@@ -55,3 +55,27 @@ Independent per-binder prefixes can deadlock healthy demand behind a candidate b
 ### 6.2 Unknown observation remains distinct
 
 Legacy nullable tokenBudgetRemaining means unknown observation in some states. Unlimited is established only by explicit authored nullable ceiling/new protocol policy, never from null remaining alone. Preserve unknown usage and blocking separately; new typed state/read DTO distinguishes known finite remaining, unlimited and unknown. Add old-null-unknown and new-unlimited-known/unknown compatibility criteria.
+
+### 6.3 Grounded input and auxiliary-budget amendments — Codex controller, 2026-10-11
+
+New handwritten imports preserve explicitly supplied finite/null executionPolicy.tokenBudget; only omitted new input normalizes to null. New built-in loop recipe version3 defaults null and may carry optional explicit finite/null tokenBudget input, encoded only when supplied. Original v1/v2 definition/expansion bytes remain exact, including old3M default. Existing frozen records are not re-expanded or rewritten.
+
+New authored policy and draft allocations may use BudgetAmount while actual used/reserved/deficit Amounts stay finite. Unclaimed new-policy task work/handoff draft token encumbrance is zero; non-token encumbrance stays as before. Funded allowances separately represent actual null work authority so active-unbounded cap/limit edits refuse even if numeric reserved tokens is0. Known/unlimited/unknown status remains explicit; null displayedreserve never proves observedusage.
+
+Reconcile auxiliary work remains finite: when deriving max source token budgets, replace each null source with independently bounded reconcile fallback3,000,000, keep every finite source value, and preserve all-finite behavior exactly. Existing cap/group admission and request/time bounds apply. Do not interpret null as0 or unlimited for reconcile. Tests pin mixed finite source abovefallback and caprefusal.
+
+### 6.4 Clarifying group cumulative policy — Codex controller, 2026-10-11
+
+Newgroup default unlimited includes initial clarifying groups as well as resulting task plans. Existing finite clarification records retain policies. New owner explicit finite/null cumulative input is preserved; all requirement single-call grants remain finite and requestbounded independently, with normal global/project/group admission and non-token guards. Carry finite priorused through split/plan conversion; never transform unknown into unlimitedknown.
+
+### 6.5 Explicit preparation ceiling at conversion — Codex controller, 2026-10-11
+
+For new optional-policy clarification groups, retain explicit finite authored group token ceiling through conversion; default/null remainsnull and prior finiteused survives. Estimates cannot expand that ceiling. Existing legacy finite groups retain their prior conversion path until deliberate owner policy change; old frozen evidence remains exact.
+
+### 6.6 Actual fixed demand and accounting boundaries — Codex controller, 2026-10-11
+
+Confirmed ready legacy finite tasks participate with their full current fixed work/handoff minimum and no residual share. Credit exact pre-reserved Web group allocation while project/global binders must fund the whole minimum; raw groups withoutpreallocation receive no credit. Do not subtract legacy current authority by inherited usage again. Accounting mode is per task with group fallback, independent of nullable group ceiling. Explicit owner group-null may preserve legacytask accounting. Task-null conversion of legacy mutable accounting is conservatively refused once any historical taskrun exists; no immutable record is rewritten.
+
+Actual work-token proof depends on the funded grant and is rechecked after awaited probes inside fresh-time claim transaction. Mechanical handoff has no modeltoken request; finite model-assisted handoff needs its handoff proof. General strict-proof-unimplemented driver guard remains; this round does not establish strict/hard execution.
+
+A proved before-provider restartable stop releases or transfers the exact optional funded token reservation once, preserves future non-token preallocation, unknown holds and predecessor readiness, and leaves historical fixed-grant semantics unchanged. Client task ceiling editing uses authoritative per-task accounting mode: optional authored ceiling changes do not debit draft tokens, while legacy and non-token reserve checks remain.

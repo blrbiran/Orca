@@ -1,0 +1,224 @@
+[
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/tokenPolicy.test.ts",
+      "-t",
+      "current cap period"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 1.876715898513794,
+    "log": "/private/tmp/orca-followup-runs/task4-period-race-red/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "f6cfc26cf997606f93b09cbd0626424f4291ac103524729378eb1ef7a2b75818",
+    "sourceFiles": 920,
+    "rawBytes": 1125,
+    "rawSHA256": "384d2cec78c14940e69eb37cfe8f6c0347f551d65536ae6dedc18931a1cf64f3"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/tokenPolicy.test.ts",
+      "tests/control/tokenPolicyCapabilities.test.ts",
+      "tests/control/setTaskLoop.test.ts",
+      "tests/control/setTaskLoopConfirmed.test.ts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 6.022626876831055,
+    "log": "/private/tmp/orca-followup-runs/task4-period-owner-green/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "5b1f25296f104d582a17758d754f00108da74afcb0669d667624757dcad84649",
+    "sourceFiles": 920,
+    "rawBytes": 1330,
+    "rawSHA256": "d58d606826f032a37fa4203f82ac6e6f59260259e9d2d639f6cc3172fead0c39"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "ORCA_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/tokenPolicyRuntime.test.ts",
+      "-t",
+      "authored 5000000"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 17.770278215408325,
+    "log": "/private/tmp/orca-followup-runs/task4-finite-saved-red/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "b0ca41c8f4e5e825451730ca675a18c85fa463abba88cb464edbc1df8304843e",
+    "sourceFiles": 920,
+    "rawBytes": 1639,
+    "rawSHA256": "d5d8251b7f8f43040e2f6e2198f6bb4c26009ec22b41c398391e067a1faf5d2d"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "ORCA_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/tokenPolicyRuntime.test.ts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 36.66680908203125,
+    "log": "/private/tmp/orca-followup-runs/task4-finite-saved-green/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "5581187be6ea85d7f38dde289d68bc97135ff0852cd18e7cf8e7fa2b342815d4",
+    "sourceFiles": 920,
+    "rawBytes": 1182,
+    "rawSHA256": "720818f2939eba4c4cff2561c6dca4c5e99e402e639175efed4bec9b480b3480"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/fundedAllowance.test.ts",
+      "-t",
+      "group into review"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 1.265564203262329,
+    "log": "/private/tmp/orca-followup-runs/task4-review-eligible-red/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "322bbe41e99e7007d35256af8e5547190e163dd57fd789608a88f8ae04d72d7d",
+    "sourceFiles": 920,
+    "rawBytes": 978,
+    "rawSHA256": "720c1fe6072ef1c6eadf4133e9bc4eee75246473201bd0ba286dfbb6d5eeb5fb"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4-d-_37tnk1d",
+      "npx",
+      "vitest",
+      "run",
+      "tests/control/fundedAllowance.test.ts",
+      "tests/control/tokenPolicy.test.ts",
+      "tests/control/requirementE2E.test.ts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 24.17928409576416,
+    "log": "/private/tmp/orca-followup-runs/task4-review-eligible-green/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "eb593098a4dd345048efec9c8a6f43358d3768976cebaa595359c872a1c43012",
+    "sourceFiles": 920,
+    "rawBytes": 1097,
+    "rawSHA256": "855eba31424b023192a0d397bbdd05ede4ce1d310ef68f00f541bd5d355b3388"
+  },
+  {
+    "repo": "/private/tmp/orca-task4-mixed-diagnostic-20261011",
+    "command": [
+      "node",
+      "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/fundedAllowance.test.ts",
+      "-t",
+      "fixed legacy"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 2.815330982208252,
+    "log": "/private/tmp/orca-followup-runs/task4-mixed-family-red-direct/output.log",
+    "source": "8d5970bcc2df44549b0a2d26279c8bf2adab35fe",
+    "sourceTreeSHA256": "20fb38e172837b5e0b70d16f545f7baa790638dec9fddd16d5352723d5d70de7",
+    "sourceFiles": 920,
+    "rawBytes": 1498,
+    "rawSHA256": "859ab2d3d249e8b1016833a99f7320e043b3c9a16618252a6a050367a4ca84f7"
+  },
+  {
+    "repo": "/private/tmp/orca-task4-mixed-diagnostic-20261011",
+    "command": [
+      "node",
+      "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/fundedAllowance.test.ts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 7.73772406578064,
+    "log": "/private/tmp/orca-followup-runs/task4-mixed-family-green-direct/output.log",
+    "source": "8d5970bcc2df44549b0a2d26279c8bf2adab35fe",
+    "sourceTreeSHA256": "d946a51e3d3d4c392bb2fd06c4ea932115a77c423820e6e7b7d9eded1525c658",
+    "sourceFiles": 920,
+    "rawBytes": 633,
+    "rawSHA256": "4cdf5bf8c3331c2fe0c1bdc0d1b3bd306abc602319ec89c818ce50c90734d283"
+  },
+  {
+    "repo": "/private/tmp/orca-task4-mixed-diagnostic-20261011",
+    "command": [
+      "node",
+      "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/tokenPolicy.test.ts",
+      "-t",
+      "actual optional claim"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 1.3921849727630615,
+    "log": "/private/tmp/orca-followup-runs/task4-mixed-actual-green/output.log",
+    "source": "8d5970bcc2df44549b0a2d26279c8bf2adab35fe",
+    "sourceTreeSHA256": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+    "sourceFiles": 920,
+    "rawBytes": 403,
+    "rawSHA256": "aec1f0ac1917facf8861dbccc5ba5bb8c7e58e54adae654eb9af1193ebe7b368"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4-control-h4kjxio8",
+      "node",
+      "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/tokenPolicy.test.ts",
+      "tests/control/fundedAllowance.test.ts",
+      "tests/control/settleUnknownUsage.test.ts",
+      "tests/control/retryTask.test.ts",
+      "tests/chain/gateCheck.test.ts",
+      "--maxWorkers=2",
+      "--reporter=default",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/task4-final-focus/results.json"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 46.789945125579834,
+    "log": "/private/tmp/orca-followup-runs/task4-final-focus/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+    "sourceFiles": 920,
+    "rawBytes": 8724,
+    "rawSHA256": "d148f05fd9ef7031f768fb2d8b212237752e84e193d507c8df78587f3e8372be"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4-root-4plunlml",
+      "npx",
+      "vitest",
+      "run",
+      "--reporter=default",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/task4-final-root/results.json"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 599.1739010810852,
+    "log": "/private/tmp/orca-followup-runs/task4-final-root/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "401ad977bc42c47d6d99214cdf203e44004e5d38fd4120b94215121613824a54",
+    "sourceFiles": 920,
+    "rawBytes": 339267,
+    "rawSHA256": "95b28339a49f2afa87c6a6631ba3bae139b84a8a8dfcb111e406d60120386e6a"
+  }
+]

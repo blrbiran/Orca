@@ -197,3 +197,7 @@ waitingCause:'token-allowance' under v4 distinguishes automatic allowance waitin
 Existing ccloop criterion `tests/control/protocol.test.ts > control protocol v1 > names unsupported protocol versions separately from invalid requests` authorized exact rewrite: unsupported1/2/5, explicitv4acceptance and extrafieldrefusal; previous unsupported4 superseded by user-approvedv4 feature. No broadening. Bounded validation scenario renderer retains positive-only overrides (standalone/v4 zero is literalzero); preserve old non-positive-override criterion and disclose context distinction.
 
 OS process identity sandbox failures are infrastructure evidence, not productwaiver; fully isolated fake-only require_escalated runner is authorized to access ownedprocess identity/lifecycle. Worker must completely read/classify exploratory201namedfailures, retainrawlogs, then fresh finalfull/native frozen-source gates.
+
+## Task4 grounded clarification owners amendment — Codex controller, 2026-10-11
+
+Task4 owned files also requirementSchemas/requirementCommands/requirementRecords/requirementCalls plus strict server/browser mirrors. Initial clarifying cumulative group default becomes BudgetAmount nulltokens, existing finite preserved; REQUIREMENT_CALL_GRANT remains finite and requestbounded with existing cap/non-token guards. Add actual open→clarify→split→planconversion tests carrying finiteused plus explicitfinite/cap/owner-only authority. This is original newgroup defaultnull scope, not new singlecall capability.

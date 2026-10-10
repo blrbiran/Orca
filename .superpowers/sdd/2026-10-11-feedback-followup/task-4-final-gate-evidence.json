@@ -1,0 +1,189 @@
+[
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4f-types-e5_w6l4p",
+      "npm",
+      "run",
+      "typecheck"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 9.083726167678833,
+    "log": "/private/tmp/orca-followup-runs/task4-frozen-types/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+    "sourceFiles": 920,
+    "tmpdir": "/private/tmp/t4f-types-e5_w6l4p",
+    "rawBytes": 268,
+    "rawSHA256": "cf5b4b572aad8c5e786e43ccbef710ff79cb7f59273133ab698114b33010e748"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4f-build-x50dcpfv",
+      "npm",
+      "run",
+      "build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.7026567459106445,
+    "log": "/private/tmp/orca-followup-runs/task4-frozen-build/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+    "sourceFiles": 920,
+    "tmpdir": "/private/tmp/t4f-build-x50dcpfv",
+    "rawBytes": 261,
+    "rawSHA256": "e0b651d93a9f848f288cdb9de6d86c87449bc51b8de5fea2602a63dc22623c85"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4f-webbuild-06v9mxs6",
+      "npm",
+      "run",
+      "build",
+      "--workspace",
+      "web"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 1.3943490982055664,
+    "log": "/private/tmp/orca-followup-runs/task4-frozen-webbuild/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+    "sourceFiles": 920,
+    "tmpdir": "/private/tmp/t4f-webbuild-06v9mxs6",
+    "rawBytes": 658,
+    "rawSHA256": "39996065f8e273db024f196b1dd82e3787dc59175e6150061b17823bd38376f0"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4f-web-7fwl1zci",
+      "npm",
+      "run",
+      "--workspace",
+      "web",
+      "check"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 27.132798194885254,
+    "log": "/private/tmp/orca-followup-runs/task4-frozen-web/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+    "sourceFiles": 920,
+    "tmpdir": "/private/tmp/t4f-web-7fwl1zci",
+    "rawBytes": 716,
+    "rawSHA256": "a4b998890fdb7e9479eb896920a77f5bf0659fbab132bc52c55dc546df8dd69b"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4f-root-midsricm",
+      "node",
+      "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+      "run",
+      "--maxWorkers=4",
+      "--reporter=default",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/task4-frozen-root/results.json"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 686.2297930717468,
+    "log": "/private/tmp/orca-followup-runs/task4-frozen-root/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+    "sourceFiles": 920,
+    "tmpdir": "/private/tmp/t4f-root-midsricm",
+    "rawBytes": 280937,
+    "rawSHA256": "f4d3119284df9fbdab53be66e0e504c771b46628610e3acfd260b26461e4cdda"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4f-control-pu6nc63n",
+      "npm",
+      "run",
+      "verify:control"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 553.3679521083832,
+    "log": "/private/tmp/orca-followup-runs/task4-frozen-control/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+    "sourceFiles": 920,
+    "tmpdir": "/private/tmp/t4f-control-pu6nc63n",
+    "rawBytes": 55663,
+    "rawSHA256": "dde69fe692b7897ccf7e766e62943afa7808e5bb643e4c322ba6ca7ac382a23c"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4f-paired-0jr4mp43",
+      "env",
+      "ORCA_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+      "node",
+      "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/tokenPolicyRuntime.test.ts",
+      "tests/control/requirementE2E.test.ts",
+      "--maxWorkers=2",
+      "--reporter=default",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/task4-frozen-paired/results.json"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 43.44715332984924,
+    "log": "/private/tmp/orca-followup-runs/task4-frozen-paired/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+    "sourceFiles": 920,
+    "tmpdir": "/private/tmp/t4f-paired-0jr4mp43",
+    "rawBytes": 2006,
+    "rawSHA256": "84f7fe2764d928467196f9a875c036c97e7aad324a55ed9bf5c92e67a800fff8"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4f-panel-gtvtp_90",
+      "npm",
+      "run",
+      "verify:panel"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 16.278858184814453,
+    "log": "/private/tmp/orca-followup-runs/task4-frozen-panel/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+    "sourceFiles": 920,
+    "tmpdir": "/private/tmp/t4f-panel-gtvtp_90",
+    "rawBytes": 1704,
+    "rawSHA256": "cde8df2d1bf6a65e9f1c6af9e3f08bb37238588067c2fb7688f5fbd54b728a70"
+  },
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "TMPDIR=/private/tmp/t4f-pin-sez4fnpf",
+      "npm",
+      "run",
+      "verify:ccloop-pin"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.898984909057617,
+    "log": "/private/tmp/orca-followup-runs/task4-frozen-pin/output.log",
+    "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+    "sourceTreeSHA256": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+    "sourceFiles": 920,
+    "tmpdir": "/private/tmp/t4f-pin-sez4fnpf",
+    "rawBytes": 951,
+    "rawSHA256": "fdc64c62d4a840dee9bd0d8a53a02b605be9a508e1741d47b27e0ebbc89a03a7"
+  }
+]

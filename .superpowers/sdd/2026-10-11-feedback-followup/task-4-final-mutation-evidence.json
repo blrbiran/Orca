@@ -1,0 +1,808 @@
+{
+  "baselineSourceTreeSHA256": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+  "baselineCommit": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+  "rows": [
+    {
+      "name": "nullable-ceiling",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-ui5c1ay0",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/tokenPolicy.test.ts",
+          "-t",
+          "keeps unlimited ceilings"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.14347505569458,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-nullable-ceiling/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "b5606a78b1da51163a15336e5f0bfa23db9cd3a2cb25d2f67175555c0129777b",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1557,
+      "rawSHA256": "3207e86d5e3c2aaef31c7dca942a448bc825a11798500e38ee31bddbbda6189b",
+      "failureBlock": " FAIL  tests/control/tokenPolicy.test.ts > authored token policy > keeps unlimited ceilings while subtracting finite observations and enforcing other dimensions\nAssertionError: expected { tokens: +0, activeMs: 60, \u2026(2) } to deeply equal { tokens: null, activeMs: 60, \u2026(2) }\n\n- Expected\n+ Received\n\n  {\n    \"activeMs\": 60,\n    \"attempts\": 1,\n    \"sessions\": 1,\n-   \"tokens\": null,\n+   \"tokens\": 0,\n  }\n\n \u276f tests/control/tokenPolicy.test.ts:9:139\n      7| describe(\"authored token policy\", () => {\n      8|   it(\"keeps unlimited ceilings while subtracting finite observations a\u2026\n      9|     expect(policy.remainingBudget({tokens:null,activeMs:100,attempts:2\u2026\n       |                                                                                                                                           ^\n     10|     expect(policy.budgetFits({tokens:4_800_000,activeMs:101,attempts:1\u2026\n     11|     expect(policy.budgetFits({tokens:4_800_000,activeMs:40,attempts:1,\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/tokenPolicy.ts",
+        "before": "tokens:ceiling.tokens===null?null:",
+        "after": "tokens:ceiling.tokens===null?0:",
+        "test": "tests/control/tokenPolicy.test.ts",
+        "selector": "keeps unlimited ceilings",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "finite-usage",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-9_utqq8b",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/tokenPolicy.test.ts",
+          "-t",
+          "refuses nullable and unsafe usage"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.0659801959991455,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-finite-usage/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "8504ddd5535f75d581fdba0af2fa6424ba42d2f1a39262ffe4f1e18b6fce17a3",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1161,
+      "rawSHA256": "983f3c47735aa35efef640ac334ec687f778f7aa5369c3fbada49c5e75f48845",
+      "failureBlock": " FAIL  tests/control/tokenPolicy.test.ts > authored token policy > refuses nullable and unsafe usage, even below an unlimited ceiling\nAssertionError: expected [Function] to throw an error\n \u276f tests/control/tokenPolicy.test.ts:28:109\n     26|       const invalid={tokens,activeMs:0,attempts:0,sessions:0};\n     27|       expect(amountSchema.safeParse(invalid).success).toBe(false);\n     28|       expect(()=>policy.remainingBudget({tokens:null,activeMs:100,atte\u2026\n       |                                                                                                             ^\n     29|     }\n     30|   });\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/tokenPolicy.ts",
+        "before": "budgetAmountSchema.parse(ceiling);amountSchema.parse(used);",
+        "after": "budgetAmountSchema.parse(ceiling);",
+        "test": "tests/control/tokenPolicy.test.ts",
+        "selector": "refuses nullable and unsafe usage",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "joint-minima",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-0go1bksc",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/fundedAllowance.test.ts",
+          "-t",
+          "skips demand blocked"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.0661847591400146,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-joint-minima/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "b019bc6d88d63a488f7f4f8c371803dcb54db82887a48e070b4de21545eb6740",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1889,
+      "rawSHA256": "605861bd372ad0f26f9159f1d6cb87b076bf7a4e015936e7c62a345f0bdc0f71",
+      "failureBlock": " FAIL  tests/control/fundedAllowance.test.ts > joint funded allowances > skips demand blocked by a project cap so the healthy project can claim global headroom\nAssertionError: expected { authoredTokenCeiling: null, \u2026(3) } to be null\n\n- Expected:\nnull\n\n+ Received:\n{\n  \"authoredTokenCeiling\": null,\n  \"bindingCauses\": [\n    \"spend-cap\",\n  ],\n  \"grant\": {\n    \"handoff\": {\n      \"activeMs\": 0,\n      \"attempts\": 0,\n      \"sessions\": 0,\n      \"tokens\": 9,\n    },\n    \"work\": {\n      \"activeMs\": 10000,\n      \"attempts\": 10,\n      \"sessions\": 10,\n      \"tokens\": 1,\n    },\n  },\n  \"inheritedUsage\": {\n    \"activeMs\": 0,\n    \"attempts\": 0,\n    \"sessions\": 0,\n    \"tokens\": 0,\n  },\n}\n\n \u276f tests/control/fundedAllowance.test.ts:28:61\n     26|   const h=await setup([{g:\"a\",repo:\"bad\",id:\"a\",handoff:9},{g:\"b\",repo\u2026\n     27|   h.store.db.prepare(\"INSERT INTO spend_caps VALUES ('repo:bad','total\u2026\n     28|   expect(funded.allocateFundedAllowance(h.store,\"a\",\"a\",0)).toBeNull();\n       |                                                             ^\n     29|   expect(funded.allocateFundedAllowance(h.store,\"b\",\"b\",0)?.grant.work\u2026\n     30|  });\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/fundedAllowance.ts",
+        "before": "const short=applicable.find(b=>b.remaining+groupCredit(b)<handoff.tokens+minimum);",
+        "after": "const short=applicable.find(()=>false);",
+        "test": "tests/control/fundedAllowance.test.ts",
+        "selector": "skips demand blocked",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "actual-commitment",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-johrsmoy",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/fundedAllowance.test.ts",
+          "-t",
+          "real start-unknown"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.0811479091644287,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-actual-commitment/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "3a2fb9ef1b7880da4aba695de24855a890d4398bf9f02dbeba511aa4839a8be0",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1394,
+      "rawSHA256": "79e87a7fa84be216731260985a5aee3cb159da777ce7b7390803c48a2256f8d6",
+      "failureBlock": " FAIL  tests/control/fundedAllowance.test.ts > deducts real start-unknown commitments and never includes the occupied work as idle demand\nAssertionError: expected 90 to be 40 // Object.is equality\n\n- Expected\n+ Received\n\n- 40\n+ 90\n\n \u276f tests/control/fundedAllowance.test.ts:106:79\n    104|  expect(claim.grant.work.tokens).toBe(40);\n    105|  const run=readRun(h.store,claim.runId);run.state=\"unknown\";h.store.tr\u2026\n    106|  expect(funded.allocateFundedAllowance(h.store,\"b\",\"b\",0)?.grant.work.\u2026\n       |                                                                               ^\n    107|  expect(funded.allocateFundedAllowance(h.store,\"a\",\"a\",0)).toBeNull();\n    108| });\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/spendCaps.ts",
+        "before": "const held = committed.get(cap.scope)!;",
+        "after": "const held = 0;",
+        "test": "tests/control/fundedAllowance.test.ts",
+        "selector": "real start-unknown",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "inherited-attempts",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-wqgn7za6",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/fundedAllowance.test.ts",
+          "-t",
+          "inherited attempts"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.0846951007843018,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-inherited-attempts/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "b8a062706f682b50fd387438deb3a6c38a1caa26031da9ba0b1b9abb88fce656",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1077,
+      "rawSHA256": "d373377952c4455073053e5b6cacfe53feef31dd6ba3819a1f7f4068a32fa8c0",
+      "failureBlock": " FAIL  tests/control/fundedAllowance.test.ts > does not renew an exhausted inherited attempts dimension\nAssertionError: expected { tokens: 40, activeMs: 50, \u2026(2) } to deeply equal { tokens: 40, activeMs: 50, \u2026(2) }\n\n- Expected\n+ Received\n\n  {\n    \"activeMs\": 50,\n-   \"attempts\": 1,\n+   \"attempts\": 0,\n    \"sessions\": 1,\n    \"tokens\": 40,\n  }\n\n \u276f tests/control/fundedAllowance.test.ts:77:46\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/fundedAllowance.ts",
+        "before": "total=add(total,amountSchema.parse(run.cumulative.work));",
+        "after": "total=add(total,{...amountSchema.parse(run.cumulative.work),attempts:0});",
+        "test": "tests/control/fundedAllowance.test.ts",
+        "selector": "inherited attempts",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "inherited-sessions",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-pe1udg8a",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/fundedAllowance.test.ts",
+          "-t",
+          "inherited sessions"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.0550761222839355,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-inherited-sessions/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "280f9c3493c98ffe9d565f4cccb07e0fee32ac21ff6b8fc4bf88a512daf199fe",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1075,
+      "rawSHA256": "416e20acf2665993769f6083f10e77daa5c3c032b1f87d9486ceda26bc915396",
+      "failureBlock": " FAIL  tests/control/fundedAllowance.test.ts > does not renew an exhausted inherited sessions dimension\nAssertionError: expected { tokens: 40, activeMs: 50, \u2026(2) } to deeply equal { tokens: 40, activeMs: 50, \u2026(2) }\n\n- Expected\n+ Received\n\n  {\n    \"activeMs\": 50,\n    \"attempts\": 1,\n-   \"sessions\": 1,\n+   \"sessions\": 0,\n    \"tokens\": 40,\n  }\n\n \u276f tests/control/fundedAllowance.test.ts:77:46\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/fundedAllowance.ts",
+        "before": "total=add(total,amountSchema.parse(run.cumulative.work));",
+        "after": "total=add(total,{...amountSchema.parse(run.cumulative.work),sessions:0});",
+        "test": "tests/control/fundedAllowance.test.ts",
+        "selector": "inherited sessions",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "feature-fence",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-dokpjva6",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/ccloopPort.test.ts",
+          "-t",
+          "negotiates optional"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 0.9045019149780273,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-feature-fence/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "205f0effbb99e67ffa52f98bee66d2a41e5f91caf877e0b4010bbf0bbec03dd7",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1398,
+      "rawSHA256": "80e24bc96cdf2c92662165bdfc35aee77cb1d45b8f1c489efbb9773e27b6cd42",
+      "failureBlock": " FAIL  tests/control/ccloopPort.test.ts > negotiates optional token policy separately and never sends v4 to an old peer\nAssertionError: expected [Function] to throw error including 'control-token-policy-unsupported' but got 'control-peer-exit:2:control-protocol-\u2026'\n\nExpected: \"control-token-policy-unsupported\"\nReceived: \"control-peer-exit:2:control-protocol-unsupported\"\n\n \u276f tests/control/ccloopPort.test.ts:241:37\n    239|  expect(await old.port.readFeatures?.()).toEqual({protocol:1});\n    240|  const input={...old.envelope,protocol:4,tokenPolicy:{authoredTokenCei\u2026\n    241|  await expect(old.port.accept(input)).rejects.toThrow(\"control-token-p\u2026\n       |                                     ^\n    242|  expect(JSON.parse(await readFile(old.record,\"utf8\")).argv[1]).toBe(\"f\u2026\n    243|  expect(await old.port.accept(old.envelope)).toMatchObject({kind:\"acce\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/ccloopPort.ts",
+        "before": "async accept(input){await requireFeatures(input);return",
+        "after": "async accept(input){return",
+        "test": "tests/control/ccloopPort.test.ts",
+        "selector": "negotiates optional",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "active-unbounded",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-dszbf652",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/tokenPolicyStop.test.ts",
+          "-t",
+          "stops an unbounded task"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.5143420696258545,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-active-unbounded/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "9a85c9fa314d5139b7a88db0c0d143f4c7c71b031062151ba850b4175449f144",
+        "sourceFiles": 920
+      },
+      "rawBytes": 2232,
+      "rawSHA256": "36613ea711fb3069c5899c5ad839b36824c4c3f7ac6d0d0d2d351e46539d1d6a",
+      "failureBlock": " FAIL  tests/control/tokenPolicyStop.test.ts > stops an unbounded task with its authored ceiling intact, then admits a finite group ceiling\nAssertionError: expected { \u2026(10) } to match object { Object (error) }\n(14 matching properties omitted from actual)\n\n- Expected\n+ Received\n\n  {\n-   \"error\": {\n-     \"code\": \"active-unbounded-budget-conflict\",\n+   \"actorId\": \"human\",\n+   \"authorityCommandHash\": \"0c5c767cbd87157a79eb63328977cbedc22ca5f03b3dc4f1914db3c7daea4ea9\",\n+   \"commandId\": \"command-3\",\n+   \"commandRevision\": 4,\n+   \"effectivePayloadHash\": \"416550bd591d660c3df300bf5620060556ac6ed9032b44eebf7d48080b805bc4\",\n+   \"projectionSeq\": 8,\n+   \"result\": {\n+     \"kind\": \"limit-set\",\n+     \"limit\": {\n+       \"activeMs\": 24840000,\n+       \"attempts\": 6,\n+       \"sessions\": 6,\n+       \"tokens\": 5000000,\n+     },\n+   },\n+   \"schema\": \"orca-command-success-v1\",\n+   \"target\": {\n+     \"groupId\": \"g\",\n+     \"kind\": \"group\",\n    },\n+   \"verb\": \"set-limit\",\n  }\n\n \u276f tests/control/tokenPolicyStop.test.ts:11:93\n      9|   const id=await x.claim();await x.until(driver,()=>x.body(id).state==\u2026\n     10|   const before=readControlGroup(x.h.store,\"epoch\",\"g\").ledger.groupLim\u2026\n     11|   expect(x.service.setLimit(x.h.command(\"set-limit\",{limit:{...before,\u2026\n       |                                                                                             ^\n     12|   await x.service.handoffStop(x.h.command(\"handoff-stop\",{}));\n     13|   await x.until(driver,()=>{const r=x.body(id);if(r.state===\"blocked\")\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/spendCaps.ts",
+        "before": "if(run.grant?.work?.tokens===null)throw",
+        "after": "if(false)throw",
+        "test": "tests/control/tokenPolicyStop.test.ts",
+        "selector": "stops an unbounded task",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "source-work",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "ORCA_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+          "env",
+          "TMPDIR=/private/tmp/t4-m-vj6r9rrs",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/tokenPolicyRuntime.test.ts",
+          "-t",
+          "renews a saved"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 12.353944063186646,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-source-work/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "64cd0f11569aa007e25d5cd765281fe9df89eba8e8d1965370caf632ec6d33a8",
+        "sourceFiles": 920
+      },
+      "rawBytes": 2216,
+      "rawSHA256": "184e6939099cc4ea3bf493811c59e7e14f015ead5840e85108f44e28c152cea0",
+      "failureBlock": " FAIL  tests/control/tokenPolicyRuntime.test.ts > paired source nullable token lifecycle > renews a saved funded allowance after a cap change without replaying paid planning (authored null)\n FAIL  tests/control/tokenPolicyRuntime.test.ts > paired source nullable token lifecycle > renews a saved funded allowance after a cap change without replaying paid planning (authored 5000000)\nAssertionError: promise resolved \"undefined\" instead of rejecting\n\n- Expected:\nError {\n  \"message\": \"rejected promise\",\n}\n\n+ Received:\nundefined\n\n \u276f tests/control/tokenPolicyRuntime.test.ts:56:143\n     54|    expect(world.calls()).toEqual([\"plan\"]);expect(workRuns(runtime)).t\u2026\n     55|    const saved=workRuns(runtime)[0]!,checkpoint=await readCommittedChe\u2026\n     56|    await expect(validateAllowanceCheckpoint(runtime.store,checkpoint,{\u2026\n       |                                                                                                                                               ^\n     57|    await expect(validateAllowanceCheckpoint(runtime.store,{...checkpoi\u2026\n     58|    const packet=JSON.parse((await readArtifact(runtime.store,checkpoin\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/2]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/fundedAllowance.ts",
+        "before": "[\"groupId\",\"workItemId\",\"taskId\",\"runId\",\"generation\",\"graphVersion\",\"targetVersion\"]",
+        "after": "[\"groupId\",\"taskId\",\"runId\",\"generation\",\"graphVersion\",\"targetVersion\"]",
+        "test": "tests/control/tokenPolicyRuntime.test.ts",
+        "selector": "renews a saved",
+        "pairedSource": true
+      }
+    },
+    {
+      "name": "source-generation",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "ORCA_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+          "env",
+          "TMPDIR=/private/tmp/t4-m-e42yz2lr",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/tokenPolicyRuntime.test.ts",
+          "-t",
+          "renews a saved"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 12.310866832733154,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-source-generation/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "a244c58a7d277c2a356ce121007ba12d017f94acd0e1c758b8bcab3bfbafa85c",
+        "sourceFiles": 920
+      },
+      "rawBytes": 2198,
+      "rawSHA256": "87cb54581d71b89601911b997edacb789ed49ad4c6daf3ee9acac75dc4e257a0",
+      "failureBlock": " FAIL  tests/control/tokenPolicyRuntime.test.ts > paired source nullable token lifecycle > renews a saved funded allowance after a cap change without replaying paid planning (authored null)\n FAIL  tests/control/tokenPolicyRuntime.test.ts > paired source nullable token lifecycle > renews a saved funded allowance after a cap change without replaying paid planning (authored 5000000)\nAssertionError: promise resolved \"undefined\" instead of rejecting\n\n- Expected:\nError {\n  \"message\": \"rejected promise\",\n}\n\n+ Received:\nundefined\n\n \u276f tests/control/tokenPolicyRuntime.test.ts:57:125\n     55|    const saved=workRuns(runtime)[0]!,checkpoint=await readCommittedChe\u2026\n     56|    await expect(validateAllowanceCheckpoint(runtime.store,checkpoint,{\u2026\n     57|    await expect(validateAllowanceCheckpoint(runtime.store,{...checkpoi\u2026\n       |                                                                                                                             ^\n     58|    const packet=JSON.parse((await readArtifact(runtime.store,checkpoin\u2026\n     59|    const ledger=JSON.parse((await readArtifact(runtime.store,packet.al\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/2]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/fundedAllowance.ts",
+        "before": "||event.generation!==candidate.generation",
+        "after": "",
+        "test": "tests/control/tokenPolicyRuntime.test.ts",
+        "selector": "renews a saved",
+        "pairedSource": true
+      }
+    },
+    {
+      "name": "source-observed-usage",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "ORCA_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+          "env",
+          "TMPDIR=/private/tmp/t4-m-1w04lygz",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/tokenPolicyRuntime.test.ts",
+          "-t",
+          "renews a saved"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 13.789721012115479,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-source-observed-usage/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "66772964fec90eb90a6c597f6a03bf94796592a04b1b9cef9d8f2b99518fcbf1",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1649,
+      "rawSHA256": "195f6a2b306c09e81fb38075c34e64006007412197b2b29ded0cee1e087f0d25",
+      "failureBlock": " FAIL  tests/control/tokenPolicyRuntime.test.ts > paired source nullable token lifecycle > renews a saved funded allowance after a cap change without replaying paid planning (authored null)\n FAIL  tests/control/tokenPolicyRuntime.test.ts > paired source nullable token lifecycle > renews a saved funded allowance after a cap change without replaying paid planning (authored 5000000)\nAssertionError: promise resolved \"undefined\" instead of rejecting\n\n- Expected:\nError {\n  \"message\": \"rejected promise\",\n}\n\n+ Received:\nundefined\n\n \u276f tests/control/tokenPolicyRuntime.test.ts:66:149\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/2]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/fundedAllowance.ts",
+        "before": "||!canonicalBytes(last).equals(canonicalBytes(run.cumulative.work))",
+        "after": "",
+        "test": "tests/control/tokenPolicyRuntime.test.ts",
+        "selector": "renews a saved",
+        "pairedSource": true
+      }
+    },
+    {
+      "name": "source-usage-closure",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "ORCA_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+          "env",
+          "TMPDIR=/private/tmp/t4-m-wnk7_z1u",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/tokenPolicyRuntime.test.ts",
+          "-t",
+          "renews a saved"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 12.810138940811157,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-source-usage-closure/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "6b918bc8cbd709e0edbdb9f142c6c891419b0bfbe9002cb876b14fba2e88a35e",
+        "sourceFiles": 920
+      },
+      "rawBytes": 2096,
+      "rawSHA256": "f8fa81349b0bb62748d47e567bae316f912b937d9dbec8e8ed0680ee9a215f0b",
+      "failureBlock": " FAIL  tests/control/tokenPolicyRuntime.test.ts > paired source nullable token lifecycle > renews a saved funded allowance after a cap change without replaying paid planning (authored null)\n FAIL  tests/control/tokenPolicyRuntime.test.ts > paired source nullable token lifecycle > renews a saved funded allowance after a cap change without replaying paid planning (authored 5000000)\nAssertionError: promise resolved \"undefined\" instead of rejecting\n\n- Expected:\nError {\n  \"message\": \"rejected promise\",\n}\n\n+ Received:\nundefined\n\n \u276f tests/control/tokenPolicyRuntime.test.ts:70:98\n     68|    const missing=structuredClone(packet);missing.artifacts=missing.art\u2026\n     69|    const handoff=await writeArtifact(runtime.store,\"unreachable-usage-\u2026\n     70|    await expect(validateAllowanceCheckpoint(runtime.store,{...checkpoi\u2026\n       |                                                                                                  ^\n     71|\n     72|    runtime.store.transaction(()=>runtime.store.db.prepare(authored===n\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/2]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/fundedAllowance.ts",
+        "before": "!packet.artifacts.some(r=>r.artifactId===ref.artifactId&&r.hash===ref.hash)||",
+        "after": "",
+        "test": "tests/control/tokenPolicyRuntime.test.ts",
+        "selector": "renews a saved",
+        "pairedSource": true
+      }
+    },
+    {
+      "name": "no-start-release",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-ixv45lov",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/tokenPolicy.test.ts",
+          "-t",
+          "reclaims a proved"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.156019926071167,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-no-start-release/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "f52841e0c6d0298ed89e808f74712ca4b754bfaaa5fa5247ed2895d6a257134d",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1445,
+      "rawSHA256": "9efa1cb3570902e720dbacf45f658c9cd33980e5e6d3b62dc8ef22a1157b1647",
+      "failureBlock": " FAIL  tests/control/tokenPolicy.test.ts > reclaims a proved no-provider funded lease without duplicating token or non-token commitments\nAssertionError: expected 'blocked' to be 'claimed' // Object.is equality\n\nExpected: \"claimed\"\nReceived: \"blocked\"\n\n \u276f tests/control/tokenPolicy.test.ts:117:76\n    115|   const committed=readGroup(h.store,\"g\").reserved;\n    116|   settleProviderAttempt(h.deps,{runId:first.runId,phase:\"work\",firstAt\u2026\n    117|   const second=await deliverScheduledStart(h.deps,\"g\");expect(second.k\u2026\n       |                                                                            ^\n    118|   expect(readGroup(h.store,\"g\").reserved).toEqual(committed);expect(re\u2026\n    119|  }finally{await h.dispose();}\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/webDispatch.ts",
+        "before": "releaseCommitment(store,run.groupId,add(finiteCommitment(remaining.work),remaining.handoff));",
+        "after": "",
+        "test": "tests/control/tokenPolicy.test.ts",
+        "selector": "reclaims a proved",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "actual-finite-proof",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-jtthkfk6",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/tokenPolicyCapabilities.test.ts",
+          "-t",
+          "cap installed while a probe is held"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.129971981048584,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-actual-finite-proof/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "44be12da8da9a62c09ea11635985f7e376719c66acc33f51f1fe0e13c2669db2",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1597,
+      "rawSHA256": "4071d54e52cac4b8912c524abc809ff46fd0c33de0aa69295b1b8b84ff8f3971",
+      "failureBlock": " FAIL  tests/control/tokenPolicyCapabilities.test.ts > rechecks a cap installed while a probe is held before reserving the actual finite grant\nAssertionError: expected { kind: 'claimed', \u2026(1) } to deeply equal { kind: 'blocked', \u2026(1) }\n\n- Expected\n+ Received\n\n  {\n-   \"kind\": \"blocked\",\n-   \"reason\": \"claim-capability-unavailable\",\n+   \"kind\": \"claimed\",\n+   \"runId\": \"run-88176169-9afe-4153-8486-177c9eba8260\",\n  }\n\n \u276f tests/control/tokenPolicyCapabilities.test.ts:40:25\n     38|   const pending=deliverScheduledStart({...h.deps,profileRouter:router}\u2026\n     39|   h.store.transaction(()=>h.store.db.prepare(\"INSERT INTO spend_caps V\u2026\n     40|   expect(await pending).toEqual({kind:\"blocked\",reason:\"claim-capabili\u2026\n       |                         ^\n     41|   expect(h.store.db.prepare(\"SELECT id FROM runs\").all()).toEqual([]);\n     42|  }finally{await h.dispose();}\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/tokenPolicy.ts",
+        "before": "actualTokens===null||",
+        "after": "true||",
+        "test": "tests/control/tokenPolicyCapabilities.test.ts",
+        "selector": "cap installed while a probe is held",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "optional-identity",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-ya0s8d6d",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/tokenPolicy.test.ts",
+          "-t",
+          "rejects a stale optional"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.127634048461914,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-optional-identity/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "954e68af0f1bebe35ecfdadaa2ecfccb96acfab35645d750df909de3a6d90973",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1502,
+      "rawSHA256": "4f6ad7395de3dd6a0896f3049b6a561904719339991cb2a3000b44a3e5a7cb6e",
+      "failureBlock": " FAIL  tests/control/tokenPolicy.test.ts > rejects a stale optional policy ceiling while preserving authoritative legal legacy limit edits\nAssertionError: promise resolved \"{ kind: 'claimed', \u2026(1) }\" instead of rejecting\n\n- Expected\n+ Received\n\n- Error {\n-   \"message\": \"rejected promise\",\n+ {\n+   \"kind\": \"claimed\",\n+   \"runId\": \"run-8cbed739-a3d0-42bc-9e59-4230fec17d37\",\n  }\n\n \u276f tests/control/tokenPolicy.test.ts:180:49\n    178|   const service=new WebControlService(h.deps);await service.confirm(h.\u2026\n    179|   h.store.db.prepare(\"UPDATE token_policies SET tokens=9000000 WHERE g\u2026\n    180|   await expect(deliverScheduledStart(h.deps,\"g\")).rejects.toThrow(\"tok\u2026\n       |                                                 ^\n    181|  }finally{await h.dispose();}\n    182| });\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/fundedAllowance.ts",
+        "before": "if((ceiling===null&&(!policy||policy.tokens!==null))||(policy?.mode===\"optional-v1\"&&policy.tokens!==ceiling))throw",
+        "after": "if(false)throw",
+        "test": "tests/control/tokenPolicy.test.ts",
+        "selector": "rejects a stale optional",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "native-error-message",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-u27qr101",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/memory/ccmemAdapter.test.ts",
+          "-t",
+          "errno libuv"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 0.5548930168151855,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-native-error-message/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "00f9d001c27a26c059ce0680df2295041986d699fc20a563ccadc420c70321fc",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1236,
+      "rawSHA256": "eb49aa227ef4fc1c8d31a6125fb27d64bbd68141a8260140dc1b18fe5df4cdce",
+      "failureBlock": " FAIL  tests/memory/ccmemAdapter.test.ts > failures (spec \u00a73.3) > names an errno libuv has no name for by its errno name, so the wire code has no spaces\nAssertionError: expected 'ccmem export --scope global exited EN\u2026' to contain 'spawn ENOEXEC'\n\nExpected: \"spawn ENOEXEC\"\nReceived: \"ccmem export --scope global exited ENOEXEC: stripped\"\n\n \u276f tests/memory/ccmemAdapter.test.ts:110:25\n    108|     const native=await new Promise<Error>((resolve)=>{try{execFile(bin\u2026\n    109|     expect(native.message.length).toBeGreaterThan(0);\n    110|     expect(err.message).toContain(native.message);\n       |                         ^\n    111|   });\n    112|\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/memory/ccmem.ts",
+        "before": "ctx.stderr === \"\" ? error.message :",
+        "after": "ctx.stderr === \"\" ? \"stripped\" :",
+        "test": "tests/memory/ccmemAdapter.test.ts",
+        "selector": "errno libuv",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "period-recheck",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-37ksf7bz",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/tokenPolicy.test.ts",
+          "-t",
+          "current cap period"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.135279893875122,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-period-recheck/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "9d5c8d4e58ab973f2e9a363eab3d2b77b52a1e7433f392aa05d81c52a3d2ac5b",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1121,
+      "rawSHA256": "a8bdcd2528d738e1d0fa5fcb011b3b883e26ab46ca6896ffafc30ce60703a3d9",
+      "failureBlock": " FAIL  tests/control/tokenPolicy.test.ts > rechecks the current cap period after an awaited probe crosses rollover\nAssertionError: expected { kind: 'claimed', \u2026(1) } to deeply equal { kind: 'blocked', \u2026(1) }\n\n- Expected\n+ Received\n\n  {\n-   \"kind\": \"blocked\",\n-   \"reason\": \"spend-cap-reached\",\n+   \"kind\": \"claimed\",\n+   \"runId\": \"run-561a60b5-d85f-40eb-807e-d20b2aa02191\",\n  }\n\n \u276f tests/control/tokenPolicy.test.ts:171:25\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/webDispatch.ts",
+        "before": "const claimAt = (deps.now?.() ?? new Date()).getTime();",
+        "after": "const claimAt = at;",
+        "test": "tests/control/tokenPolicy.test.ts",
+        "selector": "current cap period",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "saved-finite-v4",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "ORCA_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+          "env",
+          "TMPDIR=/private/tmp/t4-m-yjj69nmc",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/tokenPolicyRuntime.test.ts",
+          "-t",
+          "authored 5000000"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 17.613487720489502,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-saved-finite-v4/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "61869c0ba6e4e472b5ee96db7092fa6bd89cef7966cddcb3d6b76a18b1af7087",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1364,
+      "rawSHA256": "d27fc5eed009eac7123281bd7c1bcd18b309d0b212c4192ccaaf02dc77a87e91",
+      "failureBlock": " FAIL  tests/control/tokenPolicyRuntime.test.ts > paired source nullable token lifecycle > renews a saved funded allowance after a cap change without replaying paid planning (authored 5000000)\nAssertionError: expected [ 'plan', 'plan', 'execute' ] to deeply equal [ 'plan', 'execute' ]\n\n- Expected\n+ Received\n\n  [\n    \"plan\",\n+   \"plan\",\n    \"execute\",\n  ]\n\n \u276f tests/control/tokenPolicyRuntime.test.ts:74:84\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/webDispatch.ts",
+        "before": "typeof (work as {allowancePredecessorRunId?:unknown}).allowancePredecessorRunId===\"string\"||",
+        "after": "",
+        "test": "tests/control/tokenPolicyRuntime.test.ts",
+        "selector": "authored 5000000",
+        "pairedSource": true
+      }
+    },
+    {
+      "name": "review-eligibility",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-qio_tnl7",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/fundedAllowance.test.ts",
+          "-t",
+          "group into review"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.1259469985961914,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-review-eligibility/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "f425894b0d453f69894eed2b24c5a0ed4ea526e400c80c9306effd41ca19a50b",
+        "sourceFiles": 920
+      },
+      "rawBytes": 964,
+      "rawSHA256": "ffbe3556dae46a25dd6f833feb60f9374b6fd51accef8a04ed8270646b08f941",
+      "failureBlock": " FAIL  tests/control/fundedAllowance.test.ts > admits dependency-ready work after a prior landing puts the group into review\nAssertionError: expected undefined to be null\n\n- Expected:\nnull\n\n+ Received:\nundefined\n\n \u276f tests/control/fundedAllowance.test.ts:125:257\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/fundedAllowance.ts",
+        "before": "[\"ready\",\"running\",\"review\",\"blocked\"]",
+        "after": "[\"ready\",\"running\",\"blocked\"]",
+        "test": "tests/control/fundedAllowance.test.ts",
+        "selector": "group into review",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "fixed-legacy-minimum",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-_ny8v73o",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/tokenPolicy.test.ts",
+          "-t",
+          "actual optional claim"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.1261308193206787,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-fixed-legacy-minimum/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "a3b85f89b686128d86814072dae5917eb4c18f7c67a153bf46938680b0f930cd",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1020,
+      "rawSHA256": "0a671c27f79892de6bf914b7e604f28af9dc741cef4e11c2dab44fc1fa3c5b0e",
+      "failureBlock": " FAIL  tests/control/tokenPolicy.test.ts > an actual optional claim leaves the full historical finite claim admissible under their shared cap\nAssertionError: expected 3299989 to be 299990 // Object.is equality\n\n- Expected\n+ Received\n\n- 299990\n+ 3299989\n\n \u276f tests/control/tokenPolicy.test.ts:213:202\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/fundedAllowance.ts",
+        "before": "const minimum=fixed?remaining.tokens!:1;",
+        "after": "const minimum=1;",
+        "test": "tests/control/tokenPolicy.test.ts",
+        "selector": "actual optional claim",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "fixed-legacy-credit",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-laemd02t",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/fundedAllowance.test.ts",
+          "-t",
+          "existing reservation"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.0675177574157715,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-fixed-legacy-credit/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "bc64e5e517d7227f4a99671b2714ca1f5d6a9b8e9ebf8966f23708bb01b206a7",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1040,
+      "rawSHA256": "8c3bbcca640d70a2095f00cdeafb90df3cc3c76249f098307c0c9556c4743af6",
+      "failureBlock": " FAIL  tests/control/fundedAllowance.test.ts > credits a fixed legacy group's existing reservation and skips its unfit full grant without partial funding\nAssertionError: expected undefined to be 60 // Object.is equality\n\n- Expected:\n60\n\n+ Received:\nundefined\n\n \u276f tests/control/fundedAllowance.test.ts:138:152\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/fundedAllowance.ts",
+        "before": "fixed&&\"planHash\" in group&&b.cause===\"group\"?handoff.tokens+minimum:0",
+        "after": "0",
+        "test": "tests/control/fundedAllowance.test.ts",
+        "selector": "existing reservation",
+        "pairedSource": false
+      }
+    },
+    {
+      "name": "fixed-legacy-lineage",
+      "rc": 1,
+      "restoredDiffBytes": 0,
+      "restoredCachedDiffBytes": 0,
+      "evidence": {
+        "repo": "/private/tmp/orca-task4-mutants-20261011",
+        "command": [
+          "env",
+          "TMPDIR=/private/tmp/t4-m-6bdsh69p",
+          "node",
+          "/Users/biran/code/skills/loop/Orca/node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/fundedAllowance.test.ts",
+          "-t",
+          "without subtracting prior settled usage twice"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.0525109767913818,
+        "log": "/private/tmp/orca-followup-runs/task4-frozen-mutant-fixed-legacy-lineage/output.log",
+        "source": "c775f4416da469f7d3dffa0272ed78415ad513f2",
+        "sourceTreeSHA256": "4f7919c4c6ce7ec8cb7a5826abfe4277dae9a05494ca82db5c8749ae64cdfea9",
+        "sourceFiles": 920
+      },
+      "rawBytes": 1411,
+      "rawSHA256": "bfde880d713453581d0196adce83bd2f50a14117f46826de2c7656d372130f67",
+      "failureBlock": " FAIL  tests/control/fundedAllowance.test.ts > uses the full edited finite legacy authority without subtracting prior settled usage twice\nAssertionError: expected { authoredTokenCeiling: 60, \u2026(3) } to match object { grant: { work: { \u2026(4) } }, \u2026(1) }\n(7 matching properties omitted from actual)\n\n- Expected\n+ Received\n\n@@ -1,12 +1,12 @@\n  {\n    \"grant\": {\n      \"work\": {\n-       \"activeMs\": 9950,\n-       \"attempts\": 9,\n-       \"sessions\": 9,\n-       \"tokens\": 60,\n+       \"activeMs\": 9900,\n+       \"attempts\": 8,\n+       \"sessions\": 8,\n+       \"tokens\": 20,\n      },\n    },\n    \"inheritedUsage\": {\n      \"activeMs\": 0,\n      \"attempts\": 0,\n\n \u276f tests/control/fundedAllowance.test.ts:149:60\n\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n",
+      "mutation": {
+        "file": "src/control/fundedAllowance.ts",
+        "before": "remaining=fixed?amountSchema.parse(authored):remainingBudget(authored,inheritedUsage)",
+        "after": "remaining=remainingBudget(authored,observed)",
+        "test": "tests/control/fundedAllowance.test.ts",
+        "selector": "without subtracting prior settled usage twice",
+        "pairedSource": false
+      }
+    }
+  ]
+}

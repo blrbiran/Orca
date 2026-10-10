@@ -1,0 +1,44 @@
+{
+  "sourceSHA": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+  "gate": "task4-frozen-root",
+  "passed": 3679,
+  "failed": 0,
+  "skipped": [
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/memory/ccmemReal.test.ts",
+      "test": "a real ccmem (spec §6.3 R1) reads back one global and one project memory through the adapter",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+      "test": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset resolves the package in this checkout, whose runtime finds the scripts the package ships",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+      "test": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset runs orca agents init and show through the installed ccloop",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+      "test": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset boots the panel with an execution port, while an explicit empty ORCA_CCLOOP_BIN still turns it off",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/driverSkillsReal.test.ts",
+      "test": "A2 with a real syncskill (spec §10.8 C5) injects the frozen skill, private and read-only, and records exactly the lock file's entries",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/skills/syncskillReal.test.ts",
+      "test": "a real syncskill (spec §10.8 C12, C18) profile ls leaves the sync dir byte-identical; inject's lock entries equal the lock file; ~/.syncskill is untouched",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/service/realSmoke.test.ts",
+      "test": "real launchd smoke (opt-in) install → answering → restart → stop → start → uninstall, under a relocated label",
+      "status": "skipped"
+    }
+  ],
+  "boundary": "Task4 only, repeat exact audit on Task14 finalsource; relocated real launchd smoke is opt-in service operation excluded by current scope; other six covered separately at final stage"
+}

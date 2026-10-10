@@ -1,0 +1,1669 @@
+{
+  "initial": "c059188eab79e62384bb1f6ca949aa3478729a3950678778232e11b31d8fc733",
+  "initialRC": 130,
+  "initialFinalJSON": false,
+  "unfinishedFiles": [
+    "tests/control/handoffE2E.test.ts",
+    "tests/control/agentSelectionE2E.test.ts"
+  ],
+  "rows": [
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "directly retries an active failed continuation from head",
+      "initialRaw": "directly retries an active failed continuation from head 392ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle directly retries an active failed continuation from head",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle directly retries an active failed continuation from head",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "retries a handoff-settled failed continuation at its claim grant",
+      "initialRaw": "retries a handoff-settled failed continuation at its claim grant 318ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle retries a handoff-settled failed continuation at its claim grant",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle retries a handoff-settled failed continuation at its claim grant",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "retries released manual settlement without releasing twice",
+      "initialRaw": "retries released manual settlement without releasing twice 343ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle retries released manual settlement without releasing twice",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle retries released manual settlement without releasing twice",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "settles unknown usage before handoff then resumes and retries from head",
+      "initialRaw": "settles unknown usage before handoff then resumes and retries from head 279ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle settles unknown usage before handoff then resumes and retries from head",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle settles unknown usage before handoff then resumes and retries from head",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "rearms invalid first proof with the newest currentRunId and no second reservation",
+      "initialRaw": "rearms invalid first proof with the newest currentRunId and no second reservation 302ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle rearms invalid first proof with the newest currentRunId and no second reservation",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle rearms invalid first proof with the newest currentRunId and no second reservation",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "resumes a pre-provider stopped retry without a second reservation",
+      "initialRaw": "resumes a pre-provider stopped retry without a second reservation 242ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle resumes a pre-provider stopped retry without a second reservation",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle resumes a pre-provider stopped retry without a second reservation",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "active retry after reduced retry remains valid",
+      "initialRaw": "active retry after reduced retry remains valid 415ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle active retry after reduced retry remains valid",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle active retry after reduced retry remains valid",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "rejects retry source identity, amount and no-provider drift in both shared readers",
+      "initialRaw": "rejects retry source identity, amount and no-provider drift in both shared readers 287ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle rejects retry source identity, amount and no-provider drift in both shared readers",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle rejects retry source identity, amount and no-provider drift in both shared readers",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "clears the live source atomically when a provider retry parks held and Continue remains legal",
+      "initialRaw": "clears the live source atomically when a provider retry parks held and Continue remains legal 459ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle clears the live source atomically when a provider retry parks held and Continue remains legal",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle clears the live source atomically when a provider retry parks held and Continue remains legal",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "clears live retry source on normal terminal success",
+      "initialRaw": "clears live retry source on normal terminal success 336ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle clears live retry source on normal terminal success",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle clears live retry source on normal terminal success",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "clears live retry source on unrecoverable provider handoff",
+      "initialRaw": "clears live retry source on unrecoverable provider handoff 430ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle clears live retry source on unrecoverable provider handoff",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle clears live retry source on unrecoverable provider handoff",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "keeps stopped and archived M3 failures inadmissible",
+      "initialRaw": "keeps stopped and archived M3 failures inadmissible 292ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle keeps stopped and archived M3 failures inadmissible",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle keeps stopped and archived M3 failures inadmissible",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "refuses M3 while another historical run has unknown usage",
+      "initialRaw": "refuses M3 while another historical run has unknown usage 664ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses M3 while another historical run has unknown usage",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses M3 while another historical run has unknown usage",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "refuses M3 while another historical run has pending usage",
+      "initialRaw": "refuses M3 while another historical run has pending usage 509ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses M3 while another historical run has pending usage",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses M3 while another historical run has pending usage",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "refuses a failed predecessor with drifted taskId before reservation",
+      "initialRaw": "refuses a failed predecessor with drifted taskId before reservation 813ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses a failed predecessor with drifted taskId before reservation",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses a failed predecessor with drifted taskId before reservation",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "refuses a failed predecessor with drifted targetVersion before reservation",
+      "initialRaw": "refuses a failed predecessor with drifted targetVersion before reservation 665ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses a failed predecessor with drifted targetVersion before reservation",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses a failed predecessor with drifted targetVersion before reservation",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "refuses a failed predecessor with drifted continuationIntentId before reservation",
+      "initialRaw": "refuses a failed predecessor with drifted continuationIntentId before reservation 525ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses a failed predecessor with drifted continuationIntentId before reservation",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses a failed predecessor with drifted continuationIntentId before reservation",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "refuses a failed predecessor with drifted grant before reservation",
+      "initialRaw": "refuses a failed predecessor with drifted grant before reservation 344ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses a failed predecessor with drifted grant before reservation",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses a failed predecessor with drifted grant before reservation",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/handoffFailedRetry.test.ts",
+      "initialName": "refuses reduced retry when reserve is insufficient or a continuation registration is foreign",
+      "initialRaw": "refuses reduced retry when reserve is insufficient or a continuation registration is foreign 476ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses reduced retry when reserve is insufficient or a continuation registration is foreign",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "M3 handoff failure retry lifecycle refuses reduced retry when reserve is insufficient or a continuation registration is foreign",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "RC1: a separate run resolves the conflict and it lands as a merge of the tip and the run's own attempt",
+      "initialRaw": "RC1: a separate run resolves the conflict and it lands as a merge of the tip and the run's own attempt 409ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) RC1: a separate run resolves the conflict and it lands as a merge of the tip and the run's own attempt",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) RC1: a separate run resolves the conflict and it lands as a merge of the tip and the run's own attempt",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "spawns the reconciliation as ccloop run --agents <table> --agent-selection <file>, the file 0600 and holding the group's frozen reconcile selection with its configHash (agent selection spec \u00a74.9, \u00a76.1)",
+      "initialRaw": "spawns the reconciliation as ccloop run --agents <table> --agent-selection <file>, the file 0600 and holding the group's frozen reconcile selection with its configHash (agent selection spec \u00a74.9, \u00a76.1) 378ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) spawns the reconciliation as ccloop run --agents <table> --agent-selection <file>, the file 0600 and holding the group's frozen reconcile selection with its configHash (agent selection spec \u00a74.9, \u00a76.1)",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) spawns the reconciliation as ccloop run --agents <table> --agent-selection <file>, the file 0600 and holding the group's frozen reconcile selection with its configHash (agent selection spec \u00a74.9, \u00a76.1)",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "blocks a conflict whose group has no frozen reconcile selection, before any reconciliation run (agent selection spec \u00a76.1)",
+      "initialRaw": "blocks a conflict whose group has no frozen reconcile selection, before any reconciliation run (agent selection spec \u00a76.1) 361ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a conflict whose group has no frozen reconcile selection, before any reconciliation run (agent selection spec \u00a76.1)",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a conflict whose group has no frozen reconcile selection, before any reconciliation run (agent selection spec \u00a76.1)",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "blocks a conflict whose group record's reconcile selection no longer matches the confirmed snapshot, before any reconciliation run",
+      "initialRaw": "blocks a conflict whose group record's reconcile selection no longer matches the confirmed snapshot, before any reconciliation run 302ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a conflict whose group record's reconcile selection no longer matches the confirmed snapshot, before any reconciliation run",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a conflict whose group record's reconcile selection no longer matches the confirmed snapshot, before any reconciliation run",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "blocks a reconciliation ccloop run --agents refuses (exit 1) under the code its stderr starts with, and does not spawn it again",
+      "initialRaw": "blocks a reconciliation ccloop run --agents refuses (exit 1) under the code its stderr starts with, and does not spawn it again 314ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a reconciliation ccloop run --agents refuses (exit 1) under the code its stderr starts with, and does not spawn it again",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a reconciliation ccloop run --agents refuses (exit 1) under the code its stderr starts with, and does not spawn it again",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "blocks an exit 1 whose stderr names no code as a spawn failure carrying the stderr head, not as a refusal",
+      "initialRaw": "blocks an exit 1 whose stderr names no code as a spawn failure carrying the stderr head, not as a refusal 336ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks an exit 1 whose stderr names no code as a spawn failure carrying the stderr head, not as a refusal",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks an exit 1 whose stderr names no code as a spawn failure carrying the stderr head, not as a refusal",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "blocks a non-refusal exit 1 printed after codex's budget notice under the failure's own line, not the notice",
+      "initialRaw": "blocks a non-refusal exit 1 printed after codex's budget notice under the failure's own line, not the notice 472ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a non-refusal exit 1 printed after codex's budget notice under the failure's own line, not the notice",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a non-refusal exit 1 printed after codex's budget notice under the failure's own line, not the notice",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "books the reconciliation's spend on the group once, and the ledger still conserves",
+      "initialRaw": "books the reconciliation's spend on the group once, and the ledger still conserves 549ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) books the reconciliation's spend on the group once, and the ledger still conserves",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) books the reconciliation's spend on the group once, and the ledger still conserves",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "blocks a reconciliation that leaves conflict markers, and orca/<group> keeps only the first landing",
+      "initialRaw": "blocks a reconciliation that leaves conflict markers, and orca/<group> keeps only the first landing 364ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a reconciliation that leaves conflict markers, and orca/<group> keeps only the first landing",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a reconciliation that leaves conflict markers, and orca/<group> keeps only the first landing",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "blocks a reconciliation that ended failed, and still books its spend on the group",
+      "initialRaw": "blocks a reconciliation that ended failed, and still books its spend on the group 367ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a reconciliation that ended failed, and still books its spend on the group",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a reconciliation that ended failed, and still books its spend on the group",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "blocks a reconciliation that ended exhausted instead of landing it, and still books its spend",
+      "initialRaw": "blocks a reconciliation that ended exhausted instead of landing it, and still books its spend 399ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a reconciliation that ended exhausted instead of landing it, and still books its spend",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a reconciliation that ended exhausted instead of landing it, and still books its spend",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "blocks a reconciliation that ended blocked_waiting_human instead of landing it, and still books its spend",
+      "initialRaw": "blocks a reconciliation that ended blocked_waiting_human instead of landing it, and still books its spend 383ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a reconciliation that ended blocked_waiting_human instead of landing it, and still books its spend",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a reconciliation that ended blocked_waiting_human instead of landing it, and still books its spend",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "blocks a reconciliation that ended cancelled instead of landing it, and still books its spend",
+      "initialRaw": "blocks a reconciliation that ended cancelled instead of landing it, and still books its spend 409ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a reconciliation that ended cancelled instead of landing it, and still books its spend",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks a reconciliation that ended cancelled instead of landing it, and still books its spend",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "blocks at R, before spawning, a reconciliation the group can no longer afford",
+      "initialRaw": "blocks at R, before spawning, a reconciliation the group can no longer afford 469ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks at R, before spawning, a reconciliation the group can no longer afford",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) blocks at R, before spawning, a reconciliation the group can no longer afford",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "waits for a reconciliation still running, and collects it once it ends, with one spawn",
+      "initialRaw": "waits for a reconciliation still running, and collects it once it ends, with one spawn 381ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) waits for a reconciliation still running, and collects it once it ends, with one spawn",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) waits for a reconciliation still running, and collects it once it ends, with one spawn",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "after a restart, waits on a recorded live reconciliation process instead of spawning a second one",
+      "initialRaw": "after a restart, waits on a recorded live reconciliation process instead of spawning a second one 472ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) after a restart, waits on a recorded live reconciliation process instead of spawning a second one",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) after a restart, waits on a recorded live reconciliation process instead of spawning a second one",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "spawns the reconciliation as its own process group with its output in files, and a new driver after stop() finishes it with one spawn",
+      "initialRaw": "spawns the reconciliation as its own process group with its output in files, and a new driver after stop() finishes it with one spawn 571ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) spawns the reconciliation as its own process group with its output in files, and a new driver after stop() finishes it with one spawn",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) spawns the reconciliation as its own process group with its output in files, and a new driver after stop() finishes it with one spawn",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "after a restart with a spawn recorded but no process id, blocks instead of running a second reconciliation",
+      "initialRaw": "after a restart with a spawn recorded but no process id, blocks instead of running a second reconciliation 581ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) after a restart with a spawn recorded but no process id, blocks instead of running a second reconciliation",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "reconciling a conflict (spec \u00a75.3) after a restart with a spawn recorded but no process id, blocks instead of running a second reconciliation",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "blocks at R naming the leftover lock, and spawns no second reconciliation",
+      "initialRaw": "blocks at R naming the leftover lock, and spawns no second reconciliation 529ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "a reconciliation whose landing swap fails without the tip moving (final review I2) blocks at R naming the leftover lock, and spawns no second reconciliation",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "a reconciliation whose landing swap fails without the tip moving (final review I2) blocks at R naming the leftover lock, and spawns no second reconciliation",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "re-runs a failed reconciliation: two spawns, two distinct bookings, never three",
+      "initialRaw": "re-runs a failed reconciliation: two spawns, two distinct bookings, never three 647ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "a person's retry of a run blocked at R (final review I4) re-runs a failed reconciliation: two spawns, two distinct bookings, never three",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "a person's retry of a run blocked at R (final review I4) re-runs a failed reconciliation: two spawns, two distinct bookings, never three",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcile.test.ts",
+      "initialName": "retries a collected reconciliation whose landing failed without running it again or booking it twice",
+      "initialRaw": "retries a collected reconciliation whose landing failed without running it again or booking it twice 623ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "a person's retry of a run blocked at R (final review I4) retries a collected reconciliation whose landing failed without running it again or booking it twice",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "a person's retry of a run blocked at R (final review I4) retries a collected reconciliation whose landing failed without running it again or booking it twice",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcileN.test.ts",
+      "initialName": "answers both landed tasks, sorted by task id, where the two-sided rule escalated \"2\"; none still escalates \"0\"",
+      "initialRaw": "answers both landed tasks, sorted by task id, where the two-sided rule escalated \"2\"; none still escalates \"0\" 312ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "N1u: the other side of a conflict is every landed task it touches (spec \u00a75.2 N1) answers both landed tasks, sorted by task id, where the two-sided rule escalated \"2\"; none still escalates \"0\"",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "N1u: the other side of a conflict is every landed task it touches (spec \u00a75.2 N1) answers both landed tasks, sorted by task id, where the two-sided rule escalated \"2\"; none still escalates \"0\"",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcileN.test.ts",
+      "initialName": "lands all three with exactly two reconciliations, the second against both landed tasks",
+      "initialRaw": "lands all three with exactly two reconciliations, the second against both landed tasks 242ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "three runs conflicting on one file (spec \u00a75.2 N1, N2) lands all three with exactly two reconciliations, the second against both landed tasks",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "three runs conflicting on one file (spec \u00a75.2 N1, N2) lands all three with exactly two reconciliations, the second against both landed tasks",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcileN.test.ts",
+      "initialName": "N2: while one run of the group is reconciling, a sibling collected run does not land until the reconciliation has",
+      "initialRaw": "N2: while one run of the group is reconciling, a sibling collected run does not land until the reconciliation has 275ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "three runs conflicting on one file (spec \u00a75.2 N1, N2) N2: while one run of the group is reconciling, a sibling collected run does not land until the reconciliation has",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "three runs conflicting on one file (spec \u00a75.2 N1, N2) N2: while one run of the group is reconciling, a sibling collected run does not land until the reconciliation has",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcileN.test.ts",
+      "initialName": "books both spawns on the group under two distinct keys",
+      "initialRaw": "books both spawns on the group under two distinct keys 251ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "a reconciliation reset by a moved tip and spawned again (spec \u00a711 I7, \u00a713.2 I-6) books both spawns on the group under two distinct keys",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "a reconciliation reset by a moved tip and spawned again (spec \u00a711 I7, \u00a713.2 I-6) books both spawns on the group under two distinct keys",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverReconcileN.test.ts",
+      "initialName": "resumes above the largest booked spawn number, not the number of booked spawns",
+      "initialRaw": "resumes above the largest booked spawn number, not the number of booked spawns 315ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "the spawn key after a spawn that died unbooked (controller ruling D-SPAWNKEY, 2026-09-25) resumes above the largest booked spawn number, not the number of booked spawns",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "the spawn key after a spawn that died unbooked (controller ruling D-SPAWNKEY, 2026-09-25) resumes above the largest booked spawn number, not the number of booked spawns",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/requirementE2E.test.ts",
+      "initialName": "lands both tasks on orca/<groupId> on top of the requirement document's commit",
+      "initialRaw": "lands both tasks on orca/<groupId> on top of the requirement document's commit 13539ms",
+      "mechanism": "Approved historical finite runtime fixture / actual owner finite task edits and ordinary finite protocol3 selection; actual new nullable lifecycle remains dedicated.",
+      "source401Matches": [
+        {
+          "name": "a requirement from idea to landed work, against real ccloop (N1 spec \u00a712.3) lands both tasks on orca/<groupId> on top of the requirement document's commit",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "a requirement from idea to landed work, against real ccloop (N1 spec \u00a712.3) lands both tasks on orca/<groupId> on top of the requirement document's commit",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/integrationResolve.test.ts",
+      "initialName": "an approved resolution the group can no longer afford at spawn goes back to conflict, as the next attempt",
+      "initialRaw": "an approved resolution the group can no longer afford at spawn goes back to conflict, as the next attempt 2928ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "an integration conflict, materialised and approved (integration spec \u00a77) an approved resolution the group can no longer afford at spawn goes back to conflict, as the next attempt",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "an integration conflict, materialised and approved (integration spec \u00a77) an approved resolution the group can no longer afford at spawn goes back to conflict, as the next attempt",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/driverHandoff.test.ts",
+      "initialName": "leaves a run blocked at R whose reconciled merge is already on orca/g to a person: its request stays open",
+      "initialRaw": "leaves a run blocked at R whose reconciled merge is already on orca/g to a person: its request stays open 260ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "a landing whose worktree removal failed after the swap (controller ruling T4-I1) leaves a run blocked at R whose reconciled merge is already on orca/g to a person: its request stays open",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "a landing whose worktree removal failed after the swap (controller ruling T4-I1) leaves a run blocked at R whose reconciled merge is already on orca/g to a person: its request stays open",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/loopPlanE2E.test.ts",
+      "initialName": "runs the newly expanded contract to settle, and leaves the rest of the snapshot byte-identical",
+      "initialRaw": "runs the newly expanded contract to settle, and leaves the rest of the snapshot byte-identical 1177ms",
+      "mechanism": "Approved historical finite runtime fixture / actual owner finite task edits and ordinary finite protocol3 selection; actual new nullable lifecycle remains dedicated.",
+      "source401Matches": [
+        {
+          "name": "a loop task changed after confirmation, against real ccloop (spec \u00a76 criterion 10) runs the newly expanded contract to settle, and leaves the rest of the snapshot byte-identical",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "a loop task changed after confirmation, against real ccloop (spec \u00a76 criterion 10) runs the newly expanded contract to settle, and leaves the rest of the snapshot byte-identical",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/agentUpgradeE2E.test.ts",
+      "initialName": "blocks the next dispatch of a started group on the drift, stays blocked after a retry until the table records the new version, then lands it",
+      "initialRaw": "blocks the next dispatch of a started group on the drift, stays blocked after a retry until the table records the new version, then lands it 82333ms",
+      "mechanism": "Approved historical finite runtime fixture / actual owner finite task edits and ordinary finite protocol3 selection; actual new nullable lifecycle remains dedicated.",
+      "source401Matches": [
+        {
+          "name": "an agent CLI upgraded in place under a confirmed group (ruling review R3) blocks the next dispatch of a started group on the drift, stays blocked after a retry until the table records the new version, then lands it",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "an agent CLI upgraded in place under a confirmed group (ruling review R3) blocks the next dispatch of a started group on the drift, stays blocked after a retry until the table records the new version, then lands it",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/skillsE2E.test.ts",
+      "initialName": "lands, with no .claude/ and no syncskill-lock.json in the landed tree, and every claude call given the run's plugin dir",
+      "initialRaw": "lands, with no .claude/ and no syncskill-lock.json in the landed tree, and every claude call given the run's plugin dir 1717ms",
+      "mechanism": "Approved historical finite runtime fixture / actual owner finite task edits and ordinary finite protocol3 selection; actual new nullable lifecycle remains dedicated.",
+      "source401Matches": [
+        {
+          "name": "a run with skills against real ccloop (syncskill integration spec \u00a710.8 C9) lands, with no .claude/ and no syncskill-lock.json in the landed tree, and every claude call given the run's plugin dir",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "a run with skills against real ccloop (syncskill integration spec \u00a710.8 C9) lands, with no .claude/ and no syncskill-lock.json in the landed tree, and every claude call given the run's plugin dir",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/skillsE2E.test.ts",
+      "initialName": "reads frozen skills in every phase, preserves legacy bytes and lands no temporary links",
+      "initialRaw": "reads frozen skills in every phase, preserves legacy bytes and lands no temporary links 1576ms",
+      "mechanism": "Approved historical finite runtime fixture / actual owner finite task edits and ordinary finite protocol3 selection; actual new nullable lifecycle remains dedicated.",
+      "source401Matches": [
+        {
+          "name": "Codex frozen skills through real ccloop reads frozen skills in every phase, preserves legacy bytes and lands no temporary links",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "Codex frozen skills through real ccloop reads frozen skills in every phase, preserves legacy bytes and lands no temporary links",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/skillsE2E.test.ts",
+      "initialName": "blocks conflict with the stable reason and publishes no Orca link",
+      "initialRaw": "blocks conflict with the stable reason and publishes no Orca link 1402ms",
+      "mechanism": "Approved historical finite runtime fixture / actual owner finite task edits and ordinary finite protocol3 selection; actual new nullable lifecycle remains dedicated.",
+      "source401Matches": [
+        {
+          "name": "Codex frozen skills through real ccloop blocks conflict with the stable reason and publishes no Orca link",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "Codex frozen skills through real ccloop blocks conflict with the stable reason and publishes no Orca link",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/skillsE2E.test.ts",
+      "initialName": "blocks cleanup with the stable reason and publishes no Orca link",
+      "initialRaw": "blocks cleanup with the stable reason and publishes no Orca link 1642ms",
+      "mechanism": "Approved historical finite runtime fixture / actual owner finite task edits and ordinary finite protocol3 selection; actual new nullable lifecycle remains dedicated.",
+      "source401Matches": [
+        {
+          "name": "Codex frozen skills through real ccloop blocks cleanup with the stable reason and publishes no Orca link",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "Codex frozen skills through real ccloop blocks cleanup with the stable reason and publishes no Orca link",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/tokenPolicyRuntime.test.ts",
+      "initialName": "finishes beyond the old default with a capable peer or refuses nullable work before an old peer spends",
+      "initialRaw": "finishes beyond the old default with a capable peer or refuses nullable work before an old peer spends 1365ms",
+      "mechanism": "Actual oldpeer newnull refusal receipt now asserted explicitly, with zero provider calls; paired source lifecycle separately exercised.",
+      "source401Matches": [
+        {
+          "name": "paired source nullable token lifecycle finishes beyond the old default with a capable peer or refuses nullable work before an old peer spends",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "paired source nullable token lifecycle finishes beyond the old default with a capable peer or refuses nullable work before an old peer spends",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/tokenPolicyRuntime.test.ts",
+      "initialName": "renews a saved funded allowance after a cap raise without replaying paid planning",
+      "initialRaw": "renews a saved funded allowance after a cap raise without replaying paid planning 992ms",
+      "mechanism": "Actual oldpeer newnull refusal receipt now asserted explicitly, with zero provider calls; paired source lifecycle separately exercised.",
+      "source401Matches": [
+        {
+          "name": "paired source nullable token lifecycle renews a saved funded allowance after a cap change without replaying paid planning (authored null)",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "paired source nullable token lifecycle renews a saved funded allowance after a cap change without replaying paid planning (authored null)",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/settleUnknownUsage.test.ts",
+      "initialName": "books in current total and gates the next retry claim",
+      "initialRaw": "books in current total and gates the next retry claim 408ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "D9 accounting time and spend caps books in current total and gates the next retry claim",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "D9 accounting time and spend caps books in current total and gates the next retry claim",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/settleUnknownUsage.test.ts",
+      "initialName": "books in current week and gates the next retry claim",
+      "initialRaw": "books in current week and gates the next retry claim 350ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "D9 accounting time and spend caps books in current week and gates the next retry claim",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "D9 accounting time and spend caps books in current week and gates the next retry claim",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/settleUnknownUsage.test.ts",
+      "initialName": "books in current month and gates the next retry claim",
+      "initialRaw": "books in current month and gates the next retry claim 291ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "D9 accounting time and spend caps books in current month and gates the next retry claim",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "D9 accounting time and spend caps books in current month and gates the next retry claim",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/retryTask.test.ts",
+      "initialName": "refuses when the reserve cannot cover the new run, naming the dimension and the shortfall, and changes nothing",
+      "initialRaw": "refuses when the reserve cannot cover the new run, naming the dimension and the shortfall, and changes nothing 2170ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "retry-task refusals (spec \u00a74.2(2), \u00a74.4) refuses when the reserve cannot cover the new run, naming the dimension and the shortfall, and changes nothing",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "retry-task refusals (spec \u00a74.2(2), \u00a74.4) refuses when the reserve cannot cover the new run, naming the dimension and the shortfall, and changes nothing",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/retryTask.test.ts",
+      "initialName": "counts the handoff bucket in the net reservation: the work part fits, the handoff part makes it short",
+      "initialRaw": "counts the handoff bucket in the net reservation: the work part fits, the handoff part makes it short 2420ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "retry-task refusals (spec \u00a74.2(2), \u00a74.4) counts the handoff bucket in the net reservation: the work part fits, the handoff part makes it short",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "retry-task refusals (spec \u00a74.2(2), \u00a74.4) counts the handoff bucket in the net reservation: the work part fits, the handoff part makes it short",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/retryTask.test.ts",
+      "initialName": "retries twice: a short reserve on the second retry is refused by dimension and shortfall, and run 3 lands (review focus 2)",
+      "initialRaw": "retries twice: a short reserve on the second retry is refused by dimension and shortfall, and run 3 lands (review focus 2) 3087ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "after retry-task: cleanup, a new run, success (spec \u00a74.2(2), \u00a74.4) retries twice: a short reserve on the second retry is refused by dimension and shortfall, and run 3 lands (review focus 2)",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "after retry-task: cleanup, a new run, success (spec \u00a74.2(2), \u00a74.4) retries twice: a short reserve on the second retry is refused by dimension and shortfall, and run 3 lands (review focus 2)",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/memory/ccmemAdapter.test.ts",
+      "initialName": "names an errno libuv has no name for by its errno name, so the wire code has no spaces",
+      "initialRaw": "names an errno libuv has no name for by its errno name, so the wire code has no spaces 304ms",
+      "mechanism": "Node24 native ENOEXEC message differs from v22 hardcoded text; independent same-fixture native observer + forwarding mutant.",
+      "source401Matches": [
+        {
+          "name": "failures (spec \u00a73.3) names an errno libuv has no name for by its errno name, so the wire code has no spaces",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "failures (spec \u00a73.3) names an errno libuv has no name for by its errno name, so the wire code has no spaces",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/configHashPerTask.test.ts",
+      "initialName": "hands the reconciliation the group's reconcile slot's own configHash, distinct from both conflicted runs'",
+      "initialRaw": "hands the reconciliation the group's reconcile slot's own configHash, distinct from both conflicted runs' 378ms",
+      "mechanism": "Derived historical policy tag wrongly overrode legally edited finite body; finite-legacy body authority restored without waiving optional identity.",
+      "source401Matches": [
+        {
+          "name": "per-task configHash, with a distinct configHash per selection (audit 2026-09-26 K1-K4) hands the reconciliation the group's reconcile slot's own configHash, distinct from both conflicted runs'",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "per-task configHash, with a distinct configHash per selection (audit 2026-09-26 K1-K4) hands the reconciliation the group's reconcile slot's own configHash, distinct from both conflicted runs'",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/panel/controlPollPerformance.test.ts",
+      "initialName": "shares lazy decoding with live M3 retry authority and still rejects corrupt source and missing marker",
+      "initialRaw": "shares lazy decoding with live M3 retry authority and still rejects corrupt source and missing marker 563ms",
+      "mechanism": "Same legacy finite authority fix; strict source/marker and single-decode criteria retained.",
+      "source401Matches": [
+        {
+          "name": "control poll request snapshots shares lazy decoding with live M3 retry authority and still rejects corrupt source and missing marker",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "control poll request snapshots shares lazy decoding with live M3 retry authority and still rejects corrupt source and missing marker",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/panel/controlPollPerformance.test.ts",
+      "initialName": "preserves D9 settlement markers and strict rejection while decoding each work and run once",
+      "initialRaw": "preserves D9 settlement markers and strict rejection while decoding each work and run once 589ms",
+      "mechanism": "Same legacy finite authority fix; strict source/marker and single-decode criteria retained.",
+      "source401Matches": [
+        {
+          "name": "control poll request snapshots preserves D9 settlement markers and strict rejection while decoding each work and run once",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "control poll request snapshots preserves D9 settlement markers and strict rejection while decoding each work and run once",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionSnapshot.test.ts",
+      "initialName": "derives deterministic immutable contracts and sorted snapshot authority",
+      "initialRaw": "derives deterministic immutable contracts and sorted snapshot authority 110ms",
+      "mechanism": "Historical immutable-snapshot fixture has no mutable group limit; optional identity predicate must not invent one. Frozen source/hash criteria unchanged.",
+      "source401Matches": [
+        {
+          "name": "execution snapshot preparation derives deterministic immutable contracts and sorted snapshot authority",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "execution snapshot preparation derives deterministic immutable contracts and sorted snapshot authority",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionSnapshot.test.ts",
+      "initialName": "refuses frozen selections whose task set is not the plan's",
+      "initialRaw": "refuses frozen selections whose task set is not the plan's 101ms",
+      "mechanism": "Historical immutable-snapshot fixture has no mutable group limit; optional identity predicate must not invent one. Frozen source/hash criteria unchanged.",
+      "source401Matches": [
+        {
+          "name": "execution snapshot preparation refuses frozen selections whose task set is not the plan's",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "execution snapshot preparation refuses frozen selections whose task set is not the plan's",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionSnapshot.test.ts",
+      "initialName": "rejects component over-limit and safe-integer sum overflow",
+      "initialRaw": "rejects component over-limit and safe-integer sum overflow 92ms",
+      "mechanism": "Historical immutable-snapshot fixture has no mutable group limit; optional identity predicate must not invent one. Frozen source/hash criteria unchanged.",
+      "source401Matches": [
+        {
+          "name": "execution snapshot preparation rejects component over-limit and safe-integer sum overflow",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "execution snapshot preparation rejects component over-limit and safe-integer sum overflow",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionSnapshot.test.ts",
+      "initialName": "rejects an omitted estimate allocation relative to persisted authority",
+      "initialRaw": "rejects an omitted estimate allocation relative to persisted authority 87ms",
+      "mechanism": "Historical immutable-snapshot fixture has no mutable group limit; optional identity predicate must not invent one. Frozen source/hash criteria unchanged.",
+      "source401Matches": [
+        {
+          "name": "execution snapshot preparation rejects an omitted estimate allocation relative to persisted authority",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "execution snapshot preparation rejects an omitted estimate allocation relative to persisted authority",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionSnapshot.test.ts",
+      "initialName": "rejects an substituted estimate allocation relative to persisted authority",
+      "initialRaw": "rejects an substituted estimate allocation relative to persisted authority 89ms",
+      "mechanism": "Historical immutable-snapshot fixture has no mutable group limit; optional identity predicate must not invent one. Frozen source/hash criteria unchanged.",
+      "source401Matches": [
+        {
+          "name": "execution snapshot preparation rejects an substituted estimate allocation relative to persisted authority",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "execution snapshot preparation rejects an substituted estimate allocation relative to persisted authority",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionSnapshot.test.ts",
+      "initialName": "rejects an understated estimate allocation relative to persisted authority",
+      "initialRaw": "rejects an understated estimate allocation relative to persisted authority 135ms",
+      "mechanism": "Historical immutable-snapshot fixture has no mutable group limit; optional identity predicate must not invent one. Frozen source/hash criteria unchanged.",
+      "source401Matches": [
+        {
+          "name": "execution snapshot preparation rejects an understated estimate allocation relative to persisted authority",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "execution snapshot preparation rejects an understated estimate allocation relative to persisted authority",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionSnapshot.test.ts",
+      "initialName": "rejects an duplicate estimate allocation relative to persisted authority",
+      "initialRaw": "rejects an duplicate estimate allocation relative to persisted authority 107ms",
+      "mechanism": "Historical immutable-snapshot fixture has no mutable group limit; optional identity predicate must not invent one. Frozen source/hash criteria unchanged.",
+      "source401Matches": [
+        {
+          "name": "execution snapshot preparation rejects an duplicate estimate allocation relative to persisted authority",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "execution snapshot preparation rejects an duplicate estimate allocation relative to persisted authority",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionSnapshot.test.ts",
+      "initialName": "rejects an wrong-ID estimate allocation relative to persisted authority",
+      "initialRaw": "rejects an wrong-ID estimate allocation relative to persisted authority 91ms",
+      "mechanism": "Historical immutable-snapshot fixture has no mutable group limit; optional identity predicate must not invent one. Frozen source/hash criteria unchanged.",
+      "source401Matches": [
+        {
+          "name": "execution snapshot preparation rejects an wrong-ID estimate allocation relative to persisted authority",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "execution snapshot preparation rejects an wrong-ID estimate allocation relative to persisted authority",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionSnapshot.test.ts",
+      "initialName": "a group without skills keeps its golden snapshot hash, with or without an empty skills input",
+      "initialRaw": "a group without skills keeps its golden snapshot hash, with or without an empty skills input 143ms",
+      "mechanism": "Historical immutable-snapshot fixture has no mutable group limit; optional identity predicate must not invent one. Frozen source/hash criteria unchanged.",
+      "source401Matches": [
+        {
+          "name": "execution snapshot skills a group without skills keeps its golden snapshot hash, with or without an empty skills input",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "execution snapshot skills a group without skills keeps its golden snapshot hash, with or without an empty skills input",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionSnapshot.test.ts",
+      "initialName": "freezes the entries into the snapshot, and so into its hash",
+      "initialRaw": "freezes the entries into the snapshot, and so into its hash 113ms",
+      "mechanism": "Historical immutable-snapshot fixture has no mutable group limit; optional identity predicate must not invent one. Frozen source/hash criteria unchanged.",
+      "source401Matches": [
+        {
+          "name": "execution snapshot skills freezes the entries into the snapshot, and so into its hash",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "execution snapshot skills freezes the entries into the snapshot, and so into its hash",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionSnapshot.test.ts",
+      "initialName": "refuses an entry for a task with no derived contract",
+      "initialRaw": "refuses an entry for a task with no derived contract 103ms",
+      "mechanism": "Historical immutable-snapshot fixture has no mutable group limit; optional identity predicate must not invent one. Frozen source/hash criteria unchanged.",
+      "source401Matches": [
+        {
+          "name": "execution snapshot skills refuses an entry for a task with no derived contract",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "execution snapshot skills refuses an entry for a task with no derived contract",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionSnapshot.test.ts",
+      "initialName": "refuses an entry with no names",
+      "initialRaw": "refuses an entry with no names 112ms",
+      "mechanism": "Historical immutable-snapshot fixture has no mutable group limit; optional identity predicate must not invent one. Frozen source/hash criteria unchanged.",
+      "source401Matches": [
+        {
+          "name": "execution snapshot skills refuses an entry with no names",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "execution snapshot skills refuses an entry with no names",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionSnapshot.test.ts",
+      "initialName": "the schema refuses entries out of order or repeated, and an empty list",
+      "initialRaw": "the schema refuses entries out of order or repeated, and an empty list 93ms",
+      "mechanism": "Historical immutable-snapshot fixture has no mutable group limit; optional identity predicate must not invent one. Frozen source/hash criteria unchanged.",
+      "source401Matches": [
+        {
+          "name": "execution snapshot skills the schema refuses entries out of order or repeated, and an empty list",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "execution snapshot skills the schema refuses entries out of order or repeated, and an empty list",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/panel/agentCeiling.test.ts",
+      "initialName": "an agent's import over headroom is refused, rolled back and books nothing; a user's is accepted",
+      "initialRaw": "an agent's import over headroom is refused, rolled back and books nothing; a user's is accepted 266ms",
+      "mechanism": "Approved semantic change: new defaultnull cumulative import is admitted; actual finite estimate claim remains cap-gated. Exact old/new names separately inventoried.",
+      "source401Matches": [
+        {
+          "name": "the agent ceiling (spec \u00a76.3.2, D4, D10) an agent's new unlimited import is admitted while its finite estimate claim remains capped",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "the agent ceiling (spec \u00a76.3.2, D4, D10) an agent's new unlimited import is admitted while its finite estimate claim remains capped",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/panel/agentCeiling.test.ts",
+      "initialName": "an agent's import is held to its repository's cap too",
+      "initialRaw": "an agent's import is held to its repository's cap too 143ms",
+      "mechanism": "Approved semantic change: new defaultnull cumulative import is admitted; actual finite estimate claim remains cap-gated. Exact old/new names separately inventoried.",
+      "source401Matches": [
+        {
+          "name": "the agent ceiling (spec \u00a76.3.2, D4, D10) an agent's new unlimited import still cannot claim beyond its repository cap",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "the agent ceiling (spec \u00a76.3.2, D4, D10) an agent's new unlimited import still cannot claim beyond its repository cap",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/schema9.test.ts",
+      "initialName": "refuses a version-11 store and leaves its bytes unchanged",
+      "initialRaw": "refuses a version-11 store and leaves its bytes unchanged 152ms",
+      "mechanism": "Additive schema11 makes future-schema refusal move from11 to12.",
+      "source401Matches": [
+        {
+          "name": "schema 8 to 9 (issue-fixes spec \u00a75.2, ruling H5) refuses a version-12 store and leaves its bytes unchanged",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "schema 8 to 9 (issue-fixes spec \u00a75.2, ruling H5) refuses a version-12 store and leaves its bytes unchanged",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/loopPlanView.test.ts",
+      "initialName": "shows the plan, how it was chosen and the fields its lines are built from for a loop task",
+      "initialRaw": "shows the plan, how it was chosen and the fields its lines are built from for a loop task 159ms",
+      "mechanism": "Current recipe version3; historical v1/v2/golden expansion selected explicitly without changing archived bytes.",
+      "source401Matches": [
+        {
+          "name": "a task's plan in the group view (spec \u00a74.1) shows the plan, how it was chosen and the fields its lines are built from for a loop task",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "a task's plan in the group view (spec \u00a74.1) shows the plan, how it was chosen and the fields its lines are built from for a loop task",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/setTaskLoopVersion.test.ts",
+      "initialName": "an input change moves a v1 task to the current version",
+      "initialRaw": "an input change moves a v1 task to the current version 183ms",
+      "mechanism": "Current recipe version3; historical v1/v2/golden expansion selected explicitly without changing archived bytes.",
+      "source401Matches": [
+        {
+          "name": "set-task-loop keeps the task's plan version unless the plan or its inputs change (W7) an input change moves a v1 task to the current version",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "set-task-loop keeps the task's plan version unless the plan or its inputs change (W7) an input change moves a v1 task to the current version",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/loopPlanImport.test.ts",
+      "initialName": "archives the recipe with the task, and the stored contract is the recipe's expansion",
+      "initialRaw": "archives the recipe with the task, and the stored contract is the recipe's expansion 135ms",
+      "mechanism": "Current recipe version3; historical v1/v2/golden expansion selected explicitly without changing archived bytes.",
+      "source401Matches": [
+        {
+          "name": "Web import of a loop task (spec \u00a73.3, criterion 6) archives the recipe with the task, and the stored contract is the recipe's expansion",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "Web import of a loop task (spec \u00a73.3, criterion 6) archives the recipe with the task, and the stored contract is the recipe's expansion",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/loopPlanViewFields.test.ts",
+      "initialName": "carries exactly the fields of \u00a73.1: the contract's file cap and whether the plan version has a discipline line",
+      "initialRaw": "carries exactly the fields of \u00a73.1: the contract's file cap and whether the plan version has a discipline line 195ms",
+      "mechanism": "Current recipe version3; historical v1/v2/golden expansion selected explicitly without changing archived bytes.",
+      "source401Matches": [
+        {
+          "name": "the loop plan view's fields (panel i18n spec \u00a73.1, \u00a76.8) carries exactly the fields of \u00a73.1: the contract's file cap and whether the plan version has a discipline line",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "the loop plan view's fields (panel i18n spec \u00a73.1, \u00a76.8) carries exactly the fields of \u00a73.1: the contract's file cap and whether the plan version has a discipline line",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/loopPlanSkills.test.ts",
+      "initialName": "keeps the recipe bytes, plan entry bytes, planHash and contract hash",
+      "initialRaw": "keeps the recipe bytes, plan entry bytes, planHash and contract hash 8ms",
+      "mechanism": "Current recipe version3; historical v1/v2/golden expansion selected explicitly without changing archived bytes.",
+      "source401Matches": [
+        {
+          "name": "a loop plan without skills keeps its bytes (golden captured before the change) keeps the recipe bytes, plan entry bytes, planHash and contract hash",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "a loop plan without skills keeps its bytes (golden captured before the change) keeps the recipe bytes, plan entry bytes, planHash and contract hash",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/service/identify.test.ts",
+      "initialName": "a panel.json whose pid is dead falls through to the legacy socket under the control root",
+      "initialRaw": "a panel.json whose pid is dead falls through to the legacy socket under the control root 5013ms",
+      "mechanism": "Isolated long Unix socket path (113bytes) listenEINVAL; fresh real shortTMPDIR counterpart60bytes and unchanged assertion.",
+      "source401Matches": [
+        {
+          "name": "discovery reads panel.json first after the flag (spec \u00a75) a panel.json whose pid is dead falls through to the legacy socket under the control root",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "discovery reads panel.json first after the flag (spec \u00a75) a panel.json whose pid is dead falls through to the legacy socket under the control root",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/entry/discovery.test.ts",
+      "initialName": "with nothing at the default path, finds the one socket under the control root and names every one when there are several",
+      "initialRaw": "with nothing at the default path, finds the one socket under the control root and names every one when there are several 5018ms",
+      "mechanism": "Same proven Unix socket path boundary; unchanged discovery assertion.",
+      "source401Matches": [
+        {
+          "name": "socket discovery (spec \u00a74.3) with nothing at the default path, finds the one socket under the control root and names every one when there are several",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "socket discovery (spec \u00a74.3) with nothing at the default path, finds the one socket under the control root and names every one when there are several",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/panel/humanOnly.test.ts",
+      "initialName": "covers every amount a raw command can carry, or lists it with a reason (C19)",
+      "initialRaw": "covers every amount a raw command can carry, or lists it with a reason (C19) 12ms",
+      "mechanism": "Schema walker must recognize new nullable BudgetAmount alongside finite Amount; exact human-only fields unchanged.",
+      "source401Matches": [
+        {
+          "name": "the human-only surface (spec \u00a75) covers every amount a raw command can carry, or lists it with a reason (C19)",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "the human-only surface (spec \u00a75) covers every amount a raw command can carry, or lists it with a reason (C19)",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionDriverE2E.test.ts",
+      "initialName": "E1: three tasks, two in conflict and one dependent, from confirm to settle on orca/<group>, spending no more than planned",
+      "initialRaw": "E1: three tasks, two in conflict and one dependent, from confirm to settle on orca/<group>, spending no more than planned 361609ms",
+      "mechanism": "Approved historical finite runtime fixture / actual owner finite task edits and ordinary finite protocol3 selection; actual new nullable lifecycle remains dedicated.",
+      "source401Matches": [
+        {
+          "name": "the execution driver against real ccloop (spec \u00a77.2) E1: three tasks, two in conflict and one dependent, from confirm to settle on orca/<group>, spending no more than planned",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "the execution driver against real ccloop (spec \u00a77.2) E1: three tasks, two in conflict and one dependent, from confirm to settle on orca/<group>, spending no more than planned",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "tests/control/executionDriverE2E.test.ts",
+      "initialName": "R-F: retry-task after a ccloop failure settles the run as settled-failed, and run 2 lands",
+      "initialRaw": "R-F: retry-task after a ccloop failure settles the run as settled-failed, and run 2 lands 240979ms",
+      "mechanism": "Approved historical finite runtime fixture / actual owner finite task edits and ordinary finite protocol3 selection; actual new nullable lifecycle remains dedicated.",
+      "source401Matches": [
+        {
+          "name": "the execution driver against real ccloop (spec \u00a77.2) R-F: retry-task after a ccloop failure settles the run as settled-failed, and run 2 lands",
+          "status": "passed"
+        }
+      ],
+      "finalMatches": [
+        {
+          "name": "the execution driver against real ccloop (spec \u00a77.2) R-F: retry-task after a ccloop failure settles the run as settled-failed, and run 2 lands",
+          "status": "passed"
+        }
+      ]
+    }
+  ],
+  "finalSourceTreeSHA256": "6aa31b916020bf7b446b37ee33982b669861cf230f62005f3a1e3fb351854f82",
+  "finalRC": 0
+}
