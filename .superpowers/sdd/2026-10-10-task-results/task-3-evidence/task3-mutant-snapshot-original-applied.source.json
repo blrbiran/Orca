@@ -1,0 +1,15 @@
+{
+  "cwd": "/private/tmp/orca-progress-results-20261010/task3-mutant-clone",
+  "sourceCommit": "0ebe05113484157af774a168125d2e9975967a95",
+  "workingSourceDiffBytes": 1329,
+  "cachedSourceDiffBytes": 0,
+  "argv": [
+    "./node_modules/.bin/vitest",
+    "run",
+    "tests/control/taskResultCollector.test.ts",
+    "--maxWorkers=2",
+    "--no-cache",
+    "-t",
+    "immutable execution snapshot successors"
+  ]
+}

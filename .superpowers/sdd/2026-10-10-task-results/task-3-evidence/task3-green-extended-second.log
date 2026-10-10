@@ -1,0 +1,33 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+ [31m❯[39m tests/control/taskResultCollector.test.ts [2m([22m[2m0 test[22m[2m)[22m
+(node:48158) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-Iobd1Z/orca-snapshot-verify-k9ja2K/input.bundle is okay
+ [32m✓[39m tests/control/taskResultIsolation.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 3813[2mms[22m[39m
+   [32m✓[39m task result archive isolation [2m(3)[22m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in control/task-result-evidence[33m 1067[2mms[22m[39m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in run/task-result-captures[33m 1039[2mms[22m[39m
+     [33m[2m✓[22m[39m normal driver settlement keeps outcome, usage and recoverability with broken optional namespaces[33m 1704[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Suites 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m [ tests/control/taskResultCollector.test.ts ][22m
+[31m[1mError[22m: Cannot find module '../../src/control/webQueries.js' imported from /Users/biran/.codex/worktrees/progress-results-20261010/Orca/tests/control/taskResultCollector.test.ts[39m
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m15:1[22m[39m
+    [90m 13|[39m import type { ArtifactRef } from '../../src/control/types.js';
+    [90m 14|[39m const latch=()=>{let release!:(value?:unknown)=>void;const promise=new…
+    [90m 15|[39m import { readWebGroup } from '../../src/control/webQueries.js';
+    [90m   |[39m [31m^[39m
+    [90m 16|[39m import { cleanupCommittedRun } from '../../src/control/cleanup.js';
+    [90m 17|[39m import { createCcloopExecutionPort } from '../../src/control/ccloopPor…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m   Start at [22m 18:23:31
+[2m   Duration [22m 4.51s[2m (tests 86%, transform 12%, import 2%)[22m
+

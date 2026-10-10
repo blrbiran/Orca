@@ -1,0 +1,121 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:42046) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-PFyzF2/orca-snapshot-verify-FfBGok/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-PFyzF2/orca-snapshot-verify-7IgEsf/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-PFyzF2/orca-snapshot-verify-GCCDJ0/input.bundle is okay
+ [31m❯[39m tests/control/taskResultCollector.test.ts [2m([22m[2m16 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 11783[2mms[22m[39m
+   [31m❯[39m independent result retention [2m(11)[22m
+     [33m[2m✓[22m[39m retains manifest-owned hashes with stable run/attempt membership and results-only projection changes[33m 429[2mms[22m[39m
+     [33m[2m✓[22m[39m never admits a partial/corrupt page or rolls history backward and retries transient faults[33m 453[2mms[22m[39m
+     [33m[2m✓[22m[39m requires contiguous complete pages, identity and immutable execution snapshot successors[33m 380[2mms[22m[39m
+     [33m[2m✓[22m[39m separates actual verifier start, completion and unavailable evidence from executor claims[33m 500[2mms[22m[39m
+     [32m✓[39m rejects late writes after owner fence[32m 271[2mms[22m[39m
+     [32m✓[39m rejects late writes after drain fence[32m 257[2mms[22m[39m
+     [32m✓[39m rejects late writes after shutdown fence[32m 255[2mms[22m[39m
+     [32m✓[39m rejects late writes after run-owner fence[32m 262[2mms[22m[39m
+[31m     [31m×[31m rejects late writes after lease fence[39m[32m 267[2mms[22m[39m
+     [33m[2m✓[22m[39m core usage and terminal settle independently during a blocked optional RPC[33m 1773[2mms[22m[39m
+     [33m[2m✓[22m[39m optional RPC timeout is bounded and a real peer refusal alone means unsupported[33m 1273[2mms[22m[39m
+   [31m❯[39m retention queue and source deletion [2m(5)[22m
+     [33m[2m✓[22m[39m permits at most two process-wide jobs and deduplicates one run across schedule/flush[33m 852[2mms[22m[39m
+[31m     [31m×[31m flushes owned queued results before actual source deletion after settled budget, preserving saved bytes[39m[33m 1790[2mms[22m[39m
+     [33m[2m✓[22m[39m includes global queue wait in the 67000-ms flush deadline and fences late evidence after timeout[33m 569[2mms[22m[39m
+     [32m✓[39m does not invent observations on missing/non-task sources and retries transport errors[32m 264[2mms[22m[39m
+     [33m[2m✓[22m[39m caches only old command refusal by executable file identity and re-discovers a changed file[33m 2185[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mindependent result retention[2m > [22mrejects late writes after lease fence
+[31m[1mAssertionError[22m: expected { …(8) } to be null[39m
+
+[32m- Expected:[39m
+null
+
+[31m+ Received:[39m
+{
+  "currentAttempt": 0,
+  "identity": null,
+  "observations": [],
+  "reason": "task-result-evidence-invalid",
+  "revision": 0,
+  "schema": "orca-task-result-store-v1",
+  "sourceRevision": 0,
+  "status": "unavailable",
+}
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m87:53[22m[39m
+    [90m 85|[39m    if(fence==='lease'){const body=f.t.body(f.runId);body.ownerToken='r…
+    [90m 86|[39m    held.release();await (stopping??f.collector.flush(f.runId));
+    [90m 87|[39m    expect(readTaskResultState(f.t.h.store,f.runId)).toBeNull();expect(…
+    [90m   |[39m                                                     [31m^[39m
+    [90m 88|[39m   }finally{held.release();await f.dispose();}
+    [90m 89|[39m  });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mretention queue and source deletion[2m > [22mflushes owned queued results before actual source deletion after settled budget, preserving saved bytes
+[31m[1mAssertionError[22m: expected { …(37) } to match object { state: 'settled', …(1) }
+(84 matching properties omitted from actual)[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[2m    "remaining": {[22m
+[2m      "handoff": {[22m
+[32m-       "tokens": 0,[39m
+[31m+       "tokens": 300000,[39m
+[2m      },[22m
+[2m      "work": {[22m
+[32m-       "tokens": 0,[39m
+[31m+       "tokens": 2999990,[39m
+[2m      },[22m
+[2m    },[22m
+[2m    "state": "settled",[22m
+[2m  }[22m
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m125:30[22m[39m
+    [90m123|[39m    f.collector.schedule(f.runId);await entered.promise;const deletingS…
+    [90m124|[39m    await deleting.promise;await tick();expect((await stat(f.input.work…
+    [90m125|[39m    expect(f.t.body(f.runId)).toMatchObject({state:'settled',remaining:…
+    [90m   |[39m                              [31m^[39m
+    [90m126|[39m    held.release();expect(await deletingSource).toEqual({removed:true})…
+    [90m127|[39m    expect((await readOwnedTaskResultEvidence(f.t.h.store,f.runId,1,f.m…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Unhandled Errors [49m[22m[31m⎯⎯⎯⎯⎯⎯[39m
+[31m[1m
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.[22m[39m
+
+[31m⎯⎯⎯⎯[39m[1m[41m Unhandled Rejection [49m[22m[31m⎯⎯⎯⎯⎯[39m
+[31m[1mControlError[22m: control-store-closed[39m
+[36m [2m❯[22m Object.transaction src/control/store.ts:[2m130:27[22m[39m
+    [90m128|[39m       },
+    [90m129|[39m       transaction<T>(fn:()=>T):T {
+    [90m130|[39m         if (closed) throw new ControlError("control-store-closed");
+    [90m   |[39m                           [31m^[39m
+    [90m131|[39m         if (inTransaction) throw new ControlError("control-nested-tran…
+    [90m132|[39m         return privateIO(() => {
+[90m [2m❯[22m finish src/control/cleanup.ts:[2m35:96[22m[39m
+[90m [2m❯[22m cleanupCommittedRun src/control/cleanup.ts:[2m36:2[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ code: 'control-store-closed', detail: undefined }[39m
+[31mThis error originated in "[1mtests/control/taskResultCollector.test.ts[22m" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.[39m
+[31mThe last test to run before this error was "[1mflushes owned queued results before actual source deletion after settled budget, preserving saved bytes[22m". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.[39m
+[31m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m14 passed[39m[22m[90m (16)[39m
+[2m     Errors [22m [1m[31m1 error[39m[22m
+[2m   Start at [22m 18:22:07
+[2m   Duration [22m 12.56s[2m (tests 95%, transform 5%, import 1%)[22m
+

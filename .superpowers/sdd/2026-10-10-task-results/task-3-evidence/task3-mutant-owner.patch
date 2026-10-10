@@ -1,0 +1,21 @@
+diff --git a/src/control/taskResultCollector.ts b/src/control/taskResultCollector.ts
+index 464d5e0..3007a28 100644
+--- a/src/control/taskResultCollector.ts
++++ b/src/control/taskResultCollector.ts
+@@ -76,16 +76,6 @@ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskRe
+     const valid = (job: Job, owner: NonNullable<ReturnType<TaskResultCollectorDeps['resolve']>>) => {
+         if (stopped || job.cancelled || deps.admissionGate?.draining)
+             throw new Error('task-result-job-stopped');
+-        deps.store.assertOwner();
+-        const current = deps.resolve(job.runId);
+-        if (!current || current.executionId !== owner.executionId || sha256Canonical(current.input) !== sha256Canonical(owner.input))
+-            throw new Error('task-result-owner-changed');
+-        const row = deps.store.db.prepare('SELECT body FROM runs WHERE id=?').get(job.runId);
+-        if (!row)
+-            throw new Error('task-result-owner-changed');
+-        const run = JSON.parse(String(row.body));
+-        if (run.generation !== owner.input.claim.generation || run.executionId !== owner.executionId || run.ownerToken !== owner.input.claim.ownerToken)
+-            throw new Error('task-result-owner-changed');
+     };
+     const admitted = async <T>(job: Job, owner: NonNullable<ReturnType<TaskResultCollectorDeps['resolve']>>, operation: () => Promise<T>) => {
+         const release = deps.admissionGate?.enter();

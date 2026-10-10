@@ -1,0 +1,311 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:20091) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:20092) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-qedOhZ/orca-snapshot-verify-ril6jF/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-whUA1n/orca-snapshot-verify-47BuKl/input.bundle is okay
+ [32m✓[39m tests/control/taskResultIsolation.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 7931[2mms[22m[39m
+   [32m✓[39m task result archive isolation [2m(3)[22m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in control/task-result-evidence[33m 1332[2mms[22m[39m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in run/task-result-captures[33m 1375[2mms[22m[39m
+     [33m[2m✓[22m[39m normal driver settlement keeps outcome, usage and recoverability with broken optional namespaces[33m 1959[2mms[22m[39m
+   [32m✓[39m isolation in H-settle, failed cleanup and continuation closure [2m(3)[22m
+     [33m[2m✓[22m[39m H-settle retains continuation eligibility and booked usage with unreadable supplemental namespaces[33m 1108[2mms[22m[39m
+     [33m[2m✓[22m[39m settled-failed cleanup ignores supplemental faults and keeps failed outcome and usage[33m 1218[2mms[22m[39m
+     [33m[2m✓[22m[39m genuine core handoff damage still refuses recoverability despite excluded optional faults[33m 937[2mms[22m[39m
+(node:23841) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-whUA1n/orca-snapshot-verify-iDDpY6/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-whUA1n/orca-snapshot-verify-yiUygh/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-cGqdK7/orca-snapshot-verify-EIm7X2/input.bundle is okay
+ [32m✓[39m tests/control/taskResultPaired.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 9809[2mms[22m[39m
+   [32m✓[39m result optional transport exact build [2m(1)[22m
+     [33m[2m✓[22m[39m proves fixed-pin refusal or live saved results before a terminal candidate using the exact selected CLI[33m 9786[2mms[22m[39m
+/private/tmp/opr26/t/orca-tmp-whUA1n/orca-snapshot-verify-VY1B03/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-whUA1n/orca-snapshot-verify-0MGhMF/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-whUA1n/orca-snapshot-verify-oRWoqh/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-whUA1n/orca-snapshot-verify-iz2lFD/input.bundle is okay
+ [31m❯[39m tests/control/taskResultCollector.test.ts [2m([22m[2m30 tests[22m[2m | [22m[31m6 failed[39m[2m)[22m[33m 25462[2mms[22m[39m
+   [31m❯[39m independent result retention [2m(11)[22m
+     [33m[2m✓[22m[39m retains manifest-owned hashes with stable run/attempt membership and results-only projection changes[33m 582[2mms[22m[39m
+     [33m[2m✓[22m[39m never admits a partial/corrupt page or rolls history backward and retries transient faults[33m 734[2mms[22m[39m
+     [33m[2m✓[22m[39m requires contiguous complete pages, identity and immutable execution snapshot successors[33m 494[2mms[22m[39m
+     [33m[2m✓[22m[39m separates actual verifier start, completion and unavailable evidence from executor claims[33m 897[2mms[22m[39m
+[31m     [31m×[31m rejects late writes after owner fence[39m[33m 342[2mms[22m[39m
+[31m     [31m×[31m rejects late writes after drain fence[39m[33m 383[2mms[22m[39m
+[31m     [31m×[31m rejects late writes after shutdown fence[39m[32m 293[2mms[22m[39m
+[31m     [31m×[31m rejects late writes after run-owner fence[39m[33m 302[2mms[22m[39m
+[31m     [31m×[31m rejects late writes after lease fence[39m[33m 436[2mms[22m[39m
+     [33m[2m✓[22m[39m core usage and terminal settle independently during a blocked optional RPC[33m 2169[2mms[22m[39m
+     [33m[2m✓[22m[39m optional RPC timeout is bounded and a real peer refusal alone means unsupported[33m 1362[2mms[22m[39m
+   [32m✓[39m retention queue and source deletion [2m(6)[22m
+     [33m[2m✓[22m[39m permits at most two process-wide jobs and deduplicates one run across schedule/flush[33m 923[2mms[22m[39m
+     [33m[2m✓[22m[39m flushes owned queued results before actual source deletion after settled budget, preserving saved bytes[33m 2249[2mms[22m[39m
+     [33m[2m✓[22m[39m includes global queue wait in the 67000-ms flush deadline with available authority and fences late evidence[33m 745[2mms[22m[39m
+     [33m[2m✓[22m[39m includes global queue wait in the 67000-ms flush deadline with unavailable authority and fences late evidence[33m 673[2mms[22m[39m
+     [32m✓[39m does not invent observations on missing/non-task sources and retries transport errors[32m 298[2mms[22m[39m
+     [33m[2m✓[22m[39m caches only old command refusal by executable file identity and re-discovers a changed file[33m 2036[2mms[22m[39m
+   [32m✓[39m optional methods through owned profile routing [2m(2)[22m
+     [33m[2m✓[22m[39m retains evidence through the real frozen router while absent optional methods remain absent[33m 401[2mms[22m[39m
+     [33m[2m✓[22m[39m deduplicates a run across two collector assemblies for the same owned store[33m 689[2mms[22m[39m
+   [32m✓[39m collector assembly owner handover [2m(2)[22m
+     [33m[2m✓[22m[39m observes the old RPC but lets the new assembly retain the same run without an old stop cancelling it[33m 640[2mms[22m[39m
+     [33m[2m✓[22m[39m preserves source when shutdown wins a flush racing actual deletion[33m 2209[2mms[22m[39m
+   [32m✓[39m owner check at artifact registration [2m(1)[22m
+     [32m✓[39m registers no result artifacts when the owner changes after publication admission but before the transaction[32m 267[2mms[22m[39m
+   [32m✓[39m last source deletion fence [2m(1)[22m
+     [33m[2m✓[22m[39m rechecks shutdown after optional flush and immediately before rm starts[33m 1818[2mms[22m[39m
+   [31m❯[39m fix round 1 bounded reference staging and attempt authority [2m(7)[22m
+[31m     [31m×[31m stages one owned reference before the next read, keeps partial cursor/history and denies both real generic GET and result-reader access[39m[33m 1821[2mms[22m[39m
+     [33m[2m✓[22m[39m checks incremental lease ownership after an asynchronous read before any further reference can be published[33m 402[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps validated source attempt two when evidence fails and core attempt is 1[33m 405[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps validated source attempt two when evidence fails and core attempt is null[33m 393[2mms[22m[39m
+     [33m[2m✓[22m[39m records same-index-revision attempt growth without new reports or cursor advancement, and rejects stale/foreign/malformed facts[33m 399[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects obsolete owner and shutdown writes of source-attempt facts[33m 811[2mms[22m[39m
+     [32m✓[39m retains caller getter and method ownership through the driver overlay[32m 285[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 6 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mindependent result retention[2m > [22mrejects late writes after owner fence
+[31m[1mAssertionError[22m: expected { …(9) } to be null[39m
+
+[32m- Expected:[39m
+null
+
+[31m+ Received:[39m
+{
+  "currentAttempt": 0,
+  "currentAttemptFact": {
+    "currentAttempt": 1,
+    "identity": {
+      "envelopeHash": "bdeb8cecf36826d1d742b68b40e74e7b3e7001832ad914657f77bf80730a84c4",
+      "executionId": "execution-run-ac6a6f20-3b4f-4f20-9c4a-b23605185f3b",
+      "generation": 1,
+      "graphVersion": 1,
+      "groupId": "g",
+      "runId": "run-ac6a6f20-3b4f-4f20-9c4a-b23605185f3b",
+      "targetVersion": 1,
+      "taskId": "a",
+      "workItemId": "a",
+    },
+    "revision": 1,
+    "schema": "orca-task-result-current-attempt-v1",
+  },
+  "identity": null,
+  "observations": [],
+  "reason": null,
+  "revision": 0,
+  "schema": "orca-task-result-store-v1",
+  "sourceRevision": 0,
+  "status": "missing",
+}
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m170:63[22m[39m
+    [90m168|[39m             held.release();
+    [90m169|[39m             await (stopping ?? f.collector.flush(f.runId));
+    [90m170|[39m             expect(readTaskResultState(f.t.h.store, f.runId)).toBeNull…
+    [90m   |[39m                                                               [31m^[39m
+    [90m171|[39m             expect(readProjectionState(f.t.h.store).changeSeq).toBe(be…
+    [90m172|[39m         }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mindependent result retention[2m > [22mrejects late writes after drain fence
+[31m[1mAssertionError[22m: expected { …(9) } to be null[39m
+
+[32m- Expected:[39m
+null
+
+[31m+ Received:[39m
+{
+  "currentAttempt": 0,
+  "currentAttemptFact": {
+    "currentAttempt": 1,
+    "identity": {
+      "envelopeHash": "76f61cba7adc02293c67ebcc1d163222ea92d84a8170d1ef55290794e5952b75",
+      "executionId": "execution-run-846e8d75-5330-4e65-b829-26af741cc7aa",
+      "generation": 1,
+      "graphVersion": 1,
+      "groupId": "g",
+      "runId": "run-846e8d75-5330-4e65-b829-26af741cc7aa",
+      "targetVersion": 1,
+      "taskId": "a",
+      "workItemId": "a",
+    },
+    "revision": 1,
+    "schema": "orca-task-result-current-attempt-v1",
+  },
+  "identity": null,
+  "observations": [],
+  "reason": null,
+  "revision": 0,
+  "schema": "orca-task-result-store-v1",
+  "sourceRevision": 0,
+  "status": "missing",
+}
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m170:63[22m[39m
+    [90m168|[39m             held.release();
+    [90m169|[39m             await (stopping ?? f.collector.flush(f.runId));
+    [90m170|[39m             expect(readTaskResultState(f.t.h.store, f.runId)).toBeNull…
+    [90m   |[39m                                                               [31m^[39m
+    [90m171|[39m             expect(readProjectionState(f.t.h.store).changeSeq).toBe(be…
+    [90m172|[39m         }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mindependent result retention[2m > [22mrejects late writes after shutdown fence
+[31m[1mAssertionError[22m: expected { …(9) } to be null[39m
+
+[32m- Expected:[39m
+null
+
+[31m+ Received:[39m
+{
+  "currentAttempt": 0,
+  "currentAttemptFact": {
+    "currentAttempt": 1,
+    "identity": {
+      "envelopeHash": "f680a58c90dc9e9cecacdcd46855d55e2de3ed4d7bce228afcf739d2910c0ee4",
+      "executionId": "execution-run-de0b49c4-43da-4f0b-8176-3283115559de",
+      "generation": 1,
+      "graphVersion": 1,
+      "groupId": "g",
+      "runId": "run-de0b49c4-43da-4f0b-8176-3283115559de",
+      "targetVersion": 1,
+      "taskId": "a",
+      "workItemId": "a",
+    },
+    "revision": 1,
+    "schema": "orca-task-result-current-attempt-v1",
+  },
+  "identity": null,
+  "observations": [],
+  "reason": null,
+  "revision": 0,
+  "schema": "orca-task-result-store-v1",
+  "sourceRevision": 0,
+  "status": "missing",
+}
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m170:63[22m[39m
+    [90m168|[39m             held.release();
+    [90m169|[39m             await (stopping ?? f.collector.flush(f.runId));
+    [90m170|[39m             expect(readTaskResultState(f.t.h.store, f.runId)).toBeNull…
+    [90m   |[39m                                                               [31m^[39m
+    [90m171|[39m             expect(readProjectionState(f.t.h.store).changeSeq).toBe(be…
+    [90m172|[39m         }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mindependent result retention[2m > [22mrejects late writes after run-owner fence
+[31m[1mAssertionError[22m: expected { …(9) } to be null[39m
+
+[32m- Expected:[39m
+null
+
+[31m+ Received:[39m
+{
+  "currentAttempt": 0,
+  "currentAttemptFact": {
+    "currentAttempt": 1,
+    "identity": {
+      "envelopeHash": "6f6f045a22191c47e33c42869eb489841c3a83a59f9982287c8f30d0e06e42f7",
+      "executionId": "execution-run-03d4c817-dfed-4693-b302-501c2bfb7005",
+      "generation": 1,
+      "graphVersion": 1,
+      "groupId": "g",
+      "runId": "run-03d4c817-dfed-4693-b302-501c2bfb7005",
+      "targetVersion": 1,
+      "taskId": "a",
+      "workItemId": "a",
+    },
+    "revision": 1,
+    "schema": "orca-task-result-current-attempt-v1",
+  },
+  "identity": null,
+  "observations": [],
+  "reason": null,
+  "revision": 0,
+  "schema": "orca-task-result-store-v1",
+  "sourceRevision": 0,
+  "status": "missing",
+}
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m170:63[22m[39m
+    [90m168|[39m             held.release();
+    [90m169|[39m             await (stopping ?? f.collector.flush(f.runId));
+    [90m170|[39m             expect(readTaskResultState(f.t.h.store, f.runId)).toBeNull…
+    [90m   |[39m                                                               [31m^[39m
+    [90m171|[39m             expect(readProjectionState(f.t.h.store).changeSeq).toBe(be…
+    [90m172|[39m         }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mindependent result retention[2m > [22mrejects late writes after lease fence
+[31m[1mAssertionError[22m: expected { …(9) } to be null[39m
+
+[32m- Expected:[39m
+null
+
+[31m+ Received:[39m
+{
+  "currentAttempt": 0,
+  "currentAttemptFact": {
+    "currentAttempt": 1,
+    "identity": {
+      "envelopeHash": "48449a5e8455bc86d2a399a80caa136800ecf390c7b40d93b263bcd9b13ea72a",
+      "executionId": "execution-run-42a8955b-2ffc-4db5-bdcd-742bb5af54f2",
+      "generation": 1,
+      "graphVersion": 1,
+      "groupId": "g",
+      "runId": "run-42a8955b-2ffc-4db5-bdcd-742bb5af54f2",
+      "targetVersion": 1,
+      "taskId": "a",
+      "workItemId": "a",
+    },
+    "revision": 1,
+    "schema": "orca-task-result-current-attempt-v1",
+  },
+  "identity": null,
+  "observations": [],
+  "reason": null,
+  "revision": 0,
+  "schema": "orca-task-result-store-v1",
+  "sourceRevision": 0,
+  "status": "missing",
+}
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m170:63[22m[39m
+    [90m168|[39m             held.release();
+    [90m169|[39m             await (stopping ?? f.collector.flush(f.runId));
+    [90m170|[39m             expect(readTaskResultState(f.t.h.store, f.runId)).toBeNull…
+    [90m   |[39m                                                               [31m^[39m
+    [90m171|[39m             expect(readProjectionState(f.t.h.store).changeSeq).toBe(be…
+    [90m172|[39m         }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mfix round 1 bounded reference staging and attempt authority[2m > [22mstages one owned reference before the next read, keeps partial cursor/history and denies both real generic GET and result-reader access
+[31m[1mAssertionError[22m: expected 423 to be 409 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 409[39m
+[31m+ 423[39m
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m545:146[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m2 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[31m6 failed[39m[22m[2m | [22m[1m[32m31 passed[39m[22m[90m (37)[39m
+[2m   Start at [22m 19:33:15
+[2m   Duration [22m 26.32s[2m (tests 96%, transform 3%, import 1%)[22m
+

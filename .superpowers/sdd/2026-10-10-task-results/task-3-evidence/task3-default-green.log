@@ -1,0 +1,53 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:68892) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:68893) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-vdf825/orca-snapshot-verify-PADwJC/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-61eymw/orca-snapshot-verify-rjOKKm/input.bundle is okay
+ [32m✓[39m tests/control/taskResultIsolation.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 7599[2mms[22m[39m
+   [32m✓[39m task result archive isolation [2m(3)[22m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in control/task-result-evidence[33m 1373[2mms[22m[39m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in run/task-result-captures[33m 1267[2mms[22m[39m
+     [33m[2m✓[22m[39m normal driver settlement keeps outcome, usage and recoverability with broken optional namespaces[33m 1785[2mms[22m[39m
+   [32m✓[39m isolation in H-settle, failed cleanup and continuation closure [2m(3)[22m
+     [33m[2m✓[22m[39m H-settle retains continuation eligibility and booked usage with unreadable supplemental namespaces[33m 1162[2mms[22m[39m
+     [33m[2m✓[22m[39m settled-failed cleanup ignores supplemental faults and keeps failed outcome and usage[33m 1122[2mms[22m[39m
+     [33m[2m✓[22m[39m genuine core handoff damage still refuses recoverability despite excluded optional faults[33m 888[2mms[22m[39m
+(node:72637) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-61eymw/orca-snapshot-verify-3426Re/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-61eymw/orca-snapshot-verify-XcmEpV/input.bundle is okay
+ [32m✓[39m tests/control/taskResultCollector.test.ts [2m([22m[2m18 tests[22m[2m)[22m[33m 14577[2mms[22m[39m
+   [32m✓[39m independent result retention [2m(11)[22m
+     [33m[2m✓[22m[39m retains manifest-owned hashes with stable run/attempt membership and results-only projection changes[33m 572[2mms[22m[39m
+     [33m[2m✓[22m[39m never admits a partial/corrupt page or rolls history backward and retries transient faults[33m 671[2mms[22m[39m
+     [33m[2m✓[22m[39m requires contiguous complete pages, identity and immutable execution snapshot successors[33m 425[2mms[22m[39m
+     [33m[2m✓[22m[39m separates actual verifier start, completion and unavailable evidence from executor claims[33m 824[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after owner fence[33m 324[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after drain fence[33m 304[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after shutdown fence[33m 305[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after lease fence[33m 357[2mms[22m[39m
+     [33m[2m✓[22m[39m core usage and terminal settle independently during a blocked optional RPC[33m 2118[2mms[22m[39m
+     [33m[2m✓[22m[39m optional RPC timeout is bounded and a real peer refusal alone means unsupported[33m 1339[2mms[22m[39m
+   [32m✓[39m retention queue and source deletion [2m(5)[22m
+     [33m[2m✓[22m[39m permits at most two process-wide jobs and deduplicates one run across schedule/flush[33m 886[2mms[22m[39m
+     [33m[2m✓[22m[39m flushes owned queued results before actual source deletion after settled budget, preserving saved bytes[33m 2035[2mms[22m[39m
+     [33m[2m✓[22m[39m includes global queue wait in the 67000-ms flush deadline and fences late evidence after timeout[33m 798[2mms[22m[39m
+     [33m[2m✓[22m[39m does not invent observations on missing/non-task sources and retries transport errors[33m 306[2mms[22m[39m
+     [33m[2m✓[22m[39m caches only old command refusal by executable file identity and re-discovers a changed file[33m 2164[2mms[22m[39m
+   [32m✓[39m optional methods through owned profile routing [2m(2)[22m
+     [33m[2m✓[22m[39m retains evidence through the real frozen router while absent optional methods remain absent[33m 422[2mms[22m[39m
+     [33m[2m✓[22m[39m deduplicates a run across two collector assemblies for the same owned store[33m 440[2mms[22m[39m
+/private/tmp/opr26/t/orca-tmp-C6H4Py/orca-snapshot-verify-CV4YBU/input.bundle is okay
+ [32m✓[39m tests/control/taskResultPaired.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 9836[2mms[22m[39m
+   [32m✓[39m result optional transport exact build [2m(1)[22m
+     [33m[2m✓[22m[39m proves fixed-pin refusal or live saved results before a terminal candidate using the exact selected CLI[33m 9817[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m25 passed[39m[22m[90m (25)[39m
+[2m   Start at [22m 18:29:26
+[2m   Duration [22m 18.43s[2m (tests 96%, transform 3%, import 1%)[22m
+

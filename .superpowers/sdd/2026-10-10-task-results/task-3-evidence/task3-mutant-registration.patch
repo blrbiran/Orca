@@ -1,0 +1,13 @@
+diff --git a/src/control/archive.ts b/src/control/archive.ts
+index f79af9d..760cc6c 100644
+--- a/src/control/archive.ts
++++ b/src/control/archive.ts
+@@ -71,7 +71,7 @@ async function publish(store:ControlStore,id:string,temp:string,hash:string,deps
+  const stagedDir=privateDirectory(join(store.stateDir,"staging",randomUUID()));
+  const admit=<T>(operation:()=>Promise<T>)=>deps.admit?deps.admit(operation):operation();
+  const register=()=>store.transaction(()=>{
+-  deps.assertHeld?.();
++
+   const old=store.db.prepare("SELECT hash FROM artifacts WHERE id=?").get(id);
+   if(old && old.hash!==hash) throw new ControlError("artifact-id-conflict");
+   store.db.prepare("INSERT INTO artifacts VALUES (?,?,?) ON CONFLICT(id) DO NOTHING").run(id,hash,JSON.stringify({path:relative(store.stateDir,destination)}));

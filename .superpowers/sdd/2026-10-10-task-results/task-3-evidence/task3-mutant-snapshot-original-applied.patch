@@ -1,0 +1,13 @@
+diff --git a/src/control/taskResultCollector.ts b/src/control/taskResultCollector.ts
+index 0a012a5..25d4707 100644
+--- a/src/control/taskResultCollector.ts
++++ b/src/control/taskResultCollector.ts
+@@ -146,8 +146,6 @@ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskRe
+                     if (manifest.revision !== observation.revision || manifest.attempt > page.currentAttempt || sha256Canonical(manifest.identity) !== sha256Canonical(page.identity))
+                         throw new Error('task-result-manifest-invalid');
+                     const prior = [...old.observations, ...observations].find(o => o.manifest.attempt === manifest.attempt && o.manifest.stage === 'execution');
+-                    if (manifest.stage === 'verification' && (!prior || sha256Canonical({ outputs: prior.manifest.outputs, executionRef: prior.manifest.executionRef, explanation: prior.manifest.explanation }) !== sha256Canonical({ outputs: manifest.outputs, executionRef: manifest.executionRef, explanation: manifest.explanation })))
+-                        throw new Error('task-result-snapshot-invalid');
+                     if (manifest.stage === 'execution' && prior)
+                         throw new Error('task-result-snapshot-invalid');
+                     for (const output of manifest.outputs) {

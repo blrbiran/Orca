@@ -1,0 +1,25 @@
+# Task3 implementer self-review
+
+Owner: Codex /root/results_task3, 2026-10-10. Base d58c21450b740949193b9c8fda87f4f435584cef. Source-freeze commit is recorded in task-3-report.md; this review is append-only after commit.
+
+Read brief, global constraints, CLAUDE.md, RTK.md and effective spec §8/§8.5. TDD, systematic debugging and verification skills applied; no agents spawned.
+
+Core bookkeeping finishes before scheduling optional acquisition. Global queue admits at most two active jobs and excludes a busy run across replaced assemblies. Replacement invalidates only the old assembly; old stop does not cancel a new owner. Optional RPC promises have timeout/cancellation rejection observers. Deadline counts the existing queue, and unreadable authority at expiry is observed. Partial pages cannot publish cursor/history; admitted index has run/generation/execution/envelope authority, contiguous revisions and immutable per-attempt snapshots. Outputs remain scoped to run/attempt/exact manifest; no core evidenceContext membership is added. Results-only projection change follows changed admitted state.
+
+Exact source namespaces are excluded before lstat/walk. Exclusion ancestor directories compare filtered core entries, while core files retain hash/mode/mtime checks. H-settle, settled-failed cleanup and continuation closure keep the same core eligibility; genuine missing handoff evidence still refuses. Optional data never enters acceptance artifact closure.
+
+Actual source deletion is cleanupCommittedRun; cleanupRunWorkspace only removes workspace/skills and keeps captured source bytes, so no extra metadata wait was added to its business transition. After settlement/released ledger commitment, actual deletion flushes queued results under 67000 ms, records ordinary optional failure, and continues existing cleanup. Lost store/run/lease/admission/shutdown authority instead refuses old writes/deletion; the guard survives flush and is checked immediately before rm. Artifact registration rechecks the owner after asynchronous publication admission.
+
+Necessary controller-approved seams: cleanup.ts actual deletion and profiles.ts ownPort additive correctly-bound optional forwarding. Absent methods remain absent. Root/Web UI source, schemas, dependencies/package pin and real providers were untouched.
+
+Live verifier state comes only from the actual strict started evidence or actual completed VerificationResult. Execution snapshots alone remain unavailable; Task4 must combine saved facts with current lifecycle and must not label missing start evidence not-run or interrupted started-only evidence in-progress. Future API output identity must include run/attempt; producer output-1 is manifest-local. Saved ownership is preserved for that API.
+
+Observed native RED failures and all initial setup/error logs are preserved for the final report: optional archive changes; retention/page/identity/verifier missing implementation; lease fence; router stripping methods; same-run handover; shutdown/deletion; last rm fence; unreadable authority deadline. A wrong ledger-remainder test assumption was corrected to the existing ledger release invariant, and a test import/setup failure and teardown rejection are disclosed. No criterion was waived.
+
+Latest proof before freeze: 26-test complete synthetic lifecycle/isolation GREEN; fixed default 25-test gate GREEN before later independent fence extensions; actual feature paired 1/1 live-before-terminal GREEN with exact plan/execute/verify calls; newly added last-rm/registration/handover targeted GREEN and both deadline-authority cases GREEN. Final full frozen-source gates and independent clone mutants remain required and are recorded only after execution in task-3-report.md.
+
+## Fix1/final self-review, SOURCE8dee7c1 — 2026-10-10 /root/results_task3
+
+Per-reference staging releases file bytes before the next read; no page-wide Buffer Map survives. Complete page ownership/cursor/history stays atomic. Authenticated core GET accepts a legitimate core ref and rejects a registry-present partial result by membership; saved result reader also refuses it. Source-attempt facts remain independent of successful capture, same-revision growth retained, stale/foreign/malformed and obsolete-owner values refused. Caller dependencies remain dynamic; original four regression tests unchanged and final fullRoot/explicit regression pass. Scoped Astra assigned fixes addressed; deferred frozen-function Proxy Minor recorded.
+
+Final typecheck/root+Web builds/panel/fullRoot/140 explicit regressions/107 complete leak/source-bound feature paired/26 clone faults completed, exact count/RC/source/hash in final report. Root4 existing skips and warnings disclosed. Clone restoration0/0 confirmed; source product/test freeze unchanged. Original two survivors and every original native fail/setup log preserved; no proof promoted from setup/unmutated run. Ownership, task/attempt/output identity, asynchronous admission/deletion fences and late promise observation remain explicit.

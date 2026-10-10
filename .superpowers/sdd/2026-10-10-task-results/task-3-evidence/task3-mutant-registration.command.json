@@ -1,0 +1,1 @@
+["./node_modules/.bin/vitest", "run", "tests/control/taskResultCollector.test.ts", "--maxWorkers=2", "--no-cache", "-t", "owner changes after publication admission"]

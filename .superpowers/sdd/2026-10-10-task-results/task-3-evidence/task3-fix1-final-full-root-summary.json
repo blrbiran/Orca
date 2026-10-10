@@ -1,0 +1,11 @@
+{
+  "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+  "rc": 0,
+  "logBytes": 333609,
+  "rawLogSHA256": "99b7d2617c63f79d40cd2d6884a4b74ae7dbb376c16df50e8d930625103a5ac8",
+  "nativeSummary": [
+    " Test Files  376 passed (376)",
+    "      Tests  3573 passed | 4 skipped (3577)",
+    "   Duration  1192.10s (tests 98%, import 1%)"
+  ]
+}

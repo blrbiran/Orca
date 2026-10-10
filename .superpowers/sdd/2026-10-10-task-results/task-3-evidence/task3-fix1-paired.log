@@ -1,0 +1,15 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:53118) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-ZyqlZy/orca-snapshot-verify-eB4jHr/input.bundle is okay
+ [32m✓[39m tests/control/taskResultPaired.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 15773[2mms[22m[39m
+   [32m✓[39m result optional transport exact build [2m(1)[22m
+     [33m[2m✓[22m[39m proves fixed-pin refusal or live saved results before a terminal candidate using the exact selected CLI[33m 15750[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m   Start at [22m 19:40:43
+[2m   Duration [22m 16.78s[2m (tests 95%, transform 4%, import 1%)[22m
+

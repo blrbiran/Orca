@@ -1,0 +1,13 @@
+diff --git a/src/control/taskResultStore.ts b/src/control/taskResultStore.ts
+index 34fa65d..281741a 100644
+--- a/src/control/taskResultStore.ts
++++ b/src/control/taskResultStore.ts
+@@ -42,7 +42,7 @@ export function taskResultManifestRefs(manifest: TaskResultManifestV1): Artifact
+ }
+ /** Saved bytes are authorized by run + attempt + exact admitted manifest membership, never content hash alone. */
+ export async function readOwnedTaskResultEvidence(store: ControlStore, runId: string, attempt: number, manifestRef: ArtifactRef, ref: ArtifactRef): Promise<Buffer> {
+-    const state = readTaskResultState(store, runId), observation = state?.observations.find(o => o.manifest.attempt === attempt && sameTaskResultRef(o.manifestRef, manifestRef));
++    const state = readTaskResultState(store, runId), observation = state?.observations.find(o => sameTaskResultRef(o.manifestRef, manifestRef));
+     if (state?.identity?.runId !== runId || !observation || ![manifestRef, ...taskResultManifestRefs(observation.manifest)].some(r => sameTaskResultRef(r, ref)))
+         throw new Error('task-result-evidence-unavailable');
+     const bytes = await readArtifact(store, manifestRef);

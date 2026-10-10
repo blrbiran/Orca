@@ -1,0 +1,14 @@
+diff --git a/src/control/taskResultCollector.ts b/src/control/taskResultCollector.ts
+index 464d5e0..fedccbe 100644
+--- a/src/control/taskResultCollector.ts
++++ b/src/control/taskResultCollector.ts
+@@ -270,7 +270,7 @@ function validateCurrentFact(page: TaskResultCollectionV1, old: TaskResultState)
+         throw new Error('task-result-current-fact-stale');
+ }
+ function validatePage(page: TaskResultCollectionV1, old: TaskResultState): void {
+-    validateCurrentFact(page, old);
+-    if (page.revision < old.sourceRevision || page.nextRevision < old.revision || page.currentAttempt < old.currentAttempt || page.manifests.some((m, i) => m.revision !== old.revision + i + 1) || page.nextRevision !== (page.manifests.at(-1)?.revision ?? old.revision) || (page.nextRevision < page.revision && page.manifests.length !== 64))
++
++    if (page.revision < old.sourceRevision || page.nextRevision < old.revision || page.manifests.some((m, i) => m.revision !== old.revision + i + 1) || page.nextRevision !== (page.manifests.at(-1)?.revision ?? old.revision) || (page.nextRevision < page.revision && page.manifests.length !== 64))
+         throw new Error('task-result-page-stale');
+ }

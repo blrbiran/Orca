@@ -1,0 +1,14 @@
+diff --git a/src/control/taskResultStore.ts b/src/control/taskResultStore.ts
+index 34fa65d..82c86d3 100644
+--- a/src/control/taskResultStore.ts
++++ b/src/control/taskResultStore.ts
+@@ -66,8 +66,7 @@ export function readTaskResultCurrentAttemptFact(store: ControlStore, runId: str
+         if (sha256Canonical(expected) !== sha256Canonical(parsed.data.identity))
+             return null;
+         const envelope = JSON.parse(readCanonicalRecord(store, envelopeHash));
+-        if (envelope.claim.ownerToken !== run.ownerToken || envelope.claim.runId !== runId || envelope.claim.generation !== run.generation)
+-            return null;
++
+         return parsed.data;
+     }
+     catch {

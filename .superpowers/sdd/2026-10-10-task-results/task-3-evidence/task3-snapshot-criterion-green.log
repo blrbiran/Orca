@@ -1,0 +1,14 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:15015) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/control/taskResultCollector.test.ts [2m([22m[2m23 tests[22m[2m | [22m[33m22 skipped[39m[2m)[22m[33m 428[2mms[22m[39m
+   [32m✓[39m independent result retention [2m(11)[22m
+     [33m[2m✓[22m[39m requires contiguous complete pages, identity and immutable execution snapshot successors[33m 426[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[2m | [22m[33m22 skipped[39m[90m (23)[39m
+[2m   Start at [22m 18:43:48
+[2m   Duration [22m 1.26s[2m (transform 53%, tests 37%, import 9%, setup 1%)[22m
+

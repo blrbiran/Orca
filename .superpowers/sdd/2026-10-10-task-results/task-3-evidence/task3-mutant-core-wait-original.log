@@ -1,0 +1,15 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/orca-progress-results-20261010/task3-mutant-clone[39m
+
+(node:17212) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-UGVhEp/orca-snapshot-verify-u8BFcc/input.bundle is okay
+ [32m✓[39m tests/control/taskResultCollector.test.ts [2m([22m[2m23 tests[22m[2m | [22m[33m22 skipped[39m[2m)[22m[33m 2653[2mms[22m[39m
+   [32m✓[39m independent result retention [2m(11)[22m
+     [33m[2m✓[22m[39m core usage and terminal settle independently during a blocked optional RPC[33m 2650[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[2m | [22m[33m22 skipped[39m[90m (23)[39m
+[2m   Start at [22m 18:44:49
+[2m   Duration [22m 3.43s[2m (tests 80%, transform 17%, import 3%)[22m
+

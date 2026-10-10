@@ -1,0 +1,15 @@
+{
+  "cwd": "/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone",
+  "sourceCommit": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+  "workingSourceDiffBytes": 775,
+  "cachedSourceDiffBytes": 0,
+  "argv": [
+    "./node_modules/.bin/vitest",
+    "run",
+    "tests/control/taskResultCollector.test.ts",
+    "--maxWorkers=2",
+    "--no-cache",
+    "-t",
+    "separates actual verifier start"
+  ]
+}

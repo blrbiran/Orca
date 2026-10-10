@@ -1,0 +1,13 @@
+diff --git a/src/control/taskResultCollector.ts b/src/control/taskResultCollector.ts
+index 464d5e0..f0ceb7c 100644
+--- a/src/control/taskResultCollector.ts
++++ b/src/control/taskResultCollector.ts
+@@ -38,7 +38,7 @@ const queue: {
+ let active = 0;
+ const busyRuns = new Set<string>();
+ function pump(): void {
+-    while (active < 2 && queue.length) {
++    while (active < 3 && queue.length) {
+         const index = queue.findIndex(entry => !busyRuns.has(entry.key));
+         if (index < 0)
+             return;

@@ -1,0 +1,13 @@
+diff --git a/src/control/taskResultCollector.ts b/src/control/taskResultCollector.ts
+index 464d5e0..9457f36 100644
+--- a/src/control/taskResultCollector.ts
++++ b/src/control/taskResultCollector.ts
+@@ -70,7 +70,7 @@ export async function flushTaskResults(store: ControlStore, runId: string): Prom
+ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskResultCollector {
+     const existing = collectors.get(deps.store);
+     if (existing && !existing.stopped())
+-        void existing.collector.stop().catch(() => { });
++        return existing.collector;
+     const jobs = new Map<string, Job>();
+     let stopped = false;
+     const valid = (job: Job, owner: NonNullable<ReturnType<TaskResultCollectorDeps['resolve']>>) => {

@@ -1,0 +1,30 @@
+diff --git a/src/control/taskResultCollector.ts b/src/control/taskResultCollector.ts
+index 464d5e0..0e64591 100644
+--- a/src/control/taskResultCollector.ts
++++ b/src/control/taskResultCollector.ts
+@@ -130,12 +130,12 @@ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskRe
+                 const identity = { ...Object.fromEntries(['groupId', 'workItemId', 'taskId', 'runId', 'generation', 'graphVersion', 'targetVersion'].map(k => [k, (owner.input.claim as unknown as Record<string, unknown>)[k]])), executionId: owner.executionId, envelopeHash: sha256Canonical(owner.input) };
+                 if (sha256Canonical(page.identity) !== sha256Canonical(identity) || (old.identity && sha256Canonical(old.identity) !== sha256Canonical(page.identity)))
+                     throw new Error('task-result-identity-invalid');
+-                validatePage(page, old);
++
+                 // A later controller attempt remains authoritative even if saved bytes fail below.
+                 await admitted(job, owner, async () => deps.store.transaction(() => {
+                     valid(job, owner);
+                     const current = readTaskResultState(deps.store, job.runId) ?? empty();
+-                    validatePage(page, current);
++
+                     saveTaskResultState(deps.store, job.runId, page.identity.groupId, { ...current, currentAttemptFact: { schema: 'orca-task-result-current-attempt-v1', identity: page.identity, revision: page.revision, currentAttempt: page.currentAttempt } });
+                 }));
+                 const observations: TaskResultObservation[] = [];
+@@ -179,9 +179,7 @@ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskRe
+                 await admitted(job, owner, async () => deps.store.transaction(() => {
+                     valid(job, owner);
+                     const current = readTaskResultState(deps.store, job.runId) ?? empty();
+-                    if (current.revision !== old.revision || current.sourceRevision > page.revision)
+-                        throw new Error('task-result-page-stale');
+-                    validateCurrentFact(page, current);
++
+                     saveTaskResultState(deps.store, job.runId, page.identity.groupId, { currentAttemptFact: current.currentAttemptFact ?? null, schema: 'orca-task-result-store-v1', identity: page.identity, revision: page.nextRevision, sourceRevision: page.revision, currentAttempt: page.currentAttempt, observations: [...current.observations, ...observations], status: page.revision > 0 ? 'available' : 'missing', reason: null });
+                 }));
+                 if (page.nextRevision === page.revision)

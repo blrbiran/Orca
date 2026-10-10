@@ -1,0 +1,12 @@
+{
+  "source": "6ab6b321248acf7c387e3f3aacb13d34654749f4",
+  "rc": 1,
+  "filesFailed": 3,
+  "filesPassed": 373,
+  "testsFailed": 4,
+  "testsPassed": 3562,
+  "testsSkipped": 4,
+  "testsTotal": 3570,
+  "durationSeconds": 1166.79,
+  "rawLogSHA256": "df49a446870a75d212c9d606d236a20ef8ddf13604fc31c48ca5f1f823e47eb0"
+}

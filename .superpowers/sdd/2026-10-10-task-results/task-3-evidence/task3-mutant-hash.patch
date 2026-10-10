@@ -1,0 +1,19 @@
+diff --git a/src/control/taskResultCollector.ts b/src/control/taskResultCollector.ts
+index 464d5e0..220a2c4 100644
+--- a/src/control/taskResultCollector.ts
++++ b/src/control/taskResultCollector.ts
+@@ -142,12 +142,12 @@ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskRe
+                 const read = async (manifestRef: ArtifactRef, ref: ArtifactRef, limit = MAX_TASK_RESULT_EVIDENCE_BYTES) => {
+                     const bytes = await call(() => owner.port.readTaskResultEvidence!(owner.input, manifestRef, ref));
+                     valid(job, owner);
+-                    if (bytes.length > limit || createHash('sha256').update(bytes).digest('hex') !== ref.hash || ref.artifactId !== 'task-result-' + ref.hash)
++                    if (bytes.length > limit || ref.artifactId !== 'task-result-' + ref.hash)
+                         throw new Error('task-result-evidence-invalid');
+                     // Stage one bounded reference; never retain a page-wide collection of file buffers.
+                     const saved = await writeArtifact(deps.store, ref.artifactId, bytes, { assertHeld: () => valid(job, owner), admit: operation => admitted(job, owner, operation) });
+                     valid(job, owner);
+-                    if (saved.artifactId !== ref.artifactId || saved.hash !== ref.hash)
++                    if (saved.artifactId !== ref.artifactId)
+                         throw new Error('task-result-evidence-invalid');
+                     return bytes;
+                 };

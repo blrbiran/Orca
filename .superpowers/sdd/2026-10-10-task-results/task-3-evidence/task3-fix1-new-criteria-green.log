@@ -1,0 +1,155 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:9635) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/control/taskResultCollector.test.ts [2m([22m[2m30 tests[22m[2m | [22m[31m4 failed[39m[2m | [22m[33m23 skipped[39m[2m)[22m[33m 4457[2mms[22m[39m
+   [2m[90m↓[39m[22m independent result retention [2m(11)[22m
+     [2m[90m↓[39m[22m retains manifest-owned hashes with stable run/attempt membership and results-only projection changes
+     [2m[90m↓[39m[22m never admits a partial/corrupt page or rolls history backward and retries transient faults
+     [2m[90m↓[39m[22m requires contiguous complete pages, identity and immutable execution snapshot successors
+     [2m[90m↓[39m[22m separates actual verifier start, completion and unavailable evidence from executor claims
+     [2m[90m↓[39m[22m rejects late writes after owner fence
+     [2m[90m↓[39m[22m rejects late writes after drain fence
+     [2m[90m↓[39m[22m rejects late writes after shutdown fence
+     [2m[90m↓[39m[22m rejects late writes after run-owner fence
+     [2m[90m↓[39m[22m rejects late writes after lease fence
+     [2m[90m↓[39m[22m core usage and terminal settle independently during a blocked optional RPC
+     [2m[90m↓[39m[22m optional RPC timeout is bounded and a real peer refusal alone means unsupported
+   [2m[90m↓[39m[22m retention queue and source deletion [2m(6)[22m
+     [2m[90m↓[39m[22m permits at most two process-wide jobs and deduplicates one run across schedule/flush
+     [2m[90m↓[39m[22m flushes owned queued results before actual source deletion after settled budget, preserving saved bytes
+     [2m[90m↓[39m[22m includes global queue wait in the 67000-ms flush deadline with available authority and fences late evidence
+     [2m[90m↓[39m[22m includes global queue wait in the 67000-ms flush deadline with unavailable authority and fences late evidence
+     [2m[90m↓[39m[22m does not invent observations on missing/non-task sources and retries transport errors
+     [2m[90m↓[39m[22m caches only old command refusal by executable file identity and re-discovers a changed file
+   [2m[90m↓[39m[22m optional methods through owned profile routing [2m(2)[22m
+     [2m[90m↓[39m[22m retains evidence through the real frozen router while absent optional methods remain absent
+     [2m[90m↓[39m[22m deduplicates a run across two collector assemblies for the same owned store
+   [2m[90m↓[39m[22m collector assembly owner handover [2m(2)[22m
+     [2m[90m↓[39m[22m observes the old RPC but lets the new assembly retain the same run without an old stop cancelling it
+     [2m[90m↓[39m[22m preserves source when shutdown wins a flush racing actual deletion
+   [2m[90m↓[39m[22m owner check at artifact registration [2m(1)[22m
+     [2m[90m↓[39m[22m registers no result artifacts when the owner changes after publication admission but before the transaction
+   [2m[90m↓[39m[22m last source deletion fence [2m(1)[22m
+     [2m[90m↓[39m[22m rechecks shutdown after optional flush and immediately before rm starts
+   [31m❯[39m fix round 1 bounded reference staging and attempt authority [2m(7)[22m
+[31m     [31m×[31m stages one owned reference before the next read, keeps partial cursor/history and denies both real generic GET and result-reader access[39m[33m 1900[2mms[22m[39m
+     [33m[2m✓[22m[39m checks incremental lease ownership after an asynchronous read before any further reference can be published[33m 411[2mms[22m[39m
+[31m     [31m×[31m keeps validated source attempt two when evidence fails and core attempt is 1[39m[33m 380[2mms[22m[39m
+[31m     [31m×[31m keeps validated source attempt two when evidence fails and core attempt is null[39m[33m 369[2mms[22m[39m
+[31m     [31m×[31m records same-index-revision attempt growth without new reports or cursor advancement, and rejects stale/foreign/malformed facts[39m[33m 375[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects obsolete owner and shutdown writes of source-attempt facts[33m 758[2mms[22m[39m
+     [32m✓[39m retains caller getter and method ownership through the driver overlay[32m 261[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mfix round 1 bounded reference staging and attempt authority[2m > [22mstages one owned reference before the next read, keeps partial cursor/history and denies both real generic GET and result-reader access
+[31m[1mAssertionError[22m: expected null to match object { …(3) }[39m
+
+[32m- Expected:[39m
+{
+  "currentAttempt": 2,
+  "identity": {
+    "envelopeHash": "110746a9a3bed5d93a77ffb2d1801e30d656e2e58f907a8253c72a84cee1d697",
+    "executionId": "execution-run-18a8521a-52b2-4d0b-9820-9c38caaeb6d3",
+    "generation": 1,
+    "graphVersion": 1,
+    "groupId": "g",
+    "runId": "run-18a8521a-52b2-4d0b-9820-9c38caaeb6d3",
+    "targetVersion": 1,
+    "taskId": "a",
+    "workItemId": "a",
+  },
+  "revision": 2,
+}
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m542:166[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mfix round 1 bounded reference staging and attempt authority[2m > [22mkeeps validated source attempt two when evidence fails and core attempt is 1
+[31m[1mAssertionError[22m: expected null to match object { …(4) }[39m
+
+[32m- Expected:[39m
+{
+  "currentAttempt": 2,
+  "identity": {
+    "envelopeHash": "150e3aba15bab9c779f3c83ffc1eef1201ba0f06d2141ad400924aa9f7a538ad",
+    "executionId": "execution-run-a4da7f0f-874c-42b1-87f4-2e3b41f91668",
+    "generation": 1,
+    "graphVersion": 1,
+    "groupId": "g",
+    "runId": "run-a4da7f0f-874c-42b1-87f4-2e3b41f91668",
+    "targetVersion": 1,
+    "taskId": "a",
+    "workItemId": "a",
+  },
+  "revision": 2,
+  "schema": "orca-task-result-current-attempt-v1",
+}
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m561:33[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mfix round 1 bounded reference staging and attempt authority[2m > [22mkeeps validated source attempt two when evidence fails and core attempt is null
+[31m[1mAssertionError[22m: expected null to match object { …(4) }[39m
+
+[32m- Expected:[39m
+{
+  "currentAttempt": 2,
+  "identity": {
+    "envelopeHash": "1130db97325811ee48fa2d20e3900a68ebeaba212e47e20b9ec013a466c56e79",
+    "executionId": "execution-run-9a8b336d-bcfb-4f84-9113-882642dad3ac",
+    "generation": 1,
+    "graphVersion": 1,
+    "groupId": "g",
+    "runId": "run-9a8b336d-bcfb-4f84-9113-882642dad3ac",
+    "targetVersion": 1,
+    "taskId": "a",
+    "workItemId": "a",
+  },
+  "revision": 2,
+  "schema": "orca-task-result-current-attempt-v1",
+}
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m561:33[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mfix round 1 bounded reference staging and attempt authority[2m > [22mrecords same-index-revision attempt growth without new reports or cursor advancement, and rejects stale/foreign/malformed facts
+[31m[1mAssertionError[22m: expected null to match object { revision: 1, currentAttempt: 2 }[39m
+
+[32m- Expected:[39m
+{
+  "currentAttempt": 2,
+  "revision": 1,
+}
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m566:206[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m3 passed[39m[22m[2m | [22m[33m23 skipped[39m[90m (30)[39m
+[2m   Start at [22m 19:29:03
+[2m   Duration [22m 5.61s[2m (tests 81%, transform 15%, import 4%)[22m
+

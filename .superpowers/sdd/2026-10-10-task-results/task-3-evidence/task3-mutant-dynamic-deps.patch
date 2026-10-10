@@ -1,0 +1,16 @@
+diff --git a/src/control/executionDriver.ts b/src/control/executionDriver.ts
+index 8990ec1..916eff9 100644
+--- a/src/control/executionDriver.ts
++++ b/src/control/executionDriver.ts
+@@ -904,10 +904,7 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
+   return {input:readStartEnvelope(options.store,run),executionId:run.executionId,port:portFor(options,run)};
+  }});
+  // Preserve the caller's live dependency getters and method owner; only retention is overlaid.
+- const deps=new Proxy(options,{get(target,key){
+-  if(key==='taskResults')return taskResults;
+-  const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+- }});
++ const deps={...options,taskResults};
+   const context: DriverContext = { reconciling: new Map(), stopped: false };
+   let inFlight: Promise<boolean> | null = null;
+   let timer: NodeJS.Timeout | null = null;

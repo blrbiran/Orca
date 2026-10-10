@@ -1,0 +1,220 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:28653) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:28654) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-tINxUy/orca-snapshot-verify-sVOm8w/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-tINxUy/orca-snapshot-verify-wSiWDS/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-bGzl70/orca-snapshot-verify-RjO2Ll/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-tINxUy/orca-snapshot-verify-nKcXbv/input.bundle is okay
+orca-driver: run-88046614-b9e6-4d2a-8e82-1ae805eeaa0c: repository-unavailable
+/private/tmp/opr26/t/orca-tmp-bGzl70/orca-snapshot-verify-Iv1C9Z/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-bGzl70/orca-snapshot-verify-CjLFl6/input.bundle is okay
+ [32m✓[39m tests/control/retryTask.test.ts [2m([22m[2m15 tests[22m[2m)[22m[33m 19539[2mms[22m[39m
+   [32m✓[39m keeping ccloop's failure reason (spec §4.2(1)) [2m(2)[22m
+     [33m[2m✓[22m[39m stores ccloop's stop reason on the drive record and gives it, with the outcome, to the run view[33m 742[2mms[22m[39m
+     [33m[2m✓[22m[39m stores no stop reason when ccloop stated none, and the view says null[33m 646[2mms[22m[39m
+   [32m✓[39m settled-failed in every reader (spec §4.2(4), review C2) [2m(1)[22m
+     [33m[2m✓[22m[39m renders a settled-failed run in the group view and refuses it any further usage[33m 687[2mms[22m[39m
+   [32m✓[39m retry-task (spec §4.2(2)) [2m(1)[22m
+     [33m[2m✓[22m[39m settles the failed run, returns the task to ready under the same grant, and the group view reads at once (review C1)[33m 646[2mms[22m[39m
+   [32m✓[39m retry-task refusals (spec §4.2(2), §4.4) [2m(7)[22m
+     [33m[2m✓[22m[39m refuses a task with no run, and a task whose run is still healthy[33m 424[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses a run blocked for any other reason: a succeeded run out of bounds, a transient failure, another step[33m 1383[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses while a handoff request is open, usage is unknown, or a usage event is pending (releaseRunReserve's conditions)[33m 780[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses a stopped group with stop-mode-conflict and a clarifying group with group-state-invalid[33m 1434[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses on either half of the stop guard alone: stopped without an intent, an intent without stopped[33m 1260[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses when the reserve cannot cover the new run, naming the dimension and the shortfall, and changes nothing[33m 575[2mms[22m[39m
+     [33m[2m✓[22m[39m counts the handoff bucket in the net reservation: the work part fits, the handoff part makes it short[33m 679[2mms[22m[39m
+   [32m✓[39m recovery-retry on a terminally failed run (spec §4.2(3)) [2m(1)[22m
+     [33m[2m✓[22m[39m refuses it with run-terminal-failed and leaves it blocked at C; a transiently blocked run still resumes[33m 646[2mms[22m[39m
+   [32m✓[39m after retry-task: cleanup, a new run, success (spec §4.2(2), §4.4) [2m(3)[22m
+     [33m[2m✓[22m[39m archives and removes the failed run's workspace, claims run 2 from the group branch through normal dispatch, and lands it[33m 2788[2mms[22m[39m
+     [33m[2m✓[22m[39m records a cleanup failure on the failed run, keeps it settled-failed, and still runs the new one[33m 3104[2mms[22m[39m
+     [33m[2m✓[22m[39m retries twice: a short reserve on the second retry is refused by dimension and shortfall, and run 3 lands (review focus 2)[33m 3740[2mms[22m[39m
+(node:39437) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-tINxUy/orca-snapshot-verify-Y8gRIN/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-tINxUy/orca-snapshot-verify-znnw7G/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-tINxUy/orca-snapshot-verify-pIKjym/input.bundle is okay
+ [32m✓[39m tests/control/driverHandoff.test.ts [2m([22m[2m30 tests[22m[2m)[22m[33m 38996[2mms[22m[39m
+   [32m✓[39m a running run under handoff-stop (spec §3 accepted row, §11 C2/C3, §13.2 C-1, I-1, I-10) [2m(4)[22m
+     [33m[2m✓[22m[39m delivers one request rebuilt from the outbox, H-settles a partial checkpoint, parks the task held and lands nothing[33m 1151[2mms[22m[39m
+     [33m[2m✓[22m[39m leaves a checkpoint both continuation readers accept: exportResumeBundle and resume-from-handoff (spec §13.2 C-1)[33m 1144[2mms[22m[39m
+     [33m[2m✓[22m[39m settles unrecoverable, by name, a stop whose aborted phase never reported its usage (Web spec §6.2 usage-unsettled; §13.1 C-3)[33m 1011[2mms[22m[39m
+     [33m[2m✓[22m[39m lands a run that finished before the stop took effect, instead of parking it (spec §3: a terminal goes back through C)[33m 2090[2mms[22m[39m
+   [32m✓[39m a proved stop with no terminal and no request (spec §3, X1) [2m(2)[22m
+     [33m[2m✓[22m[39m is blocked by name at C instead of being waited on forever[33m 693[2mms[22m[39m
+     [33m[2m✓[22m[39m does not block a run whose stop arrived while C was collecting: the stop owns it, and H settles it[33m 1107[2mms[22m[39m
+   [32m✓[39m a run that provably never started (spec §11 C4, I9; §13.2 I-3; H4) [2m(4)[22m
+     [33m[2m✓[22m[39m restarts a prepared run ccloop never saw (inspect absent) and removes the workspace A2 made[33m 395[2mms[22m[39m
+     [33m[2m✓[22m[39m restarts a run ccloop refused before writing anything (B accept-refused, Minor h), without asking ccloop again[33m 448[2mms[22m[39m
+     [33m[2m✓[22m[39m does not restart a prepared run whose accept reached ccloop before a death (B-after-accept under stop): it is stopped and parked[33m 1092[2mms[22m[39m
+   [32m✓[39m a run whose start ccloop cannot confirm under a stop (plan deviation D-STOPINSPECT) [2m(1)[22m
+     [33m[2m✓[22m[39m counts unknown inspections as B' does and, at the limit, turns the request outcome-unknown and leaves the run alone[33m 320[2mms[22m[39m
+   [32m✓[39m a run already landing is not interrupted (spec §3, §11 C1; H5) [2m(2)[22m
+     [33m[2m✓[22m[39m lands and settles as usual, then its request settles on its own; the task is done, not held[33m 1938[2mms[22m[39m
+     [33m[2m✓[22m[39m settles the request after a death between the run's settle and the request's (R-H H-between-commit-and-settle)[33m 1968[2mms[22m[39m
+   [32m✓[39m nothing arrives (spec §3 grace, §11 I3) [2m(1)[22m
+     [33m[2m✓[22m[39m turns the request outcome-unknown past deadline + grace, keeps collecting without killing, and H-settles a late candidate[33m 1129[2mms[22m[39m
+   [32m✓[39m an unreadable start envelope under a stop (ccloop consolidation step 1, spec §6, §11) [2m(1)[22m
+     [33m[2m✓[22m[39m waits the default run's grace and then turns an undeliverable request outcome-unknown[33m 303[2mms[22m[39m
+   [32m✓[39m blocked runs under a stop (spec §11 I1, §13.1 C-5, §13.2 I-3; H8) [2m(3)[22m
+     [33m[2m✓[22m[39m closes a run blocked after its execution ended from its collected result, beside a running run[33m 1927[2mms[22m[39m
+     [33m[2m✓[22m[39m parks a run whose conflict the group cannot afford as held with a partial checkpoint (human ruling §13.1 C-5)[33m 3679[2mms[22m[39m
+     [33m[2m✓[22m[39m leaves a blocked run whose change already landed to a person: its request stays open (plan deviation D-LANDED)[33m 1156[2mms[22m[39m
+   [32m✓[39m deaths inside H (spec §9.2 R-H) [2m(2)[22m
+     [33m[2m✓[22m[39m re-delivers the identical request after a death between delivery and its record (H-after-deliver); ccloop runs it once[33m 1202[2mms[22m[39m
+     [33m[2m✓[22m[39m settles once after a death between reading the candidate and settling (H-after-candidate)[33m 1270[2mms[22m[39m
+   [32m✓[39m a landing whose worktree removal failed after the swap (controller ruling T4-I1) [2m(3)[22m
+     [33m[2m✓[22m[39m leaves a run blocked at D whose change is already on orca/g to a person, as D-LANDED does: its request stays open[33m 1755[2mms[22m[39m
+     [33m[2m✓[22m[39m leaves a run blocked at R whose reconciled merge is already on orca/g to a person: its request stays open[33m 4975[2mms[22m[39m
+     [33m[2m✓[22m[39m does not park a run blocked at D when the branch cannot be read to prove its change absent[33m 826[2mms[22m[39m
+   [32m✓[39m a stop whose checkpoint fails one hard condition is settled unrecoverable by name (Web spec §6.2) [2m(4)[22m
+     [33m[2m✓[22m[39m an open request id in the candidate: unresolved-requests[33m 1068[2mms[22m[39m
+     [33m[2m✓[22m[39m evidence the candidate names as missing: missing:<what>[33m 1071[2mms[22m[39m
+     [33m[2m✓[22m[39m a usage event past a gap that was never booked: usage-unsettled[33m 1166[2mms[22m[39m
+     [33m[2m✓[22m[39m a handoff usage that turned unknown after it was observed: usage-unsettled[33m 1164[2mms[22m[39m
+   [32m✓[39m delivery and inspection under a stop (Task 4 fix round 1, review finding 2) [2m(2)[22m
+     [33m[2m✓[22m[39m takes an inspection that proves the execution stopped as its identity, and settles the request from there[33m 2128[2mms[22m[39m
+(node:49432) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/control/settleUnknownUsage.test.ts [2m([22m[2m36 tests[22m[2m)[22m[33m 34884[2mms[22m[39m
+   [32m✓[39m D9 owner conservative settlement [2m(4)[22m
+     [33m[2m✓[22m[39m charges both buckets once and preserves frozen allocations[33m 785[2mms[22m[39m
+     [33m[2m✓[22m[39m charges a released failed handoff without consuming another task commitment[33m 1174[2mms[22m[39m
+     [33m[2m✓[22m[39m completes only the usage-only stopped failure[33m 1117[2mms[22m[39m
+     [33m[2m✓[22m[39m settlement before handoff counts as complete usage[33m 1255[2mms[22m[39m
+   [32m✓[39m D9 proof, pending, rollback and replay boundaries [2m(23)[22m
+     [33m[2m✓[22m[39m refuses report without accounting or activity writes[33m 736[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses isolation without accounting or activity writes[33m 795[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses identity without accounting or activity writes[33m 749[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses generation without accounting or activity writes[33m 658[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses noncurrent without accounting or activity writes[33m 913[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses pending without accounting or activity writes[33m 617[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses open-request without accounting or activity writes[33m 581[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses not-failed without accounting or activity writes[33m 696[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses known without accounting or activity writes[33m 593[2mms[22m[39m
+     [33m[2m✓[22m[39m released accounting refuses a snapshot defect even with the usage-unsettled label[33m 973[2mms[22m[39m
+     [33m[2m✓[22m[39m released accounting refuses a artifact defect even with the usage-unsettled label[33m 1093[2mms[22m[39m
+     [33m[2m✓[22m[39m released accounting refuses a missing defect even with the usage-unsettled label[33m 1321[2mms[22m[39m
+     [33m[2m✓[22m[39m released accounting refuses a unresolved defect even with the usage-unsettled label[33m 1178[2mms[22m[39m
+     [33m[2m✓[22m[39m rolls back every accounting surface and retries after failure[33m 705[2mms[22m[39m
+     [33m[2m✓[22m[39m rechecks changed highWater after evidence and rejects it transactionally[33m 725[2mms[22m[39m
+     [33m[2m✓[22m[39m rechecks changed remaining after evidence and rejects it transactionally[33m 651[2mms[22m[39m
+     [33m[2m✓[22m[39m strictly rejects fake charged marker and manually filled request state[33m 1056[2mms[22m[39m
+     [33m[2m✓[22m[39m strictly rejects fake receipt marker and manually filled request state[33m 1178[2mms[22m[39m
+     [33m[2m✓[22m[39m strictly rejects fake principal marker and manually filled request state[33m 1128[2mms[22m[39m
+     [33m[2m✓[22m[39m strictly rejects fake unknown marker and manually filled request state[33m 1162[2mms[22m[39m
+     [33m[2m✓[22m[39m strictly rejects fake remaining marker and manually filled request state[33m 1164[2mms[22m[39m
+     [33m[2m✓[22m[39m strictly rejects fake highWater marker and manually filled request state[33m 1274[2mms[22m[39m
+     [33m[2m✓[22m[39m books released overspend honestly without taking another commitment[33m 1226[2mms[22m[39m
+   [32m✓[39m D9 does not erase other frozen runs [2m(2)[22m
+     [33m[2m✓[22m[39m keeps another run's unknown/open request blocker (silent=false)[33m 1963[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps another run's unknown/open request blocker (silent=true)[33m 1195[2mms[22m[39m
+   [32m✓[39m D9 accounting time and spend caps [2m(3)[22m
+     [33m[2m✓[22m[39m books in current total and gates the next retry claim[33m 683[2mms[22m[39m
+     [33m[2m✓[22m[39m books in current week and gates the next retry claim[33m 699[2mms[22m[39m
+     [33m[2m✓[22m[39m books in current month and gates the next retry claim[33m 681[2mms[22m[39m
+   [32m✓[39m D9 preserves independent stopping conditions [2m(3)[22m
+     [33m[2m✓[22m[39m does not manufacture a recoverable checkpoint for an incomplete failed report[33m 1353[2mms[22m[39m
+     [33m[2m✓[22m[39m writes a settlement marker and activity with no zero-token ledger rows[33m 720[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects a pause and an unauthenticated direct call[33m 720[2mms[22m[39m
+   [32m✓[39m manual request provenance [2m(1)[22m
+     [33m[2m✓[22m[39m rejects a settled-failed request backed only by a committed settlement marker[33m 1364[2mms[22m[39m
+ [32m✓[39m tests/panel/webParity.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+(node:56512) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-jhtiB3/orca-snapshot-verify-8KETDF/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-jhtiB3/orca-snapshot-verify-qRhiMS/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-jhtiB3/orca-snapshot-verify-ygO8A8/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-Ij8DcU/orca-snapshot-verify-N6VfwD/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-jhtiB3/orca-snapshot-verify-ENd45I/input.bundle is okay
+ [32m✓[39m tests/control/driverContinuation.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 21933[2mms[22m[39m
+   [32m✓[39m a continuation run (spec §4) [2m(3)[22m
+     [33m[2m✓[22m[39m keeps its predecessor's base though the tip moved, carries the checkpoint, is cut to the remaining grant, and lands[33m 3969[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps the first base down a chain: a continuation stopped again is continued from the same base[33m 4945[2mms[22m[39m
+     [33m[2m✓[22m[39m draws its grant from the held commitment: the group's reserved plus used, and every ledger mirror, are conserved from park to A1[33m 1138[2mms[22m[39m
+   [32m✓[39m a continuation whose registration is not its own (spec §4) [2m(2)[22m
+     [33m[2m✓[22m[39m is blocked by name at A2, before any bundle or provider attempt, when the task registers a different continuation[33m 1239[2mms[22m[39m
+     [33m[2m✓[22m[39m is blocked by name at A2 when its predecessor has no base the driver recorded[33m 1081[2mms[22m[39m
+   [32m✓[39m a predecessor whose workspace cannot be removed (spec §4, §7) [2m(1)[22m
+     [33m[2m✓[22m[39m does not block the continuation: it still reaches accept, and the predecessor's run body carries the cleanupError[33m 1266[2mms[22m[39m
+   [32m✓[39m a continuation stopped before it started (spec §13.2 C-6) [2m(1)[22m
+     [33m[2m✓[22m[39m hands the task back to its predecessor, which can be chosen again and continued with its checkpoint[33m 3470[2mms[22m[39m
+   [32m✓[39m A2 of a continuation after a death (spec §11 I5; R-H A2-after-bundle) [2m(2)[22m
+     [33m[2m✓[22m[39m reuses the bundle it already published instead of failing on resume-bundle-exists[33m 3443[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses a published bundle whose manifest no longer names the committed checkpoint[33m 1379[2mms[22m[39m
+(node:66310) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/control/driverRequirementClarify.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 5535[2mms[22m[39m
+   [32m✓[39m the clarify purpose on the single-call chain (N1 spec §7) [2m(8)[22m
+     [33m[2m✓[22m[39m drives round 1 from its wake to awaiting-answers through one single call, the overview fenced as data[33m 489[2mms[22m[39m
+     [33m[2m✓[22m[39m retries an invalid output twice, telling the model what was wrong, then fails the round as clarify-output-invalid[33m 1029[2mms[22m[39m
+     [33m[2m✓[22m[39m waits with requirement-budget-exhausted while the grant does not fit, and claims once set-limit raises the limit[33m 361[2mms[22m[39m
+     [33m[2m✓[22m[39m a handoff-stop interrupts the call in flight, books its usage, returns the unused grant, and completes the stop[33m 517[2mms[22m[39m
+   [32m✓[39m a panel restart after a retried round (final review finding 1) [2m(1)[22m
+     [33m[2m✓[22m[39m keeps every attempt's run a single call, so recovery leaves it to the driver and blocks no dispatch[33m 710[2mms[22m[39m
+   [32m✓[39m a call while the requirement's usage is unknown (final review finding 3) [2m(1)[22m
+     [33m[2m✓[22m[39m is not claimed after recovery-retry: the round waits with requirement-usage-unknown and only the first call was sent[33m 564[2mms[22m[39m
+   [32m✓[39m a blocked requirement call (final review finding 4) [2m(2)[22m
+     [33m[2m✓[22m[39m shows an A2 repository-path block on the summary, and a run-scoped recovery-retry re-runs A2 to the answer[33m 467[2mms[22m[39m
+     [33m[2m✓[22m[39m names a run blocked on unknown usage at C the same way[33m 431[2mms[22m[39m
+(node:68605) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-lVUbX3/orca-snapshot-verify-JB5Pxp/input.bundle is okay
+ [32m✓[39m tests/control/taskResultIsolation.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 8579[2mms[22m[39m
+   [32m✓[39m task result archive isolation [2m(3)[22m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in control/task-result-evidence[33m 1310[2mms[22m[39m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in run/task-result-captures[33m 1458[2mms[22m[39m
+     [33m[2m✓[22m[39m normal driver settlement keeps outcome, usage and recoverability with broken optional namespaces[33m 2107[2mms[22m[39m
+   [32m✓[39m isolation in H-settle, failed cleanup and continuation closure [2m(3)[22m
+     [33m[2m✓[22m[39m H-settle retains continuation eligibility and booked usage with unreadable supplemental namespaces[33m 1251[2mms[22m[39m
+     [33m[2m✓[22m[39m settled-failed cleanup ignores supplemental faults and keeps failed outcome and usage[33m 1384[2mms[22m[39m
+     [33m[2m✓[22m[39m genuine core handoff damage still refuses recoverability despite excluded optional faults[33m 1066[2mms[22m[39m
+(node:72273) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/panel/settleUnknownUsage.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 2459[2mms[22m[39m
+   [32m✓[39m D9 transport permission and accounting [2m(3)[22m
+     [33m[2m✓[22m[39m uses the authenticated principal user/owner and never actorId or acknowledgement[33m 985[2mms[22m[39m
+     [33m[2m✓[22m[39m uses the authenticated principal user/member and never actorId or acknowledgement[33m 767[2mms[22m[39m
+     [33m[2m✓[22m[39m uses the authenticated principal agent/undefined and never actorId or acknowledgement[33m 704[2mms[22m[39m
+(node:73438) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/control/handoffFailedRetry.test.ts [2m([22m[2m19 tests[22m[2m)[22m[33m 56442[2mms[22m[39m
+   [32m✓[39m M3 handoff failure retry lifecycle [2m(19)[22m
+     [33m[2m✓[22m[39m directly retries an active failed continuation from head[33m 2800[2mms[22m[39m
+     [33m[2m✓[22m[39m retries a handoff-settled failed continuation at its claim grant[33m 3474[2mms[22m[39m
+     [33m[2m✓[22m[39m retries released manual settlement without releasing twice[33m 1879[2mms[22m[39m
+     [33m[2m✓[22m[39m settles unknown usage before handoff then resumes and retries from head[33m 1833[2mms[22m[39m
+     [33m[2m✓[22m[39m rearms invalid first proof with the newest currentRunId and no second reservation[33m 3281[2mms[22m[39m
+     [33m[2m✓[22m[39m resumes a pre-provider stopped retry without a second reservation[33m 3292[2mms[22m[39m
+     [33m[2m✓[22m[39m active retry after reduced retry remains valid[33m 4222[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects retry source identity, amount and no-provider drift in both shared readers[33m 3686[2mms[22m[39m
+     [33m[2m✓[22m[39m clears the live source atomically when a provider retry parks held and Continue remains legal[33m 3907[2mms[22m[39m
+     [33m[2m✓[22m[39m clears live retry source on normal terminal success[33m 4724[2mms[22m[39m
+     [33m[2m✓[22m[39m clears live retry source on unrecoverable provider handoff[33m 3982[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps stopped and archived M3 failures inadmissible[33m 2430[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses M3 while another historical run has unknown usage[33m 2376[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses M3 while another historical run has pending usage[33m 2531[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses a failed predecessor with drifted taskId before reservation[33m 2580[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses a failed predecessor with drifted targetVersion before reservation[33m 2239[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses a failed predecessor with drifted continuationIntentId before reservation[33m 2461[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses a failed predecessor with drifted grant before reservation[33m 2385[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses reduced retry when reserve is insufficient or a continuation registration is foreign[33m 2352[2mms[22m[39m
+ [32m✓[39m tests/control/schema10.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 794[2mms[22m[39m
+   [32m✓[39m D9 migration preservation [2m(2)[22m
+     [33m[2m✓[22m[39m refuses future schema11 before changing the database bytes[33m 524[2mms[22m[39m
+(node:73662) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/control/driverHandoffSnapshot.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 938[2mms[22m[39m
+   [32m✓[39m a stop whose archive produced no snapshot (Web spec §6.2) [2m(1)[22m
+     [33m[2m✓[22m[39m settles the request unrecoverable, naming snapshot-missing[33m 936[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m11 passed[39m[22m[90m (11)[39m
+[2m      Tests [22m [1m[32m140 passed[39m[22m[90m (140)[39m
+[2m   Start at [22m 20:17:16
+[2m   Duration [22m 97.54s[2m (tests 99%, transform 1%, import 1%)[22m
+

@@ -1,0 +1,43 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:50979) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:50980) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-Pk3UlM/orca-snapshot-verify-BVhiAn/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-0fwDFu/orca-snapshot-verify-mS0f3k/input.bundle is okay
+ [32m✓[39m tests/control/taskResultIsolation.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 7530[2mms[22m[39m
+   [32m✓[39m task result archive isolation [2m(3)[22m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in control/task-result-evidence[33m 1349[2mms[22m[39m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in run/task-result-captures[33m 1322[2mms[22m[39m
+     [33m[2m✓[22m[39m normal driver settlement keeps outcome, usage and recoverability with broken optional namespaces[33m 1769[2mms[22m[39m
+   [32m✓[39m isolation in H-settle, failed cleanup and continuation closure [2m(3)[22m
+     [33m[2m✓[22m[39m H-settle retains continuation eligibility and booked usage with unreadable supplemental namespaces[33m 1086[2mms[22m[39m
+     [33m[2m✓[22m[39m settled-failed cleanup ignores supplemental faults and keeps failed outcome and usage[33m 1144[2mms[22m[39m
+     [33m[2m✓[22m[39m genuine core handoff damage still refuses recoverability despite excluded optional faults[33m 856[2mms[22m[39m
+/private/tmp/opr26/t/orca-tmp-0fwDFu/orca-snapshot-verify-vDFS6K/input.bundle is okay
+/private/tmp/opr26/t/orca-tmp-0fwDFu/orca-snapshot-verify-eWHqa7/input.bundle is okay
+ [32m✓[39m tests/control/taskResultCollector.test.ts [2m([22m[2m16 tests[22m[2m)[22m[33m 13333[2mms[22m[39m
+   [32m✓[39m independent result retention [2m(11)[22m
+     [33m[2m✓[22m[39m retains manifest-owned hashes with stable run/attempt membership and results-only projection changes[33m 558[2mms[22m[39m
+     [33m[2m✓[22m[39m never admits a partial/corrupt page or rolls history backward and retries transient faults[33m 682[2mms[22m[39m
+     [33m[2m✓[22m[39m requires contiguous complete pages, identity and immutable execution snapshot successors[33m 423[2mms[22m[39m
+     [33m[2m✓[22m[39m separates actual verifier start, completion and unavailable evidence from executor claims[33m 847[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after owner fence[33m 326[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after drain fence[33m 333[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after shutdown fence[33m 303[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after lease fence[33m 383[2mms[22m[39m
+     [33m[2m✓[22m[39m core usage and terminal settle independently during a blocked optional RPC[33m 2057[2mms[22m[39m
+     [33m[2m✓[22m[39m optional RPC timeout is bounded and a real peer refusal alone means unsupported[33m 1314[2mms[22m[39m
+   [32m✓[39m retention queue and source deletion [2m(5)[22m
+     [33m[2m✓[22m[39m permits at most two process-wide jobs and deduplicates one run across schedule/flush[33m 856[2mms[22m[39m
+     [33m[2m✓[22m[39m flushes owned queued results before actual source deletion after settled budget, preserving saved bytes[33m 1842[2mms[22m[39m
+     [33m[2m✓[22m[39m includes global queue wait in the 67000-ms flush deadline and fences late evidence after timeout[33m 565[2mms[22m[39m
+     [33m[2m✓[22m[39m caches only old command refusal by executable file identity and re-discovers a changed file[33m 2314[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m22 passed[39m[22m[90m (22)[39m
+[2m   Start at [22m 18:24:27
+[2m   Duration [22m 14.01s[2m (tests 95%, transform 4%, import 1%)[22m
+

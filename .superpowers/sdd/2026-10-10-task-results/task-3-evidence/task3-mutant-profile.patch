@@ -1,0 +1,13 @@
+diff --git a/src/control/profiles.ts b/src/control/profiles.ts
+index 98f5167..0bbc756 100644
+--- a/src/control/profiles.ts
++++ b/src/control/profiles.ts
+@@ -88,7 +88,7 @@ function ownPort(port: ExecutionPort): ExecutionPort {
+     inspect: (input) => inspect(input),
+     requestHandoff: (input, request) => requestHandoff(input, request),
+     collect: (input, afterSeq) => collect(input, afterSeq),
+-    ...(collectTaskResults?{collectTaskResults:(input,afterRevision)=>collectTaskResults(input,afterRevision)}:{}),
++
+     ...(readTaskResultEvidence?{readTaskResultEvidence:(input,manifestRef,ref)=>readTaskResultEvidence(input,manifestRef,ref)}:{}),
+   };
+   return Object.freeze(owned);

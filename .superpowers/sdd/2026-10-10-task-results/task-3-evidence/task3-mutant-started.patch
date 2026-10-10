@@ -1,0 +1,13 @@
+diff --git a/src/control/taskResultProtocol.ts b/src/control/taskResultProtocol.ts
+index 59b1ded..1ae0a14 100644
+--- a/src/control/taskResultProtocol.ts
++++ b/src/control/taskResultProtocol.ts
+@@ -54,7 +54,7 @@ export function taskResultVerification(manifest: TaskResultManifestV1, bytes: Bu
+         const value: unknown = JSON.parse(bytes.toString('utf8'));
+         const started = taskResultVerificationStartedSchema.safeParse(value);
+         if (started.success)
+-            return started.data.attempt === manifest.attempt ? 'in-progress' : 'unavailable';
++            return 'passed';
+         const completed = completedVerificationSchema.safeParse(value);
+         return completed.success ? (completed.data.approved ? 'passed' : 'failed') : 'unavailable';
+     }

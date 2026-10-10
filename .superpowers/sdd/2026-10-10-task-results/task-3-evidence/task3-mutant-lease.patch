@@ -1,0 +1,13 @@
+diff --git a/src/control/taskResultCollector.ts b/src/control/taskResultCollector.ts
+index 464d5e0..ebf27ce 100644
+--- a/src/control/taskResultCollector.ts
++++ b/src/control/taskResultCollector.ts
+@@ -84,7 +84,7 @@ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskRe
+         if (!row)
+             throw new Error('task-result-owner-changed');
+         const run = JSON.parse(String(row.body));
+-        if (run.generation !== owner.input.claim.generation || run.executionId !== owner.executionId || run.ownerToken !== owner.input.claim.ownerToken)
++        if (run.generation !== owner.input.claim.generation || run.executionId !== owner.executionId)
+             throw new Error('task-result-owner-changed');
+     };
+     const admitted = async <T>(job: Job, owner: NonNullable<ReturnType<TaskResultCollectorDeps['resolve']>>, operation: () => Promise<T>) => {

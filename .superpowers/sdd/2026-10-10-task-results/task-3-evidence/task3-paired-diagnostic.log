@@ -1,0 +1,34 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:61235) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-E9ulHw/orca-snapshot-verify-mJLbU4/input.bundle is okay
+[90mstderr[2m | tests/control/taskResultPaired.test.ts[2m > [22m[2mresult optional transport exact build[2m > [22m[2mproves fixed-pin refusal or live saved results before a terminal candidate using the exact selected CLI
+[22m[39mpaired diagnostic {"saved":{"schema":"orca-task-result-store-v1","identity":null,"revision":0,"sourceRevision":0,"currentAttempt":0,"observations":[],"status":"unsupported","reason":"task-results-unsupported"},"phase":"settled","calls":["plan","execute","verify"]}
+
+ [31m❯[39m tests/control/taskResultPaired.test.ts [2m([22m[2m1 test[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 31648[2mms[22m[39m
+   [31m❯[39m result optional transport exact build [2m(1)[22m
+[31m     [31m×[31m proves fixed-pin refusal or live saved results before a terminal candidate using the exact selected CLI[39m[33m 31621[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultPaired.test.ts[2m > [22mresult optional transport exact build[2m > [22mproves fixed-pin refusal or live saved results before a terminal candidate using the exact selected CLI
+[31m[1mError[22m: timed out waiting for real live verifier start[39m
+[36m [2m❯[22m until tests/control/fixtures/ccloopWorld.ts:[2m273:38[22m[39m
+    [90m271|[39m   const deadline = Date.now() + ms;
+    [90m272|[39m   while (!predicate()) {
+    [90m273|[39m     if (Date.now() > deadline) throw new Error(`timed out waiting for …
+    [90m   |[39m                                      [31m^[39m
+    [90m274|[39m     await new Promise((resolve) => setTimeout(resolve, poll));
+    [90m275|[39m   }
+[90m [2m❯[22m tests/control/taskResultPaired.test.ts:[2m26:9[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m   Start at [22m 18:26:37
+[2m   Duration [22m 32.50s[2m (tests 98%, transform 2%)[22m
+

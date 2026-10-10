@@ -1,0 +1,12 @@
+diff --git a/src/control/executionDriver.ts b/src/control/executionDriver.ts
+index 8990ec1..4a12c7e 100644
+--- a/src/control/executionDriver.ts
++++ b/src/control/executionDriver.ts
+@@ -519,6 +519,7 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
+     throw new ControlError("report-identity-conflict");
+   }
+   deps.taskResults?.schedule(runId);
++  await deps.taskResults?.flush(runId);
+   return report;
+ }
+ 

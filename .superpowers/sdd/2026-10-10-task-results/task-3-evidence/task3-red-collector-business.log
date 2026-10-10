@@ -1,0 +1,130 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:24432) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/control/taskResultCollector.test.ts [2m([22m[2m10 tests[22m[2m | [22m[31m5 failed[39m[2m | [22m[33m5 skipped[39m[2m)[22m[33m 1358[2mms[22m[39m
+   [31m❯[39m independent result retention [2m(10)[22m
+[31m     [31m×[31m retains manifest-owned hashes with stable run/attempt membership and results-only projection changes[39m[33m 323[2mms[22m[39m
+[31m     [31m×[31m never admits a partial/corrupt page or rolls history backward and retries transient faults[39m[32m 255[2mms[22m[39m
+[31m     [31m×[31m requires contiguous complete pages, identity and immutable execution snapshot successors[39m[32m 258[2mms[22m[39m
+[31m     [31m×[31m separates actual verifier start, completion and unavailable evidence from executor claims[39m[32m 254[2mms[22m[39m
+     [2m[90m↓[39m[22m rejects late writes after owner fence
+     [2m[90m↓[39m[22m rejects late writes after drain fence
+     [2m[90m↓[39m[22m rejects late writes after shutdown fence
+     [2m[90m↓[39m[22m rejects late writes after run-owner fence
+     [2m[90m↓[39m[22m limits jobs to two globally, one per run, while core usage and terminal settle independently
+[31m     [31m×[31m optional RPC timeout is bounded and a real peer refusal alone means unsupported[39m[32m 266[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 5 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mindependent result retention[2m > [22mretains manifest-owned hashes with stable run/attempt membership and results-only projection changes
+[31m[1mAssertionError[22m: expected null to match object { status: 'available', …(3) }[39m
+
+[32m- Expected:[39m
+{
+  "currentAttempt": 1,
+  "observations": [
+    {
+      "manifest": {
+        "attempt": 1,
+      },
+      "manifestRef": {
+        "artifactId": "task-result-5f94d5ff784c06fcb494ba4214f8eb6172f13bb282e65bdd5dfc958f034549e1",
+        "hash": "5f94d5ff784c06fcb494ba4214f8eb6172f13bb282e65bdd5dfc958f034549e1",
+      },
+    },
+  ],
+  "revision": 1,
+  "status": "available",
+}
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m34:53[22m[39m
+    [90m 32|[39m   const f=await fixture();try{
+    [90m 33|[39m    const before=readProjectionState(f.t.h.store).changeSeq;f.collector…
+    [90m 34|[39m    expect(readTaskResultState(f.t.h.store,f.runId)).toMatchObject({sta…
+    [90m   |[39m                                                     [31m^[39m
+    [90m 35|[39m    expect((await readOwnedTaskResultEvidence(f.t.h.store,f.runId,1,f.m…
+    [90m 36|[39m    expect((await stat(join(f.t.h.store.stateDir,'artifacts',f.output.a…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mindependent result retention[2m > [22mnever admits a partial/corrupt page or rolls history backward and retries transient faults
+[31m[1mTypeError[22m: Cannot read properties of null (reading 'observations')[39m
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m50:146[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mindependent result retention[2m > [22mrequires contiguous complete pages, identity and immutable execution snapshot successors
+[31m[1mAssertionError[22m: expected null to match object { status: 'unavailable', …(2) }[39m
+
+[32m- Expected:[39m
+{
+  "observations": [],
+  "revision": 0,
+  "status": "unavailable",
+}
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m58:126[22m[39m
+    [90m 56|[39m  it('requires contiguous complete pages, identity and immutable execut…
+    [90m 57|[39m   const f=await fixture();try{
+    [90m 58|[39m    f.setPage({...f.page(),nextRevision:0});await f.collector.flush(f.r…
+    [90m   |[39m                                                                                                                              [31m^[39m
+    [90m 59|[39m    f.setPage({...f.page(),nextRevision:1,identity:{...f.identity,gener…
+    [90m 60|[39m    f.setPage({...f.page(),identity:f.identity});await f.collector.flus…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mindependent result retention[2m > [22mseparates actual verifier start, completion and unavailable evidence from executor claims
+[31m[1mAssertionError[22m: expected undefined to deeply equal [ 'unavailable', 'in-progress', …(1) ][39m
+
+[32m- Expected:[39m
+[
+  "unavailable",
+  "in-progress",
+  "failed",
+]
+
+[31m+ Received:[39m
+undefined
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m71:90[22m[39m
+    [90m 69|[39m    const m2=f.add(f.manifest(2,1,'verification',started)),m3=f.add(f.m…
+    [90m 70|[39m    f.setPage({...f.page(),revision:3,nextRevision:3,manifests:[{revisi…
+    [90m 71|[39m    expect(readTaskResultState(f.t.h.store,f.runId)?.observations.map(o…
+    [90m   |[39m                                                                                          [31m^[39m
+    [90m 72|[39m   }finally{await f.dispose();}
+    [90m 73|[39m  });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22mindependent result retention[2m > [22moptional RPC timeout is bounded and a real peer refusal alone means unsupported
+[31m[1mAssertionError[22m: expected null to match object { status: 'unavailable', revision: +0 }[39m
+
+[32m- Expected:[39m
+{
+  "revision": 0,
+  "status": "unavailable",
+}
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m95:141[22m[39m
+
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m5 failed[39m[22m[2m | [22m[33m5 skipped[39m[90m (10)[39m
+[2m   Start at [22m 18:15:03
+[2m   Duration [22m 2.13s[2m (tests 67%, transform 27%, import 5%)[22m
+

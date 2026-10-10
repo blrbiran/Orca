@@ -1,0 +1,31 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:33529) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:33530) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-wTNzOA/orca-snapshot-verify-xDP42F/input.bundle is okay
+ [32m✓[39m tests/control/taskResultIsolation.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 4533[2mms[22m[39m
+   [32m✓[39m task result archive isolation [2m(3)[22m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in control/task-result-evidence[33m 1295[2mms[22m[39m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in run/task-result-captures[33m 1319[2mms[22m[39m
+     [33m[2m✓[22m[39m normal driver settlement keeps outcome, usage and recoverability with broken optional namespaces[33m 1917[2mms[22m[39m
+/private/tmp/opr26/t/orca-tmp-CerxTd/orca-snapshot-verify-hYdv3h/input.bundle is okay
+ [32m✓[39m tests/control/taskResultCollector.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 7124[2mms[22m[39m
+   [32m✓[39m independent result retention [2m(10)[22m
+     [33m[2m✓[22m[39m retains manifest-owned hashes with stable run/attempt membership and results-only projection changes[33m 574[2mms[22m[39m
+     [33m[2m✓[22m[39m never admits a partial/corrupt page or rolls history backward and retries transient faults[33m 661[2mms[22m[39m
+     [33m[2m✓[22m[39m requires contiguous complete pages, identity and immutable execution snapshot successors[33m 469[2mms[22m[39m
+     [33m[2m✓[22m[39m separates actual verifier start, completion and unavailable evidence from executor claims[33m 787[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after owner fence[33m 330[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after drain fence[33m 316[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after shutdown fence[33m 340[2mms[22m[39m
+     [33m[2m✓[22m[39m limits jobs to two globally, one per run, while core usage and terminal settle independently[33m 2096[2mms[22m[39m
+     [33m[2m✓[22m[39m optional RPC timeout is bounded and a real peer refusal alone means unsupported[33m 1279[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m13 passed[39m[22m[90m (13)[39m
+[2m   Start at [22m 18:19:13
+[2m   Duration [22m 7.84s[2m (tests 90%, transform 8%, import 2%)[22m
+

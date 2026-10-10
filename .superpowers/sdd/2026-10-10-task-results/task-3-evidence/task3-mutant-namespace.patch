@@ -1,0 +1,13 @@
+diff --git a/src/control/archive.ts b/src/control/archive.ts
+index f79af9d..ca93436 100644
+--- a/src/control/archive.ts
++++ b/src/control/archive.ts
+@@ -170,7 +170,7 @@ export async function archiveRun(store:ControlStore,input:{runId:string;sourceDi
+  const sourceIdentity={dev:String(sourceStat.dev),ino:String(sourceStat.ino),birthtimeNs:String(sourceStat.birthtimeNs)};
+  const missing:string[]=[];
+  if(!input.stopProof || !input.stopProof.isolated || input.stopProof.executionId!==run.executionId || input.stopProof.generation!==run.generation) missing.push("stop-unconfirmed");
+- const logs=await captureTree(store,source,"",missing,deps,[relative(source,repo),...TASK_RESULT_SOURCE_EXCLUSIONS]);
++ const logs=await captureTree(store,source,"",missing,deps,[relative(source,repo)]);
+  const snapshot=await captureSnapshot(store,repo,missing,deps);
+  const manifest={version:1,runId:run.runId,sourceIdentity,logs,snapshot,missing};
+  const bytes=Buffer.from(JSON.stringify(manifest));const archive=await writeArtifact(store,"archive-"+createHash("sha256").update(bytes).digest("hex"),bytes,deps);

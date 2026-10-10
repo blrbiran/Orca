@@ -1,0 +1,14 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:90716) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/control/taskResultCollector.test.ts [2m([22m[2m21 tests[22m[2m | [22m[33m20 skipped[39m[2m)[22m[33m 350[2mms[22m[39m
+   [32m✓[39m owner check at artifact registration [2m(1)[22m
+     [33m[2m✓[22m[39m registers no result artifacts when the owner changes after publication admission but before the transaction[33m 348[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[2m | [22m[33m20 skipped[39m[90m (21)[39m
+[2m   Start at [22m 18:33:58
+[2m   Duration [22m 1.12s[2m (transform 55%, tests 34%, import 10%, setup 1%)[22m
+

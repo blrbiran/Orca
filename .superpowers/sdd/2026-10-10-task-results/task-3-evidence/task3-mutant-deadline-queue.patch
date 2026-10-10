@@ -1,0 +1,13 @@
+diff --git a/src/control/taskResultCollector.ts b/src/control/taskResultCollector.ts
+index 464d5e0..384b689 100644
+--- a/src/control/taskResultCollector.ts
++++ b/src/control/taskResultCollector.ts
+@@ -234,7 +234,7 @@ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskRe
+                                 job.finish();
+                                 resolve();
+                             });
+-                        }, TASK_RESULT_FLUSH_TIMEOUT_MS);
++                        }, TASK_RESULT_FLUSH_TIMEOUT_MS + 1);
+                     })]);
+             }
+             finally {

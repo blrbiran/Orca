@@ -1,0 +1,44 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone[39m
+
+(node:22450) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/control/driverRequirementClarify.test.ts [2m([22m[2m12 tests[22m[2m | [22m[31m1 failed[39m[2m | [22m[33m11 skipped[39m[2m)[22m[33m 395[2mms[22m[39m
+   [31m❯[39m the clarify purpose on the single-call chain (N1 spec §7) [2m(8)[22m
+     [2m[90m↓[39m[22m drives round 1 from its wake to awaiting-answers through one single call, the overview fenced as data
+     [2m[90m↓[39m[22m retries an invalid output twice, telling the model what was wrong, then fails the round as clarify-output-invalid
+     [2m[90m↓[39m[22m waits with requirement-budget-exhausted while the grant does not fit, and claims once set-limit raises the limit
+     [2m[90m↓[39m[22m a handoff-stop interrupts the call in flight, books its usage, returns the unused grant, and completes the stop
+     [2m[90m↓[39m[22m a panel shutdown leaves a call in flight to the driver (DR17)
+     [2m[90m↓[39m[22m a stopped group claims nothing: its requirement-call wake stays pending, no run, nothing reserved
+     [2m[90m↓[39m[22m a run whose round left drafting after its claim is blocked at A2 as requirement-call-target-moved, and never sent
+[31m     [31m×[31m a repository the run cannot resolve blocks it at A2 as repository-path, and it is never sent[39m[33m 393[2mms[22m[39m
+   [2m[90m↓[39m[22m a panel restart after a retried round (final review finding 1) [2m(1)[22m
+     [2m[90m↓[39m[22m keeps every attempt's run a single call, so recovery leaves it to the driver and blocks no dispatch
+   [2m[90m↓[39m[22m a call while the requirement's usage is unknown (final review finding 3) [2m(1)[22m
+     [2m[90m↓[39m[22m is not claimed after recovery-retry: the round waits with requirement-usage-unknown and only the first call was sent
+   [2m[90m↓[39m[22m a blocked requirement call (final review finding 4) [2m(2)[22m
+     [2m[90m↓[39m[22m shows an A2 repository-path block on the summary, and a run-scoped recovery-retry re-runs A2 to the answer
+     [2m[90m↓[39m[22m names a run blocked on unknown usage at C the same way
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/driverRequirementClarify.test.ts[2m > [22mthe clarify purpose on the single-call chain (N1 spec §7)[2m > [22ma repository the run cannot resolve blocks it at A2 as repository-path, and it is never sent
+[31m[1mError[22m: requirementHarness: not there; runs [["round-1","settled-restartable",null]][39m
+[36m [2m❯[22m Object.until tests/control/fixtures/requirementHarness.ts:[2m150:34[22m[39m
+    [90m148|[39m   const until = async (predicate: () => boolean, limit = 40): Promise<…
+    [90m149|[39m     for (let i = 0; i < limit && !holds(predicate); i += 1) { await de…
+    [90m150|[39m     if (!holds(predicate)) throw new Error(`requirementHarness: not th…
+    [90m   |[39m                                  [31m^[39m
+    [90m151|[39m   };
+    [90m152|[39m   const revision = () => Number(h.store.db.prepare("SELECT revision FR…
+[90m [2m❯[22m tests/control/driverRequirementClarify.test.ts:[2m111:7[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m11 skipped[39m[90m (12)[39m
+[2m   Start at [22m 20:23:30
+[2m   Duration [22m 1.25s[2m (transform 55%, tests 34%, import 10%, setup 1%)[22m
+

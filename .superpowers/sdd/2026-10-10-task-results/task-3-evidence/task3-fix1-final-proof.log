@@ -1,0 +1,78 @@
+task3-mutant-namespace cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=1102/0
+task3-mutant-namespace 1
+fault namespace RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-ancestor-filter cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=1002/0
+task3-mutant-ancestor-filter 1
+fault ancestor-filter RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-snapshot cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=1329/0
+task3-mutant-snapshot 1
+fault snapshot RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-monotonic cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=2673/0
+task3-mutant-monotonic 1
+fault monotonic RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-owner cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=1450/0
+task3-mutant-owner 1
+fault owner RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-lease cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=893/0
+task3-mutant-lease 1
+fault lease RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-registration cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=810/0
+task3-mutant-registration 1
+fault registration RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-flush cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=931/0
+task3-mutant-flush 1
+fault flush RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-last-rm cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=894/0
+task3-mutant-last-rm 1
+fault last-rm RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-core-wait cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=446/0
+task3-mutant-core-wait 1
+fault core-wait RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-concurrency cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=513/0
+task3-mutant-concurrency 1
+fault concurrency RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-per-run cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=610/0
+task3-mutant-per-run 1
+fault per-run RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-handover cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=750/0
+task3-mutant-handover 1
+fault handover RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-profile cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=691/0
+task3-mutant-profile 1
+fault profile RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-hash cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=1526/0
+task3-mutant-hash 1
+fault hash RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-membership cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=1190/0
+task3-mutant-membership 1
+fault membership RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-attempt-owner cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=1176/0
+task3-mutant-attempt-owner 1
+fault attempt-owner RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-started cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=775/0
+task3-mutant-started 1
+fault started RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-cache-identity cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=1072/0
+task3-mutant-cache-identity 1
+fault cache-identity RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-deadline-queue cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=609/0
+task3-mutant-deadline-queue 1
+fault deadline-queue RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-deadline-authority cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=1074/0
+task3-mutant-deadline-authority 1
+fault deadline-authority RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-incremental-staging cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=1066/0
+task3-mutant-incremental-staging 1
+fault incremental-staging RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-independent-fact cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=959/0
+task3-mutant-independent-fact 1
+fault independent-fact RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-fact-freshness cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=1176/0
+task3-mutant-fact-freshness 1
+fault fact-freshness RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-fact-lease cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=686/0
+task3-mutant-fact-lease 1
+fault fact-lease RC 1 restore {'working': 0, 'cached': 0}
+task3-mutant-dynamic-deps cwd=/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone source=8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e sourceDiff=914/0
+task3-mutant-dynamic-deps 1
+fault dynamic-deps RC 1 restore {'working': 0, 'cached': 0}

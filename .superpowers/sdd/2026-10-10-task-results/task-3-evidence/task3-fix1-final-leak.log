@@ -1,0 +1,173 @@
+leak child argv ["./node_modules/.bin/vitest", "run", "tests/control/taskResultCollector.test.ts", "tests/control/taskResultIsolation.test.ts", "tests/control/taskResultPaired.test.ts", "tests/control/settleUnknownUsage.test.ts", "tests/control/handoffFailedRetry.test.ts", "tests/control/driverContinuation.test.ts", "tests/panel/webParity.test.ts", "--maxWorkers=2", "--no-cache", "--reporter=default", "--reporter=json", "--outputFile=/private/tmp/orca-progress-results-20261010/task3-fix1-final-leak.vitest.json"] owned TMPDIR /tmp/t3l-7bienb4x
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:74268) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:74269) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/tmp/t3l-7bienb4x/orca-tmp-lTvIKm/orca-snapshot-verify-uNCEUK/input.bundle is okay
+/tmp/t3l-7bienb4x/orca-tmp-lTvIKm/orca-snapshot-verify-RlQ4J5/input.bundle is okay
+/tmp/t3l-7bienb4x/orca-tmp-lTvIKm/orca-snapshot-verify-gyVxkG/input.bundle is okay
+/tmp/t3l-7bienb4x/orca-tmp-lTvIKm/orca-snapshot-verify-32Le3o/input.bundle is okay
+/tmp/t3l-7bienb4x/orca-tmp-lTvIKm/orca-snapshot-verify-YuKK28/input.bundle is okay
+/tmp/t3l-7bienb4x/orca-tmp-lTvIKm/orca-snapshot-verify-OqkApQ/input.bundle is okay
+/tmp/t3l-7bienb4x/orca-tmp-lTvIKm/orca-snapshot-verify-WNPSnv/input.bundle is okay
+ [32m✓[39m tests/control/taskResultCollector.test.ts [2m([22m[2m30 tests[22m[2m)[22m[33m 24699[2mms[22m[39m
+   [32m✓[39m independent result retention [2m(11)[22m
+     [33m[2m✓[22m[39m retains manifest-owned hashes with stable run/attempt membership and results-only projection changes[33m 507[2mms[22m[39m
+     [33m[2m✓[22m[39m never admits a partial/corrupt page or rolls history backward and retries transient faults[33m 577[2mms[22m[39m
+     [33m[2m✓[22m[39m requires contiguous complete pages, identity and immutable execution snapshot successors[33m 534[2mms[22m[39m
+     [33m[2m✓[22m[39m separates actual verifier start, completion and unavailable evidence from executor claims[33m 649[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after owner fence[33m 349[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after run-owner fence[33m 314[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects late writes after lease fence[33m 320[2mms[22m[39m
+     [33m[2m✓[22m[39m core usage and terminal settle independently during a blocked optional RPC[33m 1819[2mms[22m[39m
+     [33m[2m✓[22m[39m optional RPC timeout is bounded and a real peer refusal alone means unsupported[33m 1262[2mms[22m[39m
+   [32m✓[39m retention queue and source deletion [2m(6)[22m
+     [33m[2m✓[22m[39m permits at most two process-wide jobs and deduplicates one run across schedule/flush[33m 1107[2mms[22m[39m
+     [33m[2m✓[22m[39m flushes owned queued results before actual source deletion after settled budget, preserving saved bytes[33m 2081[2mms[22m[39m
+     [33m[2m✓[22m[39m includes global queue wait in the 67000-ms flush deadline with available authority and fences late evidence[33m 731[2mms[22m[39m
+     [33m[2m✓[22m[39m includes global queue wait in the 67000-ms flush deadline with unavailable authority and fences late evidence[33m 723[2mms[22m[39m
+     [33m[2m✓[22m[39m does not invent observations on missing/non-task sources and retries transport errors[33m 397[2mms[22m[39m
+     [33m[2m✓[22m[39m caches only old command refusal by executable file identity and re-discovers a changed file[33m 2127[2mms[22m[39m
+   [32m✓[39m optional methods through owned profile routing [2m(2)[22m
+     [33m[2m✓[22m[39m retains evidence through the real frozen router while absent optional methods remain absent[33m 374[2mms[22m[39m
+     [33m[2m✓[22m[39m deduplicates a run across two collector assemblies for the same owned store[33m 476[2mms[22m[39m
+   [32m✓[39m collector assembly owner handover [2m(2)[22m
+     [33m[2m✓[22m[39m observes the old RPC but lets the new assembly retain the same run without an old stop cancelling it[33m 492[2mms[22m[39m
+     [33m[2m✓[22m[39m preserves source when shutdown wins a flush racing actual deletion[33m 1895[2mms[22m[39m
+   [32m✓[39m owner check at artifact registration [2m(1)[22m
+     [33m[2m✓[22m[39m registers no result artifacts when the owner changes after publication admission but before the transaction[33m 374[2mms[22m[39m
+   [32m✓[39m last source deletion fence [2m(1)[22m
+     [33m[2m✓[22m[39m rechecks shutdown after optional flush and immediately before rm starts[33m 1995[2mms[22m[39m
+   [32m✓[39m fix round 1 bounded reference staging and attempt authority [2m(7)[22m
+     [33m[2m✓[22m[39m stages one owned reference before the next read, keeps partial cursor/history and denies both real generic GET and result-reader access[33m 2022[2mms[22m[39m
+     [33m[2m✓[22m[39m checks incremental lease ownership after an asynchronous read before any further reference can be published[33m 396[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps validated source attempt two when evidence fails and core attempt is 1[33m 544[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps validated source attempt two when evidence fails and core attempt is null[33m 482[2mms[22m[39m
+     [33m[2m✓[22m[39m records same-index-revision attempt growth without new reports or cursor advancement, and rejects stale/foreign/malformed facts[33m 454[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects obsolete owner and shutdown writes of source-attempt facts[33m 870[2mms[22m[39m
+(node:87430) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/control/settleUnknownUsage.test.ts [2m([22m[2m36 tests[22m[2m)[22m[33m 30264[2mms[22m[39m
+   [32m✓[39m D9 owner conservative settlement [2m(4)[22m
+     [33m[2m✓[22m[39m charges both buckets once and preserves frozen allocations[33m 725[2mms[22m[39m
+     [33m[2m✓[22m[39m charges a released failed handoff without consuming another task commitment[33m 1067[2mms[22m[39m
+     [33m[2m✓[22m[39m completes only the usage-only stopped failure[33m 992[2mms[22m[39m
+     [33m[2m✓[22m[39m settlement before handoff counts as complete usage[33m 874[2mms[22m[39m
+   [32m✓[39m D9 proof, pending, rollback and replay boundaries [2m(23)[22m
+     [33m[2m✓[22m[39m refuses report without accounting or activity writes[33m 510[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses isolation without accounting or activity writes[33m 713[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses identity without accounting or activity writes[33m 671[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses generation without accounting or activity writes[33m 525[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses noncurrent without accounting or activity writes[33m 497[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses pending without accounting or activity writes[33m 550[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses open-request without accounting or activity writes[33m 726[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses not-failed without accounting or activity writes[33m 620[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses known without accounting or activity writes[33m 633[2mms[22m[39m
+     [33m[2m✓[22m[39m released accounting refuses a snapshot defect even with the usage-unsettled label[33m 1141[2mms[22m[39m
+     [33m[2m✓[22m[39m released accounting refuses a artifact defect even with the usage-unsettled label[33m 966[2mms[22m[39m
+     [33m[2m✓[22m[39m released accounting refuses a missing defect even with the usage-unsettled label[33m 968[2mms[22m[39m
+     [33m[2m✓[22m[39m released accounting refuses a unresolved defect even with the usage-unsettled label[33m 838[2mms[22m[39m
+     [33m[2m✓[22m[39m rolls back every accounting surface and retries after failure[33m 550[2mms[22m[39m
+     [33m[2m✓[22m[39m rechecks changed highWater after evidence and rejects it transactionally[33m 514[2mms[22m[39m
+     [33m[2m✓[22m[39m rechecks changed remaining after evidence and rejects it transactionally[33m 610[2mms[22m[39m
+     [33m[2m✓[22m[39m strictly rejects fake charged marker and manually filled request state[33m 927[2mms[22m[39m
+     [33m[2m✓[22m[39m strictly rejects fake receipt marker and manually filled request state[33m 1072[2mms[22m[39m
+     [33m[2m✓[22m[39m strictly rejects fake principal marker and manually filled request state[33m 1012[2mms[22m[39m
+     [33m[2m✓[22m[39m strictly rejects fake unknown marker and manually filled request state[33m 989[2mms[22m[39m
+     [33m[2m✓[22m[39m strictly rejects fake remaining marker and manually filled request state[33m 1047[2mms[22m[39m
+     [33m[2m✓[22m[39m strictly rejects fake highWater marker and manually filled request state[33m 920[2mms[22m[39m
+     [33m[2m✓[22m[39m books released overspend honestly without taking another commitment[33m 1037[2mms[22m[39m
+   [32m✓[39m D9 does not erase other frozen runs [2m(2)[22m
+     [33m[2m✓[22m[39m keeps another run's unknown/open request blocker (silent=false)[33m 1859[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps another run's unknown/open request blocker (silent=true)[33m 1069[2mms[22m[39m
+   [32m✓[39m D9 accounting time and spend caps [2m(3)[22m
+     [33m[2m✓[22m[39m books in current total and gates the next retry claim[33m 528[2mms[22m[39m
+     [33m[2m✓[22m[39m books in current week and gates the next retry claim[33m 620[2mms[22m[39m
+     [33m[2m✓[22m[39m books in current month and gates the next retry claim[33m 752[2mms[22m[39m
+   [32m✓[39m D9 preserves independent stopping conditions [2m(3)[22m
+     [33m[2m✓[22m[39m does not manufacture a recoverable checkpoint for an incomplete failed report[33m 1159[2mms[22m[39m
+     [33m[2m✓[22m[39m writes a settlement marker and activity with no zero-token ledger rows[33m 622[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects a pause and an unauthenticated direct call[33m 785[2mms[22m[39m
+   [32m✓[39m manual request provenance [2m(1)[22m
+     [33m[2m✓[22m[39m rejects a settled-failed request backed only by a committed settlement marker[33m 1170[2mms[22m[39m
+ [32m✓[39m tests/panel/webParity.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+(node:90005) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/tmp/t3l-7bienb4x/orca-tmp-KG8wWZ/orca-snapshot-verify-adLPal/input.bundle is okay
+/tmp/t3l-7bienb4x/orca-tmp-KG8wWZ/orca-snapshot-verify-DWOaWC/input.bundle is okay
+/tmp/t3l-7bienb4x/orca-tmp-KG8wWZ/orca-snapshot-verify-LwzRSM/input.bundle is okay
+/tmp/t3l-7bienb4x/orca-tmp-KG8wWZ/orca-snapshot-verify-5oLAE0/input.bundle is okay
+ [32m✓[39m tests/control/driverContinuation.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 20260[2mms[22m[39m
+   [32m✓[39m a continuation run (spec §4) [2m(3)[22m
+     [33m[2m✓[22m[39m keeps its predecessor's base though the tip moved, carries the checkpoint, is cut to the remaining grant, and lands[33m 3206[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps the first base down a chain: a continuation stopped again is continued from the same base[33m 4608[2mms[22m[39m
+     [33m[2m✓[22m[39m draws its grant from the held commitment: the group's reserved plus used, and every ledger mirror, are conserved from park to A1[33m 1240[2mms[22m[39m
+   [32m✓[39m a continuation whose registration is not its own (spec §4) [2m(2)[22m
+     [33m[2m✓[22m[39m is blocked by name at A2, before any bundle or provider attempt, when the task registers a different continuation[33m 936[2mms[22m[39m
+     [33m[2m✓[22m[39m is blocked by name at A2 when its predecessor has no base the driver recorded[33m 1189[2mms[22m[39m
+   [32m✓[39m a predecessor whose workspace cannot be removed (spec §4, §7) [2m(1)[22m
+     [33m[2m✓[22m[39m does not block the continuation: it still reaches accept, and the predecessor's run body carries the cleanupError[33m 1317[2mms[22m[39m
+   [32m✓[39m a continuation stopped before it started (spec §13.2 C-6) [2m(1)[22m
+     [33m[2m✓[22m[39m hands the task back to its predecessor, which can be chosen again and continued with its checkpoint[33m 3083[2mms[22m[39m
+   [32m✓[39m A2 of a continuation after a death (spec §11 I5; R-H A2-after-bundle) [2m(2)[22m
+     [33m[2m✓[22m[39m reuses the bundle it already published instead of failing on resume-bundle-exists[33m 3382[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses a published bundle whose manifest no longer names the committed checkpoint[33m 1294[2mms[22m[39m
+(node:99910) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/tmp/t3l-7bienb4x/orca-tmp-AznJ3U/orca-snapshot-verify-OiV219/input.bundle is okay
+/tmp/t3l-7bienb4x/orca-tmp-JJV0yp/orca-snapshot-verify-4lHfVt/input.bundle is okay
+ [32m✓[39m tests/control/taskResultIsolation.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 7830[2mms[22m[39m
+   [32m✓[39m task result archive isolation [2m(3)[22m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in control/task-result-evidence[33m 1285[2mms[22m[39m
+     [33m[2m✓[22m[39m ignores missing, special and changing supplemental entries in run/task-result-captures[33m 1334[2mms[22m[39m
+     [33m[2m✓[22m[39m normal driver settlement keeps outcome, usage and recoverability with broken optional namespaces[33m 1786[2mms[22m[39m
+   [32m✓[39m isolation in H-settle, failed cleanup and continuation closure [2m(3)[22m
+     [33m[2m✓[22m[39m H-settle retains continuation eligibility and booked usage with unreadable supplemental namespaces[33m 1105[2mms[22m[39m
+     [33m[2m✓[22m[39m settled-failed cleanup ignores supplemental faults and keeps failed outcome and usage[33m 1272[2mms[22m[39m
+     [33m[2m✓[22m[39m genuine core handoff damage still refuses recoverability despite excluded optional faults[33m 1045[2mms[22m[39m
+(node:4163) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/tmp/t3l-7bienb4x/orca-tmp-ID3UK5/orca-snapshot-verify-mwvGBo/input.bundle is okay
+ [32m✓[39m tests/control/taskResultPaired.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 13700[2mms[22m[39m
+   [32m✓[39m result optional transport exact build [2m(1)[22m
+     [33m[2m✓[22m[39m proves fixed-pin refusal or live saved results before a terminal candidate using the exact selected CLI[33m 13679[2mms[22m[39m
+ [32m✓[39m tests/control/handoffFailedRetry.test.ts [2m([22m[2m19 tests[22m[2m)[22m[33m 50610[2mms[22m[39m
+   [32m✓[39m M3 handoff failure retry lifecycle [2m(19)[22m
+     [33m[2m✓[22m[39m directly retries an active failed continuation from head[33m 2641[2mms[22m[39m
+     [33m[2m✓[22m[39m retries a handoff-settled failed continuation at its claim grant[33m 2973[2mms[22m[39m
+     [33m[2m✓[22m[39m retries released manual settlement without releasing twice[33m 1607[2mms[22m[39m
+     [33m[2m✓[22m[39m settles unknown usage before handoff then resumes and retries from head[33m 1714[2mms[22m[39m
+     [33m[2m✓[22m[39m rearms invalid first proof with the newest currentRunId and no second reservation[33m 3207[2mms[22m[39m
+     [33m[2m✓[22m[39m resumes a pre-provider stopped retry without a second reservation[33m 3091[2mms[22m[39m
+     [33m[2m✓[22m[39m active retry after reduced retry remains valid[33m 3882[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects retry source identity, amount and no-provider drift in both shared readers[33m 3181[2mms[22m[39m
+     [33m[2m✓[22m[39m clears the live source atomically when a provider retry parks held and Continue remains legal[33m 3760[2mms[22m[39m
+     [33m[2m✓[22m[39m clears live retry source on normal terminal success[33m 4402[2mms[22m[39m
+     [33m[2m✓[22m[39m clears live retry source on unrecoverable provider handoff[33m 3554[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps stopped and archived M3 failures inadmissible[33m 1807[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses M3 while another historical run has unknown usage[33m 2265[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses M3 while another historical run has pending usage[33m 1993[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses a failed predecessor with drifted taskId before reservation[33m 1907[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses a failed predecessor with drifted targetVersion before reservation[33m 1915[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses a failed predecessor with drifted continuationIntentId before reservation[33m 2819[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses a failed predecessor with drifted grant before reservation[33m 2105[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses reduced retry when reserve is insufficient or a continuation registration is foreign[33m 1785[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m7 passed[39m[22m[90m (7)[39m
+[2m      Tests [22m [1m[32m107 passed[39m[22m[90m (107)[39m
+[2m   Start at [22m 20:19:02
+[2m   Duration [22m 76.44s[2m (tests 99%, transform 1%)[22m
+
+JSON report written to /private/tmp/orca-progress-results-20261010/task3-fix1-final-leak.vitest.json
+{
+  "childRC": 0,
+  "totalTests": 107,
+  "passedTests": 107,
+  "failedTests": 0,
+  "pendingTests": 0,
+  "ownedTMPDIR": "/tmp/t3l-7bienb4x",
+  "entries": []
+}

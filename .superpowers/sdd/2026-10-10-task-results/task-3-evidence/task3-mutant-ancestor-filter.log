@@ -1,0 +1,65 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/orca-progress-results-20261010/task3-fix1-proof-clone[39m
+
+(node:13950) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/control/taskResultIsolation.test.ts [2m([22m[2m6 tests[22m[2m | [22m[31m2 failed[39m[2m | [22m[33m4 skipped[39m[2m)[22m[33m 2164[2mms[22m[39m
+   [31m❯[39m task result archive isolation [2m(3)[22m
+[31m     [31m×[31m ignores missing, special and changing supplemental entries in control/task-result-evidence[39m[33m 1089[2mms[22m[39m
+[31m     [31m×[31m ignores missing, special and changing supplemental entries in run/task-result-captures[39m[33m 1073[2mms[22m[39m
+     [2m[90m↓[39m[22m normal driver settlement keeps outcome, usage and recoverability with broken optional namespaces
+   [2m[90m↓[39m[22m isolation in H-settle, failed cleanup and continuation closure [2m(3)[22m
+     [2m[90m↓[39m[22m H-settle retains continuation eligibility and booked usage with unreadable supplemental namespaces
+     [2m[90m↓[39m[22m settled-failed cleanup ignores supplemental faults and keeps failed outcome and usage
+     [2m[90m↓[39m[22m genuine core handoff damage still refuses recoverability despite excluded optional faults
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultIsolation.test.ts[2m > [22mtask result archive isolation[2m > [22mignores missing, special and changing supplemental entries in control/task-result-evidence
+[31m[1mAssertionError[22m: expected [ 'changed:control' ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "changed:control",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/control/taskResultIsolation.test.ts:[2m27:36[22m[39m
+    [90m 25|[39m                     }
+    [90m 26|[39m                 } });
+    [90m 27|[39m             expect(result.missing).toEqual([]);
+    [90m   |[39m                                    [31m^[39m
+    [90m 28|[39m             const manifest = JSON.parse((await readArtifact(h.store, r…
+    [90m 29|[39m             expect(manifest.logs.some((e: {
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultIsolation.test.ts[2m > [22mtask result archive isolation[2m > [22mignores missing, special and changing supplemental entries in run/task-result-captures
+[31m[1mAssertionError[22m: expected [ 'changed:run' ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "changed:run",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/control/taskResultIsolation.test.ts:[2m27:36[22m[39m
+    [90m 25|[39m                     }
+    [90m 26|[39m                 } });
+    [90m 27|[39m             expect(result.missing).toEqual([]);
+    [90m   |[39m                                    [31m^[39m
+    [90m 28|[39m             const manifest = JSON.parse((await readArtifact(h.store, r…
+    [90m 29|[39m             expect(manifest.logs.some((e: {
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[33m4 skipped[39m[90m (6)[39m
+[2m   Start at [22m 20:22:03
+[2m   Duration [22m 2.96s[2m (tests 75%, transform 20%, import 4%)[22m
+

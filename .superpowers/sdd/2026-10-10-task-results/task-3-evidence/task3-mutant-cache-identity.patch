@@ -1,0 +1,13 @@
+diff --git a/src/control/ccloopPort.ts b/src/control/ccloopPort.ts
+index b4cfe5d..5e31c0d 100644
+--- a/src/control/ccloopPort.ts
++++ b/src/control/ccloopPort.ts
+@@ -101,7 +101,7 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
+  let unsupportedIdentity:string|null=null;
+  const optionalIdentity=()=>{regularAbsolute(binary,'control-binary-invalid',true);const stat=lstatSync(binary,{bigint:true});return [stat.dev,stat.ino,stat.size,stat.mtimeNs,stat.ctimeNs].join(':');};
+  const optionalRaw=async(method:string,payload:unknown)=>{
+-  const identity=optionalIdentity();if(identity===unsupportedIdentity)throw new TaskResultUnsupportedError();
++  const identity=optionalIdentity();if(unsupportedIdentity!==null)throw new TaskResultUnsupportedError();
+   try{return await raw(method,payload,Math.min(options.timeoutMs,TASK_RESULT_RPC_TIMEOUT_MS));}
+   catch(error){if(peerErrorCode(error)==='control-command-invalid'&&optionalIdentity()===identity){unsupportedIdentity=identity;throw new TaskResultUnsupportedError();}throw error;}
+  };

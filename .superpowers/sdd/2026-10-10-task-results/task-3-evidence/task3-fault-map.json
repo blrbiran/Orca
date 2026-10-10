@@ -1,0 +1,678 @@
+[
+  {
+    "name": "namespace",
+    "file": "src/control/archive.ts",
+    "criterion": "ignores missing, special and changing",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-namespace",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultIsolation.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "ignores missing, special and changing"
+    ],
+    "rc": 1,
+    "patchBytes": 1102,
+    "patchSHA256": "ef316ebee4b1e0f332ba8247e38d859b8a789e835f7b223eda2eeaf98463ba19",
+    "rawLogSHA256": "c1a75e0935cef280ef41e82dec6a0a0cabe152a6f1f58b2cf5727e08bbb7b2bb",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "ancestor-filter",
+    "file": "src/control/archive.ts",
+    "criterion": "ignores missing, special and changing",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-ancestor-filter",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultIsolation.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "ignores missing, special and changing"
+    ],
+    "rc": 1,
+    "patchBytes": 1002,
+    "patchSHA256": "a82da444e0600125f64f2292aa20189be9c9425b9c732ce14facbda3a2eac9fb",
+    "rawLogSHA256": "43e8c09acca209b7773d960512c12a0b7efe1e735cdc4eca1574698431f57ae6",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "snapshot",
+    "file": "src/control/taskResultCollector.ts",
+    "criterion": "immutable execution snapshot successors",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-snapshot",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "immutable execution snapshot successors"
+    ],
+    "rc": 1,
+    "patchBytes": 1329,
+    "patchSHA256": "315b587920315ea80c6a520e8b2f0783dfac9c08db1d7446cece7d87034e4d02",
+    "rawLogSHA256": "0dadc7f01b90c17290e51b52665ea0e546f517026e31a7c8043f8b2254dd12b7",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "monotonic",
+    "file": "src/control/taskResultCollector.ts",
+    "criterion": "never admits a partial/corrupt page",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-monotonic",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "never admits a partial/corrupt page"
+    ],
+    "rc": 1,
+    "patchBytes": 2673,
+    "patchSHA256": "ac94547b8ca24f08ce4c6d2b4245cb845d3c32eef3c56f30ceec41ede8e1a266",
+    "rawLogSHA256": "ddf5451ac1753f77fcb03d26519b65931dd23156af2a590758f87a37960dfac2",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "owner",
+    "file": "src/control/taskResultCollector.ts",
+    "criterion": "rejects late writes after owner fence",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-owner",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "rejects late writes after owner fence"
+    ],
+    "rc": 1,
+    "patchBytes": 1450,
+    "patchSHA256": "67f3e2bc4728803b0859ce03adf36e73d670c95461b40f53d10667c99d7c614f",
+    "rawLogSHA256": "01e78c8622113ee5638d06bd08cf0b37f8fb9c15c74193bbeb320d98c2933069",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "lease",
+    "file": "src/control/taskResultCollector.ts",
+    "criterion": "rejects late writes after lease fence",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-lease",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "rejects late writes after lease fence"
+    ],
+    "rc": 1,
+    "patchBytes": 893,
+    "patchSHA256": "231275f91ddb0cc8933663cb065351d103ea90545ebf1d87118863fd7904ad43",
+    "rawLogSHA256": "1b2851423f6a7a2019d9e1a365c527a3b4bd0add68e00669f1fee80a7ce49977",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "registration",
+    "file": "src/control/archive.ts",
+    "criterion": "owner changes after publication admission",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-registration",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "owner changes after publication admission"
+    ],
+    "rc": 1,
+    "patchBytes": 810,
+    "patchSHA256": "f2bccc22ea647fb57d3f2b5f30734377caecabf986ddf4d26c95ac9036dc1d8c",
+    "rawLogSHA256": "127ee0824f2a9d65c5ee298cae34c9d2a20dbb0f575523c404a7e9d51b38bfea",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "flush",
+    "file": "src/control/cleanup.ts",
+    "criterion": "flushes owned queued results before actual source deletion",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-flush",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "flushes owned queued results before actual source deletion"
+    ],
+    "rc": 1,
+    "patchBytes": 931,
+    "patchSHA256": "624e55efecd407c546add6eee0b4916f29dc7918bc325fb5a6acf9c88fdf9dbf",
+    "rawLogSHA256": "b3abecfd76169b3860098bd6e5c03c5dcf21b0d683c6adc8b9f63b6efdf2a011",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "last-rm",
+    "file": "src/control/cleanup.ts",
+    "criterion": "last source deletion fence",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-last-rm",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "last source deletion fence"
+    ],
+    "rc": 1,
+    "patchBytes": 894,
+    "patchSHA256": "ec6a2011f755a4a4156977206b46af744fec9aa2dd68d4b01a61dc72da1e2a61",
+    "rawLogSHA256": "5681de401373227f4fc2c7930a4989cbcd51ac6d33a54fe98e6a09063cc7eeb0",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "core-wait",
+    "file": "src/control/executionDriver.ts",
+    "criterion": "core usage and terminal settle independently",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-core-wait",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "core usage and terminal settle independently"
+    ],
+    "rc": 1,
+    "patchBytes": 446,
+    "patchSHA256": "8f6a1c596c23c543cee220d272cf788f174fa40652dbadddd7130b2b50bc2b19",
+    "rawLogSHA256": "8ccffce98acc23899ea4c2ae5516c90216832c0d6f2243157645087fd85e14c0",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "concurrency",
+    "file": "src/control/taskResultCollector.ts",
+    "criterion": "permits at most two process-wide jobs",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-concurrency",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "permits at most two process-wide jobs"
+    ],
+    "rc": 1,
+    "patchBytes": 513,
+    "patchSHA256": "63abfd082f1d7c1c550f5993b31e1cad65293a473cac5a09433b3cf5e732eef7",
+    "rawLogSHA256": "5170930ce9ac6e8dccd980ee50f82dc6a0c583c96bfab67a4a651fdae5a69087",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "per-run",
+    "file": "src/control/taskResultCollector.ts",
+    "criterion": "permits at most two process-wide jobs",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-per-run",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "permits at most two process-wide jobs"
+    ],
+    "rc": 1,
+    "patchBytes": 610,
+    "patchSHA256": "72e955eb98b01d9b607212ada5970abaee60da62660bd3ccfdf14826a820d098",
+    "rawLogSHA256": "d26090a35a8e285e99c7f66038635ca48ba31675247de5e9588160b9f63fd0be",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "handover",
+    "file": "src/control/taskResultCollector.ts",
+    "criterion": "observes the old RPC but lets the new assembly",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-handover",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "observes the old RPC but lets the new assembly"
+    ],
+    "rc": 1,
+    "patchBytes": 750,
+    "patchSHA256": "6c200edc48f28bebc7aaee272789b7c7fefefa23bf3fcf1f9eb059e863bb5467",
+    "rawLogSHA256": "a37216ac536d3fbe9b4d908249ccddeb1f1231d6034e7adcaaab719a05362546",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "profile",
+    "file": "src/control/profiles.ts",
+    "criterion": "retains evidence through the real frozen router",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-profile",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "retains evidence through the real frozen router"
+    ],
+    "rc": 1,
+    "patchBytes": 691,
+    "patchSHA256": "6c8701daa827d5a3c38e383af9a40f8d5f6786cb066d11a7a83862d7caba7252",
+    "rawLogSHA256": "c4a78b8da6d05513bb0d3a5b7530111d58ff278525a0372eb498adbc4fe81264",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "hash",
+    "file": "src/control/taskResultCollector.ts",
+    "criterion": "never admits a partial/corrupt page",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-hash",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "never admits a partial/corrupt page"
+    ],
+    "rc": 1,
+    "patchBytes": 1526,
+    "patchSHA256": "b4281c687170f4251cb3dd9af62a21866dcf1cbbff3ff7bbed35297b1763c4e3",
+    "rawLogSHA256": "b4693588ab7f94a1431f16c7c0a6a0fd2fe407deba2961a2f927222ef13932cd",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "membership",
+    "file": "src/control/taskResultStore.ts",
+    "criterion": "retains manifest-owned hashes",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-membership",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "retains manifest-owned hashes"
+    ],
+    "rc": 1,
+    "patchBytes": 1190,
+    "patchSHA256": "f3a3d6e1514df66f483a1de6646f038ce7f80095fe9c480c89cf82eaa133eeac",
+    "rawLogSHA256": "64e429c911b8621abc4c04a0a39ef1844857dbbe116014ad525394abd30e6ef2",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "attempt-owner",
+    "file": "src/control/taskResultStore.ts",
+    "criterion": "retains manifest-owned hashes",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-attempt-owner",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "retains manifest-owned hashes"
+    ],
+    "rc": 1,
+    "patchBytes": 1176,
+    "patchSHA256": "4004d05dd42570c4f41a6922a9def1a37459f5f9dc8343651b5e242b1f89e00c",
+    "rawLogSHA256": "414b091db080c330ff2d4cdf0af183cef56851a7d835ad9c3940daef3c7b262c",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "started",
+    "file": "src/control/taskResultProtocol.ts",
+    "criterion": "separates actual verifier start",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-started",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "separates actual verifier start"
+    ],
+    "rc": 1,
+    "patchBytes": 775,
+    "patchSHA256": "d13b65c4e90907ae9edcf5fe8889f927d6ffe94f17b9d626a318641d6ce26800",
+    "rawLogSHA256": "615dc870f7fc402a9b21212609b9d268a952def6bf6b7e7d111dc4ee1c644283",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "cache-identity",
+    "file": "src/control/ccloopPort.ts",
+    "criterion": "caches only old command refusal",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-cache-identity",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "caches only old command refusal"
+    ],
+    "rc": 1,
+    "patchBytes": 1072,
+    "patchSHA256": "3b3cea24d682963a8957b3cbc93fad12797a0592e7c523eaccde50a6a1879b08",
+    "rawLogSHA256": "6992c9c105e1a636a05dda8c70db6fa93fa14999f5f909b2eb2f4f6d05283510",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "deadline-queue",
+    "file": "src/control/taskResultCollector.ts",
+    "criterion": "flush deadline with available",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-deadline-queue",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "flush deadline with available"
+    ],
+    "rc": 1,
+    "patchBytes": 609,
+    "patchSHA256": "e14195bf93ad6eaf779c9ed476a5a871106d86b6a5612966049903337d2e6065",
+    "rawLogSHA256": "f41e43b8870ba071342bc2af180c561cab3d1cdefed6ef0541fe2119d0ebe295",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "deadline-authority",
+    "file": "src/control/taskResultCollector.ts",
+    "criterion": "flush deadline with unavailable",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-deadline-authority",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "flush deadline with unavailable"
+    ],
+    "rc": 1,
+    "patchBytes": 1074,
+    "patchSHA256": "7d2d5ec5b76c38e2ffef44ca8feab9b466c0e355f8361f7a23d5a094f05807f6",
+    "rawLogSHA256": "584fc2cea09cd541445b697eb458636ae08c3c6173d626e677c6c5f7f889ba24",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "incremental-staging",
+    "file": "src/control/taskResultCollector.ts",
+    "criterion": "stages one owned reference before the next read",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-incremental-staging",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "stages one owned reference before the next read"
+    ],
+    "rc": 1,
+    "patchBytes": 1066,
+    "patchSHA256": "b7e7798654fb5ee40e486fe840afb9f385a69f67a93aabc48701a6df074297cb",
+    "rawLogSHA256": "c8f28f2b3f423ccb0cf54cd1b53fe8ee36bd715319fa6e1e18f95bc0a39c9f7b",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "independent-fact",
+    "file": "src/control/taskResultCollector.ts",
+    "criterion": "keeps validated source attempt two",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-independent-fact",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "keeps validated source attempt two"
+    ],
+    "rc": 1,
+    "patchBytes": 959,
+    "patchSHA256": "b896f42bc02464a554387e3be53048adabf2f36eed11abd454d13f1ed0d0081a",
+    "rawLogSHA256": "53decb51c26f8ff7e1e5f017aa827b458c5305d3929cdb72c21b92df5b43d7de",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "fact-freshness",
+    "file": "src/control/taskResultCollector.ts",
+    "criterion": "records same-index-revision attempt growth",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-fact-freshness",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "records same-index-revision attempt growth"
+    ],
+    "rc": 1,
+    "patchBytes": 1176,
+    "patchSHA256": "a0e9d6963255a939f9857b6e7720182ed9afff2ca56602c753974885b5cbc162",
+    "rawLogSHA256": "79a8867f07995e816b3c282ec323daa272e622ebcd4cc0e528858b3ebda2f68a",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "fact-lease",
+    "file": "src/control/taskResultStore.ts",
+    "criterion": "checks incremental lease ownership",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-fact-lease",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/taskResultCollector.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "checks incremental lease ownership"
+    ],
+    "rc": 1,
+    "patchBytes": 686,
+    "patchSHA256": "42968cbd653694b412c52623c2e4847c866f0dc897c3adbfb61cd431c82b95a6",
+    "rawLogSHA256": "8f93f62ef4294acbf60d64d6ce1fa7764fb3de21f576018b3b1148fe567be3ab",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  },
+  {
+    "name": "dynamic-deps",
+    "file": "src/control/executionDriver.ts",
+    "criterion": "repository the run cannot resolve",
+    "source": "8dee7c1247fb4dc32688780b3f6c6e40d2f9e40e",
+    "command": [
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "/private/tmp/orca-progress-results-20261010/task3-gate.py",
+      "task3-mutant-dynamic-deps",
+      "./node_modules/.bin/vitest",
+      "run",
+      "tests/control/driverRequirementClarify.test.ts",
+      "--maxWorkers=2",
+      "--no-cache",
+      "-t",
+      "repository the run cannot resolve"
+    ],
+    "rc": 1,
+    "patchBytes": 914,
+    "patchSHA256": "87d51ef3d1751b8fe78d74127511f14f2f069333da53f03230abb4ac6b48de20",
+    "rawLogSHA256": "5351f42390e029502b7c9145adf92008aae94a42702a61409273c0034b9c4faa",
+    "restore": {
+      "working": 0,
+      "cached": 0
+    }
+  }
+]

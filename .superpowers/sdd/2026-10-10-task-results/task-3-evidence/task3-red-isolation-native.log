@@ -1,0 +1,68 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:18952) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+/private/tmp/opr26/t/orca-tmp-rjEc6U/orca-snapshot-verify-JAwOrk/input.bundle is okay
+ [31m❯[39m tests/control/taskResultIsolation.test.ts [2m([22m[2m3 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 3917[2mms[22m[39m
+   [31m❯[39m task result archive isolation [2m(3)[22m
+[31m     [31m×[31m ignores missing, special and changing supplemental entries in control/task-result-evidence[39m[33m 1122[2mms[22m[39m
+[31m     [31m×[31m ignores missing, special and changing supplemental entries in run/task-result-captures[39m[33m 1096[2mms[22m[39m
+     [33m[2m✓[22m[39m normal driver settlement keeps outcome, usage and recoverability with broken optional namespaces[33m 1697[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultIsolation.test.ts[2m > [22mtask result archive isolation[2m > [22mignores missing, special and changing supplemental entries in control/task-result-evidence
+[31m[1mAssertionError[22m: expected [ 'changed:control', …(3) ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "changed:control",[39m
+[31m+   "changed:control/task-result-evidence",[39m
+[31m+   "changed:control/task-result-evidence/changing",[39m
+[31m+   "changed:control/task-result-evidence/missing",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/control/taskResultIsolation.test.ts:[2m17:27[22m[39m
+    [90m 15|[39m     if(path.endsWith('stdout.log')){await rm(optional,{recursive:true}…
+    [90m 16|[39m    }});
+    [90m 17|[39m    expect(result.missing).toEqual([]);
+    [90m   |[39m                           [31m^[39m
+    [90m 18|[39m    const manifest=JSON.parse((await readArtifact(h.store,result.artifa…
+    [90m 19|[39m    expect(manifest.logs.some((e:{path:string})=>e.path===namespace||e.…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultIsolation.test.ts[2m > [22mtask result archive isolation[2m > [22mignores missing, special and changing supplemental entries in run/task-result-captures
+[31m[1mAssertionError[22m: expected [ 'changed:run', …(3) ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "changed:run",[39m
+[31m+   "changed:run/task-result-captures",[39m
+[31m+   "changed:run/task-result-captures/changing",[39m
+[31m+   "changed:run/task-result-captures/missing",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/control/taskResultIsolation.test.ts:[2m17:27[22m[39m
+    [90m 15|[39m     if(path.endsWith('stdout.log')){await rm(optional,{recursive:true}…
+    [90m 16|[39m    }});
+    [90m 17|[39m    expect(result.missing).toEqual([]);
+    [90m   |[39m                           [31m^[39m
+    [90m 18|[39m    const manifest=JSON.parse((await readArtifact(h.store,result.artifa…
+    [90m 19|[39m    expect(manifest.logs.some((e:{path:string})=>e.path===namespace||e.…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (3)[39m
+[2m   Start at [22m 18:12:49
+[2m   Duration [22m 4.68s[2m (tests 85%, transform 12%, import 2%)[22m
+

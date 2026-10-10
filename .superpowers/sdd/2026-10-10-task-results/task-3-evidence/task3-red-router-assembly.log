@@ -1,0 +1,74 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/Users/biran/.codex/worktrees/progress-results-20261010/Orca[39m
+
+(node:65214) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [31m❯[39m tests/control/taskResultCollector.test.ts [2m([22m[2m18 tests[22m[2m | [22m[31m2 failed[39m[2m | [22m[33m16 skipped[39m[2m)[22m[33m 633[2mms[22m[39m
+   [2m[90m↓[39m[22m independent result retention [2m(11)[22m
+     [2m[90m↓[39m[22m retains manifest-owned hashes with stable run/attempt membership and results-only projection changes
+     [2m[90m↓[39m[22m never admits a partial/corrupt page or rolls history backward and retries transient faults
+     [2m[90m↓[39m[22m requires contiguous complete pages, identity and immutable execution snapshot successors
+     [2m[90m↓[39m[22m separates actual verifier start, completion and unavailable evidence from executor claims
+     [2m[90m↓[39m[22m rejects late writes after owner fence
+     [2m[90m↓[39m[22m rejects late writes after drain fence
+     [2m[90m↓[39m[22m rejects late writes after shutdown fence
+     [2m[90m↓[39m[22m rejects late writes after run-owner fence
+     [2m[90m↓[39m[22m rejects late writes after lease fence
+     [2m[90m↓[39m[22m core usage and terminal settle independently during a blocked optional RPC
+     [2m[90m↓[39m[22m optional RPC timeout is bounded and a real peer refusal alone means unsupported
+   [2m[90m↓[39m[22m retention queue and source deletion [2m(5)[22m
+     [2m[90m↓[39m[22m permits at most two process-wide jobs and deduplicates one run across schedule/flush
+     [2m[90m↓[39m[22m flushes owned queued results before actual source deletion after settled budget, preserving saved bytes
+     [2m[90m↓[39m[22m includes global queue wait in the 67000-ms flush deadline and fences late evidence after timeout
+     [2m[90m↓[39m[22m does not invent observations on missing/non-task sources and retries transport errors
+     [2m[90m↓[39m[22m caches only old command refusal by executable file identity and re-discovers a changed file
+   [31m❯[39m optional methods through owned profile routing [2m(2)[22m
+[31m     [31m×[31m retains evidence through the real frozen router while absent optional methods remain absent[39m[33m 347[2mms[22m[39m
+[31m     [31m×[31m deduplicates a run across two collector assemblies for the same owned store[39m[32m 284[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22moptional methods through owned profile routing[2m > [22mretains evidence through the real frozen router while absent optional methods remain absent
+[31m[1mAssertionError[22m: expected +0 to be 1 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 1[39m
+[31m+ 0[39m
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m182:98[22m[39m
+    [90m180|[39m    await f.collector.stop();const router=createExecutionProfileRouter(…
+    [90m181|[39m    const owned=router.list()[0].port;const collector=createTaskResultC…
+    [90m182|[39m    try{await collector.flush(f.runId);expect(readTaskResultState(f.t.h…
+    [90m   |[39m                                                                                                  [31m^[39m
+    [90m183|[39m    const absent=createExecutionProfileRouter([resolveProfile(profileSn…
+    [90m184|[39m    expect(absent.collectTaskResults).toBeUndefined();expect(absent.rea…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/control/taskResultCollector.test.ts[2m > [22moptional methods through owned profile routing[2m > [22mdeduplicates a run across two collector assemblies for the same owned store
+[31m[1mAssertionError[22m: expected 2 to be 1 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 1[39m
+[31m+ 2[39m
+
+[36m [2m❯[22m tests/control/taskResultCollector.test.ts:[2m191:88[22m[39m
+    [90m189|[39m    f.port.collectTaskResults=async()=>{entered++;await held.promise;re…
+    [90m190|[39m    const second=createTaskResultCollector({store:f.t.h.store,resolve:(…
+    [90m191|[39m    f.collector.schedule(f.runId);second.schedule(f.runId);await tick()…
+    [90m   |[39m                                                                                        [31m^[39m
+    [90m192|[39m    held.release();await second.flush(f.runId);await second.stop();expe…
+    [90m193|[39m   }finally{held.release();await f.dispose();}
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[33m16 skipped[39m[90m (18)[39m
+[2m   Start at [22m 18:28:10
+[2m   Duration [22m 1.44s[2m (tests 47%, transform 44%, import 8%, setup 1%)[22m
+

@@ -1,0 +1,13 @@
+diff --git a/src/control/taskResultCollector.ts b/src/control/taskResultCollector.ts
+index 464d5e0..44fe77f 100644
+--- a/src/control/taskResultCollector.ts
++++ b/src/control/taskResultCollector.ts
+@@ -225,7 +225,7 @@ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskRe
+                 await Promise.race([job.done, new Promise<void>(resolve => {
+                         timer = setTimeout(() => {
+                             // Queue time counts. Fence acquisition before allowing source deletion.
+-                            const failure = Promise.resolve().then(() => { const owner = deps.resolve(runId); return owner ? diagnostic(job, owner, new Error('task-result-flush-timeout')) : undefined; });
++                            const owner=deps.resolve(runId); const failure=owner?diagnostic(job,owner,new Error('task-result-flush-timeout')):Promise.resolve();
+                             void failure.catch(() => { }).finally(() => {
+                                 job.cancelled = true;
+                                 job.abort();

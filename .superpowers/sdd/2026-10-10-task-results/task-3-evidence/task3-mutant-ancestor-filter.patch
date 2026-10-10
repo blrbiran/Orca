@@ -1,0 +1,13 @@
+diff --git a/src/control/archive.ts b/src/control/archive.ts
+index f79af9d..db0d95e 100644
+--- a/src/control/archive.ts
++++ b/src/control/archive.ts
+@@ -132,7 +132,7 @@ export async function readArtifact(store:ControlStore,ref:ArtifactRef):Promise<B
+ export async function captureTree(store:ControlStore,root:string,prefix:string,missing:string[],deps:ArchiveDependencies={},exclude:string[]=[]):Promise<TreeEntry[]> {
+  const result:TreeEntry[]=[];const observations:{path:string;hash?:string;target?:string;mtimeMs:number;mode:number;children?:string[]}[]=[];
+  const children=async(dir:string)=>(await readdir(dir)).sort().filter(name=>!exclude.includes(relative(root,join(dir,name))));
+- const containsExclusion=(dir:string)=>exclude.some(path=>path.startsWith(relative(root,dir)+'/'));
++ const containsExclusion=(_dir:string)=>false;
+  async function walk(dir:string):Promise<void> {
+   for(const name of (await readdir(dir)).sort()) {
+    const path=join(dir,name);const rel=relative(root,path);
