@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { requirementView } from "./fixtures/requirement.js";
+import { workItem, run } from "./fixtures/board.js";
 import { rowKey } from "../src/DecisionList.js";
 import { act } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -71,10 +72,18 @@ it.each(["answers", "draft", "problem"] as const)("opens exact requirement owner
  expect(panel.requests).toContain("GET /api/control/groups/r/requirement"); expect(panel.requests).not.toContain("GET /api/control/groups/r"); expect(panel.posts).toHaveLength(0);
 });
 it("same-name decision queue entries open their exact composite owner despite ordinary Decisions filters", async () => {
- window.localStorage.setItem("orca.projectView", "all"); const panel = setup(); panel.todo = [decisionRow("alpha", "same"), decisionRow("beta", "same")];
+ window.localStorage.setItem("orca.projectView", "all"); const panel = setup(); panel.todo = [decisionRow("alpha", "same"), decisionRow("beta", "same", { kind: "boundary" })];
  for (const row of panel.todo) panel.decisions[rowKey(row)] = { id: row.id, question: row.projectKey + " exact question", chose: "c", because: "b", alternatives: [] };
  render(<App />); const page = await screen.findByRole("region", { name: "Overview" });
+ fireEvent.click(screen.getByRole("link", { name: /^Decisions/ }));
+ await waitFor(() => expect(document.querySelector('[data-section="decisions"]')?.getAttribute("data-active")).toBe("true"));
+ await waitFor(() => expect(document.querySelector('select[name="filter-kind"] option[value="interface"]')).not.toBeNull());
+ fireEvent.change(screen.getByRole("combobox", { name: "Kind" }), { target: { value: "interface" } });
+ await waitFor(() => expect(document.querySelectorAll(".decision-list button")).toHaveLength(1));
+ fireEvent.click(screen.getByRole("link", { name: "Overview" }));
+ await waitFor(() => expect(document.querySelector('[data-section="overview"]')?.getAttribute("data-active")).toBe("true"));
  const buttons = await within(page).findAllByRole("button", { name: "Review decision · same" });
+ expect(buttons).toHaveLength(2);
  fireEvent.click(buttons[1]!);
  expect((await screen.findByTestId("decision-question")).textContent).toBe("beta exact question");
  await waitFor(() => expect(document.activeElement?.getAttribute("data-overview-region")).toBe("decision"));
@@ -138,4 +147,15 @@ it("leaving scope while an owner GET is pending cannot reopen its old detail", a
  fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "beta" } });
  await act(async () => { release(json(panel.groupViews.ga)); });
  expect(screen.queryByRole("region", { name: "Control group ga" })).toBeNull(); expect(panel.posts).toHaveLength(0);
+});
+
+it("a task/run attention destination opens the requested task before focusing its problem region", async () => {
+ const panel = setup(); groupQueue(panel); panel.groupViews.ga = { ...panel.groupViews.ga!, workItems: [workItem({ taskId: "target-task", currentRunId: "target-run" })], runs: [run({ runId: "target-run", taskId: "target-task" })] };
+ overview.steps = [{ ...overview.steps[0]!, kind: "task-attention", destination: { kind: "group", groupId: "ga", region: "problem", taskId: "target-task", runId: "target-run" } }];
+ render(<App />); const page = await screen.findByRole("region", { name: "Overview" });
+ fireEvent.click(await within(page).findByRole("button", { name: "Review task problem · ga" }));
+ const detail = await screen.findByRole("region", { name: "Control group ga" });
+ await waitFor(() => expect(within(detail).getByRole("button", { name: "target-task" }).getAttribute("aria-expanded")).toBe("true"));
+ await waitFor(() => expect(document.activeElement?.getAttribute("data-overview-region")).toBe("problem"));
+ expect(panel.posts).toHaveLength(0);
 });

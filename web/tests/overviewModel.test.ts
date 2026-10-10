@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { deriveOverview, recoveryIdentity, loadingSource, sourceFailure } from "../src/overviewModel.js";
 import type { OverviewInputs, OverviewSource } from "../src/overviewModel.js";
 import type { OverviewStepV1 } from "../src/controlTypes.js";
+import { requirementView } from "./fixtures/requirement.js";
 import { ALPHA, BETA, TWO_PROJECTS, groupSummary, decisionRow } from "./fixtures/twoProjects.js";
 const available = <T>(data: T): OverviewSource<T> => ({ status: "available", data, error: null });
 const input = (): OverviewInputs => ({ projection: available({ schema: "orca-control-overview-v1", epoch: "epoch-a", changeSeq: 1, groups: [groupSummary("ga", ALPHA), groupSummary("gb", BETA)], steps: [], issues: [] }), todo: available([]), recovery: available({ schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] }), uncertain: [], scope: { kind: "all" }, projectKey: "alpha", projects: TWO_PROJECTS, roles: ["member"] });
@@ -60,4 +61,12 @@ it("unavailable, stale and loading sources never report the human queue as known
  value.todo = sourceFailure(available([decisionRow("alpha", "retained")]), "failed");
  expect(deriveOverview(value).queue[0]?.reason).toBe("retained"); expect(deriveOverview(value).sources[1]?.status).toBe("stale");
  value.scope = { kind: "unresolved" }; expect(deriveOverview(value).scopeUnavailable).toBe(true);
+});
+
+it("accepted requirement export recovery retains the producer's requirement owner across duplicate recovery sources", () => {
+ const value = input(); value.projection.data!.groups = [groupSummary("ga", ALPHA, { state: "ready", requirement: requirementView("awaiting-review").summary.requirement })];
+ value.projection.data!.steps = [{ ...recoveryStep("group", "ga", null, "requirement-export-conflict", true), destination: { kind: "requirement", groupId: "ga", region: "problem" } }];
+ value.recovery.data!.blockers = [{ scope: "group", groupId: "ga", runId: null, code: "requirement-export-conflict", evidenceIds: [] }];
+ const rows = deriveOverview(value).queue;
+ expect(rows).toHaveLength(1); expect(rows[0]?.target).toEqual({ kind: "requirement", groupId: "ga", region: "problem" }); expect(rows[0]?.ownerRequired).toBe(true);
 });
