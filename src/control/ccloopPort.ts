@@ -1,3 +1,4 @@
+import { taskResultCollectionSchema,TaskResultUnsupportedError,TASK_RESULT_RPC_TIMEOUT_MS,MAX_TASK_RESULT_EVIDENCE_BYTES } from './taskResultProtocol.js';
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstatSync, realpathSync } from "node:fs";
@@ -88,8 +89,8 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
  const binary=regularAbsolute(options.binary,"control-binary-invalid",true),table=agentsTablePath(options.agentsTablePath);
  if(!Number.isSafeInteger(options.timeoutMs)||options.timeoutMs<=0)throw new ControlError("control-port-options-invalid");
  const evidenceContext=new Map<string,StartEnvelope>(),key=(ref:ArtifactRef)=>`${ref.artifactId}:${ref.hash}`;
- const raw=(method:string,payload:unknown)=>new Promise<unknown>((resolve,reject)=>{
-   const child=execFile(binary,["control",method,"--agents",table],{encoding:"utf8",maxBuffer:MAX_OUTPUT,timeout:options.timeoutMs},(error,stdout,stderr)=>{
+ const raw=(method:string,payload:unknown,timeoutMs=options.timeoutMs)=>new Promise<unknown>((resolve,reject)=>{
+   const child=execFile(binary,["control",method,"--agents",table],{encoding:"utf8",maxBuffer:MAX_OUTPUT,timeout:timeoutMs},(error,stdout,stderr)=>{
     if(error){const e=error as Error&{code?:number|string;killed?:boolean};if(e.code==="ERR_CHILD_PROCESS_STDIO_MAXBUFFER"||/maxBuffer/i.test(e.message))return reject(new ControlError("control-response-too-large"));if(e.killed)return reject(new ControlError("control-peer-timeout"));const suffix=String(stderr).trim();return reject(new ControlError("control-peer-exit",`${String(e.code)}${suffix?":"+suffix:""}`));}
     if(Buffer.byteLength(stdout)>MAX_OUTPUT||Buffer.byteLength(stderr)>MAX_OUTPUT)return reject(new ControlError("control-response-too-large"));
     try{resolve(JSON.parse(stdout));}catch{reject(new ControlError("control-response-invalid"));}
@@ -97,7 +98,20 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
    child.stdin?.end(JSON.stringify(payload));
  });
  const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{const parsed=schema.safeParse(value);if(!parsed.success)throw new ControlError("control-response-invalid");return parsed.data;};
+ let unsupportedIdentity:string|null=null;
+ const optionalIdentity=()=>{regularAbsolute(binary,'control-binary-invalid',true);const stat=lstatSync(binary,{bigint:true});return [stat.dev,stat.ino,stat.size,stat.mtimeNs,stat.ctimeNs].join(':');};
+ const optionalRaw=async(method:string,payload:unknown)=>{
+  const identity=optionalIdentity();if(identity===unsupportedIdentity)throw new TaskResultUnsupportedError();
+  try{return await raw(method,payload,Math.min(options.timeoutMs,TASK_RESULT_RPC_TIMEOUT_MS));}
+  catch(error){if(peerErrorCode(error)==='control-command-invalid'&&optionalIdentity()===identity){unsupportedIdentity=identity;throw new TaskResultUnsupportedError();}throw error;}
+ };
  const port:ExecutionPort={
+  async collectTaskResults(input,afterRevision){return parse(taskResultCollectionSchema,await optionalRaw('task-results',{input,afterRevision}));},
+  async readTaskResultEvidence(input,manifestRef,ref){
+   const value=parse(evidenceSchema,await optionalRaw('read-task-result-evidence',{input,manifestRef,ref}));
+   const bytes=Buffer.from(value.base64,'base64');
+   if(value.artifactId!==ref.artifactId||value.hash!==ref.hash||bytes.length>MAX_TASK_RESULT_EVIDENCE_BYTES||bytes.toString('base64').replace(/=+$/,'')!==value.base64.replace(/=+$/,'')||createHash('sha256').update(bytes).digest('hex')!==ref.hash)throw new ControlError('artifact-hash-mismatch');return bytes;
+  },
   /**
    * Agent selection spec §4.6. The request's own fields come back verbatim (spec M5: an alias is not
    * normalised), which is what lets a caller tell a layer's value from a descriptor default; an answer that

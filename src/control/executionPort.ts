@@ -1,4 +1,5 @@
 import type { Candidate, Claim, StopProof, UsageEvent, ArtifactRef, HandoffRequest, HandoffAck } from "./types.js";
+import type { TaskResultCollectionV1 } from './taskResultProtocol.js';
 import type { RunProgress } from "./schema.js";
 import type { InputCheckpointV1 } from "./resumeBundle.js";
 import { ControlError } from "./errors.js";
@@ -24,6 +25,8 @@ export interface ExecutionPort {
    * defaults, validates, materializes and answers the configHash: Orca never computes one (spec I3).
    * There is no capability probe without a selection -- a gate asks about the selection it will dispatch.
    */
+  collectTaskResults?(input:StartEnvelope,afterRevision:number):Promise<TaskResultCollectionV1>;
+  readTaskResultEvidence?(input:StartEnvelope,manifestRef:ArtifactRef,ref:ArtifactRef):Promise<Buffer>;
   resolveAgent(partial:PartialSelection):Promise<AgentResolution>;
   /** Capabilities protocol 3 with `agent: null`: the installations the panel may offer. */
   listAgents():Promise<AgentsView>;

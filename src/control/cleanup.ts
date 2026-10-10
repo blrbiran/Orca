@@ -1,3 +1,4 @@
+import { flushTaskResults } from './taskResultCollector.js';
 import { lstat, realpath, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { ControlStore } from "./store.js";
@@ -30,6 +31,7 @@ export async function cleanupCommittedRun(store:ControlStore,runId:string,source
  const intent=async()=>store.transaction(()=>store.db.prepare("INSERT INTO outbox VALUES (?, 'cleanup', ?, 0) ON CONFLICT(id) DO NOTHING").run("cleanup:"+runId,JSON.stringify({runId,sourceDir})));
  await (deps.admit?deps.admit(intent):intent());
  await deps.beforeCleanup?.();
- const finish=async()=>{await assertSource();await rm(sourceDir,{recursive:true});return store.transaction(()=>store.db.prepare("UPDATE outbox SET delivered=1 WHERE id=?").run("cleanup:"+runId));};
+ const assertTaskResultOwner=await flushTaskResults(store,runId);
+ const finish=async()=>{await assertSource();assertTaskResultOwner();await rm(sourceDir,{recursive:true});return store.transaction(()=>store.db.prepare("UPDATE outbox SET delivered=1 WHERE id=?").run("cleanup:"+runId));};
  await (deps.admit?deps.admit(finish):finish());return {removed:true};
 }

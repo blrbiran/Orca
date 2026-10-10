@@ -1,3 +1,4 @@
+import { TASK_RESULT_SOURCE_EXCLUSIONS } from './taskResultProtocol.js';
 import { createHash, randomUUID } from "node:crypto";
 import { constants, createReadStream, createWriteStream, lstatSync, realpathSync } from "node:fs";
 import { rename, lstat, open, readFile, readdir, readlink, realpath, rm } from "node:fs/promises";
@@ -14,6 +15,7 @@ import { idSchema } from "./schema.js";
 import { readRun } from "./budget.js";
 import { captureSnapshot } from "./snapshot.js";
 export interface ArchiveDependencies {
+ assertHeld?:()=>void;
  beforePublish?:()=>void;
  afterCopy?:(path:string)=>Promise<void>;
  syncFile?:(file:FileHandle)=>Promise<void>;
@@ -69,6 +71,7 @@ async function publish(store:ControlStore,id:string,temp:string,hash:string,deps
  const stagedDir=privateDirectory(join(store.stateDir,"staging",randomUUID()));
  const admit=<T>(operation:()=>Promise<T>)=>deps.admit?deps.admit(operation):operation();
  const register=()=>store.transaction(()=>{
+  deps.assertHeld?.();
   const old=store.db.prepare("SELECT hash FROM artifacts WHERE id=?").get(id);
   if(old && old.hash!==hash) throw new ControlError("artifact-id-conflict");
   store.db.prepare("INSERT INTO artifacts VALUES (?,?,?) ON CONFLICT(id) DO NOTHING").run(id,hash,JSON.stringify({path:relative(store.stateDir,destination)}));
@@ -127,7 +130,9 @@ export async function readArtifact(store:ControlStore,ref:ArtifactRef):Promise<B
  if(createHash("sha256").update(bytes).digest("hex")!==ref.hash) throw new ControlError("artifact-hash-mismatch");return bytes;
 }
 export async function captureTree(store:ControlStore,root:string,prefix:string,missing:string[],deps:ArchiveDependencies={},exclude:string[]=[]):Promise<TreeEntry[]> {
- const result:TreeEntry[]=[];const observations:{path:string;hash?:string;target?:string;mtimeMs:number;mode:number}[]=[];
+ const result:TreeEntry[]=[];const observations:{path:string;hash?:string;target?:string;mtimeMs:number;mode:number;children?:string[]}[]=[];
+ const children=async(dir:string)=>(await readdir(dir)).sort().filter(name=>!exclude.includes(relative(root,join(dir,name))));
+ const containsExclusion=(dir:string)=>exclude.some(path=>path.startsWith(relative(root,dir)+'/'));
  async function walk(dir:string):Promise<void> {
   for(const name of (await readdir(dir)).sort()) {
    const path=join(dir,name);const rel=relative(root,path);
@@ -137,7 +142,7 @@ export async function captureTree(store:ControlStore,root:string,prefix:string,m
    else if(stat.isDirectory()) {
     result.push({...entry,kind:"directory"});
     if(name===".git") {missing.push("nested-git:"+prefix+rel);continue;}
-    observations.push({path,mtimeMs:stat.mtimeMs,mode:stat.mode});await walk(path);
+    observations.push({path,mtimeMs:stat.mtimeMs,mode:stat.mode,...(containsExclusion(path)?{children:await children(path)}:{})});await walk(path);
    } else if(stat.isFile()) {
     const ref=await archiveFile(store,path,deps);result.push({...entry,kind:"file",ref});
     observations.push({path,hash:ref.hash,mtimeMs:stat.mtimeMs,mode:stat.mode});await deps.afterCopy?.(path);
@@ -150,7 +155,7 @@ export async function captureTree(store:ControlStore,root:string,prefix:string,m
  for(const seen of observations) {
   try {
    const stat=await lstat(seen.path);
-   if(stat.mtimeMs!==seen.mtimeMs || stat.mode!==seen.mode || (seen.hash && await digestFile(seen.path)!==seen.hash) || (seen.target!==undefined && await readlink(seen.path)!==seen.target)) missing.push("changed:"+prefix+relative(root,seen.path));
+   if((seen.children?JSON.stringify(await children(seen.path))!==JSON.stringify(seen.children):stat.mtimeMs!==seen.mtimeMs) || stat.mode!==seen.mode || (seen.hash && await digestFile(seen.path)!==seen.hash) || (seen.target!==undefined && await readlink(seen.path)!==seen.target)) missing.push("changed:"+prefix+relative(root,seen.path));
   }catch{missing.push("changed:"+prefix+relative(root,seen.path));}
  }
  if((await lstat(root)).mtimeMs!==before) missing.push("changed:"+prefix);
@@ -165,7 +170,7 @@ export async function archiveRun(store:ControlStore,input:{runId:string;sourceDi
  const sourceIdentity={dev:String(sourceStat.dev),ino:String(sourceStat.ino),birthtimeNs:String(sourceStat.birthtimeNs)};
  const missing:string[]=[];
  if(!input.stopProof || !input.stopProof.isolated || input.stopProof.executionId!==run.executionId || input.stopProof.generation!==run.generation) missing.push("stop-unconfirmed");
- const logs=await captureTree(store,source,"",missing,deps,[relative(source,repo)]);
+ const logs=await captureTree(store,source,"",missing,deps,[relative(source,repo),...TASK_RESULT_SOURCE_EXCLUSIONS]);
  const snapshot=await captureSnapshot(store,repo,missing,deps);
  const manifest={version:1,runId:run.runId,sourceIdentity,logs,snapshot,missing};
  const bytes=Buffer.from(JSON.stringify(manifest));const archive=await writeArtifact(store,"archive-"+createHash("sha256").update(bytes).digest("hex"),bytes,deps);

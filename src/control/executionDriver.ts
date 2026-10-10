@@ -1,3 +1,4 @@
+import { createTaskResultCollector,type TaskResultCollector } from './taskResultCollector.js';
 import { createHash } from "node:crypto";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { z } from "zod";
@@ -61,6 +62,7 @@ export class DriverCrash extends Error {
 export const INSPECT_UNKNOWN_LIMIT = 10;
 
 export interface ExecutionDriverDeps {
+  taskResults?:TaskResultCollector;
   store: ControlStore;
   router: ExecutionProfileRouter;
   admissionGate?: AdmissionGate;
@@ -516,6 +518,7 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
   if (candidate && (candidate.runId !== runId || candidate.generation !== run.generation || candidate.workItemId !== run.workItemId)) {
     throw new ControlError("report-identity-conflict");
   }
+  deps.taskResults?.schedule(runId);
   return report;
 }
 
@@ -895,7 +898,12 @@ export async function advance(deps: ExecutionDriverDeps, runId: string, context:
   }
 }
 
-export function createExecutionDriver(deps: ExecutionDriverDeps): ExecutionDriver {
+export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDriver {
+ const taskResults=options.taskResults??createTaskResultCollector({store:options.store,admissionGate:options.admissionGate,resolve(runId){
+  const run=readDriverRun(options.store,runId);if(!run.drive?.envelopeHash||!run.executionId)return null;
+  return {input:readStartEnvelope(options.store,run),executionId:run.executionId,port:portFor(options,run)};
+ }});
+ const deps={...options,taskResults};
   const context: DriverContext = { reconciling: new Map(), stopped: false };
   let inFlight: Promise<boolean> | null = null;
   let timer: NodeJS.Timeout | null = null;
@@ -1001,7 +1009,9 @@ export function createExecutionDriver(deps: ExecutionDriverDeps): ExecutionDrive
     async stop(): Promise<void> {
       context.stopped = true;
       stopTimer();
+      const stopping=taskResults.stop();
       if (inFlight !== null) await inFlight;
+      await stopping;
     },
     get crashed() { return crashed; },
   };

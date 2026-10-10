@@ -78,6 +78,8 @@ function ownPort(port: ExecutionPort): ExecutionPort {
   const inspect = port.inspect.bind(port);
   const requestHandoff = port.requestHandoff.bind(port);
   const collect = port.collect.bind(port);
+  const collectTaskResults=port.collectTaskResults?.bind(port);
+  const readTaskResultEvidence=port.readTaskResultEvidence?.bind(port);
   const owned: ExecutionPort = {
     resolveAgent: (partial) => resolveAgent(partial),
     listAgents: () => listAgents(),
@@ -86,6 +88,8 @@ function ownPort(port: ExecutionPort): ExecutionPort {
     inspect: (input) => inspect(input),
     requestHandoff: (input, request) => requestHandoff(input, request),
     collect: (input, afterSeq) => collect(input, afterSeq),
+    ...(collectTaskResults?{collectTaskResults:(input,afterRevision)=>collectTaskResults(input,afterRevision)}:{}),
+    ...(readTaskResultEvidence?{readTaskResultEvidence:(input,manifestRef,ref)=>readTaskResultEvidence(input,manifestRef,ref)}:{}),
   };
   return Object.freeze(owned);
 }
