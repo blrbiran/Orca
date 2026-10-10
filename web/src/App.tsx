@@ -83,7 +83,7 @@ import { initialControlState, reduceControlState, summaryView } from "./controlS
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import type {
   AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, IntegrationSchemeV1, OperatorPreferencesV1, RepositoryIntegrationV1,
-  RepositoryWorkspaceV1, RequirementViewV1,
+  RepositoryWorkspaceV1, RequirementViewV1, OverviewV1, RecoveryViewV1,
 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
 import { DecisionOperations } from "./DecisionOperations.js";
@@ -92,6 +92,12 @@ import type { DecisionRequest, DecisionRequests } from "./decisionRequests.js";
 import { EMPTY_DRAFTS, clearIfUnchanged, correctionKey, setDraft } from "./detailDrafts.js";
 import type { DetailDrafts, DraftSlot } from "./detailDrafts.js";
 import type { Decision } from "./DecisionDetail.js";
+import { Overview } from "./Overview.js";
+import { fetchOverview } from "./overviewApi.js";
+import { deriveOverview, loadingSource, sourceFailure } from "./overviewModel.js";
+import type { OverviewSource } from "./overviewModel.js";
+import { overviewFocusId } from "./overviewNavigation.js";
+import type { OverviewTarget } from "./overviewNavigation.js";
 import { ErrorPage } from "./ErrorPage.js";
 import i18n, { currentLanguage, writeLanguage } from "./i18n.js";
 import { DecisionsView, NO_FILTER, rowsForStatus } from "./DecisionsView.js";
@@ -161,7 +167,6 @@ export function footerLines(summary: ControlSummaryV1 | null): string[] {
 }
 
 interface HomeState {
-  todo: DecisionListRow[];
   report: MetricsReport;
   coverage: PanelCoverage;
 }
@@ -172,6 +177,16 @@ const withoutRetry = ({ retry_field: _dropped, ...rest }: PanelRefusal): PanelRe
 export function App(): JSX.Element {
   const account = useContext(AccountContext);
   const { t } = useTranslation();
+  const [metricsFailure, setMetricsFailure] = useState<PanelRefusal | null>(null);
+  type OwnedSource<T> = OverviewSource<T> & { identity: string };
+  const [todoSource, setTodoSource] = useState<OwnedSource<readonly DecisionListRow[]>>({ ...loadingSource(), identity: "" });
+  const [overviewSource, setOverviewSource] = useState<OwnedSource<OverviewV1>>({ ...loadingSource(), identity: "" });
+  const [recoverySource, setRecoverySource] = useState<OwnedSource<RecoveryViewV1>>({ ...loadingSource(), identity: "" });
+  const todoSeq = useRef(0), overviewSeq = useRef(0), recoverySeq = useRef(0), navigationSeq = useRef(0);
+  const [overviewFocus, setOverviewFocus] = useState<{ target: OverviewTarget; request: number } | null>(null);
+  const focusedRequest = useRef(0);
+  const [overviewNavigationFailure, setOverviewNavigationFailure] = useState<string | null>(null);
+  const authNow = useRef(account); authNow.current = account;
   const [home, setHome] = useState<HomeState | null>(null);
   const [error, setError] = useState<PanelRefusal | null>(null);
   const [selected, setSelected] = useState<DecisionListRow | null>(null);
@@ -197,7 +212,7 @@ export function App(): JSX.Element {
   const [allRows, setAllRows] = useState<DecisionStatusRow[] | null>(null);
   const [theme, setTheme] = useState<ThemePref>(() => readTheme(browserStorage()));
   useEffect(() => {
-    const onHash = (): void => setSection(sectionFromHash(window.location.hash));
+    const onHash = (): void => { navigationSeq.current++; setSection(sectionFromHash(window.location.hash)); };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -639,6 +654,107 @@ export function App(): JSX.Element {
     setSelectedRequirement(null);
     setSelected(null);
   }, [scopeKey]);
+  // Source identity is updated during render: a reply cannot land between a scope/auth/epoch change and effect cleanup.
+  const sourceIdentity = JSON.stringify([account, control.epoch, scope, project]);
+  const sourceIdentityNow = useRef(sourceIdentity); sourceIdentityNow.current = sourceIdentity;
+  const todo = todoSource.identity === sourceIdentity ? todoSource : loadingSource<readonly DecisionListRow[]>();
+  const overview = overviewSource.identity === sourceIdentity ? overviewSource : loadingSource<OverviewV1>();
+  const overviewRecovery = recoverySource.identity === sourceIdentity ? recoverySource : loadingSource<RecoveryViewV1>();
+  const readTodo = async (): Promise<void> => {
+    const identity = sourceIdentityNow.current, seq = ++todoSeq.current;
+    try {
+      const body = await fetchTodo();
+      if (identity !== sourceIdentityNow.current || seq !== todoSeq.current) return;
+      setTodoSource({ identity, status: "available", data: body.rows, error: null });
+    } catch (err) {
+      if (identity !== sourceIdentityNow.current || seq !== todoSeq.current) return;
+      setTodoSource((prior) => ({ ...sourceFailure(prior.identity === identity ? prior : loadingSource(), failureFrom(err).message), identity }));
+    }
+  };
+  const readOverview = async (): Promise<void> => {
+    const identity = sourceIdentityNow.current, epoch = controlNow.current.epoch, seq = ++overviewSeq.current;
+    try {
+      const value = await fetchOverview();
+      if (identity !== sourceIdentityNow.current || seq !== overviewSeq.current || (epoch !== null && value.epoch !== epoch)) return;
+      setOverviewSource((prior) => prior.identity === identity && prior.data !== null && prior.data.changeSeq > value.changeSeq ? prior : { identity, status: "available", data: value, error: null });
+    } catch (err) {
+      if (identity !== sourceIdentityNow.current || seq !== overviewSeq.current) return;
+      setOverviewSource((prior) => ({ ...sourceFailure(prior.identity === identity ? prior : loadingSource(), failureFrom(err).message), identity }));
+    }
+  };
+  const readOverviewRecovery = async (): Promise<void> => {
+    const identity = sourceIdentityNow.current, epoch = controlNow.current.epoch, seq = ++recoverySeq.current;
+    try {
+      const value = await fetchControlRecovery();
+      if (identity !== sourceIdentityNow.current || seq !== recoverySeq.current || (epoch !== null && value.epoch !== epoch)) return;
+      setRecoverySource({ identity, status: "available", data: value, error: null });
+    } catch (err) {
+      if (identity !== sourceIdentityNow.current || seq !== recoverySeq.current) return;
+      setRecoverySource((prior) => ({ ...sourceFailure(prior.identity === identity ? prior : loadingSource(), failureFrom(err).message), identity }));
+    }
+  };
+  useEffect(() => {
+    // Every pane has its initial todo read; only Overview maintains the independent refresh timer.
+    if (section === "overview" || todoSource.identity !== sourceIdentity) void readTodo();
+    if (section !== "overview") return;
+    void readOverview(); void readOverviewRecovery();
+    const todoTimer = setInterval(() => void readTodo(), 5_000);
+    const controlTimer = setInterval(() => { void readOverview(); void readOverviewRecovery(); }, CONTROL_POLL_MS);
+    return () => { clearInterval(todoTimer); clearInterval(controlTimer); todoSeq.current++; overviewSeq.current++; recoverySeq.current++; };
+  }, [sourceIdentity, section === "overview"]);
+  useEffect(() => () => { todoSeq.current++; overviewSeq.current++; recoverySeq.current++; navigationSeq.current++; }, []);
+
+  const overviewModel = deriveOverview({ projection: overview, todo, recovery: overviewRecovery, uncertain: control.uncertainCommandIds,
+    scope, projectKey: project, projects, roles: account?.user.roles ?? [] });
+  const overviewModelNow = useRef(overviewModel); overviewModelNow.current = overviewModel;
+  const overviewNow = useRef(overview); overviewNow.current = overview;
+  const openOverviewTarget = (target: OverviewTarget): void => {
+    const request = ++navigationSeq.current, identity = sourceIdentityNow.current;
+    setOverviewNavigationFailure(null);
+    const current = (): boolean => navigationSeq.current === request && identity === sourceIdentityNow.current;
+    const unavailable = (): void => { if (current()) { setOverviewNavigationFailure(t("overview.navigationUnavailable")); void readOverview(); void readTodo(); } };
+    const finish = (section: Section): void => {
+      setSection(section); window.location.hash = section;
+      setOverviewFocus({ target, request });
+    };
+    if (target.kind === "global-control") { void readControlTick(); finish("tasks"); return; }
+    if (target.kind === "decision") {
+      if (todo.status !== "available") { unavailable(); return; }
+      const row = todo.data?.find((row) => row.projectKey === target.projectKey && row.id === target.id);
+      if (row === undefined) { unavailable(); return; }
+      setStatus("unreviewed"); setFilter(NO_FILTER); setSelected(row); finish("decisions"); return;
+    }
+    const owner = overview.data?.groups.find((g) => g.groupId === target.groupId && g.archived !== true);
+    if (overview.status !== "available" || owner === undefined) { unavailable(); return; }
+    void (async () => {
+      try {
+        if (target.kind === "requirement") {
+          const value = await fetchRequirement(target.groupId);
+          if (!current()) return;
+          if (value.summary.groupId !== target.groupId || value.summary.repoId !== owner.repoId || value.summary.archived === true
+            || value.epoch !== overviewNow.current.data?.epoch || value.changeSeq < Math.max(overviewNow.current.data?.changeSeq ?? 0, controlNow.current.changeSeq)) { unavailable(); return; }
+          if (!overviewModelNow.current.progress.some((p) => p.group.groupId === target.groupId)) { unavailable(); return; }
+          setRequirementViews((all) => ({ ...all, [target.groupId]: value })); setSelectedRequirement(target.groupId); finish("requirements");
+        } else {
+          const value = await fetchControlGroup(target.groupId);
+          if (!current()) return;
+          if (value.summary.groupId !== target.groupId || value.summary.repoId !== owner.repoId || value.summary.archived === true
+            || value.epoch !== overviewNow.current.data?.epoch || value.changeSeq < Math.max(overviewNow.current.data?.changeSeq ?? 0, controlNow.current.changeSeq)
+            || (target.taskId !== null && !value.workItems.some((item) => item.taskId === target.taskId))
+            || (target.runId !== null && !value.runs.some((run) => run.runId === target.runId))) { unavailable(); return; }
+          if (!overviewModelNow.current.progress.some((p) => p.group.groupId === target.groupId)) { unavailable(); return; }
+          dispatchControl({ type: "group", value }); setSelectedGroup(target.groupId); finish("tasks");
+        }
+      } catch { unavailable(); }
+    })();
+  };
+  useEffect(() => {
+    if (overviewFocus === null || focusedRequest.current === overviewFocus.request) return;
+    const element = document.getElementById(overviewFocusId(overviewFocus.target));
+    if (element === null) return;
+    element.focus(); element.scrollIntoView?.({ block: "nearest" }); focusedRequest.current = overviewFocus.request;
+  }, [overviewFocus, selected, decision, selectedGroup, control.canonical, selectedRequirement, requirementViews, section]);
+
   // The chosen project's control repository: undefined while no project is chosen (the first repository, as before),
   // null when the control plane does not hold the chosen project.
   const chosen = projects?.find((entry) => entry.projectKey === project);
@@ -773,33 +889,30 @@ export function App(): JSX.Element {
   }, [controlConfig, selectedGroup, control.canonical, control.changeSeq]);
 
   const loadHome = async (): Promise<void> => {
+    const auth = authNow.current;
     try {
-      const [todoBody, metrics] = await Promise.all([fetchTodo(), fetchMetrics()]);
-      setHome({ todo: todoBody.rows, report: metrics.report, coverage: metrics.panel_review_coverage });
-    } catch (err) {
-      setError(failureFrom(err));
-    }
+      const metrics = await fetchMetrics();
+      if (auth !== authNow.current) return;
+      setHome({ report: metrics.report, coverage: metrics.panel_review_coverage }); setMetricsFailure(null);
+    } catch (err) { if (auth === authNow.current) setMetricsFailure(failureFrom(err)); }
   };
+  useEffect(() => { void loadHome(); }, [account]);
 
+  // Reviewed / All follow the independent decision read, including after a recorded review when metrics failed.
   useEffect(() => {
-    void loadHome();
-  }, []);
-
-  // Reviewed / All: read the full list when chosen, and again whenever the home state is re-read (a recorded review).
-  useEffect(() => {
-    if (status === "unreviewed" || home === null) return;
+    if (status === "unreviewed") return;
     let live = true;
     void fetchDecisions().then(
       (body) => { if (live) setAllRows(body.rows); },
       (err) => { if (live) setError(failureFrom(err)); },
     );
     return () => { live = false; };
-  }, [status, home]);
+  }, [status, todo.data]);
 
   const statusRows: readonly DecisionListRow[] =
-    status === "unreviewed" ? home?.todo ?? [] : rowsForStatus(allRows ?? [], status);
+    status === "unreviewed" ? todo.data ?? [] : rowsForStatus(allRows ?? [], status);
   // Final review M-T8: Reviewed / All before their first read are loading, not empty.
-  const statusLoading = status !== "unreviewed" && allRows === null;
+  const statusLoading = status === "unreviewed" ? todo.status === "loading" : allRows === null;
 
   /**
    * Parked finding N-1 / ruling R71. Opening another row takes the previous
@@ -812,17 +925,20 @@ export function App(): JSX.Element {
     setDecision(null);
     wanted.current = selected;
     if (selected === null) return;
+    const identity = sourceIdentityNow.current;
+    let live = true;
     void (async () => {
       try {
         const body = await fetchDecision(selected.projectKey, selected.id);
-        if (!acceptArrival(wanted.current, selected)) return;
+        if (!live || identity !== sourceIdentityNow.current || !acceptArrival(wanted.current, selected)) return;
         setDecision(body.decision as Decision);
       } catch (err) {
-        if (!acceptArrival(wanted.current, selected)) return;
+        if (!live || identity !== sourceIdentityNow.current || !acceptArrival(wanted.current, selected)) return;
         setError(failureFrom(err));
       }
     })();
-  }, [selected]);
+    return () => { live = false; };
+  }, [selected, sourceIdentity]);
 
   /**
    * Spec §11 R3: send one Agree or Correct as its own request record (owner, verb, a copy of the exact payload) and
@@ -848,7 +964,7 @@ export function App(): JSX.Element {
       }
       setDecisionRequests((all) => settleRequest(all, requestId, { kind: "recorded", text: verb === "agree" ? "decisions.recordedReviewed" : "decisions.correctionRecorded" }));
       if (submittedForm !== undefined) setDetailDrafts((all) => clearIfUnchanged(all, "correction", correctionKey(owner.projectKey, owner.decisionId), submittedForm));
-      await loadHome();
+      await Promise.all([readTodo(), loadHome()]);
     } catch (err) {
       setDecisionRequests((all) => settleRequest(all, requestId, { kind: "refused", refusal: failureFrom(err) }));
     }
@@ -860,7 +976,6 @@ export function App(): JSX.Element {
   };
 
   if (error !== null) return <ErrorPage failure={error} />;
-  if (home === null) return <main>{t("shell.loading")}</main>;
 
   const dismiss = (chainId: string): void => {
     const next = new Set(dismissed);
@@ -873,6 +988,7 @@ export function App(): JSX.Element {
   const detail =
     selected !== null && decision !== null ? (
       <>
+      <div id="overview-decision-detail" tabIndex={-1} data-overview-region="decision">
       <DecisionDetail
         decision={decision}
         draft={detailDrafts.correction[correctionKey(selected.projectKey, selected.id)]}
@@ -885,6 +1001,7 @@ export function App(): JSX.Element {
           void submitDecision(owner, "correct", correctionBody(owner, form), form);
         }}
       />
+      </div>
       {inline?.status.kind === "recorded" && <p role="status">{t(inline.status.text)}</p>}
       {inline?.status.kind === "refused" && (
         <Refusal
@@ -900,7 +1017,7 @@ export function App(): JSX.Element {
     <Shell
       active={section}
       badges={{
-        unreviewed: home.todo.length,
+        unreviewed: todo.status === "available" ? todo.data?.length ?? null : null,
         chainRunning: chains?.some((r) => r.chain?.state === "running") ?? false,
         controlAlert: controlAlert(
           summary === null || controlConfig === null || control.recovery === null
@@ -958,6 +1075,12 @@ export function App(): JSX.Element {
         </>
       }
     >
+      <SectionPane section="overview" active={section}>
+        {overviewNavigationFailure && <p role="alert">{overviewNavigationFailure}</p>}
+        <Overview model={overviewModel} onOpen={openOverviewTarget}
+          onImport={() => openOverviewTarget({ kind: "global-control", region: "import" })}
+          onRequirement={() => { navigationSeq.current++; setSelectedRequirement(null); setSection("requirements"); window.location.hash = "requirements"; }} />
+      </SectionPane>
       <SectionPane section="chains" active={section}>
       {chains === null && <p className="empty">{t("chains.notLoaded")}</p>}
       {chains !== null && (
@@ -1005,7 +1128,8 @@ export function App(): JSX.Element {
           scope={scope}
           repoLabel={repoLabel}
           targets={targets}
-          onSelect={setSelectedGroup}
+          focus={overviewFocus?.target.kind === "group" ? overviewFocus.target : null}
+          onSelect={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedGroup(id); }}
           onDraft={(key, text) => dispatchControl({ type: "draft", key, text })}
           onCommand={(action) => {
             void sendControl(action);
@@ -1039,10 +1163,11 @@ export function App(): JSX.Element {
       <SectionPane section="requirements" active={section}>
         {controlConfig !== null && control.recovery !== null && (
           <RequirementsPanel config={controlConfig} summary={summaryView(control)} views={requirementViews} selected={selectedRequirement} agents={agents}
+            focus={overviewFocus?.target.kind === "requirement" ? overviewFocus.target : null}
             language={currentLanguage()} refusal={requirementRefusal}
             scope={scope} repoLabel={repoLabel} targets={targets} drafts={detailDrafts} onDraft={onDetailDraft}
             repoId={controlRepoId} onRepo={(repoId) => { const entry = projects?.find((p) => p.controlRepoId === repoId); if (entry) chooseProject(entry.projectKey); }}
-            onSelect={(groupId) => { setSelectedRequirement(groupId); void readRequirement(groupId); }}
+            onSelect={(groupId) => { navigationSeq.current++; setOverviewFocus(null); setSelectedRequirement(groupId); void readRequirement(groupId); }}
             onCommand={(action, submitted) => {
               void (async () => {
                 const revision = await sendControl(action);
@@ -1053,20 +1178,21 @@ export function App(): JSX.Element {
         )}
       </SectionPane>
       <SectionPane section="decisions" active={section}>
+        {todo.status !== "available" && <p role="status">{t("overview.source.decisions")} · {t(`overview.status.${todo.status}`)}{todo.error ? ` · ${todo.error}` : ""}</p>}
         {projects === null ? (
           // Plan decision P2: without a project list the rows keep today's repository filter.
-          <DecisionsView rows={statusRows} status={status} onStatus={setStatus} loading={statusLoading} filter={filter} onFilter={setFilter} selected={selected} onOpen={setSelected} detail={detail} />
+          <DecisionsView rows={statusRows} status={status} onStatus={setStatus} loading={statusLoading} sourceStatus={status === "unreviewed" ? todo.status : undefined} filter={filter} onFilter={setFilter} selected={selected} onOpen={(row) => { navigationSeq.current++; setOverviewFocus(null); setSelected(row); }} detail={detail} />
         ) : (
           // With one, the pane follows the global scope: rows are restricted here, and its repository select is the sidebar's.
           <DecisionsView
             rows={scope.kind === "all" ? statusRows : statusRows.filter((row) => row.projectKey === project)}
             status={status}
             onStatus={setStatus}
-            loading={statusLoading}
+            loading={statusLoading} sourceStatus={status === "unreviewed" ? todo.status : undefined}
             filter={{ ...filter, projectKey: "" }}
             onFilter={setFilter}
             selected={selected}
-            onOpen={setSelected}
+            onOpen={(row) => { navigationSeq.current++; setOverviewFocus(null); setSelected(row); }}
             detail={detail}
             scope={{
               projects,
@@ -1081,7 +1207,7 @@ export function App(): JSX.Element {
         <MemoryView active={section === "memory"} project={project} onProject={chooseProject} />
       </SectionPane>
       <SectionPane section="metrics" active={section}>
-        <MetricsView report={home.report} coverage={home.coverage} />
+        {metricsFailure !== null ? <ErrorPage failure={metricsFailure} /> : home === null ? <p>{t("shell.loading")}</p> : <MetricsView report={home.report} coverage={home.coverage} />}
         {/* Accounts spec §7: usage is per control repository, so a project the control plane does not hold offers All only. */}
         <UsagePanel project={controlRepoId ?? null} active={section === "metrics"} />
       </SectionPane>

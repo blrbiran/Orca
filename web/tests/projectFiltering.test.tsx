@@ -49,7 +49,11 @@ const openGroup = async (groupId: string): Promise<void> => {
   await screen.findByRole("region", { name: `Control group ${groupId}` });
 };
 const openDecision = async (id: string): Promise<void> => {
-  const button = (await screen.findAllByRole("button")).find((candidate) => candidate.closest(".decision-list") !== null && candidate.textContent?.includes(id));
+  await screen.findByText("epoch epoch-a");
+  const button = await waitFor(() => {
+    const found = screen.queryAllByRole("button").find((candidate) => candidate.closest(".decision-list") !== null && candidate.textContent?.includes(id));
+    expect(found).toBeDefined(); return found!;
+  });
   fireEvent.click(button!);
   expect((await screen.findByTestId("decision-question")).textContent).toBe(`question of ${id}`);
 };
@@ -567,10 +571,12 @@ describe("decision identity and count", () => {
     seedDecisions();
     panel.projects = { status: 500, body: {} };
     render(<App />);
+    await screen.findByText("epoch epoch-a");
     await waitFor(() => expect(count()).toBe("3 of 3"));
     const select = within(pane()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
-    expect(optionsOf(select)).toEqual(["any", "alpha", "beta"]);
-    fireEvent.change(select, { target: { value: "beta" } });
+    await waitFor(() => expect(optionsOf(select)).toEqual(["any", "alpha", "beta"]));
+    const liveSelect = within(pane()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
+    fireEvent.change(liveSelect, { target: { value: "beta" } });
     await waitFor(() => expect(count()).toBe("2 of 3"));
   });
 
@@ -579,8 +585,11 @@ describe("decision identity and count", () => {
     let release!: () => void;
     panel.holdProjects = new Promise<void>((resolve) => { release = resolve; });
     render(<App />);
+    await screen.findByText("epoch epoch-a");
     await waitFor(() => expect(count()).toBe("3 of 3"));
-    fireEvent.change(within(pane()).getByRole("combobox", { name: "Repository" }), { target: { value: "beta" } });
+    await waitFor(() => expect(optionsOf(within(pane()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement)).toContain("beta"));
+    const liveSelect = within(pane()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
+    fireEvent.change(liveSelect, { target: { value: "beta" } });
     await waitFor(() => expect(count()).toBe("2 of 3"));
     await act(async () => { release(); });
     await ready();

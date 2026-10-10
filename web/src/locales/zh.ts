@@ -7,7 +7,16 @@
 import type { Translation, en } from "./en.js";
 
 export const zh: Translation<typeof en> = {
-  nav: { sections: "分区", decisions: "决策", chains: "链", tasks: "任务控制", requirements: "需求", memory: "记忆", metrics: "指标" },
+  nav: { overview: "概览", sections: "分区", decisions: "决策", chains: "链", tasks: "任务控制", requirements: "需求", memory: "记忆", metrics: "指标" },
+  overview: {
+    title: "概览", progress: "进展", queue: "需要你处理", newRequirement: "新建需求", import: "导入计划",
+    global: "全局控制", ownerUnknown: "所属项目未登记", ownerRequired: "这一步需要所有者处理。",
+    scopeUnavailable: "项目登记不可用；所属项目可能尚未确定。", navigationUnavailable: "所属对象不可用或已变化。正在重新读取；刷新后再打开。",
+    noProgress: "没有活跃的任务组。", noAttention: "目前没有需要你处理的事项。", tasks: "任务：{{done}} / {{total}}", taskProgress: "计划任务完成度",
+    requirementProgress: "需求第 {{round}} 轮 · {{questions}} 个待答问题", taskCountsUnavailable: "任务计数不可用", goalReview: "正在验收目标", deliverySeparate: "Git 交付状态单独查看",
+    source: { progress: "进展", decisions: "决策", recovery: "恢复" }, status: { loading: "加载中", available: "可用", stale: "尚未刷新", unavailable: "不可用" },
+    step: { "requirement-answer": "回答需求问题", "requirement-review": "审阅拆分", "requirement-attention": "查看需求问题", "budget-review": "审阅预算", "start-review": "查看启动条件", "task-attention": "查看任务问题", "stop-review": "查看已停止工作", "recovery-review": "查看恢复", "integration-review": "查看集成", "decision-review": "审阅决策", "command-unknown": "核对命令结果" },
+  },
   shell: {
     brandTitle: "交给 Orca —— 每个想法，都能成真。",
     chainRunning: "有一条链在运行",

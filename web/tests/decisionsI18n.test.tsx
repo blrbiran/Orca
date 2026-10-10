@@ -4,7 +4,7 @@
  * pills (enum values in words; the data-* attributes keep the raw value), the missing-question placeholder, why an open
  * decision left the list, and the detail's form with each correction kind in words.
  */
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import i18n from "../src/i18n.js";
 import { App } from "../src/App.js";
@@ -132,13 +132,15 @@ describe("the recorded outcome in Chinese", () => {
     }) as typeof fetch;
     await i18n.changeLanguage("zh");
     render(<App />);
-    await screen.findByText("未评审的高层级决策");
+    fireEvent.click(screen.getByRole("link", { name: /^决策/ }));
+    await waitFor(() => expect(document.querySelector('[data-section="decisions"]')?.getAttribute("data-active")).toBe("true"));
+    await waitFor(() => expect(document.querySelector(".decision-list li button")).not.toBeNull());
     fireEvent.click(document.querySelector(".decision-list li button")!);
     await screen.findByText(DECISION.question);
 
     // Agree.
     fireEvent.click(document.querySelector(".actions > button.btn-primary")!);
-    await waitFor(() => expect(screen.queryByRole("status")?.textContent).toBe("已记录为已评审。"));
+    await waitFor(() => expect(within(document.querySelector(".split-detail") as HTMLElement).queryByRole("status")?.textContent).toBe("已记录为已评审。"));
 
     // Correct, recorded at once.
     const submit = (): void => {
@@ -146,18 +148,18 @@ describe("the recorded outcome in Chinese", () => {
       fireEvent.submit(document.querySelector("form.correction-form")!);
     };
     submit();
-    await waitFor(() => expect(screen.queryByRole("status")?.textContent).toBe("纠正已记录。"));
+    await waitFor(() => expect(within(document.querySelector(".split-detail") as HTMLElement).queryByRole("status")?.textContent).toBe("纠正已记录。"));
 
     // Correct again: refused, then recorded through "Record another".
     submit();
     await screen.findByTestId("record-another");
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(within(document.querySelector(".split-detail") as HTMLElement).queryByRole("status")).toBeNull();
     fireEvent.click(screen.getByTestId("record-another"));
-    await waitFor(() => expect(screen.queryByRole("status")?.textContent).toBe("纠正已记录。"));
+    await waitFor(() => expect(within(document.querySelector(".split-detail") as HTMLElement).queryByRole("status")?.textContent).toBe("纠正已记录。"));
 
     await act(async () => {
       await i18n.changeLanguage("en");
     });
-    expect(screen.queryByRole("status")?.textContent).toBe("Correction recorded.");
+    expect(within(document.querySelector(".split-detail") as HTMLElement).queryByRole("status")?.textContent).toBe("Correction recorded.");
   });
 });

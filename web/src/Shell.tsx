@@ -13,7 +13,7 @@ import type { Section } from "./sections.js";
 import { THEME_PREFS } from "./theme.js";
 import type { ThemePref } from "./theme.js";
 
-const NAV_KEY = { decisions: "nav.decisions", chains: "nav.chains", tasks: "nav.tasks", requirements: "nav.requirements", memory: "nav.memory", metrics: "nav.metrics" } as const satisfies Record<Section, string>;
+const NAV_KEY = { overview: "nav.overview", decisions: "nav.decisions", chains: "nav.chains", tasks: "nav.tasks", requirements: "nav.requirements", memory: "nav.memory", metrics: "nav.metrics" } as const satisfies Record<Section, string>;
 
 /** The six conditions under which ControlPanel renders a role="alert" line. */
 export interface ControlAlertInput {
@@ -38,14 +38,14 @@ export function controlAlert(input: ControlAlertInput | null): boolean {
 }
 
 export interface ShellBadges {
-  unreviewed: number;
+  unreviewed: number | null;
   chainRunning: boolean;
   controlAlert: boolean;
 }
 
 function Badge({ section, badges }: { section: Section; badges: ShellBadges }): JSX.Element | null {
   const { t } = useTranslation();
-  if (section === "decisions") return <span className="nav-count" data-testid="nav-count-decisions">{badges.unreviewed}</span>;
+  if (section === "decisions") return <span className="nav-count" data-testid="nav-count-decisions" title={badges.unreviewed === null ? t("overview.status.unavailable") : undefined}>{badges.unreviewed ?? "—"}</span>;
   if (section === "chains" && badges.chainRunning) return <span className="dot dot-ok" data-testid="nav-dot-chains" title={t("shell.chainRunning")} />;
   if (section === "tasks" && badges.controlAlert) return <span className="dot dot-danger" data-testid="nav-dot-tasks" title={t("shell.needsAttention")} />;
   return null;

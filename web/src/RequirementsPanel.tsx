@@ -3,6 +3,8 @@
  * the browser originates only intents. Model-written text is shown as written (human ruling H8); the panel's own words
  * go through t.
  */
+import { overviewRegionId } from "./overviewNavigation.js";
+import type { OverviewTarget } from "./overviewNavigation.js";
 import { useContext, useEffect, useState, type JSX } from "react";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { useTranslation } from "react-i18next";
@@ -289,6 +291,7 @@ function Detail(props: { view: View; onCommand: OnCommand } & EditableDrafts): J
         <progress max={view.ledger.limit.tokens} value={view.ledger.used.tokens} />
         {view.ledger.usageUnknown && <p role="status">{t("requirements.usageUnknown")}</p>}
       </section>
+      <div id={overviewRegionId("requirement", groupId, "problem")} tabIndex={-1} data-overview-region="problem">
       {!archived && (reason !== null || retryable) && (
         <p role="alert">{reason !== null && <>{reason}{isReason(reason) ? ` · ${t(`requirements.reason.${reason}`, { groupId })}` : ""} </>}
           {stopped && <>{t("requirements.stopped")} </>}
@@ -301,7 +304,8 @@ function Detail(props: { view: View; onCommand: OnCommand } & EditableDrafts): J
         </p>
       )}
       {!archived && reason === BUDGET_EXHAUSTED && <RaiseLimit view={view} onCommand={props.onCommand} {...editable} />}
-      <section aria-label={t("requirements.rounds")}>
+      </div>
+      <section id={overviewRegionId("requirement", groupId, "answers")} tabIndex={-1} data-overview-region="answers" aria-label={t("requirements.rounds")}>
         <h4>{t("requirements.rounds")}</h4>
         {view.rounds.map((r) => (
           <details key={r.roundNo} open={r === round}>
@@ -313,6 +317,7 @@ function Detail(props: { view: View; onCommand: OnCommand } & EditableDrafts): J
         {!archived && drafting && view.summary.stopState === null && <p role="status">{t("requirements.drafting")} <button type="button" onClick={() => props.onCommand({ verb: "handoff-stop", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("requirements.stop")}</button></p>}
         {!archived && view.requirement.consensus === null && round !== null && ["answered", "awaiting-answers", "failed", "interrupted"].includes(round.state) && valid.length > 0 && <Consensus view={view} round={round} onCommand={props.onCommand} />}
       </section>
+      <div id={overviewRegionId("requirement", groupId, "draft")} tabIndex={-1} data-overview-region="draft">
       {view.drafts.map((d) => <DraftReview key={d.draftNo} view={view} draft={d} onCommand={props.onCommand} archived={archived} {...editable} />)}
       <section aria-label={t("requirements.document")}>
         <h4>{t("requirements.document")}</h4>
@@ -321,11 +326,12 @@ function Detail(props: { view: View; onCommand: OnCommand } & EditableDrafts): J
         {/* Spec §9.3: start is refused until the export is done; this says why before anyone presses Start. */}
         {exportState === "pending" && <p role="status">{EXPORT_PENDING} · {t(`requirements.reason.${EXPORT_PENDING}`, { groupId })}</p>}
       </section>
+      </div>
     </article>
   );
 }
 
-export function RequirementsPanel(props: { config: ControlConfigV1; summary: ControlSummaryV1; views: Record<string, RequirementViewV1>; selected: string | null;
+export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kind: "requirement" }> | null; config: ControlConfigV1; summary: ControlSummaryV1; views: Record<string, RequirementViewV1>; selected: string | null;
   agents: AgentsViewV1 | null; language: PanelLanguage; onSelect: (groupId: string) => void;
   /** `submitted` names the draft a success may clear, when it is still unchanged (spec §11 R2). */
   onCommand: (action: ControlAction, submitted?: Submitted) => void;

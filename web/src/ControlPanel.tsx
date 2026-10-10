@@ -30,7 +30,10 @@ import { initialControlState } from "./controlState.js";
 import type { ControlClientState, ControlRefusal, UncertainCommand } from "./controlState.js";
 import type { RecoveryTarget } from "./recoveryTarget.js";
 
+import type { OverviewTarget } from "./overviewNavigation.js";
+
 export interface ControlPanelProps {
+  focus?: Extract<OverviewTarget, { kind: "group" }> | null;
   roles?: readonly import("./auth.js").Role[];
   config: ControlConfigV1;
   summary: ControlSummaryV1;
@@ -247,11 +250,13 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       {refetchRequired && <p role="alert">{t("control.refetchRequired")}</p>}
       {recovery.dispatchBlocked && <p role="alert">{t("control.dispatchBlockedRecovery")}</p>}
       {/* Keyed by repository, so another project starts on its own first plan. */}
+      <div id="overview-control-import" tabIndex={-1} data-overview-region="import">
       <ImportForm
         key={scope?.kind === "all" ? ALL_PROJECTS : (scope?.kind === "project" ? scope.repoId : props.repoId) ?? ""}
         config={config} repoId={props.repoId} scope={scope} targets={props.targets} repoLabel={props.repoLabel} onCommand={props.onCommand}
         refusal={props.importRefusal ?? null}
       />
+      </div>
       {props.workspace && props.onWorkspaceMode && <WorkspaceModeSelector workspace={props.workspace} onChange={props.onWorkspaceMode} />}
       {props.integration && props.onIntegrationScheme && <RepositoryIntegration integration={props.integration} onSave={props.onIntegrationScheme} />}
       {props.agents && props.preferences && props.onAgentPreferences && (
@@ -260,6 +265,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       <GroupList groups={summary.groups} selected={selected} scope={scope} repoLabel={props.repoLabel} onSelect={props.onSelect} now={props.now} />
       {view !== undefined && (
         <ControlGroupView
+          focus={props.focus}
           roles={props.roles}
           key={view.summary.groupId}
           view={view}
@@ -282,6 +288,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         />
       )}
       {view === undefined && selected !== null && <p role="status">{t("control.reading", { groupId: selected })}</p>}
+      <div id="overview-control-recovery" tabIndex={-1} data-overview-region="recovery">
       <RecoveryView
         recovery={recovery}
         group={view ?? null}
@@ -295,6 +302,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         onCommand={props.onCommand}
         repoLabel={props.repoLabel}
       />
+      </div>
       {uncertain.length > 0 && (
         <p role="status">
           {t("control.outcomeUnknown", { commands: uncertain.map((command) => `${command.commandId} (${command.groupId}${ownerLabel(command.groupId)})`).join(", ") })}

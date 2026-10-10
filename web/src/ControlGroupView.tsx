@@ -8,7 +8,7 @@
  * execution is still alive.
  */
 import type { JSX } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import { AgentSelectionEditor, selectionsHashFor } from "./AgentSelectionEditor.js";
@@ -47,7 +47,11 @@ export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; chec
   });
 }
 
+import { overviewRegionId } from "./overviewNavigation.js";
+import type { OverviewTarget } from "./overviewNavigation.js";
+
 export interface ControlGroupViewProps {
+  focus?: Extract<OverviewTarget, { kind: "group" }> | null;
   roles?: readonly import("./auth.js").Role[];
   view: GroupViewV1;
   config: ControlConfigV1;
@@ -98,6 +102,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   // Labels and progress spec §4.2: the label filter (any of) and the open task live in page memory only.
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [openTask, setOpenTask] = useState<string | null>(null);
+  useEffect(() => { if (props.focus?.groupId === groupId && props.focus.taskId !== null) setOpenTask(props.focus.taskId); }, [props.focus]);
   const allLabels = [...new Set(view.workItems.flatMap((item) => item.labels ?? []))].sort();
   // A checked label no task carries any more (removed in the detail editor, or by another read) has no checkbox left to
   // uncheck, so it must stop filtering -- otherwise the table stays empty with no way out.
@@ -113,7 +118,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
     : workspace !== null && workspace.repoId === view.plan.repoId ? workspace.workspaceMode : null;
 
   return (
-    <section aria-label={t("control.group.region", { groupId })}>
+    <section aria-label={t("control.group.region", { groupId })} id={overviewRegionId("group", groupId, "results")} tabIndex={-1} data-overview-region="results">
       <h2>
         {t("control.group.heading", { groupId, state: enumText("groupState", view.summary.state), revision, projection: view.summary.projectionSeq })}
       </h2>
@@ -201,6 +206,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       </table>
       {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} />}
 
+      <div id={overviewRegionId("group", groupId, "problem")} tabIndex={-1} data-overview-region="problem">
       <h3>{t("control.group.runs")}</h3>
       <table>
         <thead>
@@ -255,6 +261,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         </tbody>
       </table>
 
+      </div>
+      <div id={overviewRegionId("group", groupId, "preparation")} tabIndex={-1} data-overview-region="preparation">
       <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} archived={archived} selectionsHash={selectionsHashFor(view, props.preview)}
         suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} />
       {props.agents !== undefined && (
@@ -268,12 +276,15 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         />
       )}
 
+      </div>
+      <div id={overviewRegionId("group", groupId, "integration")} tabIndex={-1} data-overview-region="integration">
       <GitScheme view={view} workspace={workspace} onCommand={onCommand} archived={archived} />
       {/* Fix round 1 F1: a started group's scheme stays an owner's to change, outside the (button-free for keep) Git section. */}
       {view.proposal.state === "confirmed" && (
         <GroupIntegrationConfirm view={view} suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} onCommand={onCommand} archived={archived} />
       )}
 
+      </div>
       <SkillsGiven view={view} />
 
       {view.handoffRequests.length > 0 && (
@@ -316,6 +327,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         <p role="status">{t("control.group.waiting", { commands: uncertain.map((command) => command.commandId).join(", ") })}</p>
       )}
 
+      <div id={overviewRegionId("group", groupId, "dispatch")} tabIndex={-1} data-overview-region="dispatch">
       <h3>{t("control.group.dispatch")}</h3>
       {continuable.length > 0 && <p>{t("control.group.continueFromCheckpoint")}</p>}
       {handoffActive && view.summary.stopState === "handoff-complete" && <p>{t("control.group.resumeForRetry")}</p>}
@@ -387,6 +399,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         </>
       )}
       <p>{t("control.group.recent", { commands: view.recentCommandIds.join(", ") || t("common.none") })}</p>
+      </div>
     </section>
   );
 }

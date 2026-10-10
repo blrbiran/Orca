@@ -331,3 +331,18 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
   .authenticated-shell > .shell { grid-template-rows: minmax(0, auto) minmax(0, 1fr); }
   .authenticated-shell .sidebar { height: auto; max-height: 45dvh; }
 }
+
+/* Progress spec layout B: primary progress first, queue beside it when space allows. */
+.overview-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.overview-heading > div { display: flex; gap: .5rem; flex-wrap: wrap; }
+.overview-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 2rem; }
+.overview-layout > section { min-width: 0; }
+.overview-progress, .overview-queue { list-style: none; margin: 0; padding: 0; }
+.overview-progress > li, .overview-queue > li { border-bottom: 1px solid var(--border); padding: 1rem 0; overflow-wrap: anywhere; }
+.overview-progress > li > div { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.overview-progress p, .overview-queue p { margin: .5rem 0; }
+.overview-counts { display: flex; gap: .75rem; flex-wrap: wrap; }
+.overview button { white-space: normal; text-align: left; max-width: 100%; }
+.overview progress { max-width: 100%; width: 100%; }
+[data-overview-region]:focus { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 850px) { .overview-layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; } }

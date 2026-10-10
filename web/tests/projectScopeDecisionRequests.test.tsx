@@ -58,7 +58,11 @@ const switchTo = async (projectKey: string, name: string): Promise<void> => {
   await waitFor(() => expect(screen.queryByTestId("decision-question")).toBeNull());
 };
 const openDecision = async (projectKey: string): Promise<HTMLElement> => {
-  const button = (await screen.findAllByRole("button")).find((candidate) => candidate.closest(".decision-list") !== null && candidate.textContent?.includes("d1"));
+  await screen.findByText("epoch epoch-a");
+  const button = await waitFor(() => {
+    const found = screen.queryAllByRole("button").find((candidate) => candidate.closest(".decision-list") !== null && candidate.textContent?.includes("d1"));
+    expect(found).toBeDefined(); return found!;
+  });
   fireEvent.click(button!);
   await waitFor(() => expect(screen.getByTestId("decision-question").textContent).toBe(`question of ${projectKey}/d1`));
   return document.querySelector(".decision-detail") as HTMLElement;

@@ -22,6 +22,8 @@ import type { JSX } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentSelectionEditor } from "../src/AgentSelectionEditor.js";
 import { AgentSettings } from "../src/AgentSettings.js";
+import { Overview } from "../src/Overview.js";
+import { deriveOverview } from "../src/overviewModel.js";
 import { footerLines, retryNotice } from "../src/App.js";
 import { bannersFor } from "../src/chainBanner.js";
 import { ChainBanners, ChainPanel } from "../src/ChainPanel.js";
@@ -197,7 +199,13 @@ async function openMemory(container: HTMLElement): Promise<void> {
   await waitFor(() => expect(container.querySelector("[data-testid='memory-content']")).not.toBeNull());
 }
 
+const OVERVIEW = deriveOverview({
+  projection: { status: "available", error: null, data: { schema: "orca-control-overview-v1", epoch: "e-1", changeSeq: 1, groups: [{ ...view.summary, state: "review", completion: { done: 2, total: 2 } }], issues: [], steps: [{ key: "a", groupId: "g", repoId: view.summary.repoId, taskId: null, runId: null, kind: "budget-review", reason: "r-1", ownerRequired: true, destination: { kind: "group", groupId: "g", region: "preparation", taskId: null, runId: null } }] } },
+  todo: { status: "unavailable", data: null, error: null }, recovery: { status: "stale", error: null, data: recovery },
+  scope: { kind: "all" }, projectKey: null, projects: null, roles: ["member"], uncertain: [{ groupId: "unknown-g", commandId: "c-1", importPlan: true }],
+});
 const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element; settle?: (container: HTMLElement) => Promise<void> }> = [
+  { name: "progress overview and source states", chinese: "需要你处理", element: () => <Overview model={OVERVIEW} onOpen={noop} onImport={noop} onRequirement={noop} /> },
   { name: "nav and shell footer", chinese: "决策", element: () => (
     <Shell active="decisions" badges={{ unreviewed: 1, chainRunning: true, controlAlert: true }} footer={footerLines(summary)} theme="system" language="zh"><p>pane</p></Shell>
   ) },

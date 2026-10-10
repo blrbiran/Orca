@@ -121,7 +121,16 @@ const selectionSource = {
 } as const satisfies Record<ProvenanceSourceV1, string>;
 
 export const en = {
-  nav: { sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", requirements: "Requirements", memory: "Memory", metrics: "Metrics" },
+  nav: { overview: "Overview", sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", requirements: "Requirements", memory: "Memory", metrics: "Metrics" },
+  overview: {
+    title: "Overview", progress: "Progress", queue: "Needs your attention", newRequirement: "New requirement", import: "Import plan",
+    global: "Global control", ownerUnknown: "owner not in registry", ownerRequired: "An owner must take this action.",
+    scopeUnavailable: "Project registry unavailable; ownership may be unresolved.", navigationUnavailable: "This owner is no longer available or has changed. Re-reading sources; open it again after refresh.",
+    noProgress: "No active groups.", noAttention: "Nothing needs your attention.", tasks: "Tasks: {{done}} / {{total}}", taskProgress: "Plan task completion",
+    requirementProgress: "Requirement round {{round}} · {{questions}} open questions", taskCountsUnavailable: "Task counts unavailable", goalReview: "goal review is in progress", deliverySeparate: "Git delivery is separate",
+    source: { progress: "Progress", decisions: "Decisions", recovery: "Recovery" }, status: { loading: "loading", available: "available", stale: "stale", unavailable: "unavailable" },
+    step: { "requirement-answer": "Answer requirement", "requirement-review": "Review split", "requirement-attention": "Review requirement problem", "budget-review": "Review budget", "start-review": "Review start", "task-attention": "Review task problem", "stop-review": "Review stopped work", "recovery-review": "Review recovery", "integration-review": "Review integration", "decision-review": "Review decision", "command-unknown": "Check command outcome" },
+  },
   shell: {
     brandTitle: "Leave it to Orca — every idea, made real.",
     chainRunning: "a chain is running",

@@ -13,6 +13,7 @@ import { en } from "./locales/en.js";
 import { useProjectName } from "./projectNames.js";
 import { ALL_PROJECTS } from "./projectScope.js";
 import type { ProjectV1 } from "./project.js";
+import type { SourceStatus } from "./overviewModel.js";
 import type { DecisionListRow, DecisionStatusRow } from "./types.js";
 
 export interface DecisionFilter {
@@ -95,6 +96,8 @@ export function DecisionsView(props: {
   onStatus?: (s: DecisionStatus) => void;
   /** The rows of the chosen status have not arrived yet (Reviewed / All are read on demand). */
   loading?: boolean;
+  /** Independent todo availability; absent for existing standalone/statistical lists. */
+  sourceStatus?: SourceStatus;
   selected?: Pick<DecisionListRow, "projectKey" | "id"> | null;
   onOpen?: (row: DecisionListRow) => void;
   detail?: ReactNode;
@@ -116,7 +119,7 @@ export function DecisionsView(props: {
     <div className="decisions">
       <div className="section-head">
         <h1>{t(heading.title)}</h1>
-        <span className="count" data-testid="decision-count">{t("decisions.count", { shown: shown.length, total: props.rows.length })}</span>
+        <span className="count" data-testid="decision-count">{props.sourceStatus !== undefined && props.sourceStatus !== "available" ? "—" : t("decisions.count", { shown: shown.length, total: props.rows.length })}</span>
       </div>
       <p className="section-lede">
         {t(heading.lede)}
@@ -146,7 +149,9 @@ export function DecisionsView(props: {
       </div>
       <div className="split">
         <div className="split-list">
-          {props.loading === true ? (
+          {props.sourceStatus === "unavailable" ? (
+            <p className="empty">{t("overview.status.unavailable")}</p>
+          ) : props.loading === true ? (
             <p className="empty">{t("decisions.loading")}</p>
           ) : props.rows.length === 0 ? (
             <p className="empty">{t(props.status === undefined || props.status === "unreviewed" ? "decisions.nothingToReview" : "decisions.nothingInStatus")}</p>
