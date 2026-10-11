@@ -49,11 +49,11 @@ export function SavedRunResult({value,active,identity,current=true}:{value:RunRe
  </div>;
 }
 /** Capture revisions and execution identity belong to a run; source attempt facts may advance without a new capture. */
-interface SavedRunAuthority { currentAttempt: number | null; executionId: string | null }
+interface SavedRunAuthority { captureRevision: number; currentAttempt: number | null; executionId: string | null }
 export function freshSavedRun(answer: RunResultsV1, prior?: RunResultsV1, authority?: SavedRunAuthority): boolean {
  const knownAttempt = authority?.currentAttempt ?? prior?.currentAttempt ?? null;
  const knownExecution = authority?.executionId ?? prior?.executionId ?? null;
- return answer.captureRevision >= (prior?.captureRevision ?? 0)
+ return answer.captureRevision >= Math.max(prior?.captureRevision ?? 0, authority?.captureRevision ?? 0)
   && (knownExecution === null || answer.executionId === knownExecution)
   && (knownAttempt === null || answer.currentAttempt === null || answer.currentAttempt >= knownAttempt);
 }
@@ -68,6 +68,7 @@ export function useSavedRunAuthority(owner: string) {
    for (const run of runs) {
     const known = memory.current.runs.get(key(run));
     memory.current.runs.set(key(run), {
+     captureRevision: Math.max(run.captureRevision, known?.captureRevision ?? 0),
      currentAttempt: run.currentAttempt === null ? known?.currentAttempt ?? null : Math.max(run.currentAttempt, known?.currentAttempt ?? 0),
      executionId: run.executionId ?? known?.executionId ?? null,
     });

@@ -102,3 +102,104 @@ it.each(["task","group"])("real App %s preserves known attempt high-water throug
 it.each(["task","group"])("real App %s account switch resets remembered attempt authority",async consumer=>{
  const s=setup();s.result=savedRun({currentAttempt:2,currentExplanation:{status:"missing",reason:null,content:null}});s.result.attempts[0]!.current=false;const app=render(<AccountContext.Provider value={me("one")}><App/></AccountContext.Provider>);await open();if(consumer==="task")await openTask();s.result=savedRun();app.rerender(<AccountContext.Provider value={me("two")}><App/></AccountContext.Provider>);await flush();const owner=consumer==="task"?task():within(screen.getByRole("region",{name:"Group results"}));expect(owner.getByRole("region",{name:"Current result · run-a"}).textContent).toContain("attempt 1");expect(owner.queryByRole("alert")).toBeNull();
 });
+
+// Integration P2, /root/saved_verification_takeover, 2026-10-11, BASE be35141:
+// capture authority must survive the actual mounted owner's read-effect restarts.
+type ResultsConsumer = "task" | "group";
+const resultOwner = (consumer: ResultsConsumer) => consumer === "task" ? task() : within(screen.getByRole("region", { name: "Group results" }));
+async function openResults(consumer: ResultsConsumer) { await open(); if (consumer === "task") await openTask(); }
+function capture(revision: number, work: string, verification: "passed" | "failed" = "passed"): RunResultsV1 {
+ const value = savedRun({ captureRevision: revision });
+ value.currentExplanation.content!.completedWork = [work];
+ value.attempts[0]!.revision = revision;
+ value.attempts[0]!.verification = verification;
+ value.attempts[0]!.observations[2] = { revision, stage: "verification", verification };
+ return value;
+}
+function coherentGroupReads(s: ReturnType<typeof setup>) {
+ const base = globalThis.fetch;
+ globalThis.fetch = (async (input, init) => {
+  if (String(input) !== "/api/control/groups/g/results") return base(input, init);
+  s.reads.push({ path: String(input), signal: init?.signal });
+  const value = savedGroup(s.result); value.epoch = s.group.epoch; value.changeSeq = s.group.changeSeq;
+  return json(value);
+ }) as typeof fetch;
+}
+it.each([
+ ["task", "hide"], ["group", "hide"], ["task", "changeSeq"], ["group", "changeSeq"],
+] as const)("real App %s retains capture authority after %s read restart", async (consumer, restart) => {
+ const s = setup(); coherentGroupReads(s); s.result = capture(8, "capture eight work");
+ render(<App/>); await openResults(consumer);
+ const current = resultOwner(consumer).getByRole("region", { name: "Current result · run-a" });
+ expect(current.textContent).toContain("capture eight work"); expect(current.textContent).toContain("capture 8"); expect(current.textContent).toContain("Verification: passed");
+ s.result = capture(7, "older capture seven work", "failed");
+ if (restart === "hide") {
+  fireEvent.click(screen.getByRole("link", { name: "Memory" })); await flush();
+  const reads = s.reads.length; await act(async () => { await vi.advanceTimersByTimeAsync(6000); }); expect(s.reads).toHaveLength(reads);
+  fireEvent.click(screen.getByRole("link", { name: "Task control" })); await flush();
+ } else {
+  s.group.changeSeq = 5; s.panel.summary.changeSeq = 5; s.result.changeSeq = 5;
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); await flush();
+ }
+ expect(resultOwner(consumer).queryByRole("alert")?.textContent ?? "").toContain("result-response-stale");
+ expect(resultOwner(consumer).queryByText("older capture seven work")).toBeNull();
+ expect(resultOwner(consumer).queryByRole("region", { name: "Current result · run-a" })).toBeNull();
+ expect(s.panel.posts).toHaveLength(0);
+});
+
+it.each(["task", "group"] as const)("real App %s resets capture authority for account project epoch run and generation owners", async consumer => {
+ const s = setup(); coherentGroupReads(s); s.result = capture(8, "capture eight before reset");
+ const app = render(<AccountContext.Provider value={me("one")}><App/></AccountContext.Provider>); await openResults(consumer);
+ expect(resultOwner(consumer).getByRole("region", { name: "Current result · run-a" }).textContent).toContain("capture 8");
+ const admitted = (runId = "run-a") => {
+  const owner = resultOwner(consumer); const current = owner.getByRole("region", { name: `Current result · ${runId}` });
+  expect(current.textContent).toContain("capture 7"); expect(current.textContent).toContain("lower capture in new owner"); expect(owner.queryByRole("alert")).toBeNull();
+ };
+ const raise = async () => { s.result = { ...capture(8, "capture eight before reset"), epoch: s.group.epoch, changeSeq: s.group.changeSeq }; await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); expect(resultOwner(consumer).getByRole("region", { name: "Current result · run-a" }).textContent).toContain("capture 8"); };
+ s.result = capture(7, "lower capture in new owner"); app.rerender(<AccountContext.Provider value={me("two")}><App/></AccountContext.Provider>); await flush(); admitted();
+ await raise(); s.result = capture(7, "lower capture in new owner");
+ fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "beta" } }); await flush();
+ expect(screen.queryByRole("region", { name: "Control group g" })).toBeNull();
+ fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "alpha" } }); await flush(); await openResults(consumer); admitted();
+ await raise(); s.group.epoch = "epoch-b"; s.panel.summary.epoch = "epoch-b"; s.panel.recovery.epoch = "epoch-b"; s.group.changeSeq = 5; s.panel.summary.changeSeq = 5;
+ s.result = { ...capture(7, "lower capture in new owner"), epoch: "epoch-b", changeSeq: 5 }; await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); await flush(); if (consumer === "task") await openTask(); admitted();
+ await raise(); s.group.changeSeq = 6; s.panel.summary.changeSeq = 6; s.group.runs = [run({ runId: "run-b" })]; s.group.workItems[0]!.currentRunId = "run-b"; s.group.workItems[0]!.lineageRunIds = ["run-b"];
+ s.result = { ...capture(7, "lower capture in new owner"), epoch: "epoch-b", changeSeq: 6, runId: "run-b", executionId: "execution-b", run: { ...run({ runId: "run-b" }), blockedReason: null, continuable: false } };
+ await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); await flush(); admitted("run-b");
+ s.result = { ...s.result, captureRevision: 8 }; await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+ expect(resultOwner(consumer).getByRole("region", { name: "Current result · run-b" }).textContent).toContain("capture 8");
+ s.group.changeSeq = 7; s.panel.summary.changeSeq = 7; s.group.runs = [run({ runId: "run-b", generation: 2 })];
+ s.result = { ...s.result, captureRevision: 7, changeSeq: 7, generation: 2, executionId: "generation-two", run: { ...run({ runId: "run-b", generation: 2 }), blockedReason: null, continuable: false } };
+ await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); await flush(); admitted("run-b"); expect(s.panel.posts).toHaveLength(0);
+});
+
+it.each(["task", "group"] as const)("real App %s rejected aggregate does not raise admitted capture authority", async consumer => {
+ const s = setup(); s.group.runs.push(run({ runId: "run-b" })); s.group.workItems[0]!.lineageRunIds = ["run-a", "run-b"];
+ const second = (revision: number, executionId = "execution-b") => ({ ...capture(revision, "second run work"), runId: "run-b", executionId, run: { ...run({ runId: "run-b" }), blockedReason: null, continuable: false } });
+ let values: RunResultsV1[] = [{ ...capture(8, "admitted capture eight"), executionId: null }, second(8)]; const base = globalThis.fetch;
+ globalThis.fetch = (async (input, init) => {
+  const path = String(input); const value = values.find(candidate => path === `/api/control/runs/${candidate.runId}/results`);
+  if (value !== undefined) { s.reads.push({ path, signal: init?.signal }); return json(value); }
+  if (path !== "/api/control/groups/g/results") return base(input, init);
+  s.reads.push({ path, signal: init?.signal }); const group = savedGroup(values[0]!); group.tasks[0]!.runs = values; group.tasks[0]!.lineageRunIds = ["run-a", "run-b"]; return json(group);
+ }) as typeof fetch;
+ render(<App/>); await openResults(consumer);
+ expect(resultOwner(consumer).getByRole("region", { name: "Current result · run-a" }).textContent).toContain("admitted capture eight");
+ const rejected = { ...capture(10, "rejected capture ten"), currentAttempt: 2, currentExplanation: { status: "missing" as const, reason: null, content: null } }; rejected.attempts[0]!.current = false;
+ values = [rejected, second(10, "foreign-execution")]; await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+ expect(resultOwner(consumer).getByRole("alert").textContent).toContain("result-response-stale"); expect(resultOwner(consumer).queryByText("rejected capture ten")).toBeNull();
+ expect(resultOwner(consumer).getByRole("region", { name: "Current result · run-a" }).textContent).toContain("capture 8");
+ values = [{ ...capture(9, "valid capture nine after rejected aggregate"), executionId: null }, second(9)];
+ fireEvent.click(screen.getByRole("link", { name: "Memory" })); await flush(); fireEvent.click(screen.getByRole("link", { name: "Task control" })); await flush();
+ const current = resultOwner(consumer).getByRole("region", { name: "Current result · run-a" }); expect(current.textContent).toContain("valid capture nine after rejected aggregate"); expect(current.textContent).toContain("capture 9"); expect(resultOwner(consumer).queryByRole("alert")).toBeNull(); expect(s.panel.posts).toHaveLength(0);
+});
+
+it.each(["task", "group"] as const)("real App %s admits nonregressing capture with unknown current attempt after restart", async consumer => {
+ const s = setup(); coherentGroupReads(s); s.result = capture(8, "known capture before unknown"); s.result.currentAttempt = 2; s.result.attempts[0]!.current = false;
+ render(<App/>); await openResults(consumer);
+ expect(resultOwner(consumer).getByRole("region", { name: "Current result · run-a" }).textContent).toContain("attempt 2");
+ s.result = { ...capture(9, "unused unknown prose"), currentAttempt: null, currentExplanation: { status: "unavailable", reason: "current-attempt-unavailable", content: null } }; s.result.attempts[0]!.current = false;
+ fireEvent.click(screen.getByRole("link", { name: "Memory" })); await flush(); fireEvent.click(screen.getByRole("link", { name: "Task control" })); await flush();
+ const current = resultOwner(consumer).getByRole("region", { name: "Current result · run-a" }); expect(current.textContent).toContain("attempt unknown"); expect(current.textContent).toContain("capture 9"); expect(current.textContent).not.toContain("Saved work"); expect(resultOwner(consumer).queryByRole("alert")).toBeNull();
+ s.result = capture(9, "old attempt cannot be current"); await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); expect(resultOwner(consumer).getByRole("alert").textContent).toContain("result-response-stale"); expect(resultOwner(consumer).getByRole("region", { name: "Current result · run-a" }).textContent).toContain("attempt unknown"); expect(resultOwner(consumer).queryByText("old attempt cannot be current")).toBeNull(); expect(s.panel.posts).toHaveLength(0);
+});
