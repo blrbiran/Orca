@@ -1,0 +1,23 @@
+{
+  "commandMetadata": {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6f.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /private/tmp/task6-gate.mjs node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run --fileParallelism=false --maxWorkers=1 --minWorkers=1 --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/task6-final-full-04/tests.json"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 553.9103899002075,
+    "log": "/private/tmp/orca-followup-runs/task6-final-full-04/output.log",
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "6b095585713cf85236343a3cd98f9ce73252ca5de7b0dd5af9b3e315401b9705",
+    "sourceFiles": 446
+  },
+  "assertionsAudited": 1553,
+  "filesAudited": 147,
+  "allPassed": true,
+  "jsonSHA256": "0a58272c78b32d0132f1312a77ee75e081ce0b3cbeb402b2cb3c4679221c40c9",
+  "logSHA256": "1a51b03c359cdeed2c7182a929bd7a04abece5aa61eefb7c0d024df80376d264",
+  "logBytes": 54041,
+  "rawLogReadBy": "implementer; controller independently checked complete assertion JSON, metadata and raw-byte hash"
+}
