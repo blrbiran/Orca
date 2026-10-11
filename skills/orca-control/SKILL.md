@@ -6,6 +6,9 @@ description: Use when operating Orca from an agent — reading task groups, open
 # Operating Orca with `orca control`
 
 You act as the panel's operator through two commands. The CLI is a passthrough: the panel validates everything.
+Use the checkout's `node_modules/.bin/tsx src/cli.ts` for `orca`; this package declares no global binary. The
+installed ccloop pin remains `ab824d1`, so a locally paired newer peer's saved-result features are not proof that a
+running panel or the default install supports them.
 
 ```
 orca control get <path> [--control-state-dir <dir>] [--client-name <name>]
@@ -21,11 +24,14 @@ it into a draft task group. Read the returned state rather than infer success fr
 1. Read `config`, `summary` and `recovery`. Choose a concrete registered repository; never guess a filesystem path.
 2. Open a requirement only with a single-call capable agent (the pinned Codex adapter lacks that capability), or import
    a registered plan. Read the group/requirement before each edit; use its current `commandRevision`.
-3. Review the task goals, limits and allocations. Choose agents before confirmation. Confirm the budget with real
-   profile/selection hashes from the reads, then send `groups/<id>/start` at the new revision.
+3. Review task goals, acceptance, limits, optional token policy, workspace and integration. Choose effective worker,
+   estimator, handoff and goal-review agents before confirmation. Confirm the task plan with real profile/selection
+   hashes from the reads, then send `groups/<id>/start` at the new revision. Confirmation and start are separate.
 4. Poll `groups/<id>` every 30–60 seconds. The driver schedules dependencies within a started group automatically.
-5. On failure, read `runs/<id>/activity` and `runs/<id>/evidence`. Report the reason and preserved evidence before
-   selecting a recovery action. A successful command response is not proof that provider work has completed.
+5. On failure, read `groups/<id>`, `runs/<id>/activity`, `runs/<id>/evidence` and, for a saved execution failure,
+   `runs/<id>/saved-result-eligibility`. Report the recorded phase, typed cause when present, raw code and run/attempt
+   identity. Older unknown causes stay unknown; never infer token exhaustion from a decode error. Use only the
+   evidence manifest's authorized routes. A successful command response does not prove provider completion.
 
 Example diagnosis (replace ids with those returned by your reads):
 
@@ -34,6 +40,7 @@ orca control get summary
 orca control get groups/<groupId>
 orca control get runs/<runId>/activity
 orca control get runs/<runId>/evidence
+orca control get runs/<runId>/saved-result-eligibility
 ```
 
 ### Recovery decisions
@@ -48,6 +55,10 @@ orca control get runs/<runId>/evidence
   first read the current stop revision and epoch and use the payload table below. Never delete stop records in SQL.
 - Unknown-usage settlement is **owner Web only**; socket/MCP operators must ask the human. Do not claim missing usage
   is zero or retry past an unresolved charge. The conservative charge is not provider-reported usage.
+- Saved-result verification is a distinct action after the eligibility read says `eligible`; its source run, attempt
+  and capsule hash come from that answer. It skips execution, but validation/verification may consume model usage.
+  `unavailable` is a reason to inspect evidence or use an otherwise legal ordinary retry, not an invitation to guess
+  source fields.
 - `group-archived`: reads/evidence remain available. Unarchive deliberately before edits or new work. Never delete
   history or promise archive while a requirement call or stop remains in flight.
 - A missing control plane, missing execution port, expired login and damaged recovery store are different problems;
@@ -67,10 +78,14 @@ fields; a package version alone does not establish that another running panel su
 `get` takes a path without the `/api/control/` prefix; a query string is passed through.
 
 - `summary` (or `summary?sinceChangeSeq=<n>`), `groups`, `groups/<id>`, `groups/<id>/requirement`, `groups/<id>/agent-preview`
-- `recovery`, `config`, `agents`, `operator/agent-preferences`, `repositories/<id>/workspace`, `repositories/<id>/integration`, `runs/<id>/evidence` (manifest only; artifact downloads are refused with `control-cli-binary-route`), `runs/<id>/activity` (the run's newest 200 activity rows)
+- `recovery`, `config`, `agents`, `operator/agent-preferences`, `operator/agent-installations`, `repositories/<id>/workspace`, `repositories/<id>/integration`, `runs/<id>/evidence` (manifest only; artifact downloads are refused with `control-cli-binary-route`), `runs/<id>/activity` (the newest 200 activity rows, newest first), `runs/<id>/saved-result-eligibility`
 - `usage?scope=all|repo:<id>[&from=<ms>&to=<ms>][&groupBy=model|repo|day|week|month]`: `get usage?scope=all` reads tokens used per model and the caps (`orca-usage-view-v1`: `.headline` total/week/month, `.range.byModel`, `.caps[]` with `used`, `committed`, `headroom`, and `.spendRevision`)
 - saved results: `groups/<id>/results`, `runs/<id>/results`, and `runs/<id>/results/outputs/<outputId>` (preview JSON). Binary `?download=1` is Web-only and refused by the CLI with `control-cli-binary-route`.
 - a past command's retained result: see section 4
+
+An existing run with no activity answers `{"schema":"orca-run-activity-v1","runId":"<id>","entries":[]}`. Missing
+runs and malformed/unavailable rows are errors. The Web panel displays that newest window chronologically; neither
+view promises the full run history.
 
 ### Saved result interpretation
 
@@ -106,7 +121,10 @@ publication, package repin and production service changes are separate human rel
 - Without `--command-id` the CLI generates `cli-<uuid>` and returns it as `commandId` in the output envelope. Keep it.
 - After a timeout (`control-socket-timeout`: the CLI waits 120 s) or any `retryable: true` error, resend the same route and payload with `--command-id <the same id>`. A replay of a known id never executes twice.
 - To check a result, `get` the command under its scope: group commands `groups/<groupId>/commands/<commandId>`; repository verbs (`set-workspace-mode`, `set-integration-scheme`) `groups/@repository:<repoId>/commands/<commandId>`; operator verbs (`set-agent-preferences`) `groups/@operator:<operatorId>/commands/<commandId>`; spend verbs (`set-spend-cap`, `clear-spend-cap`, `set-usage-calendar`) `groups/@spend/commands/<commandId>`.
-- A lookup miss does not prove the command never ran: a group-scope miss answers `command-result-not-found`, and an `@repository:`, `@operator:` or `@spend` miss currently answers `group-not-found` (those scopes have no group row). On any miss, resend the original command with the same `--command-id` and the same payload rather than infer absence; the replay either returns the retained result or executes it once.
+- A lookup miss does not prove the command never ran. If a genuine group scope no longer exists, the outcome cannot
+  be confirmed: preserve the original id and details, check again explicitly if needed, and do not automatically
+  resend. `@repository:`, `@operator:` and `@spend` are command scopes, never missing-group heuristics. For an
+  ordinary uncertain send, use the same id and payload under the existing idempotency rule above.
 
 ## 5. Long work
 
@@ -162,6 +180,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/tasks/<taskId>/labels` | set-task-labels | `{"labels":["area:cli"],"baseLabelsVersion":0}` |
 | `POST groups/<groupId>/tasks/<taskId>/loop` | set-task-loop | `{"baseLoopVersion":0,"plan":"standard","inputs":{"goal":"g","successCondition":"s","targetPaths":["src"],"checks":["npm test"],"nonGoals":[],"relevantDocs":[],"protectedPaths":[],"maxFilesTouched":null},"work":{"tokens":500000,"activeMs":600000,"attempts":3}}` |
 | `POST groups/<groupId>/retry-task` | retry-task | `{"taskId":"t1"}` |
+| `POST groups/<groupId>/tasks/<taskId>/verify-saved-result` | verify-saved-result | `{"sourceRunId":"run1","sourceAttempt":1,"capsuleHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}` |
 | `POST groups/<groupId>/settle-unknown-usage` | settle-unknown-usage | `{"taskId":"a","runId":"run-a","generation":1,"acknowledge":"charge-remaining-grant"}` |
 | `POST requirements` | requirement-open | `{"groupId":"g1","repoId":"r1","idea":"what to build"}` |
 | `POST groups/<groupId>/requirement/answer` | requirement-answer | `{"roundNo":1,"answers":[{"id":"R1.Q1","kind":"recommended"},{"id":"R1.Q2","kind":"text","text":"my answer"}],"glossaryDecisions":[],"adrDecisions":[]}` |

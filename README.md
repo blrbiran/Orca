@@ -26,9 +26,9 @@ Orca is the system layer. Some pieces are separate projects:
 | **ccmem** | A memory layer. The panel can show it read-only. | optional |
 | **syncskill** | Supplies skills to tasks. | optional |
 
-The flow: an **idea** becomes a **requirement**, the requirement becomes a **group of tasks**, each task is **one
-ccloop run**, every finished task is merged onto the branch **`orca/<groupId>`**, and **you** decide whether that branch
-goes into `main`.
+The flow: an **idea** becomes a **requirement**, the requirement becomes a **group of tasks**, and each task may have
+more than one ccloop run after a retry or continuation. Finished work lands on **`orca/<groupId>`**. You decide
+whether that branch goes into `main`.
 
 ## Requirements
 
@@ -261,31 +261,34 @@ page (owners only) or with `orca user add <name> [--role owner|member]` in a ter
 twice from the TTY. Run `orca user` with the same `ORCA_CONTROL_DIR` as the panel (`orca panel install --dry-run`
 shows the service's environment), or it opens a different accounts store; it prints the path it opened. A session
 lasts `--session-days` (1-30, default 15) and is refreshed while you use the page; `orca user passwd <name>` resets a
-forgotten password. Members can do everything except the human-only actions (group limits, spend caps, the usage
-calendar): the page offers those controls to owners only and shows members the values, and a member's new requirement
-gets the default limit.
+forgotten password. Members can use ordinary task controls. Owners handle human-only actions: group limits, spend
+caps, the usage calendar, integration choices, conservative unknown-usage settlement and installation updates. The
+page shows members the relevant values; a member's new requirement gets the default limit.
 
 ## The sections
 
-The left-hand navigation has six sections, ordered along the work. **Requirements** opens by default. The active
-section is kept in the URL hash, so a reload stays put. The sidebar also has a language switch (English / Chinese)
-and a theme switch.
+The sidebar has **Overview**, **Requirements**, **Task control**, **Decisions**, **Memory**, **Metrics**, **Global
+settings** and **Project settings**. It keeps the selected project visible across sections. The active section is in
+the URL hash. Language and theme switches are in the sidebar.
 
 ```
  idea ──> Requirements ──accept──> Task control ──runs──> branch orca/<groupId> ──> you merge (outside Orca)
                                         │
                                         └── choices agents record ──> Decisions ──> Metrics
- Memory: read-only, across everything        Chains: developing Orca itself, unrelated to groups
+ Memory: read-only, across everything        Continuous improvement: Orca development, unrelated to groups
 ```
 
 | Section | What it is for |
 |---|---|
+| Overview | Open the selected project's next actions and groups. |
 | Requirements | From an idea to a set of tasks, with a model. |
 | Task control | Budget, configure, start and watch groups of tasks. |
 | Decisions | Review the decisions agents recorded. |
 | Memory | Read ccmem's memory (read-only). |
 | Metrics | Correction rate, repair rate, review coverage. |
-| Chains | Unattended Claude Code sessions that develop Orca itself. |
+| Global settings | Agent preferences, installation review, usage caps and advanced navigation preference. |
+| Project settings | Workspace and integration defaults for the selected project. |
+| Continuous improvement (advanced) | Unattended Claude Code sessions that develop Orca itself; hidden by default in Global settings. An active chain still shows its status and stop control. A `#chains` link remains available. |
 
 ### Requirements
 
@@ -303,30 +306,36 @@ is still resolved by the server, so ensure your default supports single calls.
    dependencies and layers. Send it back with feedback, or **Accept this split**.
 4. Accepting turns the **same group** into a `draft` group with those tasks; it now appears in Task control. The
    requirement document is committed as `.orca/requirements/<date>-<slug>.md` onto the branch `orca/<groupId>`; the
-   group starts only once that commit exists.
+   group starts only once that commit exists. **Go to task preparation** opens that exact group for review; acceptance
+   does not confirm or start it.
 
 Each model call is counted against the requirement's token limit. When the next call does not fit, it stops and asks
 you to raise the limit.
 
 ### Task control
 
-Quick start: select the target project, import a registered plan (or accept a requirement split), review the task goals
-and budgets, choose the agents/models, **Confirm budget**, then **Start**. Confirmation freezes the selection; choose
+Quick start: select the target project, import a registered plan (or accept a requirement split), review the task goals,
+acceptance, budgets, workspace and integration, choose the agents/models, **Confirm task plan**, then **Start**. Confirmation freezes the selection; choose
 agents before confirming. The driver schedules eligible tasks and their dependencies automatically within the group.
 You do not need to start each task separately. Watch the dependency graph and open a task for activity and evidence.
 
 Groups come from an accepted requirement or from an imported plan (**Import plan**). For each group you can:
 
 - **Budget:** see the proposal (per task and a group reserve), apply the estimator's suggestions or set the numbers
-  yourself, set a group limit, then **Confirm budget**.
-- **Agents:** choose the agent and model per group slot (worker, estimator, reconcile) and per task. An agents
-  settings panel holds your defaults. Confirmation freezes the selection.
+  yourself, set a group limit and optional explicit token policy, then **Confirm task plan**. A token ceiling is not
+  implied by a spend cap or an unknown usage reading.
+- **Agents:** choose the agent and model for worker, estimator, handoff and goal review roles, with per-task worker
+  overrides. Global settings holds preferences; Project settings holds project defaults. Preview the effective selection
+  before confirmation, which freezes it. Installation changes have separate observe, preview and owner apply steps.
 - **Change plan** for a task: its loop plan — `standard`, `bugfix` (red test first), `refactor` (no behaviour
   change), `design` (a document is the deliverable), `investigate` (findings to a report only) — and its inputs: goal,
   done-when, paths it may change, check commands, non-goals, relevant docs, paths it must not change, a file limit,
   its budget, and its skills.
 - **Labels** per task, and a filter by label.
-- **Start**, then pause, resume, or hand off; continue selected tasks; retry a run.
+- **Execution controls:** **Pause new tasks** stops future dispatch while running work continues; **Continue execution**
+  resumes dispatch. **Save progress and stop** requests a safe handoff. **Stopping** means it is still settling;
+  **Stopped** is shown only after authoritative stop facts, and does not mean every task is complete or recoverable.
+  Continuable, retryable and unresolved work are shown separately.
 - **Watch:** a dependency graph, each task's status and progress, each run's phase, state, usage and evidence (which
   you can list and download), handoff requests and estimates.
 - **Git:** each task runs in its own git worktree (default) or a private clone, selectable per repository; each
@@ -334,6 +343,9 @@ Groups come from an accepted requirement or from an imported plan (**Import plan
   person: the panel has no button for either.
 - **Recovery:** after a crash the panel reconciles before it accepts connections; anything it cannot settle is shown
   as a blocker, and it will not start new runs until recovery is observed.
+
+The group and requirement cards have **More actions** for exact details, archive or unarchive, and copying the group id.
+Archiving preserves records; it is refused while work or a stop is still in flight.
 
 Completed groups open **Results** by default, including when no explanation was saved. To open an individual task,
 select it in **Progress**, then choose **Results**; its controls and unfinished inputs stay mounted across region
@@ -358,6 +370,14 @@ ordinary task execution continues. Live saved results require a paired ccloop bu
 local feature verification does not publish that build, repin the package, or change a running service. Publishing
 the paired producer and deliberately repinning/restarting remain separate release steps.
 
+On a failed run, **Runs and evidence** shows the recorded phase, a typed cause when saved producer evidence proves
+one, and an explicit unknown cause otherwise. It keeps the raw code, run id and attempt. A decode failure is not a
+token diagnosis. Open the permission-checked evidence list and the recent Activity window; the window contains the
+newest 200 run entries displayed oldest to newest, not the full history. A valid run with no entries shows an empty
+history; a missing run or damaged response shows an error. **Verify saved results** appears only after its separate
+eligibility read accepts the source; it skips execution but validation and verification may still use a model. Ordinary
+retry and recovery remain separate actions and only appear when their current server facts allow them.
+
 Each task is one ccloop run, and **runs cost money** (see [Cost](#cost)).
 
 ### Decisions
@@ -379,17 +399,18 @@ Nothing is read until you open the section.
 The correction rate, the repair rate and review coverage across your repositories, with notes on how to read them
 (the same numbers as `orca metrics`). Read-only.
 
-### Chains
+### Continuous improvement (advanced)
 
 `orca chain` runs unattended Claude Code sessions, one after another, in a clone of an **Orca** checkout, to develop
-Orca itself. It is unrelated to groups and tasks. The section shows each repository's latest chain, starts one (goal,
+Orca itself. It is unrelated to groups and tasks. Enable its navigation in Global settings; recognized `#chains` links
+remain available, and an active chain keeps its status and stop access. The section shows each repository's latest chain, starts one (goal,
 maximum sessions, a soft maximum cost in USD, session timeout) and stops one after its current session. Details in
 [docs/cli.md](docs/cli.md#unattended-chains-orca-chain).
 
 ## Known limitations
 
-- **No global project switcher.** Projects are fixed at launch by `--repo`. Requirements, Chains and Memory each have
-  their own repository selector; **Task control uses the first `--repo` only**, and imports only the first `--plan`.
+- Projects are registered at launch by `--repo`; the sidebar's selected project switches the panel's project views.
+  A project's registered plans remain bound to its repository.
 - No Orca command writes the profile snapshot; you write it by hand.
 - Paid acceptance runs against real agents so far are **n=1** each: they show the path works, not how reliably.
 
@@ -428,7 +449,8 @@ Point these variables at a scratch directory when you are trying Orca out.
 
 Real agent runs spend money on your agent accounts: clarifying a requirement, splitting it, estimating (unless the
 profile's context window is `null`), and every task run. Budgets in `soft` mode are settled after the fact, not
-prevented. Chains have a soft cost limit checked after each session.
+prevented. Verifying saved results skips execution but may still spend model usage on validation and verification.
+Chains have a soft cost limit checked after each session.
 
 ## More
 
@@ -445,6 +467,8 @@ prevented. Chains have a soft cost limit checked after each session.
 | Codex cannot clarify or estimate | Single-call capability is unavailable on the pinned Codex adapter. Use a capable agent for clarification/estimation; a task worker may still use Codex. |
 | Start is missing or `stop-mode-conflict` | Read the stop banner. Resume a pause with **Resume dispatch**. After a completed handoff, use the resume dialog; select no continuations when you only want to clear the completed stop before retrying a failed task. Pending/unresolved handoffs need recovery first; a partial handoff can be archived. Do not edit `stop_intents` or group JSON in SQLite. |
 | A task ended failed | Inspect its failure reason, recent activity and evidence. **Retry task** creates a new task attempt when allowed; **Retry recovery** is for recoverable blocked runs, not terminal task failures. Unknown usage or insufficient budget can still prevent a retry. |
+| Activity says `null` or reports no history for an invalid body | A valid empty run answers `{ "schema": "orca-run-activity-v1", "runId": "…", "entries": [] }`. A missing run or damaged row is an error. Re-read the run and inspect the named refusal; do not treat `null` as an empty feed. |
+| A command response was lost | Check its retained result with the original command id. If the group no longer exists, the outcome cannot be confirmed; use **Check again** for one lookup or **Dismiss** the attention item. A refresh does not resend the command. |
 | Unknown usage blocks admission | An owner can inspect and explicitly conservatively settle the remaining work and handoff grants in the Web UI. This charges remaining allowances as used; it is not a measured provider report and does not itself retry or clear a stop. |
 | `recovery-blocked` | Read the named blocker and inspect evidence. If a database was manually edited, preserve a backup and diagnose the damaged record separately; refreshing cookies does not repair store data. |
 | Started, but no task runs | Check the group stop banner, global recovery/admission blockers, budget/caps, dependencies, agent preview and execution-port configuration. Open the task activity and evidence before retrying. |

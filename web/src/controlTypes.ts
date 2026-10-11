@@ -241,6 +241,7 @@ export type RunViewV1 = {
   remaining: BudgetAmount;
   tokenRemainingStatus?:"known"|"unlimited"|"unknown";
   failureCode: string | null;
+  diagnosis?: { phase: "estimate" | "work" | "handoff" | "single-call"; step: "planning" | "executing" | "verifying" | null; cause: "execution-format-invalid" | "execution-format-ambiguous-or-hidden" | "usage-unsettled" | "unknown"; attempt: number };
   blockedReason?: string | null;
   /** Issue fixes spec §4.2(1), (5): ccloop's reason and the drive record's outcome; optional here so literal fixtures need no edit. */
   stopReason?: string | null;

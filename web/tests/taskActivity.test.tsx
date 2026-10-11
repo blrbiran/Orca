@@ -8,9 +8,10 @@ import { run, view, workItem } from "./fixtures/board.js";
 const AT = Date.UTC(2026, 9, 8, 10, 5, 0);
 let entries: unknown[] = [];
 let status = 200;
+let responseOverride: unknown = undefined;
 let urls: string[] = [];
 beforeEach(() => {
-  urls = []; status = 200;
+  urls = []; status = 200; responseOverride = undefined;
   entries = [
     { seq: 4, groupId: "g", taskId: "a", runId: "run-a", at: AT + 1000, kind: "run-settled", body: { state: "settled", outcome: "succeeded" } },
     { seq: 3, groupId: "g", taskId: "a", runId: "run-a", at: AT + 500, kind: "run-blocked", body: { blockedAt: AT, reason: "Error: codex-no-completion" } },
@@ -20,7 +21,7 @@ beforeEach(() => {
   ];
   vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
     urls.push(String(input));
-    const body = status === 200 ? { schema: "orca-run-activity-v1", runId: "run-a", entries } : { code: "run-not-found", message: "no such run" };
+    const body = responseOverride !== undefined ? responseOverride : status === 200 ? { schema: "orca-run-activity-v1", runId: "run-a", entries } : { code: "run-not-found", message: "no such run" };
     return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   });
 });
@@ -72,6 +73,13 @@ describe("the task detail's run activity (spec §6.5)", () => {
     entries = [];
     detail();
     expect(await screen.findByText("no activity recorded yet")).toBeTruthy();
+  });
+
+  it.each([null, { schema: "orca-run-activity-v1", runId: "run-a", entries: null }, { schema: "orca-run-activity-v1", runId: "else", entries: [] }, { schema: "orca-run-activity-v1", runId: "run-a", entries: [], extra: true }, { schema: "orca-run-activity-v1", runId: "run-a", entries: [{ seq: 1, groupId: "g", taskId: "a", runId: "run-a", at: AT, kind: "phase", body: {}, extra: true }] }])("refuses a malformed successful activity body instead of reporting no history: %j", async (body) => {
+    responseOverride = body;
+    detail();
+    expect(await screen.findByText("activity refused · activity-response-invalid")).toBeTruthy();
+    expect(screen.queryByText("no activity recorded yet")).toBeNull();
   });
 
   it("reads again when the group's projection moves, so a running task's feed follows it", async () => {

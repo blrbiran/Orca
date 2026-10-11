@@ -379,10 +379,17 @@ export const zh: Translation<typeof en> = {
     },
     activity: {
       region: "{{runId}} 的近期活动",
-      heading: "近期活动",
+      heading: "近期活动 · 最新窗口，按时间先后显示",
       none: "还没有活动记录",
       refused: "活动读取被拒绝 · {{code}}",
       phase: "{{step}} · 第 {{attempt}} 次尝试",
+    },
+    diagnosis: {
+      phaseLabel: "阶段：{{phase}}", stepLabel: "步骤：{{step}}", attempt: "第 {{attempt}} 次尝试", identity: "运行 {{runId}}",
+      phase: { estimate: "估算", work: "工作", handoff: "交接", "single-call": "单次调用" },
+      step: { planning: "规划", executing: "执行", verifying: "验证" },
+      cause: { "execution-format-invalid": "执行输出无法解码", "execution-format-ambiguous-or-hidden": "执行输出含糊或被隐藏", "usage-unsettled": "用量尚未结清", unknown: "原因未知" },
+      next: { "execution-format-invalid": "查看下方已保存成果验证资格和证据", "execution-format-ambiguous-or-hidden": "查看下方已保存成果验证资格和证据", "usage-unsettled": "请所有者核对保守用量结清", unknown: "先查看活动和证据，再使用可用的恢复操作" },
     },
     workspace: {
       region: "工作区模式",

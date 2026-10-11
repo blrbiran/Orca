@@ -12,7 +12,11 @@ export function RunReason(props: { run: RunViewV1 }): JSX.Element | null {
   const {t}=useTranslation();const lineage=props.run.recoveryOf?<> · {t("control.savedResult.lineage",{runId:props.run.recoveryOf.sourceRunId,attempt:props.run.recoveryOf.sourceAttempt})}</>:null;
   if(props.run.savedResultOrdinaryRetry||props.run.outcome==="not-started")return <>{lineage} — {t("control.savedResult.notDispatched")}</>;
   const raw = runReasonText(props.run);
-  if (raw === null) return lineage;
-  const text = explainRunReason(reasonCode(raw));
-  return <>{lineage} — {text ?? raw}{text !== null && <> <code>{raw}</code></>}</>;
+  if (raw === null && props.run.failureCode === null && props.run.state !== "blocked") return lineage;
+  const diagnosis = props.run.diagnosis ?? { phase: props.run.phase, step: null, cause: "unknown" as const, attempt: props.run.providerAttemptOrdinal };
+  const phase = t(`control.diagnosis.phase.${diagnosis.phase}`);
+  const cause = t(`control.diagnosis.cause.${diagnosis.cause}`);
+  const next = t(`control.diagnosis.next.${diagnosis.cause}`);
+  const text = raw === null ? null : explainRunReason(reasonCode(raw));
+  return <>{lineage} — <span>{t("control.diagnosis.phaseLabel", { phase })}{diagnosis.step && ` · ${t("control.diagnosis.stepLabel", { step: t(`control.diagnosis.step.${diagnosis.step}`) })}`} · {t("control.diagnosis.attempt", { attempt: diagnosis.attempt })} · {cause}. {next}</span> {t("control.diagnosis.identity", { runId: props.run.runId })}{raw !== null && <> · {text !== null && `${text} `}<code>{raw}</code></>}{props.run.failureCode !== null && <>{" · "}<code>{props.run.failureCode}</code></>}</>;
 }

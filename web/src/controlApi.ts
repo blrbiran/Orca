@@ -120,8 +120,29 @@ export const fetchRunEvidence = (runId: string): Promise<EvidenceManifestV1> =>
 export const fetchSavedResultEligibility=(runId:string):Promise<SavedResultEligibilityV1>=>controlGet(`/api/control/runs/${segment(runId)}/saved-result-eligibility`);
 
 /** GET /api/control/runs/:runId/activity -- issue-fixes spec §5.2: the run's newest 200 activity rows. */
-export const fetchRunActivity = (runId: string): Promise<RunActivityV1> =>
-  controlGet<RunActivityV1>(`/api/control/runs/${segment(runId)}/activity`);
+const activityKinds = new Set(["usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "integration", "stop", "stop-cleared", "archived", "unarchived"]);
+function activityResponse(runId: string, value: unknown): RunActivityV1 {
+  const invalid = (): never => { throw new ControlRequestError({ status: 200, code: "activity-response-invalid", message: "The activity response is malformed", commandRevision: null }); };
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return invalid();
+  const answer = value as Record<string, unknown>;
+  if (answer.schema !== "orca-run-activity-v1" || answer.runId !== runId || !Array.isArray(answer.entries) || answer.entries.length > 200 || Object.keys(answer).some(key => !["schema", "runId", "entries"].includes(key))) return invalid();
+  let previous = Number.POSITIVE_INFINITY;
+  for (const item of answer.entries) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) return invalid();
+    const entry = item as Record<string, unknown>;
+    if (!Number.isSafeInteger(entry.seq) || (entry.seq as number) <= 0 || (entry.seq as number) >= previous
+      || Object.keys(entry).some(key => !["seq", "groupId", "taskId", "runId", "at", "kind", "body"].includes(key))
+      || typeof entry.groupId !== "string" || !entry.groupId || entry.runId !== runId
+      || !(entry.taskId === null || typeof entry.taskId === "string")
+      || !Number.isSafeInteger(entry.at) || (entry.at as number) < 0
+      || !activityKinds.has(String(entry.kind))
+      || typeof entry.body !== "object" || entry.body === null || Array.isArray(entry.body)) return invalid();
+    previous = entry.seq as number;
+  }
+  return answer as RunActivityV1;
+}
+export const fetchRunActivity = async (runId: string): Promise<RunActivityV1> =>
+  activityResponse(runId, await controlGet<unknown>(`/api/control/runs/${segment(runId)}/activity`));
 
 /** Accounts spec §5.3: GET /api/control/usage with the query the Usage panel's pickers name (web/src/UsagePanel.tsx). */
 export const fetchUsageView = (query: string): Promise<UsageViewV1> => controlGet<UsageViewV1>(`/api/control/usage?${query}`);

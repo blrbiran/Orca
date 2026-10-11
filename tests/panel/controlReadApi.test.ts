@@ -748,7 +748,7 @@ describe("canonical control read API", () => {
     expect(view.activity).toHaveLength(50);
     expect(view.activity![0]).toMatchObject({ seq: newestGroupSeq, kind: "stop", taskId: null, runId: null, body: { mode: "pause" } });
     expect(view.activity!.map((entry) => entry.seq)).toEqual([...view.activity!.map((entry) => entry.seq)].sort((a, b) => b - a));
-    expect(view.runs.find((run) => run.runId === "run-one")).toMatchObject({ startedAt: null, endedAt: null, lastActivityAt: Number(newestRun.at) });
+    expect(view.runs.find((run) => run.runId === "run-one")).toMatchObject({ startedAt: null, endedAt: null, lastActivityAt: Number(newestRun.at), diagnosis: { phase: "work", cause: "unknown" } });
 
     // A run written at schema 9 carries its own times; the view shows the body's, not a time read off its rows.
     const timedBody = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id='run-one'").get()!.body));

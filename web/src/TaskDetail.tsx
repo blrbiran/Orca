@@ -156,7 +156,7 @@ export function RunActivity(props: { runId: string; changeSeq: number }): JSX.El
   useEffect(() => {
     let live = true;
     fetchRunActivity(props.runId).then(
-      (answer) => { if (live) { setEntries(Array.isArray(answer?.entries) ? answer.entries : []); setRefusal(null); } },
+      (answer) => { if (live) { setEntries(answer.entries); setRefusal(null); } },
       (err: unknown) => { if (live) setRefusal(controlFailureFrom(err).code); },
     );
     return () => { live = false; };
@@ -165,7 +165,7 @@ export function RunActivity(props: { runId: string; changeSeq: number }): JSX.El
     <section aria-label={t("control.activity.region", { runId: props.runId })}>
       <h5>{t("control.activity.heading")}</h5>
       {refusal !== null && <p className="detail-note">{t("control.activity.refused", { code: refusal })}</p>}
-      {entries !== null && (entries.length === 0 ? <p>{t("control.activity.none")}</p> : (
+      {refusal === null && entries !== null && (entries.length === 0 ? <p>{t("control.activity.none")}</p> : (
         <ol>
           {[...entries].reverse().map((entry) => <li key={entry.seq}>{new Date(entry.at).toISOString()} · {activityText(entry)}</li>)}
         </ol>

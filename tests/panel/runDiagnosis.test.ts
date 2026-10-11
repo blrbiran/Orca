@@ -1,0 +1,30 @@
+import { describe, expect, it } from "vitest";
+import { openTestStore } from "../control/fixtures/store.js";
+import { persistRecoveryArtifact } from "../../src/control/savedResultRecoveryPackage.js";
+import { readRunDiagnosis, savedFormatFailureEvidence } from "../../src/panel/runDiagnosis.js";
+
+const hash = "a".repeat(64);
+const ref = { artifactId: "fixture-ref", hash };
+
+describe("run diagnosis from retained typed facts", () => {
+  it("uses the normalizer's reason only through a matching hash-bound capsule", async () => {
+    const h = await openTestStore();
+    try {
+      const normalization = persistRecoveryArtifact(h.store, { status: "unavailable", reason: "execution-format-invalid", diagnostic: { method: "none", candidates: 0, valid: 0, hidden: false, originalBytes: 24 } });
+      const capsule = persistRecoveryArtifact(h.store, {
+        schema: "ccloop-execution-format-failure-v1", identity: { groupId: "g", workItemId: "w", taskId: "t", runId: "run-1", generation: 1, graphVersion: 1, targetVersion: 1, executionId: "exec-1", envelopeHash: hash }, attempt: 2,
+        executor: { kind: "codex", configHash: hash }, frozenContractHash: hash, acceptedBase: "main", resolvedBase: "a".repeat(40), attemptStartHead: "a".repeat(40), decoder: "strict-execution-v1", classification: "execution-format-failure-v1",
+        process: { reason: "completed", code: 0, signal: null, isolated: true }, usage: { tokenUsage: 10, highWater: 2 }, verifier: { entered: false, proof: ref },
+        artifacts: { envelope: ref, config: ref, acceptedContract: ref, runtimeContract: ref, final: ref, events: ref, schema: ref, decodeError: ref, normalization, outcome: ref, process: ref, plan: ref, usage: ref, usageLedger: ref, usageObservations: [], owner: ref },
+        snapshot: ref, completeness: { complete: true, parts: ["original-process", "original-stream", "actual-usage", "successful-plan", "verifier-not-entered", "tree-index-bundle-files"] }, capturedAt: "2026-10-11T00:00:00.000Z", captureOwner: "test",
+      });
+      const run = { groupId: "g", workItemId: "w", taskId: "t", runId: "run-1", generation: 1, graphVersion: 1, targetVersion: 1, executionId: "exec-1", providerAttemptOrdinal: 2, phase: "work" as const, progress: { status: "executing" as const }, failureCode: null, savedSource: { authorityKind: "execution-format-failure-v1" as const, source: capsule, attempt: 2 } };
+      expect(readRunDiagnosis(h.store, run)).toEqual({ phase: "work", step: "executing", cause: "execution-format-invalid", attempt: 2 });
+      expect(savedFormatFailureEvidence(h.store, run)?.refs.map(item => item.kind)).toEqual(["saved-decode-capsule", "saved-final", "saved-decode-error", "saved-normalization"]);
+      expect(readRunDiagnosis(h.store, { ...run, runId: "other" })).toEqual({ phase: "work", step: "executing", cause: "unknown", attempt: 2 });
+      expect(savedFormatFailureEvidence(h.store, { ...run, runId: "other" })).toBeNull();
+      expect(readRunDiagnosis(h.store, { ...run, savedSource: undefined, failureCode: "usage-unsettled" })).toEqual({ phase: "work", step: "executing", cause: "usage-unsettled", attempt: 2 });
+      expect(readRunDiagnosis(h.store, { ...run, savedSource: undefined, failureCode: null })).toEqual({ phase: "work", step: "executing", cause: "unknown", attempt: 2 });
+    } finally { await h.dispose(); }
+  });
+});

@@ -480,10 +480,17 @@ export const en = {
     },
     activity: {
       region: "Recent activity of {{runId}}",
-      heading: "Recent activity",
+      heading: "Recent activity · newest window, oldest to newest",
       none: "no activity recorded yet",
       refused: "activity refused · {{code}}",
       phase: "{{step}} · attempt {{attempt}}",
+    },
+    diagnosis: {
+      phaseLabel: "Phase: {{phase}}", stepLabel: "step: {{step}}", attempt: "attempt {{attempt}}", identity: "run {{runId}}",
+      phase: { estimate: "estimate", work: "work", handoff: "handoff", "single-call": "single call" },
+      step: { planning: "planning", executing: "executing", verifying: "verifying" },
+      cause: { "execution-format-invalid": "Execution output could not be decoded", "execution-format-ambiguous-or-hidden": "Execution output was ambiguous or hidden", "usage-unsettled": "Usage is unsettled", unknown: "Cause unknown" },
+      next: { "execution-format-invalid": "Check saved-result eligibility below and review evidence", "execution-format-ambiguous-or-hidden": "Check saved-result eligibility below and review evidence", "usage-unsettled": "Ask an owner to review the conservative usage settlement", unknown: "Review activity and evidence, then use an offered recovery action" },
     },
     workspace: {
       region: "Workspace mode",

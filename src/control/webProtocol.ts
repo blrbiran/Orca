@@ -1270,6 +1270,7 @@ export const runViewSchema = z
     remaining: budgetAmountSchema,
     failureCode: nonemptyString.nullable(),
     blockedReason: nonemptyString.nullable(),
+    diagnosis: z.object({ phase: z.enum(["estimate", "work", "handoff", "single-call"]), step: z.enum(["planning", "executing", "verifying"]).nullable(), cause: z.enum(["execution-format-invalid", "execution-format-ambiguous-or-hidden", "usage-unsettled", "unknown"]), attempt: safeInteger }).strict().optional(),
     // Issue fixes spec §4.2(1), (5): ccloop's own reason for the terminal it reported, and the drive record's outcome (the
     // Retry-task button keys on it). Optional on the wire like `git`; the server always gives both, null when absent.
     stopReason: nonemptyString.nullable().optional(),

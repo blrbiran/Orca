@@ -33,6 +33,7 @@ import { taskContractSchema } from "../scheduler/planFile.js";
 import { exportReasonOf } from "../control/requirementExport.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
 import { latestGroupActivityAt, readGroupActivity, readRunActivity, readLatestRunActivityByGroup } from "../control/activity.js";
+import { readRunDiagnosis, savedFormatFailureEvidence } from "./runDiagnosis.js";
 import { readGroupIntegration } from "../control/integrationScheme.js";
 import { archivedMarkOf } from "../control/archivedMark.js";
 import { workItemCategory, type WorkItemCategory } from "../control/workItemCategory.js";
@@ -757,10 +758,10 @@ function workViews(
   });
 }
 
-function artifactIdsForRun(store: ControlStore, runId: string): string[] {
+function artifactIdsForRun(store: ControlStore, runId: string, run: z.infer<typeof persistedRunSchema>): string[] {
   const row = store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
   if (!row) return blocked("run-row-missing");
-  return evidenceRefs(store, runId, String(row.group_id)).map(ref => ref.evidenceId);
+  return evidenceRefs(store, runId, String(row.group_id), run).map(ref => ref.evidenceId);
 }
 
 function profileView(binding: z.infer<typeof executionProfileAuthoritySchema>): RunViewV1["profile"] {
@@ -896,13 +897,14 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       claimOrdinal: run.claimOrdinal, providerAttemptOrdinal: run.providerAttemptOrdinal, profile,
       ...(run.tokenPolicy?{tokenRemainingStatus:tokenRemainingStatus(run.grant[bucket].tokens,run.unknown[bucket])}:{}),
       used: run.cumulative[bucket], remaining: run.remaining[bucket], failureCode: run.failureCode,
+      diagnosis: readRunDiagnosis(store, run),
       blockedReason: run.drive?.blockedReason ?? null,
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.
       stopReason: run.drive?.stopReason ?? null,
       outcome: run.drive?.outcome ?? null,
       ...settlementPreview(store, run, snapshot),
       continuable: continuableRun(store, run, snapshot),
-      evidenceIds: artifactIdsForRun(store, runId),
+      evidenceIds: artifactIdsForRun(store, runId, run),
       git: run.drive === undefined ? null : { workspaceMode: run.drive.workspaceMode, base: run.drive.base, landedCommit: run.drive.landedCommit },
       // §4.6: the lock A2 recorded. `dir` is a local path of this machine and stays out of the view; omitted for a run without skills.
       ...(run.drive?.skills == null ? {} : { skills: { profile: run.drive.skills.profile, lock: run.drive.skills.lock } }),
@@ -914,14 +916,16 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
   });
 }
 
-function checkpointViews(store: ControlStore, groupId: string): CheckpointViewV1[] {
+function checkpointViews(store: ControlStore, groupId: string, readSnapshot: GroupReadSnapshot): CheckpointViewV1[] {
   return store.db.prepare("SELECT checkpoints.id,checkpoints.run_id,checkpoints.body FROM checkpoints JOIN runs ON runs.id=checkpoints.run_id WHERE runs.group_id=? ORDER BY checkpoints.id").all(groupId).map(row => {
     const raw = parseJson(row.body, `checkpoint-invalid:${String(row.id)}`) as Record<string, unknown>;
     if (raw.checkpointId !== String(row.id) || raw.runId !== String(row.run_id) || typeof raw.taskId !== "string") return blocked("checkpoint-identity");
     const snapshot = artifactSchema.safeParse(raw.snapshot).success ? artifactSchema.parse(raw.snapshot) : null;
     const missing = Array.isArray(raw.missing) ? raw.missing : [];
     const state: CheckpointViewV1["state"] = raw.result === "complete" && snapshot && missing.length === 0 ? "complete" : raw.result === "partial" || raw.result === "failed" ? "partial" : "unknown";
-    return { checkpointId: String(row.id), taskId: raw.taskId, runId: String(row.run_id), state, snapshotHash: snapshot?.hash ?? null, evidenceIds: artifactIdsForRun(store, String(row.run_id)) };
+    const runId = String(row.run_id);
+    const run = parseSnapshot(persistedRunSchema, readSnapshot.decodeRun(runId), `run-invalid:${runId}`);
+    return { checkpointId: String(row.id), taskId: raw.taskId, runId, state, snapshotHash: snapshot?.hash ?? null, evidenceIds: artifactIdsForRun(store, runId, run) };
   });
 }
 
@@ -987,7 +991,7 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     agents: { reconcile: snapshot?.agents.reconcile ?? null },
     estimates: estimates.views,
     runs: runViews(store, groupId, archived.graphVersion, proposal, readSnapshot),
-    checkpoints: checkpointViews(store, groupId),
+    checkpoints: checkpointViews(store, groupId, readSnapshot),
     handoffRequests: handoffViews(store, groupId, readSnapshot),
     stop: stopView(store, groupId, body.stopped),
     recoveryBlockers: blockers,
@@ -1041,7 +1045,7 @@ function artifactById(store: ControlStore, evidenceId: string, kind: string): Ev
   return { evidenceId, kind, sha256: String(row.hash) };
 }
 
-function evidenceRefs(store: ControlStore, runId: string, groupId: string): EvidenceRef[] {
+function evidenceRefs(store: ControlStore, runId: string, groupId: string, run: z.infer<typeof persistedRunSchema>): EvidenceRef[] {
   const refs = new Map<string, EvidenceRef>();
   const remember = (ref: EvidenceRef): void => {
     const prior = refs.get(ref.evidenceId);
@@ -1057,6 +1061,8 @@ function evidenceRefs(store: ControlStore, runId: string, groupId: string): Evid
     if (!parsed.success) return blocked("evidence-reference-invalid");
     remember({ evidenceId: parsed.data.artifactId, kind, sha256: parsed.data.hash });
   };
+  if (run.runId !== runId || run.groupId !== groupId) return blocked("run-evidence-owner");
+  for (const { kind, ref } of savedFormatFailureEvidence(store, run)?.refs ?? []) add(ref, kind, true);
   for (const row of store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(runId)) {
     add((parseJson(row.body, "usage-event-invalid") as { source?: unknown }).source, "usage", true);
   }
@@ -1105,8 +1111,10 @@ export async function readRunEvidence(store: ControlStore, runId: string): Promi
   const groupId = String(row.group_id);
   const proposal = readBudgetProposal(store, groupId);
   const archived = readArchivedPlan(store, groupId);
-  runViews(store, groupId, archived.graphVersion, proposal, readGroupSnapshot(store, groupId));
-  const entries = await Promise.all(evidenceRefs(store, runId, groupId).map(async ref => {
+  const snapshot = readGroupSnapshot(store, groupId);
+  runViews(store, groupId, archived.graphVersion, proposal, snapshot);
+  const run = parseSnapshot(persistedRunSchema, snapshot.decodeRun(runId), `run-invalid:${runId}`);
+  const entries = await Promise.all(evidenceRefs(store, runId, groupId, run).map(async ref => {
     let bytes: Buffer;
     try { bytes = await readArtifact(store, { artifactId: ref.evidenceId, hash: ref.sha256 }); }
     catch (error) {
