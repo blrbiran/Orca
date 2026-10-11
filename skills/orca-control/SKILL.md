@@ -24,9 +24,10 @@ it into a draft task group. Read the returned state rather than infer success fr
 1. Read `config`, `summary` and `recovery`. Choose a concrete registered repository; never guess a filesystem path.
 2. Open a requirement only with a single-call capable agent (the pinned Codex adapter lacks that capability), or import
    a registered plan. Read the group/requirement before each edit; use its current `commandRevision`.
-3. Review task goals, acceptance, limits, optional token policy, workspace and integration. Choose effective worker,
-   estimator, handoff and goal-review agents before confirmation. Confirm the task plan with real profile/selection
-   hashes from the reads, then send `groups/<id>/start` at the new revision. Confirmation and start are separate.
+3. Review task goals, acceptance, limits, optional token policy, workspace and integration. Check the effective worker,
+   estimator and reconcile Agent selections, plus worker, handoff and goal-review profile bindings. Confirm the task
+   plan with real profile/selection hashes from the reads, then send `groups/<id>/start` at the new revision.
+   Confirmation and start are separate.
 4. Poll `groups/<id>` every 30–60 seconds. The driver schedules dependencies within a started group automatically.
 5. On failure, read `groups/<id>`, `runs/<id>/activity`, `runs/<id>/evidence` and, for a saved execution failure,
    `runs/<id>/saved-result-eligibility`. Report the recorded phase, typed cause when present, raw code and run/attempt
