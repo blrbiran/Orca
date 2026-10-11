@@ -1,0 +1,13 @@
+{
+  "mode": "adapter-preexit",
+  "fixture": "/private/tmp/t14.55ou0rr5/codex-integration-eo8n4L",
+  "marker": "/private/tmp/t14.55ou0rr5/codex-integration-eo8n4L/claude-marker",
+  "outcome": {
+    "error": {
+      "name": "ClaudePhaseAborted",
+      "message": "claude-aborted: /private/tmp/t14.55ou0rr5/codex-integration-eo8n4L/run/claude/1/execute/call-WVAuP0",
+      "observedTokens": 1109,
+      "evidenceDir": "/private/tmp/t14.55ou0rr5/codex-integration-eo8n4L/run/claude/1/execute/call-WVAuP0"
+    }
+  }
+}

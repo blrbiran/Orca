@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+  "command": [
+    "npm",
+    "run",
+    "build"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 4.857154130935669,
+  "log": "/private/tmp/orca-followup-runs/t14-claude-readiness-build/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "84a998e8db7fa95eeb257653bdfc9bba6ed36f1f3541272aafda4aa2cd52c5e5",
+  "sourceFiles": 248
+}

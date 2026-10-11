@@ -1,0 +1,19 @@
+{"role":"fake","pid":25352,"t":"3415109621357750","event":"answered-marker","marker":"/private/tmp/t14.40a57kbr/codex-integration-ABIhLx/claude-marker"}
+{"role":"fake","pid":25352,"t":"3415109621483208","event":"fake-exit","code":0}
+{"role":"probe","pid":25262,"t":"3415109622967833","event":"caller-marker-observed","fake":25352}
+{"role":"runner","pid":25338,"t":"3415109623813083","event":"inner-exit","child":25352,"code":0,"signal":null}
+{"role":"probe","pid":25262,"t":"3415109623972333","event":"caller-observed-1109"}
+{"role":"probe","pid":25262,"t":"3415109624030166","event":"caller-abort"}
+{"role":"adapter","pid":25262,"t":"3415109624258333","event":"adapter-stop","reason":"aborted","done":false,"code":null,"signal":null}
+{"role":"adapter","pid":25262,"t":"3415109624329291","event":"group-kill","child":25338,"signal":"SIGTERM","reason":"aborted"}
+{"role":"runner","pid":25338,"t":"3415109624484000","event":"interrupt-enter","signal":"SIGTERM"}
+{"role":"runner","pid":25338,"t":"3415109624552791","event":"interrupt-snapshot","child":25352,"childHadExited":true,"exitCode":0,"signalCode":null}
+{"role":"runner","pid":25338,"t":"3415109624807666","event":"inner-close","child":25352,"code":0,"signal":null}
+{"role":"runner","pid":25338,"t":"3415109624890166","event":"interrupt-after-terminate","childHadExited":true,"exitCode":0,"signalCode":null}
+{"role":"runner","pid":25338,"t":"3415109624930541","event":"main-run-resolved"}
+{"role":"runner","pid":25338,"t":"3415109625173916","event":"stdout-write","payload":"{\"changedFiles\":[\"answer.txt\"],\"diffPatch\":\"fixture patch\",\"commandOutputs\":[\"changed answer\"],\"stdoutStderrLog\":\"fixture execution\",\"usageEvidence\":{\"usageStatus\":\"present\",\"fields\":{\"input_tokens\":{\"status\":\"finite\",\"value\":12},\"inputTokens\":{\"status\":\"absent\"},\"output_tokens\":{\"status\":\"finite\",\"value\":3},\"outputTokens\":{\"status\":\"absent\"}},\"cacheFields\":{\"cache_creation_input_tokens\":{\"status\":\"absent\"},\"cache_read_input_tokens\":{\"status\":\"absent\"}},\"selectedInputField\":\"input_tokens\",\"selectedOutputField\":\"output_tokens\",\"normalizedTotal\":15},\"tokenUsage\":15}","stack":"Error\n    at writeJsonToStdout (file:///private/tmp/ccloop-task14-claude-diagnostic-20261011/scripts/claude-phase-runner.mjs:275:48)\n    at main (file:///private/tmp/ccloop-task14-claude-diagnostic-20261011/scripts/claude-phase-runner.mjs:665:11)"}
+{"role":"runner","pid":25338,"t":"3415109625659458","event":"stdout-write-callback","error":null}
+{"role":"adapter","pid":25262,"t":"3415109628733750","event":"runner-exit","child":25338,"code":0,"signal":null}
+{"role":"adapter","pid":25262,"t":"3415109628916041","event":"runner-close","code":0,"signal":null}
+{"role":"adapter","pid":25262,"t":"3415109628985250","event":"group-kill","child":25338,"signal":"SIGKILL","reason":"aborted"}
+{"role":"adapter","pid":25262,"t":"3415109629219000","event":"adapter-persist","reason":"aborted","code":0,"signal":null,"stdout":"{\"changedFiles\":[\"answer.txt\"],\"diffPatch\":\"fixture patch\",\"commandOutputs\":[\"changed answer\"],\"stdoutStderrLog\":\"fixture execution\",\"usageEvidence\":{\"usageStatus\":\"present\",\"fields\":{\"input_tokens\":{\"status\":\"finite\",\"value\":12},\"inputTokens\":{\"status\":\"absent\"},\"output_tokens\":{\"status\":\"finite\",\"value\":3},\"outputTokens\":{\"status\":\"absent\"}},\"cacheFields\":{\"cache_creation_input_tokens\":{\"status\":\"absent\"},\"cache_read_input_tokens\":{\"status\":\"absent\"}},\"selectedInputField\":\"input_tokens\",\"selectedOutputField\":\"output_tokens\",\"normalizedTotal\":15},\"tokenUsage\":15}","evidenceDir":"/private/tmp/t14.40a57kbr/codex-integration-ABIhLx/run/claude/1/execute/call-XfrF0R"}

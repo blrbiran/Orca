@@ -1,0 +1,17 @@
+
+> ccloop@0.1.0 test
+> vitest run tests/runtime/claude/claudePhaseRunner.test.ts tests/runtime/claude/claudeAgentAdapter.test.ts --testNamePattern=waits for close before interrupting|a result written after a stop that already carries tokenUsage keeps it --maxWorkers=1 --minWorkers=1 --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t14-claude-baseline-process/tests.json
+
+
+ RUN  v2.1.9 /private/tmp/ccloop-task14-claude-diagnostic-20261011
+
+ ✓ tests/runtime/claude/claudePhaseRunner.test.ts (24 tests | 23 skipped) 793ms
+   ✓ claude phase runner > waits for close before interrupting a close-pending successful execute 788ms
+ ✓ tests/runtime/claude/claudeAgentAdapter.test.ts (24 tests | 23 skipped) 264ms
+
+ Test Files  2 passed (2)
+      Tests  2 passed | 46 skipped (48)
+   Start at  08:57:01
+   Duration  1.52s (transform 107ms, setup 18ms, collect 129ms, tests 1.06s, environment 0ms, prepare 72ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t14-claude-baseline-process/tests.json

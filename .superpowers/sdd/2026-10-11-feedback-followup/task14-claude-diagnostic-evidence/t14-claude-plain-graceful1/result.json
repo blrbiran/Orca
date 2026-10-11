@@ -1,0 +1,15 @@
+{
+  "repo": "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+  "command": [
+    "python3",
+    "/private/tmp/task14-launch.py",
+    "t14-claude-plain-graceful1",
+    "runner-graceful"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 0.9525558948516846,
+  "log": "/private/tmp/orca-followup-runs/t14-claude-plain-graceful1/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "3180df7a54ca8eef499d432821707b5e39af1f95842efe9d17f5c9440170411d",
+  "sourceFiles": 248
+}

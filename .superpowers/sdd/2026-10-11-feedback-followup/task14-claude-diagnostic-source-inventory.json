@@ -1,0 +1,65 @@
+[
+  {
+    "path": "scripts/claude-phase-runner.mjs",
+    "baselineSHA256": "9dc19aa7f32b03c07366bc9d1430bf0dd1619399268192e6088f462b26e87b59",
+    "historicalSHA256": "9dc19aa7f32b03c07366bc9d1430bf0dd1619399268192e6088f462b26e87b59",
+    "identicalToHistorical": true,
+    "currentSHA256": "9dc19aa7f32b03c07366bc9d1430bf0dd1619399268192e6088f462b26e87b59"
+  },
+  {
+    "path": "scripts/claude-stream.mjs",
+    "baselineSHA256": "df0fb25bcd96b49f80c793960126cca1e3bdb9cbf0573db580b9a4097e9a185c",
+    "historicalSHA256": "df0fb25bcd96b49f80c793960126cca1e3bdb9cbf0573db580b9a4097e9a185c",
+    "identicalToHistorical": true,
+    "currentSHA256": "df0fb25bcd96b49f80c793960126cca1e3bdb9cbf0573db580b9a4097e9a185c"
+  },
+  {
+    "path": "src/runtime/claude/claudeAgentAdapter.ts",
+    "baselineSHA256": "9152b7babc1bd8af743a84f056f6c757384f9a4dad206d8fd5a8fe591a6ff695",
+    "historicalSHA256": "9152b7babc1bd8af743a84f056f6c757384f9a4dad206d8fd5a8fe591a6ff695",
+    "identicalToHistorical": true,
+    "currentSHA256": "ad475569caedfb4716e36a159e0682b9517da31985e24a3981f81d8903d1e076"
+  },
+  {
+    "path": "src/runtime/taskResult.ts",
+    "baselineSHA256": "1437f3784c137c8a75544035eb94fa81e59ac5bb1226dfdcb90939e2124d3f3b",
+    "historicalSHA256": "1437f3784c137c8a75544035eb94fa81e59ac5bb1226dfdcb90939e2124d3f3b",
+    "identicalToHistorical": true,
+    "currentSHA256": "1437f3784c137c8a75544035eb94fa81e59ac5bb1226dfdcb90939e2124d3f3b"
+  },
+  {
+    "path": "tests/runtime/claude/claudePhaseRunner.test.ts",
+    "baselineSHA256": "872b7ff15d5d270d221bc949d809e3149c93cfda42b718af02c7b705a9cbc07b",
+    "historicalSHA256": "872b7ff15d5d270d221bc949d809e3149c93cfda42b718af02c7b705a9cbc07b",
+    "identicalToHistorical": true,
+    "currentSHA256": "872b7ff15d5d270d221bc949d809e3149c93cfda42b718af02c7b705a9cbc07b"
+  },
+  {
+    "path": "tests/runtime/claude/claudeAgentAdapter.test.ts",
+    "baselineSHA256": "d695a2358bc5cd8d680c20f81470b9e9e9c9d6dd4b114ba0525f9b25bb5b6913",
+    "historicalSHA256": "d695a2358bc5cd8d680c20f81470b9e9e9c9d6dd4b114ba0525f9b25bb5b6913",
+    "identicalToHistorical": true,
+    "currentSHA256": "d695a2358bc5cd8d680c20f81470b9e9e9c9d6dd4b114ba0525f9b25bb5b6913"
+  },
+  {
+    "path": "tests/fixtures/fake-claude-cli.mjs",
+    "baselineSHA256": "0dbe92d638255b2a6f9e76740cfeb720239a4ad835ea023e77fd6693792dd732",
+    "historicalSHA256": "0dbe92d638255b2a6f9e76740cfeb720239a4ad835ea023e77fd6693792dd732",
+    "identicalToHistorical": true,
+    "currentSHA256": "0cb42fa09979793a750a9aa53f2d837237961a95823af00305ccff5751652c58"
+  },
+  {
+    "path": "tests/setup/scopeTmpdir.ts",
+    "baselineSHA256": "43d43668d0b4bec3d9b45fb1cb4645d2a25b6dce21c4f3757d820945db967d0d",
+    "historicalSHA256": "43d43668d0b4bec3d9b45fb1cb4645d2a25b6dce21c4f3757d820945db967d0d",
+    "identicalToHistorical": true,
+    "currentSHA256": "43d43668d0b4bec3d9b45fb1cb4645d2a25b6dce21c4f3757d820945db967d0d"
+  },
+  {
+    "path": "docs/superpowers/specs/2026-10-01-claude-adapter-consolidation-step1-design.md",
+    "baselineSHA256": "39fd65abab3d7d4c738520f58e119fbdf0e93508373f5b5c016ab91251daa117",
+    "historicalSHA256": "39fd65abab3d7d4c738520f58e119fbdf0e93508373f5b5c016ab91251daa117",
+    "identicalToHistorical": true,
+    "currentSHA256": "39fd65abab3d7d4c738520f58e119fbdf0e93508373f5b5c016ab91251daa117"
+  }
+]

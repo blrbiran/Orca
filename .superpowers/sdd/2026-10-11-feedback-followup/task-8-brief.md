@@ -1,0 +1,8 @@
+### Task 8: Primary Agent role inheritance and preparation
+
+**Files:** agentSelection/agentPreferences/agentFreeze/panel controlViews/estimator/planImport/requirementCommands/webProtocol/panel views; create shared `estimatorCompatibility.ts`; web AgentSettings/AgentFields/AgentSelectionEditor/RequirementsPanel/controlTypes/locales; selection/freeze/import/requirements/web tests.
+**Interfaces:** existing preference storage; exact amended layer decision table, `group-primary` source, new v2 hash domain onlynewfreeze; `estimatorCompatibility(resolution,mode):{compatible:boolean,reasonCodes:string[]}` reused required single-call actions. UI validation returns typed SelectionFieldError and retains unsupported draft.
+- [ ] Step1: RED nooverrideB/B-m, operatorA/model-onlyA-m plus primaryB staysA/A-m, groupmodel-onlyB-x, explicitC, nullmask/switchagent no crossmodel; oldfreeze bytes/hash same.
+- [ ] Step2: Implement backend layer/priorities/provenance and capability predicate from actual resolution; no-estimate import/confirm/run without estimator, required estimate/requirement local reason; no alternateAgent probe. No kind==='codex' capability shortcut.
+- [ ] Step3: Primary agent/model/context together, collapsed role overrides, actual inherit source/value, missingAgent actionable, supported context options, invalid draft unsaved. Preserve absent perAgent/preferences and explicit roles. Keep historical low-level helper drop contract if existing tests require, block via validated submission.
+- [ ] Step4: Full focused root selection/import + Web/type/build, mutants crossAgentfield/compatibility/invaliddraft/freeze; commit `feat(agents): share primary selection with compatible role overrides`, review.

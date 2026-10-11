@@ -1,0 +1,38 @@
+[
+  {
+    "original": "/private/tmp/orca-followup-runs/t5-final3-full/output.log",
+    "preserved": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-original/t5-final3-full-output.log",
+    "bytes": 79807,
+    "sha256": "fc7eb8181e17705d7d47058e08882f65f2fdc45387989981877aacd212daeba8"
+  },
+  {
+    "original": "/private/tmp/orca-followup-runs/t5-final3-full/tests.json",
+    "preserved": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-original/t5-final3-full-tests.json",
+    "bytes": 524895,
+    "sha256": "a06c6a8910de320a2b92bd50e71d3ee02c31a8a71e08a48bf2c2cbe071ad48f0"
+  },
+  {
+    "original": "/private/tmp/orca-followup-runs/t5-final3-full/result.json",
+    "preserved": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-original/t5-final3-full-result.json",
+    "bytes": 626,
+    "sha256": "75de84ee41eee0262243af7554a00e05e7f0063c253a3c92fc296e3808183964"
+  },
+  {
+    "original": "/private/tmp/orca-followup-runs/t5-final3-full-recheck/output.log",
+    "preserved": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-original/t5-final3-full-recheck-output.log",
+    "bytes": 78520,
+    "sha256": "82155f4f0393cf60a8ae9b0932f7aa4266261ebaf2a34ebdbf8e14eb36ee63c8"
+  },
+  {
+    "original": "/private/tmp/orca-followup-runs/t5-final3-full-recheck/tests.json",
+    "preserved": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-original/t5-final3-full-recheck-tests.json",
+    "bytes": 524801,
+    "sha256": "f0ce893a2347689658b4896d63cca60dbebcc6962c86e95083d31fd0d39c8f4d"
+  },
+  {
+    "original": "/private/tmp/orca-followup-runs/t5-final3-full-recheck/result.json",
+    "preserved": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-original/t5-final3-full-recheck-result.json",
+    "bytes": 643,
+    "sha256": "11f6bcdff23abc0cc2dee2dc9d456eb6df76a7db0f59b80b1bc5bf1aa2a76858"
+  }
+]

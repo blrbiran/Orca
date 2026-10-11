@@ -1,0 +1,21 @@
+{
+  "reason": "aborted",
+  "code": 0,
+  "signal": null,
+  "evidenceDir": "/private/tmp/t14.fwnr3tu3/codex-integration-mJF08s/run/claude/1/execute/call-eCNTi9",
+  "runner": "/private/tmp/ccloop-task14-claude-diagnostic-20261011/scripts/claude-phase-runner.mjs",
+  "claudeCommand": [
+    "/Users/biran/.nvm/versions/node/v22.13.1/bin/node",
+    "/private/tmp/ccloop-task14-claude-diagnostic-20261011/tests/fixtures/fake-claude-cli.mjs",
+    "answer-then-linger",
+    "/private/tmp/t14.fwnr3tu3/codex-integration-mJF08s/claude-marker"
+  ],
+  "extraArgs": [
+    "--model",
+    "claude-opus-5-5"
+  ],
+  "configDir": null,
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "observedUsagePath": "/private/tmp/t14.fwnr3tu3/codex-integration-mJF08s/run/claude/1/execute/call-eCNTi9/observed-usage.json"
+}

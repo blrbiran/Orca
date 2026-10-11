@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+  "command": [
+    "/bin/zsh",
+    "-c",
+    "task_tmp=$(mktemp -d /private/tmp/t14r.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec npm test -- tests/runtime/claude/task14Diagnostic.test.ts --maxWorkers=1 --minWorkers=1 --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t14-claude-regression-red1/tests.json"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 1.8844468593597412,
+  "log": "/private/tmp/orca-followup-runs/t14-claude-regression-red1/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "1835abf99219d3d7b6ff046b20a8137d4188a06d96d79589540f4141600d9741",
+  "sourceFiles": 249
+}

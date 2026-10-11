@@ -1,0 +1,18 @@
+{"role":"fake","pid":25494,"t":"3415110419866625","event":"answered-marker","marker":"/private/tmp/t14.55ou0rr5/codex-integration-eo8n4L/claude-marker"}
+{"role":"probe","pid":25406,"t":"3415110421089583","event":"caller-marker-observed","fake":25494}
+{"role":"probe","pid":25406,"t":"3415110422295083","event":"caller-observed-1109"}
+{"role":"probe","pid":25406,"t":"3415110422366916","event":"caller-abort"}
+{"role":"adapter","pid":25406,"t":"3415110422593041","event":"adapter-stop","reason":"aborted","done":false,"code":null,"signal":null}
+{"role":"adapter","pid":25406,"t":"3415110422661083","event":"group-kill","child":25480,"signal":"SIGTERM","reason":"aborted"}
+{"role":"runner","pid":25480,"t":"3415110422900416","event":"interrupt-enter","signal":"SIGTERM"}
+{"role":"runner","pid":25480,"t":"3415110422986625","event":"interrupt-snapshot","child":25494,"childHadExited":false,"exitCode":null,"signalCode":null}
+{"role":"runner","pid":25480,"t":"3415110423105208","event":"inner-kill","child":25494,"signal":"SIGTERM","exitCode":null,"signalCode":null}
+{"role":"runner","pid":25480,"t":"3415110423345625","event":"inner-kill-result","result":true}
+{"role":"runner","pid":25480,"t":"3415110424393250","event":"inner-exit","child":25494,"code":null,"signal":"SIGTERM"}
+{"role":"runner","pid":25480,"t":"3415110424549125","event":"inner-close","child":25494,"code":null,"signal":"SIGTERM"}
+{"role":"runner","pid":25480,"t":"3415110424692250","event":"main-catch","interruptHandled":true,"error":"Error: claude exited with code null\nstdout: {\"type\":\"system\",\"subtype\":\"init\",\"model\":\"claude-opus-5-5\"}\n{\"type\":\"stream_event\",\"event\":{\"type\":\"message_start\",\"message\":{\"id\":\"msg_fake_1\",\"usage\":{\"input_tokens\":2,\"cache_creation_input_tokens\":100,\"cache_read_input_tokens\":1000,\"output_tokens\":1}}}}\n{\"type\":\"assistant\",\"message\":{\"id\":\"msg_fake_1\",\"usage\":{\"input_tokens\":2,\"cache_creation_input_tokens\":100,\"cache_read_input_tokens\":1000,\"output_tokens\":1},\"content\":[]}}\n{\"type\":\"stream_event\",\"event\":{\"type\":\"message_delta\",\"usage\":{\"input_tokens\":2,\"cache_creation_input_tokens\":100,\"cache_read_input_tokens\":1000,\"output_tokens\":7}}}\n{\"type\":\"stream_event\",\"event\":{\"type\":\"message_stop\"}}\n{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"structured_output\":{\"changedFiles\":[\"answer.txt\"],\"diffPatch\":\"fixture patch\",\"commandOutputs\":[\"changed answer\"],\"stdoutStderrLog\":\"fixture execution\"},\"usage\":{\"input_tokens\":12,\"output_tokens\":3}}\n"}
+{"role":"runner","pid":25480,"t":"3415110424744958","event":"interrupt-after-terminate","childHadExited":false,"exitCode":null,"signalCode":"SIGTERM"}
+{"role":"adapter","pid":25406,"t":"3415110455457958","event":"runner-exit","child":25480,"code":1,"signal":null}
+{"role":"adapter","pid":25406,"t":"3415110455709291","event":"runner-close","code":1,"signal":null}
+{"role":"adapter","pid":25406,"t":"3415110455775125","event":"group-kill","child":25480,"signal":"SIGKILL","reason":"aborted"}
+{"role":"adapter","pid":25406,"t":"3415110455945166","event":"adapter-persist","reason":"aborted","code":1,"signal":null,"stdout":"","evidenceDir":"/private/tmp/t14.55ou0rr5/codex-integration-eo8n4L/run/claude/1/execute/call-WVAuP0"}

@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+  "command": [
+    "/bin/zsh",
+    "-c",
+    "task_tmp=$(mktemp -d /private/tmp/t14b.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec npm test -- tests/runtime/claude/claudePhaseRunner.test.ts tests/runtime/claude/claudeAgentAdapter.test.ts --maxWorkers=1 --minWorkers=1 --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t14-claude-baseline/tests.json"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 137.05963110923767,
+  "log": "/private/tmp/orca-followup-runs/t14-claude-baseline/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "84a998e8db7fa95eeb257653bdfc9bba6ed36f1f3541272aafda4aa2cd52c5e5",
+  "sourceFiles": 248
+}

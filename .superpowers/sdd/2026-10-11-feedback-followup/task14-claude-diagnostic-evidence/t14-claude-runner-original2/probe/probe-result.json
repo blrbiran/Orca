@@ -1,0 +1,50 @@
+{
+  "mode": "runner-original",
+  "fixture": "/private/tmp/t14.70v0eepl/codex-integration-WQnwey",
+  "result": {
+    "code": 0,
+    "signal": null,
+    "stdout": "{\"changedFiles\":[\"inner-success.txt\"],\"diffPatch\":\"diff --git a/inner-success.txt b/inner-success.txt\",\"commandOutputs\":[\"inner-success\"],\"stdoutStderrLog\":\"ok\",\"usageEvidence\":{\"usageStatus\":\"absent\",\"fields\":{\"input_tokens\":{\"status\":\"absent\"},\"inputTokens\":{\"status\":\"absent\"},\"output_tokens\":{\"status\":\"absent\"},\"outputTokens\":{\"status\":\"absent\"}},\"cacheFields\":{\"cache_creation_input_tokens\":{\"status\":\"absent\"},\"cache_read_input_tokens\":{\"status\":\"absent\"}},\"selectedInputField\":null,\"selectedOutputField\":null,\"normalizedTotal\":null}}",
+    "stderr": ""
+  },
+  "decoded": {
+    "parsed": {
+      "changedFiles": [
+        "inner-success.txt"
+      ],
+      "diffPatch": "diff --git a/inner-success.txt b/inner-success.txt",
+      "commandOutputs": [
+        "inner-success"
+      ],
+      "stdoutStderrLog": "ok",
+      "usageEvidence": {
+        "usageStatus": "absent",
+        "fields": {
+          "input_tokens": {
+            "status": "absent"
+          },
+          "inputTokens": {
+            "status": "absent"
+          },
+          "output_tokens": {
+            "status": "absent"
+          },
+          "outputTokens": {
+            "status": "absent"
+          }
+        },
+        "cacheFields": {
+          "cache_creation_input_tokens": {
+            "status": "absent"
+          },
+          "cache_read_input_tokens": {
+            "status": "absent"
+          }
+        },
+        "selectedInputField": null,
+        "selectedOutputField": null,
+        "normalizedTotal": null
+      }
+    }
+  }
+}

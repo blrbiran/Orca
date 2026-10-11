@@ -1,0 +1,686 @@
+
+> ccloop@0.1.0 test
+> vitest run tests/runtime/claude/claudePhaseRunner.test.ts tests/runtime/claude/claudeAgentAdapter.test.ts --maxWorkers=1 --minWorkers=1 --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t14-claude-baseline/tests.json
+
+
+ RUN  v2.1.9 /private/tmp/ccloop-task14-claude-diagnostic-20261011
+
+ ✓ tests/runtime/claude/claudePhaseRunner.test.ts (24 tests) 13907ms
+   ✓ claude phase runner > reports token usage for snake-only usage envelope 760ms
+   ✓ claude phase runner > reports token usage for camel-only usage envelope 549ms
+   ✓ claude phase runner > reports token usage for duplicate camel and snake aliases without double counting 544ms
+   ✓ claude phase runner > reports token usage for mixed aliases when only snake input and camel output are present 566ms
+   ✓ claude phase runner > reports usage evidence when missing usage keeps evidence absent 532ms
+   ✓ claude phase runner > reports usage evidence when null usage is recorded as invalid 563ms
+   ✓ claude phase runner > reports usage evidence when all usage aliases have invalid types 526ms
+   ✓ claude phase runner > reports usage evidence when invalid snake input type keeps finite output token usage 528ms
+   ✓ claude phase runner > reports usage evidence when negative and fractional values preserve current semantics 556ms
+   ✓ claude phase runner > reports usage evidence when zero total is not reported 532ms
+   ✓ claude phase runner > reports usage evidence when negative total is not reported 521ms
+   ✓ claude phase runner > falls back from a non-finite snake alias to a finite camel alias 549ms
+   ✓ claude phase runner > ignores a non-finite alias when no finite fallback exists 529ms
+   ✓ claude phase runner > omits token usage when finite selected fields overflow in sum 533ms
+   ✓ claude phase runner > terminates the inner Claude process when plan is interrupted 543ms
+   ✓ claude phase runner > terminates the inner Claude process when execute is interrupted 2158ms
+   ✓ claude phase runner > terminates the inner Claude process when verify is interrupted 339ms
+   ✓ claude phase runner > includes brand-new untracked files in partial execute diff recovery 758ms
+   ✓ claude phase runner > delivers a partial larger than one pipe chunk whole after SIGTERM 681ms
+   ✓ claude phase runner > includes both staged and unstaged edits in partial execute diff recovery 459ms
+   ✓ claude phase runner > waits for close before interrupting a close-pending successful execute 705ms
+   ✓ claude phase runner > returns repo-relative target paths for renamed and quoted files 451ms
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts (24 tests | 21 failed) 121983ms
+   × ClaudeAgentAdapter (Orca agent selection, spec §4.7) > passes the selected model to the claude CLI and returns the structured answer with its usage 1649ms
+     → claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-ALVieF/run/claude/1/plan/call-B5yO2S
+   × ClaudeAgentAdapter (Orca agent selection, spec §4.7) > selects the 1M context window by the [1m] model suffix 105ms
+     → claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-pQNwmq/run/claude/1/plan/call-zrTXJY
+   × ClaudeAgentAdapter (Orca agent selection, spec §4.7) > sets CLAUDE_CONFIG_DIR only when the installation names a configDir 90ms
+     → claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-CzVLAp/run/claude/1/plan/call-PAFpfj
+   × ClaudeAgentAdapter (Orca agent selection, spec §4.7) > keeps private per-call evidence and does not record the environment in request.json 91ms
+     → claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-SRsj4P/run/claude/1/plan/call-XClB4D
+   × ClaudeAgentAdapter (Orca agent selection, spec §4.7) > times out a hanging CLI by itself and leaves no process of the group behind 94ms
+     → expected [Function] to throw error matching /^claude-timeout: / but got 'claude-io-error: /private/tmp/t14b.Os…'
+   × ClaudeAgentAdapter (Orca agent selection, spec §4.7) > caps the timeout by the remaining runtime budget, not just the installation's timeoutMs 91ms
+     → expected [Function] to throw error matching /^claude-timeout: / but got 'claude-io-error: /private/tmp/t14b.Os…'
+   × ClaudeAgentAdapter (Orca agent selection, spec §4.7) > registers the runner's process group, so the stop proof refuses while that group is alive 5108ms
+     → Matcher did not succeed in 5000ms
+   × ClaudeAgentAdapter (Orca agent selection, spec §4.7) > writes nothing to the runner until the registration callback has returned 8111ms
+     → Matcher did not succeed in 8000ms
+   × ClaudeAgentAdapter (Orca agent selection, spec §4.7) > kills the runner's grandchild within killGraceMs of an abort 5118ms
+     → Matcher did not succeed in 5000ms
+   × ClaudeAgentAdapter, usage observed before an abort (Orca claude stream usage) > N2: a phase aborted after a closed message reports that message's final usage as a lower bound 10118ms
+     → Matcher did not succeed in 10000ms
+   × ClaudeAgentAdapter, usage observed before an abort (Orca claude stream usage) > N3: a phase aborted inside a message reports that message's opening snapshot and says a message was open 10116ms
+     → Matcher did not succeed in 10000ms
+   × ClaudeAgentAdapter, usage observed before an abort (Orca claude stream usage) > N4: an aborted execute that observed usage throws it instead of answering null 10157ms
+     → Matcher did not succeed in 10000ms
+   × ClaudeAgentAdapter, usage observed before an abort (Orca claude stream usage) > N9b: the observation lands in the call's evidence directory and nothing new appears in the worktree 10132ms
+     → Matcher did not succeed in 10000ms
+   × ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > rewritten (R5) from SubprocessClaudeAdapter's large-partial criterion: an aborted execute with a changed worktree returns the runner's partial 10115ms
+     → Matcher did not succeed in 10000ms
+   × ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > a returned partial carries the usage observed before the stop 10106ms
+     → Matcher did not succeed in 10000ms
+   × ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > an execute stopped by the adapter's own timeout returns the partial 118ms
+     → claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-qXSFLL/run/claude/1/execute/call-NjTOVM
+   × ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > the partial still arrives when the recovery window is longer than killGraceMs 10119ms
+     → Matcher did not succeed in 10000ms
+   × ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > rewritten (R5) from SubprocessClaudeAdapter's partial-outcome criterion: a runner that fails during execute returns its partial 120ms
+     → claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-SSLrRX/run/claude/1/execute/call-ByVnyb
+   × ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > a complete answer written after a stop is returned for execute 10103ms
+     → Matcher did not succeed in 10000ms
+   × ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > a result written after a stop that already carries tokenUsage keeps it 10115ms
+     → Matcher did not succeed in 10000ms
+   × ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > a plan stopped after its answer still throws ClaudePhaseAborted 10113ms
+     → Matcher did not succeed in 10000ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 21 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter (Orca agent selection, spec §4.7) > passes the selected model to the claude CLI and returns the structured answer with its usage
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-ALVieF/run/claude/1/plan/call-B5yO2S
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:63:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter (Orca agent selection, spec §4.7) > selects the 1M context window by the [1m] model suffix
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-pQNwmq/run/claude/1/plan/call-zrTXJY
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:76:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter (Orca agent selection, spec §4.7) > sets CLAUDE_CONFIG_DIR only when the installation names a configDir
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-CzVLAp/run/claude/1/plan/call-PAFpfj
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:93:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter (Orca agent selection, spec §4.7) > keeps private per-call evidence and does not record the environment in request.json
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-SRsj4P/run/claude/1/plan/call-XClB4D
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:102:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter (Orca agent selection, spec §4.7) > times out a hanging CLI by itself and leaves no process of the group behind
+AssertionError: expected [Function] to throw error matching /^claude-timeout: / but got 'claude-io-error: /private/tmp/t14b.Os…'
+
+- Expected: 
+/^claude-timeout: /
+
++ Received: 
+"claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-b8M1bz/run/claude/1/plan/call-4Fv8Uh"
+
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:120:5
+    118|   it("times out a hanging CLI by itself and leaves no process of the g…
+    119|     const f = await fixture("hang", {}, { timeoutMs: 500 });
+    120|     await expect(new ClaudeAgentAdapter(f.config).plan(f.context)).rej…
+       |     ^
+    121|     const { pid } = JSON.parse(await readFile(f.marker, "utf8"));
+    122|     await expect.poll(() => alive(pid), { timeout: 2000 }).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter (Orca agent selection, spec §4.7) > caps the timeout by the remaining runtime budget, not just the installation's timeoutMs
+AssertionError: expected [Function] to throw error matching /^claude-timeout: / but got 'claude-io-error: /private/tmp/t14b.Os…'
+
+- Expected: 
+/^claude-timeout: /
+
++ Received: 
+"claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-M3YolR/run/claude/1/plan/call-oxUwhl"
+
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:135:5
+    133|     };
+    134|     const startedAt = Date.now();
+    135|     await expect(new ClaudeAgentAdapter(f.config).plan(context)).rejec…
+       |     ^
+    136|     expect(Date.now() - startedAt).toBeLessThan(5000);
+    137|   }, 10_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter (Orca agent selection, spec §4.7) > registers the runner's process group, so the stop proof refuses while that group is alive
+Error: Matcher did not succeed in 5000ms
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:169:80
+    167|     };
+    168|     const running = new ClaudeAgentAdapter(f.config).plan(context);
+    169|     await expect.poll(() => existsSync(`${f.marker}.argv`), { timeout:…
+       |                                                                                ^
+    170|     await expect.poll(() => readFile(f.marker, "utf8").then(() => true…
+    171|     const registered = JSON.parse(await readFile(processesPath, "utf8"…
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter (Orca agent selection, spec §4.7) > writes nothing to the runner until the registration callback has returned
+Error: Matcher did not succeed in 8000ms
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:206:63
+    204|     };
+    205|     const running = new ClaudeAgentAdapter(f.config).plan(context);
+    206|     await expect.poll(() => beforeRelease, { timeout: 8000 }).toBeDefi…
+       |                                                               ^
+    207|     expect(beforeRelease).toEqual({ cliStarted: false, requestWritten:…
+    208|     release();
+
+Caused by: AssertionError: expected undefined to be defined
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter (Orca agent selection, spec §4.7) > kills the runner's grandchild within killGraceMs of an abort
+Error: Matcher did not succeed in 5000ms
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:219:114
+
+
+Caused by: AssertionError: expected 0 to be greater than 0
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter, usage observed before an abort (Orca claude stream usage) > N2: a phase aborted after a closed message reports that message's final usage as a lower bound
+Error: Matcher did not succeed in 10000ms
+ ❯ abortWhenObserved tests/runtime/claude/claudeAgentAdapter.test.ts:245:29
+    243|         return JSON.parse(await readFile(observed, "utf8")).openMessag…
+    244|       } catch { return false; }
+    245|     }, { timeout: 10_000 }).toBe(true);
+       |                             ^
+    246|     abort.abort();
+    247|     return { outcome: await running.then((value) => ({ value }), (erro…
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:252:41
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter, usage observed before an abort (Orca claude stream usage) > N3: a phase aborted inside a message reports that message's opening snapshot and says a message was open
+Error: Matcher did not succeed in 10000ms
+ ❯ abortWhenObserved tests/runtime/claude/claudeAgentAdapter.test.ts:245:29
+    243|         return JSON.parse(await readFile(observed, "utf8")).openMessag…
+    244|       } catch { return false; }
+    245|     }, { timeout: 10_000 }).toBe(true);
+       |                             ^
+    246|     abort.abort();
+    247|     return { outcome: await running.then((value) => ({ value }), (erro…
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:260:41
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter, usage observed before an abort (Orca claude stream usage) > N4: an aborted execute that observed usage throws it instead of answering null
+Error: Matcher did not succeed in 10000ms
+ ❯ abortWhenObserved tests/runtime/claude/claudeAgentAdapter.test.ts:245:29
+    243|         return JSON.parse(await readFile(observed, "utf8")).openMessag…
+    244|       } catch { return false; }
+    245|     }, { timeout: 10_000 }).toBe(true);
+       |                             ^
+    246|     abort.abort();
+    247|     return { outcome: await running.then((value) => ({ value }), (erro…
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:267:31
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter, usage observed before an abort (Orca claude stream usage) > N9b: the observation lands in the call's evidence directory and nothing new appears in the worktree
+Error: Matcher did not succeed in 10000ms
+ ❯ abortWhenObserved tests/runtime/claude/claudeAgentAdapter.test.ts:245:29
+    243|         return JSON.parse(await readFile(observed, "utf8")).openMessag…
+    244|       } catch { return false; }
+    245|     }, { timeout: 10_000 }).toBe(true);
+       |                             ^
+    246|     abort.abort();
+    247|     return { outcome: await running.then((value) => ({ value }), (erro…
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:275:32
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > rewritten (R5) from SubprocessClaudeAdapter's large-partial criterion: an aborted execute with a changed worktree returns the runner's partial
+Error: Matcher did not succeed in 10000ms
+ ❯ waitFor tests/runtime/claude/claudeAgentAdapter.test.ts:300:94
+    298|     contract: { ...f.context.contract, executionPolicy: { ...f.context…
+    299|   });
+    300|   const waitFor = (path: string) => expect.poll(() => existsSync(path)…
+       |                                                                                              ^
+    301| 
+    302|   it("rewritten (R5) from SubprocessClaudeAdapter's large-partial crit…
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:306:11
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > a returned partial carries the usage observed before the stop
+Error: Matcher did not succeed in 10000ms
+ ❯ waitFor tests/runtime/claude/claudeAgentAdapter.test.ts:300:94
+    298|     contract: { ...f.context.contract, executionPolicy: { ...f.context…
+    299|   });
+    300|   const waitFor = (path: string) => expect.poll(() => existsSync(path)…
+       |                                                                                              ^
+    301| 
+    302|   it("rewritten (R5) from SubprocessClaudeAdapter's large-partial crit…
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:320:11
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > an execute stopped by the adapter's own timeout returns the partial
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-qXSFLL/run/claude/1/execute/call-NjTOVM
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+ ❯ ClaudeAgentAdapter.execute src/runtime/claude/claudeAgentAdapter.ts:299:22
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:337:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > the partial still arrives when the recovery window is longer than killGraceMs
+Error: Matcher did not succeed in 10000ms
+ ❯ waitFor tests/runtime/claude/claudeAgentAdapter.test.ts:300:94
+    298|     contract: { ...f.context.contract, executionPolicy: { ...f.context…
+    299|   });
+    300|   const waitFor = (path: string) => expect.poll(() => existsSync(path)…
+       |                                                                                              ^
+    301| 
+    302|   it("rewritten (R5) from SubprocessClaudeAdapter's large-partial crit…
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:345:11
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > rewritten (R5) from SubprocessClaudeAdapter's partial-outcome criterion: a runner that fails during execute returns its partial
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-SSLrRX/run/claude/1/execute/call-ByVnyb
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+ ❯ ClaudeAgentAdapter.execute src/runtime/claude/claudeAgentAdapter.ts:299:22
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:355:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > a complete answer written after a stop is returned for execute
+Error: Matcher did not succeed in 10000ms
+ ❯ waitFor tests/runtime/claude/claudeAgentAdapter.test.ts:300:94
+    298|     contract: { ...f.context.contract, executionPolicy: { ...f.context…
+    299|   });
+    300|   const waitFor = (path: string) => expect.poll(() => existsSync(path)…
+       |                                                                                              ^
+    301| 
+    302|   it("rewritten (R5) from SubprocessClaudeAdapter's large-partial crit…
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:363:11
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > a result written after a stop that already carries tokenUsage keeps it
+Error: Matcher did not succeed in 10000ms
+ ❯ waitFor tests/runtime/claude/claudeAgentAdapter.test.ts:300:94
+    298|     contract: { ...f.context.contract, executionPolicy: { ...f.context…
+    299|   });
+    300|   const waitFor = (path: string) => expect.poll(() => existsSync(path)…
+       |                                                                                              ^
+    301| 
+    302|   it("rewritten (R5) from SubprocessClaudeAdapter's large-partial crit…
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:376:11
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/21]⎯
+
+ FAIL  tests/runtime/claude/claudeAgentAdapter.test.ts > ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > a plan stopped after its answer still throws ClaudePhaseAborted
+Error: Matcher did not succeed in 10000ms
+ ❯ waitFor tests/runtime/claude/claudeAgentAdapter.test.ts:300:94
+    298|     contract: { ...f.context.contract, executionPolicy: { ...f.context…
+    299|   });
+    300|   const waitFor = (path: string) => expect.poll(() => existsSync(path)…
+       |                                                                                              ^
+    301| 
+    302|   it("rewritten (R5) from SubprocessClaudeAdapter's large-partial crit…
+ ❯ tests/runtime/claude/claudeAgentAdapter.test.ts:392:11
+
+Caused by: AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/21]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 13 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-KIAAq0/run/claude/1/plan/call-w3XHlE
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { observedTokens: null }
+This error originated in "tests/runtime/claude/claudeAgentAdapter.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "registers the runner's process group, so the stop proof refuses while that group is alive". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-21E26z/run/claude/1/plan/call-nkGjOI
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { observedTokens: null }
+This error originated in "tests/runtime/claude/claudeAgentAdapter.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "writes nothing to the runner until the registration callback has returned". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-dLlyth/run/claude/1/execute/call-l5S2FJ
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+ ❯ ClaudeAgentAdapter.execute src/runtime/claude/claudeAgentAdapter.ts:299:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { observedTokens: null }
+This error originated in "tests/runtime/claude/claudeAgentAdapter.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "kills the runner's grandchild within killGraceMs of an abort". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-TDiEXt/run/claude/1/plan/call-HPKY20
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { observedTokens: null }
+This error originated in "tests/runtime/claude/claudeAgentAdapter.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "N2: a phase aborted after a closed message reports that message's final usage as a lower bound". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-Bdd0so/run/claude/1/plan/call-HlwVvQ
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { observedTokens: null }
+This error originated in "tests/runtime/claude/claudeAgentAdapter.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "N3: a phase aborted inside a message reports that message's opening snapshot and says a message was open". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-4B3x90/run/claude/1/execute/call-6h4ePg
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+ ❯ ClaudeAgentAdapter.execute src/runtime/claude/claudeAgentAdapter.ts:299:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { observedTokens: null }
+This error originated in "tests/runtime/claude/claudeAgentAdapter.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "N4: an aborted execute that observed usage throws it instead of answering null". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-ByZjrk/run/claude/1/plan/call-BHGwKB
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { observedTokens: null }
+This error originated in "tests/runtime/claude/claudeAgentAdapter.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "N9b: the observation lands in the call's evidence directory and nothing new appears in the worktree". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-d5qSxz/run/claude/1/execute/call-QkN3c4
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+ ❯ ClaudeAgentAdapter.execute src/runtime/claude/claudeAgentAdapter.ts:299:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { observedTokens: null }
+This error originated in "tests/runtime/claude/claudeAgentAdapter.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "rewritten (R5) from SubprocessClaudeAdapter's large-partial criterion: an aborted execute with a changed worktree returns the runner's partial". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-VDBBp0/run/claude/1/execute/call-pGAhZt
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+ ❯ ClaudeAgentAdapter.execute src/runtime/claude/claudeAgentAdapter.ts:299:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { observedTokens: null }
+This error originated in "tests/runtime/claude/claudeAgentAdapter.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "a returned partial carries the usage observed before the stop". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-HM07h6/run/claude/1/execute/call-w8AfC5
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+ ❯ ClaudeAgentAdapter.execute src/runtime/claude/claudeAgentAdapter.ts:299:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { observedTokens: null }
+This error originated in "tests/runtime/claude/claudeAgentAdapter.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "the partial still arrives when the recovery window is longer than killGraceMs". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-PP89he/run/claude/1/execute/call-Z3rLDV
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+ ❯ ClaudeAgentAdapter.execute src/runtime/claude/claudeAgentAdapter.ts:299:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { observedTokens: null }
+This error originated in "tests/runtime/claude/claudeAgentAdapter.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "a complete answer written after a stop is returned for execute". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-7oerW5/run/claude/1/execute/call-6NiM8L
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+ ❯ ClaudeAgentAdapter.execute src/runtime/claude/claudeAgentAdapter.ts:299:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { observedTokens: null }
+This error originated in "tests/runtime/claude/claudeAgentAdapter.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "a result written after a stop that already carries tokenUsage keeps it". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: claude-io-error: /private/tmp/t14b.OssgZz/ccloop-tmp-dqslIf/codex-integration-rZ3XPc/run/claude/1/plan/call-HiBDF0
+ ❯ ClaudeAgentAdapter.phase src/runtime/claude/claudeAgentAdapter.ts:266:27
+    264|       // §3.2) -- "never 0" no longer holds for the never-started answ…
+    265|       // neverStarted, which observedTokensOf answers 0 for. This erro…
+    266|       throw Object.assign(new Error(`claude-${outcome.reason}: ${outco…
+       |                           ^
+    267|         observedTokens: await readObservedTokens(join(outcome.evidence…
+    268|       });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { observedTokens: null }
+This error originated in "tests/runtime/claude/claudeAgentAdapter.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "a plan stopped after its answer still throws ClaudePhaseAborted". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  21 failed | 27 passed (48)
+     Errors  13 errors
+   Start at  08:54:24
+   Duration  136.39s (transform 128ms, setup 19ms, collect 157ms, tests 135.89s, environment 0ms, prepare 75ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t14-claude-baseline/tests.json

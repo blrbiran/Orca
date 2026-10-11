@@ -1,0 +1,1 @@
+{"schema":"ccloop-claude-observed-usage-v1","total":1109,"messages":[{"id":"msg_fake_1","state":"closed","fields":{"input_tokens":2,"cache_creation_input_tokens":100,"cache_read_input_tokens":1000,"output_tokens":7}}],"source":"stream-before-abort","lowerBound":true,"openMessage":false}

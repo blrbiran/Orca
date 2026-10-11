@@ -1,0 +1,197 @@
+[
+  {
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-graceful1",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-graceful1",
+      "runner-graceful"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-graceful2",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-graceful2",
+      "runner-graceful"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-original1",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-original1",
+      "runner-original"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-original2",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-original2",
+      "runner-original"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-original3",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-original3",
+      "runner-original"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-original4",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-original4",
+      "runner-original"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-original5",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-original5",
+      "runner-original"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-adapter-marker1",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-adapter-marker1",
+      "adapter-marker"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-adapter-marker2",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-adapter-marker2",
+      "adapter-marker"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-adapter-marker3",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-adapter-marker3",
+      "adapter-marker"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-adapter-preexit1",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-adapter-preexit1",
+      "adapter-preexit"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-adapter-exit1",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-adapter-exit1",
+      "adapter-exit"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-adapter-exit2",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-adapter-exit2",
+      "adapter-exit"
+    ],
+    "rc": 0
+  }
+]

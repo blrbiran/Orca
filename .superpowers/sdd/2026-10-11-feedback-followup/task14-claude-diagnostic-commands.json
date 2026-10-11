@@ -1,0 +1,378 @@
+[
+  {
+    "run": "t14-claude-adapter-exit1",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-adapter-exit1",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-adapter-exit1",
+      "adapter-exit"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-adapter-exit1/result.json",
+    "rawLogSHA256": "2133f2bf213f7cf94ca9f5332e1608acc1732e986bd21a0a44907732b18242fc"
+  },
+  {
+    "run": "t14-claude-adapter-exit2",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-adapter-exit2",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-adapter-exit2",
+      "adapter-exit"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-adapter-exit2/result.json",
+    "rawLogSHA256": "0c702e1669ed87d1805bc0827ad1a6e4ca6b31cafb40fc241af19d47430f3982"
+  },
+  {
+    "run": "t14-claude-adapter-marker1",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-adapter-marker1",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-adapter-marker1",
+      "adapter-marker"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-adapter-marker1/result.json",
+    "rawLogSHA256": "2b613725345b6f0d4fdee89e6e1e396ac2099198a7380df0bddfebc1c4c5b41c"
+  },
+  {
+    "run": "t14-claude-adapter-marker2",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-adapter-marker2",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-adapter-marker2",
+      "adapter-marker"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-adapter-marker2/result.json",
+    "rawLogSHA256": "c9e050c3180f3deb290f338dacdf7499a5598f78d5c7a0e801a8479d42a8428b"
+  },
+  {
+    "run": "t14-claude-adapter-marker3",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-adapter-marker3",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-adapter-marker3",
+      "adapter-marker"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-adapter-marker3/result.json",
+    "rawLogSHA256": "c240ceb1030ec577bf094ea17454c41801e1452abad6e4f0d796ef4cb2083b2c"
+  },
+  {
+    "run": "t14-claude-adapter-preexit1",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-adapter-preexit1",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-adapter-preexit1",
+      "adapter-preexit"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-adapter-preexit1/result.json",
+    "rawLogSHA256": "f101cc62a6560ee89016c431e6e56a3b60d643e0041d8dce6cd75eb8ce0c7efa"
+  },
+  {
+    "run": "t14-claude-baseline",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-baseline",
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t14b.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec npm test -- tests/runtime/claude/claudePhaseRunner.test.ts tests/runtime/claude/claudeAgentAdapter.test.ts --maxWorkers=1 --minWorkers=1 --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t14-claude-baseline/tests.json"
+    ],
+    "rc": 1,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "84a998e8db7fa95eeb257653bdfc9bba6ed36f1f3541272aafda4aa2cd52c5e5",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-baseline/result.json",
+    "rawLogSHA256": "a005fffd8a859ef2f93dc2b89efb9d290eebb70902784385b41dcc944dc1d15f"
+  },
+  {
+    "run": "t14-claude-baseline-process",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-baseline-process",
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t14p.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec npm test -- tests/runtime/claude/claudePhaseRunner.test.ts tests/runtime/claude/claudeAgentAdapter.test.ts --testNamePattern=\"waits for close before interrupting|a result written after a stop that already carries tokenUsage keeps it\" --maxWorkers=1 --minWorkers=1 --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t14-claude-baseline-process/tests.json"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "84a998e8db7fa95eeb257653bdfc9bba6ed36f1f3541272aafda4aa2cd52c5e5",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-baseline-process/result.json",
+    "rawLogSHA256": "9b468aa5b490adfaaad2bf69bee5991cb1e04c59cc4b0a8580dd9a569db2efe2"
+  },
+  {
+    "run": "t14-claude-graceful1",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-graceful1",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-graceful1",
+      "runner-graceful"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-graceful1/result.json",
+    "rawLogSHA256": "e6cd5e5ee42f31405865acbc7fb2b731cb8e2d498f0e145e6177899c25f076ef"
+  },
+  {
+    "run": "t14-claude-plain-graceful1",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-plain-graceful1",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-plain-graceful1",
+      "runner-graceful"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "3180df7a54ca8eef499d432821707b5e39af1f95842efe9d17f5c9440170411d",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-plain-graceful1/result.json",
+    "rawLogSHA256": "e6cd5e5ee42f31405865acbc7fb2b731cb8e2d498f0e145e6177899c25f076ef"
+  },
+  {
+    "run": "t14-claude-readiness-build",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-readiness-build",
+      "npm",
+      "run",
+      "build"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "84a998e8db7fa95eeb257653bdfc9bba6ed36f1f3541272aafda4aa2cd52c5e5",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-readiness-build/result.json",
+    "rawLogSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "run": "t14-claude-regression-red1",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-regression-red1",
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t14r.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec npm test -- tests/runtime/claude/task14Diagnostic.test.ts --maxWorkers=1 --minWorkers=1 --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t14-claude-regression-red1/tests.json"
+    ],
+    "rc": 1,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "1835abf99219d3d7b6ff046b20a8137d4188a06d96d79589540f4141600d9741",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-regression-red1/result.json",
+    "rawLogSHA256": "9a2f75ae35d7a45b55c6da1a6cbfce2255a5680d6b2780bbf86e72da84af3be6"
+  },
+  {
+    "run": "t14-claude-runner-graceful1",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-graceful1",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-graceful1",
+      "runner-graceful"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-runner-graceful1/result.json",
+    "rawLogSHA256": "e6cd5e5ee42f31405865acbc7fb2b731cb8e2d498f0e145e6177899c25f076ef"
+  },
+  {
+    "run": "t14-claude-runner-graceful2",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-graceful2",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-graceful2",
+      "runner-graceful"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-runner-graceful2/result.json",
+    "rawLogSHA256": "e6cd5e5ee42f31405865acbc7fb2b731cb8e2d498f0e145e6177899c25f076ef"
+  },
+  {
+    "run": "t14-claude-runner-original1",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-original1",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-original1",
+      "runner-original"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-runner-original1/result.json",
+    "rawLogSHA256": "efe850b8ee9c0d54ec8b30a0068cab9c5f5fac735d88520e1e99ebe1efb89d69"
+  },
+  {
+    "run": "t14-claude-runner-original2",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-original2",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-original2",
+      "runner-original"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-runner-original2/result.json",
+    "rawLogSHA256": "efe850b8ee9c0d54ec8b30a0068cab9c5f5fac735d88520e1e99ebe1efb89d69"
+  },
+  {
+    "run": "t14-claude-runner-original3",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-original3",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-original3",
+      "runner-original"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-runner-original3/result.json",
+    "rawLogSHA256": "efe850b8ee9c0d54ec8b30a0068cab9c5f5fac735d88520e1e99ebe1efb89d69"
+  },
+  {
+    "run": "t14-claude-runner-original4",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-original4",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-original4",
+      "runner-original"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-runner-original4/result.json",
+    "rawLogSHA256": "efe850b8ee9c0d54ec8b30a0068cab9c5f5fac735d88520e1e99ebe1efb89d69"
+  },
+  {
+    "run": "t14-claude-runner-original5",
+    "command": [
+      "rtk",
+      "proxy",
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task14-claude-diagnostic-20261011",
+      "t14-claude-runner-original5",
+      "python3",
+      "/private/tmp/task14-launch.py",
+      "t14-claude-runner-original5",
+      "runner-original"
+    ],
+    "rc": 0,
+    "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+    "sourceTreeSHA256": "8e190e51f1cd48b1b91268d9e03a91e6358c24fea1dd1dff2d61a5c2512242c4",
+    "result": "/private/tmp/orca-feedback-followup-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task14-claude-diagnostic-evidence/t14-claude-runner-original5/result.json",
+    "rawLogSHA256": "efe850b8ee9c0d54ec8b30a0068cab9c5f5fac735d88520e1e99ebe1efb89d69"
+  }
+]

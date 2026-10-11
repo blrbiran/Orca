@@ -1,0 +1,1 @@
+if(require("fs").readFileSync("answer.txt","utf8")!=="42\n")process.exit(1);
