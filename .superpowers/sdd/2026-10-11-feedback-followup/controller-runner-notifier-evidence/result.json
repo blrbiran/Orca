@@ -1,0 +1,15 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "npm",
+    "config",
+    "get",
+    "update-notifier"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 0.1649308204650879,
+  "log": "/private/tmp/orca-followup-runs/controller-npm-notifier-config-check/output.log",
+  "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+  "sourceTreeSHA256": "6b095585713cf85236343a3cd98f9ce73252ca5de7b0dd5af9b3e315401b9705",
+  "sourceFiles": 446
+}
