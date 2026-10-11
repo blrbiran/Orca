@@ -1,0 +1,68 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ✓ tests/control/savedResultRecovery.native.test.ts (28 tests) 103910ms
+   ✓ built CLI accepts a private package, runs only verification, records new actual usage, and harvests its approved candidate 3881ms
+   ✓ native crash at before-entry preserves mode, entry and result fences 2807ms
+   ✓ native crash at entry-fsynced preserves mode, entry and result fences 1883ms
+   ✓ native crash at verifier-returned preserves mode, entry and result fences 2219ms
+   ✓ native crash at usage-settled preserves mode, entry and result fences 2248ms
+   ✓ native crash at output-fsynced preserves mode, entry and result fences 2766ms
+   ✓ native crash at result-fsynced preserves mode, entry and result fences 2815ms
+   ✓ native crash at terminal-fsynced preserves mode, entry and result fences 2908ms
+   ✓ explicit mechanical settlement at before-entry stops a dead claimed worker without rerunning checks or providers 3189ms
+   ✓ explicit mechanical settlement at entry-fsynced stops a dead claimed worker without rerunning checks or providers 3500ms
+   ✓ explicit mechanical settlement at usage-settled stops a dead claimed worker without rerunning checks or providers 4005ms
+   ✓ explicit mechanical settlement at result-fsynced stops a dead claimed worker without rerunning checks or providers 5092ms
+   ✓ explicit mechanical settlement at revoked-result stops a dead claimed worker without rerunning checks or providers 4327ms
+   ✓ admits an explicit successor after before-entry and carries every work charge exactly once 7569ms
+   ✓ admits an explicit successor after usage-settled and carries every work charge exactly once 8503ms
+   ✓ missing lifecycle markers after before-entry cannot authorize replay or known zero usage 2351ms
+   ✓ missing lifecycle markers after entry-fsynced cannot authorize replay or known zero usage 2600ms
+   ✓ owner death before validation command release cannot run an empty login shell 322ms
+   ✓ does not reuse terminal-fsynced approval for a candidate changed before harvest 3757ms
+   ✓ refuses cleaned success with missing-publication and preserves measured usage 4490ms
+   ✓ refuses cleaned success with dirty-materialization and preserves measured usage 4602ms
+   ✓ refuses cleaned success with symlink-materialization and preserves measured usage 4635ms
+   ✓ refuses cleaned success with special-mode-materialization and preserves measured usage 4690ms
+   ✓ refuses cleaned success with extra-materialization and preserves measured usage 4775ms
+   ✓ never publishes a success whose ordinary result repository was poisoned outside the candidate 4269ms
+   ✓ refuses a cleaned terminal with wrong-parent publication even when the ref exists 4638ms
+   ✓ refuses a cleaned terminal with changed-tree publication even when the ref exists 4857ms
+ ✓ tests/controller/verifySavedResult.test.ts (26 tests) 48990ms
+   ✓ restores the archived candidate, checks and verifies once without planning/executing/recharging original usage 1823ms
+   ✓ refuses candidate modification by command without landing or retry 1229ms
+   ✓ refuses candidate modification by verifier without landing or retry 1409ms
+   ✓ refuses candidate modification by special-mode without landing or retry 1299ms
+   ✓ refuses replay of an entered state after its candidate has been cleaned up 1728ms
+   ✓ ends a retryable rejection after one fresh verification and preserves saved source failure 1663ms
+   ✓ replays a complete durable terminal verification result with no new calls or usage 1930ms
+   ✓ protects git-config from verifier changes before publication 1315ms
+   ✓ protects runtime-contract from verifier changes before publication 1386ms
+   ✓ refuses to resume recovery as ordinary work when its durable mode marker is missing 1512ms
+   ✓ verifies the original candidate before harmless current target-tip movement is reconciled 1901ms
+   ✓ checks revocation after process registration and before sending the validation command 1089ms
+   ✓ enforces actual published Git changes even when the original Agent reports no changed files 678ms
+   ✓ runs real verification of a strictly valid saved partial without interpreting its reported timeout as a new timeout 1676ms
+   ✓ refuses candidate mutation even when the verifier throws before producing a result 1456ms
+   ✓ does not reuse a complete terminal approval after its protected contract changes 1807ms
+   ✓ settles observed verifier usage on timeout and never enters an executor retry 11256ms
+   ✓ refuses a candidate moved behind a workspace path symlink even when every byte and mode matches 391ms
+   ✓ r1 refuses candidate changes before returned-result handoff publication and retains actual verification usage 1354ms
+   ✓ r1 refuses protected-input changes before returned-result handoff publication and retains actual verification usage 1371ms
+   ✓ r1 refuses fence changes before returned-result handoff publication and retains actual verification usage 1376ms
+   ✓ r1 retains unchanged returned-result interruption without replaying paid phases 1392ms
+   ✓ r1 command interruption modified=false checks recovery integrity without inventing provider usage 1348ms
+   ✓ r1 command interruption modified=true checks recovery integrity without inventing provider usage 1284ms
+   ✓ r1 rechecks private fence authority after registration before releasing the real check 1077ms
+   ✓ r1 retains observed usage when timeout cleanup races an external handoff interruption 4241ms
+ ✓ tests/control/savedResultRecovery.test.ts (39 tests) 6944ms
+   ✓ r1 refuses nonprivate control authority when a revoked fence is omitted for dead-owner reconciliation 302ms
+ ✓ tests/control/savedResultCheckpoint.test.ts (1 test) 210ms
+
+ Test Files  4 passed (4)
+      Tests  94 passed (94)
+   Start at  13:55:00
+   Duration  161.38s (transform 322ms, setup 26ms, collect 655ms, tests 160.05s, environment 1ms, prepare 165ms)
+
+JSON report written to /private/tmp/orca-followup-runs/task6-r1-clone-baseline01/tests.json

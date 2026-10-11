@@ -1,0 +1,21 @@
+{
+  "metadata": {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6rf.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /private/tmp/task6-gate.mjs node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run --fileParallelism=false --maxWorkers=1 --minWorkers=1 --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/task6-r1-final-full01/tests.json"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 571.5922138690948,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-final-full01/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446
+  },
+  "assertionsAudited": 1566,
+  "filesAudited": 147,
+  "allPassed": true,
+  "logSHA256": "471abb9fa69b87159c39f9476f149a83b7e2f0be36197df178bb9ef46bb42958",
+  "jsonSHA256": "348dc1a04b8412d928cd4c8c1ac6bcbc9b93918d78aab0293c57a0766bc8b996"
+}

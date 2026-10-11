@@ -1,0 +1,9 @@
+{
+  "rawAttachmentsVerified": 113,
+  "rawBytes": 1889638,
+  "ownedFixPathsVerified": 4,
+  "intendedMutationLogsVerified": 21,
+  "restoredSourceIndexAllClean": true,
+  "sourceSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+  "productCommit": "299da37f5b9781f79f530b871b37218a3cef7bec"
+}

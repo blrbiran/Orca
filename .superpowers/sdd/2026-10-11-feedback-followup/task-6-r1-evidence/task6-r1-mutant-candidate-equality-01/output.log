@@ -1,0 +1,25 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ❯ tests/controller/verifySavedResult.test.ts (26 tests | 1 failed | 25 skipped) 1285ms
+   × refuses candidate modification by verifier without landing or retry 1284ms
+     → expected 'succeeded' to be 'failed' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > refuses candidate modification by verifier without landing or retry
+AssertionError: expected 'succeeded' to be 'failed' // Object.is equality
+
+Expected: "failed"
+Received: "succeeded"
+
+ ❯ tests/controller/verifySavedResult.test.ts:27:24
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 25 skipped (26)
+   Start at  13:59:20
+   Duration  1.84s (transform 284ms, setup 14ms, collect 380ms, tests 1.28s, environment 0ms, prepare 33ms)
+

@@ -1,0 +1,45 @@
+{
+  "main": {
+    "hash": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "files": 446
+  },
+  "clone": {
+    "hash": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "files": 446
+  },
+  "cloneCommit": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+  "ownedPaths": [
+    "src/control/savedResultRecovery.ts",
+    "src/controller/runLoop.ts",
+    "tests/control/savedResultRecovery.test.ts",
+    "tests/controller/verifySavedResult.test.ts"
+  ],
+  "trackedDiffBytes": 0,
+  "indexDiffBytes": 0,
+  "runnerSHA256": "64a9805f8b5100cd1abe5fd1df384f48a80b2af65aa211447511f213ad1375c5",
+  "isolatedEnvironmentAdds": {
+    "NPM_CONFIG_UPDATE_NOTIFIER": "false"
+  },
+  "dependencies": {
+    "node_modules/vitest/vitest.mjs": {
+      "realpath": "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "bytes": 43,
+      "sha256": "39db22f579acf5639bbb17a261408debbde03f4692c0c439e77e7f13aeba74d6"
+    },
+    "node_modules/vitest/package.json": {
+      "realpath": "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/package.json",
+      "bytes": 4995,
+      "sha256": "6ea35e567829660d9832744086c18526b9ddebd5358c4a0cadfb0a355925f917"
+    },
+    "node_modules/typescript/package.json": {
+      "realpath": "/Users/biran/code/skills/loop/ccloop/node_modules/typescript/package.json",
+      "bytes": 3620,
+      "sha256": "822ef7ca6452205657b6288b066481ecf508bfbf43455d715cf7d3ec457561e6"
+    },
+    "node_modules/tsx/dist/loader.mjs": {
+      "realpath": "/Users/biran/code/skills/loop/ccloop/node_modules/tsx/dist/loader.mjs",
+      "bytes": 743,
+      "sha256": "274e965b148911ea8ccd08923aecf1b898e46db70c8c5a5071b1cc6035f5851d"
+    }
+  }
+}

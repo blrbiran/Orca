@@ -1,0 +1,34 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/controller/verifySavedResult.test.ts (26 tests | 1 failed | 25 skipped) 1863ms
+   × r1 retains observed usage when timeout cleanup races an external handoff interruption 1863ms
+     → expected { phase: 'verify', attempt: 1, …(4) } to match object { Object (phase, tokenUsage, ...) }
+(3 matching properties omitted from actual)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > r1 retains observed usage when timeout cleanup races an external handoff interruption
+AssertionError: expected { phase: 'verify', attempt: 1, …(4) } to match object { Object (phase, tokenUsage, ...) }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+    "completedWithResult": false,
+    "phase": "verify",
+-   "tokenUsage": 7,
++   "tokenUsage": null,
+  }
+
+ ❯ tests/controller/verifySavedResult.test.ts:204:126
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 25 skipped (26)
+   Start at  13:22:25
+   Duration  2.56s (transform 294ms, setup 14ms, collect 386ms, tests 1.86s, environment 0ms, prepare 46ms)
+

@@ -1,0 +1,23 @@
+{
+  "repo": "/private/tmp/ccloop-task6-mutants-final",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+    "sh",
+    "node",
+    "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+    "run",
+    "tests/control/savedResultRecovery.test.ts",
+    "-t",
+    "r1 rejects nonprivate|r1 rejects a nonprivate",
+    "--maxWorkers=1",
+    "--minWorkers=1"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 2.6100428104400635,
+  "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-private-mode-01/output.log",
+  "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+  "sourceTreeSHA256": "79d0b5589adbf706b5224b96c788369ed1cdbb2d922d1c2ac71d16f916475055",
+  "sourceFiles": 446
+}

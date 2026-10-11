@@ -1,0 +1,23 @@
+{
+  "repo": "/private/tmp/ccloop-task6-mutants-final",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+    "sh",
+    "node",
+    "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+    "run",
+    "tests/control/savedResultRecovery.test.ts",
+    "-t",
+    "actual legacy workspace_cleanup_failed",
+    "--maxWorkers=1",
+    "--minWorkers=1"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 1.1747291088104248,
+  "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-legacy-cleanup-event-01/output.log",
+  "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+  "sourceTreeSHA256": "c7bf6e352e6f4c39379224f3986d9c59a957efb500e6edc037cbb3071aae86ca",
+  "sourceFiles": 446
+}

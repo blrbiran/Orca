@@ -1,0 +1,14 @@
+{
+  "fixBase": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+  "commit": "299da37f5b9781f79f530b871b37218a3cef7bec",
+  "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+  "explicitOwnedPaths": [
+    "src/control/savedResultRecovery.ts",
+    "src/controller/runLoop.ts",
+    "tests/control/savedResultRecovery.test.ts",
+    "tests/controller/verifySavedResult.test.ts"
+  ],
+  "worktreeStatus": "?? node_modules\n",
+  "trackedDiffBytes": 0,
+  "indexDiffBytes": 0
+}

@@ -1,0 +1,39 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ❯ tests/control/savedResultRecovery.native.test.ts (28 tests | 1 failed | 27 skipped) 175ms
+   × owner death before validation command release cannot run an empty login shell 174ms
+     → promise resolved "Buffer[ 112, 114, 111, 102, 105, …(-100) ]" instead of rejecting
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.native.test.ts > owner death before validation command release cannot run an empty login shell
+AssertionError: promise resolved "Buffer[ 112, 114, 111, 102, 105, …(-100) ]" instead of rejecting
+
+- Expected
++ Received
+
+- [Error: rejected promise]
++ Object {
++   "data": Array [
++     112,
++     114,
++     111,
++     102,
++     105,
++     108,
++     101,
++   ],
++   "type": "Buffer",
++ }
+
+ ❯ tests/control/savedResultRecovery.native.test.ts:202:39
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 27 skipped (28)
+   Start at  13:58:47
+   Duration  718ms (transform 277ms, setup 13ms, collect 369ms, tests 175ms, environment 0ms, prepare 34ms)
+

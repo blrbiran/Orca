@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6r.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run tests/controller/verifySavedResult.test.ts -t \"r1 retains observed usage\""
+  ],
+  "rc": 1,
+  "elapsedSeconds": 2.904684066772461,
+  "log": "/private/tmp/orca-followup-runs/task6-r1-timeout-handoff-red-01/output.log",
+  "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+  "sourceTreeSHA256": "b7cea0f56c0a79c1e925a20dc91d527d36d1e584254bed7fdeee06cb3a6f9064",
+  "sourceFiles": 446
+}

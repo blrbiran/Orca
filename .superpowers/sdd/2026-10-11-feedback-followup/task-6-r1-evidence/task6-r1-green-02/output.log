@@ -1,0 +1,20 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/controller/verifySavedResult.test.ts (26 tests | 18 skipped) 11544ms
+   ✓ r1 refuses candidate changes before returned-result handoff publication and retains actual verification usage 1789ms
+   ✓ r1 refuses protected-input changes before returned-result handoff publication and retains actual verification usage 1475ms
+   ✓ r1 refuses fence changes before returned-result handoff publication and retains actual verification usage 1431ms
+   ✓ r1 retains unchanged returned-result interruption without replaying paid phases 1391ms
+   ✓ r1 command interruption modified=false checks recovery integrity without inventing provider usage 1351ms
+   ✓ r1 command interruption modified=true checks recovery integrity without inventing provider usage 1260ms
+   ✓ r1 rechecks private fence authority after registration before releasing the real check 1153ms
+   ✓ r1 retains observed usage when timeout cleanup races an external handoff interruption 1693ms
+ ✓ tests/control/savedResultRecovery.test.ts (38 tests | 34 skipped) 1098ms
+   ✓ r1 rejects nonprivate fence-control authority without repairing caller permissions 302ms
+
+ Test Files  2 passed (2)
+      Tests  12 passed | 52 skipped (64)
+   Start at  13:23:12
+   Duration  13.55s (transform 349ms, setup 17ms, collect 559ms, tests 12.64s, environment 0ms, prepare 73ms)
+

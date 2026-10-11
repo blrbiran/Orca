@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6r.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run tests/controller/verifySavedResult.test.ts tests/control/savedResultRecovery.test.ts -t \"r1 \" --fileParallelism=false"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 13.426820755004883,
+  "log": "/private/tmp/orca-followup-runs/task6-r1-green-03/output.log",
+  "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+  "sourceTreeSHA256": "0400d0698d5367cd222694b7c2a4af7957d7c276539f21334097a8903609a31b",
+  "sourceFiles": 446
+}

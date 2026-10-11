@@ -1,0 +1,79 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ❯ tests/control/savedResultRecovery.test.ts (39 tests | 4 failed | 35 skipped) 1781ms
+   × r1 rejects nonprivate execution-package authority without repairing caller permissions 564ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+   × r1 rejects nonprivate input-parent authority without repairing caller permissions 431ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+   × r1 rejects nonprivate fence-control authority without repairing caller permissions 379ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+   × r1 rejects a nonprivate source-only package without creating execution authority or changing permissions 406ms
+     → expected { status: 'eligible', …(5) } to deeply equal { status: 'unavailable', …(1) }
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > r1 rejects nonprivate execution-package authority without repairing caller permissions
+ FAIL  tests/control/savedResultRecovery.test.ts > r1 rejects nonprivate input-parent authority without repairing caller permissions
+ FAIL  tests/control/savedResultRecovery.test.ts > r1 rejects nonprivate fence-control authority without repairing caller permissions
+AssertionError: expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+
+- Expected
++ Received
+
+  Object {
+-   "reason": "saved-result-package-path-invalid",
+-   "status": "unavailable",
++   "authorityKind": "legacy-published-candidate-v1",
++   "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
++   "status": "eligible",
+  }
+
+ ❯ tests/control/savedResultRecovery.test.ts:147:77
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > r1 rejects a nonprivate source-only package without creating execution authority or changing permissions
+AssertionError: expected { status: 'eligible', …(5) } to deeply equal { status: 'unavailable', …(1) }
+
+- Expected
++ Received
+
+  Object {
+-   "reason": "saved-result-package-path-invalid",
+-   "status": "unavailable",
++   "authorityKind": "legacy-published-candidate-v1",
++   "limitation": "published-candidate-only; current membership and settled accounting require controller admission",
++   "rawExecutionTokens": 15,
++   "recoveryOf": Object {
++     "capsuleHash": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
++     "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
++     "snapshotHash": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
++     "sourceAttempt": 1,
++     "sourceRunId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++   },
++   "sourceIdentity": Object {
++     "envelopeHash": "fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba",
++     "executionId": "execution-legacy-real",
++     "generation": 1,
++     "graphVersion": 3,
++     "groupId": "g1",
++     "runId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++     "targetVersion": 1,
++     "taskId": "T1",
++     "workItemId": "T1",
++   },
++   "status": "eligible",
+  }
+
+ ❯ tests/control/savedResultRecovery.test.ts:157:57
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 35 skipped (39)
+   Start at  14:00:23
+   Duration  2.32s (transform 273ms, setup 13ms, collect 366ms, tests 1.78s, environment 0ms, prepare 33ms)
+

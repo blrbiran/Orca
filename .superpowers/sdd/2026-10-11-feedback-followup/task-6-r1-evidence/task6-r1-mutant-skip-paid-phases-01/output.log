@@ -1,0 +1,30 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ❯ tests/controller/verifySavedResult.test.ts (26 tests | 1 failed | 25 skipped) 919ms
+   × restores the archived candidate, checks and verifies once without planning/executing/recharging original usage 918ms
+     → Error: planner replayed: expected 'failed' to be 'succeeded' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > restores the archived candidate, checks and verifies once without planning/executing/recharging original usage
+AssertionError: Error: planner replayed: expected 'failed' to be 'succeeded' // Object.is equality
+
+Expected: "succeeded"
+Received: "failed"
+
+ ❯ tests/controller/verifySavedResult.test.ts:17:45
+     15|    verifications++;expect(await readFile(join(context.worktreePath,'an…
+     16|   }},{savedResultRecovery:f.input,tokenPolicy:f.input.tokenPolicy,onPh…
+     17|   expect(state.status,state.stopReason??"").toBe("succeeded");expect(a…
+       |                                             ^
+     18|   expect(state.attemptsUsed).toBe(1);expect(state.budgetSnapshot.token…
+     19|   expect(f.log("run/loop-state.json").status).toBe("failed");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 25 skipped (26)
+   Start at  13:59:12
+   Duration  1.46s (transform 274ms, setup 13ms, collect 360ms, tests 919ms, environment 0ms, prepare 35ms)
+

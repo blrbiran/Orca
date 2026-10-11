@@ -1,0 +1,6605 @@
+{
+  "rawBytes": 679877,
+  "rawLines": 45607,
+  "rawSHA256": "26c9fd796fa4849ce2c006ddde7b589899bbbc8ac091bfd1086a31e2ab388419",
+  "coverageBytes": 679877,
+  "gaps": 0,
+  "bufferArrays": [
+    {
+      "start": 5062,
+      "end": 10410,
+      "kind": "decimal-buffer",
+      "ref": "sha256-c9ede9962993b72d9e5d0ca45405cfa5085bb68add3335dd1d9d566d2d1083d0",
+      "length": 373,
+      "sha256": "c9ede9962993b72d9e5d0ca45405cfa5085bb68add3335dd1d9d566d2d1083d0",
+      "lines": [
+        136,
+        508
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-c9ede9962993b72d9e5d0ca45405cfa5085bb68add3335dd1d9d566d2d1083d0.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 10572,
+      "end": 57257,
+      "kind": "decimal-buffer",
+      "ref": "sha256-f81f0c1361f33ab1f163a94d7f421f13c85131ea4fdf793320c74308e46333c8",
+      "length": 3267,
+      "sha256": "f81f0c1361f33ab1f163a94d7f421f13c85131ea4fdf793320c74308e46333c8",
+      "lines": [
+        514,
+        3780
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-f81f0c1361f33ab1f163a94d7f421f13c85131ea4fdf793320c74308e46333c8.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 57419,
+      "end": 63160,
+      "kind": "decimal-buffer",
+      "ref": "sha256-2ac0f109ec43e1c24360efb365e418341f78da3069c317413500b0928e1aee0d",
+      "length": 394,
+      "sha256": "2ac0f109ec43e1c24360efb365e418341f78da3069c317413500b0928e1aee0d",
+      "lines": [
+        3786,
+        4179
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-2ac0f109ec43e1c24360efb365e418341f78da3069c317413500b0928e1aee0d.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 63322,
+      "end": 93222,
+      "kind": "decimal-buffer",
+      "ref": "sha256-fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba",
+      "length": 2064,
+      "sha256": "fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba",
+      "lines": [
+        4185,
+        6248
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 93384,
+      "end": 94291,
+      "kind": "decimal-buffer",
+      "ref": "sha256-1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1",
+      "length": 62,
+      "sha256": "1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1",
+      "lines": [
+        6254,
+        6315
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 94453,
+      "end": 98546,
+      "kind": "decimal-buffer",
+      "ref": "sha256-2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459",
+      "length": 283,
+      "sha256": "2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459",
+      "lines": [
+        6321,
+        6603
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 98708,
+      "end": 119893,
+      "kind": "decimal-buffer",
+      "ref": "sha256-2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b",
+      "length": 1469,
+      "sha256": "2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b",
+      "lines": [
+        6609,
+        8077
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 120055,
+      "end": 121400,
+      "kind": "decimal-buffer",
+      "ref": "sha256-318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d",
+      "length": 92,
+      "sha256": "318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d",
+      "lines": [
+        8083,
+        8174
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 121562,
+      "end": 126587,
+      "kind": "decimal-buffer",
+      "ref": "sha256-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
+      "length": 348,
+      "sha256": "356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
+      "lines": [
+        8180,
+        8527
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 126749,
+      "end": 137745,
+      "kind": "decimal-buffer",
+      "ref": "sha256-3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a",
+      "length": 762,
+      "sha256": "3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a",
+      "lines": [
+        8533,
+        9294
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 137907,
+      "end": 144935,
+      "kind": "decimal-buffer",
+      "ref": "sha256-3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352",
+      "length": 481,
+      "sha256": "3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352",
+      "lines": [
+        9300,
+        9780
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 145097,
+      "end": 146424,
+      "kind": "decimal-buffer",
+      "ref": "sha256-86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33",
+      "length": 91,
+      "sha256": "86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33",
+      "lines": [
+        9786,
+        9876
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 146586,
+      "end": 147970,
+      "kind": "decimal-buffer",
+      "ref": "sha256-99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073",
+      "length": 97,
+      "sha256": "99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073",
+      "lines": [
+        9882,
+        9978
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 148132,
+      "end": 149187,
+      "kind": "decimal-buffer",
+      "ref": "sha256-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d",
+      "length": 72,
+      "sha256": "9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d",
+      "lines": [
+        9984,
+        10055
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 149349,
+      "end": 235339,
+      "kind": "decimal-buffer",
+      "ref": "sha256-af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b",
+      "length": 6012,
+      "sha256": "af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b",
+      "lines": [
+        10061,
+        16072
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 235501,
+      "end": 241404,
+      "kind": "decimal-buffer",
+      "ref": "sha256-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981",
+      "length": 408,
+      "sha256": "b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981",
+      "lines": [
+        16078,
+        16485
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 241566,
+      "end": 242357,
+      "kind": "decimal-buffer",
+      "ref": "sha256-b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84",
+      "length": 54,
+      "sha256": "b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84",
+      "lines": [
+        16491,
+        16544
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 242519,
+      "end": 243948,
+      "kind": "decimal-buffer",
+      "ref": "sha256-c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902",
+      "length": 100,
+      "sha256": "c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902",
+      "lines": [
+        16550,
+        16649
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 244110,
+      "end": 258290,
+      "kind": "decimal-buffer",
+      "ref": "sha256-ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9",
+      "length": 981,
+      "sha256": "ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9",
+      "lines": [
+        16655,
+        17635
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 258452,
+      "end": 272402,
+      "kind": "decimal-buffer",
+      "ref": "sha256-d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e",
+      "length": 966,
+      "sha256": "d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e",
+      "lines": [
+        17641,
+        18606
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 272717,
+      "end": 283354,
+      "kind": "decimal-buffer",
+      "ref": "sha256-e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4",
+      "length": 736,
+      "sha256": "e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4",
+      "lines": [
+        18616,
+        19351
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 283516,
+      "end": 283690,
+      "kind": "decimal-buffer",
+      "ref": "sha256-bc237aec467eef4ad72ab44c19ed2edbed79f7b5824a2e7ebfb3faf583433e66",
+      "length": 12,
+      "sha256": "bc237aec467eef4ad72ab44c19ed2edbed79f7b5824a2e7ebfb3faf583433e66",
+      "lines": [
+        19357,
+        19368
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-bc237aec467eef4ad72ab44c19ed2edbed79f7b5824a2e7ebfb3faf583433e66.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 283852,
+      "end": 287443,
+      "kind": "decimal-buffer",
+      "ref": "sha256-130a6a38adc93617853c5a74b5dfd104f522d3f3b87a568cec1a7383f5245ad5",
+      "length": 251,
+      "sha256": "130a6a38adc93617853c5a74b5dfd104f522d3f3b87a568cec1a7383f5245ad5",
+      "lines": [
+        19374,
+        19624
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-130a6a38adc93617853c5a74b5dfd104f522d3f3b87a568cec1a7383f5245ad5.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 287605,
+      "end": 310281,
+      "kind": "decimal-buffer",
+      "ref": "sha256-4a7e4f55899221395689a11a510a5eaf00c8dff284980d27ad020c79f3a931c0",
+      "length": 1575,
+      "sha256": "4a7e4f55899221395689a11a510a5eaf00c8dff284980d27ad020c79f3a931c0",
+      "lines": [
+        19630,
+        21204
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-4a7e4f55899221395689a11a510a5eaf00c8dff284980d27ad020c79f3a931c0.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 310443,
+      "end": 324760,
+      "kind": "decimal-buffer",
+      "ref": "sha256-cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705",
+      "length": 978,
+      "sha256": "cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705",
+      "lines": [
+        21210,
+        22187
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 324922,
+      "end": 327807,
+      "kind": "decimal-buffer",
+      "ref": "sha256-425f4b846bf98d662dc3aa8e1f3b83ee41b05d7c5c56324d746366ad8bb88bac",
+      "length": 197,
+      "sha256": "425f4b846bf98d662dc3aa8e1f3b83ee41b05d7c5c56324d746366ad8bb88bac",
+      "lines": [
+        22193,
+        22389
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-425f4b846bf98d662dc3aa8e1f3b83ee41b05d7c5c56324d746366ad8bb88bac.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 327969,
+      "end": 332216,
+      "kind": "decimal-buffer",
+      "ref": "sha256-ae47fdece10a6f3fea64ce2f00f9dbfee11b7e33f44841206ba44bf1897b6126",
+      "length": 295,
+      "sha256": "ae47fdece10a6f3fea64ce2f00f9dbfee11b7e33f44841206ba44bf1897b6126",
+      "lines": [
+        22395,
+        22689
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-ae47fdece10a6f3fea64ce2f00f9dbfee11b7e33f44841206ba44bf1897b6126.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 332378,
+      "end": 343035,
+      "kind": "decimal-buffer",
+      "ref": "sha256-5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5",
+      "length": 740,
+      "sha256": "5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5",
+      "lines": [
+        22695,
+        23434
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 343197,
+      "end": 343431,
+      "kind": "decimal-buffer",
+      "ref": "sha256-006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd",
+      "length": 16,
+      "sha256": "006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd",
+      "lines": [
+        23440,
+        23455
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 343595,
+      "end": 354506,
+      "kind": "decimal-buffer",
+      "ref": "snapshot-e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
+      "length": 762,
+      "sha256": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
+      "lines": [
+        23461,
+        24222
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/snapshot-e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 354669,
+      "end": 531610,
+      "kind": "decimal-buffer",
+      "ref": "archive-44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
+      "length": 12346,
+      "sha256": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
+      "lines": [
+        24228,
+        36573
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/archive-44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 531774,
+      "end": 536799,
+      "kind": "decimal-buffer",
+      "ref": "recovery-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
+      "length": 348,
+      "sha256": "356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
+      "lines": [
+        36579,
+        36926
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 536963,
+      "end": 589041,
+      "kind": "decimal-buffer",
+      "ref": "recovery-8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976",
+      "length": 3641,
+      "sha256": "8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976",
+      "lines": [
+        36932,
+        40572
+      ],
+      "fixtureMatches": [],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 589205,
+      "end": 601212,
+      "kind": "decimal-buffer",
+      "ref": "recovery-1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c",
+      "length": 832,
+      "sha256": "1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c",
+      "lines": [
+        40578,
+        41409
+      ],
+      "fixtureMatches": [],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 601376,
+      "end": 607126,
+      "kind": "decimal-buffer",
+      "ref": "recovery-2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c",
+      "length": 396,
+      "sha256": "2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c",
+      "lines": [
+        41415,
+        41810
+      ],
+      "fixtureMatches": [],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 607290,
+      "end": 612209,
+      "kind": "decimal-buffer",
+      "ref": "recovery-f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a",
+      "length": 341,
+      "sha256": "f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a",
+      "lines": [
+        41816,
+        42156
+      ],
+      "fixtureMatches": [],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 612373,
+      "end": 651992,
+      "kind": "decimal-buffer",
+      "ref": "recovery-e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb",
+      "length": 2754,
+      "sha256": "e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb",
+      "lines": [
+        42162,
+        44915
+      ],
+      "fixtureMatches": [],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    }
+  ],
+  "numericLines": 44596,
+  "structuralTranscriptBytes": 47843,
+  "structuralTranscriptSHA256": "7228b73edf3d8706f1c50e8622ee0a1e0246c9bd740bb73a8afe5da8d93ae965",
+  "coverageSpans": [
+    {
+      "start": 0,
+      "end": 1,
+      "kind": "structural"
+    },
+    {
+      "start": 1,
+      "end": 61,
+      "kind": "structural"
+    },
+    {
+      "start": 61,
+      "end": 62,
+      "kind": "structural"
+    },
+    {
+      "start": 62,
+      "end": 151,
+      "kind": "structural"
+    },
+    {
+      "start": 151,
+      "end": 266,
+      "kind": "structural"
+    },
+    {
+      "start": 266,
+      "end": 360,
+      "kind": "structural"
+    },
+    {
+      "start": 360,
+      "end": 361,
+      "kind": "structural"
+    },
+    {
+      "start": 361,
+      "end": 420,
+      "kind": "structural"
+    },
+    {
+      "start": 420,
+      "end": 421,
+      "kind": "structural"
+    },
+    {
+      "start": 421,
+      "end": 574,
+      "kind": "structural"
+    },
+    {
+      "start": 574,
+      "end": 675,
+      "kind": "structural"
+    },
+    {
+      "start": 675,
+      "end": 676,
+      "kind": "structural"
+    },
+    {
+      "start": 676,
+      "end": 687,
+      "kind": "structural"
+    },
+    {
+      "start": 687,
+      "end": 698,
+      "kind": "structural"
+    },
+    {
+      "start": 698,
+      "end": 699,
+      "kind": "structural"
+    },
+    {
+      "start": 699,
+      "end": 727,
+      "kind": "structural"
+    },
+    {
+      "start": 727,
+      "end": 738,
+      "kind": "structural"
+    },
+    {
+      "start": 738,
+      "end": 772,
+      "kind": "structural"
+    },
+    {
+      "start": 772,
+      "end": 792,
+      "kind": "structural"
+    },
+    {
+      "start": 792,
+      "end": 799,
+      "kind": "structural"
+    },
+    {
+      "start": 799,
+      "end": 825,
+      "kind": "structural"
+    },
+    {
+      "start": 825,
+      "end": 854,
+      "kind": "structural"
+    },
+    {
+      "start": 854,
+      "end": 882,
+      "kind": "structural"
+    },
+    {
+      "start": 882,
+      "end": 911,
+      "kind": "structural"
+    },
+    {
+      "start": 911,
+      "end": 936,
+      "kind": "structural"
+    },
+    {
+      "start": 936,
+      "end": 961,
+      "kind": "structural"
+    },
+    {
+      "start": 961,
+      "end": 987,
+      "kind": "structural"
+    },
+    {
+      "start": 987,
+      "end": 998,
+      "kind": "structural"
+    },
+    {
+      "start": 998,
+      "end": 1022,
+      "kind": "structural"
+    },
+    {
+      "start": 1022,
+      "end": 1050,
+      "kind": "structural"
+    },
+    {
+      "start": 1050,
+      "end": 1151,
+      "kind": "structural"
+    },
+    {
+      "start": 1151,
+      "end": 1237,
+      "kind": "structural"
+    },
+    {
+      "start": 1237,
+      "end": 1248,
+      "kind": "structural"
+    },
+    {
+      "start": 1248,
+      "end": 1275,
+      "kind": "structural"
+    },
+    {
+      "start": 1275,
+      "end": 1376,
+      "kind": "structural"
+    },
+    {
+      "start": 1376,
+      "end": 1462,
+      "kind": "structural"
+    },
+    {
+      "start": 1462,
+      "end": 1473,
+      "kind": "structural"
+    },
+    {
+      "start": 1473,
+      "end": 1504,
+      "kind": "structural"
+    },
+    {
+      "start": 1504,
+      "end": 1605,
+      "kind": "structural"
+    },
+    {
+      "start": 1605,
+      "end": 1691,
+      "kind": "structural"
+    },
+    {
+      "start": 1691,
+      "end": 1702,
+      "kind": "structural"
+    },
+    {
+      "start": 1702,
+      "end": 1732,
+      "kind": "structural"
+    },
+    {
+      "start": 1732,
+      "end": 1833,
+      "kind": "structural"
+    },
+    {
+      "start": 1833,
+      "end": 1919,
+      "kind": "structural"
+    },
+    {
+      "start": 1919,
+      "end": 1930,
+      "kind": "structural"
+    },
+    {
+      "start": 1930,
+      "end": 1955,
+      "kind": "structural"
+    },
+    {
+      "start": 1955,
+      "end": 1984,
+      "kind": "structural"
+    },
+    {
+      "start": 1984,
+      "end": 2009,
+      "kind": "structural"
+    },
+    {
+      "start": 2009,
+      "end": 2034,
+      "kind": "structural"
+    },
+    {
+      "start": 2034,
+      "end": 2060,
+      "kind": "structural"
+    },
+    {
+      "start": 2060,
+      "end": 2071,
+      "kind": "structural"
+    },
+    {
+      "start": 2071,
+      "end": 2080,
+      "kind": "structural"
+    },
+    {
+      "start": 2080,
+      "end": 2104,
+      "kind": "structural"
+    },
+    {
+      "start": 2104,
+      "end": 2144,
+      "kind": "structural"
+    },
+    {
+      "start": 2144,
+      "end": 2234,
+      "kind": "structural"
+    },
+    {
+      "start": 2234,
+      "end": 2259,
+      "kind": "structural"
+    },
+    {
+      "start": 2259,
+      "end": 2298,
+      "kind": "structural"
+    },
+    {
+      "start": 2298,
+      "end": 2329,
+      "kind": "structural"
+    },
+    {
+      "start": 2329,
+      "end": 2338,
+      "kind": "structural"
+    },
+    {
+      "start": 2338,
+      "end": 2428,
+      "kind": "structural"
+    },
+    {
+      "start": 2428,
+      "end": 2494,
+      "kind": "structural"
+    },
+    {
+      "start": 2494,
+      "end": 2520,
+      "kind": "structural"
+    },
+    {
+      "start": 2520,
+      "end": 2551,
+      "kind": "structural"
+    },
+    {
+      "start": 2551,
+      "end": 2581,
+      "kind": "structural"
+    },
+    {
+      "start": 2581,
+      "end": 2612,
+      "kind": "structural"
+    },
+    {
+      "start": 2612,
+      "end": 2639,
+      "kind": "structural"
+    },
+    {
+      "start": 2639,
+      "end": 2666,
+      "kind": "structural"
+    },
+    {
+      "start": 2666,
+      "end": 2694,
+      "kind": "structural"
+    },
+    {
+      "start": 2694,
+      "end": 2707,
+      "kind": "structural"
+    },
+    {
+      "start": 2707,
+      "end": 2734,
+      "kind": "structural"
+    },
+    {
+      "start": 2734,
+      "end": 2765,
+      "kind": "structural"
+    },
+    {
+      "start": 2765,
+      "end": 2792,
+      "kind": "structural"
+    },
+    {
+      "start": 2792,
+      "end": 2819,
+      "kind": "structural"
+    },
+    {
+      "start": 2819,
+      "end": 2847,
+      "kind": "structural"
+    },
+    {
+      "start": 2847,
+      "end": 2860,
+      "kind": "structural"
+    },
+    {
+      "start": 2860,
+      "end": 2871,
+      "kind": "structural"
+    },
+    {
+      "start": 2871,
+      "end": 2903,
+      "kind": "structural"
+    },
+    {
+      "start": 2903,
+      "end": 2932,
+      "kind": "structural"
+    },
+    {
+      "start": 2932,
+      "end": 2957,
+      "kind": "structural"
+    },
+    {
+      "start": 2957,
+      "end": 2982,
+      "kind": "structural"
+    },
+    {
+      "start": 2982,
+      "end": 3008,
+      "kind": "structural"
+    },
+    {
+      "start": 3008,
+      "end": 3019,
+      "kind": "structural"
+    },
+    {
+      "start": 3019,
+      "end": 3056,
+      "kind": "structural"
+    },
+    {
+      "start": 3056,
+      "end": 3101,
+      "kind": "structural"
+    },
+    {
+      "start": 3101,
+      "end": 3136,
+      "kind": "structural"
+    },
+    {
+      "start": 3136,
+      "end": 3167,
+      "kind": "structural"
+    },
+    {
+      "start": 3167,
+      "end": 3194,
+      "kind": "structural"
+    },
+    {
+      "start": 3194,
+      "end": 3221,
+      "kind": "structural"
+    },
+    {
+      "start": 3221,
+      "end": 3249,
+      "kind": "structural"
+    },
+    {
+      "start": 3249,
+      "end": 3262,
+      "kind": "structural"
+    },
+    {
+      "start": 3262,
+      "end": 3294,
+      "kind": "structural"
+    },
+    {
+      "start": 3294,
+      "end": 3397,
+      "kind": "structural"
+    },
+    {
+      "start": 3397,
+      "end": 3485,
+      "kind": "structural"
+    },
+    {
+      "start": 3485,
+      "end": 3498,
+      "kind": "structural"
+    },
+    {
+      "start": 3498,
+      "end": 3592,
+      "kind": "structural"
+    },
+    {
+      "start": 3592,
+      "end": 3603,
+      "kind": "structural"
+    },
+    {
+      "start": 3603,
+      "end": 3638,
+      "kind": "structural"
+    },
+    {
+      "start": 3638,
+      "end": 3667,
+      "kind": "structural"
+    },
+    {
+      "start": 3667,
+      "end": 3692,
+      "kind": "structural"
+    },
+    {
+      "start": 3692,
+      "end": 3717,
+      "kind": "structural"
+    },
+    {
+      "start": 3717,
+      "end": 3743,
+      "kind": "structural"
+    },
+    {
+      "start": 3743,
+      "end": 3754,
+      "kind": "structural"
+    },
+    {
+      "start": 3754,
+      "end": 3795,
+      "kind": "structural"
+    },
+    {
+      "start": 3795,
+      "end": 3827,
+      "kind": "structural"
+    },
+    {
+      "start": 3827,
+      "end": 3882,
+      "kind": "structural"
+    },
+    {
+      "start": 3882,
+      "end": 3907,
+      "kind": "structural"
+    },
+    {
+      "start": 3907,
+      "end": 3940,
+      "kind": "structural"
+    },
+    {
+      "start": 3940,
+      "end": 3989,
+      "kind": "structural"
+    },
+    {
+      "start": 3989,
+      "end": 4000,
+      "kind": "structural"
+    },
+    {
+      "start": 4000,
+      "end": 4009,
+      "kind": "structural"
+    },
+    {
+      "start": 4009,
+      "end": 4036,
+      "kind": "structural"
+    },
+    {
+      "start": 4036,
+      "end": 4065,
+      "kind": "structural"
+    },
+    {
+      "start": 4065,
+      "end": 4156,
+      "kind": "structural"
+    },
+    {
+      "start": 4156,
+      "end": 4259,
+      "kind": "structural"
+    },
+    {
+      "start": 4259,
+      "end": 4351,
+      "kind": "structural"
+    },
+    {
+      "start": 4351,
+      "end": 4379,
+      "kind": "structural"
+    },
+    {
+      "start": 4379,
+      "end": 4446,
+      "kind": "structural"
+    },
+    {
+      "start": 4446,
+      "end": 4455,
+      "kind": "structural"
+    },
+    {
+      "start": 4455,
+      "end": 4476,
+      "kind": "structural"
+    },
+    {
+      "start": 4476,
+      "end": 4528,
+      "kind": "structural"
+    },
+    {
+      "start": 4528,
+      "end": 4553,
+      "kind": "structural"
+    },
+    {
+      "start": 4553,
+      "end": 4645,
+      "kind": "structural"
+    },
+    {
+      "start": 4645,
+      "end": 4693,
+      "kind": "structural"
+    },
+    {
+      "start": 4693,
+      "end": 4718,
+      "kind": "structural"
+    },
+    {
+      "start": 4718,
+      "end": 4745,
+      "kind": "structural"
+    },
+    {
+      "start": 4745,
+      "end": 4770,
+      "kind": "structural"
+    },
+    {
+      "start": 4770,
+      "end": 4831,
+      "kind": "structural"
+    },
+    {
+      "start": 4831,
+      "end": 4859,
+      "kind": "structural"
+    },
+    {
+      "start": 4859,
+      "end": 4883,
+      "kind": "structural"
+    },
+    {
+      "start": 4883,
+      "end": 4911,
+      "kind": "structural"
+    },
+    {
+      "start": 4911,
+      "end": 4920,
+      "kind": "structural"
+    },
+    {
+      "start": 4920,
+      "end": 4927,
+      "kind": "structural"
+    },
+    {
+      "start": 4927,
+      "end": 4946,
+      "kind": "structural"
+    },
+    {
+      "start": 4946,
+      "end": 5038,
+      "kind": "structural"
+    },
+    {
+      "start": 5038,
+      "end": 5062,
+      "kind": "structural"
+    },
+    {
+      "start": 5062,
+      "end": 10410,
+      "kind": "decimal-buffer",
+      "ref": "sha256-c9ede9962993b72d9e5d0ca45405cfa5085bb68add3335dd1d9d566d2d1083d0",
+      "length": 373,
+      "sha256": "c9ede9962993b72d9e5d0ca45405cfa5085bb68add3335dd1d9d566d2d1083d0",
+      "lines": [
+        136,
+        508
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-c9ede9962993b72d9e5d0ca45405cfa5085bb68add3335dd1d9d566d2d1083d0.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 10410,
+      "end": 10421,
+      "kind": "structural"
+    },
+    {
+      "start": 10421,
+      "end": 10447,
+      "kind": "structural"
+    },
+    {
+      "start": 10447,
+      "end": 10456,
+      "kind": "structural"
+    },
+    {
+      "start": 10456,
+      "end": 10548,
+      "kind": "structural"
+    },
+    {
+      "start": 10548,
+      "end": 10572,
+      "kind": "structural"
+    },
+    {
+      "start": 10572,
+      "end": 57257,
+      "kind": "decimal-buffer",
+      "ref": "sha256-f81f0c1361f33ab1f163a94d7f421f13c85131ea4fdf793320c74308e46333c8",
+      "length": 3267,
+      "sha256": "f81f0c1361f33ab1f163a94d7f421f13c85131ea4fdf793320c74308e46333c8",
+      "lines": [
+        514,
+        3780
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-f81f0c1361f33ab1f163a94d7f421f13c85131ea4fdf793320c74308e46333c8.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 57257,
+      "end": 57268,
+      "kind": "structural"
+    },
+    {
+      "start": 57268,
+      "end": 57294,
+      "kind": "structural"
+    },
+    {
+      "start": 57294,
+      "end": 57303,
+      "kind": "structural"
+    },
+    {
+      "start": 57303,
+      "end": 57395,
+      "kind": "structural"
+    },
+    {
+      "start": 57395,
+      "end": 57419,
+      "kind": "structural"
+    },
+    {
+      "start": 57419,
+      "end": 63160,
+      "kind": "decimal-buffer",
+      "ref": "sha256-2ac0f109ec43e1c24360efb365e418341f78da3069c317413500b0928e1aee0d",
+      "length": 394,
+      "sha256": "2ac0f109ec43e1c24360efb365e418341f78da3069c317413500b0928e1aee0d",
+      "lines": [
+        3786,
+        4179
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-2ac0f109ec43e1c24360efb365e418341f78da3069c317413500b0928e1aee0d.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 63160,
+      "end": 63171,
+      "kind": "structural"
+    },
+    {
+      "start": 63171,
+      "end": 63197,
+      "kind": "structural"
+    },
+    {
+      "start": 63197,
+      "end": 63206,
+      "kind": "structural"
+    },
+    {
+      "start": 63206,
+      "end": 63298,
+      "kind": "structural"
+    },
+    {
+      "start": 63298,
+      "end": 63322,
+      "kind": "structural"
+    },
+    {
+      "start": 63322,
+      "end": 93222,
+      "kind": "decimal-buffer",
+      "ref": "sha256-fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba",
+      "length": 2064,
+      "sha256": "fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba",
+      "lines": [
+        4185,
+        6248
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 93222,
+      "end": 93233,
+      "kind": "structural"
+    },
+    {
+      "start": 93233,
+      "end": 93259,
+      "kind": "structural"
+    },
+    {
+      "start": 93259,
+      "end": 93268,
+      "kind": "structural"
+    },
+    {
+      "start": 93268,
+      "end": 93360,
+      "kind": "structural"
+    },
+    {
+      "start": 93360,
+      "end": 93384,
+      "kind": "structural"
+    },
+    {
+      "start": 93384,
+      "end": 94291,
+      "kind": "decimal-buffer",
+      "ref": "sha256-1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1",
+      "length": 62,
+      "sha256": "1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1",
+      "lines": [
+        6254,
+        6315
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 94291,
+      "end": 94302,
+      "kind": "structural"
+    },
+    {
+      "start": 94302,
+      "end": 94328,
+      "kind": "structural"
+    },
+    {
+      "start": 94328,
+      "end": 94337,
+      "kind": "structural"
+    },
+    {
+      "start": 94337,
+      "end": 94429,
+      "kind": "structural"
+    },
+    {
+      "start": 94429,
+      "end": 94453,
+      "kind": "structural"
+    },
+    {
+      "start": 94453,
+      "end": 98546,
+      "kind": "decimal-buffer",
+      "ref": "sha256-2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459",
+      "length": 283,
+      "sha256": "2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459",
+      "lines": [
+        6321,
+        6603
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 98546,
+      "end": 98557,
+      "kind": "structural"
+    },
+    {
+      "start": 98557,
+      "end": 98583,
+      "kind": "structural"
+    },
+    {
+      "start": 98583,
+      "end": 98592,
+      "kind": "structural"
+    },
+    {
+      "start": 98592,
+      "end": 98684,
+      "kind": "structural"
+    },
+    {
+      "start": 98684,
+      "end": 98708,
+      "kind": "structural"
+    },
+    {
+      "start": 98708,
+      "end": 119893,
+      "kind": "decimal-buffer",
+      "ref": "sha256-2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b",
+      "length": 1469,
+      "sha256": "2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b",
+      "lines": [
+        6609,
+        8077
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 119893,
+      "end": 119904,
+      "kind": "structural"
+    },
+    {
+      "start": 119904,
+      "end": 119930,
+      "kind": "structural"
+    },
+    {
+      "start": 119930,
+      "end": 119939,
+      "kind": "structural"
+    },
+    {
+      "start": 119939,
+      "end": 120031,
+      "kind": "structural"
+    },
+    {
+      "start": 120031,
+      "end": 120055,
+      "kind": "structural"
+    },
+    {
+      "start": 120055,
+      "end": 121400,
+      "kind": "decimal-buffer",
+      "ref": "sha256-318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d",
+      "length": 92,
+      "sha256": "318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d",
+      "lines": [
+        8083,
+        8174
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 121400,
+      "end": 121411,
+      "kind": "structural"
+    },
+    {
+      "start": 121411,
+      "end": 121437,
+      "kind": "structural"
+    },
+    {
+      "start": 121437,
+      "end": 121446,
+      "kind": "structural"
+    },
+    {
+      "start": 121446,
+      "end": 121538,
+      "kind": "structural"
+    },
+    {
+      "start": 121538,
+      "end": 121562,
+      "kind": "structural"
+    },
+    {
+      "start": 121562,
+      "end": 126587,
+      "kind": "decimal-buffer",
+      "ref": "sha256-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
+      "length": 348,
+      "sha256": "356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
+      "lines": [
+        8180,
+        8527
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 126587,
+      "end": 126598,
+      "kind": "structural"
+    },
+    {
+      "start": 126598,
+      "end": 126624,
+      "kind": "structural"
+    },
+    {
+      "start": 126624,
+      "end": 126633,
+      "kind": "structural"
+    },
+    {
+      "start": 126633,
+      "end": 126725,
+      "kind": "structural"
+    },
+    {
+      "start": 126725,
+      "end": 126749,
+      "kind": "structural"
+    },
+    {
+      "start": 126749,
+      "end": 137745,
+      "kind": "decimal-buffer",
+      "ref": "sha256-3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a",
+      "length": 762,
+      "sha256": "3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a",
+      "lines": [
+        8533,
+        9294
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 137745,
+      "end": 137756,
+      "kind": "structural"
+    },
+    {
+      "start": 137756,
+      "end": 137782,
+      "kind": "structural"
+    },
+    {
+      "start": 137782,
+      "end": 137791,
+      "kind": "structural"
+    },
+    {
+      "start": 137791,
+      "end": 137883,
+      "kind": "structural"
+    },
+    {
+      "start": 137883,
+      "end": 137907,
+      "kind": "structural"
+    },
+    {
+      "start": 137907,
+      "end": 144935,
+      "kind": "decimal-buffer",
+      "ref": "sha256-3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352",
+      "length": 481,
+      "sha256": "3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352",
+      "lines": [
+        9300,
+        9780
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 144935,
+      "end": 144946,
+      "kind": "structural"
+    },
+    {
+      "start": 144946,
+      "end": 144972,
+      "kind": "structural"
+    },
+    {
+      "start": 144972,
+      "end": 144981,
+      "kind": "structural"
+    },
+    {
+      "start": 144981,
+      "end": 145073,
+      "kind": "structural"
+    },
+    {
+      "start": 145073,
+      "end": 145097,
+      "kind": "structural"
+    },
+    {
+      "start": 145097,
+      "end": 146424,
+      "kind": "decimal-buffer",
+      "ref": "sha256-86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33",
+      "length": 91,
+      "sha256": "86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33",
+      "lines": [
+        9786,
+        9876
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 146424,
+      "end": 146435,
+      "kind": "structural"
+    },
+    {
+      "start": 146435,
+      "end": 146461,
+      "kind": "structural"
+    },
+    {
+      "start": 146461,
+      "end": 146470,
+      "kind": "structural"
+    },
+    {
+      "start": 146470,
+      "end": 146562,
+      "kind": "structural"
+    },
+    {
+      "start": 146562,
+      "end": 146586,
+      "kind": "structural"
+    },
+    {
+      "start": 146586,
+      "end": 147970,
+      "kind": "decimal-buffer",
+      "ref": "sha256-99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073",
+      "length": 97,
+      "sha256": "99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073",
+      "lines": [
+        9882,
+        9978
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 147970,
+      "end": 147981,
+      "kind": "structural"
+    },
+    {
+      "start": 147981,
+      "end": 148007,
+      "kind": "structural"
+    },
+    {
+      "start": 148007,
+      "end": 148016,
+      "kind": "structural"
+    },
+    {
+      "start": 148016,
+      "end": 148108,
+      "kind": "structural"
+    },
+    {
+      "start": 148108,
+      "end": 148132,
+      "kind": "structural"
+    },
+    {
+      "start": 148132,
+      "end": 149187,
+      "kind": "decimal-buffer",
+      "ref": "sha256-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d",
+      "length": 72,
+      "sha256": "9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d",
+      "lines": [
+        9984,
+        10055
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 149187,
+      "end": 149198,
+      "kind": "structural"
+    },
+    {
+      "start": 149198,
+      "end": 149224,
+      "kind": "structural"
+    },
+    {
+      "start": 149224,
+      "end": 149233,
+      "kind": "structural"
+    },
+    {
+      "start": 149233,
+      "end": 149325,
+      "kind": "structural"
+    },
+    {
+      "start": 149325,
+      "end": 149349,
+      "kind": "structural"
+    },
+    {
+      "start": 149349,
+      "end": 235339,
+      "kind": "decimal-buffer",
+      "ref": "sha256-af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b",
+      "length": 6012,
+      "sha256": "af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b",
+      "lines": [
+        10061,
+        16072
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 235339,
+      "end": 235350,
+      "kind": "structural"
+    },
+    {
+      "start": 235350,
+      "end": 235376,
+      "kind": "structural"
+    },
+    {
+      "start": 235376,
+      "end": 235385,
+      "kind": "structural"
+    },
+    {
+      "start": 235385,
+      "end": 235477,
+      "kind": "structural"
+    },
+    {
+      "start": 235477,
+      "end": 235501,
+      "kind": "structural"
+    },
+    {
+      "start": 235501,
+      "end": 241404,
+      "kind": "decimal-buffer",
+      "ref": "sha256-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981",
+      "length": 408,
+      "sha256": "b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981",
+      "lines": [
+        16078,
+        16485
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 241404,
+      "end": 241415,
+      "kind": "structural"
+    },
+    {
+      "start": 241415,
+      "end": 241441,
+      "kind": "structural"
+    },
+    {
+      "start": 241441,
+      "end": 241450,
+      "kind": "structural"
+    },
+    {
+      "start": 241450,
+      "end": 241542,
+      "kind": "structural"
+    },
+    {
+      "start": 241542,
+      "end": 241566,
+      "kind": "structural"
+    },
+    {
+      "start": 241566,
+      "end": 242357,
+      "kind": "decimal-buffer",
+      "ref": "sha256-b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84",
+      "length": 54,
+      "sha256": "b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84",
+      "lines": [
+        16491,
+        16544
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 242357,
+      "end": 242368,
+      "kind": "structural"
+    },
+    {
+      "start": 242368,
+      "end": 242394,
+      "kind": "structural"
+    },
+    {
+      "start": 242394,
+      "end": 242403,
+      "kind": "structural"
+    },
+    {
+      "start": 242403,
+      "end": 242495,
+      "kind": "structural"
+    },
+    {
+      "start": 242495,
+      "end": 242519,
+      "kind": "structural"
+    },
+    {
+      "start": 242519,
+      "end": 243948,
+      "kind": "decimal-buffer",
+      "ref": "sha256-c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902",
+      "length": 100,
+      "sha256": "c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902",
+      "lines": [
+        16550,
+        16649
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 243948,
+      "end": 243959,
+      "kind": "structural"
+    },
+    {
+      "start": 243959,
+      "end": 243985,
+      "kind": "structural"
+    },
+    {
+      "start": 243985,
+      "end": 243994,
+      "kind": "structural"
+    },
+    {
+      "start": 243994,
+      "end": 244086,
+      "kind": "structural"
+    },
+    {
+      "start": 244086,
+      "end": 244110,
+      "kind": "structural"
+    },
+    {
+      "start": 244110,
+      "end": 258290,
+      "kind": "decimal-buffer",
+      "ref": "sha256-ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9",
+      "length": 981,
+      "sha256": "ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9",
+      "lines": [
+        16655,
+        17635
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 258290,
+      "end": 258301,
+      "kind": "structural"
+    },
+    {
+      "start": 258301,
+      "end": 258327,
+      "kind": "structural"
+    },
+    {
+      "start": 258327,
+      "end": 258336,
+      "kind": "structural"
+    },
+    {
+      "start": 258336,
+      "end": 258428,
+      "kind": "structural"
+    },
+    {
+      "start": 258428,
+      "end": 258452,
+      "kind": "structural"
+    },
+    {
+      "start": 258452,
+      "end": 272402,
+      "kind": "decimal-buffer",
+      "ref": "sha256-d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e",
+      "length": 966,
+      "sha256": "d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e",
+      "lines": [
+        17641,
+        18606
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 272402,
+      "end": 272413,
+      "kind": "structural"
+    },
+    {
+      "start": 272413,
+      "end": 272439,
+      "kind": "structural"
+    },
+    {
+      "start": 272439,
+      "end": 272448,
+      "kind": "structural"
+    },
+    {
+      "start": 272448,
+      "end": 272540,
+      "kind": "structural"
+    },
+    {
+      "start": 272540,
+      "end": 272566,
+      "kind": "decimal-buffer-empty",
+      "ref": "sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "start": 272566,
+      "end": 272592,
+      "kind": "structural"
+    },
+    {
+      "start": 272592,
+      "end": 272601,
+      "kind": "structural"
+    },
+    {
+      "start": 272601,
+      "end": 272693,
+      "kind": "structural"
+    },
+    {
+      "start": 272693,
+      "end": 272717,
+      "kind": "structural"
+    },
+    {
+      "start": 272717,
+      "end": 283354,
+      "kind": "decimal-buffer",
+      "ref": "sha256-e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4",
+      "length": 736,
+      "sha256": "e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4",
+      "lines": [
+        18616,
+        19351
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 283354,
+      "end": 283365,
+      "kind": "structural"
+    },
+    {
+      "start": 283365,
+      "end": 283391,
+      "kind": "structural"
+    },
+    {
+      "start": 283391,
+      "end": 283400,
+      "kind": "structural"
+    },
+    {
+      "start": 283400,
+      "end": 283492,
+      "kind": "structural"
+    },
+    {
+      "start": 283492,
+      "end": 283516,
+      "kind": "structural"
+    },
+    {
+      "start": 283516,
+      "end": 283690,
+      "kind": "decimal-buffer",
+      "ref": "sha256-bc237aec467eef4ad72ab44c19ed2edbed79f7b5824a2e7ebfb3faf583433e66",
+      "length": 12,
+      "sha256": "bc237aec467eef4ad72ab44c19ed2edbed79f7b5824a2e7ebfb3faf583433e66",
+      "lines": [
+        19357,
+        19368
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-bc237aec467eef4ad72ab44c19ed2edbed79f7b5824a2e7ebfb3faf583433e66.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 283690,
+      "end": 283701,
+      "kind": "structural"
+    },
+    {
+      "start": 283701,
+      "end": 283727,
+      "kind": "structural"
+    },
+    {
+      "start": 283727,
+      "end": 283736,
+      "kind": "structural"
+    },
+    {
+      "start": 283736,
+      "end": 283828,
+      "kind": "structural"
+    },
+    {
+      "start": 283828,
+      "end": 283852,
+      "kind": "structural"
+    },
+    {
+      "start": 283852,
+      "end": 287443,
+      "kind": "decimal-buffer",
+      "ref": "sha256-130a6a38adc93617853c5a74b5dfd104f522d3f3b87a568cec1a7383f5245ad5",
+      "length": 251,
+      "sha256": "130a6a38adc93617853c5a74b5dfd104f522d3f3b87a568cec1a7383f5245ad5",
+      "lines": [
+        19374,
+        19624
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-130a6a38adc93617853c5a74b5dfd104f522d3f3b87a568cec1a7383f5245ad5.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 287443,
+      "end": 287454,
+      "kind": "structural"
+    },
+    {
+      "start": 287454,
+      "end": 287480,
+      "kind": "structural"
+    },
+    {
+      "start": 287480,
+      "end": 287489,
+      "kind": "structural"
+    },
+    {
+      "start": 287489,
+      "end": 287581,
+      "kind": "structural"
+    },
+    {
+      "start": 287581,
+      "end": 287605,
+      "kind": "structural"
+    },
+    {
+      "start": 287605,
+      "end": 310281,
+      "kind": "decimal-buffer",
+      "ref": "sha256-4a7e4f55899221395689a11a510a5eaf00c8dff284980d27ad020c79f3a931c0",
+      "length": 1575,
+      "sha256": "4a7e4f55899221395689a11a510a5eaf00c8dff284980d27ad020c79f3a931c0",
+      "lines": [
+        19630,
+        21204
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-4a7e4f55899221395689a11a510a5eaf00c8dff284980d27ad020c79f3a931c0.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 310281,
+      "end": 310292,
+      "kind": "structural"
+    },
+    {
+      "start": 310292,
+      "end": 310318,
+      "kind": "structural"
+    },
+    {
+      "start": 310318,
+      "end": 310327,
+      "kind": "structural"
+    },
+    {
+      "start": 310327,
+      "end": 310419,
+      "kind": "structural"
+    },
+    {
+      "start": 310419,
+      "end": 310443,
+      "kind": "structural"
+    },
+    {
+      "start": 310443,
+      "end": 324760,
+      "kind": "decimal-buffer",
+      "ref": "sha256-cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705",
+      "length": 978,
+      "sha256": "cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705",
+      "lines": [
+        21210,
+        22187
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 324760,
+      "end": 324771,
+      "kind": "structural"
+    },
+    {
+      "start": 324771,
+      "end": 324797,
+      "kind": "structural"
+    },
+    {
+      "start": 324797,
+      "end": 324806,
+      "kind": "structural"
+    },
+    {
+      "start": 324806,
+      "end": 324898,
+      "kind": "structural"
+    },
+    {
+      "start": 324898,
+      "end": 324922,
+      "kind": "structural"
+    },
+    {
+      "start": 324922,
+      "end": 327807,
+      "kind": "decimal-buffer",
+      "ref": "sha256-425f4b846bf98d662dc3aa8e1f3b83ee41b05d7c5c56324d746366ad8bb88bac",
+      "length": 197,
+      "sha256": "425f4b846bf98d662dc3aa8e1f3b83ee41b05d7c5c56324d746366ad8bb88bac",
+      "lines": [
+        22193,
+        22389
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-425f4b846bf98d662dc3aa8e1f3b83ee41b05d7c5c56324d746366ad8bb88bac.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 327807,
+      "end": 327818,
+      "kind": "structural"
+    },
+    {
+      "start": 327818,
+      "end": 327844,
+      "kind": "structural"
+    },
+    {
+      "start": 327844,
+      "end": 327853,
+      "kind": "structural"
+    },
+    {
+      "start": 327853,
+      "end": 327945,
+      "kind": "structural"
+    },
+    {
+      "start": 327945,
+      "end": 327969,
+      "kind": "structural"
+    },
+    {
+      "start": 327969,
+      "end": 332216,
+      "kind": "decimal-buffer",
+      "ref": "sha256-ae47fdece10a6f3fea64ce2f00f9dbfee11b7e33f44841206ba44bf1897b6126",
+      "length": 295,
+      "sha256": "ae47fdece10a6f3fea64ce2f00f9dbfee11b7e33f44841206ba44bf1897b6126",
+      "lines": [
+        22395,
+        22689
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-ae47fdece10a6f3fea64ce2f00f9dbfee11b7e33f44841206ba44bf1897b6126.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 332216,
+      "end": 332227,
+      "kind": "structural"
+    },
+    {
+      "start": 332227,
+      "end": 332253,
+      "kind": "structural"
+    },
+    {
+      "start": 332253,
+      "end": 332262,
+      "kind": "structural"
+    },
+    {
+      "start": 332262,
+      "end": 332354,
+      "kind": "structural"
+    },
+    {
+      "start": 332354,
+      "end": 332378,
+      "kind": "structural"
+    },
+    {
+      "start": 332378,
+      "end": 343035,
+      "kind": "decimal-buffer",
+      "ref": "sha256-5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5",
+      "length": 740,
+      "sha256": "5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5",
+      "lines": [
+        22695,
+        23434
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 343035,
+      "end": 343046,
+      "kind": "structural"
+    },
+    {
+      "start": 343046,
+      "end": 343072,
+      "kind": "structural"
+    },
+    {
+      "start": 343072,
+      "end": 343081,
+      "kind": "structural"
+    },
+    {
+      "start": 343081,
+      "end": 343173,
+      "kind": "structural"
+    },
+    {
+      "start": 343173,
+      "end": 343197,
+      "kind": "structural"
+    },
+    {
+      "start": 343197,
+      "end": 343431,
+      "kind": "decimal-buffer",
+      "ref": "sha256-006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd",
+      "length": 16,
+      "sha256": "006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd",
+      "lines": [
+        23440,
+        23455
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 343431,
+      "end": 343442,
+      "kind": "structural"
+    },
+    {
+      "start": 343442,
+      "end": 343468,
+      "kind": "structural"
+    },
+    {
+      "start": 343468,
+      "end": 343477,
+      "kind": "structural"
+    },
+    {
+      "start": 343477,
+      "end": 343571,
+      "kind": "structural"
+    },
+    {
+      "start": 343571,
+      "end": 343595,
+      "kind": "structural"
+    },
+    {
+      "start": 343595,
+      "end": 354506,
+      "kind": "decimal-buffer",
+      "ref": "snapshot-e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
+      "length": 762,
+      "sha256": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
+      "lines": [
+        23461,
+        24222
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/snapshot-e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 354506,
+      "end": 354517,
+      "kind": "structural"
+    },
+    {
+      "start": 354517,
+      "end": 354543,
+      "kind": "structural"
+    },
+    {
+      "start": 354543,
+      "end": 354552,
+      "kind": "structural"
+    },
+    {
+      "start": 354552,
+      "end": 354645,
+      "kind": "structural"
+    },
+    {
+      "start": 354645,
+      "end": 354669,
+      "kind": "structural"
+    },
+    {
+      "start": 354669,
+      "end": 531610,
+      "kind": "decimal-buffer",
+      "ref": "archive-44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
+      "length": 12346,
+      "sha256": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
+      "lines": [
+        24228,
+        36573
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/archive-44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 531610,
+      "end": 531621,
+      "kind": "structural"
+    },
+    {
+      "start": 531621,
+      "end": 531647,
+      "kind": "structural"
+    },
+    {
+      "start": 531647,
+      "end": 531656,
+      "kind": "structural"
+    },
+    {
+      "start": 531656,
+      "end": 531750,
+      "kind": "structural"
+    },
+    {
+      "start": 531750,
+      "end": 531774,
+      "kind": "structural"
+    },
+    {
+      "start": 531774,
+      "end": 536799,
+      "kind": "decimal-buffer",
+      "ref": "recovery-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
+      "length": 348,
+      "sha256": "356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
+      "lines": [
+        36579,
+        36926
+      ],
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3.bin"
+      ],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 536799,
+      "end": 536810,
+      "kind": "structural"
+    },
+    {
+      "start": 536810,
+      "end": 536836,
+      "kind": "structural"
+    },
+    {
+      "start": 536836,
+      "end": 536845,
+      "kind": "structural"
+    },
+    {
+      "start": 536845,
+      "end": 536939,
+      "kind": "structural"
+    },
+    {
+      "start": 536939,
+      "end": 536963,
+      "kind": "structural"
+    },
+    {
+      "start": 536963,
+      "end": 589041,
+      "kind": "decimal-buffer",
+      "ref": "recovery-8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976",
+      "length": 3641,
+      "sha256": "8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976",
+      "lines": [
+        36932,
+        40572
+      ],
+      "fixtureMatches": [],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 589041,
+      "end": 589052,
+      "kind": "structural"
+    },
+    {
+      "start": 589052,
+      "end": 589078,
+      "kind": "structural"
+    },
+    {
+      "start": 589078,
+      "end": 589087,
+      "kind": "structural"
+    },
+    {
+      "start": 589087,
+      "end": 589181,
+      "kind": "structural"
+    },
+    {
+      "start": 589181,
+      "end": 589205,
+      "kind": "structural"
+    },
+    {
+      "start": 589205,
+      "end": 601212,
+      "kind": "decimal-buffer",
+      "ref": "recovery-1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c",
+      "length": 832,
+      "sha256": "1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c",
+      "lines": [
+        40578,
+        41409
+      ],
+      "fixtureMatches": [],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 601212,
+      "end": 601223,
+      "kind": "structural"
+    },
+    {
+      "start": 601223,
+      "end": 601249,
+      "kind": "structural"
+    },
+    {
+      "start": 601249,
+      "end": 601258,
+      "kind": "structural"
+    },
+    {
+      "start": 601258,
+      "end": 601352,
+      "kind": "structural"
+    },
+    {
+      "start": 601352,
+      "end": 601376,
+      "kind": "structural"
+    },
+    {
+      "start": 601376,
+      "end": 607126,
+      "kind": "decimal-buffer",
+      "ref": "recovery-2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c",
+      "length": 396,
+      "sha256": "2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c",
+      "lines": [
+        41415,
+        41810
+      ],
+      "fixtureMatches": [],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 607126,
+      "end": 607137,
+      "kind": "structural"
+    },
+    {
+      "start": 607137,
+      "end": 607163,
+      "kind": "structural"
+    },
+    {
+      "start": 607163,
+      "end": 607172,
+      "kind": "structural"
+    },
+    {
+      "start": 607172,
+      "end": 607266,
+      "kind": "structural"
+    },
+    {
+      "start": 607266,
+      "end": 607290,
+      "kind": "structural"
+    },
+    {
+      "start": 607290,
+      "end": 612209,
+      "kind": "decimal-buffer",
+      "ref": "recovery-f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a",
+      "length": 341,
+      "sha256": "f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a",
+      "lines": [
+        41816,
+        42156
+      ],
+      "fixtureMatches": [],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 612209,
+      "end": 612220,
+      "kind": "structural"
+    },
+    {
+      "start": 612220,
+      "end": 612246,
+      "kind": "structural"
+    },
+    {
+      "start": 612246,
+      "end": 612255,
+      "kind": "structural"
+    },
+    {
+      "start": 612255,
+      "end": 612349,
+      "kind": "structural"
+    },
+    {
+      "start": 612349,
+      "end": 612373,
+      "kind": "structural"
+    },
+    {
+      "start": 612373,
+      "end": 651992,
+      "kind": "decimal-buffer",
+      "ref": "recovery-e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb",
+      "length": 2754,
+      "sha256": "e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb",
+      "lines": [
+        42162,
+        44915
+      ],
+      "fixtureMatches": [],
+      "authority": "actual LoadedSavedResult.bytes Map key exact ArtifactRef SHA256; fixture byte equality where present"
+    },
+    {
+      "start": 651992,
+      "end": 652003,
+      "kind": "structural"
+    },
+    {
+      "start": 652003,
+      "end": 652029,
+      "kind": "structural"
+    },
+    {
+      "start": 652029,
+      "end": 652038,
+      "kind": "structural"
+    },
+    {
+      "start": 652038,
+      "end": 652045,
+      "kind": "structural"
+    },
+    {
+      "start": 652045,
+      "end": 652071,
+      "kind": "structural"
+    },
+    {
+      "start": 652071,
+      "end": 652101,
+      "kind": "structural"
+    },
+    {
+      "start": 652101,
+      "end": 652123,
+      "kind": "structural"
+    },
+    {
+      "start": 652123,
+      "end": 652132,
+      "kind": "structural"
+    },
+    {
+      "start": 652132,
+      "end": 652166,
+      "kind": "structural"
+    },
+    {
+      "start": 652166,
+      "end": 652189,
+      "kind": "structural"
+    },
+    {
+      "start": 652189,
+      "end": 652222,
+      "kind": "structural"
+    },
+    {
+      "start": 652222,
+      "end": 652229,
+      "kind": "structural"
+    },
+    {
+      "start": 652229,
+      "end": 652254,
+      "kind": "structural"
+    },
+    {
+      "start": 652254,
+      "end": 652344,
+      "kind": "structural"
+    },
+    {
+      "start": 652344,
+      "end": 652390,
+      "kind": "structural"
+    },
+    {
+      "start": 652390,
+      "end": 652413,
+      "kind": "structural"
+    },
+    {
+      "start": 652413,
+      "end": 652438,
+      "kind": "structural"
+    },
+    {
+      "start": 652438,
+      "end": 652461,
+      "kind": "structural"
+    },
+    {
+      "start": 652461,
+      "end": 652520,
+      "kind": "structural"
+    },
+    {
+      "start": 652520,
+      "end": 652546,
+      "kind": "structural"
+    },
+    {
+      "start": 652546,
+      "end": 652568,
+      "kind": "structural"
+    },
+    {
+      "start": 652568,
+      "end": 652594,
+      "kind": "structural"
+    },
+    {
+      "start": 652594,
+      "end": 652601,
+      "kind": "structural"
+    },
+    {
+      "start": 652601,
+      "end": 652623,
+      "kind": "structural"
+    },
+    {
+      "start": 652623,
+      "end": 652647,
+      "kind": "structural"
+    },
+    {
+      "start": 652647,
+      "end": 652673,
+      "kind": "structural"
+    },
+    {
+      "start": 652673,
+      "end": 652701,
+      "kind": "structural"
+    },
+    {
+      "start": 652701,
+      "end": 652745,
+      "kind": "structural"
+    },
+    {
+      "start": 652745,
+      "end": 652775,
+      "kind": "structural"
+    },
+    {
+      "start": 652775,
+      "end": 652786,
+      "kind": "structural"
+    },
+    {
+      "start": 652786,
+      "end": 652826,
+      "kind": "structural"
+    },
+    {
+      "start": 652826,
+      "end": 652916,
+      "kind": "structural"
+    },
+    {
+      "start": 652916,
+      "end": 652941,
+      "kind": "structural"
+    },
+    {
+      "start": 652941,
+      "end": 652967,
+      "kind": "structural"
+    },
+    {
+      "start": 652967,
+      "end": 652997,
+      "kind": "structural"
+    },
+    {
+      "start": 652997,
+      "end": 653028,
+      "kind": "structural"
+    },
+    {
+      "start": 653028,
+      "end": 653055,
+      "kind": "structural"
+    },
+    {
+      "start": 653055,
+      "end": 653082,
+      "kind": "structural"
+    },
+    {
+      "start": 653082,
+      "end": 653110,
+      "kind": "structural"
+    },
+    {
+      "start": 653110,
+      "end": 653123,
+      "kind": "structural"
+    },
+    {
+      "start": 653123,
+      "end": 653150,
+      "kind": "structural"
+    },
+    {
+      "start": 653150,
+      "end": 653181,
+      "kind": "structural"
+    },
+    {
+      "start": 653181,
+      "end": 653208,
+      "kind": "structural"
+    },
+    {
+      "start": 653208,
+      "end": 653235,
+      "kind": "structural"
+    },
+    {
+      "start": 653235,
+      "end": 653263,
+      "kind": "structural"
+    },
+    {
+      "start": 653263,
+      "end": 653276,
+      "kind": "structural"
+    },
+    {
+      "start": 653276,
+      "end": 653287,
+      "kind": "structural"
+    },
+    {
+      "start": 653287,
+      "end": 653314,
+      "kind": "structural"
+    },
+    {
+      "start": 653314,
+      "end": 653339,
+      "kind": "structural"
+    },
+    {
+      "start": 653339,
+      "end": 653378,
+      "kind": "structural"
+    },
+    {
+      "start": 653378,
+      "end": 653409,
+      "kind": "structural"
+    },
+    {
+      "start": 653409,
+      "end": 653437,
+      "kind": "structural"
+    },
+    {
+      "start": 653437,
+      "end": 653461,
+      "kind": "structural"
+    },
+    {
+      "start": 653461,
+      "end": 653489,
+      "kind": "structural"
+    },
+    {
+      "start": 653489,
+      "end": 653498,
+      "kind": "structural"
+    },
+    {
+      "start": 653498,
+      "end": 653588,
+      "kind": "structural"
+    },
+    {
+      "start": 653588,
+      "end": 653619,
+      "kind": "structural"
+    },
+    {
+      "start": 653619,
+      "end": 653656,
+      "kind": "structural"
+    },
+    {
+      "start": 653656,
+      "end": 653677,
+      "kind": "structural"
+    },
+    {
+      "start": 653677,
+      "end": 653715,
+      "kind": "structural"
+    },
+    {
+      "start": 653715,
+      "end": 653808,
+      "kind": "structural"
+    },
+    {
+      "start": 653808,
+      "end": 653899,
+      "kind": "structural"
+    },
+    {
+      "start": 653899,
+      "end": 653981,
+      "kind": "structural"
+    },
+    {
+      "start": 653981,
+      "end": 654012,
+      "kind": "structural"
+    },
+    {
+      "start": 654012,
+      "end": 654105,
+      "kind": "structural"
+    },
+    {
+      "start": 654105,
+      "end": 654210,
+      "kind": "structural"
+    },
+    {
+      "start": 654210,
+      "end": 654304,
+      "kind": "structural"
+    },
+    {
+      "start": 654304,
+      "end": 654334,
+      "kind": "structural"
+    },
+    {
+      "start": 654334,
+      "end": 654403,
+      "kind": "structural"
+    },
+    {
+      "start": 654403,
+      "end": 654414,
+      "kind": "structural"
+    },
+    {
+      "start": 654414,
+      "end": 654423,
+      "kind": "structural"
+    },
+    {
+      "start": 654423,
+      "end": 654446,
+      "kind": "structural"
+    },
+    {
+      "start": 654446,
+      "end": 654506,
+      "kind": "structural"
+    },
+    {
+      "start": 654506,
+      "end": 654535,
+      "kind": "structural"
+    },
+    {
+      "start": 654535,
+      "end": 654565,
+      "kind": "structural"
+    },
+    {
+      "start": 654565,
+      "end": 654606,
+      "kind": "structural"
+    },
+    {
+      "start": 654606,
+      "end": 654628,
+      "kind": "structural"
+    },
+    {
+      "start": 654628,
+      "end": 654643,
+      "kind": "structural"
+    },
+    {
+      "start": 654643,
+      "end": 654680,
+      "kind": "structural"
+    },
+    {
+      "start": 654680,
+      "end": 654718,
+      "kind": "structural"
+    },
+    {
+      "start": 654718,
+      "end": 654784,
+      "kind": "structural"
+    },
+    {
+      "start": 654784,
+      "end": 654819,
+      "kind": "structural"
+    },
+    {
+      "start": 654819,
+      "end": 654847,
+      "kind": "structural"
+    },
+    {
+      "start": 654847,
+      "end": 654862,
+      "kind": "structural"
+    },
+    {
+      "start": 654862,
+      "end": 654875,
+      "kind": "structural"
+    },
+    {
+      "start": 654875,
+      "end": 654915,
+      "kind": "structural"
+    },
+    {
+      "start": 654915,
+      "end": 654958,
+      "kind": "structural"
+    },
+    {
+      "start": 654958,
+      "end": 654991,
+      "kind": "structural"
+    },
+    {
+      "start": 654991,
+      "end": 655023,
+      "kind": "structural"
+    },
+    {
+      "start": 655023,
+      "end": 655061,
+      "kind": "structural"
+    },
+    {
+      "start": 655061,
+      "end": 655088,
+      "kind": "structural"
+    },
+    {
+      "start": 655088,
+      "end": 655112,
+      "kind": "structural"
+    },
+    {
+      "start": 655112,
+      "end": 655139,
+      "kind": "structural"
+    },
+    {
+      "start": 655139,
+      "end": 655166,
+      "kind": "structural"
+    },
+    {
+      "start": 655166,
+      "end": 655205,
+      "kind": "structural"
+    },
+    {
+      "start": 655205,
+      "end": 655220,
+      "kind": "structural"
+    },
+    {
+      "start": 655220,
+      "end": 655233,
+      "kind": "structural"
+    },
+    {
+      "start": 655233,
+      "end": 655271,
+      "kind": "structural"
+    },
+    {
+      "start": 655271,
+      "end": 655306,
+      "kind": "structural"
+    },
+    {
+      "start": 655306,
+      "end": 655336,
+      "kind": "structural"
+    },
+    {
+      "start": 655336,
+      "end": 655385,
+      "kind": "structural"
+    },
+    {
+      "start": 655385,
+      "end": 655427,
+      "kind": "structural"
+    },
+    {
+      "start": 655427,
+      "end": 655460,
+      "kind": "structural"
+    },
+    {
+      "start": 655460,
+      "end": 655503,
+      "kind": "structural"
+    },
+    {
+      "start": 655503,
+      "end": 655541,
+      "kind": "structural"
+    },
+    {
+      "start": 655541,
+      "end": 655554,
+      "kind": "structural"
+    },
+    {
+      "start": 655554,
+      "end": 655586,
+      "kind": "structural"
+    },
+    {
+      "start": 655586,
+      "end": 655624,
+      "kind": "structural"
+    },
+    {
+      "start": 655624,
+      "end": 655658,
+      "kind": "structural"
+    },
+    {
+      "start": 655658,
+      "end": 655699,
+      "kind": "structural"
+    },
+    {
+      "start": 655699,
+      "end": 655731,
+      "kind": "structural"
+    },
+    {
+      "start": 655731,
+      "end": 655744,
+      "kind": "structural"
+    },
+    {
+      "start": 655744,
+      "end": 655779,
+      "kind": "structural"
+    },
+    {
+      "start": 655779,
+      "end": 655819,
+      "kind": "structural"
+    },
+    {
+      "start": 655819,
+      "end": 655858,
+      "kind": "structural"
+    },
+    {
+      "start": 655858,
+      "end": 655903,
+      "kind": "structural"
+    },
+    {
+      "start": 655903,
+      "end": 655938,
+      "kind": "structural"
+    },
+    {
+      "start": 655938,
+      "end": 655951,
+      "kind": "structural"
+    },
+    {
+      "start": 655951,
+      "end": 655986,
+      "kind": "structural"
+    },
+    {
+      "start": 655986,
+      "end": 656028,
+      "kind": "structural"
+    },
+    {
+      "start": 656028,
+      "end": 656060,
+      "kind": "structural"
+    },
+    {
+      "start": 656060,
+      "end": 656090,
+      "kind": "structural"
+    },
+    {
+      "start": 656090,
+      "end": 656105,
+      "kind": "structural"
+    },
+    {
+      "start": 656105,
+      "end": 656143,
+      "kind": "structural"
+    },
+    {
+      "start": 656143,
+      "end": 656471,
+      "kind": "structural"
+    },
+    {
+      "start": 656471,
+      "end": 656486,
+      "kind": "structural"
+    },
+    {
+      "start": 656486,
+      "end": 656523,
+      "kind": "structural"
+    },
+    {
+      "start": 656523,
+      "end": 656536,
+      "kind": "structural"
+    },
+    {
+      "start": 656536,
+      "end": 656547,
+      "kind": "structural"
+    },
+    {
+      "start": 656547,
+      "end": 656571,
+      "kind": "structural"
+    },
+    {
+      "start": 656571,
+      "end": 656636,
+      "kind": "structural"
+    },
+    {
+      "start": 656636,
+      "end": 656700,
+      "kind": "structural"
+    },
+    {
+      "start": 656700,
+      "end": 656709,
+      "kind": "structural"
+    },
+    {
+      "start": 656709,
+      "end": 656716,
+      "kind": "structural"
+    },
+    {
+      "start": 656716,
+      "end": 656739,
+      "kind": "structural"
+    },
+    {
+      "start": 656739,
+      "end": 656763,
+      "kind": "structural"
+    },
+    {
+      "start": 656763,
+      "end": 656780,
+      "kind": "structural"
+    },
+    {
+      "start": 656780,
+      "end": 656808,
+      "kind": "structural"
+    },
+    {
+      "start": 656808,
+      "end": 656837,
+      "kind": "structural"
+    },
+    {
+      "start": 656837,
+      "end": 656858,
+      "kind": "structural"
+    },
+    {
+      "start": 656858,
+      "end": 656888,
+      "kind": "structural"
+    },
+    {
+      "start": 656888,
+      "end": 656919,
+      "kind": "structural"
+    },
+    {
+      "start": 656919,
+      "end": 656946,
+      "kind": "structural"
+    },
+    {
+      "start": 656946,
+      "end": 656980,
+      "kind": "structural"
+    },
+    {
+      "start": 656980,
+      "end": 657007,
+      "kind": "structural"
+    },
+    {
+      "start": 657007,
+      "end": 657022,
+      "kind": "structural"
+    },
+    {
+      "start": 657022,
+      "end": 657035,
+      "kind": "structural"
+    },
+    {
+      "start": 657035,
+      "end": 657068,
+      "kind": "structural"
+    },
+    {
+      "start": 657068,
+      "end": 657096,
+      "kind": "structural"
+    },
+    {
+      "start": 657096,
+      "end": 657123,
+      "kind": "structural"
+    },
+    {
+      "start": 657123,
+      "end": 657150,
+      "kind": "structural"
+    },
+    {
+      "start": 657150,
+      "end": 657176,
+      "kind": "structural"
+    },
+    {
+      "start": 657176,
+      "end": 657189,
+      "kind": "structural"
+    },
+    {
+      "start": 657189,
+      "end": 657214,
+      "kind": "structural"
+    },
+    {
+      "start": 657214,
+      "end": 657241,
+      "kind": "structural"
+    },
+    {
+      "start": 657241,
+      "end": 657304,
+      "kind": "structural"
+    },
+    {
+      "start": 657304,
+      "end": 657333,
+      "kind": "structural"
+    },
+    {
+      "start": 657333,
+      "end": 657436,
+      "kind": "structural"
+    },
+    {
+      "start": 657436,
+      "end": 657524,
+      "kind": "structural"
+    },
+    {
+      "start": 657524,
+      "end": 657537,
+      "kind": "structural"
+    },
+    {
+      "start": 657537,
+      "end": 657548,
+      "kind": "structural"
+    },
+    {
+      "start": 657548,
+      "end": 657565,
+      "kind": "structural"
+    },
+    {
+      "start": 657565,
+      "end": 657593,
+      "kind": "structural"
+    },
+    {
+      "start": 657593,
+      "end": 657623,
+      "kind": "structural"
+    },
+    {
+      "start": 657623,
+      "end": 657648,
+      "kind": "structural"
+    },
+    {
+      "start": 657648,
+      "end": 657675,
+      "kind": "structural"
+    },
+    {
+      "start": 657675,
+      "end": 657738,
+      "kind": "structural"
+    },
+    {
+      "start": 657738,
+      "end": 657767,
+      "kind": "structural"
+    },
+    {
+      "start": 657767,
+      "end": 657870,
+      "kind": "structural"
+    },
+    {
+      "start": 657870,
+      "end": 657958,
+      "kind": "structural"
+    },
+    {
+      "start": 657958,
+      "end": 657971,
+      "kind": "structural"
+    },
+    {
+      "start": 657971,
+      "end": 657982,
+      "kind": "structural"
+    },
+    {
+      "start": 657982,
+      "end": 657999,
+      "kind": "structural"
+    },
+    {
+      "start": 657999,
+      "end": 658030,
+      "kind": "structural"
+    },
+    {
+      "start": 658030,
+      "end": 658063,
+      "kind": "structural"
+    },
+    {
+      "start": 658063,
+      "end": 658090,
+      "kind": "structural"
+    },
+    {
+      "start": 658090,
+      "end": 658117,
+      "kind": "structural"
+    },
+    {
+      "start": 658117,
+      "end": 658144,
+      "kind": "structural"
+    },
+    {
+      "start": 658144,
+      "end": 658169,
+      "kind": "structural"
+    },
+    {
+      "start": 658169,
+      "end": 658182,
+      "kind": "structural"
+    },
+    {
+      "start": 658182,
+      "end": 658207,
+      "kind": "structural"
+    },
+    {
+      "start": 658207,
+      "end": 658234,
+      "kind": "structural"
+    },
+    {
+      "start": 658234,
+      "end": 658297,
+      "kind": "structural"
+    },
+    {
+      "start": 658297,
+      "end": 658326,
+      "kind": "structural"
+    },
+    {
+      "start": 658326,
+      "end": 658429,
+      "kind": "structural"
+    },
+    {
+      "start": 658429,
+      "end": 658517,
+      "kind": "structural"
+    },
+    {
+      "start": 658517,
+      "end": 658530,
+      "kind": "structural"
+    },
+    {
+      "start": 658530,
+      "end": 658541,
+      "kind": "structural"
+    },
+    {
+      "start": 658541,
+      "end": 658550,
+      "kind": "structural"
+    },
+    {
+      "start": 658550,
+      "end": 658570,
+      "kind": "structural"
+    },
+    {
+      "start": 658570,
+      "end": 658601,
+      "kind": "structural"
+    },
+    {
+      "start": 658601,
+      "end": 658639,
+      "kind": "structural"
+    },
+    {
+      "start": 658639,
+      "end": 658664,
+      "kind": "structural"
+    },
+    {
+      "start": 658664,
+      "end": 658750,
+      "kind": "structural"
+    },
+    {
+      "start": 658750,
+      "end": 658761,
+      "kind": "structural"
+    },
+    {
+      "start": 658761,
+      "end": 658796,
+      "kind": "structural"
+    },
+    {
+      "start": 658796,
+      "end": 658821,
+      "kind": "structural"
+    },
+    {
+      "start": 658821,
+      "end": 658907,
+      "kind": "structural"
+    },
+    {
+      "start": 658907,
+      "end": 658918,
+      "kind": "structural"
+    },
+    {
+      "start": 658918,
+      "end": 658968,
+      "kind": "structural"
+    },
+    {
+      "start": 658968,
+      "end": 658993,
+      "kind": "structural"
+    },
+    {
+      "start": 658993,
+      "end": 659079,
+      "kind": "structural"
+    },
+    {
+      "start": 659079,
+      "end": 659090,
+      "kind": "structural"
+    },
+    {
+      "start": 659090,
+      "end": 659099,
+      "kind": "structural"
+    },
+    {
+      "start": 659099,
+      "end": 659120,
+      "kind": "structural"
+    },
+    {
+      "start": 659120,
+      "end": 659145,
+      "kind": "structural"
+    },
+    {
+      "start": 659145,
+      "end": 659173,
+      "kind": "structural"
+    },
+    {
+      "start": 659173,
+      "end": 659198,
+      "kind": "structural"
+    },
+    {
+      "start": 659198,
+      "end": 659223,
+      "kind": "structural"
+    },
+    {
+      "start": 659223,
+      "end": 659248,
+      "kind": "structural"
+    },
+    {
+      "start": 659248,
+      "end": 659271,
+      "kind": "structural"
+    },
+    {
+      "start": 659271,
+      "end": 659282,
+      "kind": "structural"
+    },
+    {
+      "start": 659282,
+      "end": 659307,
+      "kind": "structural"
+    },
+    {
+      "start": 659307,
+      "end": 659334,
+      "kind": "structural"
+    },
+    {
+      "start": 659334,
+      "end": 659359,
+      "kind": "structural"
+    },
+    {
+      "start": 659359,
+      "end": 659384,
+      "kind": "structural"
+    },
+    {
+      "start": 659384,
+      "end": 659408,
+      "kind": "structural"
+    },
+    {
+      "start": 659408,
+      "end": 659419,
+      "kind": "structural"
+    },
+    {
+      "start": 659419,
+      "end": 659428,
+      "kind": "structural"
+    },
+    {
+      "start": 659428,
+      "end": 659435,
+      "kind": "structural"
+    },
+    {
+      "start": 659435,
+      "end": 659470,
+      "kind": "structural"
+    },
+    {
+      "start": 659470,
+      "end": 659495,
+      "kind": "structural"
+    },
+    {
+      "start": 659495,
+      "end": 659523,
+      "kind": "structural"
+    },
+    {
+      "start": 659523,
+      "end": 659622,
+      "kind": "structural"
+    },
+    {
+      "start": 659622,
+      "end": 659706,
+      "kind": "structural"
+    },
+    {
+      "start": 659706,
+      "end": 659715,
+      "kind": "structural"
+    },
+    {
+      "start": 659715,
+      "end": 659742,
+      "kind": "structural"
+    },
+    {
+      "start": 659742,
+      "end": 659759,
+      "kind": "structural"
+    },
+    {
+      "start": 659759,
+      "end": 659856,
+      "kind": "structural"
+    },
+    {
+      "start": 659856,
+      "end": 659882,
+      "kind": "structural"
+    },
+    {
+      "start": 659882,
+      "end": 659983,
+      "kind": "structural"
+    },
+    {
+      "start": 659983,
+      "end": 660071,
+      "kind": "structural"
+    },
+    {
+      "start": 660071,
+      "end": 660084,
+      "kind": "structural"
+    },
+    {
+      "start": 660084,
+      "end": 660095,
+      "kind": "structural"
+    },
+    {
+      "start": 660095,
+      "end": 660112,
+      "kind": "structural"
+    },
+    {
+      "start": 660112,
+      "end": 660209,
+      "kind": "structural"
+    },
+    {
+      "start": 660209,
+      "end": 660235,
+      "kind": "structural"
+    },
+    {
+      "start": 660235,
+      "end": 660336,
+      "kind": "structural"
+    },
+    {
+      "start": 660336,
+      "end": 660424,
+      "kind": "structural"
+    },
+    {
+      "start": 660424,
+      "end": 660437,
+      "kind": "structural"
+    },
+    {
+      "start": 660437,
+      "end": 660448,
+      "kind": "structural"
+    },
+    {
+      "start": 660448,
+      "end": 660465,
+      "kind": "structural"
+    },
+    {
+      "start": 660465,
+      "end": 660562,
+      "kind": "structural"
+    },
+    {
+      "start": 660562,
+      "end": 660588,
+      "kind": "structural"
+    },
+    {
+      "start": 660588,
+      "end": 660689,
+      "kind": "structural"
+    },
+    {
+      "start": 660689,
+      "end": 660777,
+      "kind": "structural"
+    },
+    {
+      "start": 660777,
+      "end": 660790,
+      "kind": "structural"
+    },
+    {
+      "start": 660790,
+      "end": 660801,
+      "kind": "structural"
+    },
+    {
+      "start": 660801,
+      "end": 660818,
+      "kind": "structural"
+    },
+    {
+      "start": 660818,
+      "end": 660915,
+      "kind": "structural"
+    },
+    {
+      "start": 660915,
+      "end": 660941,
+      "kind": "structural"
+    },
+    {
+      "start": 660941,
+      "end": 661042,
+      "kind": "structural"
+    },
+    {
+      "start": 661042,
+      "end": 661130,
+      "kind": "structural"
+    },
+    {
+      "start": 661130,
+      "end": 661143,
+      "kind": "structural"
+    },
+    {
+      "start": 661143,
+      "end": 661154,
+      "kind": "structural"
+    },
+    {
+      "start": 661154,
+      "end": 661171,
+      "kind": "structural"
+    },
+    {
+      "start": 661171,
+      "end": 661268,
+      "kind": "structural"
+    },
+    {
+      "start": 661268,
+      "end": 661294,
+      "kind": "structural"
+    },
+    {
+      "start": 661294,
+      "end": 661395,
+      "kind": "structural"
+    },
+    {
+      "start": 661395,
+      "end": 661483,
+      "kind": "structural"
+    },
+    {
+      "start": 661483,
+      "end": 661496,
+      "kind": "structural"
+    },
+    {
+      "start": 661496,
+      "end": 661507,
+      "kind": "structural"
+    },
+    {
+      "start": 661507,
+      "end": 661524,
+      "kind": "structural"
+    },
+    {
+      "start": 661524,
+      "end": 661621,
+      "kind": "structural"
+    },
+    {
+      "start": 661621,
+      "end": 661647,
+      "kind": "structural"
+    },
+    {
+      "start": 661647,
+      "end": 661748,
+      "kind": "structural"
+    },
+    {
+      "start": 661748,
+      "end": 661836,
+      "kind": "structural"
+    },
+    {
+      "start": 661836,
+      "end": 661849,
+      "kind": "structural"
+    },
+    {
+      "start": 661849,
+      "end": 661860,
+      "kind": "structural"
+    },
+    {
+      "start": 661860,
+      "end": 661877,
+      "kind": "structural"
+    },
+    {
+      "start": 661877,
+      "end": 661974,
+      "kind": "structural"
+    },
+    {
+      "start": 661974,
+      "end": 662000,
+      "kind": "structural"
+    },
+    {
+      "start": 662000,
+      "end": 662101,
+      "kind": "structural"
+    },
+    {
+      "start": 662101,
+      "end": 662189,
+      "kind": "structural"
+    },
+    {
+      "start": 662189,
+      "end": 662202,
+      "kind": "structural"
+    },
+    {
+      "start": 662202,
+      "end": 662213,
+      "kind": "structural"
+    },
+    {
+      "start": 662213,
+      "end": 662230,
+      "kind": "structural"
+    },
+    {
+      "start": 662230,
+      "end": 662327,
+      "kind": "structural"
+    },
+    {
+      "start": 662327,
+      "end": 662353,
+      "kind": "structural"
+    },
+    {
+      "start": 662353,
+      "end": 662454,
+      "kind": "structural"
+    },
+    {
+      "start": 662454,
+      "end": 662542,
+      "kind": "structural"
+    },
+    {
+      "start": 662542,
+      "end": 662555,
+      "kind": "structural"
+    },
+    {
+      "start": 662555,
+      "end": 662566,
+      "kind": "structural"
+    },
+    {
+      "start": 662566,
+      "end": 662583,
+      "kind": "structural"
+    },
+    {
+      "start": 662583,
+      "end": 662680,
+      "kind": "structural"
+    },
+    {
+      "start": 662680,
+      "end": 662706,
+      "kind": "structural"
+    },
+    {
+      "start": 662706,
+      "end": 662807,
+      "kind": "structural"
+    },
+    {
+      "start": 662807,
+      "end": 662895,
+      "kind": "structural"
+    },
+    {
+      "start": 662895,
+      "end": 662908,
+      "kind": "structural"
+    },
+    {
+      "start": 662908,
+      "end": 662919,
+      "kind": "structural"
+    },
+    {
+      "start": 662919,
+      "end": 662936,
+      "kind": "structural"
+    },
+    {
+      "start": 662936,
+      "end": 663033,
+      "kind": "structural"
+    },
+    {
+      "start": 663033,
+      "end": 663059,
+      "kind": "structural"
+    },
+    {
+      "start": 663059,
+      "end": 663160,
+      "kind": "structural"
+    },
+    {
+      "start": 663160,
+      "end": 663248,
+      "kind": "structural"
+    },
+    {
+      "start": 663248,
+      "end": 663261,
+      "kind": "structural"
+    },
+    {
+      "start": 663261,
+      "end": 663272,
+      "kind": "structural"
+    },
+    {
+      "start": 663272,
+      "end": 663289,
+      "kind": "structural"
+    },
+    {
+      "start": 663289,
+      "end": 663386,
+      "kind": "structural"
+    },
+    {
+      "start": 663386,
+      "end": 663412,
+      "kind": "structural"
+    },
+    {
+      "start": 663412,
+      "end": 663513,
+      "kind": "structural"
+    },
+    {
+      "start": 663513,
+      "end": 663601,
+      "kind": "structural"
+    },
+    {
+      "start": 663601,
+      "end": 663614,
+      "kind": "structural"
+    },
+    {
+      "start": 663614,
+      "end": 663625,
+      "kind": "structural"
+    },
+    {
+      "start": 663625,
+      "end": 663642,
+      "kind": "structural"
+    },
+    {
+      "start": 663642,
+      "end": 663739,
+      "kind": "structural"
+    },
+    {
+      "start": 663739,
+      "end": 663765,
+      "kind": "structural"
+    },
+    {
+      "start": 663765,
+      "end": 663866,
+      "kind": "structural"
+    },
+    {
+      "start": 663866,
+      "end": 663954,
+      "kind": "structural"
+    },
+    {
+      "start": 663954,
+      "end": 663967,
+      "kind": "structural"
+    },
+    {
+      "start": 663967,
+      "end": 663978,
+      "kind": "structural"
+    },
+    {
+      "start": 663978,
+      "end": 663995,
+      "kind": "structural"
+    },
+    {
+      "start": 663995,
+      "end": 664092,
+      "kind": "structural"
+    },
+    {
+      "start": 664092,
+      "end": 664118,
+      "kind": "structural"
+    },
+    {
+      "start": 664118,
+      "end": 664219,
+      "kind": "structural"
+    },
+    {
+      "start": 664219,
+      "end": 664307,
+      "kind": "structural"
+    },
+    {
+      "start": 664307,
+      "end": 664320,
+      "kind": "structural"
+    },
+    {
+      "start": 664320,
+      "end": 664331,
+      "kind": "structural"
+    },
+    {
+      "start": 664331,
+      "end": 664348,
+      "kind": "structural"
+    },
+    {
+      "start": 664348,
+      "end": 664445,
+      "kind": "structural"
+    },
+    {
+      "start": 664445,
+      "end": 664471,
+      "kind": "structural"
+    },
+    {
+      "start": 664471,
+      "end": 664572,
+      "kind": "structural"
+    },
+    {
+      "start": 664572,
+      "end": 664660,
+      "kind": "structural"
+    },
+    {
+      "start": 664660,
+      "end": 664673,
+      "kind": "structural"
+    },
+    {
+      "start": 664673,
+      "end": 664684,
+      "kind": "structural"
+    },
+    {
+      "start": 664684,
+      "end": 664701,
+      "kind": "structural"
+    },
+    {
+      "start": 664701,
+      "end": 664798,
+      "kind": "structural"
+    },
+    {
+      "start": 664798,
+      "end": 664824,
+      "kind": "structural"
+    },
+    {
+      "start": 664824,
+      "end": 664925,
+      "kind": "structural"
+    },
+    {
+      "start": 664925,
+      "end": 665013,
+      "kind": "structural"
+    },
+    {
+      "start": 665013,
+      "end": 665026,
+      "kind": "structural"
+    },
+    {
+      "start": 665026,
+      "end": 665037,
+      "kind": "structural"
+    },
+    {
+      "start": 665037,
+      "end": 665054,
+      "kind": "structural"
+    },
+    {
+      "start": 665054,
+      "end": 665151,
+      "kind": "structural"
+    },
+    {
+      "start": 665151,
+      "end": 665177,
+      "kind": "structural"
+    },
+    {
+      "start": 665177,
+      "end": 665278,
+      "kind": "structural"
+    },
+    {
+      "start": 665278,
+      "end": 665366,
+      "kind": "structural"
+    },
+    {
+      "start": 665366,
+      "end": 665379,
+      "kind": "structural"
+    },
+    {
+      "start": 665379,
+      "end": 665390,
+      "kind": "structural"
+    },
+    {
+      "start": 665390,
+      "end": 665407,
+      "kind": "structural"
+    },
+    {
+      "start": 665407,
+      "end": 665504,
+      "kind": "structural"
+    },
+    {
+      "start": 665504,
+      "end": 665530,
+      "kind": "structural"
+    },
+    {
+      "start": 665530,
+      "end": 665631,
+      "kind": "structural"
+    },
+    {
+      "start": 665631,
+      "end": 665719,
+      "kind": "structural"
+    },
+    {
+      "start": 665719,
+      "end": 665732,
+      "kind": "structural"
+    },
+    {
+      "start": 665732,
+      "end": 665743,
+      "kind": "structural"
+    },
+    {
+      "start": 665743,
+      "end": 665760,
+      "kind": "structural"
+    },
+    {
+      "start": 665760,
+      "end": 665857,
+      "kind": "structural"
+    },
+    {
+      "start": 665857,
+      "end": 665883,
+      "kind": "structural"
+    },
+    {
+      "start": 665883,
+      "end": 665984,
+      "kind": "structural"
+    },
+    {
+      "start": 665984,
+      "end": 666072,
+      "kind": "structural"
+    },
+    {
+      "start": 666072,
+      "end": 666085,
+      "kind": "structural"
+    },
+    {
+      "start": 666085,
+      "end": 666096,
+      "kind": "structural"
+    },
+    {
+      "start": 666096,
+      "end": 666113,
+      "kind": "structural"
+    },
+    {
+      "start": 666113,
+      "end": 666210,
+      "kind": "structural"
+    },
+    {
+      "start": 666210,
+      "end": 666236,
+      "kind": "structural"
+    },
+    {
+      "start": 666236,
+      "end": 666337,
+      "kind": "structural"
+    },
+    {
+      "start": 666337,
+      "end": 666425,
+      "kind": "structural"
+    },
+    {
+      "start": 666425,
+      "end": 666438,
+      "kind": "structural"
+    },
+    {
+      "start": 666438,
+      "end": 666449,
+      "kind": "structural"
+    },
+    {
+      "start": 666449,
+      "end": 666466,
+      "kind": "structural"
+    },
+    {
+      "start": 666466,
+      "end": 666563,
+      "kind": "structural"
+    },
+    {
+      "start": 666563,
+      "end": 666589,
+      "kind": "structural"
+    },
+    {
+      "start": 666589,
+      "end": 666690,
+      "kind": "structural"
+    },
+    {
+      "start": 666690,
+      "end": 666778,
+      "kind": "structural"
+    },
+    {
+      "start": 666778,
+      "end": 666791,
+      "kind": "structural"
+    },
+    {
+      "start": 666791,
+      "end": 666802,
+      "kind": "structural"
+    },
+    {
+      "start": 666802,
+      "end": 666819,
+      "kind": "structural"
+    },
+    {
+      "start": 666819,
+      "end": 666916,
+      "kind": "structural"
+    },
+    {
+      "start": 666916,
+      "end": 666942,
+      "kind": "structural"
+    },
+    {
+      "start": 666942,
+      "end": 667043,
+      "kind": "structural"
+    },
+    {
+      "start": 667043,
+      "end": 667131,
+      "kind": "structural"
+    },
+    {
+      "start": 667131,
+      "end": 667144,
+      "kind": "structural"
+    },
+    {
+      "start": 667144,
+      "end": 667155,
+      "kind": "structural"
+    },
+    {
+      "start": 667155,
+      "end": 667172,
+      "kind": "structural"
+    },
+    {
+      "start": 667172,
+      "end": 667269,
+      "kind": "structural"
+    },
+    {
+      "start": 667269,
+      "end": 667295,
+      "kind": "structural"
+    },
+    {
+      "start": 667295,
+      "end": 667396,
+      "kind": "structural"
+    },
+    {
+      "start": 667396,
+      "end": 667484,
+      "kind": "structural"
+    },
+    {
+      "start": 667484,
+      "end": 667497,
+      "kind": "structural"
+    },
+    {
+      "start": 667497,
+      "end": 667508,
+      "kind": "structural"
+    },
+    {
+      "start": 667508,
+      "end": 667525,
+      "kind": "structural"
+    },
+    {
+      "start": 667525,
+      "end": 667622,
+      "kind": "structural"
+    },
+    {
+      "start": 667622,
+      "end": 667648,
+      "kind": "structural"
+    },
+    {
+      "start": 667648,
+      "end": 667749,
+      "kind": "structural"
+    },
+    {
+      "start": 667749,
+      "end": 667837,
+      "kind": "structural"
+    },
+    {
+      "start": 667837,
+      "end": 667850,
+      "kind": "structural"
+    },
+    {
+      "start": 667850,
+      "end": 667861,
+      "kind": "structural"
+    },
+    {
+      "start": 667861,
+      "end": 667878,
+      "kind": "structural"
+    },
+    {
+      "start": 667878,
+      "end": 667975,
+      "kind": "structural"
+    },
+    {
+      "start": 667975,
+      "end": 668001,
+      "kind": "structural"
+    },
+    {
+      "start": 668001,
+      "end": 668102,
+      "kind": "structural"
+    },
+    {
+      "start": 668102,
+      "end": 668190,
+      "kind": "structural"
+    },
+    {
+      "start": 668190,
+      "end": 668203,
+      "kind": "structural"
+    },
+    {
+      "start": 668203,
+      "end": 668214,
+      "kind": "structural"
+    },
+    {
+      "start": 668214,
+      "end": 668231,
+      "kind": "structural"
+    },
+    {
+      "start": 668231,
+      "end": 668328,
+      "kind": "structural"
+    },
+    {
+      "start": 668328,
+      "end": 668354,
+      "kind": "structural"
+    },
+    {
+      "start": 668354,
+      "end": 668455,
+      "kind": "structural"
+    },
+    {
+      "start": 668455,
+      "end": 668543,
+      "kind": "structural"
+    },
+    {
+      "start": 668543,
+      "end": 668556,
+      "kind": "structural"
+    },
+    {
+      "start": 668556,
+      "end": 668567,
+      "kind": "structural"
+    },
+    {
+      "start": 668567,
+      "end": 668584,
+      "kind": "structural"
+    },
+    {
+      "start": 668584,
+      "end": 668681,
+      "kind": "structural"
+    },
+    {
+      "start": 668681,
+      "end": 668707,
+      "kind": "structural"
+    },
+    {
+      "start": 668707,
+      "end": 668808,
+      "kind": "structural"
+    },
+    {
+      "start": 668808,
+      "end": 668896,
+      "kind": "structural"
+    },
+    {
+      "start": 668896,
+      "end": 668909,
+      "kind": "structural"
+    },
+    {
+      "start": 668909,
+      "end": 668920,
+      "kind": "structural"
+    },
+    {
+      "start": 668920,
+      "end": 668937,
+      "kind": "structural"
+    },
+    {
+      "start": 668937,
+      "end": 669034,
+      "kind": "structural"
+    },
+    {
+      "start": 669034,
+      "end": 669060,
+      "kind": "structural"
+    },
+    {
+      "start": 669060,
+      "end": 669161,
+      "kind": "structural"
+    },
+    {
+      "start": 669161,
+      "end": 669249,
+      "kind": "structural"
+    },
+    {
+      "start": 669249,
+      "end": 669262,
+      "kind": "structural"
+    },
+    {
+      "start": 669262,
+      "end": 669273,
+      "kind": "structural"
+    },
+    {
+      "start": 669273,
+      "end": 669290,
+      "kind": "structural"
+    },
+    {
+      "start": 669290,
+      "end": 669387,
+      "kind": "structural"
+    },
+    {
+      "start": 669387,
+      "end": 669413,
+      "kind": "structural"
+    },
+    {
+      "start": 669413,
+      "end": 669514,
+      "kind": "structural"
+    },
+    {
+      "start": 669514,
+      "end": 669602,
+      "kind": "structural"
+    },
+    {
+      "start": 669602,
+      "end": 669615,
+      "kind": "structural"
+    },
+    {
+      "start": 669615,
+      "end": 669626,
+      "kind": "structural"
+    },
+    {
+      "start": 669626,
+      "end": 669643,
+      "kind": "structural"
+    },
+    {
+      "start": 669643,
+      "end": 669740,
+      "kind": "structural"
+    },
+    {
+      "start": 669740,
+      "end": 669766,
+      "kind": "structural"
+    },
+    {
+      "start": 669766,
+      "end": 669867,
+      "kind": "structural"
+    },
+    {
+      "start": 669867,
+      "end": 669955,
+      "kind": "structural"
+    },
+    {
+      "start": 669955,
+      "end": 669968,
+      "kind": "structural"
+    },
+    {
+      "start": 669968,
+      "end": 669979,
+      "kind": "structural"
+    },
+    {
+      "start": 669979,
+      "end": 669996,
+      "kind": "structural"
+    },
+    {
+      "start": 669996,
+      "end": 670093,
+      "kind": "structural"
+    },
+    {
+      "start": 670093,
+      "end": 670119,
+      "kind": "structural"
+    },
+    {
+      "start": 670119,
+      "end": 670220,
+      "kind": "structural"
+    },
+    {
+      "start": 670220,
+      "end": 670308,
+      "kind": "structural"
+    },
+    {
+      "start": 670308,
+      "end": 670321,
+      "kind": "structural"
+    },
+    {
+      "start": 670321,
+      "end": 670332,
+      "kind": "structural"
+    },
+    {
+      "start": 670332,
+      "end": 670349,
+      "kind": "structural"
+    },
+    {
+      "start": 670349,
+      "end": 670448,
+      "kind": "structural"
+    },
+    {
+      "start": 670448,
+      "end": 670474,
+      "kind": "structural"
+    },
+    {
+      "start": 670474,
+      "end": 670577,
+      "kind": "structural"
+    },
+    {
+      "start": 670577,
+      "end": 670665,
+      "kind": "structural"
+    },
+    {
+      "start": 670665,
+      "end": 670678,
+      "kind": "structural"
+    },
+    {
+      "start": 670678,
+      "end": 670689,
+      "kind": "structural"
+    },
+    {
+      "start": 670689,
+      "end": 670706,
+      "kind": "structural"
+    },
+    {
+      "start": 670706,
+      "end": 670804,
+      "kind": "structural"
+    },
+    {
+      "start": 670804,
+      "end": 670830,
+      "kind": "structural"
+    },
+    {
+      "start": 670830,
+      "end": 670932,
+      "kind": "structural"
+    },
+    {
+      "start": 670932,
+      "end": 671020,
+      "kind": "structural"
+    },
+    {
+      "start": 671020,
+      "end": 671033,
+      "kind": "structural"
+    },
+    {
+      "start": 671033,
+      "end": 671044,
+      "kind": "structural"
+    },
+    {
+      "start": 671044,
+      "end": 671061,
+      "kind": "structural"
+    },
+    {
+      "start": 671061,
+      "end": 671160,
+      "kind": "structural"
+    },
+    {
+      "start": 671160,
+      "end": 671186,
+      "kind": "structural"
+    },
+    {
+      "start": 671186,
+      "end": 671289,
+      "kind": "structural"
+    },
+    {
+      "start": 671289,
+      "end": 671377,
+      "kind": "structural"
+    },
+    {
+      "start": 671377,
+      "end": 671390,
+      "kind": "structural"
+    },
+    {
+      "start": 671390,
+      "end": 671401,
+      "kind": "structural"
+    },
+    {
+      "start": 671401,
+      "end": 671418,
+      "kind": "structural"
+    },
+    {
+      "start": 671418,
+      "end": 671517,
+      "kind": "structural"
+    },
+    {
+      "start": 671517,
+      "end": 671543,
+      "kind": "structural"
+    },
+    {
+      "start": 671543,
+      "end": 671646,
+      "kind": "structural"
+    },
+    {
+      "start": 671646,
+      "end": 671734,
+      "kind": "structural"
+    },
+    {
+      "start": 671734,
+      "end": 671747,
+      "kind": "structural"
+    },
+    {
+      "start": 671747,
+      "end": 671758,
+      "kind": "structural"
+    },
+    {
+      "start": 671758,
+      "end": 671775,
+      "kind": "structural"
+    },
+    {
+      "start": 671775,
+      "end": 671874,
+      "kind": "structural"
+    },
+    {
+      "start": 671874,
+      "end": 671900,
+      "kind": "structural"
+    },
+    {
+      "start": 671900,
+      "end": 672003,
+      "kind": "structural"
+    },
+    {
+      "start": 672003,
+      "end": 672091,
+      "kind": "structural"
+    },
+    {
+      "start": 672091,
+      "end": 672104,
+      "kind": "structural"
+    },
+    {
+      "start": 672104,
+      "end": 672115,
+      "kind": "structural"
+    },
+    {
+      "start": 672115,
+      "end": 672132,
+      "kind": "structural"
+    },
+    {
+      "start": 672132,
+      "end": 672231,
+      "kind": "structural"
+    },
+    {
+      "start": 672231,
+      "end": 672257,
+      "kind": "structural"
+    },
+    {
+      "start": 672257,
+      "end": 672360,
+      "kind": "structural"
+    },
+    {
+      "start": 672360,
+      "end": 672448,
+      "kind": "structural"
+    },
+    {
+      "start": 672448,
+      "end": 672461,
+      "kind": "structural"
+    },
+    {
+      "start": 672461,
+      "end": 672472,
+      "kind": "structural"
+    },
+    {
+      "start": 672472,
+      "end": 672489,
+      "kind": "structural"
+    },
+    {
+      "start": 672489,
+      "end": 672588,
+      "kind": "structural"
+    },
+    {
+      "start": 672588,
+      "end": 672614,
+      "kind": "structural"
+    },
+    {
+      "start": 672614,
+      "end": 672717,
+      "kind": "structural"
+    },
+    {
+      "start": 672717,
+      "end": 672805,
+      "kind": "structural"
+    },
+    {
+      "start": 672805,
+      "end": 672818,
+      "kind": "structural"
+    },
+    {
+      "start": 672818,
+      "end": 672829,
+      "kind": "structural"
+    },
+    {
+      "start": 672829,
+      "end": 672846,
+      "kind": "structural"
+    },
+    {
+      "start": 672846,
+      "end": 672945,
+      "kind": "structural"
+    },
+    {
+      "start": 672945,
+      "end": 672971,
+      "kind": "structural"
+    },
+    {
+      "start": 672971,
+      "end": 673074,
+      "kind": "structural"
+    },
+    {
+      "start": 673074,
+      "end": 673162,
+      "kind": "structural"
+    },
+    {
+      "start": 673162,
+      "end": 673175,
+      "kind": "structural"
+    },
+    {
+      "start": 673175,
+      "end": 673186,
+      "kind": "structural"
+    },
+    {
+      "start": 673186,
+      "end": 673195,
+      "kind": "structural"
+    },
+    {
+      "start": 673195,
+      "end": 673251,
+      "kind": "structural"
+    },
+    {
+      "start": 673251,
+      "end": 673301,
+      "kind": "structural"
+    },
+    {
+      "start": 673301,
+      "end": 673326,
+      "kind": "structural"
+    },
+    {
+      "start": 673326,
+      "end": 673424,
+      "kind": "structural"
+    },
+    {
+      "start": 673424,
+      "end": 673508,
+      "kind": "structural"
+    },
+    {
+      "start": 673508,
+      "end": 673517,
+      "kind": "structural"
+    },
+    {
+      "start": 673517,
+      "end": 673524,
+      "kind": "structural"
+    },
+    {
+      "start": 673524,
+      "end": 673588,
+      "kind": "structural"
+    },
+    {
+      "start": 673588,
+      "end": 673609,
+      "kind": "structural"
+    },
+    {
+      "start": 673609,
+      "end": 673645,
+      "kind": "structural"
+    },
+    {
+      "start": 673645,
+      "end": 673667,
+      "kind": "structural"
+    },
+    {
+      "start": 673667,
+      "end": 673676,
+      "kind": "structural"
+    },
+    {
+      "start": 673676,
+      "end": 673709,
+      "kind": "structural"
+    },
+    {
+      "start": 673709,
+      "end": 673733,
+      "kind": "structural"
+    },
+    {
+      "start": 673733,
+      "end": 673765,
+      "kind": "structural"
+    },
+    {
+      "start": 673765,
+      "end": 673792,
+      "kind": "structural"
+    },
+    {
+      "start": 673792,
+      "end": 673826,
+      "kind": "structural"
+    },
+    {
+      "start": 673826,
+      "end": 673858,
+      "kind": "structural"
+    },
+    {
+      "start": 673858,
+      "end": 673871,
+      "kind": "structural"
+    },
+    {
+      "start": 673871,
+      "end": 673906,
+      "kind": "structural"
+    },
+    {
+      "start": 673906,
+      "end": 673938,
+      "kind": "structural"
+    },
+    {
+      "start": 673938,
+      "end": 673963,
+      "kind": "structural"
+    },
+    {
+      "start": 673963,
+      "end": 673976,
+      "kind": "structural"
+    },
+    {
+      "start": 673976,
+      "end": 674011,
+      "kind": "structural"
+    },
+    {
+      "start": 674011,
+      "end": 674043,
+      "kind": "structural"
+    },
+    {
+      "start": 674043,
+      "end": 674056,
+      "kind": "structural"
+    },
+    {
+      "start": 674056,
+      "end": 674092,
+      "kind": "structural"
+    },
+    {
+      "start": 674092,
+      "end": 674124,
+      "kind": "structural"
+    },
+    {
+      "start": 674124,
+      "end": 674148,
+      "kind": "structural"
+    },
+    {
+      "start": 674148,
+      "end": 674161,
+      "kind": "structural"
+    },
+    {
+      "start": 674161,
+      "end": 674172,
+      "kind": "structural"
+    },
+    {
+      "start": 674172,
+      "end": 674203,
+      "kind": "structural"
+    },
+    {
+      "start": 674203,
+      "end": 674249,
+      "kind": "structural"
+    },
+    {
+      "start": 674249,
+      "end": 674297,
+      "kind": "structural"
+    },
+    {
+      "start": 674297,
+      "end": 674331,
+      "kind": "structural"
+    },
+    {
+      "start": 674331,
+      "end": 674340,
+      "kind": "structural"
+    },
+    {
+      "start": 674340,
+      "end": 674347,
+      "kind": "structural"
+    },
+    {
+      "start": 674347,
+      "end": 674377,
+      "kind": "structural"
+    },
+    {
+      "start": 674377,
+      "end": 674403,
+      "kind": "structural"
+    },
+    {
+      "start": 674403,
+      "end": 674418,
+      "kind": "structural"
+    },
+    {
+      "start": 674418,
+      "end": 674441,
+      "kind": "structural"
+    },
+    {
+      "start": 674441,
+      "end": 674466,
+      "kind": "structural"
+    },
+    {
+      "start": 674466,
+      "end": 674488,
+      "kind": "structural"
+    },
+    {
+      "start": 674488,
+      "end": 674540,
+      "kind": "structural"
+    },
+    {
+      "start": 674540,
+      "end": 674589,
+      "kind": "structural"
+    },
+    {
+      "start": 674589,
+      "end": 674598,
+      "kind": "structural"
+    },
+    {
+      "start": 674598,
+      "end": 674613,
+      "kind": "structural"
+    },
+    {
+      "start": 674613,
+      "end": 674636,
+      "kind": "structural"
+    },
+    {
+      "start": 674636,
+      "end": 674664,
+      "kind": "structural"
+    },
+    {
+      "start": 674664,
+      "end": 674686,
+      "kind": "structural"
+    },
+    {
+      "start": 674686,
+      "end": 674738,
+      "kind": "structural"
+    },
+    {
+      "start": 674738,
+      "end": 674787,
+      "kind": "structural"
+    },
+    {
+      "start": 674787,
+      "end": 674796,
+      "kind": "structural"
+    },
+    {
+      "start": 674796,
+      "end": 674803,
+      "kind": "structural"
+    },
+    {
+      "start": 674803,
+      "end": 674828,
+      "kind": "structural"
+    },
+    {
+      "start": 674828,
+      "end": 674853,
+      "kind": "structural"
+    },
+    {
+      "start": 674853,
+      "end": 674950,
+      "kind": "structural"
+    },
+    {
+      "start": 674950,
+      "end": 675034,
+      "kind": "structural"
+    },
+    {
+      "start": 675034,
+      "end": 675043,
+      "kind": "structural"
+    },
+    {
+      "start": 675043,
+      "end": 675070,
+      "kind": "structural"
+    },
+    {
+      "start": 675070,
+      "end": 675128,
+      "kind": "structural"
+    },
+    {
+      "start": 675128,
+      "end": 675151,
+      "kind": "structural"
+    },
+    {
+      "start": 675151,
+      "end": 675168,
+      "kind": "structural"
+    },
+    {
+      "start": 675168,
+      "end": 675196,
+      "kind": "structural"
+    },
+    {
+      "start": 675196,
+      "end": 675257,
+      "kind": "structural"
+    },
+    {
+      "start": 675257,
+      "end": 675289,
+      "kind": "structural"
+    },
+    {
+      "start": 675289,
+      "end": 675315,
+      "kind": "structural"
+    },
+    {
+      "start": 675315,
+      "end": 675416,
+      "kind": "structural"
+    },
+    {
+      "start": 675416,
+      "end": 675504,
+      "kind": "structural"
+    },
+    {
+      "start": 675504,
+      "end": 675517,
+      "kind": "structural"
+    },
+    {
+      "start": 675517,
+      "end": 675539,
+      "kind": "structural"
+    },
+    {
+      "start": 675539,
+      "end": 675550,
+      "kind": "structural"
+    },
+    {
+      "start": 675550,
+      "end": 675559,
+      "kind": "structural"
+    },
+    {
+      "start": 675559,
+      "end": 675586,
+      "kind": "structural"
+    },
+    {
+      "start": 675586,
+      "end": 675608,
+      "kind": "structural"
+    },
+    {
+      "start": 675608,
+      "end": 675625,
+      "kind": "structural"
+    },
+    {
+      "start": 675625,
+      "end": 675651,
+      "kind": "structural"
+    },
+    {
+      "start": 675651,
+      "end": 675674,
+      "kind": "structural"
+    },
+    {
+      "start": 675674,
+      "end": 675706,
+      "kind": "structural"
+    },
+    {
+      "start": 675706,
+      "end": 675732,
+      "kind": "structural"
+    },
+    {
+      "start": 675732,
+      "end": 675833,
+      "kind": "structural"
+    },
+    {
+      "start": 675833,
+      "end": 675921,
+      "kind": "structural"
+    },
+    {
+      "start": 675921,
+      "end": 675934,
+      "kind": "structural"
+    },
+    {
+      "start": 675934,
+      "end": 675945,
+      "kind": "structural"
+    },
+    {
+      "start": 675945,
+      "end": 675954,
+      "kind": "structural"
+    },
+    {
+      "start": 675954,
+      "end": 675974,
+      "kind": "structural"
+    },
+    {
+      "start": 675974,
+      "end": 675981,
+      "kind": "structural"
+    },
+    {
+      "start": 675981,
+      "end": 676069,
+      "kind": "structural"
+    },
+    {
+      "start": 676069,
+      "end": 676092,
+      "kind": "structural"
+    },
+    {
+      "start": 676092,
+      "end": 676116,
+      "kind": "structural"
+    },
+    {
+      "start": 676116,
+      "end": 676142,
+      "kind": "structural"
+    },
+    {
+      "start": 676142,
+      "end": 676170,
+      "kind": "structural"
+    },
+    {
+      "start": 676170,
+      "end": 676214,
+      "kind": "structural"
+    },
+    {
+      "start": 676214,
+      "end": 676244,
+      "kind": "structural"
+    },
+    {
+      "start": 676244,
+      "end": 676255,
+      "kind": "structural"
+    },
+    {
+      "start": 676255,
+      "end": 676289,
+      "kind": "structural"
+    },
+    {
+      "start": 676289,
+      "end": 676379,
+      "kind": "structural"
+    },
+    {
+      "start": 676379,
+      "end": 676404,
+      "kind": "structural"
+    },
+    {
+      "start": 676404,
+      "end": 676430,
+      "kind": "structural"
+    },
+    {
+      "start": 676430,
+      "end": 676460,
+      "kind": "structural"
+    },
+    {
+      "start": 676460,
+      "end": 676491,
+      "kind": "structural"
+    },
+    {
+      "start": 676491,
+      "end": 676518,
+      "kind": "structural"
+    },
+    {
+      "start": 676518,
+      "end": 676545,
+      "kind": "structural"
+    },
+    {
+      "start": 676545,
+      "end": 676573,
+      "kind": "structural"
+    },
+    {
+      "start": 676573,
+      "end": 676586,
+      "kind": "structural"
+    },
+    {
+      "start": 676586,
+      "end": 676613,
+      "kind": "structural"
+    },
+    {
+      "start": 676613,
+      "end": 676644,
+      "kind": "structural"
+    },
+    {
+      "start": 676644,
+      "end": 676671,
+      "kind": "structural"
+    },
+    {
+      "start": 676671,
+      "end": 676698,
+      "kind": "structural"
+    },
+    {
+      "start": 676698,
+      "end": 676726,
+      "kind": "structural"
+    },
+    {
+      "start": 676726,
+      "end": 676739,
+      "kind": "structural"
+    },
+    {
+      "start": 676739,
+      "end": 676750,
+      "kind": "structural"
+    },
+    {
+      "start": 676750,
+      "end": 676777,
+      "kind": "structural"
+    },
+    {
+      "start": 676777,
+      "end": 676802,
+      "kind": "structural"
+    },
+    {
+      "start": 676802,
+      "end": 676835,
+      "kind": "structural"
+    },
+    {
+      "start": 676835,
+      "end": 676896,
+      "kind": "structural"
+    },
+    {
+      "start": 676896,
+      "end": 676924,
+      "kind": "structural"
+    },
+    {
+      "start": 676924,
+      "end": 676948,
+      "kind": "structural"
+    },
+    {
+      "start": 676948,
+      "end": 676976,
+      "kind": "structural"
+    },
+    {
+      "start": 676976,
+      "end": 676985,
+      "kind": "structural"
+    },
+    {
+      "start": 676985,
+      "end": 677075,
+      "kind": "structural"
+    },
+    {
+      "start": 677075,
+      "end": 677106,
+      "kind": "structural"
+    },
+    {
+      "start": 677106,
+      "end": 677127,
+      "kind": "structural"
+    },
+    {
+      "start": 677127,
+      "end": 677150,
+      "kind": "structural"
+    },
+    {
+      "start": 677150,
+      "end": 677210,
+      "kind": "structural"
+    },
+    {
+      "start": 677210,
+      "end": 677239,
+      "kind": "structural"
+    },
+    {
+      "start": 677239,
+      "end": 677269,
+      "kind": "structural"
+    },
+    {
+      "start": 677269,
+      "end": 677310,
+      "kind": "structural"
+    },
+    {
+      "start": 677310,
+      "end": 677332,
+      "kind": "structural"
+    },
+    {
+      "start": 677332,
+      "end": 677347,
+      "kind": "structural"
+    },
+    {
+      "start": 677347,
+      "end": 677384,
+      "kind": "structural"
+    },
+    {
+      "start": 677384,
+      "end": 677422,
+      "kind": "structural"
+    },
+    {
+      "start": 677422,
+      "end": 677529,
+      "kind": "structural"
+    },
+    {
+      "start": 677529,
+      "end": 677564,
+      "kind": "structural"
+    },
+    {
+      "start": 677564,
+      "end": 677592,
+      "kind": "structural"
+    },
+    {
+      "start": 677592,
+      "end": 677607,
+      "kind": "structural"
+    },
+    {
+      "start": 677607,
+      "end": 677620,
+      "kind": "structural"
+    },
+    {
+      "start": 677620,
+      "end": 677660,
+      "kind": "structural"
+    },
+    {
+      "start": 677660,
+      "end": 677703,
+      "kind": "structural"
+    },
+    {
+      "start": 677703,
+      "end": 677736,
+      "kind": "structural"
+    },
+    {
+      "start": 677736,
+      "end": 677768,
+      "kind": "structural"
+    },
+    {
+      "start": 677768,
+      "end": 677806,
+      "kind": "structural"
+    },
+    {
+      "start": 677806,
+      "end": 677833,
+      "kind": "structural"
+    },
+    {
+      "start": 677833,
+      "end": 677857,
+      "kind": "structural"
+    },
+    {
+      "start": 677857,
+      "end": 677884,
+      "kind": "structural"
+    },
+    {
+      "start": 677884,
+      "end": 677911,
+      "kind": "structural"
+    },
+    {
+      "start": 677911,
+      "end": 677950,
+      "kind": "structural"
+    },
+    {
+      "start": 677950,
+      "end": 677965,
+      "kind": "structural"
+    },
+    {
+      "start": 677965,
+      "end": 677978,
+      "kind": "structural"
+    },
+    {
+      "start": 677978,
+      "end": 678016,
+      "kind": "structural"
+    },
+    {
+      "start": 678016,
+      "end": 678051,
+      "kind": "structural"
+    },
+    {
+      "start": 678051,
+      "end": 678081,
+      "kind": "structural"
+    },
+    {
+      "start": 678081,
+      "end": 678130,
+      "kind": "structural"
+    },
+    {
+      "start": 678130,
+      "end": 678172,
+      "kind": "structural"
+    },
+    {
+      "start": 678172,
+      "end": 678205,
+      "kind": "structural"
+    },
+    {
+      "start": 678205,
+      "end": 678248,
+      "kind": "structural"
+    },
+    {
+      "start": 678248,
+      "end": 678286,
+      "kind": "structural"
+    },
+    {
+      "start": 678286,
+      "end": 678299,
+      "kind": "structural"
+    },
+    {
+      "start": 678299,
+      "end": 678331,
+      "kind": "structural"
+    },
+    {
+      "start": 678331,
+      "end": 678369,
+      "kind": "structural"
+    },
+    {
+      "start": 678369,
+      "end": 678403,
+      "kind": "structural"
+    },
+    {
+      "start": 678403,
+      "end": 678444,
+      "kind": "structural"
+    },
+    {
+      "start": 678444,
+      "end": 678476,
+      "kind": "structural"
+    },
+    {
+      "start": 678476,
+      "end": 678489,
+      "kind": "structural"
+    },
+    {
+      "start": 678489,
+      "end": 678524,
+      "kind": "structural"
+    },
+    {
+      "start": 678524,
+      "end": 678564,
+      "kind": "structural"
+    },
+    {
+      "start": 678564,
+      "end": 678603,
+      "kind": "structural"
+    },
+    {
+      "start": 678603,
+      "end": 678648,
+      "kind": "structural"
+    },
+    {
+      "start": 678648,
+      "end": 678683,
+      "kind": "structural"
+    },
+    {
+      "start": 678683,
+      "end": 678696,
+      "kind": "structural"
+    },
+    {
+      "start": 678696,
+      "end": 678731,
+      "kind": "structural"
+    },
+    {
+      "start": 678731,
+      "end": 678773,
+      "kind": "structural"
+    },
+    {
+      "start": 678773,
+      "end": 678805,
+      "kind": "structural"
+    },
+    {
+      "start": 678805,
+      "end": 678835,
+      "kind": "structural"
+    },
+    {
+      "start": 678835,
+      "end": 678850,
+      "kind": "structural"
+    },
+    {
+      "start": 678850,
+      "end": 678888,
+      "kind": "structural"
+    },
+    {
+      "start": 678888,
+      "end": 679216,
+      "kind": "structural"
+    },
+    {
+      "start": 679216,
+      "end": 679231,
+      "kind": "structural"
+    },
+    {
+      "start": 679231,
+      "end": 679268,
+      "kind": "structural"
+    },
+    {
+      "start": 679268,
+      "end": 679281,
+      "kind": "structural"
+    },
+    {
+      "start": 679281,
+      "end": 679292,
+      "kind": "structural"
+    },
+    {
+      "start": 679292,
+      "end": 679316,
+      "kind": "structural"
+    },
+    {
+      "start": 679316,
+      "end": 679415,
+      "kind": "structural"
+    },
+    {
+      "start": 679415,
+      "end": 679520,
+      "kind": "structural"
+    },
+    {
+      "start": 679520,
+      "end": 679529,
+      "kind": "structural"
+    },
+    {
+      "start": 679529,
+      "end": 679536,
+      "kind": "structural"
+    },
+    {
+      "start": 679536,
+      "end": 679540,
+      "kind": "structural"
+    },
+    {
+      "start": 679540,
+      "end": 679541,
+      "kind": "structural"
+    },
+    {
+      "start": 679541,
+      "end": 679596,
+      "kind": "structural"
+    },
+    {
+      "start": 679596,
+      "end": 679597,
+      "kind": "structural"
+    },
+    {
+      "start": 679597,
+      "end": 679598,
+      "kind": "structural"
+    },
+    {
+      "start": 679598,
+      "end": 679679,
+      "kind": "structural"
+    },
+    {
+      "start": 679679,
+      "end": 679680,
+      "kind": "structural"
+    },
+    {
+      "start": 679680,
+      "end": 679706,
+      "kind": "structural"
+    },
+    {
+      "start": 679706,
+      "end": 679746,
+      "kind": "structural"
+    },
+    {
+      "start": 679746,
+      "end": 679768,
+      "kind": "structural"
+    },
+    {
+      "start": 679768,
+      "end": 679876,
+      "kind": "structural"
+    },
+    {
+      "start": 679876,
+      "end": 679877,
+      "kind": "structural"
+    }
+  ],
+  "limits": "Original raw log unchanged. Decimal Buffer content interpreted exactly via loaded map ArtifactRef SHA256, with byte comparison to fixture files where present; all non-array transcript retained verbatim.",
+  "emptyBufferArrays": [
+    {
+      "start": 272540,
+      "end": 272566,
+      "kind": "decimal-buffer-empty",
+      "ref": "sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "length": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "fixtureMatches": [
+        "/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-legacy/sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.bin"
+      ],
+      "lines": [
+        18611,
+        18611
+      ]
+    }
+  ],
+  "allBufferArrayCount": 38,
+  "allBufferLengthsValidated": true,
+  "dynamicCanonicalJsonArtifacts": {
+    "recovery-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3": {
+      "sha256": "356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
+      "length": 348,
+      "value": {
+        "executionId": "execution-legacy-real",
+        "generation": 1,
+        "graceMs": 100,
+        "isolated": true,
+        "ownerLeaseReleased": true,
+        "probedAt": "2026-10-11T01:04:02.068Z",
+        "registered": [
+          {
+            "pgid": 39631,
+            "phase": "plan",
+            "pid": 39631,
+            "startedAt": "Sun Oct 11 01:04:01 2026"
+          },
+          {
+            "pgid": 39645,
+            "phase": "execute",
+            "pid": 39645,
+            "startedAt": "Sun Oct 11 01:04:01 2026"
+          }
+        ],
+        "workerSealed": true
+      }
+    },
+    "recovery-8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976": {
+      "sha256": "8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976",
+      "length": 3641,
+      "value": {
+        "candidate": {
+          "artifacts": [
+            {
+              "artifactId": "evidence-3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a",
+              "hash": "3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a"
+            },
+            {
+              "artifactId": "evidence-2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459",
+              "hash": "2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459"
+            },
+            {
+              "artifactId": "evidence-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d",
+              "hash": "9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d"
+            },
+            {
+              "artifactId": "evidence-86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33",
+              "hash": "86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33"
+            },
+            {
+              "artifactId": "evidence-ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9",
+              "hash": "ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9"
+            },
+            {
+              "artifactId": "evidence-c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902",
+              "hash": "c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902"
+            },
+            {
+              "artifactId": "evidence-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "artifactId": "evidence-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d",
+              "hash": "9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d"
+            },
+            {
+              "artifactId": "evidence-1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1",
+              "hash": "1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1"
+            },
+            {
+              "artifactId": "evidence-d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e",
+              "hash": "d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e"
+            },
+            {
+              "artifactId": "evidence-99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073",
+              "hash": "99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073"
+            },
+            {
+              "artifactId": "evidence-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "artifactId": "evidence-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981",
+              "hash": "b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981"
+            },
+            {
+              "artifactId": "evidence-e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4",
+              "hash": "e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4"
+            },
+            {
+              "artifactId": "evidence-2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b",
+              "hash": "2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b"
+            },
+            {
+              "artifactId": "evidence-af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b",
+              "hash": "af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b"
+            }
+          ],
+          "checkpointId": "checkpoint-f678252334c34b6aa26c6c1afe8f44f0982445fd1d16d44c",
+          "generation": 1,
+          "graphVersion": 3,
+          "groupId": "g1",
+          "handoff": {
+            "artifactId": "evidence-af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b",
+            "hash": "af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b"
+          },
+          "missing": [
+            "attempts/1/plan.json",
+            "attempts/1/execution.json",
+            "attempts/1/verify.json"
+          ],
+          "result": "failed",
+          "runId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
+          "snapshot": null,
+          "stopProof": {
+            "executionId": "execution-legacy-real",
+            "generation": 1,
+            "isolated": true,
+            "source": {
+              "artifactId": "evidence-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
+              "hash": "356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3"
+            }
+          },
+          "targetVersion": 1,
+          "taskId": "T1",
+          "terminalOutcome": "failed",
+          "unresolvedRequestIds": [],
+          "usageHighWater": 3,
+          "workItemId": "T1"
+        },
+        "terminal": {
+          "outcome": "failed",
+          "sourceDir": "/private/tmp/results-task2-B8E1sf/run-e73e593c-d1d4-494f-83bf-bb0c61e17169"
+        }
+      }
+    },
+    "recovery-1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c": {
+      "sha256": "1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c",
+      "length": 832,
+      "value": {
+        "at": 1,
+        "charged": {
+          "handoff": {
+            "activeMs": 30000,
+            "attempts": 2,
+            "sessions": 1,
+            "tokens": 1000
+          },
+          "work": {
+            "activeMs": 29932,
+            "attempts": 1,
+            "sessions": 0,
+            "tokens": 985
+          }
+        },
+        "commandId": "settle-command",
+        "generation": 1,
+        "groupId": "g1",
+        "highWater": 3,
+        "method": "remaining-grant",
+        "principal": "user:fixture",
+        "report": {
+          "artifactId": "recovery-8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976",
+          "hash": "8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976"
+        },
+        "reservationDisposition": "committed",
+        "runId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
+        "stopProof": {
+          "executionId": "execution-legacy-real",
+          "generation": 1,
+          "isolated": true,
+          "source": {
+            "artifactId": "evidence-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
+            "hash": "356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3"
+          }
+        },
+        "taskId": "T1",
+        "workItemId": "T1"
+      }
+    },
+    "recovery-2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c": {
+      "sha256": "2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c",
+      "length": 396,
+      "value": {
+        "client": "web",
+        "commandId": "settle-command",
+        "principal": "user:fixture",
+        "result": {
+          "at": 1,
+          "charged": {
+            "handoff": {
+              "activeMs": 30000,
+              "attempts": 2,
+              "sessions": 1,
+              "tokens": 1000
+            },
+            "work": {
+              "activeMs": 29932,
+              "attempts": 1,
+              "sessions": 0,
+              "tokens": 985
+            }
+          },
+          "generation": 1,
+          "kind": "usage-settled",
+          "method": "remaining-grant",
+          "runId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
+          "taskId": "T1"
+        },
+        "verb": "settle-unknown-usage"
+      }
+    },
+    "recovery-f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a": {
+      "sha256": "f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a",
+      "length": 341,
+      "value": {
+        "accountingMode": "finite-legacy",
+        "authoredWork": {
+          "activeMs": 30000,
+          "attempts": 2,
+          "sessions": 1,
+          "tokens": 1000
+        },
+        "contractHash": "653938bd2a52eba5c7b682e79db27b1adf9c482df43508bca49bed5c112d6cf4",
+        "groupId": "g1",
+        "schema": "ccloop-recovery-policy-authority-v1",
+        "sourceRunId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
+        "taskId": "T1",
+        "workItemId": "T1"
+      }
+    },
+    "recovery-e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb": {
+      "sha256": "e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb",
+      "length": 2754,
+      "value": {
+        "accounting": {
+          "handoff": {
+            "activeMs": 30000,
+            "attempts": 2,
+            "sessions": 1,
+            "tokens": 1000
+          },
+          "highWater": 3,
+          "receipt": {
+            "artifactId": "recovery-2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c",
+            "hash": "2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c"
+          },
+          "report": {
+            "artifactId": "recovery-8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976",
+            "hash": "8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976"
+          },
+          "settlement": {
+            "artifactId": "recovery-1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c",
+            "hash": "1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c"
+          },
+          "stopProof": {
+            "artifactId": "recovery-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
+            "hash": "356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3"
+          },
+          "work": {
+            "activeMs": 30000,
+            "attempts": 2,
+            "sessions": 1,
+            "tokens": 1000
+          }
+        },
+        "claim": {
+          "commandId": "recover-command",
+          "configHash": "4f5f7da431b49be1f14d3c904d59f678a24b3c0a72b08996f899a530e07c26ac",
+          "generation": 2,
+          "ownerToken": "recover-owner",
+          "runId": "recovery-1"
+        },
+        "contractHash": "653938bd2a52eba5c7b682e79db27b1adf9c482df43508bca49bed5c112d6cf4",
+        "currentRunId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
+        "funding": {
+          "freshGrant": {
+            "handoff": {
+              "activeMs": 30000,
+              "attempts": 2,
+              "sessions": 1,
+              "tokens": 1000
+            },
+            "work": {
+              "activeMs": 30000,
+              "attempts": 2,
+              "sessions": 1,
+              "tokens": 1000
+            }
+          },
+          "fundedTotal": {
+            "activeMs": 60000,
+            "attempts": 4,
+            "sessions": 2,
+            "tokens": 2000
+          },
+          "historicalPolicy": {
+            "accountingMode": "finite-legacy",
+            "authoredWork": {
+              "activeMs": 30000,
+              "attempts": 2,
+              "sessions": 1,
+              "tokens": 1000
+            },
+            "authority": {
+              "artifactId": "recovery-f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a",
+              "hash": "f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a"
+            },
+            "contractHash": "653938bd2a52eba5c7b682e79db27b1adf9c482df43508bca49bed5c112d6cf4"
+          },
+          "inheritedUsage": {
+            "activeMs": 30000,
+            "attempts": 2,
+            "sessions": 1,
+            "tokens": 1000
+          },
+          "kind": "legacy-fresh-grant-v1",
+          "reservation": {
+            "handoffAllocationId": "allocation-handoff",
+            "revision": 7,
+            "runId": "recovery-1",
+            "workAllocationId": "allocation-work"
+          }
+        },
+        "predecessor": null,
+        "recoveryOf": {
+          "capsuleHash": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
+          "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
+          "snapshotHash": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
+          "sourceAttempt": 1,
+          "sourceRunId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169"
+        },
+        "revision": 7,
+        "schema": "ccloop-saved-result-admission-v1",
+        "source": {
+          "envelopeHash": "fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba",
+          "executionId": "execution-legacy-real",
+          "generation": 1,
+          "graphVersion": 3,
+          "groupId": "g1",
+          "runId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
+          "targetVersion": 1,
+          "taskId": "T1",
+          "workItemId": "T1"
+        }
+      }
+    }
+  },
+  "renderedAdmissionMatchesLoadedDynamicBytes": true,
+  "allNonArrayTranscriptRead": true
+}

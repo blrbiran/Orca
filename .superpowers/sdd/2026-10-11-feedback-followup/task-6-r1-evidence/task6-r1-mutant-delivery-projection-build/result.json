@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-task6-mutants-final",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6mb.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run build"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 4.493462800979614,
+  "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-delivery-projection-build/output.log",
+  "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+  "sourceTreeSHA256": "b46c003464a4379fd180cb34e8c5d347a3d12bae575d89da273b0306d6d0673b",
+  "sourceFiles": 446
+}

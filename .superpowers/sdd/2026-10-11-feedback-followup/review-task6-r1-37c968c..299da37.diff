@@ -1,0 +1,237 @@
+# Review package: 37c968cfaec900d8c28dfa991c4caded9cc26666..299da37f5b9781f79f530b871b37218a3cef7bec
+
+## Commits
+299da37 fix(recovery): guard handoff integrity and private authority directories
+
+## Files changed
+ src/control/savedResultRecovery.ts         | 11 +++++-
+ src/controller/runLoop.ts                  |  3 +-
+ tests/control/savedResultRecovery.test.ts  | 27 ++++++++++++++
+ tests/controller/verifySavedResult.test.ts | 59 ++++++++++++++++++++++++++++++
+ 4 files changed, 97 insertions(+), 3 deletions(-)
+
+## Diff
+diff --git a/src/control/savedResultRecovery.ts b/src/control/savedResultRecovery.ts
+index e2d0a7e..f59e20e 100644
+--- a/src/control/savedResultRecovery.ts
++++ b/src/control/savedResultRecovery.ts
+@@ -68,22 +68,27 @@ const archiveSchema=z.object({version:z.literal(1),runId:idSchema,sourceIdentity
+  logs:z.array(treeEntry).max(20000),snapshot:artifactRefSchema,missing:z.array(z.string()).length(0)}).strict();
+ type LegacySnapshot=z.infer<typeof legacySnapshotSchema>;
+ export interface LoadedSavedResult {
+  input:LoopStartEnvelope; admission:SavedResultAdmission; manifest:SavedResultPackage; source:LoopStartEnvelope;
+  plan:AttemptPlan; execution:ExecutionResult; snapshot:LegacySnapshot; bytes:Map<string,Buffer>; originalBase:string; actualChangedPaths:string[];
+ }
+ export async function savedGit(cwd:string,...args:string[]):Promise<Buffer>{
+  const env={...process.env};for(const key of Object.keys(env))if(key.startsWith("GIT_"))delete env[key];
+  return (await exec("/usr/bin/git",["--no-replace-objects","-c","core.hooksPath=/dev/null","-c","core.fsmonitor=false",...args],{cwd,env,encoding:"buffer",maxBuffer:16*1024*1024,timeout:30000})).stdout;
+ }
++async function assertPrivateAuthorityDirectory(root:string):Promise<void>{
++ const metadata=await lstat(root);
++ if(await realpath(root)!==root||!metadata.isDirectory()||metadata.isSymbolicLink()||(metadata.mode&0o7777)!==0o700
++  ||typeof process.getuid!=="function"||metadata.uid!==process.getuid())fail("saved-result-package-path-invalid");
++}
+ async function privateBytes(root:string,file:string):Promise<Buffer>{
+- if(await realpath(root)!==root||(await lstat(root)).isSymbolicLink())fail("saved-result-package-path-invalid");
++ await assertPrivateAuthorityDirectory(root);
+  const target=join(root,file);if(await realpath(target)!==target)fail("saved-result-package-path-invalid");
+  const before=await lstat(target,{bigint:true});
+  if(!before.isFile()||before.nlink!==1n||(before.mode&0o7777n)!==0o600n||before.size>BigInt(12*1024*1024-1024))fail("saved-result-package-file-invalid");
+  const handle=await open(target,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);let bytes:Buffer;
+  try{bytes=await handle.readFile();}finally{await handle.close();}
+  const after=await lstat(target,{bigint:true});
+  if(before.ino!==after.ino||before.dev!==after.dev||before.ctimeNs!==after.ctimeNs||before.size!==after.size)fail("saved-result-package-changed");
+  return bytes;
+ }
+ function semantic(contract:LoopContract):unknown{
+@@ -101,41 +106,43 @@ export async function assertSavedResultFence(input:LoopStartEnvelope,admission:S
+  let fence:SavedResultFence;
+  try{fence=savedResultFenceSchema.parse(JSON.parse((await privateBytes(join(input.work.sourceDir,"control"),"recovery-fence.json")).toString()));}
+  catch{fail("saved-result-source-stale");}
+  if(!same(fence,{schema:"ccloop-saved-result-fence-v1",admissionHash:recovery.admissionHash,packageHash:recovery.packageHash,
+   runId:input.claim.runId,generation:input.claim.generation,revision:admission.revision,currentRunId:admission.currentRunId,status:"admitted"}))fail("saved-result-source-stale");
+ }
+ async function loadPackage(input:LoopStartEnvelope,requireFence=true){
+  if(input.protocol!==4||input.mode!=="verify-saved-result"||!input.savedResultRecovery||input.inputCheckpoint!==null)fail("saved-result-mode-invalid");
+  const r=input.savedResultRecovery,root=r.packagePath;
+  const inputRoot=join(input.work.sourceDir,"input");
+- if(dirname(root)!==inputRoot||await realpath(inputRoot)!==inputRoot)fail("saved-result-package-path-invalid");
++ if(dirname(root)!==inputRoot)fail("saved-result-package-path-invalid");
++ await assertPrivateAuthorityDirectory(inputRoot);
+  const raw=await privateBytes(root,"package.json");if(digest(raw)!==r.packageHash)fail("saved-result-package-hash-mismatch");
+  const manifest=savedResultPackageSchema.parse(JSON.parse(raw.toString())),bytes=new Map<string,Buffer>(),files=new Set(["package.json"]);
+  for(const e of manifest.artifacts){
+   if(files.has(e.file)||bytes.has(e.ref.artifactId))fail("saved-result-package-duplicate");files.add(e.file);
+   const value=await privateBytes(root,e.file);if(digest(value)!==e.ref.hash)fail("saved-result-source-hash-mismatch");bytes.set(e.ref.artifactId,value);
+  }
+  if((await readdir(root)).some(name=>!files.has(name)))fail("saved-result-package-unmanifested");
+  const get=(ref:ArtifactRefV1)=>{const b=bytes.get(ref.artifactId);if(!b||digest(b)!==ref.hash)fail("saved-result-source-hash-mismatch");return b;};
+  const json=(ref:ArtifactRefV1)=>JSON.parse(get(ref).toString());
+  if(manifest.admission.hash!==r.admissionHash||manifest.source.hash!==r.recoveryOf.capsuleHash)fail("saved-result-source-hash-mismatch");
+  const admission=savedResultAdmissionSchema.parse(json(manifest.admission));
+  if(!same(admission.recoveryOf,r.recoveryOf)||admission.contractHash!==input.contractHash||!same(admission.claim,{runId:input.claim.runId,generation:input.claim.generation,commandId:input.claim.commandId,ownerToken:input.claim.ownerToken,configHash:input.claim.configHash}))fail("saved-result-source-stale");
+  for(const key of ["groupId","workItemId","taskId","graphVersion","targetVersion"] as const)if(admission.source[key]!==input.claim[key])fail("saved-result-source-stale");
+  if(admission.source.runId!==r.recoveryOf.sourceRunId||admission.source.runId===input.claim.runId)fail("saved-result-source-stale");
+  if(admission.predecessor===null){if(admission.currentRunId!==admission.source.runId)fail("saved-result-source-stale");}
+  else {
+   const p=admission.predecessor;
+   if(p.runId!==admission.currentRunId||p.runId===admission.source.runId||!same(p.recoveryOf,r.recoveryOf))fail("saved-result-source-stale");
+  }
+  if(requireFence)await assertSavedResultFence(input,admission);
++ else await assertPrivateAuthorityDirectory(join(input.work.sourceDir,"control"));
+  return {manifest,bytes,get,json,admission};
+ }
+ async function validateSnapshot(snapshot:LegacySnapshot,get:(ref:ArtifactRefV1)=>Buffer,runId:string,attempt:number,base:string):Promise<string[]>{
+  const root=await mkdtemp(join(tmpdir(),"saved-result-check-"));await chmod(root,0o700);
+  try{
+   await savedGit(root,"init","--bare","-q",`--object-format=${snapshot.head.length===64?"sha256":"sha1"}`);const bundle=join(root,"source.bundle");await writeFile(bundle,get(snapshot.bundle),{mode:0o600});
+   await savedGit(root,"bundle","verify",bundle);
+   const refs=(await savedGit(root,"bundle","list-heads",bundle)).toString().trim().split("\n");
+   const expected=`${snapshot.head} refs/ccloop/${runId}/attempts/${attempt}`;
+   if(!refs.includes(expected))fail("saved-result-legacy-ref-missing");
+diff --git a/src/controller/runLoop.ts b/src/controller/runLoop.ts
+index c7f34b8..a8cee07 100644
+--- a/src/controller/runLoop.ts
++++ b/src/controller/runLoop.ts
+@@ -1836,23 +1836,24 @@ export async function runLoopFromState(
+             error.tokenUsage === null ? undefined : { tokenUsage: error.tokenUsage },
+             true,
+             true,
+           );
+         }
+         await startedCapture;
+         if (startedCaptureError !== null) throw startedCaptureError;
+         throw error;
+       }
+ 
+-      if (handoffAborted()) {
++      if (handoffAborted() && !(recovery && verifyOutcome.timedOut)) {
+         await settlePhase("verify", attempt, verifyOutcome.elapsedMs, verifyOutcome.result);
+         await flushStartedCapture();
++        if(recovery)await assertSavedResultUnmodified(runDir,worktreePath,recovery,state);
+         await guardedWriteArtifacts(() => writeCompletedAttemptArtifacts(runDir, attempt, plan, completedExecution));
+         return await persistHandoffBoundary("handoff_interrupted", `handoff deadline interrupted verify in attempt ${attempt}`);
+       }
+ 
+       if (verifyOutcome.timedOut) {
+         const timeoutUsage=recovery ? verifyOutcome.result ?? (verifyOutcome.abortedError instanceof PhaseExecutionError && verifyOutcome.abortedError.tokenUsage!==null ? {tokenUsage:verifyOutcome.abortedError.tokenUsage}:undefined) : undefined;
+         await settlePhase("verify", attempt, verifyOutcome.elapsedMs,timeoutUsage,true);
+         await flushStartedCapture();
+         if(recovery)await assertSavedResultUnmodified(runDir,worktreePath,recovery,state);
+         await guardedWriteArtifacts(() => writeCompletedAttemptArtifacts(runDir, attempt, plan, completedExecution));
+diff --git a/tests/control/savedResultRecovery.test.ts b/tests/control/savedResultRecovery.test.ts
+index fdbdf30..6a286f9 100644
+--- a/tests/control/savedResultRecovery.test.ts
++++ b/tests/control/savedResultRecovery.test.ts
+@@ -131,10 +131,37 @@ it.each(['--model','--sandbox','-C','--output-schema','-o','evidenceDir'])('refu
+  }finally{await rm(f.root,{recursive:true,force:true});}
+ },30000);
+ 
+ it.each(['attempt_commit_publish_failed','workspace_cleanup_failed'])('refuses actual legacy %s events without guessing attempt text',async type=>{
+  const f=await savedRecoveryFixture();try{
+   const entry=f.archive.logs.find((e:any)=>e.path==='run/events.jsonl');const bytes=f.bytes.get(entry.ref.artifactId)!;
+   entry.ref=await f.put(Buffer.concat([bytes,Buffer.from('\n'+JSON.stringify({type,at:new Date().toISOString(),detail:'cleanup after terminal decision failed: original failure'})+'\n')]));await rewriteArchive(f);
+   expect(await readSavedResultEligibility(f.input)).toEqual({status:'unavailable',reason:'saved-result-legacy-publication-unproven'});
+  }finally{await rm(f.root,{recursive:true,force:true});}
+ },30000);
++
++
++it.each(['execution-package','input-parent','fence-control'] as const)('r1 rejects nonprivate %s authority without repairing caller permissions',async kind=>{
++ const f=await savedRecoveryFixture();try{
++  expect((await readSavedResultEligibility(f.input)).status).toBe('eligible');
++  const {chmod,stat}=await import('node:fs/promises'),root=kind==='execution-package'?f.input.savedResultRecovery!.packagePath:join(f.sourceDir,kind==='input-parent'?'input':'control');
++  await chmod(root,0o777);expect(await readSavedResultEligibility(f.input)).toEqual({status:'unavailable',reason:kind==='fence-control'?'saved-result-source-stale':'saved-result-package-path-invalid'});
++  expect((await stat(root)).mode&0o7777).toBe(0o777);
++ }finally{await rm(f.root,{recursive:true,force:true});}
++},30000);
++it('r1 rejects a nonprivate source-only package without creating execution authority or changing permissions',async()=>{
++ const f=await savedRecoveryFixture();try{
++  const {chmod,stat}=await import('node:fs/promises'),packagePath=join(f.root,'source-private-probe');await mkdir(packagePath,{mode:0o700});const {admission,...rest}=f.manifest,manifest={...rest,schema:'ccloop-saved-result-source-package-v1'};
++  for(const e of manifest.artifacts)await cp(join(f.input.savedResultRecovery!.packagePath,e.file),join(packagePath,e.file));
++  const bytes=Buffer.from(canonicalJson(manifest));await writeFile(join(packagePath,'package.json'),bytes,{mode:0o600});const input={source:f.source,sourceAttempt:1,packagePath,packageHash:createHash('sha256').update(bytes).digest('hex')};
++  expect((await readSavedResultSourceEligibility(input)).status).toBe('eligible');await chmod(packagePath,0o777);
++  expect(await readSavedResultSourceEligibility(input)).toEqual({status:'unavailable',reason:'saved-result-package-path-invalid'});expect((await stat(packagePath)).mode&0o7777).toBe(0o777);await expect(stat(f.runDir)).rejects.toMatchObject({code:'ENOENT'});
++ }finally{await rm(f.root,{recursive:true,force:true});}
++},30000);
++
++it('r1 refuses nonprivate control authority when a revoked fence is omitted for dead-owner reconciliation',async()=>{
++ const f=await savedRecoveryFixture();try{
++  const {loadSavedResultRecovery}=await import('../../src/control/savedResultRecovery.js'),{chmod,stat}=await import('node:fs/promises');
++  await rm(join(f.sourceDir,'control/recovery-fence.json'));await loadSavedResultRecovery(f.input,false);
++  await chmod(join(f.sourceDir,'control'),0o777);const outcome=await loadSavedResultRecovery(f.input,false).then(()=>({status:'loaded'}),error=>({status:'refused',reason:error.message}));expect(outcome).toEqual({status:'refused',reason:'saved-result-package-path-invalid'});expect((await stat(join(f.sourceDir,'control'))).mode&0o7777).toBe(0o777);
++ }finally{await rm(f.root,{recursive:true,force:true});}
++},30000);
+diff --git a/tests/controller/verifySavedResult.test.ts b/tests/controller/verifySavedResult.test.ts
+index 19d6d54..b2bbc4d 100644
+--- a/tests/controller/verifySavedResult.test.ts
++++ b/tests/controller/verifySavedResult.test.ts
+@@ -139,10 +139,69 @@ it('refuses a candidate moved behind a workspace path symlink even when every by
+  const f=await savedRecoveryFixture();try{
+   const {loadSavedResultRecovery,materializeSavedResult}=await import('../../src/control/savedResultRecovery.js');
+   const {candidateFingerprint}=await import('../../src/controller/verifySavedResult.js');
+   const {rename,symlink,mkdir}=await import('node:fs/promises');await mkdir(f.runDir,{recursive:true,mode:0o700});
+   const loaded=await loadSavedResultRecovery(f.input),workspace=await materializeSavedResult(f.repo,f.runDir,1,loaded);
+   await candidateFingerprint(workspace.worktreePath);
+   const trees=join(f.runDir,'worktrees'),moved=join(f.root,'moved-worktrees');await rename(trees,moved);await symlink(moved,trees);
+   await expect(candidateFingerprint(workspace.worktreePath)).rejects.toThrow('saved-result-modified-during-verification');
+  }finally{await rm(f.root,{recursive:true,force:true});}
+ });
++
++
++it.each(['candidate','protected-input','fence'] as const)('r1 refuses %s changes before returned-result handoff publication and retains actual verification usage',async kind=>{
++ const f=await savedRecoveryFixture();try{
++  const abort=new AbortController(),observations:any[]=[];let plan=0,execute=0,verify=0;
++  const state=await runLoop(f.input.work.contract,f.runDir,{plan:async()=>{plan++;throw Error('plan replay');},execute:async()=>{execute++;throw Error('execute replay');},verify:async c=>{
++   verify++;if(kind==='candidate')await writeFile(join(c.worktreePath,'answer.txt'),'modified during handoff');
++   if(kind==='protected-input')await writeFile(join(f.runDir,'loop-contract.json'),'{}');
++   if(kind==='fence')await rm(join(f.sourceDir,'control/recovery-fence.json'));
++   abort.abort();return {...verified,tokenUsage:7};
++  }},{savedResultRecovery:f.input,phaseSignal:abort.signal,onPhaseSettled:async o=>{observations.push(o);}});
++  expect(state.status).toBe('failed');expect(state.stopReason).toContain(kind==='fence'?'saved-result-source-stale':'saved-result-modified-during-verification');
++  expect([plan,execute,verify]).toEqual([0,0,1]);expect(observations).toHaveLength(1);expect(observations[0]).toMatchObject({phase:'verify',tokenUsage:7,completedWithResult:true});expect(state.budgetSnapshot.tokenBudgetRemaining).toBe(993);
++  const events=(await readFile(join(f.runDir,'events.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line).type);
++  expect(events).not.toContain('handoff_interrupted');expect(events).not.toContain('handoff_boundary');expect(f.log('run/loop-state.json').status).toBe('failed');
++ }finally{await rm(f.root,{recursive:true,force:true});}
++},30000);
++it('r1 retains unchanged returned-result interruption without replaying paid phases',async()=>{
++ const f=await savedRecoveryFixture();try{
++  const abort=new AbortController(),observations:any[]=[];let verify=0;
++  const state=await runLoop(f.input.work.contract,f.runDir,{plan:async()=>{throw Error('plan replay');},execute:async()=>{throw Error('execute replay');},verify:async()=>{verify++;abort.abort();return {...verified,tokenUsage:7};}},{savedResultRecovery:f.input,phaseSignal:abort.signal,onPhaseSettled:async o=>{observations.push(o);}});
++  expect(state.status).toBe('verifying');expect(state.stopReason).toBeNull();expect(verify).toBe(1);expect(observations).toHaveLength(1);expect(observations[0]).toMatchObject({phase:'verify',tokenUsage:7});expect(state.budgetSnapshot.tokenBudgetRemaining).toBe(993);
++  expect(await readFile(join(f.runDir,'worktrees/attempt-1/answer.txt'),'utf8')).toBe('saved candidate\n');
++  expect((await readFile(join(f.runDir,'events.jsonl'),'utf8'))).toContain('handoff_interrupted');
++ }finally{await rm(f.root,{recursive:true,force:true});}
++},30000);
++it.each([false,true])('r1 command interruption modified=%s checks recovery integrity without inventing provider usage',async modified=>{
++ const f=await savedRecoveryFixture();let stopped:Promise<void>|undefined;try{
++  const {mkdir,stat}=await import('node:fs/promises'),home=join(f.root,'command-home'),ready=join(f.root,'command-ready');await mkdir(home,{mode:0o700});
++  await writeFile(join(home,'.profile'),(modified?"printf changed > answer.txt\n":'')+`printf ready > '${ready}'\nwhile :; do sleep 1; done\n`);vi.stubEnv('HOME',home);
++  const abort=new AbortController(),observations:any[]=[];let verify=0;
++  stopped=(async()=>{for(let i=0;i<250;i++){try{await stat(ready);abort.abort();return;}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}await new Promise(r=>setTimeout(r,20));}throw Error('command was not entered');})();
++  const state=await runLoop(f.input.work.contract,f.runDir,{plan:async()=>{throw Error('plan replay');},execute:async()=>{throw Error('execute replay');},verify:async()=>{verify++;return {...verified,tokenUsage:7};}},{savedResultRecovery:f.input,phaseSignal:abort.signal,onPhaseSettled:async o=>{observations.push(o);}});await stopped;
++  expect(verify).toBe(0);expect(observations).toHaveLength(1);expect(observations[0]).toMatchObject({phase:'verify',tokenUsage:null,completedWithResult:false});
++  const events=(await readFile(join(f.runDir,'events.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line).type);
++  if(modified){expect(state.status).toBe('failed');expect(state.stopReason).toContain('saved-result-modified-during-verification');expect(events).not.toContain('handoff_interrupted');}
++  else{expect(state.status).toBe('verifying');expect(events).toContain('handoff_interrupted');expect(await readFile(join(f.runDir,'worktrees/attempt-1/answer.txt'),'utf8')).toBe('saved candidate\n');}
++ }finally{vi.unstubAllEnvs();await stopped?.catch(()=>undefined);await rm(f.root,{recursive:true,force:true});}
++},15000);
++it('r1 rechecks private fence authority after registration before releasing the real check',async()=>{
++ const f=await savedRecoveryFixture();try{
++  const marker=join(f.root,'checks');vi.stubEnv('CCLOOP_RECOVERY_CHECK_MARKER',marker);let verifier=0;
++  const state=await runLoop(f.input.work.contract,f.runDir,{plan:async()=>{throw Error('plan replay');},execute:async()=>{throw Error('execute replay');},verify:async()=>{verifier++;return {...verified,tokenUsage:7};}},{savedResultRecovery:f.input,onProcessRegistered:async()=>{await chmod(join(f.sourceDir,'control'),0o777);}});
++  expect(state.status).toBe('failed');expect(state.stopReason).toContain('saved-result-source-stale');expect(verifier).toBe(0);await expect(readFile(marker)).rejects.toMatchObject({code:'ENOENT'});
++  expect((await import('node:fs/promises').then(fs=>fs.stat(join(f.sourceDir,'control')))).mode&0o7777).toBe(0o777);
++ }finally{await rm(f.root,{recursive:true,force:true});}
++},30000);
++
++it('r1 retains observed usage when timeout cleanup races an external handoff interruption',async()=>{
++ const f=await savedRecoveryFixture();try{
++  f.input.claim.grant.work.activeMs=3000;f.admission.funding.freshGrant.work.activeMs=3000;f.admission.funding.fundedTotal.activeMs=33000;await f.seal();
++  const abort=new AbortController(),observations:any[]=[];let verify=0;
++  const state=await runLoop(f.input.work.contract,f.runDir,{plan:async()=>{throw Error('plan replay');},execute:async()=>{throw Error('execute replay');},verify:async c=>{
++   verify++;await new Promise<void>(resolve=>c.abortSignal!.addEventListener('abort',()=>resolve(),{once:true}));abort.abort();throw Object.assign(Error('verifier interrupted after observed usage'),{name:'AbortError',observedTokens:7});
++  }},{savedResultRecovery:f.input,phaseSignal:abort.signal,onPhaseSettled:async o=>{observations.push(o);}});
++  expect(verify).toBe(1);expect(state.status).toBe('exhausted');expect(state.stopReason).toBe('runtime or token budget exhausted');expect(state.budgetSnapshot.timeRemainingMs).toBe(0);expect(observations).toHaveLength(1);expect(observations[0]).toMatchObject({phase:'verify',tokenUsage:7,completedWithResult:false});expect(state.budgetSnapshot.tokenBudgetRemaining).toBe(993);
++  expect((await readFile(join(f.runDir,'events.jsonl'),'utf8'))).not.toContain('handoff_interrupted');
++ }finally{await rm(f.root,{recursive:true,force:true});}
++},10000);

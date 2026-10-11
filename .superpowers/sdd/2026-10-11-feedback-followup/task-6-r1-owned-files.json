@@ -1,0 +1,22 @@
+[
+  {
+    "path": "src/control/savedResultRecovery.ts",
+    "bytes": 43502,
+    "sha256": "22ef63f8677bb30ef26db422328df1ebd09cfc7280280fb2b9c22c71acb3278d"
+  },
+  {
+    "path": "src/controller/runLoop.ts",
+    "bytes": 104480,
+    "sha256": "34d8ae7d83d36a614a42b5384ecdf88ff22f1fa25a5defaff55dbe806480f2b8"
+  },
+  {
+    "path": "tests/control/savedResultRecovery.test.ts",
+    "bytes": 14658,
+    "sha256": "f9be33b54893793e1d7b1eaf4287262da34d27c6fd4024b477d4d4008eb71bc6"
+  },
+  {
+    "path": "tests/controller/verifySavedResult.test.ts",
+    "bytes": 20979,
+    "sha256": "97054fedd0603b3d10eea8c2a3276cf5a98f7e12e26ebe22f501b1d231f76787"
+  }
+]

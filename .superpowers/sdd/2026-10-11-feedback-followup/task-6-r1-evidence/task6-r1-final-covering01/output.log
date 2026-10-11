@@ -1,0 +1,39 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/controller/verifySavedResult.test.ts (26 tests) 49419ms
+   ✓ restores the archived candidate, checks and verifies once without planning/executing/recharging original usage 2082ms
+   ✓ refuses candidate modification by command without landing or retry 1229ms
+   ✓ refuses candidate modification by verifier without landing or retry 1393ms
+   ✓ refuses candidate modification by special-mode without landing or retry 1336ms
+   ✓ refuses replay of an entered state after its candidate has been cleaned up 1626ms
+   ✓ ends a retryable rejection after one fresh verification and preserves saved source failure 1657ms
+   ✓ replays a complete durable terminal verification result with no new calls or usage 1980ms
+   ✓ protects git-config from verifier changes before publication 1407ms
+   ✓ protects runtime-contract from verifier changes before publication 1452ms
+   ✓ refuses to resume recovery as ordinary work when its durable mode marker is missing 1614ms
+   ✓ verifies the original candidate before harmless current target-tip movement is reconciled 1797ms
+   ✓ checks revocation after process registration and before sending the validation command 1094ms
+   ✓ enforces actual published Git changes even when the original Agent reports no changed files 664ms
+   ✓ runs real verification of a strictly valid saved partial without interpreting its reported timeout as a new timeout 1674ms
+   ✓ refuses candidate mutation even when the verifier throws before producing a result 1349ms
+   ✓ does not reuse a complete terminal approval after its protected contract changes 1769ms
+   ✓ settles observed verifier usage on timeout and never enters an executor retry 11257ms
+   ✓ refuses a candidate moved behind a workspace path symlink even when every byte and mode matches 378ms
+   ✓ r1 refuses candidate changes before returned-result handoff publication and retains actual verification usage 1385ms
+   ✓ r1 refuses protected-input changes before returned-result handoff publication and retains actual verification usage 1383ms
+   ✓ r1 refuses fence changes before returned-result handoff publication and retains actual verification usage 1420ms
+   ✓ r1 retains unchanged returned-result interruption without replaying paid phases 1390ms
+   ✓ r1 command interruption modified=false checks recovery integrity without inventing provider usage 1455ms
+   ✓ r1 command interruption modified=true checks recovery integrity without inventing provider usage 1228ms
+   ✓ r1 rechecks private fence authority after registration before releasing the real check 1145ms
+   ✓ r1 retains observed usage when timeout cleanup races an external handoff interruption 4252ms
+ ✓ tests/control/savedResultRecovery.test.ts (39 tests) 6848ms
+ ✓ tests/control/savedResultCheckpoint.test.ts (1 test) 218ms
+
+ Test Files  3 passed (3)
+      Tests  66 passed (66)
+   Start at  13:35:45
+   Duration  57.56s (transform 317ms, setup 22ms, collect 564ms, tests 56.48s, environment 0ms, prepare 114ms)
+
+JSON report written to /private/tmp/orca-followup-runs/task6-r1-final-covering01/tests.json

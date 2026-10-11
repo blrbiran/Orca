@@ -1,0 +1,115 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/controller/verifySavedResult.test.ts (25 tests | 4 failed | 18 skipped) 9505ms
+   × r1 refuses candidate changes before returned-result handoff publication and retains actual verification usage 1512ms
+     → expected 'verifying' to be 'failed' // Object.is equality
+   × r1 refuses protected-input changes before returned-result handoff publication and retains actual verification usage 1238ms
+     → expected 'verifying' to be 'failed' // Object.is equality
+   × r1 refuses fence changes before returned-result handoff publication and retains actual verification usage 1239ms
+     → expected 'verifying' to be 'failed' // Object.is equality
+   ✓ r1 retains unchanged returned-result interruption without replaying paid phases 1235ms
+   ✓ r1 command interruption modified=false checks recovery integrity without inventing provider usage 1284ms
+   ✓ r1 command interruption modified=true checks recovery integrity without inventing provider usage 1256ms
+   × r1 rechecks private fence authority after registration before releasing the real check 1740ms
+     → expected 'succeeded' to be 'failed' // Object.is equality
+ ❯ tests/control/savedResultRecovery.test.ts (38 tests | 4 failed | 34 skipped) 1576ms
+   × r1 rejects nonprivate execution-package authority without repairing caller permissions 382ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+   × r1 rejects nonprivate input-parent authority without repairing caller permissions 375ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+   × r1 rejects nonprivate fence-control authority without repairing caller permissions 385ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+   × r1 rejects a nonprivate source-only package without creating execution authority or changing permissions 433ms
+     → expected { status: 'eligible', …(5) } to deeply equal { status: 'unavailable', …(1) }
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > r1 rejects nonprivate execution-package authority without repairing caller permissions
+ FAIL  tests/control/savedResultRecovery.test.ts > r1 rejects nonprivate input-parent authority without repairing caller permissions
+ FAIL  tests/control/savedResultRecovery.test.ts > r1 rejects nonprivate fence-control authority without repairing caller permissions
+AssertionError: expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+
+- Expected
++ Received
+
+  Object {
+-   "reason": "saved-result-package-path-invalid",
+-   "status": "unavailable",
++   "authorityKind": "legacy-published-candidate-v1",
++   "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
++   "status": "eligible",
+  }
+
+ ❯ tests/control/savedResultRecovery.test.ts:147:77
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > r1 rejects a nonprivate source-only package without creating execution authority or changing permissions
+AssertionError: expected { status: 'eligible', …(5) } to deeply equal { status: 'unavailable', …(1) }
+
+- Expected
++ Received
+
+  Object {
+-   "reason": "saved-result-package-path-invalid",
+-   "status": "unavailable",
++   "authorityKind": "legacy-published-candidate-v1",
++   "limitation": "published-candidate-only; current membership and settled accounting require controller admission",
++   "rawExecutionTokens": 15,
++   "recoveryOf": Object {
++     "capsuleHash": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
++     "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
++     "snapshotHash": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
++     "sourceAttempt": 1,
++     "sourceRunId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++   },
++   "sourceIdentity": Object {
++     "envelopeHash": "fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba",
++     "executionId": "execution-legacy-real",
++     "generation": 1,
++     "graphVersion": 3,
++     "groupId": "g1",
++     "runId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++     "targetVersion": 1,
++     "taskId": "T1",
++     "workItemId": "T1",
++   },
++   "status": "eligible",
+  }
+
+ ❯ tests/control/savedResultRecovery.test.ts:157:57
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > r1 refuses candidate changes before returned-result handoff publication and retains actual verification usage
+ FAIL  tests/controller/verifySavedResult.test.ts > r1 refuses protected-input changes before returned-result handoff publication and retains actual verification usage
+ FAIL  tests/controller/verifySavedResult.test.ts > r1 refuses fence changes before returned-result handoff publication and retains actual verification usage
+AssertionError: expected 'verifying' to be 'failed' // Object.is equality
+
+Expected: "failed"
+Received: "verifying"
+
+ ❯ tests/controller/verifySavedResult.test.ts:160:24
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > r1 rechecks private fence authority after registration before releasing the real check
+AssertionError: expected 'succeeded' to be 'failed' // Object.is equality
+
+Expected: "failed"
+Received: "succeeded"
+
+ ❯ tests/controller/verifySavedResult.test.ts:192:24
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ Test Files  2 failed (2)
+      Tests  8 failed | 3 passed | 52 skipped (63)
+   Start at  13:18:21
+   Duration  11.90s (transform 308ms, setup 18ms, collect 475ms, tests 11.08s, environment 0ms, prepare 74ms)
+

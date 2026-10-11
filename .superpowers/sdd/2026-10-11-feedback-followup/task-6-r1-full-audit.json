@@ -1,0 +1,16 @@
+{
+  "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+  "files": 147,
+  "assertions": 1566,
+  "counts": {
+    "numTotalTests": 1566,
+    "numPassedTests": 1566,
+    "numFailedTests": 0,
+    "numPendingTests": 0,
+    "numTodoTests": 0
+  },
+  "completeRawLogRead": true,
+  "logBytes": 55288,
+  "logSHA256": "471abb9fa69b87159c39f9476f149a83b7e2f0be36197df178bb9ef46bb42958",
+  "perTestJSONSHA256": "348dc1a04b8412d928cd4c8c1ac6bcbc9b93918d78aab0293c57a0766bc8b996"
+}

@@ -1,0 +1,10 @@
+{
+  "run": "task6-r1-final-formal01",
+  "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+  "files": 70,
+  "tests": 793,
+  "skipped": 0,
+  "completeRawLogRead": true,
+  "logBytes": 56462,
+  "logSHA256": "a16e00dc70f738c72e38b1de48a29ace83e0ae18c4d256507fcc532578a6129f"
+}

@@ -1,0 +1,25 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/controller/verifySavedResult.test.ts (26 tests | 1 failed | 25 skipped) 1832ms
+   × r1 retains observed usage when timeout cleanup races an external handoff interruption 1831ms
+     → expected 'verifying' to be 'exhausted' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > r1 retains observed usage when timeout cleanup races an external handoff interruption
+AssertionError: expected 'verifying' to be 'exhausted' // Object.is equality
+
+Expected: "exhausted"
+Received: "verifying"
+
+ ❯ tests/controller/verifySavedResult.test.ts:204:47
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 25 skipped (26)
+   Start at  13:25:27
+   Duration  2.49s (transform 292ms, setup 14ms, collect 389ms, tests 1.83s, environment 0ms, prepare 54ms)
+

@@ -1,0 +1,21 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ❯ tests/control/savedResultRecovery.native.test.ts (28 tests | 1 failed | 27 skipped) 3556ms
+   × never publishes a success whose ordinary result repository was poisoned outside the candidate 3556ms
+     → expected 'complete' not to be 'complete' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.native.test.ts > never publishes a success whose ordinary result repository was poisoned outside the candidate
+AssertionError: expected 'complete' not to be 'complete' // Object.is equality
+ ❯ tests/control/savedResultRecovery.native.test.ts:257:39
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 27 skipped (28)
+   Start at  14:00:06
+   Duration  4.10s (transform 278ms, setup 14ms, collect 368ms, tests 3.56s, environment 0ms, prepare 35ms)
+

@@ -1,0 +1,10 @@
+{
+  "rawSHA256": "26c9fd796fa4849ce2c006ddde7b589899bbbc8ac091bfd1086a31e2ab388419",
+  "validatedNumericBuffers": 37,
+  "validatedEmptyBuffers": 1,
+  "exactFixtureByteMatches": 33,
+  "validatedBytes": 679877,
+  "completeCoverageSpans": 1048,
+  "dynamicCanonicalArtifactCount": 6,
+  "scope": "Controller independently decoded every numeric span and checked byte length/range/hash and all fixture matches; nonarray transcript and dynamic schema interpretation audited by implementer/scopedreview."
+}

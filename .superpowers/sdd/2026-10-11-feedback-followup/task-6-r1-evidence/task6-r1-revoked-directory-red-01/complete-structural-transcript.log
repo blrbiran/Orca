@@ -1,0 +1,1048 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultRecovery.test.ts (39 tests | 1 failed | 38 skipped) 2730ms
+   × r1 refuses nonprivate control authority when a revoked fence is omitted for dead-owner reconciliation 2729ms
+     → promise resolved "{ source: { protocol: 3, …(4) }, …(15) }" instead of rejecting
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > r1 refuses nonprivate control authority when a revoked fence is omitted for dead-owner reconciliation
+AssertionError: promise resolved "{ source: { protocol: 3, …(4) }, …(15) }" instead of rejecting
+
+- Expected
++ Received
+
+- [Error: rejected promise]
++ Object {
++   "actualChangedPaths": Array [
++     "answer.txt",
++   ],
++   "admission": Object {
++     "accounting": Object {
++       "handoff": Object {
++         "activeMs": 30000,
++         "attempts": 2,
++         "sessions": 1,
++         "tokens": 1000,
++       },
++       "highWater": 3,
++       "receipt": Object {
++         "artifactId": "recovery-2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c",
++         "hash": "2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c",
++       },
++       "report": Object {
++         "artifactId": "recovery-8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976",
++         "hash": "8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976",
++       },
++       "settlement": Object {
++         "artifactId": "recovery-1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c",
++         "hash": "1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c",
++       },
++       "stopProof": Object {
++         "artifactId": "recovery-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
++         "hash": "356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
++       },
++       "work": Object {
++         "activeMs": 30000,
++         "attempts": 2,
++         "sessions": 1,
++         "tokens": 1000,
++       },
++     },
++     "claim": Object {
++       "commandId": "recover-command",
++       "configHash": "4f5f7da431b49be1f14d3c904d59f678a24b3c0a72b08996f899a530e07c26ac",
++       "generation": 2,
++       "ownerToken": "recover-owner",
++       "runId": "recovery-1",
++     },
++     "contractHash": "653938bd2a52eba5c7b682e79db27b1adf9c482df43508bca49bed5c112d6cf4",
++     "currentRunId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++     "funding": Object {
++       "freshGrant": Object {
++         "handoff": Object {
++           "activeMs": 30000,
++           "attempts": 2,
++           "sessions": 1,
++           "tokens": 1000,
++         },
++         "work": Object {
++           "activeMs": 30000,
++           "attempts": 2,
++           "sessions": 1,
++           "tokens": 1000,
++         },
++       },
++       "fundedTotal": Object {
++         "activeMs": 60000,
++         "attempts": 4,
++         "sessions": 2,
++         "tokens": 2000,
++       },
++       "historicalPolicy": Object {
++         "accountingMode": "finite-legacy",
++         "authoredWork": Object {
++           "activeMs": 30000,
++           "attempts": 2,
++           "sessions": 1,
++           "tokens": 1000,
++         },
++         "authority": Object {
++           "artifactId": "recovery-f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a",
++           "hash": "f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a",
++         },
++         "contractHash": "653938bd2a52eba5c7b682e79db27b1adf9c482df43508bca49bed5c112d6cf4",
++       },
++       "inheritedUsage": Object {
++         "activeMs": 30000,
++         "attempts": 2,
++         "sessions": 1,
++         "tokens": 1000,
++       },
++       "kind": "legacy-fresh-grant-v1",
++       "reservation": Object {
++         "handoffAllocationId": "allocation-handoff",
++         "revision": 7,
++         "runId": "recovery-1",
++         "workAllocationId": "allocation-work",
++       },
++     },
++     "predecessor": null,
++     "recoveryOf": Object {
++       "capsuleHash": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
++       "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
++       "snapshotHash": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
++       "sourceAttempt": 1,
++       "sourceRunId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++     },
++     "revision": 7,
++     "schema": "ccloop-saved-result-admission-v1",
++     "source": Object {
++       "envelopeHash": "fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba",
++       "executionId": "execution-legacy-real",
++       "generation": 1,
++       "graphVersion": 3,
++       "groupId": "g1",
++       "runId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++       "targetVersion": 1,
++       "taskId": "T1",
++       "workItemId": "T1",
++     },
++   },
++   "bytes": Map {
++     "sha256-c9ede9962993b72d9e5d0ca45405cfa5085bb68add3335dd1d9d566d2d1083d0" => Object {
++       "data": Array [
+  [Losslessly interpreted 373 decimal byte lines for sha256-c9ede9962993b72d9e5d0ca45405cfa5085bb68add3335dd1d9d566d2d1083d0; exact loaded-artifact SHA256 c9ede9962993b72d9e5d0ca45405cfa5085bb68add3335dd1d9d566d2d1083d0; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-f81f0c1361f33ab1f163a94d7f421f13c85131ea4fdf793320c74308e46333c8" => Object {
++       "data": Array [
+  [Losslessly interpreted 3267 decimal byte lines for sha256-f81f0c1361f33ab1f163a94d7f421f13c85131ea4fdf793320c74308e46333c8; exact loaded-artifact SHA256 f81f0c1361f33ab1f163a94d7f421f13c85131ea4fdf793320c74308e46333c8; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-2ac0f109ec43e1c24360efb365e418341f78da3069c317413500b0928e1aee0d" => Object {
++       "data": Array [
+  [Losslessly interpreted 394 decimal byte lines for sha256-2ac0f109ec43e1c24360efb365e418341f78da3069c317413500b0928e1aee0d; exact loaded-artifact SHA256 2ac0f109ec43e1c24360efb365e418341f78da3069c317413500b0928e1aee0d; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba" => Object {
++       "data": Array [
+  [Losslessly interpreted 2064 decimal byte lines for sha256-fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba; exact loaded-artifact SHA256 fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1" => Object {
++       "data": Array [
+  [Losslessly interpreted 62 decimal byte lines for sha256-1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1; exact loaded-artifact SHA256 1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459" => Object {
++       "data": Array [
+  [Losslessly interpreted 283 decimal byte lines for sha256-2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459; exact loaded-artifact SHA256 2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b" => Object {
++       "data": Array [
+  [Losslessly interpreted 1469 decimal byte lines for sha256-2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b; exact loaded-artifact SHA256 2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d" => Object {
++       "data": Array [
+  [Losslessly interpreted 92 decimal byte lines for sha256-318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d; exact loaded-artifact SHA256 318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3" => Object {
++       "data": Array [
+  [Losslessly interpreted 348 decimal byte lines for sha256-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3; exact loaded-artifact SHA256 356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a" => Object {
++       "data": Array [
+  [Losslessly interpreted 762 decimal byte lines for sha256-3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a; exact loaded-artifact SHA256 3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352" => Object {
++       "data": Array [
+  [Losslessly interpreted 481 decimal byte lines for sha256-3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352; exact loaded-artifact SHA256 3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33" => Object {
++       "data": Array [
+  [Losslessly interpreted 91 decimal byte lines for sha256-86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33; exact loaded-artifact SHA256 86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073" => Object {
++       "data": Array [
+  [Losslessly interpreted 97 decimal byte lines for sha256-99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073; exact loaded-artifact SHA256 99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d" => Object {
++       "data": Array [
+  [Losslessly interpreted 72 decimal byte lines for sha256-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d; exact loaded-artifact SHA256 9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b" => Object {
++       "data": Array [
+  [Losslessly interpreted 6012 decimal byte lines for sha256-af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b; exact loaded-artifact SHA256 af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981" => Object {
++       "data": Array [
+  [Losslessly interpreted 408 decimal byte lines for sha256-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981; exact loaded-artifact SHA256 b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84" => Object {
++       "data": Array [
+  [Losslessly interpreted 54 decimal byte lines for sha256-b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84; exact loaded-artifact SHA256 b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902" => Object {
++       "data": Array [
+  [Losslessly interpreted 100 decimal byte lines for sha256-c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902; exact loaded-artifact SHA256 c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9" => Object {
++       "data": Array [
+  [Losslessly interpreted 981 decimal byte lines for sha256-ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9; exact loaded-artifact SHA256 ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e" => Object {
++       "data": Array [
+  [Losslessly interpreted 966 decimal byte lines for sha256-d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e; exact loaded-artifact SHA256 d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" => Object {
++       "data": Array [],
++       "type": "Buffer",
++     },
++     "sha256-e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4" => Object {
++       "data": Array [
+  [Losslessly interpreted 736 decimal byte lines for sha256-e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4; exact loaded-artifact SHA256 e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-bc237aec467eef4ad72ab44c19ed2edbed79f7b5824a2e7ebfb3faf583433e66" => Object {
++       "data": Array [
+  [Losslessly interpreted 12 decimal byte lines for sha256-bc237aec467eef4ad72ab44c19ed2edbed79f7b5824a2e7ebfb3faf583433e66; exact loaded-artifact SHA256 bc237aec467eef4ad72ab44c19ed2edbed79f7b5824a2e7ebfb3faf583433e66; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-130a6a38adc93617853c5a74b5dfd104f522d3f3b87a568cec1a7383f5245ad5" => Object {
++       "data": Array [
+  [Losslessly interpreted 251 decimal byte lines for sha256-130a6a38adc93617853c5a74b5dfd104f522d3f3b87a568cec1a7383f5245ad5; exact loaded-artifact SHA256 130a6a38adc93617853c5a74b5dfd104f522d3f3b87a568cec1a7383f5245ad5; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-4a7e4f55899221395689a11a510a5eaf00c8dff284980d27ad020c79f3a931c0" => Object {
++       "data": Array [
+  [Losslessly interpreted 1575 decimal byte lines for sha256-4a7e4f55899221395689a11a510a5eaf00c8dff284980d27ad020c79f3a931c0; exact loaded-artifact SHA256 4a7e4f55899221395689a11a510a5eaf00c8dff284980d27ad020c79f3a931c0; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705" => Object {
++       "data": Array [
+  [Losslessly interpreted 978 decimal byte lines for sha256-cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705; exact loaded-artifact SHA256 cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-425f4b846bf98d662dc3aa8e1f3b83ee41b05d7c5c56324d746366ad8bb88bac" => Object {
++       "data": Array [
+  [Losslessly interpreted 197 decimal byte lines for sha256-425f4b846bf98d662dc3aa8e1f3b83ee41b05d7c5c56324d746366ad8bb88bac; exact loaded-artifact SHA256 425f4b846bf98d662dc3aa8e1f3b83ee41b05d7c5c56324d746366ad8bb88bac; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-ae47fdece10a6f3fea64ce2f00f9dbfee11b7e33f44841206ba44bf1897b6126" => Object {
++       "data": Array [
+  [Losslessly interpreted 295 decimal byte lines for sha256-ae47fdece10a6f3fea64ce2f00f9dbfee11b7e33f44841206ba44bf1897b6126; exact loaded-artifact SHA256 ae47fdece10a6f3fea64ce2f00f9dbfee11b7e33f44841206ba44bf1897b6126; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5" => Object {
++       "data": Array [
+  [Losslessly interpreted 740 decimal byte lines for sha256-5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5; exact loaded-artifact SHA256 5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "sha256-006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd" => Object {
++       "data": Array [
+  [Losslessly interpreted 16 decimal byte lines for sha256-006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd; exact loaded-artifact SHA256 006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "snapshot-e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265" => Object {
++       "data": Array [
+  [Losslessly interpreted 762 decimal byte lines for snapshot-e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265; exact loaded-artifact SHA256 e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "archive-44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582" => Object {
++       "data": Array [
+  [Losslessly interpreted 12346 decimal byte lines for archive-44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582; exact loaded-artifact SHA256 44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "recovery-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3" => Object {
++       "data": Array [
+  [Losslessly interpreted 348 decimal byte lines for recovery-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3; exact loaded-artifact SHA256 356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3; fixture matches 1]
++       ],
++       "type": "Buffer",
++     },
++     "recovery-8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976" => Object {
++       "data": Array [
+  [Losslessly interpreted 3641 decimal byte lines for recovery-8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976; exact loaded-artifact SHA256 8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976; fixture matches 0]
++       ],
++       "type": "Buffer",
++     },
++     "recovery-1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c" => Object {
++       "data": Array [
+  [Losslessly interpreted 832 decimal byte lines for recovery-1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c; exact loaded-artifact SHA256 1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c; fixture matches 0]
++       ],
++       "type": "Buffer",
++     },
++     "recovery-2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c" => Object {
++       "data": Array [
+  [Losslessly interpreted 396 decimal byte lines for recovery-2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c; exact loaded-artifact SHA256 2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c; fixture matches 0]
++       ],
++       "type": "Buffer",
++     },
++     "recovery-f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a" => Object {
++       "data": Array [
+  [Losslessly interpreted 341 decimal byte lines for recovery-f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a; exact loaded-artifact SHA256 f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a; fixture matches 0]
++       ],
++       "type": "Buffer",
++     },
++     "recovery-e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb" => Object {
++       "data": Array [
+  [Losslessly interpreted 2754 decimal byte lines for recovery-e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb; exact loaded-artifact SHA256 e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb; fixture matches 0]
++       ],
++       "type": "Buffer",
++     },
++   },
++   "execution": Object {
++     "changedFiles": Array [
++       "answer.txt",
++     ],
++     "commandOutputs": Array [],
++     "diffPatch": "",
++     "stdoutStderrLog": "done",
++   },
++   "identity": Object {
++     "envelopeHash": "fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba",
++     "executionId": "execution-legacy-real",
++     "generation": 1,
++     "graphVersion": 3,
++     "groupId": "g1",
++     "runId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++     "targetVersion": 1,
++     "taskId": "T1",
++     "workItemId": "T1",
++   },
++   "input": Object {
++     "claim": Object {
++       "agent": Object {
++         "agent": "codex",
++         "contextWindow": "agent-default",
++         "model": "fixture",
++       },
++       "commandId": "recover-command",
++       "configHash": "4f5f7da431b49be1f14d3c904d59f678a24b3c0a72b08996f899a530e07c26ac",
++       "generation": 2,
++       "grant": Object {
++         "handoff": Object {
++           "activeMs": 30000,
++           "attempts": 2,
++           "sessions": 1,
++           "tokens": 1000,
++         },
++         "work": Object {
++           "activeMs": 30000,
++           "attempts": 2,
++           "sessions": 1,
++           "tokens": 1000,
++         },
++       },
++       "graphVersion": 3,
++       "groupId": "g1",
++       "ownerToken": "recover-owner",
++       "runId": "recovery-1",
++       "targetVersion": 1,
++       "taskId": "T1",
++       "workItemId": "T1",
++     },
++     "contractHash": "653938bd2a52eba5c7b682e79db27b1adf9c482df43508bca49bed5c112d6cf4",
++     "inputCheckpoint": null,
++     "mode": "verify-saved-result",
++     "protocol": 4,
++     "savedResultRecovery": Object {
++       "admissionHash": "e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb",
++       "packageHash": "7b1cf4715724076503833b1a01145950dfbcced67fb2b4a574a9cca70d2dd79c",
++       "packagePath": "/private/tmp/results-task2-tSNwdf/source/input/recovery",
++       "recoveryOf": Object {
++         "capsuleHash": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
++         "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
++         "snapshotHash": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
++         "sourceAttempt": 1,
++         "sourceRunId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++       },
++     },
++     "work": Object {
++       "base": "18a46bf111c922fc07349ae2a795def18bdd7d9c",
++       "contract": Object {
++         "context": Object {
++           "buildTestCommands": Array [
++             "true",
++           ],
++           "constraints": Array [],
++           "relevantDocs": Array [],
++           "repoPath": "/private/tmp/results-task2-tSNwdf/repo",
++           "targetPaths": Array [
++             "answer.txt",
++           ],
++         },
++         "escalationAndExit": Object {
++           "escalationTargets": Array [],
++           "pauseOn": Array [],
++           "stopOn": Array [],
++           "terminalStates": Array [
++             "succeeded",
++             "failed",
++             "exhausted",
++             "cancelled",
++             "blocked_waiting_human",
++           ],
++         },
++         "executionPolicy": Object {
++           "autonomyLevel": "L2",
++           "maxAttempts": 2,
++           "partialOutcomeRecoveryWindowMs": 0,
++           "perAttemptTimeoutMs": 10000,
++           "tokenBudget": 1000,
++           "totalRuntimeBudgetMs": 30000,
++           "worktreeRequired": true,
++         },
++         "objective": Object {
++           "goal": "Produce answer",
++           "nonGoals": Array [],
++           "successCondition": "check",
++           "taskId": "task-1",
++         },
++         "safetyPolicy": Object {
++           "allowlistPaths": Array [],
++           "denylistPaths": Array [],
++           "humanGateConditions": Array [],
++           "maxFilesTouched": 64,
++         },
++         "verification": Object {
++           "evidenceRequired": Array [],
++           "rejectOn": Array [
++             "check failed",
++           ],
++           "requiredChecks": Array [
++             "node -e \"const f=require('fs');if(process.env.CCLOOP_RECOVERY_CHECK_MARKER)f.appendFileSync(process.env.CCLOOP_RECOVERY_CHECK_MARKER,'check\\n');if(process.env.CCLOOP_RECOVERY_CHECK_MUTATE)f.writeFileSync('answer.txt','modified');if(f.readFileSync('answer.txt','utf8')!=='saved candidate\\n')process.exit(1)\"",
++           ],
++           "verifierType": "agent",
++         },
++       },
++       "kind": "loop",
++       "sourceDir": "/private/tmp/results-task2-tSNwdf/source",
++       "targetRepo": "/private/tmp/results-task2-tSNwdf/repo",
++     },
++   },
++   "ledger": Object {
++     "events": Array [
++       Object {
++         "bucket": "work",
++         "byModel": Array [
++           Object {
++             "cacheRead": 0,
++             "cacheWrite": 0,
++             "input": 10,
++             "model": "fixture",
++             "output": 5,
++           },
++         ],
++         "cumulative": Object {
++           "activeMs": 68,
++           "attempts": 1,
++           "sessions": 1,
++           "tokens": 15,
++         },
++         "eventSeq": 1,
++         "generation": 1,
++         "runId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++         "source": Object {
++           "artifactId": "evidence-3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352",
++           "hash": "3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352",
++         },
++       },
++       Object {
++         "bucket": "work",
++         "cumulative": null,
++         "eventSeq": 2,
++         "generation": 1,
++         "runId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++         "source": Object {
++           "artifactId": "evidence-318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d",
++           "hash": "318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d",
++         },
++       },
++       Object {
++         "bucket": "handoff",
++         "cumulative": Object {
++           "activeMs": 0,
++           "attempts": 0,
++           "sessions": 0,
++           "tokens": 0,
++         },
++         "eventSeq": 3,
++         "generation": 1,
++         "runId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++         "source": Object {
++           "artifactId": "evidence-b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84",
++           "hash": "b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84",
++         },
++       },
++     ],
++     "nextSeq": 4,
++     "observations": Object {
++       "attempt-1-execute": Object {
++         "eventSeq": 2,
++         "hash": "fb7e57ac6c04bbabb434e0c7e07794fd2078191dd7ee6026987e4af76e2d1422",
++       },
++       "attempt-1-plan": Object {
++         "eventSeq": 1,
++         "hash": "1a914be7afec9d31497f9206ed000707d82104d5b965071ed1f90a8fcb03129c",
++       },
++       "natural-execution-legacy-real": Object {
++         "eventSeq": 3,
++         "hash": "7d95e332fad8f621d7cd0466b9bed0ca9762864e096fcb14ff28a1b6eea9c0c7",
++       },
++     },
++     "protocol": 1,
++     "totals": Object {
++       "handoff": Object {
++         "activeMs": 0,
++         "attempts": 0,
++         "sessions": 0,
++         "tokens": 0,
++       },
++       "work": Object {
++         "activeMs": 131,
++         "attempts": 1,
++         "sessions": 1,
++         "tokens": 15,
++       },
++     },
++   },
++   "logical": [Function logical],
++   "manifest": Object {
++     "admission": Object {
++       "artifactId": "recovery-e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb",
++       "hash": "e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb",
++     },
++     "artifacts": Array [
++       Object {
++         "file": "sha256-c9ede9962993b72d9e5d0ca45405cfa5085bb68add3335dd1d9d566d2d1083d0.bin",
++         "ref": Object {
++           "artifactId": "sha256-c9ede9962993b72d9e5d0ca45405cfa5085bb68add3335dd1d9d566d2d1083d0",
++           "hash": "c9ede9962993b72d9e5d0ca45405cfa5085bb68add3335dd1d9d566d2d1083d0",
++         },
++       },
++       Object {
++         "file": "sha256-f81f0c1361f33ab1f163a94d7f421f13c85131ea4fdf793320c74308e46333c8.bin",
++         "ref": Object {
++           "artifactId": "sha256-f81f0c1361f33ab1f163a94d7f421f13c85131ea4fdf793320c74308e46333c8",
++           "hash": "f81f0c1361f33ab1f163a94d7f421f13c85131ea4fdf793320c74308e46333c8",
++         },
++       },
++       Object {
++         "file": "sha256-2ac0f109ec43e1c24360efb365e418341f78da3069c317413500b0928e1aee0d.bin",
++         "ref": Object {
++           "artifactId": "sha256-2ac0f109ec43e1c24360efb365e418341f78da3069c317413500b0928e1aee0d",
++           "hash": "2ac0f109ec43e1c24360efb365e418341f78da3069c317413500b0928e1aee0d",
++         },
++       },
++       Object {
++         "file": "sha256-fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba.bin",
++         "ref": Object {
++           "artifactId": "sha256-fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba",
++           "hash": "fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba",
++         },
++       },
++       Object {
++         "file": "sha256-1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1.bin",
++         "ref": Object {
++           "artifactId": "sha256-1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1",
++           "hash": "1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1",
++         },
++       },
++       Object {
++         "file": "sha256-2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459.bin",
++         "ref": Object {
++           "artifactId": "sha256-2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459",
++           "hash": "2b39df438acdfec59fbabeb1bc9c7aeca5f92249c5e9ee92221d85f6ae266459",
++         },
++       },
++       Object {
++         "file": "sha256-2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b.bin",
++         "ref": Object {
++           "artifactId": "sha256-2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b",
++           "hash": "2daaa2612bf87115b9b9731799bcaa7d753f11baaffda8f9f08950197924a87b",
++         },
++       },
++       Object {
++         "file": "sha256-318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d.bin",
++         "ref": Object {
++           "artifactId": "sha256-318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d",
++           "hash": "318c707776e137e2bb507bfe18df6de11027e2b7eaf22054572573f2336f310d",
++         },
++       },
++       Object {
++         "file": "sha256-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3.bin",
++         "ref": Object {
++           "artifactId": "sha256-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
++           "hash": "356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
++         },
++       },
++       Object {
++         "file": "sha256-3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a.bin",
++         "ref": Object {
++           "artifactId": "sha256-3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a",
++           "hash": "3886218017446d945f0d687dbea3c8a85ccf9d0f5c3cd54ff5349abf225a457a",
++         },
++       },
++       Object {
++         "file": "sha256-3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352.bin",
++         "ref": Object {
++           "artifactId": "sha256-3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352",
++           "hash": "3a5071146a7ddc7709732d38ed4d42a57f97d92f8e0be385edcd579709c8f352",
++         },
++       },
++       Object {
++         "file": "sha256-86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33.bin",
++         "ref": Object {
++           "artifactId": "sha256-86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33",
++           "hash": "86139e89b507c65116b48469f825970af919b53c8237d2e6f0ecdcb02a3b0f33",
++         },
++       },
++       Object {
++         "file": "sha256-99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073.bin",
++         "ref": Object {
++           "artifactId": "sha256-99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073",
++           "hash": "99c2e79a2a0943cfa62bcf721ef5dc5e50a79045dfb2009055278007bcd50073",
++         },
++       },
++       Object {
++         "file": "sha256-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d.bin",
++         "ref": Object {
++           "artifactId": "sha256-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d",
++           "hash": "9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d",
++         },
++       },
++       Object {
++         "file": "sha256-af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b.bin",
++         "ref": Object {
++           "artifactId": "sha256-af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b",
++           "hash": "af5577f6178ec78813ee6ae159ace9e6fe5fc9203a8ed726b71169e4d7af062b",
++         },
++       },
++       Object {
++         "file": "sha256-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981.bin",
++         "ref": Object {
++           "artifactId": "sha256-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981",
++           "hash": "b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981",
++         },
++       },
++       Object {
++         "file": "sha256-b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84.bin",
++         "ref": Object {
++           "artifactId": "sha256-b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84",
++           "hash": "b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84",
++         },
++       },
++       Object {
++         "file": "sha256-c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902.bin",
++         "ref": Object {
++           "artifactId": "sha256-c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902",
++           "hash": "c42ca3cfe1e05c67eb93f87460e7188ad5e9bdc4db196eb9aa07695a409f1902",
++         },
++       },
++       Object {
++         "file": "sha256-ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9.bin",
++         "ref": Object {
++           "artifactId": "sha256-ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9",
++           "hash": "ca3f545745b39ae2cd8450c61c320c171c1e78f2e3a0fed5eebf1f5bf53fe0b9",
++         },
++       },
++       Object {
++         "file": "sha256-d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e.bin",
++         "ref": Object {
++           "artifactId": "sha256-d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e",
++           "hash": "d04336d4987939d62632e8b7b1f7beb6f53e31b6f9641912b3cd3b2c5daf272e",
++         },
++       },
++       Object {
++         "file": "sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.bin",
++         "ref": Object {
++           "artifactId": "sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
++           "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
++         },
++       },
++       Object {
++         "file": "sha256-e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4.bin",
++         "ref": Object {
++           "artifactId": "sha256-e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4",
++           "hash": "e4b6a7ab734cb2762d48ce79330b2cb2e1f0e8b755604dbccfa04b9aa9cca8e4",
++         },
++       },
++       Object {
++         "file": "sha256-bc237aec467eef4ad72ab44c19ed2edbed79f7b5824a2e7ebfb3faf583433e66.bin",
++         "ref": Object {
++           "artifactId": "sha256-bc237aec467eef4ad72ab44c19ed2edbed79f7b5824a2e7ebfb3faf583433e66",
++           "hash": "bc237aec467eef4ad72ab44c19ed2edbed79f7b5824a2e7ebfb3faf583433e66",
++         },
++       },
++       Object {
++         "file": "sha256-130a6a38adc93617853c5a74b5dfd104f522d3f3b87a568cec1a7383f5245ad5.bin",
++         "ref": Object {
++           "artifactId": "sha256-130a6a38adc93617853c5a74b5dfd104f522d3f3b87a568cec1a7383f5245ad5",
++           "hash": "130a6a38adc93617853c5a74b5dfd104f522d3f3b87a568cec1a7383f5245ad5",
++         },
++       },
++       Object {
++         "file": "sha256-4a7e4f55899221395689a11a510a5eaf00c8dff284980d27ad020c79f3a931c0.bin",
++         "ref": Object {
++           "artifactId": "sha256-4a7e4f55899221395689a11a510a5eaf00c8dff284980d27ad020c79f3a931c0",
++           "hash": "4a7e4f55899221395689a11a510a5eaf00c8dff284980d27ad020c79f3a931c0",
++         },
++       },
++       Object {
++         "file": "sha256-cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705.bin",
++         "ref": Object {
++           "artifactId": "sha256-cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705",
++           "hash": "cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705",
++         },
++       },
++       Object {
++         "file": "sha256-425f4b846bf98d662dc3aa8e1f3b83ee41b05d7c5c56324d746366ad8bb88bac.bin",
++         "ref": Object {
++           "artifactId": "sha256-425f4b846bf98d662dc3aa8e1f3b83ee41b05d7c5c56324d746366ad8bb88bac",
++           "hash": "425f4b846bf98d662dc3aa8e1f3b83ee41b05d7c5c56324d746366ad8bb88bac",
++         },
++       },
++       Object {
++         "file": "sha256-ae47fdece10a6f3fea64ce2f00f9dbfee11b7e33f44841206ba44bf1897b6126.bin",
++         "ref": Object {
++           "artifactId": "sha256-ae47fdece10a6f3fea64ce2f00f9dbfee11b7e33f44841206ba44bf1897b6126",
++           "hash": "ae47fdece10a6f3fea64ce2f00f9dbfee11b7e33f44841206ba44bf1897b6126",
++         },
++       },
++       Object {
++         "file": "sha256-5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5.bin",
++         "ref": Object {
++           "artifactId": "sha256-5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5",
++           "hash": "5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5",
++         },
++       },
++       Object {
++         "file": "sha256-006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd.bin",
++         "ref": Object {
++           "artifactId": "sha256-006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd",
++           "hash": "006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd",
++         },
++       },
++       Object {
++         "file": "snapshot-e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265.bin",
++         "ref": Object {
++           "artifactId": "snapshot-e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
++           "hash": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
++         },
++       },
++       Object {
++         "file": "archive-44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582.bin",
++         "ref": Object {
++           "artifactId": "archive-44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
++           "hash": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
++         },
++       },
++       Object {
++         "file": "recovery-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3.bin",
++         "ref": Object {
++           "artifactId": "recovery-356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
++           "hash": "356259823ee890d28f6f8dfc84bcb79abfa95509db00a5d63d8a5d9514031cf3",
++         },
++       },
++       Object {
++         "file": "recovery-8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976.bin",
++         "ref": Object {
++           "artifactId": "recovery-8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976",
++           "hash": "8371b0b34858da6901adfa09ce08f170b0bf5653ea46e04da6ef99bfdb238976",
++         },
++       },
++       Object {
++         "file": "recovery-1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c.bin",
++         "ref": Object {
++           "artifactId": "recovery-1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c",
++           "hash": "1d77a9a9f7bdd1ac756bcd181a79c5ffc6538a04d919adcb5d58c33f25f5e98c",
++         },
++       },
++       Object {
++         "file": "recovery-2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c.bin",
++         "ref": Object {
++           "artifactId": "recovery-2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c",
++           "hash": "2605ef5ab52a103ba3c6893dc947752aa166586356b193a3849eeea2bc2f831c",
++         },
++       },
++       Object {
++         "file": "recovery-f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a.bin",
++         "ref": Object {
++           "artifactId": "recovery-f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a",
++           "hash": "f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a",
++         },
++       },
++       Object {
++         "file": "recovery-e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb.bin",
++         "ref": Object {
++           "artifactId": "recovery-e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb",
++           "hash": "e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb",
++         },
++       },
++     ],
++     "authorityKind": "legacy-published-candidate-v1",
++     "schema": "ccloop-saved-result-package-v1",
++     "source": Object {
++       "artifactId": "archive-44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
++       "hash": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
++     },
++   },
++   "originalBase": "18a46bf111c922fc07349ae2a795def18bdd7d9c",
++   "plan": Object {
++     "primaryTargetPaths": Array [
++       "answer.txt",
++     ],
++     "summary": "write answer",
++     "tokenUsage": 15,
++     "usageEvidence": Object {
++       "fields": Object {
++         "inputTokens": Object {
++           "status": "absent",
++         },
++         "input_tokens": Object {
++           "status": "finite",
++           "value": 10,
++         },
++         "outputTokens": Object {
++           "status": "absent",
++         },
++         "output_tokens": Object {
++           "status": "finite",
++           "value": 5,
++         },
++       },
++       "normalizedTotal": 15,
++       "selectedInputField": "input_tokens",
++       "selectedOutputField": "output_tokens",
++       "usageStatus": "present",
++     },
++   },
++   "rawExecutionTokens": 15,
++   "registered": Array [
++     Object {
++       "pgid": 39631,
++       "phase": "plan",
++       "pid": 39631,
++       "registeredAt": "2026-10-11T01:04:01.409Z",
++       "startedAt": "Sun Oct 11 01:04:01 2026",
++     },
++     Object {
++       "pgid": 39645,
++       "phase": "execute",
++       "pid": 39645,
++       "registeredAt": "2026-10-11T01:04:01.510Z",
++       "startedAt": "Sun Oct 11 01:04:01 2026",
++     },
++   ],
++   "snapshot": Object {
++     "bundle": Object {
++       "artifactId": "sha256-5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5",
++       "hash": "5a190b5400ea90110d90063884aedcd2cade99ceccb1dd4c2c7d9088a33fafb5",
++     },
++     "deleted": Array [],
++     "head": "ae4e792644ca84a1ae1af098ec8590e8567761d9",
++     "index": Array [
++       Object {
++         "mode": "100644",
++         "oid": "0c4206022e100b37010fd27dbd70f530f7e60c11",
++         "path": "answer.txt",
++         "ref": Object {
++           "artifactId": "sha256-006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd",
++           "hash": "006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd",
++         },
++         "stage": 0,
++       },
++     ],
++     "missing": Array [],
++     "tree": Array [
++       Object {
++         "kind": "file",
++         "mode": 420,
++         "path": "answer.txt",
++         "ref": Object {
++           "artifactId": "sha256-006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd",
++           "hash": "006af086bf4f30cbc654e8e4b647edb9dc447537af293dea83c128f9d5ae6ddd",
++         },
++       },
++     ],
++     "version": 1,
++   },
++   "snapshotHash": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
++   "source": Object {
++     "claim": Object {
++       "agent": Object {
++         "agent": "codex",
++         "contextWindow": "agent-default",
++         "model": "fixture",
++       },
++       "commandId": "command-1",
++       "configHash": "4f5f7da431b49be1f14d3c904d59f678a24b3c0a72b08996f899a530e07c26ac",
++       "generation": 1,
++       "grant": Object {
++         "handoff": Object {
++           "activeMs": 30000,
++           "attempts": 2,
++           "sessions": 1,
++           "tokens": 1000,
++         },
++         "work": Object {
++           "activeMs": 30000,
++           "attempts": 2,
++           "sessions": 1,
++           "tokens": 1000,
++         },
++       },
++       "graphVersion": 3,
++       "groupId": "g1",
++       "ownerToken": "owner-1",
++       "runId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++       "targetVersion": 1,
++       "taskId": "T1",
++       "workItemId": "T1",
++     },
++     "contractHash": "653938bd2a52eba5c7b682e79db27b1adf9c482df43508bca49bed5c112d6cf4",
++     "inputCheckpoint": null,
++     "protocol": 3,
++     "work": Object {
++       "base": "18a46bf111c922fc07349ae2a795def18bdd7d9c",
++       "contract": Object {
++         "context": Object {
++           "buildTestCommands": Array [
++             "true",
++           ],
++           "constraints": Array [],
++           "relevantDocs": Array [],
++           "repoPath": "/private/tmp/results-task2-B8E1sf/run-e73e593c-d1d4-494f-83bf-bb0c61e17169/repo",
++           "targetPaths": Array [
++             "answer.txt",
++           ],
++         },
++         "escalationAndExit": Object {
++           "escalationTargets": Array [],
++           "pauseOn": Array [],
++           "stopOn": Array [],
++           "terminalStates": Array [
++             "succeeded",
++             "failed",
++             "exhausted",
++             "cancelled",
++             "blocked_waiting_human",
++           ],
++         },
++         "executionPolicy": Object {
++           "autonomyLevel": "L2",
++           "maxAttempts": 2,
++           "partialOutcomeRecoveryWindowMs": 0,
++           "perAttemptTimeoutMs": 10000,
++           "tokenBudget": 1000,
++           "totalRuntimeBudgetMs": 30000,
++           "worktreeRequired": true,
++         },
++         "objective": Object {
++           "goal": "Produce answer",
++           "nonGoals": Array [],
++           "successCondition": "check",
++           "taskId": "task-1",
++         },
++         "safetyPolicy": Object {
++           "allowlistPaths": Array [],
++           "denylistPaths": Array [],
++           "humanGateConditions": Array [],
++           "maxFilesTouched": 64,
++         },
++         "verification": Object {
++           "evidenceRequired": Array [],
++           "rejectOn": Array [
++             "check failed",
++           ],
++           "requiredChecks": Array [
++             "node -e \"const f=require('fs');if(process.env.CCLOOP_RECOVERY_CHECK_MARKER)f.appendFileSync(process.env.CCLOOP_RECOVERY_CHECK_MARKER,'check\\n');if(process.env.CCLOOP_RECOVERY_CHECK_MUTATE)f.writeFileSync('answer.txt','modified');if(f.readFileSync('answer.txt','utf8')!=='saved candidate\\n')process.exit(1)\"",
++           ],
++           "verifierType": "agent",
++         },
++       },
++       "kind": "loop",
++       "sourceDir": "/private/tmp/results-task2-B8E1sf/run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++       "targetRepo": "/private/tmp/results-task2-B8E1sf/run-e73e593c-d1d4-494f-83bf-bb0c61e17169/repo",
++     },
++   },
++ }
+
+ ❯ tests/control/savedResultRecovery.test.ts:165:101
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 38 skipped (39)
+   Start at  13:28:38
+   Duration  3.45s (transform 293ms, setup 18ms, collect 395ms, tests 2.73s, environment 0ms, prepare 44ms)
+

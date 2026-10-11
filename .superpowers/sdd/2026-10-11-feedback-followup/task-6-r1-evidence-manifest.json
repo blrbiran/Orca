@@ -1,0 +1,680 @@
+[
+  {
+    "path": "task-6-r1-evidence/task6-r1-clone-baseline01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-clone-baseline01/result.json",
+    "bytes": 931,
+    "sha256": "8a365e3099fd8583cc8fdf9bddb5eec89fa8d2b3a884429a38a6b70c304515eb"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-clone-baseline01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-clone-baseline01/output.log",
+    "bytes": 6122,
+    "sha256": "635c29660f2a7de4d465e7a912d80c4bbf49776e18d825870306eb4f3e9b50cf"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-clone-baseline01/tests.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-clone-baseline01/tests.json",
+    "bytes": 28600,
+    "sha256": "7c41aa8fa5d3d33fe289dd05befe67b7a463df8466c6b25ed4d13a9c04cb0131"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-clone-build01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-clone-build01/result.json",
+    "bytes": 515,
+    "sha256": "a5fe9f59331bfe7f5f4151c96c7203fe51a56c39e169dd7fe6ccb9e55b4d090e"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-clone-build01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-clone-build01/output.log",
+    "bytes": 399,
+    "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-clone-type01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-clone-type01/result.json",
+    "bytes": 518,
+    "sha256": "27b29ead1dff93d47b9d3b45347bdb8b4674383266c7a16bc1bb41b9424b6a5d"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-clone-type01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-clone-type01/output.log",
+    "bytes": 59,
+    "sha256": "443df7778c6055e93ca0f3f4fabce5cbbe7205fa5689a62bd08268806118c185"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-clone-wire01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-clone-wire01/result.json",
+    "bytes": 625,
+    "sha256": "6da5491e342260b64b89967dec42b737f72fa04e0b5516174a1d1b5b1aafb192"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-clone-wire01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-clone-wire01/output.log",
+    "bytes": 581,
+    "sha256": "f7a3fb5a1a0a8f1df7fd706371d72fbd8fb2a3f1b54c1ae056eefe5efae9721f"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-build01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-build01/result.json",
+    "bytes": 520,
+    "sha256": "a5b21d5abc27a345b50ac21a677bb8207bae1fd94645c9546b08652212073644"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-build01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-build01/output.log",
+    "bytes": 399,
+    "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-covering01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-covering01/result.json",
+    "bytes": 857,
+    "sha256": "5258eec240f81d55e9948b258c1bd5b41c5afc1120e136d18c532b0a0457c3dd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-covering01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-covering01/output.log",
+    "bytes": 3184,
+    "sha256": "bf3ce49eba640efe5dbc69a3991a39dc0d31f7a67ea40ea1958e1ddff45ea640"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-covering01/tests.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-covering01/tests.json",
+    "bytes": 20103,
+    "sha256": "c9ff0ce73a1865fdc22545e1ba81adb7455160111d80093d5ea6f2d35bf821b1"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-formal01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-formal01/result.json",
+    "bytes": 565,
+    "sha256": "07725a99793f7d0a0dd36057e00b7e429ea910a78aee406a8e05df09ab1131de"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-formal01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-formal01/output.log",
+    "bytes": 56462,
+    "sha256": "a16e00dc70f738c72e38b1de48a29ace83e0ae18c4d256507fcc532578a6129f"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-full01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-full01/result.json",
+    "bytes": 783,
+    "sha256": "7ddea0b21c813ee41557724d2c5f128f73cf87ce96cef3e087500d155fbe7b01"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-full01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-full01/output.log",
+    "bytes": 55288,
+    "sha256": "471abb9fa69b87159c39f9476f149a83b7e2f0be36197df178bb9ef46bb42958"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-full01/tests.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-full01/tests.json",
+    "bytes": 556171,
+    "sha256": "348dc1a04b8412d928cd4c8c1ac6bcbc9b93918d78aab0293c57a0766bc8b996"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-type01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-type01/result.json",
+    "bytes": 523,
+    "sha256": "4d60ecf53243100c24ba01e5ca1259e3836819f719d5b7032ed2cafa6337febd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-type01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-type01/output.log",
+    "bytes": 59,
+    "sha256": "443df7778c6055e93ca0f3f4fabce5cbbe7205fa5689a62bd08268806118c185"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-wire01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-wire01/result.json",
+    "bytes": 632,
+    "sha256": "3843eaf82d6fbf324c13871d307a3cdfea168cb4981744722bc62c85903a6332"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-final-wire01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-final-wire01/output.log",
+    "bytes": 581,
+    "sha256": "4432061a7ca869d25f43e818231befc5d2a3c2f6c50b0099cc07207ca26ef3d3"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-green-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-green-01/result.json",
+    "bytes": 699,
+    "sha256": "2efedd9b9b3297a1b66ceeffb1707cf94cc15588c681360b13a1a44cd5a9dbae"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-green-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-green-01/output.log",
+    "bytes": 1211,
+    "sha256": "19b999590b034210378b634d6dd5d7dea6e47fe5af19d24f469d3a39a1bcf47f"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-green-02/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-green-02/result.json",
+    "bytes": 698,
+    "sha256": "a4194cb15d9eb8d20e5ca05492ab20ad1b825f0dad22c0fc79c30b46ebc3ce9d"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-green-02/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-green-02/output.log",
+    "bytes": 1409,
+    "sha256": "69fbeaac8967a21572e579e7657465879f7b49761886ca5c612f3b38aabe085c"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-green-03/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-green-03/result.json",
+    "bytes": 699,
+    "sha256": "13be57ca002f1196735a670de3c379e0654ebdc52c2247c52a7c1272f7faa64f"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-green-03/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-green-03/output.log",
+    "bytes": 1313,
+    "sha256": "9cc6bb947dca5316e0e663ac85878cf14019bb44781f4497ca4182af855abbd5"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-green-04/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-green-04/result.json",
+    "bytes": 699,
+    "sha256": "13829b79c7a3418726a9f9db5ff2e585fe4b8fed15f24ed502568e50929fcf77"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-green-04/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-green-04/output.log",
+    "bytes": 1313,
+    "sha256": "87598f5a1e749d14b4bc65f4c71143536b5d610734391800fb213ac2071d18ce"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-actual-argv-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-actual-argv-01/result.json",
+    "bytes": 763,
+    "sha256": "412750dc596260120581d80fa89ca6d56fb4b797d7f79c3c30dff6620918363a"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-actual-argv-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-actual-argv-01/output.log",
+    "bytes": 2958,
+    "sha256": "70576044df1b7d4281c74c4c267e57fd377c07149f122aaed1fc0b7ca3c8d822"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-ancestor-symlink-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-ancestor-symlink-01/result.json",
+    "bytes": 757,
+    "sha256": "38082006f696f8c4fbf4d86eb3df87a922f0bd2c614423a4de41537b08b66b56"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-ancestor-symlink-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-ancestor-symlink-01/output.log",
+    "bytes": 1487,
+    "sha256": "f2bb71f3f4f9e0d57d469cf2026136b11d3e164ec9b076a3b1b686602e247006"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-candidate-equality-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-candidate-equality-01/result.json",
+    "bytes": 780,
+    "sha256": "06598dd6db849140dff8e3d02dd5061298aca7fa04fd622c56c373b5b23f0757"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-candidate-equality-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-candidate-equality-01/output.log",
+    "bytes": 926,
+    "sha256": "1594158e38e5e614e9475f15bdbff132be1c5ac8f321d642b1b77e3ed61519af"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-checkpoint-mode-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-checkpoint-mode-01/result.json",
+    "bytes": 727,
+    "sha256": "da9d2b74f1cc5eb32a6cb025fb82e9e9cb5c12d771074e8f1985a8554d8ced1f"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-checkpoint-mode-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-checkpoint-mode-01/output.log",
+    "bytes": 3687,
+    "sha256": "2f87d569e4588605d0aae3c593ef2a0df870f1fdd1c0baf13b2e0fc390954a9f"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-crash-entry-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-crash-entry-01/result.json",
+    "bytes": 775,
+    "sha256": "7c56a5739526a31cedecbc1e379117efe0c541514347fbfc2bd8ac06d7a78e6e"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-crash-entry-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-crash-entry-01/output.log",
+    "bytes": 984,
+    "sha256": "7f0210e6723d1d1a3fd8ea35abaf9d8984c452b4c1f573d413b478de381bfde5"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-delivery-projection-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-delivery-projection-01/result.json",
+    "bytes": 783,
+    "sha256": "56876d08f8a584704ab6c5ca2afed26a7022f12523caee840360c5c1a0ee5cee"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-delivery-projection-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-delivery-projection-01/output.log",
+    "bytes": 964,
+    "sha256": "911fb6654ec2ca99cf10607d63411dc41a7831ffb96cd979d35314684a1aff83"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-delivery-projection-build/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-delivery-projection-build/result.json",
+    "bytes": 533,
+    "sha256": "b9b9db1fccc80a62562688dd0b0233936d037637c8398af5f321fa972e72376b"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-delivery-projection-build/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-delivery-projection-build/output.log",
+    "bytes": 399,
+    "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-delivery-projection-restore-build/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-delivery-projection-restore-build/result.json",
+    "bytes": 541,
+    "sha256": "63b9592e85b19ad6f7473ce6313f6c864c64ea575c4dfca1b1fe81087401bcba"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-delivery-projection-restore-build/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-delivery-projection-restore-build/output.log",
+    "bytes": 399,
+    "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-funding-total-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-funding-total-01/result.json",
+    "bytes": 773,
+    "sha256": "cc4d387446bf7306c7881cd46076b95e158ffba723e4ab52c1b16fc679a23b95"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-funding-total-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-funding-total-01/output.log",
+    "bytes": 1385,
+    "sha256": "23a016bab6cdc8d9b09663efca057403138c7dabcf780bd9df310c7d789712db"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-handoff-mode-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-handoff-mode-01/result.json",
+    "bytes": 689,
+    "sha256": "7a8088436e14f07be9d66d00f4ce9e61ef297bc48c5a39937070c0b445149b3b"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-handoff-mode-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-handoff-mode-01/output.log",
+    "bytes": 789,
+    "sha256": "0d23e361979b5f657341bb4bddde6cc921b3b98bbebc6c4a9267b73eee0515ce"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-handoff-mode-build/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-handoff-mode-build/result.json",
+    "bytes": 526,
+    "sha256": "e058de2d6858a91bdba6673c9f441ca01862507c9896a32f25674c851e5644c2"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-handoff-mode-build/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-handoff-mode-build/output.log",
+    "bytes": 399,
+    "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-handoff-mode-restore-build/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-handoff-mode-restore-build/result.json",
+    "bytes": 533,
+    "sha256": "a2b58bbd0dfbc3f2063642c6ad22c5c8bd45e93fa3921e0f20ad768e3ca83429"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-handoff-mode-restore-build/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-handoff-mode-restore-build/output.log",
+    "bytes": 399,
+    "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-legacy-cleanup-event-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-legacy-cleanup-event-01/result.json",
+    "bytes": 786,
+    "sha256": "4e06224997856ce7de5249251563d0803a8c0bcc72cdb86b4fab5bf20398254f"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-legacy-cleanup-event-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-legacy-cleanup-event-01/output.log",
+    "bytes": 1281,
+    "sha256": "6ed4a560659064d6437735c04ab994e6b5b3c7e3a7ff3520607dea6f216c8cb9"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-lineage-identity-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-lineage-identity-01/result.json",
+    "bytes": 756,
+    "sha256": "bdad0bdac20d5cd596bc89011e2f3f600750cba5311d54bba8751f032618bc4c"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-lineage-identity-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-lineage-identity-01/output.log",
+    "bytes": 1383,
+    "sha256": "25e48d41265a006e74caea1d83d4d0acef14152915cc26acf2e85c8de5bcd9be"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-publication-fingerprint-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-fingerprint-01/result.json",
+    "bytes": 782,
+    "sha256": "e30e7f6d671ec3d46811e779e4a02363e04e48eefef2bac35cf0c87d353a027a"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-publication-fingerprint-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-fingerprint-01/output.log",
+    "bytes": 1250,
+    "sha256": "799a50ca447b9c3859a50060180df91ae026efa77bc444e4fd1b764813d24ea7"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-publication-fingerprint-build/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-fingerprint-build/result.json",
+    "bytes": 538,
+    "sha256": "b0774bd8609123a1fac2564aa6fbcb7a80c868ae43c688462c93ca5c7894f76f"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-publication-fingerprint-build/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-fingerprint-build/output.log",
+    "bytes": 399,
+    "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-publication-fingerprint-restore-build/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-fingerprint-restore-build/result.json",
+    "bytes": 546,
+    "sha256": "1cb468640ec7cea8883d35e822b23637aaa2dfda308abd364937f11edcad7c88"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-publication-fingerprint-restore-build/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-fingerprint-restore-build/output.log",
+    "bytes": 399,
+    "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-publication-parent-tree-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-parent-tree-01/result.json",
+    "bytes": 794,
+    "sha256": "4af680bb5798bbd35c1b74e0d8c6f45d697c0fe50386c6bf1ec0fdc168bf300b"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-publication-parent-tree-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-parent-tree-01/output.log",
+    "bytes": 2125,
+    "sha256": "958ed9c95aa6815235d66f8353a247bf69d86efb6d33793d74cfde9e41486388"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-publication-parent-tree-build/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-parent-tree-build/result.json",
+    "bytes": 537,
+    "sha256": "f8b02987d5e7d2f084ee11321f7d098c53d4265d38b510455ec0ec79b764a35a"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-publication-parent-tree-build/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-parent-tree-build/output.log",
+    "bytes": 399,
+    "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-publication-parent-tree-restore-build/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-parent-tree-restore-build/result.json",
+    "bytes": 545,
+    "sha256": "bb4d33d2ab5af9424f723df9b3f76987d65086466818f5b9f3cd68bb30510580"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-publication-parent-tree-restore-build/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-parent-tree-restore-build/output.log",
+    "bytes": 399,
+    "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-r1-handoff-integrity-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-handoff-integrity-01/result.json",
+    "bytes": 808,
+    "sha256": "6f9ae422f11403e247443d15049fa0fd5ed00031f372cba3052f77eb485fe02a"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-r1-handoff-integrity-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-handoff-integrity-01/output.log",
+    "bytes": 1011,
+    "sha256": "792864277e973d1d9f7cca6f9f6579afbb1f8ade542b3ddcb0cfb5d92911957e"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-r1-input-boundary-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-input-boundary-01/result.json",
+    "bytes": 779,
+    "sha256": "f274786492b52657fe5d379296a0566fb9b23eb95860133012aeac1021da7e85"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-r1-input-boundary-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-input-boundary-01/output.log",
+    "bytes": 1270,
+    "sha256": "ed9cba109dd6884e9dc4f119c70ca0ae6a0c50c2735e6b046e49dfba5edccfeb"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-r1-private-mode-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-private-mode-01/result.json",
+    "bytes": 788,
+    "sha256": "9bdddbc881f2e5c0b221f461e84857ae023a672b41e9ae9658bee80d7ed50c75"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-r1-private-mode-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-private-mode-01/output.log",
+    "bytes": 3682,
+    "sha256": "db57f6d131f2d07893faf68cdac2653dbc09b863070122ae612a275bf22442cf"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-r1-revoked-control-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-revoked-control-01/result.json",
+    "bytes": 785,
+    "sha256": "c6b55eb909f66903435f76714212cb523ac9d6d425a23053cbe7ed8dfd6cd58c"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-r1-revoked-control-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-revoked-control-01/output.log",
+    "bytes": 1124,
+    "sha256": "89b9a7f78bfdc37c7abfa1f01fd05ab82acceac30671f3ffe93d8d442b414fb2"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-r1-timeout-precedence-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-timeout-precedence-01/result.json",
+    "bytes": 774,
+    "sha256": "b6216ddcbc4984b0960691ab4100ff1e42851397dae687e54ec14e43aba4cd1e"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-r1-timeout-precedence-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-timeout-precedence-01/output.log",
+    "bytes": 972,
+    "sha256": "b3b68bc13cf26fea2ffc3a2087d5dda962fdbf44025464976c38d23207c21537"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-real-verifier-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-real-verifier-01/result.json",
+    "bytes": 773,
+    "sha256": "1d339f124a8e37944aefeb9e423b986e474f59d2c70164ef743b6e6d9194a152"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-real-verifier-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-real-verifier-01/output.log",
+    "bytes": 1522,
+    "sha256": "b8fef3602fb6b86d355c1aa255bcca9703a3970f591fd1964801e836c2baa843"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-skip-paid-phases-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-skip-paid-phases-01/result.json",
+    "bytes": 776,
+    "sha256": "0a7bca8f3bcfe1e05df910185bb42499cd90ed8b6b7c1a9fbfc95ba058b6ded5"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-skip-paid-phases-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-skip-paid-phases-01/output.log",
+    "bytes": 1517,
+    "sha256": "3c6b0e00f7273ec4d89a7117baedf5cc48ed48688985987bd5d33f3dec58f8e3"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-snapshot-hash-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-snapshot-hash-01/result.json",
+    "bytes": 757,
+    "sha256": "938b7e6f24059b3e681e9ee4dc3ee0981114479bb16f4d6f2a2be19315ab4c51"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-snapshot-hash-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-snapshot-hash-01/output.log",
+    "bytes": 1391,
+    "sha256": "6db86510f86354c5021bafc98c3cf56191ea9adc530d7841d2551244120db5f9"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-unreleased-eof-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-unreleased-eof-01/result.json",
+    "bytes": 794,
+    "sha256": "0103eb7d947b274a0f2e126f20e367fde8f4d4fbf8dec20c62a9f20473d62970"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-unreleased-eof-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-unreleased-eof-01/output.log",
+    "bytes": 1168,
+    "sha256": "1ddfd9379863469edf9ed825c865b84254780b9cea9c0687f785f4ededad5e8a"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-unreleased-eof-build/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-unreleased-eof-build/result.json",
+    "bytes": 528,
+    "sha256": "8d428212e119860f84c29d4e2eb01adfb902390a13a0bab93e60b40c53be697f"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-unreleased-eof-build/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-unreleased-eof-build/output.log",
+    "bytes": 399,
+    "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-unreleased-eof-restore-build/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-unreleased-eof-restore-build/result.json",
+    "bytes": 536,
+    "sha256": "a798038e3addc2ad6c1bfae547bb9376c29df43e53250255103015be4de0d15c"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutant-unreleased-eof-restore-build/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutant-unreleased-eof-restore-build/output.log",
+    "bytes": 399,
+    "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutation-panel01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutation-panel01/result.json",
+    "bytes": 437,
+    "sha256": "730b5d5f44779900c2615da03b26b7ff63881706fe6a5e361d553d3dc79d7e3c"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-mutation-panel01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-mutation-panel01/output.log",
+    "bytes": 23764,
+    "sha256": "932cb7f95b93db1c6aa338ffceb42c2ba08753155dc74267ab786bb751a29c9d"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-red-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-red-01/result.json",
+    "bytes": 696,
+    "sha256": "57c408c1c254fc621039db1338c2739b5c8bb1c3a936c8d7f0625b53c76fe464"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-red-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-red-01/output.log",
+    "bytes": 5987,
+    "sha256": "eb12234eccf7e57d63c760232b076c6bae64a9e14c2c47042461859698823be3"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-revoked-directory-red-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-revoked-directory-red-01/result.json",
+    "bytes": 683,
+    "sha256": "9d5f7dc1328eff18862bd81c570efcf14d25ce1b3bf478b103109ef656a5999f"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-revoked-directory-red-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-revoked-directory-red-01/output.log",
+    "bytes": 679877,
+    "sha256": "26c9fd796fa4849ce2c006ddde7b589899bbbc8ac091bfd1086a31e2ab388419"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-revoked-directory-red-01/lossless-audit.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-revoked-directory-red-01/lossless-audit.json",
+    "bytes": 132044,
+    "sha256": "d18305de3e4f586aa86f6b87a0b2e451eb6d63e7ebc8cbd3da799bfac0dacee3"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-revoked-directory-red-01/lossless-audit-complete.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-revoked-directory-red-01/lossless-audit-complete.json",
+    "bytes": 146496,
+    "sha256": "eac5a8da1b384ec61de7be8ba96119cda284374b35d2bd393e633fc2f770dd17"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-revoked-directory-red-01/complete-structural-transcript.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-revoked-directory-red-01/complete-structural-transcript.log",
+    "bytes": 47843,
+    "sha256": "7228b73edf3d8706f1c50e8622ee0a1e0246c9bd740bb73a8afe5da8d93ae965"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-timeout-classification-red-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-timeout-classification-red-01/result.json",
+    "bytes": 675,
+    "sha256": "8054563c147bdc9e12563ba311a11bfb1ce113e126308f106f443b8b2c311124"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-timeout-classification-red-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-timeout-classification-red-01/output.log",
+    "bytes": 979,
+    "sha256": "c0853fcb00e943ed2893d75e5a8ee1a9b91ac36989faa7e8bb28fc76cf56235f"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-timeout-handoff-red-01/result.json",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-timeout-handoff-red-01/result.json",
+    "bytes": 668,
+    "sha256": "314f6a5766ef1da4c362167e78f1f268d059d8d8ec5df1717397f06f59f208be"
+  },
+  {
+    "path": "task-6-r1-evidence/task6-r1-timeout-handoff-red-01/output.log",
+    "source": "/private/tmp/orca-followup-runs/task6-r1-timeout-handoff-red-01/output.log",
+    "bytes": 1244,
+    "sha256": "d4e8c37f78ba160ac49ffb7c505ce104a31778c36a2a1c37e23eea734e1bcc66"
+  },
+  {
+    "path": "task-6-r1-evidence/helpers/orca-followup-run.py",
+    "source": "/private/tmp/orca-followup-run.py",
+    "bytes": 2466,
+    "sha256": "64a9805f8b5100cd1abe5fd1df384f48a80b2af65aa211447511f213ad1375c5"
+  },
+  {
+    "path": "task-6-r1-evidence/helpers/task6-gate.mjs",
+    "source": "/private/tmp/task6-gate.mjs",
+    "bytes": 764,
+    "sha256": "b8da0755d1f3df0e5767dfe0545f15b7417ec49a578c96ab6243bef6f9020640"
+  },
+  {
+    "path": "task-6-r1-evidence/helpers/task6-r1-wire.mts",
+    "source": "/private/tmp/task6-r1-wire.mts",
+    "bytes": 11876,
+    "sha256": "9fbe6eeca55716f94698e3e9415b43432402418b980551110fe4b010787fbefa"
+  },
+  {
+    "path": "task-6-r1-evidence/helpers/task6-r1-clone-wire.mts",
+    "source": "/private/tmp/task6-r1-clone-wire.mts",
+    "bytes": 11831,
+    "sha256": "c84c676097328ac5eed9bfed89d4095769adfe3c84ca2fcfdd4389a71630b457"
+  },
+  {
+    "path": "task-6-r1-evidence/helpers/task6-r1-clone-wire-mutant.mts",
+    "source": "/private/tmp/task6-r1-clone-wire-mutant.mts",
+    "bytes": 11827,
+    "sha256": "9248d5959562fdb010437419917c5a4fae565cf31dfaad933a7c7c6ad1d4f649"
+  },
+  {
+    "path": "task-6-r1-evidence/helpers/task6-r1-mutant-run.py",
+    "source": "/private/tmp/task6-r1-mutant-run.py",
+    "bytes": 7822,
+    "sha256": "876e9a8cccb203ccdd4a7d5f77d90661ef5f652a202f045c6115f44e6c19f39d"
+  },
+  {
+    "path": "task-6-r1-evidence/helpers/task6-r1-mutation-panel.py",
+    "source": "/private/tmp/task6-r1-mutation-panel.py",
+    "bytes": 713,
+    "sha256": "191a64740c8874657ee3bd2f34b501dc50b57f94ee2d23618a242cb82543888a"
+  }
+]

@@ -1,0 +1,33 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ❯ tests/control/savedResultRecovery.test.ts (39 tests | 1 failed | 38 skipped) 346ms
+   × refuses actual legacy workspace_cleanup_failed events without guessing attempt text 345ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > refuses actual legacy workspace_cleanup_failed events without guessing attempt text
+AssertionError: expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+
+- Expected
++ Received
+
+  Object {
+-   "reason": "saved-result-legacy-publication-unproven",
+-   "status": "unavailable",
++   "authorityKind": "legacy-published-candidate-v1",
++   "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
++   "status": "eligible",
+  }
+
+ ❯ tests/control/savedResultRecovery.test.ts:138:53
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 38 skipped (39)
+   Start at  14:00:16
+   Duration  879ms (transform 269ms, setup 14ms, collect 358ms, tests 346ms, environment 0ms, prepare 36ms)
+

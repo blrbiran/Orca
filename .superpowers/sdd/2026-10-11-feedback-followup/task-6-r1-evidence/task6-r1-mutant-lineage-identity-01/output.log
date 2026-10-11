@@ -1,0 +1,30 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ❯ tests/control/savedResultRecovery.test.ts (39 tests | 1 failed | 38 skipped) 344ms
+   × refuses a changed task recovery authority even when private package hashes are renewed 343ms
+     → expected 'eligible' to be 'unavailable' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > refuses a changed task recovery authority even when private package hashes are renewed
+AssertionError: expected 'eligible' to be 'unavailable' // Object.is equality
+
+Expected: "unavailable"
+Received: "eligible"
+
+ ❯ tests/control/savedResultRecovery.test.ts:120:77
+    118|   if(kind==='total')f.admission.funding.fundedTotal.tokens=3000;
+    119|   if(kind==='generic-policy')f.input.tokenPolicy={authoredTokenCeiling…
+    120|   await f.seal();expect((await readSavedResultEligibility(f.input)).st…
+       |                                                                             ^
+    121|  }finally{await rm(f.root,{recursive:true,force:true});}
+    122| },30000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 38 skipped (39)
+   Start at  13:59:16
+   Duration  877ms (transform 268ms, setup 14ms, collect 362ms, tests 344ms, environment 0ms, prepare 34ms)
+

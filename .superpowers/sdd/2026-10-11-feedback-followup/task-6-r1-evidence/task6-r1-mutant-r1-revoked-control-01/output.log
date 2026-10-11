@@ -1,0 +1,31 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ❯ tests/control/savedResultRecovery.test.ts (39 tests | 1 failed | 38 skipped) 488ms
+   × r1 refuses nonprivate control authority when a revoked fence is omitted for dead-owner reconciliation 487ms
+     → expected { status: 'loaded' } to deeply equal { status: 'refused', …(1) }
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > r1 refuses nonprivate control authority when a revoked fence is omitted for dead-owner reconciliation
+AssertionError: expected { status: 'loaded' } to deeply equal { status: 'refused', …(1) }
+
+- Expected
++ Received
+
+  Object {
+-   "reason": "saved-result-package-path-invalid",
+-   "status": "refused",
++   "status": "loaded",
+  }
+
+ ❯ tests/control/savedResultRecovery.test.ts:165:204
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 38 skipped (39)
+   Start at  14:00:27
+   Duration  1.01s (transform 267ms, setup 13ms, collect 357ms, tests 488ms, environment 0ms, prepare 32ms)
+

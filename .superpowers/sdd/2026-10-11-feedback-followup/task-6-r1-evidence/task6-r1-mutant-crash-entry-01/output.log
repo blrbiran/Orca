@@ -1,0 +1,25 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ❯ tests/control/savedResultRecovery.native.test.ts (28 tests | 1 failed | 27 skipped) 2318ms
+   × native crash at entry-fsynced preserves mode, entry and result fences 2317ms
+     → expected 'failed' to be 'blocked_waiting_human' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.native.test.ts > native crash at entry-fsynced preserves mode, entry and result fences
+AssertionError: expected 'failed' to be 'blocked_waiting_human' // Object.is equality
+
+Expected: "blocked_waiting_human"
+Received: "failed"
+
+ ❯ tests/control/savedResultRecovery.native.test.ts:74:33
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 27 skipped (28)
+   Start at  13:59:23
+   Duration  2.85s (transform 270ms, setup 13ms, collect 362ms, tests 2.32s, environment 0ms, prepare 33ms)
+

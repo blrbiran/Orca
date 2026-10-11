@@ -1,0 +1,984 @@
+[
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6rmc.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run tests/controller/verifySavedResult.test.ts tests/control/savedResultRecovery.test.ts tests/control/savedResultRecovery.native.test.ts tests/control/savedResultCheckpoint.test.ts --fileParallelism=false --maxWorkers=1 --minWorkers=1 --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/task6-r1-clone-baseline01/tests.json"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 161.69109225273132,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-clone-baseline01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-clone-baseline01",
+    "logSHA256": "635c29660f2a7de4d465e7a912d80c4bbf49776e18d825870306eb4f3e9b50cf"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6rmb.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.536137819290161,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-clone-build01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-clone-build01",
+    "logSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6rmt.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run typecheck"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.047137022018433,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-clone-type01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-clone-type01",
+    "logSHA256": "443df7778c6055e93ca0f3f4fabce5cbbe7205fa5689a62bd08268806118c185"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6rmw.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node --import /private/tmp/ccloop-task6-mutants-final/node_modules/tsx/dist/loader.mjs /private/tmp/task6-r1-clone-wire.mts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 11.133523225784302,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-clone-wire01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-clone-wire01",
+    "logSHA256": "f7a3fb5a1a0a8f1df7fd706371d72fbd8fb2a3f1b54c1ae056eefe5efae9721f"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6r.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.761570692062378,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-final-build01/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-final-build01",
+    "logSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6rc.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run tests/controller/verifySavedResult.test.ts tests/control/savedResultRecovery.test.ts tests/control/savedResultCheckpoint.test.ts --fileParallelism=false --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/task6-r1-final-covering01/tests.json"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 57.90021586418152,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-final-covering01/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-final-covering01",
+    "logSHA256": "bf3ce49eba640efe5dbc69a3991a39dc0d31f7a67ea40ea1958e1ddff45ea640"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6rn.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /private/tmp/task6-gate.mjs npm run verify:control"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 139.44195699691772,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-final-formal01/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-final-formal01",
+    "logSHA256": "a16e00dc70f738c72e38b1de48a29ace83e0ae18c4d256507fcc532578a6129f"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6rf.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /private/tmp/task6-gate.mjs node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run --fileParallelism=false --maxWorkers=1 --minWorkers=1 --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/task6-r1-final-full01/tests.json"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 571.5922138690948,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-final-full01/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-final-full01",
+    "logSHA256": "471abb9fa69b87159c39f9476f149a83b7e2f0be36197df178bb9ef46bb42958"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6r.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run typecheck"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.071026086807251,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-final-type01/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-final-type01",
+    "logSHA256": "443df7778c6055e93ca0f3f4fabce5cbbe7205fa5689a62bd08268806118c185"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6rw.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node --import /private/tmp/ccloop-feedback-followup-20261011/node_modules/tsx/dist/loader.mjs /private/tmp/task6-r1-wire.mts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 11.133510828018188,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-final-wire01/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-final-wire01",
+    "logSHA256": "4432061a7ca869d25f43e818231befc5d2a3c2f6c50b0099cc07207ca26ef3d3"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6r.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run tests/controller/verifySavedResult.test.ts tests/control/savedResultRecovery.test.ts -t \"r1 \" --fileParallelism=false"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 11.617925882339478,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-green-01/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "f373a17e9f6c14041c3d900c35a82f556174b07b429fa7745294f05772ad2db8",
+    "sourceFiles": 446,
+    "runId": "task6-r1-green-01",
+    "logSHA256": "19b999590b034210378b634d6dd5d7dea6e47fe5af19d24f469d3a39a1bcf47f"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6r.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run tests/controller/verifySavedResult.test.ts tests/control/savedResultRecovery.test.ts -t \"r1 \" --fileParallelism=false"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 13.92412781715393,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-green-02/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "ab1ed19f748430786763541dfda9ccadd7e0ca5e25700451244c7acebf61ce98",
+    "sourceFiles": 446,
+    "runId": "task6-r1-green-02",
+    "logSHA256": "69fbeaac8967a21572e579e7657465879f7b49761886ca5c612f3b38aabe085c"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6r.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run tests/controller/verifySavedResult.test.ts tests/control/savedResultRecovery.test.ts -t \"r1 \" --fileParallelism=false"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 13.426820755004883,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-green-03/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "0400d0698d5367cd222694b7c2a4af7957d7c276539f21334097a8903609a31b",
+    "sourceFiles": 446,
+    "runId": "task6-r1-green-03",
+    "logSHA256": "9cc6bb947dca5316e0e663ac85878cf14019bb44781f4497ca4182af855abbd5"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6r.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run tests/controller/verifySavedResult.test.ts tests/control/savedResultRecovery.test.ts -t \"r1 \" --fileParallelism=false"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 13.770618915557861,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-green-04/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "11156f98c45535324df10d1f768a0fd693110f3e7e5d6703b3b10d945c48869b",
+    "sourceFiles": 446,
+    "runId": "task6-r1-green-04",
+    "logSHA256": "87598f5a1e749d14b4bc65f4c71143536b5d610734391800fb213ac2071d18ce"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRecovery.test.ts",
+      "-t",
+      "actual legacy argv drift",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 2.4735910892486572,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-actual-argv-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "a6e715eda555f4d7b7a57b85abdd05fc1e50c2322d7e9c7c504efc109e56c26d",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-actual-argv-01",
+    "logSHA256": "70576044df1b7d4281c74c4c267e57fd377c07149f122aaed1fc0b7ca3c8d822"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/controller/verifySavedResult.test.ts",
+      "-t",
+      "moved behind",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 1.3752498626708984,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-ancestor-symlink-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "08ec1e017772963c138a700651c3fc77dcb84dcdac5dea668bfc65a60773238a",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-ancestor-symlink-01",
+    "logSHA256": "f2bb71f3f4f9e0d57d469cf2026136b11d3e164ec9b076a3b1b686602e247006"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/controller/verifySavedResult.test.ts",
+      "-t",
+      "candidate modification by verifier",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 2.135690927505493,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-candidate-equality-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "4e049553fc747b9c57355990fc58b302a01d266fa352ce4639e17b6f77d3cfc2",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-candidate-equality-01",
+    "logSHA256": "1594158e38e5e614e9475f15bdbff132be1c5ac8f321d642b1b77e3ed61519af"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultCheckpoint.test.ts",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 1.1158819198608398,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-checkpoint-mode-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "25eac2e42478d9e5a21b8bfdaa77297d924733ba55966d73e550fb74860a687f",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-checkpoint-mode-01",
+    "logSHA256": "2f87d569e4588605d0aae3c593ef2a0df870f1fdd1c0baf13b2e0fc390954a9f"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRecovery.native.test.ts",
+      "-t",
+      "native crash at entry-fsynced",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 3.1467337608337402,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-crash-entry-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "665680ba7db0495bc5337560a7d705aa3b508a51e3c5ab345e656147df84d70c",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-crash-entry-01",
+    "logSHA256": "7f0210e6723d1d1a3fd8ea35abaf9d8984c452b4c1f573d413b478de381bfde5"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRecovery.native.test.ts",
+      "-t",
+      "poisoned outside the candidate",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 4.407026052474976,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-delivery-projection-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "b46c003464a4379fd180cb34e8c5d347a3d12bae575d89da273b0306d6d0673b",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-delivery-projection-01",
+    "logSHA256": "911fb6654ec2ca99cf10607d63411dc41a7831ffb96cd979d35314684a1aff83"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6mb.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.493462800979614,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-delivery-projection-build/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "b46c003464a4379fd180cb34e8c5d347a3d12bae575d89da273b0306d6d0673b",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-delivery-projection-build",
+    "logSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6mb.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.554672002792358,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-delivery-projection-restore-build/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-delivery-projection-restore-build",
+    "logSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRecovery.test.ts",
+      "-t",
+      "changed total recovery authority",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 1.2100319862365723,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-funding-total-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "18e7a00625b5f300e35911b732e8e00e377bd3fca05ccd64aed32e96594dea1a",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-funding-total-01",
+    "logSHA256": "23a016bab6cdc8d9b09663efca057403138c7dabcf780bd9df310c7d789712db"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "--import",
+      "/private/tmp/ccloop-task6-mutants-final/node_modules/tsx/dist/loader.mjs",
+      "/private/tmp/task6-r1-clone-wire-mutant.mts"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 9.963183879852295,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-handoff-mode-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "1767555c2e6be7ff3029bd5c6d796f347b0b1a9ba637df530977c7fdf53bd7df",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-handoff-mode-01",
+    "logSHA256": "0d23e361979b5f657341bb4bddde6cc921b3b98bbebc6c4a9267b73eee0515ce"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6mb.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.523158073425293,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-handoff-mode-build/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "1767555c2e6be7ff3029bd5c6d796f347b0b1a9ba637df530977c7fdf53bd7df",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-handoff-mode-build",
+    "logSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6mb.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.64426589012146,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-handoff-mode-restore-build/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-handoff-mode-restore-build",
+    "logSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRecovery.test.ts",
+      "-t",
+      "actual legacy workspace_cleanup_failed",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 1.1747291088104248,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-legacy-cleanup-event-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "c7bf6e352e6f4c39379224f3986d9c59a957efb500e6edc037cbb3071aae86ca",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-legacy-cleanup-event-01",
+    "logSHA256": "6ed4a560659064d6437735c04ab994e6b5b3c7e3a7ff3520607dea6f216c8cb9"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRecovery.test.ts",
+      "-t",
+      "changed task",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 1.1771430969238281,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-lineage-identity-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "730889f4ddec82d4ce7be656ae672dc4af16fbdbfff636c39c32b38529a143a3",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-lineage-identity-01",
+    "logSHA256": "25e48d41265a006e74caea1d83d4d0acef14152915cc26acf2e85c8de5bcd9be"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRecovery.native.test.ts",
+      "-t",
+      "terminal-fsynced approval",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 4.617892265319824,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-fingerprint-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "dadefbf7abe5d12fa3a657ff9412386f6327f69f8382f82e8ff70d288a0317ad",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-publication-fingerprint-01",
+    "logSHA256": "799a50ca447b9c3859a50060180df91ae026efa77bc444e4fd1b764813d24ea7"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6mb.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.6649088859558105,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-fingerprint-build/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "dadefbf7abe5d12fa3a657ff9412386f6327f69f8382f82e8ff70d288a0317ad",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-publication-fingerprint-build",
+    "logSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6mb.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.7415571212768555,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-fingerprint-restore-build/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-publication-fingerprint-restore-build",
+    "logSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRecovery.native.test.ts",
+      "-t",
+      "publication even when the ref exists",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 10.177481889724731,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-parent-tree-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "ea3168383581c0f93a1eb8afdc5b97a61602fe33c1834ba87a9fa3f2538271f7",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-publication-parent-tree-01",
+    "logSHA256": "958ed9c95aa6815235d66f8353a247bf69d86efb6d33793d74cfde9e41486388"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6mb.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.513531923294067,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-parent-tree-build/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "ea3168383581c0f93a1eb8afdc5b97a61602fe33c1834ba87a9fa3f2538271f7",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-publication-parent-tree-build",
+    "logSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6mb.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.667320013046265,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-publication-parent-tree-restore-build/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-publication-parent-tree-restore-build",
+    "logSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/controller/verifySavedResult.test.ts",
+      "-t",
+      "r1 refuses candidate changes before returned-result handoff",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 2.1909751892089844,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-handoff-integrity-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "8f02366a23dd071b90012ec7e500692820f8ac67e8095df61d4fb74138a3779d",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-r1-handoff-integrity-01",
+    "logSHA256": "792864277e973d1d9f7cca6f9f6579afbb1f8ade542b3ddcb0cfb5d92911957e"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRecovery.test.ts",
+      "-t",
+      "r1 rejects nonprivate input-parent",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 1.3104069232940674,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-input-boundary-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "fa789564366f63c75feb231449816102176cabec6290a3eea2c4154ec11233bf",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-r1-input-boundary-01",
+    "logSHA256": "ed9cba109dd6884e9dc4f119c70ca0ae6a0c50c2735e6b046e49dfba5edccfeb"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRecovery.test.ts",
+      "-t",
+      "r1 rejects nonprivate|r1 rejects a nonprivate",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 2.6100428104400635,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-private-mode-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "79d0b5589adbf706b5224b96c788369ed1cdbb2d922d1c2ac71d16f916475055",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-r1-private-mode-01",
+    "logSHA256": "db57f6d131f2d07893faf68cdac2653dbc09b863070122ae612a275bf22442cf"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRecovery.test.ts",
+      "-t",
+      "r1 refuses nonprivate control authority",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 1.3060708045959473,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-revoked-control-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "e86a5a4ff3139943cd8be048c4a645065b247d47a5bbe7e40543f45c2fb238db",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-r1-revoked-control-01",
+    "logSHA256": "89b9a7f78bfdc37c7abfa1f01fd05ab82acceac30671f3ffe93d8d442b414fb2"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/controller/verifySavedResult.test.ts",
+      "-t",
+      "r1 retains observed usage",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 5.107486963272095,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-r1-timeout-precedence-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "ddee04ca290eb0f97031b45d4c5538e24343fb163ae55ed26a77030a6ae5caef",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-r1-timeout-precedence-01",
+    "logSHA256": "b3b68bc13cf26fea2ffc3a2087d5dda962fdbf44025464976c38d23207c21537"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/controller/verifySavedResult.test.ts",
+      "-t",
+      "restores the archived candidate",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 2.8856489658355713,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-real-verifier-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "9d6f20e31a062693d51e892dd807ba690a771914842fd39f51d136abed43f74b",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-real-verifier-01",
+    "logSHA256": "b8fef3602fb6b86d355c1aa255bcca9703a3970f591fd1964801e836c2baa843"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/controller/verifySavedResult.test.ts",
+      "-t",
+      "restores the archived candidate",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 1.7784171104431152,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-skip-paid-phases-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "df79fb111ce925c2086cb295768f592403e5f092f1d0e10fbcd523f054bb2052",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-skip-paid-phases-01",
+    "logSHA256": "3c6b0e00f7273ec4d89a7117baedf5cc48ed48688985987bd5d33f3dec58f8e3"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRecovery.test.ts",
+      "-t",
+      "changed snapshot",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 1.1581330299377441,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-snapshot-hash-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "a3e080908fbe6839207b3b9a02a643c26ddce36799d381c80d5d67d73e72f8a7",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-snapshot-hash-01",
+    "logSHA256": "6db86510f86354c5021bafc98c3cf56191ea9adc530d7841d2551244120db5f9"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+      "sh",
+      "node",
+      "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRecovery.native.test.ts",
+      "-t",
+      "owner death before validation command release",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 1.0183238983154297,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-unreleased-eof-01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "8d2c1b89b9f0968caa104aa1b174ae74f4a7165c3fb1b50d2a7e1c1f230aae50",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-unreleased-eof-01",
+    "logSHA256": "1ddfd9379863469edf9ed825c865b84254780b9cea9c0687f785f4ededad5e8a"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6mb.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.633445978164673,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-unreleased-eof-build/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "8d2c1b89b9f0968caa104aa1b174ae74f4a7165c3fb1b50d2a7e1c1f230aae50",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-unreleased-eof-build",
+    "logSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6mb.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.670458078384399,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutant-unreleased-eof-restore-build/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutant-unreleased-eof-restore-build",
+    "logSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task6-mutants-final",
+    "command": [
+      "python3",
+      "/private/tmp/task6-r1-mutation-panel.py"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 114.91024780273438,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-mutation-panel01/output.log",
+    "source": "783eccf6f5df80c02aba91b6cfe625d3ae2698a7",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446,
+    "runId": "task6-r1-mutation-panel01",
+    "logSHA256": "932cb7f95b93db1c6aa338ffceb42c2ba08753155dc74267ab786bb751a29c9d"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6r.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run tests/controller/verifySavedResult.test.ts tests/control/savedResultRecovery.test.ts -t \"r1 \" --fileParallelism=false"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 12.27553415298462,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-red-01/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "8dd303ad2f63821d8e48ccc212da74cbac647f21fcd5fbf12e25e0afbda113f1",
+    "sourceFiles": 446,
+    "runId": "task6-r1-red-01",
+    "logSHA256": "eb12234eccf7e57d63c760232b076c6bae64a9e14c2c47042461859698823be3"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6r.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run tests/control/savedResultRecovery.test.ts -t \"r1 refuses nonprivate control authority\""
+    ],
+    "rc": 1,
+    "elapsedSeconds": 3.802924156188965,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-revoked-directory-red-01/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "9dee0768ce341b2da43f7b49d61e392f2a1696439ef05f586febc5a658292e3a",
+    "sourceFiles": 446,
+    "runId": "task6-r1-revoked-directory-red-01",
+    "logSHA256": "26c9fd796fa4849ce2c006ddde7b589899bbbc8ac091bfd1086a31e2ab388419"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6r.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run tests/controller/verifySavedResult.test.ts -t \"r1 retains observed usage\""
+    ],
+    "rc": 1,
+    "elapsedSeconds": 2.856109142303467,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-timeout-classification-red-01/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "c897986699e72176c3545f748d83ef2ea427f7ecfd6eb9655f66b76d632b90be",
+    "sourceFiles": 446,
+    "runId": "task6-r1-timeout-classification-red-01",
+    "logSHA256": "c0853fcb00e943ed2893d75e5a8ee1a9b91ac36989faa7e8bb28fc76cf56235f"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "sh",
+      "-c",
+      "TASK_TMP=$(mktemp -d /private/tmp/t6r.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run tests/controller/verifySavedResult.test.ts -t \"r1 retains observed usage\""
+    ],
+    "rc": 1,
+    "elapsedSeconds": 2.904684066772461,
+    "log": "/private/tmp/orca-followup-runs/task6-r1-timeout-handoff-red-01/output.log",
+    "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+    "sourceTreeSHA256": "b7cea0f56c0a79c1e925a20dc91d527d36d1e584254bed7fdeee06cb3a6f9064",
+    "sourceFiles": 446,
+    "runId": "task6-r1-timeout-handoff-red-01",
+    "logSHA256": "d4e8c37f78ba160ac49ffb7c505ce104a31778c36a2a1c37e23eea734e1bcc66"
+  }
+]

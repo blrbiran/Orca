@@ -1,0 +1,18 @@
+{"root":"/private/tmp/results-task2-1HPL0S","acceptedOldConsumer":true,"failedSourcePreserved":true,"capsuleRef":{"artifactId":"saved-result-541d7b790506b515ef04f44906b63b072b05f8a89c6202db690f89b43f035eaa","hash":"541d7b790506b515ef04f44906b63b072b05f8a89c6202db690f89b43f035eaa"},"coreRefsChecked":18,"coreCapsuleRead":2,"coreSnapshotRead":2,"aliasesChecked":2,"mutableOriginalIgnored":true}
+node:internal/modules/run_main:122
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  join(recovery.sourceDir,'control/config.json')
+
+    at <anonymous> (/private/tmp/task6-r1-clone-wire-mutant.mts:88:240) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '=='
+}
+
+Node.js v22.13.1

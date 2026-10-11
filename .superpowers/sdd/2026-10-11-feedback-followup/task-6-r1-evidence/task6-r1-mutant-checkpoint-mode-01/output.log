@@ -1,0 +1,93 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ❯ tests/control/savedResultCheckpoint.test.ts (1 test | 1 failed) 301ms
+   × refuses ordinary continuation of a genuine recovery checkpoint even though core handoff mode is projected away 300ms
+     → promise resolved "{ objective: { …(4) }, …(5) }" instead of rejecting
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultCheckpoint.test.ts > refuses ordinary continuation of a genuine recovery checkpoint even though core handoff mode is projected away
+AssertionError: promise resolved "{ objective: { …(4) }, …(5) }" instead of rejecting
+
+- Expected
++ Received
+
+- [Error: rejected promise]
++ Object {
++   "context": Object {
++     "buildTestCommands": Array [
++       "true",
++     ],
++     "constraints": Array [
++       "Treat continuation input fields unfinished, pendingDecisions, and awaitingHuman as required planning inputs.",
++       "Continuation input from the predecessor run: {\"unfinished\":[\"check\"],\"pendingDecisions\":[\"retry after first failed attempt requires human approval\"],\"awaitingHuman\":[\"retry after first failed attempt requires human approval\"]}",
++     ],
++     "relevantDocs": Array [
++       "/private/tmp/results-task2-LOOWmN/source/run/continuation-input.json",
++     ],
++     "repoPath": "/private/tmp/results-task2-LOOWmN/repo",
++     "targetPaths": Array [
++       "answer.txt",
++     ],
++   },
++   "escalationAndExit": Object {
++     "escalationTargets": Array [],
++     "pauseOn": Array [],
++     "stopOn": Array [],
++     "terminalStates": Array [
++       "succeeded",
++       "failed",
++       "exhausted",
++       "cancelled",
++       "blocked_waiting_human",
++     ],
++   },
++   "executionPolicy": Object {
++     "autonomyLevel": "L2",
++     "maxAttempts": 2,
++     "partialOutcomeRecoveryWindowMs": 0,
++     "perAttemptTimeoutMs": 10000,
++     "tokenBudget": 1000,
++     "totalRuntimeBudgetMs": 30000,
++     "worktreeRequired": true,
++   },
++   "objective": Object {
++     "goal": "Produce answer",
++     "nonGoals": Array [],
++     "successCondition": "check",
++     "taskId": "task-1",
++   },
++   "safetyPolicy": Object {
++     "allowlistPaths": Array [],
++     "denylistPaths": Array [],
++     "humanGateConditions": Array [],
++     "maxFilesTouched": 64,
++   },
++   "verification": Object {
++     "evidenceRequired": Array [],
++     "rejectOn": Array [
++       "check failed",
++     ],
++     "requiredChecks": Array [
++       "node -e \"const f=require('fs');if(process.env.CCLOOP_RECOVERY_CHECK_MARKER)f.appendFileSync(process.env.CCLOOP_RECOVERY_CHECK_MARKER,'check\\n');if(process.env.CCLOOP_RECOVERY_CHECK_MUTATE)f.writeFileSync('answer.txt','modified');if(f.readFileSync('answer.txt','utf8')!=='saved candidate\\n')process.exit(1)\"",
++     ],
++     "verifierType": "agent",
++   },
++ }
+
+ ❯ tests/control/savedResultCheckpoint.test.ts:21:81
+     19|   expect((await decode(archive.logs.find((e:any)=>e.path==='control/en…
+     20|   expect((await decode(archive.logs.find((e:any)=>e.path==='run/loop-s…
+     21|   await expect(prepareContinuationContract(f.input.work.contract,f.run…
+       |                                                                                 ^
+     22|   await expect(materializeFirstWorkspace(f.repo,f.runDir,1,input)).rej…
+     23|   await expect(readAllowanceContinuation({...f.input,mode:undefined,sa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  13:59:26
+   Duration  825ms (transform 265ms, setup 14ms, collect 354ms, tests 301ms, environment 1ms, prepare 32ms)
+
