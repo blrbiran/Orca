@@ -1,18 +1,24 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { ZodTypeAny } from "zod";
+import { VERB_ACCESS } from "../../src/panel/humanOnly.js";
 import {
   confirmPayloadSchema, continueTaskPayloadSchema, emptyPayloadSchema, handoffStopPayloadSchema, importPlanPayloadSchema, proposalEditPayloadSchema,
   proposalSetAgentPayloadSchema, recoveryRetryPayloadSchema, retryTaskPayloadSchema, settleUnknownUsagePayloadSchema, reestimatePayloadSchema, requirementAnswerPayloadSchema, requirementConsensusPayloadSchema,
   requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementOpenPayloadSchema, resumeFromHandoffPayloadSchema,
   setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema,
+  verifySavedResultPayloadSchema,
 } from "../../src/control/webProtocol.js";
 
 const skill = readFileSync("skills/orca-control/SKILL.md", "utf8");
 const api = readFileSync("src/panel/controlApi.ts", "utf8");
 
 const rows = [...skill.matchAll(/^\| `POST ([^`]+)` \| ([a-z-]+) \| `([^`]*)` \|/gm)].map((m) => ({ route: m[1]!, verb: m[2]!, payload: m[3]! }));
+const panelRoutes = new Map([...api.matchAll(/path:\s*"\/api\/control\/([^"]+)",\s*verb:\s*"([^"]+)"/g)]
+  .map((m) => [m[1]!.replace(/:([A-Za-z]+)/g, "<$1>"), m[2]!] as const));
+const ownerOnlyUnlistedRoute = { route: "operator/apply-agent-update", verb: "apply-agent-update" } as const;
+const documentedRoutes = new Map([...panelRoutes].filter(([route]) => route !== ownerOnlyUnlistedRoute.route));
 
 // Spec §7.5: each route's raw payload schema (the one validator; the panel's refinements that need live state are not statically checkable).
 const schemaByVerb: Record<string, ZodTypeAny> = {
@@ -28,6 +34,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "retry-integration": emptyPayloadSchema,
   "resolve-integration-conflict": emptyPayloadSchema,
   "archive-group": emptyPayloadSchema, "unarchive-group": emptyPayloadSchema,
+  "verify-saved-result": verifySavedResultPayloadSchema,
 };
 
 describe("the orca-control skill (spec §7, C18)", () => {
@@ -37,21 +44,17 @@ describe("the orca-control skill (spec §7, C18)", () => {
     expect(front).toMatch(/^description: .{20,}$/m);
   });
 
-  it("lists exactly the panel's mutation routes, so the table cannot drift", () => {
-    const routes = new Set([...api.matchAll(/path: "\/api\/control\/([^"]+)"/g)].map((m) => m[1]!.replace(/:([A-Za-z]+)/g, "<$1>")));
-    // 32 routes carry the 33 verbs: `shutdown` has no route (the panel's own lifecycle). Integration spec §3.4 added
-    // `repositories/<repoId>/integration` (set-integration-scheme), `groups/<groupId>/integration` (set-group-integration)
-    // and `groups/<groupId>/integration/retry` (retry-integration); §7 added `groups/<groupId>/integration/resolve`
-    // (resolve-integration-conflict). Issue fixes spec §4.2(2) added `groups/<groupId>/retry-task` (retry-task).
-    // Issue-fixes spec §6.3 added groups/<groupId>/archive and groups/<groupId>/unarchive.
-    expect(routes.size).toBe(33);
-    expect(rows.map((row) => row.route).sort()).toEqual([...routes].sort());
+  it("lists exactly the documented panel mutation routes, including saved-result verification", () => {
+    expect(panelRoutes.get(ownerOnlyUnlistedRoute.route)).toBe(ownerOnlyUnlistedRoute.verb);
+    expect(VERB_ACCESS[ownerOnlyUnlistedRoute.verb]).toBe("human-only");
+    expect(panelRoutes.get("groups/<groupId>/tasks/<taskId>/verify-saved-result")).toBe("verify-saved-result");
+    expect(VERB_ACCESS["verify-saved-result"]).toBe("any");
+    expect(rows.some((row) => row.route === ownerOnlyUnlistedRoute.route)).toBe(false);
+    expect(rows.map((row) => row.route).sort()).toEqual([...documentedRoutes.keys()].sort());
   });
 
   it("names the verb of every route as the panel does", () => {
-    const verbs = new Map([...api.matchAll(/path: "\/api\/control\/([^"]+)",?\s+verb: "([^"]+)"/g)].map((m) => [m[1]!.replace(/:([A-Za-z]+)/g, "<$1>"), m[2]!]));
-    expect(verbs.size).toBe(33);
-    expect(new Map(rows.map((row) => [row.route, row.verb]))).toEqual(verbs);
+    expect(new Map(rows.map((row) => [row.route, row.verb]))).toEqual(documentedRoutes);
   });
 
   // Task 7 (deferred Task 2 minor): the requirement rows read as one run, not split by an integration row.
@@ -62,7 +65,7 @@ describe("the orca-control skill (spec §7, C18)", () => {
   });
 
   it("gives every route a payload example that its raw payload schema accepts", () => {
-    expect(rows.length).toBe(33);
+    expect(rows.length).toBe(documentedRoutes.size);
     for (const row of rows) {
       const schema = schemaByVerb[row.verb];
       expect(schema, `no schema mapped for ${row.verb}`).toBeDefined();
@@ -78,7 +81,8 @@ describe("the orca-control skill (spec §7, C18)", () => {
       // Final review I1-I3: the transport code, the policy sentence, and where each revision and id comes from.
       "control-socket-error", "is a boundary at the panel's interfaces", "Where the expected revision comes from", ".summary.commandRevision",
       "`.revision` of `get repositories/<repoId>/workspace`", "`.revision` of `get operator/agent-preferences`", "`.repositories[].repoId`",
-      "`.plans[].planId`", "`.operatorId`", "same `--command-id`",
+      "`.plans[].planId`", "`.operatorId`", "**Look up the retained result first**",
+      "A lookup miss does not prove the command never ran.", "uses the **same** command id, route, payload and expected revision",
       // Accounts spec §8: the usage read, the owner-only cap verbs, and the two cap codes an agent meets.
       "get usage", "owner-only", "control-limit-over-cap-headroom", "spend-cap-reached",
       // Final review Minor 1: both verbs the agent ceiling can refuse (spec §6.3.2), not only import-plan.
@@ -97,5 +101,3 @@ describe("the orca-control skill (spec §7, C18)", () => {
     for (const code of ["`0`", "`1`", "`2`", "`3`"]) expect(skill).toContain(code);
   });
 });
-
-// D9 correction (Codex implement_settlement, 2026-10-09, base 2c14e73): 33 routes/34 verbs; settlement is owner Web only.
