@@ -28,7 +28,7 @@ try{
  if(build.status!==0||build.error)throw Error('saved-result-integration-unavailable:schema11-reader-build');
  execFileSync('/usr/bin/git',['diff','--exit-code','HEAD'],{cwd:reader,stdio:'pipe'});
  console.log(JSON.stringify({schema11Reader:reader,commit,buildArgv:[process.execPath,...argv],rc:build.status,trackedDiff:'clean',storeSHA256:createHash('sha256').update(readFileSync(join(reader,'dist/control/store.js'))).digest('hex')}));
- const result=spawnSync(process.execPath,[join(root,'node_modules/vitest/vitest.mjs'),'run','tests/control/savedResultRecovery.paired.test.ts','--maxWorkers=1'],{cwd:root,stdio:'inherit',env:{...process.env,ORCA_SAVED_RESULT_VERIFY:'1',ORCA_SAVED_RESULT_SCHEMA11_ROOT:reader}});
+ const result=spawnSync(process.execPath,[join(root,'node_modules/vitest/vitest.mjs'),'run','tests/control/savedResultRecovery.paired.test.ts','tests/control/savedResultRetryAuthorization.paired.test.ts','--maxWorkers=1'],{cwd:root,stdio:'inherit',env:{...process.env,ORCA_SAVED_RESULT_VERIFY:'1',ORCA_SAVED_RESULT_SCHEMA11_ROOT:reader}});
  if(result.error)console.error(result.error);process.exitCode=result.status??1;
 }catch(error){console.error(String(error));process.exitCode=1;console.error('saved-result-integration-unavailable:schema11-reader');}
 finally{rmSync(reader,{recursive:true,force:true});}

@@ -1,0 +1,21 @@
+[
+  "scripts/verify-saved-result.mjs",
+  "src/control/retryTask.ts",
+  "src/control/savedResultNoDispatch.ts",
+  "src/panel/controlViews.ts",
+  "web/src/TaskDetail.tsx",
+  "web/src/locales/en.ts",
+  "web/src/locales/zh.ts",
+  "tests/control/savedResultRetryAuthorization.paired.test.ts",
+  "web/tests/savedResultAvailability.test.tsx",
+  ".superpowers/sdd/2026-10-11-feedback-followup/task-7-report.md",
+  ".superpowers/sdd/2026-10-11-feedback-followup/task-7-r1-preparation.md",
+  ".superpowers/sdd/2026-10-11-feedback-followup/task-7-r1-interfaces.md",
+  ".superpowers/sdd/2026-10-11-feedback-followup/task-7-r1-source-manifest.json",
+  ".superpowers/sdd/2026-10-11-feedback-followup/task-7-r1-report.md",
+  ".superpowers/sdd/2026-10-11-feedback-followup/task-7-r1-owned-paths.json",
+  ".superpowers/sdd/2026-10-11-feedback-followup/task-7-r1-evidence.json",
+  ".superpowers/sdd/2026-10-11-feedback-followup/task-7-r1-skip-inventory.json",
+  ".superpowers/sdd/2026-10-11-feedback-followup/task-7-r1-mutations.json",
+  ".superpowers/sdd/2026-10-11-feedback-followup/task-7-r1-source-qualification.json"
+]

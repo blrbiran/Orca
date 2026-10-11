@@ -1,0 +1,182 @@
+[
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/memory/ccmemReal.test.ts",
+    "name": "a real ccmem (spec \u00a76.3 R1) reads back one global and one project memory through the adapter",
+    "status": "skipped",
+    "condition": "ORCA_CCMEM_REAL_BIN absent/empty; runner removes real-bin override"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+    "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset resolves the package in this checkout, whose runtime finds the scripts the package ships",
+    "status": "skipped",
+    "condition": "ORCA_CCLOOP_DEFAULT_E2E != 1; explicit default installed-pin gate absent"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+    "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset runs orca agents init and show through the installed ccloop",
+    "status": "skipped",
+    "condition": "ORCA_CCLOOP_DEFAULT_E2E != 1; explicit default installed-pin gate absent"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+    "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset boots the panel with an execution port, while an explicit empty ORCA_CCLOOP_BIN still turns it off",
+    "status": "skipped",
+    "condition": "ORCA_CCLOOP_DEFAULT_E2E != 1; explicit default installed-pin gate absent"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/driverSkillsReal.test.ts",
+    "name": "A2 with a real syncskill (spec \u00a710.8 C5) injects the frozen skill, private and read-only, and records exactly the lock file's entries",
+    "status": "skipped",
+    "condition": "ORCA_SYNCSKILL_REAL_BIN absent/empty; runner removes real-bin override"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "genuine schema10 owner \u2192 paired saved verification keeps the standard old detached archive unavailable after real owner settlement",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "genuine schema10 owner \u2192 paired saved verification reserves a distinct linked verifier run, skips plan/execute, books only new usage and lands normally",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "fences the actual immutable old11 owner before any unprepared saved run can dispatch",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "rechecks the actual revision and current membership when ordinary retry wins async preparation",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "refuses the actual current spend cap without a run or commitment leak",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "ends reject without executor retry, landing or an interrupted-source exception",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "ends modify without executor retry, landing or an interrupted-source exception",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "mechanically reaps before-entry and admits a new explicit successor with each inherited WORK charge once",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "mechanically reaps usage-settled and admits a new explicit successor with each inherited WORK charge once",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "preserves authored optional cumulative exhaustion in every dimension after an actual old-worker settlement",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "keeps post-entry unknown usage blocked until a genuine owner settlement, then preserves the same original lineage",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "missing prepared/entry markers never infer zero spend or permit a successor, even after owner charging",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "revokes a prepared but unaccepted fence and resolves its held reservation through the actual stop path",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "keeps original taskResult metadata opaque instead of treating answer-shaped artifact references as controller authority",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "refuses forged settlement receipts and changed current graph/target/frozen semantics without touching source failure",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "rechecks every finite reserve dimension using real owner limit commands",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "refuses hash-valid substituted reservation identities and never repairs supplied private authority modes",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "keeps the original candidate/base through harmless target-tip drift and uses ordinary reconciliation",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "archives the current malformed capsule through the private channel but keeps original normalization failure unavailable",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "ends a known real verifier timeout without executing, landing or admitting an interrupted exception",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRetryAuthorization.paired.test.ts",
+    "name": "explicit ordinary retry after unsuccessful saved verification authorizes a distinct normal run after reject only through the actual successful retry receipt",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRetryAuthorization.paired.test.ts",
+    "name": "explicit ordinary retry after unsuccessful saved verification authorizes a distinct normal run after modify only through the actual successful retry receipt",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRetryAuthorization.paired.test.ts",
+    "name": "explicit ordinary retry after unsuccessful saved verification authorizes a distinct normal run after delay only through the actual successful retry receipt",
+    "status": "skipped",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/skills/syncskillReal.test.ts",
+    "name": "a real syncskill (spec \u00a710.8 C12, C18) profile ls leaves the sync dir byte-identical; inject's lock entries equal the lock file; ~/.syncskill is untouched",
+    "status": "skipped",
+    "condition": "ORCA_SYNCSKILL_REAL_BIN absent/empty; runner removes real-bin override"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-20261011/tests/service/realSmoke.test.ts",
+    "name": "real launchd smoke (opt-in) install \u2192 answering \u2192 restart \u2192 stop \u2192 start \u2192 uninstall, under a relocated label",
+    "status": "skipped",
+    "condition": "ORCA_SERVICE_REAL != 1 or platform != darwin; no real launchd service opt-in"
+  }
+]

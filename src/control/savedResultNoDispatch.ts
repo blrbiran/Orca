@@ -1,7 +1,9 @@
 import {createHash} from 'node:crypto';
 import {savedDispatchSchema,savedNoDispatchSchema,savedRecoverySchema} from './savedResultProtocol.js';
 import {settlementArtifact,settlementSame} from './usageSettlement.js';
-import {sha256Canonical} from './canonicalJson.js';
+import {canonicalBytes,sha256Canonical} from './canonicalJson.js';
+import {lookupWebCommandReplay} from './commandLedger.js';
+import {rawAuthorityCommandSchema} from './webProtocol.js';
 import {readCanonicalRecord} from './snapshot.js';
 import {readBudgetProposal,readWork} from './queries.js';
 import {readFundedAllowance} from './fundedAllowance.js';
@@ -28,10 +30,21 @@ export function validSavedNoDispatch(store:ControlStore,run:any,requireUnconsume
   readFundedAllowance(store,run);return true;
  }catch{return false;}
 }
-/** Only the command ledger can consume the proof as a new ordinary plan/execute intent. */
+/** A committed explicit retry receipt, never a ready-state inference or a new saved-successor exemption. */
 export function hasSavedOrdinaryRetryAuthorization(store:ControlStore,run:any):boolean {
- const id=run.savedNoDispatchConsumedBy;if(typeof id!=='string'||run.state!=='settled-failed'||run.drive?.outcome!=='not-started')return false;
- const row=store.db.prepare("SELECT verb,body_json FROM commands WHERE group_id=? AND id=?").get(run.groupId,id);
- if(row?.verb!=='retry-task')return false;
- try{const result=JSON.parse(String(row.body_json)).result;return result.kind==='task-retried'&&result.taskId===run.taskId&&result.fromRunId===run.runId;}catch{return false;}
+ try{
+  if(run.mode!=='verify-saved-result'||!run.recoveryOf||run.state!=='settled-failed'||run.unknown.work||run.unknown.handoff)return false;
+  const noDispatch=run.drive?.outcome==='not-started',id=noDispatch?run.savedNoDispatchConsumedBy:run.savedOrdinaryRetryCommandId;
+  if(typeof id!=='string'||(!noDispatch&&(typeof run.drive?.outcome!=='string'||run.drive.outcome==='succeeded'||run.savedNoDispatchConsumedBy!==undefined)))return false;
+  const header=store.db.prepare('SELECT group_id,work_item_id,generation,active FROM runs WHERE id=?').get(run.runId),latest=store.db.prepare('SELECT id FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1').get(run.groupId,run.workItemId),work=readWork(store,run.groupId,run.workItemId) as any;
+  if(!header||header.group_id!==run.groupId||header.work_item_id!==run.workItemId||Number(header.generation)!==run.generation||Number(header.active)!==0||latest?.id!==run.runId||work.currentRunId!==run.runId||work.taskId!==run.taskId||work.status!=='ready'||work.pendingRunId!=null||work.continuation!=null)return false;
+  const row=store.db.prepare('SELECT * FROM commands WHERE group_id=? AND id=?').get(run.groupId,id);
+  if(!row||row.ledger_version!==1||row.verb!=='retry-task'||row.scope_kind!=='group'||row.scope_id!==run.groupId)return false;
+  const raw=rawAuthorityCommandSchema.parse(JSON.parse(String(row.raw_request_json)));
+  if(raw.verb!=='retry-task'||raw.commandId!==id||raw.target.kind!=='group'||raw.target.groupId!==run.groupId||raw.payload.taskId!==run.taskId||row.actor_id!==raw.actorId||Number(row.expected_revision)!==raw.expectedRevision||row.payload_hash!==row.raw_request_hash||String(row.target_json)!==canonicalBytes(raw.target).toString())return false;
+  const replay=lookupWebCommandReplay(store,raw);if(!replay||replay.status<200||replay.status>=300)return false;
+  const body:any=replay.body;
+  if(body.schema!=='orca-command-success-v1'||body.commandId!==id||body.verb!=='retry-task'||body.actorId!==raw.actorId||!settlementSame(body.target,raw.target)||Number(row.command_revision)!==body.commandRevision||String(row.body_json)!==canonicalBytes(body).toString()||String(row.result)!==String(row.body_json)||!Buffer.from(row.response_bytes as Uint8Array).equals(canonicalBytes(body)))return false;
+  return body.result.kind==='task-retried'&&body.result.taskId===run.taskId&&body.result.fromRunId===run.runId;
+ }catch{return false;}
 }

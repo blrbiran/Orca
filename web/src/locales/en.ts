@@ -316,7 +316,7 @@ export const en = {
     banner: chainBanner,
   },
   control: {
-    savedResult:{notDispatched:"Verification was not started. Ordinary retry creates a new plan and execution on the current target.",verify:"Verify saved results",cost:"Execution is skipped; validation and verification may consume model usage.",unavailable:"Saved results are unavailable for verification; ordinary retry is available.",lineage:"Verification source: {{runId}} · attempt {{attempt}}"},
+    savedResult:{notDispatched:"Verification was not started. Ordinary retry creates a new plan and execution on the current target.",verify:"Verify saved results",cost:"Execution is skipped; validation and verification may consume model usage.",unavailable:"Saved results are unavailable for verification.",lineage:"Verification source: {{runId}} · attempt {{attempt}}"},
     unavailable: "The task control plane is not available on this panel.",
     title: "Task control",
     summaryLine: "epoch {{epoch}} · projection {{seq}} · {{dispatch}}",

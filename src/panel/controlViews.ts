@@ -150,7 +150,7 @@ const executionProfileAuthoritySchema = z.object({
 }).strict();
 
 const persistedRunSchema = z.object({
-  savedDispatch:savedDispatchSchema.optional(),savedNoDispatch:artifactSchema.optional(),savedNoDispatchConsumedBy:idSchema.optional(),
+  savedDispatch:savedDispatchSchema.optional(),savedNoDispatch:artifactSchema.optional(),savedNoDispatchConsumedBy:idSchema.optional(),savedOrdinaryRetryCommandId:idSchema.optional(),
   mode:z.literal("verify-saved-result").optional(),recoveryOf:recoveryOfSchema.optional(),savedRecovery:savedRecoverySchema.optional(),savedSource:savedSourceSchema.optional(),savedSourceUnavailable:z.string().min(1).max(256).optional(),savedSettlement:artifactSchema.optional(),savedInterruption:artifactSchema.optional(),
   groupId: idSchema,
   workItemId: idSchema,

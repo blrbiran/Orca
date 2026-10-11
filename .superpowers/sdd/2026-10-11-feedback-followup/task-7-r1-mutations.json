@@ -1,0 +1,258 @@
+{
+  "repo": "/private/tmp/orca-task7-r1-mutants-20261011",
+  "baselineSource": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+  "mutations": [
+    {
+      "name": "receipt",
+      "files": {
+        "src/control/savedResultNoDispatch.ts": {
+          "before": "62d93b10f91d091ab3ef2621c3ca18d339608c5c5b1aa18916426cb0edbdd19a",
+          "after": "dcaecb860fe26efefff034f74494bf71dfcaa9b132c0aa9e6aeda9b4a6c846c4"
+        }
+      },
+      "build": {
+        "repo": "/private/tmp/orca-task7-r1-mutants-20261011",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "rc": 0,
+        "elapsedSeconds": 4.927645206451416,
+        "log": "/private/tmp/orca-followup-runs/task7-r1-mutant-receipt-build01/output.log",
+        "source": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+        "sourceTreeSHA256": "265e46e913a5c4bbafe86c51b6f8ff35d59406689afab342c66a4a51fc810998",
+        "sourceFiles": 934
+      },
+      "gate": {
+        "repo": "/private/tmp/orca-task7-r1-mutants-20261011",
+        "command": [
+          "node",
+          "/private/tmp/task7-short-command.mjs",
+          "env",
+          "ORCA_SAVED_RESULT_VERIFY=1",
+          "ORCA_SAVED_RESULT_SCHEMA11_ROOT=/private/tmp/orca-t7-schema11-reader-20261011",
+          "ORCA_SAVED_RESULT_OLD_ORCA_ROOT=/private/tmp/orca-t7-schema10-producer-20261011",
+          "ORCA_SAVED_RESULT_OLD_CCLOOP_ROOT=/private/tmp/ccloop-task6-legacy-producer",
+          "ORCA_SAVED_RESULT_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+          "node",
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/savedResultRetryAuthorization.paired.test.ts",
+          "-t",
+          "after reject only through",
+          "--maxWorkers=1"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 17.274869203567505,
+        "log": "/private/tmp/orca-followup-runs/task7-r1-mutant-receipt01/output.log",
+        "source": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+        "sourceTreeSHA256": "265e46e913a5c4bbafe86c51b6f8ff35d59406689afab342c66a4a51fc810998",
+        "sourceFiles": 934
+      },
+      "restored": {
+        "src/control/savedResultNoDispatch.ts": "62d93b10f91d091ab3ef2621c3ca18d339608c5c5b1aa18916426cb0edbdd19a"
+      }
+    },
+    {
+      "name": "generation",
+      "files": {
+        "src/control/savedResultNoDispatch.ts": {
+          "before": "62d93b10f91d091ab3ef2621c3ca18d339608c5c5b1aa18916426cb0edbdd19a",
+          "after": "945c4b4d7c84b43fe07263bc427c3cb502ab9a3a91621c4d2ad3365b36d45f95"
+        }
+      },
+      "build": {
+        "repo": "/private/tmp/orca-task7-r1-mutants-20261011",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "rc": 0,
+        "elapsedSeconds": 5.00859808921814,
+        "log": "/private/tmp/orca-followup-runs/task7-r1-mutant-generation-build01/output.log",
+        "source": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+        "sourceTreeSHA256": "743e5cdb0509b11c66b6265a976641a26f50b4170fcfe15a98c86f36398fa416",
+        "sourceFiles": 934
+      },
+      "gate": {
+        "repo": "/private/tmp/orca-task7-r1-mutants-20261011",
+        "command": [
+          "node",
+          "/private/tmp/task7-short-command.mjs",
+          "env",
+          "ORCA_SAVED_RESULT_VERIFY=1",
+          "ORCA_SAVED_RESULT_SCHEMA11_ROOT=/private/tmp/orca-t7-schema11-reader-20261011",
+          "ORCA_SAVED_RESULT_OLD_ORCA_ROOT=/private/tmp/orca-t7-schema10-producer-20261011",
+          "ORCA_SAVED_RESULT_OLD_CCLOOP_ROOT=/private/tmp/ccloop-task6-legacy-producer",
+          "ORCA_SAVED_RESULT_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+          "node",
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "tests/control/savedResultRetryAuthorization.paired.test.ts",
+          "-t",
+          "after reject only through",
+          "--maxWorkers=1"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 17.35963225364685,
+        "log": "/private/tmp/orca-followup-runs/task7-r1-mutant-generation01/output.log",
+        "source": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+        "sourceTreeSHA256": "743e5cdb0509b11c66b6265a976641a26f50b4170fcfe15a98c86f36398fa416",
+        "sourceFiles": 934
+      },
+      "restored": {
+        "src/control/savedResultNoDispatch.ts": "62d93b10f91d091ab3ef2621c3ca18d339608c5c5b1aa18916426cb0edbdd19a"
+      }
+    },
+    {
+      "name": "done",
+      "files": {
+        "web/src/TaskDetail.tsx": {
+          "before": "f535c01e7bad26fb640c665bc1ef0dba130c88a19ddc5adefb2683dce8847a2f",
+          "after": "ab43d200e9405ffcb95ef750e63f033f453e94e4029b531c67b62075acfcb676"
+        }
+      },
+      "gate": {
+        "repo": "/private/tmp/orca-task7-r1-mutants-20261011",
+        "command": [
+          "node",
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "--root",
+          "web",
+          "tests/savedResultAvailability.test.tsx",
+          "--maxWorkers=1"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.1941440105438232,
+        "log": "/private/tmp/orca-followup-runs/task7-r1-mutant-done01/output.log",
+        "source": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+        "sourceTreeSHA256": "d7215f2ddd57fa15bf1cd00fd4de450bc941a5b3f2536c74e73cc43c2d149935",
+        "sourceFiles": 934
+      },
+      "restored": {
+        "web/src/TaskDetail.tsx": "f535c01e7bad26fb640c665bc1ef0dba130c88a19ddc5adefb2683dce8847a2f"
+      }
+    },
+    {
+      "name": "copy",
+      "files": {
+        "web/src/locales/en.ts": {
+          "before": "5fd2175fefb57fcd1676eee84ffbd3d5afbbdd770fe61244380c840592a7851e",
+          "after": "fd601861b0525fc7e676d47255b1f69902b63c9d755515525d4c0bfa6fa3a961"
+        },
+        "web/src/locales/zh.ts": {
+          "before": "ef279c2d1abb23f2d6293bc40f24f528f8348479a5e6504e61042cfea6e9124c",
+          "after": "0c7458998a9c31ace2fc5270b986f1092c1a54320c48e1885b4fdb608dada465"
+        }
+      },
+      "gate": {
+        "repo": "/private/tmp/orca-task7-r1-mutants-20261011",
+        "command": [
+          "node",
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "--root",
+          "web",
+          "tests/savedResultAvailability.test.tsx",
+          "--maxWorkers=1"
+        ],
+        "rc": 1,
+        "elapsedSeconds": 1.0311648845672607,
+        "log": "/private/tmp/orca-followup-runs/task7-r1-mutant-copy01/output.log",
+        "source": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+        "sourceTreeSHA256": "418eea23fb8106cf24d53f20d61b60f3b87f472717314163d7d04e991c0d8120",
+        "sourceFiles": 934
+      },
+      "restored": {
+        "web/src/locales/en.ts": "5fd2175fefb57fcd1676eee84ffbd3d5afbbdd770fe61244380c840592a7851e",
+        "web/src/locales/zh.ts": "ef279c2d1abb23f2d6293bc40f24f528f8348479a5e6504e61042cfea6e9124c"
+      }
+    }
+  ],
+  "nativeBaseline": {
+    "repo": "/private/tmp/orca-task7-r1-mutants-20261011",
+    "command": [
+      "node",
+      "/private/tmp/task7-short-command.mjs",
+      "env",
+      "ORCA_SAVED_RESULT_VERIFY=1",
+      "ORCA_SAVED_RESULT_SCHEMA11_ROOT=/private/tmp/orca-t7-schema11-reader-20261011",
+      "ORCA_SAVED_RESULT_OLD_ORCA_ROOT=/private/tmp/orca-t7-schema10-producer-20261011",
+      "ORCA_SAVED_RESULT_OLD_CCLOOP_ROOT=/private/tmp/ccloop-task6-legacy-producer",
+      "ORCA_SAVED_RESULT_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+      "node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/control/savedResultRetryAuthorization.paired.test.ts",
+      "tests/control/savedResultRecovery.paired.test.ts",
+      "-t",
+      "after reject only through|prepared but unaccepted fence",
+      "--maxWorkers=1"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 48.225017070770264,
+    "log": "/private/tmp/orca-followup-runs/task7-r1-mutant-native-baseline01/output.log",
+    "source": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+    "sourceTreeSHA256": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+    "sourceFiles": 934
+  },
+  "uiBaseline": {
+    "repo": "/private/tmp/orca-task7-r1-mutants-20261011",
+    "command": [
+      "node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--root",
+      "web",
+      "tests/savedResultAvailability.test.tsx",
+      "--maxWorkers=1"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 1.2550280094146729,
+    "log": "/private/tmp/orca-followup-runs/task7-r1-mutant-ui-baseline01/output.log",
+    "source": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+    "sourceTreeSHA256": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+    "sourceFiles": 934
+  },
+  "restoredBuild": {
+    "repo": "/private/tmp/orca-task7-r1-mutants-20261011",
+    "command": [
+      "npm",
+      "run",
+      "build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.935036897659302,
+    "log": "/private/tmp/orca-followup-runs/task7-r1-mutant-restored-build01/output.log",
+    "source": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+    "sourceTreeSHA256": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+    "sourceFiles": 934
+  },
+  "preparedClone": {
+    "base": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+    "repo": "/private/tmp/orca-task7-r1-mutants-20261011",
+    "deps": "/Users/biran/code/skills/loop/Orca/node_modules",
+    "ownedOverlay": {
+      "scripts/verify-saved-result.mjs": "0143c15f7fc9d0bf121fd51e75df1184809743718a80a2975cc00d66578d4b3e",
+      "src/control/retryTask.ts": "44877ae241d69d8d89602db50e995c84bbc67c2300ff1e8d9cdf84ff3ddbab12",
+      "src/control/savedResultNoDispatch.ts": "62d93b10f91d091ab3ef2621c3ca18d339608c5c5b1aa18916426cb0edbdd19a",
+      "src/panel/controlViews.ts": "ec0662bb1d65bf9bd0d356a20333e47c16a45a8e6fd2e042d06c240b808ca54a",
+      "web/src/TaskDetail.tsx": "f535c01e7bad26fb640c665bc1ef0dba130c88a19ddc5adefb2683dce8847a2f",
+      "web/src/locales/en.ts": "5fd2175fefb57fcd1676eee84ffbd3d5afbbdd770fe61244380c840592a7851e",
+      "web/src/locales/zh.ts": "ef279c2d1abb23f2d6293bc40f24f528f8348479a5e6504e61042cfea6e9124c",
+      "tests/control/savedResultRetryAuthorization.paired.test.ts": "5f504e156f555af377e0814539268d4ace651fafcb2e7185e84cc8c54edb1a59",
+      "web/tests/savedResultAvailability.test.tsx": "949db3f8e2b6336a572f0e0fea69f19b1ae66d3a648c4a750146b36aa08a1a66"
+    },
+    "sourceTreeSHA256": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17"
+  },
+  "exactMutationScript": "import pathlib,subprocess,json,hashlib,sys\nrepo=pathlib.Path('/private/tmp/orca-task7-r1-mutants-20261011')\nrunner=['python3','/private/tmp/orca-followup-run.py',str(repo)]\nmanifest={'repo':str(repo),'baselineSource':'e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17','mutations':[]}\nmanifestpath=pathlib.Path('/private/tmp/task7-r1-mutations.json')\ndef run(name,argv,expected=0):\n rc=subprocess.run(runner+[name]+argv,cwd=repo).returncode\n if rc!=expected:raise RuntimeError(f'{name}: expected {expected}, actual {rc}')\n return json.loads((pathlib.Path('/private/tmp/orca-followup-runs')/name/'result.json').read_text())\ndef persist():manifestpath.write_text(json.dumps(manifest,indent=2)+'\\n')\nbaseenv=['env','ORCA_SAVED_RESULT_VERIFY=1','ORCA_SAVED_RESULT_SCHEMA11_ROOT=/private/tmp/orca-t7-schema11-reader-20261011','ORCA_SAVED_RESULT_OLD_ORCA_ROOT=/private/tmp/orca-t7-schema10-producer-20261011','ORCA_SAVED_RESULT_OLD_CCLOOP_ROOT=/private/tmp/ccloop-task6-legacy-producer','ORCA_SAVED_RESULT_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js']\nnode=['node','node_modules/vitest/vitest.mjs','run']\nshort=['node','/private/tmp/task7-short-command.mjs']\nmanifest['nativeBaseline']=run('task7-r1-mutant-native-baseline01',short+baseenv+node+['tests/control/savedResultRetryAuthorization.paired.test.ts','tests/control/savedResultRecovery.paired.test.ts','-t','after reject only through|prepared but unaccepted fence','--maxWorkers=1'])\nmanifest['uiBaseline']=run('task7-r1-mutant-ui-baseline01',node+['--root','web','tests/savedResultAvailability.test.tsx','--maxWorkers=1'])\npersist()\ndef mutation(name,changes,argv):\n backups={rel:(repo/rel).read_bytes() for rel in changes};item={'name':name,'files':{}}\n try:\n  for rel,transform in changes.items():\n   b=backups[rel];new=transform(b.decode()).encode();assert new!=b\n   (repo/rel).write_bytes(new);item['files'][rel]={'before':hashlib.sha256(b).hexdigest(),'after':hashlib.sha256(new).hexdigest()}\n  if name in ['receipt','generation']:item['build']=run('task7-r1-mutant-'+name+'-build01',['npm','run','build'])\n  item['gate']=run('task7-r1-mutant-'+name+'01',argv,1)\n finally:\n  for rel,b in backups.items():(repo/rel).write_bytes(b)\n  item['restored']={rel:hashlib.sha256((repo/rel).read_bytes()).hexdigest() for rel in backups}\n  manifest['mutations'].append(item);persist()\nselector=short+baseenv+node+['tests/control/savedResultRetryAuthorization.paired.test.ts','-t','after reject only through','--maxWorkers=1']\ndef cutReceipt(s):\n start=s.index('  const raw=rawAuthorityCommandSchema.parse',s.index('export function hasSavedOrdinaryRetryAuthorization'))\n end=s.index('\\n }catch{return false;}',start)\n return s[:start]+'  return true;'+s[end:]\ndef cutGeneration(s):\n start=s.index('export function hasSavedOrdinaryRetryAuthorization');left=s[:start];right=s[start:];needle='||Number(header.generation)!==run.generation';assert right.count(needle)==1\n return left+right.replace(needle,'')\nmutation('receipt',{'src/control/savedResultNoDispatch.ts':cutReceipt},selector)\nmutation('generation',{'src/control/savedResultNoDispatch.ts':cutGeneration},selector)\nmutation('done',{'web/src/TaskDetail.tsx':lambda s:s.replace('item.status!==\"completed\"&&','').replace('run.outcome!==\"succeeded\"&&','')},node+['--root','web','tests/savedResultAvailability.test.tsx','--maxWorkers=1'])\nmutation('copy',{'web/src/locales/en.ts':lambda s:s.replace('Saved results are unavailable for verification.','Saved results are unavailable for verification; ordinary retry is available.'),'web/src/locales/zh.ts':lambda s:s.replace('\u5df2\u4fdd\u5b58\u6210\u679c\u6682\u4e0d\u53ef\u9a8c\u8bc1\u3002','\u5df2\u4fdd\u5b58\u6210\u679c\u6682\u4e0d\u53ef\u9a8c\u8bc1\uff1b\u53ef\u4f7f\u7528\u666e\u901a\u91cd\u8bd5\u3002')},node+['--root','web','tests/savedResultAvailability.test.tsx','--maxWorkers=1'])\nmanifest['restoredBuild']=run('task7-r1-mutant-restored-build01',['npm','run','build']);persist()\n",
+  "resultInterpretation": {
+    "receipt": "Actual 409 retry ledger status becomes claimable when receipt validation is deleted; intended null-vs-workItemId negative fails.",
+    "generation": "Header generation2 with body generation1 becomes claimable when its guard is deleted; intended null-vs-workItemId negative fails.",
+    "done": "Removing completed/success suppression causes actual source GET for an already completed/succeeded recovery in en and zh.",
+    "copy": "Restoring old bilingual promise renders ordinary retry available for actual usage-unsettled response in en and zh."
+  }
+}

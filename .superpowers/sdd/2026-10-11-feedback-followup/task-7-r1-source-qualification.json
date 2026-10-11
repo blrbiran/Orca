@@ -1,0 +1,17 @@
+{
+  "backendNativeRootSource": "abcbe5ae37d2ca205a37fb05cbd717981b0d27131596d7c71ae103390e36c16e",
+  "finalSource": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+  "sourceFiles": 934,
+  "changesOnly": {
+    "web/src/TaskDetail.tsx": {
+      "abcbeSHA256": "d5b00183cdbd1ff393371ba00bbaf2d9a8cbf1a847386d32e17b8e929f2bda2e",
+      "finalSHA256": "f535c01e7bad26fb640c665bc1ef0dba130c88a19ddc5adefb2683dce8847a2f",
+      "reverseExactOldHash": true
+    },
+    "web/tests/savedResultAvailability.test.tsx": {
+      "abcbeSHA256": "98b4598a0643a67457af2cf56197f085b7838d225401ef57ca6e67aaf03f24c2",
+      "finalSHA256": "949db3f8e2b6336a572f0e0fea69f19b1ae66d3a648c4a750146b36aa08a1a66",
+      "reverseExactOldHash": true
+    }
+  }
+}

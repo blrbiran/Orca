@@ -202,7 +202,7 @@ export const zh: Translation<typeof en> = {
     banner: { done: "链已完成", blocked: "链在等你", limit: "链因触达上限而停止", anomaly: "链因异常而停止" },
   },
   control: {
-    savedResult:{notDispatched:"验证尚未启动。普通重试会从当前目标创建新的计划与执行。",verify:"验证已保存成果",cost:"跳过执行；校验和验证可能消耗模型用量。",unavailable:"已保存成果暂不可验证；可使用普通重试。",lineage:"验证来源：{{runId}} · 尝试 {{attempt}}"},
+    savedResult:{notDispatched:"验证尚未启动。普通重试会从当前目标创建新的计划与执行。",verify:"验证已保存成果",cost:"跳过执行；校验和验证可能消耗模型用量。",unavailable:"已保存成果暂不可验证。",lineage:"验证来源：{{runId}} · 尝试 {{attempt}}"},
     unavailable: "这个面板上没有任务控制面。",
     title: "任务控制",
     summaryLine: "服务会话 {{epoch}} · 状态序号 {{seq}} · {{dispatch}}",

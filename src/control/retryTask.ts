@@ -46,6 +46,16 @@ interface RetriedWork { workItemId: string; taskId: string | null; targetVersion
 /** A grant-shaped pair summed per dimension: what the group's committed amount holds for it. */
 const both = (amount: { work: Amount; handoff: Amount }): Amount => add(amount.work, amount.handoff);
 
+/** Normal failed-recovery retry keeps its real failure; no-dispatch consumption has separate proof and authority. */
+function recordSavedOrdinaryRetry(store:ControlStore,runId:string,commandId:string):void {
+  const run=readRunBody(store,runId);
+  if(run.mode!=="verify-saved-result"&&run.recoveryOf===undefined)return;
+  readFundedAllowance(store,run as never);
+  const drive=run.drive as DriveRecord|undefined;
+  if(run.mode!=="verify-saved-result"||!run.recoveryOf||run.state!=="settled-failed"||typeof drive?.outcome!=="string"||drive.outcome==="succeeded"||drive.outcome==="not-started"||run.savedNoDispatchConsumedBy!==undefined)throw new ControlError("recovery-blocked","saved-result-retry-authority");
+  saveRunBody(store,{...run,savedOrdinaryRetryCommandId:commandId},false);
+}
+
 export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): RetryTaskResult {
   const { store } = deps;
   const release = deps.admissionGate?.enter();
@@ -136,7 +146,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           delete work.continuation;delete work.retryGrantSourceRunId;delete (work as {allowancePredecessorRunId?:string}).allowancePredecessorRunId;
           setAllocationStates(store,groupId,taskId,"confirmed");saveWork(store,groupId,work as never);
           const resumedGroup=readGroup(store,groupId);resumedGroup.status="running";saveGroup(store,resumedGroup);
-          recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId}});deps.beforeCommit?.();
+          recordSavedOrdinaryRetry(store,runId,command.commandId);recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId}});deps.beforeCommit?.();
           return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId});
         }
         const retrying = held || released || work.retryGrantSourceRunId !== undefined || allocations.some(a => a.state === "continuing");
@@ -161,6 +171,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         if (work.continuation != null) delete work.continuation;
         work.pendingRunId = null;
         saveWork(store, groupId, work as never);
+        recordSavedOrdinaryRetry(store,runId,command.commandId);
         // Effect 4 (the command revision advances in applyWebCommand).
         recordActivity(store, { groupId, taskId, runId, kind: "task-retried", body: { fromRunId: runId } });
         deps.beforeCommit?.();

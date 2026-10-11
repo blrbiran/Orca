@@ -254,7 +254,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       </p>
       <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={props.workspaceMode} archived={archived} />
       {item.currentRunId !== null && <RunActivity key={item.currentRunId} runId={item.currentRunId} changeSeq={view.changeSeq} />}
-      {item.currentRunId!==null&&runs.some(run=>run.runId===item.currentRunId&&(run.outcome==="failed"||run.recoveryOf!==undefined))&&<SavedResultAction key={`verify-${item.currentRunId}`}  runId={runs.find(run=>run.runId===item.currentRunId)?.recoveryOf?.sourceRunId??item.currentRunId} groupId={groupId} taskId={item.taskId} revision={view.summary.commandRevision} changeSeq={view.changeSeq} onCommand={onCommand} disabled={archived||view.summary.stopMode!==null}/> }
+      {item.status!=="completed"&&item.currentRunId!==null&&runs.some(run=>run.runId===item.currentRunId&&run.outcome!=="succeeded"&&(run.outcome==="failed"||run.recoveryOf!==undefined))&&<SavedResultAction key={`verify-${item.currentRunId}`}  runId={runs.find(run=>run.runId===item.currentRunId)?.recoveryOf?.sourceRunId??item.currentRunId} groupId={groupId} taskId={item.taskId} revision={view.summary.commandRevision} changeSeq={view.changeSeq} onCommand={onCommand} disabled={archived||view.summary.stopMode!==null}/> }
       <h5>{t("control.task.runsOf", { taskId: item.taskId })}</h5>
       {/* Issue fixes spec §4.2(2): the run number counts the runs that reached the provider. */}
       {runNumber > 0 && <p>{t("control.task.runNumber", { n: runNumber })}</p>}
