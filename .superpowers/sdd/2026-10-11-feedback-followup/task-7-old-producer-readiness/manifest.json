@@ -1,0 +1,21 @@
+{
+  "purpose": "oldschema10 producer compile readiness ONLY; no migrated DB or settlement/model fixture exercised",
+  "ownedClone": "/private/tmp/orca-t7-schema10-producer-20261011",
+  "sourceCommit": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+  "sourceTreeSHA256": "58a505c7524e0952cd6a85645e1fc2bc559452ea35d0b070a8d26cd6ef4f90b8",
+  "sourceFiles": 911,
+  "command": [
+    "npm",
+    "run",
+    "build"
+  ],
+  "rc": 0,
+  "rawSHA256": "85a583a8309e758f7d2d85267f693f87462e82c2e62e16213eb3fc5b998b22f0",
+  "schemaVersion": "10",
+  "productDiff": "0/0",
+  "untracked": [
+    ".controller-owned-schema10-producer.json",
+    "node_modules",
+    "web/node_modules"
+  ]
+}

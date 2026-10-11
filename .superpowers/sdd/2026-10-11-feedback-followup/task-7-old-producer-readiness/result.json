@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/orca-t7-schema10-producer-20261011",
+  "command": [
+    "npm",
+    "run",
+    "build"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 6.7425360679626465,
+  "log": "/private/tmp/orca-followup-runs/t7-oldorca-readiness-build/output.log",
+  "source": "c2a1f4220006ca22b620bd81f390a728e5d07b8c",
+  "sourceTreeSHA256": "58a505c7524e0952cd6a85645e1fc2bc559452ea35d0b070a8d26cd6ef4f90b8",
+  "sourceFiles": 911
+}

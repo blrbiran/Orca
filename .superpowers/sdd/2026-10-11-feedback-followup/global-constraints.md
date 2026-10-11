@@ -9,3 +9,7 @@
 - Test HOME/XDG/TMPDIR/CCMEM_DATA_ROOT isolated, CCMEM_CONFIG_PATH absent. Use `/private/tmp/orca-followup-run.py <repo> <unique-name> <command...>`; feature paired CLI explicitly set only when criterion needs it. No CPU load generation.
 - Every task has meaningful RED/GREEN and named clone-only deletion mutations for load-bearing branches; fresh implementer + independent spec/quality reviewer, fixes scoped re-reviewed. Full workspace/package verification before task closure; controller final full root/formal gates on final tree. Record any old expectation change by exact name and approved intent, never broaden an assertion into a waiver.
 
+
+
+## Human model preference update — 2026-10-11
+Human: 后续的subagent不要用 gpt-6-astra 模型。 All subsequent subagent dispatches/review/fix/final-review use gpt-6.1-sol (appropriate reasoning effort), never gpt-6-astra. This supersedes skill tier recommendations for future dispatch. Current Task6 implementer is already running; do not restart its existing work merely to reassign. If a later new fix dispatch would otherwise resume an Astra implementer, give the scoped existing diff/findings to a fresh allowed Sol agent; preserve completed work/evidence and do not redo tasks.
