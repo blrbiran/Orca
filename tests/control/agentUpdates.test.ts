@@ -152,6 +152,25 @@ describe("reviewed installation updates", () => {
         expect(seen[1]).toEqual(seen[0]);
         expect(reopened.db.prepare("SELECT revision FROM agent_update_state WHERE operator_id='human'").get()).toEqual({ revision: 1 });
         expect(lookupCommandResult(reopened, "@operator:human", "update-1")?.originalStatus).toBe(200);
+        expect(reopened.db.prepare("SELECT client,principal FROM commands WHERE group_id='@operator:human' AND id='update-1'").get())
+          .toEqual({ client: "web", principal: "user:owner" });
+      } finally { reopened.close(); }
+    } finally { await rm(h.root, { recursive: true, force: true }); }
+  });
+  it("retains the original client and owner on a stale refusal finalized after restart", async () => {
+    const h = await openTestStore();
+    const timeoutPort = { applyAgentInstallations: async () => { throw new ControlError("control-peer-timeout"); } } as unknown as ExecutionPort;
+    try {
+      await expect(applyAgentUpdate({ store: h.store, port: timeoutPort }, command() as never, { client: "web", principal: "user:owner" }))
+        .rejects.toMatchObject({ code: "control-peer-timeout" });
+      h.store.close();
+      const reopened = await openControlStore({ stateDir: join(h.root, "state") });
+      try {
+        const stalePort = { applyAgentInstallations: async () => { throw new ControlError("agent-installation-update-stale"); } } as unknown as ExecutionPort;
+        await reconcilePendingAgentUpdates(reopened, stalePort);
+        expect(lookupCommandResult(reopened, "@operator:human", "update-1")).toMatchObject({ originalStatus: 409, body: { error: { code: "agent-installation-update-stale" } } });
+        expect(reopened.db.prepare("SELECT client,principal FROM commands WHERE group_id='@operator:human' AND id='update-1'").get())
+          .toEqual({ client: "web", principal: "user:owner" });
       } finally { reopened.close(); }
     } finally { await rm(h.root, { recursive: true, force: true }); }
   });

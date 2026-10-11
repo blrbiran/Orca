@@ -137,8 +137,8 @@ function migrate7To8(store: DatabaseSync): void {
 }
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
-  // Saved recovery requires a reader that preserves its mode. Version 12 fences older owners;
-  // the 11→12 upgrade changes only the marker, never policy classification or accounting.
+  // Saved recovery's 11→12 marker fenced older owners. The current 11/12→13 upgrade also
+  // adds installation-update revision/outbox tables; it leaves old policy and accounting rows intact.
   if (fromVersion === "12") {
     store.exec(schema12To13);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);

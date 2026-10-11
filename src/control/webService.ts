@@ -696,24 +696,29 @@ export class WebControlService {
     return preview;
   }
   async applyAgentUpdate(command: ApplyAgentUpdateCommand, context: { client: string; principal: string }): Promise<WebCommandResult> {
-    const replay = lookupWebCommandReplay<WebCommandResult>(this.store, command);
-    if (replay) return replay.body;
-    const preflight = preflightWebCommand<WebCommandResult>(this.store, command);
-    if (preflight) return preflight.body;
-    const pending = hasPendingAgentUpdate(this.store, command.actorId);
-    if (!pending) {
-      const preview = this.installationPreview;
-      if (!preview || preview.previewId !== command.payload.previewId || preview.baseTableHash !== command.payload.baseTableHash
-        || command.payload.acceptedChangeIds.some((id) => !preview.changes.some((change) => change.changeId === id))) {
-        throw new ControlError("agent-installation-update-conflict", "preview-not-owned-or-changed");
+    const release = this.deps.admissionGate?.enter();
+    try {
+      const replay = lookupWebCommandReplay<WebCommandResult>(this.store, command);
+      if (replay) return replay.body;
+      const preflight = preflightWebCommand<WebCommandResult>(this.store, command);
+      if (preflight) return preflight.body;
+      const pending = hasPendingAgentUpdate(this.store, command.actorId);
+      if (!pending) {
+        const preview = this.installationPreview;
+        if (!preview || preview.previewId !== command.payload.previewId || preview.baseTableHash !== command.payload.baseTableHash
+          || command.payload.acceptedChangeIds.some((id) => !preview.changes.some((change) => change.changeId === id))) {
+          throw new ControlError("agent-installation-update-conflict", "preview-not-owned-or-changed");
+        }
       }
+      const result = await applyAgentUpdate({ store: this.store, port: this.deps.port }, command, context);
+      if (result.status < 300) {
+        this.installationPreview = null;
+        await this.observeAgentUpdates();
+      }
+      return result.body as WebCommandResult;
+    } finally {
+      release?.();
     }
-    const result = await applyAgentUpdate({ store: this.store, port: this.deps.port }, command, context);
-    if (result.status < 300) {
-      this.installationPreview = null;
-      await this.observeAgentUpdates();
-    }
-    return result.body as WebCommandResult;
   }
   /** Accounts spec §6.1: the spend caps and the usage calendar, under the spend scope's revision (D5). */
   setSpendCap(command: Extract<SpendCommand, { verb: "set-spend-cap" }>): WebCommandResult { return this.applySpend(command); }

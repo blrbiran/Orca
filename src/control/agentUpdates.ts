@@ -1,6 +1,7 @@
 import { applyWebCommand, lookupWebCommandReplay, preflightWebCommand } from "./commandLedger.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
+import { withCommandContext } from "./commandClient.js";
 import { agentReceiptSchema, type AgentApplyRequest, type AgentReceipt } from "./agentInstallationProtocol.js";
 import type { ExecutionPort } from "./executionPort.js";
 import type { ControlStore } from "./store.js";
@@ -8,6 +9,7 @@ import { rawAuthorityCommandSchema, type CommandLookupV1, type RawAuthorityComma
 
 export type ApplyAgentUpdateCommand = Extract<RawAuthorityCommandV1, { verb: "apply-agent-update" }>;
 type Outcome = { status: number; body: CommandLookupV1["body"] };
+type Reservation = { request: AgentApplyRequest; existingPending: boolean };
 type Pending = { operator_id: string; command_id: string; raw_hash: string; raw_command_json: string; request_json: string; principal: string; client: string; state: string };
 
 function revision(store: ControlStore, operatorId: string): number {
@@ -58,7 +60,7 @@ function verifyReceipt(request: AgentApplyRequest, value: unknown): AgentReceipt
   return receipt;
 }
 
-function reserve(store: ControlStore, command: ApplyAgentUpdateCommand, context: { client: string; principal: string }): AgentApplyRequest | Outcome {
+function reserve(store: ControlStore, command: ApplyAgentUpdateCommand, context: { client: string; principal: string }): Reservation | Outcome {
   const target = command.target;
   if (target.kind !== "operator" || target.operatorId !== command.actorId) throw new ControlError("control-target-not-allowed");
   const prior = lookupWebCommandReplay<CommandLookupV1["body"]>(store, command);
@@ -71,7 +73,7 @@ function reserve(store: ControlStore, command: ApplyAgentUpdateCommand, context:
     if (pending.command_id !== command.commandId) throw new ControlError("agent-installation-update-pending");
     const request = JSON.parse(pending.request_json) as AgentApplyRequest;
     if (!canonicalBytes(request).equals(canonicalBytes(requestFor(command)))) throw new ControlError("recovery-blocked", "agent-update-request-intent-mismatch");
-    return request;
+    return { request, existingPending: true };
   }
   const stale = preflightWebCommand(store, command);
   if (stale) return stale;
@@ -82,7 +84,7 @@ function reserve(store: ControlStore, command: ApplyAgentUpdateCommand, context:
     store.db.prepare("INSERT OR IGNORE INTO agent_update_state(operator_id,revision) VALUES (?,0)").run(operatorId);
     store.db.prepare("INSERT INTO agent_update_outbox(operator_id,command_id,raw_hash,raw_command_json,request_json,principal,client,state,receipt_json) VALUES (?,?,?,?,?,?,?,'pending',NULL)")
       .run(operatorId, command.commandId, rawHash, canonicalBytes(command).toString("utf8"), canonicalBytes(request).toString("utf8"), context.principal, context.client);
-    return request;
+    return { request, existingPending: false };
   });
 }
 
@@ -137,11 +139,12 @@ export async function applyAgentUpdate(
   const reserved = reserve(deps.store, command, context);
   if ("status" in reserved) return reserved;
   let receipt: AgentReceipt;
-  try { receipt = verifyReceipt(reserved, await deps.port.applyAgentInstallations(reserved)); }
+  try { receipt = verifyReceipt(reserved.request, await deps.port.applyAgentInstallations(reserved.request)); }
   catch (error) {
     // A proven stale CAS or unsupported feature has no table mutation and can be booked durably.
     // Every unknown subprocess outcome retains the pending operation for same-identity reconciliation.
-    if (error instanceof ControlError && (error.code === "agent-installation-update-stale" || error.code === "control-agent-update-unsupported")) return finalizeKnownRefusal(deps.store, command, error.code);
+    if (error instanceof ControlError && error.code === "agent-installation-update-stale") return finalizeKnownRefusal(deps.store, command, error.code);
+    if (error instanceof ControlError && error.code === "control-agent-update-unsupported" && !reserved.existingPending) return finalizeKnownRefusal(deps.store, command, error.code);
     throw error;
   }
   afterReceipt?.();
@@ -168,9 +171,15 @@ export async function reconcilePendingAgentUpdates(store: ControlStore, port: Pi
     let receipt: AgentReceipt;
     try { receipt = verifyReceipt(request, await port.applyAgentInstallations(request)); }
     catch (error) {
-      if (error instanceof ControlError && (error.code === "agent-installation-update-stale" || error.code === "control-agent-update-unsupported")) { finalizeKnownRefusal(store, command, error.code); continue; }
+      // A replacement peer's lack of this feature says nothing about what the earlier peer did.
+      // Preserve the original pending identity and operator fence until its receipt can be read.
+      if (error instanceof ControlError && error.code === "agent-installation-update-stale") {
+        const code = error.code;
+        withCommandContext(row.command_id, { client: row.client, principal: row.principal }, () => finalizeKnownRefusal(store, command, code));
+        continue;
+      }
       throw error;
     }
-    finalize(store, command, receipt);
+    withCommandContext(row.command_id, { client: row.client, principal: row.principal }, () => finalize(store, command, receipt));
   }
 }

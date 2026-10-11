@@ -62,6 +62,25 @@ describe("the Agents settings page (agent selection spec §6.8)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Check retained result" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
+  it("shows each resolved symlink target and the full addition configuration before acceptance", () => {
+    const state: AgentInstallationStateV1 = { schema: "orca-agent-installation-state-v1", revision: 0, pending: false, pendingCommand: null,
+      failureCode: null, observation: null, preview: { schema: "orca-agent-detection-preview-v1", previewId: "preview-paths", baseTableHash: "a".repeat(64),
+        observedAt: "2026-10-11T00:00:00.000Z", installed: [], changes: [
+          { changeId: "path-a", kind: "path", installationId: "claude", command: ["/tmp/claude-link"], realpath: "/opt/claude-A", version: "2" },
+          { changeId: "path-b", kind: "path", installationId: "claude", command: ["/tmp/claude-link"], realpath: "/opt/claude-B", version: "2" },
+          { changeId: "add-c", kind: "addition", installationId: "codex", command: ["/tmp/codex", "--custom"], realpath: "/opt/codex", version: "3",
+            installation: { kind: "codex", command: ["/tmp/codex", "--custom"], version: "3", configDir: "/tmp/codex-config", timeoutMs: 1234, killGraceMs: 77, sandbox: "workspace-write", budgetMode: "soft" } },
+          { changeId: "add-missing", kind: "addition", installationId: "unreviewable", command: ["/tmp/unknown"], realpath: "/opt/unknown", version: "4" },
+        ] } };
+    const { container } = render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} installationState={state} />);
+    expect(container.textContent).toContain("/opt/claude-A");
+    expect(container.textContent).toContain("/opt/claude-B");
+    expect(container.textContent).toContain("/opt/codex");
+    expect(container.textContent).toContain('"configDir": "/tmp/codex-config"');
+    expect(container.textContent).toContain('"timeoutMs": 1234');
+    expect(container.textContent).toContain('"--custom"');
+    expect((screen.getByLabelText(/New installation: unreviewable/) as HTMLInputElement).disabled).toBe(true);
+  });
   it("clears draft model and context when changing the role Agent", () => {
     const onDraft = vi.fn();
     render(<SelectionFields agents={agents} prefix="role" label="Role" current={{ agent: "claude", model: "A-m", contextWindow: 1_000_000 }}

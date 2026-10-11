@@ -760,6 +760,7 @@ export const en = {
       noObservation: "unavailable", current: "current", changed: "changed", noChanges: "No changes were offered.",
       review: "Review each offered change and select only the ones to apply.",
       version: "Version", path: "Command path", addition: "New installation", apply: "Apply selected changes",
+      resolvedPath: "Resolved executable", installationConfiguration: "Installation configuration", configurationUnavailable: "Configuration unavailable; this addition cannot be selected.",
     },
   },
   // N1 spec §11.2: the Requirements section.
