@@ -138,6 +138,48 @@ async function renderWaitingOnReloadedCommand(): Promise<void> {
 }
 
 describe("App's recovery of an uncertain command", () => {
+  it("keeps Dismiss after an in-flight Check again reports the group still missing", async () => {
+    const fallback = globalThis.fetch;
+    const heldCheck = gate();
+    const found = { schema: "orca-command-lookup-v1", originalStatus: 202, body: {
+      schema: "orca-command-success-v1", commandId: COMMAND, actorId: "human", verb: "start", target: { kind: "group", groupId: GROUP },
+      commandRevision: 7, projectionSeq: 5, effectivePayloadHash: "1".repeat(64), authorityCommandHash: "2".repeat(64),
+      result: { kind: "scheduled", operation: "start", wakeId: "wake-1" },
+    } };
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/api/control/summary")) return jsonResponse({ ...summary, groups: [] });
+      if (url === LOOKUP_PATH) {
+        lookups.push(url);
+        if (lookups.length === 2) return heldCheck.released;
+        return lookups.length === 1
+          ? jsonResponse({ error: { code: "group-not-found", message: "No group", commandRevision: null, evidenceIds: [], retryable: false } }, 404)
+          : jsonResponse(found);
+      }
+      return fallback(input, init);
+    });
+    render(<App />);
+    await screen.findByText(/The task group no longer exists; this operation's outcome cannot be confirmed/);
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(lookups).toHaveLength(2));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    await waitFor(() => expect(readUncertainCommands(window.sessionStorage)[0]?.dismissed).toBe(true));
+    const writes = vi.spyOn(Storage.prototype, "setItem");
+    heldCheck.release(jsonResponse({ error: { code: "group-not-found", message: "No group", commandRevision: null, evidenceIds: [], retryable: false } }, 404));
+    await waitFor(() => expect(writes.mock.calls.filter(([key]) => key === UNCERTAIN_COMMANDS_KEY)).toHaveLength(1));
+    await waitFor(() => expect(readUncertainCommands(window.sessionStorage)[0]?.dismissed).toBe(true));
+    expect(screen.queryByText(/The task group no longer exists; this operation's outcome cannot be confirmed/)).toBeNull();
+    expect(lookups).toHaveLength(2);
+    fireEvent.click(screen.getByText("Dismissed uncertain operations"));
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(storedIds()).toEqual([]));
+    expect(lookups).toHaveLength(3);
+  });
+
+  it.each([500, 503])("keeps a %i group-not-found lookup as a transient unresolved outcome", async (status) => {
+    vi.stubGlobal("fetch", async () => jsonResponse({ error: { code: "group-not-found", message: "Temporary error", commandRevision: null, evidenceIds: [], retryable: true } }, status));
+    expect((await recoverUncertainCommand(GROUP, COMMAND)).kind).toBe("unresolved");
+  });
   it.each(["@repository:orca", "@operator:owner", "@spend"])("never treats a command scope %s as a missing group", async (scope) => {
     vi.stubGlobal("fetch", async () => jsonResponse({ error: { code: "group-not-found", message: "No group", commandRevision: null, evidenceIds: [], retryable: false } }, 404));
     expect((await recoverUncertainCommand(scope, COMMAND)).kind).toBe("unresolved");

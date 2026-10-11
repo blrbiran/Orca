@@ -276,7 +276,7 @@ export async function recoverUncertainCommand(groupId: string, commandId: string
   } catch (err) {
     const refusal = controlFailureFrom(err);
     if (refusal.code === "command-result-not-found") return { kind: "absent", refusal };
-    if (!groupId.startsWith("@") && refusal.code === "group-not-found") return { kind: "missing-group", refusal };
+    if (!groupId.startsWith("@") && refusal.status === 404 && refusal.code === "group-not-found") return { kind: "missing-group", refusal };
     return { kind: "unresolved", refusal };
   }
 }

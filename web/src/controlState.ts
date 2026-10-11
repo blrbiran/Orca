@@ -180,7 +180,7 @@ export function reduceControlState(state: ControlClientState, event: ControlClie
       return { ...state, uncertainCommandIds: state.uncertainCommandIds.map((command) => {
         if (keyOf(command) !== keyOf(event.value)) return command;
         const { lookupRefusal: _lookupRefusal, ...original } = command;
-        return { ...original, parked: true, dismissed: false, reason: event.reason };
+        return { ...original, parked: true, dismissed: command.dismissed === true, reason: event.reason };
       }) };
     case "command-dismissed":
       return { ...state, uncertainCommandIds: state.uncertainCommandIds.map((command) => keyOf(command) === keyOf(event.value)
