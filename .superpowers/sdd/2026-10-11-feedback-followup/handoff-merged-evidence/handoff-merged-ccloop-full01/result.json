@@ -1,0 +1,24 @@
+{
+  "repo": "/private/tmp/ccloop-handoff-merged-20261011",
+  "command": [
+    "node",
+    "/private/tmp/task7-short-command.mjs",
+    "node",
+    "/private/tmp/task6-gate.mjs",
+    "node",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "--fileParallelism=false",
+    "--maxWorkers=1",
+    "--minWorkers=1",
+    "--reporter=default",
+    "--reporter=json",
+    "--outputFile=/private/tmp/orca-followup-runs/handoff-merged-ccloop-full01/tests.json"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 581.3386821746826,
+  "log": "/private/tmp/orca-followup-runs/handoff-merged-ccloop-full01/output.log",
+  "source": "299da37f5b9781f79f530b871b37218a3cef7bec",
+  "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+  "sourceFiles": 446
+}

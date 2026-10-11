@@ -1,0 +1,17 @@
+{
+  "clone": "/private/tmp/ccloop-handoff-merged-20261011",
+  "source": "299da37f5b9781f79f530b871b37218a3cef7bec",
+  "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+  "trackedTestFiles": 147,
+  "reportedTestFiles": 147,
+  "allTrackedTestFilesIncluded": true,
+  "passed": 1566,
+  "skipped": 0,
+  "rawReadMethod": "complete bytes/hash plus every JSON assertion/file/status; raw retained verbatim",
+  "runtime": {
+    "node": "v22.13.1",
+    "libuv": "1.49.2",
+    "platform": "darwin",
+    "arch": "arm64"
+  }
+}

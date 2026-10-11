@@ -1,0 +1,111 @@
+{
+  "head": "10ed031a14ed452f6fa1cf2dfca0f984e2d49a5b",
+  "porcelainSHA256": "07647cfc86fa7a04c987e6d8f3f890457bb7fcb8111642cbde3aae228d90fe47",
+  "items": [
+    {
+      "path": ".superpowers/sdd/2026-10-10-progress-results-design/plan-self-review.md",
+      "symlink": null,
+      "sha256": "023fe6e4a693bc08160593011845d442b0fee154ce795e6ae8572d9adf400860"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-10-10-task-results-design.md",
+      "symlink": null,
+      "sha256": "6ca0152e3291782a7a1eaaac14a9b97eba72378b596cb82616a2b0888312a0f4"
+    },
+    {
+      "path": "web/src/App.tsx",
+      "symlink": null,
+      "sha256": "448642690d8279ce2373d86b979a083ba8105dc4d1f977127d7fb77d90508903"
+    },
+    {
+      "path": "web/src/ControlGroupView.tsx",
+      "symlink": null,
+      "sha256": "bb4e00a5bf26a51dfe9bf1577519a5897b2ca61c795b200aa93ee445103c5f86"
+    },
+    {
+      "path": "web/src/ControlPanel.tsx",
+      "symlink": null,
+      "sha256": "1a159042db656c2e1a65a33d5c813be6af0d927639296a22cce64c21d79f3056"
+    },
+    {
+      "path": "web/src/GroupDetailRegions.tsx",
+      "symlink": null,
+      "sha256": "f09e9cb33d4754c60411f6e3f74bc1a436973dded32a6a18ddc44c00e1dcc83a"
+    },
+    {
+      "path": "web/src/TaskDetail.tsx",
+      "symlink": null,
+      "sha256": "9ae24dbe7f69c8c38a272768d32ac5ab265aa1921c153ca3d54be4cb33e2e96a"
+    },
+    {
+      "path": "web/src/controlApi.ts",
+      "symlink": null,
+      "sha256": "78e4225ace7f1f1617b22af4666f3066d66cf64bd550a4e81e4d77dab6d94fba"
+    },
+    {
+      "path": "web/src/locales/en.ts",
+      "symlink": null,
+      "sha256": "af3c705cc0cbdf822abc2256ca1260916bc7ed845b7d1a44c379b691c770faa1"
+    },
+    {
+      "path": "web/src/locales/zh.ts",
+      "symlink": null,
+      "sha256": "fd4dfc33c95555f6e97b0d00720b7434b55f214054ca68b6826f78275abec06f"
+    },
+    {
+      "path": "node_modules",
+      "symlink": "/Users/biran/code/skills/loop/Orca/node_modules",
+      "sha256": null
+    },
+    {
+      "path": "web/src/GroupResults.tsx",
+      "symlink": null,
+      "sha256": "bfc5d9b99c133c11ecc1068668264fa071b2ee4894885a0b44cbb5b9e19413b6"
+    },
+    {
+      "path": "web/src/ResultOutput.tsx",
+      "symlink": null,
+      "sha256": "5706594ba149fb6e0d98ca6169cffc8bbfc4408c3e452f4c84d2f735350868bd"
+    },
+    {
+      "path": "web/src/SafeMarkdown.tsx",
+      "symlink": null,
+      "sha256": "27e29df4a9aa3f84bddd97b97c36eefc5c132fba514643f1ae87853310c9d0cb"
+    },
+    {
+      "path": "web/src/TaskResults.tsx",
+      "symlink": null,
+      "sha256": "5bde524daec871ec86395f72904d3a12cf117d8b76b70de216351f89143084da"
+    },
+    {
+      "path": "web/src/resultApi.ts",
+      "symlink": null,
+      "sha256": "6e49448432c99381821efa8e18f42c655e5671904a28583a5f258629a50554da"
+    },
+    {
+      "path": "web/src/useResultsRead.ts",
+      "symlink": null,
+      "sha256": "249ca10aec3dd0d25cb78b2e44bb922bf02491f476d2e46b9b18ff778be54101"
+    },
+    {
+      "path": "web/tests/fixtures/results.ts",
+      "symlink": null,
+      "sha256": "2cd33d7b3d615d90512848199158e466a9fc4d6771fa730cde5d708169a9fa03"
+    },
+    {
+      "path": "web/tests/groupResults.test.tsx",
+      "symlink": null,
+      "sha256": "5e004ac968e57489b61499c2aea4c286a440228b408663aed0a48954d62db09c"
+    },
+    {
+      "path": "web/tests/resultOutput.test.tsx",
+      "symlink": null,
+      "sha256": "f4492b826634fd126290ac44db7831a28546c2ad4cea9cbf00f3ba230e46d9a0"
+    },
+    {
+      "path": "web/tests/taskResults.test.tsx",
+      "symlink": null,
+      "sha256": "420e91b91c7e59e3172ce6363eea06e08c842a2b43662207273c0932ce2bcbf7"
+    }
+  ]
+}

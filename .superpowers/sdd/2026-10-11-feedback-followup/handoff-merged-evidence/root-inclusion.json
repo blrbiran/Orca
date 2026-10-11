@@ -1,0 +1,11 @@
+{
+  "clone": "/private/tmp/orca-handoff-merged-20261011",
+  "reportedTestFiles": 391,
+  "trackedTestFiles": 391,
+  "allRootTrackedTestFilesIncluded": true,
+  "controlFiles": 169,
+  "panelFiles": 73,
+  "failedTests": 0,
+  "failedTestSuites": 0,
+  "rawReadMethod": "complete bytes/hash plus every JSON assertion/file/status; not a model line-by-line root stdout claim"
+}

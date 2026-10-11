@@ -1,0 +1,908 @@
+{
+  "metadata": {
+    "repo": "/private/tmp/orca-handoff-merged-20261011",
+    "command": [
+      "npm",
+      "run",
+      "check",
+      "--workspace",
+      "web",
+      "--",
+      "--reporter=default",
+      "--reporter=json",
+      "--outputFile.json=/private/tmp/orca-followup-runs/handoff-merged-orca-web01/web.json",
+      "--maxWorkers=4"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 45.366472244262695,
+    "log": "/private/tmp/orca-followup-runs/handoff-merged-orca-web01/output.log",
+    "source": "262fd9c49043e91468c5891432fd1ce53a0897bb",
+    "sourceTreeSHA256": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+    "sourceFiles": 934
+  },
+  "rawBytes": 12532,
+  "rawLines": 189,
+  "rawSHA256": "d674534ce1ca8bd28c1f5e201b9f53c43c1bad73c6b4462d6119662672b38c27",
+  "completeRawRead": true,
+  "jsonReports": [
+    {
+      "path": "/private/tmp/orca-followup-runs/handoff-merged-orca-web01/web.json",
+      "bytes": 368423,
+      "sha256": "984291b4774a3eda6b58baeafbf1d5a5e35c735b0df35b1e3fde01fb8e0f383e",
+      "success": true,
+      "reported": {
+        "numTotalTestSuites": 272,
+        "numPassedTestSuites": 272,
+        "numFailedTestSuites": 0,
+        "numPendingTestSuites": 0,
+        "numTotalTests": 926,
+        "numPassedTests": 926,
+        "numFailedTests": 0,
+        "numPendingTests": 0,
+        "numTodoTests": 0
+      },
+      "counts": {
+        "passed": 926
+      },
+      "fileCount": 106,
+      "files": [
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/App.test.tsx",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/agentPreviewRefresh.test.tsx",
+          "status": "passed",
+          "assertions": 13,
+          "statuses": {
+            "passed": 13
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/agentSelectionEditor.test.tsx",
+          "status": "passed",
+          "assertions": 15,
+          "statuses": {
+            "passed": 15
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/agentSettings.test.tsx",
+          "status": "passed",
+          "assertions": 5,
+          "statuses": {
+            "passed": 5
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/agentsCollapsed.test.tsx",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/agentsI18n.test.tsx",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/appSelection.test.tsx",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/archiveGroup.test.tsx",
+          "status": "passed",
+          "assertions": 14,
+          "statuses": {
+            "passed": 14
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/authGate.test.tsx",
+          "status": "passed",
+          "assertions": 16,
+          "statuses": {
+            "passed": 16
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/budgetHandoffCapability.test.tsx",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/budgetI18n.test.tsx",
+          "status": "passed",
+          "assertions": 5,
+          "statuses": {
+            "passed": 5
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/budgetSuggestions.test.tsx",
+          "status": "passed",
+          "assertions": 10,
+          "statuses": {
+            "passed": 10
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/chainPanel.test.tsx",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/chainsI18n.test.tsx",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/confirmSelection.test.tsx",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/contrast.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/controlCommandRecovery.test.tsx",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/controlI18n.test.tsx",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/controlKeys.test.tsx",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/controlPanel.test.tsx",
+          "status": "passed",
+          "assertions": 14,
+          "statuses": {
+            "passed": 14
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/controlPollSettles.test.tsx",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/controlPortBanner.test.tsx",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/controlRefetch.test.tsx",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/controlState.test.ts",
+          "status": "passed",
+          "assertions": 15,
+          "statuses": {
+            "passed": 15
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/decisionDetail.test.tsx",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/decisionList.test.tsx",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/decisionsI18n.test.tsx",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/decisionsStatusFilter.test.tsx",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/decisionsView.test.tsx",
+          "status": "passed",
+          "assertions": 10,
+          "statuses": {
+            "passed": 10
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/dependencyGraph.test.tsx",
+          "status": "passed",
+          "assertions": 12,
+          "statuses": {
+            "passed": 12
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/detailNavigation.test.tsx",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/detailRegions.test.tsx",
+          "status": "passed",
+          "assertions": 19,
+          "statuses": {
+            "passed": 19
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/driverRetry.test.tsx",
+          "status": "passed",
+          "assertions": 10,
+          "statuses": {
+            "passed": 10
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/estimateStale.test.tsx",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/evidenceLink.test.tsx",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/failureReasons.test.ts",
+          "status": "passed",
+          "assertions": 5,
+          "statuses": {
+            "passed": 5
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/feedbackReadability.test.tsx",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/feedbackRequirements.test.tsx",
+          "status": "passed",
+          "assertions": 11,
+          "statuses": {
+            "passed": 11
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/gitScheme.test.tsx",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/globalSettingsAccounts.test.tsx",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/groupCategory.test.ts",
+          "status": "passed",
+          "assertions": 10,
+          "statuses": {
+            "passed": 10
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/groupList.test.tsx",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/groupRefusal.test.tsx",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/groupResults.test.tsx",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/handoffFailedRetry.test.tsx",
+          "status": "passed",
+          "assertions": 10,
+          "statuses": {
+            "passed": 10
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/handoffResume.test.tsx",
+          "status": "passed",
+          "assertions": 5,
+          "statuses": {
+            "passed": 5
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/i18nDetect.test.tsx",
+          "status": "passed",
+          "assertions": 12,
+          "statuses": {
+            "passed": 12
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/i18nKeys.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/i18nPseudo.test.tsx",
+          "status": "passed",
+          "assertions": 31,
+          "statuses": {
+            "passed": 31
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/i18nSwitch.test.tsx",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/i18nWidth.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/integrationScheme.test.tsx",
+          "status": "passed",
+          "assertions": 37,
+          "statuses": {
+            "passed": 37
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/kindRank.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/labelSourceFallback.test.tsx",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/loopBudgetRows.test.tsx",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/loopPlanCard.test.tsx",
+          "status": "passed",
+          "assertions": 10,
+          "statuses": {
+            "passed": 10
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/loopPlanDraft.test.tsx",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/loopPlanEdit.test.tsx",
+          "status": "passed",
+          "assertions": 14,
+          "statuses": {
+            "passed": 14
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/loopPlanSkillsPayload.test.tsx",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/loopSuggestionApply.test.tsx",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/loopSuggestionDraft.test.tsx",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/loopSummary.test.tsx",
+          "status": "passed",
+          "assertions": 43,
+          "statuses": {
+            "passed": 43
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/memberControls.test.tsx",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/memoryApp.test.tsx",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/memoryLayout.test.tsx",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/memoryView.test.tsx",
+          "status": "passed",
+          "assertions": 15,
+          "statuses": {
+            "passed": 15
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/metricsNotes.test.tsx",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/metricsView.test.tsx",
+          "status": "passed",
+          "assertions": 5,
+          "statuses": {
+            "passed": 5
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/outcome.test.tsx",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/overviewApp.test.tsx",
+          "status": "passed",
+          "assertions": 19,
+          "statuses": {
+            "passed": 19
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/overviewDecisionNavigation.test.tsx",
+          "status": "passed",
+          "assertions": 10,
+          "statuses": {
+            "passed": 10
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/overviewFreshness.test.tsx",
+          "status": "passed",
+          "assertions": 13,
+          "statuses": {
+            "passed": 13
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/overviewModel.test.ts",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/projectFiltering.test.tsx",
+          "status": "passed",
+          "assertions": 34,
+          "statuses": {
+            "passed": 34
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/projectRegistry.test.tsx",
+          "status": "passed",
+          "assertions": 9,
+          "statuses": {
+            "passed": 9
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/projectScopeDecisionRequests.test.tsx",
+          "status": "passed",
+          "assertions": 17,
+          "statuses": {
+            "passed": 17
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/projectScopeDrafts.test.tsx",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/projectScopeRecovery.test.tsx",
+          "status": "passed",
+          "assertions": 17,
+          "statuses": {
+            "passed": 17
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/projectSwitcher.test.tsx",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/refusalExplain.test.ts",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/refusalText.test.tsx",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/requirements.test.tsx",
+          "status": "passed",
+          "assertions": 19,
+          "statuses": {
+            "passed": 19
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/requirementsApp.test.tsx",
+          "status": "passed",
+          "assertions": 12,
+          "statuses": {
+            "passed": 12
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/requirementsI18n.test.tsx",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/resultOutput.test.tsx",
+          "status": "passed",
+          "assertions": 21,
+          "statuses": {
+            "passed": 21
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/resultsApp.test.tsx",
+          "status": "passed",
+          "assertions": 32,
+          "statuses": {
+            "passed": 32
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/runFacts.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/savedResultAvailability.test.tsx",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/savedResultRecovery.test.tsx",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/selection.test.tsx",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/sessionHeaders.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/settingsScopes.test.tsx",
+          "status": "passed",
+          "assertions": 12,
+          "statuses": {
+            "passed": 12
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/settleUnknownUsage.test.tsx",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/shell.test.tsx",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/skillsPanel.test.tsx",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/stopBanner.test.tsx",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/styles.test.ts",
+          "status": "passed",
+          "assertions": 10,
+          "statuses": {
+            "passed": 10
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/taskActivity.test.tsx",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/taskLabels.test.tsx",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/taskLabelsDraft.test.tsx",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/taskLabelsDraftBase.test.tsx",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/taskResults.test.tsx",
+          "status": "passed",
+          "assertions": 11,
+          "statuses": {
+            "passed": 11
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/theme.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/tokenInput.test.tsx",
+          "status": "passed",
+          "assertions": 38,
+          "statuses": {
+            "passed": 38
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/usagePanel.test.tsx",
+          "status": "passed",
+          "assertions": 16,
+          "statuses": {
+            "passed": 16
+          }
+        },
+        {
+          "file": "/private/tmp/orca-handoff-merged-20261011/web/tests/workspaceMode.test.tsx",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        }
+      ],
+      "skips": [],
+      "failures": [],
+      "control": {
+        "files": 0,
+        "passed": 0,
+        "skipped": 0,
+        "failed": 0
+      }
+    }
+  ]
+}

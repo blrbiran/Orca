@@ -1,0 +1,93 @@
+{"actualArgv":["env","ORCA_SAVED_RESULT_OLD_ORCA_ROOT=/private/tmp/orca-t7-schema10-producer-20261011","ORCA_SAVED_RESULT_OLD_CCLOOP_ROOT=/private/tmp/ccloop-task6-legacy-producer","ORCA_SAVED_RESULT_CCLOOP_BIN=/private/tmp/ccloop-handoff-merged-20261011/dist/cli.js","npm","run","verify:saved-result"]}
+{"ownedShortTMPDIR":"/private/tmp/gb0","bytes":16,"mode":"700","uid":501}
+
+> orca@0.1.0 verify:saved-result
+> node scripts/verify-saved-result.mjs
+
+{"schema11Reader":"/private/tmp/t7-s11-vmjSEp","commit":"f00bfdb797ee3f5de130585557fdf77dc421d535","buildArgv":["/Users/biran/.nvm/versions/node/v22.13.1/bin/node","/private/tmp/t7-s11-vmjSEp/node_modules/typescript/bin/tsc","-p","tsconfig.build.json"],"rc":0,"trackedDiff":"clean","storeSHA256":"32c186f6c082225f9abf2faa8a76bd1451855d910e011b5e3f3b33d2bafbd41f"}
+
+ RUN  v5.0.3 /private/tmp/orca-handoff-merged-20261011
+
+(node:26638) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Cloning into bare repository '/private/tmp/t7-wfzObk/w-jRjasg/control/e2e-6d8749c4.runs/run-742989fa-f571-4f29-a8fd-1b5d04be99ba/repo/.git'...
+done.
+HEAD is now at d0a476f ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-wfzObk/orca-snapshot-verify-f5OxmR/input.bundle is okay
+Cloning into bare repository '/private/tmp/t7-ejaFBM/w-b4Utql/control/e2e-6d8749c4.runs/run-98bcdbfc-599e-481d-bbc4-300ce3ba151b/repo/.git'...
+done.
+HEAD is now at 48786dc ccloop attempt: refs/ccloop/run/attempts/1
+Cloning into bare repository '/private/tmp/t7-Yd6qzM/w-NDqd7p/control/e2e-6d8749c4.runs/run-c67629d6-4900-4e43-99fa-33931679ceb3/repo/.git'...
+done.
+HEAD is now at 146d914 ccloop attempt: refs/ccloop/run/attempts/1
+Cloning into bare repository '/private/tmp/t7-6gv8xG/w-9jpUfo/control/e2e-6d8749c4.runs/run-9dfa6dff-949c-4488-8c7d-ad7531d792ee/repo/.git'...
+done.
+HEAD is now at 5ad613e ccloop attempt: refs/ccloop/run/attempts/1
+Cloning into bare repository '/private/tmp/t7-bn2mjj/w-c6v7Y7/control/e2e-6d8749c4.runs/run-0d1f5459-ff01-4a4f-827e-a92729ae88fd/repo/.git'...
+done.
+HEAD is now at 32a6ca8 ccloop attempt: refs/ccloop/run/attempts/1
+Cloning into bare repository '/private/tmp/t7-tbybod/w-AcaV2R/control/e2e-6d8749c4.runs/run-ff1081ff-da52-407d-b256-a3bad78a55fa/repo/.git'...
+done.
+HEAD is now at ab39bb4 ccloop attempt: refs/ccloop/run/attempts/1
+Cloning into bare repository '/private/tmp/t7-61PzGm/w-DymrkW/control/e2e-6d8749c4.runs/run-12d1e902-d006-4e70-b7b4-9c1c843fbb3b/repo/.git'...
+done.
+HEAD is now at a54ce6a ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-61PzGm/orca-snapshot-verify-I0SqQX/input.bundle is okay
+Cloning into bare repository '/private/tmp/t7-NeYdqS/w-J6a5GP/control/e2e-6d8749c4.runs/run-09f1910b-9afc-4edf-a773-f03d66c4e2ea/repo/.git'...
+done.
+HEAD is now at 25009a3 ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-NeYdqS/orca-snapshot-verify-7w8XDT/input.bundle is okay
+Cloning into bare repository '/private/tmp/t7-1MHUkA/w-7lYLGW/control/e2e-6d8749c4.runs/run-1ab311e9-d712-4f85-90a9-f12faa2b292c/repo/.git'...
+done.
+HEAD is now at 2c0177b ccloop attempt: refs/ccloop/run/attempts/1
+Cloning into bare repository '/private/tmp/t7-sg5Clx/w-8TDwYd/control/e2e-6d8749c4.runs/run-a607b82c-3da3-42b1-9669-bd076ceda5af/repo/.git'...
+done.
+HEAD is now at f987714 ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-sg5Clx/orca-snapshot-verify-xP8YeC/input.bundle is okay
+Cloning into bare repository '/private/tmp/t7-U2ZoLT/w-gEXZnO/control/e2e-6d8749c4.runs/run-7f72e7c1-abb0-46e6-b49b-b32f8936e4a6/repo/.git'...
+done.
+HEAD is now at 7995571 ccloop attempt: refs/ccloop/run/attempts/1
+Cloning into bare repository '/private/tmp/t7-axv28U/w-XahFBE/control/e2e-6d8749c4.runs/run-24e3eaf7-d622-4030-b821-f6a06873b335/repo/.git'...
+done.
+HEAD is now at a66e3a5 ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-axv28U/orca-snapshot-verify-2c5kQ2/input.bundle is okay
+Cloning into bare repository '/private/tmp/t7-FztLlG/w-rLur26/control/e2e-6d8749c4.runs/run-449c61e2-a429-40f5-a90d-7b93e055108a/repo/.git'...
+done.
+HEAD is now at 68454f5 ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-FztLlG/orca-snapshot-verify-Tdr9vJ/input.bundle is okay
+Cloning into bare repository '/private/tmp/t7-cCMRbk/w-UZyvrE/control/e2e-6d8749c4.runs/run-72bf2d20-480c-4241-a236-4a8ea6090ce2/repo/.git'...
+done.
+HEAD is now at 8b4965b ccloop attempt: refs/ccloop/run/attempts/1
+Cloning into bare repository '/private/tmp/t7-D5cBI9/w-MkB8jp/control/e2e-6d8749c4.runs/run-683389ac-f362-4d46-97e0-66f84aff56b1/repo/.git'...
+done.
+HEAD is now at a609f52 ccloop attempt: refs/ccloop/run/attempts/1
+Cloning into bare repository '/private/tmp/t7-An37dR/w-GxFPJc/control/e2e-6d8749c4.runs/run-df095738-e029-4354-9266-991305e9fd17/repo/.git'...
+done.
+HEAD is now at 6023dc9 ccloop attempt: refs/ccloop/run/attempts/1
+Cloning into bare repository '/private/tmp/t7-zXuknb/w-FtGEIl/control/e2e-6d8749c4.runs/run-e4e4e9fc-b01d-4583-b4f8-53405ae167a2/repo/.git'...
+done.
+HEAD is now at cc548f6 ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-zXuknb/orca-snapshot-verify-6UHeC5/input.bundle is okay
+Cloning into bare repository '/private/tmp/t7-qz34SR/w-E7KcXU/control/e2e-6d8749c4.runs/run-a0bfcc0d-3e5a-4280-b80c-887c3461adfb/repo/.git'...
+done.
+HEAD is now at 0b59f9f ccloop attempt: refs/ccloop/run/attempts/1
+(node:66419) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Cloning into bare repository '/private/tmp/t7-PS5Abi/w-sPQkrB/control/e2e-6d8749c4.runs/run-89f3f681-fd38-407f-b925-aeaafc856ddb/repo/.git'...
+done.
+HEAD is now at d7e5990 ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-PS5Abi/orca-snapshot-verify-MlWU9f/input.bundle is okay
+Cloning into bare repository '/private/tmp/t7-QXG8zU/w-Boqomf/control/e2e-6d8749c4.runs/run-19513513-99dc-4deb-972d-b51672e8ffbb/repo/.git'...
+done.
+HEAD is now at 9fa8e77 ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-QXG8zU/orca-snapshot-verify-QOZKxy/input.bundle is okay
+Cloning into bare repository '/private/tmp/t7-DCXLwT/w-mgSCHj/control/e2e-6d8749c4.runs/run-487de319-4e5e-4b53-8820-af106672d020/repo/.git'...
+done.
+HEAD is now at 9d7231e ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-DCXLwT/orca-snapshot-verify-6Okp7F/input.bundle is okay
+
+ Test Files  2 passed (2)
+      Tests  23 passed (23)
+   Start at  21:37:18
+   Duration  448.72s (tests 100%)
+

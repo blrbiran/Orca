@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/orca-handoff-merged-20261011",
+  "command": [
+    "npm",
+    "run",
+    "build"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 5.365198850631714,
+  "log": "/private/tmp/orca-followup-runs/handoff-merged-orca-build01/output.log",
+  "source": "262fd9c49043e91468c5891432fd1ce53a0897bb",
+  "sourceTreeSHA256": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+  "sourceFiles": 934
+}

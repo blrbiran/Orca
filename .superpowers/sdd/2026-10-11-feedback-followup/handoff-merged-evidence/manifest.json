@@ -1,0 +1,294 @@
+{
+  "scope": "fresh merged declared product source, completed Tasks1–7; no whole14-task/runtime acceptance",
+  "runCount": 10,
+  "files": [
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-ccloop-types01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-ccloop-types01/output.log",
+      "bytes": 59,
+      "sha256": "443df7778c6055e93ca0f3f4fabce5cbbe7205fa5689a62bd08268806118c185"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-ccloop-types01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-ccloop-types01/result.json",
+      "bytes": 422,
+      "sha256": "2132ce95d93c50534961db2eaea275fe1022562cd83aebabd958710668c528bf"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-ccloop-build01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-ccloop-build01/output.log",
+      "bytes": 399,
+      "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-ccloop-build01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-ccloop-build01/result.json",
+      "bytes": 417,
+      "sha256": "cc9dcd1bb26207788082724d1381c3bc7e962f25130c22032b7847d972dea550"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-types01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-types01/output.log",
+      "bytes": 57,
+      "sha256": "95e3139b92d7a7c68a78bf799a9e66e72c3ed1f70e2391990dd69e37294e15c9"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-types01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-types01/result.json",
+      "bytes": 418,
+      "sha256": "ae544cbc8682dc09420aaa02babf2eacc89735639ecc6bad9d9a3c275a4347fa"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-build01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-build01/output.log",
+      "bytes": 50,
+      "sha256": "85a583a8309e758f7d2d85267f693f87462e82c2e62e16213eb3fc5b998b22f0"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-build01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-build01/result.json",
+      "bytes": 413,
+      "sha256": "16618cc8df9f0e4fc5066e082c8cb7e0b026cf13a412e9507a2e0de172638ed0"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-webbuild01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-webbuild01/output.log",
+      "bytes": 658,
+      "sha256": "5b8fde3dc846acc46b549ba99fdf4f85c72cb024ff1f0e6bfe38fb2ae435f714"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-webbuild01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-webbuild01/result.json",
+      "bytes": 447,
+      "sha256": "462aa3f8f421d815477ffd379549be22fec7d261abcbf99747865074e8336261"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-web01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-web01/output.log",
+      "bytes": 12532,
+      "sha256": "d674534ce1ca8bd28c1f5e201b9f53c43c1bad73c6b4462d6119662672b38c27"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-web01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-web01/result.json",
+      "bytes": 615,
+      "sha256": "21173ff7098a6b457a2258c43bd9674386803b7507e4e3c20e42a5a348bea2a2"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-web01/web.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-web01/web.json",
+      "bytes": 368423,
+      "sha256": "984291b4774a3eda6b58baeafbf1d5a5e35c735b0df35b1e3fde01fb8e0f383e"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-root01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-root01/output.log",
+      "bytes": 279268,
+      "sha256": "af67584bcf46f00f265383e889899b3506760abb1bff89bc1a132eab056fe45d"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-root01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-root01/result.json",
+      "bytes": 507,
+      "sha256": "11073e466724ea5abfb073dd0c350cabdf536dae1b2170bea1cefff647ab7a5b"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-root01/root.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-root01/root.json",
+      "bytes": 1541494,
+      "sha256": "818e772245ac2d19da49639d688aa15e4d9dfa3998886306f88355ed916166fe"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-native01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-native01/output.log",
+      "bytes": 6558,
+      "sha256": "e439d53de30de0f9b00485e636d3f42132e1a962e7f074f127168b47cb2cf3c4"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-native01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-native01/result.json",
+      "bytes": 758,
+      "sha256": "d049e31a366620b6751bdc373a2245d828bdcd0478f921f88fd30c66788116b0"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-panel01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-panel01/output.log",
+      "bytes": 1611,
+      "sha256": "88116e713799be4eb09f6635c22a556c38785df5cae10bde87fb0094bcad0da8"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-orca-panel01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-orca-panel01/result.json",
+      "bytes": 477,
+      "sha256": "8035e0d5c04b711f0937e9578383f299fb0dfef26bcc3f26f77d27f83fbf9754"
+    },
+    {
+      "original": "/private/tmp/orca-followup-run.py",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/isolated-runner.py",
+      "bytes": 2466,
+      "sha256": "64a9805f8b5100cd1abe5fd1df384f48a80b2af65aa211447511f213ad1375c5"
+    },
+    {
+      "original": "/private/tmp/task7-short-command.mjs",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/short-command.mjs",
+      "bytes": 1185,
+      "sha256": "5115d2840e2299a3e9de42d29ccbd4e111946129fe71d9d080412705c2bd666a"
+    },
+    {
+      "original": "/private/tmp/task7-root-formal.mjs",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/root-formal.mjs",
+      "bytes": 1741,
+      "sha256": "786f329f9eaa7b6c7313fa144dd67eba3b2a150ac75d9376f2ee20973077efba"
+    },
+    {
+      "original": "/private/tmp/task6-gate.mjs",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/ccloop-fixture-gate.mjs",
+      "bytes": 764,
+      "sha256": "b8da0755d1f3df0e5767dfe0545f15b7417ec49a578c96ab6243bef6f9020640"
+    },
+    {
+      "original": "/private/tmp/orca-handoff-audit.py",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/audit-helper.py",
+      "bytes": 2225,
+      "sha256": "1ce744606570763dec8c4ab2994879624cd830e7ccfda561ec2747b75264fa88"
+    },
+    {
+      "original": "/private/tmp/orca-local-merge-preflight.py",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/local-merge-preflight.py",
+      "bytes": 2246,
+      "sha256": "fe824e4315415efd837895aca8001b105bee87765f1bbed6d5fb36566d464f08"
+    },
+    {
+      "original": "/private/tmp/handoff-merged-clone-provenance.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/merged-clone-provenance.json",
+      "bytes": 1237,
+      "sha256": "8eff5e9eb8d436ea3be4687cde9123d12763196950ef3237becc4cd80c9f4731"
+    },
+    {
+      "original": "/private/tmp/handoff-source-config-before.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/source-config-before.json",
+      "bytes": 576,
+      "sha256": "4ee739bd170b8416b088a68fe5bde3aeb457096a3d666c79087101bd6768283d"
+    },
+    {
+      "original": "/private/tmp/original-results-wip-handoff-before.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/original-wip-before.json",
+      "bytes": 3605,
+      "sha256": "2c534d02a1bc14c54ea32dc366e61ae0ba107dfacce8f4b7cf36dd4ab8531cff"
+    },
+    {
+      "original": "/private/tmp/handoff-rolling-preservation-before.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/rolling-preservation-before.json",
+      "bytes": 1251,
+      "sha256": "021cd608998abcc658154a8adea120d2d5fcae64ddd0ec72681cd255fffa267b"
+    },
+    {
+      "original": "/private/tmp/handoff-merged-orca-web-audit.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/web-audit.json",
+      "bytes": 26557,
+      "sha256": "f3cb0ebdf7850d717bed6f37a7f9a6d310e5a7303261a33d5b939a3efef35f65"
+    },
+    {
+      "original": "/private/tmp/handoff-merged-orca-root-audit.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/root-audit.json",
+      "bytes": 104519,
+      "sha256": "25ebffd01ca8f763bd35103a6e3f1f232a376d878903b98457bd1f381c71c146"
+    },
+    {
+      "original": "/private/tmp/handoff-merged-orca-root-inclusion.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/root-inclusion.json",
+      "bytes": 369,
+      "sha256": "be11723fe3e0cf2c4a63c3e6131c01dac7e3c6029a0e37c280acf9814baaace3"
+    },
+    {
+      "original": "/private/tmp/handoff-merged-orca-native-audit.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/native-audit.json",
+      "bytes": 2105,
+      "sha256": "dc8fcbb2d188da7b9ab76c645d2b3eb25d3d6fa62844042c9f42bf89190355de"
+    },
+    {
+      "original": "/private/tmp/handoff-merged-orca-panel-audit.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/panel-audit.json",
+      "bytes": 843,
+      "sha256": "31b2840f735225899cd7b2f4ae761bb81db361c3ae4755a9e74752c97b44e5f1"
+    },
+    {
+      "original": "/private/tmp/handoff-final-preflight-Orca.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/preintegration-Orca.json",
+      "bytes": 134507,
+      "sha256": "141b0fa67d9a9bf2733fda5304f8600b62ed30c5788376cca761ad64f3c25cce"
+    },
+    {
+      "original": "/private/tmp/handoff-final-preflight-ccloop.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/preintegration-ccloop.json",
+      "bytes": 26053,
+      "sha256": "b576306e6ff24d017441ac86bc8d2058678e65c08421067029aaeaa81a403ac0"
+    },
+    {
+      "original": "/private/tmp/handoff-final-preflight-ccmem.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/preintegration-ccmem.json",
+      "bytes": 476,
+      "sha256": "9f3f31f8c2deee8e17a3209d648e52e7d453bcffb3a63483a701aa2d48ad2ecb"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-ccloop-full01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-ccloop-full01/output.log",
+      "bytes": 56587,
+      "sha256": "ddeeaef5d61c96baabd6b50b7814ef1262ad7ad5cbb7e7df84a87a22265d4360"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-ccloop-full01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-ccloop-full01/result.json",
+      "bytes": 761,
+      "sha256": "c4bde2aabe9363af9738a711e8def147dfd7d091b87939d890eb06aae5261451"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/handoff-merged-ccloop-full01/tests.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/handoff-merged-ccloop-full01/tests.json",
+      "bytes": 555820,
+      "sha256": "86d2a1947e56fea232759a67a6b415a1a1346898f2532cb8872caaff3e09ce83"
+    },
+    {
+      "original": "/private/tmp/handoff-merged-ccloop-full-audit.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/ccloop-full-audit.json",
+      "bytes": 37609,
+      "sha256": "7b50ca6d62d8c2d7f49571ff90a8bfa10288868740d07713d58acabc51991bcb"
+    },
+    {
+      "original": "/private/tmp/handoff-merged-ccloop-inclusion.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/ccloop-inclusion.json",
+      "bytes": 551,
+      "sha256": "02df2a16ab2e9dd51229458f7cdf0e3c52a56c2dcad9082bb63dd8478a15b315"
+    },
+    {
+      "original": "controller-derived exact raw/source evidence",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/skip-inventory.json",
+      "bytes": 11731,
+      "sha256": "08d8114168a692c7b5598d12c05ea9ef349d2027c3050ce3b70edd7bd7735814"
+    },
+    {
+      "original": "controller-derived exact raw/source evidence",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/runtime.json",
+      "bytes": 156,
+      "sha256": "fd5c8f9775f32ee12023fca07bf435daac28b5ddb77a38df7e83fb8d84a82594"
+    },
+    {
+      "original": "controller-derived exact raw/source evidence",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/product-source-correspondence.json",
+      "bytes": 3919,
+      "sha256": "a86bd2e76f409a776550d3e607dc129a4cb4d2a228cdad02fa69268f51bcce96"
+    },
+    {
+      "original": "controller-derived exact raw/source evidence",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/ignored-source-preservation.json",
+      "bytes": 299,
+      "sha256": "a097b034f305243d735ffa08de0cc18c22bd27b679a842eb4e435e6321ec2ce7"
+    },
+    {
+      "original": "/private/tmp/handoff-rolling-preservation-after.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-merged-evidence/rolling-preservation-after.json",
+      "bytes": 1039,
+      "sha256": "633916572628603ffc57c734a01913a61877e5018fb98e513d5e5fe80405308c"
+    }
+  ]
+}

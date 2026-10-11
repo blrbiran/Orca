@@ -1,0 +1,1239 @@
+{
+  "metadata": {
+    "repo": "/private/tmp/ccloop-handoff-merged-20261011",
+    "command": [
+      "node",
+      "/private/tmp/task7-short-command.mjs",
+      "node",
+      "/private/tmp/task6-gate.mjs",
+      "node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--fileParallelism=false",
+      "--maxWorkers=1",
+      "--minWorkers=1",
+      "--reporter=default",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/handoff-merged-ccloop-full01/tests.json"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 581.3386821746826,
+    "log": "/private/tmp/orca-followup-runs/handoff-merged-ccloop-full01/output.log",
+    "source": "299da37f5b9781f79f530b871b37218a3cef7bec",
+    "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "sourceFiles": 446
+  },
+  "rawBytes": 56587,
+  "rawLines": 551,
+  "rawSHA256": "ddeeaef5d61c96baabd6b50b7814ef1262ad7ad5cbb7e7df84a87a22265d4360",
+  "completeRawRead": true,
+  "jsonReports": [
+    {
+      "path": "/private/tmp/orca-followup-runs/handoff-merged-ccloop-full01/tests.json",
+      "bytes": 555820,
+      "sha256": "86d2a1947e56fea232759a67a6b415a1a1346898f2532cb8872caaff3e09ce83",
+      "success": true,
+      "reported": {
+        "numTotalTestSuites": 371,
+        "numPassedTestSuites": 371,
+        "numFailedTestSuites": 0,
+        "numPendingTestSuites": 0,
+        "numTotalTests": 1566,
+        "numPassedTests": 1566,
+        "numFailedTests": 0,
+        "numPendingTests": 0,
+        "numTodoTests": 0
+      },
+      "counts": {
+        "passed": 1566
+      },
+      "fileCount": 147,
+      "files": [
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/agents/claudeModelSuffix.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/agents/command.test.ts",
+          "status": "passed",
+          "assertions": 11,
+          "statuses": {
+            "passed": 11
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/agents/detect.test.ts",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/agents/detectIsolation.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/agents/materialize.test.ts",
+          "status": "passed",
+          "assertions": 17,
+          "statuses": {
+            "passed": 17
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/agents/registry.test.ts",
+          "status": "passed",
+          "assertions": 17,
+          "statuses": {
+            "passed": 17
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/agents/table.test.ts",
+          "status": "passed",
+          "assertions": 29,
+          "statuses": {
+            "passed": 29
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/cli/agentsResume.test.ts",
+          "status": "passed",
+          "assertions": 5,
+          "statuses": {
+            "passed": 5
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/cli/agentsRun.test.ts",
+          "status": "passed",
+          "assertions": 23,
+          "statuses": {
+            "passed": 23
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/cli/cli.test.ts",
+          "status": "passed",
+          "assertions": 37,
+          "statuses": {
+            "passed": 37
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/cli/codex.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/cli/crashResume.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/contract/loadContract.test.ts",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/allowanceContinuation.test.ts",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/codex.integration.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/executionBase.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/leaseGate.test.ts",
+          "status": "passed",
+          "assertions": 12,
+          "statuses": {
+            "passed": 12
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/leaseHeartbeat.test.ts",
+          "status": "passed",
+          "assertions": 28,
+          "statuses": {
+            "passed": 28
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/leaseLifecycle.integration.test.ts",
+          "status": "passed",
+          "assertions": 35,
+          "statuses": {
+            "passed": 35
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/optionalTokens.test.ts",
+          "status": "passed",
+          "assertions": 10,
+          "statuses": {
+            "passed": 10
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/ownedRunStateWriter.structure.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/partialToVerify.test.ts",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/resumeCrashAdoption.test.ts",
+          "status": "passed",
+          "assertions": 12,
+          "statuses": {
+            "passed": 12
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/resumeLoop.gate.test.ts",
+          "status": "passed",
+          "assertions": 27,
+          "statuses": {
+            "passed": 27
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/resumeLoop.integration.test.ts",
+          "status": "passed",
+          "assertions": 20,
+          "statuses": {
+            "passed": 20
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/runLoop.integration.test.ts",
+          "status": "passed",
+          "assertions": 71,
+          "statuses": {
+            "passed": 71
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/taskResultCapture.test.ts",
+          "status": "passed",
+          "assertions": 21,
+          "statuses": {
+            "passed": 21
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/taskResultOutcome.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/controller/verifySavedResult.test.ts",
+          "status": "passed",
+          "assertions": 26,
+          "statuses": {
+            "passed": 26
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/packaging/gitDependency.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/accept.test.ts",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/agentsControl.test.ts",
+          "status": "passed",
+          "assertions": 14,
+          "statuses": {
+            "passed": 14
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/allowanceEvidence.test.ts",
+          "status": "passed",
+          "assertions": 20,
+          "statuses": {
+            "passed": 20
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/claudeEndToEnd.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/claudeHandoffDeadlineUsage.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/codexSkillsFailureWorker.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/codexSkillsWorker.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/collect.test.ts",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/command.test.ts",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/endToEnd.test.ts",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/handoff.test.ts",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/handoffDeadlineUsage.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/handoffEnteredPhases.test.ts",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/materialize.test.ts",
+          "status": "passed",
+          "assertions": 15,
+          "statuses": {
+            "passed": 15
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/optionalWorker.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/phasesCompleted.test.ts",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/protocol.test.ts",
+          "status": "passed",
+          "assertions": 22,
+          "statuses": {
+            "passed": 22
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/protocol4.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/requestBoundDimensions.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/resultRepository.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/savedResultCheckpoint.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/savedResultEvidence.test.ts",
+          "status": "passed",
+          "assertions": 24,
+          "statuses": {
+            "passed": 24
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/savedResultRecovery.native.test.ts",
+          "status": "passed",
+          "assertions": 28,
+          "statuses": {
+            "passed": 28
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/savedResultRecovery.test.ts",
+          "status": "passed",
+          "assertions": 39,
+          "statuses": {
+            "passed": 39
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/singleCall.test.ts",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/singleCallCapability.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/skillPluginDirAccept.test.ts",
+          "status": "passed",
+          "assertions": 5,
+          "statuses": {
+            "passed": 5
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/skillPluginDirWorker.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/stopProof.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/taskResultAuthority.test.ts",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/taskResults.test.ts",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/usage.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/usageByModel.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/worker.test.ts",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/workerByModel.test.ts",
+          "status": "passed",
+          "assertions": 9,
+          "statuses": {
+            "passed": 9
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/control/workerLaunch.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/ownership/lease.test.ts",
+          "status": "passed",
+          "assertions": 16,
+          "statuses": {
+            "passed": 16
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/ownership/ownerController.test.ts",
+          "status": "passed",
+          "assertions": 13,
+          "statuses": {
+            "passed": 13
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/ownership/ownerLiveness.test.ts",
+          "status": "passed",
+          "assertions": 12,
+          "statuses": {
+            "passed": 12
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/ownership/reapRunProcesses.test.ts",
+          "status": "passed",
+          "assertions": 14,
+          "statuses": {
+            "passed": 14
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/persistence/fileStore.test.ts",
+          "status": "passed",
+          "assertions": 97,
+          "statuses": {
+            "passed": 97
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/persistence/leaseStore.test.ts",
+          "status": "passed",
+          "assertions": 9,
+          "statuses": {
+            "passed": 9
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/persistence/liveness.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/persistence/lockReadChokepoint.structure.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/persistence/noUnlockValueImport.structure.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/policy/pathPolicy.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/registry/noUnlockValueImport.structure.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/registry/observeFields.test.ts",
+          "status": "passed",
+          "assertions": 13,
+          "statuses": {
+            "passed": 13
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/registry/observeRun.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/registry/readObservedFile.test.ts",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/registry/renderRuns.test.ts",
+          "status": "passed",
+          "assertions": 18,
+          "statuses": {
+            "passed": 18
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/registry/scanRuns.test.ts",
+          "status": "passed",
+          "assertions": 9,
+          "statuses": {
+            "passed": 9
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/registry/zeroWrite.test.ts",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/executionNormalizer.test.ts",
+          "status": "passed",
+          "assertions": 19,
+          "statuses": {
+            "passed": 19
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/phaseTimeoutUsage.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/processIdentity.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/scriptedAdapter.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/taskResult.test.ts",
+          "status": "passed",
+          "assertions": 15,
+          "statuses": {
+            "passed": 15
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/taskResultPersistence.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/taskResultPrompts.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/state/stateMachine.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/stop/stopController.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/sweep/lockPresence.test.ts",
+          "status": "passed",
+          "assertions": 5,
+          "statuses": {
+            "passed": 5
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/sweep/sweepCrashCandidates.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/sweep/sweepRuns.test.ts",
+          "status": "passed",
+          "assertions": 19,
+          "statuses": {
+            "passed": 19
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/unlock/inspectLock.test.ts",
+          "status": "passed",
+          "assertions": 18,
+          "statuses": {
+            "passed": 18
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/unlock/lockRows.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/unlock/unlockCommand.test.ts",
+          "status": "passed",
+          "assertions": 35,
+          "statuses": {
+            "passed": 35
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/validation/codexAdapter.test.ts",
+          "status": "passed",
+          "assertions": 7,
+          "statuses": {
+            "passed": 7
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/validation/codexSoftBudget.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/validation/codexWatchdog.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/validation/contracts.test.ts",
+          "status": "passed",
+          "assertions": 19,
+          "statuses": {
+            "passed": 19
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/validation/evidence.test.ts",
+          "status": "passed",
+          "assertions": 29,
+          "statuses": {
+            "passed": 29
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/validation/fixture.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/workspace/attemptRefNamespace.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/workspace/worktreeManager.test.ts",
+          "status": "passed",
+          "assertions": 11,
+          "statuses": {
+            "passed": 11
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudeAdapterFdLeak.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudeAgentAdapter.test.ts",
+          "status": "passed",
+          "assertions": 24,
+          "statuses": {
+            "passed": 24
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudeModelUsage.test.ts",
+          "status": "passed",
+          "assertions": 8,
+          "statuses": {
+            "passed": 8
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudeNeverStarted.test.ts",
+          "status": "passed",
+          "assertions": 9,
+          "statuses": {
+            "passed": 9
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudeParentWatch.test.ts",
+          "status": "passed",
+          "assertions": 10,
+          "statuses": {
+            "passed": 10
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudePhaseRunner.test.ts",
+          "status": "passed",
+          "assertions": 24,
+          "statuses": {
+            "passed": 24
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudePhaseRunnerEnv.test.ts",
+          "status": "passed",
+          "assertions": 9,
+          "statuses": {
+            "passed": 9
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudePhaseRunnerFailure.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudePhaseRunnerNeverStarted.test.ts",
+          "status": "passed",
+          "assertions": 5,
+          "statuses": {
+            "passed": 5
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudePhaseRunnerPartialOrigin.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudePhaseRunnerStream.test.ts",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudePhaseSchemas.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudePhaseUsageCache.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudeSingleCall.test.ts",
+          "status": "passed",
+          "assertions": 9,
+          "statuses": {
+            "passed": 9
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudeSkillPluginDir.test.ts",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudeStream.test.ts",
+          "status": "passed",
+          "assertions": 6,
+          "statuses": {
+            "passed": 6
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/claudeStreamSubagent.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/fakeClaudeCli.test.ts",
+          "status": "passed",
+          "assertions": 18,
+          "statuses": {
+            "passed": 18
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/largePrompt.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/phasePrompts.test.ts",
+          "status": "passed",
+          "assertions": 10,
+          "statuses": {
+            "passed": 10
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/stderrDecoding.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/streamUsageGuards.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/claude/taskResultSchema.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/abortedUsage.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/adapter.test.ts",
+          "status": "passed",
+          "assertions": 5,
+          "statuses": {
+            "passed": 5
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/codexModelUsage.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/codexSkills.test.ts",
+          "status": "passed",
+          "assertions": 17,
+          "statuses": {
+            "passed": 17
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/executionFormatFailure.test.ts",
+          "status": "passed",
+          "assertions": 4,
+          "statuses": {
+            "passed": 4
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/extraEnv.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/extractFinalObject.test.ts",
+          "status": "passed",
+          "assertions": 58,
+          "statuses": {
+            "passed": 58
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/fakeCodexArgv.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/fakeCodexDelay.test.ts",
+          "status": "passed",
+          "assertions": 5,
+          "statuses": {
+            "passed": 5
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/fakeCodexFrames.test.ts",
+          "status": "passed",
+          "assertions": 3,
+          "statuses": {
+            "passed": 3
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/fakeCodexScript.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/fileBoundary.test.ts",
+          "status": "passed",
+          "assertions": 1,
+          "statuses": {
+            "passed": 1
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/finalExtraction.test.ts",
+          "status": "passed",
+          "assertions": 19,
+          "statuses": {
+            "passed": 19
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/protocol.test.ts",
+          "status": "passed",
+          "assertions": 38,
+          "statuses": {
+            "passed": 38
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/runCodexPhase.test.ts",
+          "status": "passed",
+          "assertions": 24,
+          "statuses": {
+            "passed": 24
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/skillsController.test.ts",
+          "status": "passed",
+          "assertions": 11,
+          "statuses": {
+            "passed": 11
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/taskResultDecoding.test.ts",
+          "status": "passed",
+          "assertions": 20,
+          "statuses": {
+            "passed": 20
+          }
+        },
+        {
+          "file": "/private/tmp/ccloop-handoff-merged-20261011/tests/runtime/codex/transport.test.ts",
+          "status": "passed",
+          "assertions": 2,
+          "statuses": {
+            "passed": 2
+          }
+        }
+      ],
+      "skips": [],
+      "failures": [],
+      "control": {
+        "files": 36,
+        "passed": 290,
+        "skipped": 0,
+        "failed": 0
+      }
+    }
+  ]
+}

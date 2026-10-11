@@ -1,0 +1,26 @@
+[
+  {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "path": "docs/handoff/handoff.md",
+    "line": 166,
+    "prefixSHA256": "4cdffb1cb0b4406a0829170e876b4258c2d9086c4fd18db1f4a6b2b47d29db0b",
+    "suffixSHA256": "8d0df65419a2af4b8951502818911a65c64e53b9183570e8fc0a50f9028cebd8",
+    "outsideRollingSectionUnchanged": true
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "path": "docs/handoff/handoff.md",
+    "line": 410,
+    "prefixSHA256": "f32d67dcac73fc0c246bf30a45c590a7148c5f37405541c5e68a853353f22740",
+    "suffixSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "outsideRollingSectionUnchanged": true
+  },
+  {
+    "repo": "/private/tmp/ccmem-feedback-followup-20261011",
+    "path": "docs/handoff/handoff.md",
+    "line": 7692,
+    "prefixSHA256": "23154b2ade224afcb993ba122b8eda2211bce23e6df874803cb49ab9a7d1913e",
+    "suffixSHA256": "9bf92e094d4831191efec03a95a091d24e0139e877ec8c88ab90b24adb0f207d",
+    "outsideRollingSectionUnchanged": true
+  }
+]

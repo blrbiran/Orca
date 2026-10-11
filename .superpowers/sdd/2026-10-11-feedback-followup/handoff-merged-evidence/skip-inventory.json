@@ -1,0 +1,192 @@
+{
+  "source": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+  "rootSkips": [
+    {
+      "file": "tests/control/ccloopDefaultE2E.test.ts",
+      "fullName": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset resolves the package in this checkout, whose runtime finds the scripts the package ships",
+      "status": "skipped",
+      "condition": "requires ORCA_CCLOOP_DEFAULT_E2E=1 and ORCA_CCLOOP_BIN unset; this full/control gate deliberately has explicit old-pin bin and flag absent"
+    },
+    {
+      "file": "tests/control/ccloopDefaultE2E.test.ts",
+      "fullName": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset runs orca agents init and show through the installed ccloop",
+      "status": "skipped",
+      "condition": "requires ORCA_CCLOOP_DEFAULT_E2E=1 and ORCA_CCLOOP_BIN unset; this full/control gate deliberately has explicit old-pin bin and flag absent"
+    },
+    {
+      "file": "tests/control/ccloopDefaultE2E.test.ts",
+      "fullName": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset boots the panel with an execution port, while an explicit empty ORCA_CCLOOP_BIN still turns it off",
+      "status": "skipped",
+      "condition": "requires ORCA_CCLOOP_DEFAULT_E2E=1 and ORCA_CCLOOP_BIN unset; this full/control gate deliberately has explicit old-pin bin and flag absent"
+    },
+    {
+      "file": "tests/control/driverSkillsReal.test.ts",
+      "fullName": "A2 with a real syncskill (spec §10.8 C5) injects the frozen skill, private and read-only, and records exactly the lock file's entries",
+      "status": "skipped",
+      "condition": "ORCA_SYNCSKILL_REAL_BIN absent/empty; runner removes real-bin override"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "genuine schema10 owner → paired saved verification keeps the standard old detached archive unavailable after real owner settlement",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "genuine schema10 owner → paired saved verification reserves a distinct linked verifier run, skips plan/execute, books only new usage and lands normally",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "fences the actual immutable old11 owner before any unprepared saved run can dispatch",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "rechecks the actual revision and current membership when ordinary retry wins async preparation",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "refuses the actual current spend cap without a run or commitment leak",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "ends reject without executor retry, landing or an interrupted-source exception",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "ends modify without executor retry, landing or an interrupted-source exception",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "mechanically reaps before-entry and admits a new explicit successor with each inherited WORK charge once",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "mechanically reaps usage-settled and admits a new explicit successor with each inherited WORK charge once",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "preserves authored optional cumulative exhaustion in every dimension after an actual old-worker settlement",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "keeps post-entry unknown usage blocked until a genuine owner settlement, then preserves the same original lineage",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "missing prepared/entry markers never infer zero spend or permit a successor, even after owner charging",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "revokes a prepared but unaccepted fence and resolves its held reservation through the actual stop path",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "keeps original taskResult metadata opaque instead of treating answer-shaped artifact references as controller authority",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "refuses forged settlement receipts and changed current graph/target/frozen semantics without touching source failure",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "rechecks every finite reserve dimension using real owner limit commands",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "refuses hash-valid substituted reservation identities and never repairs supplied private authority modes",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "keeps the original candidate/base through harmless target-tip drift and uses ordinary reconciliation",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "archives the current malformed capsule through the private channel but keeps original normalization failure unavailable",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRecovery.paired.test.ts",
+      "fullName": "ends a known real verifier timeout without executing, landing or admitting an interrupted exception",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRetryAuthorization.paired.test.ts",
+      "fullName": "explicit ordinary retry after unsuccessful saved verification authorizes a distinct normal run after reject only through the actual successful retry receipt",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRetryAuthorization.paired.test.ts",
+      "fullName": "explicit ordinary retry after unsuccessful saved verification authorizes a distinct normal run after modify only through the actual successful retry receipt",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/control/savedResultRetryAuthorization.paired.test.ts",
+      "fullName": "explicit ordinary retry after unsuccessful saved verification authorizes a distinct normal run after delay only through the actual successful retry receipt",
+      "status": "skipped",
+      "condition": "ORCA_SAVED_RESULT_VERIFY != 1; native suite ordinary-root opt-in absent; dedicated gate separately ran all23 with zero skips"
+    },
+    {
+      "file": "tests/memory/ccmemReal.test.ts",
+      "fullName": "a real ccmem (spec §6.3 R1) reads back one global and one project memory through the adapter",
+      "status": "skipped",
+      "condition": "ORCA_CCMEM_REAL_BIN absent/empty; runner removes real-bin override"
+    },
+    {
+      "file": "tests/service/realSmoke.test.ts",
+      "fullName": "real launchd smoke (opt-in) install → answering → restart → stop → start → uninstall, under a relocated label",
+      "status": "skipped",
+      "condition": "ORCA_SERVICE_REAL != 1 or platform != darwin; no real launchd service opt-in"
+    },
+    {
+      "file": "tests/skills/syncskillReal.test.ts",
+      "fullName": "a real syncskill (spec §10.8 C12, C18) profile ls leaves the sync dir byte-identical; inject's lock entries equal the lock file; ~/.syncskill is untouched",
+      "status": "skipped",
+      "condition": "ORCA_SYNCSKILL_REAL_BIN absent/empty; runner removes real-bin override"
+    }
+  ],
+  "nativeOptInCount": 23,
+  "existingExternalOptInCount": 7,
+  "actualDedicatedNative": {
+    "passed": 23,
+    "skipped": 0
+  },
+  "realServiceAuthorized": false
+}

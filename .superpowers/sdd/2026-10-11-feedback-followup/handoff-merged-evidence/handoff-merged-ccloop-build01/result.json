@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-handoff-merged-20261011",
+  "command": [
+    "npm",
+    "run",
+    "build"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 4.495983123779297,
+  "log": "/private/tmp/orca-followup-runs/handoff-merged-ccloop-build01/output.log",
+  "source": "299da37f5b9781f79f530b871b37218a3cef7bec",
+  "sourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+  "sourceFiles": 446
+}

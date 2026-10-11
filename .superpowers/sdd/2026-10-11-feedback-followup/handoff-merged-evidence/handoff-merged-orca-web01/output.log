@@ -1,0 +1,189 @@
+
+> @orca/web@0.1.0 check
+> tsc --noEmit -p tsconfig.json && vitest run --reporter=default --reporter=json --outputFile.json=/private/tmp/orca-followup-runs/handoff-merged-orca-web01/web.json --maxWorkers=4
+
+
+ RUN  v5.0.3 /private/tmp/orca-handoff-merged-20261011/web
+
+ ✓ tests/i18nPseudo.test.tsx (31 tests) 380ms
+ ✓ tests/integrationScheme.test.tsx (37 tests) 687ms
+ ✓ tests/projectScopeDrafts.test.tsx (8 tests) 2436ms
+   ✓ detail drafts outlive the detail, keyed by owner (spec §11 R2) (4)
+     ✓ 1: alpha's answers, choices, feedback, limit and correction survive Beta and come back; Beta shows its own defaults 999ms
+     ✓ 3: a success clears only an unchanged draft -- text edited while it was in flight survives -- and a refusal keeps it 337ms
+   ✓ text typed in All before a target is chosen (fix round 1, I1 and ruling M2) (1)
+     ✓ 4b: the next explicit choice takes it only into a draft-less target and drops it either way; it never resurfaces 361ms
+ ✓ tests/resultsApp.test.tsx (32 tests) 5696ms
+   ✓ real App completed missing results retain actual success and independent source unsupported 310ms
+   ✓ real App opens the task route and preserves mounted local drafts and focus across refresh and hidden sections 494ms
+   ✓ real App task resets capture authority for account project epoch run and generation owners 664ms
+ ✓ tests/projectFiltering.test.tsx (34 tests) 6024ms
+   ✓ view mode and persistence (4)
+     ✓ 1: two projects offer All projects first; choosing it stores the view and keeps the project 351ms
+   ✓ selection lifecycle (5)
+     ✓ 5: a project that disappears from the list falls back to the first, and its open group and decision close 315ms
+     ✓ 9: an unsaved task label draft survives a switch to Beta and back 333ms
+   ✓ two-project lists (13)
+     ✓ 7: in All projects a new requirement needs a chosen repository and stays in All; in project mode the select moves the project 305ms
+   ✓ group workspace (4)
+     ✓ 2: a late reply for another repository does not overwrite the open group's workspace mode 580ms
+     ✓ 2b: two reads of one repository: only the newest answer is applied 585ms
+ ✓ tests/agentPreviewRefresh.test.tsx (13 tests) 5096ms
+   ✓ App re-reads a group's agent preview when the one on screen can no longer be confirmed (wave 3 I-3) (9)
+     ✓ re-reads the preview once after a confirm refused with agent-selection-changed, and the next confirm carries the new hash 571ms
+     ✓ re-reads a preview whose slot was unavailable five times on the backoff, then waits for the operator's Re-read 704ms
+     ✓ retries a preview read that did not conclude five times on the backoff, reports the failure once, and then waits for the operator's Re-read 609ms
+     ✓ reads the preview again for a table whose content changed, and not for the same table read again 690ms
+     ✓ pauses the backoff while the page is hidden and reads again when it comes back 331ms
+     ✓ keeps the newer preview when the answer to an older read arrives after it 380ms
+     ✓ ignores a failure that answers an older read after a newer read concluded 353ms
+   ✓ the proposal view when the installation table cannot be read, and after a refused selection (wave 4 review I-1, M-1) (3)
+     ✓ retries a failed installation table read five times on the backoff, then re-reads it and the preview when the operator presses Re-read 373ms
+ ✓ tests/loopSummary.test.tsx (43 tests) 22ms
+ ✓ tests/controlI18n.test.tsx (8 tests) 577ms
+ ✓ tests/projectScopeDecisionRequests.test.tsx (17 tests) 2654ms
+   ✓ decision requests keep their owner (spec §11 R3) (7)
+     ✓ 1: A's late success or refusal never lands in B's detail; the notice names Alpha / d1 741ms
+     ✓ 4: a scope switch with nothing selected keeps A's pending request, and its result, visible in every section 325ms
+     ✓ 9: a correction refused without retry_field again, or lost in transport, offers no Record another in the notice 317ms
+ ✓ tests/usagePanel.test.tsx (16 tests) 581ms
+ ✓ tests/tokenInput.test.tsx (38 tests) 510ms
+ ✓ tests/agentSelectionEditor.test.tsx (15 tests) 653ms
+ ✓ tests/authGate.test.tsx (16 tests) 526ms
+ ✓ tests/controlPanel.test.tsx (14 tests) 186ms
+ ✓ tests/settingsScopes.test.tsx (12 tests) 1681ms
+ ✓ tests/budgetI18n.test.tsx (5 tests) 278ms
+ ✓ tests/archiveGroup.test.tsx (14 tests) 1383ms
+ ✓ tests/budgetSuggestions.test.tsx (10 tests) 453ms
+ ✓ tests/loopPlanEdit.test.tsx (14 tests) 704ms
+ ✓ tests/overviewApp.test.tsx (19 tests) 4289ms
+   ✓ an owner read older than the live projection cannot reopen after progress refresh 2159ms
+ ✓ tests/agentsI18n.test.tsx (3 tests) 93ms
+ ✓ tests/requirements.test.tsx (19 tests) 513ms
+ ✓ tests/loopSuggestionApply.test.tsx (6 tests) 721ms
+ ✓ tests/taskLabels.test.tsx (8 tests) 538ms
+ ✓ tests/projectSwitcher.test.tsx (8 tests) 1161ms
+   ✓ the project switcher (8)
+     ✓ A: imports into the chosen project's repository with one of that repository's plans 393ms
+ ✓ tests/refusalText.test.tsx (7 tests) 125ms
+ ✓ tests/controlCommandRecovery.test.tsx (4 tests) 589ms
+   ✓ D9 uses authenticated App roles and retains the original command id after losing its POST answer 369ms
+ ✓ tests/projectScopeRecovery.test.tsx (17 tests) 7182ms
+   ✓ App: a recovery Retry carries its own group's revision (6)
+     ✓ 1: with a1 (rev 3) open, retrying b1's group blocker sends b1 at revision 9 357ms
+     ✓ 6: once a poll no longer lists the blocker, no Retry for it remains 2053ms
+   ✓ recovery blockers across an epoch change, and a Retry with no App sender (2)
+     ✓ 7: a recovery read of a new epoch before its summary keeps the blocker listed but not retryable, until the complete summary lands 4084ms
+ ✓ tests/memoryView.test.tsx (15 tests) 446ms
+ ✓ tests/controlState.test.ts (15 tests) 6ms
+ ✓ tests/requirementsApp.test.tsx (12 tests) 3426ms
+   ✓ App and the Requirements section (N1 spec §11.2, DR25) (6)
+     ✓ reads the requirement view after a requirement command, never the group view a clarifying group does not have 410ms
+     ✓ re-reads the open requirement on the summary poll that lists it 2037ms
+ ✓ tests/projectRegistry.test.tsx (9 tests) 629ms
+ ✓ tests/driverRetry.test.tsx (10 tests) 348ms
+ ✓ tests/decisionsI18n.test.tsx (3 tests) 321ms
+ ✓ tests/resultOutput.test.tsx (21 tests) 648ms
+ ✓ tests/taskLabelsDraftBase.test.tsx (3 tests) 2672ms
+   ✓ a label draft is sent with the labelsVersion it started from (final review finding 1) (3)
+     ✓ keeps the draft's base after a poll read someone else's v1, so every save is refused as a conflict and the draft stays 2417ms
+ ✓ tests/groupRefusal.test.tsx (7 tests) 7192ms
+   ✓ a group's refusal stays with its group (spec §2.2(d)) (2)
+     ✓ is shown at the top of its group's view, kept through another group's success, and cleared by its own group's next success 776ms
+     ✓ clears a group's unknown outcome once the lookup finds the command succeeded 2066ms
+   ✓ an import's refusal stays in the import form (spec §2.2(d)) (5)
+     ✓ remembers an import whose answer was lost as an import, so its lookup's answer replaces the notice in the import form 2040ms
+     ✓ replaces an unknown import's notice with the refusal its lookup finds, the plan's problems listed 2049ms
+ ✓ tests/detailRegions.test.tsx (19 tests) 776ms
+ ✓ tests/decisionsStatusFilter.test.tsx (8 tests) 453ms
+ ✓ tests/loopSuggestionDraft.test.tsx (1 test) 502ms
+   ✓ applying a loop suggestion keeps the plan card's open draft (W7) (1)
+     ✓ keeps what the person typed and says the plan changed after the draft began 501ms
+ ✓ tests/loopPlanDraft.test.tsx (1 test) 513ms
+   ✓ the loop draft survives a refusal and is cleared by a success (spec §4.2) (1)
+     ✓ keeps the draft through a refusal, shows the refusal's code, and clears it once the command succeeded 512ms
+ ✓ tests/overviewFreshness.test.tsx (13 tests) 970ms
+ ✓ tests/loopBudgetRows.test.tsx (4 tests) 220ms
+ ✓ tests/taskResults.test.tsx (11 tests) 785ms
+ ✓ tests/appSelection.test.tsx (4 tests) 423ms
+ ✓ tests/handoffResume.test.tsx (5 tests) 279ms
+ ✓ tests/overviewDecisionNavigation.test.tsx (10 tests) 3199ms
+   ✓ reopened decision always does a live owner GET while overview todo refresh is pending 330ms
+   ✓ an Overview decision owner response is ignored after epoch changes 2051ms
+ ✓ tests/stopBanner.test.tsx (8 tests) 348ms
+ ✓ tests/evidenceLink.test.tsx (3 tests) 393ms
+ ✓ tests/loopPlanCard.test.tsx (10 tests) 254ms
+ ✓ tests/overviewModel.test.ts (7 tests) 15ms
+ ✓ tests/dependencyGraph.test.tsx (12 tests) 521ms
+ ✓ tests/taskLabelsDraft.test.tsx (1 test) 594ms
+   ✓ the label draft survives a refusal and is cleared by a success (spec §4.2) (1)
+     ✓ keeps the draft through a refusal, shows the refusal's code, and clears it once the command succeeded 593ms
+ ✓ tests/requirementsI18n.test.tsx (3 tests) 135ms
+ ✓ tests/globalSettingsAccounts.test.tsx (4 tests) 449ms
+ ✓ tests/chainsI18n.test.tsx (3 tests) 74ms
+ ✓ tests/decisionsView.test.tsx (10 tests) 34ms
+ ✓ tests/i18nDetect.test.tsx (12 tests) 64ms
+ ✓ tests/taskActivity.test.tsx (8 tests) 187ms
+ ✓ tests/groupList.test.tsx (6 tests) 226ms
+ ✓ tests/controlRefetch.test.tsx (2 tests) 2831ms
+   ✓ a voided control cache is re-read once and then settles (2)
+     ✓ reads the open group once after the cache was voided, not once per arriving body 741ms
+     ✓ stops saying a refetch is required once a complete summary shows the projection whole 2089ms
+ ✓ tests/loopPlanSkillsPayload.test.tsx (4 tests) 219ms
+ ✓ tests/gitScheme.test.tsx (8 tests) 451ms
+ ✓ tests/handoffFailedRetry.test.tsx (10 tests) 501ms
+ ✓ tests/controlKeys.test.tsx (2 tests) 313ms
+ ✓ tests/estimateStale.test.tsx (2 tests) 194ms
+ ✓ tests/agentSettings.test.tsx (5 tests) 144ms
+ ✓ tests/workspaceMode.test.tsx (3 tests) 40ms
+ ✓ tests/settleUnknownUsage.test.tsx (7 tests) 361ms
+ ✓ tests/metricsView.test.tsx (5 tests) 15ms
+ ✓ tests/chainPanel.test.tsx (8 tests) 20ms
+ ✓ tests/controlPollSettles.test.tsx (2 tests) 14260ms
+   ✓ polling a server that answers like the real one settles (2)
+     ✓ keeps the open group and its open task on the page across polls, and re-reads it when it moves 8204ms
+     ✓ does not re-read a body that is newer than the summary listing it 6056ms
+ ✓ tests/contrast.test.ts (4 tests) 4ms
+ ✓ tests/feedbackRequirements.test.tsx (11 tests) 258ms
+ ✓ tests/outcome.test.tsx (7 tests) 27ms
+ ✓ tests/shell.test.tsx (6 tests) 19ms
+ ✓ tests/refusalExplain.test.ts (7 tests) 7ms
+ ✓ tests/styles.test.ts (10 tests) 4ms
+ ✓ tests/groupCategory.test.ts (10 tests) 5ms
+ ✓ tests/i18nSwitch.test.tsx (3 tests) 278ms
+ ✓ tests/metricsNotes.test.tsx (2 tests) 35ms
+ ✓ tests/decisionList.test.tsx (4 tests) 16ms
+ ✓ tests/controlPortBanner.test.tsx (6 tests) 21ms
+ ✓ tests/budgetHandoffCapability.test.tsx (1 test) 71ms
+ ✓ tests/memberControls.test.tsx (3 tests) 208ms
+ ✓ tests/runFacts.test.ts (4 tests) 3ms
+ ✓ tests/skillsPanel.test.tsx (8 tests) 231ms
+ ✓ tests/failureReasons.test.ts (5 tests) 4ms
+ ✓ tests/confirmSelection.test.tsx (2 tests) 150ms
+ ✓ tests/savedResultRecovery.test.tsx (4 tests) 153ms
+ ✓ tests/memoryLayout.test.tsx (2 tests) 82ms
+ ✓ tests/agentsCollapsed.test.tsx (4 tests) 77ms
+ ✓ tests/i18nWidth.test.ts (1 test) 5ms
+ ✓ tests/groupResults.test.tsx (7 tests) 329ms
+ ✓ tests/i18nKeys.test.ts (4 tests) 29ms
+ ✓ tests/selection.test.tsx (4 tests) 3ms
+ ✓ tests/memoryApp.test.tsx (2 tests) 139ms
+ ✓ tests/labelSourceFallback.test.tsx (2 tests) 46ms
+ ✓ tests/decisionDetail.test.tsx (2 tests) 14ms
+ ✓ tests/sessionHeaders.test.ts (2 tests) 8ms
+ ✓ tests/kindRank.test.ts (2 tests) 4ms
+ ✓ tests/savedResultAvailability.test.tsx (4 tests) 159ms
+ ✓ tests/theme.test.ts (3 tests) 3ms
+ ✓ tests/App.test.tsx (1 test) 19ms
+ ✓ tests/detailNavigation.test.tsx (2 tests) 385ms
+ ✓ tests/feedbackReadability.test.tsx (3 tests) 171ms
+
+ Test Files  106 passed (106)
+      Tests  926 passed (926)
+   Start at  21:19:50
+   Duration  39.76s (tests 65%, environment 24%, import 6%, transform 3%, setup 2%)
+
+    Isolate  106 workers spawned · ~437ms startup each (spawn + environment, per file)
+             at least ~11.15s faster with isolate: false — reuses workers across files instead of one per file
+
+JSON report written to /private/tmp/orca-followup-runs/handoff-merged-orca-web01/web.json

@@ -1,0 +1,84 @@
+[
+  {
+    "name": "Orca",
+    "repo": "/Users/biran/code/skills/loop/Orca",
+    "declaredSourceTreeSHA256": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+    "declaredSourceFiles": 934,
+    "allDeclaredBytesMatch": true,
+    "physicalSourceFiles": 935,
+    "physicalSourceTreeSHA256": "55866d333fa84e5b0af23838238de1c859298076e89331a29fba9fdca2627038",
+    "ignoredExtras": [
+      {
+        "repo": "/Users/biran/code/skills/loop/Orca",
+        "path": "web/src/.ccmem/context-08011394.md",
+        "bytes": 2275,
+        "sha256": "4ac3b878c58a6b44a34a88b8d18154155035446a1d5f1c46a21ea202b1ca451e",
+        "ignored": true,
+        "preservedOnly": true,
+        "contentNotCopiedOrPrinted": true
+      }
+    ],
+    "HEADAtObservation": "262fd9c49043e91468c5891432fd1ce53a0897bb",
+    "algorithm": "same runner Python Path ordering, path+NUL+bytes+NUL; not lexicographic full-string path ordering"
+  },
+  {
+    "name": "Orca",
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "declaredSourceTreeSHA256": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+    "declaredSourceFiles": 934,
+    "allDeclaredBytesMatch": true,
+    "physicalSourceFiles": 934,
+    "physicalSourceTreeSHA256": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+    "ignoredExtras": [],
+    "HEADAtObservation": "262fd9c49043e91468c5891432fd1ce53a0897bb",
+    "algorithm": "same runner Python Path ordering, path+NUL+bytes+NUL; not lexicographic full-string path ordering"
+  },
+  {
+    "name": "Orca",
+    "repo": "/private/tmp/orca-handoff-merged-20261011",
+    "declaredSourceTreeSHA256": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+    "declaredSourceFiles": 934,
+    "allDeclaredBytesMatch": true,
+    "physicalSourceFiles": 934,
+    "physicalSourceTreeSHA256": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+    "ignoredExtras": [],
+    "HEADAtObservation": "262fd9c49043e91468c5891432fd1ce53a0897bb",
+    "algorithm": "same runner Python Path ordering, path+NUL+bytes+NUL; not lexicographic full-string path ordering"
+  },
+  {
+    "name": "ccloop",
+    "repo": "/Users/biran/code/skills/loop/ccloop",
+    "declaredSourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "declaredSourceFiles": 446,
+    "allDeclaredBytesMatch": true,
+    "physicalSourceFiles": 446,
+    "physicalSourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "ignoredExtras": [],
+    "HEADAtObservation": "299da37f5b9781f79f530b871b37218a3cef7bec",
+    "algorithm": "same runner Python Path ordering, path+NUL+bytes+NUL; not lexicographic full-string path ordering"
+  },
+  {
+    "name": "ccloop",
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "declaredSourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "declaredSourceFiles": 446,
+    "allDeclaredBytesMatch": true,
+    "physicalSourceFiles": 446,
+    "physicalSourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "ignoredExtras": [],
+    "HEADAtObservation": "299da37f5b9781f79f530b871b37218a3cef7bec",
+    "algorithm": "same runner Python Path ordering, path+NUL+bytes+NUL; not lexicographic full-string path ordering"
+  },
+  {
+    "name": "ccloop",
+    "repo": "/private/tmp/ccloop-handoff-merged-20261011",
+    "declaredSourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "declaredSourceFiles": 446,
+    "allDeclaredBytesMatch": true,
+    "physicalSourceFiles": 446,
+    "physicalSourceTreeSHA256": "76f6212cd9630233b5cef758bf5e794d5996d4bb6b135428892fef5b5ca01c28",
+    "ignoredExtras": [],
+    "HEADAtObservation": "299da37f5b9781f79f530b871b37218a3cef7bec",
+    "algorithm": "same runner Python Path ordering, path+NUL+bytes+NUL; not lexicographic full-string path ordering"
+  }
+]

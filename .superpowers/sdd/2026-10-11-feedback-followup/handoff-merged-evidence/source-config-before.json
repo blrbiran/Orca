@@ -1,0 +1,17 @@
+[
+  {
+    "repo": "/Users/biran/code/skills/loop/Orca",
+    "localHooksPath": "scripts/githooks",
+    "configSHA256": "d1a78597526673f8c024a8d5e177ca71783c52a29c8fd3a8e477d421b541e935"
+  },
+  {
+    "repo": "/Users/biran/code/skills/loop/ccloop",
+    "localHooksPath": null,
+    "configSHA256": "6456ed630015881221473f761aed11f8f3a13f8824c58a3545da70f4b654fee2"
+  },
+  {
+    "repo": "/Users/biran/code/skills/ccmem",
+    "localHooksPath": "/Users/biran/code/skills/ccmem/.git/hooks",
+    "configSHA256": "70d583d6a366c94cde8ece8f46b4745e3ffd5b792e54137547def4378b91c3ff"
+  }
+]

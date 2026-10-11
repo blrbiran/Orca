@@ -1,0 +1,28 @@
+[
+  {
+    "repo": "Orca",
+    "source": "/Users/biran/code/skills/loop/Orca",
+    "sourceHEADAtObservation": "262fd9c49043e91468c5891432fd1ce53a0897bb",
+    "sourceBranch": "main",
+    "sourcePorcelain": "",
+    "freshClone": "/private/tmp/orca-handoff-merged-20261011",
+    "cloneHEAD": "262fd9c49043e91468c5891432fd1ce53a0897bb",
+    "cloneTrackedDiffBytes": 0,
+    "nodeModules": "/Users/biran/code/skills/loop/Orca/node_modules",
+    "cloneMethod": "local clone --no-hardlinks --branch main, one-command empty hooks",
+    "packageSHA256": "d5eb4a50fa104b068b405b10bece9b19b29d69b42e33090be9e93554b1503283"
+  },
+  {
+    "repo": "ccloop",
+    "source": "/Users/biran/code/skills/loop/ccloop",
+    "sourceHEADAtObservation": "299da37f5b9781f79f530b871b37218a3cef7bec",
+    "sourceBranch": "main",
+    "sourcePorcelain": "",
+    "freshClone": "/private/tmp/ccloop-handoff-merged-20261011",
+    "cloneHEAD": "299da37f5b9781f79f530b871b37218a3cef7bec",
+    "cloneTrackedDiffBytes": 0,
+    "nodeModules": "/Users/biran/code/skills/loop/ccloop/node_modules",
+    "cloneMethod": "local clone --no-hardlinks --branch main, one-command empty hooks",
+    "packageSHA256": "508789a9aad75d21ba7cdbee23e94b6138ba8d8c788a84302c4059917621899a"
+  }
+]

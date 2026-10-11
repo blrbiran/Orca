@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "repo": "/private/tmp/orca-handoff-merged-20261011",
+    "command": [
+      "node",
+      "/private/tmp/task7-short-command.mjs",
+      "env",
+      "ORCA_SAVED_RESULT_OLD_ORCA_ROOT=/private/tmp/orca-t7-schema10-producer-20261011",
+      "ORCA_SAVED_RESULT_OLD_CCLOOP_ROOT=/private/tmp/ccloop-task6-legacy-producer",
+      "ORCA_SAVED_RESULT_CCLOOP_BIN=/private/tmp/ccloop-handoff-merged-20261011/dist/cli.js",
+      "npm",
+      "run",
+      "verify:saved-result"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 459.56082820892334,
+    "log": "/private/tmp/orca-followup-runs/handoff-merged-orca-native01/output.log",
+    "source": "262fd9c49043e91468c5891432fd1ce53a0897bb",
+    "sourceTreeSHA256": "e06660e08eda57b03118ea1618d049f4f3a193b4b2c2416f9e3a0d84d9f2ae17",
+    "sourceFiles": 934
+  },
+  "rawBytes": 6558,
+  "rawLines": 93,
+  "rawSHA256": "e439d53de30de0f9b00485e636d3f42132e1a962e7f074f127168b47cb2cf3c4",
+  "completeRawRead": true,
+  "actualDedicatedNativeFiles": 2,
+  "passed": 23,
+  "skipped": 0,
+  "exactScriptSelectors": [
+    "tests/control/savedResultRecovery.paired.test.ts",
+    "tests/control/savedResultRetryAuthorization.paired.test.ts"
+  ],
+  "scriptSHA256": "0143c15f7fc9d0bf121fd51e75df1184809743718a80a2975cc00d66578d4b3e",
+  "schema11Reader": {
+    "schema11Reader": "/private/tmp/t7-s11-vmjSEp",
+    "commit": "f00bfdb797ee3f5de130585557fdf77dc421d535",
+    "buildArgv": [
+      "/Users/biran/.nvm/versions/node/v22.13.1/bin/node",
+      "/private/tmp/t7-s11-vmjSEp/node_modules/typescript/bin/tsc",
+      "-p",
+      "tsconfig.build.json"
+    ],
+    "rc": 0,
+    "trackedDiff": "clean",
+    "storeSHA256": "32c186f6c082225f9abf2faa8a76bd1451855d910e011b5e3f3b33d2bafbd41f"
+  },
+  "pairedCurrentCLI": "/private/tmp/ccloop-handoff-merged-20261011/dist/cli.js",
+  "pairedProductCommit": "299da37f5b9781f79f530b871b37218a3cef7bec",
+  "auditParserCorrection": "First audit incorrectly assumed reporter prints per-file lines; corrected to exact script selectors plus actual complete 2-file/23-pass/zero-skip summary. Native gate never failed and was not rerun."
+}

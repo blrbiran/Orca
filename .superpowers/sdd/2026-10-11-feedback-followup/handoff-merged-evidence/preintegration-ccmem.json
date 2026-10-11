@@ -1,0 +1,13 @@
+{
+  "source": "/Users/biran/code/skills/ccmem",
+  "candidate": "/private/tmp/ccmem-feedback-followup-20261011",
+  "sourceHEADAtObservation": "97f6d3b7115b3467116a957ed90655fe1f13a03e",
+  "candidateHEAD": "97f6d3b7115b3467116a957ed90655fe1f13a03e",
+  "sourceBranch": "main",
+  "sourcePorcelain": "",
+  "ancestorRC": 0,
+  "addedTrackedPathsChecked": [],
+  "collisions": [],
+  "scriptSHA256": "fe824e4315415efd837895aca8001b105bee87765f1bbed6d5fb36566d464f08",
+  "ready": true
+}
