@@ -3,6 +3,8 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TaskDetail } from "../src/TaskDetail.js";
+import { fetchRunActivity } from "../src/controlApi.js";
+import i18n from "../src/i18n.js";
 import { run, view, workItem } from "./fixtures/board.js";
 
 const AT = Date.UTC(2026, 9, 8, 10, 5, 0);
@@ -33,6 +35,18 @@ const detail = (archived = false): void => {
 };
 
 describe("the task detail's run activity (spec §6.5)", () => {
+  it.each([
+    ["en", "The activity response is malformed"],
+    ["zh", "活动响应格式无效"],
+  ])("names a malformed successful response in %s while retaining its code and run route", async (language, message) => {
+    await i18n.changeLanguage(language);
+    responseOverride = null;
+    try {
+      await expect(fetchRunActivity("run-a")).rejects.toMatchObject({ refusal: { status: 200, code: "activity-response-invalid", message } });
+      expect(urls).toEqual(["/api/control/runs/run-a/activity"]);
+    } finally { await i18n.changeLanguage("en"); }
+  });
+
   it("reads the current run's activity from its route and lists the newest window chronologically, above the runs and their evidence", async () => {
     detail();
     const region = await screen.findByRole("region", { name: "Recent activity of run-a" });

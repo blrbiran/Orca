@@ -382,6 +382,7 @@ export const zh: Translation<typeof en> = {
       heading: "近期活动 · 最新窗口，按时间先后显示",
       none: "还没有活动记录",
       refused: "活动读取被拒绝 · {{code}}",
+      responseInvalid: "活动响应格式无效",
       phase: "{{step}} · 第 {{attempt}} 次尝试",
     },
     diagnosis: {

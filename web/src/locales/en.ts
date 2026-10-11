@@ -483,6 +483,7 @@ export const en = {
       heading: "Recent activity · newest window, oldest to newest",
       none: "no activity recorded yet",
       refused: "activity refused · {{code}}",
+      responseInvalid: "The activity response is malformed",
       phase: "{{step}} · attempt {{attempt}}",
     },
     diagnosis: {

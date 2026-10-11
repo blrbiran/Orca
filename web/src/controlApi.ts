@@ -122,7 +122,7 @@ export const fetchSavedResultEligibility=(runId:string):Promise<SavedResultEligi
 /** GET /api/control/runs/:runId/activity -- issue-fixes spec §5.2: the run's newest 200 activity rows. */
 const activityKinds = new Set(["usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "integration", "stop", "stop-cleared", "archived", "unarchived"]);
 function activityResponse(runId: string, value: unknown): RunActivityV1 {
-  const invalid = (): never => { throw new ControlRequestError({ status: 200, code: "activity-response-invalid", message: "The activity response is malformed", commandRevision: null }); };
+  const invalid = (): never => { throw new ControlRequestError({ status: 200, code: "activity-response-invalid", message: i18n.t("control.activity.responseInvalid"), commandRevision: null }); };
   if (typeof value !== "object" || value === null || Array.isArray(value)) return invalid();
   const answer = value as Record<string, unknown>;
   if (answer.schema !== "orca-run-activity-v1" || answer.runId !== runId || !Array.isArray(answer.entries) || answer.entries.length > 200 || Object.keys(answer).some(key => !["schema", "runId", "entries"].includes(key))) return invalid();

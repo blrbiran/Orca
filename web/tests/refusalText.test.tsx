@@ -8,7 +8,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { refusalFrom } from "../src/api.js";
-import { ControlRequestError, downloadEvidenceArtifact, fetchControlConfig, refusalFromAnswer, sendControlCommand } from "../src/controlApi.js";
+import { ControlRequestError, detectAgentInstallations, downloadEvidenceArtifact, fetchControlConfig, refusalFromAnswer, sendControlCommand } from "../src/controlApi.js";
 import { ControlPanel } from "../src/ControlPanel.js";
 import { ErrorPage } from "../src/ErrorPage.js";
 import i18n, { fillEntry, refusalText } from "../src/i18n.js";
@@ -148,6 +148,10 @@ describe("refusals in the reader's language (spec §3.2, §6.4)", () => {
     expect(await refusedWith(() => downloadEvidenceArtifact(entry))).toBe(`GET ${entry.downloadUrl}: 返回了 409`);
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("not json", { status: 503 }))));
     expect(await sendControlCommand("/api/control/x", envelope)).toMatchObject({ kind: "uncertain", refusal: { message: "POST /api/control/x: 面板可能没有提交这条命令" } });
+    // The third POST template is the installation-preview refusal's technical method and exact route.
+    await expect(detectAgentInstallations()).rejects.toMatchObject({ refusal: {
+      status: 503, code: "http-503", message: "POST /api/control/operator/agent-update-preview: 返回了 503",
+    } });
     // Task 10 review Important 1: an unparsable 5xx is http-<n>, and the control line must still say the command may not
     // have committed -- for a workspace-mode or agent-preferences POST it is the only notice.
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("Bad Gateway", { status: 502 }))));
