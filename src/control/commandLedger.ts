@@ -1,3 +1,4 @@
+import {revokeRecoveryFence} from "./savedResultRecoveryPackage.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { commandClientFor, commandPrincipalFor } from "./commandClient.js";
 import { ControlError, durableCommandErrorStatus } from "./errors.js";
@@ -363,6 +364,9 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
     if (authorityChanged) {
       if (currentCommandRevision === Number.MAX_SAFE_INTEGER) throw new ControlError("control-sequence-overflow");
       updateRevision(store, commandScope.groupId!, currentCommandRevision + 1);
+      for(const row of store.db.prepare("SELECT body FROM runs WHERE group_id=? AND active=1").all(commandScope.groupId!)){
+        const run=JSON.parse(String(row.body));if((run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&run.savedRecovery?.revision!==currentCommandRevision+1&&run.drive?.sourceDir)revokeRecoveryFence(run.drive.sourceDir);
+      }
     }
     const projectionGroups = !succeeded ? [] : typeof input.projectionGroupIds === "function"
       ? input.projectionGroupIds(typedOutcome)

@@ -1,3 +1,4 @@
+import type { SavedResultSourcePackage,SavedResultSourceEligibility,SavedResultSettlement,RecoveryOf } from "./savedResultProtocol.js";
 import type { TokenPolicy } from "./tokenPolicy.js";
 import type { Candidate, Claim, StopProof, UsageEvent, ArtifactRef, HandoffRequest, HandoffAck } from "./types.js";
 import type { TaskResultCollectionV1 } from './taskResultProtocol.js';
@@ -10,7 +11,7 @@ import type { AgentResolution, ContextWindow, PartialSelection } from "./agentSe
 // Syncskill integration spec §10.6: skillPluginDir only for a run with skills (ccloop protocol 3, additive).
 export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string }
 export interface SingleCallWork { kind:"single-call";prompt:string;responseSchema:Record<string,unknown>;maxOutputTokens:number;sourceDir:string }
-export interface StartEnvelope { protocol:3|4;tokenPolicy?:TokenPolicy;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:LoopWork|SingleCallWork }
+export interface StartEnvelope { protocol:3|4;mode?:"verify-saved-result";savedResultRecovery?:{packagePath:string;packageHash:string;admissionHash:string;recoveryOf:RecoveryOf};tokenPolicy?:TokenPolicy;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:LoopWork|SingleCallWork }
 export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown"}|{kind:"stopped";proof:StopProof};
 export interface ExecutionReport {
  events:UsageEvent[];candidate:Candidate|null;
@@ -23,6 +24,12 @@ export interface AgentsView { installations: Array<{ id: string; kind: string; d
 export interface ControlFeatures { protocol:1;tokenPolicy?:"optional-v1";savedResultRecovery?:"v1";agentInstallationUpdate?:"v1" }
 export interface ExecutionPort {
   readFeatures?():Promise<ControlFeatures>;
+  savedResultSourceEligibility?(input:{source:StartEnvelope;sourceAttempt:number;packagePath:string;packageHash:string}):Promise<SavedResultSourceEligibility>;
+  savedResultEligibility?(input:StartEnvelope):Promise<{status:"eligible";authorityKind:SavedResultSourcePackage["authorityKind"];normalizedExecutionHash:string}|{status:"unavailable";reason:string}>;
+  collectSavedResultEvidence?(input:StartEnvelope):Promise<{schema:"ccloop-saved-result-evidence-v1";identity:unknown;attempt:number;capsule:ArtifactRef|null;reason:string|null}>;
+  readSavedResultEvidence?(input:StartEnvelope,capsule:ArtifactRef,ref:ArtifactRef):Promise<Buffer>;
+  settleSavedResult?(input:StartEnvelope):Promise<{ref:ArtifactRef;settlement:SavedResultSettlement}>;
+  readSavedResultSettlement?(input:StartEnvelope,settlementRef:ArtifactRef,ref:ArtifactRef):Promise<Buffer>;
   /**
    * Agent selection spec §4.6 (capabilities protocol 3 with a selection). ccloop fills the descriptor's
    * defaults, validates, materializes and answers the configHash: Orca never computes one (spec I3).

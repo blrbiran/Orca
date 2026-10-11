@@ -1,3 +1,5 @@
+import {validSavedNoDispatch} from "../control/savedResultNoDispatch.js";
+import {savedDispatchSchema,recoveryOfSchema,savedRecoverySchema,savedSourceSchema} from "../control/savedResultProtocol.js";
 import { hasOptionalTaskPolicy, readFundedAllowance } from "../control/fundedAllowance.js";
 import { tokenPolicySchema, tokenRemainingStatus } from "../control/tokenPolicy.js";
 import { budgetAmountSchema } from "../control/schema.js";
@@ -148,6 +150,8 @@ const executionProfileAuthoritySchema = z.object({
 }).strict();
 
 const persistedRunSchema = z.object({
+  savedDispatch:savedDispatchSchema.optional(),savedNoDispatch:artifactSchema.optional(),savedNoDispatchConsumedBy:idSchema.optional(),
+  mode:z.literal("verify-saved-result").optional(),recoveryOf:recoveryOfSchema.optional(),savedRecovery:savedRecoverySchema.optional(),savedSource:savedSourceSchema.optional(),savedSourceUnavailable:z.string().min(1).max(256).optional(),savedSettlement:artifactSchema.optional(),savedInterruption:artifactSchema.optional(),
   groupId: idSchema,
   workItemId: idSchema,
   taskId: idSchema.nullable(),
@@ -802,6 +806,7 @@ function displayRunState(run: z.infer<typeof persistedRunSchema>): RunViewV1["st
  * after any later handoff-stop, and the panel's batch would be refused whole.
  */
 function continuableRun(store: ControlStore, run: z.infer<typeof persistedRunSchema>, snapshot: GroupReadSnapshot): boolean {
+  if(run.mode!==undefined||run.recoveryOf!==undefined)return false;
   if (run.state !== "settled-recoverable") return false;
   const workRow = snapshot.workById.get(run.workItemId);
   if (workRow === undefined) return false;
@@ -883,7 +888,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
     }
     const bucket = run.phase === "handoff" ? "handoff" : "work";
     return {
-      runId, taskId: run.taskId, estimateId: run.estimateId, generation: run.generation, state, phase: run.phase,
+      runId,...(run.recoveryOf?{recoveryOf:run.recoveryOf,savedResultOrdinaryRetry:validSavedNoDispatch(store,run)}:{}), taskId: run.taskId, estimateId: run.estimateId, generation: run.generation, state, phase: run.phase,
       ...(run.purpose === undefined ? {} : { purpose: run.purpose }),
       claimOrdinal: run.claimOrdinal, providerAttemptOrdinal: run.providerAttemptOrdinal, profile,
       ...(run.tokenPolicy?{tokenRemainingStatus:tokenRemainingStatus(run.grant[bucket].tokens,run.unknown[bucket])}:{}),

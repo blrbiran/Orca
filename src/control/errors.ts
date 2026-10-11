@@ -100,6 +100,10 @@ export const durableCommandErrorStatuses = {
   "task-loop-version-conflict": 409,
   // Issue fixes spec §4.2(2): retry-task on a task whose current run is not one ccloop ended failed (the detail names why).
   "task-not-retryable": 409,
+  "saved-result-unavailable":409,
+  "saved-result-source-stale":409,
+  "saved-result-usage-unsettled":409,
+  "control-saved-result-unsupported":409,
   "usage-event-conflict": 409,
   "work-already-active": 409,
   "work-already-done": 409,

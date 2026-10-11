@@ -40,11 +40,12 @@ export function retryTaskOpen(view: GroupViewV1): boolean {
 
 /** UI qualification uses only exposed server facts; immutable proof and pending event validation remain server-side. */
 export function retryRunOpen(view: GroupViewV1, run: RunViewV1): boolean {
-  if (!retryTaskOpen(view) || !hasFailureOutcome(run) || run.taskId === null) return false;
+  if (!retryTaskOpen(view) || (!hasFailureOutcome(run)&&!run.savedResultOrdinaryRetry) || run.taskId === null) return false;
   const work = view.workItems.find(item => item.taskId === run.taskId);
   if (work && (work.currentRunId !== run.runId || work.pendingRunId != null)) return false;
   if (run.unknownUsageSettlement && !run.unknownUsageSettlement.settlement) return false;
   if (view.handoffRequests.some(request => request.runId === run.runId && ["request-pending", "latched", "collecting", "outcome-unknown"].includes(request.state))) return false;
+  if(run.savedResultOrdinaryRetry&&run.state==="settled-restartable")return work?.status==="ready"&&!view.ledger.usageUnknown;
   if (run.state === "blocked") return true;
   if (!work || work.pendingRunId !== null || view.ledger.usageUnknown) return false;
   const allocations = view.allocations.filter(item => item.ownerKind === "task" && item.ownerId === run.taskId);
@@ -85,5 +86,5 @@ export function taskRunNumber(view: GroupViewV1, taskId: string): number {
 /** The count behind `taskRunNumber`, for a caller that holds the task's lineage and the runs but not a whole group view. */
 export function lineageRunNumber(lineageRunIds: readonly string[], runs: readonly RunViewV1[]): number {
   const lineage = new Set(lineageRunIds);
-  return runs.filter((run) => lineage.has(run.runId) && run.state !== "failed-before-provider").length;
+  return runs.filter((run) => lineage.has(run.runId) && run.state !== "failed-before-provider"&&run.outcome!=="not-started"&&!run.savedResultOrdinaryRetry).length;
 }

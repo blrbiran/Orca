@@ -316,6 +316,7 @@ export const en = {
     banner: chainBanner,
   },
   control: {
+    savedResult:{notDispatched:"Verification was not started. Ordinary retry creates a new plan and execution on the current target.",verify:"Verify saved results",cost:"Execution is skipped; validation and verification may consume model usage.",unavailable:"Saved results are unavailable for verification; ordinary retry is available.",lineage:"Verification source: {{runId}} · attempt {{attempt}}"},
     unavailable: "The task control plane is not available on this panel.",
     title: "Task control",
     summaryLine: "epoch {{epoch}} · projection {{seq}} · {{dispatch}}",
@@ -1018,6 +1019,10 @@ export const enErrors: Record<string, string> = {
   "continuation-predecessor-unrecoverable": "The previous run cannot be recovered, so it cannot be continued.",
   "active-unbounded-budget-conflict": "Stop and reconcile the active unlimited run before setting a finite limit.",
   "control-token-policy-unsupported": "This ccloop installation does not support unlimited token policies.",
+  "control-saved-result-unsupported": "This ccloop installation does not support saved-result verification.",
+  "saved-result-source-stale": "The saved result no longer matches this task's current authority. Refresh the task before retrying.",
+  "saved-result-unavailable": "The saved result cannot be verified: {{detail}}.",
+  "saved-result-usage-unsettled": "The source run's usage must be settled before saved-result verification can start.",
   "control-capability-unsupported": "A required capability is not supported: {{detail}}",
   "control-estimator-unconfigured": "The panel has no estimator profile configured. Restart it with an estimator profile to run estimates.",
   "control-evidence-unavailable": "Evidence is not available.",

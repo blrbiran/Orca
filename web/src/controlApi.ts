@@ -1,3 +1,4 @@
+import type {SavedResultEligibilityV1} from "./controlTypes.js";
 /**
  * Task 9: the browser's only door to the control plane.
  *
@@ -113,6 +114,8 @@ export const fetchControlRecovery = (): Promise<RecoveryViewV1> => controlGet<Re
 /** GET /api/control/runs/:runId/evidence -- the manifest of raw evidence retained for one run. */
 export const fetchRunEvidence = (runId: string): Promise<EvidenceManifestV1> =>
   controlGet<EvidenceManifestV1>(`/api/control/runs/${segment(runId)}/evidence`);
+
+export const fetchSavedResultEligibility=(runId:string):Promise<SavedResultEligibilityV1>=>controlGet(`/api/control/runs/${segment(runId)}/saved-result-eligibility`);
 
 /** GET /api/control/runs/:runId/activity -- issue-fixes spec §5.2: the run's newest 200 activity rows. */
 export const fetchRunActivity = (runId: string): Promise<RunActivityV1> =>
@@ -258,6 +261,7 @@ export type ControlAction =
   | { verb: "recovery-retry"; groupId: string; expectedRevision: number; payload: RecoveryRetryPayloadV1 }
   // Issue fixes spec §4.2(2): retry a task whose run ccloop ended failed, as a new run.
   | { verb: "settle-unknown-usage"; groupId: string; expectedRevision: number; payload: SettleUnknownUsagePayloadV1 }
+  | { verb:"verify-saved-result";groupId:string;taskId:string;expectedRevision:number;payload:{sourceRunId:string;sourceAttempt:number;capsuleHash:string} }
   | { verb: "retry-task"; groupId: string; expectedRevision: number; payload: RetryTaskPayloadV1 }
   // Issue-fixes spec §6.3: archive and unarchive a group (empty payload).
   | { verb: "archive-group" | "unarchive-group"; groupId: string; expectedRevision: number; payload: Record<string, never> }
@@ -309,6 +313,7 @@ export function controlCommandPath(action: ControlAction): string {
       return "/api/control/recovery/retry";
     case "settle-unknown-usage":
       return `${group}/settle-unknown-usage`;
+    case "verify-saved-result":return `${group}/tasks/${segment(action.taskId)}/verify-saved-result`;
     case "retry-task":
       return `${group}/retry-task`;
     case "set-group-integration":

@@ -14,7 +14,7 @@ import { readVersions } from "../control/queries.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
 import { resolveSelection, slotLayers, type PartialSelection } from "../control/agentSelection.js";
 import { idSchema } from "../control/schema.js";
-import { agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import { savedResultEligibilityViewSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import { readIntegrationDefault } from "../control/integrationScheme.js";
@@ -188,6 +188,11 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     }
   });
 
+  app.get("/api/control/runs/:runId/saved-result-eligibility",asyncRoute(async(req,res)=>{
+    const runId=idSchema.parse(req.params.runId);
+    if(!deps.store.db.prepare("SELECT id FROM runs WHERE id=?").get(runId)){sendControlError(res,404,"run-not-found","No control run was found.");return;}
+    res.json(savedResultEligibilityViewSchema.parse(deps.service?await deps.service.savedResultEligibility(runId):{status:"unavailable",reason:"control-saved-result-unsupported"}));
+  }));
   app.get("/api/control/groups/:groupId", (req, res) => {
     const groupId = String(req.params.groupId);
     try { res.json(readControlGroup(deps.store, deps.epoch, groupId)); }
@@ -446,6 +451,7 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     },
     // Issue fixes spec §4.2(2): the task is named in the payload; the ledger key is the group's.
     { path: "/api/control/groups/:groupId/settle-unknown-usage", verb: "settle-unknown-usage", target: fromParams },
+    {path:"/api/control/groups/:groupId/tasks/:taskId/verify-saved-result",verb:"verify-saved-result",target:(params)=>{const groupId=idSchema.parse(params.groupId);return {groupId,target:{kind:"task",groupId,taskId:idSchema.parse(params.taskId)}};}},
     { path: "/api/control/groups/:groupId/retry-task", verb: "retry-task", target: fromParams },
   ];
 }
@@ -484,6 +490,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "continue-task": await service.continueTask(command); break;
           case "recovery-retry": await service.recoveryRetry(command); break;
           case "settle-unknown-usage": await service.settleUnknownUsage(command); break;
+          case "verify-saved-result":await service.verifySavedResult(command);break;
           case "retry-task": service.retryTask(command); break;
           case "set-workspace-mode": await service.setWorkspaceMode(command); break;
           case "set-integration-scheme": await service.setIntegrationScheme(command); break;

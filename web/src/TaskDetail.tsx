@@ -11,9 +11,9 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
-import { controlFailureFrom, downloadEvidenceArtifact, fetchRunActivity, fetchRunEvidence, type ControlAction } from "./controlApi.js";
+import { controlFailureFrom, fetchSavedResultEligibility, downloadEvidenceArtifact, fetchRunActivity, fetchRunEvidence, type ControlAction } from "./controlApi.js";
 import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
-import type { ActivityEntryV1, EvidenceManifestV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
+import type { SavedResultEligibilityV1, ActivityEntryV1, EvidenceManifestV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
 import { TaskResults } from "./TaskResults.js";
 import { LoopPlanCard } from "./LoopPlanCard.js";
 import { RunReason } from "./RunReason.js";
@@ -254,6 +254,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       </p>
       <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={props.workspaceMode} archived={archived} />
       {item.currentRunId !== null && <RunActivity key={item.currentRunId} runId={item.currentRunId} changeSeq={view.changeSeq} />}
+      {item.currentRunId!==null&&runs.some(run=>run.runId===item.currentRunId&&(run.outcome==="failed"||run.recoveryOf!==undefined))&&<SavedResultAction key={`verify-${item.currentRunId}`}  runId={runs.find(run=>run.runId===item.currentRunId)?.recoveryOf?.sourceRunId??item.currentRunId} groupId={groupId} taskId={item.taskId} revision={view.summary.commandRevision} changeSeq={view.changeSeq} onCommand={onCommand} disabled={archived||view.summary.stopMode!==null}/> }
       <h5>{t("control.task.runsOf", { taskId: item.taskId })}</h5>
       {/* Issue fixes spec §4.2(2): the run number counts the runs that reached the provider. */}
       {runNumber > 0 && <p>{t("control.task.runNumber", { n: runNumber })}</p>}
@@ -273,4 +274,14 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       )}
     </section>
   );
+}
+
+/** Source availability is read-only; an explicit click submits the frozen tuple under the visible revision. */
+export function SavedResultAction(props:{runId:string;groupId:string;taskId:string;revision:number;changeSeq:number;onCommand:(action:ControlAction)=>void;disabled?:boolean}):JSX.Element {
+ const {t}=useTranslation();const [answer,setAnswer]=useState<SavedResultEligibilityV1|null>(null);
+ useEffect(()=>{let live=true;setAnswer(null);fetchSavedResultEligibility(props.runId).then(value=>{if(live)setAnswer(value);},error=>{if(live)setAnswer({status:"unavailable",reason:controlFailureFrom(error).code});});return()=>{live=false;};},[props.runId,props.changeSeq,props.revision]);
+ if(answer===null)return <></>;
+ if(answer.status==="unavailable")return <p className="detail-note">{t("control.savedResult.unavailable")} <code>{answer.reason}</code></p>;
+ const source=answer.recoveryOf;
+ return <div><button type="button" disabled={props.disabled} onClick={()=>props.onCommand({verb:"verify-saved-result",groupId:props.groupId,taskId:props.taskId,expectedRevision:props.revision,payload:{sourceRunId:source.sourceRunId,sourceAttempt:source.sourceAttempt,capsuleHash:source.capsuleHash}})}>{t("control.savedResult.verify")}</button><p className="detail-note">{t("control.savedResult.cost")}</p></div>;
 }

@@ -1,10 +1,14 @@
+import {hasValidUsageSettlement,settlementArtifact as settlementArtifactBytes} from "./usageSettlement.js";
+import {assertCurrentSavedRecovery,savedRecoveryAccounting} from "./savedResultRecovery.js";
+import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,recoveryClosure} from "./savedResultRecoveryPackage.js";
+import {savedDispatchSchema,savedRecoverySchema,savedResultAdmissionSchema,executionFormatFailureSchema,savedExecutionSnapshotSchema,savedResultCollectionSchema,savedResultSettlementSchema,interruptedSavedResultSchema} from "./savedResultProtocol.js";
 import { readWork as allowanceWork, saveWork as saveAllowanceWork, readGroup as allowanceGroup, saveGroup as saveAllowanceGroup } from "./queries.js";
 import { validateAllowanceCheckpoint } from "./fundedAllowance.js";
 import { verifySnapshot } from "./snapshot.js";
 import { minTokenCeiling } from "./tokenPolicy.js";
 import { createTaskResultCollector,type TaskResultCollector } from './taskResultCollector.js';
 import { createHash } from "node:crypto";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, realpath, readFile, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { join } from "node:path";
 import { archiveRun, readArtifact, writeArtifact } from "./archive.js";
@@ -21,7 +25,7 @@ import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
 import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
 import { recordActivity } from "./activity.js";
-import type { RunProgress } from "./schema.js";
+import {artifactSchema,type RunProgress} from "./schema.js";
 import { recordUsage } from "./usage.js";
 import { exportPendingRequirements } from "./requirementExport.js";
 import { runTask } from "../scheduler/ccloopRunner.js";
@@ -202,7 +206,7 @@ export function readStartEnvelope(store: ControlStore, run: DriverRun): StartEnv
   return JSON.parse(readCanonicalRecord(store, run.drive.envelopeHash)) as StartEnvelope;
 }
 
-function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: WorkspaceMode, workspace: boolean): DriveRecord {
+export function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: WorkspaceMode, workspace: boolean): DriveRecord {
   return {
     workspaceMode, sourceDir: sourceDirOf(roots, runId), workspacePath: workspace ? workspacePathOf(roots, runId) : null, targetRepo: null,
     prepared: false, base: null, envelopeHash: null, inspectUnknown: 0, outcome: null, attemptSha: null, landedCommit: null,
@@ -272,6 +276,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
   catch { blockRun(deps, runId, "A2", "repository-path"); return true; }
+  if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)assertCurrentSavedRecovery(store,run,(deps.now?.()??new Date()).getTime());
   const savedAllowance=(allowanceWork(store,run.groupId,run.workItemId) as {allowancePredecessorRunId?:string}).allowancePredecessorRunId;
   const allowanceSource=savedAllowance?readDriverRun(store,savedAllowance):null;
   const continued = run.continuationIntentId ? continuationOf(store, run) : allowanceSource?.drive?.base?{predecessorRunId:allowanceSource.runId,base:allowanceSource.drive.base}:null;
@@ -279,7 +284,10 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   // Handoff delivery spec §4 (human ruling, plan X): a continuation keeps its predecessor's base and never reads
   // the current tip -- ccloop rebuilds the predecessor's tree on the snapshot HEAD, a descendant of that base
   // (spec §11 I6), so C's bounds check, D's findLanding and the other side of a conflict all count from it.
-  const base = continued !== null ? continued.base : await ensureWorkBranch(targetRepo, run.groupId);
+  if((run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&continued!==null)throw new ControlError("resume-handoff-invalid","saved-result-explicit-command-required");
+  const recovery=run.savedRecovery===undefined?null:savedRecoverySchema.parse(run.savedRecovery);
+  const original=recovery?JSON.parse((await readArtifact(store,recovery.sourceEnvelope)).toString()) as StartEnvelope:null;
+  const base = original?.work.kind==="loop"?original.work.base:continued !== null ? continued.base : await ensureWorkBranch(targetRepo, run.groupId);
   privateDirectory(drive.sourceDir);
   await ensureWorkspace(targetRepo, drive.workspaceMode, workspaceOf(drive), base, deps.roots);
   deps.crash?.("A2-after-workspace");
@@ -313,7 +321,9 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     ...confirmed.contract, context: { ...confirmed.contract.context, repoPath: workspaceOf(drive) },
     executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work),
   };
-  const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), run, {
+  const packageRecord=recovery?{...materializeRecoveryPackage(store,drive.sourceDir,recovery),recoveryOf:recovery.recoveryOf}:undefined;
+  if(recovery)write(deps,()=>{assertCurrentSavedRecovery(store,readDriverRun(store,runId),(deps.now?.()??new Date()).getTime());const admission=savedResultAdmissionSchema.parse(JSON.parse(settlementArtifactBytes(store,recovery.admission).toString()));publishRecoveryFence(drive.sourceDir,admission,packageRecord!.packageHash,packageRecord!.admissionHash);});
+  const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), {...run,...(packageRecord?{savedResultRecovery:packageRecord}:{})}, {
     sourceDir: drive.sourceDir, targetRepo, base, ...(skills !== null ? skillsKind === "codex" ? { codexSkillsDir: join(skills.dir,"skills") } : { skillPluginDir: skills.dir } : {}),
   }, contract, inputCheckpoint);
   const envelopeHash = sha256Canonical(envelope);
@@ -322,6 +332,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     const current = readDriverRun(store, runId);
     if (current.state !== "start-pending" || current.drive === undefined || current.drive.prepared) return false;
     current.drive = { ...current.drive, targetRepo, base, envelopeHash, prepared: true, skills };
+    if(current.mode==="verify-saved-result"||current.recoveryOf!==undefined){const marker=savedDispatchSchema.parse(current.savedDispatch);if(marker.state!=="never-submitted")throw new ControlError("saved-result-source-stale");current.savedDispatch={...marker,envelopeHash};}
     saveDriverRun(store, current);
     return true;
   });
@@ -452,6 +463,8 @@ export async function stepB(deps: ExecutionDriverDeps, runId: string): Promise<b
     return write(deps, () => { const current = readDriverRun(store, runId); current.state = "accepted"; saveDriverRun(store, current); return true; });
   }
   if (store.dispatchBlocked || groupHeld(store, run.groupId) || deps.admissionGate?.draining) return false;
+  if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)assertCurrentSavedRecovery(store,run,(deps.now?.()??new Date()).getTime());
+  if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)write(deps,()=>{const current=readDriverRun(store,runId),marker=savedDispatchSchema.parse(current.savedDispatch);if(marker.state!=="never-submitted"||marker.envelopeHash!==current.drive?.envelopeHash)throw new ControlError("saved-result-source-stale");current.savedDispatch={...marker,state:"submitted"};saveDriverRun(store,current);});
   let status: ExecutionStatus;
   try {
     status = await portFor(deps, run).accept(readStartEnvelope(store, run));
@@ -473,6 +486,10 @@ export async function stepBPrime(deps: ExecutionDriverDeps, runId: string): Prom
   let status: ExecutionStatus;
   try { status = await portFor(deps, run).inspect(readStartEnvelope(deps.store, run)); }
   catch { status = { kind: "unknown" }; }
+  if(status.kind==="unknown"&&(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&await settleDeadSavedRecovery(deps,run)){
+    const current=readDriverRun(deps.store,runId);status=await portFor(deps,current).inspect(readStartEnvelope(deps.store,current));
+  }
+  if(status.kind==="absent"&&(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&savedDispatchSchema.parse(run.savedDispatch).state!=="never-submitted")status={kind:"unknown"};
   return persistStatus(deps, runId, status, "B'");
 }
 
@@ -520,6 +537,19 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
       }
     });
   }
+  try {
+  if(report.terminal&&run.taskId!==null&&run.mode===undefined&&run.recoveryOf===undefined&&(await port.readFeatures?.())?.savedResultRecovery==="v1"&&port.collectSavedResultEvidence&&port.readSavedResultEvidence){
+    const page=savedResultCollectionSchema.parse(await port.collectSavedResultEvidence(readStartEnvelope(store,run)));
+    if(page.identity.runId!==runId||page.identity.envelopeHash!==run.drive?.envelopeHash||page.identity.executionId!==run.executionId)throw new ControlError("report-identity-conflict");
+    if(page.capsule){
+      const retain=async(ref:import("./types.js").ArtifactRef):Promise<Buffer>=>{const bytes=await port.readSavedResultEvidence!(readStartEnvelope(store,run),page.capsule!,ref);await writeArtifact(store,ref.artifactId,bytes,archiveAdmission(deps));return bytes;};
+      const capsule=executionFormatFailureSchema.parse(JSON.parse((await retain(page.capsule)).toString())),snapshot=savedExecutionSnapshotSchema.parse(JSON.parse((await retain(capsule.snapshot)).toString()));
+      const {usageObservations,...artifacts}=capsule.artifacts;
+      for(const ref of [capsule.verifier.proof,...Object.values(artifacts),...usageObservations.flatMap(a=>[a.source,a.copy]),snapshot.index,snapshot.bundle,snapshot.status,...snapshot.files.map(f=>f.ref)])await retain(ref);
+      write(deps,()=>{const current=readDriverRun(store,runId);current.savedSource={authorityKind:"execution-format-failure-v1",source:page.capsule,attempt:page.attempt};saveDriverRun(store,current);});
+    }
+  }
+  }catch{write(deps,()=>{const current=readDriverRun(store,runId);current.savedSourceUnavailable="saved-result-evidence-unavailable";saveDriverRun(store,current);});}
   const candidate = report.candidate;
   if (candidate && (candidate.runId !== runId || candidate.generation !== run.generation || candidate.workItemId !== run.workItemId)) {
     throw new ControlError("report-identity-conflict");
@@ -533,7 +563,11 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<b
   const run = readDriverRun(store, runId);
   if (run.state !== "accepted" || run.drive === undefined || run.taskId === null) return false;
   const drive = run.drive;
-  const report = await collectInto(deps, run);
+  let report = await collectInto(deps, run);
+  if((run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&(!report.terminal||!report.candidate?.stopProof)){
+    const status=await portFor(deps,run).inspect(readStartEnvelope(store,run));
+    if(status.kind==="unknown"&&await settleDeadSavedRecovery(deps,run))report=await collectInto(deps,readDriverRun(store,runId));
+  }
   const candidate = report.candidate;
   // Handoff delivery spec §3 (X1): a proved stop with no terminal and no request of this run's is not
   // something to wait for forever; it is blocked by name. With a request, step H owns the run.
@@ -547,12 +581,15 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<b
   write(deps, () => store.db.prepare("INSERT INTO outbox VALUES (?, 'report', ?, 0) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run(`report:${runId}`, JSON.stringify({ source })));
   deps.crash?.("C-after-terminal");
   const outcome = report.terminal.outcome;
+  if((run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&report.terminal.waitingCause==="token-allowance")throw new ControlError("resume-handoff-invalid","saved-result-explicit-command-required");
   if(report.terminal.waitingCause==="token-allowance")return settleTokenAllowance(deps,runId,report);
   if (outcome !== "succeeded") {
+    if(run.mode===undefined&&run.recoveryOf===undefined)try{await archiveRun(store,{runId,sourceDir:drive.sourceDir,repoDir:join(drive.sourceDir,"repo"),stopProof:candidate.stopProof},archiveAdmission(deps));}catch{write(deps,()=>{const current=readDriverRun(store,runId);current.savedSourceUnavailable="saved-result-evidence-unavailable";saveDriverRun(store,current);});}
     // Issue fixes spec §4.2(1): ccloop's reason is kept beside the outcome (the run view and the panel explain it); the
     // blocked reason is unchanged.
     const stopReason = report.terminal.stopReason ? { stopReason: report.terminal.stopReason } : {};
     blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome, ...stopReason });
+    if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)await retainSavedInterruption(deps,runId);
     return true;
   }
   const attemptSha = await commitAttempt(join(drive.sourceDir, "repo"));
@@ -1048,4 +1085,47 @@ async function settleTokenAllowance(deps:ExecutionDriverDeps,runId:string,report
   const group=allowanceGroup(store,run.groupId);if(!group.stopped)group.status="running";saveAllowanceGroup(store,group);
  }});
  return true;
+}
+
+/** Dead-owner mechanical RPC cannot execute checks/providers or reclaim the old worker. */
+async function settleDeadSavedRecovery(deps:ExecutionDriverDeps,run:DriverRun):Promise<boolean>{
+ const port=portFor(deps,run);if(!port.settleSavedResult||!port.readSavedResultSettlement)throw new ControlError("control-saved-result-unsupported");
+ const input=readStartEnvelope(deps.store,run);let result;
+ try{result=await port.settleSavedResult(input);}catch(error){
+  // A live/identity-unproven owner remains unknown. Never invent zero usage or call accept again.
+  if(error instanceof ControlError&&error.code==="control-peer-exit")return false;throw error;
+ }
+ if(result.settlement.identity.runId!==run.runId||result.settlement.identity.envelopeHash!==run.drive?.envelopeHash||run.executionId!==null&&result.settlement.identity.executionId!==run.executionId)throw new ControlError("report-identity-conflict");
+ const page=result.settlement,refs=[result.ref,page.state,...(page.lifecycle?[page.lifecycle]:[]),page.accepted,page.envelope,page.usage,page.stopProof,...page.usageObservations.flatMap(a=>[a.source,a.copy])];
+ for(const ref of refs){const bytes=await port.readSavedResultSettlement(input,result.ref,ref);await writeArtifact(deps.store,ref.artifactId,bytes,archiveAdmission(deps));}
+ write(deps,()=>{const current=readDriverRun(deps.store,run.runId);current.savedSettlement=result.ref;current.executionId=page.identity.executionId;saveDriverRun(deps.store,current);});return true;
+}
+export async function retainSavedInterruption(deps:Pick<ExecutionDriverDeps,"store"|"admissionGate">,runId:string):Promise<void>{
+ const run=readDriverRun(deps.store,runId);if(!run.savedSettlement)return;
+ const page=savedResultSettlementSchema.parse(JSON.parse((await readArtifact(deps.store,run.savedSettlement as import("./types.js").ArtifactRef)).toString()));
+ if(page.disposition!=="interrupted"||(page.usageStatus!=="known"&&!(run.usageSettlement!==undefined&&hasValidUsageSettlement(deps.store,run)))||page.lifecycle===null||!["saved-result-verification-interrupted","saved-result-before-entry-interrupted"].includes(run.drive?.stopReason??""))return;
+ const record=savedRecoverySchema.parse(run.savedRecovery),input=readStartEnvelope(deps.store,run);
+ const packageBytes=await readFile(join(input.savedResultRecovery!.packagePath,"package.json"));
+ if(createHash("sha256").update(packageBytes).digest("hex")!==input.savedResultRecovery!.packageHash)throw new ControlError("artifact-hash-mismatch");
+ write(deps,()=>{
+  const current=readDriverRun(deps.store,runId),accounting=savedRecoveryAccounting(deps.store,current);
+  const packageRef=persistRecoveryArtifact(deps.store,packageBytes),refs=[page.envelope,page.accepted,packageRef,record.admission,page.state,page.lifecycle!,page.usage,accounting.report,accounting.stopProof,...(accounting.settlement?[accounting.settlement,accounting.receipt!]:[]),...page.usageObservations.flatMap(a=>[a.source,a.copy])];
+  const artifacts=[...recoveryClosure(deps.store,[...refs,record.source.source,...record.artifacts]).values()].map(v=>v.ref);
+  current.savedInterruption=persistRecoveryArtifact(deps.store,interruptedSavedResultSchema.parse({schema:"ccloop-saved-result-interrupted-v1",envelope:page.envelope,accepted:page.accepted,package:packageRef,admission:record.admission,state:page.state,lifecycle:page.lifecycle,usage:page.usage,accounting,artifacts}));saveDriverRun(deps.store,current);
+ });
+}
+
+/** Inspection-only input for an authorized claim whose controller has durably never submitted accept. */
+export async function savedRecoveryInspectionInput(deps:ExecutionDriverDeps,run:DriverRun):Promise<StartEnvelope>{
+ const marker=savedDispatchSchema.parse(run.savedDispatch);if(marker.state!=="never-submitted"||run.executionId!==null)throw new ControlError("recovery-blocked","saved-result-accept-unknown");
+ const binding=savedRecoverySchema.parse(run.savedRecovery);if(marker.admissionHash!==binding.admission.hash||marker.fundingHash!==sha256Canonical(binding.funding)||marker.revision!==binding.revision)throw new ControlError("recovery-blocked","saved-result-accept-unknown");
+ if(run.drive?.envelopeHash)return readStartEnvelope(deps.store,run);
+ const record=savedRecoverySchema.parse(run.savedRecovery),original=JSON.parse((await readArtifact(deps.store,record.sourceEnvelope)).toString()) as StartEnvelope;
+ if(original.work.kind!=="loop")throw new ControlError("saved-result-source-stale");
+ const drive=run.drive??newDrive(deps.roots,run.runId,readWorkspaceSetting(deps.store,groupRepoId(deps.store,run.groupId)).workspaceMode,true);
+ privateDirectory(drive.sourceDir);const targetRepo=deps.resolveRepository(groupRepoId(deps.store,run.groupId)),base=original.work.base;
+ const packageRecord={...materializeRecoveryPackage(deps.store,drive.sourceDir,record),recoveryOf:record.recoveryOf},contract:any=original.work.contract;
+ const runtime={...contract,context:{...contract.context,repoPath:workspaceOf(drive)},executionPolicy:withinGrant(contract.executionPolicy,(run.grant as any).work)};
+ const input=toStartEnvelope(readWorkClaimEnvelope(deps.store,run.groupId,run.runId),{...run,savedResultRecovery:packageRecord},{sourceDir:drive.sourceDir,targetRepo,base},runtime,null),envelopeHash=sha256Canonical(input);
+ write(deps,()=>{const current=readDriverRun(deps.store,run.runId),still=savedDispatchSchema.parse(current.savedDispatch);if(still.state!=="never-submitted"||still.admissionHash!==record.admission.hash)throw new ControlError("saved-result-source-stale");writeCanonicalRecord(deps.store,run.groupId,envelopeHash,canonicalBytes(input).toString());current.drive={...drive,targetRepo,base,envelopeHash};current.savedDispatch={...still,envelopeHash};saveDriverRun(deps.store,current);});return input;
 }

@@ -1,3 +1,4 @@
+import { recoveryOfSchema, savedResultSourceEligibilitySchema } from "./savedResultProtocol.js";
 import { budgetAmountSchema } from "./schema.js";
 import { z } from "zod";
 import { usageSettlementSchema } from "./usageSettlement.js";
@@ -606,6 +607,7 @@ export const commandVerbSchema = z.enum([
   "continue-task",
   "recovery-retry",
   "retry-task",
+  "verify-saved-result",
   "settle-unknown-usage",
   "shutdown",
   "set-workspace-mode",
@@ -863,6 +865,8 @@ const effectiveCommandFields = {
   actorId: nonemptyString,
 } as const;
 
+export const verifySavedResultPayloadSchema=z.object({sourceRunId:idSchema,sourceAttempt:positiveSafeInteger,capsuleHash:hashSchema}).strict();
+export const savedResultEligibilityViewSchema=savedResultSourceEligibilitySchema;
 const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("import-plan"), target: groupCommandTargetSchema, payload: importPlanPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("proposal-edit"), target: groupCommandTargetSchema, payload: proposalEditPayloadSchema }).strict(),
@@ -880,6 +884,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("continue-task"), target: taskCommandTargetSchema, payload: continueTaskPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("retry-task"), target: groupCommandTargetSchema, payload: retryTaskPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb:z.literal("verify-saved-result"), target:taskCommandTargetSchema, payload:verifySavedResultPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("settle-unknown-usage"), target: groupCommandTargetSchema, payload: settleUnknownUsagePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
@@ -935,6 +940,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
     .object({ ...effectiveCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema })
     .strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("retry-task"), target: groupCommandTargetSchema, payload: retryTaskPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb:z.literal("verify-saved-result"), target:taskCommandTargetSchema, payload:verifySavedResultPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("settle-unknown-usage"), target: groupCommandTargetSchema, payload: settleUnknownUsagePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
@@ -1222,6 +1228,7 @@ export const activityEntrySchema = z
 export const runViewSchema = z
   .object({
     runId: idSchema,
+    recoveryOf:recoveryOfSchema.optional(),savedResultOrdinaryRetry:z.boolean().optional(),
     taskId: idSchema.nullable(),
     estimateId: idSchema.nullable(),
     generation: positiveSafeInteger,
@@ -1495,6 +1502,7 @@ export const commandErrorSchema = z
 export const commandErrorBodySchema = z.object({ error: commandErrorSchema }).strict();
 
 const commandResultSchema = z.discriminatedUnion("kind", [
+ z.object({kind:z.literal("saved-result-verification-started"),taskId:idSchema,runId:idSchema,recoveryOf:recoveryOfSchema}).strict(),
   z
     .object({
       kind: z.literal("imported"),

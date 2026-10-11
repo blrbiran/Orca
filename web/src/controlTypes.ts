@@ -224,6 +224,7 @@ export type RunSkillLockV1 = {
 export type SettleUnknownUsagePayloadV1 = { taskId: string; runId: string; generation: number; acknowledge: "charge-remaining-grant" };
 export type UsageSettlementV1 = { method: "remaining-grant"; commandId: string; principal: string; at: number; groupId: string; taskId: string; workItemId: string; runId: string; generation: number; highWater: number; charged: { work: Amount; handoff: Amount }; reservationDisposition: "committed" | "released"; report: { artifactId: string; hash: string }; stopProof: { executionId: string; generation: number; isolated: true; source: { artifactId: string; hash: string } }; handoffResolution?: { requestId: string; previousState: "settled-unrecoverable"; previousFailureCode: "usage-unsettled"; checkpointId: string; checkpointHash: string } };
 export type RunViewV1 = {
+  recoveryOf?:RecoveryOf;savedResultOrdinaryRetry?:boolean;
   unknownUsageSettlement?: { generation: number; highWater: number; remaining: { work: BudgetAmount; handoff: Amount }; allowed: boolean; refusalReason: string | null; settlement?: UsageSettlementV1 };
   runId: string;
   taskId: string | null;
@@ -469,7 +470,7 @@ export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
     | "archive-group" | "unarchive-group";
@@ -479,6 +480,8 @@ export type CommandSuccessV1 = {
   effectivePayloadHash: string;
   authorityCommandHash: string;
   result:
+    | {kind:"saved-result-verification-started";taskId:string;runId:string;recoveryOf:RecoveryOf}
+
     | { kind: "usage-settled"; taskId: string; runId: string; generation: number; charged: { work: Amount; handoff: Amount }; at: number; method: "remaining-grant" }
     | { kind: "imported"; groupId: string; estimateId: string; estimateState: "queued" | "blocked-capability" | "input-too-large"; estimateReasonCode: string | null }
     | { kind: "proposal-edited"; proposalVersion: number }
@@ -736,3 +739,6 @@ export interface GroupResultsV1 {
         notProduced: number;
     };
 }
+
+export type RecoveryOf={sourceRunId:string;sourceAttempt:number;capsuleHash:string;snapshotHash:string;normalizedExecutionHash:string};
+export type SavedResultEligibilityV1={status:"unavailable";reason:string}|{status:"eligible";authorityKind:"execution-format-failure-v1"|"legacy-published-candidate-v1";sourceIdentity:{groupId:string;workItemId:string;taskId:string;runId:string;generation:number;graphVersion:number;targetVersion:number;executionId:string;envelopeHash:string};rawExecutionTokens:number;recoveryOf:RecoveryOf;limitation:"published-candidate-only; current membership and settled accounting require controller admission"};

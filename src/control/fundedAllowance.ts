@@ -1,3 +1,7 @@
+import {readCanonicalRecord} from "./snapshot.js";
+import {savedRecoverySchema,savedResultAdmissionSchema,recoveryPolicyAuthoritySchema} from "./savedResultProtocol.js";
+import {settlementArtifact,settlementSame} from "./usageSettlement.js";
+import {sha256Canonical} from "./canonicalJson.js";
 import { archivedMarkOf } from "./archivedMark.js";
 import { readArtifact } from "./archive.js";
 import { packetSchema } from "./handoff.js";
@@ -107,7 +111,23 @@ export function persistFundedAllowance(store:ControlStore,runId:string,groupId:s
  store.db.prepare("INSERT INTO funded_allowances VALUES (?,?,?,?)").run(runId,groupId,workId,JSON.stringify(allowance));
 }
 
-export function readFundedAllowance(store:ControlStore,run:{runId:string;groupId:string;workItemId:string;grant:unknown;tokenPolicy?:unknown}):FundedAllowance|null {
+export function readFundedAllowance(store:ControlStore,run:{runId:string;groupId:string;workItemId:string;grant:unknown;tokenPolicy?:unknown;savedRecovery?:unknown;mode?:unknown;recoveryOf?:unknown;generation?:number;configHash?:string;commandId?:string;ownerToken?:string}):FundedAllowance|null {
+ if(run.savedRecovery!==undefined){
+  const record=savedRecoverySchema.parse(run.savedRecovery),admission=savedResultAdmissionSchema.parse(JSON.parse(settlementArtifact(store,record.admission).toString())),funding=record.funding;
+  const policy=recoveryPolicyAuthoritySchema.parse(JSON.parse(settlementArtifact(store,funding.historicalPolicy.authority).toString()));
+  const source=store.db.prepare("SELECT body FROM runs WHERE id=?").get(record.recoveryOf.sourceRunId);if(!source)throw new ControlError("recovery-blocked","saved-result-funding-source");
+  const frozen=JSON.parse(readCanonicalRecord(store,admission.contractHash));if(frozen.schema!=="orca-derived-contract-record-v1"||sha256Canonical(frozen)!==admission.contractHash)throw new ControlError("recovery-blocked","saved-result-frozen-policy");
+  const old=JSON.parse(String(source.body));const work=readWork(store,run.groupId,run.workItemId);
+  if(run.mode!=="verify-saved-result"||!settlementSame(run.recoveryOf,record.recoveryOf)||!settlementSame(admission.funding,funding)||!settlementSame(admission.recoveryOf,record.recoveryOf)||!settlementSame(admission.claim,{runId:run.runId,generation:run.generation,commandId:run.commandId,ownerToken:run.ownerToken,configHash:run.configHash})||admission.revision!==record.revision
+   ||funding.reservation.runId!==run.runId||funding.reservation.revision!==record.revision||!settlementSame(funding.freshGrant,run.grant)||policy.sourceRunId!==old.runId||policy.groupId!==run.groupId||policy.workItemId!==run.workItemId||policy.contractHash!==admission.contractHash
+   ||policy.accountingMode!==funding.historicalPolicy.accountingMode||!settlementSame(policy.authoredWork,funding.historicalPolicy.authoredWork)||!settlementSame(policy.authoredWork,frozen.confirmedGrant.work)
+   ||hasOptionalTaskPolicy(store,run.groupId,run.workItemId)!==(funding.kind==="optional-cumulative-v1"))throw new ControlError("recovery-blocked","saved-result-funding-identity");
+  for(const bucket of ["work","handoff"] as const){const expected=`allocation-${sha256Canonical({runId:run.runId,revision:record.revision,groupId:run.groupId,taskId:work.taskId,bucket,grant:funding.freshGrant[bucket]})}`;
+   if(funding.reservation[bucket==="work"?"workAllocationId":"handoffAllocationId"]!==expected)throw new ControlError("recovery-blocked","saved-result-reservation-identity");}
+  for(const d of ["tokens","activeMs","attempts","sessions"] as const){const fresh=funding.freshGrant.work[d],total=fresh===null?null:funding.inheritedUsage[d]+fresh;if(total!==null&&!Number.isSafeInteger(total)||funding.fundedTotal[d]!==total)throw new ControlError("recovery-blocked","saved-result-funded-total");}
+  return {grant:funding.freshGrant,authoredTokenCeiling:funding.historicalPolicy.authoredWork.tokens,inheritedUsage:funding.inheritedUsage,bindingCauses:run.tokenPolicy?(run.tokenPolicy as TokenPolicy).bindingCauses:["task"]};
+ }
+
  const row=store.db.prepare("SELECT group_id,work_item_id,body FROM funded_allowances WHERE run_id=?").get(run.runId);
  if(!row){if(run.tokenPolicy!==undefined)throw new ControlError("recovery-blocked","funded-allowance-missing");return null;}
  const parsed=tokenPolicySchema.extend({grant:grantSchema}).safeParse(JSON.parse(String(row.body)));

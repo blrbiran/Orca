@@ -1,3 +1,4 @@
+import {savedRecoverySchema} from "./savedResultProtocol.js";
 import { tokenPolicySchema } from "./tokenPolicy.js";
 import { z } from "zod";
 import { ControlError } from "./errors.js";
@@ -95,8 +96,13 @@ export function toStartEnvelope(
   // Single-call estimate spec §4.1, N1 spec §5.1: an estimate or other single-call claim is one single call, never a loop.
   if (frozen.phase === "estimate" || frozen.phase === "single-call") throw new ControlError("start-envelope-conflict", `phase:${frozen.phase}`);
   const policy=tokenPolicySchema.optional().parse((run as {tokenPolicy?:unknown}).tokenPolicy);
+  const record=(run as {savedRecovery?:unknown}).savedRecovery===undefined?null:savedRecoverySchema.parse((run as {savedRecovery:unknown}).savedRecovery);
+  const packageRecord=(run as {savedResultRecovery?:StartEnvelope["savedResultRecovery"]}).savedResultRecovery;
+  if(record&&(!packageRecord||inputCheckpoint!==null))throw new ControlError("start-envelope-conflict","saved-result-package-required");
+  if(!record&&((run as {mode?:unknown}).mode!==undefined||(run as {recoveryOf?:unknown}).recoveryOf!==undefined))throw new ControlError("start-envelope-conflict","saved-result-mode-required");
   const built: StartEnvelope = {
-    protocol: policy?4:3,
+    protocol: record||policy?4:3,
+    ...(record?{mode:"verify-saved-result" as const,savedResultRecovery:packageRecord}:{}),
     ...(policy?{tokenPolicy:policy}:{}),
     claim,
     // The ledger's derived hash, never one recomputed here: recomputing would let a contract that

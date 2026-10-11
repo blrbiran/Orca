@@ -1,4 +1,6 @@
-import { readFundedAllowance, hasTokenPolicy } from "./fundedAllowance.js";
+import {validSavedNoDispatch} from "./savedResultNoDispatch.js";
+import {claimCapBlocking} from "./spendCaps.js";
+import { readFundedAllowance, hasOptionalTaskPolicy } from "./fundedAllowance.js";
 import { finiteCommitment, remainingBudget } from "./tokenPolicy.js";
 import { readGroup, saveGroup } from "./queries.js";
 import { createHash } from "node:crypto";
@@ -75,6 +77,15 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           throw new ControlError("recovery-blocked", "retry-claim-identity");
         }
         const allocations = readBudgetProposal(store, groupId).allocations.filter(a => a.ownerKind === "task" && a.ownerId === taskId);
+        if(run.mode==="verify-saved-result"&&run.state==="settled-restartable"){
+          if(!validSavedNoDispatch(store,run)||groupUsageUnknown(store,groupId))throw new ControlError("task-not-retryable","saved-result-no-dispatch-proof");
+          if(hasOptionalTaskPolicy(store,groupId,taskId)||run.grant.work.tokens===null)throw new ControlError("task-not-retryable","saved-result-no-dispatch-funding");
+          if(claimCapBlocking(store,groupId,run.grant.work.tokens+run.grant.handoff.tokens,store.now()))throw new ControlError("task-not-retryable","spend-cap-reached");
+          readConfirmedTaskExecution(store,groupId,taskId);
+          saveRunBody(store,{...run,state:"settled-failed",savedNoDispatchConsumedBy:command.commandId,drive:{...run.drive!,outcome:"not-started",stopReason:"saved-result-not-dispatched"}},false);
+          Object.assign(work,{status:"ready",retryGrantSourceRunId:runId,pendingRunId:null});setAllocationStates(store,groupId,taskId,"retrying",run.grant);saveWork(store,groupId,work as never);
+          recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,reason:"saved-result-not-dispatched"}});deps.beforeCommit?.();return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId});
+        }
         const held = !live && run.state === "settled-recoverable" && run.recoverable === true && work.status === "held"
           && allocations.length === 2 && allocations.every(a => a.state === "held" && settlementSame(a.amount, run.remaining[a.bucket as "work" | "handoff"]))
           && settlementSame(work.grant, run.remaining);
@@ -115,7 +126,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         validateRetryGrantSource(store, groupId, work);
         readConfirmedTaskExecution(store, groupId, taskId);
         if (run.usageSettlement !== undefined && !hasValidUsageSettlement(store, run)) throw new ControlError("recovery-blocked", "retry-settlement");
-        if(hasTokenPolicy(store,groupId)) {
+        if(hasOptionalTaskPolicy(store,groupId,taskId)) {
           const funding=readFundedAllowance(store,run as never);if(!funding)throw new ControlError("recovery-blocked","retry-funding-missing");
           const inherited=add(funding.inheritedUsage,run.cumulative.work);
           const left=remainingBudget(work.grant.work,inherited);

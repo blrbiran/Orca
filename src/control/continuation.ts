@@ -140,6 +140,7 @@ function runBody(store: ControlStore, runId: string): RunBody | null {
 function assertPredecessor(store: ControlStore, groupId: string, work: ContinuationWork, predecessorRunId: string, checkpointId: string): RunBody {
   const unrecoverable = (): ControlError => new ControlError("continuation-predecessor-unrecoverable", `${groupId}:${work.workItemId}:${predecessorRunId}`);
   const run = runBody(store, predecessorRunId);
+  if(run?.mode==="verify-saved-result"||run?.recoveryOf!==undefined)throw new ControlError("resume-handoff-invalid","saved-result-explicit-command-required");
   if (!run || run.groupId !== groupId || run.workItemId !== work.workItemId || run.taskId !== work.taskId) throw unrecoverable();
   if (run.state !== "settled-recoverable" || run.recoverable !== true || run.checkpointId !== checkpointId) throw unrecoverable();
   const checkpoint = store.db.prepare("SELECT run_id,hash,body FROM checkpoints WHERE id=?").get(checkpointId);

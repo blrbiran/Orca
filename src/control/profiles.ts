@@ -82,6 +82,7 @@ function ownPort(port: ExecutionPort): ExecutionPort {
   const collectTaskResults=port.collectTaskResults?.bind(port);
   const readTaskResultEvidence=port.readTaskResultEvidence?.bind(port);
   const owned: ExecutionPort = {
+    ...Object.fromEntries(["savedResultSourceEligibility","savedResultEligibility","collectSavedResultEvidence","readSavedResultEvidence","settleSavedResult","readSavedResultSettlement"].flatMap(key=>{const method=port[key as keyof ExecutionPort];return typeof method==="function"?[[key,method.bind(port)]]:[]})),
     ...(readFeatures?{readFeatures:()=>readFeatures()}:{}),
     resolveAgent: (partial) => resolveAgent(partial),
     listAgents: () => listAgents(),

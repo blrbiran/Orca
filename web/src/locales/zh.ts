@@ -202,6 +202,7 @@ export const zh: Translation<typeof en> = {
     banner: { done: "链已完成", blocked: "链在等你", limit: "链因触达上限而停止", anomaly: "链因异常而停止" },
   },
   control: {
+    savedResult:{notDispatched:"验证尚未启动。普通重试会从当前目标创建新的计划与执行。",verify:"验证已保存成果",cost:"跳过执行；校验和验证可能消耗模型用量。",unavailable:"已保存成果暂不可验证；可使用普通重试。",lineage:"验证来源：{{runId}} · 尝试 {{attempt}}"},
     unavailable: "这个面板上没有任务控制面。",
     title: "任务控制",
     summaryLine: "服务会话 {{epoch}} · 状态序号 {{seq}} · {{dispatch}}",
@@ -956,6 +957,10 @@ export const zhErrors: Record<string, string> = {
   "continuation-predecessor-unrecoverable": "前一个运行无法恢复，不能续跑。",
   "active-unbounded-budget-conflict": "设置有限上限前，请停止并结算正在进行的不限额运行。",
   "control-token-policy-unsupported": "当前 ccloop 安装不支持不限 token 的策略。",
+  "control-saved-result-unsupported": "当前 ccloop 安装不支持验证已保存成果。",
+  "saved-result-source-stale": "已保存成果与任务当前的授权状态不再一致，请刷新任务后重试。",
+  "saved-result-unavailable": "无法验证已保存成果：{{detail}}。",
+  "saved-result-usage-unsettled": "需先结算源运行的用量，才能验证已保存成果。",
   "control-capability-unsupported": "所需能力不受支持：{{message}}",
   "control-estimator-unconfigured": "面板没有配置估算 profile。",
   "control-evidence-unavailable": "证据不可用。",

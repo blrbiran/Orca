@@ -1,3 +1,7 @@
+import {savedDispatchSchema,savedRecoverySchema,savedNoDispatchSchema} from "./savedResultProtocol.js";
+import {persistRecoveryArtifact} from "./savedResultRecoveryPackage.js";
+import {sha256Canonical} from "./canonicalJson.js";
+import {createHash} from "node:crypto";
 import { join } from "node:path";
 import { archiveRun } from "./archive.js";
 import { hasObservedUsage, readRun, saveRun } from "./budget.js";
@@ -14,7 +18,7 @@ import { cleanupRunWorkspace, revParse, workBranchRef } from "./workspace.js";
 import { findLanding } from "./driverLanding.js";
 import {
   INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, collectInto, describeError, driverRunIds, groupRepoId, portFor, readDriverRun,
-  readStartEnvelope, saveDriverRun, savedReport, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
+  readStartEnvelope,savedRecoveryInspectionInput, saveDriverRun, savedReport, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
 } from "./executionDriver.js";
 import type { ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { PartialSelection } from "./agentSelection.js";
@@ -105,7 +109,14 @@ function settleCompletedRun(deps: ExecutionDriverDeps, run: DriverRun, request: 
  */
 export async function restartRun(deps: ExecutionDriverDeps, runId: string, requestId: string): Promise<boolean> {
   const { store } = deps;
-  const run = readDriverRun(store, runId);
+  let run = readDriverRun(store, runId);
+  if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined){
+    const request=readHandoffRequest(store,run.groupId,requestId).request;let input:StartEnvelope;
+    try{input=await savedRecoveryInspectionInput(deps,run);}catch{return countUnknownUnderStop(deps,run,request);}
+    const observed=await portFor(deps,run).inspect(input);
+    if(observed.kind!=="absent")return countUnknownUnderStop(deps,run,request);
+    run=readDriverRun(store,runId);
+  }
   let cleanupError: string | null = null;
   // Single-call estimate spec §6.5 (review I3): an estimate run has no workspace; nothing in the target repository is touched.
   if (run.drive !== undefined && run.drive.workspacePath !== null) {
@@ -121,6 +132,11 @@ export async function restartRun(deps: ExecutionDriverDeps, runId: string, reque
       saveDriverRun(store, current);
     }
     settleHandoffRequestInTransaction(stopDeps(deps), run.groupId, requestId, "settled-restartable", null);
+    if(current.mode==="verify-saved-result"||current.recoveryOf!==undefined){
+      const settled=readDriverRun(store,runId),marker=savedDispatchSchema.parse(settled.savedDispatch),recovery=savedRecoverySchema.parse(settled.savedRecovery);
+      if(marker.state!=="never-submitted"||marker.envelopeHash!==settled.drive?.envelopeHash||settled.executionId!==null||settled.highWater!==0||(settled.unknown as {work:boolean;handoff:boolean}).work||(settled.unknown as {work:boolean;handoff:boolean}).handoff||store.db.prepare("SELECT seq FROM usage_events WHERE run_id=?").get(runId))throw new ControlError("recovery-blocked","saved-result-accept-unknown");
+      settled.savedNoDispatch=persistRecoveryArtifact(store,savedNoDispatchSchema.parse({schema:"orca-saved-result-no-dispatch-v1",groupId:settled.groupId,workItemId:settled.workItemId,taskId:settled.taskId,runId,generation:settled.generation,commandId:settled.commandId,ownerTokenHash:createHash("sha256").update(String(settled.ownerToken)).digest("hex"),admission:recovery.admission,fundingHash:sha256Canonical(recovery.funding),revision:recovery.revision,envelopeHash:settled.drive!.envelopeHash,handoffRequestId:requestId,inspection:"absent",controllerState:"never-submitted",observedAt:store.now()}));saveDriverRun(store,settled);
+    }
     return true;
   });
 }

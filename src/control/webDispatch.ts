@@ -1,3 +1,4 @@
+import {hasSavedOrdinaryRetryAuthorization} from "./savedResultNoDispatch.js";
 import { groupRepoIdOf } from "./usageLedger.js";
 import { releaseCommitment } from "./stopIntent.js";
 import { allocateFundedAllowance, decideFundedAllowance, hasTokenPolicy, persistFundedAllowance, type FundedAllowance } from "./fundedAllowance.js";
@@ -59,14 +60,14 @@ function saveDispatchRun(store: ControlStore, run: DispatchRun): void {
   store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(run), run.runId);
 }
 
-function readFrozenSnapshot(store: ControlStore, groupId: string): ExecutionSnapshotV1 {
+export function readFrozenSnapshot(store: ControlStore, groupId: string): ExecutionSnapshotV1 {
   const proposal = readBudgetProposal(store, groupId);
   if (proposal.state !== "confirmed" || proposal.executionSnapshotHash === null) throw new ControlError("group-state-invalid");
   return executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(store, proposal.executionSnapshotHash)));
 }
 
 /** A degraded required probe blocks dispatch; it is never silently downgraded. */
-function probeBlocksDispatch(observation: ObservedProfile, mode: "strict" | "soft",actualTokens:number|null=0,bucket:"work"|"handoff"="work"): boolean {
+export function probeBlocksDispatch(observation: ObservedProfile, mode: "strict" | "soft",actualTokens:number|null=0,bucket:"work"|"handoff"="work"): boolean {
   if (observation.probeFailureCode !== null) return true;
   const cap = observation.observed as CapabilityViewV1;
   return cap.usageObservation === "unavailable"
@@ -351,6 +352,8 @@ export function nextClaimableTask(store: ControlStore, groupId: string, groupBod
   for (const row of rows) {
     const work = JSON.parse(String(row.body)) as { workItemId: string; kind: string; status: string; dependsOn?: string[] };
     if (work.kind !== "task" || work.status !== "ready") continue;
+    const currentId=(work as {currentRunId?:string}).currentRunId;
+    if(currentId){const current=readDispatchRun(store,currentId);if((current.mode==="verify-saved-result"||current.recoveryOf!==undefined)&&!hasSavedOrdinaryRetryAuthorization(store,current))continue;}
     if (store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(groupId, work.workItemId)) continue;
     const ready = (work.dependsOn ?? []).every((id) => {
       const dependency = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, id);
@@ -362,7 +365,7 @@ export function nextClaimableTask(store: ControlStore, groupId: string, groupBod
   return null;
 }
 
-function createStartingRun(
+export function createStartingRun(
   store: ControlStore,
   groupId: string,
   target: { workItemId: string },
@@ -370,6 +373,7 @@ function createStartingRun(
   startRevision: number,
   continuation?: RegisteredContinuation,
   allowance?:FundedAllowance,
+  recovery?:{commandId:string;grant:import("./types.js").Grant;initialize(run:DispatchRun):void},
 ): DispatchRun {
   const work = readWork(store, groupId, target.workItemId);
   validateRetryGrantSource(store, groupId, work);
@@ -378,7 +382,7 @@ function createStartingRun(
   const claimIdentity = continuation
     ? `${continuation.desiredIntentId}:attempt:${claimOrdinal}`
     : `task:${groupId}:${startRevision}:${work.taskId}:attempt:${claimOrdinal}`;
-  const grant = structuredClone(allowance?.grant??work.grant);
+  const grant = structuredClone(recovery?.grant??allowance?.grant??work.grant);
   const runId = continuation ? continuation.pendingRunId : `run-${randomUUID()}`;
   const ownerToken = randomUUID();
   const binding = (slot: ProfileBindingV1): { profileId: string; profileHash: string } => ({ profileId: slot.profileId, profileHash: slot.profileHash });
@@ -395,7 +399,7 @@ function createStartingRun(
   const run: DispatchRun = {
     runId, groupId, workItemId: work.workItemId, taskId: work.taskId, estimateId: null, generation: 1,
     graphVersion: snapshot.graphVersion, targetVersion: work.targetVersion,
-    commandId: continuation ? `continue-${groupId}-${continuation.resumeRevision}-${work.workItemId}` : `start-${groupId}-${startRevision}-${work.workItemId}`,
+    commandId: recovery?.commandId ?? (continuation ? `continue-${groupId}-${continuation.resumeRevision}-${work.workItemId}` : `start-${groupId}-${startRevision}-${work.workItemId}`),
     // Agent selection spec §6.4 / §3 I1: a run (and a continuation of it) carries its work item's frozen selection unchanged.
     configHash: frozen.configHash, agent: frozen.agent, agentProvenance: frozen.agentProvenance, timeoutMs: frozen.timeoutMs,
     killGraceMs: frozen.killGraceMs, agentCapabilities: frozen.agentCapabilities,
@@ -406,6 +410,7 @@ function createStartingRun(
     continuationIntentId: continuation?.continuationIntentId ?? null,
     executionProfile: { workKind: "task", ...binding(snapshot.profiles.worker) }, handoffProfile: { workKind: "handoff", ...binding(snapshot.profiles.handoff) },
   };
+  recovery?.initialize(run);
   store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,?,1,1,?)").run(runId, groupId, work.workItemId, JSON.stringify(run));
   if(allowance){
     persistFundedAllowance(store,runId,groupId,work.workItemId,allowance);

@@ -1,0 +1,72 @@
+[
+  {
+    "name": "task7-mutant-source-semantic01",
+    "path": "/private/tmp/orca-task7-mutant-20261011/src/control/savedResultRecovery.ts",
+    "beforeSHA256": "0732927d1aa84b33c61e1eb6973e37f5c2e65f90010855430f0b91bb01e8d042",
+    "afterSHA256": "379349454677adec77eb79dc309a8d0eabe2d84cfcc0305604e3c4bcfb5a49c2",
+    "rc": 1
+  },
+  {
+    "name": "task7-mutant-cap01",
+    "path": "/private/tmp/orca-task7-mutant-20261011/src/control/savedResultRecovery.ts",
+    "beforeSHA256": "0732927d1aa84b33c61e1eb6973e37f5c2e65f90010855430f0b91bb01e8d042",
+    "afterSHA256": "c2a9161a64d5a5c7e9157427b7c71c79ce040ca4d618d29f09bc3ab86f052214",
+    "rc": 1
+  },
+  {
+    "name": "task7-mutant-reservation01",
+    "path": "/private/tmp/orca-task7-mutant-20261011/src/control/fundedAllowance.ts",
+    "beforeSHA256": "99b48ecf2bac853c68c4997f3c660c7221e1d89e9a8c86056775942643020e17",
+    "afterSHA256": "d9d4daea33d1183dd512292da328fe38bbda176a850db0afb9ba2d9d7b5d244f",
+    "rc": 1
+  },
+  {
+    "name": "task7-mutant-lineage01",
+    "path": "/private/tmp/orca-task7-mutant-20261011/src/control/savedResultRecovery.ts",
+    "beforeSHA256": "0732927d1aa84b33c61e1eb6973e37f5c2e65f90010855430f0b91bb01e8d042",
+    "afterSHA256": "cf2a738ad772bbff9bcfb9d8a365b7bcab4cbda73695e599371db88fd7a503eb",
+    "rc": 1
+  },
+  {
+    "name": "task7-mutant-original-failure01",
+    "path": "/private/tmp/orca-task7-mutant-20261011/src/control/savedResultRecovery.ts",
+    "beforeSHA256": "0732927d1aa84b33c61e1eb6973e37f5c2e65f90010855430f0b91bb01e8d042",
+    "afterSHA256": "0fdc22d1ca4df64d5f44c36ccdb8047d4ad77321cc4f2b62e679781474ff7e31",
+    "rc": 1
+  },
+  {
+    "name": "task7-mutant-never-submitted01",
+    "path": "/private/tmp/orca-task7-mutant-20261011/src/control/savedResultNoDispatch.ts",
+    "beforeSHA256": "7fbe74f5ae8d17f61b0996f572e09592e253233c6137223a33a917082909e5c5",
+    "afterSHA256": "bd4f52aa9e562517f66e229a6429e5c7ebaa2a02f7e4a1ce737dee9ecc3113e6",
+    "rc": 1
+  },
+  {
+    "name": "task7-mutant-auto-fallback01",
+    "path": "/private/tmp/orca-task7-mutant-20261011/src/control/webDispatch.ts",
+    "beforeSHA256": "5cba3715affd96554616b0a31a19efacd5ae70156489e481f59d1a8ac529aec0",
+    "afterSHA256": "cbc6c10458012a9795019e2a5b820755446aeea19e3a3d7a58df7a9d105adb3d",
+    "rc": 0
+  },
+  {
+    "name": "task7-mutant-auto-fallback02",
+    "path": "/private/tmp/orca-task7-mutant-20261011/src/control/webDispatch.ts",
+    "beforeSHA256": "5cba3715affd96554616b0a31a19efacd5ae70156489e481f59d1a8ac529aec0",
+    "afterSHA256": "cbc6c10458012a9795019e2a5b820755446aeea19e3a3d7a58df7a9d105adb3d",
+    "rc": 1
+  },
+  {
+    "name": "task7-mutant-owner-version01",
+    "path": "/private/tmp/orca-task7-mutant-20261011/src/control/migrations.ts",
+    "beforeSHA256": "063d57f262f2f12217418416e9323a67bd22f57b252184714b503cc47a75a2d5",
+    "afterSHA256": "fe0a02d70eed932e165ec76650a148c78ace86f543b27c8d28ecdb6eed57a644",
+    "rc": 1
+  },
+  {
+    "name": "task7-mutant-required-check01",
+    "path": "/private/tmp/ccloop-task7-check-mutant-20261011/src/controller/runLoop.ts",
+    "beforeSHA256": "34d8ae7d83d36a614a42b5384ecdf88ff22f1fa25a5defaff55dbe806480f2b8",
+    "afterSHA256": "7ad32299dc2b6326dc3fb007b3c868ce30435e589fa7e623bc31649be951f419",
+    "rc": 1
+  }
+]

@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const schemaVersion = "11";
+export const schemaVersion = "12";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -130,6 +130,12 @@ function migrate7To8(store: DatabaseSync): void {
 }
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
+  // Saved recovery requires a reader that preserves its mode. Version 12 fences older owners;
+  // the 11→12 upgrade changes only the marker, never policy classification or accounting.
+  if (fromVersion === "11") {
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "1") store.exec(schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7);
   else if (fromVersion === "2") store.exec(schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7);
   else if (fromVersion === "3") store.exec(schema3To4 + schema4To5 + schema5To6 + schema6To7);

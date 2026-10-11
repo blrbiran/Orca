@@ -1,7 +1,7 @@
 {
   "name": "orca",
   "version": "0.1.0",
-  "description": "Leave it to Orca — every idea, made real.",
+  "description": "Leave it to Orca \u2014 every idea, made real.",
   "private": true,
   "workspaces": [
     "web"
@@ -26,7 +26,8 @@
     "verify:panel": "tsx scripts/verify-panel.ts",
     "verify:ccloop-pin": "node scripts/verify-ccloop-pin.mjs",
     "hooks:install": "git config core.hooksPath scripts/githooks",
-    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath scripts/githooks || true"
+    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath scripts/githooks || true",
+    "verify:saved-result": "node scripts/verify-saved-result.mjs"
   },
   "dependencies": {
     "@ast-grep/cli": "0.45.3",

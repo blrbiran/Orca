@@ -1,0 +1,190 @@
+[
+  {
+    "path": "README.md",
+    "sha256": "699d2b0a0ba9f07fb27781528beedc066bff217d832348b74cdab936eafcf09a"
+  },
+  {
+    "path": "package.json",
+    "sha256": "d5eb4a50fa104b068b405b10bece9b19b29d69b42e33090be9e93554b1503283"
+  },
+  {
+    "path": "src/control/ccloopPort.ts",
+    "sha256": "6453e350eb8a3d26601c0258a8465cacf3b74bcb2874271554f5a06a1888fb97"
+  },
+  {
+    "path": "src/control/commandLedger.ts",
+    "sha256": "4b39bb9dcf44991a4717329fef3bf6116b280548df3445ccc67aa0f65207ace8"
+  },
+  {
+    "path": "src/control/continuation.ts",
+    "sha256": "10cbf97fc5fbe38e7dd23409099d2fafd1c119c6a9a365284bdb695b0286bc62"
+  },
+  {
+    "path": "src/control/driverHandoff.ts",
+    "sha256": "b83e15e203264cfa055b5dceb8edcfcf18e085d03bc7baf87853f2e641558ba4"
+  },
+  {
+    "path": "src/control/errors.ts",
+    "sha256": "ab3fb88d6a3da1fc491ee2fdbe2e206bc2027521d9323f01e36d0ea6aed0edb7"
+  },
+  {
+    "path": "src/control/executionDriver.ts",
+    "sha256": "d3bc61a3baf1535ebe2c67c00fdaf1e886ac4ec4dbd6eae3e2e7c6bd1346acfd"
+  },
+  {
+    "path": "src/control/executionPort.ts",
+    "sha256": "307e461b002c61098e0af50b011a8a810e9c6ba0d6e04d0fe395e0e8f88a3e57"
+  },
+  {
+    "path": "src/control/fundedAllowance.ts",
+    "sha256": "99b48ecf2bac853c68c4997f3c660c7221e1d89e9a8c86056775942643020e17"
+  },
+  {
+    "path": "src/control/migrations.ts",
+    "sha256": "063d57f262f2f12217418416e9323a67bd22f57b252184714b503cc47a75a2d5"
+  },
+  {
+    "path": "src/control/profiles.ts",
+    "sha256": "3571d8d0b2da109c83ffcc8f8410c15dc73837cbb18e02313e2db95c264ee8ab"
+  },
+  {
+    "path": "src/control/retryTask.ts",
+    "sha256": "e1c460da7703dfcee19e428e08fd2ef314925ff9981a6f73adb7c3fe45a8f33e"
+  },
+  {
+    "path": "src/control/schema.ts",
+    "sha256": "a9d5ae5a670544806d6fa1d7e5548a459043e9ee8c062d0fe4d20c2f8dcecf54"
+  },
+  {
+    "path": "src/control/startEnvelope.ts",
+    "sha256": "bf26a1d3a885b1d33fddb7e1bc27d9123aba632e707792e291f8467a29c8fe8b"
+  },
+  {
+    "path": "src/control/store.ts",
+    "sha256": "56b84a0e8ffdb31982b0707d2bc794887b4d3d9f85c146488f0c503e8313716d"
+  },
+  {
+    "path": "src/control/webDispatch.ts",
+    "sha256": "5cba3715affd96554616b0a31a19efacd5ae70156489e481f59d1a8ac529aec0"
+  },
+  {
+    "path": "src/control/webProtocol.ts",
+    "sha256": "26d7fa1f07d1768f356af4d01049d07f68cf3e8759044ce803a0c632af85ee91"
+  },
+  {
+    "path": "src/control/webService.ts",
+    "sha256": "8c5c1cbe63932f0fdbf135c6fd44dff5f56541f66d8e8bfe666be2c31e9b57fd"
+  },
+  {
+    "path": "src/panel/controlApi.ts",
+    "sha256": "ea645d6116ad63ceeda552d5309cb6585acbb19ca6532e6d35e475db8be751ab"
+  },
+  {
+    "path": "src/panel/controlViews.ts",
+    "sha256": "e671c5a741105f48e2139fe757837302114dd5f2241d40e3a7629731e28e8509"
+  },
+  {
+    "path": "src/panel/humanOnly.ts",
+    "sha256": "7e73ff2b352c5661bb23a101444cd803636dc280a28a3563fd918149442e037d"
+  },
+  {
+    "path": "tests/control/archiveGroup.test.ts",
+    "sha256": "b7173e02cec2f13a1421cc0034d56897de2d65b084e2bce9106f55c21682b1f5"
+  },
+  {
+    "path": "tests/control/commandClient.test.ts",
+    "sha256": "c9fde3784c3efd06293dbbaa7ec9924deef88beb268d964745ea3031718a091d"
+  },
+  {
+    "path": "tests/control/requirementRecords.test.ts",
+    "sha256": "b8a22cb026eb2c2911d8f3fa196bc02b2e2b684dd8f362408f991d36c636afca"
+  },
+  {
+    "path": "tests/control/schema10.test.ts",
+    "sha256": "56cd855851694c180de97f79191ae930f43961c9f149c380b2ac28d03bcdd1c0"
+  },
+  {
+    "path": "tests/control/schema8.test.ts",
+    "sha256": "136481442d8f58e71c9bbc01a20d0488d3e86cc42f1643666df48a7ccbd6b4b9"
+  },
+  {
+    "path": "tests/control/schema9.test.ts",
+    "sha256": "890296cd4619ffbb9b2c0054eed3951fef6c55cf24c96590ec0a158782c82936"
+  },
+  {
+    "path": "tests/control/shutdownHealing.test.ts",
+    "sha256": "1d15f7944ed60b41f29d0d84ac7cf4c7583fbd4b32981071e7223319a3ed22c8"
+  },
+  {
+    "path": "tests/control/tokenPolicyMigration.test.ts",
+    "sha256": "22f9e084077768a8f654f64e1345e982169f63ef9830860ea1f64d031bc6970c"
+  },
+  {
+    "path": "web/src/RunReason.tsx",
+    "sha256": "b30f867a9f043dc4f75ad1869a70c7cda712ab9250022db445489eb856e99a0e"
+  },
+  {
+    "path": "web/src/TaskDetail.tsx",
+    "sha256": "ab43d200e9405ffcb95ef750e63f033f453e94e4029b531c67b62075acfcb676"
+  },
+  {
+    "path": "web/src/controlApi.ts",
+    "sha256": "6b4649642ce2b1aced56392fb99b1a1a1a1d3f51362d8c70b391d801e90828c4"
+  },
+  {
+    "path": "web/src/controlTypes.ts",
+    "sha256": "afebff0ca7532cc2e1bd72d7b8770c9231325440ef15e9107620bd28f56ce7b0"
+  },
+  {
+    "path": "web/src/locales/en.ts",
+    "sha256": "fd601861b0525fc7e676d47255b1f69902b63c9d755515525d4c0bfa6fa3a961"
+  },
+  {
+    "path": "web/src/locales/zh.ts",
+    "sha256": "0c7458998a9c31ace2fc5270b986f1092c1a54320c48e1885b4fdb608dada465"
+  },
+  {
+    "path": "web/src/runFacts.ts",
+    "sha256": "c9f93bd71fd707f96745951960b638d3055c1dd55d1aadffeb0ce0a8b0d06938"
+  },
+  {
+    "path": "scripts/verify-saved-result.mjs",
+    "sha256": "d88c95ee095d58ebae063011f3dfb1e40a96028bd5247cf60fd3186f23fcc62e"
+  },
+  {
+    "path": "src/control/savedResultNoDispatch.ts",
+    "sha256": "7fbe74f5ae8d17f61b0996f572e09592e253233c6137223a33a917082909e5c5"
+  },
+  {
+    "path": "src/control/savedResultProtocol.ts",
+    "sha256": "e9fa12cc09600e42559172e78a8d592414e25d9038064a8272641e2a56e6592c"
+  },
+  {
+    "path": "src/control/savedResultRecovery.ts",
+    "sha256": "0732927d1aa84b33c61e1eb6973e37f5c2e65f90010855430f0b91bb01e8d042"
+  },
+  {
+    "path": "src/control/savedResultRecoveryPackage.ts",
+    "sha256": "e5f03a66dfb3bcbb184350c3641b369b48d69279383eeb1829202533c24b7395"
+  },
+  {
+    "path": "tests/control/fixtures/savedResultWorld.ts",
+    "sha256": "ab82fd5005262e6edd49b1ee7d7a5db15a8fc94e9f0dc83bb5b55243f7e9d002"
+  },
+  {
+    "path": "tests/control/savedResultRecovery.paired.test.ts",
+    "sha256": "ad1ecc27c2961ce677a4e2f265578a89cbfd571f86e68860a046923a556061d7"
+  },
+  {
+    "path": "tests/control/savedResultRecovery.test.ts",
+    "sha256": "d4c906ccdc0f45009a03d1e82ab340c026038c3933366b1cbdfbb90943a2f4ee"
+  },
+  {
+    "path": "tests/panel/savedResultRecovery.test.ts",
+    "sha256": "dd6e0834e4c3041bb5b748f3b21e67f52cdf7383c93e5594a11dd5de908d9be0"
+  },
+  {
+    "path": "web/tests/savedResultRecovery.test.tsx",
+    "sha256": "e00d3adf1fe9d176ddf6ec91e98b7fdf943acea20bf25018668b0d555f64fd00"
+  }
+]

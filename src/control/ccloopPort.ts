@@ -1,3 +1,4 @@
+import { savedResultCollectionSchema,savedResultSourceEligibilitySchema,savedResultEligibilitySchema,savedResultSettlementSchema } from "./savedResultProtocol.js";
 import { taskResultCollectionSchema,TaskResultUnsupportedError,TASK_RESULT_RPC_TIMEOUT_MS,MAX_TASK_RESULT_EVIDENCE_BYTES } from './taskResultProtocol.js';
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -117,9 +118,17 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
   if(optionalIdentity()!==identity)throw new ControlError("control-binary-invalid","changed-during-feature-probe");
   featuresCache={identity,value};return {...value};
  };
- const requireFeatures=async(input:StartEnvelope)=>{if(input.protocol===4&&(await readFeatures()).tokenPolicy!=="optional-v1")throw new ControlError("control-token-policy-unsupported");};
+ const requireRecovery=async()=>{if((await readFeatures()).savedResultRecovery!=="v1")throw new ControlError("control-saved-result-unsupported");};
+ const requireFeatures=async(input:StartEnvelope)=>{if(input.mode==="verify-saved-result")await requireRecovery();if(input.protocol===4&&(input.mode===undefined||input.tokenPolicy!==undefined)&&(await readFeatures()).tokenPolicy!=="optional-v1")throw new ControlError("control-token-policy-unsupported");};
+ const privateRead=async(method:string,payload:unknown,ref:ArtifactRef)=>{await requireRecovery();const value=parse(evidenceSchema,await raw(method,payload));const bytes=Buffer.from(value.base64,"base64");if(value.artifactId!==ref.artifactId||value.hash!==ref.hash||bytes.toString("base64").replace(/=+$/," ").trim()!==value.base64.replace(/=+$/," ").trim()||createHash("sha256").update(bytes).digest("hex")!==ref.hash)throw new ControlError("artifact-hash-mismatch");return bytes;};
  const port:ExecutionPort={
   readFeatures,
+  async savedResultSourceEligibility(input){await requireRecovery();return parse(savedResultSourceEligibilitySchema,await raw("saved-result-source-eligibility",{input}));},
+  async savedResultEligibility(input){await requireRecovery();return parse(savedResultEligibilitySchema,await raw("saved-result-eligibility",{input}));},
+  async collectSavedResultEvidence(input){await requireRecovery();return parse(savedResultCollectionSchema,await raw("saved-result-evidence",{input}));},
+  async readSavedResultEvidence(input,capsuleRef,ref){return privateRead("read-saved-result-evidence",{input,capsuleRef,ref},ref);},
+  async settleSavedResult(input){await requireRecovery();return parse(z.object({ref:artifactSchema,settlement:savedResultSettlementSchema}).strict(),await raw("settle-saved-result",{input}));},
+  async readSavedResultSettlement(input,settlementRef,ref){return privateRead("read-saved-result-settlement",{input,settlementRef,ref},ref);},
   async collectTaskResults(input,afterRevision){return parse(taskResultCollectionSchema,await optionalRaw('task-results',{input,afterRevision}));},
   async readTaskResultEvidence(input,manifestRef,ref){
    const value=parse(evidenceSchema,await optionalRaw('read-task-result-evidence',{input,manifestRef,ref}));

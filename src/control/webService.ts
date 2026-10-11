@@ -1,3 +1,5 @@
+import {retainSavedInterruption,readDriverRun} from "./executionDriver.js";
+import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
 import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
 import { assertNoActiveUnbounded } from "./spendCaps.js";
 import { hasTokenPolicy, saveTokenPolicy, enableOptionalTokenPolicy } from "./fundedAllowance.js";
@@ -666,8 +668,12 @@ export class WebControlService {
   }
   /** Issue fixes spec §4.2(2): a task whose run ccloop ended failed back to ready (retryTask.ts). */
   async settleUnknownUsage(command: SettleUnknownUsageCommand): Promise<WebCommandResult> {
-    return applySettleUnknownUsage(this.stopDeps(), command);
+    const result=await applySettleUnknownUsage(this.stopDeps(), command);
+    if("result" in result){const run=readDriverRun(this.store,command.payload.runId);if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)await retainSavedInterruption({store:this.store,admissionGate:this.deps.admissionGate},run.runId);}
+    return result;
   }
+  savedResultEligibility(runId:string){return readSavedResultEligibility(this.stopDeps(),runId);}
+  verifySavedResult(command:VerifySavedResultCommand){return applyVerifySavedResult(this.stopDeps(),command);}
   retryTask(command: RetryTaskCommand): WebCommandResult {
     return applyRetryTask(this.stopDeps(), command) as WebCommandResult;
   }
