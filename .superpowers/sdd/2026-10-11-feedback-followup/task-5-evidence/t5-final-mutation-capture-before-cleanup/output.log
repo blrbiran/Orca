@@ -1,0 +1,165 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-mutations-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (10 tests | 8 failed) 8817ms
+   × captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 1237ms
+     → {"type":"loop_planning","at":"2026-10-10T23:40:55.237Z","detail":"run initialized and ready to plan"}
+{"type":"attempt_started","at":"2026-10-10T23:40:55.392Z","detail":"attempt 1"}
+{"type":"execute_started","at":"2026-10-10T23:40:55.392Z","detail":"attempt 1"}
+{"type":"attempt_failed","at":"2026-10-10T23:40:55.576Z","detail":"ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-YKGky3/source/run/codex/1/execute/call-zRTMz7"}
+: expected null not to be null
+   × records capture failure as unavailable and preserves original failed outcome 1016ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × binds frozen authority separately from a genuinely narrowed protocol4 runtime contract 1075ms
+     → {"type":"loop_planning","at":"2026-10-10T23:40:57.521Z","detail":"run initialized and ready to plan"}
+{"type":"attempt_started","at":"2026-10-10T23:40:57.678Z","detail":"attempt 1"}
+{"type":"execute_started","at":"2026-10-10T23:40:57.678Z","detail":"attempt 1"}
+{"type":"attempt_failed","at":"2026-10-10T23:40:57.788Z","detail":"ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-EqmeoT/source/run/codex/1/execute/call-ETDksP"}
+: expected null not to be null
+   × refuses a hash-valid capsule with another source identity 1010ms
+     → control-request-invalid
+: expected 2 to be +0 // Object.is equality
+   × rejects symlinked evidence namespaces even when referenced bytes exist 1056ms
+     → ENOENT: no such file or directory, rename '/private/tmp/results-task2-NErTNE/source/control/saved-result-evidence' -> '/private/tmp/results-task2-NErTNE/source/saved'
+   × refuses rewrite-runtime bytes that differ from the actual execution authority 1104ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × refuses rewrite-config bytes that differ from the actual execution authority 1047ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × recursively serves original ledger refs only through exact capsule aliases and validates copied bytes 1048ms
+     → control-request-invalid
+: expected 2 to be +0 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3
+AssertionError: {"type":"loop_planning","at":"2026-10-10T23:40:55.237Z","detail":"run initialized and ready to plan"}
+{"type":"attempt_started","at":"2026-10-10T23:40:55.392Z","detail":"attempt 1"}
+{"type":"execute_started","at":"2026-10-10T23:40:55.392Z","detail":"attempt 1"}
+{"type":"attempt_failed","at":"2026-10-10T23:40:55.576Z","detail":"ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-YKGky3/source/run/codex/1/execute/call-zRTMz7"}
+: expected null not to be null
+ ❯ tests/control/savedResultEvidence.test.ts:61:119
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > records capture failure as unavailable and preserves original failed outcome
+AssertionError: expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+    "capsule": null,
+-   "reason": "saved-result-snapshot-entry-unsupported",
++   "reason": "saved-result-original-evidence-unavailable",
+  }
+
+ ❯ tests/control/savedResultEvidence.test.ts:97:31
+     95| it('records capture failure as unavailable and preserves original fail…
+     96|  const f=await world('capture-failure');const r=await f.rpc('saved-res…
+     97|  expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:'save…
+       |                               ^
+     98|  expect(JSON.parse(await readFile(join(f.runDir,'loop-state.json'),'ut…
+     99| },30000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > binds frozen authority separately from a genuinely narrowed protocol4 runtime contract
+AssertionError: {"type":"loop_planning","at":"2026-10-10T23:40:57.521Z","detail":"run initialized and ready to plan"}
+{"type":"attempt_started","at":"2026-10-10T23:40:57.678Z","detail":"attempt 1"}
+{"type":"execute_started","at":"2026-10-10T23:40:57.678Z","detail":"attempt 1"}
+{"type":"attempt_failed","at":"2026-10-10T23:40:57.788Z","detail":"ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-EqmeoT/source/run/codex/1/execute/call-ETDksP"}
+: expected null not to be null
+ ❯ tests/control/savedResultEvidence.test.ts:107:112
+    105| it('binds frozen authority separately from a genuinely narrowed protoc…
+    106|  const f=await world('narrowed');const r=await f.rpc('saved-result-evi…
+    107|  const page=JSON.parse(r.stdout);expect(page.capsule,await readFile(jo…
+       |                                                                                                                ^
+    108|  const c=await jsonRef(f,page.capsule,page.capsule);
+    109|  const accepted=await jsonRef(f,page.capsule,c.artifacts.acceptedContr…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > refuses a hash-valid capsule with another source identity
+AssertionError: control-request-invalid
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ jsonRef tests/control/savedResultEvidence.test.ts:56:107
+     54| }
+     55| async function jsonRef(f:Awaited<ReturnType<typeof world>>,capsuleRef:…
+     56|  const r=await f.rpc('read-saved-result-evidence',{input:f.input,capsu…
+       |                                                                                                           ^
+     57|  return JSON.parse(Buffer.from(JSON.parse(r.stdout).base64,'base64').t…
+     58| }
+ ❯ tests/control/savedResultEvidence.test.ts:117:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > rejects symlinked evidence namespaces even when referenced bytes exist
+Error: ENOENT: no such file or directory, rename '/private/tmp/results-task2-NErTNE/source/control/saved-result-evidence' -> '/private/tmp/results-task2-NErTNE/source/saved'
+ ❯ tests/control/savedResultEvidence.test.ts:124:2
+    122| it('rejects symlinked evidence namespaces even when referenced bytes e…
+    123|  const f=await world();const {rename}=await import('node:fs/promises');
+    124|  await rename(join(f.sourceDir,'control','saved-result-evidence'),join…
+       |  ^
+    125|  await symlink(join(f.sourceDir,'saved'),join(f.sourceDir,'control','s…
+    126|  expect((await f.rpc('saved-result-evidence',{input:f.input})).code).n…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > refuses rewrite-runtime bytes that differ from the actual execution authority
+ FAIL  tests/control/savedResultEvidence.test.ts > refuses rewrite-config bytes that differ from the actual execution authority
+AssertionError: expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+    "capsule": null,
+-   "reason": "saved-result-runtime-contract-mismatch",
++   "reason": "saved-result-original-evidence-unavailable",
+  }
+
+ ❯ tests/control/savedResultEvidence.test.ts:137:31
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > recursively serves original ledger refs only through exact capsule aliases and validates copied bytes
+AssertionError: control-request-invalid
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ jsonRef tests/control/savedResultEvidence.test.ts:56:107
+     54| }
+     55| async function jsonRef(f:Awaited<ReturnType<typeof world>>,capsuleRef:…
+     56|  const r=await f.rpc('read-saved-result-evidence',{input:f.input,capsu…
+       |                                                                                                           ^
+     57|  return JSON.parse(Buffer.from(JSON.parse(r.stdout).base64,'base64').t…
+     58| }
+ ❯ tests/control/savedResultEvidence.test.ts:143:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ Test Files  1 failed (1)
+      Tests  8 failed | 2 passed (10)
+   Start at  07:40:54
+   Duration  9.36s (transform 236ms, setup 14ms, collect 308ms, tests 8.82s, environment 0ms, prepare 45ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-final-mutation-capture-before-cleanup/tests.json

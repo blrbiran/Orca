@@ -1,0 +1,13 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/runtime/executionNormalizer.test.ts (19 tests) 71ms
+ ✓ tests/runtime/codex/extractFinalObject.test.ts (58 tests) 2922ms
+   ✓ extractFinalObject (codex phase output hardening) > performance > refuses a 16 MiB span of millions of empty objects in under 3 s (plan) 1270ms
+   ✓ extractFinalObject (codex phase output hardening) > performance > refuses a 16 MiB span of millions of empty objects in under 3 s (execute) 1335ms
+
+ Test Files  2 passed (2)
+      Tests  77 passed (77)
+   Start at  07:05:06
+   Duration  3.36s (transform 80ms, setup 44ms, collect 171ms, tests 2.99s, environment 1ms, prepare 111ms)
+

@@ -1,0 +1,1186 @@
+# Review package: 5b0adea413b885a1151259d5eb88d21eedcc2ce0..8d1f707634318561dcbc151cd6c33f0ef0da6c49
+
+## Commits
+8d1f707 feat(recovery): retain strict execution format failure evidence
+
+## Files changed
+ src/control/command.ts                             |  11 +-
+ src/control/protocol.ts                            |  15 +-
+ src/control/savedResultEvidence.ts                 | 100 +++++++++++++
+ src/control/worker.ts                              |   1 +
+ src/controller/executionFormatFailure.ts           | 148 ++++++++++++++++++++
+ src/controller/runLoop.ts                          |  21 ++-
+ src/runtime/codex/codexAdapter.ts                  |  39 ++++--
+ src/runtime/codex/protocol.ts                      |  30 ++--
+ src/runtime/executionNormalizer.ts                 |  35 +++++
+ tests/control/savedResultEvidence.test.ts          | 154 +++++++++++++++++++++
+ tests/runtime/codex/executionFormatFailure.test.ts |  36 +++++
+ tests/runtime/executionNormalizer.test.ts          |  32 +++++
+ 12 files changed, 594 insertions(+), 28 deletions(-)
+
+## Diff
+diff --git a/src/control/command.ts b/src/control/command.ts
+index b689fc2..f8df61c 100644
+--- a/src/control/command.ts
++++ b/src/control/command.ts
+@@ -1,10 +1,11 @@
++import { collectSavedResultEvidence, readSavedResultEvidence, savedResultCollectionSchema } from "./savedResultEvidence.js";
+ import { z } from "zod";
+ import { resolveAgent } from "../agents/materialize.js";
+ import { getDescriptor } from "../agents/registry.js";
+ import { assertAgentsTablePath, readAgentsTable } from "../agents/table.js";
+ import { AgentError, type CapabilityViewV1 } from "../agents/types.js";
+ import {
+   agentSelectionSchema,
+   artifactRefSchema,
+   contextWindowSchema,
+   attachControlMethod,
+@@ -163,20 +164,22 @@ const collectionSchema = z.object({
+ const METHODS = new Set<ControlMethodV1>([
+   "features",
+   "capabilities",
+   "accept",
+   "inspect",
+   "handoff",
+   "collect",
+   "read-evidence",
+   "task-results",
+   "read-task-result-evidence",
++  "saved-result-evidence",
++  "read-saved-result-evidence",
+ ]);
+ 
+ async function parseCommand(argv: string[]): Promise<{ method: ControlMethodV1; agentsTablePath: string }> {
+   const method = argv[0] as ControlMethodV1 | undefined;
+   if (method === undefined || !METHODS.has(method)) throw new Error("control-command-invalid");
+   if (method === "features" && argv.length === 1) return { method, agentsTablePath: "" };
+   // Agent selection (2026-09-26), spec §4.5: `--agents <table>` is the only form; `--adapter`/`--adapter-config`
+   // are no longer accepted. Every method checks the path's shape; only capabilities and accept read the table
+   // (spec §4.2, I4: a broken table must not block collecting a run already in flight).
+   if (argv.length !== 3 || argv[1] !== "--agents") throw new Error("control-command-invalid");
+@@ -217,20 +220,25 @@ async function defaultHandler(request: ControlRequestV1, context: ControlContext
+   }
+   if (request.method === "inspect") {
+     return await inspectExecution(request.input);
+   }
+   if (request.method === "handoff") {
+     return await requestHandoff(request.input, request.request);
+   }
+   if (request.method === "collect") {
+     return await collectExecution(request.input, request.afterSeq);
+   }
++  if (request.method === "saved-result-evidence") return await collectSavedResultEvidence(request.input);
++  if (request.method === "read-saved-result-evidence") {
++    const bytes=await readSavedResultEvidence(request.input,request.capsuleRef,request.ref);
++    return {...request.ref,base64:bytes.toString("base64")};
++  }
+   if (request.method === "task-results") return await collectTaskResults(request.input, request.afterRevision);
+   if (request.method === "read-task-result-evidence") {
+     const bytes = await readTaskResultEvidence(request.input, request.manifestRef, request.ref);
+     return { ...request.ref, base64: bytes.toString("base64") };
+   }
+   if (request.method === "read-evidence") {
+     const bytes = await readEvidence(request.input.work.sourceDir, request.ref);
+     return { ...request.ref, base64: bytes.toString("base64") };
+   }
+   throw new ControlProtocolError("control-method-unavailable");
+@@ -241,22 +249,23 @@ function validateResponse(method: ControlMethodV1, value: unknown, protocol = 3)
+     if (method === "features") return z.object({ protocol: z.literal(1), tokenPolicy: z.literal("optional-v1") }).strict().parse(value);
+     if (method === "capabilities") return capabilitiesSchema.parse(value);
+     if (method === "accept" || method === "inspect") return executionStatusSchema.parse(value);
+     if (method === "handoff") return handoffAckSchema.parse(value);
+     if (method === "collect") return (protocol === 4 ? collectionSchema.extend({
+       terminal: terminalSchema.extend({ waitingCause: z.literal("token-allowance").optional(), allowanceNextPhase: z.enum(["plan", "execute", "verify"]).optional(), budgetSnapshot: z.object({
+         attemptsRemaining: safeInteger, timeRemainingMs: safeInteger, tokenBudgetRemaining: safeInteger.nullable(),
+         tokenRemainingStatus: z.enum(["known", "unlimited", "unknown"]),
+       }).strict() }).nullable(),
+     }) : collectionSchema).parse(value);
++    if (method === "saved-result-evidence") return savedResultCollectionSchema.parse(value);
+     if (method === "task-results") return taskResultCollectionSchema.parse(value);
+-    if (method === "read-evidence" || method === "read-task-result-evidence") return evidenceSchema.parse(value);
++    if (method === "read-evidence" || method === "read-task-result-evidence" || method === "read-saved-result-evidence") return evidenceSchema.parse(value);
+     return value;
+   } catch {
+     throw new Error("control-response-invalid");
+   }
+ }
+ 
+ export async function runControlCommand(
+   argv: string[],
+   stdin: string,
+   deps: ControlCommandDeps = {},
+diff --git a/src/control/protocol.ts b/src/control/protocol.ts
+index 438c365..329535d 100644
+--- a/src/control/protocol.ts
++++ b/src/control/protocol.ts
+@@ -8,21 +8,23 @@ import { loopContractSchema, type LoopContract } from "../contract/schema.js";
+ 
+ export type ControlMethodV1 =
+   | "features"
+   | "capabilities"
+   | "accept"
+   | "inspect"
+   | "handoff"
+   | "collect"
+   | "read-evidence"
+   | "task-results"
+-  | "read-task-result-evidence";
++  | "read-task-result-evidence"
++  | "saved-result-evidence"
++  | "read-saved-result-evidence";
+ 
+ export interface AmountV1 {
+   tokens: number;
+   activeMs: number;
+   attempts: number;
+   sessions: number;
+ }
+ 
+ export interface GrantV1 {
+   work: BudgetAmount;
+@@ -116,30 +118,33 @@ export interface CapabilitiesRequestV3 {
+ 
+ export type ControlRequestV1 =
+   | { method: "features" }
+   | { method: "capabilities"; agent: PartialSelectionV1 | null }
+   | { method: "accept"; input: StartEnvelopeV3 }
+   | { method: "inspect"; input: StartEnvelopeV3 }
+   | { method: "handoff"; input: StartEnvelopeV3; request: HandoffRequestV1 }
+   | { method: "collect"; input: StartEnvelopeV3; afterSeq: number }
+   | { method: "read-evidence"; input: StartEnvelopeV3; ref: ArtifactRefV1 }
+   | { method: "task-results"; input: StartEnvelopeV3; afterRevision: number }
+-  | { method: "read-task-result-evidence"; input: StartEnvelopeV3; manifestRef: ArtifactRefV1; ref: ArtifactRefV1 };
++  | { method: "read-task-result-evidence"; input: StartEnvelopeV3; manifestRef: ArtifactRefV1; ref: ArtifactRefV1 }
++  | { method: "saved-result-evidence"; input: StartEnvelopeV3 }
++  | { method: "read-saved-result-evidence"; input: StartEnvelopeV3; capsuleRef: ArtifactRefV1; ref: ArtifactRefV1 };
+ 
+ export type ControlPayloadV1 =
+   | CapabilitiesRequestV3
+   | StartEnvelopeV3
+   | { input: StartEnvelopeV3; request: HandoffRequestV1 }
+   | { input: StartEnvelopeV3; afterSeq: number }
+   | { input: StartEnvelopeV3; ref: ArtifactRefV1 }
+   | { input: StartEnvelopeV3; afterRevision: number }
+-  | { input: StartEnvelopeV3; manifestRef: ArtifactRefV1; ref: ArtifactRefV1 };
++  | { input: StartEnvelopeV3; manifestRef: ArtifactRefV1; ref: ArtifactRefV1 }
++  | { input: StartEnvelopeV3; capsuleRef: ArtifactRefV1; ref: ArtifactRefV1 };
+ 
+ export class ControlProtocolError extends Error {
+   constructor(readonly code: string) {
+     super(code);
+     this.name = "ControlProtocolError";
+   }
+ }
+ 
+ const safeInteger = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+ const positiveSafeInteger = safeInteger.refine((value) => value > 0);
+@@ -248,20 +253,22 @@ export const handoffRequestSchema = z
+   })
+   .strict();
+ 
+ const payloadSchemas = {
+   features: z.object({}).strict(),
+   capabilities: z.object({ agent: partialSelectionSchema.nullable() }).strict(),
+   accept: startEnvelopeSchema,
+   inspect: startEnvelopeSchema,
+   handoff: z.object({ input: startEnvelopeSchema, request: handoffRequestSchema }).strict(),
+   collect: z.object({ input: startEnvelopeSchema, afterSeq: safeInteger }).strict(),
++  "saved-result-evidence": z.object({ input: startEnvelopeSchema }).strict(),
++  "read-saved-result-evidence": z.object({ input: startEnvelopeSchema, capsuleRef: artifactRefSchema, ref: artifactRefSchema }).strict(),
+   "task-results": z.object({ input: startEnvelopeSchema, afterRevision: safeInteger }).strict(),
+   "read-task-result-evidence": z.object({ input: startEnvelopeSchema, manifestRef: artifactRefSchema, ref: artifactRefSchema }).strict(),
+   "read-evidence": z.object({ input: startEnvelopeSchema, ref: artifactRefSchema }).strict(),
+ } satisfies Record<ControlMethodV1, z.ZodTypeAny>;
+ 
+ function canonicalize(value: unknown): unknown {
+   if (Array.isArray(value)) return value.map(canonicalize);
+   if (value !== null && typeof value === "object") {
+     return Object.fromEntries(
+       Object.entries(value as Record<string, unknown>)
+@@ -350,21 +357,21 @@ export function parseControlRequest(method: ControlMethodV1, raw: unknown): Cont
+   // Agent selection (2026-09-26), spec §5: the start envelope is protocol 2; a v1 envelope is refused by name.
+   // Handoff requests stay protocol 1 and are nested, so this reads the envelope's number (spec §5 M4).
+   // ERRATUM (Orca single-call estimate, 2026-09-27, human ruling S7): the start envelope is now protocol 3 only; 1 and 2 are refused by name.
+   // Task3 (2026-10-11): independent features negotiates protocol4; legacy protocol3 remains finite and exact.
+   if (version !== undefined && version !== 3 && version !== 4) {
+     throw new ControlProtocolError("control-protocol-unsupported");
+   }
+   try {
+     const payload = payloadSchemas[method].parse(raw) as ControlPayloadV1;
+     if (method === "accept" || method === "inspect") validateEnvelopePaths(payload as StartEnvelopeV3, method);
+-    if (method === "handoff" || method === "collect" || method === "read-evidence" || method === "task-results" || method === "read-task-result-evidence") {
++    if (method === "handoff" || method === "collect" || method === "read-evidence" || method === "task-results" || method === "read-task-result-evidence" || method === "saved-result-evidence" || method === "read-saved-result-evidence") {
+       validateEnvelopePaths((payload as { input: StartEnvelopeV3 }).input, method);
+     }
+     return payload;
+   } catch (error) {
+     if (error instanceof ControlProtocolError) throw error;
+     throw new ControlProtocolError("control-request-invalid");
+   }
+ }
+ 
+ export function attachControlMethod(method: ControlMethodV1, payload: ControlPayloadV1): ControlRequestV1 {
+diff --git a/src/control/savedResultEvidence.ts b/src/control/savedResultEvidence.ts
+new file mode 100644
+index 0000000..16fae90
+--- /dev/null
++++ b/src/control/savedResultEvidence.ts
+@@ -0,0 +1,100 @@
++import { join } from "node:path";
++import { z } from "zod";
++import { artifactRefSchema, canonicalHash, ControlProtocolError, type ArtifactRefV1, type StartEnvelopeV3 } from "./protocol.js";
++import { readAccepted } from "./store.js";
++import { publishTaskResultIndex, readTaskResultFile, taskResultDigest, TaskResultFileError } from "./taskResultEvidence.js";
++import { taskResultIdentitySchema } from "./taskResults.js";
++
++const safe=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), positive=safe.refine(n=>n>0);
++const hash=z.string().regex(/^[a-f0-9]{64}$/), oid=z.string().regex(/^[a-f0-9]{40,64}$/);
++const ref=artifactRefSchema;
++// Leave room for base64 expansion plus the strict control-response envelope.
++const MAX_SAVED_BYTES=12*1024*1024-1024;
++export const executionSnapshotSchema=z.object({
++  schema:z.literal("ccloop-execution-snapshot-v1"),head:oid,indexTree:oid,indexCommit:oid,bundleRefName:z.string().startsWith("refs/ccloop/"),
++  index:ref,bundle:ref,status:ref,
++  files:z.array(z.object({path:z.string().min(1),kind:z.literal("file"),mode:safe,ref}).strict()).max(10000),
++  directories:z.array(z.object({path:z.string().min(1),mode:safe}).strict()).max(10000),
++  deleted:z.array(z.string()),
++}).strict();
++export const executionFormatFailureSchema=z.object({
++  schema:z.literal("ccloop-execution-format-failure-v1"),identity:taskResultIdentitySchema,attempt:positive,
++  executor:z.object({kind:z.literal("codex"),configHash:hash}).strict(), frozenContractHash:hash,
++  acceptedBase:z.string().min(1),resolvedBase:oid,attemptStartHead:oid,decoder:z.literal("strict-execution-v1"),classification:z.literal("execution-format-failure-v1"),
++  process:z.object({reason:z.literal("completed"),code:z.literal(0),signal:z.null(),isolated:z.literal(true)}).strict(),
++  usage:z.object({tokenUsage:positive,highWater:positive}).strict(),
++  verifier:z.object({entered:z.literal(false),proof:ref}).strict(),
++  artifacts:z.object({envelope:ref,config:ref,acceptedContract:ref,runtimeContract:ref,final:ref,events:ref,schema:ref,decodeError:ref,normalization:ref,outcome:ref,process:ref,plan:ref,usage:ref,usageLedger:ref,usageObservations:z.array(z.object({source:ref,copy:ref}).strict()),owner:ref}).strict(),
++  snapshot:ref,completeness:z.object({complete:z.literal(true),parts:z.tuple([z.literal("original-process"),z.literal("original-stream"),z.literal("actual-usage"),z.literal("successful-plan"),z.literal("verifier-not-entered"),z.literal("tree-index-bundle-files")])}).strict(),
++  capturedAt:z.string().datetime({offset:true}),captureOwner:z.string().min(1),
++}).strict();
++export type ExecutionFormatFailureCapsule=z.infer<typeof executionFormatFailureSchema>;
++export const savedResultCollectionSchema=z.object({
++  schema:z.literal("ccloop-saved-result-evidence-v1"),identity:taskResultIdentitySchema,attempt:safe,capsule:ref.nullable(),reason:z.string().nullable(),
++}).strict();
++export const savedResultIndexPath=(source:string)=>join(source,"run","saved-result","index.json");
++export function savedResultPath(source:string,ref:ArtifactRefV1):string {
++  if(!artifactRefSchema.safeParse(ref).success || ref.artifactId!==`saved-result-${ref.hash}`)throw new ControlProtocolError("control-saved-result-ref-invalid");
++  return join(source,"control","saved-result-evidence",`${ref.artifactId}.bin`);
++}
++export async function readSavedBytes(source:string,ref:ArtifactRefV1):Promise<Buffer>{
++  const bytes=await readTaskResultFile(source,savedResultPath(source,ref),MAX_SAVED_BYTES);
++  if(taskResultDigest(bytes)!==ref.hash)throw new ControlProtocolError("control-saved-result-hash-mismatch");
++  return bytes;
++}
++export async function writeSavedBytes(source:string,bytes:Buffer,assertHeld:()=>Promise<void>):Promise<ArtifactRefV1>{
++  if(bytes.length>MAX_SAVED_BYTES)throw new Error("saved-result-evidence-too-large");
++  const hash=taskResultDigest(bytes),ref={artifactId:`saved-result-${hash}`,hash};
++  try {await readSavedBytes(source,ref);return ref;}catch(error){if(!(error instanceof TaskResultFileError && error.status==="missing"))throw error;}
++  await publishTaskResultIndex(source,savedResultPath(source,ref),bytes,assertHeld);
++  return ref;
++}
++export async function savedResultIdentity(input:StartEnvelopeV3){
++  const accepted=await readAccepted(input.work.sourceDir);
++  if(accepted.envelopeHash!==canonicalHash(input)||accepted.configHash!==input.claim.configHash||accepted.generation!==input.claim.generation)throw new ControlProtocolError("control-envelope-conflict");
++  const {groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion}=input.claim;
++  return taskResultIdentitySchema.parse({groupId,workItemId,taskId,runId,generation,graphVersion,targetVersion,executionId:accepted.executionId,envelopeHash:accepted.envelopeHash});
++}
++const same=(a:ArtifactRefV1,b:ArtifactRefV1)=>a.artifactId===b.artifactId&&a.hash===b.hash;
++export async function collectSavedResultEvidence(input:StartEnvelopeV3){
++  const identity=await savedResultIdentity(input),source=input.work.sourceDir;
++  let page:z.infer<typeof savedResultCollectionSchema>;
++  try {page=savedResultCollectionSchema.parse(JSON.parse((await readTaskResultFile(source,savedResultIndexPath(source),16*1024*1024)).toString()));}
++  catch(error){
++    if(!(error instanceof TaskResultFileError&&error.status==="missing"))throw error;
++    let reason="saved-result-original-evidence-unavailable";
++    try {
++      const config=JSON.parse((await readTaskResultFile(source,join(source,"control","config.json"),16*1024*1024)).toString());
++      if(config.kind!=="codex")reason="saved-result-provider-original-evidence-unsupported";
++    } catch(error) {if(!(error instanceof TaskResultFileError&&error.status==="missing"))throw error;}
++    return {schema:"ccloop-saved-result-evidence-v1" as const,identity,attempt:0,capsule:null,reason};
++  }
++  if(canonicalHash(page.identity)!==canonicalHash(identity))throw new ControlProtocolError("control-saved-result-authority-invalid");
++  if(page.capsule)await loadClosure(input,page.capsule,page.attempt);
++  return page;
++}
++async function loadClosure(input:StartEnvelopeV3,capsuleRef:ArtifactRefV1,attempt:number){
++  const source=input.work.sourceDir,identity=await savedResultIdentity(input);
++  const c=executionFormatFailureSchema.parse(JSON.parse((await readSavedBytes(source,capsuleRef)).toString()));
++  if(canonicalHash(c.identity)!==canonicalHash(identity)||c.attempt!==attempt||c.frozenContractHash!==input.contractHash||c.executor.configHash!==input.claim.configHash)throw new ControlProtocolError("control-saved-result-authority-invalid");
++  const snapshot=executionSnapshotSchema.parse(JSON.parse((await readSavedBytes(source,c.snapshot)).toString()));
++  const {usageObservations,...artifacts}=c.artifacts;
++  const refs=[capsuleRef,c.snapshot,c.verifier.proof,...Object.values(artifacts),...usageObservations.map(alias=>alias.copy),snapshot.index,snapshot.bundle,snapshot.status,...snapshot.files.map(f=>f.ref)];
++  for(const ref of refs)await readSavedBytes(source,ref);
++  const ledger=JSON.parse((await readSavedBytes(source,c.artifacts.usageLedger)).toString());
++  if(!Array.isArray(ledger.events)||ledger.events.length!==usageObservations.length
++    ||usageObservations.some((alias,i)=>!same(alias.source,ledger.events[i].source)
++      ||alias.source.artifactId!==`evidence-${alias.source.hash}`||alias.source.hash!==alias.copy.hash))throw new ControlProtocolError("control-saved-result-authority-invalid");
++  return {refs,aliases:usageObservations};
++}
++export async function readSavedResultEvidence(input:StartEnvelopeV3,capsuleRef:ArtifactRefV1,ref:ArtifactRefV1):Promise<Buffer>{
++  const page=await collectSavedResultEvidence(input);
++  if(!page.capsule||!same(page.capsule,capsuleRef))throw new ControlProtocolError("control-saved-result-authority-invalid");
++  const {refs,aliases}=await loadClosure(input,capsuleRef,page.attempt);
++  // Exact declared ID/hash pairs only; raw historical ledger bytes and IDs stay unchanged.
++  // Aliases resolve to private immutable copies, never to mutable core evidence paths.
++  const alias=aliases.find(alias=>same(alias.source,ref));
++  if(alias)return readSavedBytes(input.work.sourceDir,alias.copy);
++  if(!refs.some(r=>same(r,ref)))throw new ControlProtocolError("control-saved-result-authority-invalid");
++  return readSavedBytes(input.work.sourceDir,ref);
++}
+diff --git a/src/control/worker.ts b/src/control/worker.ts
+index 0bfa4af..1d47388 100644
+--- a/src/control/worker.ts
++++ b/src/control/worker.ts
+@@ -236,20 +236,21 @@ export async function runControlWorker(argv: string[]): Promise<void> {
+       ? envelope.work.contract
+       : await prepareContinuationContract(envelope.work.contract, runDir, envelope.inputCheckpoint);
+     const adapterOptions = envelope.work.kind === "loop" && envelope.work.skillPluginDir !== undefined
+       ? { skillPluginDir: envelope.work.skillPluginDir }
+       : envelope.work.codexSkillsDir !== undefined ? { codexSkillsDir: envelope.work.codexSkillsDir } : undefined;
+     await runLoop(contract, runDir, () => getDescriptor(config.kind).createAdapter(config, adapterOptions), {
+       ...(envelope.protocol === 4 ? { workGrant: envelope.claim.grant.work, tokenPolicy: envelope.tokenPolicy } : {}),
+       allowanceContinuation,
+       firstWorkspaceInput: envelope.inputCheckpoint ?? undefined,
+       taskResultInput: envelope,
++      executionFormatCapture: config.kind === "codex" ? {config} : undefined,
+       stopRequested,
+       phaseSignal: phaseAbort.signal,
+       onProcessRegistered,
+       onPhaseSettled: async (observation) => {
+         if (observation.completedWithResult) await recordCompletedPhase(sourceDir);
+         if (observation.tokenUsage === null) usageKnown = false;
+         let byModel: ModelUsageV1[] | undefined;
+         if (observation.tokenUsage !== null) {
+           const next = cumulativeTokens + observation.tokenUsage;
+           if (!Number.isSafeInteger(next)) throw new Error("control-usage-overflow");
+diff --git a/src/controller/executionFormatFailure.ts b/src/controller/executionFormatFailure.ts
+new file mode 100644
+index 0000000..97d09e1
+--- /dev/null
++++ b/src/controller/executionFormatFailure.ts
+@@ -0,0 +1,148 @@
++import type { LoopContract } from "../contract/schema.js";
++import type { MaterializedAgentConfigV1 } from "../agents/types.js";
++import { loopContractSchema } from "../contract/schema.js";
++import { agentConfigHash, parseMaterializedAgentConfig } from "../agents/materialize.js";
++import { ExecutionFormatFailure } from "../runtime/executionNormalizer.js";
++export { ExecutionFormatFailure } from "../runtime/executionNormalizer.js";
++import { execFile } from "node:child_process";
++import { lstat, readdir, mkdtemp, rm, writeFile, realpath } from "node:fs/promises";
++import { dirname, join, resolve } from "node:path";
++import { promisify } from "node:util";
++import { z } from "zod";
++import { appendEvent } from "../persistence/fileStore.js";
++import { canonicalHash, canonicalJson, isLoopEnvelope, type ArtifactRefV1, type StartEnvelopeV3 } from "../control/protocol.js";
++import { readEvidence } from "../control/evidence.js";
++import { parseKnownWorkUsageLedger, readUsageEvents } from "../control/usage.js";
++import { publishTaskResultIndex, readTaskResultFile, safeTaskResultPath } from "../control/taskResultEvidence.js";
++import { executionFormatFailureSchema, executionSnapshotSchema, savedResultIdentity, savedResultIndexPath, writeSavedBytes } from "../control/savedResultEvidence.js";
++import { decodeCodexResult, decodeCodexUsage, codexModelUsage } from "../runtime/codex/protocol.js";
++import { normalizeExecutionFinal, EXECUTION_NORMALIZER_VERSION } from "../runtime/executionNormalizer.js";
++import { codexSkillsPendingPath } from "../runtime/codex/codexSkills.js";
++
++const exec=promisify(execFile);
++const git=async(cwd:string,...args:string[])=>(await exec("/usr/bin/git",["-c","core.hooksPath=/dev/null",...args],{cwd,maxBuffer:16*1024*1024,timeout:30000})).stdout.trim();
++const read=(root:string,path:string)=>readTaskResultFile(root,path,16*1024*1024);
++const missing=async(path:string)=>{try{await lstat(path);return false;}catch(e){if((e as NodeJS.ErrnoException).code==="ENOENT")return true;throw e;}};
++const positive=z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
++const processSchema=z.object({pid:positive,pgid:positive,startedAt:z.string().min(1),phase:z.literal("execute")}).strict();
++export interface ExecutionFormatCaptureInput {
++  input:StartEnvelopeV3;runDir:string;worktreePath:string;attempt:number;attemptStartHead:string;resolvedBase:string;
++  runtimeContract:LoopContract;actualConfig:MaterializedAgentConfigV1;
++  failure:ExecutionFormatFailure;verifierEntered:boolean;assertHeld:()=>Promise<void>;
++}
++async function snapshot(input:ExecutionFormatCaptureInput):Promise<ArtifactRefV1>{
++  const {worktreePath:tree}=input,source=input.input.work.sourceDir;
++  const write=(bytes:Buffer)=>writeSavedBytes(source,bytes,input.assertHeld);
++  if(!await missing(codexSkillsPendingPath(tree)))throw new Error("saved-result-skills-cleanup-incomplete");
++  const head=await git(tree,"rev-parse","HEAD");
++  const indexPath=await realpath(resolve(tree,await git(tree,"rev-parse","--git-path","index")));
++  const indexBytes=await read(dirname(indexPath),indexPath);
++  const index=await write(indexBytes);
++  if((await git(tree,"ls-files","--stage")).split("\n").some(row=>row.startsWith("160000 ")))throw new Error("saved-result-submodule-unavailable");
++  const directories:Array<{path:string;mode:number}>=[];
++  const files:Array<{path:string;kind:"file";mode:number;ref:ArtifactRefV1}>=[];
++  const walk=async(directory:string)=>{
++    for(const name of (await readdir(join(tree,directory))).sort()){
++      if(name===".git") {if(directory!=="")throw new Error("saved-result-nested-repository-unavailable");continue;}
++      const path=directory?`${directory}/${name}`:name;
++      if(!safeTaskResultPath(path))throw new Error("saved-result-snapshot-path-invalid");
++      const stat=await lstat(join(tree,path));
++      if(stat.isDirectory()){
++        if(directories.length>=10000)throw new Error("saved-result-snapshot-too-large");
++        directories.push({path,mode:stat.mode&0o777});await walk(path);
++      }
++      else {
++        if(!stat.isFile())throw new Error("saved-result-snapshot-entry-unsupported");
++        if(files.length>=10000)throw new Error("saved-result-snapshot-too-large");
++        files.push({path,kind:"file",mode:stat.mode&0o777,ref:await write(await read(tree,join(tree,path)))});
++      }
++    }
++  };
++  await walk("");files.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
++  const statusBytes=(await exec("/usr/bin/git",["status","--porcelain=v1","-z","--untracked-files=all"],{cwd:tree,encoding:"buffer",maxBuffer:16*1024*1024})).stdout;
++  const deleted=(await exec("/usr/bin/git",["diff","HEAD","--name-only","--diff-filter=D","-z"],{cwd:tree,maxBuffer:16*1024*1024})).stdout.split("\0").filter(Boolean);
++  const scratchParent=join(source,"run","saved-result");
++  // The evidence writer creates this private directory before temporary bundle construction.
++  await publishTaskResultIndex(source,join(scratchParent,"capture-started.json"),Buffer.from(JSON.stringify({attempt:input.attempt})),input.assertHeld);
++  const scratch=await mkdtemp(join(scratchParent,"snapshot-"));
++  try {
++    const repo=join(scratch,"repo");
++    await git(tree,"clone","--local","--no-hardlinks","--no-checkout",tree,repo);
++    await writeFile(join(repo,".git","index"),indexBytes,{mode:0o600});
++    const indexTree=await git(repo,"write-tree");
++    const indexCommit=await git(repo,"-c","user.name=ccloop","-c","user.email=ccloop@invalid","commit-tree",indexTree,"-p",head,"-m","saved execution index");
++    const bundleRefName=`refs/ccloop/${input.input.claim.runId}/saved-result/${input.attempt}`;
++    await git(repo,"update-ref",bundleRefName,indexCommit);
++    const bundlePath=join(scratch,"snapshot.bundle");
++    await git(repo,"bundle","create",bundlePath,bundleRefName);
++    const bundle=await write(await read(source,bundlePath)),status=await write(statusBytes);
++    if(head!==await git(tree,"rev-parse","HEAD")||!(await read(dirname(indexPath),indexPath)).equals(indexBytes))throw new Error("saved-result-snapshot-changed");
++    const captured=[...files],capturedDirectories=[...directories];files.length=0;directories.length=0;await walk("");files.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
++    if(canonicalHash(captured)!==canonicalHash(files)||canonicalHash(capturedDirectories)!==canonicalHash(directories))throw new Error("saved-result-snapshot-changed");
++    await input.assertHeld();
++    return await write(Buffer.from(canonicalJson(executionSnapshotSchema.parse({schema:"ccloop-execution-snapshot-v1",head,indexTree,indexCommit,bundleRefName,index,bundle,status,files,directories,deleted}))));
++  } finally {await rm(scratch,{recursive:true,force:true});}
++}
++async function capture(input:ExecutionFormatCaptureInput):Promise<ArtifactRefV1>{
++  const {input:envelope,failure}=input,source=envelope.work.sourceDir;
++  if(!isLoopEnvelope(envelope)||input.runDir!==join(source,"run")||input.verifierEntered||!positive.safeParse(input.attempt).success)throw new Error("saved-result-capture-authority-invalid");
++  await input.assertHeld();
++  const identity=await savedResultIdentity(envelope),write=(bytes:Buffer)=>writeSavedBytes(source,bytes,input.assertHeld);
++  const retain=(path:string)=>read(source,path).then(write);
++  const json=async(path:string)=>JSON.parse((await read(source,path)).toString());
++  const callRoot=join(input.runDir,"codex",String(input.attempt),"execute");
++  const calls=await readdir(callRoot);
++  if(calls.length!==1||join(callRoot,calls[0]!)!==failure.evidenceDir)throw new Error("saved-result-execute-call-ambiguous");
++  const call=failure.evidenceDir,outcome=await json(join(call,"outcome.json"));
++  if(outcome.reason!=="completed"||outcome.code!==0||outcome.signal!==null||outcome.ioError!==undefined||outcome.stdoutTruncated!==false||outcome.stderrTruncated!==false||outcome.finalTruncated!==false)throw new Error("saved-result-process-incomplete");
++  const processRecord=processSchema.parse(await json(join(call,"process.json")));
++  const registered=z.array(processSchema.omit({phase:true}).extend({phase:z.string(),registeredAt:z.string()}).strict()).parse(await json(join(source,"control","processes.json")));
++  if(!registered.some(p=>p.pid===processRecord.pid&&p.pgid===processRecord.pgid&&p.startedAt===processRecord.startedAt&&p.phase==="execute")||!await missing(join(input.runDir,"codex",String(input.attempt),"verify")))throw new Error("saved-result-process-authority-invalid");
++  for(const p of registered){
++    let quiet=false;try{process.kill(-p.pgid,0);}catch(e){if((e as NodeJS.ErrnoException).code==="ESRCH")quiet=true;}
++    if(!quiet)throw new Error("saved-result-process-not-settled");
++  }
++  const config=parseMaterializedAgentConfig(await json(join(source,"control","config.json")));
++  if(config.kind!=="codex"||agentConfigHash(config)!==envelope.claim.configHash||canonicalHash(config)!==canonicalHash(input.actualConfig))throw new Error("saved-result-config-mismatch");
++  const originalEvents=(await read(source,join(call,"events.jsonl"))).toString(),originalFinal=(await read(source,join(call,"final.json"))).toString();
++  const usage=decodeCodexUsage(originalEvents,true),normalization=normalizeExecutionFinal(originalFinal);
++  if(normalization.status!=="unavailable"||canonicalHash(normalization)!==canonicalHash(failure.normalization)||usage.tokenUsage!==failure.observedTokens||canonicalHash(usage.usageEvidence)!==canonicalHash(failure.usageEvidence)||canonicalHash(codexModelUsage(originalEvents,config.selection.model))!==canonicalHash(failure.modelUsage??null))throw new Error("saved-result-original-evidence-mismatch");
++  if(canonicalHash(await json(join(source,"control","envelope.json")))!==identity.envelopeHash)throw new Error("saved-result-envelope-mismatch");
++  const actual=loopContractSchema.parse(await json(join(input.runDir,"loop-contract.json")));
++  const semantic=(contract:typeof actual)=>{const {repoPath:_repo,...context}=contract.context;const {tokenBudget:_tokens,maxAttempts:_attempts,totalRuntimeBudgetMs:_time,...executionPolicy}=contract.executionPolicy;return {...contract,context,executionPolicy};};
++  if(canonicalHash(actual)!==canonicalHash(input.runtimeContract)||canonicalHash(semantic(actual))!==canonicalHash(semantic(envelope.work.contract))
++    ||actual.executionPolicy.maxAttempts>envelope.work.contract.executionPolicy.maxAttempts
++    ||actual.executionPolicy.totalRuntimeBudgetMs>envelope.work.contract.executionPolicy.totalRuntimeBudgetMs
++    ||(envelope.work.contract.executionPolicy.tokenBudget!==null&&(actual.executionPolicy.tokenBudget===null||actual.executionPolicy.tokenBudget>envelope.work.contract.executionPolicy.tokenBudget)))throw new Error("saved-result-runtime-contract-mismatch");
++  const planPath=join(input.runDir,"attempts",String(input.attempt),"plan.json"),plan=await json(planPath);
++  // Saved plan is controller-owned decoded output; strict core validation ignores only measured usage fields.
++  const {tokenUsage:_tokens,usageEvidence:_usage,modelUsage:_models,...planCore}=plan;
++  decodeCodexResult("plan",originalEvents,JSON.stringify(planCore));
++  const usageEvents=await readUsageEvents(source),last=usageEvents.at(-1);
++  if(!last||last.cumulative===null||last.bucket!=="work")throw new Error("saved-result-usage-unavailable");
++  const ledger=await read(source,join(source,"control","usage.json"));
++  parseKnownWorkUsageLedger(JSON.parse(ledger.toString()),{runId:envelope.claim.runId,generation:envelope.claim.generation,usageHighWater:last.eventSeq+1});
++  const observations=[];
++  for(const event of usageEvents)observations.push({source:event.source,copy:await write(await readEvidence(source,event.source))});
++  const lastObservation=JSON.parse((await readEvidence(source,last.source)).toString());
++  if(lastObservation.phase!=="execute"||lastObservation.attempt!==input.attempt||lastObservation.tokenUsage!==usage.tokenUsage||lastObservation.completedWithResult!==false)throw new Error("saved-result-usage-observation-mismatch");
++  const owner=await json(join(input.runDir,"owner-record.json"));
++  const proof=await write(Buffer.from(canonicalJson({schema:"ccloop-execution-verifier-not-entered-v1",identity,attempt:input.attempt,entered:false,recordedBy:"controller-before-execution-failure-cleanup"})));
++  const artifacts={envelope:await retain(join(source,"control","envelope.json")),config:await retain(join(source,"control","config.json")),acceptedContract:await write(Buffer.from(canonicalJson(envelope.work.contract))),runtimeContract:await retain(join(input.runDir,"loop-contract.json")),final:await retain(join(call,"final.json")),events:await retain(join(call,"events.jsonl")),schema:await retain(join(call,"schema.json")),decodeError:await retain(join(call,"decode-error.txt")),normalization:await retain(join(call,"execution-normalization.json")),outcome:await retain(join(call,"outcome.json")),process:await retain(join(call,"process.json")),plan:await retain(planPath),usage:await retain(join(call,"usage.json")),usageLedger:await write(ledger),usageObservations:observations,owner:await retain(join(input.runDir,"owner-record.json"))};
++  const snapshotRef=await snapshot(input);
++  const capsule=executionFormatFailureSchema.parse({schema:"ccloop-execution-format-failure-v1",identity,attempt:input.attempt,executor:{kind:"codex",configHash:envelope.claim.configHash},frozenContractHash:envelope.contractHash,acceptedBase:envelope.work.base,resolvedBase:input.resolvedBase,attemptStartHead:input.attemptStartHead,decoder:EXECUTION_NORMALIZER_VERSION,classification:"execution-format-failure-v1",process:{reason:"completed",code:0,signal:null,isolated:true},usage:{tokenUsage:usage.tokenUsage,highWater:last.eventSeq},verifier:{entered:false,proof},artifacts,snapshot:snapshotRef,completeness:{complete:true,parts:["original-process","original-stream","actual-usage","successful-plan","verifier-not-entered","tree-index-bundle-files"]},capturedAt:new Date().toISOString(),captureOwner:canonicalHash(owner)});
++  const capsuleRef=await write(Buffer.from(canonicalJson(capsule)));
++  await input.assertHeld();
++  await publishTaskResultIndex(source,savedResultIndexPath(source),Buffer.from(canonicalJson({schema:"ccloop-saved-result-evidence-v1",identity,attempt:input.attempt,capsule:capsuleRef,reason:null})),input.assertHeld);
++  return capsuleRef;
++}
++/** Capture failures do not turn the original execution into success or authorize incomplete recovery. */
++export async function captureExecutionFormatFailure(input:ExecutionFormatCaptureInput):Promise<ArtifactRefV1|null>{
++  try{return await capture(input);}catch(error){
++    await input.assertHeld();
++    await appendEvent(input.runDir,{type:"execution_format_capture_failed",at:new Date().toISOString(),detail:`attempt ${input.attempt}: ${String(error)}`}).catch(()=>undefined);
++    const identity=await savedResultIdentity(input.input);
++    await publishTaskResultIndex(input.input.work.sourceDir,savedResultIndexPath(input.input.work.sourceDir),Buffer.from(canonicalJson({schema:"ccloop-saved-result-evidence-v1",identity,attempt:input.attempt,capsule:null,reason:error instanceof Error && error.message.startsWith("saved-result-")?error.message:"saved-result-capture-failed"})),input.assertHeld).catch(async()=>{await input.assertHeld();});
++    return null;
++  }
++}
+diff --git a/src/controller/runLoop.ts b/src/controller/runLoop.ts
+index e18eadf..5abbe7f 100644
+--- a/src/controller/runLoop.ts
++++ b/src/controller/runLoop.ts
+@@ -1,10 +1,12 @@
++import type { MaterializedAgentConfigV1 } from "../agents/types.js";
++import { captureExecutionFormatFailure, ExecutionFormatFailure } from "./executionFormatFailure.js";
+ import { remainingTokens, minTokenCeiling, budgetAmountSchema, type BudgetAmount, type TokenPolicy } from "../budget/tokenPolicy.js";
+ import { execFile } from "node:child_process";
+ import { promisify } from "node:util";
+ import {
+   appendEvent,
+   initializeRunFiles,
+   OwnerTransferLockBusyError,
+   OwnerTransferLockLivenessUndeterminedError,
+   OwnerTransferLockUnattributableError,
+   OwnerTransferPreconditionError,
+@@ -102,26 +104,28 @@ const BUDGET_EXHAUSTED_REASON = "runtime or token budget exhausted";
+ export const OWNER_TRANSFER_LOCK_RETRY_ATTEMPTS = 3;
+ export const OWNER_TRANSFER_LOCK_RETRY_DELAY_MS = 50;
+ 
+ class PhaseExecutionError extends Error {
+   readonly elapsedMs: number;
+   // Orca handoff delivery C-3: tokens the failed phase was observed spending, or null (never 0).
+   // *** ERRATUM (crash resume, 2026-10-02, Orca session ece96b67; ccloop spec 2026-10-02-crash-resume-and-orphan-reaping-design.md
+   // §3.2) -- "never 0" no longer holds for one case: an error carrying neverStarted books 0 (the runner proved no claude
+   // process existed in the call). Every other error is unchanged: observed tokens, or null. ***
+   readonly tokenUsage: number | null;
++  readonly formatFailure: ExecutionFormatFailure | null;
+ 
+   constructor(elapsedMs: number, error: unknown) {
+     super(String(error));
+     this.name = "PhaseExecutionError";
+     this.elapsedMs = elapsedMs;
+     this.tokenUsage = observedTokensOf(error);
++    this.formatFailure = error instanceof ExecutionFormatFailure ? error : null;
+   }
+ }
+ 
+ function isAbortError(error: unknown): boolean {
+   return error instanceof Error && error.name === "AbortError";
+ }
+ 
+ // §8.1: the two ways heartbeat.assertHeld() can refuse a side effect. Both abandon the
+ // attempt in place; they differ only in the stop reason they carry, because "someone else
+ // owns this run" and "this run's ownership could not be read" are not the same claim.
+@@ -1213,20 +1217,22 @@ export function createStopRequestSignal(): StopRequestSignal {
+   return { requested: false };
+ }
+ 
+ export interface RunControlHooks {
+   workGrant?: BudgetAmount;
+   tokenPolicy?: TokenPolicy;
+   /** Only the worker supplies this, after validating the checkpoint and reachable artifacts. */
+   allowanceContinuation?: { nextPhase: "plan" | "execute" | "verify"; plan: AttemptPlan | null; execution: ExecutionResult | null; recentFailures?: FailureFingerprint[] };
+   /** Trusted accepted control envelope supplied only by the worker. */
+   taskResultInput?: StartEnvelopeV3;
++  /** Only supported original provider evidence can create a recovery capsule. */
++  executionFormatCapture?: {config:MaterializedAgentConfigV1};
+   firstWorkspaceInput?: InputCheckpointV1;
+   stopRequested?: StopRequestSignal;
+   phaseSignal?: AbortSignal;
+   onPhaseSettled?: (observation: {
+     phase: "plan" | "execute" | "verify";
+     attempt: number;
+     elapsedMs: number;
+     tokenUsage: number | null;
+     usageEvidence: UsageEvidence | undefined;
+     /** Orca accounts plan B2 (2026-10-07): the phase result's per-model breakdown; the key is absent when it had none. */
+@@ -1438,22 +1444,29 @@ export async function runLoopFromState(
+       }
+     }
+ 
+     // A continuation workspace is fully hash- and state-verified before an
+     // adapter can observe it or create an external agent process.
+     const attemptAdapter = activeAdapter ??= (adapter as () => RuntimeAdapter)();
+ 
+     let plan: AttemptPlan | null = null;
+     let execution: ExecutionResult | null = null;
+     let verification: VerificationResult | null = null;
++    let attemptStartHead: string | null = null;
++    let resolvedSourceBase: string | null = null;
++    let verifierEntered = false;
+ 
+     try {
++      if (options?.executionFormatCapture && options.taskResultInput?.work.kind === "loop") {
++        attemptStartHead = (await execFileAsync("/usr/bin/git", ["rev-parse", "HEAD"], {cwd:worktreePath})).stdout.trim();
++        resolvedSourceBase = (await execFileAsync("/usr/bin/git", ["rev-parse", `${options.taskResultInput.work.base}^{commit}`], {cwd:options.taskResultInput.work.targetRepo})).stdout.trim();
++      }
+       state = consumeAttemptBudget(state, contract, attempt);
+       await writeOwnedRunState(runDir, state);
+ 
+       const continuation = attempt === 1 ? options?.allowanceContinuation : undefined;
+       if (continuation) {
+         plan = continuation.plan;
+         execution = continuation.execution;
+       }
+       if (!continuation || continuation.nextPhase === "plan") {
+         const planTimeoutMs = getPhaseTimeoutMs(contract, state);
+@@ -1722,20 +1735,21 @@ export async function runLoopFromState(
+       }
+ 
+       state = transitionRunState(state, "verifying");
+       await appendTransitionEvent(runDir, state, "execution_finished", `attempt ${attempt}`);
+       await writeOwnedRunState(runDir, state);
+ 
+       const verifyTimeoutMs = getPhaseTimeoutMs(contract, state);
+       // §8.1: launching a Claude call is a side effect. runVerification also shells out to the
+       // contract's required checks inside the attempt worktree, which is one too.
+       await heartbeat.assertHeld();
++      verifierEntered = true;
+       activePhase = "verify";
+       let startedCapture = Promise.resolve();
+       let startedCaptureError: unknown = null;
+       const flushStartedCapture = async (): Promise<void> => {
+         await startedCapture;
+         if (startedCaptureError !== null) throw startedCaptureError;
+       };
+       let verifyOutcome: PhaseOutcome<VerificationResult>;
+       try {
+         verifyOutcome = await runPhaseWithTimeout(verifyTimeoutMs, (abortSignal) =>
+@@ -2011,21 +2025,26 @@ export async function runLoopFromState(
+         return isTerminalRunStatus(state.status)
+           ? state
+           : await persistTerminalState(runDir, writeOwnedRunState, state, "cancelled", error.stopReason);
+       }
+ 
+       const failureReason = error instanceof PhaseExecutionError ? error.message : String(error);
+ 
+       if (error instanceof PhaseExecutionError) {
+         const failedPhase = activePhase;
+         if (activePhase !== null) {
+-          await settlePhase(activePhase, attempt, error.elapsedMs, error.tokenUsage === null ? undefined : { tokenUsage: error.tokenUsage }, true);
++          await settlePhase(activePhase, attempt, error.elapsedMs, error.tokenUsage === null ? undefined : { tokenUsage: error.tokenUsage, ...(error.formatFailure ? {usageEvidence:error.formatFailure.usageEvidence,modelUsage:error.formatFailure.modelUsage} : {}) }, true);
++        }
++
++        if (failedPhase === "execute" && error.formatFailure && options?.taskResultInput && worktreePath && attemptStartHead && resolvedSourceBase && !handoffAborted() && !handoffRequested()) {
++          await guardedWriteArtifacts(() => writeCompletedAttemptArtifacts(runDir, attempt, plan, execution));
++          await heartbeat.runExclusive(() => captureExecutionFormatFailure({input:options.taskResultInput!,runDir,worktreePath:worktreePath!,attempt,attemptStartHead:attemptStartHead!,resolvedBase:resolvedSourceBase!,runtimeContract:contract,actualConfig:options.executionFormatCapture!.config,failure:error.formatFailure!,verifierEntered,assertHeld:()=>heartbeat.assertHeld()}));
+         }
+ 
+         if (!isCodexSkillFailure(error) && (handoffAborted() || handoffRequested())) {
+           await guardedWriteArtifacts(() => writeCompletedAttemptArtifacts(runDir, attempt, plan, execution));
+           const interrupted = handoffAborted();
+           return await persistHandoffBoundary(
+             interrupted ? "handoff_interrupted" : "handoff_boundary",
+             `${interrupted ? "handoff deadline interrupted" : "handoff requested during"} ${failedPhase ?? "phase"} in attempt ${attempt}`,
+           );
+         }
+diff --git a/src/runtime/codex/codexAdapter.ts b/src/runtime/codex/codexAdapter.ts
+index 0df41eb..cb342f2 100644
+--- a/src/runtime/codex/codexAdapter.ts
++++ b/src/runtime/codex/codexAdapter.ts
+@@ -1,17 +1,16 @@
+-import { z } from "zod";
+-import { boundedTaskResult } from "../taskResult.js";
++import { normalizeExecutionFinal, ExecutionFormatFailure } from "../executionNormalizer.js";
+ import { writeFile } from "node:fs/promises";
+ import { join } from "node:path";
+ import { buildExecutorPrompt, buildPlannerPrompt, buildVerifierPrompt } from "../claude/prompts.js";
+ import type { AttemptContext, RuntimeAdapter } from "../types.js";
+-import { codexModelUsage, decodeCodexResult, parseCodexConfig, phaseFinalAccepts, scanFinalMessage, type CodexConfig, type CodexPhase, type PhaseResults } from "./protocol.js";
++import { codexModelUsage, decodeCodexUsage, decodeCodexResult, parseCodexConfig, phaseFinalAccepts, scanFinalMessage, type CodexConfig, type CodexPhase, type PhaseResults } from "./protocol.js";
+ import { runCodexPhase } from "./runCodexPhase.js";
+ 
+ /** Orca handoff delivery C-3: an aborted phase, carrying the usage its stdout showed before the kill (or null). */
+ export class CodexPhaseAborted extends Error {
+   constructor(readonly evidenceDir: string, readonly observedTokens: number | null) {
+     super(`codex-aborted: ${evidenceDir}`);
+     this.name = "CodexPhaseAborted";
+   }
+ }
+ 
+@@ -23,39 +22,55 @@ export class CodexAdapter implements RuntimeAdapter {
+   get awaitAbortedPhaseCleanup(): boolean { return this.codexSkillsDir !== undefined; }
+ 
+   private async phase<P extends CodexPhase>(phase: P, prompt: string, context: AttemptContext): Promise<PhaseResults[P]> {
+     const outcome = await runCodexPhase(this.config, { phase, prompt, context }, this.extraEnv, this.codexSkillsDir);
+     if (outcome.reason === "aborted") throw new CodexPhaseAborted(outcome.evidenceDir, outcome.observedTokens);
+     if (outcome.reason !== "completed" || outcome.final === null) {
+       // Orca ruling 26 (session c85d2c4e, 2026-09-28): as the aborted path, a phase that timed out or failed carries the
+       // turn usage its stdout showed (runCodexPhase observes it for every outcome but completed), null when none.
+       throw Object.assign(new Error(`${outcome.reason.startsWith("codex-skills-") ? outcome.reason : `codex-${outcome.reason}`}: ${outcome.evidenceDir}`), { observedTokens: outcome.observedTokens });
+     }
++    if (phase === "execute") {
++      // Completion and usage are independent facts; invalid finals must not erase actual spend.
++      let usage:ReturnType<typeof decodeCodexUsage>;
++      try { usage=decodeCodexUsage(outcome.events,true); }
++      catch(error) {
++        await writeFile(join(outcome.evidenceDir,"decode-error.txt"),String(error),{mode:0o600});
++        throw new Error(`${String(error)}: ${outcome.evidenceDir}`);
++      }
++      const modelUsage=codexModelUsage(outcome.events,this.config.model) ?? undefined;
++      await writeFile(join(outcome.evidenceDir,"usage.json"),JSON.stringify(usage.usageEvidence,null,2),{mode:0o600});
++      const normalization=normalizeExecutionFinal(outcome.final);
++      await writeFile(join(outcome.evidenceDir,"execution-normalization.json"),JSON.stringify(normalization),{mode:0o600});
++      if (normalization.diagnostic.method !== "whole" && (normalization.diagnostic.candidates>0 || normalization.diagnostic.hidden)) {
++        await writeFile(join(outcome.evidenceDir,"final-extraction.json"),JSON.stringify(normalization.diagnostic),{mode:0o600});
++      }
++      if (normalization.status === "unavailable") {
++        // Preserve historical parse diagnostics while adding an independent typed classification.
++        let original:unknown;
++        try { JSON.parse(outcome.final); original=new Error("codex-result-invalid"); } catch(error) { original=error; }
++        await writeFile(join(outcome.evidenceDir,"decode-error.txt"),String(original),{mode:0o600});
++        throw new ExecutionFormatFailure(`${String(original)}: ${outcome.evidenceDir}`,outcome.evidenceDir,usage.tokenUsage,usage.usageEvidence,modelUsage,normalization);
++      }
++      return {...normalization.execution,...usage,...(modelUsage===undefined?{}:{modelUsage})} as PhaseResults[P];
++    }
+     try {
+       // Codex phase output hardening (2026-10-08), spec §3.2 as corrected by §7: a decorated final message yields its answer
+       // when it holds exactly one distinct answer-shaped node and that node is accepted (verify: a rejection only); a
+       // whole-JSON answer, and any other message, take today's path with the original text unchanged.
+       // Spec §7 rule 4: the evidence also records hidden text, and is written for it even when nothing parsed.
+       const { extraction, hidden } = scanFinalMessage(outcome.final, phaseFinalAccepts(phase));
+       if (extraction.method === "candidate" || (extraction.method === "none" && (extraction.candidates > 0 || hidden))) {
+         await writeFile(join(outcome.evidenceDir, "final-extraction.json"), JSON.stringify({ method: extraction.method, candidates: extraction.candidates, valid: extraction.valid, hidden, originalBytes: Buffer.byteLength(outcome.final, "utf8") }), { mode: 0o600 });
+       }
+       const final = extraction.method === "candidate" ? JSON.stringify(extraction.value) : outcome.final;
+-      let decodedFinal = final;
+-      if (phase === "execute") {
+-        const body = z.object({result:z.unknown()}).strict().parse(JSON.parse(final)).result;
+-        if (body !== null && typeof body === "object" && !Array.isArray(body) && Object.hasOwn(body, "taskResult")) {
+-          (body as Record<string, unknown>).taskResult = boundedTaskResult((body as Record<string, unknown>).taskResult);
+-        }
+-        decodedFinal = JSON.stringify(body);
+-      }
+-      const result = decodeCodexResult(phase, outcome.events, decodedFinal);
++      const result = decodeCodexResult(phase, outcome.events, final);
+       await writeFile(join(outcome.evidenceDir, "usage.json"), JSON.stringify(result.usageEvidence, null, 2), { mode: 0o600 });
+       // Orca accounts plan B3: codex runs one model, so the whole usage belongs to it.
+       const modelUsage = codexModelUsage(outcome.events, this.config.model);
+       return modelUsage === null ? result : { ...result, modelUsage };
+     } catch (error) {
+       await writeFile(join(outcome.evidenceDir, "decode-error.txt"), String(error), { mode: 0o600 });
+       throw new Error(`${String(error)}: ${outcome.evidenceDir}`);
+     }
+   }
+ 
+diff --git a/src/runtime/codex/protocol.ts b/src/runtime/codex/protocol.ts
+index cfebd15..dba930a 100644
+--- a/src/runtime/codex/protocol.ts
++++ b/src/runtime/codex/protocol.ts
+@@ -18,21 +18,22 @@ export function parseCodexConfig(raw: unknown): CodexConfig {
+   const parsed = configSchema.safeParse(raw);
+   if (!parsed.success) throw new Error(`codex-config-invalid: ${parsed.error.message}`);
+   return parsed.data;
+ }
+ 
+ const strings = z.array(z.string());
+ const plan = z.object({summary:z.string(), primaryTargetPaths:strings}).strict();
+ const executionFields = {taskResult:z.unknown().optional(),changedFiles:strings, diffPatch:z.string(), commandOutputs:strings, stdoutStderrLog:z.string()};
+ const complete = z.object(executionFields).strict();
+ const partial = z.object({...executionFields,completionStatus:z.literal("partial"),failureType:z.enum(["timeout","error"]),failureMessage:z.string()}).strict();
+-const execution = z.union([complete,partial]);
++export const executionSchema = z.union([complete,partial]);
++const execution = executionSchema;
+ const verification = z.object({approved:z.boolean(),rejectCategory:z.string(),primaryTargetPaths:strings,failingCommand:z.string().nullable(),safeToRetry:z.boolean(),evidence:strings,pauseSignals:strings,stopSignals:strings}).strict();
+ const schemas = {plan,execute:execution,verify:verification};
+ const string = {type:"string"};
+ const array = {type:"array",items:string};
+ const object = (properties: Record<string,unknown>) => ({type:"object",properties,required:Object.keys(properties),additionalProperties:false});
+ export function phaseJsonSchema(phase: CodexPhase): Record<string, unknown> {
+   if (phase === "plan") return object({summary:string,primaryTargetPaths:array});
+   if (phase === "verify") return object({approved:{type:"boolean"},rejectCategory:string,primaryTargetPaths:array,failingCommand:{type:["string","null"]},safeToRetry:{type:"boolean"},evidence:array,pauseSignals:array,stopSignals:array});
+   const fields = {changedFiles:array,diffPatch:string,commandOutputs:array,stdoutStderrLog:string};
+   const optionalReport = (fields: Record<string, unknown>) => ({...object(fields), properties:{...fields,taskResult:{}}});
+@@ -65,52 +66,57 @@ export function observedTurnUsage(events: string): number | null {
+     let row: unknown;
+     try { row = JSON.parse(line); } catch { continue; }
+     if (!record(row) || row.type !== "turn.completed" || !record(row.usage)) continue;
+     const input = row.usage.input_tokens, output = row.usage.output_tokens;
+     if (!integer(input) || !integer(output) || !Number.isSafeInteger(input + output) || input + output === 0) continue;
+     observed = input + output;
+   }
+   return observed;
+ }
+ 
+-export function decodeCodexResult<P extends CodexPhase>(phase:P, events:string, final:string): PhaseResults[P] {
++export function decodeCodexUsage(events:string, uniqueCompletion=false): {tokenUsage:number;usageEvidence:UsageEvidence} {
+   let completed: Record<string, unknown> | undefined;
+   for (const line of events.split("\n")) {
+     if (!line.trim()) continue;
+     let row: unknown;
+     try { row = JSON.parse(line); } catch { throw new Error("codex-events-invalid"); }
+     if (!record(row) || typeof row.type !== "string") throw new Error("codex-events-invalid");
+     if (row.type === "turn.failed" || row.type === "error") throw new Error("codex-event-error");
+     if (row.type !== "turn.completed") continue;
+-    if (completed && JSON.stringify(completed) !== JSON.stringify(row)) throw new Error("codex-conflicting-completion");
++    if (completed && (uniqueCompletion || JSON.stringify(completed) !== JSON.stringify(row))) throw new Error("codex-conflicting-completion");
+     completed = row;
+   }
+   if (!completed) throw new Error("codex-no-completion");
+   const usage = completed.usage;
+   if (!record(usage)) throw new Error("codex-usage-invalid");
+   const input = usage.input_tokens, output = usage.output_tokens;
+   if (!integer(input) || !integer(output) || !Number.isSafeInteger(input + output)) throw new Error("codex-usage-invalid");
+   for (const [field,limit] of [["cached_input_tokens",input],["reasoning_output_tokens",output]] as const) {
+     const v = usage[field];
+     if (v !== undefined && (!integer(v) || v > limit)) throw new Error("codex-usage-invalid");
+   }
+   const tokenUsage = input + output;
+   if (tokenUsage === 0) throw new Error("codex-usage-unavailable");
++  const usageEvidence: UsageEvidence = {
++    usageStatus:"present", fields:{input_tokens:{status:"finite",value:input},output_tokens:{status:"finite",value:output},inputTokens:{status:"absent"},outputTokens:{status:"absent"}},
++    selectedInputField:"input_tokens",selectedOutputField:"output_tokens",normalizedTotal:tokenUsage,
++  };
++  return {tokenUsage,usageEvidence};
++}
++
++export function decodeCodexResult<P extends CodexPhase>(phase:P, events:string, final:string): PhaseResults[P] {
++  const {tokenUsage,usageEvidence}=decodeCodexUsage(events);
+   let raw: unknown;
+   try { raw = JSON.parse(final); } catch { throw new Error("codex-result-invalid"); }
+   if (phase === "execute" && record(raw) && Object.hasOwn(raw, "taskResult")) raw.taskResult = boundedTaskResult(raw.taskResult);
+   const parsed = schemas[phase].safeParse(raw);
+   if (!parsed.success) throw new Error(`codex-result-invalid: ${parsed.error.message}`);
+-  const usageEvidence: UsageEvidence = {
+-    usageStatus:"present", fields:{input_tokens:{status:"finite",value:input},output_tokens:{status:"finite",value:output},inputTokens:{status:"absent"},outputTokens:{status:"absent"}},
+-    selectedInputField:"input_tokens",selectedOutputField:"output_tokens",normalizedTotal:tokenUsage,
+-  };
+   // Validation above selects the phase schema; the generic preserves that selection for callers.
+   return {...parsed.data, tokenUsage, usageEvidence} as PhaseResults[P];
+ }
+ 
+ /**
+  * Orca accounts plan B3 (2026-10-07): the usage of the run's single model, re-read from the `turn.completed` row that
+  * decodeCodexResult validated (call it on events that decoded). `input` is the non-cached input, so the entry adds up to
+  * input_tokens + output_tokens, the tokenUsage decodeCodexResult reports. Null when there is no usable completion or the
+  * model name is one the usage schema refuses (empty, over 200 chars): absent, never a guess.
+  */
+@@ -176,22 +182,24 @@ function canonicalJsonHash(value: unknown, reports?: WeakMap<object, string>): s
+  * provider let the model decorate. A final message that is whole JSON is returned as is (acceptance is then decided
+  * exactly as before). Otherwise every top-level balanced {…} span is parsed (a fence needs no separate handling: the brace
+  * pass scans its text) and every object node of every span is walked. A node carrying one of the phase's discriminating
+  * keys is answer-shaped and counts whether or not it is valid: the answer is the one distinct answer-shaped node, and only
+  * if the acceptor takes it. Two or more distinct answer-shaped nodes are `none`, so a schema-valid template can never
+  * stand in for an off-schema real answer. Fail closed on hidden text: an unclosed `{`, a span that is not JSON, or a walk
+  * past MAX_NODES object nodes or MAX_DEPTH levels could hide another answer, so the result is `none` and `hidden` is true.
+  * `candidates` counts distinct parsed spans, `valid` the accepted ones among the distinct answer-shaped nodes seen (the
+  * walk stops examining answer-shaped nodes at the second: the result is then `none` whatever follows).
+  */
+-export function scanFinalMessage(final: string, accepts: PhaseAcceptor): { extraction: FinalExtraction; hidden: boolean } {
+-  try { return { extraction: { method: "whole", value: JSON.parse(final) }, hidden: false }; } catch { /* not whole JSON: look for candidates */ }
++export function scanFinalMessage(final: string, accepts: PhaseAcceptor, strictExecution = false): { extraction: FinalExtraction; hidden: boolean } {
++  if (!strictExecution) {
++    try { return { extraction: { method: "whole", value: JSON.parse(final) }, hidden: false }; } catch { /* not whole JSON: look for candidates */ }
++  }
+   const spans: string[] = [];
+   // Brace spans: string state only inside an object (depth >= 1), so a stray quote in prose cannot hide one; a `}` at
+   // depth 0 is ignored; an unclosed `{` never closes (its text is hidden from the matcher, handled below).
+   let depth = 0, spanStart = 0, inString = false, escaped = false;
+   for (let i = 0; i < final.length; i++) {
+     const c = final[i];
+     if (inString) {
+       if (escaped) escaped = false;
+       else if (c === "\\") escaped = true;
+       else if (c === '"') inString = false;
+@@ -214,36 +222,38 @@ export function scanFinalMessage(final: string, accepts: PhaseAcceptor): { extra
+     // Every container of the tree, iteratively, with its depth: an answer wrapped inside another object is still seen.
+     // The whole span is walked (and depth-checked) before any node is serialised, so a too-deep subtree under an
+     // answer-shaped node fails closed instead of overflowing JSON.stringify (follow-up B1).
+     const stack: Array<[object, number]> = [[value as object, 1]], found: Record<string, unknown>[] = [];
+     let hasLossyReport = false;
+     for (let entry = stack.pop(); entry !== undefined; entry = stack.pop()) {
+       const [node, level] = entry;
+       if (level > MAX_DEPTH || (record(node) && ++nodes > MAX_NODES)) { hidden = true; break scan; }
+       // Only an established strict execute envelope owns an opaque report subtree. Orphan artifacts grant no opacity.
+       if (accepts.opaqueTaskResult && record(node) && Object.hasOwn(node, "result") && executeEnvelope.safeParse(node).success) reportOwners.add(node.result as object);
++      if (strictExecution && record(node) && execution.safeParse(node).success) reportOwners.add(node);
+       const opaque = record(node) && reportOwners.has(node) && Object.hasOwn(node, "taskResult");
+       if (opaque) {
+         const original = node.taskResult, bounded = boundedTaskResult(original);
+         const lossy = record(bounded) && bounded.schema === "ccloop-task-result-invalid-v1" &&
+           !(record(original) && Object.keys(original).length === 3 && original.schema === bounded.schema && original.reason === bounded.reason && original.diagnostic === bounded.diagnostic);
+         if (lossy) { reportFingerprints.set(node, canonicalJsonHash(original)); hasLossyReport = true; }
+         node.taskResult = bounded;
+       }
+       const children = opaque ? Object.entries(node).filter(([key]) => key !== "taskResult").map(([, item]) => item) : Object.values(node);
+       for (const item of children) if (item !== null && typeof item === "object") stack.push([item, level + 1]);
+       if (record(node) && accepts.keys.some((key) => Object.hasOwn(node, key))) found.push(node);
+     }
+     for (const node of found) {
+       if (shaped.size >= 2) break;
+       // Lossy diagnostics are presentation data: compare original report identities, independent of prefix order.
+-      const key = hasLossyReport ? "sha256:" + canonicalJsonHash(node, reportFingerprints) : JSON.stringify(node, sortKeys);
++      const semantic = strictExecution && executeEnvelope.safeParse(node).success ? node.result : node;
++      const key = hasLossyReport ? "sha256:" + canonicalJsonHash(semantic, reportFingerprints) : JSON.stringify(semantic, sortKeys);
+       if (!shaped.has(key)) {
+         const ok = accepts(node);
+         shaped.set(key, ok);
+         if (ok) answer = node;
+       }
+     }
+     roots.add(hasLossyReport ? "sha256:" + canonicalJsonHash(value, reportFingerprints) : JSON.stringify(value, sortKeys));
+   }
+   const counts = { candidates: roots.size, valid: [...shaped.values()].filter(Boolean).length };
+   const unique = !hidden && shaped.size === 1 && counts.valid === 1;
+diff --git a/src/runtime/executionNormalizer.ts b/src/runtime/executionNormalizer.ts
+new file mode 100644
+index 0000000..e5370d2
+--- /dev/null
++++ b/src/runtime/executionNormalizer.ts
+@@ -0,0 +1,35 @@
++import { executionSchema, scanFinalMessage, type PhaseAcceptor } from "./codex/protocol.js";
++import type { ExecutionResult } from "./types.js";
++export const EXECUTION_NORMALIZER_VERSION = "strict-execution-v1";
++type Diagnostic = { method:"whole"|"candidate"|"none"; candidates:number; valid:number; hidden:boolean; originalBytes:number };
++export type ExecutionNormalization =
++  | { status:"available"; execution:ExecutionResult; diagnostic:Diagnostic }
++  | { status:"unavailable"; reason:"execution-format-invalid"|"execution-format-ambiguous-or-hidden"; diagnostic:Diagnostic };
++const record = (x:unknown):x is Record<string,unknown> => x !== null && typeof x === "object" && !Array.isArray(x);
++const unwrap = (value:unknown):unknown => record(value) && Object.keys(value).length===1 && Object.hasOwn(value,"result") ? value.result : value;
++const accepts:PhaseAcceptor = Object.assign((value:unknown)=>executionSchema.safeParse(unwrap(value)).success, {
++  keys:["result","changedFiles","diffPatch","commandOutputs","stdoutStderrLog","completionStatus","failureType","failureMessage"], opaqueTaskResult:true,
++});
++/** Exact execute shapes only; the bounded scanner owns ambiguity and original report fingerprints. */
++export function normalizeExecutionFinal(final:string):ExecutionNormalization {
++  let whole:unknown, isWhole=false;
++  try { whole=JSON.parse(final);isWhole=true; } catch { /* decorated */ }
++  const {extraction,hidden}=scanFinalMessage(final,accepts,true);
++  const diagnostic:Diagnostic={method:extraction.method,candidates:"candidates" in extraction?extraction.candidates:1,valid:"valid" in extraction?extraction.valid:1,hidden,originalBytes:Buffer.byteLength(final,"utf8")};
++  if (extraction.method === "candidate" && (!isWhole || accepts(whole))) {
++    return {status:"available",execution:executionSchema.parse(unwrap(extraction.value)),diagnostic:{...diagnostic,method:isWhole?"whole":"candidate"}};
++  }
++  return {status:"unavailable",reason:hidden||diagnostic.valid>0?"execution-format-ambiguous-or-hidden":"execution-format-invalid",diagnostic};
++}
++
++import type { ModelUsageV1 } from "../control/usage.js";
++import type { UsageEvidence } from "./types.js";
++/** Only constructed after successful process/stream/usage validation, never from provider claims. */
++export class ExecutionFormatFailure extends Error {
++  constructor(message:string, readonly evidenceDir:string, readonly observedTokens:number,
++    readonly usageEvidence:UsageEvidence, readonly modelUsage:ModelUsageV1[]|undefined,
++    readonly normalization:ExecutionNormalization) {
++    super(message); this.name="ExecutionFormatFailure";
++  }
++}
++
+diff --git a/tests/control/savedResultEvidence.test.ts b/tests/control/savedResultEvidence.test.ts
+new file mode 100644
+index 0000000..28a22ed
+--- /dev/null
++++ b/tests/control/savedResultEvidence.test.ts
+@@ -0,0 +1,154 @@
++import { execFile } from "node:child_process";
++import { promisify } from "node:util";
++import { savedResultPath, savedResultIndexPath, writeSavedBytes } from "../../src/control/savedResultEvidence.js";
++const exec=promisify(execFile);
++import { afterEach, expect, it } from "vitest";
++import { mkdir, readFile, readdir, rm, writeFile, symlink } from "node:fs/promises";
++import { join } from "node:path";
++import { resultFixture } from "./taskResultFixture.js";
++import { sealCodex } from "./agentsFixture.js";
++import { canonicalHash, canonicalJson } from "../../src/control/protocol.js";
++import { writeAccepted } from "../../src/control/store.js";
++import { atomicReplacePrivateFile } from "../../src/control/paths.js";
++import { runControlWorker } from "../../src/control/worker.js";
++import { readUsageEvents } from "../../src/control/usage.js";
++const roots:string[]=[];
++afterEach(async()=>{for(const root of roots.splice(0))await rm(root,{recursive:true,force:true});});
++async function world(mode="invalid") {
++  const f=await resultFixture(); roots.push(f.root);
++  const fake=join(f.root,"fake.mjs");
++  await writeFile(join(f.repo,"delete.txt"),"delete me");
++  await exec("/usr/bin/git",["add","delete.txt"],{cwd:f.repo});await exec("/usr/bin/git",["-c","core.hooksPath=/dev/null","commit","-m","tracked deletion fixture"],{cwd:f.repo});
++  if(mode==="narrowed") {
++    Object.assign(f.input,{protocol:4,tokenPolicy:{authoredTokenCeiling:1000,bindingCauses:["spend-cap"],inheritedUsage:{tokens:0,activeMs:0,attempts:0,sessions:0}}});
++    f.input.claim.grant.work={tokens:100,activeMs:10000,attempts:1,sessions:1};
++  }
++  await writeFile(fake,`import {readFileSync,writeFileSync,unlinkSync,chmodSync} from 'node:fs';
++import {execFileSync} from 'node:child_process';
++if(process.argv.includes('--version')){console.log('9.9.9-fake');process.exit(0);}
++let prompt='';for await(const part of process.stdin)prompt+=part;
++const args=process.argv, schema=JSON.parse(readFileSync(args[args.indexOf('--output-schema')+1],'utf8'));
++const phase=schema.properties?.result?'execute':schema.properties?.approved?'verify':'plan';
++if(phase==='verify')throw new Error('verifier must not enter');
++const result=phase==='plan'?{summary:'write answer',primaryTargetPaths:['answer.txt']}:{result:{changedFiles:['answer.txt']}};
++if(phase==='execute'){
++ unlinkSync('delete.txt');
++ writeFileSync('answer.txt','staged\\n');execFileSync('/usr/bin/git',['add','answer.txt']);writeFileSync('answer.txt','unstaged\\n');
++ writeFileSync('new.sh','#!/bin/sh\\necho saved\\n');chmodSync('new.sh',0o755);
++ writeFileSync('.gitignore','ignored.txt\\n');writeFileSync('ignored.txt','protected');
++ if(${JSON.stringify(mode)}==='capture-failure')execFileSync('mkfifo',['pipe']);
++ if(${JSON.stringify(mode)}==='rewrite-runtime') {const path=${JSON.stringify(join(f.runDir,'loop-contract.json'))};const c=JSON.parse(readFileSync(path,'utf8'));c.executionPolicy.tokenBudget=999;writeFileSync(path,JSON.stringify(c));}
++ if(${JSON.stringify(mode)}==='rewrite-config') {const path=${JSON.stringify(join(f.sourceDir,'control/config.json'))};const c=JSON.parse(readFileSync(path,'utf8'));c.installation.command=[process.execPath,'/not-the-executed-provider.mjs'];writeFileSync(path,JSON.stringify(c));}
++}
++writeFileSync(args[args.indexOf('-o')+1],JSON.stringify(result));
++console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:5}}));
++`);
++  const sealed=await sealCodex({command:[process.execPath,fake],model:'fixture',sandbox:'workspace-write',budgetMode:'soft',timeoutMs:10000,killGraceMs:50});
++  f.input.claim.agent=sealed.selection;f.input.claim.configHash=sealed.configHash;
++  f.input.contractHash='b'.repeat(64); // frozen authority differs from narrowed accepted/runtime bytes
++  await atomicReplacePrivateFile(f.sourceDir,join(f.sourceDir,'control/config.json'),Buffer.from(canonicalJson(sealed.config)));
++  await atomicReplacePrivateFile(f.sourceDir,join(f.sourceDir,'control/envelope.json'),Buffer.from(canonicalJson(f.input)));
++  await writeAccepted(f.sourceDir,{protocol:1,envelopeHash:canonicalHash(f.input),executionId:'execution-1',configHash:sealed.configHash,generation:1,acceptedAt:new Date().toISOString(),launch:'intended',worker:null});
++  await runControlWorker(['--source-dir',f.sourceDir,'--execution-id','execution-1','--nonce','nonce-1']);
++  return f;
++}
++async function jsonRef(f:Awaited<ReturnType<typeof world>>,capsuleRef:any,ref:any){
++ const r=await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef,ref});expect(r.code,r.stderr).toBe(0);
++ return JSON.parse(Buffer.from(JSON.parse(r.stdout).base64,'base64').toString());
++}
++it('captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3',async()=>{
++ const f=await world();const response=await f.rpc('saved-result-evidence',{input:f.input});expect(response.code,response.stderr).toBe(0);
++ const page=JSON.parse(response.stdout);expect(page.capsule,await readFile(join(f.runDir,"events.jsonl"),"utf8")).not.toBeNull();expect(page.attempt).toBe(1);
++ const c=await jsonRef(f,page.capsule,page.capsule);
++ expect(c).toMatchObject({schema:'ccloop-execution-format-failure-v1',identity:{runId:'run-1',executionId:'execution-1',envelopeHash:canonicalHash(f.input)},attempt:1,frozenContractHash:'b'.repeat(64),decoder:'strict-execution-v1',executor:{kind:'codex',configHash:f.input.claim.configHash},usage:{tokenUsage:15},verifier:{entered:false},completeness:{complete:true}});
++ expect(await jsonRef(f,page.capsule,c.artifacts.runtimeContract)).toEqual(f.contract);
++ expect(c.artifacts.runtimeContract.hash).not.toBe(c.frozenContractHash);
++ const snap=await jsonRef(f,page.capsule,c.snapshot);
++ expect(snap.files.find((x:any)=>x.path==='new.sh')).toMatchObject({mode:0o755,kind:'file'});
++ expect(snap.files.map((x:any)=>x.path)).toEqual(['.gitignore','answer.txt','ignored.txt','new.sh']);
++ expect(snap.deleted).toEqual(['delete.txt']);expect(snap.head).toBe(c.attemptStartHead);expect(c.resolvedBase).toBe(c.attemptStartHead);expect(snap.index).toBeTruthy();expect(snap.bundle).toBeTruthy();
++ const output=await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef:page.capsule,ref:snap.files.find((x:any)=>x.path==='answer.txt').ref});
++ expect(Buffer.from(JSON.parse(output.stdout).base64,'base64').toString()).toBe('unstaged\n');
++ const bundleResponse=await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef:page.capsule,ref:snap.bundle});
++ const bundlePath=join(f.root,'restore.bundle');await writeFile(bundlePath,Buffer.from(JSON.parse(bundleResponse.stdout).base64,'base64'));
++ const restored=join(f.root,'restored');await exec('/usr/bin/git',['clone','--no-checkout',bundlePath,restored]);
++ await exec('/usr/bin/git',['fetch',bundlePath,snap.bundleRefName],{cwd:restored});
++ await exec('/usr/bin/git',['checkout','--detach',snap.indexCommit],{cwd:restored});
++ expect(await readFile(join(restored,'answer.txt'),'utf8')).toBe('staged\n');
++ expect((await exec('/usr/bin/git',['rev-parse',`${snap.indexCommit}^{tree}`],{cwd:restored})).stdout.trim()).toBe(snap.indexTree);
++ expect(await readdir(join(f.runDir,'worktrees'))).toEqual([]);
++ const usage=await readUsageEvents(f.sourceDir);expect(usage.filter(e=>e.bucket==='work').map(e=>e.cumulative?.tokens)).toEqual([15,30]);
++ expect(usage.filter(e=>e.bucket==='work').at(-1)?.byModel).toEqual([{model:'fixture',input:20,output:10,cacheRead:0,cacheWrite:0}]);
++ const legacy=await f.rpc('collect',{input:f.input,afterSeq:0});expect(legacy.code,legacy.stderr).toBe(0);
++ console.log('TASK5_V3_COLLECTION:'+legacy.stdout.trim());
++ const collected=JSON.parse(legacy.stdout);expect(Object.keys(collected)).toEqual(['events','candidate','terminal','progress']);expect(collected.terminal.status).toBe('failed');
++ expect(Object.keys(collected.terminal)).toEqual(['status','currentAttempt','attemptsUsed','lastTransitionAt','waitingOnHuman','stopReason','budgetSnapshot','recentFailures']);
++ expect(Object.hasOwn(collected.candidate,'capsule')).toBe(false);
++ expect(JSON.parse((await f.rpc('features',{})).stdout)).toEqual({protocol:1,tokenPolicy:'optional-v1'});
++ const foreign=await writeSavedBytes(f.sourceDir,Buffer.from('private foreign bytes'),async()=>{});
++ expect((await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef:page.capsule,ref:foreign})).code).not.toBe(0);
++ const changed=structuredClone(f.input);changed.claim.generation=2;
++ expect((await f.rpc('saved-result-evidence',{input:changed})).code).not.toBe(0);
++ await writeFile(savedResultPath(f.sourceDir,snap.files[0].ref),'tampered');
++ expect((await f.rpc('saved-result-evidence',{input:f.input})).stderr).toContain('control-saved-result-hash-mismatch');
++},30000);
++it('records capture failure as unavailable and preserves original failed outcome',async()=>{
++ const f=await world('capture-failure');const r=await f.rpc('saved-result-evidence',{input:f.input});expect(r.code,r.stderr).toBe(0);
++ expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:'saved-result-snapshot-entry-unsupported'});
++ expect(JSON.parse(await readFile(join(f.runDir,'loop-state.json'),'utf8')).status).toBe('failed');
++},30000);
++it('missing original provider evidence is unavailable rather than reconstructed',async()=>{
++ const f=await resultFixture();roots.push(f.root);const r=await f.rpc('saved-result-evidence',{input:f.input});
++ expect(r.code,r.stderr).toBe(0);expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:'saved-result-original-evidence-unavailable'});
++});
++
++it('binds frozen authority separately from a genuinely narrowed protocol4 runtime contract',async()=>{
++ const f=await world('narrowed');const r=await f.rpc('saved-result-evidence',{input:f.input});expect(r.code,r.stderr).toBe(0);
++ const page=JSON.parse(r.stdout);expect(page.capsule,await readFile(join(f.runDir,'events.jsonl'),'utf8')).not.toBeNull();
++ const c=await jsonRef(f,page.capsule,page.capsule);
++ const accepted=await jsonRef(f,page.capsule,c.artifacts.acceptedContract),actual=await jsonRef(f,page.capsule,c.artifacts.runtimeContract);
++ expect(accepted.executionPolicy.tokenBudget).toBe(1000);expect(actual.executionPolicy.tokenBudget).toBe(100);
++ expect(accepted.executionPolicy.maxAttempts).toBe(2);expect(actual.executionPolicy.maxAttempts).toBe(1);
++ expect(c.frozenContractHash).toBe('b'.repeat(64));expect(actual.objective).toEqual(accepted.objective);
++},30000);
++
++it('refuses a hash-valid capsule with another source identity',async()=>{
++ const f=await world();const page=JSON.parse((await f.rpc('saved-result-evidence',{input:f.input})).stdout);
++ const c=await jsonRef(f,page.capsule,page.capsule);c.identity.runId='foreign-run';
++ const forged=await writeSavedBytes(f.sourceDir,Buffer.from(canonicalJson(c)),async()=>{});
++ await writeFile(savedResultIndexPath(f.sourceDir),canonicalJson({...page,capsule:forged}));
++ expect((await f.rpc('saved-result-evidence',{input:f.input})).stderr).toContain('control-saved-result-authority-invalid');
++},30000);
++it('rejects symlinked evidence namespaces even when referenced bytes exist',async()=>{
++ const f=await world();const {rename}=await import('node:fs/promises');
++ await rename(join(f.sourceDir,'control','saved-result-evidence'),join(f.sourceDir,'saved'));
++ await symlink(join(f.sourceDir,'saved'),join(f.sourceDir,'control','saved-result-evidence'));
++ expect((await f.rpc('saved-result-evidence',{input:f.input})).code).not.toBe(0);
++},30000);
++it('unsupported provider original evidence gets an explicit unavailable reason',async()=>{
++ const f=await resultFixture();roots.push(f.root);
++ await writeFile(join(f.sourceDir,'control/config.json'),JSON.stringify({kind:'claude'}));
++ const r=await f.rpc('saved-result-evidence',{input:f.input});expect(r.code,r.stderr).toBe(0);
++ expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:'saved-result-provider-original-evidence-unsupported'});
++});
++
++it.each([['rewrite-runtime','saved-result-runtime-contract-mismatch'],['rewrite-config','saved-result-config-mismatch']])('refuses %s bytes that differ from the actual execution authority',async(mode,reason)=>{
++ const f=await world(mode);const r=await f.rpc('saved-result-evidence',{input:f.input});expect(r.code,r.stderr).toBe(0);
++ expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason});
++ expect(JSON.parse(await readFile(join(f.runDir,'loop-state.json'),'utf8')).status).toBe('failed');
++},30000);
++
++it('recursively serves original ledger refs only through exact capsule aliases and validates copied bytes',async()=>{
++ const f=await world();const page=JSON.parse((await f.rpc('saved-result-evidence',{input:f.input})).stdout);
++ const c=await jsonRef(f,page.capsule,page.capsule),ledger=await jsonRef(f,page.capsule,c.artifacts.usageLedger);
++ for(const event of ledger.events){
++   const observation=await jsonRef(f,page.capsule,event.source);expect(observation.attempt).toBe(1);
++ }
++ const alias=c.artifacts.usageObservations[0];
++ const sameHashUndeclared={artifactId:'evidence-undeclared',hash:alias.source.hash};
++ expect((await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef:page.capsule,ref:sameHashUndeclared})).stderr).toContain('control-saved-result-authority-invalid');
++ const other=await world();const otherPage=JSON.parse((await other.rpc('saved-result-evidence',{input:other.input})).stdout);
++ expect((await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef:otherPage.capsule,ref:alias.source})).stderr).toContain('control-saved-result-authority-invalid');
++ await writeFile(savedResultPath(f.sourceDir,alias.copy),'tampered copied observation');
++ expect((await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef:page.capsule,ref:alias.source})).stderr).toContain('control-saved-result-hash-mismatch');
++},30000);
+diff --git a/tests/runtime/codex/executionFormatFailure.test.ts b/tests/runtime/codex/executionFormatFailure.test.ts
+new file mode 100644
+index 0000000..7687275
+--- /dev/null
++++ b/tests/runtime/codex/executionFormatFailure.test.ts
+@@ -0,0 +1,36 @@
++import { afterEach, expect, it } from "vitest";
++import { readFile, readdir, rm, writeFile } from "node:fs/promises";
++import { join } from "node:path";
++import { codexFixture } from "./fixture.js";
++import { CodexAdapter } from "../../../src/runtime/codex/codexAdapter.js";
++import { ExecutionFormatFailure } from "../../../src/controller/executionFormatFailure.js";
++const dirs:string[]=[];
++afterEach(async()=>{for(const d of dirs.splice(0))await rm(d,{recursive:true,force:true});});
++it("keeps failed execution usage and original bytes independently of missing core fields",async()=>{
++  const f=await codexFixture("final-text");dirs.push(f.dir);
++  const finals=join(f.dir,"finals.json"),final='Done: {"result":{"changedFiles":["answer.txt"]}}';
++  await writeFile(finals,JSON.stringify({execute:final}));
++  const error=await new CodexAdapter({...f.config,command:[...f.config.command,finals]}).execute(f.context).catch(e=>e);
++  expect(error).toBeInstanceOf(ExecutionFormatFailure);
++  expect(error).toMatchObject({observedTokens:15,usageEvidence:{normalizedTotal:15},modelUsage:[{model:"fixture",input:12,output:3,cacheRead:0,cacheWrite:0}],normalization:{status:"unavailable"}});
++  expect(await readFile(join(error.evidenceDir,"final.json"),"utf8")).toBe(final);
++  expect(JSON.parse(await readFile(join(error.evidenceDir,"usage.json"),"utf8"))).toMatchObject({normalizedTotal:15});
++});
++it("accepts direct execution through the real adapter",async()=>{
++  const f=await codexFixture("final-text");dirs.push(f.dir);const finals=join(f.dir,"finals.json");
++  const execution={changedFiles:[],diffPatch:"",commandOutputs:[],stdoutStderrLog:"ok"};
++  await writeFile(finals,JSON.stringify({execute:JSON.stringify(execution)}));
++  expect(await new CodexAdapter({...f.config,command:[...f.config.command,finals]}).execute(f.context)).toMatchObject({...execution,tokenUsage:15});
++});
++it("never labels a failed process as eligible format failure",async()=>{
++  const f=await codexFixture("nonzero");dirs.push(f.dir);
++  const error=await new CodexAdapter(f.config).execute(f.context).catch(e=>e);
++  expect(error).not.toBeInstanceOf(ExecutionFormatFailure);expect(error.message).toContain("codex-exit-error");
++});
++
++it("requires intact stream, unique completion and finite actual usage independently of final schema",async()=>{
++  const {decodeCodexUsage}=await import("../../../src/runtime/codex/protocol.js");
++  const event=JSON.stringify({type:"turn.completed",usage:{input_tokens:12,output_tokens:3}});
++  expect(decodeCodexUsage(event,true)).toMatchObject({tokenUsage:15});
++  for(const text of [event+"\n"+event,event+"\n{broken",event+'\n{"type":"error"}',JSON.stringify({type:"turn.completed",usage:{input_tokens:null,output_tokens:3}})])expect(()=>decodeCodexUsage(text,true)).toThrow();
++});
+diff --git a/tests/runtime/executionNormalizer.test.ts b/tests/runtime/executionNormalizer.test.ts
+new file mode 100644
+index 0000000..ea40989
+--- /dev/null
++++ b/tests/runtime/executionNormalizer.test.ts
+@@ -0,0 +1,32 @@
++import { describe, expect, it } from "vitest";
++import { normalizeExecutionFinal } from "../../src/runtime/executionNormalizer.js";
++const complete = { changedFiles:["answer.txt"], diffPatch:"patch", commandOutputs:["ran"], stdoutStderrLog:"ok" };
++const partial = {...complete,completionStatus:"partial",failureType:"error",failureMessage:"stopped"};
++describe("strict execution normalization",()=>{
++  for (const body of [complete, partial]) for (const wrapped of [false,true]) for (const decorated of [false,true]) {
++    it(`accepts ${body===partial?"partial":"complete"} ${wrapped?"envelope":"direct"} ${decorated?"decorated":"whole"}`,()=>{
++      const text=JSON.stringify(wrapped?{result:body}:body);
++      expect(normalizeExecutionFinal(decorated?`Done: ${text}`:text)).toMatchObject({status:"available",execution:body});
++    });
++  }
++  it.each([
++    JSON.stringify({...complete,extra:1}), JSON.stringify({result:complete,extra:1}), JSON.stringify([complete]),
++    `Answer ${JSON.stringify(complete)} then {"changedFiles":"bad"}`,
++    `Answer ${JSON.stringify({result:complete})} then {"result":{}}`,
++    `Answer ${JSON.stringify(complete)} then {`,
++    `Answer ${JSON.stringify(complete)} then {broken}`,
++    JSON.stringify({result:{...complete,diffPatch:undefined}}),
++  ])("refuses ambiguous, hidden, incompatible or incomplete output %#",text=>expect(normalizeExecutionFinal(text).status).toBe("unavailable"));
++  it("counts an envelope and direct repeated body as one semantic answer",()=>{
++    expect(normalizeExecutionFinal(`One ${JSON.stringify({result:complete})} again ${JSON.stringify(complete)}`).status).toBe("available");
++  });
++  it("treats established reports as opaque but retains original lossy identity",()=>{
++    const a={...complete,taskResult:{changedFiles:"opaque",bad:"a".repeat(200000)}};
++    const b={...complete,taskResult:{changedFiles:"opaque",bad:"b".repeat(200000)}};
++    expect(normalizeExecutionFinal(`Done ${JSON.stringify(a)}`).status).toBe("available");
++    expect(normalizeExecutionFinal(`One ${JSON.stringify(a)} two ${JSON.stringify({result:b})}`).status).toBe("unavailable");
++  });
++  it("fails closed on scanner depth overflow",()=>{
++    expect(normalizeExecutionFinal(`Done {"result":${'{"a":'.repeat(1001)}{}${'}'.repeat(1001)}}`)).toMatchObject({status:"unavailable",diagnostic:{hidden:true}});
++  });
++});

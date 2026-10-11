@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "/bin/zsh",
+    "-c",
+    "task_tmp=$(mktemp -d /private/tmp/t5w.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node --import /private/tmp/ccloop-feedback-followup-20261011/node_modules/tsx/dist/loader.mjs /private/tmp/task5-native-wire-final.mts"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 4.991717100143433,
+  "log": "/private/tmp/orca-followup-runs/t5-final3-wire/output.log",
+  "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+  "sourceTreeSHA256": "b325e1b5123b4eb03a6a9de761778e447b8d86165c14325a42bbf5fb96d1586f",
+  "sourceFiles": 247
+}

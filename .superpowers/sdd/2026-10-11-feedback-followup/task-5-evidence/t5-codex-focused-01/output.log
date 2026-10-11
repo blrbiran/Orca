@@ -1,0 +1,65 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/runtime/codex/protocol.test.ts (38 tests) 17ms
+ ✓ tests/runtime/codex/codexSkills.test.ts (17 tests) 171ms
+ ✓ tests/runtime/codex/fakeCodexScript.test.ts (2 tests) 196ms
+ ✓ tests/runtime/codex/fakeCodexFrames.test.ts (3 tests) 665ms
+   ✓ fake codex frames mode (spec §3.4) > falls back to the * list and defaults the missing fields 310ms
+ ✓ tests/runtime/codex/taskResultDecoding.test.ts (20 tests) 1198ms
+   ✓ optional Codex execute explanation > requests the logical report in the original executor call 432ms
+ ✓ tests/runtime/codex/fakeCodexArgv.test.ts (2 tests) 592ms
+   ✓ fake codex .argv and --version (Orca agent selection) > appends one JSON array line per call, from `exec` on, including the model 388ms
+ ✓ tests/runtime/codex/extraEnv.test.ts (2 tests) 561ms
+   ✓ codex config directory > runs the CLI with extraEnv on top of the inherited environment 324ms
+ ✓ tests/runtime/executionNormalizer.test.ts (19 tests) 94ms
+ ✓ tests/runtime/codex/abortedUsage.test.ts (3 tests) 1859ms
+   ✓ usage observed before a codex phase was aborted (Orca handoff delivery C-3) > returns the observed tokens on an aborted outcome after a usage line, and null before any 768ms
+   ✓ usage observed before a codex phase was aborted (Orca handoff delivery C-3) > carries the observation on CodexPhaseAborted for plan and verify, and for execute only when one exists 1088ms
+ ✓ tests/runtime/codex/codexModelUsage.test.ts (4 tests) 474ms
+   ✓ Codex adapter model usage > attaches the configured model's usage to every phase result 470ms
+ ✓ tests/runtime/codex/fileBoundary.test.ts (1 test) 308ms
+   ✓ refuses a FIFO final without waiting for a writer after phase exit 307ms
+ ✓ tests/runtime/codex/transport.test.ts (2 tests) 524ms
+   ✓ uses an object root for execute's structured output union 306ms
+ ✓ tests/runtime/codex/executionFormatFailure.test.ts (4 tests) 786ms
+   ✓ keeps failed execution usage and original bytes independently of missing core fields 318ms
+ ✓ tests/runtime/codex/adapter.test.ts (5 tests) 1526ms
+   ✓ Codex runtime adapter > retains usage evidence from every phase 493ms
+   ✓ does not hide cleanup failure behind an aborted execute result 343ms
+ ✓ tests/runtime/codex/extractFinalObject.test.ts (58 tests) 3841ms
+   ✓ extractFinalObject (codex phase output hardening) > performance > refuses a 16 MiB span of millions of empty objects in under 3 s (plan) 1816ms
+   ✓ extractFinalObject (codex phase output hardening) > performance > refuses a 16 MiB span of millions of empty objects in under 3 s (execute) 1595ms
+ ✓ tests/runtime/codex/finalExtraction.test.ts (19 tests) 4675ms
+   ✓ Codex adapter final-message extraction (codex phase output hardening) > extracts the one plan from decorated prose and records how 436ms
+   ✓ Codex adapter final-message extraction (codex phase output hardening) > writes no extraction evidence for a compliant whole answer 320ms
+   ✓ Codex adapter final-message extraction (codex phase output hardening) > accepts a decorated verify rejection 351ms
+   ✓ Codex adapter final-message extraction (codex phase output hardening) > fails a verify answer with a child nested 100 000 deep as today and records hidden text 368ms
+ ✓ tests/runtime/codex/runCodexPhase.test.ts (24 tests) 5509ms
+   ✓ Codex phase process > refuses output-limit output 647ms
+   ✓ Codex phase process > times out a hanging process without external cancellation 546ms
+   ✓ Codex phase process > reaps same-group pipe holders before test cleanup 1151ms
+   ✓ Codex phase process > labels truncated evidence explicitly 464ms
+   ✓ Codex phase process > returns its own deadline result before the test watchdog 511ms
+   ✓ Codex skill phase lifetime > keeps links during hang and cleans after child closes 527ms
+ ✓ tests/runtime/codex/fakeCodexDelay.test.ts (5 tests) 5931ms
+   ✓ fake codex script delay and continuation entries (Orca handoff delivery C5, I-7) > sleeps delayMs for the named phase of every phase kind before answering, and only for that phase 2222ms
+   ✓ fake codex script delay and continuation entries (Orca handoff delivery C5, I-7) > chooses the #continuation entry only when the prompt carries the continuation constraint 3391ms
+ ✓ tests/runtime/codex/skillsController.test.ts (11 tests) 14266ms
+   ✓ controller plan timeout waits for Codex close before deleting skills or the worktree 1823ms
+   ✓ controller verify timeout waits for Codex close before deleting skills or the worktree 1842ms
+   ✓ controller preserves plan skill cleanup failure across timeout 1403ms
+   ✓ controller preserves plan skill cleanup failure across handoff-request 1414ms
+   ✓ controller preserves plan skill cleanup failure across handoff-abort 488ms
+   ✓ controller preserves execute skill cleanup failure across timeout 1482ms
+   ✓ controller preserves execute skill cleanup failure across handoff-request 1482ms
+   ✓ controller preserves execute skill cleanup failure across handoff-abort 553ms
+   ✓ controller preserves verify skill cleanup failure across timeout 1549ms
+   ✓ controller preserves verify skill cleanup failure across handoff-request 1558ms
+   ✓ controller preserves verify skill cleanup failure across handoff-abort 670ms
+
+ Test Files  19 passed (19)
+      Tests  239 passed (239)
+   Start at  07:11:25
+   Duration  15.36s (transform 796ms, setup 194ms, collect 2.38s, tests 43.19s, environment 4ms, prepare 1.45s)
+

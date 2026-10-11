@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-task5-mutations-20261011",
+  "command": [
+    "/bin/zsh",
+    "-c",
+    "task_tmp=$(mktemp -d /private/tmp/t5x.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-final-mutation-actual-contract/tests.json"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 15.630035877227783,
+  "log": "/private/tmp/orca-followup-runs/t5-final-mutation-actual-contract/output.log",
+  "source": "c52dd68b0c9715a2f27cb9f807aa4c9ae30c96f1",
+  "sourceTreeSHA256": "61b6c9462541ea5467cd7d8ae34976b9980d988ae40d11b736e2bc430341052f",
+  "sourceFiles": 247
+}

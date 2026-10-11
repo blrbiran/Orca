@@ -1,0 +1,23 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/runtime/codex/executionFormatFailure.test.ts (3 tests) 595ms
+ ❯ tests/control/savedResultEvidence.test.ts (3 tests | 1 failed) 2259ms
+   × captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 1054ms
+     → expected null not to be null
+   ✓ records capture failure as unavailable and preserves original failed outcome 1094ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3
+AssertionError: expected null not to be null
+ ❯ tests/control/savedResultEvidence.test.ts:48:66
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 5 passed (6)
+   Start at  07:09:48
+   Duration  2.87s (transform 309ms, setup 31ms, collect 446ms, tests 2.85s, environment 0ms, prepare 103ms)
+

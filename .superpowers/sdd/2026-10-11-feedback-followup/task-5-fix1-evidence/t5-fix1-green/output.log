@@ -1,0 +1,89 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (21 tests | 3 failed) 30246ms
+   ✓ captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 2317ms
+   ✓ records capture failure as unavailable and preserves original failed outcome 1385ms
+   ✓ binds frozen authority separately from a genuinely narrowed protocol4 runtime contract 1687ms
+   ✓ refuses a hash-valid capsule with another source identity 1683ms
+   ✓ rejects symlinked evidence namespaces even when referenced bytes exist 1557ms
+   ✓ refuses rewrite-runtime bytes that differ from the actual execution authority 1022ms
+   ✓ refuses rewrite-config bytes that differ from the actual execution authority 1082ms
+   ✓ recursively serves original ledger refs only through exact capsule aliases and validates copied bytes 3477ms
+   ✓ fix I1 freezes the materialized base across target movement before workspace creation 1695ms
+   ✓ fix I1 freezes the materialized base across target movement after workspace creation 1688ms
+   ✓ fix I1 keeps a distinct continuation HEAD but refuses missing original-base authority 1617ms
+   ✓ fix I2 refuses unsupported file mode 2541 before complete capture 1368ms
+   × fix I2 refuses unsupported file mode 1517 before complete capture 1026ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses unsupported directory mode 1517 before complete capture 1039ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   ✓ fix I2 refuses unsupported directory mode 1005 before complete capture 1405ms
+   ✓ fix I2 refuses unsupported root mode 1005 before complete capture 1267ms
+   ✓ fix I2 refuses file special bits introduced during the stability pass 1555ms
+   × fix I2 refuses directory special bits introduced during the stability pass 1591ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   ✓ fix I2 refuses root special bits introduced between capture passes 1570ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses unsupported file mode 1517 before complete capture
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses unsupported directory mode 1517 before complete capture
+AssertionError: expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+    "capsule": null,
+-   "reason": "saved-result-mode-unsupported",
++   "reason": "saved-result-original-evidence-unavailable",
+  }
+
+ ❯ tests/control/savedResultEvidence.test.ts:195:31
+    193| it.each([["file",0o4755],["file",0o2755],["directory",0o2755],["direct…
+    194|  const f=await world(`special-${kind}-${mode}`);const r=await f.rpc("s…
+    195|  expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"save…
+       |                               ^
+    196| },30000);
+    197| it.each(["file","directory"])("fix I2 refuses %s special bits introduc…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses directory special bits introduced during the stability pass
+AssertionError: expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "capsule": null,
+-   "reason": "saved-result-mode-unsupported",
++   "capsule": Object {
++     "artifactId": "saved-result-4f3d85e1aaca7e3f310b37a62a0ad4d551b1cec93996221bab22e3c991740ff3",
++     "hash": "4f3d85e1aaca7e3f310b37a62a0ad4d551b1cec93996221bab22e3c991740ff3",
++   },
++   "reason": null,
+  }
+
+ ❯ tests/control/savedResultEvidence.test.ts:207:31
+    205|  }) as typeof fs.readdir);
+    206|  const f=await world();const r=await f.rpc("saved-result-evidence",{in…
+    207|  expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"save…
+       |                               ^
+    208| },30000);
+    209| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 18 passed (21)
+   Start at  08:01:37
+   Duration  30.90s (transform 280ms, setup 14ms, collect 360ms, tests 30.25s, environment 0ms, prepare 54ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-fix1-green/tests.json

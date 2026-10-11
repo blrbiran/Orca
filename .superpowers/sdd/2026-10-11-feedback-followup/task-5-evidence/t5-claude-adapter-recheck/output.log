@@ -1,0 +1,20 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/runtime/claude/claudeAgentAdapter.test.ts (24 tests) 13803ms
+   ✓ ClaudeAgentAdapter (Orca agent selection, spec §4.7) > passes the selected model to the claude CLI and returns the structured answer with its usage 319ms
+   ✓ ClaudeAgentAdapter (Orca agent selection, spec §4.7) > sets CLAUDE_CONFIG_DIR only when the installation names a configDir 432ms
+   ✓ ClaudeAgentAdapter (Orca agent selection, spec §4.7) > times out a hanging CLI by itself and leaves no process of the group behind 611ms
+   ✓ ClaudeAgentAdapter (Orca agent selection, spec §4.7) > caps the timeout by the remaining runtime budget, not just the installation's timeoutMs 414ms
+   ✓ ClaudeAgentAdapter (Orca agent selection, spec §4.7) > registers the runner's process group, so the stop proof refuses while that group is alive 315ms
+   ✓ ClaudeAgentAdapter (Orca agent selection, spec §4.7) > writes nothing to the runner until the registration callback has returned 3236ms
+   ✓ ClaudeAgentAdapter (Orca agent selection, spec §4.7) > kills the runner's grandchild within killGraceMs of an abort 305ms
+   ✓ ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > a returned partial carries the usage observed before the stop 302ms
+   ✓ ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > an execute stopped by the adapter's own timeout returns the partial 1654ms
+   ✓ ClaudeAgentAdapter, the execute result written after a stop (consolidation step 1) > the partial still arrives when the recovery window is longer than killGraceMs 3315ms
+
+ Test Files  1 passed (1)
+      Tests  24 passed (24)
+   Start at  07:41:53
+   Duration  14.19s (transform 104ms, setup 14ms, collect 114ms, tests 13.80s, environment 0ms, prepare 55ms)
+

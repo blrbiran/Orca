@@ -1,0 +1,12 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/control/savedResultEvidence.test.ts (23 tests | 22 skipped) 2731ms
+   ✓ fix I1 preserves ordinary retry choice while binding each attempt's actual origin 2730ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 22 skipped (23)
+   Start at  08:09:12
+   Duration  3.38s (transform 267ms, setup 14ms, collect 356ms, tests 2.73s, environment 0ms, prepare 47ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-fix1-retry/tests.json

@@ -1,0 +1,22 @@
+[
+  {
+    "file": "src/runtime/claude/claudeAgentAdapter.ts",
+    "baseIdentical": true,
+    "sha256": "9152b7babc1bd8af743a84f056f6c757384f9a4dad206d8fd5a8fe591a6ff695"
+  },
+  {
+    "file": "scripts/claude-phase-runner.mjs",
+    "baseIdentical": true,
+    "sha256": "9dc19aa7f32b03c07366bc9d1430bf0dd1619399268192e6088f462b26e87b59"
+  },
+  {
+    "file": "tests/runtime/claude/claudeAgentAdapter.test.ts",
+    "baseIdentical": true,
+    "sha256": "d695a2358bc5cd8d680c20f81470b9e9e9c9d6dd4b114ba0525f9b25bb5b6913"
+  },
+  {
+    "file": "tests/runtime/claude/claudePhaseRunner.test.ts",
+    "baseIdentical": true,
+    "sha256": "872b7ff15d5d270d221bc949d809e3149c93cfda42b718af02c7b705a9cbc07b"
+  }
+]

@@ -1,0 +1,34 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-mutations-20261011
+
+ ❯ tests/runtime/executionNormalizer.test.ts (19 tests | 2 failed) 66ms
+   × strict execution normalization > refuses ambiguous, hidden, incompatible or incomplete output 3 4ms
+     → expected 'available' to be 'unavailable' // Object.is equality
+   × strict execution normalization > refuses ambiguous, hidden, incompatible or incomplete output 4 1ms
+     → expected 'available' to be 'unavailable' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/runtime/executionNormalizer.test.ts > strict execution normalization > refuses ambiguous, hidden, incompatible or incomplete output 3
+ FAIL  tests/runtime/executionNormalizer.test.ts > strict execution normalization > refuses ambiguous, hidden, incompatible or incomplete output 4
+AssertionError: expected 'available' to be 'unavailable' // Object.is equality
+
+Expected: "unavailable"
+Received: "available"
+
+ ❯ tests/runtime/executionNormalizer.test.ts:19:123
+     17|     `Answer ${JSON.stringify(complete)} then {broken}`,
+     18|     JSON.stringify({result:{...complete,diffPatch:undefined}}),
+     19|   ])("refuses ambiguous, hidden, incompatible or incomplete output %#"…
+       |                                                                                                                           ^
+     20|   it("counts an envelope and direct repeated body as one semantic answ…
+     21|     expect(normalizeExecutionFinal(`One ${JSON.stringify({result:compl…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 17 passed (19)
+   Start at  07:40:23
+   Duration  349ms (transform 49ms, setup 15ms, collect 46ms, tests 66ms, environment 0ms, prepare 47ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-final-mutation-ambiguity/tests.json

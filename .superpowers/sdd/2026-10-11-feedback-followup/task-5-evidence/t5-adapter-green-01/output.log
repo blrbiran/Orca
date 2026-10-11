@@ -1,0 +1,377 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/runtime/codex/protocol.test.ts (38 tests) 12ms
+ ❯ tests/runtime/codex/executionFormatFailure.test.ts (3 tests | 3 failed) 2792ms
+   × keeps failed execution usage and original bytes independently of missing core fields 2593ms
+     → expected Error: codex-io-error: /private/tmp/t5a.9… { observedTokens: null } to be an instance of ExecutionFormatFailure
+   × accepts direct execution through the real adapter 94ms
+     → codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-qZKlhG/codex-integration-kaC6ne/run/codex/1/execute/call-RWJq35
+   × never labels a failed process as eligible format failure 104ms
+     → expected 'codex-io-error: /private/tmp/t5a.9uyP…' to contain 'codex-exit-error'
+ ❯ tests/runtime/codex/finalExtraction.test.ts (19 tests | 19 failed) 4228ms
+   × Codex adapter final-message extraction (codex phase output hardening) > extracts the one plan from decorated prose and records how 2588ms
+     → codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-FBFb5E/run/codex/1/plan/call-xk1wxZ
+   × Codex adapter final-message extraction (codex phase output hardening) > writes no extraction evidence for a compliant whole answer 93ms
+     → codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-c4NqWy/run/codex/1/plan/call-NYfsHx
+   × Codex adapter final-message extraction (codex phase output hardening) > keeps today's error text and records the refused candidates before decoding 106ms
+     → expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+   × Codex adapter final-message extraction (codex phase output hardening) > writes no extraction evidence when no candidate parses 88ms
+     → expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+   × Codex adapter final-message extraction (codex phase output hardening) > decodes a bare array holding the plan as a whole answer, failing as today 94ms
+     → expected false to be true // Object.is equality
+   × Codex adapter final-message extraction (codex phase output hardening) > refuses a verify answer that carries an approval template next to the rejection 86ms
+     → expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+   × Codex adapter final-message extraction (codex phase output hardening) > refuses a verify rejection after a fenced answer-shaped example that is not a valid verification 87ms
+     → expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+   × Codex adapter final-message extraction (codex phase output hardening) > accepts a decorated verify rejection 88ms
+     → codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-gHbfCG/run/codex/1/verify/call-MANvA7
+   × Codex adapter final-message extraction (codex phase output hardening) > refuses a decorated verify approval with today's error text 91ms
+     → expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+   × Codex adapter final-message extraction (codex phase output hardening) > refuses a verify rejection with an extra key next to a fenced approval template 90ms
+     → expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+   × Codex adapter final-message extraction (codex phase output hardening) > records hidden text with zero candidates 93ms
+     → expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+   × Codex adapter final-message extraction (codex phase output hardening) > fails a plan answer with a child nested 100 000 deep as today and records hidden text 95ms
+     → expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+   × Codex adapter final-message extraction (codex phase output hardening) > fails a verify answer with a child nested 100 000 deep as today and records hidden text 93ms
+     → expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+   × Codex adapter final-message extraction (codex phase output hardening) > fails a execute answer with a child nested 100 000 deep as today and records hidden text 107ms
+     → expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'SyntaxError: Unexpected token \'D\', …' // Object.is equality
+   × Codex adapter final-message extraction (codex phase output hardening) > extracts a complete execution envelope from prose 81ms
+     → codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-bcssTD/run/codex/1/execute/call-oHZ8QE
+   × Codex adapter final-message extraction (codex phase output hardening) > extracts a partial execution envelope from prose 80ms
+     → codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-RYFqZb/run/codex/1/execute/call-SWxidN
+   × Codex adapter final-message extraction (codex phase output hardening) > keeps today's execute error for two different envelopes 91ms
+     → expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'SyntaxError: Unexpected token \'F\', …' // Object.is equality
+   × Codex adapter final-message extraction (codex phase output hardening) > keeps today's execute error for an envelope with an extra key 85ms
+     → expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'SyntaxError: Unexpected token \'R\', …' // Object.is equality
+   × codex execute prompt order (codex phase output hardening) > puts codex's envelope line after the executor's final-message line 89ms
+     → codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-xTCXhR/run/codex/1/execute/call-ZdZwvC
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 22 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/runtime/codex/executionFormatFailure.test.ts > keeps failed execution usage and original bytes independently of missing core fields
+AssertionError: expected Error: codex-io-error: /private/tmp/t5a.9… { observedTokens: null } to be an instance of ExecutionFormatFailure
+ ❯ tests/runtime/codex/executionFormatFailure.test.ts:14:17
+     12|   await writeFile(finals,JSON.stringify({execute:final}));
+     13|   const error=await new CodexAdapter({...f.config,command:[...f.config…
+     14|   expect(error).toBeInstanceOf(ExecutionFormatFailure);
+       |                 ^
+     15|   expect(error).toMatchObject({observedTokens:15,usageEvidence:{normal…
+     16|   expect(await readFile(join(error.evidenceDir,"final.json"),"utf8")).…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯
+
+ FAIL  tests/runtime/codex/executionFormatFailure.test.ts > accepts direct execution through the real adapter
+Error: codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-qZKlhG/codex-integration-kaC6ne/run/codex/1/execute/call-RWJq35
+ ❯ CodexAdapter.phase src/runtime/codex/codexAdapter.ts:31:27
+     29|       // Orca ruling 26 (session c85d2c4e, 2026-09-28): as the aborted…
+     30|       // turn usage its stdout showed (runCodexPhase observes it for e…
+     31|       throw Object.assign(new Error(`${outcome.reason.startsWith("code…
+       |                           ^
+     32|     }
+     33|     if (phase === "execute") {
+ ❯ CodexAdapter.execute src/runtime/codex/codexAdapter.ts:80:18
+ ❯ tests/runtime/codex/executionFormatFailure.test.ts:23:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯
+
+ FAIL  tests/runtime/codex/executionFormatFailure.test.ts > never labels a failed process as eligible format failure
+AssertionError: expected 'codex-io-error: /private/tmp/t5a.9uyP…' to contain 'codex-exit-error'
+
+Expected: "codex-exit-error"
+Received: "codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-qZKlhG/codex-integration-Or1HXt/run/codex/1/execute/call-pB6ydb"
+
+ ❯ tests/runtime/codex/executionFormatFailure.test.ts:28:82
+     26|   const f=await codexFixture("nonzero");dirs.push(f.dir);
+     27|   const error=await new CodexAdapter(f.config).execute(f.context).catc…
+     28|   expect(error).not.toBeInstanceOf(ExecutionFormatFailure);expect(erro…
+       |                                                                                  ^
+     29| });
+     30| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > extracts the one plan from decorated prose and records how
+Error: codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-FBFb5E/run/codex/1/plan/call-xk1wxZ
+ ❯ CodexAdapter.phase src/runtime/codex/codexAdapter.ts:31:27
+     29|       // Orca ruling 26 (session c85d2c4e, 2026-09-28): as the aborted…
+     30|       // turn usage its stdout showed (runCodexPhase observes it for e…
+     31|       throw Object.assign(new Error(`${outcome.reason.startsWith("code…
+       |                           ^
+     32|     }
+     33|     if (phase === "execute") {
+ ❯ tests/runtime/codex/finalExtraction.test.ts:47:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > writes no extraction evidence for a compliant whole answer
+Error: codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-c4NqWy/run/codex/1/plan/call-NYfsHx
+ ❯ CodexAdapter.phase src/runtime/codex/codexAdapter.ts:31:27
+     29|       // Orca ruling 26 (session c85d2c4e, 2026-09-28): as the aborted…
+     30|       // turn usage its stdout showed (runCodexPhase observes it for e…
+     31|       throw Object.assign(new Error(`${outcome.reason.startsWith("code…
+       |                           ^
+     32|     }
+     33|     if (phase === "execute") {
+ ❯ tests/runtime/codex/finalExtraction.test.ts:57:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > keeps today's error text and records the refused candidates before decoding
+AssertionError: expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+
+Expected: "Error: codex-result-invalid: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-eesa54/run/codex/1/plan/call-MjsEBq"
+Received: "codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-eesa54/run/codex/1/plan/call-MjsEBq"
+
+ ❯ tests/runtime/codex/finalExtraction.test.ts:66:21
+     64|     const message = await failure(f.adapter.plan(f.context));
+     65|     const call = await f.call();
+     66|     expect(message).toBe(`Error: codex-result-invalid: ${call}`);
+       |                     ^
+     67|     expect(await readFile(join(call, "decode-error.txt"), "utf8")).toB…
+     68|     expect(await readJson(join(call, "final-extraction.json"))).toEqua…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > writes no extraction evidence when no candidate parses
+AssertionError: expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+
+Expected: "Error: codex-result-invalid: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-aV66Dh/run/codex/1/plan/call-9Ld51J"
+Received: "codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-aV66Dh/run/codex/1/plan/call-9Ld51J"
+
+ ❯ tests/runtime/codex/finalExtraction.test.ts:75:21
+     73|     const message = await failure(f.adapter.plan(f.context));
+     74|     const call = await f.call();
+     75|     expect(message).toBe(`Error: codex-result-invalid: ${call}`);
+       |                     ^
+     76|     expect(await exists(join(call, "final-extraction.json"))).toBe(fal…
+     77|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > decodes a bare array holding the plan as a whole answer, failing as today
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/runtime/codex/finalExtraction.test.ts:83:65
+     81|     const message = await failure(f.adapter.plan(f.context));
+     82|     const call = await f.call();
+     83|     expect(message.startsWith("Error: codex-result-invalid: ")).toBe(t…
+       |                                                                 ^
+     84|     expect(message.endsWith(`: ${call}`)).toBe(true);
+     85|     expect(await exists(join(call, "final-extraction.json"))).toBe(fal…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > refuses a verify answer that carries an approval template next to the rejection
+AssertionError: expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+
+Expected: "Error: codex-result-invalid: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-BGPzzF/run/codex/1/verify/call-sHF0Sd"
+Received: "codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-BGPzzF/run/codex/1/verify/call-sHF0Sd"
+
+ ❯ tests/runtime/codex/finalExtraction.test.ts:93:21
+     91|     const message = await failure(f.adapter.verify(f.context));
+     92|     const call = await f.call();
+     93|     expect(message).toBe(`Error: codex-result-invalid: ${call}`);
+       |                     ^
+     94|     expect(await readJson(join(call, "final-extraction.json"))).toEqua…
+     95|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > refuses a verify rejection after a fenced answer-shaped example that is not a valid verification
+AssertionError: expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+
+Expected: "Error: codex-result-invalid: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-PlnsBT/run/codex/1/verify/call-GGqNII"
+Received: "codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-PlnsBT/run/codex/1/verify/call-GGqNII"
+
+ ❯ tests/runtime/codex/finalExtraction.test.ts:104:21
+    102|     const message = await failure(f.adapter.verify(f.context));
+    103|     const call = await f.call();
+    104|     expect(message).toBe(`Error: codex-result-invalid: ${call}`);
+       |                     ^
+    105|     expect(await readJson(join(call, "final-extraction.json"))).toEqua…
+    106|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > accepts a decorated verify rejection
+Error: codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-gHbfCG/run/codex/1/verify/call-MANvA7
+ ❯ CodexAdapter.phase src/runtime/codex/codexAdapter.ts:31:27
+     29|       // Orca ruling 26 (session c85d2c4e, 2026-09-28): as the aborted…
+     30|       // turn usage its stdout showed (runCodexPhase observes it for e…
+     31|       throw Object.assign(new Error(`${outcome.reason.startsWith("code…
+       |                           ^
+     32|     }
+     33|     if (phase === "execute") {
+ ❯ tests/runtime/codex/finalExtraction.test.ts:111:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > refuses a decorated verify approval with today's error text
+AssertionError: expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+
+Expected: "Error: codex-result-invalid: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-Hiz3dr/run/codex/1/verify/call-bWeEt4"
+Received: "codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-Hiz3dr/run/codex/1/verify/call-bWeEt4"
+
+ ❯ tests/runtime/codex/finalExtraction.test.ts:121:21
+    119|     const message = await failure(f.adapter.verify(f.context));
+    120|     const call = await f.call();
+    121|     expect(message).toBe(`Error: codex-result-invalid: ${call}`);
+       |                     ^
+    122|     expect(await readFile(join(call, "decode-error.txt"), "utf8")).toB…
+    123|     expect(await readJson(join(call, "final-extraction.json"))).toEqua…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > refuses a verify rejection with an extra key next to a fenced approval template
+AssertionError: expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+
+Expected: "Error: codex-result-invalid: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-qc4DLP/run/codex/1/verify/call-nUGvhL"
+Received: "codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-qc4DLP/run/codex/1/verify/call-nUGvhL"
+
+ ❯ tests/runtime/codex/finalExtraction.test.ts:131:21
+    129|     const f = await withFinal("verify", text);
+    130|     const message = await failure(f.adapter.verify(f.context));
+    131|     expect(message).toBe(`Error: codex-result-invalid: ${await f.call(…
+       |                     ^
+    132|   });
+    133| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > records hidden text with zero candidates
+AssertionError: expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+
+Expected: "Error: codex-result-invalid: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-C0oznY/run/codex/1/plan/call-k9b3PJ"
+Received: "codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-C0oznY/run/codex/1/plan/call-k9b3PJ"
+
+ ❯ tests/runtime/codex/finalExtraction.test.ts:140:21
+    138|     const message = await failure(f.adapter.plan(f.context));
+    139|     const call = await f.call();
+    140|     expect(message).toBe(`Error: codex-result-invalid: ${call}`);
+       |                     ^
+    141|     expect(await readJson(join(call, "final-extraction.json"))).toEqua…
+    142|     expect((await stat(join(call, "final-extraction.json"))).mode & 0o…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > fails a plan answer with a child nested 100 000 deep as today and records hidden text
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > fails a verify answer with a child nested 100 000 deep as today and records hidden text
+AssertionError: expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'Error: codex-result-invalid: /private…' // Object.is equality
+
+Expected: "Error: codex-result-invalid: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-Z4MaDx/run/codex/1/plan/call-D76fo5"
+Received: "codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-Z4MaDx/run/codex/1/plan/call-D76fo5"
+
+ ❯ tests/runtime/codex/finalExtraction.test.ts:156:21
+    154|     const message = await failure(phase === "plan" ? f.adapter.plan(f.…
+    155|     const call = await f.call();
+    156|     expect(message).toBe(phase === "execute" ? `${todaysParseError(tex…
+       |                     ^
+    157|     expect(await readJson(join(call, "final-extraction.json"))).toEqua…
+    158|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > fails a execute answer with a child nested 100 000 deep as today and records hidden text
+AssertionError: expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'SyntaxError: Unexpected token \'D\', …' // Object.is equality
+
+Expected: "SyntaxError: Unexpected token 'D', "Done: {"re"... is not valid JSON: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-P7tWDK/run/codex/1/execute/call-NPdVSH"
+Received: "codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-P7tWDK/run/codex/1/execute/call-NPdVSH"
+
+ ❯ tests/runtime/codex/finalExtraction.test.ts:156:21
+    154|     const message = await failure(phase === "plan" ? f.adapter.plan(f.…
+    155|     const call = await f.call();
+    156|     expect(message).toBe(phase === "execute" ? `${todaysParseError(tex…
+       |                     ^
+    157|     expect(await readJson(join(call, "final-extraction.json"))).toEqua…
+    158|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > extracts a complete execution envelope from prose
+Error: codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-bcssTD/run/codex/1/execute/call-oHZ8QE
+ ❯ CodexAdapter.phase src/runtime/codex/codexAdapter.ts:31:27
+     29|       // Orca ruling 26 (session c85d2c4e, 2026-09-28): as the aborted…
+     30|       // turn usage its stdout showed (runCodexPhase observes it for e…
+     31|       throw Object.assign(new Error(`${outcome.reason.startsWith("code…
+       |                           ^
+     32|     }
+     33|     if (phase === "execute") {
+ ❯ CodexAdapter.execute src/runtime/codex/codexAdapter.ts:80:18
+ ❯ tests/runtime/codex/finalExtraction.test.ts:163:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > extracts a partial execution envelope from prose
+Error: codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-RYFqZb/run/codex/1/execute/call-SWxidN
+ ❯ CodexAdapter.phase src/runtime/codex/codexAdapter.ts:31:27
+     29|       // Orca ruling 26 (session c85d2c4e, 2026-09-28): as the aborted…
+     30|       // turn usage its stdout showed (runCodexPhase observes it for e…
+     31|       throw Object.assign(new Error(`${outcome.reason.startsWith("code…
+       |                           ^
+     32|     }
+     33|     if (phase === "execute") {
+ ❯ CodexAdapter.execute src/runtime/codex/codexAdapter.ts:80:18
+ ❯ tests/runtime/codex/finalExtraction.test.ts:163:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > keeps today's execute error for two different envelopes
+AssertionError: expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'SyntaxError: Unexpected token \'F\', …' // Object.is equality
+
+Expected: "SyntaxError: Unexpected token 'F', "First {"re"... is not valid JSON: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-jqvY97/run/codex/1/execute/call-5YM30q"
+Received: "codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-jqvY97/run/codex/1/execute/call-5YM30q"
+
+ ❯ tests/runtime/codex/finalExtraction.test.ts:173:21
+    171|     const f = await withFinal("execute", text);
+    172|     const message = await failure(f.adapter.execute(f.context));
+    173|     expect(message).toBe(`${todaysParseError(text)}: ${await f.call()}…
+       |                     ^
+    174|   });
+    175| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > Codex adapter final-message extraction (codex phase output hardening) > keeps today's execute error for an envelope with an extra key
+AssertionError: expected 'codex-io-error: /private/tmp/t5a.9uyP…' to be 'SyntaxError: Unexpected token \'R\', …' // Object.is equality
+
+Expected: "SyntaxError: Unexpected token 'R', "Result: {""... is not valid JSON: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-ITxB32/run/codex/1/execute/call-PvySGH"
+Received: "codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-ITxB32/run/codex/1/execute/call-PvySGH"
+
+ ❯ tests/runtime/codex/finalExtraction.test.ts:173:21
+    171|     const f = await withFinal("execute", text);
+    172|     const message = await failure(f.adapter.execute(f.context));
+    173|     expect(message).toBe(`${todaysParseError(text)}: ${await f.call()}…
+       |                     ^
+    174|   });
+    175| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/22]⎯
+
+ FAIL  tests/runtime/codex/finalExtraction.test.ts > codex execute prompt order (codex phase output hardening) > puts codex's envelope line after the executor's final-message line
+Error: codex-io-error: /private/tmp/t5a.9uyP16/ccloop-tmp-a547Pr/codex-integration-xTCXhR/run/codex/1/execute/call-ZdZwvC
+ ❯ CodexAdapter.phase src/runtime/codex/codexAdapter.ts:31:27
+     29|       // Orca ruling 26 (session c85d2c4e, 2026-09-28): as the aborted…
+     30|       // turn usage its stdout showed (runCodexPhase observes it for e…
+     31|       throw Object.assign(new Error(`${outcome.reason.startsWith("code…
+       |                           ^
+     32|     }
+     33|     if (phase === "execute") {
+ ❯ CodexAdapter.execute src/runtime/codex/codexAdapter.ts:80:18
+ ❯ tests/runtime/codex/finalExtraction.test.ts:183:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/22]⎯
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  22 failed | 38 passed (60)
+   Start at  07:06:06
+   Duration  4.54s (transform 120ms, setup 36ms, collect 233ms, tests 7.03s, environment 0ms, prepare 122ms)
+

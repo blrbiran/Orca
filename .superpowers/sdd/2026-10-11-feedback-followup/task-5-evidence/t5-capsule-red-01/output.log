@@ -1,0 +1,81 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (3 tests | 3 failed) 2294ms
+   × captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 1198ms
+     → control-command-invalid
+: expected 1 to be +0 // Object.is equality
+   × records capture failure as unavailable and preserves original failed outcome 993ms
+     → control-command-invalid
+: expected 1 to be +0 // Object.is equality
+   × missing original provider evidence is unavailable rather than reconstructed 103ms
+     → control-command-invalid
+: expected 1 to be +0 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3
+AssertionError: control-command-invalid
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/control/savedResultEvidence.test.ts:47:130
+     45| }
+     46| it('captures original attempt, usage, full snapshot and exact runtime …
+     47|  const f=await world();const response=await f.rpc('saved-result-eviden…
+       |                                                                                                                                  ^
+     48|  const page=JSON.parse(response.stdout);expect(page.capsule).not.toBeN…
+     49|  const c=await jsonRef(f,page.capsule,page.capsule);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > records capture failure as unavailable and preserves original failed outcome
+AssertionError: control-command-invalid
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/control/savedResultEvidence.test.ts:73:126
+     71| },30000);
+     72| it('records capture failure as unavailable and preserves original fail…
+     73|  const f=await world('capture-failure');const r=await f.rpc('saved-res…
+       |                                                                                                                              ^
+     74|  expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:'save…
+     75|  expect(JSON.parse(await readFile(join(f.runDir,'loop-state.json'),'ut…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > missing original provider evidence is unavailable rather than reconstructed
+AssertionError: control-command-invalid
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/control/savedResultEvidence.test.ts:79:26
+     77| it('missing original provider evidence is unavailable rather than reco…
+     78|  const f=await resultFixture();roots.push(f.root);const r=await f.rpc(…
+     79|  expect(r.code,r.stderr).toBe(0);expect(JSON.parse(r.stdout)).toMatchO…
+       |                          ^
+     80| });
+     81| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  07:07:18
+   Duration  2.91s (transform 255ms, setup 15ms, collect 323ms, tests 2.29s, environment 0ms, prepare 55ms)
+

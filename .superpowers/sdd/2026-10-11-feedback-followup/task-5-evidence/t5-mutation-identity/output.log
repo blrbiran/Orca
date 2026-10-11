@@ -1,0 +1,40 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-mutations-20261011
+
+stdout | tests/control/savedResultEvidence.test.ts > captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3
+TASK5_V3_COLLECTION:{"events":[{"runId":"run-1","generation":1,"eventSeq":1,"bucket":"work","cumulative":{"tokens":15,"activeMs":61,"attempts":1,"sessions":1},"source":{"artifactId":"evidence-1550d0b4a55e5e6cb30dc5cb3412d3db82a901da365fd87d494a5e672e976865","hash":"1550d0b4a55e5e6cb30dc5cb3412d3db82a901da365fd87d494a5e672e976865"},"byModel":[{"model":"fixture","input":10,"output":5,"cacheRead":0,"cacheWrite":0}]},{"runId":"run-1","generation":1,"eventSeq":2,"bucket":"work","cumulative":{"tokens":30,"activeMs":140,"attempts":1,"sessions":1},"source":{"artifactId":"evidence-c4898b8f1346adcb1368bc577e3caf83806f15dc4d55cae7de8b502e79d59f90","hash":"c4898b8f1346adcb1368bc577e3caf83806f15dc4d55cae7de8b502e79d59f90"},"byModel":[{"model":"fixture","input":20,"output":10,"cacheRead":0,"cacheWrite":0}]},{"runId":"run-1","generation":1,"eventSeq":3,"bucket":"handoff","cumulative":{"tokens":0,"activeMs":0,"attempts":0,"sessions":0},"source":{"artifactId":"evidence-b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84","hash":"b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84"}}],"candidate":{"groupId":"group-1","workItemId":"work-1","taskId":"task-1","runId":"run-1","generation":1,"graphVersion":1,"targetVersion":1,"checkpointId":"checkpoint-3a1a5d1f0072a66ba9226368f1a2e7a02da42a4f4c461332","usageHighWater":3,"result":"failed","artifacts":[{"artifactId":"evidence-13876a74ee204a1d98ec149cf1671b6951bc9994263704eb044f9febfb349fa0","hash":"13876a74ee204a1d98ec149cf1671b6951bc9994263704eb044f9febfb349fa0"},{"artifactId":"evidence-79aba33f5a398c870ba1587908302518c21ddf3bd10a39bbbe6c216b3ecdd0a4","hash":"79aba33f5a398c870ba1587908302518c21ddf3bd10a39bbbe6c216b3ecdd0a4"},{"artifactId":"evidence-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d","hash":"9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d"},{"artifactId":"evidence-d616095816c463a466f40d9dd1df2d9531a3a09011a53b4f9907e6b78ebf2d44","hash":"d616095816c463a466f40d9dd1df2d9531a3a09011a53b4f9907e6b78ebf2d44"},{"artifactId":"evidence-6c7a2de405b62033de43aff7909215828badb7263635575a4490fd31ebc07c77","hash":"6c7a2de405b62033de43aff7909215828badb7263635575a4490fd31ebc07c77"},{"artifactId":"evidence-205246349b83a2a59a264af0e309ed185b0a05ea00225b0484bedb5ac6cd7213","hash":"205246349b83a2a59a264af0e309ed185b0a05ea00225b0484bedb5ac6cd7213"},{"artifactId":"evidence-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},{"artifactId":"evidence-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981","hash":"b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981"},{"artifactId":"evidence-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d","hash":"9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d"},{"artifactId":"evidence-1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1","hash":"1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1"},{"artifactId":"evidence-b54181b821c27311502c1abdd20d02fa87b8c67a3ac3db028efed8887df15fda","hash":"b54181b821c27311502c1abdd20d02fa87b8c67a3ac3db028efed8887df15fda"},{"artifactId":"evidence-23426702df5b4b3ba45390c7412985ffa0f41bbfbee325bab5f42cba85a74348","hash":"23426702df5b4b3ba45390c7412985ffa0f41bbfbee325bab5f42cba85a74348"},{"artifactId":"evidence-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},{"artifactId":"evidence-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981","hash":"b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981"},{"artifactId":"evidence-cc24c2aa2d057b6f53eed72cc9370418cdb7034883e6c61fb78903e901ea9024","hash":"cc24c2aa2d057b6f53eed72cc9370418cdb7034883e6c61fb78903e901ea9024"},{"artifactId":"evidence-65383aa03be8cdd0cfd1723ed5e7c9c07f5cd888a75da5271c76d7e27bb5e109","hash":"65383aa03be8cdd0cfd1723ed5e7c9c07f5cd888a75da5271c76d7e27bb5e109"},{"artifactId":"evidence-bd36d13d8d9aa271afa51b6b4071fbcbcadedc4a164d5b231d227db8d6ff0d66","hash":"bd36d13d8d9aa271afa51b6b4071fbcbcadedc4a164d5b231d227db8d6ff0d66"},{"artifactId":"evidence-5bc827fb943ad6a788ea3920f0dbaef6a41aff5c95d65481a4fd8a751e857ea6","hash":"5bc827fb943ad6a788ea3920f0dbaef6a41aff5c95d65481a4fd8a751e857ea6"}],"snapshot":null,"missing":["attempts/1/execution.json","attempts/1/verify.json"],"unresolvedRequestIds":[],"stopProof":{"executionId":"execution-1","generation":1,"isolated":true,"source":{"artifactId":"evidence-2538b6c3d5c697246a69c8e16b3056c30024487e07d363a4ed2ec34d9b2a02c6","hash":"2538b6c3d5c697246a69c8e16b3056c30024487e07d363a4ed2ec34d9b2a02c6"}},"terminalOutcome":"failed","handoff":{"artifactId":"evidence-5bc827fb943ad6a788ea3920f0dbaef6a41aff5c95d65481a4fd8a751e857ea6","hash":"5bc827fb943ad6a788ea3920f0dbaef6a41aff5c95d65481a4fd8a751e857ea6"}},"terminal":{"status":"failed","currentAttempt":1,"attemptsUsed":1,"lastTransitionAt":"2026-10-10T23:19:03.071Z","waitingOnHuman":false,"stopReason":"ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-yVU8iC/source/run/codex/1/execute/call-eQzCGU","budgetSnapshot":{"attemptsRemaining":1,"timeRemainingMs":29860,"tokenBudgetRemaining":970},"recentFailures":[]},"progress":{"status":"failed","currentAttempt":1,"attemptsUsed":1,"attemptsRemaining":1,"lastTransitionAt":"2026-10-10T23:19:03.071Z"}}
+
+ ❯ tests/control/savedResultEvidence.test.ts (7 tests | 1 failed) 8698ms
+   ✓ captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 2116ms
+   ✓ records capture failure as unavailable and preserves original failed outcome 1429ms
+   ✓ binds frozen authority separately from a genuinely narrowed protocol4 runtime contract 1690ms
+   × refuses a hash-valid capsule with another source identity 1662ms
+     → expected '' to contain 'control-saved-result-authority-invalid'
+   ✓ rejects symlinked evidence namespaces even when referenced bytes exist 1588ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > refuses a hash-valid capsule with another source identity
+AssertionError: expected '' to contain 'control-saved-result-authority-invalid'
+
+- Expected
++ Received
+
+- control-saved-result-authority-invalid
+
+ ❯ tests/control/savedResultEvidence.test.ts:118:72
+    116|  const forged=await writeSavedBytes(f.sourceDir,Buffer.from(canonicalJ…
+    117|  await writeFile(savedResultIndexPath(f.sourceDir),canonicalJson({...p…
+    118|  expect((await f.rpc('saved-result-evidence',{input:f.input})).stderr)…
+       |                                                                        ^
+    119| },30000);
+    120| it('rejects symlinked evidence namespaces even when referenced bytes e…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  07:19:01
+   Duration  9.27s (transform 242ms, setup 13ms, collect 323ms, tests 8.70s, environment 0ms, prepare 47ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-mutation-identity/tests.json

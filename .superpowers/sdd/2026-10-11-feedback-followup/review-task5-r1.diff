@@ -1,0 +1,526 @@
+# Review package: 8d1f707634318561dcbc151cd6c33f0ef0da6c49..367066b38f171d01663d7b767fdbfecca7d4f53c
+
+## Commits
+367066b fix(recovery): bind initialized bases and reject lossy modes
+
+## Files changed
+ src/control/savedResultEvidence.ts        |   2 +-
+ src/controller/executionFormatFailure.ts  |  29 +++++++--
+ src/controller/runLoop.ts                 |  20 ++++--
+ src/runtime/executionNormalizer.ts        |   1 -
+ tests/control/savedResultEvidence.test.ts | 103 +++++++++++++++++++++++++++---
+ tests/controller/executionBase.test.ts    |  34 ++++++++++
+ 6 files changed, 166 insertions(+), 23 deletions(-)
+
+## Diff
+diff --git a/src/control/savedResultEvidence.ts b/src/control/savedResultEvidence.ts
+index 16fae90..7514f64 100644
+--- a/src/control/savedResultEvidence.ts
++++ b/src/control/savedResultEvidence.ts
+@@ -5,21 +5,21 @@ import { readAccepted } from "./store.js";
+ import { publishTaskResultIndex, readTaskResultFile, taskResultDigest, TaskResultFileError } from "./taskResultEvidence.js";
+ import { taskResultIdentitySchema } from "./taskResults.js";
+ 
+ const safe=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), positive=safe.refine(n=>n>0);
+ const hash=z.string().regex(/^[a-f0-9]{64}$/), oid=z.string().regex(/^[a-f0-9]{40,64}$/);
+ const ref=artifactRefSchema;
+ // Leave room for base64 expansion plus the strict control-response envelope.
+ const MAX_SAVED_BYTES=12*1024*1024-1024;
+ export const executionSnapshotSchema=z.object({
+   schema:z.literal("ccloop-execution-snapshot-v1"),head:oid,indexTree:oid,indexCommit:oid,bundleRefName:z.string().startsWith("refs/ccloop/"),
+-  index:ref,bundle:ref,status:ref,
++  index:ref,bundle:ref,status:ref,rootMode:safe.max(0o777),
+   files:z.array(z.object({path:z.string().min(1),kind:z.literal("file"),mode:safe,ref}).strict()).max(10000),
+   directories:z.array(z.object({path:z.string().min(1),mode:safe}).strict()).max(10000),
+   deleted:z.array(z.string()),
+ }).strict();
+ export const executionFormatFailureSchema=z.object({
+   schema:z.literal("ccloop-execution-format-failure-v1"),identity:taskResultIdentitySchema,attempt:positive,
+   executor:z.object({kind:z.literal("codex"),configHash:hash}).strict(), frozenContractHash:hash,
+   acceptedBase:z.string().min(1),resolvedBase:oid,attemptStartHead:oid,decoder:z.literal("strict-execution-v1"),classification:z.literal("execution-format-failure-v1"),
+   process:z.object({reason:z.literal("completed"),code:z.literal(0),signal:z.null(),isolated:z.literal(true)}).strict(),
+   usage:z.object({tokenUsage:positive,highWater:positive}).strict(),
+diff --git a/src/controller/executionFormatFailure.ts b/src/controller/executionFormatFailure.ts
+index 97d09e1..77056ff 100644
+--- a/src/controller/executionFormatFailure.ts
++++ b/src/controller/executionFormatFailure.ts
+@@ -15,53 +15,68 @@ import { readEvidence } from "../control/evidence.js";
+ import { parseKnownWorkUsageLedger, readUsageEvents } from "../control/usage.js";
+ import { publishTaskResultIndex, readTaskResultFile, safeTaskResultPath } from "../control/taskResultEvidence.js";
+ import { executionFormatFailureSchema, executionSnapshotSchema, savedResultIdentity, savedResultIndexPath, writeSavedBytes } from "../control/savedResultEvidence.js";
+ import { decodeCodexResult, decodeCodexUsage, codexModelUsage } from "../runtime/codex/protocol.js";
+ import { normalizeExecutionFinal, EXECUTION_NORMALIZER_VERSION } from "../runtime/executionNormalizer.js";
+ import { codexSkillsPendingPath } from "../runtime/codex/codexSkills.js";
+ 
+ const exec=promisify(execFile);
+ const git=async(cwd:string,...args:string[])=>(await exec("/usr/bin/git",["-c","core.hooksPath=/dev/null",...args],{cwd,maxBuffer:16*1024*1024,timeout:30000})).stdout.trim();
+ const read=(root:string,path:string)=>readTaskResultFile(root,path,16*1024*1024);
++/** A checkpoint proves its restored HEAD, not a former symbolic target's value. */
++export async function resolveCheckpointOriginalBase(acceptedBase:string,worktreePath:string,restoredHead:string):Promise<string|null>{
++  if(!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(acceptedBase))return null;
++  try {
++    if(await git(worktreePath,"--no-replace-objects","cat-file","-t",acceptedBase)!=="commit")return null;
++    await git(worktreePath,"--no-replace-objects","merge-base","--is-ancestor",acceptedBase,restoredHead);
++    return acceptedBase;
++  } catch {return null;}
++}
++
+ const missing=async(path:string)=>{try{await lstat(path);return false;}catch(e){if((e as NodeJS.ErrnoException).code==="ENOENT")return true;throw e;}};
+ const positive=z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+ const processSchema=z.object({pid:positive,pgid:positive,startedAt:z.string().min(1),phase:z.literal("execute")}).strict();
+ export interface ExecutionFormatCaptureInput {
+-  input:StartEnvelopeV3;runDir:string;worktreePath:string;attempt:number;attemptStartHead:string;resolvedBase:string;
++  input:StartEnvelopeV3;runDir:string;worktreePath:string;attempt:number;attemptStartHead:string;resolvedBase:string|null;
+   runtimeContract:LoopContract;actualConfig:MaterializedAgentConfigV1;
+   failure:ExecutionFormatFailure;verifierEntered:boolean;assertHeld:()=>Promise<void>;
+ }
++function supportedMode(mode:number):number {
++  if ((mode & 0o7000) !== 0) throw new Error("saved-result-mode-unsupported");
++  return mode & 0o777;
++}
+ async function snapshot(input:ExecutionFormatCaptureInput):Promise<ArtifactRefV1>{
+   const {worktreePath:tree}=input,source=input.input.work.sourceDir;
+   const write=(bytes:Buffer)=>writeSavedBytes(source,bytes,input.assertHeld);
+   if(!await missing(codexSkillsPendingPath(tree)))throw new Error("saved-result-skills-cleanup-incomplete");
++  const rootMode=supportedMode((await lstat(tree)).mode);
+   const head=await git(tree,"rev-parse","HEAD");
+   const indexPath=await realpath(resolve(tree,await git(tree,"rev-parse","--git-path","index")));
+   const indexBytes=await read(dirname(indexPath),indexPath);
+   const index=await write(indexBytes);
+   if((await git(tree,"ls-files","--stage")).split("\n").some(row=>row.startsWith("160000 ")))throw new Error("saved-result-submodule-unavailable");
+   const directories:Array<{path:string;mode:number}>=[];
+   const files:Array<{path:string;kind:"file";mode:number;ref:ArtifactRefV1}>=[];
+   const walk=async(directory:string)=>{
+     for(const name of (await readdir(join(tree,directory))).sort()){
+       if(name===".git") {if(directory!=="")throw new Error("saved-result-nested-repository-unavailable");continue;}
+       const path=directory?`${directory}/${name}`:name;
+       if(!safeTaskResultPath(path))throw new Error("saved-result-snapshot-path-invalid");
+-      const stat=await lstat(join(tree,path));
++      const stat=await lstat(join(tree,path)),mode=supportedMode(stat.mode);
+       if(stat.isDirectory()){
+         if(directories.length>=10000)throw new Error("saved-result-snapshot-too-large");
+-        directories.push({path,mode:stat.mode&0o777});await walk(path);
++        directories.push({path,mode});await walk(path);
+       }
+       else {
+         if(!stat.isFile())throw new Error("saved-result-snapshot-entry-unsupported");
+         if(files.length>=10000)throw new Error("saved-result-snapshot-too-large");
+-        files.push({path,kind:"file",mode:stat.mode&0o777,ref:await write(await read(tree,join(tree,path)))});
++        files.push({path,kind:"file",mode,ref:await write(await read(tree,join(tree,path)))});
+       }
+     }
+   };
+   await walk("");files.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
+   const statusBytes=(await exec("/usr/bin/git",["status","--porcelain=v1","-z","--untracked-files=all"],{cwd:tree,encoding:"buffer",maxBuffer:16*1024*1024})).stdout;
+   const deleted=(await exec("/usr/bin/git",["diff","HEAD","--name-only","--diff-filter=D","-z"],{cwd:tree,maxBuffer:16*1024*1024})).stdout.split("\0").filter(Boolean);
+   const scratchParent=join(source,"run","saved-result");
+   // The evidence writer creates this private directory before temporary bundle construction.
+   await publishTaskResultIndex(source,join(scratchParent,"capture-started.json"),Buffer.from(JSON.stringify({attempt:input.attempt})),input.assertHeld);
+   const scratch=await mkdtemp(join(scratchParent,"snapshot-"));
+@@ -70,30 +85,32 @@ async function snapshot(input:ExecutionFormatCaptureInput):Promise<ArtifactRefV1
+     await git(tree,"clone","--local","--no-hardlinks","--no-checkout",tree,repo);
+     await writeFile(join(repo,".git","index"),indexBytes,{mode:0o600});
+     const indexTree=await git(repo,"write-tree");
+     const indexCommit=await git(repo,"-c","user.name=ccloop","-c","user.email=ccloop@invalid","commit-tree",indexTree,"-p",head,"-m","saved execution index");
+     const bundleRefName=`refs/ccloop/${input.input.claim.runId}/saved-result/${input.attempt}`;
+     await git(repo,"update-ref",bundleRefName,indexCommit);
+     const bundlePath=join(scratch,"snapshot.bundle");
+     await git(repo,"bundle","create",bundlePath,bundleRefName);
+     const bundle=await write(await read(source,bundlePath)),status=await write(statusBytes);
+     if(head!==await git(tree,"rev-parse","HEAD")||!(await read(dirname(indexPath),indexPath)).equals(indexBytes))throw new Error("saved-result-snapshot-changed");
++    if(supportedMode((await lstat(tree)).mode)!==rootMode)throw new Error("saved-result-snapshot-changed");
+     const captured=[...files],capturedDirectories=[...directories];files.length=0;directories.length=0;await walk("");files.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
+-    if(canonicalHash(captured)!==canonicalHash(files)||canonicalHash(capturedDirectories)!==canonicalHash(directories))throw new Error("saved-result-snapshot-changed");
++    if(supportedMode((await lstat(tree)).mode)!==rootMode||canonicalHash(captured)!==canonicalHash(files)||canonicalHash(capturedDirectories)!==canonicalHash(directories))throw new Error("saved-result-snapshot-changed");
+     await input.assertHeld();
+-    return await write(Buffer.from(canonicalJson(executionSnapshotSchema.parse({schema:"ccloop-execution-snapshot-v1",head,indexTree,indexCommit,bundleRefName,index,bundle,status,files,directories,deleted}))));
++    return await write(Buffer.from(canonicalJson(executionSnapshotSchema.parse({schema:"ccloop-execution-snapshot-v1",head,indexTree,indexCommit,bundleRefName,index,bundle,status,files,directories,deleted,rootMode}))));
+   } finally {await rm(scratch,{recursive:true,force:true});}
+ }
+ async function capture(input:ExecutionFormatCaptureInput):Promise<ArtifactRefV1>{
+   const {input:envelope,failure}=input,source=envelope.work.sourceDir;
+   if(!isLoopEnvelope(envelope)||input.runDir!==join(source,"run")||input.verifierEntered||!positive.safeParse(input.attempt).success)throw new Error("saved-result-capture-authority-invalid");
+   await input.assertHeld();
++  if(input.resolvedBase===null)throw new Error("saved-result-original-base-unavailable");
+   const identity=await savedResultIdentity(envelope),write=(bytes:Buffer)=>writeSavedBytes(source,bytes,input.assertHeld);
+   const retain=(path:string)=>read(source,path).then(write);
+   const json=async(path:string)=>JSON.parse((await read(source,path)).toString());
+   const callRoot=join(input.runDir,"codex",String(input.attempt),"execute");
+   const calls=await readdir(callRoot);
+   if(calls.length!==1||join(callRoot,calls[0]!)!==failure.evidenceDir)throw new Error("saved-result-execute-call-ambiguous");
+   const call=failure.evidenceDir,outcome=await json(join(call,"outcome.json"));
+   if(outcome.reason!=="completed"||outcome.code!==0||outcome.signal!==null||outcome.ioError!==undefined||outcome.stdoutTruncated!==false||outcome.stderrTruncated!==false||outcome.finalTruncated!==false)throw new Error("saved-result-process-incomplete");
+   const processRecord=processSchema.parse(await json(join(call,"process.json")));
+   const registered=z.array(processSchema.omit({phase:true}).extend({phase:z.string(),registeredAt:z.string()}).strict()).parse(await json(join(source,"control","processes.json")));
+diff --git a/src/controller/runLoop.ts b/src/controller/runLoop.ts
+index 5abbe7f..1e56297 100644
+--- a/src/controller/runLoop.ts
++++ b/src/controller/runLoop.ts
+@@ -1,12 +1,12 @@
+ import type { MaterializedAgentConfigV1 } from "../agents/types.js";
+-import { captureExecutionFormatFailure, ExecutionFormatFailure } from "./executionFormatFailure.js";
++import { captureExecutionFormatFailure, ExecutionFormatFailure, resolveCheckpointOriginalBase } from "./executionFormatFailure.js";
+ import { remainingTokens, minTokenCeiling, budgetAmountSchema, type BudgetAmount, type TokenPolicy } from "../budget/tokenPolicy.js";
+ import { execFile } from "node:child_process";
+ import { promisify } from "node:util";
+ import {
+   appendEvent,
+   initializeRunFiles,
+   OwnerTransferLockBusyError,
+   OwnerTransferLockLivenessUndeterminedError,
+   OwnerTransferLockUnattributableError,
+   OwnerTransferPreconditionError,
+@@ -1398,29 +1398,35 @@ export async function runLoopFromState(
+       return state;
+     }
+ 
+     if (hasBudgetExceeded(state) || state.budgetSnapshot.attemptsRemaining === 0 || options?.workGrant?.sessions === 0) {
+       return await persistTerminalState(runDir, writeOwnedRunState, state, "exhausted", BUDGET_EXHAUSTED_REASON);
+     }
+     const attempt = state.attemptsUsed + 1;
+ 
+     let worktreePath: string | null = null;
+     let infraRetryUsed = false;
++    let initializedBase: string | null = null;
+ 
+     while (!worktreePath) {
+       try {
+         // §8.1: adding a worktree mutates the repository, so the lease is re-checked here —
+         // inside the retry loop, because the retry can be a long way from the first attempt.
+         await heartbeat.assertHeld();
++        // Preserve the ordinary fresh-workspace HEAD choice, but freeze the exact commit
++        // before creating it. Each retry/attempt gets its own actual initialization fact.
++        if (!(attempt === 1 && options?.firstWorkspaceInput) && options?.executionFormatCapture) {
++          initializedBase = (await execFileAsync("/usr/bin/git", ["rev-parse", "HEAD^{commit}"], {cwd:contract.context.repoPath})).stdout.trim();
++        }
+         worktreePath = (attempt === 1 && options?.firstWorkspaceInput
+           ? await materializeFirstWorkspace(contract.context.repoPath, runDir, attempt, options.firstWorkspaceInput)
+-          : await createAttemptWorkspace(contract.context.repoPath, runDir, attempt)).worktreePath;
++          : await createAttemptWorkspace(contract.context.repoPath, runDir, attempt, initializedBase ?? undefined)).worktreePath;
+       } catch (error) {
+         // §8.1: a refused lease is not a workspace-infrastructure failure and must consume
+         // neither the infra retry nor the blocked_waiting_human escalation below. No worktree
+         // was created, so there is nothing to abandon in place; the attempt simply never
+         // starts and the run stops here.
+         if (isLeaseStopError(error)) {
+           return await persistTerminalState(runDir, writeOwnedRunState, state, "cancelled", error.stopReason);
+         }
+ 
+         if (infraRetryUsed) {
+@@ -1445,27 +1451,29 @@ export async function runLoopFromState(
+     }
+ 
+     // A continuation workspace is fully hash- and state-verified before an
+     // adapter can observe it or create an external agent process.
+     const attemptAdapter = activeAdapter ??= (adapter as () => RuntimeAdapter)();
+ 
+     let plan: AttemptPlan | null = null;
+     let execution: ExecutionResult | null = null;
+     let verification: VerificationResult | null = null;
+     let attemptStartHead: string | null = null;
+-    let resolvedSourceBase: string | null = null;
++    let resolvedSourceBase = options?.firstWorkspaceInput ? null : initializedBase;
+     let verifierEntered = false;
+ 
+     try {
+       if (options?.executionFormatCapture && options.taskResultInput?.work.kind === "loop") {
+         attemptStartHead = (await execFileAsync("/usr/bin/git", ["rev-parse", "HEAD"], {cwd:worktreePath})).stdout.trim();
+-        resolvedSourceBase = (await execFileAsync("/usr/bin/git", ["rev-parse", `${options.taskResultInput.work.base}^{commit}`], {cwd:options.taskResultInput.work.targetRepo})).stdout.trim();
++        if (options.firstWorkspaceInput) {
++          resolvedSourceBase = await resolveCheckpointOriginalBase(options.taskResultInput.work.base, worktreePath, attemptStartHead);
++        }
+       }
+       state = consumeAttemptBudget(state, contract, attempt);
+       await writeOwnedRunState(runDir, state);
+ 
+       const continuation = attempt === 1 ? options?.allowanceContinuation : undefined;
+       if (continuation) {
+         plan = continuation.plan;
+         execution = continuation.execution;
+       }
+       if (!continuation || continuation.nextPhase === "plan") {
+@@ -2028,23 +2036,23 @@ export async function runLoopFromState(
+       }
+ 
+       const failureReason = error instanceof PhaseExecutionError ? error.message : String(error);
+ 
+       if (error instanceof PhaseExecutionError) {
+         const failedPhase = activePhase;
+         if (activePhase !== null) {
+           await settlePhase(activePhase, attempt, error.elapsedMs, error.tokenUsage === null ? undefined : { tokenUsage: error.tokenUsage, ...(error.formatFailure ? {usageEvidence:error.formatFailure.usageEvidence,modelUsage:error.formatFailure.modelUsage} : {}) }, true);
+         }
+ 
+-        if (failedPhase === "execute" && error.formatFailure && options?.taskResultInput && worktreePath && attemptStartHead && resolvedSourceBase && !handoffAborted() && !handoffRequested()) {
++        if (failedPhase === "execute" && error.formatFailure && options?.taskResultInput && worktreePath && attemptStartHead && !handoffAborted() && !handoffRequested()) {
+           await guardedWriteArtifacts(() => writeCompletedAttemptArtifacts(runDir, attempt, plan, execution));
+-          await heartbeat.runExclusive(() => captureExecutionFormatFailure({input:options.taskResultInput!,runDir,worktreePath:worktreePath!,attempt,attemptStartHead:attemptStartHead!,resolvedBase:resolvedSourceBase!,runtimeContract:contract,actualConfig:options.executionFormatCapture!.config,failure:error.formatFailure!,verifierEntered,assertHeld:()=>heartbeat.assertHeld()}));
++          await heartbeat.runExclusive(() => captureExecutionFormatFailure({input:options.taskResultInput!,runDir,worktreePath:worktreePath!,attempt,attemptStartHead:attemptStartHead!,resolvedBase:resolvedSourceBase,runtimeContract:contract,actualConfig:options.executionFormatCapture!.config,failure:error.formatFailure!,verifierEntered,assertHeld:()=>heartbeat.assertHeld()}));
+         }
+ 
+         if (!isCodexSkillFailure(error) && (handoffAborted() || handoffRequested())) {
+           await guardedWriteArtifacts(() => writeCompletedAttemptArtifacts(runDir, attempt, plan, execution));
+           const interrupted = handoffAborted();
+           return await persistHandoffBoundary(
+             interrupted ? "handoff_interrupted" : "handoff_boundary",
+             `${interrupted ? "handoff deadline interrupted" : "handoff requested during"} ${failedPhase ?? "phase"} in attempt ${attempt}`,
+           );
+         }
+diff --git a/src/runtime/executionNormalizer.ts b/src/runtime/executionNormalizer.ts
+index e5370d2..047ff46 100644
+--- a/src/runtime/executionNormalizer.ts
++++ b/src/runtime/executionNormalizer.ts
+@@ -25,11 +25,10 @@ export function normalizeExecutionFinal(final:string):ExecutionNormalization {
+ import type { ModelUsageV1 } from "../control/usage.js";
+ import type { UsageEvidence } from "./types.js";
+ /** Only constructed after successful process/stream/usage validation, never from provider claims. */
+ export class ExecutionFormatFailure extends Error {
+   constructor(message:string, readonly evidenceDir:string, readonly observedTokens:number,
+     readonly usageEvidence:UsageEvidence, readonly modelUsage:ModelUsageV1[]|undefined,
+     readonly normalization:ExecutionNormalization) {
+     super(message); this.name="ExecutionFormatFailure";
+   }
+ }
+-
+diff --git a/tests/control/savedResultEvidence.test.ts b/tests/control/savedResultEvidence.test.ts
+index 28a22ed..e3858c2 100644
+--- a/tests/control/savedResultEvidence.test.ts
++++ b/tests/control/savedResultEvidence.test.ts
+@@ -1,93 +1,113 @@
++import * as workspace from "../../src/workspace/worktreeManager.js";
++import * as fs from "node:fs/promises";
++import { buildBundle } from "./optionalMaterializeFixture.js";
+ import { execFile } from "node:child_process";
+ import { promisify } from "node:util";
+ import { savedResultPath, savedResultIndexPath, writeSavedBytes } from "../../src/control/savedResultEvidence.js";
+ const exec=promisify(execFile);
+-import { afterEach, expect, it } from "vitest";
+-import { mkdir, readFile, readdir, rm, writeFile, symlink } from "node:fs/promises";
++import { afterEach, expect, it, vi } from "vitest";
++import { mkdir, readFile, readdir, rm, writeFile, symlink, cp, chmod, chown } from "node:fs/promises";
+ import { join } from "node:path";
+ import { resultFixture } from "./taskResultFixture.js";
+ import { sealCodex } from "./agentsFixture.js";
+ import { canonicalHash, canonicalJson } from "../../src/control/protocol.js";
+ import { writeAccepted } from "../../src/control/store.js";
+ import { atomicReplacePrivateFile } from "../../src/control/paths.js";
+ import { runControlWorker } from "../../src/control/worker.js";
+ import { readUsageEvents } from "../../src/control/usage.js";
++vi.mock("node:fs/promises",async importOriginal=>{
++ const actual=await importOriginal<typeof fs>();return {...actual,readdir:vi.fn(actual.readdir),writeFile:vi.fn(actual.writeFile)};
++});
+ const roots:string[]=[];
+-afterEach(async()=>{for(const root of roots.splice(0))await rm(root,{recursive:true,force:true});});
++afterEach(async()=>{vi.restoreAllMocks();for(const root of roots.splice(0))await rm(root,{recursive:true,force:true});});
+ async function world(mode="invalid") {
+   const f=await resultFixture(); roots.push(f.root);
+   const fake=join(f.root,"fake.mjs");
++  let checkpointHead:string|undefined;
++  if(mode.startsWith("continuation")) {
++    const bundle=await buildBundle();roots.push(bundle.root);
++    const bundlePath=join(f.sourceDir,"input","cp1");await mkdir(join(f.sourceDir,"input"),{recursive:true});await cp(bundle.input.bundlePath,bundlePath,{recursive:true});
++    f.input.inputCheckpoint={...bundle.input,bundlePath};f.input.work.targetRepo=bundle.targetRepo;f.contract.context.repoPath=bundle.targetRepo;
++    checkpointHead=String(bundle.snapshot.head);
++    if(mode==="continuation-immutable")f.input.work.base=checkpointHead;
++  }
+   await writeFile(join(f.repo,"delete.txt"),"delete me");
+   await exec("/usr/bin/git",["add","delete.txt"],{cwd:f.repo});await exec("/usr/bin/git",["-c","core.hooksPath=/dev/null","commit","-m","tracked deletion fixture"],{cwd:f.repo});
+   if(mode==="narrowed") {
+     Object.assign(f.input,{protocol:4,tokenPolicy:{authoredTokenCeiling:1000,bindingCauses:["spend-cap"],inheritedUsage:{tokens:0,activeMs:0,attempts:0,sessions:0}}});
+     f.input.claim.grant.work={tokens:100,activeMs:10000,attempts:1,sessions:1};
+   }
+-  await writeFile(fake,`import {readFileSync,writeFileSync,unlinkSync,chmodSync} from 'node:fs';
++  await writeFile(fake,`import {readFileSync,writeFileSync,unlinkSync,chmodSync,mkdirSync,statSync,chownSync} from 'node:fs';
+ import {execFileSync} from 'node:child_process';
+ if(process.argv.includes('--version')){console.log('9.9.9-fake');process.exit(0);}
+ let prompt='';for await(const part of process.stdin)prompt+=part;
+ const args=process.argv, schema=JSON.parse(readFileSync(args[args.indexOf('--output-schema')+1],'utf8'));
+ const phase=schema.properties?.result?'execute':schema.properties?.approved?'verify':'plan';
+-if(phase==='verify')throw new Error('verifier must not enter');
+-const result=phase==='plan'?{summary:'write answer',primaryTargetPaths:['answer.txt']}:{result:{changedFiles:['answer.txt']}};
+-if(phase==='execute'){
++const attempt=Number(process.cwd().split('/').at(-1).split('-').at(-1));
++if(phase==='verify' && ${JSON.stringify(mode)}!=='retry')throw new Error('verifier must not enter');
++if(phase==='verify')execFileSync('/usr/bin/git',['-C',${JSON.stringify(f.repo)},'-c','core.hooksPath=/dev/null','commit','--allow-empty','-m','target moves before ordinary retry']);
++const result=phase==='plan'?{summary:'write answer',primaryTargetPaths:['answer.txt']}:phase==='verify'?{approved:false,rejectCategory:'retry-fixture',primaryTargetPaths:['answer.txt'],failingCommand:null,safeToRetry:true,evidence:[],pauseSignals:[],stopSignals:[]}:${JSON.stringify(mode)}==='retry'&&attempt===1?{result:{changedFiles:['answer.txt'],diffPatch:'',commandOutputs:[],stdoutStderrLog:'done'}}:{result:{changedFiles:['answer.txt']}};
++if(phase==='execute' && !${JSON.stringify(mode)}.startsWith('continuation')){
+  unlinkSync('delete.txt');
+  writeFileSync('answer.txt','staged\\n');execFileSync('/usr/bin/git',['add','answer.txt']);writeFileSync('answer.txt','unstaged\\n');
+  writeFileSync('new.sh','#!/bin/sh\\necho saved\\n');chmodSync('new.sh',0o755);
+  writeFileSync('.gitignore','ignored.txt\\n');writeFileSync('ignored.txt','protected');
++ mkdirSync('regular-dir');chmodSync('regular-dir',0o755);chmodSync('.',0o755);
+  if(${JSON.stringify(mode)}==='capture-failure')execFileSync('mkfifo',['pipe']);
++ const special=${JSON.stringify(mode)}.match(/^special-(file|directory|root)-(\\d+)$/);
++ if(special){const path=special[1]==='file'?'new.sh':special[1]==='root'?'.':'special-dir';if(special[1]==='directory')mkdirSync(path);const mode=Number(special[2]);chownSync(path,process.getuid(),process.getgid());chmodSync(path,mode);if((statSync(path).mode&0o7777)!==mode)throw new Error('special mode setup failed');}
+  if(${JSON.stringify(mode)}==='rewrite-runtime') {const path=${JSON.stringify(join(f.runDir,'loop-contract.json'))};const c=JSON.parse(readFileSync(path,'utf8'));c.executionPolicy.tokenBudget=999;writeFileSync(path,JSON.stringify(c));}
+  if(${JSON.stringify(mode)}==='rewrite-config') {const path=${JSON.stringify(join(f.sourceDir,'control/config.json'))};const c=JSON.parse(readFileSync(path,'utf8'));c.installation.command=[process.execPath,'/not-the-executed-provider.mjs'];writeFileSync(path,JSON.stringify(c));}
+ }
++if(phase==='execute' && ${JSON.stringify(mode)}.startsWith('continuation'))writeFileSync(${JSON.stringify(join(f.root,'continuation-head'))},execFileSync('/usr/bin/git',['rev-parse','HEAD']));
+ writeFileSync(args[args.indexOf('-o')+1],JSON.stringify(result));
+ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:5}}));
+ `);
+   const sealed=await sealCodex({command:[process.execPath,fake],model:'fixture',sandbox:'workspace-write',budgetMode:'soft',timeoutMs:10000,killGraceMs:50});
+   f.input.claim.agent=sealed.selection;f.input.claim.configHash=sealed.configHash;
+   f.input.contractHash='b'.repeat(64); // frozen authority differs from narrowed accepted/runtime bytes
+   await atomicReplacePrivateFile(f.sourceDir,join(f.sourceDir,'control/config.json'),Buffer.from(canonicalJson(sealed.config)));
+   await atomicReplacePrivateFile(f.sourceDir,join(f.sourceDir,'control/envelope.json'),Buffer.from(canonicalJson(f.input)));
+   await writeAccepted(f.sourceDir,{protocol:1,envelopeHash:canonicalHash(f.input),executionId:'execution-1',configHash:sealed.configHash,generation:1,acceptedAt:new Date().toISOString(),launch:'intended',worker:null});
+   await runControlWorker(['--source-dir',f.sourceDir,'--execution-id','execution-1','--nonce','nonce-1']);
+-  return f;
++  return {...f,checkpointHead};
+ }
+ async function jsonRef(f:Awaited<ReturnType<typeof world>>,capsuleRef:any,ref:any){
+  const r=await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef,ref});expect(r.code,r.stderr).toBe(0);
+  return JSON.parse(Buffer.from(JSON.parse(r.stdout).base64,'base64').toString());
+ }
+ it('captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3',async()=>{
+  const f=await world();const response=await f.rpc('saved-result-evidence',{input:f.input});expect(response.code,response.stderr).toBe(0);
+  const page=JSON.parse(response.stdout);expect(page.capsule,await readFile(join(f.runDir,"events.jsonl"),"utf8")).not.toBeNull();expect(page.attempt).toBe(1);
+  const c=await jsonRef(f,page.capsule,page.capsule);
+  expect(c).toMatchObject({schema:'ccloop-execution-format-failure-v1',identity:{runId:'run-1',executionId:'execution-1',envelopeHash:canonicalHash(f.input)},attempt:1,frozenContractHash:'b'.repeat(64),decoder:'strict-execution-v1',executor:{kind:'codex',configHash:f.input.claim.configHash},usage:{tokenUsage:15},verifier:{entered:false},completeness:{complete:true}});
+  expect(await jsonRef(f,page.capsule,c.artifacts.runtimeContract)).toEqual(f.contract);
+  expect(c.artifacts.runtimeContract.hash).not.toBe(c.frozenContractHash);
+  const snap=await jsonRef(f,page.capsule,c.snapshot);
++ expect(snap.rootMode).toBe(0o755);expect(snap.directories).toContainEqual({path:'regular-dir',mode:0o755});
+  expect(snap.files.find((x:any)=>x.path==='new.sh')).toMatchObject({mode:0o755,kind:'file'});
+  expect(snap.files.map((x:any)=>x.path)).toEqual(['.gitignore','answer.txt','ignored.txt','new.sh']);
+  expect(snap.deleted).toEqual(['delete.txt']);expect(snap.head).toBe(c.attemptStartHead);expect(c.resolvedBase).toBe(c.attemptStartHead);expect(snap.index).toBeTruthy();expect(snap.bundle).toBeTruthy();
+  const output=await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef:page.capsule,ref:snap.files.find((x:any)=>x.path==='answer.txt').ref});
+  expect(Buffer.from(JSON.parse(output.stdout).base64,'base64').toString()).toBe('unstaged\n');
+  const bundleResponse=await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef:page.capsule,ref:snap.bundle});
+  const bundlePath=join(f.root,'restore.bundle');await writeFile(bundlePath,Buffer.from(JSON.parse(bundleResponse.stdout).base64,'base64'));
+  const restored=join(f.root,'restored');await exec('/usr/bin/git',['clone','--no-checkout',bundlePath,restored]);
+  await exec('/usr/bin/git',['fetch',bundlePath,snap.bundleRefName],{cwd:restored});
+  await exec('/usr/bin/git',['checkout','--detach',snap.indexCommit],{cwd:restored});
+  expect(await readFile(join(restored,'answer.txt'),'utf8')).toBe('staged\n');
+  expect((await exec('/usr/bin/git',['rev-parse',`${snap.indexCommit}^{tree}`],{cwd:restored})).stdout.trim()).toBe(snap.indexTree);
+  expect(await readdir(join(f.runDir,'worktrees'))).toEqual([]);
+  const usage=await readUsageEvents(f.sourceDir);expect(usage.filter(e=>e.bucket==='work').map(e=>e.cumulative?.tokens)).toEqual([15,30]);
+  expect(usage.filter(e=>e.bucket==='work').at(-1)?.byModel).toEqual([{model:'fixture',input:20,output:10,cacheRead:0,cacheWrite:0}]);
+  const legacy=await f.rpc('collect',{input:f.input,afterSeq:0});expect(legacy.code,legacy.stderr).toBe(0);
+- console.log('TASK5_V3_COLLECTION:'+legacy.stdout.trim());
+  const collected=JSON.parse(legacy.stdout);expect(Object.keys(collected)).toEqual(['events','candidate','terminal','progress']);expect(collected.terminal.status).toBe('failed');
+  expect(Object.keys(collected.terminal)).toEqual(['status','currentAttempt','attemptsUsed','lastTransitionAt','waitingOnHuman','stopReason','budgetSnapshot','recentFailures']);
+  expect(Object.hasOwn(collected.candidate,'capsule')).toBe(false);
+  expect(JSON.parse((await f.rpc('features',{})).stdout)).toEqual({protocol:1,tokenPolicy:'optional-v1'});
+  const foreign=await writeSavedBytes(f.sourceDir,Buffer.from('private foreign bytes'),async()=>{});
+  expect((await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef:page.capsule,ref:foreign})).code).not.toBe(0);
+  const changed=structuredClone(f.input);changed.claim.generation=2;
+  expect((await f.rpc('saved-result-evidence',{input:changed})).code).not.toBe(0);
+  await writeFile(savedResultPath(f.sourceDir,snap.files[0].ref),'tampered');
+  expect((await f.rpc('saved-result-evidence',{input:f.input})).stderr).toContain('control-saved-result-hash-mismatch');
+@@ -145,10 +165,75 @@ it('recursively serves original ledger refs only through exact capsule aliases a
+    const observation=await jsonRef(f,page.capsule,event.source);expect(observation.attempt).toBe(1);
+  }
+  const alias=c.artifacts.usageObservations[0];
+  const sameHashUndeclared={artifactId:'evidence-undeclared',hash:alias.source.hash};
+  expect((await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef:page.capsule,ref:sameHashUndeclared})).stderr).toContain('control-saved-result-authority-invalid');
+  const other=await world();const otherPage=JSON.parse((await other.rpc('saved-result-evidence',{input:other.input})).stdout);
+  expect((await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef:otherPage.capsule,ref:alias.source})).stderr).toContain('control-saved-result-authority-invalid');
+  await writeFile(savedResultPath(f.sourceDir,alias.copy),'tampered copied observation');
+  expect((await f.rpc('read-saved-result-evidence',{input:f.input,capsuleRef:page.capsule,ref:alias.source})).stderr).toContain('control-saved-result-hash-mismatch');
+ },30000);
++
++it.each(["before", "after"])("fix I1 freezes the materialized base across target movement %s workspace creation",async when=>{
++ const create=workspace.createAttemptWorkspace;let initializedHead="";
++ vi.spyOn(workspace,"createAttemptWorkspace").mockImplementation(async(...args)=>{
++  initializedHead=(await exec("/usr/bin/git",["rev-parse","HEAD"],{cwd:args[0]})).stdout.trim();
++  const move=()=>exec("/usr/bin/git",["-c","core.hooksPath=/dev/null","commit","--allow-empty","-m","concurrent target movement"],{cwd:args[0]});
++  if(when==="before")await move();const result=await create(...args);if(when==="after")await move();return result;
++ });
++ const f=await world();const page=JSON.parse((await f.rpc("saved-result-evidence",{input:f.input})).stdout);expect(page.capsule).not.toBeNull();
++ const c=await jsonRef(f,page.capsule,page.capsule);
++ expect(c.resolvedBase).toBe(initializedHead);expect(c.attemptStartHead).toBe(initializedHead);
++ expect((await exec("/usr/bin/git",["rev-parse","HEAD"],{cwd:f.repo})).stdout.trim()).not.toBe(initializedHead);
++},30000);
++it("fix I1 keeps a distinct continuation HEAD but refuses missing original-base authority",async()=>{
++ const f=await world("continuation");
++ expect((await readFile(join(f.root,"continuation-head"),"utf8")).trim()).toBe(f.checkpointHead);
++ expect((await exec("/usr/bin/git",["rev-parse","HEAD"],{cwd:f.input.work.targetRepo})).stdout.trim()).not.toBe(f.checkpointHead);
++ const r=await f.rpc("saved-result-evidence",{input:f.input});expect(r.code,r.stderr).toBe(0);
++ expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"saved-result-original-base-unavailable"});
++ expect(JSON.parse(await readFile(join(f.runDir,"loop-state.json"),"utf8")).status).toBe("failed");
++},30000);
++it.each([["file",0o4755],["file",0o2755],["directory",0o2755],["directory",0o1755],["root",0o1755]])("fix I2 refuses unsupported %s mode %i before complete capture",async(kind,mode)=>{
++ const f=await world(`special-${kind}-${mode}`);const r=await f.rpc("saved-result-evidence",{input:f.input});expect(r.code,r.stderr).toBe(0);
++ expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"saved-result-mode-unsupported"});
++},30000);
++it.each(["file","directory"])("fix I2 refuses %s special bits introduced during the stability pass",async kind=>{
++ const readDirectory=fs.readdir;let passes=0;
++ vi.spyOn(fs,"readdir").mockImplementation((async(path:any,...args:any[])=>{
++  if(String(path).endsWith("/run/worktrees/attempt-1")&&++passes===2){
++   const entry=kind==="file"?join(String(path),"new.sh"):join(String(path),"regular-dir");
++   await chown(entry,process.getuid!(),process.getgid!());await chmod(entry,kind==="file"?0o4755:0o2755);
++  }
++  return (readDirectory as any)(path,...args);
++ }) as typeof fs.readdir);
++ const f=await world();const r=await f.rpc("saved-result-evidence",{input:f.input});expect(r.code,r.stderr).toBe(0);
++ expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"saved-result-mode-unsupported"});expect(passes).toBeGreaterThanOrEqual(2);
++},30000);
++
++it("fix I2 refuses root special bits introduced between capture passes",async()=>{
++ const write=fs.writeFile;let introduced=false;
++ vi.spyOn(fs,"writeFile").mockImplementation((async(path:any,...args:any[])=>{
++  const result=await (write as any)(path,...args);
++  if(String(path).includes("/saved-result/snapshot-")&&String(path).endsWith("/.git/index")){
++   const run=String(path).split("/saved-result/snapshot-")[0];await chmod(join(run,"worktrees/attempt-1"),0o1755);introduced=true;
++  }
++  return result;
++ }) as typeof fs.writeFile);
++ const f=await world();expect(introduced).toBe(true);
++ const r=await f.rpc("saved-result-evidence",{input:f.input});expect(r.code,r.stderr).toBe(0);
++ expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"saved-result-mode-unsupported"});
++},30000);
++
++it("fix I1 recognizes an immutable checkpoint base without widening legacy context authority",async()=>{
++ const f=await world("continuation-immutable");expect((await readFile(join(f.root,"continuation-head"),"utf8")).trim()).toBe(f.checkpointHead);
++ const r=await f.rpc("saved-result-evidence",{input:f.input});expect(r.code,r.stderr).toBe(0);
++ expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"saved-result-runtime-contract-mismatch"});
++},30000);
++
++it("fix I1 preserves ordinary retry choice while binding each attempt's actual origin",async()=>{
++ const f=await world("retry"),r=await f.rpc("saved-result-evidence",{input:f.input});expect(r.code,r.stderr).toBe(0);
++ const page=JSON.parse(r.stdout);expect(page.capsule,await readFile(join(f.runDir,"events.jsonl"),"utf8")).not.toBeNull();
++ const c=await jsonRef(f,page.capsule,page.capsule),current=(await exec("/usr/bin/git",["rev-parse","HEAD"],{cwd:f.repo})).stdout.trim();
++ expect(c.attempt).toBe(2);expect(c.resolvedBase).toBe(current);expect(c.attemptStartHead).toBe(current);
++ expect((await exec("/usr/bin/git",["rev-parse","HEAD^"],{cwd:f.repo})).stdout.trim()).not.toBe(c.resolvedBase);
++},30000);
+diff --git a/tests/controller/executionBase.test.ts b/tests/controller/executionBase.test.ts
+new file mode 100644
+index 0000000..3e7c7bd
+--- /dev/null
++++ b/tests/controller/executionBase.test.ts
+@@ -0,0 +1,34 @@
++import { createHash } from "node:crypto";
++import { execFile } from "node:child_process";
++import { promisify } from "node:util";
++import { writeFile,readFile,rm } from "node:fs/promises";
++import { join } from "node:path";
++import { afterEach,expect,it } from "vitest";
++import { buildBundle } from "../control/optionalMaterializeFixture.js";
++import { materializeFirstWorkspace } from "../../src/control/materialize.js";
++import { resolveCheckpointOriginalBase } from "../../src/controller/executionFormatFailure.js";
++const exec=promisify(execFile),roots:string[]=[];
++afterEach(async()=>{for(const root of roots.splice(0))await rm(root,{recursive:true,force:true});});
++it("proves an immutable original base distinct from the real restored checkpoint HEAD",async()=>{
++ const h=await buildBundle();roots.push(h.root);const original=String(h.snapshot.head);
++ const git=async(...args:string[])=>(await exec("/usr/bin/git",["-c","user.name=Test","-c","user.email=test@invalid",...args],{cwd:h.sourceRepo})).stdout.trim();
++ const tree=await git("rev-parse",`${original}^{tree}`),head=await git("commit-tree",tree,"-p",original,"-m","checkpoint descendant");
++ await git("update-ref","HEAD",head);const bundlePath=join(h.root,"descendant.bundle");await git("bundle","create",bundlePath,"--all","HEAD");
++ const ref=(bytes:Buffer)=>{const hash=createHash("sha256").update(bytes).digest("hex");return {artifactId:`sha256-${hash}`,hash};};
++ const retain=async(bytes:Buffer)=>{const r=ref(bytes),file=`artifacts/${r.artifactId}.bin`;await writeFile(join(h.input.bundlePath,file),bytes,{mode:0o600});h.manifest.artifacts.push({ref:r,file});return r;};
++ const bundle=await retain(await readFile(bundlePath));const snapshot=await retain(Buffer.from(JSON.stringify({...h.snapshot,head,bundle})));
++ const checkpointBytes=Buffer.from(JSON.stringify({checkpointId:h.input.checkpointId,snapshot})),checkpoint=ref(checkpointBytes);
++ h.manifest.artifacts[0]={ref:checkpoint,file:"checkpoint.json"};Object.assign(h.manifest,{checkpoint,checkpointHash:checkpoint.hash,snapshot});h.input.checkpointHash=checkpoint.hash;
++ await writeFile(join(h.input.bundlePath,"checkpoint.json"),checkpointBytes);await writeFile(h.manifestPath,JSON.stringify(h.manifest));
++ const {worktreePath}=await materializeFirstWorkspace(h.targetRepo,h.runDir,1,h.input);
++ expect((await exec("/usr/bin/git",["rev-parse","HEAD"],{cwd:worktreePath})).stdout.trim()).toBe(head);expect(head).not.toBe(original);
++ expect(await resolveCheckpointOriginalBase(original,worktreePath,head)).toBe(original);
++ expect(await resolveCheckpointOriginalBase("HEAD",worktreePath,head)).toBeNull();
++ const unrelated=(await exec("/usr/bin/git",["rev-parse","HEAD"],{cwd:h.targetRepo})).stdout.trim();
++ expect(await resolveCheckpointOriginalBase(unrelated,worktreePath,head)).toBeNull();
++ expect(await resolveCheckpointOriginalBase("a".repeat(40),worktreePath,head)).toBeNull();
++ // A mutable replace ref must not turn an unrelated immutable base into ancestry proof.
++ const replacement=(await exec("/usr/bin/git",["-c","user.name=Test","-c","user.email=test@invalid","commit-tree",tree,"-p",unrelated,"-m","replacement ancestry"],{cwd:worktreePath})).stdout.trim();
++ await exec("/usr/bin/git",["replace",head,replacement],{cwd:worktreePath});
++ expect(await resolveCheckpointOriginalBase(unrelated,worktreePath,head)).toBeNull();
++},30000);

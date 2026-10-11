@@ -1,0 +1,175 @@
+[
+  {
+    "name": "base-pin",
+    "rc": 1,
+    "failed": 1,
+    "unselected": 22,
+    "failures": [
+      {
+        "name": "fix I1 freezes the materialized base across target movement before workspace creation",
+        "message": "AssertionError: expected '2faf8453477b834c9fea7bfec4e4c43208556\u2026' to be '2fa561921e9bf0b15ddc7d4e13f629d00dbeb\u2026' // Object.is equality\n"
+      }
+    ],
+    "rawSHA256": "653c553df894c1ba502224a09fcd82e2550dc5a9fe97351df6566bf54d0d64a2",
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "base-reread",
+    "rc": 1,
+    "failed": 1,
+    "unselected": 22,
+    "failures": [
+      {
+        "name": "fix I1 freezes the materialized base across target movement after workspace creation",
+        "message": "AssertionError: expected '414f3f9a87c965b6b3fa5a5db78a62f98e0b7\u2026' to be '49d460e12874251ad447f48f4b5493ba8e0eb\u2026' // Object.is equality\n"
+      }
+    ],
+    "rawSHA256": "0ca936cb8d2963c50e9baf740195ddb15312cee3b60847241c0f6b13c3c00129",
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "retry-origin",
+    "rc": 1,
+    "failed": 1,
+    "unselected": 22,
+    "failures": [
+      {
+        "name": "fix I1 preserves ordinary retry choice while binding each attempt's actual origin",
+        "message": "AssertionError: expected '01d9f07baf95526783fac4c2b166ee29010d5\u2026' to be '4197a4f2fd022b5c406cf83f2ee25726ac81b\u2026' // Object.is equality\n"
+      }
+    ],
+    "rawSHA256": "91fd2f35dcbf5f0819abf4395d49aca95aeaa81aa3200a6fc717d215521ce96e",
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "immutable-base",
+    "rc": 1,
+    "failed": 1,
+    "unselected": 0,
+    "failures": [
+      {
+        "name": "proves an immutable original base distinct from the real restored checkpoint HEAD",
+        "message": "AssertionError: expected 'HEAD' to be null\n"
+      }
+    ],
+    "rawSHA256": "e892dc4f03a444ece37425798821e1eb6166e0a81e75d981e2d9cca0c5c38843",
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "base-ancestry",
+    "rc": 1,
+    "failed": 1,
+    "unselected": 0,
+    "failures": [
+      {
+        "name": "proves an immutable original base distinct from the real restored checkpoint HEAD",
+        "message": "AssertionError: expected '2479a3a9d43d0e806ca084da1f476bc867e2e\u2026' to be null\n"
+      }
+    ],
+    "rawSHA256": "ed68192b929e421157118087fbeccb6d7118896f6f1a2de8d9ad85e051898eb9",
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "raw-ancestry",
+    "rc": 1,
+    "failed": 1,
+    "unselected": 0,
+    "failures": [
+      {
+        "name": "proves an immutable original base distinct from the real restored checkpoint HEAD",
+        "message": "AssertionError: expected '7b586a58e0162bfa9399ae89c8ef4967d2816\u2026' to be null\n"
+      }
+    ],
+    "rawSHA256": "43b9f417b997cb33d15639cacdeb08aceacbf19ab70126336f90bb58ac377a4c",
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "special-mode",
+    "rc": 1,
+    "failed": 5,
+    "unselected": 18,
+    "failures": [
+      {
+        "name": "fix I2 refuses unsupported file mode 2541 before complete capture",
+        "message": "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n"
+      },
+      {
+        "name": "fix I2 refuses unsupported file mode 1517 before complete capture",
+        "message": "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n"
+      },
+      {
+        "name": "fix I2 refuses unsupported directory mode 1517 before complete capture",
+        "message": "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n"
+      },
+      {
+        "name": "fix I2 refuses unsupported directory mode 1005 before complete capture",
+        "message": "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n"
+      },
+      {
+        "name": "fix I2 refuses unsupported root mode 1005 before complete capture",
+        "message": "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n"
+      }
+    ],
+    "rawSHA256": "93e826ab88228ad4c2894e3801393b493d5f597b5f4b483001a35b40eab963c2",
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "entry-stability-mode",
+    "rc": 1,
+    "failed": 2,
+    "unselected": 21,
+    "failures": [
+      {
+        "name": "fix I2 refuses file special bits introduced during the stability pass",
+        "message": "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n"
+      },
+      {
+        "name": "fix I2 refuses directory special bits introduced during the stability pass",
+        "message": "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n"
+      }
+    ],
+    "rawSHA256": "9c9058afbf34fdf851407fb2abe08e88a656daf960997d7fe84aab355a728392",
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "root-stability-mode",
+    "rc": 1,
+    "failed": 1,
+    "unselected": 22,
+    "failures": [
+      {
+        "name": "fix I2 refuses root special bits introduced between capture passes",
+        "message": "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n"
+      }
+    ],
+    "rawSHA256": "63b391523a57e7f3828e6bae85960f095e8aa750e5c18c1f761f49754f16d885",
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  }
+]

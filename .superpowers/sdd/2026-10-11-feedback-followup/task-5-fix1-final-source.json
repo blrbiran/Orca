@@ -1,0 +1,52 @@
+{
+  "commit": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "tree": "a21006f9d45b1277299b72160b7aa3b2ec6a0948",
+  "base": "8d1f707634318561dcbc151cd6c33f0ef0da6c49",
+  "sourceTreeSHA256": "84a998e8db7fa95eeb257653bdfc9bba6ed36f1f3541272aafda4aa2cd52c5e5",
+  "files": [
+    {
+      "path": "src/control/savedResultEvidence.ts",
+      "bytes": 8350,
+      "sha256": "830615532595c329a0e7f632b7f9fa3bc0cb9929aa1f3e514d6411f9846950d7"
+    },
+    {
+      "path": "src/controller/executionFormatFailure.ts",
+      "bytes": 16317,
+      "sha256": "ef9d29573dd80bb3bf57bfea68baf41d470ffc308c785b7896d0be10207ee261"
+    },
+    {
+      "path": "src/controller/runLoop.ts",
+      "bytes": 97321,
+      "sha256": "efc640bd29e7dc2dfa8660adfd716c952e264369767598c168d479a3d27b3333"
+    },
+    {
+      "path": "src/runtime/executionNormalizer.ts",
+      "bytes": 2624,
+      "sha256": "3fbe27e001378485433ad0e7531006e39f2e0943e7d9ba7dc2efd874c76a52bf"
+    },
+    {
+      "path": "tests/control/savedResultEvidence.test.ts",
+      "bytes": 21164,
+      "sha256": "9ea1e0f9683b64a547c18962876c2ddc48639e25cc50a1f0232d8a81d480e6ff"
+    },
+    {
+      "path": "tests/controller/executionBase.test.ts",
+      "bytes": 3360,
+      "sha256": "50bfd799bbd6e8ed2270e9a7f99c56e15e00863e040c40d6e20f3258b282dd1e"
+    }
+  ],
+  "trackedDiffBytes": [
+    0,
+    0
+  ],
+  "untracked": [
+    "node_modules"
+  ],
+  "precommitDiffCheck": {
+    "command": "rtk proxy /usr/bin/git diff --cached --check",
+    "rc": 0,
+    "separateCallBeforeCommit": true
+  },
+  "commitCommand": "rtk proxy /usr/bin/git -c core.hooksPath=/private/tmp/orca-empty-hooks commit -m 'fix(recovery): bind initialized bases and reject lossy modes'",
+  "distCliSHA256": "b85bad30ecfd202e0e726e9926fbbc31fd9230e67048bd3d52061d3b4f5e5aaa"
+}

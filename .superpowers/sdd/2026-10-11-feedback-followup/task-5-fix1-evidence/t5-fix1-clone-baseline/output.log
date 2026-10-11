@@ -1,0 +1,34 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-fix1-mutations-20261011
+
+ ✓ tests/controller/executionBase.test.ts (1 test) 1998ms
+   ✓ proves an immutable original base distinct from the real restored checkpoint HEAD 1997ms
+ ✓ tests/control/savedResultEvidence.test.ts (23 tests) 43234ms
+   ✓ captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 3059ms
+   ✓ records capture failure as unavailable and preserves original failed outcome 1549ms
+   ✓ binds frozen authority separately from a genuinely narrowed protocol4 runtime contract 2316ms
+   ✓ refuses a hash-valid capsule with another source identity 2442ms
+   ✓ rejects symlinked evidence namespaces even when referenced bytes exist 1924ms
+   ✓ refuses rewrite-runtime bytes that differ from the actual execution authority 1363ms
+   ✓ refuses rewrite-config bytes that differ from the actual execution authority 1244ms
+   ✓ recursively serves original ledger refs only through exact capsule aliases and validates copied bytes 3929ms
+   ✓ fix I1 freezes the materialized base across target movement before workspace creation 1965ms
+   ✓ fix I1 freezes the materialized base across target movement after workspace creation 1929ms
+   ✓ fix I1 keeps a distinct continuation HEAD but refuses missing original-base authority 2262ms
+   ✓ fix I2 refuses unsupported file mode 2541 before complete capture 1573ms
+   ✓ fix I2 refuses unsupported file mode 1517 before complete capture 1483ms
+   ✓ fix I2 refuses unsupported directory mode 1517 before complete capture 1466ms
+   ✓ fix I2 refuses unsupported directory mode 1005 before complete capture 1818ms
+   ✓ fix I2 refuses unsupported root mode 1005 before complete capture 1413ms
+   ✓ fix I2 refuses file special bits introduced during the stability pass 1773ms
+   ✓ fix I2 refuses directory special bits introduced during the stability pass 2104ms
+   ✓ fix I2 refuses root special bits introduced between capture passes 1694ms
+   ✓ fix I1 recognizes an immutable checkpoint base without widening legacy context authority 2059ms
+   ✓ fix I1 preserves ordinary retry choice while binding each attempt's actual origin 3650ms
+
+ Test Files  2 passed (2)
+      Tests  24 passed (24)
+   Start at  08:28:01
+   Duration  44.15s (transform 520ms, setup 41ms, collect 851ms, tests 45.23s, environment 0ms, prepare 247ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-fix1-clone-baseline/tests.json

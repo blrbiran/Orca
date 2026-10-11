@@ -1,0 +1,18 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/runtime/codex/executionFormatFailure.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/runtime/codex/executionFormatFailure.test.ts [ tests/runtime/codex/executionFormatFailure.test.ts ]
+Error: Failed to load url ../../../src/controller/executionFormatFailure.js (resolved id: ../../../src/controller/executionFormatFailure.js) in /private/tmp/ccloop-feedback-followup-20261011/tests/runtime/codex/executionFormatFailure.test.ts. Does the file exist?
+ ❯ loadAndTransform ../../../Users/biran/code/skills/loop/ccloop/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51969:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  07:05:43
+   Duration  282ms (transform 71ms, setup 14ms, collect 0ms, tests 0ms, environment 0ms, prepare 39ms)
+

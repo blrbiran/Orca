@@ -1,0 +1,26 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/runtime/executionNormalizer.test.ts (19 tests) 72ms
+ ✓ tests/runtime/codex/executionFormatFailure.test.ts (4 tests) 579ms
+ ❯ tests/control/savedResultEvidence.test.ts (4 tests | 1 failed) 5022ms
+   × captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 1824ms
+     → Command failed: /usr/bin/git checkout --detach fa38101ae31c0d49bbdb6370e95c1289a2b73c1a
+fatal: unable to read tree (fa38101ae31c0d49bbdb6370e95c1289a2b73c1a)
+
+   ✓ records capture failure as unavailable and preserves original failed outcome 1379ms
+   ✓ binds frozen authority separately from a genuinely narrowed protocol4 runtime contract 1714ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3
+Error: Command failed: /usr/bin/git checkout --detach fa38101ae31c0d49bbdb6370e95c1289a2b73c1a
+fatal: unable to read tree (fa38101ae31c0d49bbdb6370e95c1289a2b73c1a)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 26 passed (27)
+   Start at  07:12:10
+   Duration  5.54s (transform 307ms, setup 34ms, collect 489ms, tests 5.67s, environment 0ms, prepare 134ms)
+

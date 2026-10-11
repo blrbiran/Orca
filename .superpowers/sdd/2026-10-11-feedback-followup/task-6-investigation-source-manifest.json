@@ -1,0 +1,47 @@
+[
+  {
+    "path": "/private/tmp/orca-feedback-followup-20261011/src/control/archive.ts",
+    "sha256": "ee82793cf8b6198ff419f2223c394f41dcaaa3fab8e0657c8524482005c8d97a",
+    "lines": 183
+  },
+  {
+    "path": "/private/tmp/orca-feedback-followup-20261011/src/control/snapshot.ts",
+    "sha256": "767ae97f4593535b4a993e37d9ca1dba087e1ccf3866cb0ef3352fd95c13b8eb",
+    "lines": 120
+  },
+  {
+    "path": "/private/tmp/orca-feedback-followup-20261011/src/control/usageSettlement.ts",
+    "sha256": "0dcda947f2fab59481718873cf3e3b68399734662a78edd31fae4b2f8eed2a29",
+    "lines": 123
+  },
+  {
+    "path": "/private/tmp/orca-feedback-followup-20261011/src/control/settleUnknownUsage.ts",
+    "sha256": "329d8ada1426ff10cf72c9b38bf48e42449f403a95e48d0ff531357639bda149",
+    "lines": 103
+  },
+  {
+    "path": "/private/tmp/ccloop-feedback-followup-20261011/src/control/resultRepository.ts",
+    "sha256": "6213a969a45ed0ece72bbf3d1fb2494d77699ce02c845d6e67efbd4fd3d71a2a",
+    "lines": 90
+  },
+  {
+    "path": "/private/tmp/ccloop-feedback-followup-20261011/src/controller/executionFormatFailure.ts",
+    "sha256": "ef9d29573dd80bb3bf57bfea68baf41d470ffc308c785b7896d0be10207ee261",
+    "lines": 165
+  },
+  {
+    "path": "/private/tmp/ccloop-feedback-followup-20261011/src/workspace/worktreeManager.ts",
+    "sha256": "d034933740a7db5d16038b63092c98d429979641bc4bb15de4c096b9b28aec82",
+    "lines": 132
+  },
+  {
+    "path": "/private/tmp/ccloop-feedback-followup-20261011/src/runtime/executionNormalizer.ts",
+    "sha256": "3fbe27e001378485433ad0e7531006e39f2e0943e7d9ba7dc2efd874c76a52bf",
+    "lines": 34
+  },
+  {
+    "path": "/private/tmp/ccloop-feedback-followup-20261011/src/controller/resumeLoop.ts",
+    "sha256": "c5a196392fd2b5bc1c192a2c2a22936d0c5f08699a675b6db9347015406dc892",
+    "lines": 417
+  }
+]

@@ -1,0 +1,84 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/controller/executionBase.test.ts (1 test) 1210ms
+   ✓ proves an immutable original base distinct from the real restored checkpoint HEAD 1209ms
+ ✓ tests/controller/allowanceContinuation.test.ts (6 tests) 2127ms
+   ✓ allowance phase continuation > renews directly at verify without replaying paid phases or inherited usage 345ms
+   ✓ allowance phase continuation > does not renew an authored ceiling or exhausted non-token dimension 617ms
+   ✓ allowance phase continuation > parks after a genuine retryable verifier rejection, then preserves its retry history 376ms
+ ✓ tests/control/materialize.test.ts (15 tests) 8447ms
+   ✓ committed continuation materialization > reproduces HEAD, all index stages, worktree bytes, modes, symlinks and status 1057ms
+   ✓ committed continuation materialization > writes immutable structured continuation input and augments a copied contract 529ms
+   ✓ committed continuation materialization > verifies the continuation workspace before constructing the runtime adapter 1050ms
+   ✓ committed continuation materialization > rejects hostile bundle: traversal 402ms
+   ✓ committed continuation materialization > rejects hostile bundle: absolute 453ms
+   ✓ committed continuation materialization > rejects hostile bundle: duplicate 517ms
+   ✓ committed continuation materialization > rejects hostile bundle: missing 444ms
+   ✓ committed continuation materialization > rejects hostile bundle: hash 553ms
+   ✓ committed continuation materialization > rejects hostile bundle: extra 443ms
+   ✓ committed continuation materialization > rejects hostile bundle: symlink 454ms
+   ✓ committed continuation materialization > rejects hostile bundle: fifo 462ms
+   ✓ committed continuation materialization > rejects hostile bundle: checkpoint 480ms
+   ✓ committed continuation materialization > rejects hostile bundle: predecessor 395ms
+   ✓ committed continuation materialization > refuses a source bundle that changes during validation 445ms
+   ✓ committed continuation materialization > puts the continuation input itself into the plan and execute prompts every adapter builds 424ms
+ ✓ tests/controller/runLoop.integration.test.ts (71 tests) 22431ms
+   ✓ runLoop > succeeds when verification approves 344ms
+   ✓ runLoop > succeeds from requiredChecks alone when verifierType is command 418ms
+   ✓ runLoop > records a measured zero token usage for a verify phase that makes no provider call 322ms
+   ✓ runLoop > skips adapter.verify when agent verification requiredChecks fail 382ms
+   ✓ runLoop > does not succeed when approved verification is missing required evidence 300ms
+   ✓ runLoop > persists retry-ready planning state before retry cleanup runs 457ms
+   ✓ runLoop > passes phase state plus plan/execution context to each adapter step 324ms
+   ✓ runLoop > exhausts the run when planning exceeds per-attempt timeout 374ms
+   ✓ runLoop > persists execution-recovery.json when execute is entered but returns no result before exhaustion 354ms
+   ✓ runLoop > writes stale reconciliation conflicting evidence when execute aborts after changing files 308ms
+   ✓ runLoop > refuses to write a terminal exhausted status into a run a different owner holds 301ms
+   ✓ runLoop > refuses to write the terminal failed status of a retry-cleanup failure into a run a different owner holds 359ms
+   ✓ runLoop > writes owner-record.json when a run is initialized 317ms
+   ✓ runLoop > writes an OWNER_LOST reconciliation record with transferred ownership when persisted owner truth no longer supports ownership and continuity evidence does not rescue it 384ms
+   ✓ runLoop > publishes reconciliation-record.json inside the transfer transaction even when assertHeld throws afterwards 339ms
+   ✓ runLoop > leaves the reconciliation-record.json inode untouched when the winner writes boundary artifacts 356ms
+   ✓ runLoop > abandons the loser's reconciliation write against the winner's held transfer lock and finalizes none of the winner's transaction inside the publish window 398ms
+   ✓ runLoop > keeps the loser's downgrade when its protected span runs first, and still ends at the winner's reconciliation record 304ms
+   ✓ runLoop > keeps the winner's reconciliation record as the terminal state when the loser's write is forced to land after the winner's last rename 438ms
+   ✓ runLoop > records retained cleanupStatus in execution recovery when cleanup fails 319ms
+   ✓ runLoop > treats execute timeout with no adapter result as exhausted even if files changed in the worktree 325ms
+   ✓ runLoop > continues normally when execute returns a complete result during the recovery window 1805ms
+   ✓ runLoop > caps phase timeout by the remaining runtime budget 335ms
+   ✓ runLoop > persists phase usage evidence from the claude agent adapter without recomputing controller totals 1378ms
+   ✓ runLoop > returns the terminal state when cleanup fails after a non-human terminal decision 326ms
+   ✓ runLoop > returns a failed terminal state when retry cleanup fails 348ms
+   ✓ runLoop > preserves transition-event completeness when the run blocks for human input 343ms
+   ✓ runLoop > publishes a ref for an attempt that was rejected at verification 408ms
+   ✓ rejectOn is the verifier's judgment, not a search over evidence > an approving agent verifier that quotes the rule, or names it alone, still succeeds 308ms
+   ✓ rejectOn is the verifier's judgment, not a search over evidence > a rejecting verifier keeps its own category and retry choice 318ms
+ ✓ tests/control/savedResultEvidence.test.ts (22 tests) 33400ms
+   ✓ captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 2582ms
+   ✓ records capture failure as unavailable and preserves original failed outcome 1471ms
+   ✓ binds frozen authority separately from a genuinely narrowed protocol4 runtime contract 1805ms
+   ✓ refuses a hash-valid capsule with another source identity 1720ms
+   ✓ rejects symlinked evidence namespaces even when referenced bytes exist 1653ms
+   ✓ refuses rewrite-runtime bytes that differ from the actual execution authority 1039ms
+   ✓ refuses rewrite-config bytes that differ from the actual execution authority 1058ms
+   ✓ recursively serves original ledger refs only through exact capsule aliases and validates copied bytes 3393ms
+   ✓ fix I1 freezes the materialized base across target movement before workspace creation 1677ms
+   ✓ fix I1 freezes the materialized base across target movement after workspace creation 1680ms
+   ✓ fix I1 keeps a distinct continuation HEAD but refuses missing original-base authority 1825ms
+   ✓ fix I2 refuses unsupported file mode 2541 before complete capture 1333ms
+   ✓ fix I2 refuses unsupported file mode 1517 before complete capture 1478ms
+   ✓ fix I2 refuses unsupported directory mode 1517 before complete capture 1400ms
+   ✓ fix I2 refuses unsupported directory mode 1005 before complete capture 1432ms
+   ✓ fix I2 refuses unsupported root mode 1005 before complete capture 1297ms
+   ✓ fix I2 refuses file special bits introduced during the stability pass 1560ms
+   ✓ fix I2 refuses directory special bits introduced during the stability pass 1563ms
+   ✓ fix I2 refuses root special bits introduced between capture passes 1575ms
+   ✓ fix I1 recognizes an immutable checkpoint base without widening legacy context authority 1656ms
+
+ Test Files  5 passed (5)
+      Tests  115 passed (115)
+   Start at  08:07:54
+   Duration  34.12s (transform 1.10s, setup 168ms, collect 1.84s, tests 67.62s, environment 3ms, prepare 301ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-fix1-covering/tests.json

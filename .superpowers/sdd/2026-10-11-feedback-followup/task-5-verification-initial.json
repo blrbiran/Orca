@@ -1,0 +1,528 @@
+[
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5a.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/runtime/codex/executionFormatFailure.test.ts tests/runtime/codex/finalExtraction.test.ts tests/runtime/codex/protocol.test.ts"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 4.845777988433838,
+    "log": "/private/tmp/orca-followup-runs/t5-adapter-green-01/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "727d323eac7f0bfe3966494c0b6e5b1510c8ca9df68f874700158cba8c2572fa",
+    "sourceFiles": 245,
+    "name": "t5-adapter-green-01",
+    "rawLogBytes": 27000,
+    "rawLogSHA256": "cb8751f8572c3df8fb0933cce5d8abff4d0ce75a30445b497db13317aa766f3e"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5a.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/runtime/codex/executionFormatFailure.test.ts tests/runtime/codex/finalExtraction.test.ts tests/runtime/codex/protocol.test.ts"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 3.935600996017456,
+    "log": "/private/tmp/orca-followup-runs/t5-adapter-green-02/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "727d323eac7f0bfe3966494c0b6e5b1510c8ca9df68f874700158cba8c2572fa",
+    "sourceFiles": 245,
+    "name": "t5-adapter-green-02",
+    "rawLogBytes": 2132,
+    "rawLogSHA256": "0d91ab1155dbdfc43437419e7c4884123f73221655243d7df415ea4d48f071c3"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5a.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/runtime/codex/executionFormatFailure.test.ts"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 0.5445919036865234,
+    "log": "/private/tmp/orca-followup-runs/t5-adapter-red-01/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "22a115c809f42f731a669ccd900e0fa91d6f8387a69a915ab11ed5eba57ec48e",
+    "sourceFiles": 244,
+    "name": "t5-adapter-red-01",
+    "rawLogBytes": 947,
+    "rawLogSHA256": "9a0dcca1dc3fb6f4aeb887001c75fe7f76bccdb805ceb77d3b095fb92e7e8228"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5e.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts tests/runtime/codex/executionFormatFailure.test.ts tests/runtime/executionNormalizer.test.ts"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 5.818652153015137,
+    "log": "/private/tmp/orca-followup-runs/t5-capsule-expanded-01/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "82739b739d90a74b96388de65ed9e4d3092d8df7b0701c960d29b49a3559f3bd",
+    "sourceFiles": 247,
+    "name": "t5-capsule-expanded-01",
+    "rawLogBytes": 1427,
+    "rawLogSHA256": "52d4b20a01d863f32d5a5bed7928f2b89ee41ffa35e663f2c90acdbd193549b1"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5e.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts tests/runtime/codex/executionFormatFailure.test.ts tests/runtime/executionNormalizer.test.ts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 6.181889772415161,
+    "log": "/private/tmp/orca-followup-runs/t5-capsule-expanded-02/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "88f728bc077003474e49f9d3019f2f1703d21595ff011eaf73bd21760cb15249",
+    "sourceFiles": 247,
+    "name": "t5-capsule-expanded-02",
+    "rawLogBytes": 6351,
+    "rawLogSHA256": "a4560be437fce0470c2008c8bc7df458671bea5b812512a467bf6777d53c49c1"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5c.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts tests/runtime/codex/executionFormatFailure.test.ts"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 3.2043240070343018,
+    "log": "/private/tmp/orca-followup-runs/t5-capsule-green-01/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "e6f13c957ba4e18fc3349f0105656bf0f6e49104885a61331542363aec8ac5b4",
+    "sourceFiles": 247,
+    "name": "t5-capsule-green-01",
+    "rawLogBytes": 1065,
+    "rawLogSHA256": "9f476e04ef2ab2ece37ba352d6a2cbf701189749232b274f0f191a5447f7b921"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5c.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 3.1306939125061035,
+    "log": "/private/tmp/orca-followup-runs/t5-capsule-green-02/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "176e36059abf0558f1ed53e329164e9fe8cf866d2fa1068e28debb7fc80041cf",
+    "sourceFiles": 247,
+    "name": "t5-capsule-green-02",
+    "rawLogBytes": 2166,
+    "rawLogSHA256": "3d49dee2193ef352446a72eff899ea014229a016935d194b6e200befdd39d0f0"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5c.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.306540012359619,
+    "log": "/private/tmp/orca-followup-runs/t5-capsule-green-03/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "91c9044285fcc68ef21f27ad38d9cde85540dfe593139fcfaca2acb30b090104",
+    "sourceFiles": 247,
+    "name": "t5-capsule-green-03",
+    "rawLogBytes": 522,
+    "rawLogSHA256": "bdfdb7d304f0df4ef5e876e133c41c915a2abee8babf66e0dc4ae789fee5e1f8"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5c.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 3.2511470317840576,
+    "log": "/private/tmp/orca-followup-runs/t5-capsule-red-01/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "c29ff1d8553dd4821a95dede1bcedefead182c344704b21df7277e796aaff49e",
+    "sourceFiles": 246,
+    "name": "t5-capsule-red-01",
+    "rawLogBytes": 3340,
+    "rawLogSHA256": "b77b9db49297f7a5e8eb1a61f04f08d6ed02b4b136c2080c4af11097176a4708"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task5-mutations-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5m.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts tests/runtime/codex/executionFormatFailure.test.ts tests/runtime/executionNormalizer.test.ts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 9.469516038894653,
+    "log": "/private/tmp/orca-followup-runs/t5-clone-baseline/output.log",
+    "source": "5ec7ace8d7b83586b0897a4bae9f3c50ffe5047e",
+    "sourceTreeSHA256": "71756d186bc38cf8ae15874561e0e2efa7c75936a325d95aa0a9dfd83093da70",
+    "sourceFiles": 247,
+    "name": "t5-clone-baseline",
+    "rawLogBytes": 6506,
+    "rawLogSHA256": "ddbcaf1922f851e9a7d2ca927d9b935e6e58d81aa197be1ce05f9b071b76766f"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task5-mutations-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5b.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec npm run build"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 7.319210052490234,
+    "log": "/private/tmp/orca-followup-runs/t5-clone-build/output.log",
+    "source": "5ec7ace8d7b83586b0897a4bae9f3c50ffe5047e",
+    "sourceTreeSHA256": "71756d186bc38cf8ae15874561e0e2efa7c75936a325d95aa0a9dfd83093da70",
+    "sourceFiles": 247,
+    "name": "t5-clone-build",
+    "rawLogBytes": 399,
+    "rawLogSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5f.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/runtime/codex tests/runtime/executionNormalizer.test.ts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 15.680379152297974,
+    "log": "/private/tmp/orca-followup-runs/t5-codex-focused-01/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "91c9044285fcc68ef21f27ad38d9cde85540dfe593139fcfaca2acb30b090104",
+    "sourceFiles": 247,
+    "name": "t5-codex-focused-01",
+    "rawLogBytes": 5530,
+    "rawLogSHA256": "12a03bf017c6ba1bc87257945c8c859d0c303eb4798a5707f0622d61ed36dfa0"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5g.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts tests/runtime/codex/executionFormatFailure.test.ts tests/runtime/executionNormalizer.test.ts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 11.46489691734314,
+    "log": "/private/tmp/orca-followup-runs/t5-exact-authority-green/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "007853cdbe574c190f0334979a38a579e7a8f6554f7ae6b9365c5db426070f7c",
+    "sourceFiles": 247,
+    "name": "t5-exact-authority-green",
+    "rawLogBytes": 6694,
+    "rawLogSHA256": "57f0957d413f146c45b7fb1843c8b2eb1189038693f79dd33d07315ba9a4f9e6"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5r.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts -t \"bytes that differ\""
+    ],
+    "rc": 1,
+    "elapsedSeconds": 5.246755838394165,
+    "log": "/private/tmp/orca-followup-runs/t5-exact-authority-red/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "1199d0c237ddf5349c7cbd147ff817fa7ed1a3e1efceacb0a5877619aaf767ff",
+    "sourceFiles": 247,
+    "name": "t5-exact-authority-red",
+    "rawLogBytes": 1687,
+    "rawLogSHA256": "fc501df5a1e99be716cf8baa02d04b8d93891fa7749a5042202b4a54a6f8c97b"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5q.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts tests/runtime/codex/executionFormatFailure.test.ts tests/runtime/executionNormalizer.test.ts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 9.434415102005005,
+    "log": "/private/tmp/orca-followup-runs/t5-final-focused/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "71756d186bc38cf8ae15874561e0e2efa7c75936a325d95aa0a9dfd83093da70",
+    "sourceFiles": 247,
+    "name": "t5-final-focused",
+    "rawLogBytes": 6508,
+    "rawLogSHA256": "e6ce74ee87022587ce80afe2ace1bfb903180e6600d271e6bb8d08eb1d258604"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5u.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec npm test -- --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-final-full/tests.json"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 68.65300297737122,
+    "log": "/private/tmp/orca-followup-runs/t5-final-full/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "71756d186bc38cf8ae15874561e0e2efa7c75936a325d95aa0a9dfd83093da70",
+    "sourceFiles": 247,
+    "name": "t5-final-full",
+    "rawLogBytes": 75444,
+    "rawLogSHA256": "f9b60bbaf0287ab60167989f5544615fc35cd8abc548a17754bc90c7f5e82c22"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "node",
+      "/private/tmp/task5-native.mjs"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 53.47323489189148,
+    "log": "/private/tmp/orca-followup-runs/t5-final-native/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "71756d186bc38cf8ae15874561e0e2efa7c75936a325d95aa0a9dfd83093da70",
+    "sourceFiles": 247,
+    "name": "t5-final-native",
+    "rawLogBytes": 52180,
+    "rawLogSHA256": "54c3dbd581e55b2204213bb129b85520c4a02b89dc353ede006c4af1ea45485b"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5t.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec npm run typecheck"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 6.3872740268707275,
+    "log": "/private/tmp/orca-followup-runs/t5-final-types/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "71756d186bc38cf8ae15874561e0e2efa7c75936a325d95aa0a9dfd83093da70",
+    "sourceFiles": 247,
+    "name": "t5-final-types",
+    "rawLogBytes": 59,
+    "rawLogSHA256": "443df7778c6055e93ca0f3f4fabce5cbbe7205fa5689a62bd08268806118c185"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5l.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node --import /private/tmp/ccloop-feedback-followup-20261011/node_modules/tsx/dist/loader.mjs /private/tmp/task5-legacy-consumer.mts"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 0.29604077339172363,
+    "log": "/private/tmp/orca-followup-runs/t5-legacy-consumer/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "71756d186bc38cf8ae15874561e0e2efa7c75936a325d95aa0a9dfd83093da70",
+    "sourceFiles": 247,
+    "name": "t5-legacy-consumer",
+    "rawLogBytes": 559,
+    "rawLogSHA256": "2a3af7bae5e362eb613a93402663e0849bcf570c5540a8b7a6b4f2a255669174"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5l.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node --import /private/tmp/ccloop-feedback-followup-20261011/node_modules/tsx/dist/loader.mjs /private/tmp/task5-legacy-consumer.mts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 0.2962911128997803,
+    "log": "/private/tmp/orca-followup-runs/t5-legacy-consumer-02/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "71756d186bc38cf8ae15874561e0e2efa7c75936a325d95aa0a9dfd83093da70",
+    "sourceFiles": 247,
+    "name": "t5-legacy-consumer-02",
+    "rawLogBytes": 702,
+    "rawLogSHA256": "8397b37853d88b88bc6f4ab1920a4e408ae7b16921c959b0b2745db03afb34b9"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task5-mutations-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5x.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-mutations-20261011/node_modules/vitest/vitest.mjs run tests/runtime/executionNormalizer.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-mutation-ambiguity/tests.json"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 0.6508188247680664,
+    "log": "/private/tmp/orca-followup-runs/t5-mutation-ambiguity/output.log",
+    "source": "5ec7ace8d7b83586b0897a4bae9f3c50ffe5047e",
+    "sourceTreeSHA256": "04498d0b046ddbf39ceb6bb1857cc5d1cdad977363d794e1f3dc59a47489af71",
+    "sourceFiles": 247,
+    "name": "t5-mutation-ambiguity",
+    "rawLogBytes": 1910,
+    "rawLogSHA256": "76968699e6458af02b7b5f8ba28f82a2b8b91d9a6a398544bc249306994b2cbb"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task5-mutations-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5x.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-mutation-capture-before-cleanup/tests.json"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 6.4650959968566895,
+    "log": "/private/tmp/orca-followup-runs/t5-mutation-capture-before-cleanup/output.log",
+    "source": "5ec7ace8d7b83586b0897a4bae9f3c50ffe5047e",
+    "sourceTreeSHA256": "e4cf7d64a8611fc9632d5ed989879c92425479dc768beb1830b670cb5676d4a8",
+    "sourceFiles": 247,
+    "name": "t5-mutation-capture-before-cleanup",
+    "rawLogBytes": 7042,
+    "rawLogSHA256": "00557ba65c55da630ff3284ef7c75bb5d3be36a5363ceddf8f3263c4c639637b"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task5-mutations-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5x.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-mutation-identity/tests.json"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 9.581778764724731,
+    "log": "/private/tmp/orca-followup-runs/t5-mutation-identity/output.log",
+    "source": "5ec7ace8d7b83586b0897a4bae9f3c50ffe5047e",
+    "sourceTreeSHA256": "6f917a05cd019d537dfc74d2e7b61d2f28412a7aed02dc2471e87a1cb451c679",
+    "sourceFiles": 247,
+    "name": "t5-mutation-identity",
+    "rawLogBytes": 7434,
+    "rawLogSHA256": "466fc379813d2a36d6ec923cf342b2f40285e6c1378c7c87921ad039f8b71b71"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task5-mutations-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5x.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-mutation-nested-hash/tests.json"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 9.530643939971924,
+    "log": "/private/tmp/orca-followup-runs/t5-mutation-nested-hash/output.log",
+    "source": "5ec7ace8d7b83586b0897a4bae9f3c50ffe5047e",
+    "sourceTreeSHA256": "2dcf43dce308f2ff408c08b3e985fcc44558232f3957d6d5259d45026f9658a3",
+    "sourceFiles": 247,
+    "name": "t5-mutation-nested-hash",
+    "rawLogBytes": 7473,
+    "rawLogSHA256": "994e3084cf6475845f22a822b1277935f440ffc56fcfc7084d6127c343db69fb"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task5-mutations-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5x.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-mutation-usage/tests.json"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 6.374613046646118,
+    "log": "/private/tmp/orca-followup-runs/t5-mutation-usage/output.log",
+    "source": "5ec7ace8d7b83586b0897a4bae9f3c50ffe5047e",
+    "sourceTreeSHA256": "64ac09959b44c3e1b3269a9d3e5240793001153d0f5bc99e66f80657f51e9d28",
+    "sourceFiles": 247,
+    "name": "t5-mutation-usage",
+    "rawLogBytes": 7025,
+    "rawLogSHA256": "d48b7176fa1fa475634e8b55a1e11deaddad5d25b698804253d1b4fc903cf146"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task5-mutations-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5x.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-mutation-v3-leak/tests.json"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 10.458903074264526,
+    "log": "/private/tmp/orca-followup-runs/t5-mutation-v3-leak/output.log",
+    "source": "5ec7ace8d7b83586b0897a4bae9f3c50ffe5047e",
+    "sourceTreeSHA256": "d3d43890d2a65a89f8c5ba47536d961c0fea940ef64762d80ad3703637c4ff70",
+    "sourceFiles": 247,
+    "name": "t5-mutation-v3-leak",
+    "rawLogBytes": 1945,
+    "rawLogSHA256": "62e37634c9e9b87907115dd6f1c90040209c9026a30718ff55420db73057a7e3"
+  },
+  {
+    "repo": "/private/tmp/ccloop-task5-mutations-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5x.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-mutations-20261011/node_modules/vitest/vitest.mjs run tests/runtime/executionNormalizer.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-mutation-wrapping/tests.json"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 5.754365921020508,
+    "log": "/private/tmp/orca-followup-runs/t5-mutation-wrapping/output.log",
+    "source": "5ec7ace8d7b83586b0897a4bae9f3c50ffe5047e",
+    "sourceTreeSHA256": "70d09881930b195a2d43d46857cfe0c261de27ff14dbf384a68184cb967de980",
+    "sourceFiles": 247,
+    "name": "t5-mutation-wrapping",
+    "rawLogBytes": 3841,
+    "rawLogSHA256": "9039e68b4f283be0dede57737ebd910b36292b68a4b70689f97480fbce495ae4"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5w.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node --import /private/tmp/ccloop-feedback-followup-20261011/node_modules/tsx/dist/loader.mjs /private/tmp/task5-native-wire.mts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.629019737243652,
+    "log": "/private/tmp/orca-followup-runs/t5-native-wire/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "71756d186bc38cf8ae15874561e0e2efa7c75936a325d95aa0a9dfd83093da70",
+    "sourceFiles": 247,
+    "name": "t5-native-wire",
+    "rawLogBytes": 345,
+    "rawLogSHA256": "3a531825f1c17e216e18061824b4720a4a215d518c3a7afdeb11586560f602b9"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5n.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/runtime/executionNormalizer.test.ts tests/runtime/codex/extractFinalObject.test.ts"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 3.6282050609588623,
+    "log": "/private/tmp/orca-followup-runs/t5-normalizer-green-01/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "aad6352c10e2e12772632323c86ebe90e44d7c0dc7c6db4b49f99844d3cc65fa",
+    "sourceFiles": 243,
+    "name": "t5-normalizer-green-01",
+    "rawLogBytes": 686,
+    "rawLogSHA256": "fc3f25054030985a93c41f224155ddf05185ce98bcd89b21bcd8e0ecd5568ade"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5n.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/runtime/executionNormalizer.test.ts"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 0.5938920974731445,
+    "log": "/private/tmp/orca-followup-runs/t5-normalizer-red-01/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "fff703ba0e2fdd22a21d79bef6d3adc4dd7e8a203e250cc5a22ddaea64354bfc",
+    "sourceFiles": 242,
+    "name": "t5-normalizer-red-01",
+    "rawLogBytes": 893,
+    "rawLogSHA256": "639166f0f624edf1d42e1019a4a4190aa7360db3d6c64f98154beb5ecaf74273"
+  },
+  {
+    "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+    "command": [
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5t.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec npm run typecheck"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 4.002571105957031,
+    "log": "/private/tmp/orca-followup-runs/t5-types-01/output.log",
+    "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+    "sourceTreeSHA256": "e6f13c957ba4e18fc3349f0105656bf0f6e49104885a61331542363aec8ac5b4",
+    "sourceFiles": 247,
+    "name": "t5-types-01",
+    "rawLogBytes": 59,
+    "rawLogSHA256": "443df7778c6055e93ca0f3f4fabce5cbbe7205fa5689a62bd08268806118c185"
+  }
+]

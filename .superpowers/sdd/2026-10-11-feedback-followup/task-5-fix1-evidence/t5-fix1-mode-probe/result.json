@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "/bin/zsh",
+    "-c",
+    "task_tmp=$(mktemp -d /private/tmp/t5fp.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/t5-fix1-mode-probe.mjs"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 0.06493782997131348,
+  "log": "/private/tmp/orca-followup-runs/t5-fix1-mode-probe/output.log",
+  "source": "8d1f707634318561dcbc151cd6c33f0ef0da6c49",
+  "sourceTreeSHA256": "6232f86964d4f210e3097f8e7b58ac25a4f8cdb39bf48d657f293a55d5805745",
+  "sourceFiles": 247
+}

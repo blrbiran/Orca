@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-task5-fix1-mutations-20261011",
+  "command": [
+    "/bin/zsh",
+    "-c",
+    "task_tmp=$(mktemp -d /private/tmp/t5fm.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-fix1-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts -t 'root special bits introduced between' --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-fix1-mutant-root-stability-mode/tests.json"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 3.228814125061035,
+  "log": "/private/tmp/orca-followup-runs/t5-fix1-mutant-root-stability-mode/output.log",
+  "source": "16e11e2a9b1e6cae8a5ed3bedc344afd53c3a4d7",
+  "sourceTreeSHA256": "3b912be565e3322573ab88b08ce11105f0e7411686538ea209aac20710891e9c",
+  "sourceFiles": 248
+}

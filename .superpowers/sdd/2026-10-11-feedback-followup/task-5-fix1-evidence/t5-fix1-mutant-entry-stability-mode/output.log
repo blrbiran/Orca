@@ -1,0 +1,47 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-fix1-mutations-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (23 tests | 2 failed | 21 skipped) 3841ms
+   × fix I2 refuses file special bits introduced during the stability pass 2004ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses directory special bits introduced during the stability pass 1837ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses file special bits introduced during the stability pass
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses directory special bits introduced during the stability pass
+AssertionError: expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "capsule": null,
+-   "reason": "saved-result-mode-unsupported",
++   "capsule": Object {
++     "artifactId": "saved-result-a98e79313b227da9fdfb84206acbc55e93ac92e2bd71cd871f15f2d9ba6f1cf6",
++     "hash": "a98e79313b227da9fdfb84206acbc55e93ac92e2bd71cd871f15f2d9ba6f1cf6",
++   },
++   "reason": null,
+  }
+
+ ❯ tests/control/savedResultEvidence.test.ts:210:31
+    208|  }) as typeof fs.readdir);
+    209|  const f=await world();const r=await f.rpc("saved-result-evidence",{in…
+    210|  expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"save…
+       |                               ^
+    211| },30000);
+    212| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 21 skipped (23)
+   Start at  08:29:36
+   Duration  4.59s (transform 293ms, setup 14ms, collect 400ms, tests 3.84s, environment 0ms, prepare 76ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-fix1-mutant-entry-stability-mode/tests.json

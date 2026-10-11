@@ -1,0 +1,81 @@
+{
+  "commit": "8d1f707634318561dcbc151cd6c33f0ef0da6c49",
+  "tree": "9f13f544e14106e1fa1f7eeba12c7f8bdf8410a6",
+  "sourceTreeSHA256": "b325e1b5123b4eb03a6a9de761778e447b8d86165c14325a42bbf5fb96d1586f",
+  "base": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+  "branch": "codex/feedback-followup-20261011",
+  "files": [
+    {
+      "path": "src/control/command.ts",
+      "sha256": "bcf997d83b0ebe2df56d4a72639fc3e398b448c47db6bf8dbc7d83bedf70dca6",
+      "bytes": 14558
+    },
+    {
+      "path": "src/control/protocol.ts",
+      "sha256": "9ac6ee2aa010009b9ed203b6ea924f0ea692d0c15505ce6bd13933a95ff6177e",
+      "bytes": 17007
+    },
+    {
+      "path": "src/control/savedResultEvidence.ts",
+      "sha256": "60efcb71022edbc65c15046f4cec2d253c989f3cb0cae082a7f970a838382b66",
+      "bytes": 8325
+    },
+    {
+      "path": "src/control/worker.ts",
+      "sha256": "0cc4078132819d24b8508ab62d0a8f98ac52e2221931f96e85a2ac6862855d6d",
+      "bytes": 15340
+    },
+    {
+      "path": "src/controller/executionFormatFailure.ts",
+      "sha256": "5be7a5e21d62b3136aeb10cd0fe0ae64dbde2a0c8a6ca85547aaad73c4447883",
+      "bytes": 15282
+    },
+    {
+      "path": "src/controller/runLoop.ts",
+      "sha256": "b5c91703a47980b896faed6b7628ca2487b51c345ef87b85fd26097b96feaa6a",
+      "bytes": 96771
+    },
+    {
+      "path": "src/runtime/codex/codexAdapter.ts",
+      "sha256": "b330ea751110ff1b7291d0df51631a49a0fed6a356aee17b9ce8776d06512a71",
+      "bytes": 6683
+    },
+    {
+      "path": "src/runtime/codex/protocol.ts",
+      "sha256": "9bebb185361e4dea663745c7b3dfbdda70ee0d667093359bae04d16f5a6ca166",
+      "bytes": 17991
+    },
+    {
+      "path": "src/runtime/executionNormalizer.ts",
+      "sha256": "a45630b0f7da5f106edd154292968189156a06136ed0780534d4aa2c7edaabb3",
+      "bytes": 2625
+    },
+    {
+      "path": "tests/control/savedResultEvidence.test.ts",
+      "sha256": "d5641889507ca0e9de503ac3fdc72e2247cddc7904f49c38bc0e5d741b3e6cc1",
+      "bytes": 13730
+    },
+    {
+      "path": "tests/runtime/codex/executionFormatFailure.test.ts",
+      "sha256": "068ad1d5dc541727b6d5ee09f8bbc4124fd364259b24430219b86447a6e8a17a",
+      "bytes": 2778
+    },
+    {
+      "path": "tests/runtime/executionNormalizer.test.ts",
+      "sha256": "ffe64c32b9e5b3db84b6d07ff64745730c9e7434d1d6672db44d3fe2b971bd95",
+      "bytes": 2346
+    }
+  ],
+  "trackedDiffBytes": [
+    0,
+    0
+  ],
+  "untracked": [
+    "node_modules"
+  ],
+  "distCliSHA256": "b85bad30ecfd202e0e726e9926fbbc31fd9230e67048bd3d52061d3b4f5e5aaa",
+  "stagedWhitespaceCheck": {
+    "rc": 2,
+    "diagnostic": "src/runtime/executionNormalizer.ts:35: new blank line at EOF."
+  }
+}

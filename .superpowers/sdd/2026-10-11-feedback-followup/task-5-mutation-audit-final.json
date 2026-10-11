@@ -1,0 +1,234 @@
+[
+  {
+    "name": "alias-pair",
+    "rc": 1,
+    "total": 10,
+    "failed": 1,
+    "failures": [
+      {
+        "name": "recursively serves original ledger refs only through exact capsule aliases and validates copied bytes",
+        "message": "AssertionError: expected '' to contain 'control-saved-result-authority-invalid'\n"
+      }
+    ],
+    "rawSHA256": "7cd3770b3499d55aa695b293ad86d61d1071752d1769662eca243d4f196f7c5c",
+    "rawBytes": 7880,
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "actual-config",
+    "rc": 1,
+    "total": 10,
+    "failed": 1,
+    "failures": [
+      {
+        "name": "refuses rewrite-config bytes that differ from the actual execution authority",
+        "message": "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n"
+      }
+    ],
+    "rawSHA256": "7780206097fec9a624c7ff8a3c7fbfec89662d9dba678f42dd28873bbc2b8206",
+    "rawBytes": 7697,
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "actual-contract",
+    "rc": 1,
+    "total": 10,
+    "failed": 1,
+    "failures": [
+      {
+        "name": "refuses rewrite-runtime bytes that differ from the actual execution authority",
+        "message": "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n"
+      }
+    ],
+    "rawSHA256": "980febfb42271208b82cb7c5246b00a26b305700c66f546c9adafbbc93c2f494",
+    "rawBytes": 7710,
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "wrapping",
+    "rc": 1,
+    "total": 19,
+    "failed": 5,
+    "failures": [
+      {
+        "name": "strict execution normalization accepts complete envelope whole",
+        "message": "AssertionError: expected { status: 'unavailable', \u2026(2) } to match object { status: 'available', \u2026(1) }\n(7 matching properties omitted from actual)\n"
+      },
+      {
+        "name": "strict execution normalization accepts complete envelope decorated",
+        "message": "AssertionError: expected { status: 'unavailable', \u2026(2) } to match object { status: 'available', \u2026(1) }\n(7 matching properties omitted from actual)\n"
+      },
+      {
+        "name": "strict execution normalization accepts partial envelope whole",
+        "message": "AssertionError: expected { status: 'unavailable', \u2026(2) } to match object { status: 'available', \u2026(1) }\n(7 matching properties omitted from actual)\n"
+      },
+      {
+        "name": "strict execution normalization accepts partial envelope decorated",
+        "message": "AssertionError: expected { status: 'unavailable', \u2026(2) } to match object { status: 'available', \u2026(1) }\n(7 matching properties omitted from actual)\n"
+      },
+      {
+        "name": "strict execution normalization counts an envelope and direct repeated body as one semantic answer",
+        "message": "AssertionError: expected 'unavailable' to be 'available' // Object.is equality\n"
+      }
+    ],
+    "rawSHA256": "fe4b22f383d8f0161c0695ce1314eae45ca0fda9d978c162bfae5d988a1337db",
+    "rawBytes": 3847,
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "ambiguity",
+    "rc": 1,
+    "total": 19,
+    "failed": 2,
+    "failures": [
+      {
+        "name": "strict execution normalization refuses ambiguous, hidden, incompatible or incomplete output 3",
+        "message": "AssertionError: expected 'available' to be 'unavailable' // Object.is equality\n"
+      },
+      {
+        "name": "strict execution normalization refuses ambiguous, hidden, incompatible or incomplete output 4",
+        "message": "AssertionError: expected 'available' to be 'unavailable' // Object.is equality\n"
+      }
+    ],
+    "rawSHA256": "24fa0a0321507443dedcc49e668d5d58810544b0082144337039719c8aa39156",
+    "rawBytes": 1916,
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "usage",
+    "rc": 1,
+    "total": 10,
+    "failed": 1,
+    "failures": [
+      {
+        "name": "captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3",
+        "message": "AssertionError: expected undefined to deeply equal [ { model: 'fixture', \u2026(4) } ]\n"
+      }
+    ],
+    "rawSHA256": "5c0a72db1b8d06bdc18beca3466229f63855add5e031cc43553efa1bc5668f31",
+    "rawBytes": 2334,
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "identity",
+    "rc": 1,
+    "total": 10,
+    "failed": 1,
+    "failures": [
+      {
+        "name": "refuses a hash-valid capsule with another source identity",
+        "message": "AssertionError: expected '' to contain 'control-saved-result-authority-invalid'\n"
+      }
+    ],
+    "rawSHA256": "8a26958378c398c7ab02e8455bd58693e016ee832aa1ed9059f6eb2bc3c6b0fe",
+    "rawBytes": 7744,
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "capture-before-cleanup",
+    "rc": 1,
+    "total": 10,
+    "failed": 8,
+    "failures": [
+      {
+        "name": "captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3",
+        "message": "AssertionError: {\"type\":\"loop_planning\",\"at\":\"2026-10-10T23:40:55.237Z\",\"detail\":\"run initialized and ready to plan\"}\n{\"type\":\"attempt_started\",\"at\":\"2026-10-10T23:40:55.392Z\",\"detail\":\"attempt 1\"}\n{\"type\":\"execute_started\",\"at\":\"2026-10-10T23:40:55.392Z\",\"detail\":\"attempt 1\"}\n{\"type\":\"attempt_failed\",\"at\":\"2026-10-10T23:40:55.576Z\",\"detail\":\"ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-YKGky3/source/run/codex/1/execute/call-zRTMz7\"}\n: expected null not to be null\n"
+      },
+      {
+        "name": "records capture failure as unavailable and preserves original failed outcome",
+        "message": "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n"
+      },
+      {
+        "name": "binds frozen authority separately from a genuinely narrowed protocol4 runtime contract",
+        "message": "AssertionError: {\"type\":\"loop_planning\",\"at\":\"2026-10-10T23:40:57.521Z\",\"detail\":\"run initialized and ready to plan\"}\n{\"type\":\"attempt_started\",\"at\":\"2026-10-10T23:40:57.678Z\",\"detail\":\"attempt 1\"}\n{\"type\":\"execute_started\",\"at\":\"2026-10-10T23:40:57.678Z\",\"detail\":\"attempt 1\"}\n{\"type\":\"attempt_failed\",\"at\":\"2026-10-10T23:40:57.788Z\",\"detail\":\"ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-EqmeoT/source/run/codex/1/execute/call-ETDksP\"}\n: expected null not to be null\n"
+      },
+      {
+        "name": "refuses a hash-valid capsule with another source identity",
+        "message": "AssertionError: control-request-invalid\n: expected 2 to be +0 // Object.is equality\n"
+      },
+      {
+        "name": "rejects symlinked evidence namespaces even when referenced bytes exist",
+        "message": "Error: ENOENT: no such file or directory, rename '/private/tmp/results-task2-NErTNE/source/control/saved-result-evidence' -> '/private/tmp/results-task2-NErTNE/source/saved'\n"
+      },
+      {
+        "name": "refuses rewrite-runtime bytes that differ from the actual execution authority",
+        "message": "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n"
+      },
+      {
+        "name": "refuses rewrite-config bytes that differ from the actual execution authority",
+        "message": "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n"
+      },
+      {
+        "name": "recursively serves original ledger refs only through exact capsule aliases and validates copied bytes",
+        "message": "AssertionError: control-request-invalid\n: expected 2 to be +0 // Object.is equality\n"
+      }
+    ],
+    "rawSHA256": "e5d2254f1a739b8344116f788408c757e056f23755ac17450caaf2d28665c3ee",
+    "rawBytes": 9207,
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "nested-hash",
+    "rc": 1,
+    "total": 10,
+    "failed": 2,
+    "failures": [
+      {
+        "name": "captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3",
+        "message": "AssertionError: expected '' to contain 'control-saved-result-hash-mismatch'\n"
+      },
+      {
+        "name": "recursively serves original ledger refs only through exact capsule aliases and validates copied bytes",
+        "message": "AssertionError: expected '' to contain 'control-saved-result-hash-mismatch'\n"
+      }
+    ],
+    "rawSHA256": "f5637d29dbf64a7cca45bc8c2182cfb9d4209aca3ff74c55165a83b5dd162ce6",
+    "rawBytes": 8686,
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  },
+  {
+    "name": "v3-leak",
+    "rc": 1,
+    "total": 10,
+    "failed": 1,
+    "failures": [
+      {
+        "name": "captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3",
+        "message": "AssertionError: control-response-invalid\n: expected 1 to be +0 // Object.is equality\n"
+      }
+    ],
+    "rawSHA256": "f03e4ee6282c5a2ec810bfe2fe93f420198d776c52936349c05ef26caec0c5fc",
+    "rawBytes": 2254,
+    "restoredDiffBytes": [
+      0,
+      0
+    ]
+  }
+]

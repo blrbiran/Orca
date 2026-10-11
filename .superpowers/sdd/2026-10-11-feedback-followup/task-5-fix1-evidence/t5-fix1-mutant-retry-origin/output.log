@@ -1,0 +1,31 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-fix1-mutations-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (23 tests | 1 failed | 22 skipped) 3007ms
+   × fix I1 preserves ordinary retry choice while binding each attempt's actual origin 3006ms
+     → expected '01d9f07baf95526783fac4c2b166ee29010d5…' to be '4197a4f2fd022b5c406cf83f2ee25726ac81b…' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I1 preserves ordinary retry choice while binding each attempt's actual origin
+AssertionError: expected '01d9f07baf95526783fac4c2b166ee29010d5…' to be '4197a4f2fd022b5c406cf83f2ee25726ac81b…' // Object.is equality
+
+Expected: "4197a4f2fd022b5c406cf83f2ee25726ac81bd21"
+Received: "01d9f07baf95526783fac4c2b166ee29010d50f8"
+
+ ❯ tests/control/savedResultEvidence.test.ts:237:51
+    235|  const page=JSON.parse(r.stdout);expect(page.capsule,await readFile(jo…
+    236|  const c=await jsonRef(f,page.capsule,page.capsule),current=(await exe…
+    237|  expect(c.attempt).toBe(2);expect(c.resolvedBase).toBe(current);expect…
+       |                                                   ^
+    238|  expect((await exec("/usr/bin/git",["rev-parse","HEAD^"],{cwd:f.repo})…
+    239| },30000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 22 skipped (23)
+   Start at  08:29:14
+   Duration  3.82s (transform 361ms, setup 16ms, collect 454ms, tests 3.01s, environment 0ms, prepare 88ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-fix1-mutant-retry-origin/tests.json

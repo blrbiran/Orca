@@ -1,0 +1,29 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-r1-review-20261011
+
+ ❯ tests/control/task5R1Review.test.ts (1 test | 1 failed) 1057ms
+   × review I1: fresh retry after checkpoint uses its own actual initialization base 1057ms
+     → control-request-invalid
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/task5R1Review.test.ts > review I1: fresh retry after checkpoint uses its own actual initialization base
+ControlProtocolError: control-request-invalid
+ ❯ Module.parseControlRequest src/control/protocol.ts:373:11
+    371|   } catch (error) {
+    372|     if (error instanceof ControlProtocolError) throw error;
+    373|     throw new ControlProtocolError("control-request-invalid");
+       |           ^
+    374|   }
+    375| }
+ ❯ Module.runControlWorker src/control/worker.ts:148:22
+ ❯ tests/control/task5R1Review.test.ts:64:2
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  08:37:55
+   Duration  1.73s (transform 262ms, setup 16ms, collect 365ms, tests 1.06s, environment 0ms, prepare 66ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-r1-review-checkpoint-retry-l3/tests.json

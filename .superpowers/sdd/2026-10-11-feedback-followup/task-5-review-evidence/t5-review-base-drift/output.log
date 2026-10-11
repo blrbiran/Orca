@@ -1,0 +1,31 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-independent-review-20261011
+
+ ❯ tests/control/task5ReviewBase.test.ts (1 test | 1 failed) 1861ms
+   × review: binds original workspace base despite later symbolic target movement 1860ms
+     → expected '5697828ea268c7c6fd532b2ed260995d0cc90…' to be 'f008562f97199376aedcc1c72c29ef99aaf20…' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/task5ReviewBase.test.ts > review: binds original workspace base despite later symbolic target movement
+AssertionError: expected '5697828ea268c7c6fd532b2ed260995d0cc90…' to be 'f008562f97199376aedcc1c72c29ef99aaf20…' // Object.is equality
+
+Expected: "f008562f97199376aedcc1c72c29ef99aaf20339"
+Received: "5697828ea268c7c6fd532b2ed260995d0cc90c1c"
+
+ ❯ tests/control/task5ReviewBase.test.ts:75:70
+     73|  expect(c.acceptedBase).toBe('HEAD');
+     74|  const current=(await exec('/usr/bin/git',['rev-parse','HEAD'],{cwd:f.…
+     75|  expect(current).not.toBe(c.attemptStartHead);expect(c.resolvedBase).t…
+       |                                                                      ^
+     76| },30000);
+     77| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  07:50:06
+   Duration  2.56s (transform 279ms, setup 14ms, collect 364ms, tests 1.86s, environment 0ms, prepare 49ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-review-base-drift/tests.json

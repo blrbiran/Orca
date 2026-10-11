@@ -1,0 +1,34 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-fix1-mutations-20261011
+
+ ❯ tests/controller/executionBase.test.ts (1 test | 1 failed) 1072ms
+   × proves an immutable original base distinct from the real restored checkpoint HEAD 1072ms
+     → expected 'HEAD' to be null
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/executionBase.test.ts > proves an immutable original base distinct from the real restored checkpoint HEAD
+AssertionError: expected 'HEAD' to be null
+
+- Expected: 
+null
+
++ Received: 
+"HEAD"
+
+ ❯ tests/controller/executionBase.test.ts:26:72
+     24|  expect((await exec("/usr/bin/git",["rev-parse","HEAD"],{cwd:worktreeP…
+     25|  expect(await resolveCheckpointOriginalBase(original,worktreePath,head…
+     26|  expect(await resolveCheckpointOriginalBase("HEAD",worktreePath,head))…
+       |                                                                        ^
+     27|  const unrelated=(await exec("/usr/bin/git",["rev-parse","HEAD"],{cwd:…
+     28|  expect(await resolveCheckpointOriginalBase(unrelated,worktreePath,hea…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  08:29:19
+   Duration  1.75s (transform 253ms, setup 20ms, collect 294ms, tests 1.07s, environment 0ms, prepare 92ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-fix1-mutant-immutable-base/tests.json

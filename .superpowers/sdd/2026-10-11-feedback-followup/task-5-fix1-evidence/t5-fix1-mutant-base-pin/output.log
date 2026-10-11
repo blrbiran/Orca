@@ -1,0 +1,31 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-fix1-mutations-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (23 tests | 1 failed | 22 skipped) 1991ms
+   × fix I1 freezes the materialized base across target movement before workspace creation 1990ms
+     → expected '2faf8453477b834c9fea7bfec4e4c43208556…' to be '2fa561921e9bf0b15ddc7d4e13f629d00dbeb…' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I1 freezes the materialized base across target movement before workspace creation
+AssertionError: expected '2faf8453477b834c9fea7bfec4e4c43208556…' to be '2fa561921e9bf0b15ddc7d4e13f629d00dbeb…' // Object.is equality
+
+Expected: "2fa561921e9bf0b15ddc7d4e13f629d00dbeb506"
+Received: "2faf8453477b834c9fea7bfec4e4c4320855688b"
+
+ ❯ tests/control/savedResultEvidence.test.ts:185:74
+    183|  const f=await world();const page=JSON.parse((await f.rpc("saved-resul…
+    184|  const c=await jsonRef(f,page.capsule,page.capsule);
+    185|  expect(c.resolvedBase).toBe(initializedHead);expect(c.attemptStartHea…
+       |                                                                          ^
+    186|  expect((await exec("/usr/bin/git",["rev-parse","HEAD"],{cwd:f.repo}))…
+    187| },30000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 22 skipped (23)
+   Start at  08:29:08
+   Duration  2.77s (transform 300ms, setup 15ms, collect 402ms, tests 1.99s, environment 0ms, prepare 75ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-fix1-mutant-base-pin/tests.json

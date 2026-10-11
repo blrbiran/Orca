@@ -1,0 +1,78 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-mutations-20261011
+
+ ❯ tests/runtime/executionNormalizer.test.ts (19 tests | 5 failed) 78ms
+   × strict execution normalization > accepts complete envelope whole 6ms
+     → expected { status: 'unavailable', …(2) } to match object { status: 'available', …(1) }
+(7 matching properties omitted from actual)
+   × strict execution normalization > accepts complete envelope decorated 1ms
+     → expected { status: 'unavailable', …(2) } to match object { status: 'available', …(1) }
+(7 matching properties omitted from actual)
+   × strict execution normalization > accepts partial envelope whole 1ms
+     → expected { status: 'unavailable', …(2) } to match object { status: 'available', …(1) }
+(7 matching properties omitted from actual)
+   × strict execution normalization > accepts partial envelope decorated 1ms
+     → expected { status: 'unavailable', …(2) } to match object { status: 'available', …(1) }
+(7 matching properties omitted from actual)
+   × strict execution normalization > counts an envelope and direct repeated body as one semantic answer 1ms
+     → expected 'unavailable' to be 'available' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/runtime/executionNormalizer.test.ts > strict execution normalization > accepts complete envelope whole
+ FAIL  tests/runtime/executionNormalizer.test.ts > strict execution normalization > accepts complete envelope decorated
+ FAIL  tests/runtime/executionNormalizer.test.ts > strict execution normalization > accepts partial envelope whole
+ FAIL  tests/runtime/executionNormalizer.test.ts > strict execution normalization > accepts partial envelope decorated
+AssertionError: expected { status: 'unavailable', …(2) } to match object { status: 'available', …(1) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "execution": Object {
+-     "changedFiles": Array [
+-       "answer.txt",
+-     ],
+-     "commandOutputs": Array [
+-       "ran",
+-     ],
+-     "diffPatch": "patch",
+-     "stdoutStderrLog": "ok",
+-   },
+-   "status": "available",
++   "status": "unavailable",
+  }
+
+ ❯ tests/runtime/executionNormalizer.test.ts:9:71
+      7|     it(`accepts ${body===partial?"partial":"complete"} ${wrapped?"enve…
+      8|       const text=JSON.stringify(wrapped?{result:body}:body);
+      9|       expect(normalizeExecutionFinal(decorated?`Done: ${text}`:text)).…
+       |                                                                       ^
+     10|     });
+     11|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/runtime/executionNormalizer.test.ts > strict execution normalization > counts an envelope and direct repeated body as one semantic answer
+AssertionError: expected 'unavailable' to be 'available' // Object.is equality
+
+Expected: "available"
+Received: "unavailable"
+
+ ❯ tests/runtime/executionNormalizer.test.ts:21:122
+     19|   ])("refuses ambiguous, hidden, incompatible or incomplete output %#"…
+     20|   it("counts an envelope and direct repeated body as one semantic answ…
+     21|     expect(normalizeExecutionFinal(`One ${JSON.stringify({result:compl…
+       |                                                                                                                          ^
+     22|   });
+     23|   it("treats established reports as opaque but retains original lossy …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 14 passed (19)
+   Start at  07:40:22
+   Duration  359ms (transform 47ms, setup 13ms, collect 46ms, tests 78ms, environment 0ms, prepare 51ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-final-mutation-wrapping/tests.json

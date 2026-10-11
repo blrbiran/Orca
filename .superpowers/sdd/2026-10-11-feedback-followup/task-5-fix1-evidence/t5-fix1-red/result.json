@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "/bin/zsh",
+    "-c",
+    "task_tmp=$(mktemp -d /private/tmp/t5fr.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-feedback-followup-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts -t \"fix I\" --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-fix1-red/tests.json"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 13.367953300476074,
+  "log": "/private/tmp/orca-followup-runs/t5-fix1-red/output.log",
+  "source": "8d1f707634318561dcbc151cd6c33f0ef0da6c49",
+  "sourceTreeSHA256": "abfca1fff4c5d8445b88d43dd589bd63ae731be17bfc3cfe1a03c04eb4d6c05d",
+  "sourceFiles": 247
+}

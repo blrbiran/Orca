@@ -1,0 +1,12 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/control/savedResultEvidence.test.ts (3 tests) 3471ms
+   ✓ captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 1984ms
+   ✓ records capture failure as unavailable and preserves original failed outcome 1355ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  07:10:20
+   Duration  4.03s (transform 237ms, setup 14ms, collect 318ms, tests 3.47s, environment 0ms, prepare 47ms)
+

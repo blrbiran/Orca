@@ -1,0 +1,12 @@
+/private/tmp/task5-legacy-consumer.mts:8
+if(JSON.stringify(parsed)!==JSON.stringify(raw))throw new Error('old consumer byte shape changed');
+                                                      ^
+
+
+Error: old consumer byte shape changed
+    at <anonymous> (/private/tmp/task5-legacy-consumer.mts:8:55)
+    at ModuleJob.run (node:internal/modules/esm/module_job:271:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:547:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:116:5)
+
+Node.js v22.13.1

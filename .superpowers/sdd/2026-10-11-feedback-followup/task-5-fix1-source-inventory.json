@@ -1,0 +1,36 @@
+{
+  "base": "8d1f707634318561dcbc151cd6c33f0ef0da6c49",
+  "sourceTreeSHA256": "84a998e8db7fa95eeb257653bdfc9bba6ed36f1f3541272aafda4aa2cd52c5e5",
+  "files": [
+    {
+      "path": "src/control/savedResultEvidence.ts",
+      "bytes": 8350,
+      "sha256": "830615532595c329a0e7f632b7f9fa3bc0cb9929aa1f3e514d6411f9846950d7"
+    },
+    {
+      "path": "src/controller/executionFormatFailure.ts",
+      "bytes": 16317,
+      "sha256": "ef9d29573dd80bb3bf57bfea68baf41d470ffc308c785b7896d0be10207ee261"
+    },
+    {
+      "path": "src/controller/runLoop.ts",
+      "bytes": 97321,
+      "sha256": "efc640bd29e7dc2dfa8660adfd716c952e264369767598c168d479a3d27b3333"
+    },
+    {
+      "path": "src/runtime/executionNormalizer.ts",
+      "bytes": 2624,
+      "sha256": "3fbe27e001378485433ad0e7531006e39f2e0943e7d9ba7dc2efd874c76a52bf"
+    },
+    {
+      "path": "tests/control/savedResultEvidence.test.ts",
+      "bytes": 21164,
+      "sha256": "9ea1e0f9683b64a547c18962876c2ddc48639e25cc50a1f0232d8a81d480e6ff"
+    },
+    {
+      "path": "tests/controller/executionBase.test.ts",
+      "bytes": 3360,
+      "sha256": "50bfd799bbd6e8ed2270e9a7f99c56e15e00863e040c40d6e20f3258b282dd1e"
+    }
+  ]
+}

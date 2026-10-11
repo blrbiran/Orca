@@ -1,0 +1,14 @@
+[
+  {
+    "run": "t5-r1-review-checkpoint-retry",
+    "rawSHA256": "fab8a4947f8b7fdae3d10d052603aab74f59a1ebc3ba54374634328552170db9",
+    "credited": false,
+    "reason": "existing human gate prevents checkpoint-origin local retry"
+  },
+  {
+    "run": "t5-r1-review-checkpoint-retry-l3",
+    "rawSHA256": "8461f46747c8fde6ce02f03ebde28df6e959a18eb1a1eb58d0058833d77b0e09",
+    "credited": false,
+    "reason": "unsupported L3 input fixture rejected by existing strict schema"
+  }
+]

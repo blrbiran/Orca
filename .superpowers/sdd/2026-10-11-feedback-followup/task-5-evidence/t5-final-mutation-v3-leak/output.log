@@ -1,0 +1,43 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-mutations-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (10 tests | 1 failed) 14347ms
+   × captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 2220ms
+     → control-response-invalid
+: expected 1 to be +0 // Object.is equality
+   ✓ records capture failure as unavailable and preserves original failed outcome 1396ms
+   ✓ binds frozen authority separately from a genuinely narrowed protocol4 runtime contract 1684ms
+   ✓ refuses a hash-valid capsule with another source identity 1690ms
+   ✓ rejects symlinked evidence namespaces even when referenced bytes exist 1565ms
+   ✓ refuses rewrite-runtime bytes that differ from the actual execution authority 1039ms
+   ✓ refuses rewrite-config bytes that differ from the actual execution authority 1066ms
+   ✓ recursively serves original ledger refs only through exact capsule aliases and validates copied bytes 3470ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3
+AssertionError: control-response-invalid
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/control/savedResultEvidence.test.ts:82:99
+     80|  const usage=await readUsageEvents(f.sourceDir);expect(usage.filter(e=…
+     81|  expect(usage.filter(e=>e.bucket==='work').at(-1)?.byModel).toEqual([{…
+     82|  const legacy=await f.rpc('collect',{input:f.input,afterSeq:0});expect…
+       |                                                                                                   ^
+     83|  console.log('TASK5_V3_COLLECTION:'+legacy.stdout.trim());
+     84|  const collected=JSON.parse(legacy.stdout);expect(Object.keys(collecte…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  07:41:19
+   Duration  14.91s (transform 248ms, setup 14ms, collect 333ms, tests 14.35s, environment 0ms, prepare 48ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-final-mutation-v3-leak/tests.json

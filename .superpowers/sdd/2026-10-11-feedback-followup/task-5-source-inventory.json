@@ -1,0 +1,68 @@
+{
+  "base": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+  "branch": "codex/feedback-followup-20261011",
+  "sourceTreeSHA256": "007853cdbe574c190f0334979a38a579e7a8f6554f7ae6b9365c5db426070f7c",
+  "files": [
+    {
+      "file": "src/control/command.ts",
+      "bytes": 14558,
+      "sha256": "bcf997d83b0ebe2df56d4a72639fc3e398b448c47db6bf8dbc7d83bedf70dca6"
+    },
+    {
+      "file": "src/control/protocol.ts",
+      "bytes": 17007,
+      "sha256": "9ac6ee2aa010009b9ed203b6ea924f0ea692d0c15505ce6bd13933a95ff6177e"
+    },
+    {
+      "file": "src/control/savedResultEvidence.ts",
+      "bytes": 7481,
+      "sha256": "8cc1d07a43941630b2c36b36534a136caf6fcbc566a9d3db0d5034e7589f6c0b"
+    },
+    {
+      "file": "src/control/worker.ts",
+      "bytes": 15340,
+      "sha256": "0cc4078132819d24b8508ab62d0a8f98ac52e2221931f96e85a2ac6862855d6d"
+    },
+    {
+      "file": "src/controller/executionFormatFailure.ts",
+      "bytes": 15255,
+      "sha256": "fb8a4797e3ba10543eebde39fcf8d16e7caa38258d4e5397e3c8d2aebc5cbb91"
+    },
+    {
+      "file": "src/controller/runLoop.ts",
+      "bytes": 96771,
+      "sha256": "b5c91703a47980b896faed6b7628ca2487b51c345ef87b85fd26097b96feaa6a"
+    },
+    {
+      "file": "src/runtime/codex/codexAdapter.ts",
+      "bytes": 6683,
+      "sha256": "b330ea751110ff1b7291d0df51631a49a0fed6a356aee17b9ce8776d06512a71"
+    },
+    {
+      "file": "src/runtime/codex/protocol.ts",
+      "bytes": 17991,
+      "sha256": "9bebb185361e4dea663745c7b3dfbdda70ee0d667093359bae04d16f5a6ca166"
+    },
+    {
+      "file": "src/runtime/executionNormalizer.ts",
+      "bytes": 2625,
+      "sha256": "a45630b0f7da5f106edd154292968189156a06136ed0780534d4aa2c7edaabb3"
+    },
+    {
+      "file": "tests/control/savedResultEvidence.test.ts",
+      "bytes": 12374,
+      "sha256": "c336aa9b8f9fc51b4d51bfaede345e913c4838e65062437fb94b49e1ca4e4731"
+    },
+    {
+      "file": "tests/runtime/codex/executionFormatFailure.test.ts",
+      "bytes": 2778,
+      "sha256": "068ad1d5dc541727b6d5ee09f8bbc4124fd364259b24430219b86447a6e8a17a"
+    },
+    {
+      "file": "tests/runtime/executionNormalizer.test.ts",
+      "bytes": 2346,
+      "sha256": "ffe64c32b9e5b3db84b6d07ff64745730c9e7434d1d6672db44d3fe2b971bd95"
+    }
+  ],
+  "changedOldAssertions": []
+}

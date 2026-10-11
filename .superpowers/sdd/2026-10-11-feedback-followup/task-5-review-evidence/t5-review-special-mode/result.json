@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-task5-independent-review-20261011",
+  "command": [
+    "/bin/zsh",
+    "-c",
+    "task_review_tmp=$(mktemp -d /private/tmp/t5r.XXXXXX); chmod 700 \"$task_review_tmp\"; export TMPDIR=\"$task_review_tmp\"; exec node /private/tmp/ccloop-task5-independent-review-20261011/node_modules/vitest/vitest.mjs run tests/control/task5Review.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-review-special-mode/tests.json"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 3.042955160140991,
+  "log": "/private/tmp/orca-followup-runs/t5-review-special-mode/output.log",
+  "source": "8d1f707634318561dcbc151cd6c33f0ef0da6c49",
+  "sourceTreeSHA256": "12ddd1c6b3c30e3e34f49ead518fcda85affd43edee7860bf87c8d7f4bf871bc",
+  "sourceFiles": 248
+}

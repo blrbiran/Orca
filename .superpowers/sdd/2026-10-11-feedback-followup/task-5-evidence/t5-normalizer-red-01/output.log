@@ -1,0 +1,18 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/runtime/executionNormalizer.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/runtime/executionNormalizer.test.ts [ tests/runtime/executionNormalizer.test.ts ]
+Error: Failed to load url ../../src/runtime/executionNormalizer.js (resolved id: ../../src/runtime/executionNormalizer.js) in /private/tmp/ccloop-feedback-followup-20261011/tests/runtime/executionNormalizer.test.ts. Does the file exist?
+ ❯ loadAndTransform ../../../Users/biran/code/skills/loop/ccloop/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51969:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  07:04:43
+   Duration  266ms (transform 27ms, setup 15ms, collect 0ms, tests 0ms, environment 0ms, prepare 39ms)
+

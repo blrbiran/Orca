@@ -1,0 +1,30 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/control/savedResultEvidence.test.ts (21 tests) 30993ms
+   ✓ captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 2292ms
+   ✓ records capture failure as unavailable and preserves original failed outcome 1455ms
+   ✓ binds frozen authority separately from a genuinely narrowed protocol4 runtime contract 1685ms
+   ✓ refuses a hash-valid capsule with another source identity 1656ms
+   ✓ rejects symlinked evidence namespaces even when referenced bytes exist 1601ms
+   ✓ refuses rewrite-runtime bytes that differ from the actual execution authority 1031ms
+   ✓ refuses rewrite-config bytes that differ from the actual execution authority 1083ms
+   ✓ recursively serves original ledger refs only through exact capsule aliases and validates copied bytes 3393ms
+   ✓ fix I1 freezes the materialized base across target movement before workspace creation 1664ms
+   ✓ fix I1 freezes the materialized base across target movement after workspace creation 1684ms
+   ✓ fix I1 keeps a distinct continuation HEAD but refuses missing original-base authority 1692ms
+   ✓ fix I2 refuses unsupported file mode 2541 before complete capture 1359ms
+   ✓ fix I2 refuses unsupported file mode 1517 before complete capture 1342ms
+   ✓ fix I2 refuses unsupported directory mode 1517 before complete capture 1395ms
+   ✓ fix I2 refuses unsupported directory mode 1005 before complete capture 1450ms
+   ✓ fix I2 refuses unsupported root mode 1005 before complete capture 1291ms
+   ✓ fix I2 refuses file special bits introduced during the stability pass 1601ms
+   ✓ fix I2 refuses directory special bits introduced during the stability pass 1547ms
+   ✓ fix I2 refuses root special bits introduced between capture passes 1558ms
+
+ Test Files  1 passed (1)
+      Tests  21 passed (21)
+   Start at  08:05:28
+   Duration  31.63s (transform 274ms, setup 15ms, collect 351ms, tests 30.99s, environment 0ms, prepare 47ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-fix1-green2/tests.json

@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "/bin/zsh",
+    "-c",
+    "task_tmp=$(mktemp -d /private/tmp/t5u.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec npm test -- --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-final3-full-recheck/tests.json"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 68.90851616859436,
+  "log": "/private/tmp/orca-followup-runs/t5-final3-full-recheck/output.log",
+  "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+  "sourceTreeSHA256": "b325e1b5123b4eb03a6a9de761778e447b8d86165c14325a42bbf5fb96d1586f",
+  "sourceFiles": 247
+}

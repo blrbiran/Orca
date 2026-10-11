@@ -1,0 +1,43 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-fix1-mutations-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (23 tests | 1 failed | 22 skipped) 2019ms
+   × fix I2 refuses root special bits introduced between capture passes 2018ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses root special bits introduced between capture passes
+AssertionError: expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "capsule": null,
+-   "reason": "saved-result-mode-unsupported",
++   "capsule": Object {
++     "artifactId": "saved-result-02c970dc9f5222665195e46cab99b9f36293e950801c160f39439369f5380de6",
++     "hash": "02c970dc9f5222665195e46cab99b9f36293e950801c160f39439369f5380de6",
++   },
++   "reason": null,
+  }
+
+ ❯ tests/control/savedResultEvidence.test.ts:224:31
+    222|  const f=await world();expect(introduced).toBe(true);
+    223|  const r=await f.rpc("saved-result-evidence",{input:f.input});expect(r…
+    224|  expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"save…
+       |                               ^
+    225| },30000);
+    226| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 22 skipped (23)
+   Start at  08:29:41
+   Duration  2.89s (transform 374ms, setup 17ms, collect 480ms, tests 2.02s, environment 0ms, prepare 104ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-fix1-mutant-root-stability-mode/tests.json

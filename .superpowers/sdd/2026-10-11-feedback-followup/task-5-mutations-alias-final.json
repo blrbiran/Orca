@@ -1,0 +1,290 @@
+[
+  {
+    "name": "alias-pair",
+    "file": "src/control/savedResultEvidence.ts",
+    "removed": "aliases.find(alias=>same(alias.source,ref))",
+    "replacement": "aliases.find(alias=>alias.source.hash===ref.hash)",
+    "rc": 1,
+    "failures": [
+      {
+        "name": "recursively serves original ledger refs only through exact capsule aliases and validates copied bytes",
+        "messages": [
+          "AssertionError: expected '' to contain 'control-saved-result-authority-invalid'\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:149:124\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)\n    at runBaseTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/base.BZZh4cSm.js:29:3)"
+        ]
+      }
+    ],
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "sourceSHA256": "60efcb71022edbc65c15046f4cec2d253c989f3cb0cae082a7f970a838382b66",
+    "log": "/private/tmp/orca-followup-runs/t5-final-mutation-alias-pair/output.log"
+  },
+  {
+    "name": "actual-config",
+    "file": "src/controller/executionFormatFailure.ts",
+    "removed": "||canonicalHash(config)!==canonicalHash(input.actualConfig)",
+    "replacement": "",
+    "rc": 1,
+    "failures": [
+      {
+        "name": "refuses rewrite-config bytes that differ from the actual execution authority",
+        "messages": [
+          "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:137:31\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11"
+        ]
+      }
+    ],
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "sourceSHA256": "5be7a5e21d62b3136aeb10cd0fe0ae64dbde2a0c8a6ca85547aaad73c4447883",
+    "log": "/private/tmp/orca-followup-runs/t5-final-mutation-actual-config/output.log"
+  },
+  {
+    "name": "actual-contract",
+    "file": "src/controller/executionFormatFailure.ts",
+    "removed": "canonicalHash(actual)!==canonicalHash(input.runtimeContract)||",
+    "replacement": "",
+    "rc": 1,
+    "failures": [
+      {
+        "name": "refuses rewrite-runtime bytes that differ from the actual execution authority",
+        "messages": [
+          "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:137:31\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11"
+        ]
+      }
+    ],
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "sourceSHA256": "5be7a5e21d62b3136aeb10cd0fe0ae64dbde2a0c8a6ca85547aaad73c4447883",
+    "log": "/private/tmp/orca-followup-runs/t5-final-mutation-actual-contract/output.log"
+  },
+  {
+    "name": "wrapping",
+    "file": "src/runtime/codex/protocol.ts",
+    "removed": "const semantic = strictExecution && executeEnvelope.safeParse(node).success ? node.result : node;",
+    "replacement": "const semantic = node;",
+    "rc": 1,
+    "failures": [
+      {
+        "name": "strict execution normalization accepts complete envelope whole",
+        "messages": [
+          "AssertionError: expected { status: 'unavailable', \u2026(2) } to match object { status: 'available', \u2026(1) }\n(7 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/runtime/executionNormalizer.test.ts:9:71\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)"
+        ]
+      },
+      {
+        "name": "strict execution normalization accepts complete envelope decorated",
+        "messages": [
+          "AssertionError: expected { status: 'unavailable', \u2026(2) } to match object { status: 'available', \u2026(1) }\n(7 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/runtime/executionNormalizer.test.ts:9:71\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)"
+        ]
+      },
+      {
+        "name": "strict execution normalization accepts partial envelope whole",
+        "messages": [
+          "AssertionError: expected { status: 'unavailable', \u2026(2) } to match object { status: 'available', \u2026(1) }\n(7 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/runtime/executionNormalizer.test.ts:9:71\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)"
+        ]
+      },
+      {
+        "name": "strict execution normalization accepts partial envelope decorated",
+        "messages": [
+          "AssertionError: expected { status: 'unavailable', \u2026(2) } to match object { status: 'available', \u2026(1) }\n(7 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/runtime/executionNormalizer.test.ts:9:71\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)"
+        ]
+      },
+      {
+        "name": "strict execution normalization counts an envelope and direct repeated body as one semantic answer",
+        "messages": [
+          "AssertionError: expected 'unavailable' to be 'available' // Object.is equality\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/runtime/executionNormalizer.test.ts:21:122\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)"
+        ]
+      }
+    ],
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "sourceSHA256": "9bebb185361e4dea663745c7b3dfbdda70ee0d667093359bae04d16f5a6ca166",
+    "log": "/private/tmp/orca-followup-runs/t5-final-mutation-wrapping/output.log"
+  },
+  {
+    "name": "ambiguity",
+    "file": "src/runtime/codex/protocol.ts",
+    "removed": "shaped.size === 1 && counts.valid === 1",
+    "replacement": "shaped.size >= 1 && counts.valid === 1",
+    "rc": 1,
+    "failures": [
+      {
+        "name": "strict execution normalization refuses ambiguous, hidden, incompatible or incomplete output 3",
+        "messages": [
+          "AssertionError: expected 'available' to be 'unavailable' // Object.is equality\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/runtime/executionNormalizer.test.ts:19:123\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:633:57\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)"
+        ]
+      },
+      {
+        "name": "strict execution normalization refuses ambiguous, hidden, incompatible or incomplete output 4",
+        "messages": [
+          "AssertionError: expected 'available' to be 'unavailable' // Object.is equality\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/runtime/executionNormalizer.test.ts:19:123\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:633:57\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)"
+        ]
+      }
+    ],
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "sourceSHA256": "9bebb185361e4dea663745c7b3dfbdda70ee0d667093359bae04d16f5a6ca166",
+    "log": "/private/tmp/orca-followup-runs/t5-final-mutation-ambiguity/output.log"
+  },
+  {
+    "name": "usage",
+    "file": "src/controller/runLoop.ts",
+    "removed": ",modelUsage:error.formatFailure.modelUsage",
+    "replacement": "",
+    "rc": 1,
+    "failures": [
+      {
+        "name": "captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3",
+        "messages": [
+          "AssertionError: expected undefined to deeply equal [ { model: 'fixture', \u2026(4) } ]\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:81:61\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)\n    at runBaseTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/base.BZZh4cSm.js:29:3)"
+        ]
+      }
+    ],
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "sourceSHA256": "b5c91703a47980b896faed6b7628ca2487b51c345ef87b85fd26097b96feaa6a",
+    "log": "/private/tmp/orca-followup-runs/t5-final-mutation-usage/output.log"
+  },
+  {
+    "name": "identity",
+    "file": "src/control/savedResultEvidence.ts",
+    "removed": "canonicalHash(c.identity)!==canonicalHash(identity)||",
+    "replacement": "",
+    "rc": 1,
+    "failures": [
+      {
+        "name": "refuses a hash-valid capsule with another source identity",
+        "messages": [
+          "AssertionError: expected '' to contain 'control-saved-result-authority-invalid'\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:120:72\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)\n    at runBaseTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/base.BZZh4cSm.js:29:3)"
+        ]
+      }
+    ],
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "sourceSHA256": "60efcb71022edbc65c15046f4cec2d253c989f3cb0cae082a7f970a838382b66",
+    "log": "/private/tmp/orca-followup-runs/t5-final-mutation-identity/output.log"
+  },
+  {
+    "name": "capture-before-cleanup",
+    "file": "src/controller/runLoop.ts",
+    "removed": "          await heartbeat.runExclusive(() => captureExecutionFormatFailure({input:options.taskResultInput!,runDir,worktreePath:worktreePath!,attempt,attemptStartHead:attemptStartHead!,resolvedBase:resolvedSourceBase!,runtimeContract:contract,actualConfig:options.executionFormatCapture!.config,failure:error.formatFailure!,verifierEntered,assertHeld:()=>heartbeat.assertHeld()}));",
+    "replacement": "",
+    "rc": 1,
+    "failures": [
+      {
+        "name": "captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3",
+        "messages": [
+          "AssertionError: {\"type\":\"loop_planning\",\"at\":\"2026-10-10T23:40:55.237Z\",\"detail\":\"run initialized and ready to plan\"}\n{\"type\":\"attempt_started\",\"at\":\"2026-10-10T23:40:55.392Z\",\"detail\":\"attempt 1\"}\n{\"type\":\"execute_started\",\"at\":\"2026-10-10T23:40:55.392Z\",\"detail\":\"attempt 1\"}\n{\"type\":\"attempt_failed\",\"at\":\"2026-10-10T23:40:55.576Z\",\"detail\":\"ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-YKGky3/source/run/codex/1/execute/call-zRTMz7\"}\n: expected null not to be null\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:61:119\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)\n    at runBaseTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/base.BZZh4cSm.js:29:3)"
+        ]
+      },
+      {
+        "name": "records capture failure as unavailable and preserves original failed outcome",
+        "messages": [
+          "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:97:31\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11"
+        ]
+      },
+      {
+        "name": "binds frozen authority separately from a genuinely narrowed protocol4 runtime contract",
+        "messages": [
+          "AssertionError: {\"type\":\"loop_planning\",\"at\":\"2026-10-10T23:40:57.521Z\",\"detail\":\"run initialized and ready to plan\"}\n{\"type\":\"attempt_started\",\"at\":\"2026-10-10T23:40:57.678Z\",\"detail\":\"attempt 1\"}\n{\"type\":\"execute_started\",\"at\":\"2026-10-10T23:40:57.678Z\",\"detail\":\"attempt 1\"}\n{\"type\":\"attempt_failed\",\"at\":\"2026-10-10T23:40:57.788Z\",\"detail\":\"ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-EqmeoT/source/run/codex/1/execute/call-ETDksP\"}\n: expected null not to be null\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:107:112\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)\n    at runBaseTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/base.BZZh4cSm.js:29:3)"
+        ]
+      },
+      {
+        "name": "refuses a hash-valid capsule with another source identity",
+        "messages": [
+          "AssertionError: control-request-invalid\n: expected 2 to be +0 // Object.is equality\n    at jsonRef (/private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:56:107)\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:117:10\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)"
+        ]
+      },
+      {
+        "name": "rejects symlinked evidence namespaces even when referenced bytes exist",
+        "messages": [
+          "Error: ENOENT: no such file or directory, rename '/private/tmp/results-task2-NErTNE/source/control/saved-result-evidence' -> '/private/tmp/results-task2-NErTNE/source/saved'\n    at rename (node:internal/fs/promises:783:10)\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:124:2\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)"
+        ]
+      },
+      {
+        "name": "refuses rewrite-runtime bytes that differ from the actual execution authority",
+        "messages": [
+          "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:137:31\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11"
+        ]
+      },
+      {
+        "name": "refuses rewrite-config bytes that differ from the actual execution authority",
+        "messages": [
+          "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:137:31\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11"
+        ]
+      },
+      {
+        "name": "recursively serves original ledger refs only through exact capsule aliases and validates copied bytes",
+        "messages": [
+          "AssertionError: control-request-invalid\n: expected 2 to be +0 // Object.is equality\n    at jsonRef (/private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:56:107)\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:143:10\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)"
+        ]
+      }
+    ],
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "sourceSHA256": "b5c91703a47980b896faed6b7628ca2487b51c345ef87b85fd26097b96feaa6a",
+    "log": "/private/tmp/orca-followup-runs/t5-final-mutation-capture-before-cleanup/output.log"
+  },
+  {
+    "name": "nested-hash",
+    "file": "src/control/savedResultEvidence.ts",
+    "removed": "  if(taskResultDigest(bytes)!==ref.hash)throw new ControlProtocolError(\"control-saved-result-hash-mismatch\");",
+    "replacement": "",
+    "rc": 1,
+    "failures": [
+      {
+        "name": "captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3",
+        "messages": [
+          "AssertionError: expected '' to contain 'control-saved-result-hash-mismatch'\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:93:72\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)\n    at runBaseTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/base.BZZh4cSm.js:29:3)"
+        ]
+      },
+      {
+        "name": "recursively serves original ledger refs only through exact capsule aliases and validates copied bytes",
+        "messages": [
+          "AssertionError: expected '' to contain 'control-saved-result-hash-mismatch'\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:153:118\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)\n    at runBaseTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/base.BZZh4cSm.js:29:3)"
+        ]
+      }
+    ],
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "sourceSHA256": "60efcb71022edbc65c15046f4cec2d253c989f3cb0cae082a7f970a838382b66",
+    "log": "/private/tmp/orca-followup-runs/t5-final-mutation-nested-hash/output.log"
+  },
+  {
+    "name": "v3-leak",
+    "file": "src/control/collect.ts",
+    "removed": "    events,\n    candidate:",
+    "replacement": "    events, capsule: {schema:\"ccloop-execution-format-failure-v1\"},\n    candidate:",
+    "rc": 1,
+    "failures": [
+      {
+        "name": "captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3",
+        "messages": [
+          "AssertionError: control-response-invalid\n: expected 1 to be +0 // Object.is equality\n    at /private/tmp/ccloop-task5-mutations-20261011/tests/control/savedResultEvidence.test.ts:82:99\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)\n    at runBaseTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/base.BZZh4cSm.js:29:3)"
+        ]
+      }
+    ],
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "sourceSHA256": "04f63fdd6e7cf63609861592db5b30ef0ac70fd4a3bd23c4500c2facaa47e518",
+    "log": "/private/tmp/orca-followup-runs/t5-final-mutation-v3-leak/output.log"
+  }
+]

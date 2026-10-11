@@ -1,0 +1,33 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/controller/executionBase.test.ts (1 test | 1 failed) 1042ms
+   × proves an immutable original base distinct from the real restored checkpoint HEAD 1042ms
+     → expected '7c0a2930d2bfc248bbaa1dbd2fd2be8fbf64f…' to be null
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/executionBase.test.ts > proves an immutable original base distinct from the real restored checkpoint HEAD
+AssertionError: expected '7c0a2930d2bfc248bbaa1dbd2fd2be8fbf64f…' to be null
+
+- Expected: 
+null
+
++ Received: 
+"7c0a2930d2bfc248bbaa1dbd2fd2be8fbf64fd32"
+
+ ❯ tests/controller/executionBase.test.ts:33:75
+     31|  const replacement=(await exec("/usr/bin/git",["-c","user.name=Test","…
+     32|  await exec("/usr/bin/git",["replace",head,replacement],{cwd:worktreeP…
+     33|  expect(await resolveCheckpointOriginalBase(unrelated,worktreePath,hea…
+       |                                                                           ^
+     34| },30000);
+     35| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  08:13:05
+   Duration  1.54s (transform 175ms, setup 14ms, collect 224ms, tests 1.04s, environment 0ms, prepare 49ms)
+

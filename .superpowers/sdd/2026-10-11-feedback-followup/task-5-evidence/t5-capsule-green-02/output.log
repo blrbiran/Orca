@@ -1,0 +1,32 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (3 tests | 1 failed) 2227ms
+   × captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 1110ms
+     → {"type":"loop_planning","at":"2026-10-10T23:10:02.569Z","detail":"run initialized and ready to plan"}
+{"type":"attempt_started","at":"2026-10-10T23:10:02.711Z","detail":"attempt 1"}
+{"type":"execute_started","at":"2026-10-10T23:10:02.711Z","detail":"attempt 1"}
+{"type":"execution_format_capture_failed","at":"2026-10-10T23:10:02.820Z","detail":"attempt 1: Error: saved-result-config-mismatch"}
+{"type":"attempt_failed","at":"2026-10-10T23:10:02.833Z","detail":"ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-tptcyt/source/run/codex/1/execute/call-qnMLdz"}
+: expected null not to be null
+   ✓ records capture failure as unavailable and preserves original failed outcome 1012ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3
+AssertionError: {"type":"loop_planning","at":"2026-10-10T23:10:02.569Z","detail":"run initialized and ready to plan"}
+{"type":"attempt_started","at":"2026-10-10T23:10:02.711Z","detail":"attempt 1"}
+{"type":"execute_started","at":"2026-10-10T23:10:02.711Z","detail":"attempt 1"}
+{"type":"execution_format_capture_failed","at":"2026-10-10T23:10:02.820Z","detail":"attempt 1: Error: saved-result-config-mismatch"}
+{"type":"attempt_failed","at":"2026-10-10T23:10:02.833Z","detail":"ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-tptcyt/source/run/codex/1/execute/call-qnMLdz"}
+: expected null not to be null
+ ❯ tests/control/savedResultEvidence.test.ts:48:119
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  07:10:01
+   Duration  2.84s (transform 237ms, setup 15ms, collect 322ms, tests 2.23s, environment 0ms, prepare 44ms)
+

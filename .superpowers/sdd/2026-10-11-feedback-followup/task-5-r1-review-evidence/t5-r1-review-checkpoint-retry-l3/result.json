@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-task5-r1-review-20261011",
+  "command": [
+    "/bin/zsh",
+    "-c",
+    "task_review_tmp=$(mktemp -d /private/tmp/t5rr.XXXXXX); chmod 700 \"$task_review_tmp\"; export TMPDIR=\"$task_review_tmp\"; exec node /private/tmp/ccloop-task5-r1-review-20261011/node_modules/vitest/vitest.mjs run tests/control/task5R1Review.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-r1-review-checkpoint-retry-l3/tests.json"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 2.054611921310425,
+  "log": "/private/tmp/orca-followup-runs/t5-r1-review-checkpoint-retry-l3/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "d061d7b2f743f1786f5a6bb6e67e3f06a1788b568da32cb44a8fd01d6a56806c",
+  "sourceFiles": 249
+}

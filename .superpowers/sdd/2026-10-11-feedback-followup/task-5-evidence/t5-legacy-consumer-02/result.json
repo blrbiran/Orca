@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "/bin/zsh",
+    "-c",
+    "task_tmp=$(mktemp -d /private/tmp/t5l.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node --import /private/tmp/ccloop-feedback-followup-20261011/node_modules/tsx/dist/loader.mjs /private/tmp/task5-legacy-consumer.mts"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 0.2962911128997803,
+  "log": "/private/tmp/orca-followup-runs/t5-legacy-consumer-02/output.log",
+  "source": "5b0adea413b885a1151259d5eb88d21eedcc2ce0",
+  "sourceTreeSHA256": "71756d186bc38cf8ae15874561e0e2efa7c75936a325d95aa0a9dfd83093da70",
+  "sourceFiles": 247
+}

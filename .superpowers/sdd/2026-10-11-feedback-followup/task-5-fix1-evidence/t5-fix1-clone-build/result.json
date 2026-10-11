@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-task5-fix1-mutations-20261011",
+  "command": [
+    "/bin/zsh",
+    "-c",
+    "task_tmp=$(mktemp -d /private/tmp/t5fb.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec npm run build"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 4.458777189254761,
+  "log": "/private/tmp/orca-followup-runs/t5-fix1-clone-build/output.log",
+  "source": "16e11e2a9b1e6cae8a5ed3bedc344afd53c3a4d7",
+  "sourceTreeSHA256": "84a998e8db7fa95eeb257653bdfc9bba6ed36f1f3541272aafda4aa2cd52c5e5",
+  "sourceFiles": 248
+}

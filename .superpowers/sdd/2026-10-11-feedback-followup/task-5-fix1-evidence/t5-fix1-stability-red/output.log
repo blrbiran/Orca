@@ -1,0 +1,77 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (21 tests | 3 failed | 18 skipped) 5013ms
+   × fix I2 refuses file special bits introduced during the stability pass 1825ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses directory special bits introduced during the stability pass 1601ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses root special bits introduced between capture passes 1585ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses file special bits introduced during the stability pass
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses directory special bits introduced during the stability pass
+AssertionError: expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "capsule": null,
+-   "reason": "saved-result-mode-unsupported",
++   "capsule": Object {
++     "artifactId": "saved-result-a210cb37ed12aae80c3030fa5546cfbacc4f5dee725cdcf8308f6b1ce34ce2d3",
++     "hash": "a210cb37ed12aae80c3030fa5546cfbacc4f5dee725cdcf8308f6b1ce34ce2d3",
++   },
++   "reason": null,
+  }
+
+ ❯ tests/control/savedResultEvidence.test.ts:206:31
+    204|  }) as typeof fs.readdir);
+    205|  const f=await world();const r=await f.rpc("saved-result-evidence",{in…
+    206|  expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"save…
+       |                               ^
+    207| },30000);
+    208| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses root special bits introduced between capture passes
+AssertionError: expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "capsule": null,
+-   "reason": "saved-result-mode-unsupported",
++   "capsule": Object {
++     "artifactId": "saved-result-fdfbf42e7e2866f0e7e17424a2f34ffa8dc274e64d2c821ce8eeefadf2a23557",
++     "hash": "fdfbf42e7e2866f0e7e17424a2f34ffa8dc274e64d2c821ce8eeefadf2a23557",
++   },
++   "reason": null,
+  }
+
+ ❯ tests/control/savedResultEvidence.test.ts:220:31
+    218|  const f=await world();expect(introduced).toBe(true);
+    219|  const r=await f.rpc("saved-result-evidence",{input:f.input});expect(r…
+    220|  expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"save…
+       |                               ^
+    221| },30000);
+    222| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 18 skipped (21)
+   Start at  07:59:14
+   Duration  5.67s (transform 269ms, setup 13ms, collect 364ms, tests 5.01s, environment 0ms, prepare 48ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-fix1-stability-red/tests.json

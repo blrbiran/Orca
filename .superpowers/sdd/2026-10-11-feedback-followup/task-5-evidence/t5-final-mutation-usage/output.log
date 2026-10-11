@@ -1,0 +1,49 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-mutations-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (10 tests | 1 failed) 14074ms
+   × captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 1976ms
+     → expected undefined to deeply equal [ { model: 'fixture', …(4) } ]
+   ✓ records capture failure as unavailable and preserves original failed outcome 1377ms
+   ✓ binds frozen authority separately from a genuinely narrowed protocol4 runtime contract 1709ms
+   ✓ refuses a hash-valid capsule with another source identity 1749ms
+   ✓ rejects symlinked evidence namespaces even when referenced bytes exist 1561ms
+   ✓ refuses rewrite-runtime bytes that differ from the actual execution authority 1080ms
+   ✓ refuses rewrite-config bytes that differ from the actual execution authority 1030ms
+   ✓ recursively serves original ledger refs only through exact capsule aliases and validates copied bytes 3384ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3
+AssertionError: expected undefined to deeply equal [ { model: 'fixture', …(4) } ]
+
+- Expected: 
+Array [
+  Object {
+    "cacheRead": 0,
+    "cacheWrite": 0,
+    "input": 20,
+    "model": "fixture",
+    "output": 10,
+  },
+]
+
++ Received: 
+undefined
+
+ ❯ tests/control/savedResultEvidence.test.ts:81:61
+     79|  expect(await readdir(join(f.runDir,'worktrees'))).toEqual([]);
+     80|  const usage=await readUsageEvents(f.sourceDir);expect(usage.filter(e=…
+     81|  expect(usage.filter(e=>e.bucket==='work').at(-1)?.byModel).toEqual([{…
+       |                                                             ^
+     82|  const legacy=await f.rpc('collect',{input:f.input,afterSeq:0});expect…
+     83|  console.log('TASK5_V3_COLLECTION:'+legacy.stdout.trim());
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  07:40:23
+   Duration  14.63s (transform 241ms, setup 13ms, collect 319ms, tests 14.07s, environment 0ms, prepare 52ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-final-mutation-usage/tests.json

@@ -1,0 +1,461 @@
+{
+  "root": "/private/tmp/results-task2-3ErNRK",
+  "input": {
+    "protocol": 3,
+    "claim": {
+      "groupId": "group-1",
+      "workItemId": "work-1",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "generation": 1,
+      "graphVersion": 1,
+      "targetVersion": 1,
+      "commandId": "command-1",
+      "configHash": "4f5f7da431b49be1f14d3c904d59f678a24b3c0a72b08996f899a530e07c26ac",
+      "agent": {
+        "agent": "codex",
+        "model": "fixture",
+        "contextWindow": "agent-default"
+      },
+      "grant": {
+        "work": {
+          "tokens": 1000,
+          "activeMs": 30000,
+          "attempts": 2,
+          "sessions": 1
+        },
+        "handoff": {
+          "tokens": 1000,
+          "activeMs": 30000,
+          "attempts": 2,
+          "sessions": 1
+        }
+      },
+      "ownerToken": "owner-1"
+    },
+    "contractHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "inputCheckpoint": null,
+    "work": {
+      "kind": "loop",
+      "contract": {
+        "objective": {
+          "taskId": "task-1",
+          "goal": "Produce answer",
+          "successCondition": "check",
+          "nonGoals": []
+        },
+        "context": {
+          "repoPath": "/private/tmp/results-task2-3ErNRK/repo",
+          "targetPaths": [
+            "answer.txt"
+          ],
+          "relevantDocs": [],
+          "buildTestCommands": [
+            "true"
+          ],
+          "constraints": []
+        },
+        "executionPolicy": {
+          "autonomyLevel": "L2",
+          "maxAttempts": 2,
+          "perAttemptTimeoutMs": 10000,
+          "totalRuntimeBudgetMs": 30000,
+          "tokenBudget": 1000,
+          "worktreeRequired": true,
+          "partialOutcomeRecoveryWindowMs": 0
+        },
+        "safetyPolicy": {
+          "allowlistPaths": [],
+          "denylistPaths": [],
+          "maxFilesTouched": 64,
+          "humanGateConditions": []
+        },
+        "verification": {
+          "verifierType": "agent",
+          "requiredChecks": [
+            "true"
+          ],
+          "rejectOn": [
+            "check failed"
+          ],
+          "evidenceRequired": []
+        },
+        "escalationAndExit": {
+          "escalationTargets": [],
+          "pauseOn": [],
+          "stopOn": [],
+          "terminalStates": [
+            "succeeded",
+            "failed",
+            "exhausted",
+            "cancelled",
+            "blocked_waiting_human"
+          ]
+        }
+      },
+      "targetRepo": "/private/tmp/results-task2-3ErNRK/repo",
+      "base": "HEAD",
+      "sourceDir": "/private/tmp/results-task2-3ErNRK/source"
+    }
+  },
+  "table": "/private/tmp/results-task2-3ErNRK/agents.json",
+  "page": {
+    "schema": "ccloop-saved-result-evidence-v1",
+    "identity": {
+      "groupId": "group-1",
+      "workItemId": "work-1",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "generation": 1,
+      "graphVersion": 1,
+      "targetVersion": 1,
+      "executionId": "execution-1",
+      "envelopeHash": "427314e9a747f176aa79709924b4b8f78f4ca24e9dbde38ffcbe2a795308e647"
+    },
+    "attempt": 1,
+    "capsule": {
+      "artifactId": "saved-result-ca548b7d6267304e212bd0386e127684b21e9e8fe78c3c66b39ec227de07200b",
+      "hash": "ca548b7d6267304e212bd0386e127684b21e9e8fe78c3c66b39ec227de07200b"
+    },
+    "reason": null
+  },
+  "core": {
+    "events": [
+      {
+        "runId": "run-1",
+        "generation": 1,
+        "eventSeq": 1,
+        "bucket": "work",
+        "cumulative": {
+          "tokens": 15,
+          "activeMs": 62,
+          "attempts": 1,
+          "sessions": 1
+        },
+        "source": {
+          "artifactId": "evidence-9718802b72542bf2646a81bd686922db4a27871b559449d5ad69b40f118cb924",
+          "hash": "9718802b72542bf2646a81bd686922db4a27871b559449d5ad69b40f118cb924"
+        },
+        "byModel": [
+          {
+            "model": "fixture",
+            "input": 10,
+            "output": 5,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        ]
+      },
+      {
+        "runId": "run-1",
+        "generation": 1,
+        "eventSeq": 2,
+        "bucket": "work",
+        "cumulative": {
+          "tokens": 30,
+          "activeMs": 142,
+          "attempts": 1,
+          "sessions": 1
+        },
+        "source": {
+          "artifactId": "evidence-0b3b46c3f40dc934c01cd814a205c1cf41de19ed4624c00cfd74238efac93beb",
+          "hash": "0b3b46c3f40dc934c01cd814a205c1cf41de19ed4624c00cfd74238efac93beb"
+        },
+        "byModel": [
+          {
+            "model": "fixture",
+            "input": 20,
+            "output": 10,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        ]
+      },
+      {
+        "runId": "run-1",
+        "generation": 1,
+        "eventSeq": 3,
+        "bucket": "handoff",
+        "cumulative": {
+          "tokens": 0,
+          "activeMs": 0,
+          "attempts": 0,
+          "sessions": 0
+        },
+        "source": {
+          "artifactId": "evidence-b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84",
+          "hash": "b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84"
+        }
+      }
+    ],
+    "candidate": {
+      "groupId": "group-1",
+      "workItemId": "work-1",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "generation": 1,
+      "graphVersion": 1,
+      "targetVersion": 1,
+      "checkpointId": "checkpoint-f911573b6684e5073814db28be1a7bc9daeea5e9479b2c79",
+      "usageHighWater": 3,
+      "result": "failed",
+      "artifacts": [
+        {
+          "artifactId": "evidence-26b56ed6ce61a67ac4b3e00ed547750aef488391c4b595271847e3113c815d60",
+          "hash": "26b56ed6ce61a67ac4b3e00ed547750aef488391c4b595271847e3113c815d60"
+        },
+        {
+          "artifactId": "evidence-79aba33f5a398c870ba1587908302518c21ddf3bd10a39bbbe6c216b3ecdd0a4",
+          "hash": "79aba33f5a398c870ba1587908302518c21ddf3bd10a39bbbe6c216b3ecdd0a4"
+        },
+        {
+          "artifactId": "evidence-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d",
+          "hash": "9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d"
+        },
+        {
+          "artifactId": "evidence-d616095816c463a466f40d9dd1df2d9531a3a09011a53b4f9907e6b78ebf2d44",
+          "hash": "d616095816c463a466f40d9dd1df2d9531a3a09011a53b4f9907e6b78ebf2d44"
+        },
+        {
+          "artifactId": "evidence-77fb7a79c22805164c509172ee601ffdd216d06cbd71cea58d213a34a6d553ff",
+          "hash": "77fb7a79c22805164c509172ee601ffdd216d06cbd71cea58d213a34a6d553ff"
+        },
+        {
+          "artifactId": "evidence-a72b359d4b794653e062dae9e5eb8a1f30d0d885ba74f8179b3ea7875ad0aa24",
+          "hash": "a72b359d4b794653e062dae9e5eb8a1f30d0d885ba74f8179b3ea7875ad0aa24"
+        },
+        {
+          "artifactId": "evidence-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "artifactId": "evidence-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981",
+          "hash": "b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981"
+        },
+        {
+          "artifactId": "evidence-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d",
+          "hash": "9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d"
+        },
+        {
+          "artifactId": "evidence-1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1",
+          "hash": "1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1"
+        },
+        {
+          "artifactId": "evidence-3ca69bb029e8157f1179f4a9d3522a84b0da1fc0b964f889a46bf7545a3b754f",
+          "hash": "3ca69bb029e8157f1179f4a9d3522a84b0da1fc0b964f889a46bf7545a3b754f"
+        },
+        {
+          "artifactId": "evidence-b024b3a95dcc63c79c4e22fb68b7813bd0c1c3226722452d37ae6166137e8ff1",
+          "hash": "b024b3a95dcc63c79c4e22fb68b7813bd0c1c3226722452d37ae6166137e8ff1"
+        },
+        {
+          "artifactId": "evidence-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "artifactId": "evidence-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981",
+          "hash": "b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981"
+        },
+        {
+          "artifactId": "evidence-58ced41b0987ca685c097c9c998d03bbe8cccf385107fc04218da83f52caac46",
+          "hash": "58ced41b0987ca685c097c9c998d03bbe8cccf385107fc04218da83f52caac46"
+        },
+        {
+          "artifactId": "evidence-d2566400ba9f01e9be4ef435d7490be7cd6276e76e4328cba8ffda21ff1794c6",
+          "hash": "d2566400ba9f01e9be4ef435d7490be7cd6276e76e4328cba8ffda21ff1794c6"
+        },
+        {
+          "artifactId": "evidence-bd36d13d8d9aa271afa51b6b4071fbcbcadedc4a164d5b231d227db8d6ff0d66",
+          "hash": "bd36d13d8d9aa271afa51b6b4071fbcbcadedc4a164d5b231d227db8d6ff0d66"
+        },
+        {
+          "artifactId": "evidence-f017766cd8b7641a296c86188ec8791e25dfe9e1d518b5602917f64c27fd789a",
+          "hash": "f017766cd8b7641a296c86188ec8791e25dfe9e1d518b5602917f64c27fd789a"
+        }
+      ],
+      "snapshot": null,
+      "missing": [
+        "attempts/1/execution.json",
+        "attempts/1/verify.json"
+      ],
+      "unresolvedRequestIds": [],
+      "stopProof": {
+        "executionId": "execution-1",
+        "generation": 1,
+        "isolated": true,
+        "source": {
+          "artifactId": "evidence-e323f0b22e52cc257ba0dbcf6619766061d82eafad1ac6dc974882715daf1667",
+          "hash": "e323f0b22e52cc257ba0dbcf6619766061d82eafad1ac6dc974882715daf1667"
+        }
+      },
+      "terminalOutcome": "failed",
+      "handoff": {
+        "artifactId": "evidence-f017766cd8b7641a296c86188ec8791e25dfe9e1d518b5602917f64c27fd789a",
+        "hash": "f017766cd8b7641a296c86188ec8791e25dfe9e1d518b5602917f64c27fd789a"
+      }
+    },
+    "terminal": {
+      "status": "failed",
+      "currentAttempt": 1,
+      "attemptsUsed": 1,
+      "lastTransitionAt": "2026-10-10T23:17:51.620Z",
+      "waitingOnHuman": false,
+      "stopReason": "ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-3ErNRK/source/run/codex/1/execute/call-nCbgXW",
+      "budgetSnapshot": {
+        "attemptsRemaining": 1,
+        "timeRemainingMs": 29858,
+        "tokenBudgetRemaining": 970
+      },
+      "recentFailures": []
+    },
+    "progress": {
+      "status": "failed",
+      "currentAttempt": 1,
+      "attemptsUsed": 1,
+      "attemptsRemaining": 1,
+      "lastTransitionAt": "2026-10-10T23:17:51.620Z"
+    }
+  },
+  "capsule": {
+    "acceptedBase": "HEAD",
+    "artifacts": {
+      "acceptedContract": {
+        "artifactId": "saved-result-a77d7f3787a13ab8ba1fd072cdb0cad8e92abee828d0efac52287a5cbfd630fd",
+        "hash": "a77d7f3787a13ab8ba1fd072cdb0cad8e92abee828d0efac52287a5cbfd630fd"
+      },
+      "config": {
+        "artifactId": "saved-result-693a1c404c724fed5476dd15e2c15b9b83e16b7c8c82728bd63d2a68435c377f",
+        "hash": "693a1c404c724fed5476dd15e2c15b9b83e16b7c8c82728bd63d2a68435c377f"
+      },
+      "decodeError": {
+        "artifactId": "saved-result-79aba33f5a398c870ba1587908302518c21ddf3bd10a39bbbe6c216b3ecdd0a4",
+        "hash": "79aba33f5a398c870ba1587908302518c21ddf3bd10a39bbbe6c216b3ecdd0a4"
+      },
+      "envelope": {
+        "artifactId": "saved-result-427314e9a747f176aa79709924b4b8f78f4ca24e9dbde38ffcbe2a795308e647",
+        "hash": "427314e9a747f176aa79709924b4b8f78f4ca24e9dbde38ffcbe2a795308e647"
+      },
+      "events": {
+        "artifactId": "saved-result-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d",
+        "hash": "9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d"
+      },
+      "final": {
+        "artifactId": "saved-result-d616095816c463a466f40d9dd1df2d9531a3a09011a53b4f9907e6b78ebf2d44",
+        "hash": "d616095816c463a466f40d9dd1df2d9531a3a09011a53b4f9907e6b78ebf2d44"
+      },
+      "normalization": {
+        "artifactId": "saved-result-49308c176f45c4ac0a873c3da367454e00d54b8ce1aa012c21e4a9ef0777ddca",
+        "hash": "49308c176f45c4ac0a873c3da367454e00d54b8ce1aa012c21e4a9ef0777ddca"
+      },
+      "outcome": {
+        "artifactId": "saved-result-77fb7a79c22805164c509172ee601ffdd216d06cbd71cea58d213a34a6d553ff",
+        "hash": "77fb7a79c22805164c509172ee601ffdd216d06cbd71cea58d213a34a6d553ff"
+      },
+      "owner": {
+        "artifactId": "saved-result-acbb09cde71c2a9f9ecf56c1a6e203f6510ea0dad96cc82e2b6f21c4438b7134",
+        "hash": "acbb09cde71c2a9f9ecf56c1a6e203f6510ea0dad96cc82e2b6f21c4438b7134"
+      },
+      "plan": {
+        "artifactId": "saved-result-bd36d13d8d9aa271afa51b6b4071fbcbcadedc4a164d5b231d227db8d6ff0d66",
+        "hash": "bd36d13d8d9aa271afa51b6b4071fbcbcadedc4a164d5b231d227db8d6ff0d66"
+      },
+      "process": {
+        "artifactId": "saved-result-a72b359d4b794653e062dae9e5eb8a1f30d0d885ba74f8179b3ea7875ad0aa24",
+        "hash": "a72b359d4b794653e062dae9e5eb8a1f30d0d885ba74f8179b3ea7875ad0aa24"
+      },
+      "runtimeContract": {
+        "artifactId": "saved-result-d2566400ba9f01e9be4ef435d7490be7cd6276e76e4328cba8ffda21ff1794c6",
+        "hash": "d2566400ba9f01e9be4ef435d7490be7cd6276e76e4328cba8ffda21ff1794c6"
+      },
+      "schema": {
+        "artifactId": "saved-result-cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705",
+        "hash": "cf9710eef213f3273a6935a51f37e37baa2f89f1fa12e7c7e7e5ee809d3ad705"
+      },
+      "usage": {
+        "artifactId": "saved-result-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981",
+        "hash": "b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981"
+      },
+      "usageLedger": {
+        "artifactId": "saved-result-6732aa372b840121fd1df47a03c1201ef9ae59f6baa807707a19368caa1978a3",
+        "hash": "6732aa372b840121fd1df47a03c1201ef9ae59f6baa807707a19368caa1978a3"
+      },
+      "usageObservations": [
+        {
+          "artifactId": "saved-result-9718802b72542bf2646a81bd686922db4a27871b559449d5ad69b40f118cb924",
+          "hash": "9718802b72542bf2646a81bd686922db4a27871b559449d5ad69b40f118cb924"
+        },
+        {
+          "artifactId": "saved-result-0b3b46c3f40dc934c01cd814a205c1cf41de19ed4624c00cfd74238efac93beb",
+          "hash": "0b3b46c3f40dc934c01cd814a205c1cf41de19ed4624c00cfd74238efac93beb"
+        }
+      ]
+    },
+    "attempt": 1,
+    "attemptStartHead": "d364822168f3ed61001981efc60e0b35d692ddbc",
+    "capturedAt": "2026-10-10T23:17:51.595Z",
+    "captureOwner": "fdb7777c423331fb0ac6f542a9b9d0833bf6a0acd6785af869f37b00119ee411",
+    "classification": "execution-format-failure-v1",
+    "completeness": {
+      "complete": true,
+      "parts": [
+        "original-process",
+        "original-stream",
+        "actual-usage",
+        "successful-plan",
+        "verifier-not-entered",
+        "tree-index-bundle-files"
+      ]
+    },
+    "decoder": "strict-execution-v1",
+    "executor": {
+      "configHash": "4f5f7da431b49be1f14d3c904d59f678a24b3c0a72b08996f899a530e07c26ac",
+      "kind": "codex"
+    },
+    "frozenContractHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "identity": {
+      "envelopeHash": "427314e9a747f176aa79709924b4b8f78f4ca24e9dbde38ffcbe2a795308e647",
+      "executionId": "execution-1",
+      "generation": 1,
+      "graphVersion": 1,
+      "groupId": "group-1",
+      "runId": "run-1",
+      "targetVersion": 1,
+      "taskId": "task-1",
+      "workItemId": "work-1"
+    },
+    "process": {
+      "code": 0,
+      "isolated": true,
+      "reason": "completed",
+      "signal": null
+    },
+    "resolvedBase": "d364822168f3ed61001981efc60e0b35d692ddbc",
+    "schema": "ccloop-execution-format-failure-v1",
+    "snapshot": {
+      "artifactId": "saved-result-c478a3710f19d09ca85e5f5e729abb0bf30fc28e27c60242f3acbcce687d30bf",
+      "hash": "c478a3710f19d09ca85e5f5e729abb0bf30fc28e27c60242f3acbcce687d30bf"
+    },
+    "usage": {
+      "highWater": 2,
+      "tokenUsage": 15
+    },
+    "verifier": {
+      "entered": false,
+      "proof": {
+        "artifactId": "saved-result-4655b63a77a3f36044a046acda55f69f8d681d6afe17ae6ee98590c7ed8d68c1",
+        "hash": "4655b63a77a3f36044a046acda55f69f8d681d6afe17ae6ee98590c7ed8d68c1"
+      }
+    }
+  },
+  "capsuleThroughCore": {
+    "rc": 2,
+    "stdout": "",
+    "stderr": "control-evidence-ref-invalid\n"
+  },
+  "snapshotThroughCore": {
+    "rc": 2,
+    "stdout": "",
+    "stderr": "control-evidence-ref-invalid\n"
+  },
+  "coreRefsChecked": 18
+}

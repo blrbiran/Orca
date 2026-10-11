@@ -1,0 +1,56 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/runtime/codex/protocol.test.ts (38 tests) 10ms
+ ❯ tests/runtime/codex/executionFormatFailure.test.ts (3 tests | 1 failed) 628ms
+   × keeps failed execution usage and original bytes independently of missing core fields 291ms
+     → expected ExecutionFormatFailure: SyntaxError: Unex… { …(5) } to match object { observedTokens: 15, …(3) }
+(2 matching properties omitted from actual)
+ ✓ tests/runtime/codex/finalExtraction.test.ts (19 tests) 3161ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/runtime/codex/executionFormatFailure.test.ts > keeps failed execution usage and original bytes independently of missing core fields
+AssertionError: expected ExecutionFormatFailure: SyntaxError: Unex… { …(5) } to match object { observedTokens: 15, …(3) }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+- Object {
++ ExecutionFormatFailure {
+    "modelUsage": Array [
+      Object {
+        "cacheRead": 0,
+        "cacheWrite": 0,
+-       "input": 10,
++       "input": 12,
+        "model": "fixture",
+-       "output": 5,
++       "output": 3,
+      },
+    ],
+    "normalization": Object {
+      "status": "unavailable",
+    },
+    "observedTokens": 15,
+    "usageEvidence": Object {
+      "normalizedTotal": 15,
+    },
+  }
+
+ ❯ tests/runtime/codex/executionFormatFailure.test.ts:15:17
+     13|   const error=await new CodexAdapter({...f.config,command:[...f.config…
+     14|   expect(error).toBeInstanceOf(ExecutionFormatFailure);
+     15|   expect(error).toMatchObject({observedTokens:15,usageEvidence:{normal…
+       |                 ^
+     16|   expect(await readFile(join(error.evidenceDir,"final.json"),"utf8")).…
+     17|   expect(JSON.parse(await readFile(join(error.evidenceDir,"usage.json"…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 59 passed (60)
+   Start at  07:06:28
+   Duration  3.55s (transform 136ms, setup 36ms, collect 228ms, tests 3.80s, environment 0ms, prepare 179ms)
+

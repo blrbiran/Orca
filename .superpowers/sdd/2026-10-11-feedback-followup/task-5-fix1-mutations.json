@@ -1,0 +1,362 @@
+[
+  {
+    "name": "base-pin",
+    "file": "src/controller/runLoop.ts",
+    "edits": [
+      [
+        ", initializedBase ?? undefined)).worktreePath;",
+        ")).worktreePath;",
+        1
+      ]
+    ],
+    "command": [
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task5-fix1-mutations-20261011",
+      "t5-fix1-mutant-base-pin",
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5fm.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-fix1-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts -t 'movement before' --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-fix1-mutant-base-pin/tests.json"
+    ],
+    "rc": 1,
+    "failures": [
+      {
+        "name": "fix I1 freezes the materialized base across target movement before workspace creation",
+        "messages": [
+          "AssertionError: expected '2faf8453477b834c9fea7bfec4e4c43208556\u2026' to be '2fa561921e9bf0b15ddc7d4e13f629d00dbeb\u2026' // Object.is equality\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/control/savedResultEvidence.test.ts:185:74\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)\n    at runBaseTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/base.BZZh4cSm.js:29:3)"
+        ]
+      }
+    ],
+    "skippedUnselected": 22,
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "log": "/private/tmp/orca-followup-runs/t5-fix1-mutant-base-pin/output.log"
+  },
+  {
+    "name": "base-reread",
+    "file": "src/controller/runLoop.ts",
+    "edits": [
+      [
+        "let resolvedSourceBase = options?.firstWorkspaceInput ? null : initializedBase;",
+        "let resolvedSourceBase = options?.firstWorkspaceInput ? null : (await execFileAsync(\"/usr/bin/git\", [\"rev-parse\",\"HEAD\"], {cwd:contract.context.repoPath})).stdout.trim();",
+        1
+      ]
+    ],
+    "command": [
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task5-fix1-mutations-20261011",
+      "t5-fix1-mutant-base-reread",
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5fm.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-fix1-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts -t 'movement after' --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-fix1-mutant-base-reread/tests.json"
+    ],
+    "rc": 1,
+    "failures": [
+      {
+        "name": "fix I1 freezes the materialized base across target movement after workspace creation",
+        "messages": [
+          "AssertionError: expected '414f3f9a87c965b6b3fa5a5db78a62f98e0b7\u2026' to be '49d460e12874251ad447f48f4b5493ba8e0eb\u2026' // Object.is equality\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/control/savedResultEvidence.test.ts:185:25\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)\n    at runBaseTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/base.BZZh4cSm.js:29:3)"
+        ]
+      }
+    ],
+    "skippedUnselected": 22,
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "log": "/private/tmp/orca-followup-runs/t5-fix1-mutant-base-reread/output.log"
+  },
+  {
+    "name": "retry-origin",
+    "file": "src/controller/runLoop.ts",
+    "edits": [
+      [
+        "    let initializedBase: string | null = null;\n",
+        "",
+        1
+      ],
+      [
+        "  let observedTokens = 0;",
+        "  let observedTokens = 0;\n  let initializedBase: string | null = null;",
+        1
+      ],
+      [
+        "if (!(attempt === 1 && options?.firstWorkspaceInput) && options?.executionFormatCapture) {",
+        "if (!(attempt === 1 && options?.firstWorkspaceInput) && options?.executionFormatCapture && initializedBase === null) {",
+        1
+      ]
+    ],
+    "command": [
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task5-fix1-mutations-20261011",
+      "t5-fix1-mutant-retry-origin",
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5fm.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-fix1-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts -t 'ordinary retry choice' --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-fix1-mutant-retry-origin/tests.json"
+    ],
+    "rc": 1,
+    "failures": [
+      {
+        "name": "fix I1 preserves ordinary retry choice while binding each attempt's actual origin",
+        "messages": [
+          "AssertionError: expected '01d9f07baf95526783fac4c2b166ee29010d5\u2026' to be '4197a4f2fd022b5c406cf83f2ee25726ac81b\u2026' // Object.is equality\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/control/savedResultEvidence.test.ts:237:51\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)"
+        ]
+      }
+    ],
+    "skippedUnselected": 22,
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "log": "/private/tmp/orca-followup-runs/t5-fix1-mutant-retry-origin/output.log"
+  },
+  {
+    "name": "immutable-base",
+    "file": "src/controller/executionFormatFailure.ts",
+    "edits": [
+      [
+        "  if(!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(acceptedBase))return null;\n",
+        "",
+        1
+      ]
+    ],
+    "command": [
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task5-fix1-mutations-20261011",
+      "t5-fix1-mutant-immutable-base",
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5fm.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-fix1-mutations-20261011/node_modules/vitest/vitest.mjs run tests/controller/executionBase.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-fix1-mutant-immutable-base/tests.json"
+    ],
+    "rc": 1,
+    "failures": [
+      {
+        "name": "proves an immutable original base distinct from the real restored checkpoint HEAD",
+        "messages": [
+          "AssertionError: expected 'HEAD' to be null\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/controller/executionBase.test.ts:26:72\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)"
+        ]
+      }
+    ],
+    "skippedUnselected": 0,
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "log": "/private/tmp/orca-followup-runs/t5-fix1-mutant-immutable-base/output.log"
+  },
+  {
+    "name": "base-ancestry",
+    "file": "src/controller/executionFormatFailure.ts",
+    "edits": [
+      [
+        "    await git(worktreePath,\"--no-replace-objects\",\"merge-base\",\"--is-ancestor\",acceptedBase,restoredHead);\n",
+        "",
+        1
+      ]
+    ],
+    "command": [
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task5-fix1-mutations-20261011",
+      "t5-fix1-mutant-base-ancestry",
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5fm.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-fix1-mutations-20261011/node_modules/vitest/vitest.mjs run tests/controller/executionBase.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-fix1-mutant-base-ancestry/tests.json"
+    ],
+    "rc": 1,
+    "failures": [
+      {
+        "name": "proves an immutable original base distinct from the real restored checkpoint HEAD",
+        "messages": [
+          "AssertionError: expected '2479a3a9d43d0e806ca084da1f476bc867e2e\u2026' to be null\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/controller/executionBase.test.ts:28:75\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)"
+        ]
+      }
+    ],
+    "skippedUnselected": 0,
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "log": "/private/tmp/orca-followup-runs/t5-fix1-mutant-base-ancestry/output.log"
+  },
+  {
+    "name": "raw-ancestry",
+    "file": "src/controller/executionFormatFailure.ts",
+    "edits": [
+      [
+        "git(worktreePath,\"--no-replace-objects\",\"merge-base\"",
+        "git(worktreePath,\"merge-base\"",
+        1
+      ]
+    ],
+    "command": [
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task5-fix1-mutations-20261011",
+      "t5-fix1-mutant-raw-ancestry",
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5fm.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-fix1-mutations-20261011/node_modules/vitest/vitest.mjs run tests/controller/executionBase.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-fix1-mutant-raw-ancestry/tests.json"
+    ],
+    "rc": 1,
+    "failures": [
+      {
+        "name": "proves an immutable original base distinct from the real restored checkpoint HEAD",
+        "messages": [
+          "AssertionError: expected '7b586a58e0162bfa9399ae89c8ef4967d2816\u2026' to be null\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/controller/executionBase.test.ts:33:75\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11\n    at withEnv (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:90:5)\n    at run (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:112:3)\n    at runBaseTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/base.BZZh4cSm.js:29:3)"
+        ]
+      }
+    ],
+    "skippedUnselected": 0,
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "log": "/private/tmp/orca-followup-runs/t5-fix1-mutant-raw-ancestry/output.log"
+  },
+  {
+    "name": "special-mode",
+    "file": "src/controller/executionFormatFailure.ts",
+    "edits": [
+      [
+        "  if ((mode & 0o7000) !== 0) throw new Error(\"saved-result-mode-unsupported\");\n",
+        "",
+        1
+      ]
+    ],
+    "command": [
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task5-fix1-mutations-20261011",
+      "t5-fix1-mutant-special-mode",
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5fm.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-fix1-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts -t 'fix I2 refuses unsupported' --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-fix1-mutant-special-mode/tests.json"
+    ],
+    "rc": 1,
+    "failures": [
+      {
+        "name": "fix I2 refuses unsupported file mode 2541 before complete capture",
+        "messages": [
+          "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/control/savedResultEvidence.test.ts:198:31\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11"
+        ]
+      },
+      {
+        "name": "fix I2 refuses unsupported file mode 1517 before complete capture",
+        "messages": [
+          "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/control/savedResultEvidence.test.ts:198:31\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11"
+        ]
+      },
+      {
+        "name": "fix I2 refuses unsupported directory mode 1517 before complete capture",
+        "messages": [
+          "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/control/savedResultEvidence.test.ts:198:31\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11"
+        ]
+      },
+      {
+        "name": "fix I2 refuses unsupported directory mode 1005 before complete capture",
+        "messages": [
+          "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/control/savedResultEvidence.test.ts:198:31\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11"
+        ]
+      },
+      {
+        "name": "fix I2 refuses unsupported root mode 1005 before complete capture",
+        "messages": [
+          "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/control/savedResultEvidence.test.ts:198:31\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11"
+        ]
+      }
+    ],
+    "skippedUnselected": 18,
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "log": "/private/tmp/orca-followup-runs/t5-fix1-mutant-special-mode/output.log"
+  },
+  {
+    "name": "entry-stability-mode",
+    "file": "src/controller/executionFormatFailure.ts",
+    "edits": [
+      [
+        "  const walk=async(directory:string)=>{",
+        "  let modePass=0;\n  const walk=async(directory:string)=>{\n    if(directory===\"\")modePass++;",
+        1
+      ],
+      [
+        "mode=supportedMode(stat.mode);",
+        "mode=modePass>1?stat.mode&0o777:supportedMode(stat.mode);",
+        1
+      ]
+    ],
+    "command": [
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task5-fix1-mutations-20261011",
+      "t5-fix1-mutant-entry-stability-mode",
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5fm.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-fix1-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts -t 'special bits introduced during' --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-fix1-mutant-entry-stability-mode/tests.json"
+    ],
+    "rc": 1,
+    "failures": [
+      {
+        "name": "fix I2 refuses file special bits introduced during the stability pass",
+        "messages": [
+          "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/control/savedResultEvidence.test.ts:210:31\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11"
+        ]
+      },
+      {
+        "name": "fix I2 refuses directory special bits introduced during the stability pass",
+        "messages": [
+          "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/control/savedResultEvidence.test.ts:210:31\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11"
+        ]
+      }
+    ],
+    "skippedUnselected": 21,
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "log": "/private/tmp/orca-followup-runs/t5-fix1-mutant-entry-stability-mode/output.log"
+  },
+  {
+    "name": "root-stability-mode",
+    "file": "src/controller/executionFormatFailure.ts",
+    "edits": [
+      [
+        "supportedMode((await lstat(tree)).mode)!==rootMode",
+        "((await lstat(tree)).mode&0o777)!==rootMode",
+        2
+      ]
+    ],
+    "command": [
+      "python3",
+      "/private/tmp/orca-followup-run.py",
+      "/private/tmp/ccloop-task5-fix1-mutations-20261011",
+      "t5-fix1-mutant-root-stability-mode",
+      "/bin/zsh",
+      "-c",
+      "task_tmp=$(mktemp -d /private/tmp/t5fm.XXXXXX); chmod 700 \"$task_tmp\"; export TMPDIR=\"$task_tmp\"; exec node /private/tmp/ccloop-task5-fix1-mutations-20261011/node_modules/vitest/vitest.mjs run tests/control/savedResultEvidence.test.ts -t 'root special bits introduced between' --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-fix1-mutant-root-stability-mode/tests.json"
+    ],
+    "rc": 1,
+    "failures": [
+      {
+        "name": "fix I2 refuses root special bits introduced between capture passes",
+        "messages": [
+          "AssertionError: expected { \u2026(5) } to match object { capsule: null, \u2026(1) }\n(12 matching properties omitted from actual)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:1134:13)\n    at Proxy.<anonymous> (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/expect/dist/index.js:972:17)\n    at Proxy.methodWrapper (file:///Users/biran/code/skills/loop/ccloop/node_modules/chai/index.js:1686:25)\n    at /private/tmp/ccloop-task5-fix1-mutations-20261011/tests/control/savedResultEvidence.test.ts:224:31\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/biran/code/skills/loop/ccloop/node_modules/@vitest/runner/dist/index.js:1271:3)\n    at file:///Users/biran/code/skills/loop/ccloop/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11"
+        ]
+      }
+    ],
+    "skippedUnselected": 22,
+    "restoredDiffBytes": [
+      0,
+      0
+    ],
+    "log": "/private/tmp/orca-followup-runs/t5-fix1-mutant-root-stability-mode/output.log"
+  }
+]

@@ -1,0 +1,14 @@
+
+## Initial source investigation — implementer, 2026-10-11
+
+Task 6 remains incomplete. Product source/tests are unchanged at ccloop BASE 367066b38f171d01663d7b767fdbfecca7d4f53c. No new feature advertisement, test gate, mutation or commit is claimed. Applicable task brief/bridge/global constraints, complete binding recovery spec, implementation rulings, RTK, CLAUDE, TDD and verification/debugging guidance were read.
+
+Architectural questions sent to controller before constructing positive fixtures:
+
+1. Legacy `src/control/snapshot.ts` in Orca has no rootMode. `archive.ts` captureTree stores stat.mode & 0o777, with no initial special-mode refusal. It therefore cannot prove original root permissions or absence of special bits. The legacy spec intentionally requires archived snapshot HEAD to equal the published attempt ref. Whether that archived post-publication candidate, its encoded modes, and a newly created private restore root are sufficient needs an explicit boundary ruling; do not claim complete original pre-cleanup state.
+2. ccloop `workspace/worktreeManager.ts` publishAttemptCommit stages all files, commits, and publishes attempt refs; runLoop cleanup removes the original worktree. `control/resultRepository.ts` then clones the attempt ref when the worktree is absent. That published snapshot does not retain the original staged/unstaged split or ignored files. The exact legacy accepted authority needs to match this producer reality.
+3. Pre-Task5 ccloop commit 5b0adea `src/runtime/codex/codexAdapter.ts` parses the strict result envelope before successful usage decoding; its generic Error carries no observedTokens. Genuine old bare-output format failures record unknown usage. Orca has an existing explicit owner settlement mechanism (`settleUnknownUsage.ts` / `usageSettlement.ts`), backed by command receipts and immutable report/stop-proof refs. A positive fixture must use that real settlement or remain ineligible; raw observed tokens cannot silently rewrite accounting.
+4. Current Task5 capture requires normalizeExecutionFinal.status unavailable and uses strict-execution-v1, the same current normalizer. Current capsules cannot become valid normalized executions under that unchanged version. No artificial capsule with valid final bytes should stand in for genuine production evidence.
+5. ccloop does not own Orca current task membership or owner command receipts. Recovery package/current-membership/explicit-settlement authority must be agreed with the Task7 consumer; immutable evidence alone cannot establish no newer task run at provider entry.
+
+Read-only source evidence hashes are in task-6-investigation-source-manifest.json. Initial `/usr/bin/git diff --check` returned 0; `/usr/bin/git diff --stat` was empty. The only status entry observed was pre-existing untracked node_modules. No original repositories/runtime/pin were modified.

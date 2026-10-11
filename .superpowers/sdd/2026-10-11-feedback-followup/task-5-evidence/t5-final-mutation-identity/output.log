@@ -1,0 +1,43 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-mutations-20261011
+
+stdout | tests/control/savedResultEvidence.test.ts > captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3
+TASK5_V3_COLLECTION:{"events":[{"runId":"run-1","generation":1,"eventSeq":1,"bucket":"work","cumulative":{"tokens":15,"activeMs":62,"attempts":1,"sessions":1},"source":{"artifactId":"evidence-9718802b72542bf2646a81bd686922db4a27871b559449d5ad69b40f118cb924","hash":"9718802b72542bf2646a81bd686922db4a27871b559449d5ad69b40f118cb924"},"byModel":[{"model":"fixture","input":10,"output":5,"cacheRead":0,"cacheWrite":0}]},{"runId":"run-1","generation":1,"eventSeq":2,"bucket":"work","cumulative":{"tokens":30,"activeMs":144,"attempts":1,"sessions":1},"source":{"artifactId":"evidence-94b95144fc608dc16b91d47d24b14f07695b84b87f51ae6919808f182e1f47f2","hash":"94b95144fc608dc16b91d47d24b14f07695b84b87f51ae6919808f182e1f47f2"},"byModel":[{"model":"fixture","input":20,"output":10,"cacheRead":0,"cacheWrite":0}]},{"runId":"run-1","generation":1,"eventSeq":3,"bucket":"handoff","cumulative":{"tokens":0,"activeMs":0,"attempts":0,"sessions":0},"source":{"artifactId":"evidence-b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84","hash":"b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84"}}],"candidate":{"groupId":"group-1","workItemId":"work-1","taskId":"task-1","runId":"run-1","generation":1,"graphVersion":1,"targetVersion":1,"checkpointId":"checkpoint-d2e7760d86dd6ff3f9e56d3835866ff4ff84fd949601f476","usageHighWater":3,"result":"failed","artifacts":[{"artifactId":"evidence-3031d41e97e1fa9c294d1ead72e7f9ac48c006402f40ff245f5b3df92ad4c3c6","hash":"3031d41e97e1fa9c294d1ead72e7f9ac48c006402f40ff245f5b3df92ad4c3c6"},{"artifactId":"evidence-79aba33f5a398c870ba1587908302518c21ddf3bd10a39bbbe6c216b3ecdd0a4","hash":"79aba33f5a398c870ba1587908302518c21ddf3bd10a39bbbe6c216b3ecdd0a4"},{"artifactId":"evidence-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d","hash":"9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d"},{"artifactId":"evidence-d616095816c463a466f40d9dd1df2d9531a3a09011a53b4f9907e6b78ebf2d44","hash":"d616095816c463a466f40d9dd1df2d9531a3a09011a53b4f9907e6b78ebf2d44"},{"artifactId":"evidence-943c6af8a1050033696e066c7e1647b3ddee06fce274be4a01c77d521aaa1245","hash":"943c6af8a1050033696e066c7e1647b3ddee06fce274be4a01c77d521aaa1245"},{"artifactId":"evidence-a393fb9c84622434454429339e69c6fa1e9f77d2fe387e000f49c9cc9ddc93f7","hash":"a393fb9c84622434454429339e69c6fa1e9f77d2fe387e000f49c9cc9ddc93f7"},{"artifactId":"evidence-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},{"artifactId":"evidence-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981","hash":"b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981"},{"artifactId":"evidence-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d","hash":"9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d"},{"artifactId":"evidence-1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1","hash":"1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1"},{"artifactId":"evidence-cbcd595e824a4b619f4089f8ec4b6551d49fa1daa837ebb350b4fe14089f5d67","hash":"cbcd595e824a4b619f4089f8ec4b6551d49fa1daa837ebb350b4fe14089f5d67"},{"artifactId":"evidence-b5fc0128a585f66d6f103596e9efb74970c139de7f2cbbd0a8fb50811c94af0c","hash":"b5fc0128a585f66d6f103596e9efb74970c139de7f2cbbd0a8fb50811c94af0c"},{"artifactId":"evidence-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},{"artifactId":"evidence-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981","hash":"b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981"},{"artifactId":"evidence-a0f6287fed1fa12cffa3691d52d641c423fd667390aac2f94fc8706e35b5e5cd","hash":"a0f6287fed1fa12cffa3691d52d641c423fd667390aac2f94fc8706e35b5e5cd"},{"artifactId":"evidence-75e57c8712f54bd10cfa8cabd1f0ce49af2ef89d6d39239925f0ec265651ea4e","hash":"75e57c8712f54bd10cfa8cabd1f0ce49af2ef89d6d39239925f0ec265651ea4e"},{"artifactId":"evidence-bd36d13d8d9aa271afa51b6b4071fbcbcadedc4a164d5b231d227db8d6ff0d66","hash":"bd36d13d8d9aa271afa51b6b4071fbcbcadedc4a164d5b231d227db8d6ff0d66"},{"artifactId":"evidence-d5bbe294e4e453aed484af272dc2502cab59dc46b5ed80a0207fdedd1142a0df","hash":"d5bbe294e4e453aed484af272dc2502cab59dc46b5ed80a0207fdedd1142a0df"}],"snapshot":null,"missing":["attempts/1/execution.json","attempts/1/verify.json"],"unresolvedRequestIds":[],"stopProof":{"executionId":"execution-1","generation":1,"isolated":true,"source":{"artifactId":"evidence-0c64c93888878b6346f5650d06e9d23e2e5743b474d7c90194003ead08510e33","hash":"0c64c93888878b6346f5650d06e9d23e2e5743b474d7c90194003ead08510e33"}},"terminalOutcome":"failed","handoff":{"artifactId":"evidence-d5bbe294e4e453aed484af272dc2502cab59dc46b5ed80a0207fdedd1142a0df","hash":"d5bbe294e4e453aed484af272dc2502cab59dc46b5ed80a0207fdedd1142a0df"}},"terminal":{"status":"failed","currentAttempt":1,"attemptsUsed":1,"lastTransitionAt":"2026-10-10T23:40:40.735Z","waitingOnHuman":false,"stopReason":"ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-TJyqi6/source/run/codex/1/execute/call-13pLG7","budgetSnapshot":{"attemptsRemaining":1,"timeRemainingMs":29856,"tokenBudgetRemaining":970},"recentFailures":[]},"progress":{"status":"failed","currentAttempt":1,"attemptsUsed":1,"attemptsRemaining":1,"lastTransitionAt":"2026-10-10T23:40:40.735Z"}}
+
+ ❯ tests/control/savedResultEvidence.test.ts (10 tests | 1 failed) 14281ms
+   ✓ captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 2154ms
+   ✓ records capture failure as unavailable and preserves original failed outcome 1395ms
+   ✓ binds frozen authority separately from a genuinely narrowed protocol4 runtime contract 1666ms
+   × refuses a hash-valid capsule with another source identity 1726ms
+     → expected '' to contain 'control-saved-result-authority-invalid'
+   ✓ rejects symlinked evidence namespaces even when referenced bytes exist 1580ms
+   ✓ refuses rewrite-runtime bytes that differ from the actual execution authority 1051ms
+   ✓ refuses rewrite-config bytes that differ from the actual execution authority 1048ms
+   ✓ recursively serves original ledger refs only through exact capsule aliases and validates copied bytes 3438ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > refuses a hash-valid capsule with another source identity
+AssertionError: expected '' to contain 'control-saved-result-authority-invalid'
+
+- Expected
++ Received
+
+- control-saved-result-authority-invalid
+
+ ❯ tests/control/savedResultEvidence.test.ts:120:72
+    118|  const forged=await writeSavedBytes(f.sourceDir,Buffer.from(canonicalJ…
+    119|  await writeFile(savedResultIndexPath(f.sourceDir),canonicalJson({...p…
+    120|  expect((await f.rpc('saved-result-evidence',{input:f.input})).stderr)…
+       |                                                                        ^
+    121| },30000);
+    122| it('rejects symlinked evidence namespaces even when referenced bytes e…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  07:40:38
+   Duration  14.83s (transform 231ms, setup 15ms, collect 307ms, tests 14.28s, environment 0ms, prepare 63ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-final-mutation-identity/tests.json

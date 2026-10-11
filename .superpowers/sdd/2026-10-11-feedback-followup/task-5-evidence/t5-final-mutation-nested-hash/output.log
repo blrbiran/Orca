@@ -1,0 +1,62 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-mutations-20261011
+
+stdout | tests/control/savedResultEvidence.test.ts > captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3
+TASK5_V3_COLLECTION:{"events":[{"runId":"run-1","generation":1,"eventSeq":1,"bucket":"work","cumulative":{"tokens":15,"activeMs":60,"attempts":1,"sessions":1},"source":{"artifactId":"evidence-8ba0861a60cb9277ebcc0d4cc3190fedaadf39810ba8697ce6b41dce5bf1617d","hash":"8ba0861a60cb9277ebcc0d4cc3190fedaadf39810ba8697ce6b41dce5bf1617d"},"byModel":[{"model":"fixture","input":10,"output":5,"cacheRead":0,"cacheWrite":0}]},{"runId":"run-1","generation":1,"eventSeq":2,"bucket":"work","cumulative":{"tokens":30,"activeMs":138,"attempts":1,"sessions":1},"source":{"artifactId":"evidence-e2521ed2341aae05056236e3cbe69b2c5ee72be9ace9eea940554d3b8a6ea0a3","hash":"e2521ed2341aae05056236e3cbe69b2c5ee72be9ace9eea940554d3b8a6ea0a3"},"byModel":[{"model":"fixture","input":20,"output":10,"cacheRead":0,"cacheWrite":0}]},{"runId":"run-1","generation":1,"eventSeq":3,"bucket":"handoff","cumulative":{"tokens":0,"activeMs":0,"attempts":0,"sessions":0},"source":{"artifactId":"evidence-b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84","hash":"b5a3bdd7760bca051f71189b5bcb658b13570f1f0b819ede1882f3feafdadb84"}}],"candidate":{"groupId":"group-1","workItemId":"work-1","taskId":"task-1","runId":"run-1","generation":1,"graphVersion":1,"targetVersion":1,"checkpointId":"checkpoint-3dd64f81f2a24264c3a19a1db6fe47630e6528545113bb6e","usageHighWater":3,"result":"failed","artifacts":[{"artifactId":"evidence-c3357659eda0a0923c8ee89ec49a2a81dbfa4a7be3b82511e699c596b3fdac23","hash":"c3357659eda0a0923c8ee89ec49a2a81dbfa4a7be3b82511e699c596b3fdac23"},{"artifactId":"evidence-79aba33f5a398c870ba1587908302518c21ddf3bd10a39bbbe6c216b3ecdd0a4","hash":"79aba33f5a398c870ba1587908302518c21ddf3bd10a39bbbe6c216b3ecdd0a4"},{"artifactId":"evidence-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d","hash":"9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d"},{"artifactId":"evidence-d616095816c463a466f40d9dd1df2d9531a3a09011a53b4f9907e6b78ebf2d44","hash":"d616095816c463a466f40d9dd1df2d9531a3a09011a53b4f9907e6b78ebf2d44"},{"artifactId":"evidence-90f9b10d5341d69a50f948a6bf94de0c4774c6b5865ce90275bb78af4293bbc5","hash":"90f9b10d5341d69a50f948a6bf94de0c4774c6b5865ce90275bb78af4293bbc5"},{"artifactId":"evidence-a8479882b20d5217f06243e83d3c907e46982e0cba450d95836799098d3529fe","hash":"a8479882b20d5217f06243e83d3c907e46982e0cba450d95836799098d3529fe"},{"artifactId":"evidence-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},{"artifactId":"evidence-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981","hash":"b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981"},{"artifactId":"evidence-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d","hash":"9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d"},{"artifactId":"evidence-1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1","hash":"1f8b24c3361948d1e683bcdbe3eb237477c9a1685a8da49aa66f172c825120a1"},{"artifactId":"evidence-f82b041d4b0dbf3e5cf7137513a2b3532cb2916b92a1a36d669b4d215169e107","hash":"f82b041d4b0dbf3e5cf7137513a2b3532cb2916b92a1a36d669b4d215169e107"},{"artifactId":"evidence-8c3060c9ba350a5ed910ebdd4c8c1d8e35c46cd309290766ba9a8fb17183fab1","hash":"8c3060c9ba350a5ed910ebdd4c8c1d8e35c46cd309290766ba9a8fb17183fab1"},{"artifactId":"evidence-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},{"artifactId":"evidence-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981","hash":"b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981"},{"artifactId":"evidence-7b6b520f06aa91f8092d3368ead7a36aebced715cba4676814a54ac1926a6ec6","hash":"7b6b520f06aa91f8092d3368ead7a36aebced715cba4676814a54ac1926a6ec6"},{"artifactId":"evidence-4e946d8ae2281fc92323fc16567957e3798946eb5f5f8aa43fded7148618702d","hash":"4e946d8ae2281fc92323fc16567957e3798946eb5f5f8aa43fded7148618702d"},{"artifactId":"evidence-bd36d13d8d9aa271afa51b6b4071fbcbcadedc4a164d5b231d227db8d6ff0d66","hash":"bd36d13d8d9aa271afa51b6b4071fbcbcadedc4a164d5b231d227db8d6ff0d66"},{"artifactId":"evidence-79975435b5a0d0edb976399d350434383d4f4732a15fd1af2b91c2679b955efb","hash":"79975435b5a0d0edb976399d350434383d4f4732a15fd1af2b91c2679b955efb"}],"snapshot":null,"missing":["attempts/1/execution.json","attempts/1/verify.json"],"unresolvedRequestIds":[],"stopProof":{"executionId":"execution-1","generation":1,"isolated":true,"source":{"artifactId":"evidence-fe5220e6685f57ce62af6a0245af3e0ea43c26ab46b1626bf899ecf4881b60fb","hash":"fe5220e6685f57ce62af6a0245af3e0ea43c26ab46b1626bf899ecf4881b60fb"}},"terminalOutcome":"failed","handoff":{"artifactId":"evidence-79975435b5a0d0edb976399d350434383d4f4732a15fd1af2b91c2679b955efb","hash":"79975435b5a0d0edb976399d350434383d4f4732a15fd1af2b91c2679b955efb"}},"terminal":{"status":"failed","currentAttempt":1,"attemptsUsed":1,"lastTransitionAt":"2026-10-10T23:41:05.926Z","waitingOnHuman":false,"stopReason":"ExecutionFormatFailure: Error: codex-result-invalid: /private/tmp/results-task2-uC4EYW/source/run/codex/1/execute/call-k6QBYL","budgetSnapshot":{"attemptsRemaining":1,"timeRemainingMs":29862,"tokenBudgetRemaining":970},"recentFailures":[]},"progress":{"status":"failed","currentAttempt":1,"attemptsUsed":1,"attemptsRemaining":1,"lastTransitionAt":"2026-10-10T23:41:05.926Z"}}
+
+ ❯ tests/control/savedResultEvidence.test.ts (10 tests | 2 failed) 14004ms
+   × captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 2132ms
+     → expected '' to contain 'control-saved-result-hash-mismatch'
+   ✓ records capture failure as unavailable and preserves original failed outcome 1360ms
+   ✓ binds frozen authority separately from a genuinely narrowed protocol4 runtime contract 1704ms
+   ✓ refuses a hash-valid capsule with another source identity 1581ms
+   ✓ rejects symlinked evidence namespaces even when referenced bytes exist 1570ms
+   ✓ refuses rewrite-runtime bytes that differ from the actual execution authority 1040ms
+   ✓ refuses rewrite-config bytes that differ from the actual execution authority 1039ms
+   × recursively serves original ledger refs only through exact capsule aliases and validates copied bytes 3384ms
+     → expected '' to contain 'control-saved-result-hash-mismatch'
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3
+AssertionError: expected '' to contain 'control-saved-result-hash-mismatch'
+
+- Expected
++ Received
+
+- control-saved-result-hash-mismatch
+
+ ❯ tests/control/savedResultEvidence.test.ts:93:72
+     91|  expect((await f.rpc('saved-result-evidence',{input:changed})).code).n…
+     92|  await writeFile(savedResultPath(f.sourceDir,snap.files[0].ref),'tampe…
+     93|  expect((await f.rpc('saved-result-evidence',{input:f.input})).stderr)…
+       |                                                                        ^
+     94| },30000);
+     95| it('records capture failure as unavailable and preserves original fail…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > recursively serves original ledger refs only through exact capsule aliases and validates copied bytes
+AssertionError: expected '' to contain 'control-saved-result-hash-mismatch'
+
+- Expected
++ Received
+
+- control-saved-result-hash-mismatch
+
+ ❯ tests/control/savedResultEvidence.test.ts:153:118
+    151|  expect((await f.rpc('read-saved-result-evidence',{input:f.input,capsu…
+    152|  await writeFile(savedResultPath(f.sourceDir,alias.copy),'tampered cop…
+    153|  expect((await f.rpc('read-saved-result-evidence',{input:f.input,capsu…
+       |                                                                                                                      ^
+    154| },30000);
+    155| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 8 passed (10)
+   Start at  07:41:04
+   Duration  14.56s (transform 230ms, setup 13ms, collect 308ms, tests 14.00s, environment 0ms, prepare 39ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-final-mutation-nested-hash/tests.json

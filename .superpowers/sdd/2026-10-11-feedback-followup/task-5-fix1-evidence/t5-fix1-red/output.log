@@ -1,0 +1,138 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (20 tests | 10 failed | 10 skipped) 12396ms
+   × fix I1 freezes the materialized base across target movement before workspace creation 1952ms
+     → expected 'fed987d9454ab02dd86dfc69c7d31f6d07e19…' to be 'a97c05d83cba3e333908d114abf9fce8d9697…' // Object.is equality
+   × fix I1 freezes the materialized base across target movement after workspace creation 1679ms
+     → expected 'b85b6c060a3f22c60a654e73d4d6ef217ace6…' to be '6ff245a6c4b59a6ec02263a871713f6a6b6df…' // Object.is equality
+   × fix I1 keeps a distinct continuation HEAD but refuses missing original-base authority 1728ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses unsupported file mode 2541 before complete capture 1618ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses unsupported file mode 1517 before complete capture 996ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses unsupported directory mode 1517 before complete capture 970ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses unsupported directory mode 1005 before complete capture 1640ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses unsupported root mode 1005 before complete capture 1811ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses file special bits introduced during the stability pass 2ms
+     → Cannot redefine property: readdir
+   × fix I2 refuses directory special bits introduced during the stability pass 0ms
+     → Cannot redefine property: readdir
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I1 freezes the materialized base across target movement before workspace creation
+AssertionError: expected 'fed987d9454ab02dd86dfc69c7d31f6d07e19…' to be 'a97c05d83cba3e333908d114abf9fce8d9697…' // Object.is equality
+
+Expected: "a97c05d83cba3e333908d114abf9fce8d9697049"
+Received: "fed987d9454ab02dd86dfc69c7d31f6d07e19bbb"
+
+ ❯ tests/control/savedResultEvidence.test.ts:178:25
+    176|  const f=await world();const page=JSON.parse((await f.rpc("saved-resul…
+    177|  const c=await jsonRef(f,page.capsule,page.capsule);
+    178|  expect(c.resolvedBase).toBe(initializedHead);expect(c.attemptStartHea…
+       |                         ^
+    179|  expect((await exec("/usr/bin/git",["rev-parse","HEAD"],{cwd:f.repo}))…
+    180| },30000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I1 freezes the materialized base across target movement after workspace creation
+AssertionError: expected 'b85b6c060a3f22c60a654e73d4d6ef217ace6…' to be '6ff245a6c4b59a6ec02263a871713f6a6b6df…' // Object.is equality
+
+Expected: "6ff245a6c4b59a6ec02263a871713f6a6b6df9de"
+Received: "b85b6c060a3f22c60a654e73d4d6ef217ace6977"
+
+ ❯ tests/control/savedResultEvidence.test.ts:178:25
+    176|  const f=await world();const page=JSON.parse((await f.rpc("saved-resul…
+    177|  const c=await jsonRef(f,page.capsule,page.capsule);
+    178|  expect(c.resolvedBase).toBe(initializedHead);expect(c.attemptStartHea…
+       |                         ^
+    179|  expect((await exec("/usr/bin/git",["rev-parse","HEAD"],{cwd:f.repo}))…
+    180| },30000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I1 keeps a distinct continuation HEAD but refuses missing original-base authority
+AssertionError: expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+    "capsule": null,
+-   "reason": "saved-result-original-base-unavailable",
++   "reason": "saved-result-runtime-contract-mismatch",
+  }
+
+ ❯ tests/control/savedResultEvidence.test.ts:186:31
+    184|  expect((await exec("/usr/bin/git",["rev-parse","HEAD"],{cwd:f.input.w…
+    185|  const r=await f.rpc("saved-result-evidence",{input:f.input});expect(r…
+    186|  expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"save…
+       |                               ^
+    187|  expect(JSON.parse(await readFile(join(f.runDir,"loop-state.json"),"ut…
+    188| },30000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses unsupported file mode 2541 before complete capture
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses unsupported file mode 1517 before complete capture
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses unsupported directory mode 1517 before complete capture
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses unsupported directory mode 1005 before complete capture
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses unsupported root mode 1005 before complete capture
+AssertionError: expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "capsule": null,
+-   "reason": "saved-result-mode-unsupported",
++   "capsule": Object {
++     "artifactId": "saved-result-6a2ad1dd2489b7a8ee1efd4a07c71d0010fc993c589d5f82237dce5be617a353",
++     "hash": "6a2ad1dd2489b7a8ee1efd4a07c71d0010fc993c589d5f82237dce5be617a353",
++   },
++   "reason": null,
+  }
+
+ ❯ tests/control/savedResultEvidence.test.ts:191:31
+    189| it.each([["file",0o4755],["file",0o2755],["directory",0o2755],["direct…
+    190|  const f=await world(`special-${kind}-${mode}`);const r=await f.rpc("s…
+    191|  expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"save…
+       |                               ^
+    192| },30000);
+    193| it.each(["file","directory"])("fix I2 refuses %s special bits introduc…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses file special bits introduced during the stability pass
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses directory special bits introduced during the stability pass
+TypeError: Cannot redefine property: readdir
+ ❯ tests/control/savedResultEvidence.test.ts:195:5
+    193| it.each(["file","directory"])("fix I2 refuses %s special bits introduc…
+    194|  const readDirectory=fs.readdir;let passes=0;
+    195|  vi.spyOn(fs,"readdir").mockImplementation((async(path:any,...args:any…
+       |     ^
+    196|   if(String(path).endsWith("/run/worktrees/attempt-1")&&++passes===2){
+    197|    const entry=kind==="file"?join(String(path),"new.sh"):join(String(p…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ Test Files  1 failed (1)
+      Tests  10 failed | 10 skipped (20)
+   Start at  07:57:44
+   Duration  13.03s (transform 249ms, setup 14ms, collect 323ms, tests 12.40s, environment 0ms, prepare 56ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-fix1-red/tests.json

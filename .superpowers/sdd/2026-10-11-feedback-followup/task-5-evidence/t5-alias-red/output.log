@@ -1,0 +1,36 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (10 tests | 1 failed | 9 skipped) 4494ms
+   × recursively serves original ledger refs only through exact capsule aliases and validates copied bytes 4488ms
+     → control-saved-result-authority-invalid
+: expected 2 to be +0 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > recursively serves original ledger refs only through exact capsule aliases and validates copied bytes
+AssertionError: control-saved-result-authority-invalid
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ jsonRef tests/control/savedResultEvidence.test.ts:56:107
+     54| }
+     55| async function jsonRef(f:Awaited<ReturnType<typeof world>>,capsuleRef:…
+     56|  const r=await f.rpc('read-saved-result-evidence',{input:f.input,capsu…
+       |                                                                                                           ^
+     57|  return JSON.parse(Buffer.from(JSON.parse(r.stdout).base64,'base64').t…
+     58| }
+ ❯ tests/control/savedResultEvidence.test.ts:145:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 skipped (10)
+   Start at  07:24:53
+   Duration  5.78s (transform 336ms, setup 39ms, collect 762ms, tests 4.49s, environment 0ms, prepare 131ms)
+

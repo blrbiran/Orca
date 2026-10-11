@@ -1,0 +1,62 @@
+{
+  "source": {
+    "sha256": "b325e1b5123b4eb03a6a9de761778e447b8d86165c14325a42bbf5fb96d1586f",
+    "files": 247
+  },
+  "mutationCloneRestored": {
+    "sha256": "b325e1b5123b4eb03a6a9de761778e447b8d86165c14325a42bbf5fb96d1586f",
+    "files": 247
+  },
+  "reviewCloneOriginalFiles": {
+    "sha256": "b325e1b5123b4eb03a6a9de761778e447b8d86165c14325a42bbf5fb96d1586f",
+    "files": 247
+  },
+  "focusedReviewChecks": [
+    {
+      "repo": "/private/tmp/ccloop-task5-independent-review-20261011",
+      "command": [
+        "/bin/zsh",
+        "-c",
+        "task_review_tmp=$(mktemp -d /private/tmp/t5r.XXXXXX); chmod 700 \"$task_review_tmp\"; export TMPDIR=\"$task_review_tmp\"; exec node /private/tmp/ccloop-task5-independent-review-20261011/node_modules/vitest/vitest.mjs run tests/control/task5Review.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-review-special-mode/tests.json"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 3.042955160140991,
+      "log": "/private/tmp/orca-followup-runs/t5-review-special-mode/output.log",
+      "source": "8d1f707634318561dcbc151cd6c33f0ef0da6c49",
+      "sourceTreeSHA256": "12ddd1c6b3c30e3e34f49ead518fcda85affd43edee7860bf87c8d7f4bf871bc",
+      "sourceFiles": 248,
+      "rawSHA256": "4fda3c1b9ed658c97dd131d65f5c6cf61fa7609dbb155ba22d5bb74de7f884a8",
+      "counts": {
+        "failed": 1
+      }
+    },
+    {
+      "repo": "/private/tmp/ccloop-task5-independent-review-20261011",
+      "command": [
+        "/bin/zsh",
+        "-c",
+        "task_review_tmp=$(mktemp -d /private/tmp/t5r.XXXXXX); chmod 700 \"$task_review_tmp\"; export TMPDIR=\"$task_review_tmp\"; exec node /private/tmp/ccloop-task5-independent-review-20261011/node_modules/vitest/vitest.mjs run tests/control/task5ReviewBase.test.ts --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/t5-review-base-drift/tests.json"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 2.893415927886963,
+      "log": "/private/tmp/orca-followup-runs/t5-review-base-drift/output.log",
+      "source": "8d1f707634318561dcbc151cd6c33f0ef0da6c49",
+      "sourceTreeSHA256": "da12908c496f55e29b07af761a5a9da161233e76f5723d3f3953f5fb3ac2be3b",
+      "sourceFiles": 249,
+      "rawSHA256": "b24ecbc120a0c71a97f62ec71a517a294a28abdcc33a70de91b3230dc8fb88da",
+      "counts": {
+        "failed": 1
+      }
+    }
+  ],
+  "nativePerFileTests": {
+    "files": 65,
+    "tests": 684
+  },
+  "unchangedClaude": [
+    "tests/runtime/claude/claudePhaseRunner.test.ts",
+    "tests/runtime/claude/claudeAgentAdapter.test.ts",
+    "src/runtime/claude/claudeAgentAdapter.ts",
+    "scripts/claude-phase-runner.mjs"
+  ]
+}

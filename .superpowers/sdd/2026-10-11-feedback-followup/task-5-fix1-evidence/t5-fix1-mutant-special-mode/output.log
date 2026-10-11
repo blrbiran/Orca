@@ -1,0 +1,59 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task5-fix1-mutations-20261011
+
+ ❯ tests/control/savedResultEvidence.test.ts (23 tests | 5 failed | 18 skipped) 9797ms
+   × fix I2 refuses unsupported file mode 2541 before complete capture 2067ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses unsupported file mode 1517 before complete capture 2509ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses unsupported directory mode 1517 before complete capture 1803ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses unsupported directory mode 1005 before complete capture 1716ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+   × fix I2 refuses unsupported root mode 1005 before complete capture 1701ms
+     → expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses unsupported file mode 2541 before complete capture
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses unsupported file mode 1517 before complete capture
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses unsupported directory mode 1517 before complete capture
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses unsupported directory mode 1005 before complete capture
+ FAIL  tests/control/savedResultEvidence.test.ts > fix I2 refuses unsupported root mode 1005 before complete capture
+AssertionError: expected { …(5) } to match object { capsule: null, …(1) }
+(12 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "capsule": null,
+-   "reason": "saved-result-mode-unsupported",
++   "capsule": Object {
++     "artifactId": "saved-result-38c498407a13da4830e5a8150472e7f149ab2a4c8ca277fc4cfe79438d81ac8b",
++     "hash": "38c498407a13da4830e5a8150472e7f149ab2a4c8ca277fc4cfe79438d81ac8b",
++   },
++   "reason": null,
+  }
+
+ ❯ tests/control/savedResultEvidence.test.ts:198:31
+    196| it.each([["file",0o4755],["file",0o2755],["directory",0o2755],["direct…
+    197|  const f=await world(`special-${kind}-${mode}`);const r=await f.rpc("s…
+    198|  expect(JSON.parse(r.stdout)).toMatchObject({capsule:null,reason:"save…
+       |                               ^
+    199| },30000);
+    200| it.each(["file","directory"])("fix I2 refuses %s special bits introduc…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 18 skipped (23)
+   Start at  08:29:25
+   Duration  10.51s (transform 302ms, setup 30ms, collect 378ms, tests 9.80s, environment 0ms, prepare 59ms)
+
+JSON report written to /private/tmp/orca-followup-runs/t5-fix1-mutant-special-mode/tests.json

@@ -1,0 +1,32 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/runtime/claude/claudePhaseRunner.test.ts (24 tests) 8056ms
+   ✓ claude phase runner > reports token usage for snake-only usage envelope 467ms
+   ✓ claude phase runner > reports token usage for camel-only usage envelope 304ms
+   ✓ claude phase runner > reports token usage for duplicate camel and snake aliases without double counting 306ms
+   ✓ claude phase runner > reports token usage for mixed aliases when only snake input and camel output are present 310ms
+   ✓ claude phase runner > reports usage evidence when missing usage keeps evidence absent 313ms
+   ✓ claude phase runner > reports usage evidence when null usage is recorded as invalid 313ms
+   ✓ claude phase runner > reports usage evidence when all usage aliases have invalid types 304ms
+   ✓ claude phase runner > reports usage evidence when invalid snake input type keeps finite output token usage 324ms
+   ✓ claude phase runner > reports usage evidence when negative and fractional values preserve current semantics 310ms
+   ✓ claude phase runner > reports usage evidence when zero total is not reported 312ms
+   ✓ claude phase runner > reports usage evidence when negative total is not reported 326ms
+   ✓ claude phase runner > falls back from a non-finite snake alias to a finite camel alias 312ms
+   ✓ claude phase runner > ignores a non-finite alias when no finite fallback exists 312ms
+   ✓ claude phase runner > omits token usage when finite selected fields overflow in sum 304ms
+   ✓ claude phase runner > terminates the inner Claude process when plan is interrupted 310ms
+   ✓ claude phase runner > terminates the inner Claude process when execute is interrupted 527ms
+   ✓ claude phase runner > terminates the inner Claude process when verify is interrupted 332ms
+   ✓ claude phase runner > includes brand-new untracked files in partial execute diff recovery 450ms
+   ✓ claude phase runner > delivers a partial larger than one pipe chunk whole after SIGTERM 469ms
+   ✓ claude phase runner > includes both staged and unstaged edits in partial execute diff recovery 451ms
+   ✓ claude phase runner > waits for close before interrupting a close-pending successful execute 529ms
+   ✓ claude phase runner > returns repo-relative target paths for renamed and quoted files 448ms
+
+ Test Files  1 passed (1)
+      Tests  24 passed (24)
+   Start at  07:27:51
+   Duration  8.37s (transform 53ms, setup 15ms, collect 41ms, tests 8.06s, environment 0ms, prepare 47ms)
+
