@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/orca-task7-r1-mutants-20261011",
+  "command": [
+    "npm",
+    "run",
+    "build"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 4.927645206451416,
+  "log": "/private/tmp/orca-followup-runs/task7-r1-mutant-receipt-build01/output.log",
+  "source": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+  "sourceTreeSHA256": "265e46e913a5c4bbafe86c51b6f8ff35d59406689afab342c66a4a51fc810998",
+  "sourceFiles": 934
+}

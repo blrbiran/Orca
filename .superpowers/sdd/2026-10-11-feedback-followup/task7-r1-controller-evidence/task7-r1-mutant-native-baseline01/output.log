@@ -1,0 +1,23 @@
+{"actualArgv":["env","ORCA_SAVED_RESULT_VERIFY=1","ORCA_SAVED_RESULT_SCHEMA11_ROOT=/private/tmp/orca-t7-schema11-reader-20261011","ORCA_SAVED_RESULT_OLD_ORCA_ROOT=/private/tmp/orca-t7-schema10-producer-20261011","ORCA_SAVED_RESULT_OLD_CCLOOP_ROOT=/private/tmp/ccloop-task6-legacy-producer","ORCA_SAVED_RESULT_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js","node","node_modules/vitest/vitest.mjs","run","tests/control/savedResultRetryAuthorization.paired.test.ts","tests/control/savedResultRecovery.paired.test.ts","-t","after reject only through|prepared but unaccepted fence","--maxWorkers=1"]}
+{"ownedShortTMPDIR":"/private/tmp/gac","bytes":16,"mode":"700","uid":501}
+
+ RUN  v5.0.3 /private/tmp/orca-task7-r1-mutants-20261011
+
+(node:18672) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Cloning into bare repository '/private/tmp/t7-iFL66p/w-UJiisQ/control/e2e-6d8749c4.runs/run-d8de2a96-4a6b-493b-a1ac-1479472d7fcc/repo/.git'...
+done.
+HEAD is now at 90c97b5 ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-iFL66p/orca-snapshot-verify-nXWUpF/input.bundle is okay
+(node:19756) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Cloning into bare repository '/private/tmp/t7-TtjBWm/w-X9kaV6/control/e2e-6d8749c4.runs/run-b4e6c817-850b-4c94-94c5-3772a026dcdd/repo/.git'...
+done.
+HEAD is now at 5494fc2 ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-TtjBWm/orca-snapshot-verify-6w6mIX/input.bundle is okay
+
+ Test Files  2 passed (2)
+      Tests  2 passed | 21 skipped (23)
+   Start at  20:43:47
+   Duration  47.88s (tests 98%, transform 2%, import 1%)
+

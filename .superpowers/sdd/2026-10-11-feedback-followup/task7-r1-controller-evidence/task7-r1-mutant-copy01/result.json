@@ -1,0 +1,18 @@
+{
+  "repo": "/private/tmp/orca-task7-r1-mutants-20261011",
+  "command": [
+    "node",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "--root",
+    "web",
+    "tests/savedResultAvailability.test.tsx",
+    "--maxWorkers=1"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 1.0311648845672607,
+  "log": "/private/tmp/orca-followup-runs/task7-r1-mutant-copy01/output.log",
+  "source": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+  "sourceTreeSHA256": "418eea23fb8106cf24d53f20d61b60f3b87f472717314163d7d04e991c0d8120",
+  "sourceFiles": 934
+}

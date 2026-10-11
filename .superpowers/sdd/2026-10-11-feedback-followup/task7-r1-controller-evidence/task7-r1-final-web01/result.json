@@ -1,0 +1,16 @@
+{
+  "repo": "/private/tmp/orca-feedback-followup-20261011",
+  "command": [
+    "npm",
+    "run",
+    "check",
+    "--workspace",
+    "web"
+  ],
+  "rc": 2,
+  "elapsedSeconds": 5.144384145736694,
+  "log": "/private/tmp/orca-followup-runs/task7-r1-final-web01/output.log",
+  "source": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+  "sourceTreeSHA256": "abcbe5ae37d2ca205a37fb05cbd717981b0d27131596d7c71ae103390e36c16e",
+  "sourceFiles": 934
+}

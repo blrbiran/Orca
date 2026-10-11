@@ -1,0 +1,217 @@
+{
+  "scope": "Task7 frozen db65 root + formal-control combined; not final post-fix/main acceptance",
+  "meta": {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "node",
+      "/private/tmp/task7-root-formal.mjs",
+      "/private/tmp/orca-followup-runs/task7-final-root02/root.json"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 832.0834360122681,
+    "log": "/private/tmp/orca-followup-runs/task7-final-root02/output.log",
+    "source": "f00bfdb797ee3f5de130585557fdf77dc421d535",
+    "sourceTreeSHA256": "db65f6aedfdd86bc6575df983e3fdadc0fdf9a69cc92f221cb72b1623dc966ed",
+    "sourceFiles": 932
+  },
+  "rawBytes": 285405,
+  "rawLines": 3405,
+  "rawSHA256": "c3753c17fc6e26a16058ca2cd53f0bd6c03453214c2dc45ae98d21bbbec9df73",
+  "allRawRead": true,
+  "contiguous420LineChunks": [
+    "10447ba1546d84fe65b889ef27a1e21faf480574c12e45d997f9643112589715",
+    "f9e3a9b16eac8e820f33dfc60e0f61aa41f08c8689fd0b95ffd48d331079977f",
+    "fc9171b067fef11b07588e96fb3d077f564d6d2e3cd24ccd45b2d0145e99e8a0",
+    "a730697cd098422c338dda96dc0dba5502664e503bbe346e73d616e8e98b5e45",
+    "1227ebc22f046253a1d1fbd1bf8a4363d97f3737cbb97d64d9e643b940707e4e",
+    "05c1e7883cd0f240552f4beaffd40d0a71aabf4c3afec87fc9125795bfc91310",
+    "2eb76af3902e3bedc75299b3b00f2a2b13ce1f4cb378e84b5750529ec093b03e",
+    "48b73e9387370cdf5ea32d39ab1ff148c9ae4bcda75486814bbd5d18e7c9b9ce",
+    "9686ea062416c717baf462a591395f3d87dd45a48f88a6680e3861ff78668cfc"
+  ],
+  "concatEqualsRaw": true,
+  "jsonSHA256": "cf4af11a764193ba500fae74e5857d8e9f758a9c50cc0dbf507a966318566268",
+  "files": 390,
+  "allAssertionCount": 3722,
+  "allStatuses": {
+    "passed": 3695,
+    "skipped": 27
+  },
+  "controlFiles": 168,
+  "controlStatuses": {
+    "passed": 1840,
+    "skipped": 24
+  },
+  "allAssertionRecordsSHA256": "09aa496b469312533e1d6612efdaa4556cdea7a987b4678d9b5a1534b0b6d4d4",
+  "nonPassed": [
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/memory/ccmemReal.test.ts",
+      "name": "a real ccmem (spec §6.3 R1) reads back one global and one project memory through the adapter",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+      "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset resolves the package in this checkout, whose runtime finds the scripts the package ships",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+      "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset runs orca agents init and show through the installed ccloop",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+      "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset boots the panel with an execution port, while an explicit empty ORCA_CCLOOP_BIN still turns it off",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/driverSkillsReal.test.ts",
+      "name": "A2 with a real syncskill (spec §10.8 C5) injects the frozen skill, private and read-only, and records exactly the lock file's entries",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "genuine schema10 owner → paired saved verification keeps the standard old detached archive unavailable after real owner settlement",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "genuine schema10 owner → paired saved verification reserves a distinct linked verifier run, skips plan/execute, books only new usage and lands normally",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "fences the actual immutable old11 owner before any unprepared saved run can dispatch",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "rechecks the actual revision and current membership when ordinary retry wins async preparation",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "refuses the actual current spend cap without a run or commitment leak",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "ends reject without executor retry, landing or an interrupted-source exception",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "ends modify without executor retry, landing or an interrupted-source exception",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "mechanically reaps before-entry and admits a new explicit successor with each inherited WORK charge once",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "mechanically reaps usage-settled and admits a new explicit successor with each inherited WORK charge once",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "preserves authored optional cumulative exhaustion in every dimension after an actual old-worker settlement",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "keeps post-entry unknown usage blocked until a genuine owner settlement, then preserves the same original lineage",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "missing prepared/entry markers never infer zero spend or permit a successor, even after owner charging",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "revokes a prepared but unaccepted fence and resolves its held reservation through the actual stop path",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "keeps original taskResult metadata opaque instead of treating answer-shaped artifact references as controller authority",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "refuses forged settlement receipts and changed current graph/target/frozen semantics without touching source failure",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "rechecks every finite reserve dimension using real owner limit commands",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "refuses hash-valid substituted reservation identities and never repairs supplied private authority modes",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "keeps the original candidate/base through harmless target-tip drift and uses ordinary reconciliation",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "archives the current malformed capsule through the private channel but keeps original normalization failure unavailable",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "ends a known real verifier timeout without executing, landing or admitting an interrupted exception",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/service/realSmoke.test.ts",
+      "name": "real launchd smoke (opt-in) install → answering → restart → stop → start → uninstall, under a relocated label",
+      "status": "skipped"
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/skills/syncskillReal.test.ts",
+      "name": "a real syncskill (spec §10.8 C12, C18) profile ls leaves the sync dir byte-identical; inject's lock entries equal the lock file; ~/.syncskill is untouched",
+      "status": "skipped"
+    }
+  ],
+  "wrapperSourceSHA256": "786f329f9eaa7b6c7313fa144dd67eba3b2a150ac75d9376f2ee20973077efba",
+  "wrapperFullyRead": true,
+  "preflight": [
+    {
+      "formalControlPreflight": {
+        "binary": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js",
+        "table": "/private/tmp/orca-followup-runs/task7-final-root02/agents.json",
+        "realpaths": {
+          "binary": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js",
+          "table": "/private/tmp/orca-followup-runs/task7-final-root02/agents.json"
+        },
+        "rc": 0
+      }
+    },
+    {
+      "combinedRootControlArgv": [
+        "/Users/biran/.nvm/versions/node/v22.13.1/bin/node",
+        "/private/tmp/orca-feedback-followup-20261011/node_modules/vitest/vitest.mjs",
+        "run",
+        "--maxWorkers=4",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile.json=/private/tmp/orca-followup-runs/task7-final-root02/root.json"
+      ],
+      "scope": "all root tests, including every tests/control file without name filters",
+      "ORCA_CONTROL_VERIFY": "1"
+    },
+    {
+      "ownedShortTMPDIR": "/private/tmp/gf3",
+      "bytes": 16,
+      "mode": "700",
+      "uid": 501
+    }
+  ]
+}

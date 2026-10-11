@@ -1,0 +1,24 @@
+{
+  "repo": "/private/tmp/orca-feedback-followup-20261011",
+  "command": [
+    "env",
+    "ORCA_SAVED_RESULT_VERIFY=1",
+    "ORCA_SAVED_RESULT_SCHEMA11_ROOT=/private/tmp/orca-t7-schema11-reader-20261011",
+    "ORCA_SAVED_RESULT_OLD_ORCA_ROOT=/private/tmp/orca-t7-schema10-producer-20261011",
+    "ORCA_SAVED_RESULT_OLD_CCLOOP_ROOT=/private/tmp/ccloop-task6-legacy-producer",
+    "ORCA_SAVED_RESULT_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js",
+    "node",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "tests/control/savedResultRetryAuthorization.paired.test.ts",
+    "-t",
+    "after reject",
+    "--maxWorkers=1"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 19.045082092285156,
+  "log": "/private/tmp/orca-followup-runs/task7-r1-retry-red02/output.log",
+  "source": "847c9b2dc947d2c5a6abda23a4ce968702d97061",
+  "sourceTreeSHA256": "558ab26595fe244f148ccaf91d02b1b7a2c9f69a81b913afd5fc7d81830e49c6",
+  "sourceFiles": 934
+}

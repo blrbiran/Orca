@@ -1,0 +1,29 @@
+
+ RUN  v5.0.3 /private/tmp/orca-feedback-followup-20261011
+
+(node:13034) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Cloning into bare repository '/private/tmp/t7-f90IZP/w-J1EshZ/control/e2e-6d8749c4.runs/run-c3991569-2c15-4dda-a6c9-87ca3d74fb08/repo/.git'...
+done.
+HEAD is now at 38a100e ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-f90IZP/orca-snapshot-verify-wFR7Za/input.bundle is okay
+(node:15152) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Cloning into bare repository '/private/tmp/t7-o1uo4z/w-jWFXiv/control/e2e-6d8749c4.runs/run-3272664d-f795-44c1-8b05-718c1ac4c4bd/repo/.git'...
+done.
+HEAD is now at 930f220 ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-o1uo4z/orca-snapshot-verify-GhAyoq/input.bundle is okay
+Cloning into bare repository '/private/tmp/t7-UBW8rW/w-UhiXcw/control/e2e-6d8749c4.runs/run-8746af62-94de-43f1-9973-1d534d5e1284/repo/.git'...
+done.
+HEAD is now at 882214d ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-UBW8rW/orca-snapshot-verify-aUkbNa/input.bundle is okay
+Cloning into bare repository '/private/tmp/t7-rOi4z8/w-8kW1j8/control/e2e-6d8749c4.runs/run-45124522-77e8-45f4-aa21-5ac3325179d2/repo/.git'...
+done.
+HEAD is now at dead72b ccloop attempt: refs/ccloop/run/attempts/1
+/private/tmp/t7-rOi4z8/orca-snapshot-verify-WhvvX2/input.bundle is okay
+
+ Test Files  2 passed (2)
+      Tests  4 passed | 19 skipped (23)
+   Start at  20:12:33
+   Duration  113.63s (tests 99%, transform 1%)
+

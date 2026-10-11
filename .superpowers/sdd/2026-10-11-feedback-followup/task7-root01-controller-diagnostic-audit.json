@@ -1,0 +1,235 @@
+{
+  "scope": "diagnostic only: latest web-assets prerequisite absent; not acceptance",
+  "meta": {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--maxWorkers=4",
+      "--reporter=default",
+      "--reporter=json",
+      "--outputFile.json=/private/tmp/orca-followup-runs/task7-final-root01/root.json"
+    ],
+    "rc": 1,
+    "elapsedSeconds": 736.3537900447845,
+    "log": "/private/tmp/orca-followup-runs/task7-final-root01/output.log",
+    "source": "f00bfdb797ee3f5de130585557fdf77dc421d535",
+    "sourceTreeSHA256": "50a45ddcbdd80da4d45c316286dba9ccf259fd5426a87caf6c8dd37a06258197",
+    "sourceFiles": 932
+  },
+  "jsonSHA256": "59cc4bcde502864f2deaf35a72fd04eba6143828e69467c7d5ef48f6da81a36a",
+  "rawLogSHA256": "e88addac663c02e77e284ae9ae159246bdc8bf2071106ba524bbce3f10c858b1",
+  "assertionsInspected": 3721,
+  "statuses": {
+    "passed": 3689,
+    "failed": 5,
+    "skipped": 27
+  },
+  "completeAssertionRecordSHA256": "f02b2eaeaf705b66be37b417c0a0bba181042b9aba3ae158f960bf55eb95fcfd",
+  "nonPassed": [
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/entry/discovery.test.ts",
+      "name": "socket discovery (spec §4.3) with nothing at the default path, finds the one socket under the control root and names every one when there are several",
+      "status": "failed",
+      "failureMessages": [
+        "AssertionError: expected '/private/tmp/orca-followup-runs/task7…' to be '/private/tmp/orca-followup-runs/task7…' // Object.is equality\n    at /private/tmp/orca-feedback-followup-20261011/tests/entry/discovery.test.ts:69:41\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+      ]
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/archiveGroup.test.ts",
+      "name": "an archived group refuses every group-targeted command but unarchive-group (spec §6.3) covers every group-targeted verb the protocol knows, so a new verb cannot slip past",
+      "status": "failed",
+      "failureMessages": [
+        "AssertionError: expected [ 'archive-group', 'confirm', …(24) ] to deeply equal [ 'archive-group', 'confirm', …(25) ]\n    at /private/tmp/orca-feedback-followup-20261011/tests/control/archiveGroup.test.ts:197:39\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:1628:35\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:26\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3321:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3316:10)\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3301:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3259:10)\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3882:64"
+      ]
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+      "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset resolves the package in this checkout, whose runtime finds the scripts the package ships",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+      "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset runs orca agents init and show through the installed ccloop",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/ccloopDefaultE2E.test.ts",
+      "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset boots the panel with an execution port, while an explicit empty ORCA_CCLOOP_BIN still turns it off",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/driverSkillsReal.test.ts",
+      "name": "A2 with a real syncskill (spec §10.8 C5) injects the frozen skill, private and read-only, and records exactly the lock file's entries",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "genuine schema10 owner → paired saved verification keeps the standard old detached archive unavailable after real owner settlement",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "genuine schema10 owner → paired saved verification reserves a distinct linked verifier run, skips plan/execute, books only new usage and lands normally",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "fences the actual immutable old11 owner before any unprepared saved run can dispatch",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "rechecks the actual revision and current membership when ordinary retry wins async preparation",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "refuses the actual current spend cap without a run or commitment leak",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "ends reject without executor retry, landing or an interrupted-source exception",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "ends modify without executor retry, landing or an interrupted-source exception",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "mechanically reaps before-entry and admits a new explicit successor with each inherited WORK charge once",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "mechanically reaps usage-settled and admits a new explicit successor with each inherited WORK charge once",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "preserves authored optional cumulative exhaustion in every dimension after an actual old-worker settlement",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "keeps post-entry unknown usage blocked until a genuine owner settlement, then preserves the same original lineage",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "missing prepared/entry markers never infer zero spend or permit a successor, even after owner charging",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "revokes a prepared but unaccepted fence and resolves its held reservation through the actual stop path",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "keeps original taskResult metadata opaque instead of treating answer-shaped artifact references as controller authority",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "refuses forged settlement receipts and changed current graph/target/frozen semantics without touching source failure",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "rechecks every finite reserve dimension using real owner limit commands",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "refuses hash-valid substituted reservation identities and never repairs supplied private authority modes",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "keeps the original candidate/base through harmless target-tip drift and uses ordinary reconciliation",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "archives the current malformed capsule through the private channel but keeps original normalization failure unavailable",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/control/savedResultRecovery.paired.test.ts",
+      "name": "ends a known real verifier timeout without executing, landing or admitting an interrupted exception",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/memory/ccmemReal.test.ts",
+      "name": "a real ccmem (spec §6.3 R1) reads back one global and one project memory through the adapter",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/panel/refusalCoverage.test.ts",
+      "name": "refusal coverage in both languages (panel i18n spec §6.4; spec 2026-10-08 §2.2(a)) has a zh entry for every catalog code, web-made code, hand-listed code and view-shown reason",
+      "status": "failed",
+      "failureMessages": [
+        "AssertionError: expected [ …(4) ] to deeply equal []\n    at /private/tmp/orca-feedback-followup-20261011/tests/panel/refusalCoverage.test.ts:64:67\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2869:63\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:1628:35\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:26\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3321:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3316:10)\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3301:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3259:10)"
+      ]
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/panel/refusalCoverage.test.ts",
+      "name": "refusal coverage in both languages (panel i18n spec §6.4; spec 2026-10-08 §2.2(a)) has a en entry for every catalog code, web-made code, hand-listed code and view-shown reason",
+      "status": "failed",
+      "failureMessages": [
+        "AssertionError: expected [ …(4) ] to deeply equal []\n    at /private/tmp/orca-feedback-followup-20261011/tests/panel/refusalCoverage.test.ts:64:67\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2869:63\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:1628:35\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:26\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3321:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3316:10)\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3301:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3259:10)"
+      ]
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/skills/syncskillReal.test.ts",
+      "name": "a real syncskill (spec §10.8 C12, C18) profile ls leaves the sync dir byte-identical; inject's lock entries equal the lock file; ~/.syncskill is untouched",
+      "status": "skipped",
+      "failureMessages": []
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/service/identify.test.ts",
+      "name": "discovery reads panel.json first after the flag (spec §5) a panel.json whose pid is dead falls through to the legacy socket under the control root",
+      "status": "failed",
+      "failureMessages": [
+        "AssertionError: expected '/private/tmp/orca-followup-runs/task7…' to be '/private/tmp/orca-followup-runs/task7…' // Object.is equality\n    at /private/tmp/orca-feedback-followup-20261011/tests/service/identify.test.ts:149:41\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at file:///Users/biran/code/skills/loop/Orca/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+      ]
+    },
+    {
+      "file": "/private/tmp/orca-feedback-followup-20261011/tests/service/realSmoke.test.ts",
+      "name": "real launchd smoke (opt-in) install → answering → restart → stop → start → uninstall, under a relocated label",
+      "status": "skipped",
+      "failureMessages": []
+    }
+  ],
+  "limits": "Controller iterated all per-test assertions and read complete non-passed records; full raw root01 is diagnostic and implementer-owned. This audit does not claim final acceptance or full controller reading of all root01 stdout."
+}

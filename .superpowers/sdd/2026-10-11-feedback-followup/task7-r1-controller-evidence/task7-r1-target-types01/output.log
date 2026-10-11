@@ -1,0 +1,9 @@
+
+> orca@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+src/control/retryTask.ts(54,105): error TS2339: Property 'outcome' does not exist on type '{}'.
+src/control/retryTask.ts(54,135): error TS2339: Property 'outcome' does not exist on type '{}'.
+src/control/retryTask.ts(54,168): error TS2339: Property 'outcome' does not exist on type '{}'.
+tests/control/savedResultRetryAuthorization.paired.test.ts(17,161): error TS18046: 'failed.unknown' is of type 'unknown'.
+tests/control/savedResultRetryAuthorization.paired.test.ts(22,100): error TS2698: Spread types may only be created from object types.

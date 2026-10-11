@@ -1,0 +1,38 @@
+{"actualArgv":["env","ORCA_SAVED_RESULT_VERIFY=1","ORCA_SAVED_RESULT_SCHEMA11_ROOT=/private/tmp/orca-t7-schema11-reader-20261011","ORCA_SAVED_RESULT_OLD_ORCA_ROOT=/private/tmp/orca-t7-schema10-producer-20261011","ORCA_SAVED_RESULT_OLD_CCLOOP_ROOT=/private/tmp/ccloop-task6-legacy-producer","ORCA_SAVED_RESULT_CCLOOP_BIN=/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js","node","node_modules/vitest/vitest.mjs","run","tests/control/savedResultRetryAuthorization.paired.test.ts","-t","after reject only through","--maxWorkers=1"]}
+{"ownedShortTMPDIR":"/private/tmp/gd1","bytes":16,"mode":"700","uid":501}
+
+ RUN  v5.0.3 /private/tmp/orca-task7-r1-mutants-20261011
+
+(node:22638) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Cloning into bare repository '/private/tmp/t7-CAidXf/w-TZSfLW/control/e2e-6d8749c4.runs/run-ee2c3ccc-8c55-4c19-a237-f2b92a0042ff/repo/.git'...
+done.
+HEAD is now at f5956e3 ccloop attempt: refs/ccloop/run/attempts/1
+ ❯ tests/control/savedResultRetryAuthorization.paired.test.ts (3 tests | 1 failed | 2 skipped) 16244ms
+   ❯ explicit ordinary retry after unsuccessful saved verification (3)
+     × authorizes a distinct normal run after reject only through the actual successful retry receipt 16241ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRetryAuthorization.paired.test.ts > explicit ordinary retry after unsuccessful saved verification > authorizes a distinct normal run after reject only through the actual successful retry receipt
+AssertionError: expected { workItemId: 'a' } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "workItemId": "a",
+}
+
+ ❯ tests/control/savedResultRetryAuthorization.paired.test.ts:35:114
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+   Start at  20:45:05
+   Duration  17.05s (tests 96%, transform 3%, import 1%)
+

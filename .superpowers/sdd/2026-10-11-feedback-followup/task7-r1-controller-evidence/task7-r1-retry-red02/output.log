@@ -1,0 +1,34 @@
+
+ RUN  v5.0.3 /private/tmp/orca-feedback-followup-20261011
+
+(node:3155) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Cloning into bare repository '/private/tmp/t7-Jjs2ME/w-TVCiv3/control/e2e-6d8749c4.runs/run-774e4aa4-0add-477a-b7fa-a083fbf0b50e/repo/.git'...
+done.
+HEAD is now at 026985a ccloop attempt: refs/ccloop/run/attempts/1
+ ❯ tests/control/savedResultRetryAuthorization.paired.test.ts (3 tests | 1 failed | 2 skipped) 17798ms
+   ❯ explicit ordinary retry after unsuccessful saved verification (3)
+     × authorizes a distinct normal run after reject only through the actual successful retry receipt 17796ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRetryAuthorization.paired.test.ts > explicit ordinary retry after unsuccessful saved verification > authorizes a distinct normal run after reject only through the actual successful retry receipt
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/control/savedResultRetryAuthorization.paired.test.ts:29:64
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+   Start at  20:07:11
+   Duration  18.72s (tests 96%, transform 4%, import 1%)
+

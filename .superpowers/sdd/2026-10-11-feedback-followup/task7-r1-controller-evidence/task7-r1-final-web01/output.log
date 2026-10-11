@@ -1,0 +1,14 @@
+
+> @orca/web@0.1.0 check
+> tsc --noEmit -p tsconfig.json && vitest run
+
+src/TaskDetail.tsx(257,8): error TS2367: This comparison appears to be unintentional because the types '"blocked" | "draft" | "ready" | "active" | "held" | "continuing" | "starting" | "start-unknown" | "completed"' and '"done"' have no overlap.
+tests/savedResultAvailability.test.tsx(11,23): error TS2322: Type '"done"' is not assignable to type '"blocked" | "draft" | "ready" | "active" | "held" | "continuing" | "starting" | "start-unknown" | "completed" | undefined'.
+tests/savedResultAvailability.test.tsx(11,205): error TS2322: Type '"settled"' is not assignable to type '"blocked" | "running" | "unknown" | "starting" | "settled-unrecoverable" | "attempt-unknown" | "attempt-proof-invalid" | "failed-before-provider" | "settled-recoverable" | ... 5 more ... | undefined'.
+npm error Lifecycle script `check` failed with error:
+npm error code 2
+npm error path /private/tmp/orca-feedback-followup-20261011/web
+npm error workspace @orca/web@0.1.0
+npm error location /private/tmp/orca-feedback-followup-20261011/web
+npm error command failed
+npm error command sh -c tsc --noEmit -p tsconfig.json && vitest run

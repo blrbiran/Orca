@@ -1,0 +1,30 @@
+
+ RUN  v5.0.3 /private/tmp/orca-task7-r1-mutants-20261011/web
+
+ ❯ tests/savedResultAvailability.test.tsx (4 tests | 2 failed) 63ms
+   × omits saved recovery for an actually done/succeeded task in en 31ms
+   × omits saved recovery for an actually done/succeeded task in zh 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/savedResultAvailability.test.tsx > omits saved recovery for an actually done/succeeded task in en
+ FAIL  tests/savedResultAvailability.test.tsx > omits saved recovery for an actually done/succeeded task in zh
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/savedResultAvailability.test.tsx:13:93
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  20:45:22
+   Duration  947ms (environment 58%, transform 20%, import 10%, tests 7%, setup 4%, worker 1%)
+

@@ -1,0 +1,59 @@
+
+ RUN  v5.0.3 /private/tmp/orca-task7-r1-mutants-20261011/web
+
+ ❯ tests/savedResultAvailability.test.tsx (4 tests | 2 failed) 116ms
+   × uses truthful neutral unavailable copy for usage settlement, stop and archive in en 8ms
+   × uses truthful neutral unavailable copy for usage settlement, stop and archive in zh 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/savedResultAvailability.test.tsx > uses truthful neutral unavailable copy for usage settlement, stop and archive in en
+AssertionError: expected <p class="detail-note">…(1)</p> to be null
+
+- Expected:
+null
+
++ Received:
+<p
+  class="detail-note"
+>
+  Saved results are unavailable for verification; ordinary retry is available.
+   
+  <code>
+    saved-result-usage-unsettled
+  </code>
+</p>
+
+ ❯ tests/savedResultAvailability.test.tsx:19:119
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/savedResultAvailability.test.tsx > uses truthful neutral unavailable copy for usage settlement, stop and archive in zh
+AssertionError: expected <p class="detail-note">…(1)</p> to be null
+
+- Expected:
+null
+
++ Received:
+<p
+  class="detail-note"
+>
+  已保存成果暂不可验证；可使用普通重试。
+   
+  <code>
+    saved-result-usage-unsettled
+  </code>
+</p>
+
+ ❯ tests/savedResultAvailability.test.tsx:19:119
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  20:45:24
+   Duration  802ms (environment 50%, transform 21%, tests 16%, import 9%, setup 4%)
+

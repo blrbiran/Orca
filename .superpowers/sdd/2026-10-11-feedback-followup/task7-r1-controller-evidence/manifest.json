@@ -1,0 +1,401 @@
+{
+  "scope": "R1 complete 30 run raw/meta; original source and failures preserved, not current merged evidence",
+  "files": [
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-copy-green01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-copy-green01/output.log",
+      "bytes": 424,
+      "sha256": "d8bcc1bf96dcc86798f9e1f79c7ed1cec0feeb7821f41b20dafd8e14011718bd"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-copy-green01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-copy-green01/result.json",
+      "bytes": 571,
+      "sha256": "53f4cc88e193327c452c256bdca3d6516feaa38d4649c2f30a1422aa20371a19"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-copy-red01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-copy-red01/output.log",
+      "bytes": 2204,
+      "sha256": "6b4a660ef616f9e2719313bfe0fa6a479526842e90d5f782e0b2cb38463fb4be"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-copy-red01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-copy-red01/result.json",
+      "bytes": 528,
+      "sha256": "5d1446e4b54feb19768ff2bdf4b1a63691ed9fab02469a8bab14f2fcc085abd5"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-build01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-build01/output.log",
+      "bytes": 50,
+      "sha256": "85a583a8309e758f7d2d85267f693f87462e82c2e62e16213eb3fc5b998b22f0"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-build01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-build01/result.json",
+      "bytes": 411,
+      "sha256": "f1b7d6f25e01f0c54d8bb7822acf1d4389bcb2eb982482e9aeca985730defd17"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-build02/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-build02/output.log",
+      "bytes": 50,
+      "sha256": "85a583a8309e758f7d2d85267f693f87462e82c2e62e16213eb3fc5b998b22f0"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-build02/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-build02/result.json",
+      "bytes": 411,
+      "sha256": "1a0ebdfbf0284147f13d898e36cfc36a6de54c9a3381eac3c8aa85fba5036d7f"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-native01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-native01/output.log",
+      "bytes": 6534,
+      "sha256": "2b41fc1ef5c13e7b10ddfe839009b1c942dbfc5144d79ee0471bd94da7212f45"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-native01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-native01/result.json",
+      "bytes": 758,
+      "sha256": "349cdfbea1a646418f7d05e6ef1ea63f062f2322a4bf55690744cdc58b324b6e"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-panel01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-panel01/output.log",
+      "bytes": 1611,
+      "sha256": "38264f694b97f46147ab6cccc0f2a467f84417becef0a45739152b9cf97101e6"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-panel01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-panel01/result.json",
+      "bytes": 475,
+      "sha256": "5314c9e65a48294fd1a9a49ecc0c5b20499afacb76b976d512319e216472b962"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-root01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-root01/output.log",
+      "bytes": 279038,
+      "sha256": "f693d58dc5fb2914be6e1cc2967a2af6fb2c572b70b514fc873f54a0fea9dd5e"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-root01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-root01/result.json",
+      "bytes": 500,
+      "sha256": "6628f1d56897a232e70b83e9639e233ffe86dbcb6ff8dbd8dd4c85c823c453de"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-root01/root.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-root01/root.json",
+      "bytes": 1542859,
+      "sha256": "c17962e9801971a40ff0b198aaa96e3a2da81b4798e21e00328838b2989f17d7"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-types01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-types01/output.log",
+      "bytes": 57,
+      "sha256": "95e3139b92d7a7c68a78bf799a9e66e72c3ed1f70e2391990dd69e37294e15c9"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-types01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-types01/result.json",
+      "bytes": 414,
+      "sha256": "af585635fbef2f4f2bf19df9b3183b4c1d4051348f49cb58c7be52aa35247b51"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-types02/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-types02/output.log",
+      "bytes": 57,
+      "sha256": "95e3139b92d7a7c68a78bf799a9e66e72c3ed1f70e2391990dd69e37294e15c9"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-types02/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-types02/result.json",
+      "bytes": 415,
+      "sha256": "7c30673ce165052785def479589f30e0c17bd2990b23f5f5009f24234f00397f"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-web01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-web01/output.log",
+      "bytes": 1182,
+      "sha256": "53dbeb0840270fae4acf13f5322800fcc33e17135defd98e073ed896fbd17fa6"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-web01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-web01/result.json",
+      "bytes": 439,
+      "sha256": "86287b3d84cb65516a203b4e62159679970e1a9eed8434ecc59e5f750a14eb88"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-web02/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-web02/output.log",
+      "bytes": 505,
+      "sha256": "1c67645e3ba533e9890224f0810b8d9802a6569a551b295d9874d07128605222"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-web02/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-web02/result.json",
+      "bytes": 440,
+      "sha256": "b40a681c8301fbed9380649c66cc0e80922145994b7d38817cd65a690ba1e13f"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-webbuild01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-webbuild01/output.log",
+      "bytes": 658,
+      "sha256": "a3035f49256ae82f63e4748d6d12f174627dbb3ae36be4863eec4c06f3626469"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-webbuild01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-webbuild01/result.json",
+      "bytes": 445,
+      "sha256": "eab85855291e5b5425c48d7cc9edb5980ef8ec77482dc0fed342f4fd2aa13e0d"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-webbuild02/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-webbuild02/output.log",
+      "bytes": 658,
+      "sha256": "9d5fc7e9058e85dec5e92742b3d14b7973fa4792e56f6ae1b167831c67b60394"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-final-webbuild02/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-final-webbuild02/result.json",
+      "bytes": 443,
+      "sha256": "1aec76a9b34396e4e3647929e07475eeda5388c3877f10abb094f23aece6dbe0"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-build01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-build01/output.log",
+      "bytes": 50,
+      "sha256": "85a583a8309e758f7d2d85267f693f87462e82c2e62e16213eb3fc5b998b22f0"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-build01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-build01/result.json",
+      "bytes": 411,
+      "sha256": "e8df4dd34b710d296bcf5bc8eb47ea6da0fb3f23f8830e4ad99ed6597723d30c"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-build02/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-build02/output.log",
+      "bytes": 50,
+      "sha256": "85a583a8309e758f7d2d85267f693f87462e82c2e62e16213eb3fc5b998b22f0"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-build02/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-build02/result.json",
+      "bytes": 411,
+      "sha256": "82a4eacb01cd4d11a3ae08207cb3e123201ee7b824f40cfae4c2174cc2d8831c"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-copy01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-copy01/output.log",
+      "bytes": 1607,
+      "sha256": "10ed6b682f1f858c03a029da9f22bb3cb9b5b1a34080681306cdac6be38ad34b"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-copy01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-copy01/result.json",
+      "bytes": 530,
+      "sha256": "ce5a83a2b009c4e35aaeb7d7ebfb6093bfbf988a770fcc34c1170f5caa7f2908"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-done01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-done01/output.log",
+      "bytes": 983,
+      "sha256": "cf92f155ffae9573935b89f982c3c65b99b0ee622401923c6f3a004b07eee255"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-done01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-done01/result.json",
+      "bytes": 530,
+      "sha256": "df8ccb5c1ce115cd452aa8c64d15d7f792cbbef79c340690ea03aa66f8055715"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-generation-build01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-generation-build01/output.log",
+      "bytes": 50,
+      "sha256": "85a583a8309e758f7d2d85267f693f87462e82c2e62e16213eb3fc5b998b22f0"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-generation-build01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-generation-build01/result.json",
+      "bytes": 421,
+      "sha256": "f99c48c8a3aaad932894283a77297fb69c67abef74c8d1009978aa0bb01c634f"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-generation01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-generation01/output.log",
+      "bytes": 2046,
+      "sha256": "a76da726c2c69dcdf8af20ea6c623d0c9b7b5832d58920b8dd56365b31b8e6bd"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-generation01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-generation01/result.json",
+      "bytes": 1024,
+      "sha256": "00029b5cd3c2d622d5b8c143e404abc05e63680e9ac179f9c12368625eb52369"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-native-baseline01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-native-baseline01/output.log",
+      "bytes": 1812,
+      "sha256": "cded60881db04ec89a423b007464143e719ae4247a3a13618c6cb3faced0e52b"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-native-baseline01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-native-baseline01/result.json",
+      "bytes": 1116,
+      "sha256": "620a47b656accf5955635e345f418fdbeb705c0cac54412abc763a1433ab16d2"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-receipt-build01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-receipt-build01/output.log",
+      "bytes": 50,
+      "sha256": "85a583a8309e758f7d2d85267f693f87462e82c2e62e16213eb3fc5b998b22f0"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-receipt-build01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-receipt-build01/result.json",
+      "bytes": 419,
+      "sha256": "09bcbdc3b699a547a03ff36c6b9b03e4fca9fca163e04d7a2e9abe421aa3b4de"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-receipt01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-receipt01/output.log",
+      "bytes": 2046,
+      "sha256": "f58f6f265677188c22b117c7b945dd4c4afa400d915b3c6cfc8a0159756e2697"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-receipt01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-receipt01/result.json",
+      "bytes": 1022,
+      "sha256": "e0b27a674eab9fdc6d185ba6648075ec9f9ca18dfa5d6d999cd7872b5b23f1cd"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-restored-build01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-restored-build01/output.log",
+      "bytes": 50,
+      "sha256": "85a583a8309e758f7d2d85267f693f87462e82c2e62e16213eb3fc5b998b22f0"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-restored-build01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-restored-build01/result.json",
+      "bytes": 420,
+      "sha256": "e881ac611675dd321f4a93fade660edc9531691400469234a31d09d1dc543204"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-ui-baseline01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-ui-baseline01/output.log",
+      "bytes": 224,
+      "sha256": "1a253ffc7cc62f184e50b5894c8d13f16a3a38c27492d140c17d967305161ef0"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-ui-baseline01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-ui-baseline01/result.json",
+      "bytes": 537,
+      "sha256": "3b8ae9e141673869f7e3e0b9436634f89c688c59427b1d5f57618bda9f6463ab"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-webbuild01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-webbuild01/output.log",
+      "bytes": 658,
+      "sha256": "825d6c250dc7f23a665506c29f3d0968590e4378010da4bc037a24be06326ed8"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-webbuild01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-webbuild01/result.json",
+      "bytes": 444,
+      "sha256": "ad103c12689878b4702f2a1f548ba7141fe61a3c4043c41fc6cfb52b7e8ad12e"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-webbuild02/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-webbuild02/output.log",
+      "bytes": 658,
+      "sha256": "98e76284bed90ab4d0ffaa76c5299f51c76e342ee62ad180594c312a98a82d2f"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-mutant-webbuild02/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-mutant-webbuild02/result.json",
+      "bytes": 444,
+      "sha256": "96b8e7e11bf10a547cc6e1db9ef9034f04ce46ba3b3da7be98e8940887f5a150"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-retry-green01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-retry-green01/output.log",
+      "bytes": 1683,
+      "sha256": "71a9a8d73fc5c8e375a3b9e695fdf9e019e8eb025ff7a6596e74cdf2992b9ea5"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-retry-green01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-retry-green01/result.json",
+      "bytes": 1073,
+      "sha256": "de7f5c465625c771b29474c606cb19b96122f4ea37da055a92ccc7c691e7896e"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-retry-red01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-retry-red01/output.log",
+      "bytes": 4734,
+      "sha256": "b726ea089b9b70ee984e70e096f75eb4278ec984bd48bbdd9a441b114dd02071"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-retry-red01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-retry-red01/result.json",
+      "bytes": 918,
+      "sha256": "68a19c366c8d96e2cdd51e5f0071e5f4a93139827768056de40de706de6fbc3e"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-retry-red02/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-retry-red02/output.log",
+      "bytes": 1423,
+      "sha256": "bcd81df2d4be2a718d9c369685317cc9ce1868ddc34207f3589455d634d39fe6"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-retry-red02/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-retry-red02/result.json",
+      "bytes": 949,
+      "sha256": "61cfaecd59c0d62f673288acd148069323b6422f3cd065c454bf8524ab850ec3"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-target-types01/output.log",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-target-types01/output.log",
+      "bytes": 601,
+      "sha256": "50d820f2ac489b1d9f93f95d6057b17f6045d159edbffe46621651c9110f5c78"
+    },
+    {
+      "original": "/private/tmp/orca-followup-runs/task7-r1-target-types01/result.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/task7-r1-target-types01/result.json",
+      "bytes": 417,
+      "sha256": "22633d581b520ae6f8eed9972602eafebec37c2f9687a8a0d4ed2328e281a7f0"
+    },
+    {
+      "original": "/private/tmp/orca-followup-run.py",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/isolated-runner.py",
+      "bytes": 2466,
+      "sha256": "64a9805f8b5100cd1abe5fd1df384f48a80b2af65aa211447511f213ad1375c5"
+    },
+    {
+      "original": "/private/tmp/task7-short-command.mjs",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/short-command.mjs",
+      "bytes": 1185,
+      "sha256": "5115d2840e2299a3e9de42d29ccbd4e111946129fe71d9d080412705c2bd666a"
+    },
+    {
+      "original": "/private/tmp/orca-handoff-audit.py",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/audit-helper.py",
+      "bytes": 2225,
+      "sha256": "1ce744606570763dec8c4ab2994879624cd830e7ccfda561ec2747b75264fa88"
+    },
+    {
+      "original": "/private/tmp/task7-r1-integration-source-raw-audit.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/source-raw-audit.json",
+      "bytes": 11632,
+      "sha256": "81549bb8e978ecc9c14c31428875e12e060fbff80b5953f68cb6cf0c5ff8bd25"
+    },
+    {
+      "original": "/private/tmp/task7-r1-root-integration-audit.json",
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/task7-r1-controller-evidence/root-audit.json",
+      "bytes": 105770,
+      "sha256": "918e224e4df07a54feb6a695377513ab4f60404c6dd19ec2bb25c9f1842a9794"
+    }
+  ]
+}

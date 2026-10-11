@@ -1,0 +1,76 @@
+
+ RUN  v5.0.3 /private/tmp/orca-feedback-followup-20261011/web
+
+ ❯ tests/savedResultAvailability.test.tsx (4 tests | 4 failed) 70ms
+   × omits saved recovery for an actually done/succeeded task in en 40ms
+   × omits saved recovery for an actually done/succeeded task in zh 8ms
+   × uses truthful neutral unavailable copy for usage settlement, stop and archive in en 16ms
+   × uses truthful neutral unavailable copy for usage settlement, stop and archive in zh 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/savedResultAvailability.test.tsx > omits saved recovery for an actually done/succeeded task in en
+ FAIL  tests/savedResultAvailability.test.tsx > omits saved recovery for an actually done/succeeded task in zh
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/savedResultAvailability.test.tsx:13:93
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/savedResultAvailability.test.tsx > uses truthful neutral unavailable copy for usage settlement, stop and archive in en
+AssertionError: expected <p class="detail-note">…(1)</p> to be null
+
+- Expected:
+null
+
++ Received:
+<p
+  class="detail-note"
+>
+  Saved results are unavailable for verification; ordinary retry is available.
+   
+  <code>
+    saved-result-usage-unsettled
+  </code>
+</p>
+
+ ❯ tests/savedResultAvailability.test.tsx:19:119
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/savedResultAvailability.test.tsx > uses truthful neutral unavailable copy for usage settlement, stop and archive in zh
+AssertionError: expected <p class="detail-note">…(1)</p> to be null
+
+- Expected:
+null
+
++ Received:
+<p
+  class="detail-note"
+>
+  已保存成果暂不可验证；可使用普通重试。
+   
+  <code>
+    saved-result-usage-unsettled
+  </code>
+</p>
+
+ ❯ tests/savedResultAvailability.test.tsx:19:119
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  20:03:12
+   Duration  1.24s (environment 59%, transform 20%, import 11%, tests 6%, setup 3%)
+

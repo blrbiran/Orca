@@ -1,0 +1,94 @@
+
+ RUN  v5.0.3 /private/tmp/orca-feedback-followup-20261011
+
+(node:92341) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Cloning into bare repository '/private/tmp/t7-YCAGJC/w-xV7pKD/control/e2e-6d8749c4.runs/run-a26d373d-b6b4-454a-ad07-42adbb84d826/repo/.git'...
+done.
+HEAD is now at 1261b62 ccloop attempt: refs/ccloop/run/attempts/1
+Cloning into bare repository '/private/tmp/t7-L79xwi/w-QV2i0z/control/e2e-6d8749c4.runs/run-f28b08cf-7e63-4a6e-941d-8497593f1e50/repo/.git'...
+done.
+HEAD is now at 9122f0e ccloop attempt: refs/ccloop/run/attempts/1
+Cloning into bare repository '/private/tmp/t7-KGJk5g/w-uJ83ff/control/e2e-6d8749c4.runs/run-b1393ace-d154-47cb-a8d7-4845b2fddeb6/repo/.git'...
+done.
+HEAD is now at 0055edc ccloop attempt: refs/ccloop/run/attempts/1
+ ❯ tests/control/savedResultRetryAuthorization.paired.test.ts (3 tests | 3 failed) 54235ms
+   ❯ explicit ordinary retry after unsuccessful saved verification (3)
+     × authorizes a distinct normal run after reject only through the actual successful retry receipt 20024ms
+     × authorizes a distinct normal run after modify only through the actual successful retry receipt 15306ms
+     × authorizes a distinct normal run after delay only through the actual successful retry receipt 18902ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRetryAuthorization.paired.test.ts > explicit ordinary retry after unsuccessful saved verification > authorizes a distinct normal run after reject only through the actual successful retry receipt
+AssertionError: expected { kind: 'claimed', …(1) } to deeply equal { kind: 'idle' }
+
+- Expected
++ Received
+
+  {
+-   "kind": "idle",
++   "kind": "claimed",
++   "runId": "run-a2669078-2128-4edd-86a5-49ed518cc827",
+  }
+
+ ❯ tests/control/savedResultRetryAuthorization.paired.test.ts:19:84
+     17|    const failed=readDriverRun(f.store,id);expect(failed.state).toBe('b…
+     18|    const dispatch={store:f.store,profileRouter:f.deps.router,admission…
+     19|    replenishStartWakes(dispatch);expect(await deliverScheduledStart(di…
+       |                                                                                    ^
+     20|    const original=f.store.db.prepare('SELECT body FROM runs WHERE id=?…
+     21|    if(verify==='reject'){
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/control/savedResultRetryAuthorization.paired.test.ts > explicit ordinary retry after unsuccessful saved verification > authorizes a distinct normal run after modify only through the actual successful retry receipt
+AssertionError: expected { kind: 'claimed', …(1) } to deeply equal { kind: 'idle' }
+
+- Expected
++ Received
+
+  {
+-   "kind": "idle",
++   "kind": "claimed",
++   "runId": "run-49216c16-8a5e-4972-8336-607b64ef5138",
+  }
+
+ ❯ tests/control/savedResultRetryAuthorization.paired.test.ts:19:84
+     17|    const failed=readDriverRun(f.store,id);expect(failed.state).toBe('b…
+     18|    const dispatch={store:f.store,profileRouter:f.deps.router,admission…
+     19|    replenishStartWakes(dispatch);expect(await deliverScheduledStart(di…
+       |                                                                                    ^
+     20|    const original=f.store.db.prepare('SELECT body FROM runs WHERE id=?…
+     21|    if(verify==='reject'){
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/control/savedResultRetryAuthorization.paired.test.ts > explicit ordinary retry after unsuccessful saved verification > authorizes a distinct normal run after delay only through the actual successful retry receipt
+AssertionError: expected { kind: 'claimed', …(1) } to deeply equal { kind: 'idle' }
+
+- Expected
++ Received
+
+  {
+-   "kind": "idle",
++   "kind": "claimed",
++   "runId": "run-093fefcc-4f71-4e68-9067-576bd2091e3d",
+  }
+
+ ❯ tests/control/savedResultRetryAuthorization.paired.test.ts:19:84
+     17|    const failed=readDriverRun(f.store,id);expect(failed.state).toBe('b…
+     18|    const dispatch={store:f.store,profileRouter:f.deps.router,admission…
+     19|    replenishStartWakes(dispatch);expect(await deliverScheduledStart(di…
+       |                                                                                    ^
+     20|    const original=f.store.db.prepare('SELECT body FROM runs WHERE id=?…
+     21|    if(verify==='reject'){
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  20:03:10
+   Duration  55.26s (tests 98%, transform 1%)
+

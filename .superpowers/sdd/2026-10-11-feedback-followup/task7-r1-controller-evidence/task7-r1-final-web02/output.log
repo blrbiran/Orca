@@ -1,0 +1,16 @@
+
+> @orca/web@0.1.0 check
+> tsc --noEmit -p tsconfig.json && vitest run
+
+
+ RUN  v5.0.3 /private/tmp/orca-feedback-followup-20261011/web
+
+
+ Test Files  106 passed (106)
+      Tests  926 passed (926)
+   Start at  20:39:52
+   Duration  23.32s (tests 55%, environment 28%, transform 7%, import 7%, setup 3%)
+
+    Isolate  106 workers spawned · ~633ms startup each (spawn + environment, per file)
+             at least ~6.82s faster with isolate: false — reuses workers across files instead of one per file
+

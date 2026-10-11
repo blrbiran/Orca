@@ -1,0 +1,44 @@
+# Task 1 integration P2 — independent scoped re-review
+
+**Spec compliance: Approved. Quality: Approved. P2 closed.** No new Critical, Important or Minor product finding in this fix or its introduced regression surface. This is scoped approval, not final current-round merge approval.
+
+Reviewed immutable Orca BASE `be35141f778c2773ab75cd2af6be5901b027ee53` through HEAD `847c9b2dc947d2c5a6abda23a4ce968702d97061`. Product commit `e9f898b61cde33b8c1a67602e140f0f3b8af022a` changes only `web/src/TaskResults.tsx` and `web/tests/resultsApp.test.tsx`; the closing commit adds its report/evidence. Product inspection used committed `git show`/diff objects. Concurrent Task 7 R1 working changes were not read as this scope, mutated or treated as approved. No subagents, suite reruns, browser run, provider, DB, Git state, runtime/pin/service or remote changes. Only this review and the original integration report's append-only closure were written.
+
+## P2 resolution and regression assessment
+
+- `/private/tmp/orca-feedback-followup-20261011/web/src/TaskResults.tsx:52` now records `captureRevision` with the existing per-run/generation authority. The predicate at `:56` compares the answer against **max(effect-local prior, persistent admitted floor)**, so an effect restart cannot lower the floor and a stronger prior cannot be ignored. The write at `:71` retains the greatest admitted capture, rather than replacing it with the latest nullable display or synthesizing a new revision.
+- Whole-response commit ordering remains intact: the actual Task consumer at `TaskResults.tsx:85` remembers only after all answers pass identity/freshness; GroupResults at `web/src/GroupResults.tsx:12` remembers only after its complete aggregate passes. A refused member cannot raise another member's capture, attempt or execution authority. The group helper is unchanged by the product patch and consumes the same corrected authority.
+- The owner reset at `TaskResults.tsx:63`, `[runId,generation]` key at `:64`, and owner keys at `:84`/`GroupResults.tsx:11` remain unchanged. Same account/project/epoch/group/task keeps the floor across projection `changeSeq` and mounted hide/show; real owner replacement resets the Map; new run/generation has an independent entry; unmount retires it. No broader global/cache/polling state was added.
+- Attempt and execution comparisons at `TaskResults.tsx:54`–`:58` and remembered nullable handling at `:72`–`:73` remain unchanged. A nonregressing capture with currentAttempt=null remains admissible and renders unknown; it does not turn the remembered known attempt into a display fact or promote historical prose. A later regressing ordinal still refuses even at the same accepted capture.
+- `web/src/useResultsRead.ts:12` still resets only its effect-local prior, guards active/current request ownership before calling admission at `:20`, and retains the existing abort/auth/interval cleanup at `:26`–`:27`. The three-line authority fix adds no request, timer, DTO field, localStorage write, global state or delivery/command behavior.
+
+## Actual consumer criteria
+
+The new tests preserve all old assertions and use the real App, original hooks and Task/Group consumers:
+
+- `web/tests/resultsApp.test.tsx:130`: four task/group × hide/show/changeSeq sequences first require capture8/current content/verification, then supply capture7 and require `result-response-stale`, absent old prose/current region, no hidden reads and zero command posts.
+- `:150`: both consumers exercise actual account, project, epoch, run and generation replacements, each admitting capture7 after an earlier owner's capture8. The task detail is reopened through existing navigation after the real epoch reset, rather than requiring a detail retired by App to remain mounted.
+- `:176`: both two-run aggregates start with admitted capture8; one valid-looking capture10/attempt2/first concrete execution is paired with a foreign second execution, so the whole response refuses. Valid capture9/attempt1/unknown execution must still admit after restart. This checks all remembered authority, not only capture.
+- `:197`: both consumers accept nonregressing capture9/currentAttempt-null after restart, preserve the unknown display and reject an old attempt at the same capture without borrowing its prose.
+
+## Independent evidence audit — no rerun
+
+Read the full fix report, full scoped product diff, committed helper/callsite bodies, all 17 durable raw outputs, all result metadata, source/commit/readiness/full/mutation audits, and the exact three patches/restoration records.
+
+- All **48 manifest-listed attachments** match their committed byte lengths and SHA256. These are the raw/helper/metadata files excluding the manifest itself. The complete closing evidence is preserved, not normalized to hide failed setup or raw-log EOF whitespace.
+- Independently hashed all **932 immutable HEAD source bytes**, using the declared sorted `path + NUL + bytes + NUL` algorithm: `3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed`. Every per-file record matches. Independently read all 932 source blobs from clone commit `2f5c7f52da3ac322d7ef58912704b7bfbf118588` in its own repository and reproduced that identical hash with no missing paths or byte mismatch. The two owned file hashes are `4763b7bf73daca4761de84e8a9e578c83d408510ed3708084b944c5abb2f969b` and `6f83b96d49826d65ae3ca9715cbe88356aa2237de714ef1aa6f32bfd2985e3bd`.
+- Each of the **17 run-inventory result objects** equals its durable result.json. The final type/build, full Web, clone type/build/baseline/restored results all bind the frozen source hash above. Earlier source variants are explicitly historical.
+- The complete native JSON SHA256 is `f8639dd83525181d2335ef52e5fba9e493c6549572d33d8c7247e2fb6867350b`. Independently visited all **105 files / 922 assertions**: every status passed, every failure-message array empty; zero failed/skipped/pending/todo. Raw full log SHA256 `90cbd594ea57f5130c61a1c44a60e7d78cd6ca2feaf26a1baf21b0a92c3d5201` agrees and was read completely. Final Web type/build are RC0; baseline/restored focused suites are **127/127 across 8 files, no skips**, RC0.
+- RED03 is the clean business witness: exactly four intended missing-refusal failures plus six boundary positives, with 22 selector skips. RED01's undefined-matcher diagnostic and RED02's retired-task-detail fixture error are retained and correctly classified; neither substitutes for RED03. The first final typecheck's new-fixture inferred-union RC2 is retained and superseded by the explicit `RunResultsV1[]` final fix, not credited as mutation evidence.
+- All three mutations are actual assertion failures, RC1: removing persistent capture from admission fails four lifecycle criteria; deleting admitted capture retention fails the same four; deleting whole-response commit gates in both actual consumers fails two aggregate criteria. Independently applied each exact patch **in memory** to the frozen source inventory and reproduced the recorded mutant source SHA256 (`53a40ac4…`, `c164e647…`, `d93c0c0c…`). Raw errors are the intended stale-refusal/current-region behavior, not compiler failures. Every restoration record is unstaged/cached **0/0 bytes**, and the restored focused source/hash passes 127/127.
+- Existing Vite >500kB chunk advice and Vitest worker-isolation advice remain disclosed raw output noise; no new product warning or warning suppression is introduced by this scoped fix. Existing preview-backoff criteria passed in this run; this is not permanent flake elimination or a Task 14 Claude race waiver.
+
+No unresolved fix-path doubt requires another test run: recorded actual App criteria, complete exact-source gates and load-bearing deletions answer the original lifecycle gap and its owner/aggregate/null regression risks.
+
+## Out-of-scope and final-verdict boundary
+
+- Task 7 R1 I1/I2 implementation and its independent review remain pending. This closure does not clear them or authorize merging the overall branch.
+- The later Task 7 persistence boundary is **schema12**, including the marker-only 11→12 owner-version fence from binding spec §6.14. The initial integration report's schema11 discussion is historical for its stated Tasks 1–6 commit range; final integration must inspect the approved schema12 head, actual old11 refusal and 10→11→12 body/accounting preservation. No real store migration/runtime switch is claimed here.
+- Tasks 8–14 remain explicitly deferred. Browser geometry, merged-main/root/panel/CLI acceptance and historical Claude parallel races were not rerun or judged as repaired by this browser-only fix. Default installed ccloop ab824d1/publication/repin limitations remain unchanged.
+
+**Scoped verdict: P2 addressed; spec/quality Approved; no new blocking finding.** Await approved Task 7 R1 HEAD before extending the final current-round integration/merge verdict.
