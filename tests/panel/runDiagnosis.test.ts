@@ -25,7 +25,15 @@ describe("run diagnosis from retained typed facts", () => {
       expect(readRunDiagnosis(h.store, { ...run, runId: "other" })).toEqual({ phase: "work", step: "executing", cause: "unknown", attempt: 2 });
       expect(savedFormatFailureEvidence(h.store, { ...run, runId: "other" })).toBeNull();
       expect(readRunDiagnosis(h.store, { ...run, generation: 2 }).cause).toBe("unknown");
-      expect(readRunDiagnosis(h.store, { ...run, providerAttemptOrdinal: 3 }).cause).toBe("unknown");
+      expect(readRunDiagnosis(h.store, { ...run, savedSource: { ...run.savedSource, attempt: 3 } }).cause).toBe("unknown");
+      const firstDispatch = { ...run, providerAttemptOrdinal: 1 };
+      expect(readRunDiagnosis(h.store, firstDispatch)).toEqual({ phase: "work", step: "executing", cause: "execution-format-invalid", attempt: 1 });
+      expect(savedFormatFailureEvidence(h.store, firstDispatch)?.refs.map(item => item.kind)).toEqual(["saved-decode-capsule", "saved-final", "saved-decode-error", "saved-normalization"]);
+      const ambiguousNormalization = persistRecoveryArtifact(h.store, { status: "unavailable", reason: "execution-format-ambiguous-or-hidden", diagnostic: { method: "none", candidates: 1, valid: 2, hidden: false, originalBytes: 242 } });
+      const ambiguousCapsule = persistRecoveryArtifact(h.store, { ...capsuleBody, artifacts: { ...capsuleBody.artifacts, normalization: ambiguousNormalization } });
+      const ambiguous = { ...firstDispatch, savedSource: { ...firstDispatch.savedSource, source: ambiguousCapsule } };
+      expect(readRunDiagnosis(h.store, ambiguous).cause).toBe("execution-format-ambiguous-or-hidden");
+      expect(savedFormatFailureEvidence(h.store, ambiguous)?.refs.map(item => item.kind)).toContain("saved-final");
       const wrongEnvelope = persistRecoveryArtifact(h.store, { ...capsuleBody, identity: { ...capsuleBody.identity, envelopeHash: "b".repeat(64) } });
       const foreign = { ...run, savedSource: { ...run.savedSource, source: wrongEnvelope } };
       expect(readRunDiagnosis(h.store, foreign).cause).toBe("unknown");
