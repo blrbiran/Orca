@@ -2,7 +2,8 @@ import { budgetAmountSchema, type BudgetAmount } from "./tokenPolicy.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
-import { ESTIMATE_INSTRUCTIONS, buildEstimatePrompt } from "./estimatePrompt.js";
+import { buildEstimatePrompt } from "./estimatePrompt.js";
+import { estimatorCompatibility } from "./estimatorCompatibility.js";
 import { intersectCapabilities, type FrozenProfile, type ObservedProfile } from "./profiles.js";
 import { amountSchema } from "./schema.js";
 import type { ControlStore } from "./store.js";
@@ -80,11 +81,7 @@ export function buildBudgetEstimateRequest(input: EstimateInput): FrozenEstimate
   // Active time, attempts and sessions are bounded by the accounted claim path.
   // Single-call estimate spec §4.4: the estimate runs as one ccloop single call, so ccloop must answer v1 for this
   // selection (a failed probe has no resolution); spec §4.2: and Orca must hold the instruction the profile names.
-  if (observation.probeFailureCode !== null || !preflight || observation.resolution?.singleCallExecution !== "v1"
-    || !Object.hasOwn(ESTIMATE_INSTRUCTIONS, preflight.instructionVersion)
-    || observed.contextWindowTokens === null || observed.handoffControl !== "durable" || observed.handoffExecution === null
-    || observed.usageObservation === "unavailable" || observed.budgetEnforcement === "unavailable"
-    || (input.mode === "strict" && (observed.budgetEnforcement !== "bounded" || !observed.requestBoundProof?.workDimensions.includes("tokens")))) return blocked;
+  if (!estimatorCompatibility(observation, input.mode).compatible || !preflight || observed.contextWindowTokens === null) return blocked;
   const request = budgetEstimateRequestSchema.parse({ schema: "budget-estimate-request-v1", planHash: input.planHash,
     planSnapshotCanonicalJson: input.effectivePlanCanonicalJson ?? input.planCanonicalJson, estimatorProfile: { profileId: profile.snapshot.profile.profileId, profileHash: profile.profileHash },
     estimatorCapabilities: { contextWindowTokens: observed.contextWindowTokens, usageObservation: observed.usageObservation, budgetEnforcement: observed.budgetEnforcement, contextObservation: observed.contextObservation },
@@ -116,7 +113,7 @@ export function estimateCapabilityDegraded(request: BudgetEstimateRequestV1, obs
   if (observation.profile.profileHash !== request.estimatorProfile.profileHash) throw new ControlError("profile-changed");
   const current = intersectCapabilities(observation.profile.snapshot.profile.capabilities, observation.observed), frozen = request.estimatorCapabilities;
   const order = ["unavailable", "phase-end", "realtime"], budgetOrder = ["unavailable", "soft", "bounded"];
-  return observation.probeFailureCode !== null || observation.resolution?.singleCallExecution !== "v1"
+  return !estimatorCompatibility(observation, mode).compatible
     || current.contextWindowTokens === null || current.contextWindowTokens < frozen.contextWindowTokens
     || order.indexOf(current.usageObservation) < order.indexOf(frozen.usageObservation)
     || order.indexOf(current.contextObservation) < order.indexOf(frozen.contextObservation)

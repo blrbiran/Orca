@@ -129,7 +129,7 @@ describe("the store's own modes", () => {
 });
 
 describe("what a panel with no port refuses", () => {
-  it("refuses a plan import by the estimator's own name, on the route that actually exists", async () => {
+  it("reaches target validation for import even with no estimator or execution port", async () => {
     // ⚠️ The first version of this judgement posted to /api/control/commands, which is not a route.
     // It answered 404 and the assertion -- "status >= 400 and not panel-internal-error" -- passed.
     // A criterion that cannot tell a missing route from a named refusal is not judging anything, so
@@ -144,8 +144,7 @@ describe("what a panel with no port refuses", () => {
       body: JSON.stringify({ commandId: "import-1", expectedRevision: 0, payload: { groupId: "g", repoId: "proj", planId: "plan" } }),
     });
     const body = await response.json() as { error?: { code?: string } };
-    expect(response.status).not.toBe(404);
-    expect(body.error?.code).toBe("control-estimator-unconfigured");
+    expect(body.error?.code).toBe("control-target-not-allowed");
   });
 
   it("does not answer a real mutation route with route-not-found, which is how the above went vacuous", async () => {

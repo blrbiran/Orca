@@ -74,6 +74,41 @@ const options = (container: HTMLElement, name: string): string[] =>
   [...container.querySelectorAll(`select[name="${name}"] option`)].map((option) => (option as HTMLOptionElement).value);
 
 describe("agent selection in the proposal view (agent selection spec §6.8)", () => {
+  it("names the concrete inherited value and source beside task fields", () => {
+    const { container } = renderView({});
+    const fields = container.querySelector('fieldset[aria-label="Task a"]') as HTMLElement;
+    expect(fields.textContent).toContain("inherit claude from operator");
+    expect(fields.textContent).toContain("inherit claude-opus-5-5 from operator-agent");
+    expect(fields.textContent).toContain("inherit agent default from descriptor");
+  });
+  it("uses the server's group primary preview for estimator inheritance labels", () => {
+    const primary = frozen({ agent: "claude", model: "claude-fable-5", contextWindow: 1_000_000 },
+      { agent: "group-primary", model: "group-primary", contextWindow: "group-primary" });
+    const preview = resolvedPreview({ rolePreviews: { worker: { kind: "resolved", frozen: primary }, estimator: { kind: "resolved", frozen: primary } } });
+    const { container } = renderView({ preview });
+    const fields = container.querySelector('fieldset[aria-label="Group estimator"]') as HTMLElement;
+    expect(fields.textContent).toContain("inherit claude from group primary");
+    expect(fields.textContent).toContain("inherit claude-fable-5 from group primary");
+    expect(fields.textContent).toContain("inherit 1000000 tokens from group primary");
+  });
+  it("retains an unsupported task context draft and disables submitting that layer", () => {
+    const { container } = renderView({ drafts: { "g:agent:task:b:context": "1000000" } });
+    const task = row(container, "task:b");
+    expect((task.querySelector('select[name="g:agent:task:b:context"]') as HTMLSelectElement).value).toBe("1000000");
+    expect((task.querySelector("button") as HTMLButtonElement).disabled).toBe(true);
+    expect(task.querySelector('[role="alert"]')?.textContent).toMatch(/context/i);
+  });
+
+  it("switches a group Agent without carrying the previous installation's model or context", () => {
+    const onCommand = vi.fn();
+    const { container } = renderView({ onCommand, preferences: { defaultAgent: "claude", perAgent: {} },
+      preview: resolvedPreview({ groupOverrides: { worker: { agent: "claude", model: "claude-m", contextWindow: 1_000_000 } } }),
+      drafts: { "g:agent:group:worker:agent": "codex" } });
+    expect((container.querySelector('input[name="g:agent:group:worker:model"]') as HTMLInputElement).value).toBe("");
+    expect((container.querySelector('select[name="g:agent:group:worker:context"]') as HTMLSelectElement).value).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Set group worker agent" }));
+    expect(onCommand.mock.calls[0]![0]).toMatchObject({ payload: { partial: { agent: "codex" } } });
+  });
   it("shows each task's resolved agent, model and context with the layer each came from", () => {
     const { container } = renderView({});
     const a = row(container, "task:a").textContent!;
@@ -137,14 +172,14 @@ describe("agent selection in the proposal view (agent selection spec §6.8)", ()
     expect(options(container, "g:agent:group:reconcile:context")).toEqual(["", "agent-default"]);
     expect(options(container, "g:agent:task:a:context")).toEqual(["", "agent-default"]);
     cleanup();
-    // A group worker agent sits below the reconcile and task layers, and not below the estimator's.
+    // With no explicit estimator role, the group worker is also its primary baseline.
     const second = renderView({
       preferences: { defaultAgent: "codex", perAgent: {} },
       preview: resolvedPreview({ groupOverrides: { worker: { agent: "claude" } } }),
     }).container;
     expect(options(second, "g:agent:group:reconcile:context")).toEqual(["", "agent-default", "1000000"]);
     expect(options(second, "g:agent:task:a:context")).toEqual(["", "agent-default", "1000000"]);
-    expect(options(second, "g:agent:group:estimator:context")).toEqual(["", "agent-default"]);
+    expect(options(second, "g:agent:group:estimator:context")).toEqual(["", "agent-default", "1000000"]);
     cleanup();
     // An operator reconcile agent sits below the group layers of the reconcile slot only.
     const third = renderView({ preferences: { defaultAgent: "codex", perAgent: {}, reconcile: { agent: "claude" } } }).container;

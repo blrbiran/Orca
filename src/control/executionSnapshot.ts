@@ -41,7 +41,7 @@ export interface ConfirmedProposal {
   groupLimit: BudgetAmount;
   budgetMode: "strict" | "soft";
   contextPolicy: { handoffAtContextTokens: number | null };
-  profiles: { estimator: ProfileBindingV1; worker: ProfileBindingV1; handoff: ProfileBindingV1; goalReview: ProfileBindingV1 };
+  profiles: { estimator: ProfileBindingV1 | null; worker: ProfileBindingV1; handoff: ProfileBindingV1; goalReview: ProfileBindingV1 };
   allocations: Array<ExecutionAllocation | EstimateAllocation>;
   tasks: Array<{
     taskId: string;

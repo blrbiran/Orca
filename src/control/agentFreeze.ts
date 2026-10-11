@@ -1,5 +1,5 @@
 import { readAgentPreferences } from "./agentPreferences.js";
-import { descriptorProvenance, frozenSlotOf, resolveSelection, selectionsHash, slotLayers, type AgentResolution, type FrozenSlot, type GroupAgentOverrides, type PanelPartialSelection, type PartialSelection, type ProvenanceSource } from "./agentSelection.js";
+import { descriptorProvenance, frozenSlotOf, resolveSelection, selectionsHashV2, slotLayers, type AgentResolution, type FrozenSlot, type GroupAgentOverrides, type PanelPartialSelection, type PartialSelection, type ProvenanceSource } from "./agentSelection.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { ControlError, nonDurableControlErrorClassifications } from "./errors.js";
 import type { ExecutionPort } from "./executionPort.js";
@@ -139,7 +139,7 @@ export async function resolveGroupSelections(
   for (const slot of slots) if (slot.outcome.kind === "resolved") frozen[slot.key] = slot.outcome.frozen;
   return {
     proposalVersion: base.proposalVersion, groupOverrides: base.groupOverrides, taskOverrides: base.taskOverrides, planLayers: base.planLayers, slots,
-    selectionsHash: Object.keys(frozen).length === slots.length ? selectionsHash(frozen) : null,
+    selectionsHash: Object.keys(frozen).length === slots.length ? selectionsHashV2(frozen) : null,
   };
 }
 

@@ -114,6 +114,77 @@ async function setup() {
 }
 
 describe("immutable plan import", () => {
+  it("imports a draft with deterministic defaults when no estimator profile is configured", async () => {
+    const h = await setup();
+    try {
+      const result = await importControlPlanAsync({ ...h.deps, defaults: () => null }, command());
+      expect(result).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM groups").get()?.n).toBe(1);
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM scheduler_wakes WHERE kind='budget-estimate'").get()?.n).toBe(0);
+    } finally { await h.dispose(); }
+  });
+  it("writes no estimator slot when a synchronous caller has no configured estimator profile", async () => {
+    const h = await setup();
+    try {
+      const result = importControlPlan({ ...h.deps, defaults: () => null }, command());
+      expect(result).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
+      if (!("result" in result) || result.result.kind !== "imported") throw new Error("import refused");
+      expect(readEstimateRecord(h.store, "g", result.result.estimateId)).toMatchObject({ profile: null, estimatorSlot: null });
+    } finally { await h.dispose(); }
+  });
+  it("probes the plan worker primary for a new import and freezes that estimator selection", async () => {
+    const h = await setup();
+    try {
+      await writeFile(h.planPath, JSON.stringify({ ...h.plan, agent: { agent: "claude", model: "B-m" } }));
+      const probed: unknown[] = [];
+      const result = await importControlPlanAsync({ ...h.deps, profileRouter: {
+        ...h.router,
+        probe: async (selected, partial) => {
+          probed.push(partial);
+          return { ...h.deps.estimatorObservation(selected), observedAt: new Date(0).toISOString(), resolution: {
+            ...fixtureResolutionFor(selected.snapshot.profile.capabilities), selection: { agent: "claude", model: "B-m", contextWindow: "agent-default" as const },
+          } };
+        },
+      } }, command());
+      expect(result).toMatchObject({ result: { kind: "imported", estimateState: "queued" } });
+      expect(probed).toEqual([{ agent: "claude", model: "B-m" }]);
+      if (!("result" in result) || result.result.kind !== "imported") throw new Error("import refused");
+      expect(readEstimateRecord(h.store, "g", result.result.estimateId).estimatorSlot?.selection).toEqual({ agent: "claude", model: "B-m", contextWindow: "agent-default" });
+    } finally { await h.dispose(); }
+  });
+
+  it("refuses an import when the plan primary changes while its estimator probe is in flight", async () => {
+    const h = await setup();
+    try {
+      await writeFile(h.planPath, JSON.stringify({ ...h.plan, agent: { agent: "claude", model: "B-m" } }));
+      let release!: (value: ReturnType<typeof h.deps.estimatorObservation> & { observedAt: string }) => void;
+      const probe = vi.fn((..._args: Parameters<typeof h.router.probe>) => new Promise<ReturnType<typeof h.deps.estimatorObservation> & { observedAt: string }>(resolve => { release = resolve; }));
+      const pending = importControlPlanAsync({ ...h.deps, profileRouter: { ...h.router, probe } }, command());
+      expect(probe.mock.calls[0]?.[1]).toEqual({ agent: "claude", model: "B-m" });
+      await writeFile(h.planPath, JSON.stringify({ ...h.plan, agent: { agent: "codex", model: "A-m" } }));
+      release({ ...h.deps.estimatorObservation(h.frozen), observedAt: new Date(0).toISOString() });
+      expect(await pending).toMatchObject({ error: { code: "plan-version-conflict" } });
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM groups").get()?.n).toBe(0);
+    } finally { await h.dispose(); }
+  });
+  it("refuses an import when the plan layer source changes during its probe but resolves to the same fields", async () => {
+    const h = await setup();
+    try {
+      h.store.db.prepare("UPDATE agent_preferences SET doc_json=? WHERE operator_id='operator'")
+        .run(canonicalBytes({ defaultAgent: "claude", perAgent: {} }).toString("utf8"));
+      await writeFile(h.planPath, JSON.stringify({ ...h.plan, agent: { model: "B-m" } }));
+      let release!: (value: ReturnType<typeof h.deps.estimatorObservation> & { observedAt: string }) => void;
+      const probe = vi.fn((..._args: Parameters<typeof h.router.probe>) => new Promise<ReturnType<typeof h.deps.estimatorObservation> & { observedAt: string }>((resolve) => { release = resolve; }));
+      const pending = importControlPlanAsync({ ...h.deps, profileRouter: { ...h.router, probe } }, command());
+      expect(probe.mock.calls[0]?.[1]).toEqual({ agent: "claude", model: "B-m" });
+      await writeFile(h.planPath, JSON.stringify({ ...h.plan, agent: { agent: "claude", model: "B-m" } }));
+      release({ ...h.deps.estimatorObservation(h.frozen), observedAt: new Date(0).toISOString(), resolution: {
+        ...fixtureResolutionFor(h.frozen.snapshot.profile.capabilities), selection: { agent: "claude", model: "B-m", contextWindow: "agent-default" },
+      } as never });
+      expect(await pending).toMatchObject({ error: { code: "plan-version-conflict" } });
+      expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM groups").get()?.n).toBe(0);
+    } finally { await h.dispose(); }
+  });
   it("normalizes sets, archives contracts, and keeps imported authority unchanged after source edits", async () => {
     const h = await setup();
     try {
@@ -201,7 +272,7 @@ describe("immutable plan import", () => {
     } finally { await h.dispose(); }
   });
 
-  it("rechecks revision after a successful in-flight probe before source I/O", async () => {
+  it("rechecks revision after a successful in-flight probe before importing", async () => {
     const h = await setup();
     try {
       let release!: (value: ReturnType<typeof h.deps.estimatorObservation> & { observedAt: string }) => void;
@@ -214,7 +285,7 @@ describe("immutable plan import", () => {
       release({ ...h.deps.estimatorObservation(h.frozen), observedAt: new Date(0).toISOString() });
       const result = await pending;
       expect(result).toMatchObject({ error: { code: "revision-conflict", commandRevision: 1 } });
-      expect(resolveTarget).not.toHaveBeenCalled();
+      expect(resolveTarget).toHaveBeenCalledTimes(1);
       expect(lookupCommandResult(h.store, "g", "import-1")).toMatchObject({ originalStatus: 409, body: result });
     } finally { await h.dispose(); }
   });

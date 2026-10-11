@@ -7,7 +7,7 @@
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
-import { SelectionFields, contextLabel, panelPartialFromFields } from "./AgentFields.js";
+import { SelectionFields, contextLabel, panelPartialFromFields, selectionFieldErrors } from "./AgentFields.js";
 import type {
   AgentSelectionPreviewV1, AgentSelectionV1, AgentSlotV1, AgentsViewV1, GroupAgentOverridesV1, GroupViewV1, OperatorPreferencesV1,
   PanelPartialSelectionV1, PartialSelectionV1, SelectionProvenanceV1, SlotOutcomeV1,
@@ -41,7 +41,8 @@ export function inheritedAgentFor(
   const groupWorker = (below: string | undefined): string | undefined => levelAgent(overrides.worker, planLayers?.group.worker, below);
   if (scope.kind === "task") return groupWorker(operator);
   if (scope.slot === "worker") return operator;
-  if (scope.slot === "estimator") return preferences?.estimator?.agent ?? operator;
+  if (scope.slot === "estimator") return preferences?.estimator && Object.values(preferences.estimator).some((value) => value !== undefined)
+    ? preferences.estimator.agent ?? operator : groupWorker(operator);
   return groupWorker(preferences?.reconcile?.agent ?? operator);
 }
 
@@ -170,11 +171,15 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
       {!archived && (["worker", "estimator", "reconcile"] as const).map((slot) => {
         const scope: Scope = { kind: "group", slot };
         const prefix = agentDraftPrefix(groupId, scope);
-        const partial = panelPartialFromFields(agents, prefix, preview.groupOverrides[slot], plannedFor(scope), drafts, inherited(scope));
+        const roleOutcome = slot === "worker" ? preview.rolePreviews?.worker : slot === "estimator" ? preview.rolePreviews?.estimator : preview.slots.find((entry) => entry.key === "reconcile")?.outcome;
+        const inheritance = roleOutcome?.kind === "resolved" ? roleOutcome.frozen : undefined;
+        const inheritedAgent = inherited(scope) ?? inheritance?.selection.agent;
+        const partial = panelPartialFromFields(agents, prefix, preview.groupOverrides[slot], plannedFor(scope), drafts, inheritedAgent);
+        const invalid = selectionFieldErrors(agents, prefix, preview.groupOverrides[slot], plannedFor(scope), drafts, inheritedAgent).length > 0;
         return (
           <div key={slot}>
-            <SelectionFields agents={agents} prefix={prefix} label={t("agents.groupSlot", { slot: enumText("agentSlot", slot) })} current={preview.groupOverrides[slot]} planned={plannedFor(scope)} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
-            <button type="button" disabled={Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>{t("agents.setGroup", { slot: enumText("agentSlot", slot) })}</button>
+            <SelectionFields agents={agents} prefix={prefix} label={t("agents.groupSlot", { slot: enumText("agentSlot", slot) })} current={preview.groupOverrides[slot]} planned={plannedFor(scope)} inheritedAgent={inheritedAgent} inheritance={inheritance} drafts={drafts} onDraft={onDraft} />
+            <button type="button" disabled={invalid || Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>{t("agents.setGroup", { slot: enumText("agentSlot", slot) })}</button>
             <button type="button" disabled={preview.groupOverrides[slot] === undefined} onClick={() => send(scope, null)}>{t("agents.clearGroup", { slot: enumText("agentSlot", slot) })}</button>
             {slot === "estimator" && (
               // Wave 3 review M-7 / ruling R7: the estimator is not part of the confirm; it is used at the next re-estimate.
@@ -192,6 +197,7 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
             const scope: Scope | null = taskId === null ? null : { kind: "task", taskId };
             const prefix = scope === null ? "" : agentDraftPrefix(groupId, scope);
             const partial = scope === null ? {} : panelPartialFromFields(agents, prefix, own, plannedFor(scope), drafts, inherited(scope));
+            const invalid = scope !== null && selectionFieldErrors(agents, prefix, own, plannedFor(scope), drafts, inherited(scope)).length > 0;
             return (
               <tr key={entry.key} data-slot={entry.key}>
                 <td>{taskId ?? enumText("agentSlot", "reconcile")}</td>
@@ -201,8 +207,8 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
                 <td>
                   {scope !== null && !archived && (
                     <>
-                      <SelectionFields agents={agents} prefix={prefix} label={t("agents.taskLayer", { taskId: String(taskId) })} current={own} planned={plannedFor(scope)} inheritedAgent={inherited(scope)} drafts={drafts} onDraft={onDraft} />
-                      <button type="button" disabled={Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>{t("agents.setTask", { taskId: String(taskId) })}</button>
+                      <SelectionFields agents={agents} prefix={prefix} label={t("agents.taskLayer", { taskId: String(taskId) })} current={own} planned={plannedFor(scope)} inheritedAgent={inherited(scope) ?? (entry.outcome.kind === "resolved" ? entry.outcome.frozen.selection.agent : undefined)} inheritance={entry.outcome.kind === "resolved" ? entry.outcome.frozen : undefined} drafts={drafts} onDraft={onDraft} />
+                      <button type="button" disabled={invalid || Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>{t("agents.setTask", { taskId: String(taskId) })}</button>
                       <button type="button" disabled={own === undefined} onClick={() => send(scope, null)}>{t("agents.clearTask", { taskId: String(taskId) })}</button>
                     </>
                   )}

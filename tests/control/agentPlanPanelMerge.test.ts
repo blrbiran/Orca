@@ -78,8 +78,8 @@ describe("the plan and the panel at one level, merged per field (ruling review R
     });
   });
 
-  it("reads a null in the estimator's panel layer as no choice (the plan has no estimator layer, ruling R8)", () => {
+  it("reads a null in the estimator's panel layer as inheritance from the group primary", () => {
     const result = resolveSelection(slotLayers("estimator", operator, { estimator: { agent: null, model: "e" } }), operator.perAgent);
-    expect(result).toEqual({ partial: { agent: "claude", model: "e" }, provenance: { agent: "operator", model: "group-estimator", contextWindow: null } });
+    expect(result).toEqual({ partial: { agent: "claude", model: "e" }, provenance: { agent: "group-primary", model: "group-estimator", contextWindow: null } });
   });
 });

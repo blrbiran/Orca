@@ -116,7 +116,7 @@ export const capabilityViewSchema = z
 export const provenanceSourceSchema = z.enum([
   "operator", "operator-estimator", "operator-reconcile", "group", "group-estimator", "group-reconcile", "task", "operator-agent", "descriptor",
   // Ruling review R7: the plan file's half of each level, below the panel's (which keeps the older names).
-  "group-plan", "group-reconcile-plan", "task-plan",
+  "group-plan", "group-primary", "group-reconcile-plan", "task-plan",
 ]);
 export const selectionProvenanceSchema = z
   .object({ agent: provenanceSourceSchema, model: provenanceSourceSchema, contextWindow: provenanceSourceSchema })
@@ -493,7 +493,7 @@ export const executionSnapshotSchema = z
     budgetMode: z.enum(["strict", "soft"]),
     contextPolicy: z.object({ handoffAtContextTokens: positiveSafeInteger.nullable() }).strict(),
     profiles: z
-      .object({ estimator: profileBindingSchema, worker: profileBindingSchema, handoff: profileBindingSchema, goalReview: profileBindingSchema })
+      .object({ estimator: profileBindingSchema.nullable(), worker: profileBindingSchema, handoff: profileBindingSchema, goalReview: profileBindingSchema })
       .strict(),
     allocations: z.array(executionAllocationSchema),
     derivedContracts: z.array(z.object({ taskId: idSchema, derivedContractHash: hashSchema }).strict()),
@@ -724,8 +724,8 @@ export const confirmPayloadSchema = z
     planHash: hashSchema,
     proposalVersion: positiveSafeInteger,
     budgetMode: z.enum(["strict", "soft"]),
-    profileIds: z.object({ estimator: idSchema, worker: idSchema, handoff: idSchema, goalReview: idSchema }).strict(),
-    profileHashes: z.object({ estimator: hashSchema, worker: hashSchema, handoff: hashSchema, goalReview: hashSchema }).strict(),
+    profileIds: z.object({ estimator: idSchema.nullable(), worker: idSchema, handoff: idSchema, goalReview: idSchema }).strict(),
+    profileHashes: z.object({ estimator: hashSchema.nullable(), worker: hashSchema, handoff: hashSchema, goalReview: hashSchema }).strict(),
     contextPolicy: z.object({ handoffAtContextTokens: positiveSafeInteger.nullable() }).strict(),
     // Agent selection spec §6.4 step 3 (§12 C4): the hash of the selections the operator saw; refused as
     // agent-selection-changed when what confirmation resolves is not that.
@@ -734,7 +734,10 @@ export const confirmPayloadSchema = z
     // group's scheme is not keep. Absent adds no bytes, so a keep group's confirm hashes as before.
     integrationHash: hashSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if ((value.profileIds.estimator === null) !== (value.profileHashes.estimator === null)) issue(ctx, ["profileHashes", "estimator"], "estimator-profile-id-hash-pair-required");
+  });
 export const setLimitPayloadSchema = z.object({ limit: budgetAmountSchema }).strict();
 
 const effectiveImportPlanPayloadSchema = z
@@ -742,8 +745,8 @@ const effectiveImportPlanPayloadSchema = z
     groupId: idSchema,
     repoId: idSchema,
     planId: idSchema,
-    estimatorProfileId: idSchema,
-    estimatorProfileHash: hashSchema,
+    estimatorProfileId: idSchema.nullable(),
+    estimatorProfileHash: hashSchema.nullable(),
     estimateMode: z.enum(["strict", "soft"]),
   })
   .strict();
@@ -1301,7 +1304,7 @@ export const estimateViewSchema = z
     estimateId: idSchema,
     estimateVersion: positiveSafeInteger,
     state: z.enum(["queued", "running", "start-unknown", "ready", "failed", "interrupted", "blocked-capability", "input-too-large"]),
-    profile: profileBindingSchema,
+    profile: profileBindingSchema.nullable(),
     mode: z.enum(["strict", "soft"]),
     requestHash: hashSchema.nullable(),
     outputHash: hashSchema.nullable(),
@@ -1384,7 +1387,7 @@ export const groupViewSchema = z
         budgetMode: z.enum(["strict", "soft"]).nullable(),
         contextPolicy: z.object({ handoffAtContextTokens: positiveSafeInteger.nullable() }).strict(),
         profiles: z
-          .object({ estimator: profileBindingSchema, worker: profileBindingSchema, handoff: profileBindingSchema, goalReview: profileBindingSchema })
+          .object({ estimator: profileBindingSchema.nullable(), worker: profileBindingSchema, handoff: profileBindingSchema, goalReview: profileBindingSchema })
           .strict()
           .nullable(),
         executionSnapshotHash: hashSchema.nullable(),
@@ -1786,6 +1789,7 @@ export const agentSelectionPreviewSchema = z
     slots: z.array(
       z.object({ key: nonemptyString, slot: z.enum(["worker", "reconcile"]), taskId: idSchema.nullable(), outcome: slotOutcomeSchema }).strict(),
     ),
+    rolePreviews: z.object({ worker: slotOutcomeSchema, estimator: slotOutcomeSchema }).strict().optional(),
     selectionsHash: hashSchema.nullable(),
   })
   .strict()

@@ -7,6 +7,8 @@ import { readGroupSnapshot, type GroupReadSnapshot, type StoredJsonResult } from
 import { validateRetryGrantSource } from "../control/retryGrant.js";
 import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executionSnapshot.js";
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
+import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
+import { readAgentPreferences } from "../control/agentPreferences.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
 import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint } from "../control/usageSettlement.js";
@@ -15,7 +17,7 @@ import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { dimensions } from "../control/commands.js";
 import { driveRecordSchema } from "../control/driveRecord.js";
-import { ControlError } from "../control/errors.js";
+import { ControlError, nonDurableControlErrorClassifications } from "../control/errors.js";
 import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
 import { effectiveTaskLabels, readTaskLabelState } from "../control/labels.js";
 import { choosePlanByLabels, loopPlanDefinition } from "../control/loopPlans.js";
@@ -849,7 +851,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
         || run.workItemId !== run.estimateId || run.executionProfile.workKind !== "budget-estimate") return blocked(`run-estimate-identity:${runId}`);
       const estimate = readEstimateRecord(store, groupId, run.estimateId);
       const zero = { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 };
-      if (!sameBinding(run.executionProfile, estimate.profile, "budget-estimate")
+      if (estimate.profile === null || !sameBinding(run.executionProfile, estimate.profile, "budget-estimate")
         || canonicalBytes(run.grant.work).compare(canonicalBytes(estimate.grant)) !== 0
         || canonicalBytes(run.grant.handoff).compare(canonicalBytes(zero)) !== 0) return blocked(`run-estimate-profile:${runId}`);
       // Spec §12 C5: an estimate run carries its estimate's frozen estimator selection and nothing else.
@@ -1141,7 +1143,21 @@ export async function readSelectionPreview(
   groupId: string,
 ): Promise<AgentSelectionPreviewV1> {
   const resolved = await resolveGroupSelections({ store, port }, groupId, operatorId, "preview");
-  const parsed = agentSelectionPreviewSchema.safeParse({ schema: "orca-agent-selection-preview-v1", groupId, ...resolved });
+  const prefs = readAgentPreferences(store, operatorId).preferences;
+  const rolePreview = async (slot: "worker" | "estimator") => {
+    try {
+      const { partial, provenance } = resolveSelection(slotLayers(slot, prefs, resolved.groupOverrides, undefined, { group: resolved.planLayers.group.worker }), prefs.perAgent);
+      const answer = await port.resolveAgent(partial);
+      return { kind: "resolved" as const, frozen: frozenSlotOf(answer, partial, descriptorProvenance(partial, answer.selection, provenance)) };
+    } catch (error) {
+      if (!(error instanceof ControlError)) throw error;
+      return (nonDurableControlErrorClassifications as Record<string, string>)[error.code] === "transient"
+        ? { kind: "unavailable" as const, code: error.code }
+        : { kind: "rejected" as const, code: error.code };
+    }
+  };
+  const rolePreviews = { worker: await rolePreview("worker"), estimator: await rolePreview("estimator") };
+  const parsed = agentSelectionPreviewSchema.safeParse({ schema: "orca-agent-selection-preview-v1", groupId, ...resolved, rolePreviews });
   if (!parsed.success) return blocked(`agent-preview:${parsed.error.issues[0]?.path.join(".")}:${parsed.error.issues[0]?.message}`);
   return parsed.data;
 }

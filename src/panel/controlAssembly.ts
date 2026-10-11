@@ -219,7 +219,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     // particular no mode is guessed -- a guessed mode is how a soft adapter comes to be driven as
     // a strict one, which is the whole reason these are operator arguments.
     defaults: () => {
-      if (estimator === null || control.estimateMode === null) throw new ControlError("control-estimator-unconfigured");
+      if (estimator === null || control.estimateMode === null) return null;
       return { estimatorProfileId: estimator.snapshot.profile.profileId, estimatorProfileHash: estimator.profileHash, estimateMode: control.estimateMode };
     },
   });

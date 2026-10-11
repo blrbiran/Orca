@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  descriptorProvenance, resolveSelection, selectionsHash, slotLayers,
+  descriptorProvenance, resolveSelection, selectionsHash, selectionsHashV2, slotLayers,
   type FrozenSlot, type OperatorPreferences, type SelectionLayer,
 } from "../../src/control/agentSelection.js";
 import { unavailableCapabilities } from "../../src/control/profiles.js";
@@ -12,6 +12,34 @@ const layer = (name: SelectionLayer["name"], partial: SelectionLayer["partial"])
 const prefs = (patch: Partial<OperatorPreferences> = {}): OperatorPreferences => ({ perAgent: {}, ...patch });
 
 describe("resolveSelection follows the spec §6.3 formal definition", () => {
+  it("inherits the group primary selection for an unconfigured estimator", () => {
+    const operator = prefs({ defaultAgent: "A", perAgent: { A: { model: "A-m" }, B: { model: "B-default" } } });
+    const result = resolveSelection(slotLayers("estimator", operator, { worker: { agent: "B", model: "B-m", contextWindow: 128000 } }), operator.perAgent);
+    expect(result.partial).toEqual({ agent: "B", model: "B-m", contextWindow: 128000 });
+    expect(result.provenance).toEqual({ agent: "group-primary", model: "group-primary", contextWindow: "group-primary" });
+  });
+
+  it("keeps a partial operator estimator override associated with its operator agent", () => {
+    const operator = prefs({ defaultAgent: "A", perAgent: { A: { model: "A-default" } }, estimator: { model: "A-m" } });
+    const result = resolveSelection(slotLayers("estimator", operator, { worker: { agent: "B", model: "B-m" } }), operator.perAgent);
+    expect(result.partial).toEqual({ agent: "A", model: "A-m" });
+    expect(result.provenance).toEqual({ agent: "operator", model: "operator-estimator", contextWindow: null });
+  });
+
+  it("applies a group model-only estimator override over the group primary agent", () => {
+    const operator = prefs({ defaultAgent: "A" });
+    const result = resolveSelection(slotLayers("estimator", operator, { worker: { agent: "B", model: "B-m" }, estimator: { model: "B-x" } }), operator.perAgent);
+    expect(result.partial).toEqual({ agent: "B", model: "B-x" });
+    expect(result.provenance).toEqual({ agent: "group-primary", model: "group-estimator", contextWindow: null });
+  });
+
+  it("uses the effective plan worker as the group primary and isolates an explicit estimator agent switch", () => {
+    const operator = prefs({ defaultAgent: "A", perAgent: { C: { model: "C-m" } } });
+    const primary = resolveSelection(slotLayers("estimator", operator, {}, undefined, { group: { agent: "B", model: "B-m" } }), operator.perAgent);
+    expect(primary.partial).toEqual({ agent: "B", model: "B-m" });
+    const switched = resolveSelection(slotLayers("estimator", operator, { worker: { agent: "B", model: "B-m" }, estimator: { agent: "C" } }), operator.perAgent);
+    expect(switched.partial).toEqual({ agent: "C", model: "C-m" });
+  });
   it("(a) a task that repeats the upper layer's agent keeps the model the upper layer set for that agent", () => {
     const result = resolveSelection([
       layer("operator", { agent: "claude" }),
@@ -117,5 +145,11 @@ describe("selectionsHash binds exactly what the operator saw (spec §6.4 step 3)
   it("covers only partial, selection and configHash: provenance and limits are derived, not chosen", () => {
     const base = selectionsHash({ "task:a": slot("a".repeat(64)) });
     expect(selectionsHash({ "task:a": { ...slot("a".repeat(64)), provenance: { agent: "task", model: "task", contextWindow: "task" }, timeoutMs: 1, killGraceMs: 0 } })).toBe(base);
+  });
+
+  it("uses a new hash domain for new freezes while preserving the historical v1 hash", () => {
+    const slots = { "task:a": slot("a".repeat(64)) };
+    expect(selectionsHash(slots)).toBe("528669a1193ba50998a5e5a2fe5aff72cc0309b0235fef86c983a6c1c862528b");
+    expect(selectionsHashV2(slots)).not.toBe(selectionsHash(slots));
   });
 });

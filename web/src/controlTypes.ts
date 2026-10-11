@@ -275,7 +275,7 @@ export type EstimateViewV1 = {
   estimateId: string;
   estimateVersion: number;
   state: "queued" | "running" | "start-unknown" | "ready" | "failed" | "interrupted" | "blocked-capability" | "input-too-large";
-  profile: ProfileBindingV1;
+  profile: ProfileBindingV1 | null;
   mode: "strict" | "soft";
   requestHash: string | null;
   outputHash: string | null;
@@ -307,7 +307,7 @@ export type GroupViewV1 = {
     planHash: string;
     budgetMode: "strict" | "soft" | null;
     contextPolicy: { handoffAtContextTokens: number | null };
-    profiles: null | { estimator: ProfileBindingV1; worker: ProfileBindingV1; handoff: ProfileBindingV1; goalReview: ProfileBindingV1 };
+    profiles: null | { estimator: ProfileBindingV1 | null; worker: ProfileBindingV1; handoff: ProfileBindingV1; goalReview: ProfileBindingV1 };
     executionSnapshotHash: string | null;
   };
   ledger: { groupLimit: BudgetAmount; used: Amount; committedRemaining: Amount; explicitUnallocatedReserve: BudgetAmount; budgetDeficit: Amount; usageUnknown: boolean };
@@ -406,8 +406,8 @@ export type ConfirmPayloadV1 = {
   planHash: string;
   proposalVersion: number;
   budgetMode: "strict" | "soft";
-  profileIds: { estimator: string; worker: string; handoff: string; goalReview: string };
-  profileHashes: { estimator: string; worker: string; handoff: string; goalReview: string };
+  profileIds: { estimator: string | null; worker: string; handoff: string; goalReview: string };
+  profileHashes: { estimator: string | null; worker: string; handoff: string; goalReview: string };
   contextPolicy: { handoffAtContextTokens: number | null };
   /** Agent selection spec §6.4 step 3: the hash of the selections the operator saw. */
   selectionsHash: string;
@@ -455,7 +455,7 @@ export type ContextWindowV1 = "agent-default" | number;
 export type ProvenanceSourceV1 =
   | "operator" | "operator-estimator" | "operator-reconcile" | "group" | "group-estimator" | "group-reconcile" | "task" | "operator-agent" | "descriptor"
   // Ruling review R7: the plan file's half of each level, below the panel's.
-  | "group-plan" | "group-reconcile-plan" | "task-plan";
+  | "group-plan" | "group-primary" | "group-reconcile-plan" | "task-plan";
 export type PartialSelectionV1 = { agent?: string; model?: string; contextWindow?: ContextWindowV1 };
 /** Ruling review R7: a panel layer; a null field masks the plan's value for that field at the same level. */
 export type PanelPartialSelectionV1 = { agent?: string | null; model?: string | null; contextWindow?: ContextWindowV1 | null };
@@ -562,6 +562,7 @@ export type AgentSelectionPreviewV1 = {
   /** Ruling review R7: the plan file's own layers, below the panel's. */
   planLayers: { group: { worker?: PartialSelectionV1; reconcile?: PartialSelectionV1 }; tasks: Record<string, PartialSelectionV1 | null> };
   slots: Array<{ key: string; slot: "worker" | "reconcile"; taskId: string | null; outcome: SlotOutcomeV1 }>;
+  rolePreviews?: { worker: SlotOutcomeV1; estimator: SlotOutcomeV1 };
   selectionsHash: string | null;
 };
 /** Plan-review P5 (W6-8): the revision travels in the envelope's expectedRevision only. */

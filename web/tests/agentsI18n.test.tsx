@@ -87,7 +87,7 @@ describe("the agents area in Chinese", () => {
     expect(texts(container, "button")).toEqual(["保存 agent 偏好"]);
     cleanup();
     const empty = render(<AgentSettings agents={{ ...agents, installations: [] }} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} />).container;
-    expect(texts(empty, `p[role="note"]`)).toEqual(["安装表里没有任何 agent。运行 orca agents init，把 ORCA_AGENTS_TABLE 指向它写出的表（默认 ~/.orca/agents.json），然后重启面板。"]);
+    expect(texts(empty, `p[role="note"]`)).toEqual(["安装表里没有任何 agent。运行 orca agents init，把 ORCA_AGENTS_TABLE 指向它写出的表（默认 ~/.orca/agents.json），然后重启面板。", "必须选择 Agent（无法继承）"]);
   });
 
   it("shows the proposal's agent editor, the confirmed view, the read failure and the retry notice in Chinese", async () => {

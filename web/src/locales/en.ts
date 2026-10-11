@@ -118,7 +118,7 @@ const agentSlot = { worker: "worker", estimator: "estimator", reconcile: "reconc
 const selectionSource = {
   operator: "operator", "operator-estimator": "operator-estimator", "operator-reconcile": "operator-reconcile", group: "group",
   "group-estimator": "group-estimator", "group-reconcile": "group-reconcile", task: "task", "operator-agent": "operator-agent", descriptor: "descriptor",
-  "group-plan": "group-plan", "group-reconcile-plan": "group-reconcile-plan", "task-plan": "task-plan",
+  "group-plan": "group-plan", "group-primary": "group primary", "group-reconcile-plan": "group-reconcile-plan", "task-plan": "task-plan",
 } as const satisfies Record<ProvenanceSourceV1, string>;
 
 export const en = {
@@ -588,6 +588,10 @@ export const en = {
     reread: "Re-read",
   },
   budget: {
+    noEstimator: "no estimator configured",
+    executionProfiles: "Execution profiles",
+    budgetMode: "Budget mode",
+    profile: { worker: "Worker profile", handoff: "Handoff profile", goalReview: "Goal review profile" },
     unlimited: "Unlimited",
     ownerSetsLimit: "Only an owner can change the group limit.",
     region: "Budget proposal",
@@ -710,8 +714,10 @@ export const en = {
     ignorePlan: "ignore the plan's {{field}} ({{value}})",
     field: { agent: "agent", model: "model", contextWindow: "contextWindow" },
     label: { agent: "agent", model: "model", context: "context" },
+    fieldError: { missingAgent: "Choose an Agent; no inherited selection is available", unsupportedContext: "This Agent does not support context {{value}}", invalidContext: "Invalid context {{value}}" },
     inheritPlan: "inherit (plan: {{agent}})",
     inherit: "inherit",
+    inheritConcrete: "inherit {{value}} from {{source}}",
     from: "from {{source}}",
     rejected: "rejected",
     unavailable: "unavailable for now, Re-read to ask again",
@@ -739,6 +745,9 @@ export const en = {
       noInstallations: "The installation table lists no agent. Run orca agents init, point ORCA_AGENTS_TABLE at the table it wrote (by default ~/.orca/agents.json) and restart the panel.",
       th: { installation: "installation", kind: "kind", version: "version", defaultModel: "default model", defaultContext: "default context" },
       defaultAgent: "Default agent",
+      primary: "Primary Agent",
+      otherDefaults: "Other installation defaults",
+      roleOverrides: "Role overrides",
       noDefault: "none (every group has to choose one)",
       perAgent: "{{agentId}} defaults",
       estimatorSlot: "Estimator slot",

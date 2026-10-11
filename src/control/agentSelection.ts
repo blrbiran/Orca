@@ -14,7 +14,7 @@ export interface PartialSelection { agent?: string; model?: string; contextWindo
 export interface PanelPartialSelection { agent?: string | null; model?: string | null; contextWindow?: ContextWindow | null }
 export type LayerName =
   | "operator" | "operator-estimator" | "operator-reconcile"
-  | "group-plan" | "group" | "group-estimator" | "group-reconcile-plan" | "group-reconcile" | "task-plan" | "task";
+  | "group-plan" | "group" | "group-primary" | "group-estimator" | "group-reconcile-plan" | "group-reconcile" | "task-plan" | "task";
 export type ProvenanceSource = LayerName | "operator-agent" | "descriptor";
 export interface SelectionLayer { name: LayerName; partial: PartialSelection }
 export interface OperatorPreferences {
@@ -74,13 +74,35 @@ export function slotLayers(slot: Slot, prefs: OperatorPreferences, group: GroupA
   const operator: SelectionLayer = { name: "operator", partial: prefs.defaultAgent === undefined ? {} : { agent: prefs.defaultAgent } };
   if (slot === "worker") return [operator, ...levelLayers("group-plan", "group", plan.group, group.worker), ...levelLayers("task-plan", "task", plan.task, task)];
   if (slot === "estimator") {
-    // Ruling R8 keeps D1: the plan has no estimator layer; a null in the panel's is simply no choice.
-    return [operator, { name: "operator-estimator", partial: prefs.estimator ?? {} }, { name: "group-estimator", partial: panelChoices(group.estimator) }];
+    // A concrete operator role field retains its operator-agent baseline. Otherwise the role inherits the
+    // effective group worker, including the archived plan half and panel null masks. Keep the inherited fields
+    // together so a model from one installation can never ride another installation's agent switch.
+    const operatorRole = prefs.estimator ?? {};
+    const hasOperatorRole = Object.values(operatorRole).some(value => value !== undefined);
+    if (hasOperatorRole) return [operator, { name: "operator-estimator", partial: operatorRole }, { name: "group-estimator", partial: panelChoices(group.estimator) }];
+    let primary: PartialSelection = {};
+    try { primary = resolveSelection(slotLayers("worker", prefs, group, undefined, plan), prefs.perAgent).partial; }
+    catch (error) { if (!(error instanceof ControlError) || error.code !== "agent-unselected") throw error; }
+    return [operator, { name: "group-primary", partial: primary }, { name: "group-estimator", partial: panelChoices(group.estimator) }];
   }
   return [
     operator, { name: "operator-reconcile", partial: prefs.reconcile ?? {} },
     ...levelLayers("group-plan", "group", plan.group, group.worker), ...levelLayers("group-reconcile-plan", "group-reconcile", plan.reconcile, group.reconcile),
   ];
+}
+
+/** Bind the concrete layer sources that produced an estimator selection across an asynchronous probe. */
+export function estimatorLayerAuthority(prefs: OperatorPreferences, group: GroupAgentOverrides, planGroup?: PartialSelection): string {
+  const roleConcrete = Object.values(prefs.estimator ?? {}).some(value => value !== undefined);
+  const primaryLayers = roleConcrete ? null : slotLayers("worker", prefs, group, undefined, { group: planGroup });
+  const estimatorLayers = slotLayers("estimator", prefs, group, undefined, { group: planGroup });
+  let selected: ReturnType<typeof resolveSelection> | { code: "agent-unselected" };
+  try { selected = resolveSelection(estimatorLayers, prefs.perAgent); }
+  catch (error) {
+    if (!(error instanceof ControlError) || error.code !== "agent-unselected") throw error;
+    selected = { code: "agent-unselected" };
+  }
+  return sha256Canonical({ primaryLayers, estimatorLayers, selected });
 }
 
 /**
@@ -134,10 +156,19 @@ export function descriptorProvenance(partial: PartialSelection, resolved: AgentS
 
 /** Spec §6.4 step 3: per slot key, the canonical hash of exactly {partial, selection, configHash}. */
 export function selectionsHash(slots: Record<string, FrozenSlot>): string {
+  return sha256Canonical(selectionHashBound(slots));
+}
+
+/** Only newly confirmed groups use this domain; v1 stays available for old frozen records. */
+export function selectionsHashV2(slots: Record<string, FrozenSlot>): string {
+  return sha256Canonical({ domain: "orca-agent-selections-v2", slots: selectionHashBound(slots) });
+}
+
+function selectionHashBound(slots: Record<string, FrozenSlot>): Record<string, { partial: PartialSelection; selection: AgentSelection; configHash: string }> {
   const bound: Record<string, { partial: PartialSelection; selection: AgentSelection; configHash: string }> = {};
   for (const key of Object.keys(slots)) {
     const slot = slots[key]!;
     bound[key] = { partial: slot.partial, selection: slot.selection, configHash: slot.configHash };
   }
-  return sha256Canonical(bound);
+  return bound;
 }

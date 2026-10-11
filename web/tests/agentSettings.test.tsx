@@ -10,6 +10,7 @@ import type { JSX } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentSettings, preferencesFromDrafts } from "../src/AgentSettings.js";
+import { CLEARED_DRAFT, SelectionFields } from "../src/AgentFields.js";
 import { initialControlState, reduceControlState } from "../src/controlState.js";
 import type { AgentPreferencesViewV1, AgentsViewV1, OperatorPreferencesV1 } from "../src/controlTypes.js";
 
@@ -28,6 +29,42 @@ const preferences: AgentPreferencesViewV1 = {
 };
 
 describe("the Agents settings page (agent selection spec §6.8)", () => {
+  it("clears draft model and context when changing the role Agent", () => {
+    const onDraft = vi.fn();
+    render(<SelectionFields agents={agents} prefix="role" label="Role" current={{ agent: "claude", model: "A-m", contextWindow: 1_000_000 }}
+      inheritedAgent="claude" drafts={{ "role:model": "typed-A", "role:context": "1000000" }} onDraft={onDraft} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "agent" }), { target: { value: "codex" } });
+    expect(onDraft.mock.calls).toEqual([["role:agent", "codex"], ["role:model", CLEARED_DRAFT], ["role:context", CLEARED_DRAFT]]);
+  });
+  it("keeps a model-only role override with its old primary Agent when the primary changes", () => {
+    const withRole: AgentPreferencesViewV1 = { ...preferences, preferences: { ...preferences.preferences, estimator: { model: "A-estimate" } } };
+    expect(preferencesFromDrafts(agents, withRole, { "agents:default-agent": "codex" }).estimator)
+      .toEqual({ agent: "claude", model: "A-estimate" });
+  });
+  it("keeps a valid old-Agent context role saveable when the new primary has different context options", () => {
+    const withRole: AgentPreferencesViewV1 = { ...preferences, preferences: { ...preferences.preferences, estimator: { contextWindow: 1_000_000 } } };
+    const onSave = vi.fn();
+    render(<AgentSettings agents={agents} preferences={withRole} drafts={{ "agents:default-agent": "codex" }} onDraft={vi.fn()} onSave={onSave} />);
+    expect((screen.getByRole("button", { name: "Save agent preferences" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Save agent preferences" }));
+    expect(onSave.mock.calls[0]![0].estimator).toEqual({ agent: "claude", contextWindow: 1_000_000 });
+  });
+  it("places the primary Agent, model and context together and folds role overrides", () => {
+    const { container } = render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} />);
+    const primary = container.querySelector('[aria-label="Primary Agent"]') as HTMLElement;
+    expect(primary.querySelector('select[name="agents:default-agent"]')).not.toBeNull();
+    expect(primary.querySelector('input[name="agents:per:claude:model"]')).not.toBeNull();
+    expect(primary.querySelector('select[name="agents:per:claude:context"]')).not.toBeNull();
+    expect((container.querySelector('[data-role-overrides]') as HTMLDetailsElement).open).toBe(false);
+  });
+  it("keeps an unsupported context draft visible and prevents a lossy preferences save", () => {
+    const onSave = vi.fn();
+    const { container } = render(<AgentSettings agents={agents} preferences={preferences} drafts={{ "agents:per:codex:context": "1000000" }} onDraft={vi.fn()} onSave={onSave} />);
+    const context = container.querySelector('select[name="agents:per:codex:context"]') as HTMLSelectElement;
+    expect(context.value).toBe("1000000");
+    expect((screen.getByRole("button", { name: "Save agent preferences" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(container.querySelector('[role="alert"]')?.textContent).toMatch(/context/i);
+  });
   it("lists every installation from the table view with its version and its defaults", () => {
     const html = renderToStaticMarkup(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} />);
     for (const text of ["claude", "2.1.282", "claude-opus-5-5", "codex", "0.155.1", "gpt-6-sol", "preferences revision 4"]) expect(html).toContain(text);

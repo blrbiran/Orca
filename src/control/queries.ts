@@ -80,7 +80,7 @@ export function getRun(store:ControlStore,id:string):RunView {
 
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const profileSetSchema = z.object({
-  estimator: profileBindingSchema, worker: profileBindingSchema, handoff: profileBindingSchema, goalReview: profileBindingSchema,
+  estimator: profileBindingSchema.nullable(), worker: profileBindingSchema, handoff: profileBindingSchema, goalReview: profileBindingSchema,
 }).strict();
 const groupAuthoritySchema = z.object({
   groupId: idSchema,
@@ -236,7 +236,7 @@ export function readBudgetProposal(store: ControlStore, groupId: string, canonic
 const estimateRecordSchema = z.object({
   estimateId: idSchema, estimateVersion: safeInteger.positive(),
   state: z.enum(["queued", "running", "start-unknown", "ready", "failed", "interrupted", "blocked-capability", "input-too-large"]),
-  profile: profileBindingSchema, mode: z.enum(["strict", "soft"]), requestHash: hashSchema.nullable(),
+  profile: profileBindingSchema.nullable(), mode: z.enum(["strict", "soft"]), requestHash: hashSchema.nullable(),
   request: budgetEstimateRequestSchema.nullable(), outputHash: hashSchema.nullable(), output: budgetEstimateSchema.nullable(),
   reasonCode: z.string().min(1).nullable(), grant: amountSchema,
   // Agent selection spec §6.4: the estimator selection frozen for this estimate (null when it was not resolved).
@@ -253,7 +253,7 @@ const estimateRecordSchema = z.object({
 export interface EstimateRecord {
   estimateId: string; estimateVersion: number;
   state: "queued" | "running" | "start-unknown" | "ready" | "failed" | "interrupted" | "blocked-capability" | "input-too-large";
-  profile: ProfileBindingV1; mode: "strict" | "soft"; requestHash: string | null; request: BudgetEstimateRequestV1 | null;
+  profile: ProfileBindingV1 | null; mode: "strict" | "soft"; requestHash: string | null; request: BudgetEstimateRequestV1 | null;
   outputHash: string | null; output: BudgetEstimateV1 | null; reasonCode: string | null; grant: Amount;
   estimatorSlot: FrozenSlot | null;
 }
@@ -295,11 +295,13 @@ export function decodeEstimateRecord(estimateId: string, row: Readonly<Record<st
     || parsed.data.estimateId !== estimateId || parsed.data.estimateVersion !== Number(row.estimate_version)
     || parsed.data.state !== String(row.state)) return recoveryBlocked();
   const estimate = parsed.data;
+  if (estimate.profile === null && (estimate.state !== "blocked-capability" || estimate.request !== null || estimate.estimatorSlot !== null
+    || estimate.reasonCode !== "agent-selection-rejected:estimator:control-estimator-unconfigured")) return recoveryBlocked();
   if ((estimate.request === null) !== (estimate.requestHash === null)
     || (estimate.request && (estimate.requestHash !== sha256Canonical(estimate.request)
       || estimate.request.planHash !== archivedPlan.planHash
       || !estimateSnapshotOf(archivedPlan, estimate.request.planSnapshotCanonicalJson)
-      || canonicalBytes(estimate.request.estimatorProfile).compare(canonicalBytes(estimate.profile)) !== 0))
+      || estimate.profile === null || canonicalBytes(estimate.request.estimatorProfile).compare(canonicalBytes(estimate.profile)) !== 0))
     || (estimate.output === null) !== (estimate.outputHash === null)
     || (estimate.output && (estimate.outputHash !== sha256Canonical(estimate.output) || estimate.output.planHash !== archivedPlan.planHash))) {
     return recoveryBlocked();

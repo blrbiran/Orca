@@ -8,7 +8,7 @@
  * from the model or a complex-1m default says so next to the box, because the
  * person is about to type over it.
  */
-import { useContext, useEffect } from "react";
+import { useContext, useEffect, useState } from "react";
 import type { JSX } from "react";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
@@ -24,6 +24,7 @@ import type {
   ControlConfigV1,
   FieldProvenanceV1,
   GroupViewV1,
+  ProfileBindingV1,
   ProposalOperationV1,
   ProposalTargetV1,
   SetTaskLoopPayloadV1,
@@ -282,16 +283,25 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const handoffBlocked = config.profiles.filter((profile) =>
     (profile.allowedWorkKinds.includes("task") || profile.allowedWorkKinds.includes("handoff"))
     && (profile.observed.handoffControl !== "durable" || profile.observed.handoffExecution === null));
-  // Ruling R7: a panel started without --estimator-profile/--estimate-mode serves `defaults: null`.
-  // There is then nothing to fall back to, so confirming is refused here rather than sent with a
-  // guessed profile or a guessed mode -- guessing the mode is the strict-versus-soft fault itself.
   const defaults = config.defaults;
-  const confirmBlocked = defaults === null && (view.proposal.profiles === null || view.proposal.budgetMode === null);
+  const [manualMode, setManualMode] = useState<"" | "strict" | "soft">("");
+  const [manualProfiles, setManualProfiles] = useState<Record<"worker" | "handoff" | "goalReview", string>>({ worker: "", handoff: "", goalReview: "" });
+  const mode = view.proposal.budgetMode ?? defaults?.estimateMode ?? (manualMode || null);
+  const explicitProfile = (kind: "worker" | "handoff" | "goalReview"): ProfileBindingV1 | null => {
+    const id = manualProfiles[kind];
+    const workKind = kind === "worker" ? "task" : kind === "goalReview" ? "goal-review" : "handoff";
+    const profile = config.profiles.find((candidate) => candidate.profileId === id && candidate.allowedWorkKinds.includes(workKind));
+    return profile ? { profileId: profile.profileId, profileHash: profile.profileHash } : null;
+  };
+  const confirmProfile = (kind: "estimator" | "worker" | "handoff" | "goalReview"): ProfileBindingV1 | null => {
+    if (view.proposal.profiles !== null) return view.proposal.profiles[kind];
+    if (kind === "estimator") return defaults === null ? null : { profileId: defaults.estimatorProfileId, profileHash: defaults.estimatorProfileHash };
+    return defaults === null ? explicitProfile(kind) : { profileId: defaults.estimatorProfileId, profileHash: defaults.estimatorProfileHash };
+  };
+  const confirmBlocked = mode === null || (["worker", "handoff", "goalReview"] as const).some((kind) => confirmProfile(kind) === null);
   const shownSelectionsHash = props.selectionsHash ?? null;
   // Integration spec §3.2, ruling R2: confirming a group Orca merges or pushes is an owner's approval of its scheme.
   const integrationBlocked = view.integration !== undefined && !mayLimit;
-  const confirmProfile = (kind: "estimator" | "worker" | "handoff" | "goalReview") =>
-    view.proposal.profiles?.[kind] ?? { profileId: defaults?.estimatorProfileId ?? "", profileHash: defaults?.estimatorProfileHash ?? "" };
 
   const submitEdit = (): void => {
     const operations = editedOperations(view, drafts);
@@ -318,14 +328,14 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       payload: {
         planHash: view.plan.planHash,
         proposalVersion: view.proposal.proposalVersion,
-        budgetMode: view.proposal.budgetMode ?? defaults!.estimateMode,
+        budgetMode: mode!,
         profileIds: {
-          estimator: confirmProfile("estimator").profileId, worker: confirmProfile("worker").profileId,
-          handoff: confirmProfile("handoff").profileId, goalReview: confirmProfile("goalReview").profileId,
+          estimator: confirmProfile("estimator")?.profileId ?? null, worker: confirmProfile("worker")!.profileId,
+          handoff: confirmProfile("handoff")!.profileId, goalReview: confirmProfile("goalReview")!.profileId,
         },
         profileHashes: {
-          estimator: confirmProfile("estimator").profileHash, worker: confirmProfile("worker").profileHash,
-          handoff: confirmProfile("handoff").profileHash, goalReview: confirmProfile("goalReview").profileHash,
+          estimator: confirmProfile("estimator")?.profileHash ?? null, worker: confirmProfile("worker")!.profileHash,
+          handoff: confirmProfile("handoff")!.profileHash, goalReview: confirmProfile("goalReview")!.profileHash,
         },
         contextPolicy: { handoffAtContextTokens: tokens === null || !Number.isSafeInteger(tokens) ? null : tokens },
         selectionsHash: shownSelectionsHash,
@@ -335,7 +345,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
     });
   };
   const submitEstimate = (): void => {
-    if (estimator === null) return;
+    if (estimator?.profile == null) return;
     onCommand({
       verb: "estimate",
       groupId,
@@ -356,6 +366,19 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         {t("budget.modeLine", { mode: view.proposal.budgetMode === null ? t("budget.notChosen") : enumText("budgetMode", view.proposal.budgetMode), enforcement: observedEnforcement })}
         {view.proposal.budgetMode === "soft" ? t("budget.softNote") : ""}
       </p>
+      {defaults === null && view.proposal.state === "editable" && <fieldset>
+        <legend>{t("budget.executionProfiles")}</legend>
+        <label>{t("budget.budgetMode")}<select value={manualMode} onChange={(event) => setManualMode(event.currentTarget.value as "" | "strict" | "soft") }>
+          <option value="">{t("budget.notChosen")}</option><option value="strict">{enumText("budgetMode", "strict")}</option><option value="soft">{enumText("budgetMode", "soft")}</option>
+        </select></label>
+        {(["worker", "handoff", "goalReview"] as const).map((kind) => {
+          const workKind = kind === "worker" ? "task" : kind === "goalReview" ? "goal-review" : "handoff";
+          return <label key={kind}>{t(`budget.profile.${kind}`)}<select value={manualProfiles[kind]} onChange={(event) => setManualProfiles({ ...manualProfiles, [kind]: event.currentTarget.value })}>
+            <option value="">{t("budget.notChosen")}</option>
+            {config.profiles.filter((profile) => profile.allowedWorkKinds.includes(workKind)).map((profile) => <option key={profile.profileId} value={profile.profileId}>{profile.profileId}</option>)}
+          </select></label>;
+        })}
+      </fieldset>}
       {contextUnavailable && (
         <p role="note">{t("budget.contextUnavailable")}</p>
       )}
@@ -492,10 +515,10 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         {view.ledger.usageUnknown ? t("budget.usageUnknown") : ""}
       </p>
       {!archived && <button type="button" disabled={!editable || hasBadDraft(drafts) || editedOperations(view, drafts).length === 0} onClick={submitEdit}>{t("budget.save")}</button>}
-      {estimator !== null && !archived && <button type="button" onClick={submitEstimate}>{t("budget.reestimate")}</button>}
+      {estimator !== null && !archived && <button type="button" disabled={estimator.profile === null} onClick={submitEstimate}>{t("budget.reestimate")}</button>}
       {editable && <GroupIntegrationConfirm view={view} suggestedTarget={props.suggestedTarget ?? null} onCommand={onCommand} />}
       {editable && shownSelectionsHash === null && <p role="note">{t("budget.confirmWaits")}</p>}
-      {!archived && <button type="button" disabled={shownSelectionsHash === null || integrationBlocked || hasBadDraft(drafts)} onClick={submitConfirm}>{t("budget.confirm")}</button>}
+      {!archived && <button type="button" disabled={confirmBlocked || shownSelectionsHash === null || integrationBlocked || hasBadDraft(drafts)} onClick={submitConfirm}>{t("budget.confirm")}</button>}
     </section>
   );
 }

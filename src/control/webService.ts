@@ -15,8 +15,9 @@ import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, r
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand } from "./planImport.js";
+import { readAgentPreferences } from "./agentPreferences.js";
 import { intersectCapabilities } from "./profiles.js";
-import type { FrozenSlot } from "./agentSelection.js";
+import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
 import { effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
 import { agentSelectionSchema, amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
@@ -431,6 +432,7 @@ export class WebControlService {
       const replay = preflightWebCommand(this.store, command); if (replay) return replay.body;
       let prepared: ReturnType<typeof buildBudgetEstimateRequest>;
       let estimatorSlot: FrozenSlot | null;
+      let layerAuthority: string;
       try {
         const id = groupId(command), group = readWebGroup(this.store, id);
         const plan = readArchivedPlan(this.store, id), proposal = readBudgetProposal(this.store, id);
@@ -440,7 +442,8 @@ export class WebControlService {
         // Spec §6.4: a re-estimate resolves the estimator layers as they are now -- including the group's, which only
         // the panel sets (controller ruling R7) -- and freezes them for this estimate only.
         const overrides = readGroupAgentOverrides(group);
-        const slot = await estimatorSlotFor({ store: this.store, profileRouter: this.deps.profileRouter }, command.actorId, overrides, profile);
+        const slot = await estimatorSlotFor({ store: this.store, profileRouter: this.deps.profileRouter }, command.actorId, overrides, profile, plan.plan.agent);
+        layerAuthority = slot.layerAuthority;
         estimatorSlot = slot.outcome.kind === "frozen" ? slot.outcome.slot : null;
         prepared = slot.outcome.kind === "rejected"
           ? rejectedEstimatorRequest(slot.outcome.code)
@@ -456,6 +459,9 @@ export class WebControlService {
           const id = groupId(command), group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id);
           if (proposal.proposalVersion !== command.payload.proposalVersion) throw new ControlError("proposal-version-conflict");
           prestart(group);
+          const currentPlan = readArchivedPlan(this.store, id).plan;
+          const currentPrefs = readAgentPreferences(this.store, command.actorId).preferences;
+          if (estimatorLayerAuthority(currentPrefs, readGroupAgentOverrides(group), currentPlan.agent) !== layerAuthority) throw new ControlError("agent-selection-changed");
           this.deps.profileRouter.resolve("budget-estimate", command.payload.estimatorProfileId, command.payload.estimatorProfileHash);
           const estimateVersion = safeNumber(BigInt(Number(this.store.db.prepare("SELECT MAX(estimate_version) AS n FROM estimates WHERE group_id=?").get(id)?.n ?? 0)) + 1n);
           const estimateId = `estimate-${sha256Canonical({ groupId: id, planHash: proposal.planHash, version: estimateVersion }).slice(0, 24)}`;
@@ -484,6 +490,7 @@ export class WebControlService {
       // Accounts spec §6.3.1: an estimate that left the queue another way no longer waits on a cap.
       const leftQueue = (): null => { this.store.transaction(() => clearSpendCapBlock(this.store, id, "estimate")); return null; };
       if (!["queued", "running", "start-unknown"].includes(initial.state)) return leftQueue();
+      if (initial.profile === null) throw new ControlError("recovery-blocked", "estimate-profile-missing");
       // Issue-fixes spec §6.3: a queued estimate of an archived group is not probed; the check in the transaction below
       // stays for a group archived while the probe ran.
       if (initial.state === "queued" && isGroupArchived(this.store, id)) return null;
@@ -502,7 +509,7 @@ export class WebControlService {
         // Issue-fixes spec §6.3 (Part E ruling 2): an archived group claims no estimate; it stays queued and its wake
         // pending until the group is unarchived.
         if (isGroupArchived(this.store, id)) return null;
-        if (estimate.state !== "queued" || !estimate.request) throw new ControlError("recovery-blocked");
+        if (estimate.state !== "queued" || !estimate.request || estimate.profile === null) throw new ControlError("recovery-blocked");
         prestart(group); assertKnownConservation(this.store, group, proposal);
         if (group.stopped) throw new ControlError("group-stopped");
         this.deps.profileRouter.resolve("budget-estimate", estimate.profile.profileId, estimate.profile.profileHash);
@@ -710,10 +717,11 @@ export class WebControlService {
           assertKnownConservation(this.store, group, proposal);
           if(featureError)throw featureError;
           if(!optionalSupported)throw new ControlError("control-token-policy-unsupported");
-          const selected = { estimator: this.deps.profileRouter.resolve("budget-estimate", payload.profileIds.estimator, payload.profileHashes.estimator), worker: this.deps.profileRouter.resolve("task", payload.profileIds.worker, payload.profileHashes.worker), handoff: this.deps.profileRouter.resolve("handoff", payload.profileIds.handoff, payload.profileHashes.handoff), goalReview: this.deps.profileRouter.resolve("goal-review", payload.profileIds.goalReview, payload.profileHashes.goalReview) };
+          if ((payload.profileIds.estimator === null) !== (payload.profileHashes.estimator === null)) throw new ControlError("control-estimator-unconfigured");
+          const selected = { estimator: payload.profileIds.estimator === null ? null : this.deps.profileRouter.resolve("budget-estimate", payload.profileIds.estimator, payload.profileHashes.estimator!), worker: this.deps.profileRouter.resolve("task", payload.profileIds.worker, payload.profileHashes.worker), handoff: this.deps.profileRouter.resolve("handoff", payload.profileIds.handoff, payload.profileHashes.handoff), goalReview: this.deps.profileRouter.resolve("goal-review", payload.profileIds.goalReview, payload.profileHashes.goalReview) };
           const window = selected.worker.snapshot.profile.capabilities.contextWindowTokens, threshold = payload.contextPolicy.handoffAtContextTokens;
           if (window === null ? threshold !== null : threshold === null || threshold > window) throw new ControlError("execution-policy-unrepresentable");
-          const profiles = Object.fromEntries(Object.entries(selected).map(([slot, p]) => [slot, { profileId: p.snapshot.profile.profileId, profileHash: p.profileHash }])) as Record<keyof typeof selected, ProfileBindingV1>;
+          const profiles = Object.fromEntries(Object.entries(selected).map(([slot, p]) => [slot, p === null ? null : { profileId: p.snapshot.profile.profileId, profileHash: p.profileHash }])) as { estimator: ProfileBindingV1 | null; worker: ProfileBindingV1; handoff: ProfileBindingV1; goalReview: ProfileBindingV1 };
           for (const row of proposal.allocations) for (const d of dimensions) {
             const source = row.fieldProvenance[d];
             if (source.provenance !== "model") continue;

@@ -15,15 +15,14 @@ function mount(view = requirementView("failed"), table: AgentsViewV1 | null = ag
   return onCommand;
 }
 describe("feedback requirement affordances", () => {
-  it("blocks an explicitly selected codex installation before creating an unsupported requirement", () => {
+  it("submits the chosen installation for server-side single-call capability validation", () => {
     const send = mount(); const form = screen.getByRole("form", { name: "New requirement" });
     fireEvent.change(within(form).getByRole("textbox", { name: "Idea" }), { target: { value: "Investigate" } });
     fireEvent.change(within(form).getByRole("combobox", { name: "Agent" }), { target: { value: "my-coder" } });
-    expect((within(form).getByRole("button", { name: "Start clarifying" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(within(form).getAllByRole("note").map((node) => node.textContent).join(" ")).toMatch(/Codex.*single-call.*Task control/);
-    fireEvent.submit(form); expect(send).not.toHaveBeenCalled();
+    expect((within(form).getByRole("button", { name: "Start clarifying" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.submit(form); expect(send.mock.calls[0]![0]).toMatchObject({ verb: "requirement-open", payload: { agent: { agent: "my-coder" } } });
     fireEvent.change(within(form).getByRole("combobox", { name: "Agent" }), { target: { value: "my-claude" } });
-    fireEvent.submit(form); expect(send.mock.calls[0]![0]).toMatchObject({ verb: "requirement-open", payload: { agent: { agent: "my-claude" } } });
+    fireEvent.submit(form); expect(send.mock.calls[1]![0]).toMatchObject({ verb: "requirement-open", payload: { agent: { agent: "my-claude" } } });
   });
   it("leaves a default selection to the server even when the table is unavailable", () => {
     const send = mount(requirementView("failed"), null); const form = screen.getByRole("form", { name: "New requirement" });

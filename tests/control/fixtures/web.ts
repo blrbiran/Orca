@@ -106,8 +106,9 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   if (preferences !== null) { seedPreferences(h.store, "human", preferences); seedPanelOperator(h.store, preferences); }
   if (options.integration !== undefined) writeRepositorySettingsBody(h.store, "repo", { workspaceMode: "worktree", revision: 1, integration: options.integration });
   const importCommand: ImportCommand = { schema: "orca-raw-command-v1", commandId: "import", expectedRevision: 0, actorId: "human", verb: "import-plan", target: { kind: "group", groupId: "g" }, payload: { groupId: "g", repoId: "repo", planId: "plan" } };
-  const prepared = await prepareEstimatorSlot({ store: h.store, profileRouter: router }, importCommand, frozen);
-  const deps = { store: h.store, port, admissionGate: createAdmissionGate(), profileRouter: router, trustedConfig: { resolveTarget: () => ({ repositoryPath: repo, planPath, validatePlanDescriptor() {} }) },
+  const trustedConfig = { resolveTarget: () => ({ repositoryPath: repo, planPath, validatePlanDescriptor() {} }) };
+  const prepared = await prepareEstimatorSlot({ store: h.store, profileRouter: router, trustedConfig }, importCommand, frozen);
+  const deps = { store: h.store, port, admissionGate: createAdmissionGate(), profileRouter: router, trustedConfig,
     defaults: () => ({ estimatorProfileId: "all", estimatorProfileHash: frozen.profileHash, estimateMode: "soft" as const }), estimatorSlot: prepared.outcome };
   // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
   const imported = importControlPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null, resolution: prepared.observation.resolution }) }, importCommand);

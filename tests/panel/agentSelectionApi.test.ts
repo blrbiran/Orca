@@ -5,7 +5,7 @@
  * preview computed a second way would fail one of the two.
  */
 import { afterAll, describe, expect, it } from "vitest";
-import { selectionsHash, type PartialSelection } from "../../src/control/agentSelection.js";
+import { selectionsHashV2, type PartialSelection } from "../../src/control/agentSelection.js";
 import { ControlError } from "../../src/control/errors.js";
 import { readConfirmedReconcileSlot } from "../../src/control/executionSnapshot.js";
 import {
@@ -121,7 +121,9 @@ describe("agent selection over a real panel (agent selection spec §6.8)", () =>
       });
     }
     expect(answer.proposalVersion).toBe((await view(panel)).proposal.proposalVersion);
-    expect(answer.selectionsHash).toBe(selectionsHash(resolvedFrozen(answer)));
+    expect(answer.rolePreviews?.worker).toMatchObject({ kind: "resolved", frozen: { selection: claude } });
+    expect(answer.rolePreviews?.estimator).toMatchObject({ kind: "resolved", frozen: { selection: claude, provenance: { agent: "group-primary" } } });
+    expect(answer.selectionsHash).toBe(selectionsHashV2(resolvedFrozen(answer)));
     const confirmed = await confirm(panel, "agents-confirm", answer.selectionsHash!);
     expect(confirmed.status).toBe(200);
     expect(commandSuccessSchema.parse(confirmed.body).result).toMatchObject({ kind: "confirmed" });

@@ -419,8 +419,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                   version: estimate.estimateVersion,
                   state: enumText("estimateState", estimate.state),
                   mode: enumText("budgetMode", estimate.mode),
-                  profileId: estimate.profile.profileId,
-                  hash: short(estimate.profile.profileHash),
+                  profileId: estimate.profile?.profileId ?? t("budget.noEstimator"),
+                  hash: estimate.profile === null ? "" : short(estimate.profile.profileHash),
                 })}
                 {estimate.reasonCode !== null ? ` · ${estimate.reasonCode}` : ""}
               </li>

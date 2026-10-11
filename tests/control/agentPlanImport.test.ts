@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { groupSelectionPartials } from "../../src/control/agentFreeze.js";
+import { describe, expect, it, vi } from "vitest";
+import { groupSelectionPartials, resolveGroupSelections } from "../../src/control/agentFreeze.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { ControlError } from "../../src/control/errors.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
@@ -64,7 +64,42 @@ describe("the plan file carries agent layers (spec §6.2, R7)", () => {
   });
 });
 
-describe("import freezes the estimator slot from the operator's layers (spec §6.4, R7)", () => {
+describe("import freezes the estimator slot from the primary and role layers", () => {
+  it("refuses re-estimate when the operator role source changes during its probe even if the partial is identical", async () => {
+    const h = await webFixture(); try {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      const probe = vi.fn(async (...args: Parameters<typeof h.deps.profileRouter.probe>) => { await gate; return h.deps.profileRouter.probe(...args); });
+      const service = new WebControlService({ ...h.deps, profileRouter: { ...h.deps.profileRouter, probe } });
+      const pending = service.createEstimate(h.command("estimate", { proposalVersion: 1, estimatorProfileId: "all", estimatorProfileHash: h.frozen.profileHash, estimateMode: "soft" }));
+      expect(probe.mock.calls[0]?.[1]).toEqual({ agent: FIXTURE_AGENT_ID });
+      seedPreferences(h.store, "human", { defaultAgent: FIXTURE_AGENT_ID, perAgent: {}, estimator: { agent: FIXTURE_AGENT_ID } }, 1);
+      release();
+      expect(await pending).toMatchObject({ error: { code: "agent-selection-changed" } });
+      expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM estimates WHERE group_id='g'").get()?.n).toBe(1);
+    } finally { await h.dispose(); }
+  });
+  it("confirms and starts a draft imported without an estimator profile", async () => {
+    const h = await webFixture(); try {
+      const service = new WebControlService({ ...h.deps, defaults: () => null });
+      const imported = await service.importPlan(importG2(h));
+      expect(imported).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
+      expect(readControlGroup(h.store, "epoch", "g2").estimates[0]).toMatchObject({ profile: null, state: "blocked-capability" });
+      const preview = await resolveGroupSelections({ store: h.store, port: h.deps.port }, "g2", "human");
+      expect(preview.selectionsHash).not.toBeNull();
+      const hash = h.frozen.profileHash;
+      const confirmed = await service.confirm(h.rawCommand("confirm-no-estimator", 1, "confirm", { kind: "group", groupId: "g2" }, {
+        planHash: readArchivedPlan(h.store, "g2").planHash, proposalVersion: 1, budgetMode: "soft",
+        profileIds: { estimator: null, worker: "all", handoff: "all", goalReview: "all" },
+        profileHashes: { estimator: null, worker: hash, handoff: hash, goalReview: hash },
+        contextPolicy: { handoffAtContextTokens: 800_000 }, selectionsHash: preview.selectionsHash,
+      }) as never);
+      expect(confirmed).toMatchObject({ result: { kind: "confirmed" } });
+      const started = await service.start(h.rawCommand("start-no-estimator", 2, "start", { kind: "group", groupId: "g2" }, {}) as never);
+      expect(started).toMatchObject({ result: { kind: "scheduled" } });
+      expect(readControlGroup(h.store, "epoch", "g2").proposal.profiles?.estimator).toBeNull();
+    } finally { await h.dispose(); }
+  });
   it("resolves operator default < per-agent < operator estimator, ignores the plan's layers, and freezes ccloop's answer", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a", agent: { agent: "other", model: "task-model" } }], {
       preferences: { defaultAgent: FIXTURE_AGENT_ID, perAgent: { [FIXTURE_AGENT_ID]: { model: "per-agent-model" } }, estimator: { contextWindow: 1_000_000 } },
@@ -88,13 +123,12 @@ describe("import freezes the estimator slot from the operator's layers (spec §6
     } finally { await h.dispose(); }
   });
 
-  it("still imports when no operator layer names an agent -- a plan's worker agent does not count -- degrading the estimate by name", async () => {
+  it("uses the plan primary when no operator role or default names an agent", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }], { preferences: null, planAgents: { agent: { agent: FIXTURE_AGENT_ID } } }); try {
-      expect(h.imported.result).toMatchObject({ kind: "imported", estimateState: "blocked-capability", estimateReasonCode: "agent-selection-rejected:estimator:agent-unselected" });
-      expect(h.asked).toEqual([]);
-      expect(group(h).estimatorSlot).toBeNull();
-      expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "blocked-capability", estimatorSlot: null, request: null });
-      expect(h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g'").get()).toBeUndefined();
+      expect(h.imported.result).toMatchObject({ kind: "imported", estimateState: "queued", estimateReasonCode: null });
+      expect(h.asked).toEqual([{ agent: FIXTURE_AGENT_ID }]);
+      expect(group(h).estimatorSlot).toMatchObject({ selection: FIXTURE_AGENT, provenance: { agent: "group-primary", model: "descriptor" } });
+      expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "queued", estimatorSlot: { selection: FIXTURE_AGENT } });
     } finally { await h.dispose(); }
   });
 
@@ -188,7 +222,7 @@ describe("import freezes the estimator slot from the operator's layers (spec §6
       expect(created.result.estimateState).toBe("queued");
       expect(readEstimateRecord(h.store, "g", created.result.estimateId).estimatorSlot).toMatchObject({
         selection: { agent: FIXTURE_AGENT_ID, model: "panel-estimator", contextWindow: "agent-default" },
-        provenance: { agent: "operator", model: "group-estimator", contextWindow: "descriptor" },
+        provenance: { agent: "group-primary", model: "group-estimator", contextWindow: "descriptor" },
       });
       // The group's import-time slot records that import only.
       expect(group(h).estimatorSlot).toBeNull();

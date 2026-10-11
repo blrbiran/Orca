@@ -5,6 +5,7 @@ import { applyWebCommand, preflightWebCommand } from "./commandLedger.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions } from "./commands.js";
 import { ControlError } from "./errors.js";
+import { estimatorCompatibility } from "./estimatorCompatibility.js";
 import {
   estimatorSlotFor, normalizeControlPlan, writeImportedPlan, type AsyncImportDeps, type ImportDefaults, type ImportDeps, type PreparedEstimatorSlot,
 } from "./planImport.js";
@@ -30,7 +31,7 @@ export type RequirementDraftFeedbackCommand = Extract<RawAuthorityCommandV1, { v
 export type RequirementDraftAcceptCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-draft-accept" }>;
 type Result = CommandLookupV1["body"];
 export interface RequirementCommandDeps {
-  store: ControlStore; admissionGate?: AdmissionGate; profileRouter: ExecutionProfileRouter; defaults: () => ImportDefaults;
+  store: ControlStore; admissionGate?: AdmissionGate; profileRouter: ExecutionProfileRouter; defaults: () => ImportDefaults | null;
   knownRepository?: (repoId: string) => boolean; now?: () => Date;
 }
 type EffectiveOpenPayload = { groupId: string; repoId: string; idea: string; limit: BudgetAmount; agent: Record<string, unknown> | null; contentLanguage: "en" | "zh" };
@@ -63,9 +64,11 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
   try {
     const replay = preflightWebCommand<Result>(deps.store, command);
     if (replay) return replay.body;
-    let profile: FrozenProfile, slot: PreparedEstimatorSlot;
+    let profile: FrozenProfile, slot: PreparedEstimatorSlot, estimateMode: "strict" | "soft";
     try {
       const defaults = deps.defaults();
+      if (!defaults?.estimatorProfileId || !defaults.estimatorProfileHash) throw new ControlError("control-estimator-unconfigured");
+      estimateMode = defaults.estimateMode;
       profile = deps.profileRouter.resolve("budget-estimate", defaults.estimatorProfileId, defaults.estimatorProfileHash);
       slot = await estimatorSlotFor({ store: deps.store, profileRouter: deps.profileRouter }, command.actorId, command.payload.agent === undefined ? {} : { estimator: command.payload.agent }, profile);
     } catch (error) {
@@ -85,6 +88,8 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
         if (slot.outcome.kind !== "frozen") throw new ControlError("agent-selection-rejected", `estimator:${slot.outcome.code}`);
         const preflight = profile.snapshot.profile.estimatorPreflight;
         if (!preflight) throw new ControlError("control-estimator-unconfigured");
+        const compatibility = estimatorCompatibility(slot.observation, estimateMode);
+        if (!compatibility.compatible) throw new ControlError("agent-selection-rejected", `estimator:${compatibility.reasonCodes.join(",")}`);
         const requirementId = sha256Canonical({ groupId: payload.groupId, commandId: command.commandId }).slice(0, 32);
         insertClarifyingGroup(deps.store, {
           groupId: payload.groupId, repoId: payload.repoId, idea: payload.idea, limit: payload.limit, contentLanguage: payload.contentLanguage,
@@ -194,9 +199,14 @@ export async function applyRequirementDraftAccept(
     const id = command.target.groupId;
     let defaults: ImportDefaults, profile: FrozenProfile, slot: PreparedEstimatorSlot;
     try {
-      defaults = deps.defaults();
-      profile = deps.profileRouter.resolve("budget-estimate", defaults.estimatorProfileId, defaults.estimatorProfileHash);
-      slot = await estimatorSlotFor({ store: deps.store, profileRouter: deps.profileRouter }, command.actorId, readGroupAgentOverrides(readRequirementGroup(deps.store, id)), profile);
+      const configured = deps.defaults();
+      if (!configured?.estimatorProfileId || !configured.estimatorProfileHash) throw new ControlError("control-estimator-unconfigured");
+      defaults = configured;
+      profile = deps.profileRouter.resolve("budget-estimate", configured.estimatorProfileId, configured.estimatorProfileHash);
+      const draft = readDraft(deps.store, id, command.payload.draftNo);
+      const stored = draft.plan as { targetRepo: string } | null;
+      const planAgent = stored === null ? undefined : schedulerControlPlanSourceOf(stored, stored.targetRepo).agent;
+      slot = await estimatorSlotFor({ store: deps.store, profileRouter: deps.profileRouter }, command.actorId, readGroupAgentOverrides(readRequirementGroup(deps.store, id)), profile, planAgent);
     } catch (error) {
       return applyWebCommand<Result>(deps.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
     }
@@ -228,7 +238,7 @@ export async function applyRequirementDraftAccept(
         const stored = draft.plan as { targetRepo: string };
         const planId = `requirement-draft-${draft.draftNo}`;
         const plan = normalizeControlPlan({ ...schedulerControlPlanSourceOf(stored, stored.targetRepo), repoId: group.requirement.repoId, planId });
-        const importDeps: ImportDeps = { ...deps, defaults: () => defaults, estimatorSlot: slot.outcome,
+        const importDeps: ImportDeps = { ...deps, defaults: () => defaults, estimatorSlot: slot.outcome, estimatorLayerAuthority: slot.layerAuthority,
           estimatorObservation: (selected) => { if (selected !== profile) throw new ControlError("profile-changed"); return slot.observation; } };
         const { estimateId, preflight } = writeImportedPlan(importDeps, { groupId: id, repoId: group.requirement.repoId, planId, plan, actorId: command.actorId, commandId: command.commandId, at: now.getTime(),
           estimatorProfileId: defaults.estimatorProfileId, estimatorProfileHash: defaults.estimatorProfileHash, estimateMode: defaults.estimateMode },

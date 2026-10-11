@@ -95,12 +95,10 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
     return <p role="note">{t("requirements.repositoryNotConfigured")}</p>;
   }
   const { idea, tokens, language, agent } = draft;
-  // Codex cannot bound a single call; defaults and unknown kinds remain server-resolved.
-  const unsupported = props.agents?.installations.find((entry) => entry.id === agent)?.kind === "codex";
   return (
     <form aria-label={t("requirements.newTitle")} onSubmit={(event) => {
       event.preventDefault();
-      if (repoId === "" || limitBad || unsupported) return;
+      if (repoId === "" || limitBad) return;
       const groupId = `requirement-${nextCommandId()}`;
       props.onCommand({ verb: "requirement-open", groupId, expectedRevision: 0, payload: {
         groupId, repoId, idea, contentLanguage: language, ...(mayLimit ? { limit: { tokens, activeMs: 14_400_000, attempts: 40, sessions: 40 } } : {}),
@@ -119,8 +117,7 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
         <option value="">{t("requirements.agentDefault")}</option>
         {(props.agents?.installations ?? []).map((installation) => <option key={installation.id} value={installation.id}>{installation.id}</option>)}</select></label>
       <p role="note">{t("requirements.capabilityNote")}</p>
-      {unsupported && <p role="note">{t("requirements.codexUnsupported")}</p>}
-      <button type="submit" disabled={idea.trim() === "" || repoId === "" || limitBad || unsupported}>{t("requirements.open")}</button>
+      <button type="submit" disabled={idea.trim() === "" || repoId === "" || limitBad}>{t("requirements.open")}</button>
     </form>
   );
 }

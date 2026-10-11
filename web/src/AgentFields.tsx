@@ -5,8 +5,8 @@
  */
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
-import type { AgentInstallationV1, AgentsViewV1, ContextWindowV1, PanelPartialSelectionV1, PartialSelectionV1 } from "./controlTypes.js";
-import i18n from "./i18n.js";
+import type { AgentInstallationV1, AgentSelectionV1, AgentsViewV1, ContextWindowV1, PanelPartialSelectionV1, PartialSelectionV1, SelectionProvenanceV1 } from "./controlTypes.js";
+import i18n, { enumText } from "./i18n.js";
 
 export const contextLabel = (value: ContextWindowV1): string => (value === "agent-default" ? i18n.t("agents.contextDefault") : i18n.t("agents.contextTokens", { value }));
 export const contextValue = (value: ContextWindowV1 | undefined): string => (value === undefined ? "" : String(value));
@@ -39,6 +39,29 @@ export function installationOf(agents: AgentsViewV1, id: string | undefined): Ag
   return id === undefined ? undefined : agents.installations.find((row) => row.id === id);
 }
 
+export interface SelectionFieldError { field: "agent" | "contextWindow"; code: "missingAgent" | "unsupportedContext" | "invalidContext"; value?: string }
+
+/** Validate the exact draft the person sees before a lossy low-level partial builder may be used. */
+export function selectionFieldErrors(
+  agents: AgentsViewV1, prefix: string, current: PanelPartialSelectionV1 | undefined,
+  planned: PartialSelectionV1 | undefined, drafts: Record<string, string>, inheritedAgent: string | undefined,
+  fixedAgent?: string,
+): SelectionFieldError[] {
+  const agentText = fixedAgent ?? draftText(drafts, `${prefix}:agent`, typeof current?.agent === "string" ? current.agent : "");
+  const agent = textOrUndefined(agentText) ?? (isMasked(prefix, "agent", current, planned, drafts) ? inheritedAgent : planned?.agent ?? inheritedAgent);
+  const priorAgent = typeof current?.agent === "string" ? current.agent : planned?.agent ?? inheritedAgent;
+  const switched = fixedAgent === undefined && agentText !== "" && priorAgent !== undefined && agentText !== priorAgent;
+  const errors: SelectionFieldError[] = [];
+  if (!agent || !installationOf(agents, agent)) errors.push({ field: "agent", code: "missingAgent" });
+  const contextText = draftText(drafts, `${prefix}:context`, switched ? "" : contextValue(current?.contextWindow ?? undefined));
+  if (contextText !== "" && !isMasked(prefix, "contextWindow", current, planned, drafts)) {
+    const context = parseContext(contextText);
+    if (context === undefined) errors.push({ field: "contextWindow", code: "invalidContext", value: contextText });
+    else if (!installationOf(agents, agent)?.contextOptions.includes(context)) errors.push({ field: "contextWindow", code: "unsupportedContext", value: contextText });
+  }
+  return errors;
+}
+
 /**
  * The partial the drafts describe for one layer. A context the effective agent cannot express is dropped
  * rather than sent: the select never offers it, so it can only be a draft left over from another agent.
@@ -52,8 +75,9 @@ export function partialFromFields(
 ): PartialSelectionV1 {
   const pick = (field: string, fallback: string): string => draftText(drafts, `${prefix}:${field}`, fallback);
   const agent = textOrUndefined(pick("agent", current?.agent ?? ""));
-  const model = textOrUndefined(pick("model", current?.model ?? ""));
-  const parsed = parseContext(pick("context", contextValue(current?.contextWindow)));
+  const switched = agent !== undefined && current?.agent !== undefined && agent !== current.agent;
+  const model = textOrUndefined(pick("model", switched ? "" : current?.model ?? ""));
+  const parsed = parseContext(pick("context", switched ? "" : contextValue(current?.contextWindow)));
   const options = installationOf(agents, agent ?? inheritedAgent)?.contextOptions ?? [];
   const contextWindow = parsed !== undefined && options.includes(parsed) ? parsed : undefined;
   return {
@@ -93,9 +117,11 @@ export function panelPartialFromFields(
   const pick = (field: string, fallback: string): string => draftText(drafts, `${prefix}:${field}`, fallback);
   const text = (value: string | null | undefined): string => (typeof value === "string" ? value : "");
   const agent = masked("agent") ? undefined : textOrUndefined(pick("agent", text(current?.agent)));
-  const model = masked("model") ? undefined : textOrUndefined(pick("model", text(current?.model)));
+  const priorAgent = typeof current?.agent === "string" ? current.agent : planned?.agent ?? inheritedAgent;
+  const switched = agent !== undefined && priorAgent !== undefined && agent !== priorAgent;
+  const model = masked("model") ? undefined : textOrUndefined(pick("model", switched ? "" : text(current?.model)));
   const effective = agent ?? (masked("agent") ? inheritedAgent : planned?.agent ?? inheritedAgent);
-  const parsed = masked("contextWindow") ? undefined : parseContext(pick("context", contextValue(current?.contextWindow ?? undefined)));
+  const parsed = masked("contextWindow") ? undefined : parseContext(pick("context", switched ? "" : contextValue(current?.contextWindow ?? undefined)));
   const options = installationOf(agents, effective)?.contextOptions ?? [];
   const contextWindow = parsed !== undefined && options.includes(parsed) ? parsed : undefined;
   return {
@@ -120,6 +146,9 @@ export interface SelectionFieldsProps {
   inheritedAgent: string | undefined;
   /** A per-agent row: the agent is fixed and not offered. */
   fixedAgent?: string;
+  showMissingAgent?: boolean;
+  /** The server's resolved slot, for fields that currently inherit at this layer. */
+  inheritance?: { selection: AgentSelectionV1; provenance: SelectionProvenanceV1 };
   drafts: Record<string, string>;
   onDraft: (key: string, text: string) => void;
 }
@@ -128,12 +157,31 @@ export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
   const { agents, prefix, drafts, onDraft } = props;
   const { t } = useTranslation();
   const draft = (field: string, fallback: string): string => draftText(drafts, `${prefix}:${field}`, fallback);
-  const change = (field: string) => (event: { target: { value: string } }) => onDraft(`${prefix}:${field}`, draftOf(event.target.value));
+  const change = (field: string) => (event: { target: { value: string } }) => {
+    const next = event.target.value;
+    const previousAgent = draft("agent", typeof props.current?.agent === "string" ? props.current.agent : "");
+    onDraft(`${prefix}:${field}`, draftOf(next));
+    if (field === "agent" && next !== previousAgent) {
+      onDraft(`${prefix}:model`, CLEARED_DRAFT);
+      onDraft(`${prefix}:context`, CLEARED_DRAFT);
+    }
+  };
   const text = (value: string | null | undefined): string => (typeof value === "string" ? value : "");
   const masked = (field: Field): boolean => isMasked(prefix, field, props.current, props.planned, drafts);
   const agentText = props.fixedAgent ?? draft("agent", text(props.current?.agent));
-  const below = masked("agent") ? props.inheritedAgent : props.planned?.agent ?? props.inheritedAgent;
+  const below = masked("agent") ? props.inheritedAgent : props.planned?.agent ?? props.inheritedAgent ?? props.inheritance?.selection.agent;
+  const priorAgent = typeof props.current?.agent === "string" ? props.current.agent : below;
+  const switched = props.fixedAgent === undefined && agentText !== "" && priorAgent !== undefined && agentText !== priorAgent;
   const effective = installationOf(agents, agentText === "" ? below : agentText);
+  const errors = selectionFieldErrors(agents, prefix, props.current, props.planned, drafts, below, props.fixedAgent);
+  const contextText = draft("context", switched ? "" : contextValue(props.current?.contextWindow ?? undefined));
+  const unsupportedContext = errors.find((error) => error.field === "contextWindow");
+  const inheritedHint = (field: "model" | "contextWindow"): string | null => {
+    if (!props.inheritance || props.current?.[field] !== undefined) return null;
+    const value = props.inheritance.selection[field];
+    const label = field === "contextWindow" ? contextLabel(value as ContextWindowV1) : String(value);
+    return t("agents.inheritConcrete", { value: label, source: enumText("selectionSource", props.inheritance.provenance[field]) });
+  };
   const planValue = (field: Field): string | null => {
     const value = props.planned?.[field];
     return value === undefined ? null : field === "contextWindow" ? contextLabel(value as ContextWindowV1) : String(value);
@@ -155,7 +203,9 @@ export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
         <label>
           {t("agents.label.agent")}
           <select name={`${prefix}:agent`} value={agentText} onChange={change("agent")}>
-            <option value="">{props.planned?.agent !== undefined && !masked("agent") ? t("agents.inheritPlan", { agent: props.planned.agent }) : t("agents.inherit")}</option>
+            <option value="">{props.inheritance && props.current?.agent === undefined
+              ? t("agents.inheritConcrete", { value: props.inheritance.selection.agent, source: enumText("selectionSource", props.inheritance.provenance.agent) })
+              : props.planned?.agent !== undefined && !masked("agent") ? t("agents.inheritPlan", { agent: props.planned.agent }) : t("agents.inherit")}</option>
             {agents.installations.map((row) => <option key={row.id} value={row.id}>{row.id} ({row.kind} {row.version})</option>)}
           </select>
         </label>
@@ -163,16 +213,20 @@ export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
       {props.fixedAgent === undefined && maskBox("agent")}
       <label>
         {t("agents.label.model")}
-        <input name={`${prefix}:model`} value={draft("model", text(props.current?.model))} placeholder={(masked("model") ? undefined : props.planned?.model) ?? effective?.defaults.model ?? ""} onChange={change("model")} />
+        <input name={`${prefix}:model`} value={draft("model", switched ? "" : text(props.current?.model))} placeholder={(masked("model") ? undefined : props.planned?.model) ?? effective?.defaults.model ?? ""} onChange={change("model")} />
+        {inheritedHint("model") && <small>{inheritedHint("model")}</small>}
       </label>
       {maskBox("model")}
       <label>
         {t("agents.label.context")}
-        <select name={`${prefix}:context`} value={draft("context", contextValue(props.current?.contextWindow ?? undefined))} onChange={change("context")}>
+        <select name={`${prefix}:context`} value={contextText} aria-invalid={unsupportedContext !== undefined} onChange={change("context")}>
           <option value="">{t("agents.inherit")}</option>
           {(effective?.contextOptions ?? []).map((option) => <option key={String(option)} value={String(option)}>{contextLabel(option)}</option>)}
+          {unsupportedContext && contextText !== "" && <option value={contextText}>{contextText}</option>}
         </select>
+        {inheritedHint("contextWindow") && <small>{inheritedHint("contextWindow")}</small>}
       </label>
+      {errors.filter((error) => error.code !== "missingAgent" || props.showMissingAgent !== false).map((error) => <p key={error.field} role={error.code === "missingAgent" ? "note" : "alert"}>{t(`agents.fieldError.${error.code}`, { value: error.value ?? "" })}</p>)}
       {maskBox("contextWindow")}
     </fieldset>
   );

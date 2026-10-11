@@ -47,10 +47,10 @@ describe("resolveGroupSelections (W6-1, spec §6.3/§6.4 step 1)", () => {
       expect(resolved(resolution, "task:b").provenance).toEqual({ agent: "task-plan", model: "descriptor", contextWindow: "descriptor" });
       expect(resolution.taskOverrides).toEqual({ a: null, b: null });
       expect(resolution.planLayers.tasks).toEqual({ a: null, b: { agent: FIXTURE_OTHER_AGENT_ID } });
-      expect(resolution.selectionsHash).toBe(sha256Canonical(Object.fromEntries(resolution.slots.map((slot) => {
+      expect(resolution.selectionsHash).toBe(sha256Canonical({ domain: "orca-agent-selections-v2", slots: Object.fromEntries(resolution.slots.map((slot) => {
         const frozen = resolved(resolution, slot.key);
         return [slot.key, { partial: frozen.partial, selection: frozen.selection, configHash: frozen.configHash }];
-      }))));
+      })) }));
     } finally { await h.dispose(); }
   });
 

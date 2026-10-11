@@ -23,6 +23,26 @@ const SETTLED_ROUND_ONE = { ...ROUND_TWO, slug: "markdown-export" };
 const bad = { ...ROUND_ONE, questions: [], frontierEmpty: false };
 
 describe("requirement-open (N1 spec §11.1 item 1)", () => {
+  it("returns a local reason when clarification is required but no estimator is configured", async () => {
+    const x = await requirementHarness({ answers: [], startAt: "none" });
+    try {
+      const service = new WebControlService({ ...x.service.deps, defaults: () => null });
+      expect(await service.openRequirement(open("no-estimator"))).toMatchObject({ error: { code: "control-estimator-unconfigured" } });
+      expect(x.store.db.prepare("SELECT COUNT(*) AS n FROM groups").get()!.n).toBe(0);
+    } finally { await x.dispose(); }
+  });
+
+  it("refuses a selected installation without single-call execution even when its kind is accepted elsewhere", async () => {
+    const x = await requirementHarness({ answers: [], startAt: "none" });
+    try {
+      const port = { ...x.fake.port, resolveAgent: async (partial: Parameters<typeof x.fake.port.resolveAgent>[0]) => ({ ...await x.fake.port.resolveAgent(partial), singleCallExecution: null }) };
+      const profile = resolveProfile(profileSnapshot(), port);
+      const service = new WebControlService({ ...x.service.deps, profileRouter: createExecutionProfileRouter([profile]),
+        defaults: () => ({ estimatorProfileId: "all", estimatorProfileHash: profile.profileHash, estimateMode: "strict" as const }) });
+      expect(await service.openRequirement(open("single-call-missing"))).toMatchObject({ error: { code: "agent-selection-rejected", message: expect.stringContaining("single-call-unavailable") } });
+      expect(x.store.db.prepare("SELECT COUNT(*) AS n FROM groups").get()!.n).toBe(0);
+    } finally { await x.dispose(); }
+  });
   it("creates a clarifying group with round 1 queued, its agent frozen, its id derived from the command", async () => {
     const x = await requirementHarness({ answers: [], startAt: "none" });
     try {
