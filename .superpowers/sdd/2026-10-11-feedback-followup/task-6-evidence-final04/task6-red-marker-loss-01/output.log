@@ -1,0 +1,116 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultRecovery.native.test.ts (18 tests | 2 failed | 16 skipped) 5539ms
+   × missing lifecycle markers after before-entry cannot authorize replay or known zero usage 2746ms
+     → promise resolved "{ status: 'failed', …(8) }" instead of rejecting
+   × missing lifecycle markers after entry-fsynced cannot authorize replay or known zero usage 2792ms
+     → promise resolved "{ status: 'failed', …(8) }" instead of rejecting
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.native.test.ts > missing lifecycle markers after before-entry cannot authorize replay or known zero usage
+ FAIL  tests/control/savedResultRecovery.native.test.ts > missing lifecycle markers after entry-fsynced cannot authorize replay or known zero usage
+AssertionError: promise resolved "{ status: 'failed', …(8) }" instead of rejecting
+
+- Expected
++ Received
+
+- [Error: rejected promise]
++ Object {
++   "attemptsUsed": 1,
++   "budgetSnapshot": Object {
++     "attemptsRemaining": 1,
++     "timeRemainingMs": 29710,
++     "tokenBudgetRemaining": 1000,
++     "tokenRemainingStatus": "unknown",
++   },
++   "currentAttempt": 1,
++   "lastTransitionAt": "2026-10-11T02:41:29.062Z",
++   "recentFailures": Array [],
++   "savedResult": Object {
++     "admissionHash": "c2d804b3fdba62817e343c76e24d0325f034529d3700b6b92c4cdcbe826af415",
++     "entry": Object {
++       "candidateHash": "603b5b9a1c5ab055a88e26aa07be3ca1800180328e590ce60929e29b42fee1ac",
++       "enteredAt": "2026-10-11T02:41:28.562Z",
++       "protectedInputsHash": "4685409367ccbec5c7ab57f8f1145d0decf5a360f5906ad1e845ccc08ae30a07",
++     },
++     "funding": Object {
++       "freshGrant": Object {
++         "handoff": Object {
++           "activeMs": 30000,
++           "attempts": 2,
++           "sessions": 1,
++           "tokens": 1000,
++         },
++         "work": Object {
++           "activeMs": 30000,
++           "attempts": 2,
++           "sessions": 1,
++           "tokens": 1000,
++         },
++       },
++       "fundedTotal": Object {
++         "activeMs": 60000,
++         "attempts": 4,
++         "sessions": 2,
++         "tokens": 2000,
++       },
++       "historicalPolicy": Object {
++         "accountingMode": "finite-legacy",
++         "authoredWork": Object {
++           "activeMs": 30000,
++           "attempts": 2,
++           "sessions": 1,
++           "tokens": 1000,
++         },
++         "authority": Object {
++           "artifactId": "recovery-f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a",
++           "hash": "f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a",
++         },
++         "contractHash": "653938bd2a52eba5c7b682e79db27b1adf9c482df43508bca49bed5c112d6cf4",
++       },
++       "inheritedUsage": Object {
++         "activeMs": 30000,
++         "attempts": 2,
++         "sessions": 1,
++         "tokens": 1000,
++       },
++       "kind": "legacy-fresh-grant-v1",
++       "reservation": Object {
++         "handoffAllocationId": "allocation-handoff",
++         "revision": 7,
++         "runId": "recovery-1",
++         "workAllocationId": "allocation-work",
++       },
++     },
++     "mode": "verify-saved-result",
++     "packageHash": "0c21ed00d274ec3cfeb454384edd9bc72134a4fe207dc6d4d4851372aba735b8",
++     "prepared": Object {
++       "candidateHash": "603b5b9a1c5ab055a88e26aa07be3ca1800180328e590ce60929e29b42fee1ac",
++       "preparedAt": "2026-10-11T02:41:28.339Z",
++       "protectedInputsHash": "4685409367ccbec5c7ab57f8f1145d0decf5a360f5906ad1e845ccc08ae30a07",
++     },
++     "recoveryOf": Object {
++       "capsuleHash": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
++       "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
++       "snapshotHash": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
++       "sourceAttempt": 1,
++       "sourceRunId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
++     },
++   },
++   "status": "failed",
++   "stopReason": "Error: replay",
++   "waitingOnHuman": false,
++ }
+
+ ❯ tests/control/savedResultRecovery.native.test.ts:179:128
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 16 skipped (18)
+   Start at  10:41:25
+   Duration  6.10s (transform 285ms, setup 16ms, collect 377ms, tests 5.54s, environment 0ms, prepare 35ms)
+

@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6t.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; npm run typecheck"
+  ],
+  "rc": 2,
+  "elapsedSeconds": 4.297728061676025,
+  "log": "/private/tmp/orca-followup-runs/task6-types-explore-08/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "9ab418b2a3f7fa891c382a08685fcafd1383d3913a34ac89e7115634447c28d3",
+  "sourceFiles": 354
+}

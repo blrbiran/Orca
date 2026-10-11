@@ -1,0 +1,55 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/controller/verifySavedResult.test.ts (5 tests | 4 failed) 3003ms
+   × restores the archived candidate, checks and verifies once without planning/executing/recharging original usage 2181ms
+     → expected 'failed' to be 'succeeded' // Object.is equality
+   × refuses candidate modification by verifier without landing or retry 226ms
+     → expected 'Error: planner replay' to contain 'saved-result-modified-during-verifica…'
+   × refuses candidate modification by special-mode without landing or retry 238ms
+     → expected 'Error: planner replay' to contain 'saved-result-modified-during-verifica…'
+   × never repeats checks or a verifier after a durable entry without a result 247ms
+     → expected undefined to be defined
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > restores the archived candidate, checks and verifies once without planning/executing/recharging original usage
+AssertionError: expected 'failed' to be 'succeeded' // Object.is equality
+
+Expected: "succeeded"
+Received: "failed"
+
+ ❯ tests/controller/verifySavedResult.test.ts:14:24
+     12|    verifications++;expect(await readFile(join(context.worktreePath,'an…
+     13|   }},{savedResultRecovery:f.input,tokenPolicy:f.input.tokenPolicy,onPh…
+     14|   expect(state.status).toBe("succeeded");expect(verifications).toBe(1)…
+       |                        ^
+     15|   expect(state.attemptsUsed).toBe(1);expect(state.budgetSnapshot.token…
+     16|   expect(f.log("run/loop-state.json").status).toBe("failed");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > refuses candidate modification by verifier without landing or retry
+ FAIL  tests/controller/verifySavedResult.test.ts > refuses candidate modification by special-mode without landing or retry
+AssertionError: expected 'Error: planner replay' to contain 'saved-result-modified-during-verifica…'
+
+Expected: "saved-result-modified-during-verification"
+Received: "Error: planner replay"
+
+ ❯ tests/controller/verifySavedResult.test.ts:26:64
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > never repeats checks or a verifier after a durable entry without a result
+AssertionError: expected undefined to be defined
+ ❯ tests/controller/verifySavedResult.test.ts:33:39
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 1 passed (5)
+   Start at  09:00:01
+   Duration  3.57s (transform 237ms, setup 14ms, collect 318ms, tests 3.00s, environment 0ms, prepare 39ms)
+

@@ -1,0 +1,13 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "python3",
+    "-"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 4.290917873382568,
+  "log": "/private/tmp/orca-followup-runs/task6-legacy-ref-probe-01/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "84a998e8db7fa95eeb257653bdfc9bba6ed36f1f3541272aafda4aa2cd52c5e5",
+  "sourceFiles": 248
+}

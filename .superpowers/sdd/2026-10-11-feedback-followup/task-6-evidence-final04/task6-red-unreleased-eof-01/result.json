@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6e.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node node_modules/vitest/vitest.mjs run tests/control/savedResultRecovery.native.test.ts -t \"owner death before validation command release\" --maxWorkers=1 --minWorkers=1"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 1.0869560241699219,
+  "log": "/private/tmp/orca-followup-runs/task6-red-unreleased-eof-01/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "aea07b9fbce1052973cc00611375f906a6944c7fdef1d1cd33c1d41a95e75ed6",
+  "sourceFiles": 446
+}

@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "npm",
+    "run",
+    "build"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 4.728903770446777,
+  "log": "/private/tmp/orca-followup-runs/task6-build-explore-02/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "dc6a9a4d57be744eb06d8929dec4172a895cc5c8477cfc5e1131421058ed0189",
+  "sourceFiles": 287
+}

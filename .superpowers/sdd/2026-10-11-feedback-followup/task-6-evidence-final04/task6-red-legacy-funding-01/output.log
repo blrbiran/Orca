@@ -1,0 +1,25 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultRecovery.test.ts (18 tests | 1 failed | 17 skipped) 2522ms
+   × legacy funding keeps historical authority, exact inherited work and a separate fresh grant/derived total 2521ms
+     → expected 'unavailable' to be 'eligible' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > legacy funding keeps historical authority, exact inherited work and a separate fresh grant/derived total
+AssertionError: expected 'unavailable' to be 'eligible' // Object.is equality
+
+Expected: "eligible"
+Received: "unavailable"
+
+ ❯ tests/control/savedResultRecovery.test.ts:100:62
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 skipped (18)
+   Start at  09:35:02
+   Duration  3.18s (transform 254ms, setup 17ms, collect 353ms, tests 2.52s, environment 0ms, prepare 43ms)
+

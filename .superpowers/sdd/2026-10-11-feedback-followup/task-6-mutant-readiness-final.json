@@ -1,0 +1,15 @@
+{
+  "main": {
+    "hash": "9919aa628a14ad45c098f831e5993f1e19e29de0fa148f586254a30b0bd0c780",
+    "files": 446
+  },
+  "clone": {
+    "hash": "9919aa628a14ad45c098f831e5993f1e19e29de0fa148f586254a30b0bd0c780",
+    "files": 446
+  },
+  "cloneCommit": "51ba895f8f25e238c2e91c7a2f00c93fe2979461",
+  "dependencyPath": "/Users/biran/code/skills/loop/ccloop/node_modules",
+  "vitestBytes": 43,
+  "trackedDiffBytes": 0,
+  "indexDiffBytes": 0
+}

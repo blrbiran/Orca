@@ -1,0 +1,31 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/controller/verifySavedResult.test.ts (18 tests) 36822ms
+   ✓ restores the archived candidate, checks and verifies once without planning/executing/recharging original usage 2176ms
+   ✓ refuses candidate modification by command without landing or retry 1302ms
+   ✓ refuses candidate modification by verifier without landing or retry 1557ms
+   ✓ refuses candidate modification by special-mode without landing or retry 1429ms
+   ✓ refuses replay of an entered state after its candidate has been cleaned up 1814ms
+   ✓ ends a retryable rejection after one fresh verification and preserves saved source failure 1693ms
+   ✓ replays a complete durable terminal verification result with no new calls or usage 2010ms
+   ✓ protects git-config from verifier changes before publication 1493ms
+   ✓ protects runtime-contract from verifier changes before publication 1409ms
+   ✓ refuses to resume recovery as ordinary work when its durable mode marker is missing 1477ms
+   ✓ verifies the original candidate before harmless current target-tip movement is reconciled 1843ms
+   ✓ checks revocation after process registration and before sending the validation command 1156ms
+   ✓ enforces actual published Git changes even when the original Agent reports no changed files 685ms
+   ✓ runs real verification of a strictly valid saved partial without interpreting its reported timeout as a new timeout 1765ms
+   ✓ refuses candidate mutation even when the verifier throws before producing a result 1402ms
+   ✓ does not reuse a complete terminal approval after its protected contract changes 1963ms
+   ✓ settles observed verifier usage on timeout and never enters an executor retry 11261ms
+   ✓ refuses a candidate moved behind a workspace path symlink even when every byte and mode matches 386ms
+ ✓ tests/control/savedResultRecovery.test.ts (34 tests) 5958ms
+ ✓ tests/control/savedResultCheckpoint.test.ts (1 test) 229ms
+
+ Test Files  3 passed (3)
+      Tests  53 passed (53)
+   Start at  12:22:20
+   Duration  44.09s (transform 318ms, setup 24ms, collect 580ms, tests 43.01s, environment 1ms, prepare 112ms)
+
+JSON report written to /private/tmp/orca-followup-runs/task6-final-covering-04/tests.json

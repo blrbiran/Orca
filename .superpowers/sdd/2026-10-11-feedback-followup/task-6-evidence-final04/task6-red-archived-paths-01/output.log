@@ -1,0 +1,98 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultRecovery.test.ts (9 tests | 5 failed) 3122ms
+   ✓ saved result recovery wire > accepts only an explicit protocol4 immutable recovery package without checkpoint 2151ms
+   × qualifies a genuine old bare execution only with its complete published archive and accounted admission 124ms
+     → expected { status: 'unavailable', …(1) } to match object { status: 'eligible', …(2) }
+(1 matching property omitted from actual)
+   × refuses semantic before runtime creation 114ms
+     → expected { status: 'unavailable', …(1) } to deeply equal { status: 'unavailable', …(1) }
+   × refuses settlement before runtime creation 121ms
+     → expected { status: 'unavailable', …(1) } to deeply equal { status: 'unavailable', …(1) }
+   × refuses lineage before runtime creation 120ms
+     → expected { status: 'unavailable', …(1) } to deeply equal { status: 'unavailable', …(1) }
+   × source-only eligibility reads genuine immutable evidence without a new claim, admission, fence or provider 135ms
+     → expected { status: 'unavailable', …(1) } to match object { status: 'eligible', …(2) }
+(1 matching property omitted from actual)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > qualifies a genuine old bare execution only with its complete published archive and accounted admission
+AssertionError: expected { status: 'unavailable', …(1) } to match object { status: 'eligible', …(2) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "authorityKind": "legacy-published-candidate-v1",
+-   "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
+-   "status": "eligible",
++   "status": "unavailable",
+  }
+
+ ❯ tests/control/savedResultRecovery.test.ts:24:53
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > refuses semantic before runtime creation
+ FAIL  tests/control/savedResultRecovery.test.ts > refuses settlement before runtime creation
+ FAIL  tests/control/savedResultRecovery.test.ts > refuses lineage before runtime creation
+AssertionError: expected { status: 'unavailable', …(1) } to deeply equal { status: 'unavailable', …(1) }
+
+- Expected
++ Received
+
+  Object {
+-   "reason": "saved-result-source-stale",
++   "reason": "saved-result-evidence-invalid",
+    "status": "unavailable",
+  }
+
+ ❯ tests/control/savedResultRecovery.test.ts:41:53
+     39|   if(kind==='lineage')f.input.tokenPolicy!.inheritedUsage.attempts=0;
+     40|   if(kind==='owner')f.input.claim.ownerToken='foreign';
+     41|   expect(await readSavedResultEligibility(f.input)).toEqual({status:'u…
+       |                                                     ^
+     42|  }finally{await rm(f.root,{recursive:true,force:true});}
+     43| },30000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > source-only eligibility reads genuine immutable evidence without a new claim, admission, fence or provider
+AssertionError: expected { status: 'unavailable', …(1) } to match object { status: 'eligible', …(2) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "rawExecutionTokens": 15,
+-   "recoveryOf": Object {
+-     "capsuleHash": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
+-     "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
+-     "snapshotHash": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
+-     "sourceAttempt": 1,
+-     "sourceRunId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
+-   },
+-   "status": "eligible",
++   "status": "unavailable",
+  }
+
+ ❯ tests/control/savedResultRecovery.test.ts:59:79
+     57|   const input={source:f.source,sourceAttempt:1,packagePath,packageHash…
+     58|   const before=await readdir(f.sourceDir);const result=await f.rpc('sa…
+     59|   expect(result.code,result.stderr).toBe(0);expect(JSON.parse(result.s…
+       |                                                                               ^
+     60|   expect(await readdir(f.sourceDir)).toEqual(before);await expect(stat…
+     61|  }finally{await rm(f.root,{recursive:true,force:true});}
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 4 passed (9)
+   Start at  09:08:42
+   Duration  3.58s (transform 188ms, setup 14ms, collect 249ms, tests 3.12s, environment 0ms, prepare 36ms)
+

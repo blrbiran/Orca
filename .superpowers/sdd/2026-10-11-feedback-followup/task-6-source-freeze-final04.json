@@ -1,0 +1,27 @@
+{
+  "sourceTreeSHA256": "6b095585713cf85236343a3cd98f9ce73252ca5de7b0dd5af9b3e315401b9705",
+  "sourceFiles": 446,
+  "sha256Algorithm": "sorted relative path + NUL + exact file bytes + NUL; src/tests/scripts/package/config roots as isolated runner",
+  "dependencies": {
+    "node_modules/vitest/vitest.mjs": {
+      "realpath": "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+      "bytes": 43,
+      "sha256": "39db22f579acf5639bbb17a261408debbde03f4692c0c439e77e7f13aeba74d6"
+    },
+    "node_modules/vitest/package.json": {
+      "realpath": "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/package.json",
+      "bytes": 4995,
+      "sha256": "6ea35e567829660d9832744086c18526b9ddebd5358c4a0cadfb0a355925f917"
+    },
+    "node_modules/typescript/package.json": {
+      "realpath": "/Users/biran/code/skills/loop/ccloop/node_modules/typescript/package.json",
+      "bytes": 3620,
+      "sha256": "822ef7ca6452205657b6288b066481ecf508bfbf43455d715cf7d3ec457561e6"
+    },
+    "node_modules/tsx/dist/loader.mjs": {
+      "realpath": "/Users/biran/code/skills/loop/ccloop/node_modules/tsx/dist/loader.mjs",
+      "bytes": 743,
+      "sha256": "274e965b148911ea8ccd08923aecf1b898e46db70c8c5a5071b1cc6035f5851d"
+    }
+  }
+}

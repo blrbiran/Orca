@@ -1,0 +1,4 @@
+
+> ccloop@0.1.0 build
+> tsc -p tsconfig.json && node -e "const fs=require('fs');fs.writeFileSync('dist/cli.js', '#!/usr/bin/env node\nexport * from \"./src/cli.js\";\nimport { main } from \"./src/cli.js\";\nvoid main(process.argv.slice(2)).then((code) => { process.exitCode = code; });\n');fs.chmodSync('dist/cli.js', 0o755);fs.writeFileSync('dist/cli.d.ts', 'export * from \"./src/cli.js\";\n');"
+

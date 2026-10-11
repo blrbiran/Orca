@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6n.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node node_modules/vitest/vitest.mjs run tests/control/savedResultRecovery.native.test.ts -t \"missing lifecycle markers\" --maxWorkers=1 --minWorkers=1"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 6.415311098098755,
+  "log": "/private/tmp/orca-followup-runs/task6-red-marker-loss-01/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "025f91434a84ad3397e08d6a8b43d630c5a6ebfd9d89495ebebfa38e732ea7ba",
+  "sourceFiles": 354
+}

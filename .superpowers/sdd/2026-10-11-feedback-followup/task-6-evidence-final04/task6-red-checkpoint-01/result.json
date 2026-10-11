@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6c.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node node_modules/vitest/vitest.mjs run tests/control/savedResultCheckpoint.test.ts --maxWorkers=1 --minWorkers=1"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 3.1712422370910645,
+  "log": "/private/tmp/orca-followup-runs/task6-red-checkpoint-01/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "4d00a3c93cb7d9dd88f604604456ad406ac637a0752ec5277c0879abd38808df",
+  "sourceFiles": 446
+}

@@ -1,0 +1,27 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/control/savedResultRecovery.native.test.ts (18 tests) 61736ms
+   ✓ built CLI accepts a private package, runs only verification, records new actual usage, and harvests its approved candidate 3914ms
+   ✓ native crash at before-entry preserves mode, entry and result fences 2878ms
+   ✓ native crash at entry-fsynced preserves mode, entry and result fences 1845ms
+   ✓ native crash at verifier-returned preserves mode, entry and result fences 2197ms
+   ✓ native crash at usage-settled preserves mode, entry and result fences 2234ms
+   ✓ native crash at output-fsynced preserves mode, entry and result fences 2725ms
+   ✓ native crash at result-fsynced preserves mode, entry and result fences 2846ms
+   ✓ native crash at terminal-fsynced preserves mode, entry and result fences 2663ms
+   ✓ explicit mechanical settlement at before-entry stops a dead claimed worker without rerunning checks or providers 3193ms
+   ✓ explicit mechanical settlement at entry-fsynced stops a dead claimed worker without rerunning checks or providers 3474ms
+   ✓ explicit mechanical settlement at usage-settled stops a dead claimed worker without rerunning checks or providers 4015ms
+   ✓ explicit mechanical settlement at result-fsynced stops a dead claimed worker without rerunning checks or providers 4594ms
+   ✓ explicit mechanical settlement at revoked-result stops a dead claimed worker without rerunning checks or providers 4475ms
+   ✓ admits an explicit successor after before-entry and carries every work charge exactly once 7277ms
+   ✓ admits an explicit successor after usage-settled and carries every work charge exactly once 8265ms
+   ✓ missing lifecycle markers after before-entry cannot authorize replay or known zero usage 2370ms
+   ✓ missing lifecycle markers after entry-fsynced cannot authorize replay or known zero usage 2560ms
+
+ Test Files  1 passed (1)
+      Tests  18 passed (18)
+   Start at  10:50:02
+   Duration  62.30s (transform 276ms, setup 13ms, collect 370ms, tests 61.74s, environment 0ms, prepare 36ms)
+

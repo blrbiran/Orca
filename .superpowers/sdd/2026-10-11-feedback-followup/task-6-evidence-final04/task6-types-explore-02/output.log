@@ -1,0 +1,5 @@
+
+> ccloop@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+tests/controller/verifySavedResult.test.ts(13,88): error TS7006: Parameter 'e' implicitly has an 'any' type.

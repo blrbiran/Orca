@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6b.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; ./node_modules/.bin/vitest run tests/control/savedResultRecovery.test.ts -t \"legacy funding keeps\""
+  ],
+  "rc": 1,
+  "elapsedSeconds": 3.5506298542022705,
+  "log": "/private/tmp/orca-followup-runs/task6-red-legacy-funding-01/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "f57f2a60a60eade412718486e6adf56daa05012c8cbafaf5cda987f544ab2ab0",
+  "sourceFiles": 288
+}

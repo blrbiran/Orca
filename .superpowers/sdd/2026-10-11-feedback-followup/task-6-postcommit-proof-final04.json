@@ -1,0 +1,16 @@
+{
+  "main": {
+    "hash": "6b095585713cf85236343a3cd98f9ce73252ca5de7b0dd5af9b3e315401b9705",
+    "files": 446
+  },
+  "cloneRestored": {
+    "hash": "6b095585713cf85236343a3cd98f9ce73252ca5de7b0dd5af9b3e315401b9705",
+    "files": 446
+  },
+  "mainCommit": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+  "mainTrackedDiffBytes": 0,
+  "mainIndexDiffBytes": 0,
+  "cloneTrackedDiffBytes": 0,
+  "cloneIndexDiffBytes": 0,
+  "archiveHashesVerified": 238
+}

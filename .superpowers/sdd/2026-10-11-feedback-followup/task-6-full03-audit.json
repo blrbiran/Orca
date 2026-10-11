@@ -1,0 +1,14 @@
+{
+  "parts": [
+    "/private/tmp/orca-followup-runs/task6-final-full-03/output.part-1.log",
+    "/private/tmp/orca-followup-runs/task6-final-full-03/output.part-2.log",
+    "/private/tmp/orca-followup-runs/task6-final-full-03/output.part-3.log",
+    "/private/tmp/orca-followup-runs/task6-final-full-03/output.part-4.log",
+    "/private/tmp/orca-followup-runs/task6-final-full-03/output.part-5.log"
+  ],
+  "logSHA256": "e3e20109add6be7cdd99c10326e321340b74233ddff1dc7382751f441a71096d",
+  "assertionsAudited": 1541,
+  "filesAudited": 147,
+  "jsonSHA256": "97c96797a5412b34f98972ee7abdba8b8e3bb7cecf0e33f07e0efc7e9c658e4f",
+  "allPassed": true
+}

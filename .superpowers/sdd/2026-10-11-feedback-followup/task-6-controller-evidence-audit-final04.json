@@ -1,0 +1,10 @@
+{
+  "rawAttachmentsVerified": 238,
+  "rawBytes": 2345263,
+  "ownedProductPathsVerified": 214,
+  "intendedMutationLogsVerified": 16,
+  "mutationSourceRestorationAllClean": true,
+  "sourceSHA256": "6b095585713cf85236343a3cd98f9ce73252ca5de7b0dd5af9b3e315401b9705",
+  "productCommit": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+  "scope": "Controller byte/hash/size and assertion-metadata audit; complete raw interpretation by implementer and independent reviewer."
+}

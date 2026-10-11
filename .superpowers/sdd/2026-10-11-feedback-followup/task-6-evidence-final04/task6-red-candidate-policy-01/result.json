@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6p.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; ./node_modules/.bin/vitest run tests/controller/verifySavedResult.test.ts -t \"actual published|saved partial|throws before\""
+  ],
+  "rc": 1,
+  "elapsedSeconds": 4.962861061096191,
+  "log": "/private/tmp/orca-followup-runs/task6-red-candidate-policy-01/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "7373d9cdf11187855f4b4c9a32521ca21e158d2688104cc3578265c66713caf5",
+  "sourceFiles": 354
+}

@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6b.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; ./node_modules/.bin/vitest run tests/control/savedResultRecovery.test.ts tests/controller/verifySavedResult.test.ts"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 12.513880968093872,
+  "log": "/private/tmp/orca-followup-runs/task6-green-legacy-funding-01/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "2d31c9fcef5df32fa015adc4fe581234e3a6b24e71115ab3c0e582b62c24a8a8",
+  "sourceFiles": 288
+}

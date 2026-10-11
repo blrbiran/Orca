@@ -1,0 +1,44 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultRecovery.native.test.ts (19 tests | 1 failed | 18 skipped) 188ms
+   × owner death before validation command release cannot run an empty login shell 187ms
+     → promise resolved "Buffer[ 112, 114, 111, 102, 105, …(-100) ]" instead of rejecting
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.native.test.ts > owner death before validation command release cannot run an empty login shell
+AssertionError: promise resolved "Buffer[ 112, 114, 111, 102, 105, …(-100) ]" instead of rejecting
+
+- Expected
++ Received
+
+- [Error: rejected promise]
++ Object {
++   "data": Array [
++     112,
++     114,
++     111,
++     102,
++     105,
++     108,
++     101,
++   ],
++   "type": "Buffer",
++ }
+
+ ❯ tests/control/savedResultRecovery.native.test.ts:201:39
+    199|   await waitFile(ready);pgid=JSON.parse(await readFile(join(runDir,'sa…
+    200|   let gone=false;for(let i=0;i<300;i++){try{process.kill(-pgid!,0);}ca…
+    201|   await expect(readFile(profileMarker)).rejects.toMatchObject({code:'E…
+       |                                       ^
+    202|  }finally{owner.kill('SIGKILL');if(pgid)try{process.kill(-pgid,'SIGKIL…
+    203| },15000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 skipped (19)
+   Start at  11:20:02
+   Duration  757ms (transform 289ms, setup 14ms, collect 385ms, tests 188ms, environment 0ms, prepare 36ms)
+

@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6n.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; ./node_modules/.bin/vitest run tests/control/savedResultRecovery.native.test.ts"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 21.302486181259155,
+  "log": "/private/tmp/orca-followup-runs/task6-native-crashes-01/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "dc6a9a4d57be744eb06d8929dec4172a895cc5c8477cfc5e1131421058ed0189",
+  "sourceFiles": 287
+}

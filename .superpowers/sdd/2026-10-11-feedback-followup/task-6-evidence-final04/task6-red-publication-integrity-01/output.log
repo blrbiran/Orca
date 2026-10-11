@@ -1,0 +1,109 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultRecovery.native.test.ts (26 tests | 7 failed | 19 skipped) 25844ms
+   × does not reuse terminal-fsynced approval for a candidate changed before harvest 3681ms
+     → expected { …(12) } to match object { disposition: 'terminal', …(1) }
+(36 matching properties omitted from actual)
+   × refuses cleaned success with missing-publication and preserves measured usage 3680ms
+     → expected { …(12) } to match object { disposition: 'terminal', …(1) }
+(36 matching properties omitted from actual)
+   × refuses cleaned success with dirty-materialization and preserves measured usage 3725ms
+     → expected { …(12) } to match object { disposition: 'terminal', …(1) }
+(36 matching properties omitted from actual)
+   × refuses cleaned success with symlink-materialization and preserves measured usage 3786ms
+     → expected { …(12) } to match object { disposition: 'terminal', …(1) }
+(36 matching properties omitted from actual)
+   × refuses cleaned success with special-mode-materialization and preserves measured usage 3694ms
+     → expected { …(12) } to match object { disposition: 'terminal', …(1) }
+(36 matching properties omitted from actual)
+   × refuses cleaned success with extra-materialization and preserves measured usage 3775ms
+     → expected { …(12) } to match object { disposition: 'terminal', …(1) }
+(36 matching properties omitted from actual)
+   × never publishes a success whose ordinary result repository was poisoned outside the candidate 3502ms
+     → expected 'complete' not to be 'complete' // Object.is equality
+ ❯ tests/control/savedResultRecovery.test.ts (34 tests | 2 failed | 32 skipped) 525ms
+   × refuses actual legacy attempt_commit_publish_failed events without guessing attempt text 276ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+   × refuses actual legacy workspace_cleanup_failed events without guessing attempt text 248ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.native.test.ts > does not reuse terminal-fsynced approval for a candidate changed before harvest
+AssertionError: expected { …(12) } to match object { disposition: 'terminal', …(1) }
+(36 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "disposition": "terminal",
++   "disposition": "complete",
+    "usageStatus": "known",
+  }
+
+ ❯ tests/control/savedResultRecovery.native.test.ts:219:28
+    217|   await writeFile(join(f.runDir,'worktrees/attempt-1/answer.txt'),'cha…
+    218|   const settled=await f.rpc('settle-saved-result',{input:f.input});exp…
+    219|   expect(value.settlement).toMatchObject({disposition:'terminal',usage…
+       |                            ^
+    220|   const response=await f.rpc('read-saved-result-settlement',{input:f.i…
+    221|   const refused=JSON.parse(Buffer.from(JSON.parse(response.stdout).bas…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  tests/control/savedResultRecovery.native.test.ts > refuses cleaned success with missing-publication and preserves measured usage
+ FAIL  tests/control/savedResultRecovery.native.test.ts > refuses cleaned success with dirty-materialization and preserves measured usage
+ FAIL  tests/control/savedResultRecovery.native.test.ts > refuses cleaned success with symlink-materialization and preserves measured usage
+ FAIL  tests/control/savedResultRecovery.native.test.ts > refuses cleaned success with special-mode-materialization and preserves measured usage
+ FAIL  tests/control/savedResultRecovery.native.test.ts > refuses cleaned success with extra-materialization and preserves measured usage
+AssertionError: expected { …(12) } to match object { disposition: 'terminal', …(1) }
+(36 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "disposition": "terminal",
++   "disposition": "complete",
+    "usageStatus": "known",
+  }
+
+ ❯ tests/control/savedResultRecovery.native.test.ts:247:152
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  tests/control/savedResultRecovery.native.test.ts > never publishes a success whose ordinary result repository was poisoned outside the candidate
+AssertionError: expected 'complete' not to be 'complete' // Object.is equality
+ ❯ tests/control/savedResultRecovery.native.test.ts:257:39
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > refuses actual legacy attempt_commit_publish_failed events without guessing attempt text
+ FAIL  tests/control/savedResultRecovery.test.ts > refuses actual legacy workspace_cleanup_failed events without guessing attempt text
+AssertionError: expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+
+- Expected
++ Received
+
+  Object {
+-   "reason": "saved-result-legacy-publication-unproven",
+-   "status": "unavailable",
++   "authorityKind": "legacy-published-candidate-v1",
++   "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
++   "status": "eligible",
+  }
+
+ ❯ tests/control/savedResultRecovery.test.ts:138:53
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ Test Files  2 failed (2)
+      Tests  9 failed | 51 skipped (60)
+   Start at  12:05:49
+   Duration  27.19s (transform 313ms, setup 17ms, collect 477ms, tests 26.37s, environment 0ms, prepare 76ms)
+

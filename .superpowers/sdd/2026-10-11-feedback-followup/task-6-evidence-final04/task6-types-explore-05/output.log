@@ -1,0 +1,6 @@
+
+> ccloop@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+src/control/protocol.ts(281,125): error TS2339: Property 'mode' does not exist on type '{ work: { kind: "loop"; contract: { objective: { taskId: string; goal: string; successCondition: string; nonGoals: string[]; }; context: { repoPath: string; targetPaths: string[]; relevantDocs: string[]; buildTestCommands: string[]; constraints: string[]; }; executionPolicy: { ...; }; safetyPolicy: { ...; }; verific...'.
+  Property 'mode' does not exist on type '{ work: { kind: "loop"; contract: { objective: { taskId: string; goal: string; successCondition: string; nonGoals: string[]; }; context: { repoPath: string; targetPaths: string[]; relevantDocs: string[]; buildTestCommands: string[]; constraints: string[]; }; executionPolicy: { ...; }; safetyPolicy: { ...; }; verific...'.

@@ -1,0 +1,450 @@
+{
+  "baselineSourceTreeSHA256": "6b095585713cf85236343a3cd98f9ce73252ca5de7b0dd5af9b3e315401b9705",
+  "cloneCommit": "0695eac632261268a14969cd637f72fb57965df8",
+  "mutants": [
+    {
+      "mutant": "actual-argv",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "864520bf51501868f77cad3867fb5a12bb92c1cf4b0cd79939e2d74af5a5a378",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-actual-argv-01",
+      "logSHA256": "d6e7d5f32a39135d3acfd9be38e4c40069ed785a97d11d02650409ee0d4247fd",
+      "sourceTreeSHA256": "d7a10d2dc7f705d023845280e9e90bcc9080fd12901dcf9f28659dc3bfdf41e9",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/savedResultRecovery.test.ts",
+        "-t",
+        "actual legacy argv drift",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 6 failed | 28 skipped (34)"
+      ],
+      "evidenceLimit": "Intended behavior assertion fails after the named guard deletion."
+    },
+    {
+      "mutant": "unreleased-eof",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "413f3d4b07bcc65ba5863eaf14b1d19cc3e7059349de0efe400c64eb7939a08f",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-unreleased-eof-01",
+      "logSHA256": "aea80d94af52967fc556e137133702b7bab5ee123181aba4a3f2e830a3979a40",
+      "sourceTreeSHA256": "7c8b2d40ff50d5f3d48c8cf3516bc4040b500bec57b70d8c7eeca786111c9791",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/savedResultRecovery.native.test.ts",
+        "-t",
+        "owner death before validation command release",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 1 failed | 27 skipped (28)"
+      ],
+      "evidenceLimit": "Intended behavior assertion fails after the named guard deletion."
+    },
+    {
+      "mutant": "handoff-mode",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "d0632bb66b91294e4e8d64ac3ea1c69673658ec654e243c29e1cbe0cf4b33347",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-handoff-mode-01",
+      "logSHA256": "6ec52d83e84af09c41c150f9a26dff0dfc9c15556194fd31c07ea4f59362053a",
+      "sourceTreeSHA256": "9eb893daa12ee795da0d77f929ac9b75a3a28b3d06c00c9d1baf21dd239ed902",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "--import",
+        "/private/tmp/ccloop-task6-mutants-final/node_modules/tsx/dist/loader.mjs",
+        "/private/tmp/task6-clone-wire-mutant-final04.mts"
+      ],
+      "failureSummary": [],
+      "evidenceLimit": "Built wire artifact check at helper line 88 detects leaked savedResult metadata; this is an assertion failure, not a compiler error."
+    },
+    {
+      "mutant": "skip-paid-phases",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "2ffd65368cc4a4518c934c08b979cff97b03b514ae5c97445b830f3d1657b6ec",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-skip-paid-phases-01",
+      "logSHA256": "a77d6c119018cea017f1a366a43e6403c8a6bff5b5e6fb728d6b932c751a3a59",
+      "sourceTreeSHA256": "3725f7236a08d190840fcbcf1c364fdf1252465b5453516cdd77e40754992887",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/controller/verifySavedResult.test.ts",
+        "-t",
+        "restores the archived candidate",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 1 failed | 17 skipped (18)"
+      ],
+      "evidenceLimit": "Intended behavior assertion fails after the named guard deletion."
+    },
+    {
+      "mutant": "snapshot-hash",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "864520bf51501868f77cad3867fb5a12bb92c1cf4b0cd79939e2d74af5a5a378",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-snapshot-hash-01",
+      "logSHA256": "8821ee2c303aaf4be4431a241caf161dfd7482a56bcbcde1f9620071a23f73d6",
+      "sourceTreeSHA256": "f345fab1c8d9a53328d84dfd9fe278494fd4ca28ef41b711a8ea6501544bdb4d",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/savedResultRecovery.test.ts",
+        "-t",
+        "changed snapshot",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 1 failed | 33 skipped (34)"
+      ],
+      "evidenceLimit": "Intended behavior assertion fails after the named guard deletion."
+    },
+    {
+      "mutant": "lineage-identity",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "864520bf51501868f77cad3867fb5a12bb92c1cf4b0cd79939e2d74af5a5a378",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-lineage-identity-01",
+      "logSHA256": "8cb44dbaf58bf959447120dd4505a22fca2880fb809335ab3c372150e55ab11f",
+      "sourceTreeSHA256": "1a084d0cb3e66d118521e3b160c4920c6e4909602a2e8b024bf8a00cbdd02def",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/savedResultRecovery.test.ts",
+        "-t",
+        "changed task",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 1 failed | 33 skipped (34)"
+      ],
+      "evidenceLimit": "Intended behavior assertion fails after the named guard deletion."
+    },
+    {
+      "mutant": "real-verifier",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "2ffd65368cc4a4518c934c08b979cff97b03b514ae5c97445b830f3d1657b6ec",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-real-verifier-01",
+      "logSHA256": "8c5576d3c2e864002f543a400ba8be50b1444903660a319be7ac2a8232483496",
+      "sourceTreeSHA256": "735bad1f5eb457b767fcbf00895c58cdb49c10f9f60d8ca18eb8d202c286760f",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/controller/verifySavedResult.test.ts",
+        "-t",
+        "restores the archived candidate",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 1 failed | 17 skipped (18)"
+      ],
+      "evidenceLimit": "Intended behavior assertion fails after the named guard deletion."
+    },
+    {
+      "mutant": "candidate-equality",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "413f3d4b07bcc65ba5863eaf14b1d19cc3e7059349de0efe400c64eb7939a08f",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-candidate-equality-01",
+      "logSHA256": "1e499a2cae4cec163448e5dfe26ef9211f821dd3d1275f38a5248e90316c8336",
+      "sourceTreeSHA256": "76c0a0bdd67a5b93596f2a4910010f4cf81ddd44cf31070ec906783487f8ca02",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/controller/verifySavedResult.test.ts",
+        "-t",
+        "candidate modification by verifier",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 1 failed | 17 skipped (18)"
+      ],
+      "evidenceLimit": "Intended behavior assertion fails after the named guard deletion."
+    },
+    {
+      "mutant": "crash-entry",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "2ffd65368cc4a4518c934c08b979cff97b03b514ae5c97445b830f3d1657b6ec",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-crash-entry-01",
+      "logSHA256": "6e740feac43395ffc577467b4b4c36491c6836cafd65e8a29dc73b012b714fd4",
+      "sourceTreeSHA256": "2ef9f58eb008827d4304cf19d4bd19233c76e3c4cecd24a01211aed0f94da45a",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/savedResultRecovery.native.test.ts",
+        "-t",
+        "native crash at entry-fsynced",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 1 failed | 27 skipped (28)"
+      ],
+      "evidenceLimit": "Expected parked interrupted state becomes failed; the later entry guard still prevents another provider call."
+    },
+    {
+      "mutant": "checkpoint-mode",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "e4fa82f5f6f1309756211f3616aea6c0a5d2375a8eacf406035a0f227d42926a",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-checkpoint-mode-01",
+      "logSHA256": "f4d1a41b6edb1e867c2def846d0f525830927fa8d7d603238ae6c397e48c87d4",
+      "sourceTreeSHA256": "817cd9f290d4f9fc3bf2a9786bf6464d65eef775c877d7808f6c2ed9f566cbd1",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/savedResultCheckpoint.test.ts",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 1 failed (1)"
+      ],
+      "evidenceLimit": "Intended behavior assertion fails after the named guard deletion."
+    },
+    {
+      "mutant": "publication-fingerprint",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "413f3d4b07bcc65ba5863eaf14b1d19cc3e7059349de0efe400c64eb7939a08f",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-publication-fingerprint-01",
+      "logSHA256": "fe7046b68fb15baccdc74b0e4a78e570de587b3f624cb2bf2f984e734b740011",
+      "sourceTreeSHA256": "046a6f8578f53be12491d6bfc60d868df52b4d3db6b986c43a3d19c90c972468",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/savedResultRecovery.native.test.ts",
+        "-t",
+        "terminal-fsynced approval",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 1 failed | 27 skipped (28)"
+      ],
+      "evidenceLimit": "Existing changed workspace reaches cleanup; a later publication guard still refuses, with publication-unavailable instead of the required modified-candidate refusal."
+    },
+    {
+      "mutant": "publication-parent-tree",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "413f3d4b07bcc65ba5863eaf14b1d19cc3e7059349de0efe400c64eb7939a08f",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-publication-parent-tree-01",
+      "logSHA256": "81198b8dd5d83a4ed643d3cde8c93707883adc92ebd82376be69ebdc61b0cfb2",
+      "sourceTreeSHA256": "f441d3f29b0d93066f08acc464f189eae6d3a873585bd2b233aef690dabf801f",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/savedResultRecovery.native.test.ts",
+        "-t",
+        "publication even when the ref exists",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 2 failed | 26 skipped (28)"
+      ],
+      "evidenceLimit": "Parent/tree authority is skipped; the unchanged materialized HEAD causes a later delivery refusal with modified-candidate instead of publication-unavailable."
+    },
+    {
+      "mutant": "delivery-projection",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "413f3d4b07bcc65ba5863eaf14b1d19cc3e7059349de0efe400c64eb7939a08f",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-delivery-projection-01",
+      "logSHA256": "85bf9a84edfba1d677efb6e72eebe64f46ddc19edec4842f9d4814d3926c7f26",
+      "sourceTreeSHA256": "bec9ea58fe1144deffdc7394bac4cd521cad78266425c0ca0b848a418bf2450a",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/savedResultRecovery.native.test.ts",
+        "-t",
+        "poisoned outside the candidate",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 1 failed | 27 skipped (28)"
+      ],
+      "evidenceLimit": "Intended behavior assertion fails after the named guard deletion."
+    },
+    {
+      "mutant": "legacy-cleanup-event",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "864520bf51501868f77cad3867fb5a12bb92c1cf4b0cd79939e2d74af5a5a378",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-legacy-cleanup-event-01",
+      "logSHA256": "58d1886d440c26292ec3d67751542562a3adefa774030d7147bc0ef1c86874cd",
+      "sourceTreeSHA256": "6779193e26aea444d091924242416e5550646ecb6d8935ec2e1caf389ca8559a",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/savedResultRecovery.test.ts",
+        "-t",
+        "actual legacy workspace_cleanup_failed",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 1 failed | 33 skipped (34)"
+      ],
+      "evidenceLimit": "Intended behavior assertion fails after the named guard deletion."
+    },
+    {
+      "mutant": "ancestor-symlink",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "413f3d4b07bcc65ba5863eaf14b1d19cc3e7059349de0efe400c64eb7939a08f",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-ancestor-symlink-01",
+      "logSHA256": "a8403d32c52880497c569897c2da69194de42d00d21f7e1daa1f288307ed4949",
+      "sourceTreeSHA256": "66f142d150f1811f6c49a5f60720c763bc231ee37c6ef1411d1fd3ff9ef4d8ec",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/controller/verifySavedResult.test.ts",
+        "-t",
+        "moved behind",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 1 failed | 17 skipped (18)"
+      ],
+      "evidenceLimit": "Intended behavior assertion fails after the named guard deletion."
+    },
+    {
+      "mutant": "funding-total",
+      "intendedRefusalRC": 1,
+      "restoredSHA256": "864520bf51501868f77cad3867fb5a12bb92c1cf4b0cd79939e2d74af5a5a378",
+      "trackedDiffBytes": 0,
+      "indexDiffBytes": 0,
+      "run": "task6-final04-mutant-funding-total-01",
+      "logSHA256": "dec5460e3859d8d31e20b1d001484cda8664c677225ebd1ab184b749165b666e",
+      "sourceTreeSHA256": "66834eb0cbc4b63aecdca8337ee1d8bd66d9338e85d71a64cb9529b2a6e0ace1",
+      "command": [
+        "sh",
+        "-c",
+        "TASK_TMP=$(mktemp -d /private/tmp/t6m.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; exec \"$@\"",
+        "sh",
+        "node",
+        "/Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs",
+        "run",
+        "tests/control/savedResultRecovery.test.ts",
+        "-t",
+        "changed total recovery authority",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "failureSummary": [
+        " 1 failed | 33 skipped (34)"
+      ],
+      "evidenceLimit": "Intended behavior assertion fails after the named guard deletion."
+    }
+  ],
+  "allRawLogsRead": true,
+  "nativeBuildsAndRestorationBuildsPassed": true,
+  "restoredTrackedDiffBytes": 0,
+  "restoredIndexDiffBytes": 0
+}

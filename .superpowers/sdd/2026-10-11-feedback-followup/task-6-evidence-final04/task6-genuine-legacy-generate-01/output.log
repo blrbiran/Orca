@@ -1,0 +1,26 @@
+node:internal/child_process:1120
+    result.error = new ErrnoException(result.error, 'spawnSync ' + options.file);
+                   ^
+
+<ref *1> Error: spawnSync ps EPERM
+    at Object.spawnSync (node:internal/child_process:1120:20)
+    at spawnSync (node:child_process:868:24)
+    at execFileSync (node:child_process:911:15)
+    at openControlStore (/private/tmp/orca-feedback-followup-20261011/src/control/store.ts:55:67)
+    at openTestStore (/private/tmp/orca-feedback-followup-20261011/tests/control/fixtures/store.ts:8:23)
+    at async <anonymous> (/private/tmp/task6-generate-legacy.mts:15:60) {
+  errno: -1,
+  code: 'EPERM',
+  syscall: 'spawnSync ps',
+  path: 'ps',
+  spawnargs: [ '-p', '13548', '-o', 'lstart=' ],
+  error: [Circular *1],
+  status: null,
+  signal: null,
+  output: null,
+  pid: 0,
+  stdout: undefined,
+  stderr: undefined
+}
+
+Node.js v22.13.1

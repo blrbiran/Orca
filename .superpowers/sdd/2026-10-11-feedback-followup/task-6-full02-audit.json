@@ -1,0 +1,7 @@
+{
+  "file": "/private/tmp/orca-followup-runs/task6-final-full-02/tests.json",
+  "sha256": "7a472e433584a036abce7957b5c86fe346d3d7eea74900de3652e2781b78ca6d",
+  "assertionsAudited": 1540,
+  "filesAudited": 147,
+  "allPassed": true
+}

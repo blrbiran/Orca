@@ -1,0 +1,9 @@
+{
+  "commit": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+  "base": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "6b095585713cf85236343a3cd98f9ce73252ca5de7b0dd5af9b3e315401b9705",
+  "committedExplicitProductPaths": 214,
+  "worktreeStatus": "?? node_modules\n",
+  "trackedDiffBytes": 0,
+  "indexDiffBytes": 0
+}

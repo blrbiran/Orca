@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6w.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node --import /private/tmp/ccloop-feedback-followup-20261011/node_modules/tsx/dist/loader.mjs /private/tmp/task6-final-wire-04.mts"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 11.184257745742798,
+  "log": "/private/tmp/orca-followup-runs/task6-final-wire-04/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "6b095585713cf85236343a3cd98f9ce73252ca5de7b0dd5af9b3e315401b9705",
+  "sourceFiles": 446
+}

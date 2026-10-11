@@ -1,0 +1,27 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultRecovery.test.ts (1 test | 1 failed) 1947ms
+   × saved result recovery wire > accepts only an explicit protocol4 immutable recovery package without checkpoint 1946ms
+     → control-request-invalid
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > saved result recovery wire > accepts only an explicit protocol4 immutable recovery package without checkpoint
+ControlProtocolError: control-request-invalid
+ ❯ Module.parseControlRequest src/control/protocol.ts:373:11
+    371|   } catch (error) {
+    372|     if (error instanceof ControlProtocolError) throw error;
+    373|     throw new ControlProtocolError("control-request-invalid");
+       |           ^
+    374|   }
+    375| }
+ ❯ tests/control/savedResultRecovery.test.ts:11:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  08:52:53
+   Duration  2.46s (transform 177ms, setup 17ms, collect 234ms, tests 1.95s, environment 0ms, prepare 40ms)
+

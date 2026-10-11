@@ -1,0 +1,42 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ❯ tests/control/savedResultRecovery.native.test.ts (28 tests | 2 failed | 26 skipped) 9443ms
+   × refuses a cleaned terminal with wrong-parent publication even when the ref exists 4823ms
+     → expected { status: 'failed', …(8) } to match object { status: 'failed', …(1) }
+(18 matching properties omitted from actual)
+   × refuses a cleaned terminal with changed-tree publication even when the ref exists 4619ms
+     → expected { status: 'failed', …(8) } to match object { status: 'failed', …(1) }
+(18 matching properties omitted from actual)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.native.test.ts > refuses a cleaned terminal with wrong-parent publication even when the ref exists
+ FAIL  tests/control/savedResultRecovery.native.test.ts > refuses a cleaned terminal with changed-tree publication even when the ref exists
+AssertionError: expected { status: 'failed', …(8) } to match object { status: 'failed', …(1) }
+(18 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+    "status": "failed",
+-   "stopReason": "saved-result-publication-unavailable",
++   "stopReason": "saved-result-modified-during-verification",
+  }
+
+ ❯ tests/control/savedResultRecovery.native.test.ts:274:91
+    272|   expect(value.settlement).toMatchObject({disposition:'terminal',usage…
+    273|   const response=await f.rpc('read-saved-result-settlement',{input:f.i…
+    274|   expect(JSON.parse(Buffer.from(JSON.parse(response.stdout).base64,'ba…
+       |                                                                                           ^
+    275|   expect(await readFile(f.calls,'utf8')).toBe('verify\n');expect((awai…
+    276|  }finally{await rm(f.root,{recursive:true,force:true});}
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 26 skipped (28)
+   Start at  12:45:13
+   Duration  9.99s (transform 284ms, setup 13ms, collect 377ms, tests 9.44s, environment 0ms, prepare 35ms)
+

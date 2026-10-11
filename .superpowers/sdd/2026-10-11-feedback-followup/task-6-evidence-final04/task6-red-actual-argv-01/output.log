@@ -1,0 +1,53 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultRecovery.test.ts (32 tests | 6 failed | 26 skipped) 3456ms
+   × refuses hash-valid actual legacy argv drift at --model 2329ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+   × refuses hash-valid actual legacy argv drift at --sandbox 222ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+   × refuses hash-valid actual legacy argv drift at -C 226ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+   × refuses hash-valid actual legacy argv drift at --output-schema 223ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+   × refuses hash-valid actual legacy argv drift at -o 220ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+   × refuses hash-valid actual legacy argv drift at evidenceDir 233ms
+     → expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > refuses hash-valid actual legacy argv drift at --model
+ FAIL  tests/control/savedResultRecovery.test.ts > refuses hash-valid actual legacy argv drift at --sandbox
+ FAIL  tests/control/savedResultRecovery.test.ts > refuses hash-valid actual legacy argv drift at -C
+ FAIL  tests/control/savedResultRecovery.test.ts > refuses hash-valid actual legacy argv drift at --output-schema
+ FAIL  tests/control/savedResultRecovery.test.ts > refuses hash-valid actual legacy argv drift at -o
+ FAIL  tests/control/savedResultRecovery.test.ts > refuses hash-valid actual legacy argv drift at evidenceDir
+AssertionError: expected { status: 'eligible', …(2) } to deeply equal { status: 'unavailable', …(1) }
+
+- Expected
++ Received
+
+  Object {
+-   "reason": "saved-result-config-mismatch",
+-   "status": "unavailable",
++   "authorityKind": "legacy-published-candidate-v1",
++   "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
++   "status": "eligible",
+  }
+
+ ❯ tests/control/savedResultRecovery.test.ts:130:53
+    128|   if(field==='evidenceDir')value.evidenceDir+='/different';else value.…
+    129|   entry.ref=await f.put(value);await rewriteArchive(f);
+    130|   expect(await readSavedResultEligibility(f.input)).toEqual({status:'u…
+       |                                                     ^
+    131|  }finally{await rm(f.root,{recursive:true,force:true});}
+    132| },30000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 26 skipped (32)
+   Start at  11:01:04
+   Duration  3.93s (transform 231ms, setup 13ms, collect 308ms, tests 3.46s, environment 0ms, prepare 32ms)
+

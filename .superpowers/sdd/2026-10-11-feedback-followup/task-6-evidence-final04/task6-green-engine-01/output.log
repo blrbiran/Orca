@@ -1,0 +1,74 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/control/savedResultRecovery.test.ts (2 tests) 2826ms
+   ✓ saved result recovery wire > accepts only an explicit protocol4 immutable recovery package without checkpoint 2539ms
+ ❯ tests/controller/verifySavedResult.test.ts (4 tests | 4 failed) 3558ms
+   × restores the archived candidate, checks and verifies once without planning/executing/recharging original usage 2650ms
+     → control-path-invalid
+   × refuses candidate modification by verifier without landing or retry 390ms
+     → control-path-invalid
+   × refuses candidate modification by special-mode without landing or retry 262ms
+     → control-path-invalid
+   × never repeats checks or a verifier after a durable entry without a result 255ms
+     → control-path-invalid
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > restores the archived candidate, checks and verifies once without planning/executing/recharging original usage
+Error: control-path-invalid
+ ❯ invalid src/control/paths.ts:15:10
+     13| 
+     14| function invalid(): Error {
+     15|   return new Error("control-path-invalid");
+       |          ^
+     16| }
+     17| 
+ ❯ ensurePrivateDirectory src/control/paths.ts:65:69
+ ❯ Module.atomicReplacePrivateFile src/control/paths.ts:108:3
+ ❯ Module.persistSavedResultMode src/controller/verifySavedResult.ts:30:10
+ ❯ Module.runLoop src/controller/runLoop.ts:1138:69
+ ❯ tests/controller/verifySavedResult.test.ts:11:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > refuses candidate modification by verifier without landing or retry
+ FAIL  tests/controller/verifySavedResult.test.ts > refuses candidate modification by special-mode without landing or retry
+Error: control-path-invalid
+ ❯ invalid src/control/paths.ts:15:10
+     13| 
+     14| function invalid(): Error {
+     15|   return new Error("control-path-invalid");
+       |          ^
+     16| }
+     17| 
+ ❯ ensurePrivateDirectory src/control/paths.ts:65:69
+ ❯ Module.atomicReplacePrivateFile src/control/paths.ts:108:3
+ ❯ Module.persistSavedResultMode src/controller/verifySavedResult.ts:30:10
+ ❯ Module.runLoop src/controller/runLoop.ts:1138:69
+ ❯ tests/controller/verifySavedResult.test.ts:22:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > never repeats checks or a verifier after a durable entry without a result
+Error: control-path-invalid
+ ❯ invalid src/control/paths.ts:15:10
+     13| 
+     14| function invalid(): Error {
+     15|   return new Error("control-path-invalid");
+       |          ^
+     16| }
+     17| 
+ ❯ ensurePrivateDirectory src/control/paths.ts:65:69
+ ❯ Module.atomicReplacePrivateFile src/control/paths.ts:108:3
+ ❯ Module.persistSavedResultMode src/controller/verifySavedResult.ts:30:10
+ ❯ Module.runLoop src/controller/runLoop.ts:1138:69
+ ❯ tests/controller/verifySavedResult.test.ts:29:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  4 failed | 2 passed (6)
+   Start at  09:02:14
+   Duration  4.14s (transform 296ms, setup 26ms, collect 599ms, tests 6.38s, environment 0ms, prepare 77ms)
+

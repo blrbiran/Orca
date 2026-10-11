@@ -1,0 +1,29 @@
+
+> ccloop@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+src/control/savedResultRecovery.ts(92,11): error TS2454: Variable 'fence' is used before being assigned.
+src/control/savedResultRecovery.ts(97,41): error TS18048: 'r' is possibly 'undefined'.
+src/control/savedResultRecovery.ts(100,69): error TS18048: 'r' is possibly 'undefined'.
+src/control/savedResultRecovery.ts(108,45): error TS2532: Object is possibly 'undefined'.
+src/control/savedResultRecovery.ts(109,31): error TS18048: 'r' is possibly 'undefined'.
+src/control/savedResultRecovery.ts(109,71): error TS18048: 'r' is possibly 'undefined'.
+src/control/savedResultRecovery.ts(111,32): error TS18048: 'r' is possibly 'undefined'.
+src/control/savedResultRecovery.ts(113,30): error TS18048: 'r' is possibly 'undefined'.
+src/control/savedResultRecovery.ts(117,59): error TS18048: 'r' is possibly 'undefined'.
+src/control/savedResultRecovery.ts(117,248): error TS18048: 'r' is possibly 'undefined'.
+src/control/savedResultRecovery.ts(177,44): error TS2345: Argument of type '{ artifactId: string; hash: string; } | null' is not assignable to parameter of type 'ArtifactRefV1'.
+  Type 'null' is not assignable to type 'ArtifactRefV1'.
+src/control/savedResultRecovery.ts(177,92): error TS2345: Argument of type '{ artifactId: string; hash: string; } | null' is not assignable to parameter of type 'ArtifactRefV1'.
+  Type 'null' is not assignable to type 'ArtifactRefV1'.
+src/control/savedResultRecovery.ts(199,44): error TS2532: Object is possibly 'undefined'.
+src/control/savedResultRecovery.ts(207,139): error TS2345: Argument of type 'Buffer<ArrayBufferLike> | undefined' is not assignable to parameter of type 'Buffer<ArrayBufferLike>'.
+  Type 'undefined' is not assignable to type 'Buffer<ArrayBufferLike>'.
+src/control/savedResultRecovery.ts(239,30): error TS2339: Property 'execution' does not exist on type 'ExecutionNormalization'.
+  Property 'execution' does not exist on type '{ status: "unavailable"; reason: "execution-format-invalid" | "execution-format-ambiguous-or-hidden"; diagnostic: Diagnostic; }'.
+src/control/savedResultRecovery.ts(246,164): error TS18048: 'input.tokenPolicy' is possibly 'undefined'.
+src/control/savedResultRecovery.ts(248,100): error TS2345: Argument of type '(ref: ArtifactRefV1) => Buffer<ArrayBufferLike> | undefined' is not assignable to parameter of type '(ref: ArtifactRefV1) => Buffer<ArrayBufferLike>'.
+  Type 'Buffer<ArrayBufferLike> | undefined' is not assignable to type 'Buffer<ArrayBufferLike>'.
+    Type 'undefined' is not assignable to type 'Buffer<ArrayBufferLike>'.
+src/control/savedResultRecovery.ts(250,68): error TS2339: Property 'execution' does not exist on type 'ExecutionNormalization'.
+  Property 'execution' does not exist on type '{ status: "unavailable"; reason: "execution-format-invalid" | "execution-format-ambiguous-or-hidden"; diagnostic: Diagnostic; }'.

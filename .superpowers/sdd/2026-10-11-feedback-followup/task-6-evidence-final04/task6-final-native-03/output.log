@@ -1,0 +1,316 @@
+
+> ccloop@0.1.0 verify:control
+> node scripts/verify-control-protocol.mjs
+
+
+> ccloop@0.1.0 build
+> tsc -p tsconfig.json && node -e "const fs=require('fs');fs.writeFileSync('dist/cli.js', '#!/usr/bin/env node\nexport * from \"./src/cli.js\";\nimport { main } from \"./src/cli.js\";\nvoid main(process.argv.slice(2)).then((code) => { process.exitCode = code; });\n');fs.chmodSync('dist/cli.js', 0o755);fs.writeFileSync('dist/cli.d.ts', 'export * from \"./src/cli.js\";\n');"
+
+{"binary":"/private/tmp/ccloop-feedback-followup-20261011/dist/cli.js","agentsTable":"/private/tmp/t6n.ZFJAli/agents.json","agentsTableSha256":"cdd09a5c8181d30eee2fb2ac9d846f8ddfa6eb1e3ffbf1c89f1e94bbf3ab8a50"}
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/controller/runLoop.integration.test.ts (71 tests) 18389ms
+   ✓ runLoop > succeeds when verification approves 319ms
+   ✓ runLoop > persists retry-ready planning state before retry cleanup runs 385ms
+   ✓ runLoop > refuses to write the terminal failed status of a retry-cleanup failure into a run a different owner holds 319ms
+   ✓ runLoop > abandons the loser's reconciliation write against the winner's held transfer lock and finalizes none of the winner's transaction inside the publish window 382ms
+   ✓ runLoop > keeps the winner's reconciliation record as the terminal state when the loser's write is forced to land after the winner's last rename 379ms
+   ✓ runLoop > treats execute timeout with no adapter result as exhausted even if files changed in the worktree 313ms
+   ✓ runLoop > continues normally when execute returns a complete result during the recovery window 1751ms
+   ✓ runLoop > persists phase usage evidence from the claude agent adapter without recomputing controller totals 1191ms
+   ✓ runLoop > returns a failed terminal state when retry cleanup fails 304ms
+   ✓ runLoop > publishes a ref for an attempt that was rejected at verification 365ms
+ ✓ tests/controller/leaseLifecycle.integration.test.ts (35 tests) 10704ms
+   ✓ lease heartbeat lifecycle > appends owner_transfer_contended and abandons the transfer when the owner-transfer lock stays busy 678ms
+   ✓ lease heartbeat lifecycle > contains an unattributable transfer lock as a recorded contention instead of throwing out of the attempt 429ms
+   ✓ lease heartbeat lifecycle > abandons the attempt in place when the ownership read hits an unattributable transfer lock, without failing the run 344ms
+   ✓ lease heartbeat lifecycle > contains an undetermined-liveness transfer lock as a recorded contention, not a failed attempt 692ms
+   ✓ lease heartbeat lifecycle > abandons the attempt in place when the ownership read hits an undetermined-liveness transfer lock, without failing the run 335ms
+   ✓ lease heartbeat lifecycle > retries a busy owner-transfer lock and completes once it clears (spec requirement 1) 535ms
+   ✓ lease heartbeat lifecycle > abandons the transfer once the retry bound is exhausted, with the contention event appended exactly once (spec requirement 2) 587ms
+   ✓ lease heartbeat lifecycle > retries a liveness-undetermined owner-transfer lock to the same bound a busy one gets, before abandoning 586ms
+   ✓ lease heartbeat lifecycle > retries zero times on a CAS mismatch (spec requirement 3) 486ms
+   ✓ lease heartbeat lifecycle > refuses the catch-path re-read once superseded, rather than finalizing a staged transfer it no longer owns 363ms
+   ✓ lease heartbeat lifecycle > blocks a due affirm until the transfer's exclusive span completes, with zero CAS failures and no lease_lost (spec requirement 4) 487ms
+   ✓ lease heartbeat lifecycle > a self-performed transfer with adopt inside the exclusive span appends no lease_lost event (spec requirement 5) 461ms
+   ✓ lease heartbeat lifecycle > writes no boundary artifact — but its own already-committed transfer's reconciliation record stands — when superseded after its own transfer completes (spec requirement 7, amended by task A4) 375ms
+   ✓ lease heartbeat lifecycle > records one contention when the re-read after an abandoned transfer meets the same 'liveness-undetermined' lock 490ms
+   ✓ lease heartbeat lifecycle > records one contention when the re-read after an abandoned transfer meets the same 'unattributable' lock 371ms
+   ✓ lease heartbeat lifecycle > still records the recovery-blocked contention when the abandoned transfer found the lock busy 476ms
+ ✓ tests/controller/resumeLoop.integration.test.ts (20 tests) 3691ms
+   ✓ resumeLoop > retries a busy owner-transfer lock during the resume claim and completes once it clears 325ms
+   ✓ resumeLoop > discards a residual worktree from the interrupted attempt during resume (next-attempt-fresh) 329ms
+ ✓ tests/controller/leaseHeartbeat.test.ts (28 tests) 381ms
+ ✓ tests/controller/taskResultCapture.test.ts (21 tests) 6493ms
+   ✓ immutable live attempt results > reads execution while verify pauses, then retains the same bytes after verify edits and cleanup 460ms
+   ✓ immutable live attempt results > retains partial reports without changing actual verification or usage: undefined 361ms
+   ✓ immutable live attempt results > retains partial reports without changing actual verification or usage: {"bad":"report"} 399ms
+   ✓ immutable live attempt results > retains partial reports without changing actual verification or usage: {"schema":"task-result-v1","goal":"Produce answer","completedWork":["Wrote answer"],"conclusions":["Agent claim"],"limitations":[],"outputs":[{"path":"answer.txt","label":"Answer"}]} 376ms
+   ✓ immutable live attempt results > shows rejected attempt one as history while attempt two executes, then records its separate pass 685ms
+   ✓ immutable live attempt results > real capture refuses outside bytes during an ancestor swap and preserves success 375ms
+   ✓ immutable live attempt results > settles real verification usage while started metadata publication is blocked 392ms
+   ✓ immutable live attempt results > settles blocked-start provider error before release and preserves failure routing 346ms
+   ✓ immutable live attempt results > keeps actual completion and deduplicates a start whose optional evidence write failed 358ms
+ ✓ tests/control/agentsControl.test.ts (14 tests) 5534ms
+   ✓ control over the installation table (agent selection) > reads the table only for capabilities and accept: a table broken after accept blocks neither inspect nor collect 565ms
+   ✓ control over the installation table (agent selection) > keeps inspect and collect working after the table is deleted, while capabilities still refuses it 522ms
+   ✓ accept under the installation table (agent selection) > seals the materialized agent config whose canonical hash the claim carries 508ms
+   ✓ accept under the installation table (agent selection) > accepts a claim frozen before the CLI was upgraded, once the table records the new version 511ms
+   ✓ accept under the installation table (agent selection) > accepts a claim frozen before the CLI moved or its run limits changed, under the table as it is now 517ms
+   ✓ worker adapter from the sealed config (agent selection) > refuses a sealed config whose schema or kind does not hold, or that is not JSON, before any phase 593ms
+   ✓ claude process registration through the control worker (agent selection) > registers the claude phase's process group in processes.json, and that record proves nothing while the group lives 946ms
+ ✓ tests/control/protocol.test.ts (22 tests) 49ms
+ ✓ tests/control/savedResultEvidence.test.ts (24 tests) 37860ms
+   ✓ captures original attempt, usage, full snapshot and exact runtime bytes before cleanup without changing v3 2134ms
+   ✓ records capture failure as unavailable and preserves original failed outcome 1405ms
+   ✓ binds frozen authority separately from a genuinely narrowed protocol4 runtime contract 1696ms
+   ✓ refuses a hash-valid capsule with another source identity 1741ms
+   ✓ rejects symlinked evidence namespaces even when referenced bytes exist 1587ms
+   ✓ refuses rewrite-runtime bytes that differ from the actual execution authority 1054ms
+   ✓ refuses rewrite-config bytes that differ from the actual execution authority 1066ms
+   ✓ recursively serves original ledger refs only through exact capsule aliases and validates copied bytes 3474ms
+   ✓ fix I1 freezes the materialized base across target movement before workspace creation 1651ms
+   ✓ fix I1 freezes the materialized base across target movement after workspace creation 1718ms
+   ✓ fix I1 keeps a distinct continuation HEAD but refuses missing original-base authority 1714ms
+   ✓ fix I2 refuses unsupported file mode 2541 before complete capture 1419ms
+   ✓ fix I2 refuses unsupported file mode 1517 before complete capture 1378ms
+   ✓ fix I2 refuses unsupported directory mode 1517 before complete capture 1373ms
+   ✓ fix I2 refuses unsupported directory mode 1005 before complete capture 1410ms
+   ✓ fix I2 refuses unsupported root mode 1005 before complete capture 1303ms
+   ✓ fix I2 refuses file special bits introduced during the stability pass 1568ms
+   ✓ fix I2 refuses directory special bits introduced during the stability pass 1588ms
+   ✓ fix I2 refuses root special bits introduced between capture passes 1601ms
+   ✓ fix I1 recognizes an immutable checkpoint base without widening legacy context authority 1761ms
+   ✓ fix I1 preserves ordinary retry choice while binding each attempt's actual origin 2670ms
+   ✓ Task6 never turns a genuine current malformed capsule into an invented normalized execution 2347ms
+ ✓ tests/control/savedResultRecovery.native.test.ts (19 tests) 62517ms
+   ✓ built CLI accepts a private package, runs only verification, records new actual usage, and harvests its approved candidate 3596ms
+   ✓ native crash at before-entry preserves mode, entry and result fences 2907ms
+   ✓ native crash at entry-fsynced preserves mode, entry and result fences 1894ms
+   ✓ native crash at verifier-returned preserves mode, entry and result fences 2224ms
+   ✓ native crash at usage-settled preserves mode, entry and result fences 2271ms
+   ✓ native crash at output-fsynced preserves mode, entry and result fences 2673ms
+   ✓ native crash at result-fsynced preserves mode, entry and result fences 2825ms
+   ✓ native crash at terminal-fsynced preserves mode, entry and result fences 2734ms
+   ✓ explicit mechanical settlement at before-entry stops a dead claimed worker without rerunning checks or providers 3202ms
+   ✓ explicit mechanical settlement at entry-fsynced stops a dead claimed worker without rerunning checks or providers 3607ms
+   ✓ explicit mechanical settlement at usage-settled stops a dead claimed worker without rerunning checks or providers 4023ms
+   ✓ explicit mechanical settlement at result-fsynced stops a dead claimed worker without rerunning checks or providers 4589ms
+   ✓ explicit mechanical settlement at revoked-result stops a dead claimed worker without rerunning checks or providers 4498ms
+   ✓ admits an explicit successor after before-entry and carries every work charge exactly once 7506ms
+   ✓ admits an explicit successor after usage-settled and carries every work charge exactly once 8445ms
+   ✓ missing lifecycle markers after before-entry cannot authorize replay or known zero usage 2376ms
+   ✓ missing lifecycle markers after entry-fsynced cannot authorize replay or known zero usage 2575ms
+   ✓ owner death before validation command release cannot run an empty login shell 326ms
+ ✓ tests/controller/resumeCrashAdoption.test.ts (12 tests) 3147ms
+   ✓ resume adopts a killed run (spec 2026-10-02 crash-resume §4.3) > T6: adopts a killed run and continues it to succeeded 312ms
+   ✓ resume adopts a killed run (spec 2026-10-02 crash-resume §4.3) > T9b: replaces a reconciliation record left without a transfer and says so 302ms
+   ✓ resume adopts a killed run (spec 2026-10-02 crash-resume §4.3) > T9c: a run with a transfer and a live unfinished registered group: reaped, then resumed 437ms
+   ✓ resume adopts a killed run (spec 2026-10-02 crash-resume §4.3) > T6b: a killed run with a live orphan group: reaped, orphan_process_group_reaped recorded, then adopted 476ms
+   ✓ resume adopts a killed run (spec 2026-10-02 crash-resume §4.3) > a second resume after adoption takes today's path (Review Focus 3) 319ms
+ ✓ tests/control/workerByModel.test.ts (9 tests) 3649ms
+   ✓ the worker's per-model breakdown (Orca accounts plan B2) > sums each model across phases, reconciles to cumulative tokens, and drops out for good once a phase spends unseen 328ms
+   ✓ the worker's per-model breakdown (Orca accounts plan B2) > keeps the breakdown through a phase that spent nothing (a command verifier's explicit zero) 316ms
+   ✓ the worker's per-model breakdown (Orca accounts plan B2) > never emits a breakdown that does not add up to the cumulative tokens 319ms
+   ✓ the worker's per-model breakdown (Orca accounts plan B2) > stops the breakdown for good at a phase whose models do not add up to its own tokens, even when a later error cancels it 332ms
+   ✓ a single call's per-model breakdown through the control worker (Orca accounts plan B2) > puts claude's breakdown on the work event when it adds up to the call's tokens 454ms
+   ✓ a single call's per-model breakdown through the control worker (Orca accounts plan B2) > leaves it off when it does not add up 452ms
+   ✓ a loop run's per-model breakdown through the control worker (Orca accounts plan B2, fix round 1) > puts the summed breakdown on each work event, reconciled to its cumulative tokens 1443ms
+ ✓ tests/runtime/codex/extractFinalObject.test.ts (58 tests) 3056ms
+   ✓ extractFinalObject (codex phase output hardening) > performance > refuses a 16 MiB span of millions of empty objects in under 3 s (plan) 1405ms
+   ✓ extractFinalObject (codex phase output hardening) > performance > refuses a 16 MiB span of millions of empty objects in under 3 s (execute) 1333ms
+ ✓ tests/control/handoff.test.ts (7 tests) 4106ms
+   ✓ named handoff request > persists an external deadline abort as handoff interruption rather than failure or exhaustion 2135ms
+   ✓ named handoff request > watches a latched deadline through packet, zero handoff usage, seal, and released lease 926ms
+ ✓ tests/control/materialize.test.ts (15 tests) 6521ms
+   ✓ committed continuation materialization > reproduces HEAD, all index stages, worktree bytes, modes, symlinks and status 733ms
+   ✓ committed continuation materialization > writes immutable structured continuation input and augments a copied contract 377ms
+   ✓ committed continuation materialization > verifies the continuation workspace before constructing the runtime adapter 762ms
+   ✓ committed continuation materialization > rejects hostile bundle: traversal 365ms
+   ✓ committed continuation materialization > rejects hostile bundle: absolute 366ms
+   ✓ committed continuation materialization > rejects hostile bundle: duplicate 357ms
+   ✓ committed continuation materialization > rejects hostile bundle: missing 358ms
+   ✓ committed continuation materialization > rejects hostile bundle: hash 367ms
+   ✓ committed continuation materialization > rejects hostile bundle: extra 367ms
+   ✓ committed continuation materialization > rejects hostile bundle: symlink 397ms
+   ✓ committed continuation materialization > rejects hostile bundle: fifo 422ms
+   ✓ committed continuation materialization > rejects hostile bundle: checkpoint 387ms
+   ✓ committed continuation materialization > rejects hostile bundle: predecessor 363ms
+   ✓ committed continuation materialization > refuses a source bundle that changes during validation 369ms
+   ✓ committed continuation materialization > puts the continuation input itself into the plan and execute prompts every adapter builds 377ms
+ ✓ tests/control/singleCall.test.ts (8 tests) 7349ms
+   ✓ single-call work through the control worker (Orca single-call estimate) > W1 + W5: books the call's output, call record, usage and stop proof, and writes nothing else 742ms
+   ✓ single-call work through the control worker (Orca single-call estimate) > W2: an answer with no structured object fails the call, keeps its usage and leaves no output artifact 568ms
+   ✓ single-call work through the control worker (Orca single-call estimate) > W3: a handoff request stops the call at once and books what claude streamed before it as the cumulative 583ms
+   ✓ single-call work through the control worker (Orca single-call estimate) > W4: a call stopped before claude streamed anything books no work usage (null, never 0) 451ms
+   ✓ single-call work through the control worker (Orca single-call estimate) > W6: a call that times out after claude streamed a closed message books that usage and fails claude-timeout 3502ms
+   ✓ single-call work through the control worker (Orca single-call estimate) > W7: a call that exits with an error before any stream books no work usage (null, never 0) 570ms
+   ✓ single-call work through the control worker (Orca single-call estimate) > W8: an output-invalid call that raced a handoff request keeps its usage and single-call-output-invalid 474ms
+   ✓ single-call work through the control worker (Orca single-call estimate) > W9: hands the adapter a time limit of the grant's activeMs less the 10 s margin 457ms
+ ✓ tests/runtime/codex/finalExtraction.test.ts (19 tests) 2978ms
+ ✓ tests/controller/verifySavedResult.test.ts (17 tests) 34580ms
+   ✓ restores the archived candidate, checks and verifies once without planning/executing/recharging original usage 1750ms
+   ✓ refuses candidate modification by command without landing or retry 1159ms
+   ✓ refuses candidate modification by verifier without landing or retry 1341ms
+   ✓ refuses candidate modification by special-mode without landing or retry 1284ms
+   ✓ refuses replay of an entered state after its candidate has been cleaned up 1593ms
+   ✓ ends a retryable rejection after one fresh verification and preserves saved source failure 1576ms
+   ✓ replays a complete durable terminal verification result with no new calls or usage 1834ms
+   ✓ protects git-config from verifier changes before publication 1467ms
+   ✓ protects runtime-contract from verifier changes before publication 1327ms
+   ✓ refuses to resume recovery as ordinary work when its durable mode marker is missing 1473ms
+   ✓ verifies the original candidate before harmless current target-tip movement is reconciled 1784ms
+   ✓ checks revocation after process registration and before sending the validation command 1162ms
+   ✓ enforces actual published Git changes even when the original Agent reports no changed files 670ms
+   ✓ runs real verification of a strictly valid saved partial without interpreting its reported timeout as a new timeout 1682ms
+   ✓ refuses candidate mutation even when the verifier throws before producing a result 1387ms
+   ✓ does not reuse a complete terminal approval after its protected contract changes 1876ms
+   ✓ settles observed verifier usage on timeout and never enters an executor retry 11213ms
+ ✓ tests/controller/resumeLoop.gate.test.ts (27 tests) 5ms
+ ✓ tests/control/phasesCompleted.test.ts (8 tests) 2670ms
+   ✓ phase settlement reports whether the phase completed with a result > is false for a phase that threw, even when it carried observed usage 427ms
+   ✓ the control worker counts completed phases > writes one count per phase a registering adapter completed, and the run still proves isolation 1406ms
+ ✓ tests/runtime/codex/runCodexPhase.test.ts (24 tests) 4482ms
+   ✓ Codex phase process > times out a hanging process without external cancellation 523ms
+   ✓ Codex phase process > reaps same-group pipe holders before test cleanup 1097ms
+   ✓ Codex phase process > returns its own deadline result before the test watchdog 519ms
+   ✓ Codex skill phase lifetime > keeps links during hang and cleans after child closes 529ms
+ ✓ tests/control/savedResultRecovery.test.ts (32 tests) 5438ms
+ ✓ tests/control/handoffEnteredPhases.test.ts (7 tests) 887ms
+ ✓ tests/control/endToEnd.test.ts (6 tests) 9727ms
+   ✓ control protocol through the built CLI > keeps one execution identity across dropped/duplicate accept and exposes complete evidence 1995ms
+   ✓ control protocol through the built CLI > deduplicates named handoff and rejects old generation or changed envelope without another phase 2340ms
+   ✓ control protocol through the built CLI > recovers the synchronized SIGKILL boundary: accepted-fsynced 532ms
+   ✓ control protocol through the built CLI > recovers the synchronized SIGKILL boundary: worker-claimed 750ms
+   ✓ control protocol through the built CLI > recovers the synchronized SIGKILL boundary: handoff-fsynced 2128ms
+   ✓ control protocol through the built CLI > recovers the synchronized SIGKILL boundary: candidate-fsynced 1980ms
+ ✓ tests/control/worker.test.ts (8 tests) 1753ms
+   ✓ run control hooks > keeps the work bucket's cumulative usage defined after a command-verifier verify phase 300ms
+   ✓ run control hooks > observes adapter throw and external abort once for the entered phase 311ms
+ ✓ tests/control/command.test.ts (7 tests) 875ms
+   ✓ control command boundary > routes the real CLI through control before legacy parsing and emits one JSON value 489ms
+ ✓ tests/runtime/codex/fakeCodexDelay.test.ts (5 tests) 5667ms
+   ✓ fake codex script delay and continuation entries (Orca handoff delivery C5, I-7) > sleeps delayMs for the named phase of every phase kind before answering, and only for that phase 2113ms
+   ✓ fake codex script delay and continuation entries (Orca handoff delivery C5, I-7) > chooses the #continuation entry only when the prompt carries the continuation constraint 3253ms
+ ✓ tests/control/allowanceEvidence.test.ts (20 tests) 8374ms
+   ✓ saved allowance phase evidence > loads only reachable hash-verified completed phases for plan 438ms
+   ✓ saved allowance phase evidence > loads only reachable hash-verified completed phases for execute 399ms
+   ✓ saved allowance phase evidence > loads only reachable hash-verified completed phases for verify 416ms
+   ✓ saved allowance phase evidence > refuses changed task authority even if the caller repeats the frozen hash 388ms
+   ✓ saved allowance phase evidence > refuses identity evidence 390ms
+   ✓ saved allowance phase evidence > refuses hash evidence 428ms
+   ✓ saved allowance phase evidence > refuses unreachable evidence 424ms
+   ✓ saved allowance phase evidence > refuses partial evidence 428ms
+   ✓ saved allowance phase evidence > refuses a renewal that resets inherited attempt or session counts 399ms
+   ✓ saved allowance phase evidence > review I1: refuses another work item sharing every other frozen authority 388ms
+   ✓ saved allowance phase evidence > review I2: refuses rollback below previously inherited tokens 422ms
+   ✓ saved allowance phase evidence > review I2: refuses rollback below previously inherited activeMs 397ms
+   ✓ saved allowance phase evidence > review I2: refuses omitted local tokens and preserves source overshoot 410ms
+   ✓ saved allowance phase evidence > review I2: refuses omitted local activeMs and preserves source overshoot 423ms
+   ✓ saved allowance phase evidence > review I2: refuses unknown work usage evidence 401ms
+   ✓ saved allowance phase evidence > review I2: refuses foreign-generation work usage evidence 409ms
+   ✓ saved allowance phase evidence > review I2: refuses foreign-run work usage evidence 405ms
+   ✓ saved allowance phase evidence > review I2: refuses unsafe-sum work usage evidence 412ms
+   ✓ saved allowance phase evidence > review I2: refuses unreachable work usage evidence 391ms
+   ✓ saved allowance phase evidence > review I2: carries source ledger usage without recharging already paid phase artifacts 403ms
+ ✓ tests/control/collect.test.ts (7 tests) 106ms
+ ✓ tests/control/accept.test.ts (7 tests) 2694ms
+   ✓ durable control acceptance > persists accepted before one exclusive worker claim and replays idempotently 533ms
+   ✓ durable control acceptance > serializes concurrent identical accepts into one durable launch 465ms
+   ✓ durable control acceptance > refuses the same identity with a different envelope 466ms
+   ✓ durable control acceptance > recovers a dropped accept response through inspect without another worker 472ms
+   ✓ durable control acceptance > seals the materialized agent config so later table drift has no effect 450ms
+ ✓ tests/controller/partialToVerify.test.ts (6 tests) 1304ms
+ ✓ tests/runtime/codex/taskResultDecoding.test.ts (20 tests) 579ms
+ ✓ tests/control/taskResults.test.ts (6 tests) 4218ms
+   ✓ bounded result snapshots > pages at most 64 immutable observations and reports the independent current attempt 3413ms
+ ✓ tests/runtime/codex/codexSkills.test.ts (17 tests) 44ms
+ ✓ tests/controller/ownedRunStateWriter.structure.test.ts (1 test) 56ms
+ ✓ tests/controller/leaseGate.test.ts (12 tests) 16ms
+ ✓ tests/control/claudeEndToEnd.test.ts (1 test) 2029ms
+   ✓ control through the built CLI with a claude installation (agent selection) > carries the claimed selection to the claude CLI's argv and still proves the run stopped 2028ms
+ ✓ tests/control/claudeHandoffDeadlineUsage.test.ts (1 test) 1219ms
+   ✓ deadline-aborted claude execute with observed usage (Orca claude stream usage C-3) > books the observed tokens as a known cumulative and still hands off a partial candidate that answers its request 1218ms
+ ✓ tests/runtime/codex/abortedUsage.test.ts (3 tests) 1179ms
+   ✓ usage observed before a codex phase was aborted (Orca handoff delivery C-3) > returns the observed tokens on an aborted outcome after a usage line, and null before any 393ms
+   ✓ usage observed before a codex phase was aborted (Orca handoff delivery C-3) > carries the observation on CodexPhaseAborted for plan and verify, and for execute only when one exists 784ms
+ ✓ tests/controller/optionalTokens.test.ts (10 tests) 1040ms
+ ✓ tests/controller/allowanceContinuation.test.ts (6 tests) 1362ms
+   ✓ allowance phase continuation > does not renew an authored ceiling or exhausted non-token dimension 394ms
+ ✓ tests/control/handoffDeadlineUsage.test.ts (1 test) 1197ms
+   ✓ deadline-aborted execute with observed usage (Orca handoff delivery C-3) > books the observed tokens as a known cumulative and still hands off a partial candidate that answers its request 1197ms
+ ✓ tests/control/singleCallCapability.test.ts (4 tests) 1325ms
+   ✓ single-call capability and its accept gate (Orca single-call estimate) > C1: answers singleCallExecution beside an unchanged seven-key view: v1 for claude, null for codex 372ms
+   ✓ single-call capability and its accept gate (Orca single-call estimate) > C4: accept admits single-call work for claude and seals its envelope 594ms
+ ✓ tests/control/skillPluginDirAccept.test.ts (5 tests) 2047ms
+   ✓ skillPluginDir at accept (Orca syncskill integration) > admits a claude run that names a skill plugin dir and seals the envelope with the field 536ms
+   ✓ skillPluginDir at accept (Orca syncskill integration) > still admits a codex run that names none (the refusal is for the field, not the agent) 523ms
+   ✓ skillPluginDir at accept (Orca syncskill integration) > admits a codex run with codexSkillsDir and seals that field 516ms
+ ✓ tests/controller/taskResultOutcome.test.ts (4 tests) 3211ms
+   ✓ controller outcome independent of explanation > codex: invokes the real verifier once with baseline prompt even when optional report accessor throws 762ms
+   ✓ controller outcome independent of explanation > claude: invokes the real verifier once with baseline prompt even when optional report accessor throws 809ms
+   ✓ controller outcome independent of explanation > preserves real complete outcome, attempts, usage and verification count 813ms
+   ✓ controller outcome independent of explanation > preserves real partial outcome, attempts, usage and verification count 826ms
+ ✓ tests/control/taskResultAuthority.test.ts (8 tests) 1382ms
+ ✓ tests/control/stopProof.test.ts (3 tests) 340ms
+   ✓ quiet execution proof > does not treat leader exit as group quiet and proves only after the full tree is gone 331ms
+ ✓ tests/control/optionalWorker.test.ts (3 tests) 3064ms
+   ✓ v4 worker executes all phases and publishes finite usage above three million tokens 1473ms
+   ✓ v4 worker parks a cap allowance and retains reachable completed phase evidence 804ms
+   ✓ review I2: worker captures actual work usage including soft allowance overshoot 786ms
+ ✓ tests/control/resultRepository.test.ts (3 tests) 825ms
+   ✓ the result repository a control run materializes (Orca execution driver C1/C2) > C2 reads its own run's attempt ref, not the shared path-derived one a later run overwrote 303ms
+ ✓ tests/runtime/codex/protocol.test.ts (38 tests) 11ms
+ ✓ tests/control/skillPluginDirWorker.test.ts (2 tests) 2902ms
+   ✓ worker passes skillPluginDir to the claude adapter (Orca syncskill integration) > loads the plugin and keeps slash commands enabled in plan, execute and verify 1480ms
+   ✓ worker passes skillPluginDir to the claude adapter (Orca syncskill integration) > without the field the claude command is exactly the installation's (slash commands stay disabled, no plugin) 1421ms
+ ✓ tests/control/codexSkillsWorker.test.ts (1 test) 1433ms
+   ✓ worker loads frozen Codex skills in all phases and publishes only original skills 1433ms
+ ✓ tests/runtime/codex/fakeCodexFrames.test.ts (3 tests) 425ms
+ ✓ tests/control/protocol4.test.ts (4 tests) 21ms
+ ✓ tests/control/codexSkillsFailureWorker.test.ts (2 tests) 3406ms
+   ✓ worker collects the stable cleanup failure after execute-timeout, without a complete candidate or attempt ref 2269ms
+   ✓ worker collects the stable cleanup failure after plan-handoff, without a complete candidate or attempt ref 1136ms
+ ✓ tests/control/workerLaunch.test.ts (1 test) 42ms
+ ✓ tests/controller/executionBase.test.ts (1 test) 871ms
+   ✓ proves an immutable original base distinct from the real restored checkpoint HEAD 870ms
+ ✓ tests/control/usageByModel.test.ts (3 tests) 91ms
+ ✓ tests/control/requestBoundDimensions.test.ts (1 test) 66ms
+ ✓ tests/runtime/codex/fakeCodexScript.test.ts (2 tests) 124ms
+ ✓ tests/runtime/codex/executionFormatFailure.test.ts (4 tests) 488ms
+ ✓ tests/runtime/codex/skillsController.test.ts (11 tests) 13812ms
+   ✓ controller plan timeout waits for Codex close before deleting skills or the worktree 1511ms
+   ✓ controller verify timeout waits for Codex close before deleting skills or the worktree 1619ms
+   ✓ controller preserves plan skill cleanup failure across timeout 1435ms
+   ✓ controller preserves plan skill cleanup failure across handoff-request 1423ms
+   ✓ controller preserves plan skill cleanup failure across handoff-abort 477ms
+   ✓ controller preserves execute skill cleanup failure across timeout 1498ms
+   ✓ controller preserves execute skill cleanup failure across handoff-request 1487ms
+   ✓ controller preserves execute skill cleanup failure across handoff-abort 567ms
+   ✓ controller preserves verify skill cleanup failure across timeout 1562ms
+   ✓ controller preserves verify skill cleanup failure across handoff-request 1548ms
+   ✓ controller preserves verify skill cleanup failure across handoff-abort 683ms
+ ✓ tests/controller/codex.integration.test.ts (3 tests) 1890ms
+   ✓ Codex through the real controller > runs all three phases, charges actual usage and publishes the changed answer 491ms
+   ✓ Codex through the real controller > retains written artifacts when execute reaches the controller deadline 1049ms
+   ✓ Codex through the real controller > does not reach verify after execute usage is missing 349ms
+ ✓ tests/runtime/codex/fakeCodexArgv.test.ts (2 tests) 365ms
+ ✓ tests/runtime/codex/extraEnv.test.ts (2 tests) 351ms
+ ✓ tests/control/savedResultCheckpoint.test.ts (1 test) 216ms
+ ✓ tests/control/usage.test.ts (4 tests) 202ms
+ ✓ tests/runtime/codex/adapter.test.ts (5 tests) 916ms
+ ✓ tests/runtime/codex/codexModelUsage.test.ts (4 tests) 290ms
+ ✓ tests/runtime/codex/fileBoundary.test.ts (1 test) 161ms
+ ✓ tests/runtime/codex/transport.test.ts (2 tests) 316ms
+
+ Test Files  70 passed (70)
+      Tests  768 passed (768)
+   Start at  11:25:43
+   Duration  323.72s (transform 1.01s, setup 292ms, collect 4.55s, tests 308.52s, environment 9ms, prepare 2.35s)
+
+npm notice
+npm notice New major version of npm available! 10.9.2 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice

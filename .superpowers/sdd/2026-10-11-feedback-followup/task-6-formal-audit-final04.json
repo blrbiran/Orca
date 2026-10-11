@@ -1,0 +1,17 @@
+{
+  "sourceTreeSHA256": "6b095585713cf85236343a3cd98f9ce73252ca5de7b0dd5af9b3e315401b9705",
+  "run": "task6-final-formal-04",
+  "files": 70,
+  "tests": 780,
+  "failures": 0,
+  "skipped": 0,
+  "logBytes": 56710,
+  "logSHA256": "e04e3de3462da1315020e0d71aeb112bb93962a6c34eac37317d09e130b62274",
+  "fullRawLogRead": true,
+  "contiguousReadParts": [
+    17877,
+    17939,
+    17954,
+    2940
+  ]
+}

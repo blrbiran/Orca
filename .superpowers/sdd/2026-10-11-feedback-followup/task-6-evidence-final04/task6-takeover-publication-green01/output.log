@@ -1,0 +1,54 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/control/savedResultRecovery.native.test.ts (26 tests) 99186ms
+   ✓ built CLI accepts a private package, runs only verification, records new actual usage, and harvests its approved candidate 4415ms
+   ✓ native crash at before-entry preserves mode, entry and result fences 2970ms
+   ✓ native crash at entry-fsynced preserves mode, entry and result fences 1918ms
+   ✓ native crash at verifier-returned preserves mode, entry and result fences 2460ms
+   ✓ native crash at usage-settled preserves mode, entry and result fences 2323ms
+   ✓ native crash at output-fsynced preserves mode, entry and result fences 2870ms
+   ✓ native crash at result-fsynced preserves mode, entry and result fences 2993ms
+   ✓ native crash at terminal-fsynced preserves mode, entry and result fences 3274ms
+   ✓ explicit mechanical settlement at before-entry stops a dead claimed worker without rerunning checks or providers 3373ms
+   ✓ explicit mechanical settlement at entry-fsynced stops a dead claimed worker without rerunning checks or providers 3685ms
+   ✓ explicit mechanical settlement at usage-settled stops a dead claimed worker without rerunning checks or providers 4098ms
+   ✓ explicit mechanical settlement at result-fsynced stops a dead claimed worker without rerunning checks or providers 5273ms
+   ✓ explicit mechanical settlement at revoked-result stops a dead claimed worker without rerunning checks or providers 4836ms
+   ✓ admits an explicit successor after before-entry and carries every work charge exactly once 8267ms
+   ✓ admits an explicit successor after usage-settled and carries every work charge exactly once 9059ms
+   ✓ missing lifecycle markers after before-entry cannot authorize replay or known zero usage 2347ms
+   ✓ missing lifecycle markers after entry-fsynced cannot authorize replay or known zero usage 2755ms
+   ✓ owner death before validation command release cannot run an empty login shell 325ms
+   ✓ does not reuse terminal-fsynced approval for a candidate changed before harvest 3903ms
+   ✓ refuses cleaned success with missing-publication and preserves measured usage 4542ms
+   ✓ refuses cleaned success with dirty-materialization and preserves measured usage 4782ms
+   ✓ refuses cleaned success with symlink-materialization and preserves measured usage 4924ms
+   ✓ refuses cleaned success with special-mode-materialization and preserves measured usage 4709ms
+   ✓ refuses cleaned success with extra-materialization and preserves measured usage 4742ms
+   ✓ never publishes a success whose ordinary result repository was poisoned outside the candidate 4129ms
+ ✓ tests/controller/verifySavedResult.test.ts (17 tests) 36147ms
+   ✓ restores the archived candidate, checks and verifies once without planning/executing/recharging original usage 1962ms
+   ✓ refuses candidate modification by command without landing or retry 1343ms
+   ✓ refuses candidate modification by verifier without landing or retry 1446ms
+   ✓ refuses candidate modification by special-mode without landing or retry 1354ms
+   ✓ refuses replay of an entered state after its candidate has been cleaned up 1727ms
+   ✓ ends a retryable rejection after one fresh verification and preserves saved source failure 1651ms
+   ✓ replays a complete durable terminal verification result with no new calls or usage 1946ms
+   ✓ protects git-config from verifier changes before publication 1436ms
+   ✓ protects runtime-contract from verifier changes before publication 1531ms
+   ✓ refuses to resume recovery as ordinary work when its durable mode marker is missing 1589ms
+   ✓ verifies the original candidate before harmless current target-tip movement is reconciled 1812ms
+   ✓ checks revocation after process registration and before sending the validation command 1123ms
+   ✓ enforces actual published Git changes even when the original Agent reports no changed files 719ms
+   ✓ runs real verification of a strictly valid saved partial without interpreting its reported timeout as a new timeout 1842ms
+   ✓ refuses candidate mutation even when the verifier throws before producing a result 1423ms
+   ✓ does not reuse a complete terminal approval after its protected contract changes 1944ms
+   ✓ settles observed verifier usage on timeout and never enters an executor retry 11297ms
+ ✓ tests/control/savedResultRecovery.test.ts (34 tests) 6059ms
+
+ Test Files  3 passed (3)
+      Tests  77 passed (77)
+   Start at  12:17:19
+   Duration  142.50s (transform 318ms, setup 26ms, collect 588ms, tests 141.39s, environment 0ms, prepare 115ms)
+

@@ -1,0 +1,30 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/controller/verifySavedResult.test.ts (16 tests | 1 failed | 15 skipped) 2025ms
+   × does not reuse a complete terminal approval after its protected contract changes 2025ms
+     → expected 'succeeded' to be 'failed' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > does not reuse a complete terminal approval after its protected contract changes
+AssertionError: expected 'succeeded' to be 'failed' // Object.is equality
+
+Expected: "failed"
+Received: "succeeded"
+
+ ❯ tests/controller/verifySavedResult.test.ts:123:26
+    121|   await writeFile(join(f.runDir,'loop-contract.json'),'{}');
+    122|   const resumed=await runLoopFromState(f.input.work.contract,f.runDir,…
+    123|   expect(resumed.status).toBe('failed');expect(resumed.stopReason).toB…
+       |                          ^
+    124|  }finally{await rm(f.root,{recursive:true,force:true});}
+    125| },30000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 skipped (16)
+   Start at  10:45:07
+   Duration  2.56s (transform 268ms, setup 13ms, collect 361ms, tests 2.03s, environment 0ms, prepare 33ms)
+

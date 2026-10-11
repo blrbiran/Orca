@@ -1,0 +1,23 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/control/savedResultRecovery.native.test.ts (13 tests) 36694ms
+   ✓ built CLI accepts a private package, runs only verification, records new actual usage, and harvests its approved candidate 3633ms
+   ✓ native crash at before-entry preserves mode, entry and result fences 2640ms
+   ✓ native crash at entry-fsynced preserves mode, entry and result fences 1572ms
+   ✓ native crash at verifier-returned preserves mode, entry and result fences 1915ms
+   ✓ native crash at usage-settled preserves mode, entry and result fences 1936ms
+   ✓ native crash at output-fsynced preserves mode, entry and result fences 2294ms
+   ✓ native crash at result-fsynced preserves mode, entry and result fences 3049ms
+   ✓ native crash at terminal-fsynced preserves mode, entry and result fences 2373ms
+   ✓ explicit mechanical settlement at before-entry stops a dead claimed worker without rerunning checks or providers 2700ms
+   ✓ explicit mechanical settlement at entry-fsynced stops a dead claimed worker without rerunning checks or providers 2931ms
+   ✓ explicit mechanical settlement at usage-settled stops a dead claimed worker without rerunning checks or providers 3514ms
+   ✓ explicit mechanical settlement at result-fsynced stops a dead claimed worker without rerunning checks or providers 4344ms
+   ✓ explicit mechanical settlement at revoked-result stops a dead claimed worker without rerunning checks or providers 3791ms
+
+ Test Files  1 passed (1)
+      Tests  13 passed (13)
+   Start at  09:27:52
+   Duration  37.46s (transform 292ms, setup 16ms, collect 406ms, tests 36.69s, environment 0ms, prepare 52ms)
+

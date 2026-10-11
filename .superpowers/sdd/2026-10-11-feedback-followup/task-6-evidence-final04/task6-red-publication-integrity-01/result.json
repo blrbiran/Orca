@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6p.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node node_modules/vitest/vitest.mjs run tests/control/savedResultRecovery.native.test.ts tests/control/savedResultRecovery.test.ts -t \"terminal-fsynced approval|cleaned success|ordinary result repository|actual legacy .*events\" --maxWorkers=1 --minWorkers=1"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 27.563327074050903,
+  "log": "/private/tmp/orca-followup-runs/task6-red-publication-integrity-01/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "14e2dd110ccb1a11f6eba7521d64d5d60cf27dc19888bcac047bd1615b2a2c1b",
+  "sourceFiles": 446
+}

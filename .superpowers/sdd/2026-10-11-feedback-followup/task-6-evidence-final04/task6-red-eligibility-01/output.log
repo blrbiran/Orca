@@ -1,0 +1,35 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultRecovery.test.ts (2 tests | 1 failed) 2519ms
+   ✓ saved result recovery wire > accepts only an explicit protocol4 immutable recovery package without checkpoint 2392ms
+   × qualifies a genuine old bare execution only with its complete published archive and accounted admission 126ms
+     → expected { status: 'unavailable', …(1) } to match object { status: 'eligible', …(2) }
+(1 matching property omitted from actual)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.test.ts > qualifies a genuine old bare execution only with its complete published archive and accounted admission
+AssertionError: expected { status: 'unavailable', …(1) } to match object { status: 'eligible', …(2) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "authorityKind": "legacy-published-candidate-v1",
+-   "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79",
+-   "status": "eligible",
++   "status": "unavailable",
+  }
+
+ ❯ tests/control/savedResultRecovery.test.ts:24:53
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  08:56:11
+   Duration  3.03s (transform 182ms, setup 14ms, collect 234ms, tests 2.52s, environment 0ms, prepare 50ms)
+

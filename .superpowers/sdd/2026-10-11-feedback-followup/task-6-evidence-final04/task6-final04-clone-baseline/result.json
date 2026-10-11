@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-task6-mutants-final",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6mc.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node /Users/biran/code/skills/loop/ccloop/node_modules/vitest/vitest.mjs run tests/controller/verifySavedResult.test.ts tests/control/savedResultRecovery.test.ts tests/control/savedResultRecovery.native.test.ts tests/control/savedResultCheckpoint.test.ts --fileParallelism=false --maxWorkers=1 --minWorkers=1 --reporter=default --reporter=json --outputFile=/private/tmp/orca-followup-runs/task6-final04-clone-baseline/tests.json"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 145.22857022285461,
+  "log": "/private/tmp/orca-followup-runs/task6-final04-clone-baseline/output.log",
+  "source": "0695eac632261268a14969cd637f72fb57965df8",
+  "sourceTreeSHA256": "6b095585713cf85236343a3cd98f9ce73252ca5de7b0dd5af9b3e315401b9705",
+  "sourceFiles": 446
+}

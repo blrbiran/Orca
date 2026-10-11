@@ -1,0 +1,31 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/control/savedResultRecovery.native.test.ts (19 tests) 62121ms
+   ✓ built CLI accepts a private package, runs only verification, records new actual usage, and harvests its approved candidate 3817ms
+   ✓ native crash at before-entry preserves mode, entry and result fences 2873ms
+   ✓ native crash at entry-fsynced preserves mode, entry and result fences 1826ms
+   ✓ native crash at verifier-returned preserves mode, entry and result fences 2253ms
+   ✓ native crash at usage-settled preserves mode, entry and result fences 2243ms
+   ✓ native crash at output-fsynced preserves mode, entry and result fences 2754ms
+   ✓ native crash at result-fsynced preserves mode, entry and result fences 2757ms
+   ✓ native crash at terminal-fsynced preserves mode, entry and result fences 2603ms
+   ✓ explicit mechanical settlement at before-entry stops a dead claimed worker without rerunning checks or providers 3176ms
+   ✓ explicit mechanical settlement at entry-fsynced stops a dead claimed worker without rerunning checks or providers 3519ms
+   ✓ explicit mechanical settlement at usage-settled stops a dead claimed worker without rerunning checks or providers 4123ms
+   ✓ explicit mechanical settlement at result-fsynced stops a dead claimed worker without rerunning checks or providers 4594ms
+   ✓ explicit mechanical settlement at revoked-result stops a dead claimed worker without rerunning checks or providers 4403ms
+   ✓ admits an explicit successor after before-entry and carries every work charge exactly once 7419ms
+   ✓ admits an explicit successor after usage-settled and carries every work charge exactly once 8283ms
+   ✓ missing lifecycle markers after before-entry cannot authorize replay or known zero usage 2397ms
+   ✓ missing lifecycle markers after entry-fsynced cannot authorize replay or known zero usage 2523ms
+   ✓ owner death before validation command release cannot run an empty login shell 316ms
+ ✓ tests/ownership/reapRunProcesses.test.ts (14 tests) 1782ms
+   ✓ reapRunProcesses (spec 4.2: reap only what is certainly ours, refuse otherwise) > falls through to SIGKILL when the group ignores SIGTERM 504ms
+   ✓ reapRunProcesses (spec 4.2: reap only what is certainly ours, refuse otherwise) > refuses when the group outlives the timeout 490ms
+
+ Test Files  2 passed (2)
+      Tests  33 passed (33)
+   Start at  11:23:50
+   Duration  64.71s (transform 323ms, setup 19ms, collect 432ms, tests 63.90s, environment 0ms, prepare 85ms)
+

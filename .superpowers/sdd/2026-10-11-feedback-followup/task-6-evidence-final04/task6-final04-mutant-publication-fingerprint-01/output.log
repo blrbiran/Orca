@@ -1,0 +1,33 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ❯ tests/control/savedResultRecovery.native.test.ts (28 tests | 1 failed | 27 skipped) 3795ms
+   × does not reuse terminal-fsynced approval for a candidate changed before harvest 3794ms
+     → expected { attemptsUsed: 1, …(8) } to match object { status: 'failed', …(1) }
+(18 matching properties omitted from actual)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.native.test.ts > does not reuse terminal-fsynced approval for a candidate changed before harvest
+AssertionError: expected { attemptsUsed: 1, …(8) } to match object { status: 'failed', …(1) }
+(18 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+    "status": "failed",
+-   "stopReason": "saved-result-modified-during-verification",
++   "stopReason": "saved-result-publication-unavailable",
+  }
+
+ ❯ tests/control/savedResultRecovery.native.test.ts:221:113
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 27 skipped (28)
+   Start at  12:44:59
+   Duration  4.37s (transform 288ms, setup 14ms, collect 391ms, tests 3.80s, environment 0ms, prepare 36ms)
+

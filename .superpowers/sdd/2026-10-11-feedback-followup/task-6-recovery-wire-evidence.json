@@ -1,0 +1,460 @@
+{
+  "root": "/private/tmp/results-task2-m38Maf",
+  "input": {
+    "protocol": 4,
+    "claim": {
+      "groupId": "g1",
+      "workItemId": "T1",
+      "taskId": "T1",
+      "runId": "recovery-1",
+      "generation": 2,
+      "graphVersion": 3,
+      "targetVersion": 1,
+      "commandId": "recover-command",
+      "configHash": "066bd445b52b4074f2095eb8a2e43879d35aef0b7cf3a897f0bafca7b4168689",
+      "agent": {
+        "agent": "codex",
+        "model": "fixture-new-verifier",
+        "contextWindow": "agent-default"
+      },
+      "grant": {
+        "work": {
+          "tokens": 1000,
+          "activeMs": 30000,
+          "attempts": 2,
+          "sessions": 1
+        },
+        "handoff": {
+          "tokens": 1000,
+          "activeMs": 30000,
+          "attempts": 2,
+          "sessions": 1
+        }
+      },
+      "ownerToken": "recover-owner"
+    },
+    "contractHash": "653938bd2a52eba5c7b682e79db27b1adf9c482df43508bca49bed5c112d6cf4",
+    "inputCheckpoint": null,
+    "work": {
+      "kind": "loop",
+      "contract": {
+        "objective": {
+          "taskId": "task-1",
+          "goal": "Produce answer",
+          "successCondition": "check",
+          "nonGoals": []
+        },
+        "context": {
+          "repoPath": "/private/tmp/results-task2-m38Maf/repo",
+          "targetPaths": [
+            "answer.txt"
+          ],
+          "relevantDocs": [],
+          "buildTestCommands": [
+            "true"
+          ],
+          "constraints": []
+        },
+        "executionPolicy": {
+          "autonomyLevel": "L2",
+          "maxAttempts": 2,
+          "perAttemptTimeoutMs": 10000,
+          "totalRuntimeBudgetMs": 30000,
+          "tokenBudget": 1000,
+          "worktreeRequired": true,
+          "partialOutcomeRecoveryWindowMs": 0
+        },
+        "safetyPolicy": {
+          "allowlistPaths": [],
+          "denylistPaths": [],
+          "maxFilesTouched": 64,
+          "humanGateConditions": []
+        },
+        "verification": {
+          "verifierType": "agent",
+          "requiredChecks": [
+            "node -e \"const f=require('fs');if(process.env.CCLOOP_RECOVERY_CHECK_MARKER)f.appendFileSync(process.env.CCLOOP_RECOVERY_CHECK_MARKER,'check\\n');if(process.env.CCLOOP_RECOVERY_CHECK_MUTATE)f.writeFileSync('answer.txt','modified');if(f.readFileSync('answer.txt','utf8')!=='saved candidate\\n')process.exit(1)\""
+          ],
+          "rejectOn": [
+            "check failed"
+          ],
+          "evidenceRequired": []
+        },
+        "escalationAndExit": {
+          "escalationTargets": [],
+          "pauseOn": [],
+          "stopOn": [],
+          "terminalStates": [
+            "succeeded",
+            "failed",
+            "exhausted",
+            "cancelled",
+            "blocked_waiting_human"
+          ]
+        }
+      },
+      "targetRepo": "/private/tmp/results-task2-m38Maf/repo",
+      "base": "18a46bf111c922fc07349ae2a795def18bdd7d9c",
+      "sourceDir": "/private/tmp/results-task2-m38Maf/source"
+    },
+    "mode": "verify-saved-result",
+    "savedResultRecovery": {
+      "packagePath": "/private/tmp/results-task2-m38Maf/source/input/recovery",
+      "packageHash": "0c21ed00d274ec3cfeb454384edd9bc72134a4fe207dc6d4d4851372aba735b8",
+      "admissionHash": "c2d804b3fdba62817e343c76e24d0325f034529d3700b6b92c4cdcbe826af415",
+      "recoveryOf": {
+        "sourceRunId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
+        "sourceAttempt": 1,
+        "capsuleHash": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
+        "snapshotHash": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
+        "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79"
+      }
+    }
+  },
+  "legacyCore": {
+    "events": [
+      {
+        "runId": "recovery-1",
+        "generation": 2,
+        "eventSeq": 1,
+        "bucket": "work",
+        "cumulative": {
+          "tokens": 0,
+          "activeMs": 0,
+          "attempts": 1,
+          "sessions": 1
+        },
+        "source": {
+          "artifactId": "evidence-557b5711c0f031ef71c40a71bb429ea8c3114da8c0e8fa86fb73e8352cfafd11",
+          "hash": "557b5711c0f031ef71c40a71bb429ea8c3114da8c0e8fa86fb73e8352cfafd11"
+        }
+      },
+      {
+        "runId": "recovery-1",
+        "generation": 2,
+        "eventSeq": 2,
+        "bucket": "work",
+        "cumulative": {
+          "tokens": 15,
+          "activeMs": 354,
+          "attempts": 1,
+          "sessions": 1
+        },
+        "source": {
+          "artifactId": "evidence-f1c39aa44ad9165fc498ee7b6ff418f11823d64e59c02be27563b5143226ea60",
+          "hash": "f1c39aa44ad9165fc498ee7b6ff418f11823d64e59c02be27563b5143226ea60"
+        },
+        "byModel": [
+          {
+            "model": "fixture-new-verifier",
+            "input": 10,
+            "output": 5,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        ]
+      },
+      {
+        "runId": "recovery-1",
+        "generation": 2,
+        "eventSeq": 3,
+        "bucket": "handoff",
+        "cumulative": {
+          "tokens": 0,
+          "activeMs": 0,
+          "attempts": 0,
+          "sessions": 0
+        },
+        "source": {
+          "artifactId": "evidence-c78a0b762b3edf4ffec928b72a93dda014b7f5095e124bcf988acca58965f4d2",
+          "hash": "c78a0b762b3edf4ffec928b72a93dda014b7f5095e124bcf988acca58965f4d2"
+        }
+      }
+    ],
+    "candidate": {
+      "groupId": "g1",
+      "workItemId": "T1",
+      "taskId": "T1",
+      "runId": "recovery-1",
+      "generation": 2,
+      "graphVersion": 3,
+      "targetVersion": 1,
+      "checkpointId": "checkpoint-8a6be264b0ec6ddf286e15b747f8cf0110a7582f6a0235b5",
+      "usageHighWater": 3,
+      "result": "complete",
+      "artifacts": [
+        {
+          "artifactId": "evidence-b07b9071ed7552f38f4c6a89a355847199cda3a475f7941ec44dee58c823f2ca",
+          "hash": "b07b9071ed7552f38f4c6a89a355847199cda3a475f7941ec44dee58c823f2ca"
+        },
+        {
+          "artifactId": "evidence-9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d",
+          "hash": "9e9af21eecd243d497719f8c655ac28728e1e29d89f74eb7d9cd811804150e8d"
+        },
+        {
+          "artifactId": "evidence-51a9260905b2f952fd7127f34943877999976f24056b115a55e5697dd0016b01",
+          "hash": "51a9260905b2f952fd7127f34943877999976f24056b115a55e5697dd0016b01"
+        },
+        {
+          "artifactId": "evidence-c3db0e77b63ec5cae6dd0bb92a8919264bb22459f4d540aea931cc9221f83123",
+          "hash": "c3db0e77b63ec5cae6dd0bb92a8919264bb22459f4d540aea931cc9221f83123"
+        },
+        {
+          "artifactId": "evidence-22c41b5c762470cf4a3d645c948566cf16fe34530166de34eaa76559eb495fe7",
+          "hash": "22c41b5c762470cf4a3d645c948566cf16fe34530166de34eaa76559eb495fe7"
+        },
+        {
+          "artifactId": "evidence-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "artifactId": "evidence-b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981",
+          "hash": "b145e48e79eac59aa03143630e4fdb14408be5336fbb8c344547cddb3212a981"
+        },
+        {
+          "artifactId": "evidence-f58aa6829c11b580c713571d6c082ccb47353a97e08eadbd672c99afc81eb70a",
+          "hash": "f58aa6829c11b580c713571d6c082ccb47353a97e08eadbd672c99afc81eb70a"
+        },
+        {
+          "artifactId": "evidence-ae8332a827c95e08b8f0d64dc8fda79f88fd87e8d2de80e7994aa6dac940dea7",
+          "hash": "ae8332a827c95e08b8f0d64dc8fda79f88fd87e8d2de80e7994aa6dac940dea7"
+        },
+        {
+          "artifactId": "evidence-1ecb8548b4270d3ef7a97d7ef0060d74e1fe3410308f0abb2c052f7a75f37af9",
+          "hash": "1ecb8548b4270d3ef7a97d7ef0060d74e1fe3410308f0abb2c052f7a75f37af9"
+        },
+        {
+          "artifactId": "evidence-e824b52427ec39396f871f48a936c91c3c963c00b31ddf4de5fe1d8b49ebeb83",
+          "hash": "e824b52427ec39396f871f48a936c91c3c963c00b31ddf4de5fe1d8b49ebeb83"
+        },
+        {
+          "artifactId": "evidence-029b15cd733707bc30f9c49d6f4b050941b982fb579f7d5edc06fe4a017670aa",
+          "hash": "029b15cd733707bc30f9c49d6f4b050941b982fb579f7d5edc06fe4a017670aa"
+        },
+        {
+          "artifactId": "evidence-cea3dd6d7fa45d0c8800ab7eba9743d41c84a0c526e7698c9918a0f12877eb21",
+          "hash": "cea3dd6d7fa45d0c8800ab7eba9743d41c84a0c526e7698c9918a0f12877eb21"
+        }
+      ],
+      "snapshot": null,
+      "missing": [],
+      "unresolvedRequestIds": [],
+      "stopProof": {
+        "executionId": "execution-recovery-wire",
+        "generation": 2,
+        "isolated": true,
+        "source": {
+          "artifactId": "evidence-44a98e4fffa159c0dad37edee7447af3c73e589059ece756c1814ddba980dc69",
+          "hash": "44a98e4fffa159c0dad37edee7447af3c73e589059ece756c1814ddba980dc69"
+        }
+      },
+      "terminalOutcome": "succeeded",
+      "handoff": {
+        "artifactId": "evidence-cea3dd6d7fa45d0c8800ab7eba9743d41c84a0c526e7698c9918a0f12877eb21",
+        "hash": "cea3dd6d7fa45d0c8800ab7eba9743d41c84a0c526e7698c9918a0f12877eb21"
+      }
+    },
+    "terminal": {
+      "status": "succeeded",
+      "currentAttempt": 1,
+      "attemptsUsed": 1,
+      "lastTransitionAt": "2026-10-11T03:10:14.813Z",
+      "waitingOnHuman": false,
+      "stopReason": "success condition satisfied",
+      "budgetSnapshot": {
+        "attemptsRemaining": 1,
+        "timeRemainingMs": 29646,
+        "tokenBudgetRemaining": 985
+      },
+      "recentFailures": []
+    },
+    "progress": {
+      "status": "succeeded",
+      "currentAttempt": 1,
+      "attemptsUsed": 1,
+      "attemptsRemaining": 1,
+      "lastTransitionAt": "2026-10-11T03:10:14.813Z"
+    }
+  },
+  "internal": {
+    "status": "succeeded",
+    "currentAttempt": 1,
+    "attemptsUsed": 1,
+    "lastTransitionAt": "2026-10-11T03:10:14.813Z",
+    "waitingOnHuman": false,
+    "stopReason": "success condition satisfied",
+    "budgetSnapshot": {
+      "attemptsRemaining": 1,
+      "timeRemainingMs": 29646,
+      "tokenBudgetRemaining": 985,
+      "tokenRemainingStatus": "known"
+    },
+    "recentFailures": [],
+    "savedResult": {
+      "mode": "verify-saved-result",
+      "packageHash": "0c21ed00d274ec3cfeb454384edd9bc72134a4fe207dc6d4d4851372aba735b8",
+      "admissionHash": "c2d804b3fdba62817e343c76e24d0325f034529d3700b6b92c4cdcbe826af415",
+      "recoveryOf": {
+        "sourceRunId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
+        "sourceAttempt": 1,
+        "capsuleHash": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
+        "snapshotHash": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
+        "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79"
+      },
+      "funding": {
+        "inheritedUsage": {
+          "tokens": 1000,
+          "activeMs": 30000,
+          "attempts": 2,
+          "sessions": 1
+        },
+        "reservation": {
+          "runId": "recovery-1",
+          "revision": 7,
+          "workAllocationId": "allocation-work",
+          "handoffAllocationId": "allocation-handoff"
+        },
+        "kind": "legacy-fresh-grant-v1",
+        "historicalPolicy": {
+          "contractHash": "653938bd2a52eba5c7b682e79db27b1adf9c482df43508bca49bed5c112d6cf4",
+          "authority": {
+            "artifactId": "recovery-f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a",
+            "hash": "f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a"
+          },
+          "accountingMode": "finite-legacy",
+          "authoredWork": {
+            "tokens": 1000,
+            "activeMs": 30000,
+            "attempts": 2,
+            "sessions": 1
+          }
+        },
+        "freshGrant": {
+          "work": {
+            "tokens": 1000,
+            "activeMs": 30000,
+            "attempts": 2,
+            "sessions": 1
+          },
+          "handoff": {
+            "tokens": 1000,
+            "activeMs": 30000,
+            "attempts": 2,
+            "sessions": 1
+          }
+        },
+        "fundedTotal": {
+          "tokens": 2000,
+          "activeMs": 60000,
+          "attempts": 4,
+          "sessions": 2
+        }
+      },
+      "prepared": {
+        "candidateHash": "8b77abdbfe0aff079f1baff25c79c08af7c79fda1f00bce246db7431f2d08211",
+        "protectedInputsHash": "966e8b52acc5ad90880d60994bceb0e6f3d97e5aad4421010707afdcefe794e1",
+        "preparedAt": "2026-10-11T03:10:13.716Z"
+      },
+      "entry": {
+        "candidateHash": "8b77abdbfe0aff079f1baff25c79c08af7c79fda1f00bce246db7431f2d08211",
+        "protectedInputsHash": "966e8b52acc5ad90880d60994bceb0e6f3d97e5aad4421010707afdcefe794e1",
+        "enteredAt": "2026-10-11T03:10:13.985Z"
+      }
+    }
+  },
+  "receipt": {
+    "ref": {
+      "artifactId": "saved-result-956984622c7bf8f680435a514aeb2ee550f85c2401b6ee66e1853b8f292d1183",
+      "hash": "956984622c7bf8f680435a514aeb2ee550f85c2401b6ee66e1853b8f292d1183"
+    },
+    "settlement": {
+      "schema": "ccloop-saved-result-settlement-v1",
+      "identity": {
+        "groupId": "g1",
+        "workItemId": "T1",
+        "taskId": "T1",
+        "runId": "recovery-1",
+        "generation": 2,
+        "graphVersion": 3,
+        "targetVersion": 1,
+        "executionId": "execution-recovery-wire",
+        "envelopeHash": "7326bd674d7019bd314e213d216f1a9fa71bbaf1ba3a9d83d3a2bc7c379076b8"
+      },
+      "recoveryOf": {
+        "sourceRunId": "run-e73e593c-d1d4-494f-83bf-bb0c61e17169",
+        "sourceAttempt": 1,
+        "capsuleHash": "44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582",
+        "snapshotHash": "e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265",
+        "normalizedExecutionHash": "412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79"
+      },
+      "disposition": "complete",
+      "usageStatus": "known",
+      "state": {
+        "artifactId": "saved-result-130d7e384572c22b17875d372995c6ea396b499aeeb6178c93c53685a80e0ab1",
+        "hash": "130d7e384572c22b17875d372995c6ea396b499aeeb6178c93c53685a80e0ab1"
+      },
+      "lifecycle": {
+        "artifactId": "saved-result-00d6f3215705038a1436314a0d1c98e9bd21c7600fc82f1b7edefdd1f26759d4",
+        "hash": "00d6f3215705038a1436314a0d1c98e9bd21c7600fc82f1b7edefdd1f26759d4"
+      },
+      "accepted": {
+        "artifactId": "saved-result-b56aa744797e285030909baea3df3ba0131d2c1ec48eb99abdc16c0bd5800247",
+        "hash": "b56aa744797e285030909baea3df3ba0131d2c1ec48eb99abdc16c0bd5800247"
+      },
+      "envelope": {
+        "artifactId": "saved-result-7326bd674d7019bd314e213d216f1a9fa71bbaf1ba3a9d83d3a2bc7c379076b8",
+        "hash": "7326bd674d7019bd314e213d216f1a9fa71bbaf1ba3a9d83d3a2bc7c379076b8"
+      },
+      "usage": {
+        "artifactId": "saved-result-5d207a539f557b8f2f9c7b8615027e14ac53328d53af7753dc86a907611124f1",
+        "hash": "5d207a539f557b8f2f9c7b8615027e14ac53328d53af7753dc86a907611124f1"
+      },
+      "stopProof": {
+        "artifactId": "saved-result-aaaece46ba807ff5f5754857af87380affc675bfab310a1663f34122d55a1a1b",
+        "hash": "aaaece46ba807ff5f5754857af87380affc675bfab310a1663f34122d55a1a1b"
+      },
+      "usageObservations": [
+        {
+          "source": {
+            "artifactId": "evidence-557b5711c0f031ef71c40a71bb429ea8c3114da8c0e8fa86fb73e8352cfafd11",
+            "hash": "557b5711c0f031ef71c40a71bb429ea8c3114da8c0e8fa86fb73e8352cfafd11"
+          },
+          "copy": {
+            "artifactId": "saved-result-557b5711c0f031ef71c40a71bb429ea8c3114da8c0e8fa86fb73e8352cfafd11",
+            "hash": "557b5711c0f031ef71c40a71bb429ea8c3114da8c0e8fa86fb73e8352cfafd11"
+          }
+        },
+        {
+          "source": {
+            "artifactId": "evidence-f1c39aa44ad9165fc498ee7b6ff418f11823d64e59c02be27563b5143226ea60",
+            "hash": "f1c39aa44ad9165fc498ee7b6ff418f11823d64e59c02be27563b5143226ea60"
+          },
+          "copy": {
+            "artifactId": "saved-result-f1c39aa44ad9165fc498ee7b6ff418f11823d64e59c02be27563b5143226ea60",
+            "hash": "f1c39aa44ad9165fc498ee7b6ff418f11823d64e59c02be27563b5143226ea60"
+          }
+        },
+        {
+          "source": {
+            "artifactId": "evidence-c78a0b762b3edf4ffec928b72a93dda014b7f5095e124bcf988acca58965f4d2",
+            "hash": "c78a0b762b3edf4ffec928b72a93dda014b7f5095e124bcf988acca58965f4d2"
+          },
+          "copy": {
+            "artifactId": "saved-result-c78a0b762b3edf4ffec928b72a93dda014b7f5095e124bcf988acca58965f4d2",
+            "hash": "c78a0b762b3edf4ffec928b72a93dda014b7f5095e124bcf988acca58965f4d2"
+          }
+        }
+      ]
+    }
+  },
+  "privateThroughCore": {
+    "rc": 2,
+    "stdout": "",
+    "stderr": "control-evidence-ref-invalid\n"
+  },
+  "features": {
+    "rc": 0,
+    "stdout": "{\"protocol\":1,\"tokenPolicy\":\"optional-v1\",\"savedResultRecovery\":\"v1\"}\n",
+    "stderr": ""
+  }
+}

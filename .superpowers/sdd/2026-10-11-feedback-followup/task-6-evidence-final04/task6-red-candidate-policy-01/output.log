@@ -1,0 +1,51 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/controller/verifySavedResult.test.ts (15 tests | 3 failed | 12 skipped) 3899ms
+   × enforces actual published Git changes even when the original Agent reports no changed files 1867ms
+     → expected 'succeeded' to be 'blocked_waiting_human' // Object.is equality
+   × runs real verification of a strictly valid saved partial without interpreting its reported timeout as a new timeout 772ms
+     → executor reported partial: expected 'exhausted' to be 'succeeded' // Object.is equality
+   × refuses candidate mutation even when the verifier throws before producing a result 1260ms
+     → expected 'Error: provider interrupted' to contain 'saved-result-modified-during-verifica…'
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > enforces actual published Git changes even when the original Agent reports no changed files
+AssertionError: expected 'succeeded' to be 'blocked_waiting_human' // Object.is equality
+
+Expected: "blocked_waiting_human"
+Received: "succeeded"
+
+ ❯ tests/controller/verifySavedResult.test.ts:100:70
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > runs real verification of a strictly valid saved partial without interpreting its reported timeout as a new timeout
+AssertionError: executor reported partial: expected 'exhausted' to be 'succeeded' // Object.is equality
+
+Expected: "succeeded"
+Received: "exhausted"
+
+ ❯ tests/controller/verifySavedResult.test.ts:107:45
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > refuses candidate mutation even when the verifier throws before producing a result
+AssertionError: expected 'Error: provider interrupted' to contain 'saved-result-modified-during-verifica…'
+
+Expected: "saved-result-modified-during-verification"
+Received: "Error: provider interrupted"
+
+ ❯ tests/controller/verifySavedResult.test.ts:113:64
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 12 skipped (15)
+   Start at  10:11:57
+   Duration  4.57s (transform 285ms, setup 15ms, collect 387ms, tests 3.90s, environment 0ms, prepare 53ms)
+

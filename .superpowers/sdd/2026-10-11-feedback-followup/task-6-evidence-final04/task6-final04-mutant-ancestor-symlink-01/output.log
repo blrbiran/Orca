@@ -1,0 +1,33 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-task6-mutants-final
+
+ ❯ tests/controller/verifySavedResult.test.ts (18 tests | 1 failed | 17 skipped) 545ms
+   × refuses a candidate moved behind a workspace path symlink even when every byte and mode matches 544ms
+     → promise resolved "'ed27f03a086e5173a9510aeee4154c637efe9…'" instead of rejecting
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > refuses a candidate moved behind a workspace path symlink even when every byte and mode matches
+AssertionError: promise resolved "'ed27f03a086e5173a9510aeee4154c637efe9…'" instead of rejecting
+
+- Expected: 
+[Error: rejected promise]
+
++ Received: 
+"ed27f03a086e5173a9510aeee4154c637efe9f60ca057078a650b135ac171f66"
+
+ ❯ tests/controller/verifySavedResult.test.ts:146:60
+    144|   await candidateFingerprint(workspace.worktreePath);
+    145|   const trees=join(f.runDir,'worktrees'),moved=join(f.root,'moved-work…
+    146|   await expect(candidateFingerprint(workspace.worktreePath)).rejects.t…
+       |                                                            ^
+    147|  }finally{await rm(f.root,{recursive:true,force:true});}
+    148| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 skipped (18)
+   Start at  12:45:45
+   Duration  1.08s (transform 280ms, setup 14ms, collect 367ms, tests 545ms, environment 0ms, prepare 34ms)
+

@@ -1,0 +1,27 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/controller/verifySavedResult.test.ts (18 tests | 1 failed | 17 skipped) 2449ms
+   × refuses a candidate moved behind a workspace path symlink even when every byte and mode matches 2448ms
+     → ENOENT: no such file or directory, open '/private/tmp/results-task2-QyCsPH/source/run/saved-result.bundle'
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > refuses a candidate moved behind a workspace path symlink even when every byte and mode matches
+Error: ENOENT: no such file or directory, open '/private/tmp/results-task2-QyCsPH/source/run/saved-result.bundle'
+ ❯ materializeSavedResult src/control/savedResultRecovery.ts:292:74
+    290| }
+    291| export async function materializeSavedResult(repo:string,runDir:string…
+    292|  const {snapshot,bytes}=loaded,bundle=join(runDir,"saved-result.bundle…
+       |                                                                          ^
+    293|  await savedGit(repo,"fetch","-q",bundle,`refs/ccloop/${loaded.source.…
+    294|  const existing=join(runDir,"worktrees",`attempt-${attempt}`);
+ ❯ tests/controller/verifySavedResult.test.ts:143:65
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 skipped (18)
+   Start at  12:20:05
+   Duration  3.10s (transform 299ms, setup 13ms, collect 389ms, tests 2.45s, environment 0ms, prepare 38ms)
+

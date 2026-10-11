@@ -1,0 +1,10 @@
+2026-10-11 08:51:04.634 xcodebuild[6809:452040721]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-10-11 08:51:04.951 xcodebuild[6809:452040719] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+{
+  "root": "/private/tmp/t6-ref-alojv5we",
+  "base": "509413aa13b53eed25ca4a88a9e65dd2386205be",
+  "head": "e43a326b2ecd0655298d7d70f5d9b402f7c0207b",
+  "targetRefs": "e43a326b2ecd0655298d7d70f5d9b402f7c0207b refs/ccloop/run-1/attempts/1\n509413aa13b53eed25ca4a88a9e65dd2386205be refs/heads/main",
+  "resultRefs": "e43a326b2ecd0655298d7d70f5d9b402f7c0207b HEAD\n509413aa13b53eed25ca4a88a9e65dd2386205be refs/heads/main\n509413aa13b53eed25ca4a88a9e65dd2386205be refs/remotes/origin/HEAD\n509413aa13b53eed25ca4a88a9e65dd2386205be refs/remotes/origin/main",
+  "bundleHeads": "509413aa13b53eed25ca4a88a9e65dd2386205be refs/heads/main\n509413aa13b53eed25ca4a88a9e65dd2386205be refs/remotes/origin/HEAD\n509413aa13b53eed25ca4a88a9e65dd2386205be refs/remotes/origin/main\ne43a326b2ecd0655298d7d70f5d9b402f7c0207b HEAD"
+}

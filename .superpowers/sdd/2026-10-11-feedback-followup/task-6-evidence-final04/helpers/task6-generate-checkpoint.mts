@@ -1,0 +1,38 @@
+import {mkdir,writeFile,readFile,rename,cp} from 'node:fs/promises';
+import {join} from 'node:path';
+import {savedRecoveryFixture} from '/private/tmp/ccloop-feedback-followup-20261011/tests/control/savedRecoveryFixture.ts';
+import {sealCodex} from '/private/tmp/ccloop-feedback-followup-20261011/tests/control/agentsFixture.ts';
+import {writeAccepted,readAccepted} from '/private/tmp/ccloop-feedback-followup-20261011/src/control/store.ts';
+import {canonicalHash,canonicalJson} from '/private/tmp/ccloop-feedback-followup-20261011/src/control/protocol.ts';
+import {atomicReplacePrivateFile} from '/private/tmp/ccloop-feedback-followup-20261011/src/control/paths.ts';
+import {runControlWorker} from '/private/tmp/ccloop-feedback-followup-20261011/src/control/worker.ts';
+import {proveStopped} from '/private/tmp/ccloop-feedback-followup-20261011/src/control/stopProof.ts';
+import {openTestStore,seedBudgetCase} from '/private/tmp/orca-feedback-followup-20261011/tests/control/fixtures/store.ts';
+import {claimWork,readRun,saveRun} from '/private/tmp/orca-feedback-followup-20261011/src/control/budget.ts';
+import {archiveRun,readArtifact,writeArtifact} from '/private/tmp/orca-feedback-followup-20261011/src/control/archive.ts';
+import {recordUsage} from '/private/tmp/orca-feedback-followup-20261011/src/control/usage.ts';
+import {commitCandidate} from '/private/tmp/orca-feedback-followup-20261011/src/control/checkpoints.ts';
+import {exportResumeBundle} from '/private/tmp/orca-feedback-followup-20261011/src/control/resumeBundle.ts';
+const f=await savedRecoveryFixture(),h=await openTestStore(),seed=seedBudgetCase(h.store,'soft'),claim=claimWork(h.store,seed.t1Claim);
+Object.assign(f.input.claim,{runId:claim.runId,generation:claim.generation});Object.assign(f.admission.claim,{runId:claim.runId,generation:claim.generation});f.admission.funding.reservation.runId=claim.runId;
+const fake=join(f.root,'fake.mjs');await writeFile(fake,`import {readFileSync,writeFileSync} from 'node:fs';
+if(process.argv.includes('--version')){console.log('9.9.9-fake');process.exit(0);}for await(const part of process.stdin){}
+const a=process.argv,s=JSON.parse(readFileSync(a[a.indexOf('--output-schema')+1],'utf8'));if(!s.properties.approved)throw Error('phase replay');
+writeFileSync(a[a.indexOf('-o')+1],JSON.stringify({approved:false,rejectCategory:'needs-change',primaryTargetPaths:['answer.txt'],failingCommand:null,safeToRetry:true,evidence:['checked'],pauseSignals:[],stopSignals:[]}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:5}}));`);
+const config=await sealCodex({command:[process.execPath,fake],model:'fixture-new-verifier',sandbox:'workspace-write',budgetMode:'soft',timeoutMs:10000,killGraceMs:50});f.input.claim.agent=config.selection;f.input.claim.configHash=config.configHash;f.admission.claim.configHash=config.configHash;await f.seal();
+const source=join(f.root,claim.runId);await rename(f.sourceDir,source);f.input.work.sourceDir=source;f.input.savedResultRecovery!.packagePath=join(source,'input/recovery');
+await atomicReplacePrivateFile(source,join(source,'control/config.json'),Buffer.from(canonicalJson(config.config)));await atomicReplacePrivateFile(source,join(source,'control/envelope.json'),Buffer.from(canonicalJson(f.input)));
+await writeAccepted(source,{protocol:1,envelopeHash:canonicalHash(f.input),executionId:'execution-recovery-checkpoint',configHash:config.configHash,generation:claim.generation,acceptedAt:new Date().toISOString(),launch:'intended',worker:null});
+await runControlWorker(['--source-dir',source,'--execution-id','execution-recovery-checkpoint','--nonce','recovery-checkpoint']);
+const state=JSON.parse(await readFile(join(source,'run/loop-state.json'),'utf8'));if(state.status!=='blocked_waiting_human'||state.savedResult.mode!=='verify-saved-result')throw Error('not genuine recovery rejection');
+const proof=await proveStopped({sourceDir:source,accepted:await readAccepted(source)});if(!proof)throw Error('not stopped');
+saveRun(h.store,{...readRun(h.store,claim.runId),executionId:proof.executionId});
+const archived=await archiveRun(h.store,{runId:claim.runId,sourceDir:source,repoDir:join(source,'repo'),stopProof:proof});if(archived.missing.length)throw Error(JSON.stringify(archived.missing));
+const ledger=JSON.parse(await readFile(join(source,'control/usage.json'),'utf8')),raw=JSON.parse(await readFile(join(source,'control/candidate.json'),'utf8'));
+for(const event of ledger.events){await writeArtifact(h.store,event.source.artifactId,await readFile(join(source,'control/evidence',event.source.artifactId+'.bin')));recordUsage(h.store,event);}
+for(const ref of [...raw.artifacts,raw.handoff,proof.source])await writeArtifact(h.store,ref.artifactId,await readFile(join(source,'control/evidence',ref.artifactId+'.bin')));
+const candidate={...raw,stopProof:proof,artifacts:[...archived.artifacts,...raw.artifacts,raw.handoff],snapshot:archived.snapshot};await commitCandidate(h.store,candidate);
+const input=await exportResumeBundle(h.store,{predecessorRunId:claim.runId,newSourceDir:join(f.root,'next')});
+const destination='/private/tmp/ccloop-feedback-followup-20261011/tests/fixtures/saved-result-checkpoint';await mkdir(destination,{recursive:true});await cp(input.bundlePath,join(destination,'bundle'),{recursive:true});
+await writeFile(join(destination,'fixture.json'),JSON.stringify({schema:'genuine-recovery-checkpoint-fixture-v1',input,source:f.input,producerBase:'367066b38f171d01663d7b767fdbfecca7d4f53c',limitation:'Current Task6 worker over typed controller admission; real archiveRun, usage observation, commitCandidate and exportResumeBundle primitives; not Task7 owner recovery authorization.'},null,2));
+console.log(JSON.stringify({source,state,proof,candidate,input,destination}));h.store.close();

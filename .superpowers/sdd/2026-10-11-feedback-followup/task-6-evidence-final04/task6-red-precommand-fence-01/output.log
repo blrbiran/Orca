@@ -1,0 +1,38 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/controller/verifySavedResult.test.ts (12 tests | 1 failed | 11 skipped) 1470ms
+   × checks revocation after process registration and before sending the validation command 1469ms
+     → promise resolved "Buffer[ 99, 104, 101, 99, 107, 10 ]" instead of rejecting
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/controller/verifySavedResult.test.ts > checks revocation after process registration and before sending the validation command
+AssertionError: promise resolved "Buffer[ 99, 104, 101, 99, 107, 10 ]" instead of rejecting
+
+- Expected
++ Received
+
+- [Error: rejected promise]
++ Object {
++   "data": Array [
++     99,
++     104,
++     101,
++     99,
++     107,
++     10,
++   ],
++   "type": "Buffer",
++ }
+
+ ❯ tests/controller/verifySavedResult.test.ts:92:98
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 skipped (12)
+   Start at  09:43:02
+   Duration  2.26s (transform 302ms, setup 16ms, collect 419ms, tests 1.47s, environment 0ms, prepare 47ms)
+

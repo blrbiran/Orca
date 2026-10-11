@@ -1,0 +1,9 @@
+
+> ccloop@0.1.0 build
+> tsc -p tsconfig.json && node -e "const fs=require('fs');fs.writeFileSync('dist/cli.js', '#!/usr/bin/env node\nexport * from \"./src/cli.js\";\nimport { main } from \"./src/cli.js\";\nvoid main(process.argv.slice(2)).then((code) => { process.exitCode = code; });\n');fs.chmodSync('dist/cli.js', 0o755);fs.writeFileSync('dist/cli.d.ts', 'export * from \"./src/cli.js\";\n');"
+
+npm notice
+npm notice New major version of npm available! 10.9.2 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice

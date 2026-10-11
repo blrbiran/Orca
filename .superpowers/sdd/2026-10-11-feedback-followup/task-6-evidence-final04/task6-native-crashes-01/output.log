@@ -1,0 +1,28 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ❯ tests/control/savedResultRecovery.native.test.ts (8 tests | 1 failed) 20301ms
+   ✓ built CLI accepts a private package, runs only verification, records new actual usage, and harvests its approved candidate 3076ms
+   × native crash at before-entry preserves mode, entry and result fences 2383ms
+     → ENOENT: no such file or directory, open '/private/tmp/results-task2-3xAyVt/checks'
+   ✓ native crash at entry-fsynced preserves mode, entry and result fences 1605ms
+   ✓ native crash at verifier-returned preserves mode, entry and result fences 1966ms
+   ✓ native crash at usage-settled preserves mode, entry and result fences 1881ms
+   ✓ native crash at output-fsynced preserves mode, entry and result fences 2189ms
+   ✓ native crash at result-fsynced preserves mode, entry and result fences 2332ms
+   ✓ native crash at terminal-fsynced preserves mode, entry and result fences 4869ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/control/savedResultRecovery.native.test.ts > native crash at before-entry preserves mode, entry and result fences
+Error: ENOENT: no such file or directory, open '/private/tmp/results-task2-3xAyVt/checks'
+ ❯ tests/control/savedResultRecovery.native.test.ts:68:131
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  09:21:14
+   Duration  20.94s (transform 265ms, setup 17ms, collect 351ms, tests 20.30s, environment 0ms, prepare 48ms)
+

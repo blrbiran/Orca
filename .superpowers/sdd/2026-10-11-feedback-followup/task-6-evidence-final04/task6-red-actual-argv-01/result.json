@@ -1,0 +1,14 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "sh",
+    "-c",
+    "TASK_TMP=$(mktemp -d /private/tmp/t6r.XXXXXX); chmod 700 \"$TASK_TMP\"; export TMPDIR=\"$TASK_TMP\"; node node_modules/vitest/vitest.mjs run tests/control/savedResultRecovery.test.ts -t \"actual legacy argv drift\" --maxWorkers=1 --minWorkers=1"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 4.214711666107178,
+  "log": "/private/tmp/orca-followup-runs/task6-red-actual-argv-01/output.log",
+  "source": "367066b38f171d01663d7b767fdbfecca7d4f53c",
+  "sourceTreeSHA256": "16b63070da6735c0b5c9989be88c2f38746fe132d65a4df50c0127a8b0e20096",
+  "sourceFiles": 446
+}

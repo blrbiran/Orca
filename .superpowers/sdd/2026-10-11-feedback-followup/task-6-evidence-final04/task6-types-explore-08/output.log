@@ -1,0 +1,5 @@
+
+> ccloop@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+src/controller/runLoop.ts(1703,61): error TS2339: Property 'actualChangedPaths' does not exist on type 'never'.

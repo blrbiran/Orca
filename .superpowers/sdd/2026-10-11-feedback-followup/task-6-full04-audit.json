@@ -1,0 +1,18 @@
+{
+  "sourceTreeSHA256": "6b095585713cf85236343a3cd98f9ce73252ca5de7b0dd5af9b3e315401b9705",
+  "run": "task6-final-full-04",
+  "files": 147,
+  "assertions": 1553,
+  "counts": {
+    "numTotalTests": 1553,
+    "numPassedTests": 1553,
+    "numFailedTests": 0,
+    "numPendingTests": 0,
+    "numTodoTests": 0
+  },
+  "skippedAssertions": 0,
+  "logBytes": 54041,
+  "logSHA256": "1a51b03c359cdeed2c7182a929bd7a04abece5aa61eefb7c0d024df80376d264",
+  "perTestJSONSHA256": "0a58272c78b32d0132f1312a77ee75e081ce0b3cbeb402b2cb3c4679221c40c9",
+  "completeRawLogRead": true
+}

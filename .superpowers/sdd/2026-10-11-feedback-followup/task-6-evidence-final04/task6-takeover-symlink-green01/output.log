@@ -1,0 +1,11 @@
+
+ RUN  v2.1.9 /private/tmp/ccloop-feedback-followup-20261011
+
+ ✓ tests/controller/verifySavedResult.test.ts (18 tests | 17 skipped) 1930ms
+   ✓ refuses a candidate moved behind a workspace path symlink even when every byte and mode matches 1929ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 17 skipped (18)
+   Start at  12:21:14
+   Duration  2.56s (transform 295ms, setup 15ms, collect 396ms, tests 1.93s, environment 0ms, prepare 37ms)
+

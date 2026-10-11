@@ -1,0 +1,5 @@
+
+> ccloop@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+src/control/settleSavedResult.ts(38,24): error TS7006: Parameter 'q' implicitly has an 'any' type.
