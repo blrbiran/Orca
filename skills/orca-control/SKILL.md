@@ -78,7 +78,8 @@ fields; a package version alone does not establish that another running panel su
 `get` takes a path without the `/api/control/` prefix; a query string is passed through.
 
 - `summary` (or `summary?sinceChangeSeq=<n>`), `groups`, `groups/<id>`, `groups/<id>/requirement`, `groups/<id>/agent-preview`
-- `recovery`, `config`, `agents`, `operator/agent-preferences`, `operator/agent-installations`, `repositories/<id>/workspace`, `repositories/<id>/integration`, `runs/<id>/evidence` (manifest only; artifact downloads are refused with `control-cli-binary-route`), `runs/<id>/activity` (the newest 200 activity rows, newest first), `runs/<id>/saved-result-eligibility`
+- `recovery`, `config`, `agents`, `operator/agent-preferences`, `repositories/<id>/workspace`, `repositories/<id>/integration`, `runs/<id>/evidence` (manifest only; artifact downloads are refused with `control-cli-binary-route`), `runs/<id>/activity` (the newest 200 activity rows, newest first), `runs/<id>/saved-result-eligibility`
+- Web owner-only read: `GET /api/control/operator/agent-installations`. The socket acts as Agent and returns `owner-required` for this route; it is not an `orca control get` path.
 - `usage?scope=all|repo:<id>[&from=<ms>&to=<ms>][&groupBy=model|repo|day|week|month]`: `get usage?scope=all` reads tokens used per model and the caps (`orca-usage-view-v1`: `.headline` total/week/month, `.range.byModel`, `.caps[]` with `used`, `committed`, `headroom`, and `.spendRevision`)
 - saved results: `groups/<id>/results`, `runs/<id>/results`, and `runs/<id>/results/outputs/<outputId>` (preview JSON). Binary `?download=1` is Web-only and refused by the CLI with `control-cli-binary-route`.
 - a past command's retained result: see section 4

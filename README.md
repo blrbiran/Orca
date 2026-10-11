@@ -294,8 +294,9 @@ the URL hash. Language and theme switches are in the sidebar.
 
 Clarification and splitting need a bounded **single call**. The pinned Codex adapter does not provide that capability;
 use Claude for this section. With only Codex installed, write a plan using the [Plans for Task control](#5-plans-for-task-control-optional) example and import it in
-**Task control**, then review/set task budgets manually if no capable estimator is available. An explicitly selected Codex installation is explained and blocked in the form; a default selection
-is still resolved by the server, so ensure your default supports single calls.
+**Task control**, then review/set task budgets manually if no capable estimator is available. The form allows an
+explicitly selected Codex installation to be submitted, but the server refuses it because it lacks the single-call
+capability. A default selection is also resolved by the server, so ensure your default supports single calls.
 
 1. Pick a repository, type the idea, set a token limit, the content language and the agent, and press
    **Start clarifying**. This creates a group in state `clarifying`.
@@ -324,9 +325,10 @@ Groups come from an accepted requirement or from an imported plan (**Import plan
 - **Budget:** see the proposal (per task and a group reserve), apply the estimator's suggestions or set the numbers
   yourself, set a group limit and optional explicit token policy, then **Confirm task plan**. A token ceiling is not
   implied by a spend cap or an unknown usage reading.
-- **Agents:** choose the agent and model for worker, estimator, handoff and goal review roles, with per-task worker
-  overrides. Global settings holds preferences; Project settings holds project defaults. Preview the effective selection
-  before confirmation, which freezes it. Installation changes have separate observe, preview and owner apply steps.
+- **Agents and profiles:** choose Agent role overrides for worker, estimator and reconcile, with per-task worker
+  overrides. Choose profile bindings for worker, handoff and goal review. Global settings holds Agent preferences;
+  Project settings holds project defaults. Review the effective Agent selection and profile bindings before confirmation.
+  Installation changes have separate observe, preview and owner apply steps.
 - **Change plan** for a task: its loop plan — `standard`, `bugfix` (red test first), `refactor` (no behaviour
   change), `design` (a document is the deliverable), `investigate` (findings to a report only) — and its inputs: goal,
   done-when, paths it may change, check commands, non-goals, relevant docs, paths it must not change, a file limit,
