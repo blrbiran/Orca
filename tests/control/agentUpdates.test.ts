@@ -8,6 +8,7 @@ import { lookupCommandResult } from "../../src/control/commandLedger.js";
 import type { AgentApplyRequest, AgentReceipt } from "../../src/control/agentInstallationProtocol.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
 import { ControlError } from "../../src/control/errors.js";
+import { withCommandContext } from "../../src/control/commandClient.js";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { openControlStore } from "../../src/control/store.js";
 import { join } from "node:path";
@@ -79,6 +80,41 @@ describe("reviewed installation updates", () => {
       await expect(applyAgentUpdate({ store: h.store, port }, command("second") as never, { client: "web", principal: "user:owner" }))
         .rejects.toMatchObject({ code: "agent-installation-update-pending" });
       expect(calls).toBe(1);
+    } finally { await h.dispose(); }
+  });
+  it("keeps original client and principal on a direct same-ID success retry without ambient context", async () => {
+    const h = await openTestStore();
+    const unknown = { applyAgentInstallations: async () => { throw new ControlError("control-peer-timeout"); } } as unknown as ExecutionPort;
+    const seen: AgentApplyRequest[] = [];
+    const receipt = { applyAgentInstallations: async (request: AgentApplyRequest) => {
+      seen.push(request);
+      return { schema: "orca-agent-detection-receipt-v1", opId: request.opId, requestDigest: request.requestDigest,
+        previewId: request.previewId, acceptedChangeIds: request.acceptedChangeIds, beforeHash: request.baseTableHash, afterHash: "b".repeat(64),
+        before: { schema: "ccloop-agents-table-v1", installations: {} }, after: { schema: "ccloop-agents-table-v1", installations: {} } };
+    } } as ExecutionPort;
+    try {
+      await expect(applyAgentUpdate({ store: h.store, port: unknown }, command() as never, { client: "web", principal: "user:first-owner" }))
+        .rejects.toMatchObject({ code: "control-peer-timeout" });
+      const result = await applyAgentUpdate({ store: h.store, port: receipt }, command() as never, { client: "web", principal: "user:second-owner" });
+      expect(result.status).toBe(200);
+      expect(seen).toMatchObject([{ opId: "update-1" }]);
+      expect(h.store.db.prepare("SELECT client,principal FROM commands WHERE group_id='@operator:human' AND id='update-1'").get())
+        .toEqual({ client: "web", principal: "user:first-owner" });
+    } finally { await h.dispose(); }
+  });
+
+  it("keeps original client and principal on a manual stale refusal retried by another owner", async () => {
+    const h = await openTestStore();
+    const unknown = { applyAgentInstallations: async () => { throw new ControlError("control-peer-timeout"); } } as unknown as ExecutionPort;
+    const stale = { applyAgentInstallations: async () => { throw new ControlError("agent-installation-update-stale"); } } as unknown as ExecutionPort;
+    try {
+      await expect(applyAgentUpdate({ store: h.store, port: unknown }, command() as never, { client: "web", principal: "user:first-owner" }))
+        .rejects.toMatchObject({ code: "control-peer-timeout" });
+      const result = await withCommandContext("update-1", { client: "web", principal: "user:second-owner" }, () =>
+        applyAgentUpdate({ store: h.store, port: stale }, command() as never, { client: "web", principal: "user:second-owner" }));
+      expect(result).toMatchObject({ status: 409, body: { error: { code: "agent-installation-update-stale" } } });
+      expect(h.store.db.prepare("SELECT client,principal FROM commands WHERE group_id='@operator:human' AND id='update-1'").get())
+        .toEqual({ client: "web", principal: "user:first-owner" });
     } finally { await h.dispose(); }
   });
   it("holds a pending operator command ID against a different verb until its receipt is reconciled", async () => {

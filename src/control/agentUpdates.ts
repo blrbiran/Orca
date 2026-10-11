@@ -9,7 +9,8 @@ import { rawAuthorityCommandSchema, type CommandLookupV1, type RawAuthorityComma
 
 export type ApplyAgentUpdateCommand = Extract<RawAuthorityCommandV1, { verb: "apply-agent-update" }>;
 type Outcome = { status: number; body: CommandLookupV1["body"] };
-type Reservation = { request: AgentApplyRequest; existingPending: boolean };
+type Reservation = { request: AgentApplyRequest; existingPending: false } |
+  { request: AgentApplyRequest; existingPending: true; originalContext: { client: string; principal: string } };
 type Pending = { operator_id: string; command_id: string; raw_hash: string; raw_command_json: string; request_json: string; principal: string; client: string; state: string };
 
 function revision(store: ControlStore, operatorId: string): number {
@@ -73,7 +74,7 @@ function reserve(store: ControlStore, command: ApplyAgentUpdateCommand, context:
     if (pending.command_id !== command.commandId) throw new ControlError("agent-installation-update-pending");
     const request = JSON.parse(pending.request_json) as AgentApplyRequest;
     if (!canonicalBytes(request).equals(canonicalBytes(requestFor(command)))) throw new ControlError("recovery-blocked", "agent-update-request-intent-mismatch");
-    return { request, existingPending: true };
+    return { request, existingPending: true, originalContext: { client: pending.client, principal: pending.principal } };
   }
   const stale = preflightWebCommand(store, command);
   if (stale) return stale;
@@ -138,17 +139,23 @@ export async function applyAgentUpdate(
   if (!deps.port.applyAgentInstallations) throw new ControlError("control-agent-update-unsupported");
   const reserved = reserve(deps.store, command, context);
   if ("status" in reserved) return reserved;
+  const finalizeAsOriginal = <T>(write: () => T): T => reserved.existingPending
+    ? withCommandContext(command.commandId, reserved.originalContext, write)
+    : write();
   let receipt: AgentReceipt;
   try { receipt = verifyReceipt(reserved.request, await deps.port.applyAgentInstallations(reserved.request)); }
   catch (error) {
     // A proven stale CAS or unsupported feature has no table mutation and can be booked durably.
     // Every unknown subprocess outcome retains the pending operation for same-identity reconciliation.
-    if (error instanceof ControlError && error.code === "agent-installation-update-stale") return finalizeKnownRefusal(deps.store, command, error.code);
+    if (error instanceof ControlError && error.code === "agent-installation-update-stale") {
+      const code = error.code;
+      return finalizeAsOriginal(() => finalizeKnownRefusal(deps.store, command, code));
+    }
     if (error instanceof ControlError && error.code === "control-agent-update-unsupported" && !reserved.existingPending) return finalizeKnownRefusal(deps.store, command, error.code);
     throw error;
   }
   afterReceipt?.();
-  return finalize(deps.store, command, receipt);
+  return finalizeAsOriginal(() => finalize(deps.store, command, receipt));
 }
 
 /** Bounded startup pass: the peer's same-operation receipt is the only evidence that finalizes a mutation. */

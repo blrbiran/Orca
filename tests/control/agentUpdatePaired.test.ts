@@ -7,6 +7,7 @@ import { createCcloopExecutionPort } from "../../src/control/ccloopPort.js";
 import { applyAgentUpdate, hasPendingAgentUpdate, pendingAgentUpdateCommand, reconcilePendingAgentUpdates } from "../../src/control/agentUpdates.js";
 import { lookupCommandResult } from "../../src/control/commandLedger.js";
 import { openControlStore } from "../../src/control/store.js";
+import { withCommandContext } from "../../src/control/commandClient.js";
 import { openTestStore } from "./fixtures/store.js";
 import { readAgentPreferences } from "../../src/control/agentPreferences.js";
 
@@ -75,7 +76,8 @@ describe.skipIf(!pairedBinary)("paired reviewed installation update CLI", () => 
       const command = { schema: "orca-raw-command-v1" as const, commandId: "unknown-switch-1", expectedRevision: 0, actorId: "human",
         verb: "apply-agent-update" as const, target: { kind: "operator" as const, operatorId: "human" },
         payload: { previewId: preview.previewId, baseTableHash: preview.baseTableHash, acceptedChangeIds: [choice!.changeId] } };
-      await expect(applyAgentUpdate({ store: h.store, port: newPort }, command, { client: "web", principal: "user:owner" }, () => { throw new Error("lost-after-receipt"); }))
+      await expect(withCommandContext(command.commandId, { client: "web", principal: "user:owner" }, () =>
+        applyAgentUpdate({ store: h.store, port: newPort }, command, { client: "web", principal: "user:owner" }, () => { throw new Error("lost-after-receipt"); })))
         .rejects.toThrow("lost-after-receipt");
       const changed = await readFile(table);
       expect(JSON.parse(changed.toString()).installations.custom.version).toBe("2.1.283");
@@ -91,8 +93,17 @@ describe.skipIf(!pairedBinary)("paired reviewed installation update CLI", () => 
       expect(pendingAgentUpdateCommand(reopened, "human")?.commandId).toBe(command.commandId);
       expect(lookupCommandResult(reopened, "@operator:human", command.commandId)).toBeNull();
       expect(await readFile(table)).toEqual(changed);
-      await reconcilePendingAgentUpdates(reopened, newPort);
-      expect(lookupCommandResult(reopened, "@operator:human", command.commandId)).toMatchObject({ originalStatus: 200, body: { commandRevision: 1 } });
+      const manual = await withCommandContext(command.commandId, { client: "web", principal: "user:other-owner" }, () =>
+        applyAgentUpdate({ store: reopened!, port: newPort }, command, { client: "web", principal: "user:other-owner" }));
+      expect(manual.status).toBe(200);
+      const booked = lookupCommandResult(reopened, "@operator:human", command.commandId);
+      expect(booked).toMatchObject({ originalStatus: 200, body: { commandId: command.commandId, commandRevision: 1 } });
+      const receipt = JSON.parse(String(reopened.db.prepare("SELECT receipt_json FROM agent_update_outbox WHERE operator_id='human' AND command_id=?").get(command.commandId)?.receipt_json)) as
+        { opId: string; previewId: string; acceptedChangeIds: string[]; afterHash: string };
+      expect(receipt).toMatchObject({ opId: command.commandId, previewId: preview.previewId, acceptedChangeIds: [choice!.changeId] });
+      expect(booked?.body).toMatchObject({ result: { afterHash: receipt.afterHash } });
+      expect(reopened.db.prepare("SELECT client,principal FROM commands WHERE group_id='@operator:human' AND id=?").get(command.commandId))
+        .toEqual({ client: "web", principal: "user:owner" });
       expect(hasPendingAgentUpdate(reopened, "human")).toBe(false);
       expect(await readFile(table)).toEqual(changed);
     } finally { reopened?.close(); h.store.close(); await rm(h.root, { recursive: true, force: true }); await rm(root, { recursive: true, force: true }); }
