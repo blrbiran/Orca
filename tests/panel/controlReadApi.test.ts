@@ -627,6 +627,15 @@ describe("canonical control read API", () => {
     expect(lookup.status).toBe(200);
     expect(await lookup.json()).toEqual(persisted);
 
+    // A retained command row can outlive its group. The lookup checks that row first.
+    h.store.db.prepare("UPDATE commands SET group_id='orphan' WHERE group_id='group-a' AND id='import-group-a'").run();
+    const orphanResult = await request(h, "/api/control/groups/orphan/commands/import-group-a");
+    expect(orphanResult.status).toBe(200);
+    expect(await orphanResult.json()).toEqual(persisted);
+    const orphanMiss = await request(h, "/api/control/groups/orphan/commands/missing");
+    expect(orphanMiss.status).toBe(404);
+    expect(await orphanMiss.json()).toMatchObject({ error: { code: "group-not-found" } });
+
     const missingCommand = await request(h, "/api/control/groups/group-a/commands/missing");
     expect(missingCommand.status).toBe(404);
     expect(await missingCommand.json()).toEqual({ error: { code: "command-result-not-found", message: "No retained command result was found.", commandRevision: 1, evidenceIds: [], retryable: false } });

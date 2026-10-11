@@ -17,7 +17,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountContext } from "../src/AuthGate.js";
 import { App } from "../src/App.js";
-import { UNCERTAIN_COMMANDS_KEY } from "../src/controlApi.js";
+import { UNCERTAIN_COMMANDS_KEY, readUncertainCommands, recoverUncertainCommand } from "../src/controlApi.js";
 import type { Amount, ControlConfigV1, GroupViewV1, ControlSummaryV1, RecoveryViewV1 } from "../src/controlTypes.js";
 
 const GROUP = "g";
@@ -138,6 +138,93 @@ async function renderWaitingOnReloadedCommand(): Promise<void> {
 }
 
 describe("App's recovery of an uncertain command", () => {
+  it.each(["@repository:orca", "@operator:owner", "@spend"])("never treats a command scope %s as a missing group", async (scope) => {
+    vi.stubGlobal("fetch", async () => jsonResponse({ error: { code: "group-not-found", message: "No group", commandRevision: null, evidenceIds: [], retryable: false } }, 404));
+    expect((await recoverUncertainCommand(scope, COMMAND)).kind).toBe("unresolved");
+  });
+  it("resolves a retained result when its group is gone, without reading the missing group", async () => {
+    const fallback = globalThis.fetch;
+    const reads: string[] = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/api/control/summary")) return jsonResponse({ ...summary, groups: [] });
+      if (url === LOOKUP_PATH) {
+        lookups.push(url);
+        return jsonResponse({ schema: "orca-command-lookup-v1", originalStatus: 202, body: {
+          schema: "orca-command-success-v1", commandId: COMMAND, actorId: "human", verb: "start", target: { kind: "group", groupId: GROUP },
+          commandRevision: 7, projectionSeq: 5, effectivePayloadHash: "1".repeat(64), authorityCommandHash: "2".repeat(64),
+          result: { kind: "scheduled", operation: "start", wakeId: "wake-1" },
+        } });
+      }
+      if (url === `/api/control/groups/${GROUP}`) reads.push(url);
+      return fallback(input, init);
+    });
+    render(<App />);
+    await waitFor(() => expect(storedIds()).toEqual([]));
+    expect(lookups).toEqual([LOOKUP_PATH]);
+    expect(reads).toEqual([]);
+  });
+
+  it("parks a missing group once, preserves its identity after dismissal and reload, then checks once on request", async () => {
+    const fallback = globalThis.fetch;
+    const posts: string[] = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") posts.push(url);
+      if (url.startsWith("/api/control/summary")) return jsonResponse({ ...summary, groups: [] });
+      if (url === LOOKUP_PATH) {
+        lookups.push(url);
+        return jsonResponse({ error: { code: "group-not-found", message: "No control group was found.", commandRevision: null, evidenceIds: [], retryable: false } }, 404);
+      }
+      return fallback(input, init);
+    });
+    const first = render(<App />);
+    await screen.findByText(/The task group no longer exists; this operation's outcome cannot be confirmed/);
+    expect(lookups).toEqual([LOOKUP_PATH]);
+    expect(readUncertainCommands(window.sessionStorage)).toEqual([{ groupId: GROUP, commandId: COMMAND, parked: true, dismissed: false, reason: "group-missing" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    await waitFor(() => expect(readUncertainCommands(window.sessionStorage)[0]?.dismissed).toBe(true));
+    expect(screen.queryByText(/The task group no longer exists; this operation's outcome cannot be confirmed/)).toBeNull();
+    first.unmount();
+    render(<App />);
+    await screen.findByText("Dismissed uncertain operations");
+    await new Promise((resolve) => setTimeout(resolve, 2_100));
+    expect(lookups).toEqual([LOOKUP_PATH]);
+    expect(storedIds()).toEqual([COMMAND]);
+    expect(posts).toEqual([]);
+    // A separate visible parked item can be checked explicitly after reload.
+    fireEvent.click(screen.getByText("Dismissed uncertain operations"));
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(lookups).toHaveLength(2));
+    expect(posts).toEqual([]);
+  });
+
+  it("resumes ordinary retry after a manual check meets a temporary error", async () => {
+    const fallback = globalThis.fetch;
+    const retained = { schema: "orca-command-lookup-v1", originalStatus: 202, body: {
+      schema: "orca-command-success-v1", commandId: COMMAND, actorId: "human", verb: "start", target: { kind: "group", groupId: GROUP },
+      commandRevision: 7, projectionSeq: 5, effectivePayloadHash: "1".repeat(64), authorityCommandHash: "2".repeat(64),
+      result: { kind: "scheduled", operation: "start", wakeId: "wake-1" },
+    } };
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/api/control/summary")) return jsonResponse({ ...summary, groups: [] });
+      if (url === LOOKUP_PATH) {
+        lookups.push(url);
+        if (lookups.length === 1) return jsonResponse({ error: { code: "group-not-found", message: "No group", commandRevision: null, evidenceIds: [], retryable: false } }, 404);
+        if (lookups.length === 2) return new Response(null, { status: 503 });
+        return jsonResponse(retained);
+      }
+      return fallback(input, init);
+    });
+    render(<App />);
+    await screen.findByText(/The task group no longer exists; this operation's outcome cannot be confirmed/);
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(lookups).toHaveLength(2));
+    expect(storedIds()).toEqual([COMMAND]);
+    await waitFor(() => expect(storedIds()).toEqual([]), { timeout: 3_500 });
+    expect(lookups).toHaveLength(3);
+  });
   it("keeps the id when the lookup itself could not conclude", async () => {
     render(<App />);
     await waitFor(() => expect(lookups).toEqual([LOOKUP_PATH]));
@@ -197,6 +284,9 @@ it("D9 uses authenticated App roles and retains the original command id after lo
     expect(posted).toHaveLength(1);
     expect(posted[0]!.payload).toEqual({ taskId: "a", runId: "run-a", generation: 1, acknowledge: "charge-remaining-grant" });
     expect(storedIds()).toEqual([posted[0]!.commandId]);
+    expect(readUncertainCommands(window.sessionStorage)[0]).toMatchObject({
+      groupId: GROUP, commandId: posted[0]!.commandId, verb: "settle-unknown-usage", payload: posted[0]!.payload,
+    });
     expect(pendingLine()).not.toBeNull();
   } finally { vi.unstubAllGlobals(); }
 });

@@ -77,6 +77,7 @@ export function deriveOverview(input: OverviewInputs): OverviewModel {
     rows.set(key, { key, kind: "decision-review", reason: row.question ?? row.id, owner: entry ? projectName(entry) : row.projectKey, ownerUnknown: entry === undefined, ownerRequired: false, target: { kind: "decision", projectKey: row.projectKey, id: row.id }, priority: 1 });
   }
   for (const command of input.uncertain) {
+    if (command.parked && command.dismissed) continue;
     const group = groups.find((g) => g.groupId === command.groupId);
     if (!command.importPlan && group && !scoped(group.repoId)) continue;
     const target: OverviewTarget = command.importPlan ? { kind: "global-control", region: "import" }

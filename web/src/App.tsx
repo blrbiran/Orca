@@ -87,6 +87,7 @@ import { ControlPanel } from "./ControlPanel.js";
 import { initialControlState, reduceControlState, summaryView } from "./controlState.js";
 import type { ControlAnswer } from "./controlApi.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
+import { UncertainOperations } from "./UncertainOperations.js";
 import type {
   AgentPreferencesViewV1, AgentInstallationStateV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, IntegrationSchemeV1, OperatorPreferencesV1, RepositoryIntegrationV1,
   RepositoryWorkspaceV1, RequirementViewV1, OverviewV1, RecoveryViewV1,
@@ -311,6 +312,8 @@ export function App(): JSX.Element {
   controlNow.current = control;
   /** Command ids whose lookup is already in flight, so one tick does not ask twice. */
   const resolving = useRef<Set<string>>(new Set());
+  /** Closed identities bridge the time between a fast lookup and the reducer's next render. */
+  const closedLookups = useRef<Set<string>>(new Set());
 
   const loadChains = async (): Promise<void> => {
     try {
@@ -379,27 +382,38 @@ export function App(): JSX.Element {
    * ledger dedupes on the whole raw envelope, so a fresh id would be a second
    * intent -- possibly a second execution -- rather than a retry of this one.
    */
-  const resolveUncertain = async (command: UncertainCommand): Promise<void> => {
+  const resolveUncertain = async (command: UncertainCommand, explicit = false): Promise<void> => {
     const id = `${command.groupId}\0${command.commandId}`;
-    if (resolving.current.has(id)) return;
+    if ((!explicit && (command.parked || closedLookups.current.has(id))) || resolving.current.has(id)) return;
     resolving.current.add(id);
     const result = await recoverUncertainCommand(command.groupId, command.commandId);
     resolving.current.delete(id);
+    if (result.kind === "missing-group") {
+      closedLookups.current.add(id);
+      dispatchControl({ type: "command-parked", value: command, reason: "group-missing" });
+      return;
+    }
     if (result.kind === "unresolved") {
       // The lookup told us nothing, so the command is still unresolved: keep the id
       // for the next tick and show why this round could not conclude.
-      dispatchControl({ type: "refusal", place: "panel", groupId: command.groupId, value: result.refusal });
+      closedLookups.current.delete(id);
+      if (explicit) dispatchControl({ type: "command-resumed", value: command });
+      dispatchControl({ type: "command-lookup-failed", value: command, refusal: result.refusal });
       return;
     }
+    closedLookups.current.add(id);
     // Reloaded results may arrive before the first summary is committed into React's cache.
     let group: ControlSummaryV1["groups"][number] | undefined = controlNow.current.groups[command.groupId];
     if (command.importPlan !== true && group === undefined) {
       try { group = (await fetchControlSummary()).groups.find((candidate) => candidate.groupId === command.groupId); }
       catch (err) {
-        dispatchControl({ type: "refusal", place: "panel", groupId: command.groupId, value: controlFailureFrom(err) });
+        closedLookups.current.delete(id);
+        dispatchControl({ type: "command-lookup-failed", value: command, refusal: controlFailureFrom(err) });
         return; // Keep the original id until its owner can be read safely.
       }
     }
+    // A retained answer resolves the original identity even after its owner group disappeared.
+    // An absent result is typed by the lookup route only while its group still exists.
     dispatchControl({ type: "command-resolved", value: command });
     const place = command.importPlan === true ? ("import" as const) : ("group" as const);
     if (result.kind === "absent") dispatchControl({ type: "refusal", place, groupId: command.groupId, value: result.refusal });
@@ -413,7 +427,7 @@ export function App(): JSX.Element {
       dispatchControl({ type: "refusal", place, groupId: command.groupId, value: refusal });
     }
     // An import that did not succeed made no group: reading it would only store a group-not-found no view shows.
-    if (command.importPlan === true && !succeeded) return;
+    if ((command.importPlan === true && !succeeded) || group === undefined) return;
     if (group?.state === "clarifying" || group?.requirement !== undefined) {
       const refusal = result.kind === "absent" ? result.refusal : succeeded ? null
         : refusalFromAnswer({ kind: "answered", status: result.lookup.originalStatus, body: result.lookup.body });
@@ -436,7 +450,9 @@ export function App(): JSX.Element {
     const commandId = nextCommandId();
     // Spec 2026-10-08 §2.2(d): an import's refusal is shown in the import form, every other command's in its group.
     const place = action.verb === "import-plan" ? ("import" as const) : ("group" as const);
-    const command: UncertainCommand = place === "import" ? { groupId: action.groupId, commandId, importPlan: true } : { groupId: action.groupId, commandId };
+    const command: UncertainCommand = place === "import"
+      ? { groupId: action.groupId, commandId, importPlan: true, verb: action.verb, payload: action.payload }
+      : { groupId: action.groupId, commandId, verb: action.verb, payload: action.payload };
     dispatchControl({ type: "command-uncertain", value: command });
     // Spec §5: an answer that arrives after the scope changed may fill the cache, but must not reopen a detail.
     const scopeAtSend = scopeKeyNow.current;
@@ -1189,6 +1205,9 @@ export function App(): JSX.Element {
       banners={
         <>
           {chains !== null && <ChainBanners banners={bannersFor(chains, dismissed)} onDismiss={dismiss} />}
+          <UncertainOperations commands={control.uncertainCommandIds}
+            onCheck={(command) => { void resolveUncertain(command, true); }}
+            onDismiss={(command) => dispatchControl({ type: "command-dismissed", value: command })} />
           <DecisionOperations
             requests={noticeRequests(decisionRequests, selected)}
             projectName={nameOf}
@@ -1281,7 +1300,7 @@ export function App(): JSX.Element {
           groups={control.canonical}
           selected={selectedGroup}
           drafts={control.drafts}
-          uncertain={control.uncertainCommandIds}
+          uncertain={control.uncertainCommandIds.filter((command) => !command.parked)}
           refusal={control.panelRefusal}
           groupRefusals={control.refusals}
           importRefusal={control.importRefusal}

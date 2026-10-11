@@ -226,6 +226,13 @@ export const zh: Translation<typeof en> = {
     },
     reading: "正在读取 {{groupId}}…",
     outcomeUnknown: "命令结果未知，正在查询：{{commands}}",
+    uncertain: {
+      title: "结果未确认的操作",
+      groupMissing: "任务组已不存在，无法确认这条操作的结果。",
+      checkAgain: "重新核对",
+      dismiss: "关闭提示",
+      dismissed: "已关闭提示的未确认操作",
+    },
     requirementBadge: "需求——在「需求」里处理",
     import: {
       region: "导入计划",

@@ -340,6 +340,13 @@ export const en = {
     },
     reading: "Reading {{groupId}}…",
     outcomeUnknown: "Command outcome unknown, being looked up: {{commands}}",
+    uncertain: {
+      title: "Uncertain operations",
+      groupMissing: "The task group no longer exists; this operation's outcome cannot be confirmed.",
+      checkAgain: "Check again",
+      dismiss: "Dismiss",
+      dismissed: "Dismissed uncertain operations",
+    },
     requirementBadge: "requirement — open in Requirements",
     import: {
       region: "Import plan",

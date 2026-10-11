@@ -14,6 +14,13 @@ import type { ControlSummaryV1, GroupSummaryV1, GroupViewV1, RecoveryViewV1 } fr
 export interface UncertainCommand {
   groupId: string;
   commandId: string;
+  /** Known original intent only; legacy entries may have neither field. */
+  verb?: string;
+  payload?: unknown;
+  parked?: true;
+  dismissed?: boolean;
+  reason?: "group-missing";
+  lookupRefusal?: ControlRefusal;
   /**
    * Spec 2026-10-08 §2.2(d): an import's group exists only if the import succeeded, so its lookup's answer belongs to the
    * import form and its group is read only after a success. Kept across a reload with the rest of the entry.
@@ -59,6 +66,10 @@ export type ControlClientEvent =
   | { type: "draft"; key: string; text: string }
   | { type: "command-uncertain"; value: UncertainCommand }
   | { type: "command-resolved"; value: UncertainCommand }
+  | { type: "command-parked"; value: UncertainCommand; reason: "group-missing" }
+  | { type: "command-dismissed"; value: UncertainCommand }
+  | { type: "command-resumed"; value: UncertainCommand }
+  | { type: "command-lookup-failed"; value: UncertainCommand; refusal: ControlRefusal }
   // groupId on a panel refusal is the scope a revision conflict voids (e.g. @repository:<id>), never where it is shown.
   | { type: "refusal"; place: "group"; groupId: string; value: ControlRefusal }
   | { type: "refusal"; place: "import" | "panel"; groupId: string | null; value: ControlRefusal }
@@ -165,6 +176,24 @@ export function reduceControlState(state: ControlClientState, event: ControlClie
         : { ...state, uncertainCommandIds: [...state.uncertainCommandIds, event.value] };
     case "command-resolved":
       return { ...state, uncertainCommandIds: state.uncertainCommandIds.filter((command) => keyOf(command) !== keyOf(event.value)) };
+    case "command-parked":
+      return { ...state, uncertainCommandIds: state.uncertainCommandIds.map((command) => {
+        if (keyOf(command) !== keyOf(event.value)) return command;
+        const { lookupRefusal: _lookupRefusal, ...original } = command;
+        return { ...original, parked: true, dismissed: false, reason: event.reason };
+      }) };
+    case "command-dismissed":
+      return { ...state, uncertainCommandIds: state.uncertainCommandIds.map((command) => keyOf(command) === keyOf(event.value)
+        ? { ...command, dismissed: true } : command) };
+    case "command-resumed":
+      return { ...state, uncertainCommandIds: state.uncertainCommandIds.map((command) => {
+        if (keyOf(command) !== keyOf(event.value)) return command;
+        const { parked: _parked, dismissed: _dismissed, reason: _reason, lookupRefusal: _lookupRefusal, ...original } = command;
+        return original;
+      }) };
+    case "command-lookup-failed":
+      return { ...state, uncertainCommandIds: state.uncertainCommandIds.map((command) => keyOf(command) === keyOf(event.value)
+        ? { ...command, lookupRefusal: event.refusal } : command) };
     case "refusal": {
       const next: ControlClientState = event.place === "group"
         ? { ...state, refusals: { ...state.refusals, [event.groupId]: event.value } }

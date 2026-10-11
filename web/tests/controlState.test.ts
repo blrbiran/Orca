@@ -190,6 +190,16 @@ describe("control client state machine", () => {
     expect(reduceControlState(pending, { type: "command-resolved", value: uncertain }).uncertainCommandIds).toEqual([]);
   });
 
+  it("parks and dismisses an unknown outcome without losing its original scope or known command metadata through an epoch", () => {
+    const command: UncertainCommand = { groupId: "g", commandId: "cmd-park", verb: "start", payload: {} };
+    let state = apply(initialControlState(), { type: "command-uncertain", value: command }, { type: "command-parked", value: command, reason: "group-missing" });
+    expect(state.uncertainCommandIds).toEqual([{ ...command, parked: true, dismissed: false, reason: "group-missing" }]);
+    state = apply(state, { type: "command-dismissed", value: command }, { type: "summary", value: summary({ epoch: "new" }) });
+    expect(state.uncertainCommandIds).toEqual([{ ...command, parked: true, dismissed: true, reason: "group-missing" }]);
+    state = reduceControlState(state, { type: "command-resumed", value: command });
+    expect(state.uncertainCommandIds).toEqual([command]);
+  });
+
   it("never applies a command result locally: only server reads move group state", () => {
     const populated = populatedState();
     const command: UncertainCommand = { groupId: "g", commandId: "cmd-2" };

@@ -258,6 +258,7 @@ export function refusalFromAnswer(answer: Extract<ControlAnswer, { kind: "answer
 export type CommandRecovery =
   | { kind: "found"; lookup: CommandLookupV1 }
   | { kind: "absent"; refusal: ControlRefusal }
+  | { kind: "missing-group"; refusal: ControlRefusal }
   | { kind: "unresolved"; refusal: ControlRefusal };
 
 /**
@@ -274,7 +275,9 @@ export async function recoverUncertainCommand(groupId: string, commandId: string
     return { kind: "found", lookup: await controlGet<CommandLookupV1>(path) };
   } catch (err) {
     const refusal = controlFailureFrom(err);
-    return refusal.code === "command-result-not-found" ? { kind: "absent", refusal } : { kind: "unresolved", refusal };
+    if (refusal.code === "command-result-not-found") return { kind: "absent", refusal };
+    if (!groupId.startsWith("@") && refusal.code === "group-not-found") return { kind: "missing-group", refusal };
+    return { kind: "unresolved", refusal };
   }
 }
 

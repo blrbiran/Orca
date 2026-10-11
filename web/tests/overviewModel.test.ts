@@ -43,6 +43,13 @@ it("retains unknown imports, global safety blockers and unknown ownership even i
  expect(model.issues.map((r) => r.reason)).toEqual(["store-broken", "unknown-source"]);
  expect(model.complete).toBe(false);
 });
+it("dismissed parked commands leave attention while keeping their identity outside the queue", () => {
+ const value = input(); value.uncertain = [
+  { groupId: "missing", commandId: "visible", parked: true, dismissed: false, reason: "group-missing" },
+  { groupId: "missing", commandId: "dismissed", parked: true, dismissed: true, reason: "group-missing" },
+ ];
+ expect(deriveOverview(value).queue.map((row) => row.reason)).toEqual(["visible"]);
+});
 it("does not manufacture queue work from summary running/ready/review/counts and keeps plan completion distinct from group acceptance", () => {
  const value = input(); value.projection.data!.groups = [groupSummary("ga", ALPHA, { state: "review", completion: { done: 4, total: 4 } }), groupSummary("gb", BETA, { state: "ready" }), groupSummary("archive", BETA, { archived: true })];
  const model = deriveOverview(value); expect(model.queue).toHaveLength(0); expect(model.progress).toHaveLength(2);

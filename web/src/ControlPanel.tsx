@@ -297,9 +297,12 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       />
       </div>
       {uncertain.length > 0 && (
-        <p role="status">
-          {t("control.outcomeUnknown", { commands: uncertain.map((command) => `${command.commandId} (${command.groupId}${ownerLabel(command.groupId)})`).join(", ") })}
-        </p>
+        <div role="status">
+          <p>{t("control.outcomeUnknown", { commands: uncertain.map((command) => `${command.commandId} (${command.groupId}${ownerLabel(command.groupId)})`).join(", ") })}</p>
+          {uncertain.filter((command) => command.lookupRefusal).map((command) => <p key={command.commandId}>
+            {command.commandId} · {command.lookupRefusal?.code} · {command.lookupRefusal?.message}
+          </p>)}
+        </div>
       )}
       {refusal !== null && (
         <p role="alert" data-status={refusal.status ?? ""}>

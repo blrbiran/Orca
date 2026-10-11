@@ -125,6 +125,13 @@ a { color: var(--accent); }
 .section-pane:not([data-active="true"]) { display: none; }
 .chain-banners:empty { display: none; }
 .chain-banners { margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
+.uncertain-operations { border: 1px solid var(--warn); background: var(--warn-subtle); border-radius: var(--radius); padding: 10px 12px; min-width: 0; }
+.uncertain-operations ul { list-style: none; padding: 0; margin: 0; }
+.uncertain-operations li + li { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px; }
+.uncertain-operations p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.uncertain-operations p[role="alert"] { background: none; border: 0; padding: 0; }
+.uncertain-operations button { margin-right: 8px; }
+.uncertain-operations summary { cursor: pointer; }
 
 /* Generic surfaces inside panes: styles existing components without editing them */
 .section-pane > section, .section-pane section[aria-label], .detail-block, .split-list, .split-detail {
