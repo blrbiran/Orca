@@ -4,7 +4,7 @@ Human boundary: stop implementation after Task 7 and its independent review. Tas
 
 - [x] Task 7 final product commit, report, exact source identity and complete raw/JSON gate audit; actual configured verify:saved-result has no skips.
 - [x] Independent Task 7 spec/quality review; required fixes and scoped rereview complete.
-- [ ] Cross-repository integration review of completed Tasks 1–7; preserve explicitly unavailable historical sources and unresolved Claude races.
+- [x] Cross-repository integration review of completed Tasks 1–7; preserve explicitly unavailable historical sources and unresolved Claude races.
 - [ ] Parent-owned spec/rulings/progress/preflight/bridges committed separately, excluding node_modules and implementer paths.
 - [ ] Three source mains freshly clean and ancestors of current-round branches; local-only fast-forward via approved Git mutations, no reset/force/push.
 - [ ] Fresh verification of merged product trees in private clones with isolated HOME/XDG/TMPDIR/CCMEM_DATA_ROOT, CCMEM_CONFIG_PATH removed; enumerate every conditional skip.
