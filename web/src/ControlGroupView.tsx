@@ -105,7 +105,14 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const archived = view.summary.archived === true;
   const continuable = continuableRuns(view);
   const retryableCount = view.runs.filter((run) => retryRunOpen(view, run)).length;
-  const unresolvedCount = view.recoveryBlockers.length + view.runs.filter((run) => ["unknown", "attempt-unknown", "start-unknown"].includes(run.state)).length;
+  const unresolvedWork = new Set(view.workItems.filter((item) => item.status === "start-unknown").map((item) => `task:${item.taskId}`));
+  const unresolvedKey = (runId: string): string => {
+    const taskId = view.runs.find((run) => run.runId === runId)?.taskId;
+    return taskId === null || taskId === undefined ? `run:${runId}` : `task:${taskId}`;
+  };
+  for (const run of view.runs) if (run.state === "unknown" || run.state === "attempt-unknown") unresolvedWork.add(unresolvedKey(run.runId));
+  for (const blocker of view.recoveryBlockers) if (blocker.scope === "run" && blocker.runId !== null) unresolvedWork.add(unresolvedKey(blocker.runId));
+  const unresolvedCount = unresolvedWork.size;
   const selections = (): ContinuationSelectionV1[] =>
     continuable.map(({ run, checkpointId }) => ({ taskId: String(run.taskId), predecessorRunId: run.runId, checkpointId }));
   // Labels and progress spec §4.2: the label filter (any of) and the open task live in page memory only.

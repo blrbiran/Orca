@@ -8,7 +8,7 @@ import { ControlGroupView } from "../src/ControlGroupView.js";
 import { RequirementsPanel } from "../src/RequirementsPanel.js";
 import { ChainPanel } from "../src/ChainPanel.js";
 import { ADVANCED_KEY, readShowAdvanced, writeShowAdvanced } from "../src/advancedPreference.js";
-import { view as boardView, config as boardConfig } from "./fixtures/board.js";
+import { view as boardView, config as boardConfig, run as boardRun } from "./fixtures/board.js";
 import { requirementView, config as requirementConfig, summaryWith } from "./fixtures/requirement.js";
 import type { GroupSummaryV1 } from "../src/controlTypes.js";
 
@@ -52,6 +52,28 @@ it("pending requirement work disables archive with a reason", () => {
   const archive = within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }) as HTMLButtonElement;
   expect(archive.disabled).toBe(true);
   expect(archive.getAttribute("aria-describedby")).toBeTruthy();
+});
+
+it("each More actions trigger describes its own group and supports menu arrow navigation", () => {
+  render(<GroupList groups={[group({ groupId: "g" }), group({ groupId: "h" })]} selected={null} onSelect={vi.fn()} onAction={vi.fn()} />);
+  const triggers = screen.getAllByRole("button", { name: "More actions" });
+  expect(triggers).toHaveLength(2);
+  expect(document.getElementById(triggers[0]!.getAttribute("aria-describedby")!)?.textContent).toContain("g");
+  expect(document.getElementById(triggers[1]!.getAttribute("aria-describedby")!)?.textContent).toContain("h");
+  fireEvent.click(triggers[0]!);
+  const menu = screen.getByRole("menu");
+  const items = within(menu).getAllByRole("menuitem");
+  expect(document.activeElement).toBe(items[0]);
+  fireEvent.keyDown(menu, { key: "ArrowDown" });
+  expect(document.activeElement).toBe(items[1]);
+  fireEvent.keyDown(menu, { key: "End" });
+  expect(document.activeElement).toBe(items[2]);
+  fireEvent.keyDown(menu, { key: "Home" });
+  expect(document.activeElement).toBe(items[0]);
+  fireEvent.keyDown(menu, { key: "ArrowUp" });
+  expect(document.activeElement).toBe(items[2]);
+  fireEvent.keyDown(menu, { key: "Escape" });
+  expect(document.activeElement).toBe(triggers[0]);
 });
 
 it("advanced navigation is opt-in, but a running chain remains linked", () => {
@@ -107,6 +129,18 @@ it("execution controls name pause and safe stop without implying completion", ()
   expect(within(region).getByText("Continuable work")).toBeTruthy();
   expect(within(region).getByText("Retryable work")).toBeTruthy();
   expect(within(region).getByText("Unresolved work")).toBeTruthy();
+});
+
+it("unresolved work counts distinct affected runs, not duplicate or group blockers", () => {
+  const shown = boardView([], [boardRun({ runId: "run-a", state: "unknown" })]);
+  shown.summary.state = "ready";
+  shown.recoveryBlockers = [
+    { scope: "run", code: "unresolved", runId: "run-a", evidenceIds: [] },
+    { scope: "group", code: "group-blocked", runId: null, evidenceIds: [] },
+  ];
+  render(<ControlGroupView view={shown} config={boardConfig} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+  fireEvent.click(screen.getByRole("tab", { name: "Preparation" }));
+  expect(screen.getByText("Unresolved work").nextElementSibling?.textContent).toBe("1");
 });
 
 it("unresolved Agent selections give a destination before confirmation", () => {

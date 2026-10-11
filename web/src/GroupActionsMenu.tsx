@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX, type MouseEvent } from "react";
+import { useEffect, useId, useRef, useState, type JSX, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { GroupSummaryV1 } from "./controlTypes.js";
 import type { ControlRefusal } from "./controlState.js";
@@ -20,6 +20,7 @@ export function GroupActionsMenu(props: {
   children: (onContextMenu: (event: MouseEvent<HTMLElement>) => void) => JSX.Element;
 }): JSX.Element {
   const { t } = useTranslation();
+  const ownerDescriptionId = useId();
   const [open, setOpen] = useState(false);
   const archivePending = cardArchivePending(props.group);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -28,12 +29,25 @@ export function GroupActionsMenu(props: {
   useEffect(() => { if (open) menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus(); }, [open]);
   const context = (event: MouseEvent<HTMLElement>): void => { event.preventDefault(); setOpen(true); };
   const act = (action: () => void): void => { action(); close(); };
+  const moveFocus = (key: string): void => {
+    const items = [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [])];
+    if (items.length === 0) return;
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const next = key === "Home" ? 0 : key === "End" ? items.length - 1
+      : key === "ArrowDown" ? (current + 1) % items.length
+      : (current - 1 + items.length) % items.length;
+    items[next]?.focus();
+  };
   return <div className="group-card-row">
     {props.children(context)}
+    <span id={ownerDescriptionId} className="sr-only">{t("control.groupMenu.owner", { groupId: props.group.groupId })}</span>
     <button ref={trigger} type="button" className="group-more" aria-label={t("control.groupMenu.more")}
-      aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}>⋯</button>
+      aria-describedby={ownerDescriptionId} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}>⋯</button>
     {open && <div ref={menu} role="menu" className="group-actions-menu" aria-label={t("control.groupMenu.more")}
-      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); close(); } }}>
+      onKeyDown={(event) => {
+        if (event.key === "Escape") { event.stopPropagation(); close(); }
+        else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) { event.preventDefault(); moveFocus(event.key); }
+      }}>
       <button type="button" role="menuitem" onClick={() => act(props.onOpen)}>{t("control.groupMenu.open")}</button>
       <button type="button" role="menuitem" disabled={props.onAction === undefined || archivePending}
         aria-describedby={props.onAction === undefined || archivePending ? `archive-reason-${props.group.groupId}` : undefined}

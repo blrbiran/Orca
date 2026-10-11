@@ -52,7 +52,6 @@ import type { CorrectionForm, PanelRefusal, RecordCorrectionInput } from "./api.
 import { bannersFor, readDismissed, writeDismissed } from "./chainBanner.js";
 import { ChainBanners, ChainPanel } from "./ChainPanel.js";
 import { readShowAdvanced, writeShowAdvanced } from "./advancedPreference.js";
-import { archiveOpen } from "./runFacts.js";
 import type { ChainOutcome } from "./ChainPanel.js";
 import {
   AGENT_PREFERENCES_PATH,
@@ -513,13 +512,16 @@ export function App(): JSX.Element {
   /** Card actions read the exact owner at click time; a stale card cannot submit its old revision. */
   const sendGroupCardAction = async (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string): Promise<void> => {
     try {
+      const scopeAtClick = scopeKeyNow.current;
+      const sourceAtClick = sourceIdentityNow.current;
       const summaryOwner = controlNow.current.groups[groupId];
       if (summaryOwner === undefined || summaryOwner.repoId !== repoId) return;
       const fresh = summaryOwner.state === "clarifying" ? await fetchRequirement(groupId) : await fetchControlGroup(groupId);
       if (fresh.summary.groupId !== groupId || fresh.summary.repoId !== repoId) return;
       if (verb === "unarchive-group" ? fresh.summary.archived !== true : fresh.summary.archived === true) return;
-      // The full group view exposes the same active-run guards as the detail. The ledger remains authoritative.
-      if (verb === "archive-group" && fresh.schema === "orca-control-group-v1" && !archiveOpen(fresh)) return;
+      // A project/auth/epoch change during the GET invalidates this click. The ledger judges all remaining archive guards.
+      if (scopeAtClick !== scopeKeyNow.current || sourceAtClick !== sourceIdentityNow.current
+        || controlNow.current.groups[groupId]?.repoId !== repoId) return;
       if (fresh.schema === "orca-requirement-view-v1") setRequirementViews((all) => ({ ...all, [groupId]: fresh }));
       else dispatchControl({ type: "group", value: fresh });
       await sendControl({ verb, groupId, expectedRevision: fresh.summary.commandRevision, payload: {} });
@@ -1376,7 +1378,7 @@ export function App(): JSX.Element {
       <SectionPane section="requirements" active={section}>
         {controlConfig !== null && control.recovery !== null && (
           <RequirementsPanel config={controlConfig} summary={summaryView(control)} views={requirementViews} selected={selectedRequirement} agents={agents}
-            onPrepare={(groupId) => { navigationSeq.current++; setOverviewFocus(null); setSelectedGroup(groupId); setSection("tasks"); window.location.hash = "tasks"; void readControlGroup(groupId); }}
+            onPrepare={(groupId) => { const request = ++navigationSeq.current; setOverviewFocus({ target: { kind: "group", groupId, region: "preparation", taskId: null, runId: null }, request }); setSelectedGroup(groupId); setSection("tasks"); window.location.hash = "tasks"; void readControlGroup(groupId); }}
             onGroupAction={(groupId, verb, repoId) => { void sendGroupCardAction(groupId, verb, repoId); }}
             groupRefusals={control.refusals}
             focus={overviewFocus?.target.kind === "requirement" ? overviewFocus.target : null}

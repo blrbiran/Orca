@@ -351,7 +351,7 @@ export const en = {
       dismissed: "Dismissed uncertain operations",
     },
     requirementBadge: "requirement — open in Requirements",
-    groupMenu: { more: "More actions", open: "Open details", copyId: "Copy group ID", archiveUnavailable: "This action is unavailable until this group can be read.", archivePending: "Wait for active work or recovery before archiving." },
+    groupMenu: { more: "More actions", owner: "Group {{groupId}}", open: "Open details", copyId: "Copy group ID", archiveUnavailable: "This action is unavailable until this group can be read.", archivePending: "Wait for active work or recovery before archiving." },
     import: {
       region: "Import plan",
       title: "Import a plan",

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { App } from "../src/App.js";
 import { ALPHA, BETA, groupSummary, installFakePanel, planGroupView, type FakePanel } from "./fixtures/twoProjects.js";
+import { requirementView } from "./fixtures/requirement.js";
 
 let panel: FakePanel;
 beforeEach(() => { panel = installFakePanel(); });
@@ -35,6 +36,67 @@ it("a fresh read owned by another repository cannot archive the old card", async
   await openCardMenu();
   fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }));
   await waitFor(() => expect(panel.requests.some((request) => request === "GET /api/control/groups/g")).toBe(true));
+  expect(panel.posts).toHaveLength(0);
+});
+
+it("a project switch during the archive GET cancels the POST for the old scope", async () => {
+  const summary = groupSummary("g", ALPHA, { state: "ready", commandRevision: 7 });
+  panel.summary = { ...panel.summary, groups: [summary] };
+  panel.groupViews.g = planGroupView({ ...summary, commandRevision: 9 });
+  const original = globalThis.fetch;
+  let release: ((response: Response) => void) | undefined;
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => String(input) === "/api/control/groups/g"
+    ? new Promise<Response>((resolve) => { release = resolve; }) : original(input, init)) as typeof fetch;
+  render(<App />);
+  await openCardMenu();
+  fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }));
+  await waitFor(() => expect(release).toBeDefined());
+  fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "beta" } });
+  await act(async () => { release!(new Response(JSON.stringify(panel.groupViews.g), { status: 200, headers: { "content-type": "application/json" } })); });
+  expect(panel.posts).toHaveLength(0);
+});
+
+it.each(["estimate", "integration"] as const)("an enabled Archive with a fresh %s guard receives the server refusal", async (guard) => {
+  const summary = groupSummary("g", ALPHA, { state: "ready", commandRevision: 7 });
+  panel.summary = { ...panel.summary, groups: [summary] };
+  const fresh = planGroupView(summary);
+  if (guard === "estimate") fresh.estimates = [{ estimateId: "est-1", estimateVersion: 1, state: "start-unknown", profile: { profileId: "all", profileHash: "b".repeat(64) }, mode: "soft", requestHash: null, outputHash: null, output: null, reasonCode: null }];
+  else fresh.integration = { scheme: { delivery: "push-branch", trigger: "task", target: "main", remote: "origin" }, schemeHash: "h", frozen: true, state: "resolving", reason: null, lastIntegrated: null, integratedCommit: null, pr: null };
+  panel.groupViews.g = fresh;
+  const code = guard === "estimate" ? "archive-call-in-flight" : "archive-integration-resolving";
+  panel.onPost = async () => new Response(JSON.stringify({ error: { code, message: "not eligible", commandRevision: 7 } }),
+    { status: 409, headers: { "content-type": "application/json" } });
+  render(<App />);
+  await openCardMenu();
+  const archive = within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }) as HTMLButtonElement;
+  expect(archive.disabled).toBe(false);
+  fireEvent.click(archive);
+  await waitFor(() => expect(panel.posts).toHaveLength(1));
+  expect((await screen.findByTestId("card-refusal-g")).textContent).toContain(code);
+});
+
+it.each([false, true])("accepted requirement opens the same group's Preparation tab (previously mounted: %s)", async (mounted) => {
+  const accepted = requirementView("awaiting-review");
+  accepted.summary = { ...accepted.summary, groupId: "r", repoId: ALPHA, state: "ready" };
+  accepted.requirement = { ...accepted.requirement, repoId: ALPHA, acceptedDraftNo: 1 };
+  accepted.drafts[0]!.state = "accepted";
+  panel.summary = { ...panel.summary, groups: [accepted.summary] };
+  panel.requirementViews.r = accepted;
+  panel.groupViews.r = planGroupView(accepted.summary);
+  window.location.hash = mounted ? "#tasks" : "#requirements";
+  render(<App />);
+  if (mounted) {
+    const tasks = await screen.findByRole("navigation", { name: "Control groups" });
+    fireEvent.click(within(tasks).getByRole("button", { name: /r · ready/ }));
+    await screen.findByRole("region", { name: "Control group r" });
+    fireEvent.click(screen.getByRole("tab", { name: "Problems" }));
+    await act(async () => { window.location.hash = "#requirements"; window.dispatchEvent(new Event("hashchange")); });
+  }
+  const requirements = await screen.findByRole("navigation", { name: "Requirement list" });
+  fireEvent.click(within(requirements).getByRole("button", { name: /r · ready/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "Go to task preparation" }));
+  const detail = await screen.findByRole("region", { name: "Control group r" });
+  await waitFor(() => expect(within(detail).getByRole("tab", { name: "Preparation" }).getAttribute("aria-selected")).toBe("true"));
   expect(panel.posts).toHaveLength(0);
 });
 

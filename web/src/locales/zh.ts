@@ -237,7 +237,7 @@ export const zh: Translation<typeof en> = {
       dismissed: "已关闭提示的未确认操作",
     },
     requirementBadge: "需求——在「需求」里处理",
-    groupMenu: { more: "更多操作", open: "打开详情", copyId: "复制任务组 ID", archiveUnavailable: "读取任务组之前，此操作不可用。", archivePending: "归档前请等待进行中的工作或恢复处理完成。" },
+    groupMenu: { more: "更多操作", owner: "任务组 {{groupId}}", open: "打开详情", copyId: "复制任务组 ID", archiveUnavailable: "读取任务组之前，此操作不可用。", archivePending: "归档前请等待进行中的工作或恢复处理完成。" },
     import: {
       region: "导入计划",
       title: "导入一个计划",
