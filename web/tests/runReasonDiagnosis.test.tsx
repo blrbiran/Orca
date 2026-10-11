@@ -19,4 +19,11 @@ describe("run failure diagnosis", () => {
     expect(html).toContain("strange-old-error");
     expect(html).not.toMatch(/token budget|token exhaustion/i);
   });
+
+  it("keeps the diagnosis for a settled failed run with no raw reason or code", () => {
+    const html = renderToStaticMarkup(<RunReason run={run({ runId: "run-silent", providerAttemptOrdinal: 3, state: "settled-failed", outcome: "failed", stopReason: null, blockedReason: null, failureCode: null, diagnosis: { phase: "work", step: null, cause: "unknown", attempt: 3 } })} />);
+    expect(html).toContain("Cause unknown");
+    expect(html).toContain("attempt 3");
+    expect(html).toContain("run-silent");
+  });
 });

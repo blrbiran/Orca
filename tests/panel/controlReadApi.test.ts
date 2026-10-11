@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { writeArtifact } from "../../src/control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { recordActivity } from "../../src/control/activity.js";
+import { persistRecoveryArtifact } from "../../src/control/savedResultRecoveryPackage.js";
 import { lookupCommandResult } from "../../src/control/commandLedger.js";
 import { createGroup } from "../../src/control/commands.js";
 import { prepareExecutionSnapshot, type PreparedExecutionSnapshot } from "../../src/control/executionSnapshot.js";
@@ -296,6 +297,31 @@ describe("canonical control read API", () => {
   afterEach(async () => {
     await new Promise<void>((resolve, reject) => h.server.close(error => error ? reject(error) : resolve()));
     await h.disposeStore();
+  });
+
+  it("omits saved decode evidence from the manifest when a hash-valid capsule belongs to another envelope", async () => {
+    await confirmGroup(h, "group-a");
+    const run = insertValidTaskRun(h, "group-a");
+    const ownedEnvelope = hash("a"), foreignEnvelope = hash("b");
+    const normalization = persistRecoveryArtifact(h.store, { status: "unavailable", reason: "execution-format-invalid", diagnostic: { method: "none", candidates: 0, valid: 0, hidden: false, originalBytes: 24 } });
+    const ref = { artifactId: "foreign-ref", hash: hash("c") };
+    const capsule = persistRecoveryArtifact(h.store, {
+      schema: "ccloop-execution-format-failure-v1", identity: { groupId: "group-a", workItemId: "a", taskId: "a", runId: "run-one", generation: 1, graphVersion: 1, targetVersion: run.targetVersion, executionId: run.executionId, envelopeHash: foreignEnvelope }, attempt: 1,
+      executor: { kind: "codex", configHash: hash("d") }, frozenContractHash: hash("e"), acceptedBase: "main", resolvedBase: "a".repeat(40), attemptStartHead: "a".repeat(40), decoder: "strict-execution-v1", classification: "execution-format-failure-v1",
+      process: { reason: "completed", code: 0, signal: null, isolated: true }, usage: { tokenUsage: 10, highWater: 1 }, verifier: { entered: false, proof: ref },
+      artifacts: { envelope: ref, config: ref, acceptedContract: ref, runtimeContract: ref, final: ref, events: ref, schema: ref, decodeError: ref, normalization, outcome: ref, process: ref, plan: ref, usage: ref, usageLedger: ref, usageObservations: [], owner: ref },
+      snapshot: ref, completeness: { complete: true, parts: ["original-process", "original-stream", "actual-usage", "successful-plan", "verifier-not-entered", "tree-index-bundle-files"] }, capturedAt: "2026-10-11T00:00:00.000Z", captureOwner: "test",
+    });
+    h.store.db.prepare("UPDATE runs SET body=? WHERE id='run-one'").run(canonicalBytes({ ...run,
+      drive: { workspaceMode: "worktree", sourceDir: "/isolated", workspacePath: "/isolated", targetRepo: "/isolated", prepared: true, base: null, envelopeHash: ownedEnvelope, inspectUnknown: 0, outcome: null, attemptSha: null, landedCommit: null, reconcile: null, blockedAt: null, blockedReason: null, cleanedUp: false },
+      savedSource: { authorityKind: "execution-format-failure-v1", source: capsule, attempt: 1 },
+    }).toString("utf8"));
+    const response = await request(h, "/api/control/runs/run-one/evidence");
+    expect(response.status).toBe(200);
+    const manifest = await response.json() as EvidenceManifestV1;
+    expect(manifest.entries.map(entry => entry.evidenceId)).not.toContain(capsule.artifactId);
+    expect(manifest.entries.map(entry => entry.evidenceId)).not.toContain(normalization.artifactId);
+    expect(manifest.entries.some(entry => entry.kind.startsWith("saved-"))).toBe(false);
   });
 
   it("authenticates reads, enforces canonical sinceChangeSeq spelling, and keeps immediate kill absent", async () => {

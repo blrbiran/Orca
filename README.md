@@ -378,7 +378,7 @@ history; a missing run or damaged response shows an error. **Verify saved result
 eligibility read accepts the source; it skips execution but validation and verification may still use a model. Ordinary
 retry and recovery remain separate actions and only appear when their current server facts allow them.
 
-Each task is one ccloop run, and **runs cost money** (see [Cost](#cost)).
+Each run invokes ccloop, and **runs cost money** (see [Cost](#cost)). A task can have multiple runs after a retry or continuation.
 
 ### Decisions
 

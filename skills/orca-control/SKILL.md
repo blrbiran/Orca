@@ -119,12 +119,18 @@ publication, package repin and production service changes are separate human rel
 ## 4. Retries and idempotency
 
 - Without `--command-id` the CLI generates `cli-<uuid>` and returns it as `commandId` in the output envelope. Keep it.
-- After a timeout (`control-socket-timeout`: the CLI waits 120 s) or any `retryable: true` error, resend the same route and payload with `--command-id <the same id>`. A replay of a known id never executes twice.
-- To check a result, `get` the command under its scope: group commands `groups/<groupId>/commands/<commandId>`; repository verbs (`set-workspace-mode`, `set-integration-scheme`) `groups/@repository:<repoId>/commands/<commandId>`; operator verbs (`set-agent-preferences`) `groups/@operator:<operatorId>/commands/<commandId>`; spend verbs (`set-spend-cap`, `clear-spend-cap`, `set-usage-calendar`) `groups/@spend/commands/<commandId>`.
-- A lookup miss does not prove the command never ran. If a genuine group scope no longer exists, the outcome cannot
-  be confirmed: preserve the original id and details, check again explicitly if needed, and do not automatically
-  resend. `@repository:`, `@operator:` and `@spend` are command scopes, never missing-group heuristics. For an
-  ordinary uncertain send, use the same id and payload under the existing idempotency rule above.
+- After a timeout (`control-socket-timeout`: the CLI waits 120 s) or any `retryable: true` error, keep the original
+  command id, route, payload and expected revision. **Look up the retained result first**, even if the group appears
+  missing. A found result resolves the outcome; do not send again.
+- Look up the id under its original scope: group commands `groups/<groupId>/commands/<commandId>`; repository verbs
+  (`set-workspace-mode`, `set-integration-scheme`) `groups/@repository:<repoId>/commands/<commandId>`; operator verbs
+  (`set-agent-preferences`) `groups/@operator:<operatorId>/commands/<commandId>`; spend verbs (`set-spend-cap`,
+  `clear-spend-cap`, `set-usage-calendar`) `groups/@spend/commands/<commandId>`.
+- A lookup miss does not prove the command never ran. If a genuine group scope no longer exists, preserve the unknown
+  outcome and do not automatically resend; a deliberate later check performs one new lookup. `@repository:`,
+  `@operator:` and `@spend` are command scopes, never missing-group heuristics. After a confirmed ordinary lookup miss
+  in a still-existing scope, an otherwise legal retry uses the **same** command id, route, payload and expected revision;
+  a known-id replay cannot execute twice. If lookup itself fails, repeat the read before deciding on a send.
 
 ## 5. Long work
 
@@ -156,7 +162,7 @@ stdout is exactly one JSON line:
 
 - `status` is the panel's HTTP status, or `0` for a local refusal. `commandId` is present for `send` only. `body` is the panel's body verbatim; a local refusal is `{"error":{"code","message","retryable"}}`.
 - Exit `0`: the panel answered 2xx. `1`: refused locally (bad arguments, `panel-not-running`, `control-socket-timeout`, `control-socket-error`, path problems). `2`: the panel answered non-2xx (the body names the code and `retryable`). `3`: reserved for a crash (an unexpected error; stdout may then be empty).
-- `control-socket-error` is any other transport failure (`<code>: <message>`). It is retryable when the connection dropped (`ECONNRESET`, `EPIPE`): the command may have run, so resend it with the same `--command-id`. `control-cli-response-invalid` (the panel's body was not JSON) is retryable for the same reason.
+- `control-socket-error` is any other transport failure (`<code>: <message>`). A dropped connection (`ECONNRESET`, `EPIPE`) and `control-cli-response-invalid` are retryable because the command may have run: retain its id and follow the result-first lookup above.
 - Parse stdout; stderr is free-form diagnostics.
 
 ## 8. Route table

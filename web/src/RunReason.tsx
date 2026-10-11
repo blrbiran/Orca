@@ -6,13 +6,14 @@ import {useTranslation} from "react-i18next";
 import type { JSX } from "react";
 import type { RunViewV1 } from "./controlTypes.js";
 import { explainRunReason } from "./refusalExplain.js";
-import { reasonCode, runReasonText } from "./runFacts.js";
+import { hasFailureOutcome, reasonCode, runReasonText } from "./runFacts.js";
 
 export function RunReason(props: { run: RunViewV1 }): JSX.Element | null {
   const {t}=useTranslation();const lineage=props.run.recoveryOf?<> · {t("control.savedResult.lineage",{runId:props.run.recoveryOf.sourceRunId,attempt:props.run.recoveryOf.sourceAttempt})}</>:null;
   if(props.run.savedResultOrdinaryRetry||props.run.outcome==="not-started")return <>{lineage} — {t("control.savedResult.notDispatched")}</>;
   const raw = runReasonText(props.run);
-  if (raw === null && props.run.failureCode === null && props.run.state !== "blocked") return lineage;
+  if (raw === null && props.run.failureCode === null && !hasFailureOutcome(props.run)
+    && !["blocked", "settled-failed", "failed-before-provider"].includes(props.run.state)) return lineage;
   const diagnosis = props.run.diagnosis ?? { phase: props.run.phase, step: null, cause: "unknown" as const, attempt: props.run.providerAttemptOrdinal };
   const phase = t(`control.diagnosis.phase.${diagnosis.phase}`);
   const cause = t(`control.diagnosis.cause.${diagnosis.cause}`);

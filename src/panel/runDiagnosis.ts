@@ -13,9 +13,17 @@ export interface RunDiagnosis {
 
 type DiagnosticRun = {
   groupId: string; workItemId: string; taskId: string | null; runId: string; generation: number; graphVersion: number; targetVersion: number; executionId: string | null;
-  phase: RunDiagnosis["phase"]; progress?: { status: string } | null; providerAttemptOrdinal: number; savedSource?: unknown; failureCode: string | null;
+  phase: RunDiagnosis["phase"]; progress?: { status: string } | null; providerAttemptOrdinal: number; drive?: { envelopeHash?: string | null } | null; savedSource?: unknown; failureCode: string | null;
 };
-const normalizationSchema = z.object({ status: z.literal("unavailable"), reason: z.enum(["execution-format-invalid", "execution-format-ambiguous-or-hidden"]) }).passthrough();
+const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const normalizationSchema = z.object({
+  status: z.literal("unavailable"),
+  reason: z.enum(["execution-format-invalid", "execution-format-ambiguous-or-hidden"]),
+  diagnostic: z.object({
+    method: z.enum(["whole", "candidate", "none"]), candidates: count, valid: count, hidden: z.boolean(), originalBytes: count,
+  }).strict(),
+}).strict().refine(value => value.diagnostic.valid <= value.diagnostic.candidates
+  && value.reason === (value.diagnostic.hidden || value.diagnostic.valid > 0 ? "execution-format-ambiguous-or-hidden" : "execution-format-invalid"));
 
 export function savedFormatFailureEvidence(store: ControlStore, run: DiagnosticRun): { cause: "execution-format-invalid" | "execution-format-ambiguous-or-hidden"; refs: Array<{ kind: string; ref: ArtifactRef }> } | null {
   const source = savedSourceSchema.safeParse(run.savedSource);
@@ -25,7 +33,9 @@ export function savedFormatFailureEvidence(store: ControlStore, run: DiagnosticR
     const identity = capsule.identity;
     if (identity.groupId !== run.groupId || identity.workItemId !== run.workItemId || identity.taskId !== run.taskId
       || identity.runId !== run.runId || identity.generation !== run.generation || identity.graphVersion !== run.graphVersion
-      || identity.targetVersion !== run.targetVersion || identity.executionId !== run.executionId || capsule.attempt !== source.data.attempt) return null;
+      || identity.targetVersion !== run.targetVersion || identity.executionId !== run.executionId
+      || identity.envelopeHash !== run.drive?.envelopeHash || capsule.attempt !== source.data.attempt
+      || capsule.attempt !== run.providerAttemptOrdinal) return null;
     const normalization = normalizationSchema.parse(JSON.parse(settlementArtifact(store, capsule.artifacts.normalization).toString("utf8")));
     return { cause: normalization.reason, refs: [
       { kind: "saved-decode-capsule", ref: source.data.source },
