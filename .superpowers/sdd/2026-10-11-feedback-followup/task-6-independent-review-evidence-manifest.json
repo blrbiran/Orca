@@ -1,0 +1,50 @@
+[
+  {
+    "source": "/private/tmp/orca-followup-runs/task6-independent-review-probes-01/result.json",
+    "path": "task-6-independent-review-evidence/task6-independent-review-probes-01/result.json",
+    "bytes": 549,
+    "sha256": "ace60ed20a9a713ce0d8069f1e22cd745975ba60f1fbb543fb7a2bbc602713ec"
+  },
+  {
+    "source": "/private/tmp/orca-followup-runs/task6-independent-review-probes-01/output.log",
+    "path": "task-6-independent-review-evidence/task6-independent-review-probes-01/output.log",
+    "bytes": 3703,
+    "sha256": "a179479881befa3ae988771df6db7085c5f5a2d44358e35849516d028335c5c5"
+  },
+  {
+    "source": "/private/tmp/orca-followup-runs/task6-independent-review-probes-02/result.json",
+    "path": "task-6-independent-review-evidence/task6-independent-review-probes-02/result.json",
+    "bytes": 550,
+    "sha256": "06bededf119f53882087f1dca5d28ced7aedfe9ee50bb13288b45f5bb2f76fbf"
+  },
+  {
+    "source": "/private/tmp/orca-followup-runs/task6-independent-review-probes-02/output.log",
+    "path": "task-6-independent-review-evidence/task6-independent-review-probes-02/output.log",
+    "bytes": 3681,
+    "sha256": "2900bd460657dfbc3cbd02c03a82144f7796d378fea5af15f40a34f9612f3c4a"
+  },
+  {
+    "source": "/private/tmp/orca-followup-runs/task6-independent-review-roots-03/result.json",
+    "path": "task-6-independent-review-evidence/task6-independent-review-roots-03/result.json",
+    "bytes": 552,
+    "sha256": "8b20542fd7846df4fbc2172e463ea65c7b7312e08a36fddac46f65b2b52ea3a0"
+  },
+  {
+    "source": "/private/tmp/orca-followup-runs/task6-independent-review-roots-03/output.log",
+    "path": "task-6-independent-review-evidence/task6-independent-review-roots-03/output.log",
+    "bytes": 558,
+    "sha256": "10220a52549a5505eb4b1c7aaa8ef9d572512510d3c0ea459763234df62a0fab"
+  },
+  {
+    "source": "/private/tmp/task6-review-probes.mts",
+    "path": "task-6-independent-review-evidence/helpers/task6-review-probes.mts",
+    "bytes": 2529,
+    "sha256": "9d5f4f53cbfa92fc22021539ca0cc83937caf6d85d901647e675f847030d22e8"
+  },
+  {
+    "source": "/private/tmp/task6-review-root-only.mts",
+    "path": "task-6-independent-review-evidence/helpers/task6-review-root-only.mts",
+    "bytes": 735,
+    "sha256": "023a25e6b6d5439b722c50c9404dc687d844f5415733eac1925c52c277a1481f"
+  }
+]

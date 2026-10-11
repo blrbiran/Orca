@@ -1,0 +1,15 @@
+{
+  "repo": "/private/tmp/ccloop-feedback-followup-20261011",
+  "command": [
+    "node",
+    "--import",
+    "/private/tmp/ccloop-feedback-followup-20261011/node_modules/tsx/dist/loader.mjs",
+    "/private/tmp/task6-review-root-only.mts"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 2.8123972415924072,
+  "log": "/private/tmp/orca-followup-runs/task6-independent-review-roots-03/output.log",
+  "source": "37c968cfaec900d8c28dfa991c4caded9cc26666",
+  "sourceTreeSHA256": "6b095585713cf85236343a3cd98f9ce73252ca5de7b0dd5af9b3e315401b9705",
+  "sourceFiles": 446
+}

@@ -1,0 +1,35 @@
+baseline eligibility {
+  status: 'eligible',
+  authorityKind: 'legacy-published-candidate-v1',
+  normalizedExecutionHash: '412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79'
+}
+0777 execution-package eligibility {
+  status: 'eligible',
+  authorityKind: 'legacy-published-candidate-v1',
+  normalizedExecutionHash: '412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79'
+}
+0777 source-package eligibility {
+  status: 'eligible',
+  authorityKind: 'legacy-published-candidate-v1',
+  sourceIdentity: {
+    groupId: 'g1',
+    workItemId: 'T1',
+    taskId: 'T1',
+    runId: 'run-e73e593c-d1d4-494f-83bf-bb0c61e17169',
+    generation: 1,
+    graphVersion: 3,
+    targetVersion: 1,
+    executionId: 'execution-legacy-real',
+    envelopeHash: 'fb8f3fac298c6ed93052e4cc970002402f7fa8216acfff4be6933940b267caba'
+  },
+  rawExecutionTokens: 15,
+  recoveryOf: {
+    sourceRunId: 'run-e73e593c-d1d4-494f-83bf-bb0c61e17169',
+    sourceAttempt: 1,
+    capsuleHash: '44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582',
+    snapshotHash: 'e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265',
+    normalizedExecutionHash: '412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79'
+  },
+  limitation: 'published-candidate-only; current membership and settled accounting require controller admission'
+}
+mutated-then-handoff result {"state":{"status":"verifying","currentAttempt":1,"attemptsUsed":1,"lastTransitionAt":"2026-10-11T05:01:58.271Z","waitingOnHuman":false,"stopReason":null,"budgetSnapshot":{"attemptsRemaining":1,"timeRemainingMs":29704,"tokenBudgetRemaining":993},"recentFailures":[],"savedResult":{"mode":"verify-saved-result","packageHash":"7b1cf4715724076503833b1a01145950dfbcced67fb2b4a574a9cca70d2dd79c","admissionHash":"e259191e629f1d5f79410647dc345d30f82f11de7e3b082a606f3ba142e6abeb","recoveryOf":{"sourceRunId":"run-e73e593c-d1d4-494f-83bf-bb0c61e17169","sourceAttempt":1,"capsuleHash":"44fb75e737430bfd3b0682850bd583bc63b82102e8204e80b7f17f47f7854582","snapshotHash":"e82c776f4f0d7da7059f9a1084727b24e5704fbcf7e5ce082427a17d4339b265","normalizedExecutionHash":"412d7a5ae7050505fde52aa983abecf0c34e399f4296666e89db1fbcf0bbbf79"},"funding":{"inheritedUsage":{"tokens":1000,"activeMs":30000,"attempts":2,"sessions":1},"reservation":{"runId":"recovery-1","revision":7,"workAllocationId":"allocation-work","handoffAllocationId":"allocation-handoff"},"kind":"legacy-fresh-grant-v1","historicalPolicy":{"contractHash":"653938bd2a52eba5c7b682e79db27b1adf9c482df43508bca49bed5c112d6cf4","authority":{"artifactId":"recovery-f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a","hash":"f1a955811768a839599bf646075b07608b3b3aaf1df824725898f6347395fe2a"},"accountingMode":"finite-legacy","authoredWork":{"tokens":1000,"activeMs":30000,"attempts":2,"sessions":1}},"freshGrant":{"work":{"tokens":1000,"activeMs":30000,"attempts":2,"sessions":1},"handoff":{"tokens":1000,"activeMs":30000,"attempts":2,"sessions":1}},"fundedTotal":{"tokens":2000,"activeMs":60000,"attempts":4,"sessions":2}},"prepared":{"candidateHash":"733539466e217421e7b6032f0c7a949bdb234050b75fae1801026cc66f04394a","protectedInputsHash":"c6e6e9b68b0b4fab3193a49facc109b023a91f1ad85f0dfbe7849edec4cb2299","preparedAt":"2026-10-11T05:01:58.253Z"},"entry":{"candidateHash":"733539466e217421e7b6032f0c7a949bdb234050b75fae1801026cc66f04394a","protectedInputsHash":"c6e6e9b68b0b4fab3193a49facc109b023a91f1ad85f0dfbe7849edec4cb2299","enteredAt":"2026-10-11T05:01:58.503Z"}}},"observations":[{"phase":"verify","attempt":1,"elapsedMs":296,"tokenUsage":7,"completedWithResult":true}],"plan":0,"execute":0,"verifier":1,"candidateBytes":"modified during handoff"}
