@@ -1,0 +1,248 @@
+{
+  "owner": "/root/saved_verification_takeover",
+  "productHead": "e9f898b61cde33b8c1a67602e140f0f3b8af022a",
+  "finalSourceSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+  "fileCountExcludingSelf": 48,
+  "files": [
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/full-audit.json",
+      "bytes": 17596,
+      "sha256": "b1112195128e73fca903ea4f600c9a252874a739b129011e175b3bdd417018ba"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/isolated-runner.py",
+      "bytes": 2466,
+      "sha256": "64a9805f8b5100cd1abe5fd1df384f48a80b2af65aa211447511f213ad1375c5"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/mutant-capture-guard-restoration.json",
+      "bytes": 88,
+      "sha256": "59e5a6d52f210b41221852d831fb6c72dcb5ceae6994dc5f50092e120f52cbba"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/mutant-capture-guard.patch",
+      "bytes": 883,
+      "sha256": "19d3949579f912060f96145cf8d66ab5b7db1929d70d79317f60e0f001e74f26"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/mutant-capture-write-restoration.json",
+      "bytes": 84,
+      "sha256": "d7857b5558843bbcc513adb7d98b80821ff113f2403bb27f77879945d53fe382"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/mutant-capture-write.patch",
+      "bytes": 676,
+      "sha256": "e0d05cdec810465fcdce1da83adc33e5993d80c5d0da82e00122f5e2e6ce326f"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/mutant-whole-response-restoration.json",
+      "bytes": 92,
+      "sha256": "b9daad152dd63e5f077ebfa19a66cc01e35029218b274ddd8f21da1ada02f068"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/mutant-whole-response.patch",
+      "bytes": 4721,
+      "sha256": "09085cbf788e726b476a9c465fa576897912cf69798e3bcc0aced460ea247c64"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/mutation-audit.json",
+      "bytes": 2336,
+      "sha256": "30d244e729c7dc4827bc74c7cc60204686a0276ff4b031979bfe5c62081414aa"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/precommit-proof.json",
+      "bytes": 442,
+      "sha256": "e22c32b083bede19b24735c6cf474c4543edf886d4b5f593c27df0447c00579f"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/product-commit-proof.json",
+      "bytes": 453,
+      "sha256": "f385673c5fe5c38d7cc54ee23a86ca033cbcf43e5abf2a9936ec44be1ac3b080"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-build-final/output.log",
+      "bytes": 658,
+      "sha256": "21675f25e0e863ce754bd37ccb5b52e05a1fe242dc95fbc5634454dafe4dc732"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-build-final/result.json",
+      "bytes": 448,
+      "sha256": "3a8f24d6a3d3268bdfbd897c01ec2adf4480f699fae5b5a4a24a38960c214b53"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-build-final02/output.log",
+      "bytes": 658,
+      "sha256": "3cd919f25cc592c213c535ea62c0e83749f9b8c0394e453041ab586c19b1c46a"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-build-final02/result.json",
+      "bytes": 451,
+      "sha256": "b772b4c44d46a178f0e6c5b4ecbb668021f9bd748ece22aadf9e73966a9e737d"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-clone-baseline/output.log",
+      "bytes": 434,
+      "sha256": "334c987a4f274fff73ff90cab888fc2eec3f0940e09b3679f40363269ebbfc20"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-clone-baseline/result.json",
+      "bytes": 838,
+      "sha256": "81cf3a89e46222c91f5c30881c6d635e1dee5cb0252f0a35cc21dbc9c58e17cf"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-clone-build/output.log",
+      "bytes": 658,
+      "sha256": "6586afee5795d417205fc68b5a494a120d0829bf06800b9866ce6a0dbdc3507b"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-clone-build/result.json",
+      "bytes": 457,
+      "sha256": "7917b4629ad106718a6706dc23b77a8220489ea8cd17804027c1bca0b1ec2973"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-clone-restored/output.log",
+      "bytes": 434,
+      "sha256": "b8ee2e3adc8d4fb9be71378217652f6b3740229861defecb48064852723af3a8"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-clone-restored/result.json",
+      "bytes": 838,
+      "sha256": "2b10261bee58d827d119d257a5cf08349c18b24098a261d2a7e90f5140216107"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-clone-type/output.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-clone-type/result.json",
+      "bytes": 511,
+      "sha256": "b3bbbe7d2d67ef1e67b7d1f671b6a8e87d3b08d9b310a1d9f6902831e3f8426d"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-focused-01/output.log",
+      "bytes": 426,
+      "sha256": "af22d301c177d5bf349cdeecb5dfe505ac5aa5a36046b3f2247db1fc75f2a2b2"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-focused-01/result.json",
+      "bytes": 826,
+      "sha256": "7c1406979e7d0e5fe01bbafb3315a0ff8a6fbcb0a47c00216c837d5ced0feb4e"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-focused-final/output.log",
+      "bytes": 426,
+      "sha256": "b7423c0c3d3c321832f08574094027b76f3b6dedf5920b5887d01c6e1bdee51d"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-focused-final/result.json",
+      "bytes": 829,
+      "sha256": "c25a696c30c40d310381f7ab5ef1f544c9f68770804d1303529579194bdc1e28"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-full-final/output.log",
+      "bytes": 11497,
+      "sha256": "90cbd594ea57f5130c61a1c44a60e7d78cd6ca2feaf26a1baf21b0a92c3d5201"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-full-final/result.json",
+      "bytes": 690,
+      "sha256": "9124cd0347f610f40688b2a6d1e6233f3c4d61f13e96d1ca636b962414687ee8"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-full-final/vitest.json",
+      "bytes": 367317,
+      "sha256": "f8639dd83525181d2335ef52e5fba9e493c6549572d33d8c7247e2fb6867350b"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-mutant-capture-guard/output.log",
+      "bytes": 1761,
+      "sha256": "9496d1a39a53e06863ba7b1e5c26495b390f91b0379c453d47613b2249068122"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-mutant-capture-guard/result.json",
+      "bytes": 648,
+      "sha256": "84e2632c71dd16239886aa34595f12161469bd96b6555abb702de040efbdd2dc"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-mutant-capture-write/output.log",
+      "bytes": 1761,
+      "sha256": "6607136173598daa395c96eab11e3402f0e335f623d6095e5a5679a27a085795"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-mutant-capture-write/result.json",
+      "bytes": 648,
+      "sha256": "63b3c10953fc762f1847cb09dc02e28649b6aa0f40a97a29b4676f50fab6cc5e"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-mutant-whole-response/output.log",
+      "bytes": 4956,
+      "sha256": "703390c13848185bfce178e6e45b77021feb77cb7af364a771068e141f423578"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-mutant-whole-response/result.json",
+      "bytes": 636,
+      "sha256": "0989118c61949246d121626ad2897794e185a7d3c67fff9e8902b8be512a9a35"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-red-01/output.log",
+      "bytes": 1830,
+      "sha256": "88cc6125bb0dc650d9e79b6a76438c1e7779904ecbddf074870804d92935d690"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-red-01/result.json",
+      "bytes": 627,
+      "sha256": "9af214a379936bbb67ac7c9187814f7e74b4a482cb9a70749d0b6863fb769209"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-red-02/output.log",
+      "bytes": 12019,
+      "sha256": "4a214fcfb6ea0eaeffcdfcc3293d3c4462cc4df8e5045107315afeade3315e25"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-red-02/result.json",
+      "bytes": 634,
+      "sha256": "7154dd72be4ced74b0a5c489ca192d7a405aa844388e32623ebf592303ae080d"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-red-03/output.log",
+      "bytes": 1765,
+      "sha256": "5d89879a73cf9b4ee220e3ab246667fb5c91443bd1d363d3b05846715690086d"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-red-03/result.json",
+      "bytes": 634,
+      "sha256": "a48743893df3bc2dcbd20e2419b6a049ce27c19080c04c8dfac7c7c18451faae"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-type-final/output.log",
+      "bytes": 1316,
+      "sha256": "889c805485ea7875c2a3279e775b55fec2dee38f27c794d17abe9329d5860a00"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-type-final/result.json",
+      "bytes": 503,
+      "sha256": "6ee785cc7ada4881ddc0ade9086e3a852f522c7f70c007f2a3c7f9f758f7b08f"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-type-final02/output.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-type-final02/result.json",
+      "bytes": 506,
+      "sha256": "93ee9911048a192944e38ef31d464e4dd9476c4fb370d9b5e504d56c41fd2c21"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/run-inventory.json",
+      "bytes": 19063,
+      "sha256": "e389de4ada13d0a13aea02ad87da814278f4a5d6f40a8932b698f269b4bf065f"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/source-readiness.json",
+      "bytes": 165099,
+      "sha256": "eba2f7de693c2c882a3e584f6c4507c6c217c786412ecb218d687c58b00f47a6"
+    }
+  ]
+}

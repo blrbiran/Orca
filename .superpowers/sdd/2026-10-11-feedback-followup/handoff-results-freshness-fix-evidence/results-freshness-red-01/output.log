@@ -1,0 +1,32 @@
+
+ RUN  v5.0.3 /private/tmp/orca-feedback-followup-20261011/web
+
+ ❯ tests/resultsApp.test.tsx (26 tests | 4 failed | 22 skipped) 873ms
+   × real App task retains capture authority after hide read restart 450ms
+   × real App group retains capture authority after hide read restart 192ms
+   × real App task retains capture authority after changeSeq read restart 149ms
+   × real App group retains capture authority after changeSeq read restart 81ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/resultsApp.test.tsx > real App task retains capture authority after hide read restart
+ FAIL  tests/resultsApp.test.tsx > real App group retains capture authority after hide read restart
+ FAIL  tests/resultsApp.test.tsx > real App task retains capture authority after changeSeq read restart
+ FAIL  tests/resultsApp.test.tsx > real App group retains capture authority after changeSeq read restart
+AssertionError: the given combination of arguments (undefined and string) is invalid for this assertion. You can use an array, a map, an object, a set, a string, or a weakset instead of a string
+ ❯ tests/resultsApp.test.tsx:144:66
+    142|   await act(async () => { await vi.advanceTimersByTimeAsync(2000); });…
+    143|  }
+    144|  expect(resultOwner(consumer).queryByRole("alert")?.textContent).toCon…
+       |                                                                  ^
+    145|  expect(resultOwner(consumer).queryByText("older capture seven work"))…
+    146|  expect(resultOwner(consumer).queryByRole("region", { name: "Current r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 22 skipped (26)
+   Start at  19:40:34
+   Duration  2.29s (tests 40%, environment 28%, transform 23%, import 7%, setup 2%)
+

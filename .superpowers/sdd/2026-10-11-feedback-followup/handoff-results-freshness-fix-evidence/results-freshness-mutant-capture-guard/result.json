@@ -1,0 +1,25 @@
+{
+  "repo": "/private/tmp/orca-results-freshness-mutants-20261011",
+  "command": [
+    "env",
+    "DEBUG_PRINT_LIMIT=0",
+    "npm",
+    "exec",
+    "--workspace",
+    "web",
+    "--",
+    "vitest",
+    "run",
+    "tests/resultsApp.test.tsx",
+    "-t",
+    "retains capture authority after",
+    "--maxWorkers=2",
+    "--no-cache"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 2.716991901397705,
+  "log": "/private/tmp/orca-followup-runs/results-freshness-mutant-capture-guard/output.log",
+  "source": "2f5c7f52da3ac322d7ef58912704b7bfbf118588",
+  "sourceTreeSHA256": "53a40ac4cdecb9fe6ea4e573ea0287b7b298697b35cd24c88659421a4f888dc7",
+  "sourceFiles": 932
+}

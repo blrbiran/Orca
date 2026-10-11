@@ -1,0 +1,16 @@
+{
+  "repo": "/private/tmp/orca-results-freshness-mutants-20261011",
+  "command": [
+    "npm",
+    "run",
+    "build",
+    "--workspace",
+    "web"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 1.3773880004882812,
+  "log": "/private/tmp/orca-followup-runs/results-freshness-clone-build/output.log",
+  "source": "2f5c7f52da3ac322d7ef58912704b7bfbf118588",
+  "sourceTreeSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+  "sourceFiles": 932
+}

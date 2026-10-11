@@ -1,0 +1,567 @@
+{
+  "run": {
+    "repo": "/private/tmp/orca-feedback-followup-20261011",
+    "command": [
+      "env",
+      "DEBUG_PRINT_LIMIT=0",
+      "npm",
+      "exec",
+      "--workspace",
+      "web",
+      "--",
+      "vitest",
+      "run",
+      "--maxWorkers=2",
+      "--no-cache",
+      "--reporter=default",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/results-freshness-full-final/vitest.json"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 72.70509481430054,
+    "log": "/private/tmp/orca-followup-runs/results-freshness-full-final/output.log",
+    "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+    "sourceTreeSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+    "sourceFiles": 932
+  },
+  "counts": {
+    "files": 105,
+    "assertions": 922,
+    "passed": 922,
+    "failed": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "completeAssertionsInspected": true,
+  "files": [
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/App.test.tsx",
+      "assertions": 1,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/agentPreviewRefresh.test.tsx",
+      "assertions": 13,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/agentSelectionEditor.test.tsx",
+      "assertions": 15,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/agentSettings.test.tsx",
+      "assertions": 5,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/agentsCollapsed.test.tsx",
+      "assertions": 4,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/agentsI18n.test.tsx",
+      "assertions": 3,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/appSelection.test.tsx",
+      "assertions": 4,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/archiveGroup.test.tsx",
+      "assertions": 14,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/authGate.test.tsx",
+      "assertions": 16,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/budgetHandoffCapability.test.tsx",
+      "assertions": 1,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/budgetI18n.test.tsx",
+      "assertions": 5,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/budgetSuggestions.test.tsx",
+      "assertions": 10,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/chainPanel.test.tsx",
+      "assertions": 8,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/chainsI18n.test.tsx",
+      "assertions": 3,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/confirmSelection.test.tsx",
+      "assertions": 2,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/contrast.test.ts",
+      "assertions": 4,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/controlCommandRecovery.test.tsx",
+      "assertions": 4,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/controlI18n.test.tsx",
+      "assertions": 8,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/controlKeys.test.tsx",
+      "assertions": 2,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/controlPanel.test.tsx",
+      "assertions": 14,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/controlPollSettles.test.tsx",
+      "assertions": 2,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/controlPortBanner.test.tsx",
+      "assertions": 6,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/controlRefetch.test.tsx",
+      "assertions": 2,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/controlState.test.ts",
+      "assertions": 15,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/decisionDetail.test.tsx",
+      "assertions": 2,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/decisionList.test.tsx",
+      "assertions": 4,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/decisionsI18n.test.tsx",
+      "assertions": 3,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/decisionsStatusFilter.test.tsx",
+      "assertions": 8,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/decisionsView.test.tsx",
+      "assertions": 10,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/dependencyGraph.test.tsx",
+      "assertions": 12,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/detailNavigation.test.tsx",
+      "assertions": 2,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/detailRegions.test.tsx",
+      "assertions": 19,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/driverRetry.test.tsx",
+      "assertions": 10,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/estimateStale.test.tsx",
+      "assertions": 2,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/evidenceLink.test.tsx",
+      "assertions": 3,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/failureReasons.test.ts",
+      "assertions": 5,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/feedbackReadability.test.tsx",
+      "assertions": 3,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/feedbackRequirements.test.tsx",
+      "assertions": 11,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/gitScheme.test.tsx",
+      "assertions": 8,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/globalSettingsAccounts.test.tsx",
+      "assertions": 4,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/groupCategory.test.ts",
+      "assertions": 10,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/groupList.test.tsx",
+      "assertions": 6,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/groupRefusal.test.tsx",
+      "assertions": 7,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/groupResults.test.tsx",
+      "assertions": 7,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/handoffFailedRetry.test.tsx",
+      "assertions": 10,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/handoffResume.test.tsx",
+      "assertions": 5,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/i18nDetect.test.tsx",
+      "assertions": 12,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/i18nKeys.test.ts",
+      "assertions": 4,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/i18nPseudo.test.tsx",
+      "assertions": 31,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/i18nSwitch.test.tsx",
+      "assertions": 3,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/i18nWidth.test.ts",
+      "assertions": 1,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/integrationScheme.test.tsx",
+      "assertions": 37,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/kindRank.test.ts",
+      "assertions": 2,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/labelSourceFallback.test.tsx",
+      "assertions": 2,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/loopBudgetRows.test.tsx",
+      "assertions": 4,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/loopPlanCard.test.tsx",
+      "assertions": 10,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/loopPlanDraft.test.tsx",
+      "assertions": 1,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/loopPlanEdit.test.tsx",
+      "assertions": 14,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/loopPlanSkillsPayload.test.tsx",
+      "assertions": 4,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/loopSuggestionApply.test.tsx",
+      "assertions": 6,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/loopSuggestionDraft.test.tsx",
+      "assertions": 1,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/loopSummary.test.tsx",
+      "assertions": 43,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/memberControls.test.tsx",
+      "assertions": 3,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/memoryApp.test.tsx",
+      "assertions": 2,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/memoryLayout.test.tsx",
+      "assertions": 2,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/memoryView.test.tsx",
+      "assertions": 15,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/metricsNotes.test.tsx",
+      "assertions": 2,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/metricsView.test.tsx",
+      "assertions": 5,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/outcome.test.tsx",
+      "assertions": 7,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/overviewApp.test.tsx",
+      "assertions": 19,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/overviewDecisionNavigation.test.tsx",
+      "assertions": 10,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/overviewFreshness.test.tsx",
+      "assertions": 13,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/overviewModel.test.ts",
+      "assertions": 7,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/projectFiltering.test.tsx",
+      "assertions": 34,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/projectRegistry.test.tsx",
+      "assertions": 9,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/projectScopeDecisionRequests.test.tsx",
+      "assertions": 17,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/projectScopeDrafts.test.tsx",
+      "assertions": 8,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/projectScopeRecovery.test.tsx",
+      "assertions": 17,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/projectSwitcher.test.tsx",
+      "assertions": 8,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/refusalExplain.test.ts",
+      "assertions": 7,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/refusalText.test.tsx",
+      "assertions": 7,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/requirements.test.tsx",
+      "assertions": 19,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/requirementsApp.test.tsx",
+      "assertions": 12,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/requirementsI18n.test.tsx",
+      "assertions": 3,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/resultOutput.test.tsx",
+      "assertions": 21,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/resultsApp.test.tsx",
+      "assertions": 32,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/runFacts.test.ts",
+      "assertions": 4,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/savedResultRecovery.test.tsx",
+      "assertions": 4,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/selection.test.tsx",
+      "assertions": 4,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/sessionHeaders.test.ts",
+      "assertions": 2,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/settingsScopes.test.tsx",
+      "assertions": 12,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/settleUnknownUsage.test.tsx",
+      "assertions": 7,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/shell.test.tsx",
+      "assertions": 6,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/skillsPanel.test.tsx",
+      "assertions": 8,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/stopBanner.test.tsx",
+      "assertions": 8,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/styles.test.ts",
+      "assertions": 10,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/taskActivity.test.tsx",
+      "assertions": 8,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/taskLabels.test.tsx",
+      "assertions": 8,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/taskLabelsDraft.test.tsx",
+      "assertions": 1,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/taskLabelsDraftBase.test.tsx",
+      "assertions": 3,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/taskResults.test.tsx",
+      "assertions": 11,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/theme.test.ts",
+      "assertions": 3,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/tokenInput.test.tsx",
+      "assertions": 38,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/usagePanel.test.tsx",
+      "assertions": 16,
+      "status": "passed"
+    },
+    {
+      "path": "/private/tmp/orca-feedback-followup-20261011/web/tests/workspaceMode.test.tsx",
+      "assertions": 3,
+      "status": "passed"
+    }
+  ],
+  "logBytes": 11497,
+  "logSHA256": "90cbd594ea57f5130c61a1c44a60e7d78cd6ca2feaf26a1baf21b0a92c3d5201",
+  "jsonBytes": 367317,
+  "jsonSHA256": "f8639dd83525181d2335ef52e5fba9e493c6549572d33d8c7247e2fb6867350b"
+}

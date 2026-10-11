@@ -1,0 +1,13 @@
+diff --git a/web/src/TaskResults.tsx b/web/src/TaskResults.tsx
+index 0fddfa8..01bde6c 100644
+--- a/web/src/TaskResults.tsx
++++ b/web/src/TaskResults.tsx
+@@ -68,7 +68,7 @@ export function useSavedRunAuthority(owner: string) {
+    for (const run of runs) {
+     const known = memory.current.runs.get(key(run));
+     memory.current.runs.set(key(run), {
+-     captureRevision: Math.max(run.captureRevision, known?.captureRevision ?? 0),
++     captureRevision: 0,
+      currentAttempt: run.currentAttempt === null ? known?.currentAttempt ?? null : Math.max(run.currentAttempt, known?.currentAttempt ?? 0),
+      executionId: run.executionId ?? known?.executionId ?? null,
+     });

@@ -1,0 +1,68 @@
+{
+  "cloneHead": "2f5c7f52da3ac322d7ef58912704b7bfbf118588",
+  "baselineSourceSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+  "readiness": [
+    "all932filesEqual",
+    "dependenciesLinked",
+    "type0",
+    "build0",
+    "focused127Passed0Skips"
+  ],
+  "mutants": [
+    {
+      "name": "capture-authority-retention",
+      "run": "results-freshness-mutant-capture-guard",
+      "source": "53a40ac4cdecb9fe6ea4e573ea0287b7b298697b35cd24c88659421a4f888dc7",
+      "expectedFailingAssertions": 4,
+      "selectedSkips": 28,
+      "intendedFailure": "AssertionError: expected '' to contain 'result-response-stale'",
+      "compilerFailure": false,
+      "restoration": {
+        "mutant": "capture-authority-retention",
+        "unstagedBytes": 0,
+        "cachedBytes": 0
+      },
+      "patch": "mutant-capture-guard.patch",
+      "completeLogAndPatchRead": true
+    },
+    {
+      "name": "capture-authority-write",
+      "run": "results-freshness-mutant-capture-write",
+      "source": "c164e6477831c4b387573b9b9c367bfc2bef34ead579db492752b89274833bf2",
+      "expectedFailingAssertions": 4,
+      "selectedSkips": 28,
+      "intendedFailure": "AssertionError: expected '' to contain 'result-response-stale'",
+      "compilerFailure": false,
+      "restoration": {
+        "mutant": "capture-authority-write",
+        "unstagedBytes": 0,
+        "cachedBytes": 0
+      },
+      "patch": "mutant-capture-write.patch",
+      "completeLogAndPatchRead": true
+    },
+    {
+      "name": "whole-response-authority-commit",
+      "run": "results-freshness-mutant-whole-response",
+      "source": "d93c0c0c6e9973227e359b253f100336a2914e9a2d1f5997d1e39af6e70ea5ef",
+      "expectedFailingAssertions": 2,
+      "selectedSkips": 30,
+      "intendedFailure": "Unable to find an accessible element with the role \"region\" and name \"Current result \u00b7 run-a\"",
+      "compilerFailure": false,
+      "restoration": {
+        "mutant": "whole-response-authority-commit",
+        "unstagedBytes": 0,
+        "cachedBytes": 0
+      },
+      "patch": "mutant-whole-response.patch",
+      "completeLogAndPatchRead": true
+    }
+  ],
+  "restoredFocused": {
+    "files": 8,
+    "passed": 127,
+    "failed": 0,
+    "skipped": 0,
+    "sourceSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed"
+  }
+}

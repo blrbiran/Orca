@@ -1,0 +1,25 @@
+{
+  "repo": "/private/tmp/orca-feedback-followup-20261011",
+  "command": [
+    "env",
+    "DEBUG_PRINT_LIMIT=0",
+    "npm",
+    "exec",
+    "--workspace",
+    "web",
+    "--",
+    "vitest",
+    "run",
+    "tests/resultsApp.test.tsx",
+    "-t",
+    "retains capture authority after",
+    "--maxWorkers=2",
+    "--no-cache"
+  ],
+  "rc": 1,
+  "elapsedSeconds": 3.1076529026031494,
+  "log": "/private/tmp/orca-followup-runs/results-freshness-red-01/output.log",
+  "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+  "sourceTreeSHA256": "25e8b3e71e3e1722fe34b3d2221bda165e6c4d25be5fd22aca84ce6de4e2aae9",
+  "sourceFiles": 932
+}

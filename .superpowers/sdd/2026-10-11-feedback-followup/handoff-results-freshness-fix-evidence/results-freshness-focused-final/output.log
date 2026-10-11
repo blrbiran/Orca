@@ -1,0 +1,12 @@
+
+ RUN  v5.0.3 /private/tmp/orca-feedback-followup-20261011/web
+
+
+ Test Files  8 passed (8)
+      Tests  127 passed (127)
+   Start at  19:43:48
+   Duration  7.15s (tests 57%, environment 26%, transform 8%, import 6%, setup 2%)
+
+    Isolate  8 workers spawned · ~532ms startup each (spawn + environment, per file)
+             at least ~1.60s faster with isolate: false — reuses workers across files instead of one per file
+

@@ -1,0 +1,30 @@
+{
+  "repo": "/private/tmp/orca-results-freshness-mutants-20261011",
+  "command": [
+    "env",
+    "DEBUG_PRINT_LIMIT=0",
+    "npm",
+    "exec",
+    "--workspace",
+    "web",
+    "--",
+    "vitest",
+    "run",
+    "tests/resultsApp.test.tsx",
+    "tests/taskResults.test.tsx",
+    "tests/groupResults.test.tsx",
+    "tests/resultOutput.test.tsx",
+    "tests/detailRegions.test.tsx",
+    "tests/i18nKeys.test.ts",
+    "tests/i18nPseudo.test.tsx",
+    "tests/labelSourceFallback.test.tsx",
+    "--maxWorkers=2",
+    "--no-cache"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 7.601977825164795,
+  "log": "/private/tmp/orca-followup-runs/results-freshness-clone-baseline/output.log",
+  "source": "2f5c7f52da3ac322d7ef58912704b7bfbf118588",
+  "sourceTreeSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+  "sourceFiles": 932
+}

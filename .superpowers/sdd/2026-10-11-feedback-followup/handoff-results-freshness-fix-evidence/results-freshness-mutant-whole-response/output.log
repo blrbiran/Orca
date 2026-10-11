@@ -1,0 +1,222 @@
+
+ RUN  v5.0.3 /private/tmp/orca-results-freshness-mutants-20261011/web
+
+ ❯ tests/resultsApp.test.tsx (32 tests | 2 failed | 30 skipped) 684ms
+   × real App task rejected aggregate does not raise admitted capture authority 489ms
+   × real App group rejected aggregate does not raise admitted capture authority 194ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/resultsApp.test.tsx > real App task rejected aggregate does not raise admitted capture authority
+TestingLibraryElementError: Unable to find an accessible element with the role "region" and name "Current result · run-a"
+
+Here are the accessible roles:
+
+  heading:
+
+  Name "Task a":
+  ...
+
+  --------------------------------------------------paragraph:
+
+  Name "":
+  ...
+
+  --------------------------------------------------region:
+
+  Name "Task results · a":
+  ...
+
+  --------------------------------------------------
+  heading:
+
+  Name "Task results · a":
+  ...
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  alert:
+
+  Name "":
+  ...
+
+  --------------------------------------------------list:
+
+  Name "Labels of a":
+  ...
+
+  --------------------------------------------------combobox:
+
+  Name "System label":
+  ...
+
+  --------------------------------------------------
+  option:
+
+  Name "feature":
+  ...
+
+  Name "bug":
+  ...
+
+  Name "refactor":
+  ...
+
+  Name "test":
+  ...
+
+  Name "doc":
+  ...
+
+  Name "design":
+  ...
+
+  Name "investigate":
+  ...
+
+  Name "perf":
+  ...
+
+  Name "security":
+  ...
+
+  Name "chore":
+  ...
+
+  --------------------------------------------------button:
+
+  Name "Add system label":
+  ...
+
+  --------------------------------------------------textbox:
+
+  Name "Custom label":
+  ...
+
+  --------------------------------------------------button:
+
+  Name "Add custom label":
+  ...
+
+  --------------------------------------------------button:
+
+  Name "Save labels":
+  ...
+
+  --------------------------------------------------button:
+
+  Name "Discard draft":
+  ...
+
+  --------------------------------------------------button:
+
+  Name "Restore plan labels":
+  ...
+
+  --------------------------------------------------paragraph:
+
+  Name "":
+  ...
+
+  --------------------------------------------------region:
+
+  Name "Recent activity of run-a":
+  ...
+
+  --------------------------------------------------
+  heading:
+
+  Name "Recent activity":
+  ...
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  ...
+
+  --------------------------------------------------heading:
+
+  Name "Runs of a":
+  ...
+
+  --------------------------------------------------paragraph:
+
+  Name "":
+  ...
+
+  --------------------------------------------------list:
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  listitem:
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  button:
+
+  Name "List evidence of run-a":
+  ...
+
+  Name "List evidence of run-b":
+  ...
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+...
+ ❯ Object.getElementError ../../../../Users/biran/code/skills/loop/Orca/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../../../../Users/biran/code/skills/loop/Orca/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../../../../Users/biran/code/skills/loop/Orca/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../../../../Users/biran/code/skills/loop/Orca/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ tests/resultsApp.test.tsx:194:40
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/resultsApp.test.tsx > real App group rejected aggregate does not raise admitted capture authority
+TestingLibraryElementError: Unable to find an accessible element with the role "region" and name "Current result · run-a"
+
+Here are the accessible roles:
+
+  status:
+
+  Name "":
+  ...
+
+  --------------------------------------------------alert:
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+...
+ ❯ Object.getElementError ../../../../Users/biran/code/skills/loop/Orca/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../../../../Users/biran/code/skills/loop/Orca/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../../../../Users/biran/code/skills/loop/Orca/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../../../../Users/biran/code/skills/loop/Orca/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ tests/resultsApp.test.tsx:194:40
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 30 skipped (32)
+   Start at  19:50:03
+   Duration  2.04s (tests 35%, environment 30%, transform 25%, import 7%, setup 2%)
+

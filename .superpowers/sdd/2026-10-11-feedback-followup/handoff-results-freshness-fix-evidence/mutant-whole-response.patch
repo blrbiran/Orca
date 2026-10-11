@@ -1,0 +1,26 @@
+diff --git a/web/src/GroupResults.tsx b/web/src/GroupResults.tsx
+index 2263a81..16cd5fb 100644
+--- a/web/src/GroupResults.tsx
++++ b/web/src/GroupResults.tsx
+@@ -9,7 +9,7 @@ export function GroupResults(props:{view:GroupViewV1;active:boolean;scope:string
+  const {t}=useTranslation();const {view}=props;
+  const identity=JSON.stringify([props.scope,view.epoch,view.changeSeq,view.summary.groupId]);
+  const authority=useSavedRunAuthority(JSON.stringify([props.scope,view.epoch,view.summary.groupId]));
+- const state=useResultsRead(props.active,identity,signal=>fetchGroupResults(view.summary.groupId,signal),(answer,prior)=>{ const accepted=answer?.schema==="orca-group-results-v1" && answer.epoch===view.epoch && answer.groupId===view.summary.groupId && answer.changeSeq>=view.changeSeq && answer.tasks.every(task=>task.runs.every(run=>run.groupId===answer.groupId && run.taskId===task.taskId && run.epoch===answer.epoch && run.changeSeq>=view.changeSeq && run.changeSeq>=answer.changeSeq && run.run.runId===run.runId && run.run.taskId===run.taskId && run.run.generation===run.generation && (view.runs.find(core=>core.runId===run.runId)?.generation ?? run.generation)===run.generation && authority.admit(run,prior?.tasks.find(old=>old.taskId===task.taskId)?.runs.find(old=>old.runId===run.runId)))); if (accepted) authority.remember(answer.tasks.flatMap(task=>task.runs)); return accepted; });
++ const state=useResultsRead(props.active,identity,signal=>fetchGroupResults(view.summary.groupId,signal),(answer,prior)=>{ const accepted=answer?.schema==="orca-group-results-v1" && answer.epoch===view.epoch && answer.groupId===view.summary.groupId && answer.changeSeq>=view.changeSeq && answer.tasks.every(task=>task.runs.every(run=>run.groupId===answer.groupId && run.taskId===task.taskId && run.epoch===answer.epoch && run.changeSeq>=view.changeSeq && run.changeSeq>=answer.changeSeq && run.run.runId===run.runId && run.run.taskId===run.taskId && run.run.generation===run.generation && (view.runs.find(core=>core.runId===run.runId)?.generation ?? run.generation)===run.generation && authority.admit(run,prior?.tasks.find(old=>old.taskId===task.taskId)?.runs.find(old=>old.runId===run.runId)))); authority.remember(answer.tasks.flatMap(task=>task.runs)); return accepted; });
+  const value=state.value;
+  return <section aria-label={t("results.groupRegion")} className="group-results">
+   {value===null && <p role="status">{t(view.summary.state==="done"?"detail.resultsMissing":"detail.resultsNotProduced")}</p>}
+diff --git a/web/src/TaskResults.tsx b/web/src/TaskResults.tsx
+index 0fddfa8..4849ccc 100644
+--- a/web/src/TaskResults.tsx
++++ b/web/src/TaskResults.tsx
+@@ -82,7 +82,7 @@ export function TaskResults(props:{view:GroupViewV1;item:WorkItemViewV1;active:b
+  const runIds=runs.map(run=>run.runId);
+  const identity=JSON.stringify([props.scope,view.epoch,view.changeSeq,view.summary.groupId,item.taskId,item.currentRunId,item.pendingRunId,runs.map(run=>[run.runId,run.generation])]);
+  const authority=useSavedRunAuthority(JSON.stringify([props.scope,view.epoch,view.summary.groupId,item.taskId]));
+- const state=useResultsRead(props.active,identity,signal=>Promise.all(runIds.map(id=>fetchRunResults(id,signal))), (answers,prior)=>{ const accepted=answers.every((answer,index)=>answer.schema==="orca-run-results-v1" && answer.epoch===view.epoch && answer.changeSeq>=view.changeSeq && answer.groupId===view.summary.groupId && answer.taskId===item.taskId && answer.runId===runIds[index] && answer.generation===runs[index]?.generation && answer.run.generation===answer.generation && answer.run.runId===answer.runId && answer.run.taskId===answer.taskId && authority.admit(answer,prior?.[index])); if (accepted) authority.remember(answers); return accepted; });
++ const state=useResultsRead(props.active,identity,signal=>Promise.all(runIds.map(id=>fetchRunResults(id,signal))), (answers,prior)=>{ const accepted=answers.every((answer,index)=>answer.schema==="orca-run-results-v1" && answer.epoch===view.epoch && answer.changeSeq>=view.changeSeq && answer.groupId===view.summary.groupId && answer.taskId===item.taskId && answer.runId===runIds[index] && answer.generation===runs[index]?.generation && answer.run.generation===answer.generation && answer.run.runId===answer.runId && answer.run.taskId===answer.taskId && authority.admit(answer,prior?.[index])); authority.remember(answers); return accepted; });
+  return <section hidden={!props.active} aria-label={t("results.taskRegion",{taskId:item.taskId})}>
+   <h4>{t("results.taskRegion",{taskId:item.taskId})}</h4><p>{t("results.taskStatus",{taskId:item.taskId,status:enumText("workStatus",item.status)})}</p>
+   {runIds.length===0 && <p>{t("results.notProduced")}</p>}

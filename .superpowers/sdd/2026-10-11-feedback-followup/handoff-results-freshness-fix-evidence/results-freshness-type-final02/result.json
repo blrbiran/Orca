@@ -1,0 +1,20 @@
+{
+  "repo": "/private/tmp/orca-feedback-followup-20261011",
+  "command": [
+    "npm",
+    "exec",
+    "--workspace",
+    "web",
+    "--",
+    "tsc",
+    "--noEmit",
+    "-p",
+    "tsconfig.json"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 5.7948219776153564,
+  "log": "/private/tmp/orca-followup-runs/results-freshness-type-final02/output.log",
+  "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+  "sourceTreeSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+  "sourceFiles": 932
+}

@@ -1,0 +1,15 @@
+{
+  "base": "be35141f778c2773ab75cd2af6be5901b027ee53",
+  "head": "be35141f778c2773ab75cd2af6be5901b027ee53",
+  "sourceSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+  "sourceFiles": 932,
+  "mainCloneByteEqual": true,
+  "cloneUnstagedBytes": 0,
+  "cloneCachedBytes": 0,
+  "mainCachedBytes": 0,
+  "ownedPaths": [
+    "web/src/TaskResults.tsx",
+    "web/tests/resultsApp.test.tsx"
+  ],
+  "ownedDiffBytes": 13374
+}

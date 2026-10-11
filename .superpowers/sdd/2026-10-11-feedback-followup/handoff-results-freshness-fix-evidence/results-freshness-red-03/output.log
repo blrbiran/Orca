@@ -1,0 +1,38 @@
+
+ RUN  v5.0.3 /private/tmp/orca-feedback-followup-20261011/web
+
+ ❯ tests/resultsApp.test.tsx (32 tests | 4 failed | 22 skipped) 2481ms
+   × real App task retains capture authority after hide read restart 448ms
+   × real App group retains capture authority after hide read restart 201ms
+   × real App task retains capture authority after changeSeq read restart 143ms
+   × real App group retains capture authority after changeSeq read restart 79ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/resultsApp.test.tsx > real App task retains capture authority after hide read restart
+ FAIL  tests/resultsApp.test.tsx > real App group retains capture authority after hide read restart
+ FAIL  tests/resultsApp.test.tsx > real App task retains capture authority after changeSeq read restart
+ FAIL  tests/resultsApp.test.tsx > real App group retains capture authority after changeSeq read restart
+AssertionError: expected '' to contain 'result-response-stale'
+
+- Expected
++ Received
+
+- result-response-stale
+
+ ❯ tests/resultsApp.test.tsx:144:72
+    142|   await act(async () => { await vi.advanceTimersByTimeAsync(2000); });…
+    143|  }
+    144|  expect(resultOwner(consumer).queryByRole("alert")?.textContent ?? "")…
+       |                                                                        ^
+    145|  expect(resultOwner(consumer).queryByText("older capture seven work"))…
+    146|  expect(resultOwner(consumer).queryByRole("region", { name: "Current r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 6 passed | 22 skipped (32)
+   Start at  19:42:39
+   Duration  3.94s (tests 65%, environment 17%, transform 13%, import 4%, setup 1%)
+

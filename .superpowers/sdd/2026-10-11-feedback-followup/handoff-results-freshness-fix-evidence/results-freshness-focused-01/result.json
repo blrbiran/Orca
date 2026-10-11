@@ -1,0 +1,30 @@
+{
+  "repo": "/private/tmp/orca-feedback-followup-20261011",
+  "command": [
+    "env",
+    "DEBUG_PRINT_LIMIT=0",
+    "npm",
+    "exec",
+    "--workspace",
+    "web",
+    "--",
+    "vitest",
+    "run",
+    "tests/resultsApp.test.tsx",
+    "tests/taskResults.test.tsx",
+    "tests/groupResults.test.tsx",
+    "tests/resultOutput.test.tsx",
+    "tests/detailRegions.test.tsx",
+    "tests/i18nKeys.test.ts",
+    "tests/i18nPseudo.test.tsx",
+    "tests/labelSourceFallback.test.tsx",
+    "--maxWorkers=2",
+    "--no-cache"
+  ],
+  "rc": 0,
+  "elapsedSeconds": 7.872400999069214,
+  "log": "/private/tmp/orca-followup-runs/results-freshness-focused-01/output.log",
+  "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+  "sourceTreeSHA256": "998282abc8cddac0ca2ce2a8c0cee140d7df4d32ebfbd35b6a947bbd10c99bea",
+  "sourceFiles": 932
+}

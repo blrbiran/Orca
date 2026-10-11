@@ -1,0 +1,1007 @@
+
+ RUN  v5.0.3 /private/tmp/orca-feedback-followup-20261011/web
+
+ ❯ tests/resultsApp.test.tsx (32 tests | 5 failed | 22 skipped) 2682ms
+   × real App task retains capture authority after hide read restart 447ms
+   × real App group retains capture authority after hide read restart 215ms
+   × real App task retains capture authority after changeSeq read restart 142ms
+   × real App group retains capture authority after changeSeq read restart 77ms
+   × real App task resets capture authority for account project epoch run and generation owners 591ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/resultsApp.test.tsx > real App task retains capture authority after hide read restart
+ FAIL  tests/resultsApp.test.tsx > real App group retains capture authority after hide read restart
+ FAIL  tests/resultsApp.test.tsx > real App task retains capture authority after changeSeq read restart
+ FAIL  tests/resultsApp.test.tsx > real App group retains capture authority after changeSeq read restart
+AssertionError: expected '' to contain 'result-response-stale'
+
+- Expected
++ Received
+
+- result-response-stale
+
+ ❯ tests/resultsApp.test.tsx:144:72
+    142|   await act(async () => { await vi.advanceTimersByTimeAsync(2000); });…
+    143|  }
+    144|  expect(resultOwner(consumer).queryByRole("alert")?.textContent ?? "")…
+       |                                                                        ^
+    145|  expect(resultOwner(consumer).queryByText("older capture seven work"))…
+    146|  expect(resultOwner(consumer).queryByRole("region", { name: "Current r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/resultsApp.test.tsx > real App task resets capture authority for account project epoch run and generation owners
+TestingLibraryElementError: Unable to find an accessible element with the role "region" and name "Task a"
+
+Here are the accessible roles:
+
+  navigation:
+
+  Name "Sections":
+  ...
+
+  Name "Control groups":
+  ...
+
+  Name "Requirement list":
+  ...
+
+  --------------------------------------------------
+  combobox:
+
+  Name "Project":
+  ...
+
+  Name "Theme":
+  ...
+
+  Name "Language":
+  ...
+
+  Name "Default agent":
+  ...
+
+  Name "agent":
+  ...
+
+  Name "context":
+  ...
+
+  Name "agent":
+  ...
+
+  Name "context":
+  ...
+
+  Name "Repository":
+  ...
+
+  Name "Repository":
+  ...
+
+  Name "Content language":
+  ...
+
+  Name "Agent":
+  ...
+
+  Name "Status":
+  ...
+
+  Name "Kind":
+  ...
+
+  Name "Scope":
+  ...
+
+  Name "Repository":
+  ...
+
+  Name "Scope":
+  ...
+
+  Name "Period":
+  ...
+
+  --------------------------------------------------
+  option:
+
+  Name "All projects":
+  ...
+
+  Name "Alpha":
+  ...
+
+  Name "Beta":
+  ...
+
+  Name "system":
+  ...
+
+  Name "light":
+  ...
+
+  Name "dark":
+  ...
+
+  Name "English":
+  ...
+
+  Name "中文":
+  ...
+
+  Name "none (every group has to choose one)":
+  ...
+
+  Name "inherit":
+  ...
+
+  Name "inherit":
+  ...
+
+  Name "inherit":
+  ...
+
+  Name "inherit":
+  ...
+
+  Name "alpha":
+  ...
+
+  Name "beta":
+  ...
+
+  Name "English":
+  ...
+
+  Name "中文":
+  ...
+
+  Name "Your default":
+  ...
+
+  Name "Unreviewed":
+  ...
+
+  Name "Reviewed":
+  ...
+
+  Name "All":
+  ...
+
+  Name "any":
+  ...
+
+  Name "any":
+  ...
+
+  Name "All projects":
+  ...
+
+  Name "Alpha":
+  ...
+
+  Name "Beta":
+  ...
+
+  Name "All projects":
+  ...
+
+  Name "This project (alpha-11111111)":
+  ...
+
+  Name "All time":
+  ...
+
+  Name "By day":
+  ...
+
+  Name "By week":
+  ...
+
+  Name "By month":
+  ...
+
+  Name "Custom range":
+  ...
+
+  --------------------------------------------------
+  button:
+
+  Name "Add project":
+  ...
+
+  Name "Rename project":
+  ...
+
+  Name "Save agent preferences":
+  ...
+
+  Name "New requirement":
+  ...
+
+  Name "Import plan":
+  ...
+
+  Name "Start chain":
+  ...
+
+  Name "Import plan":
+  ...
+
+  Name "All":
+  ...
+
+  Name "Not started":
+  ...
+
+  Name "Running":
+  ...
+
+  Name "Needs attention":
+  ...
+
+  Name "Done":
+  ...
+
+  Name "Archived":
+  ...
+
+  Name "g · done":
+  ...
+
+  Name "Preview saved output · Saved HTML":
+  ...
+
+  Name "Preview saved output · Saved HTML":
+  ...
+
+  Name "Open run controls and evidence · run-a":
+  ...
+
+  Name "Start clarifying":
+  ...
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  list:
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  listitem:
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  link:
+
+  Name "Overview":
+  ...
+
+  Name "Requirements":
+  ...
+
+  Name "Task control":
+  ...
+
+  Name "Decisions0":
+  ...
+
+  Name "Memory":
+  ...
+
+  Name "Metrics":
+  ...
+
+  Name "Chains":
+  ...
+
+  Name "Global settings":
+  ...
+
+  Name "Project settings":
+  ...
+
+  --------------------------------------------------
+  main:
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  region:
+
+  Name "Global settings":
+  ...
+
+  Name "Agents settings":
+  ...
+
+  Name "Project settings":
+  ...
+
+  Name "Workspace mode":
+  ...
+
+  Name "Overview":
+  ...
+
+  Name "Progress":
+  ...
+
+  Name "Needs your attention":
+  ...
+
+  Name "Task control":
+  ...
+
+  Name "Import plan":
+  ...
+
+  Name "Control group g":
+  ...
+
+  Name "Group results":
+  ...
+
+  Name "Task results · a":
+  ...
+
+  Name "Current result · run-a":
+  ...
+
+  Name "Saved attempt 1 · run-a":
+  ...
+
+  Name "Git":
+  ...
+
+  Name "Integration of this group":
+  ...
+
+  Name "Recovery":
+  ...
+
+  Name "Requirements":
+  ...
+
+  Name "Usage":
+  ...
+
+  --------------------------------------------------
+  heading:
+
+  Name "Global settings":
+  ...
+
+  Name "Agents":
+  ...
+
+  Name "Project settings":
+  ...
+
+  Name "Workspace mode":
+  ...
+
+  Name "Overview":
+  ...
+
+  Name "Progress":
+  ...
+
+  Name "Needs your attention":
+  ...
+
+  Name "Chains":
+  ...
+
+  Name "Task control":
+  ...
+
+  Name "Import a plan":
+  ...
+
+  Name "g · done · revision 6 · projection 4":
+  ...
+
+  Name "Group results":
+  ...
+
+  Name "Actual group goal review":
+  ...
+
+  Name "Actual Git delivery":
+  ...
+
+  Name "a":
+  ...
+
+  Name "Agent explanation":
+  ...
+
+  Name "Goal":
+  ...
+
+  Name "Completed work reported by Agent":
+  ...
+
+  Name "Agent conclusions":
+  ...
+
+  Name "Outputs reported by Agent":
+  ...
+
+  Name "Agent limitations":
+  ...
+
+  Name "Saved outputs":
+  ...
+
+  Name "Agent explanation":
+  ...
+
+  Name "Goal":
+  ...
+
+  Name "Completed work reported by Agent":
+  ...
+
+  Name "Agent conclusions":
+  ...
+
+  Name "Outputs reported by Agent":
+  ...
+
+  Name "Agent limitations":
+  ...
+
+  Name "Saved outputs":
+  ...
+
+  Name "Git":
+  ...
+
+  Name "Integration of this group":
+  ...
+
+  Name "Requirements":
+  ...
+
+  Name "New requirement":
+  ...
+
+  Name "Unreviewed high-tier decisions":
+  ...
+
+  Name "Memory":
+  ...
+
+  Name "Correction rate":
+  ...
+
+  Name "Repair rate":
+  ...
+
+  Name "Review coverage":
+  ...
+
+  Name "Unresolved decisions":
+  ...
+
+  Name "Malformed lines":
+  ...
+
+  Name "Excluded as future":
+  ...
+
+  Name "Usage":
+  ...
+
+  --------------------------------------------------
+  group:
+
+  Name "":
+  ...
+
+  Name "Estimator slot":
+  ...
+
+  Name "Reconcile slot":
+  ...
+
+  Name "Show groups":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  note:
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  table:
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  rowgroup:
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  row:
+
+  Name "installation kind version default model default context":
+  ...
+
+  --------------------------------------------------
+  columnheader:
+
+  Name "installation":
+  ...
+
+  Name "kind":
+  ...
+
+  Name "version":
+  ...
+
+  Name "default model":
+  ...
+
+  Name "default context":
+  ...
+
+  --------------------------------------------------
+  textbox:
+
+  Name "model":
+  ...
+
+  Name "model":
+  ...
+
+  Name "Goal":
+  ...
+
+  Name "Idea":
+  ...
+
+  --------------------------------------------------
+  radio:
+
+  Name "git worktree (default)":
+  ...
+
+  Name "private clone":
+  ...
+
+  --------------------------------------------------
+  status:
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  spinbutton:
+
+  Name "Max sessions":
+  ...
+
+  Name "Max cost in USD (a soft limit)":
+  ...
+
+  Name "Session timeout in minutes":
+  ...
+
+  --------------------------------------------------
+  alert:
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  tablist:
+
+  Name "Group detail":
+  ...
+
+  --------------------------------------------------
+  tab:
+
+  Name "Progress":
+  ...
+
+  Name "Preparation":
+  ...
+
+  Name "Problems":
+  ...
+
+  Name "Results":
+  ...
+
+  Name "Runs and evidence":
+  ...
+
+  Name "Technical details":
+  ...
+
+  --------------------------------------------------
+  tabpanel:
+
+  Name "Results":
+  ...
+
+  --------------------------------------------------
+  code:
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  Name "":
+  ...
+
+  --------------------------------------------------
+  checkbox:
+
+  Name "Show archived requirements":
+  ...
+
+  --------------------------------------------------
+  form:
+
+  Name "New requirement":
+  ...
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+...
+ ❯ Object.getElementError ../../../../Users/biran/code/skills/loop/Orca/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../../../../Users/biran/code/skills/loop/Orca/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../../../../Users/biran/code/skills/loop/Orca/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../../../../Users/biran/code/skills/loop/Orca/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ task tests/resultsApp.test.tsx:34:40
+
+ ❯ resultOwner tests/resultsApp.test.tsx:109:74
+ ❯ admitted tests/resultsApp.test.tsx:155:17
+ ❯ tests/resultsApp.test.tsx:165:178
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 5 passed | 22 skipped (32)
+   Start at  19:42:11
+   Duration  3.99s (tests 69%, environment 14%, transform 12%, import 3%, setup 1%)
+

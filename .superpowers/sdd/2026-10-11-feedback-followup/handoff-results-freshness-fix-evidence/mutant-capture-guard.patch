@@ -1,0 +1,13 @@
+diff --git a/web/src/TaskResults.tsx b/web/src/TaskResults.tsx
+index 0fddfa8..bc61ff7 100644
+--- a/web/src/TaskResults.tsx
++++ b/web/src/TaskResults.tsx
+@@ -53,7 +53,7 @@ interface SavedRunAuthority { captureRevision: number; currentAttempt: number |
+ export function freshSavedRun(answer: RunResultsV1, prior?: RunResultsV1, authority?: SavedRunAuthority): boolean {
+  const knownAttempt = authority?.currentAttempt ?? prior?.currentAttempt ?? null;
+  const knownExecution = authority?.executionId ?? prior?.executionId ?? null;
+- return answer.captureRevision >= Math.max(prior?.captureRevision ?? 0, authority?.captureRevision ?? 0)
++ return answer.captureRevision >= (prior?.captureRevision ?? 0)
+   && (knownExecution === null || answer.executionId === knownExecution)
+   && (knownAttempt === null || answer.currentAttempt === null || answer.currentAttempt >= knownAttempt);
+ }

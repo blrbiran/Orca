@@ -1,0 +1,12 @@
+
+ RUN  v5.0.3 /private/tmp/orca-results-freshness-mutants-20261011/web
+
+
+ Test Files  8 passed (8)
+      Tests  127 passed (127)
+   Start at  19:48:20
+   Duration  6.92s (tests 59%, environment 26%, transform 8%, import 6%, setup 2%)
+
+    Isolate  8 workers spawned · ~508ms startup each (spawn + environment, per file)
+             at least ~1.53s faster with isolate: false — reuses workers across files instead of one per file
+

@@ -1,0 +1,571 @@
+[
+  {
+    "name": "results-freshness-red-01",
+    "result": {
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "DEBUG_PRINT_LIMIT=0",
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "vitest",
+        "run",
+        "tests/resultsApp.test.tsx",
+        "-t",
+        "retains capture authority after",
+        "--maxWorkers=2",
+        "--no-cache"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 3.1076529026031494,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-red-01/output.log",
+      "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+      "sourceTreeSHA256": "25e8b3e71e3e1722fe34b3d2221bda165e6c4d25be5fd22aca84ce6de4e2aae9",
+      "sourceFiles": 932
+    },
+    "counts": {
+      "failed": 4,
+      "skipped": 22
+    },
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-red-01/output.log",
+    "logBytes": 1830,
+    "logSHA256": "88cc6125bb0dc650d9e79b6a76438c1e7779904ecbddf074870804d92935d690",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-red-02",
+    "result": {
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "DEBUG_PRINT_LIMIT=0",
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "vitest",
+        "run",
+        "tests/resultsApp.test.tsx",
+        "-t",
+        "capture authority|nonregressing capture",
+        "--maxWorkers=2",
+        "--no-cache"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 4.768216848373413,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-red-02/output.log",
+      "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+      "sourceTreeSHA256": "7b5d68742379460f014700d3707e138b8b29b5418304bcab05c2a2607e434206",
+      "sourceFiles": 932
+    },
+    "counts": {
+      "failed": 5,
+      "passed": 5,
+      "skipped": 22
+    },
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-red-02/output.log",
+    "logBytes": 12019,
+    "logSHA256": "4a214fcfb6ea0eaeffcdfcc3293d3c4462cc4df8e5045107315afeade3315e25",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-red-03",
+    "result": {
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "DEBUG_PRINT_LIMIT=0",
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "vitest",
+        "run",
+        "tests/resultsApp.test.tsx",
+        "-t",
+        "capture authority|nonregressing capture",
+        "--maxWorkers=2",
+        "--no-cache"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 4.756366729736328,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-red-03/output.log",
+      "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+      "sourceTreeSHA256": "63a401d4478f4f191a95deff0330033de3d0573139b4f485b4eec55cd10f3f1a",
+      "sourceFiles": 932
+    },
+    "counts": {
+      "failed": 4,
+      "passed": 6,
+      "skipped": 22
+    },
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-red-03/output.log",
+    "logBytes": 1765,
+    "logSHA256": "5d89879a73cf9b4ee220e3ab246667fb5c91443bd1d363d3b05846715690086d",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-focused-01",
+    "result": {
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "DEBUG_PRINT_LIMIT=0",
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "vitest",
+        "run",
+        "tests/resultsApp.test.tsx",
+        "tests/taskResults.test.tsx",
+        "tests/groupResults.test.tsx",
+        "tests/resultOutput.test.tsx",
+        "tests/detailRegions.test.tsx",
+        "tests/i18nKeys.test.ts",
+        "tests/i18nPseudo.test.tsx",
+        "tests/labelSourceFallback.test.tsx",
+        "--maxWorkers=2",
+        "--no-cache"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 7.872400999069214,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-focused-01/output.log",
+      "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+      "sourceTreeSHA256": "998282abc8cddac0ca2ce2a8c0cee140d7df4d32ebfbd35b6a947bbd10c99bea",
+      "sourceFiles": 932
+    },
+    "counts": {
+      "passed": 127
+    },
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-focused-01/output.log",
+    "logBytes": 426,
+    "logSHA256": "af22d301c177d5bf349cdeecb5dfe505ac5aa5a36046b3f2247db1fc75f2a2b2",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-focused-final",
+    "result": {
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "DEBUG_PRINT_LIMIT=0",
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "vitest",
+        "run",
+        "tests/resultsApp.test.tsx",
+        "tests/taskResults.test.tsx",
+        "tests/groupResults.test.tsx",
+        "tests/resultOutput.test.tsx",
+        "tests/detailRegions.test.tsx",
+        "tests/i18nKeys.test.ts",
+        "tests/i18nPseudo.test.tsx",
+        "tests/labelSourceFallback.test.tsx",
+        "--maxWorkers=2",
+        "--no-cache"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 8.067109107971191,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-focused-final/output.log",
+      "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+      "sourceTreeSHA256": "256332d0ff82decdb0e99ab485fc2994b835c54f6c5e79fd8bbf96f8aff8e5c8",
+      "sourceFiles": 932
+    },
+    "counts": {
+      "passed": 127
+    },
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-focused-final/output.log",
+    "logBytes": 426,
+    "logSHA256": "b7423c0c3d3c321832f08574094027b76f3b6dedf5920b5887d01c6e1bdee51d",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-type-final",
+    "result": {
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "tsconfig.json"
+      ],
+      "rc": 2,
+      "elapsedSeconds": 5.785623788833618,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-type-final/output.log",
+      "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+      "sourceTreeSHA256": "fecff2daf483b056999e2a21ec3480973a2a4f393da6dcb9d297e8a817b24348",
+      "sourceFiles": 932
+    },
+    "counts": null,
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-type-final/output.log",
+    "logBytes": 1316,
+    "logSHA256": "889c805485ea7875c2a3279e775b55fec2dee38f27c794d17abe9329d5860a00",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-build-final",
+    "result": {
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "npm",
+        "run",
+        "build",
+        "--workspace",
+        "web"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 1.453524112701416,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-build-final/output.log",
+      "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+      "sourceTreeSHA256": "fecff2daf483b056999e2a21ec3480973a2a4f393da6dcb9d297e8a817b24348",
+      "sourceFiles": 932
+    },
+    "counts": null,
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-build-final/output.log",
+    "logBytes": 658,
+    "logSHA256": "21675f25e0e863ce754bd37ccb5b52e05a1fe242dc95fbc5634454dafe4dc732",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-type-final02",
+    "result": {
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "tsconfig.json"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 5.7948219776153564,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-type-final02/output.log",
+      "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+      "sourceTreeSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+      "sourceFiles": 932
+    },
+    "counts": null,
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-type-final02/output.log",
+    "logBytes": 0,
+    "logSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-build-final02",
+    "result": {
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "npm",
+        "run",
+        "build",
+        "--workspace",
+        "web"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 1.4771473407745361,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-build-final02/output.log",
+      "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+      "sourceTreeSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+      "sourceFiles": 932
+    },
+    "counts": null,
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-build-final02/output.log",
+    "logBytes": 658,
+    "logSHA256": "3cd919f25cc592c213c535ea62c0e83749f9b8c0394e453041ab586c19b1c46a",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-full-final",
+    "result": {
+      "repo": "/private/tmp/orca-feedback-followup-20261011",
+      "command": [
+        "env",
+        "DEBUG_PRINT_LIMIT=0",
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "vitest",
+        "run",
+        "--maxWorkers=2",
+        "--no-cache",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=/private/tmp/orca-followup-runs/results-freshness-full-final/vitest.json"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 72.70509481430054,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-full-final/output.log",
+      "source": "be35141f778c2773ab75cd2af6be5901b027ee53",
+      "sourceTreeSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+      "sourceFiles": 932
+    },
+    "counts": {
+      "passed": 922
+    },
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-full-final/output.log",
+    "logBytes": 11497,
+    "logSHA256": "90cbd594ea57f5130c61a1c44a60e7d78cd6ca2feaf26a1baf21b0a92c3d5201",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-clone-type",
+    "result": {
+      "repo": "/private/tmp/orca-results-freshness-mutants-20261011",
+      "command": [
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "tsconfig.json"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 5.714533805847168,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-clone-type/output.log",
+      "source": "2f5c7f52da3ac322d7ef58912704b7bfbf118588",
+      "sourceTreeSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+      "sourceFiles": 932
+    },
+    "counts": null,
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-clone-type/output.log",
+    "logBytes": 0,
+    "logSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-clone-build",
+    "result": {
+      "repo": "/private/tmp/orca-results-freshness-mutants-20261011",
+      "command": [
+        "npm",
+        "run",
+        "build",
+        "--workspace",
+        "web"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 1.3773880004882812,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-clone-build/output.log",
+      "source": "2f5c7f52da3ac322d7ef58912704b7bfbf118588",
+      "sourceTreeSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+      "sourceFiles": 932
+    },
+    "counts": null,
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-clone-build/output.log",
+    "logBytes": 658,
+    "logSHA256": "6586afee5795d417205fc68b5a494a120d0829bf06800b9866ce6a0dbdc3507b",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-clone-baseline",
+    "result": {
+      "repo": "/private/tmp/orca-results-freshness-mutants-20261011",
+      "command": [
+        "env",
+        "DEBUG_PRINT_LIMIT=0",
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "vitest",
+        "run",
+        "tests/resultsApp.test.tsx",
+        "tests/taskResults.test.tsx",
+        "tests/groupResults.test.tsx",
+        "tests/resultOutput.test.tsx",
+        "tests/detailRegions.test.tsx",
+        "tests/i18nKeys.test.ts",
+        "tests/i18nPseudo.test.tsx",
+        "tests/labelSourceFallback.test.tsx",
+        "--maxWorkers=2",
+        "--no-cache"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 7.601977825164795,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-clone-baseline/output.log",
+      "source": "2f5c7f52da3ac322d7ef58912704b7bfbf118588",
+      "sourceTreeSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+      "sourceFiles": 932
+    },
+    "counts": {
+      "passed": 127
+    },
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-clone-baseline/output.log",
+    "logBytes": 434,
+    "logSHA256": "334c987a4f274fff73ff90cab888fc2eec3f0940e09b3679f40363269ebbfc20",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-mutant-capture-guard",
+    "result": {
+      "repo": "/private/tmp/orca-results-freshness-mutants-20261011",
+      "command": [
+        "env",
+        "DEBUG_PRINT_LIMIT=0",
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "vitest",
+        "run",
+        "tests/resultsApp.test.tsx",
+        "-t",
+        "retains capture authority after",
+        "--maxWorkers=2",
+        "--no-cache"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 2.716991901397705,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-mutant-capture-guard/output.log",
+      "source": "2f5c7f52da3ac322d7ef58912704b7bfbf118588",
+      "sourceTreeSHA256": "53a40ac4cdecb9fe6ea4e573ea0287b7b298697b35cd24c88659421a4f888dc7",
+      "sourceFiles": 932
+    },
+    "counts": {
+      "failed": 4,
+      "skipped": 28
+    },
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-mutant-capture-guard/output.log",
+    "logBytes": 1761,
+    "logSHA256": "9496d1a39a53e06863ba7b1e5c26495b390f91b0379c453d47613b2249068122",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-mutant-capture-write",
+    "result": {
+      "repo": "/private/tmp/orca-results-freshness-mutants-20261011",
+      "command": [
+        "env",
+        "DEBUG_PRINT_LIMIT=0",
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "vitest",
+        "run",
+        "tests/resultsApp.test.tsx",
+        "-t",
+        "retains capture authority after",
+        "--maxWorkers=2",
+        "--no-cache"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 3.037137031555176,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-mutant-capture-write/output.log",
+      "source": "2f5c7f52da3ac322d7ef58912704b7bfbf118588",
+      "sourceTreeSHA256": "c164e6477831c4b387573b9b9c367bfc2bef34ead579db492752b89274833bf2",
+      "sourceFiles": 932
+    },
+    "counts": {
+      "failed": 4,
+      "skipped": 28
+    },
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-mutant-capture-write/output.log",
+    "logBytes": 1761,
+    "logSHA256": "6607136173598daa395c96eab11e3402f0e335f623d6095e5a5679a27a085795",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-mutant-whole-response",
+    "result": {
+      "repo": "/private/tmp/orca-results-freshness-mutants-20261011",
+      "command": [
+        "env",
+        "DEBUG_PRINT_LIMIT=0",
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "vitest",
+        "run",
+        "tests/resultsApp.test.tsx",
+        "-t",
+        "rejected aggregate",
+        "--maxWorkers=2",
+        "--no-cache"
+      ],
+      "rc": 1,
+      "elapsedSeconds": 2.857166051864624,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-mutant-whole-response/output.log",
+      "source": "2f5c7f52da3ac322d7ef58912704b7bfbf118588",
+      "sourceTreeSHA256": "d93c0c0c6e9973227e359b253f100336a2914e9a2d1f5997d1e39af6e70ea5ef",
+      "sourceFiles": 932
+    },
+    "counts": {
+      "failed": 2,
+      "skipped": 30
+    },
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-mutant-whole-response/output.log",
+    "logBytes": 4956,
+    "logSHA256": "703390c13848185bfce178e6e45b77021feb77cb7af364a771068e141f423578",
+    "completeRawLogRead": true
+  },
+  {
+    "name": "results-freshness-clone-restored",
+    "result": {
+      "repo": "/private/tmp/orca-results-freshness-mutants-20261011",
+      "command": [
+        "env",
+        "DEBUG_PRINT_LIMIT=0",
+        "npm",
+        "exec",
+        "--workspace",
+        "web",
+        "--",
+        "vitest",
+        "run",
+        "tests/resultsApp.test.tsx",
+        "tests/taskResults.test.tsx",
+        "tests/groupResults.test.tsx",
+        "tests/resultOutput.test.tsx",
+        "tests/detailRegions.test.tsx",
+        "tests/i18nKeys.test.ts",
+        "tests/i18nPseudo.test.tsx",
+        "tests/labelSourceFallback.test.tsx",
+        "--maxWorkers=2",
+        "--no-cache"
+      ],
+      "rc": 0,
+      "elapsedSeconds": 7.727843999862671,
+      "log": "/private/tmp/orca-followup-runs/results-freshness-clone-restored/output.log",
+      "source": "2f5c7f52da3ac322d7ef58912704b7bfbf118588",
+      "sourceTreeSHA256": "3564d91114e89a4b7f25a5566a322aa58b660406b7a553fb8e432cc458b493ed",
+      "sourceFiles": 932
+    },
+    "counts": {
+      "passed": 127
+    },
+    "durableLog": ".superpowers/sdd/2026-10-11-feedback-followup/handoff-results-freshness-fix-evidence/results-freshness-clone-restored/output.log",
+    "logBytes": 434,
+    "logSHA256": "b8ee2e3adc8d4fb9be71378217652f6b3740229861defecb48064852723af3a8",
+    "completeRawLogRead": true
+  }
+]
