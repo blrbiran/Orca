@@ -66,6 +66,7 @@ export interface EstimateInput {
 }
 export interface FrozenEstimateRequest {
   state: "queued" | "blocked-capability" | "input-too-large"; reasonCode: string | null;
+  compatibilityReasonCodes?: string[];
   requestHash: string | null; request: BudgetEstimateRequestV1 | null;
   contract: EstimateExecutionContractV1 | null; contractHash: string | null;
   inputTokens: number | null; requiredRequestTokens: number | null;
@@ -81,7 +82,10 @@ export function buildBudgetEstimateRequest(input: EstimateInput): FrozenEstimate
   // Active time, attempts and sessions are bounded by the accounted claim path.
   // Single-call estimate spec §4.4: the estimate runs as one ccloop single call, so ccloop must answer v1 for this
   // selection (a failed probe has no resolution); spec §4.2: and Orca must hold the instruction the profile names.
-  if (!estimatorCompatibility(observation, input.mode).compatible || !preflight || observed.contextWindowTokens === null) return blocked;
+  const compatibility = estimatorCompatibility(observation, input.mode);
+  if (!compatibility.compatible || !preflight || observed.contextWindowTokens === null) return {
+    ...blocked, ...(compatibility.reasonCodes.length === 0 ? {} : { compatibilityReasonCodes: compatibility.reasonCodes }),
+  };
   const request = budgetEstimateRequestSchema.parse({ schema: "budget-estimate-request-v1", planHash: input.planHash,
     planSnapshotCanonicalJson: input.effectivePlanCanonicalJson ?? input.planCanonicalJson, estimatorProfile: { profileId: profile.snapshot.profile.profileId, profileHash: profile.profileHash },
     estimatorCapabilities: { contextWindowTokens: observed.contextWindowTokens, usageObservation: observed.usageObservation, budgetEnforcement: observed.budgetEnforcement, contextObservation: observed.contextObservation },

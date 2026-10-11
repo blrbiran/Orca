@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
 import { estimatorSlotFor, importControlPlan, importControlPlanAsync, type ImportCommand } from "../../src/control/planImport.js";
 import { readArchivedContract, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
+import { readControlGroup } from "../../src/panel/controlViews.js";
 import { createTrustedControlConfig } from "../../src/panel/controlConfig.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
 import type { ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.js";
@@ -114,6 +115,31 @@ async function setup() {
 }
 
 describe("immutable plan import", () => {
+  it("records the chosen estimator's exact local compatibility reason on a blocked estimate", async () => {
+    const h = await setup();
+    try {
+      const imported = importControlPlan({ ...h.deps, estimatorObservation: (profile) => {
+        const observation = h.deps.estimatorObservation(profile);
+        return { ...observation, resolution: { ...observation.resolution, singleCallExecution: null } };
+      } }, command());
+      expect(imported).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
+      if (!("result" in imported) || imported.result.kind !== "imported") throw new Error("import refused");
+      expect(readEstimateRecord(h.store, "g", imported.result.estimateId).compatibilityReasonCodes).toEqual(["single-call-unavailable"]);
+      expect(readControlGroup(h.store, "epoch", "g").estimates[0]?.compatibilityReasonCodes).toEqual(["single-call-unavailable"]);
+    } finally { await h.dispose(); }
+  });
+
+  it("reads a legacy queued estimate without adding a compatibility field or changing its stored bytes", async () => {
+    const h = await setup();
+    try {
+      const imported = importControlPlan(h.deps, command());
+      if (!("result" in imported) || imported.result.kind !== "imported") throw new Error("import refused");
+      const row = h.store.db.prepare("SELECT body FROM estimates WHERE group_id='g' AND id=?").get(imported.result.estimateId)!;
+      const before = String(row.body);
+      expect(Object.hasOwn(readEstimateRecord(h.store, "g", imported.result.estimateId), "compatibilityReasonCodes")).toBe(false);
+      expect(String(h.store.db.prepare("SELECT body FROM estimates WHERE group_id='g' AND id=?").get(imported.result.estimateId)!.body)).toBe(before);
+    } finally { await h.dispose(); }
+  });
   it("imports a draft with deterministic defaults when no estimator profile is configured", async () => {
     const h = await setup();
     try {

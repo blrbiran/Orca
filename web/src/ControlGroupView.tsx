@@ -423,6 +423,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                   hash: estimate.profile === null ? "" : short(estimate.profile.profileHash),
                 })}
                 {estimate.reasonCode !== null ? ` · ${estimate.reasonCode}` : ""}
+                {estimate.compatibilityReasonCodes?.length ? ` · ${estimate.compatibilityReasonCodes.join(", ")}` : ""}
               </li>
             ))}
           </ul>

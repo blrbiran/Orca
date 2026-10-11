@@ -594,6 +594,7 @@ function estimateViews(store: ControlStore, groupId: string, currentPlanCanonica
       estimateId: estimate.estimateId, estimateVersion: estimate.estimateVersion, state: estimate.state,
       profile: estimate.profile, mode: estimate.mode, requestHash: estimate.requestHash,
       outputHash: estimate.outputHash, output: estimate.output, reasonCode: estimate.reasonCode,
+      ...(estimate.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: estimate.compatibilityReasonCodes }),
       stale: estimateIsStale(estimate, currentPlanCanonicalJson),
     });
     allocations.push(allocationViewSchema.parse({

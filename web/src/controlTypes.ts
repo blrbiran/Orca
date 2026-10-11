@@ -281,6 +281,7 @@ export type EstimateViewV1 = {
   outputHash: string | null;
   output: BudgetEstimateV1 | null;
   reasonCode: string | null;
+  compatibilityReasonCodes?: string[];
   /** W6: built from contracts a plan change has since replaced; its suggestions are not applied. Absent reads as false. */
   stale?: boolean;
 };

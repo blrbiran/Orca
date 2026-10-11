@@ -74,6 +74,15 @@ const options = (container: HTMLElement, name: string): string[] =>
   [...container.querySelectorAll(`select[name="${name}"] option`)].map((option) => (option as HTMLOptionElement).value);
 
 describe("agent selection in the proposal view (agent selection spec §6.8)", () => {
+  it("shows the blocked estimate's selected-Agent compatibility reason locally", () => {
+    const estimate: GroupViewV1["estimates"][number] = {
+      estimateId: "estimate-1", estimateVersion: 1, state: "blocked-capability", profile: { profileId: "all", profileHash: "b".repeat(64) },
+      mode: "soft", requestHash: null, outputHash: null, output: null, reasonCode: "estimate-blocked-capability",
+      compatibilityReasonCodes: ["single-call-unavailable"],
+    };
+    const { container } = renderView({ view: view({ estimates: [estimate] }) });
+    expect(container.textContent).toContain("single-call-unavailable");
+  });
   it("names the concrete inherited value and source beside task fields", () => {
     const { container } = renderView({});
     const fields = container.querySelector('fieldset[aria-label="Task a"]') as HTMLElement;

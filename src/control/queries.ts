@@ -239,6 +239,7 @@ const estimateRecordSchema = z.object({
   profile: profileBindingSchema.nullable(), mode: z.enum(["strict", "soft"]), requestHash: hashSchema.nullable(),
   request: budgetEstimateRequestSchema.nullable(), outputHash: hashSchema.nullable(), output: budgetEstimateSchema.nullable(),
   reasonCode: z.string().min(1).nullable(), grant: amountSchema,
+  compatibilityReasonCodes: z.array(z.string().min(1)).min(1).optional(),
   // Agent selection spec §6.4: the estimator selection frozen for this estimate (null when it was not resolved).
   estimatorSlot: frozenSlotSchema.nullable(),
 }).strict().superRefine((value, ctx) => {
@@ -255,6 +256,7 @@ export interface EstimateRecord {
   state: "queued" | "running" | "start-unknown" | "ready" | "failed" | "interrupted" | "blocked-capability" | "input-too-large";
   profile: ProfileBindingV1 | null; mode: "strict" | "soft"; requestHash: string | null; request: BudgetEstimateRequestV1 | null;
   outputHash: string | null; output: BudgetEstimateV1 | null; reasonCode: string | null; grant: Amount;
+  compatibilityReasonCodes?: string[];
   estimatorSlot: FrozenSlot | null;
 }
 

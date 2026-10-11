@@ -361,6 +361,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
     estimateId, estimateVersion: 1, state: preflight.state,
     profile: estimatorProfile === null ? null : { profileId: input.estimatorProfileId, profileHash: input.estimatorProfileHash }, mode: input.estimateMode,
     requestHash: preflight.requestHash, request: preflight.request, outputHash: null, output: null, reasonCode: preflight.reasonCode,
+    ...(preflight.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: preflight.compatibilityReasonCodes }),
     grant: cloneAmount(ESTIMATE_GRANT), estimatorSlot,
   };
   deps.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)")

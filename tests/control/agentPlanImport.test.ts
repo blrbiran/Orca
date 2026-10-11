@@ -65,6 +65,19 @@ describe("the plan file carries agent layers (spec §6.2, R7)", () => {
 });
 
 describe("import freezes the estimator slot from the primary and role layers", () => {
+  it("records the local compatibility reason on a blocked re-estimate", async () => {
+    const h = await webFixture(); try {
+      const router = { ...h.deps.profileRouter, probe: async (...args: Parameters<typeof h.deps.profileRouter.probe>) => {
+        const observation = await h.deps.profileRouter.probe(...args);
+        return { ...observation, resolution: observation.resolution === null ? null : { ...observation.resolution, singleCallExecution: null as null } };
+      } };
+      const service = new WebControlService({ ...h.deps, profileRouter: router });
+      const created = await service.createEstimate(h.command("estimate", { proposalVersion: 1, estimatorProfileId: "all", estimatorProfileHash: h.frozen.profileHash, estimateMode: "soft" }));
+      expect(created).toMatchObject({ result: { kind: "estimate-created", estimateState: "blocked-capability" } });
+      if (!("result" in created) || created.result.kind !== "estimate-created") throw new Error("estimate refused");
+      expect(readEstimateRecord(h.store, "g", created.result.estimateId).compatibilityReasonCodes).toEqual(["single-call-unavailable"]);
+    } finally { await h.dispose(); }
+  });
   it("refuses re-estimate when the operator role source changes during its probe even if the partial is identical", async () => {
     const h = await webFixture(); try {
       let release!: () => void;
