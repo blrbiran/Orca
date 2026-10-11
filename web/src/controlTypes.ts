@@ -471,7 +471,7 @@ export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
     | "archive-group" | "unarchive-group";
@@ -501,6 +501,7 @@ export type CommandSuccessV1 = {
     | { kind: "archived"; groupId: string; at: number }
     | { kind: "unarchived"; groupId: string }
     | { kind: "agent-preferences-set"; operatorId: string; revision: number }
+    | { kind: "agent-installations-updated"; operatorId: string; revision: number; beforeHash: string; afterHash: string }
     | { kind: "spend-cap-set"; revision: number }
     | { kind: "spend-cap-cleared"; revision: number }
     | { kind: "usage-calendar-set"; revision: number }
@@ -548,6 +549,17 @@ export type OperatorPreferencesV1 = {
 export type AgentInstallationV1 = { id: string; kind: string; defaults: { model: string; contextWindow: ContextWindowV1 }; contextOptions: ContextWindowV1[]; version: string };
 export type AgentsViewV1 = { schema: "orca-agents-view-v1"; installations: AgentInstallationV1[] };
 export type AgentPreferencesViewV1 = { schema: "orca-agent-preferences-v1"; operatorId: string; revision: number; preferences: OperatorPreferencesV1 };
+export type AgentInstallationObservationV1 = {
+  schema: "orca-agent-detection-observation-v1"; baseTableHash: string; observedAt: string;
+  installed: Array<{ id: string; kind: string; command: string[]; recordedVersion: string; observedVersion: string | null; realpath: string | null; status: "current" | "changed" | "unavailable" }>;
+};
+export type AgentInstallationPreviewV1 = Omit<AgentInstallationObservationV1, "schema"> & {
+  schema: "orca-agent-detection-preview-v1"; previewId: string;
+  changes: Array<{ changeId: string; kind: "version" | "path" | "addition"; installationId: string; command: string[]; realpath: string; version: string; installation?: Record<string, unknown> }>;
+};
+export type AgentInstallationStateV1 = { schema: "orca-agent-installation-state-v1"; revision: number; pending: boolean;
+  pendingCommand: null | { schema: "orca-raw-command-v1"; commandId: string; expectedRevision: number; actorId: string; verb: "apply-agent-update"; target: { kind: "operator"; operatorId: string }; payload: { previewId: string; baseTableHash: string; acceptedChangeIds: string[] } };
+  observation: AgentInstallationObservationV1 | null; preview: AgentInstallationPreviewV1 | null; failureCode: string | null };
 export type FrozenSlotV1 = {
   partial: PartialSelectionV1; provenance: SelectionProvenanceV1;
   selection: AgentSelectionV1; configHash: string; timeoutMs: number; killGraceMs: number; capabilities: CapabilityViewV1;

@@ -7,6 +7,7 @@ import type { InputCheckpointV1 } from "./resumeBundle.js";
 import { ControlError } from "./errors.js";
 import { createCcloopExecutionPort } from "./ccloopPort.js";
 import type { AgentResolution, ContextWindow, PartialSelection } from "./agentSelection.js";
+import type { AgentApplyRequest, AgentObservation, AgentPreview, AgentReceipt } from "./agentInstallationProtocol.js";
 /** Single-call estimate spec §4.1: protocol 3's two kinds of work. */
 // Syncskill integration spec §10.6: skillPluginDir only for a run with skills (ccloop protocol 3, additive).
 export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string }
@@ -24,6 +25,9 @@ export interface AgentsView { installations: Array<{ id: string; kind: string; d
 export interface ControlFeatures { protocol:1;tokenPolicy?:"optional-v1";savedResultRecovery?:"v1";agentInstallationUpdate?:"v1" }
 export interface ExecutionPort {
   readFeatures?():Promise<ControlFeatures>;
+  observeAgentInstallations?():Promise<AgentObservation>;
+  previewAgentInstallations?():Promise<AgentPreview>;
+  applyAgentInstallations?(request:AgentApplyRequest):Promise<AgentReceipt>;
   savedResultSourceEligibility?(input:{source:StartEnvelope;sourceAttempt:number;packagePath:string;packageHash:string}):Promise<SavedResultSourceEligibility>;
   savedResultEligibility?(input:StartEnvelope):Promise<{status:"eligible";authorityKind:SavedResultSourcePackage["authorityKind"];normalizedExecutionHash:string}|{status:"unavailable";reason:string}>;
   collectSavedResultEvidence?(input:StartEnvelope):Promise<{schema:"ccloop-saved-result-evidence-v1";identity:unknown;attempt:number;capsule:ArtifactRef|null;reason:string|null}>;

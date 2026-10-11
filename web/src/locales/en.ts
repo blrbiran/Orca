@@ -754,6 +754,13 @@ export const en = {
       reconcileSlot: "Reconcile slot",
       save: "Save agent preferences",
     },
+    updates: {
+      title: "Installation updates", detect: "Detect again", observedAt: "Observed {{time}}",
+      unavailable: "Detection unavailable · {{code}}", pending: "An installation update is being reconciled. Review its result before trying another.", checkPending: "Check retained result",
+      noObservation: "unavailable", current: "current", changed: "changed", noChanges: "No changes were offered.",
+      review: "Review each offered change and select only the ones to apply.",
+      version: "Version", path: "Command path", addition: "New installation", apply: "Apply selected changes",
+    },
   },
   // N1 spec §11.2: the Requirements section.
   requirements: {
@@ -1002,6 +1009,11 @@ export const enErrors: Record<string, string> = {
   // Spec §3.2, §6.4: every code of controlErrorCatalog() (src/panel/controlErrors.ts); refusalCoverage.test.ts pins the count.
   "agent-context-unsupported": "The agent does not support this context window: {{detail}}",
   "agent-installation-missing": "The agents table has no installation of this agent: {{detail}}",
+  "agent-installation-update-stale": "The installation table changed. Detect again before applying.",
+  "agent-installation-update-conflict": "The installation preview or operation conflicts with the current table. Detect again and review it.",
+  "agent-installation-update-invalid": "The proposed installation update is invalid: {{detail}}",
+  "agent-installation-update-pending": "An installation update is still being reconciled. Keep its command ID and check the result.",
+  "control-agent-update-unsupported": "This ccloop version cannot review installation updates. Existing agent settings remain available.",
   "agent-selection-changed": "The agent selections changed before the confirmation. Read the group again, then confirm.",
   "agent-selection-invalid": "The agent selection is not valid: {{detail}}",
   "agent-selection-rejected": "ccloop refused this agent selection: {{detail}}",

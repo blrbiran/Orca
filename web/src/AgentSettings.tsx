@@ -7,7 +7,7 @@ import { useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { SelectionFields, contextLabel, draftOf, draftText, installationOf, partialFromFields, selectionFieldErrors, textOrUndefined } from "./AgentFields.js";
-import type { AgentPreferencesViewV1, AgentsViewV1, OperatorPreferencesV1 } from "./controlTypes.js";
+import type { AgentPreferencesViewV1, AgentInstallationStateV1, AgentsViewV1, OperatorPreferencesV1 } from "./controlTypes.js";
 
 const DEFAULT_AGENT_KEY = "agents:default-agent";
 export const AGENTS_OPEN_KEY = "orca.panel.agentsOpen";
@@ -60,6 +60,13 @@ export interface AgentSettingsProps {
   drafts: Record<string, string>;
   onDraft: (key: string, text: string) => void;
   onSave: (preferences: OperatorPreferencesV1, expectedRevision: number) => void;
+  installationState?: AgentInstallationStateV1 | null;
+  updateNotice?: string | null;
+  updateBusy?: boolean;
+  onDetectUpdates?: () => void;
+  onApplyUpdates?: (ids: string[]) => void;
+  onRetryPendingUpdate?: () => void;
+  unansweredCommandId?: string | null;
 }
 
 export function AgentSettings(props: AgentSettingsProps): JSX.Element {
@@ -76,6 +83,12 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
   const invalid = agents.installations.some((row) => selectionFieldErrors(agents, `agents:per:${row.id}`, preferences.preferences.perAgent[row.id], undefined, drafts, row.id, row.id).length > 0)
     || (["estimator", "reconcile"] as const).some((name) => selectionFieldErrors(agents, `agents:${name}`, preferences.preferences[name], undefined, drafts, roleInheritedAgent(name)).some((error) => error.field === "contextWindow"));
   const [open, setOpen] = useState(readOpen);
+  const [accepted, setAccepted] = useState<{ previewId: string; ids: string[] }>({ previewId: "", ids: [] });
+  const installation = props.installationState;
+  const pendingUpdate = !!installation?.pending || !!props.unansweredCommandId;
+  const pendingId = installation?.pendingCommand?.commandId ?? props.unansweredCommandId;
+  const updatePreview = installation?.preview;
+  const selected = updatePreview && accepted.previewId === updatePreview.previewId ? accepted.ids : [];
   return (
     <details open={open} onToggle={(event) => { const next = event.currentTarget.open; setOpen(next); writeOpen(next); }}>
     <summary><h3 className="agents-summary">{t("agents.title")}</h3></summary>
@@ -100,6 +113,33 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
           ))}
         </tbody>
       </table>
+      {installation && <section aria-label={t("agents.updates.title")}>
+        <h4>{t("agents.updates.title")}</h4>
+        {installation.failureCode && <p role="status">{t("agents.updates.unavailable", { code: installation.failureCode })}</p>}
+        {pendingUpdate && <div role="status"><p>{t("agents.updates.pending")}</p>
+          {pendingId && <><code>{pendingId}</code> <button type="button" disabled={props.updateBusy} onClick={props.onRetryPendingUpdate}>{t("agents.updates.checkPending")}</button></>}
+        </div>}
+        {installation.observation && <>
+          <p>{t("agents.updates.observedAt", { time: installation.observation.observedAt })}</p>
+          <ul>{installation.observation.installed.map((row) => <li key={row.id}>
+            {row.id}: {row.recordedVersion} → {row.observedVersion ?? t("agents.updates.noObservation")} ({t(`agents.updates.${row.status}`)})
+          </li>)}</ul>
+        </>}
+        <button type="button" disabled={props.updateBusy || pendingUpdate || installation.failureCode === "control-agent-update-unsupported"} onClick={props.onDetectUpdates}>{t("agents.updates.detect")}</button>
+        {updatePreview && <>
+          <p>{t("agents.updates.review")}</p>
+          {updatePreview.changes.length === 0 ? <p role="status">{t("agents.updates.noChanges")}</p> : <ul>{updatePreview.changes.map((change) => <li key={change.changeId}>
+            <label><input type="checkbox" checked={selected.includes(change.changeId)} onChange={(event) => {
+              const ids = event.currentTarget.checked ? [...selected, change.changeId] : selected.filter((id) => id !== change.changeId);
+              setAccepted({ previewId: updatePreview.previewId, ids });
+            }} />
+            {t(`agents.updates.${change.kind}`)}: {change.installationId} — {change.version} ({change.command.join(" ")})
+            </label>
+          </li>)}</ul>}
+          <button type="button" disabled={props.updateBusy || pendingUpdate || selected.length === 0} onClick={() => props.onApplyUpdates?.(selected)}>{t("agents.updates.apply")}</button>
+        </>}
+        {props.updateNotice && <p role="alert">{props.updateNotice}</p>}
+      </section>}
       <div aria-label={t("agents.settings.primary")}>
         <h4>{t("agents.settings.primary")}</h4>
         <label>

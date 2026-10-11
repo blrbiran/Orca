@@ -650,6 +650,13 @@ export const zh: Translation<typeof en> = {
       reconcileSlot: "协调槽",
       save: "保存 agent 偏好",
     },
+    updates: {
+      title: "安装更新", detect: "重新检测", observedAt: "检测时间 {{time}}",
+      unavailable: "检测不可用 · {{code}}", pending: "安装更新正在核对结果。请先查看结果，再尝试下一次更新。", checkPending: "核对已保留的结果",
+      noObservation: "不可用", current: "当前版本", changed: "版本有变化", noChanges: "没有可选的更新。",
+      review: "逐项检查候选变化，只选择要应用的项目。",
+      version: "版本", path: "命令路径", addition: "新增安装", apply: "应用选中的变化",
+    },
   },
   requirements: {
     ownerRaisesLimit: "只有 owner 能提高这个额度，请找一位 owner。",
@@ -940,6 +947,11 @@ export const zhErrors: Record<string, string> = {
   // Spec §3.2, §6.4: every code of controlErrorCatalog() (src/panel/controlErrors.ts), 124 at ac969bb.
   "agent-context-unsupported": "agent 不支持这个上下文窗口：{{message}}",
   "agent-installation-missing": "安装表里没有这个 agent：{{message}}",
+  "agent-installation-update-stale": "安装表已变化。请重新检测后再应用。",
+  "agent-installation-update-conflict": "安装预览或操作与当前表冲突。请重新检测并检查。",
+  "agent-installation-update-invalid": "安装更新无效：{{detail}}",
+  "agent-installation-update-pending": "安装更新的结果仍在核对中。请保留命令 ID 并查看结果。",
+  "control-agent-update-unsupported": "这个 ccloop 版本不支持安装更新检查。原有 agent 设置仍可使用。",
   "agent-selection-changed": "agent 选择在确认时已变化，请重新读取后再确认。",
   "agent-selection-invalid": "agent 选择不合法：{{message}}",
   "agent-selection-rejected": "ccloop 拒绝了这个 agent 选择：{{message}}",

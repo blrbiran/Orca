@@ -14,6 +14,8 @@ import { csrfHeader, failureFrom, noteAnswer } from "./api.js";
 import i18n from "./i18n.js";
 import type {
   AgentPreferencesViewV1,
+  AgentInstallationStateV1,
+  AgentInstallationPreviewV1,
   AgentSelectionPreviewV1,
   AgentsViewV1,
   CommandEnvelopeV1,
@@ -129,6 +131,36 @@ export const fetchAgentsView = (): Promise<AgentsViewV1> => controlGet<AgentsVie
 export const AGENT_PREFERENCES_PATH = "/api/control/operator/agent-preferences";
 /** This panel operator's defaults and the revision they are at. */
 export const fetchAgentPreferences = (): Promise<AgentPreferencesViewV1> => controlGet<AgentPreferencesViewV1>(AGENT_PREFERENCES_PATH);
+export const AGENT_UPDATE_PATH = "/api/control/operator/apply-agent-update";
+const PENDING_AGENT_UPDATE_KEY = "orca.agent-update.pending";
+export type PendingAgentUpdateEnvelope = { commandId: string; expectedRevision: number; payload: { previewId: string; baseTableHash: string; acceptedChangeIds: string[] } };
+export function readPendingAgentUpdate(storage: Storage | null | undefined): PendingAgentUpdateEnvelope | null {
+  try {
+    const raw = storage?.getItem(PENDING_AGENT_UPDATE_KEY);
+    if (!raw) return null;
+    const value: unknown = JSON.parse(raw);
+    if (typeof value !== "object" || value === null) return null;
+    const row = value as Partial<PendingAgentUpdateEnvelope>;
+    if (typeof row.commandId !== "string" || !Number.isSafeInteger(row.expectedRevision) || row.expectedRevision! < 0
+      || typeof row.payload?.previewId !== "string" || !/^[a-f0-9]{64}$/.test(row.payload.baseTableHash)
+      || !Array.isArray(row.payload.acceptedChangeIds) || !row.payload.acceptedChangeIds.every((id) => typeof id === "string")) return null;
+    return row as PendingAgentUpdateEnvelope;
+  } catch { return null; }
+}
+export function writePendingAgentUpdate(storage: Storage | null | undefined, value: PendingAgentUpdateEnvelope | null): void {
+  try { if (value === null) storage?.removeItem(PENDING_AGENT_UPDATE_KEY); else storage?.setItem(PENDING_AGENT_UPDATE_KEY, JSON.stringify(value)); }
+  catch { /* Browsers without session storage still retain the in-memory command for this page. */ }
+}
+export const fetchAgentInstallationState = (): Promise<AgentInstallationStateV1> => controlGet<AgentInstallationStateV1>("/api/control/operator/agent-installations");
+export async function detectAgentInstallations(): Promise<AgentInstallationPreviewV1> {
+  const path = "/api/control/operator/agent-update-preview";
+  const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json", ...csrfHeader() }, body: "{}" });
+  const body: unknown = await res.json().catch(() => undefined);
+  noteAnswer(res.status, body);
+  if (!res.ok) throw new ControlRequestError(refusalOf(`POST ${path}`, res.status, body, i18n.t("panelErrors.answered", { status: res.status })));
+  return body as AgentInstallationPreviewV1;
+}
+export const fetchAgentInstallationPreview = (): Promise<AgentInstallationStateV1> => controlGet<AgentInstallationStateV1>("/api/control/operator/agent-update-preview");
 /** The confirm's own resolution of a group's agent slots, for the proposal version the server holds now. */
 export const fetchAgentPreview = (groupId: string): Promise<AgentSelectionPreviewV1> =>
   controlGet<AgentSelectionPreviewV1>(`/api/control/groups/${segment(groupId)}/agent-preview`);

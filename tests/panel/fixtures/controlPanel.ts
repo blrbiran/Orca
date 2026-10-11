@@ -73,6 +73,7 @@ export interface BootOptions {
   resolveAgent?: (partial: PartialSelection) => Promise<AgentResolution>;
   /** `false`: the panel operator is neither fixed nor given preferences, so the mutation routes mint it with none. */
   seedPreferences?: false;
+  agentUpdatePort?: Pick<ExecutionPort, "observeAgentInstallations" | "previewAgentInstallations" | "applyAgentInstallations" | "readFeatures">;
 }
 
 export interface Harness {
@@ -145,6 +146,7 @@ export function createHarness(): Harness {
         readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" }), inspect: async () => ({ kind: "unknown" }),
         requestHandoff: async (_input: unknown, request: { requestId: string }) => ({ kind: "unknown", requestId: request.requestId }),
         collect: async () => ({ events: [], candidate: null, terminal: null }),
+        ...options.agentUpdatePort,
       } as unknown as ExecutionPort;
       const frozen = resolveProfile(snapshot, port);
       const router = createExecutionProfileRouter([frozen], { now: () => new Date("2030-01-01T00:00:00.000Z") });

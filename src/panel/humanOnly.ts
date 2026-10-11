@@ -25,6 +25,7 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "shutdown": "panel",
   "set-workspace-mode": "any",
   "set-agent-preferences": "any",
+  "apply-agent-update": "human-only",
   "proposal-set-agent": "any",
   "set-task-labels": "any",
   "set-task-loop": "any",

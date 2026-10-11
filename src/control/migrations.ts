@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const schemaVersion = "12";
+export const schemaVersion = "13";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -113,8 +113,15 @@ INSERT OR IGNORE INTO token_policies SELECT id,'','finite-legacy',json_extract(b
 INSERT OR IGNORE INTO token_policies SELECT group_id,id,'finite-legacy',json_extract(body,'$.grant.work.tokens') FROM work_items;
 `;
 
+// Installation updates have their own operator revision. The existing preference revision and frozen
+// selection documents are never advanced by a table update. A pending row is the durable dispatch outbox.
+export const schema12To13 = `CREATE TABLE IF NOT EXISTS agent_update_state(operator_id TEXT PRIMARY KEY, revision INTEGER NOT NULL CHECK(revision >= 0 AND revision <= 9007199254740991)) STRICT;
+CREATE TABLE IF NOT EXISTS agent_update_outbox(operator_id TEXT NOT NULL, command_id TEXT NOT NULL, raw_hash TEXT NOT NULL, raw_command_json TEXT NOT NULL, request_json TEXT NOT NULL, principal TEXT NOT NULL, client TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending','complete')), receipt_json TEXT, PRIMARY KEY(operator_id,command_id)) STRICT;
+CREATE UNIQUE INDEX IF NOT EXISTS one_pending_agent_update ON agent_update_outbox(operator_id) WHERE state='pending';
+`;
+
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
-export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11;
+export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13;
 
 /**
  * Accounts spec §9: idempotent on a store a criterion downgraded by dropping only its own column or table (the 6-to-7 and
@@ -132,7 +139,13 @@ function migrate7To8(store: DatabaseSync): void {
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   // Saved recovery requires a reader that preserves its mode. Version 12 fences older owners;
   // the 11→12 upgrade changes only the marker, never policy classification or accounting.
+  if (fromVersion === "12") {
+    store.exec(schema12To13);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "11") {
+    store.exec(schema12To13);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -145,6 +158,6 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   else if (fromVersion !== "7" && fromVersion !== "8" && fromVersion !== "9" && fromVersion !== "10") throw new Error("control-schema-unsupported");
   // Every version before 8 goes through 7 to 8 first; 8 itself only gains the activity table (spec §5.2).
   if (fromVersion !== "8" && fromVersion !== "9" && fromVersion !== "10") migrate7To8(store);
-  store.exec(schema8To9 + schema10To11);
+  store.exec(schema8To9 + schema10To11 + schema12To13);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }

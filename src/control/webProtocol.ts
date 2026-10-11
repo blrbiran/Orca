@@ -612,6 +612,7 @@ export const commandVerbSchema = z.enum([
   "shutdown",
   "set-workspace-mode",
   "set-agent-preferences",
+  "apply-agent-update",
   "proposal-set-agent",
   "set-task-labels",
   "set-task-loop",
@@ -792,6 +793,11 @@ export const setIntegrationSchemePayloadSchema = z.object({ integration: integra
 export const setGroupIntegrationPayloadSchema = z.object({ integration: integrationSchemeSchema }).strict();
 // Controller ruling W6-8: the envelope's expectedRevision (checked against agent_preferences.revision) is the only one.
 export const setAgentPreferencesPayloadSchema = z.object({ preferences: operatorPreferencesSchema }).strict();
+export const applyAgentUpdatePayloadSchema = z.object({
+  previewId: idSchema,
+  baseTableHash: hashSchema,
+  acceptedChangeIds: z.array(idSchema).min(1).superRefine((values, ctx) => requireSortedUnique(values, String, ctx, [])),
+}).strict();
 // Accounts spec §6.1: a cap's amount. Its own instance (not the shared positiveSafeInteger), so the human-only criterion
 // (C19) can find every field that carries it.
 export const spendTokensSchema = safeInteger.positive();
@@ -899,6 +905,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("apply-agent-update"), target: operatorCommandTargetSchema, payload: applyAgentUpdatePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-task-loop"), target: taskCommandTargetSchema, payload: setTaskLoopPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-open"), target: groupCommandTargetSchema, payload: requirementOpenPayloadSchema }).strict(),
@@ -955,6 +962,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("apply-agent-update"), target: operatorCommandTargetSchema, payload: applyAgentUpdatePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-task-loop"), target: taskCommandTargetSchema, payload: setTaskLoopPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-open"), target: groupCommandTargetSchema, payload: effectiveRequirementOpenPayloadSchema }).strict(),
@@ -1559,6 +1567,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("archived"), groupId: idSchema, at: safeInteger }).strict(),
   z.object({ kind: z.literal("unarchived"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("agent-preferences-set"), operatorId: nonemptyString, revision: positiveSafeInteger }).strict(),
+  z.object({ kind: z.literal("agent-installations-updated"), operatorId: nonemptyString, revision: positiveSafeInteger, beforeHash: hashSchema, afterHash: hashSchema }).strict(),
   z.object({ kind: z.literal("spend-cap-set"), revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("spend-cap-cleared"), revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("usage-calendar-set"), revision: positiveSafeInteger }).strict(),
@@ -1647,7 +1656,7 @@ export const commandSuccessSchema = z
     const isShutdown = value.verb === "shutdown";
     // Execution driver spec §3.2: a repository-scoped command has its setting's revision and no group
     // projection.
-    const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-integration-scheme" || value.verb === "set-agent-preferences"
+    const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-integration-scheme" || value.verb === "set-agent-preferences" || value.verb === "apply-agent-update"
       || value.verb === "set-spend-cap" || value.verb === "clear-spend-cap" || value.verb === "set-usage-calendar";
     if (isShutdown ? value.commandRevision !== null : value.commandRevision === null) {
       issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");

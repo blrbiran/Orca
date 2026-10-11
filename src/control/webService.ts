@@ -6,7 +6,7 @@ import { hasTokenPolicy, saveTokenPolicy, enableOptionalTokenPolicy } from "./fu
 import { budgetAmountSchema, safeInteger } from "./schema.js";
 import { z } from "zod";
 import { randomUUID, createHash } from "node:crypto";
-import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
+import { applyWebCommand, lookupWebCommandReplay, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
@@ -36,6 +36,8 @@ import { isGroupArchived } from "./archivedMark.js";
 import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
+import { applyAgentUpdate, hasPendingAgentUpdate, pendingAgentUpdateCommand, readAgentUpdateRevision, reconcilePendingAgentUpdates, type ApplyAgentUpdateCommand } from "./agentUpdates.js";
+import type { AgentObservation, AgentPreview } from "./agentInstallationProtocol.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { claimCapBlocking, clearSpendCapBlock, gateClaim } from "./spendCaps.js";
 import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from "./labels.js";
@@ -68,7 +70,7 @@ export interface WebServiceDeps extends AsyncImportDeps {
   /** Integration spec §3.3: a known repository's path, for the git checks that run before a setter's transaction. */
   resolveRepository?: (repoId: string) => string;
   /** Agent selection spec §6.4 (W6-19): the same port the panel's profiles use; confirm resolves selections through it. */
-  port: Pick<ExecutionPort, "resolveAgent" | "listAgents">;
+  port: Pick<ExecutionPort, "resolveAgent" | "listAgents" | "readFeatures" | "observeAgentInstallations" | "previewAgentInstallations" | "applyAgentInstallations">;
   /** Syncskill integration spec §10.5: confirm looks up each declared profile through it. Absent means not configured. */
   syncskill?: SyncskillOptions;
 }
@@ -349,6 +351,9 @@ function reopenProposal(store: ControlStore, id: string, group: Group, proposal:
 
 /** Web commands only publish durable authority. Provider invocation belongs to scheduler delivery. */
 export class WebControlService {
+  private installationObservation: AgentObservation | null = null;
+  private installationPreview: AgentPreview | null = null;
+  private installationFailure: string | null = null;
   readonly store: ControlStore;
   constructor(readonly deps: WebServiceDeps) { this.store = deps.store; }
   private mutate<T>(action: () => T): T { const release = this.deps.admissionGate?.enter(); try { return action(); } finally { release?.(); } }
@@ -662,6 +667,53 @@ export class WebControlService {
   /** Agent selection spec §6.2 layer 1: the operator's defaults, under their own revision. */
   async setAgentPreferences(command: SetAgentPreferencesCommand): Promise<WebCommandResult> {
     return applySetAgentPreferences({ store: this.store, admissionGate: this.deps.admissionGate }, command) as WebCommandResult;
+  }
+  /** One startup observation, with pending same-operation reconciliation first. Failure remains visible and nonfatal. */
+  async recoverAgentUpdates(): Promise<void> {
+    let reconcileFailure: string | null = null;
+    try { await reconcilePendingAgentUpdates(this.store, this.deps.port); }
+    catch (error) { reconcileFailure = error instanceof ControlError ? error.code : "control-peer-exit"; }
+    await this.observeAgentUpdates();
+    if (reconcileFailure) this.installationFailure = reconcileFailure;
+  }
+  async observeAgentUpdates(): Promise<void> {
+    if (!this.deps.port.observeAgentInstallations) { this.installationFailure = "control-agent-update-unsupported"; return; }
+    try { this.installationObservation = await this.deps.port.observeAgentInstallations(); this.installationFailure = null; }
+    catch (error) { this.installationObservation = null; this.installationFailure = error instanceof ControlError ? error.code : "control-peer-exit"; }
+  }
+  agentUpdateView(operatorId: string) {
+    return { schema: "orca-agent-installation-state-v1" as const, revision: readAgentUpdateRevision(this.store, operatorId),
+      pending: hasPendingAgentUpdate(this.store, operatorId), pendingCommand: pendingAgentUpdateCommand(this.store, operatorId), observation: this.installationObservation,
+      preview: this.installationPreview, failureCode: this.installationFailure };
+  }
+  async previewAgentUpdates(): Promise<AgentPreview> {
+    if (!this.deps.port.previewAgentInstallations) throw new ControlError("control-agent-update-unsupported");
+    if (this.store.db.prepare("SELECT command_id FROM agent_update_outbox WHERE state='pending' LIMIT 1").get()) throw new ControlError("agent-installation-update-pending");
+    const preview = await this.deps.port.previewAgentInstallations();
+    this.installationPreview = preview;
+    this.installationObservation = { schema: "orca-agent-detection-observation-v1", baseTableHash: preview.baseTableHash, observedAt: preview.observedAt, installed: preview.installed };
+    this.installationFailure = null;
+    return preview;
+  }
+  async applyAgentUpdate(command: ApplyAgentUpdateCommand, context: { client: string; principal: string }): Promise<WebCommandResult> {
+    const replay = lookupWebCommandReplay<WebCommandResult>(this.store, command);
+    if (replay) return replay.body;
+    const preflight = preflightWebCommand<WebCommandResult>(this.store, command);
+    if (preflight) return preflight.body;
+    const pending = hasPendingAgentUpdate(this.store, command.actorId);
+    if (!pending) {
+      const preview = this.installationPreview;
+      if (!preview || preview.previewId !== command.payload.previewId || preview.baseTableHash !== command.payload.baseTableHash
+        || command.payload.acceptedChangeIds.some((id) => !preview.changes.some((change) => change.changeId === id))) {
+        throw new ControlError("agent-installation-update-conflict", "preview-not-owned-or-changed");
+      }
+    }
+    const result = await applyAgentUpdate({ store: this.store, port: this.deps.port }, command, context);
+    if (result.status < 300) {
+      this.installationPreview = null;
+      await this.observeAgentUpdates();
+    }
+    return result.body as WebCommandResult;
   }
   /** Accounts spec §6.1: the spend caps and the usage calendar, under the spend scope's revision (D5). */
   setSpendCap(command: Extract<SpendCommand, { verb: "set-spend-cap" }>): WebCommandResult { return this.applySpend(command); }

@@ -205,6 +205,11 @@ export const durableCommandErrorStatuses = {
 
   // A durable recovery lock is immutable for this command ID.
   "control-recovery-required": 423,
+  "agent-installation-update-stale": 409,
+  "agent-installation-update-conflict": 409,
+  "agent-installation-update-invalid": 422,
+  "control-agent-update-unsupported": 422,
+  "agent-installation-update-pending": 423,
   "recovery-blocked": 423,
 } as const satisfies Record<string, DurableCommandErrorStatus>;
 

@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentSettings, preferencesFromDrafts } from "../src/AgentSettings.js";
 import { CLEARED_DRAFT, SelectionFields } from "../src/AgentFields.js";
 import { initialControlState, reduceControlState } from "../src/controlState.js";
-import type { AgentPreferencesViewV1, AgentsViewV1, OperatorPreferencesV1 } from "../src/controlTypes.js";
+import type { AgentPreferencesViewV1, AgentInstallationStateV1, AgentsViewV1, OperatorPreferencesV1 } from "../src/controlTypes.js";
 
 afterEach(() => cleanup());
 
@@ -29,6 +29,39 @@ const preferences: AgentPreferencesViewV1 = {
 };
 
 describe("the Agents settings page (agent selection spec §6.8)", () => {
+  it("shows unavailable detection separately and applies only explicitly selected preview changes", () => {
+    const onApply = vi.fn();
+    const state: AgentInstallationStateV1 = {
+      schema: "orca-agent-installation-state-v1", revision: 0, pending: false, pendingCommand: null, failureCode: null,
+      observation: { schema: "orca-agent-detection-observation-v1", baseTableHash: "a".repeat(64), observedAt: "2026-10-11T00:00:00.000Z",
+        installed: [{ id: "claude", kind: "claude", command: ["/tmp/claude"], recordedVersion: "2.1.282", observedVersion: null, realpath: null, status: "unavailable" }] },
+      preview: { schema: "orca-agent-detection-preview-v1", baseTableHash: "a".repeat(64), observedAt: "2026-10-11T00:00:00.000Z", previewId: "preview-1",
+        installed: [{ id: "claude", kind: "claude", command: ["/tmp/claude"], recordedVersion: "2.1.282", observedVersion: null, realpath: null, status: "unavailable" }],
+        changes: [{ changeId: "version-1", kind: "version", installationId: "claude", command: ["/tmp/claude"], realpath: "/tmp/claude", version: "2.1.283" },
+          { changeId: "path-1", kind: "path", installationId: "codex", command: ["/tmp/codex"], realpath: "/tmp/codex", version: "0.2" }] },
+    };
+    render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} installationState={state} onApplyUpdates={onApply} />);
+    expect(screen.getByText(/unavailable/)).toBeDefined();
+    const apply = screen.getByRole("button", { name: "Apply selected changes" }) as HTMLButtonElement;
+    expect(apply.disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText(/Version: claude/));
+    expect(apply.disabled).toBe(false);
+    fireEvent.click(apply);
+    expect(onApply).toHaveBeenCalledWith(["version-1"]);
+  });
+  it("offers an explicit retained-result check for a pending update without offering a new apply", () => {
+    const onRetry = vi.fn();
+    const state: AgentInstallationStateV1 = { schema: "orca-agent-installation-state-v1", revision: 0, pending: true, failureCode: "control-peer-timeout", observation: null, preview: null,
+      pendingCommand: { schema: "orca-raw-command-v1", commandId: "retained-1", expectedRevision: 0, actorId: "operator-1", verb: "apply-agent-update", target: { kind: "operator", operatorId: "operator-1" },
+        payload: { previewId: "preview-1", baseTableHash: "a".repeat(64), acceptedChangeIds: ["choice-1"] } } };
+    render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} installationState={state} onRetryPendingUpdate={onRetry} />);
+    expect(screen.getByText("retained-1")).toBeDefined();
+    expect((screen.getByRole("button", { name: "Detect again" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Apply selected changes" })).toBeNull();
+    expect(onRetry).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Check retained result" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
   it("clears draft model and context when changing the role Agent", () => {
     const onDraft = vi.fn();
     render(<SelectionFields agents={agents} prefix="role" label="Role" current={{ agent: "claude", model: "A-m", contextWindow: 1_000_000 }}

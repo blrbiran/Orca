@@ -90,10 +90,18 @@ export function spendRevision(store: ControlStore): number {
 }
 
 /** A settings scope carries its own revision; null means the scope is a group or global one. */
-function settingRevision(store: ControlStore, commandScope: CommandScope): number | null {
+function settingRevision(store: ControlStore, commandScope: CommandScope, verb?: RawAuthorityCommandV1["verb"]): number | null {
   if (commandScope.kind === "spend") return spendRevision(store);
   if (commandScope.repoId !== null) return repositoryRevision(store, commandScope.repoId);
-  if (commandScope.operatorId !== null) return operatorRevision(store, commandScope.operatorId);
+  if (commandScope.operatorId !== null) {
+    if (verb === "apply-agent-update") {
+      const row = store.db.prepare("SELECT revision FROM agent_update_state WHERE operator_id=?").get(commandScope.operatorId);
+      const revision = Number(row?.revision ?? 0);
+      if (!Number.isSafeInteger(revision) || revision < 0) throw new ControlError("recovery-blocked", "agent-update-revision-invalid");
+      return revision;
+    }
+    return operatorRevision(store, commandScope.operatorId);
+  }
   return null;
 }
 
@@ -120,12 +128,21 @@ function replay(row: CommandRow): StoredCommandOutcome<CommandBody> {
   return validatedOutcome(row.original_status, parsedBody(row.body_json));
 }
 
+/** A reserved installation command ID is unavailable to every other raw identity in this operator ledger scope. */
+function assertNoPendingAgentIdCollision(store: ControlStore, command: RawAuthorityCommandV1): void {
+  if (command.target.kind !== "operator") return;
+  const row = store.db.prepare("SELECT raw_hash FROM agent_update_outbox WHERE operator_id=? AND command_id=? AND state='pending'")
+    .get(command.target.operatorId, command.commandId);
+  if (row && (command.verb !== "apply-agent-update" || String(row.raw_hash) !== sha256Canonical(command))) throw new ControlError("command-id-conflict");
+}
+
 /**
  * Read-only raw identity lookup. A miss does not check the current revision;
  * asynchronous orchestration must use preflightWebCommand before preparation.
  */
 export function lookupWebCommandReplay<T>(store: ControlStore, input: RawAuthorityCommandV1): StoredCommandOutcome<T> | null {
   const rawCommand = rawAuthorityCommandSchema.parse(input) as RawAuthorityCommandV1;
+  assertNoPendingAgentIdCollision(store, rawCommand);
   const commandScope = scope(rawCommand);
   const rawRequestHash = sha256Canonical(rawCommand);
   const prior = store.db.prepare("SELECT raw_request_hash,original_status,body_json FROM commands WHERE group_id=? AND id=?")
@@ -148,7 +165,7 @@ export function preflightWebCommand<T = CommandBody>(store: ControlStore, input:
 
     const commandScope = scope(rawCommand);
     const groupRow = commandScope.groupId === null ? undefined : store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(commandScope.groupId);
-    const setting = settingRevision(store, commandScope);
+    const setting = settingRevision(store, commandScope, rawCommand.verb);
     const currentCommandRevision = setting !== null ? setting
       : commandScope.groupId === null ? 0 : Number(groupRow?.revision ?? 0);
     const stale = rawCommand.expectedRevision !== currentCommandRevision;
@@ -288,6 +305,7 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
   const rawRequestHash = sha256Canonical(rawCommand);
 
   return store.transaction(() => {
+    assertNoPendingAgentIdCollision(store, rawCommand);
     const prior = store.db.prepare("SELECT raw_request_hash,original_status,body_json FROM commands WHERE group_id=? AND id=?")
       .get(commandScope.key, rawCommand.commandId) as CommandRow | undefined;
     if (prior) {
@@ -296,7 +314,7 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
     }
 
     const groupRow = commandScope.groupId === null ? undefined : store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(commandScope.groupId);
-    const setting = settingRevision(store, commandScope);
+    const setting = settingRevision(store, commandScope, rawCommand.verb);
     const currentCommandRevision = setting !== null ? setting
       : commandScope.groupId === null ? 0 : Number(groupRow?.revision ?? 0);
     const resultCommandRevision = setting !== null ? currentCommandRevision : commandScope.groupId === null ? null : currentCommandRevision;
@@ -384,7 +402,7 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
     }
 
     const finalGroup = commandScope.groupId === null ? undefined : store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id=?").get(commandScope.groupId);
-    const commandRevision = settingRevision(store, commandScope)
+    const commandRevision = settingRevision(store, commandScope, rawCommand.verb)
       ?? (commandScope.groupId === null ? null : Number(finalGroup?.revision ?? currentCommandRevision));
     const projectionSeq = commandScope.groupId === null || !finalGroup ? null : Number(finalGroup.projection_seq);
     assertFinalVersions(outcome.body, commandRevision, projectionSeq);

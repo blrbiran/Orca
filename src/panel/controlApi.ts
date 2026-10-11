@@ -9,9 +9,10 @@ import { ZodError } from "zod";
 import { lookupCommandResult } from "../control/commandLedger.js";
 import { ControlError } from "../control/errors.js";
 import { withCommandContext } from "../control/commandClient.js";
-import { permissionRefusal, principalLabel, type Principal } from "./permissions.js";
+import { may, permissionRefusal, principalLabel, type Principal } from "./permissions.js";
 import { readVersions } from "../control/queries.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
+import { agentUpdateStateSchema } from "../control/agentInstallationProtocol.js";
 import { resolveSelection, slotLayers, type PartialSelection } from "../control/agentSelection.js";
 import { idSchema } from "../control/schema.js";
 import { savedResultEligibilityViewSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
@@ -211,6 +212,10 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       // A repository-scope result (`@repository:<id>`) has no group row, so versions are read only on a miss.
       const result = lookupCommandResult(deps.store, groupId, commandId);
       if (!result) {
+        if (groupId.startsWith("@operator:") && deps.store.db.prepare("SELECT command_id FROM agent_update_outbox WHERE operator_id=? AND command_id=? AND state='pending'").get(groupId.slice(10), commandId)) {
+          sendControlError(res, 423, "agent-installation-update-pending", "The installation update outcome is still being reconciled.", { retryable: true });
+          return;
+        }
         // A scope key (`@spend`, `@repository:<id>`, `@operator:<id>`) has no group row and no group revision to name.
         const commandRevision = groupId.startsWith("@") ? null : readVersions(deps.store, groupId).commandRevision;
         sendControlError(res, 404, "command-result-not-found", "No retained command result was found.", { commandRevision });
@@ -254,6 +259,28 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   // can command has one; the agents view and the preview also ask ccloop, so they need the port as well.
   if (deps.service) {
     const operatorId = ensurePanelOperatorId(deps.store);
+    const owner = (res: Response): boolean => {
+      const principal = res.locals.orcaPrincipal as Principal | undefined;
+      if (principal === undefined) throw new Error("control request carries no principal");
+      if (may(principal, "accounts")) return true;
+      sendControlError(res, 403, "owner-required", "An owner account is required.");
+      return false;
+    };
+    app.get("/api/control/operator/agent-installations", (_req, res) => {
+      if (owner(res)) res.json(agentUpdateStateSchema.parse(deps.service!.agentUpdateView(operatorId)));
+    });
+    app.get("/api/control/operator/agent-update-preview", (_req, res) => {
+      if (owner(res)) res.json(agentUpdateStateSchema.parse(deps.service!.agentUpdateView(operatorId)));
+    });
+    app.post("/api/control/operator/agent-update-preview", asyncRoute(async (req, res) => {
+      if (!owner(res)) return;
+      if (typeof req.body !== "object" || req.body === null || Array.isArray(req.body) || Object.keys(req.body).length !== 0) {
+        sendControlError(res, 400, "control-non-json-payload", "Detection accepts no caller paths or commands.");
+        return;
+      }
+      try { res.json(await deps.service!.previewAgentUpdates()); }
+      catch (error) { sendMappedControlError(res, error); }
+    }));
     app.get("/api/control/operator/agent-preferences", (_req, res) => {
       try {
         res.json(agentPreferencesViewSchema.parse({ schema: "orca-agent-preferences-v1", operatorId, ...readAgentPreferences(deps.store, operatorId) }));
@@ -420,6 +447,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
       // W6-4: the ledger key is the operator scope's, so the retained result is looked up under it.
       target: () => ({ groupId: `@operator:${actorId}`, target: { kind: "operator", operatorId: actorId } }),
     },
+    { path: "/api/control/operator/apply-agent-update", verb: "apply-agent-update",
+      target: () => ({ groupId: `@operator:${actorId}`, target: { kind: "operator", operatorId: actorId } }) },
     // Accounts spec §6.1, D5: the spend scope's verbs; the ledger key is `@spend`, so the retained result is looked up under it.
     { path: "/api/control/operator/set-spend-cap", verb: "set-spend-cap", target: spendScoped },
     { path: "/api/control/operator/clear-spend-cap", verb: "clear-spend-cap", target: spendScoped },
@@ -500,6 +529,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "archive-group": service.archiveGroup(command); break;
           case "unarchive-group": service.unarchiveGroup(command); break;
           case "set-agent-preferences": await service.setAgentPreferences(command); break;
+          case "apply-agent-update": await service.applyAgentUpdate(command, { client, principal: principalLabel(principal) }); break;
           case "proposal-set-agent": await service.proposalSetAgent(command); break;
           case "set-task-labels": service.setTaskLabels(command); break;
           case "set-task-loop": await service.setTaskLoop(command); break;

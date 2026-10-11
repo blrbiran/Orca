@@ -63,6 +63,11 @@ import {
   fetchControlSummary,
   fetchRequirement,
   fetchAgentPreferences,
+  fetchAgentInstallationState,
+  detectAgentInstallations,
+  AGENT_UPDATE_PATH,
+  readPendingAgentUpdate,
+  writePendingAgentUpdate,
   fetchAgentPreview,
   fetchAgentsView,
   fetchRepositoryIntegration,
@@ -83,7 +88,7 @@ import { initialControlState, reduceControlState, summaryView } from "./controlS
 import type { ControlAnswer } from "./controlApi.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import type {
-  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, IntegrationSchemeV1, OperatorPreferencesV1, RepositoryIntegrationV1,
+  AgentPreferencesViewV1, AgentInstallationStateV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, IntegrationSchemeV1, OperatorPreferencesV1, RepositoryIntegrationV1,
   RepositoryWorkspaceV1, RequirementViewV1, OverviewV1, RecoveryViewV1,
 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
@@ -246,6 +251,10 @@ export function App(): JSX.Element {
   /** Agent selection spec §6.8: the installation table and this operator's defaults; null until read, or when the port refuses. */
   const [agents, setAgents] = useState<AgentsViewV1 | null>(null);
   const [agentPreferences, setAgentPreferences] = useState<AgentPreferencesViewV1 | null>(null);
+  const [agentInstallations, setAgentInstallations] = useState<AgentInstallationStateV1 | null>(null);
+  const [localPendingUpdate, setLocalPendingUpdate] = useState(() => readPendingAgentUpdate(browserSession()));
+  const [agentUpdateNotice, setAgentUpdateNotice] = useState<string | null>(null);
+  const [agentUpdateBusy, setAgentUpdateBusy] = useState(false);
   /**
    * Wave 4 review I-1: the code the server gave when the installation table or the preferences could not be
    * read (e.g. control-port-unconfigured), so the proposal view says why instead of resolving forever.
@@ -492,6 +501,7 @@ export function App(): JSX.Element {
       const preferences = await fetchAgentPreferences();
       setAgents(table);
       setAgentPreferences(preferences);
+      try { setAgentInstallations(await fetchAgentInstallationState()); } catch { setAgentInstallations(null); }
       agentsRetries.current = 0;
       setAgentsRetry(null);
     } catch (err) {
@@ -610,6 +620,61 @@ export function App(): JSX.Element {
     if (answer.kind === "uncertain") dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: answer.refusal });
     else if (answer.status >= 400) dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: refusalFromAnswer(answer) });
     try { setAgentPreferences(await fetchAgentPreferences()); } catch { /* the refusal above already says why */ }
+  };
+
+  const detectInstallationUpdates = async (): Promise<void> => {
+    setAgentUpdateBusy(true);
+    try {
+      await detectAgentInstallations();
+      setAgentInstallations(await fetchAgentInstallationState());
+      setAgentUpdateNotice(null);
+    } catch (error) { setAgentUpdateNotice(controlFailureFrom(error).message); }
+    finally { setAgentUpdateBusy(false); }
+  };
+  const applyInstallationUpdates = async (acceptedChangeIds: string[]): Promise<void> => {
+    const view = agentInstallations, preview = view?.preview;
+    if (!view || !preview || acceptedChangeIds.length === 0) return;
+    setAgentUpdateBusy(true);
+    const commandId = nextCommandId();
+    const envelope = { commandId, expectedRevision: view.revision,
+      payload: { previewId: preview.previewId, baseTableHash: preview.baseTableHash, acceptedChangeIds: [...acceptedChangeIds].sort() } };
+    setLocalPendingUpdate(envelope); writePendingAgentUpdate(browserSession(), envelope);
+    const answer = await sendControlCommand(AGENT_UPDATE_PATH, envelope);
+    if (answer.kind === "uncertain") setAgentUpdateNotice(`${answer.refusal.message} (${commandId})`);
+    else if (answer.status >= 400) { setLocalPendingUpdate(null); writePendingAgentUpdate(browserSession(), null); setAgentUpdateNotice(refusalFromAnswer(answer).message); }
+    else {
+      setLocalPendingUpdate(null); writePendingAgentUpdate(browserSession(), null);
+      setAgentUpdateNotice(null);
+      await loadAgents(false);
+    }
+    try { setAgentInstallations(await fetchAgentInstallationState()); } catch { /* old view remains visible */ }
+    setAgentUpdateBusy(false);
+  };
+  const retryPendingInstallationUpdate = async (): Promise<void> => {
+    const pending = agentInstallations?.pendingCommand;
+    const local = localPendingUpdate;
+    if (!pending && !local) return;
+    setAgentUpdateBusy(true);
+    if (!pending && local && agentPreferences) {
+      const result = await recoverUncertainCommand(`@operator:${agentPreferences.operatorId}`, local.commandId);
+      if (result.kind === "found" || result.kind === "absent") {
+        setLocalPendingUpdate(null); writePendingAgentUpdate(browserSession(), null);
+        setAgentUpdateNotice(result.kind === "absent" ? result.refusal.message
+          : result.lookup.originalStatus >= 400 ? refusalFromAnswer({ kind: "answered", status: result.lookup.originalStatus, body: result.lookup.body }).message : null);
+        if (result.kind === "found" && result.lookup.originalStatus < 300) await loadAgents(false);
+      } else setAgentUpdateNotice(result.refusal.message);
+      setAgentUpdateBusy(false);
+      return;
+    }
+    if (!pending) { setAgentUpdateBusy(false); return; }
+    const answer = await sendControlCommand(AGENT_UPDATE_PATH, {
+      commandId: pending.commandId, expectedRevision: pending.expectedRevision, payload: pending.payload,
+    });
+    if (answer.kind === "uncertain") setAgentUpdateNotice(`${answer.refusal.message} (${pending.commandId})`);
+    else if (answer.status >= 400) { setAgentUpdateNotice(refusalFromAnswer(answer).message); setLocalPendingUpdate(null); writePendingAgentUpdate(browserSession(), null); }
+    else { setAgentUpdateNotice(null); setLocalPendingUpdate(null); writePendingAgentUpdate(browserSession(), null); await loadAgents(false); }
+    try { setAgentInstallations(await fetchAgentInstallationState()); } catch { /* retain command for another explicit retry */ }
+    setAgentUpdateBusy(false);
   };
 
   useEffect(() => {
@@ -1151,6 +1216,13 @@ export function App(): JSX.Element {
             agents, preferences: agentPreferences, drafts: control.drafts,
             onDraft: (key, text) => dispatchControl({ type: "draft", key, text }),
             onSave: (preferences, revision) => { void sendAgentPreferences(preferences, revision); },
+            installationState: agentInstallations,
+            updateNotice: agentUpdateNotice,
+            updateBusy: agentUpdateBusy,
+            onDetectUpdates: () => { void detectInstallationUpdates(); },
+            onApplyUpdates: (ids) => { void applyInstallationUpdates(ids); },
+            onRetryPendingUpdate: () => { void retryPendingInstallationUpdate(); },
+            unansweredCommandId: localPendingUpdate?.commandId ?? null,
           }}
         />
       </SectionPane>

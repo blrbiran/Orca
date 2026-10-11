@@ -8,10 +8,10 @@ import { describe, expect, it } from "vitest";
 import { webFixture, profileSnapshot } from "./fixtures/web.js";
 import { schemaVersion } from "../../src/control/migrations.js";
 describe("D9 one-way schema gate", () => {
-  it("opens fresh stores at current version 12", async () => {
+  it("opens fresh stores at current version 13", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
-      expect(schemaVersion).toBe("12");
-      expect(h.store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("12");
+      expect(schemaVersion).toBe("13");
+      expect(h.store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("13");
     } finally { await h.dispose(); }
   });
 });
@@ -26,15 +26,15 @@ describe("D9 migration preservation", () => {
       const raw = new DatabaseSync(join(dir, "control.sqlite")); raw.prepare("UPDATE meta SET value='9' WHERE key='schemaVersion'").run();
       const before = ["groups", "runs", "usage_ledger", "activity"].map(t => raw.prepare(`SELECT * FROM ${t}`).all()); raw.close();
       store = await openControlStore({ stateDir: dir });
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("12");
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("13");
       expect(["groups", "runs", "usage_ledger", "activity"].map(t => store.db.prepare(`SELECT * FROM ${t}`).all())).toEqual(before);
     } finally { store.close(); await rm(root, { recursive: true, force: true }); }
   });
-  it("refuses future schema13 before changing the database bytes", async () => {
+  it("refuses future schema14 before changing the database bytes", async () => {
     const root = await mkdtemp(join(tmpdir(), "s11-")), dir = join(root, "s");
     try {
       (await openControlStore({ stateDir: dir })).close(); const db = new DatabaseSync(join(dir, "control.sqlite"));
-      db.prepare("UPDATE meta SET value='13' WHERE key='schemaVersion'").run(); db.close();
+      db.prepare("UPDATE meta SET value='14' WHERE key='schemaVersion'").run(); db.close();
       const before = await readFile(join(dir, "control.sqlite"));
       await expect(openControlStore({ stateDir: dir })).rejects.toThrow("control-schema-unsupported");
       expect(await readFile(join(dir, "control.sqlite"))).toEqual(before);

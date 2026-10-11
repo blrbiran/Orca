@@ -270,6 +270,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     store, config, service, router, admissionGate, port, epoch, driver,
     recover: async () => {
       await recoverControl(store, port, { handlers: wakeHandlers }, { driverOwnsWebRuns: driver !== null });
+      await service.recoverAgentUpdates();
       driver?.kick();
     },
     shutdown() {

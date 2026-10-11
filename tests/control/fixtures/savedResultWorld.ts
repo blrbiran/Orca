@@ -67,7 +67,7 @@ export async function savedResultWorld(options:{completeArchive?:boolean;verify?
   const complete=await archiveRun(old.store,{runId:source.runId,sourceDir:source.drive.sourceDir,repoDir:candidate,stopProof:report.candidate.stopProof});expect(complete.missing).toEqual([]);
  }
  const historical=old.store.db.prepare("SELECT id,body FROM groups UNION ALL SELECT id,body FROM work_items UNION ALL SELECT id,body FROM runs").all();
- const stateDir=old.store.stateDir,oldDeps=(old.service as any).deps,profile=old.router.list()[0].snapshot;expect(old.store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get().value).toBe((options.optional||options.currentCapsule)?'12':'10');
+ const stateDir=old.store.stateDir,oldDeps=(old.service as any).deps,profile=old.router.list()[0].snapshot;expect(old.store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get().value).toBe((options.optional||options.currentCapsule)?'13':'10');
  w.die(old);old=null;
  let prior:any;
  if(!options.optional&&!options.currentCapsule){
@@ -77,8 +77,8 @@ export async function savedResultWorld(options:{completeArchive?:boolean;verify?
   expect(prior.db.prepare("SELECT mode FROM token_policies WHERE group_id='g' AND work_item_id='a'").get().mode).toBe('finite-legacy');
  }
  const tables=prior?.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name<>'meta' ORDER BY name").all().map((r:any)=>String(r.name)),before=tables?.map((t:string)=>prior.db.prepare(`SELECT * FROM ${t}`).all());prior?.close();
- store=await openControlStore({stateDir,now:()=>Date.now()});expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe('12');
- if(tables){expect(store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name<>'meta' ORDER BY name").all().map((r:any)=>String(r.name))).toEqual(tables);expect(tables.map((t:string)=>store.db.prepare(`SELECT * FROM ${t}`).all())).toEqual(before);}
+ store=await openControlStore({stateDir,now:()=>Date.now()});expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe('13');
+ if(tables){const afterTables=store.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name<>'meta' ORDER BY name").all().map((r:any)=>String(r.name));expect(afterTables.filter((t:string)=>!tables.includes(t))).toEqual(['agent_update_outbox','agent_update_state']);expect(tables.map((t:string)=>store.db.prepare(`SELECT * FROM ${t}`).all())).toEqual(before);}
  expect(store.db.prepare("SELECT id,body FROM groups UNION ALL SELECT id,body FROM work_items UNION ALL SELECT id,body FROM runs").all()).toEqual(historical);
  expect(store.db.prepare("SELECT mode FROM token_policies WHERE group_id='g' AND work_item_id='a'").get()!.mode).toBe((options.optional||options.currentCapsule)?'optional-v1':'finite-legacy');
  const newPort=createCcloopExecutionPort({binary:pairedCcloop,agentsTablePath:w.table,timeoutMs:60000}),router=createExecutionProfileRouter([resolveProfile(profile,newPort)]);

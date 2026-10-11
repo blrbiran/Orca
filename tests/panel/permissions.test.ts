@@ -51,7 +51,10 @@ describe("the permission table (spec §3.5)", () => {
       const commandPaths = commands.map((route) => `POST ${route.path}`);
       // Non-vacuous: the walk sees the reads and every command route.
       expect(registered.filter((entry) => entry.startsWith("GET ")).length).toBeGreaterThanOrEqual(12);
-      expect(registered.filter((entry) => !entry.startsWith("GET ") && !commandPaths.includes(entry))).toEqual([]);
+      // Reviewed detection is the sole POST read/probe: it has no operator command result or table mutation.
+      expect(registered.filter((entry) => !entry.startsWith("GET ") && !commandPaths.includes(entry))).toEqual([
+        "POST /api/control/operator/agent-update-preview",
+      ]);
       expect(commandPaths.filter((entry) => !registered.includes(entry))).toEqual([]);
       // Every verb has an entry, and a verb a principal can send has exactly one route; a panel verb has none.
       const verbs = [...commandVerbSchema.options].sort();

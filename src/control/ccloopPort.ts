@@ -13,6 +13,7 @@ import { agentSelectionSchema, artifactSchema, candidateSchema, contextWindowSch
 import { capabilityViewSchema } from "./webProtocol.js";
 import { byModelSchema } from "./usageLedger.js";
 import { boundStopReason } from "./driveRecord.js";
+import { agentObservationSchema, agentPreviewSchema, agentReceiptSchema } from "./agentInstallationProtocol.js";
 
 const MAX_OUTPUT=24*1024*1024;
 const executionStatusSchema=z.discriminatedUnion("kind",[
@@ -119,10 +120,18 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
   featuresCache={identity,value};return {...value};
  };
  const requireRecovery=async()=>{if((await readFeatures()).savedResultRecovery!=="v1")throw new ControlError("control-saved-result-unsupported");};
+ const requireAgentUpdates=async()=>{if((await readFeatures()).agentInstallationUpdate!=="v1")throw new ControlError("control-agent-update-unsupported");};
  const requireFeatures=async(input:StartEnvelope)=>{if(input.mode==="verify-saved-result")await requireRecovery();if(input.protocol===4&&(input.mode===undefined||input.tokenPolicy!==undefined)&&(await readFeatures()).tokenPolicy!=="optional-v1")throw new ControlError("control-token-policy-unsupported");};
  const privateRead=async(method:string,payload:unknown,ref:ArtifactRef)=>{await requireRecovery();const value=parse(evidenceSchema,await raw(method,payload));const bytes=Buffer.from(value.base64,"base64");if(value.artifactId!==ref.artifactId||value.hash!==ref.hash||bytes.toString("base64").replace(/=+$/," ").trim()!==value.base64.replace(/=+$/," ").trim()||createHash("sha256").update(bytes).digest("hex")!==ref.hash)throw new ControlError("artifact-hash-mismatch");return bytes;};
  const port:ExecutionPort={
   readFeatures,
+  async observeAgentInstallations(){await requireAgentUpdates();return parse(agentObservationSchema,await raw("agent-installation-observe",{}));},
+  async previewAgentInstallations(){await requireAgentUpdates();return parse(agentPreviewSchema,await raw("agent-installation-preview",{}));},
+  async applyAgentInstallations(request){await requireAgentUpdates();try{return parse(agentReceiptSchema,await raw("agent-installation-apply",request));}catch(error){
+    const code=peerErrorCode(error);
+    if(code==="agent-installation-update-stale"||code==="agent-installation-update-conflict"||code==="agent-installation-update-invalid")throw new ControlError(code);
+    throw error;
+  }},
   async savedResultSourceEligibility(input){await requireRecovery();return parse(savedResultSourceEligibilitySchema,await raw("saved-result-source-eligibility",{input}));},
   async savedResultEligibility(input){await requireRecovery();return parse(savedResultEligibilitySchema,await raw("saved-result-eligibility",{input}));},
   async collectSavedResultEvidence(input){await requireRecovery();return parse(savedResultCollectionSchema,await raw("saved-result-evidence",{input}));},
