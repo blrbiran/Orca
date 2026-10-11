@@ -229,7 +229,7 @@ describe("two-project lists", () => {
   const requirementNav = (): HTMLElement => screen.getByRole("navigation", { name: "Requirement list" });
   /** Every row's text in a nav: Task control's buttons and links, or Requirements' buttons. */
   const rows = (nav: HTMLElement): string[] =>
-    Array.from(nav.querySelectorAll(":scope > button, :scope > a")).map((row) => row.textContent ?? "");
+    Array.from(nav.querySelectorAll(":scope > .group-card-row > .group-card, :scope > .group-card-row > button:first-child")).map((row) => row.textContent ?? "");
   const rowIds = (nav: HTMLElement): string[] => rows(nav).map((text) => text.split(" · ")[0]!);
   const listsReady = async (): Promise<void> => {
     await ready();

@@ -85,8 +85,8 @@ describe("ControlPanel", () => {
 
   it("offers pause and handoff stop while dispatch is live, and never an immediate kill", () => {
     const html = renderToStaticMarkup(<ControlPanel {...panelProps()} />);
-    expect(html).toContain("Pause dispatch");
-    expect(html).toContain("Handoff stop");
+    expect(html).toContain("Pause new tasks");
+    expect(html).toContain("Save progress and stop");
     expect(html.toLowerCase()).not.toContain("kill");
   });
 
@@ -95,7 +95,7 @@ describe("ControlPanel", () => {
       summary: { ...summary.groups[0], state: "running", stopMode: "pause", stopState: "paused" } });
     const html = renderToStaticMarkup(<ControlPanel {...panelProps({ groups: { g: view }, summary: { ...summary, groups: [view.summary] } })} />);
     expect(html).toContain("paused");
-    expect(html).toContain("Resume dispatch");
+    expect(html).toContain("Continue execution");
   });
 
   // Handoff delivery (human ruling 2026-09-25, spec §12: this slice may rewrite criteria; ruling 88 (b)(c)): the batch continuation is offered only for a run the server marks continuable (a handoff left a partial checkpoint), never for a normally completed run that also displays settled-recoverable.
@@ -110,7 +110,7 @@ describe("ControlPanel", () => {
     expect(html).toContain("handoff-unresolved");
     expect(html).toContain("outcome-unknown");
     expect(html).toContain("2026-09-21T00:30:00.000Z");
-    expect(html).not.toContain("Resume dispatch");
+    expect(html).not.toContain("Continue execution");
     const settled = groupView({ ...view, stop: { ...view.stop!, state: "handoff-complete" },
       summary: { ...view.summary, stopState: "handoff-complete" },
       workItems: [{ ...view.workItems[0], status: "held", currentRunId: null }],
@@ -193,7 +193,7 @@ describe("BudgetEditor", () => {
     const onCommand = vi.fn();
     const html = renderToStaticMarkup(<BudgetEditor view={groupView()} config={config} drafts={emptyDrafts} onDraft={vi.fn()} onCommand={onCommand} />);
     expect(html).toContain("Save proposal");
-    expect(html).toContain("Confirm budget");
+    expect(html).toContain("Confirm task plan");
     expect(html).toContain("Re-estimate");
   });
 

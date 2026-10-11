@@ -15,6 +15,7 @@ export function GlobalSettings(props: {
   refusal?: ControlRefusal | null;
   theme: ThemePref; onTheme: (pref: ThemePref) => void;
   language: PanelLanguage; onLanguage: (lang: PanelLanguage) => void;
+  showAdvanced?: boolean; onAdvanced?: (show: boolean) => void;
   agents: AgentSettingsProps | null;
 }): JSX.Element {
   const { t } = useTranslation();
@@ -34,6 +35,8 @@ export function GlobalSettings(props: {
             {PANEL_LANGUAGES.map((lang) => <option key={lang} value={lang}>{LANGUAGE_NAMES[lang]}</option>)}
           </select>
         </label>
+        <label className="theme-pick"><input type="checkbox" checked={props.showAdvanced ?? false}
+          onChange={(event) => props.onAdvanced?.(event.currentTarget.checked)} />{t("settings.showAdvanced")}</label>
       </div>
       <AccountSettings />
       <p>{t("settings.agentScope")}</p>

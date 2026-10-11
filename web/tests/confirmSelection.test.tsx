@@ -39,7 +39,7 @@ describe("confirming needs the previewed selectionsHash (agent selection spec §
     render(<BudgetEditor view={view} config={{ ...config, defaults: null }} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} selectionsHash={"9".repeat(64)} />);
     fireEvent.change(screen.getByRole("combobox", { name: "Budget mode" }), { target: { value: "soft" } });
     for (const name of ["Worker profile", "Handoff profile", "Goal review profile"]) fireEvent.change(screen.getByRole("combobox", { name }), { target: { value: "all" } });
-    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
     expect(onCommand.mock.calls[0]![0]).toMatchObject({ verb: "confirm", payload: {
       budgetMode: "soft", profileIds: { estimator: null, worker: "all", handoff: "all", goalReview: "all" },
       profileHashes: { estimator: null, worker: "b".repeat(64), handoff: "b".repeat(64), goalReview: "b".repeat(64) },
@@ -48,14 +48,14 @@ describe("confirming needs the previewed selectionsHash (agent selection spec §
   it("does not send a confirmation when no selectionsHash was previewed", () => {
     const onCommand = vi.fn();
     render(<BudgetEditor view={view} config={config} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
-    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
     expect(onCommand).not.toHaveBeenCalled();
   });
 
   it("sends the previewed selectionsHash with the confirmation", () => {
     const onCommand = vi.fn();
     render(<BudgetEditor view={view} config={config} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} selectionsHash={"9".repeat(64)} />);
-    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
     expect(onCommand).toHaveBeenCalledTimes(1);
     expect(onCommand.mock.calls[0]![0]).toMatchObject({ verb: "confirm", groupId: "g", payload: { selectionsHash: "9".repeat(64), proposalVersion: 2 } });
   });

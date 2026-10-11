@@ -55,6 +55,9 @@ export interface ControlPanelProps {
    */
   repoId?: string | null;
   onSelect: (groupId: string) => void;
+  onSelectRequirement?: (groupId: string) => void;
+  onSourceRequirement?: (groupId: string) => void;
+  onGroupAction?: (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string) => void;
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
   /** W5: commands one control sends in order (BudgetEditor's onCommands). */
@@ -252,7 +255,8 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         refusal={props.importRefusal ?? null}
       />
       </div>
-      <GroupList groups={summary.groups} selected={selected} scope={scope} repoLabel={props.repoLabel} onSelect={props.onSelect} now={props.now} />
+      <GroupList groups={summary.groups} selected={selected} scope={scope} repoLabel={props.repoLabel} onSelect={props.onSelect}
+        onSelectRequirement={props.onSelectRequirement} onAction={props.onGroupAction} refusals={props.groupRefusals} now={props.now} />
       {view !== undefined && (
         <ControlGroupView
           active={props.active}
@@ -267,6 +271,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           drafts={drafts}
           onDraft={props.onDraft}
           onCommand={props.onCommand}
+          onSourceRequirement={props.onSourceRequirement}
           onCommands={props.onCommands}
           agents={props.agents}
           preview={props.previews?.[view.summary.groupId] ?? null}

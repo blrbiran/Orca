@@ -2,7 +2,7 @@
 /**
  * Issue-fixes spec §3.2 (3), (4) and §3.4: a group stopped by a panel shutdown is left through the same resume dialog as a
  * human handoff-stop, every stopped group shows one banner (how it stopped, its state, the one way out), and the buttons
- * the stop mode refuses -- Start, Pause dispatch, Handoff stop -- are not rendered.
+ * the stop mode refuses -- Start, Pause new tasks, Save progress and stop -- are not rendered.
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -37,7 +37,7 @@ const mount = (shown: GroupViewV1, onCommand = vi.fn()) => {
   render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "dispatch", taskId: null, runId: null }} view={shown} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
   return onCommand;
 };
-const refusedButtons = ["Start", "Pause dispatch", "Handoff stop"];
+const refusedButtons = ["Start", "Pause new tasks", "Save progress and stop"];
 
 afterEach(cleanup);
 
@@ -60,8 +60,8 @@ describe("the stop banner (issue-fixes spec §3.2 (4))", () => {
   it("says how the group stopped, its state, and the one way out, at the top of the group view", () => {
     const { container } = render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "dispatch", taskId: null, runId: null }} view={view("ready", shutdownStop("handoff-complete"))} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     const banner = screen.getByTestId("stop-banner");
-    expect(banner.textContent).toContain("Stopped: the panel shut down while runs were active.");
-    expect(banner.textContent).toContain("Ready to resume: use the resume button under Dispatch.");
+    expect(banner.textContent).toContain("Stopped · The panel shut down while runs were active.");
+    expect(banner.textContent).toContain("Ready to resume: use the resume button under Execution controls.");
     expect(banner.textContent).toContain("stop shutdown handoff-complete");
     // Above the plan line and everything after it: the first thing under the heading.
     const heading = container.querySelector("h2")!;
@@ -73,11 +73,11 @@ describe("the stop banner (issue-fixes spec §3.2 (4))", () => {
     expect(screen.getByTestId("stop-banner").textContent).toContain("Stopping: the frozen runs are still settling.");
   });
 
-  it("does not offer Start on a paused ready group, because start refuses any stop intent; Resume dispatch is its way out", () => {
+  it("does not offer Start on a paused ready group, because start refuses any stop intent; Continue execution is its way out", () => {
     const onCommand = mount(view("ready", { mode: "pause", state: "paused", frozenRunIds: [], acceptedAt: null, deadlineAt: null }));
-    expect(screen.getByTestId("stop-banner").textContent).toContain("Way out: press Resume dispatch under Dispatch.");
+    expect(screen.getByTestId("stop-banner").textContent).toContain("Way out: press Continue execution under Execution controls.");
     for (const name of refusedButtons) expect(screen.queryByRole("button", { name }), name).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Resume dispatch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue execution" }));
     expect(onCommand).toHaveBeenCalledWith({ verb: "resume-dispatch", groupId: "g", expectedRevision: 6, payload: {} });
   });
 
@@ -92,7 +92,7 @@ describe("the stop banner (issue-fixes spec §3.2 (4))", () => {
   it("names Archive group as the way out of handoff-partial, offers it, and no longer points at Retry recovery", async () => {
     mount(view("running", shutdownStop("handoff-partial")));
     const text = screen.getByTestId("stop-banner").textContent ?? "";
-    expect(text).toContain("Way out: press Archive group under Dispatch.");
+    expect(text).toContain("Way out: press Archive group under Execution controls.");
     expect(text).not.toContain("Retry recovery");
     expect(screen.getByRole("button", { name: "Archive group" })).toBeTruthy();
     cleanup();
@@ -100,7 +100,7 @@ describe("the stop banner (issue-fixes spec §3.2 (4))", () => {
     try {
       mount(view("running", shutdownStop("handoff-partial")));
       const zh = screen.getByTestId("stop-banner").textContent ?? "";
-      expect(zh).toContain("出路：点「调度」下的「归档这个组」。");
+      expect(zh).toContain("出路：点「执行控制」下的「归档这个组」。");
       expect(zh).not.toContain("重试恢复");
       expect(screen.getByRole("button", { name: "归档这个组" })).toBeTruthy();
     } finally {
@@ -112,8 +112,8 @@ describe("the stop banner (issue-fixes spec §3.2 (4))", () => {
     await i18n.changeLanguage("zh");
     mount(view("ready", shutdownStop("handoff-complete")));
     const text = screen.getByTestId("stop-banner").textContent ?? "";
-    expect(text).toContain("已停止：面板关闭时有运行在跑。");
-    expect(text).toContain("可以恢复了：用「调度」下的恢复按钮。");
+    expect(text).toContain("已停止 · 面板关闭时有运行在跑。");
+    expect(text).toContain("可以恢复了：用「执行控制」下的恢复按钮。");
     expect(screen.getByRole("button", { name: "恢复（不续跑）" })).toBeTruthy();
   });
 });

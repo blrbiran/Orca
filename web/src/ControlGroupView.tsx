@@ -65,6 +65,7 @@ export interface ControlGroupViewProps {
   drafts: Record<string, string>;
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void;
+  onSourceRequirement?: (groupId: string) => void;
   /** Issue-fixes spec §6.5: the clock the graph's elapsed and no-progress text is read against; the graph reads it itself when absent. */
   now?: number;
   /** W5: commands one control sends in order (BudgetEditor's onCommands). */
@@ -103,6 +104,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   // Issue-fixes spec §6.3: the server refuses every command of an archived group but the unarchive (group-archived).
   const archived = view.summary.archived === true;
   const continuable = continuableRuns(view);
+  const retryableCount = view.runs.filter((run) => retryRunOpen(view, run)).length;
+  const unresolvedCount = view.recoveryBlockers.length + view.runs.filter((run) => ["unknown", "attempt-unknown", "start-unknown"].includes(run.state)).length;
   const selections = (): ContinuationSelectionV1[] =>
     continuable.map(({ run, checkpointId }) => ({ taskId: String(run.taskId), predecessorRunId: run.runId, checkpointId }));
   // Labels and progress spec §4.2: the label filter (any of) and the open task live in page memory only.
@@ -133,6 +136,11 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const dispatchControls = (<>
       <div id={overviewRegionId("group", groupId, "dispatch")} tabIndex={-1} data-overview-region="dispatch">
       <h3>{t("control.group.dispatch")}</h3>
+      <dl className="execution-work-kinds">
+        <dt>{t("control.group.continuableWork")}</dt><dd>{continuable.length}</dd>
+        <dt>{t("control.group.retryableWork")}</dt><dd>{retryableCount}</dd>
+        <dt>{t("control.group.unresolvedWork")}</dt><dd>{unresolvedCount}</dd>
+      </dl>
       {continuable.length > 0 && <p>{t("control.group.continueFromCheckpoint")}</p>}
       {handoffActive && view.summary.stopState === "handoff-complete" && <p>{t("control.group.resumeForRetry")}</p>}
       {!archived && (
@@ -217,6 +225,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {/* Issue-fixes spec §3.2 (4): one banner for any stop intent -- how it stopped, its state, and the one way out. */}
       {view.stop !== null && (
         <div role="status" data-testid="stop-banner">
+          <strong>{t(view.stop.state === "handoff-pending" || view.stop.state === "handoff-unresolved" ? "control.group.stopping" : "control.group.stopped")}</strong>{" · "}
           <p>{t(`control.group.stopBanner.how.${view.stop.mode}` as const)}</p>
           <p>{t(`control.group.stopBanner.exit.${view.stop.state}` as const)}</p>
           <p>
@@ -246,6 +255,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <p>
         {t("control.group.planLine", { goal: view.plan.goal, hash: short(view.plan.planHash), graphVersion: view.graphVersion })}
       </p>
+      {view.summary.requirement !== undefined && <a href="#requirements" onClick={() => props.onSourceRequirement?.(groupId)}>{t("control.group.sourceRequirement")}</a>}
       {archived && (
         <p role="status" aria-label={t("control.group.archivedRegion")}>
           {t("control.group.archivedBanner")}{" "}
@@ -299,6 +309,16 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 
         </>,
         preparation: <>
+      <section aria-label={t("control.preparation.reviewTitle")}>
+        <h3>{t("control.preparation.reviewTitle")}</h3>
+        <p>{t("control.preparation.goal", { goal: view.plan.goal })}</p>
+        <ul>{view.plan.successConditions.map((condition, index) => <li key={index}>{condition}</li>)}</ul>
+        <p>{t("control.preparation.agentReview")}</p>
+        <p>{t("control.preparation.workspace", { mode: workspaceMode ?? t("common.unknown") })}</p>
+        <p>{t("control.preparation.integrationReview")}</p>
+        <p>{t("control.preparation.tokenPolicy")}</p>
+        <p>{t("control.preparation.sequence")}</p>
+      </section>
       <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} archived={archived} selectionsHash={selectionsHashFor(view, props.preview)}
         suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} />
       {props.agents !== undefined && (

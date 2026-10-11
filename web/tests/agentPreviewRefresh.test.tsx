@@ -146,12 +146,12 @@ const passQuiescent = async (ms: number): Promise<void> => {
 };
 /** Real time for an answer the test just released to reach the page. */
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 100));
-const confirmButton = (): HTMLButtonElement => screen.getByRole("button", { name: "Confirm budget" }) as HTMLButtonElement;
+const confirmButton = (): HTMLButtonElement => screen.getByRole("button", { name: "Confirm task plan" }) as HTMLButtonElement;
 
 async function openGroup(): Promise<void> {
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: /^g · draft/ }));
-  await screen.findByRole("button", { name: "Confirm budget" });
+  await screen.findByRole("button", { name: "Confirm task plan" });
 }
 
 describe("App re-reads a group's agent preview when the one on screen can no longer be confirmed (wave 3 I-3)", () => {

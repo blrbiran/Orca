@@ -1,0 +1,133 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { GroupList } from "../src/GroupList.js";
+import { Shell } from "../src/Shell.js";
+import { GlobalSettings } from "../src/GlobalSettings.js";
+import { ControlGroupView } from "../src/ControlGroupView.js";
+import { RequirementsPanel } from "../src/RequirementsPanel.js";
+import { ChainPanel } from "../src/ChainPanel.js";
+import { ADVANCED_KEY, readShowAdvanced, writeShowAdvanced } from "../src/advancedPreference.js";
+import { view as boardView, config as boardConfig } from "./fixtures/board.js";
+import { requirementView, config as requirementConfig, summaryWith } from "./fixtures/requirement.js";
+import type { GroupSummaryV1 } from "../src/controlTypes.js";
+
+const group = (over: Partial<GroupSummaryV1> = {}): GroupSummaryV1 => ({
+  groupId: "g", repoId: "repo", state: "ready", commandRevision: 7, projectionSeq: 1,
+  stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0,
+  archived: false, ...over,
+});
+afterEach(() => { cleanup(); window.localStorage.clear(); });
+
+it("the visible and context affordances open the same owner menu without nesting buttons", () => {
+  const onSelect = vi.fn(), onAction = vi.fn();
+  render(<GroupList groups={[group()]} selected={null} onSelect={onSelect} onAction={onAction} />);
+  const more = screen.getByRole("button", { name: "More actions" });
+  expect(more.closest("button button")).toBeNull();
+  fireEvent.click(more);
+  const menu = screen.getByRole("menu");
+  fireEvent.click(within(menu).getByRole("menuitem", { name: "Open details" }));
+  expect(onSelect).toHaveBeenCalledWith("g");
+  fireEvent.contextMenu(screen.getByRole("button", { name: /g · ready/ }));
+  expect(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Copy group ID" })).toBeTruthy();
+  fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(document.activeElement).toBe(more);
+});
+
+it("menu archives the exact owner and never offers permanent deletion", () => {
+  const onAction = vi.fn();
+  render(<GroupList groups={[group()]} selected={null} onSelect={vi.fn()} onAction={onAction} />);
+  fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+  fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }));
+  expect(onAction).toHaveBeenCalledWith("g", "archive-group", "repo");
+  expect(screen.queryByText(/permanent.*delete/i)).toBeNull();
+});
+
+it("pending requirement work disables archive with a reason", () => {
+  const requirement = requirementView("awaiting-review").summary;
+  requirement.requirement!.draftState = "drafting";
+  render(<GroupList groups={[requirement]} selected={null} onSelect={vi.fn()} onAction={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+  const archive = within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }) as HTMLButtonElement;
+  expect(archive.disabled).toBe(true);
+  expect(archive.getAttribute("aria-describedby")).toBeTruthy();
+});
+
+it("advanced navigation is opt-in, but a running chain remains linked", () => {
+  expect(readShowAdvanced(window.localStorage)).toBe(false);
+  writeShowAdvanced(window.localStorage, true);
+  expect(window.localStorage.getItem(ADVANCED_KEY)).toBe("true");
+  expect(readShowAdvanced(window.localStorage)).toBe(true);
+  const common = { active: "overview" as const, footer: [], badges: { unreviewed: 0, chainRunning: false, controlAlert: false }, children: <p>content</p> };
+  const first = render(<Shell {...common} showAdvanced={false} />);
+  expect(screen.queryByRole("link", { name: "Continuous improvement (advanced)" })).toBeNull();
+  first.rerender(<Shell {...common} showAdvanced={true} />);
+  expect(screen.getByRole("link", { name: "Continuous improvement (advanced)" }).getAttribute("href")).toBe("#chains");
+  first.rerender(<Shell {...common} showAdvanced={false} badges={{ ...common.badges, chainRunning: true }} />);
+  expect(screen.getByRole("link", { name: "Continuous improvement (advanced)" })).toBeTruthy();
+});
+
+it("global settings edits the advanced preference", () => {
+  const onAdvanced = vi.fn();
+  render(<GlobalSettings theme="system" onTheme={vi.fn()} language="en" onLanguage={vi.fn()} agents={null} showAdvanced={false} onAdvanced={onAdvanced} />);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Show continuous improvement" }));
+  expect(onAdvanced).toHaveBeenCalledWith(true);
+});
+
+it("the advanced chain page states its current Orca development scope", () => {
+  render(<ChainPanel repos={[]} banners={[]} outcome={null} />);
+  expect(screen.getByText(/Orca development/)).toBeTruthy();
+});
+
+it("an accepted requirement offers preparation for its exact group and keeps its source readable", () => {
+  const accepted = requirementView("awaiting-review");
+  accepted.summary.state = "draft";
+  accepted.requirement.acceptedDraftNo = 1;
+  accepted.drafts[0]!.state = "accepted";
+  const onPrepare = vi.fn();
+  const onCommand = vi.fn();
+  render(<RequirementsPanel config={requirementConfig} summary={summaryWith(accepted)} views={{ r: accepted }} selected="r"
+    agents={null} language="en" onSelect={vi.fn()} onCommand={onCommand} onPrepare={onPrepare} />);
+  fireEvent.click(screen.getByRole("button", { name: "Go to task preparation" }));
+  expect(onPrepare).toHaveBeenCalledWith("r");
+  expect(onCommand).not.toHaveBeenCalled();
+  expect(screen.getByText("People can export a note as Markdown.")).toBeTruthy();
+});
+
+it("execution controls name pause and safe stop without implying completion", () => {
+  const shown = boardView([]);
+  shown.summary.state = "ready";
+  render(<ControlGroupView view={shown} config={boardConfig} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+  fireEvent.click(screen.getByRole("tab", { name: "Preparation" }));
+  expect(screen.getByRole("heading", { name: "Execution controls" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Pause new tasks" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Save progress and stop" })).toBeTruthy();
+  const region = screen.getByRole("tabpanel", { name: "Preparation" });
+  expect(within(region).getByText("Continuable work")).toBeTruthy();
+  expect(within(region).getByText("Retryable work")).toBeTruthy();
+  expect(within(region).getByText("Unresolved work")).toBeTruthy();
+});
+
+it("unresolved Agent selections give a destination before confirmation", () => {
+  const shown = boardView([]);
+  shown.summary.state = "draft";
+  shown.proposal.state = "editable";
+  render(<ControlGroupView view={shown} config={boardConfig} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+  const region = screen.getByRole("tabpanel", { name: "Preparation" });
+  expect(within(region).getByRole("link", { name: "Global settings" }).getAttribute("href")).toBe("#global-settings");
+  expect((within(region).getByRole("button", { name: "Confirm task plan" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("pending stop is stopping and settled stop is stopped only from stop facts", () => {
+  const shown = boardView([]);
+  shown.summary.stopMode = "handoff";
+  shown.summary.stopState = "handoff-pending";
+  shown.stop = { mode: "handoff", state: "handoff-pending", frozenRunIds: [], acceptedAt: null, deadlineAt: null };
+  const mounted = render(<ControlGroupView view={shown} config={boardConfig} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+  expect(screen.getByTestId("stop-banner").textContent).toContain("Stopping");
+  expect(screen.getByTestId("stop-banner").textContent).not.toContain("Stopped");
+  mounted.rerender(<ControlGroupView view={{ ...shown, summary: { ...shown.summary, stopState: "handoff-complete" }, stop: { ...shown.stop, state: "handoff-complete" } }}
+    config={boardConfig} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+  expect(screen.getByTestId("stop-banner").textContent).toContain("Stopped");
+});

@@ -134,7 +134,7 @@ describe("agent selection in the proposal view (agent selection spec §6.8)", ()
     expect(cell.textContent).toContain("agent-context-unsupported");
     expect(cell.textContent).toContain("rejected");
     expect(cell.style.color).toBe("red");
-    expect((screen.getByRole("button", { name: "Confirm budget" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Confirm task plan" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows a slot ccloop could not answer for now in red with the code, worded as unavailable rather than refused, and offers no confirm", () => {
@@ -144,7 +144,7 @@ describe("agent selection in the proposal view (agent selection spec §6.8)", ()
     expect(cell.textContent).toContain("unavailable for now");
     expect(cell.textContent).not.toContain("rejected");
     expect(cell.style.color).toBe("red");
-    expect((screen.getByRole("button", { name: "Confirm budget" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Confirm task plan" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("sends proposal-set-agent for a task and for a group slot, bound to the revision and proposal version on screen", () => {
@@ -199,7 +199,7 @@ describe("agent selection in the proposal view (agent selection spec §6.8)", ()
   it("confirms with the selectionsHash of the resolution on screen", () => {
     const onCommand = vi.fn();
     renderView({ onCommand });
-    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
     expect(onCommand).toHaveBeenCalledTimes(1);
     expect(onCommand.mock.calls[0]![0]).toMatchObject({ verb: "confirm", groupId: "g", payload: { proposalVersion: 3, selectionsHash: HASH } });
   });
@@ -207,7 +207,7 @@ describe("agent selection in the proposal view (agent selection spec §6.8)", ()
   it("does not confirm on a resolution made for another proposal version, and says it is re-reading", () => {
     const onCommand = vi.fn();
     const { container } = renderView({ onCommand, preview: resolvedPreview({ proposalVersion: 2 }) });
-    const button = screen.getByRole("button", { name: "Confirm budget" }) as HTMLButtonElement;
+    const button = screen.getByRole("button", { name: "Confirm task plan" }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     fireEvent.click(button);
     expect(onCommand).not.toHaveBeenCalled();

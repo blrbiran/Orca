@@ -21,7 +21,7 @@ const GROUPS = [
   g("d1", { completion: { done: 1, total: 1 }, counts: { ...zero, done: 1 } }), g("x1", { archived: true }),
 ];
 const nav = () => screen.getByRole("navigation", { name: "Control groups" });
-const ids = () => [...nav().querySelectorAll(":scope > button")].map((card) => (card.textContent ?? "").split(" · ")[0]);
+const ids = () => [...nav().querySelectorAll(":scope > .group-card-row > .group-card")].map((card) => (card.textContent ?? "").split(" · ")[0]);
 const chip = (name: string) => within(screen.getByRole("group", { name: "Show groups" })).getByRole("button", { name });
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); try { window.localStorage.clear(); } catch { /* none */ } });

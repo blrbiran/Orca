@@ -75,7 +75,7 @@ describe("the task control and recovery areas in Chinese", () => {
       "g · 运行中 · 版本 6 · 状态序号 4", "认领已阻断 · ", "goal-x · 计划 aaaaaaaaaaaa · 图 v1", "停止 暂停 已暂停 · 受理于 不适用 · 截止 无 · 0 个冻结的运行：无",
       "工作项", "依赖", "已挂起", "等人处理 · 尝试次数未知 · token 5 / 0", "已阻塞 — why-1 · 第 2 次尝试（认领序号 不适用）", "重试运行 a",
       "交接请求", "h1 · 运行 r1 · 结果未知 · 截止 2026-10-02T00:00:00.000Z · 证据 无", "est-1 · v1 · 已中断 · 严格 · profile p1 bbbbbbbbbbbb",
-      "等待台账回答：c1", "调度", "恢复调度", "重试 g 的恢复", "最近的命令：无", "命令结果未知，正在查询：c1 (g)",
+      "等待台账回答：c1", "调度", "继续执行", "重试 g 的恢复", "最近的命令：无", "命令结果未知，正在查询：c1 (g)",
       "全局 · 所有组 · code-2", "运行 · g · 运行 r1 · code-1", "运行证据", "重试恢复",
       "orca 里新的运行使用git worktree（设置版本 1）。已开始的运行保持原样。", "git worktree（默认）", "私有克隆",
     ]) expect(text, expected).toContain(expected);
@@ -147,15 +147,15 @@ describe("the rest of the control area's branches in Chinese", () => {
     fireEvent.click(screen.getByRole("tab", { name: "技术详情" }));
     expect(screen.getByRole("heading", { name: "估算" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "准备" }));
-    for (const name of ["开跑", "暂停调度", "交接停止"]) expect(screen.getByRole("button", { name }), name).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 3, name: "调度" })).toBeTruthy();
+    for (const name of ["开始", "暂停启动新任务", "保存进度并停止"]) expect(screen.getByRole("button", { name }), name).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 3, name: "执行控制" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "运行与证据" }));
     expect(screen.getByRole("heading", { level: 3, name: "运行" })).toBeTruthy();
     cleanup();
 
     render(<ControlGroupView view={view} {...props} />);
     fireEvent.click(screen.getByRole("tab", { name: "问题" }));
-    expect(screen.getByRole("button", { name: "恢复调度" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "继续执行" })).toBeTruthy();
     cleanup();
 
     const handoff = { ...view.summary, stopMode: "handoff" as const, stopState: "handoff-complete" as const };

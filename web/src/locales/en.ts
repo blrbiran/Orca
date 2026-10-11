@@ -54,15 +54,15 @@ const stopState = {
 // Issue-fixes spec §3.2 (4): the stop banner says how the group stopped and the one way out of each stop state.
 const stopBannerHow = {
   pause: "Stopped: a person paused dispatch. No new run is claimed.",
-  handoff: "Stopped: a person asked for a handoff-stop. The runs that were active are frozen and hand off their work.",
-  shutdown: "Stopped: the panel shut down while runs were active. Those runs were frozen and hand off their work.",
+  handoff: "Save progress and stop was requested. Active runs are frozen and hand off their work.",
+  shutdown: "The panel shut down while runs were active. Those runs were frozen and hand off their work.",
 } as const satisfies Record<NonNullable<GroupSummaryV1["stopMode"]>, string>;
 const stopBannerExit = {
-  paused: "Way out: press Resume dispatch under Dispatch.",
+  paused: "Way out: press Continue execution under Execution controls.",
   "handoff-pending": "Stopping: the frozen runs are still settling. Nothing to press yet; the way out appears here when they finish.",
-  "handoff-partial": "A frozen run could not hand off, so the group cannot resume from this stop. Way out: press Archive group under Dispatch.",
-  "handoff-unresolved": "A frozen run's outcome is not known yet. The group stays stopped; press Retry recovery under Dispatch when it is offered.",
-  "handoff-complete": "Ready to resume: use the resume button under Dispatch.",
+  "handoff-partial": "A frozen run could not hand off, so the group cannot resume from this stop. Way out: press Archive group under Execution controls.",
+  "handoff-unresolved": "A frozen run's outcome is not known yet. The group stays stopped; press Retry recovery under Execution controls when it is offered.",
+  "handoff-complete": "Ready to resume: use the resume button under Execution controls.",
 } as const satisfies Record<NonNullable<GroupSummaryV1["stopState"]>, string>;
 const workStatus = {
   draft: "draft", ready: "ready", starting: "starting", "start-unknown": "start-unknown", active: "active", held: "held", continuing: "continuing", completed: "completed", blocked: "blocked",
@@ -209,7 +209,7 @@ export const en = {
   }
 },
   detail: { regions: "Group detail", progress: "Progress", preparation: "Preparation", problem: "Problems", results: "Results", runs: "Runs and evidence", technical: "Technical details", resultsMissing: "Work is completed; its explanation is missing.", resultsNotProduced: "A result explanation has not been produced here yet.", resultsEvidence: "Existing run evidence remains available. Task completion, goal review and Git delivery are separate facts.", openRun: "Open run controls and evidence · {{runId}}", goalReview: "The group is in goal review; task completion does not establish goal acceptance.", nextAction: "Review progress, preparation or problems; each region keeps the actions allowed by the current read." },
-  nav: { overview: "Overview", sections: "Sections", decisions: "Decisions", chains: "Chains", tasks: "Task control", requirements: "Requirements", memory: "Memory", metrics: "Metrics", globalSettings: "Global settings", projectSettings: "Project settings" },
+  nav: { overview: "Overview", sections: "Sections", decisions: "Decisions", chains: "Continuous improvement (advanced)", tasks: "Task control", requirements: "Requirements", memory: "Memory", metrics: "Metrics", globalSettings: "Global settings", projectSettings: "Project settings" },
   overview: {
     title: "Overview", progress: "Progress", queue: "Needs your attention", newRequirement: "New requirement", import: "Import plan",
     global: "Global control", ownerUnknown: "owner not in registry", ownerRequired: "An owner must take this action.",
@@ -289,6 +289,8 @@ export const en = {
     dismissOperation: "Dismiss",
   },
   chains: {
+    activeBanner: "Continuous improvement {{chainId}} is running",
+    scope: "This advanced workflow currently runs Orca development chains. It does not plan or execute tasks across groups.",
     notLoaded: "Chains have not loaded.",
     title: "Chains",
     noChain: "No chain yet.",
@@ -316,6 +318,7 @@ export const en = {
     banner: chainBanner,
   },
   control: {
+    preparation: { reviewTitle: "Review task plan", goal: "Goal: {{goal}}", agentReview: "Review the effective Agent and role selections below before confirming.", workspace: "Workspace: {{mode}}", integrationReview: "Review the integration target below.", tokenPolicy: "Review the optional token policy and allocations below.", sequence: "Confirm the task plan first; Start is a separate action after confirmation." },
     savedResult:{notDispatched:"Verification was not started. Ordinary retry creates a new plan and execution on the current target.",verify:"Verify saved results",cost:"Execution is skipped; validation and verification may consume model usage.",unavailable:"Saved results are unavailable for verification.",lineage:"Verification source: {{runId}} · attempt {{attempt}}"},
     unavailable: "The task control plane is not available on this panel.",
     title: "Task control",
@@ -348,6 +351,7 @@ export const en = {
       dismissed: "Dismissed uncertain operations",
     },
     requirementBadge: "requirement — open in Requirements",
+    groupMenu: { more: "More actions", open: "Open details", copyId: "Copy group ID", archiveUnavailable: "This action is unavailable until this group can be read.", archivePending: "Wait for active work or recovery before archiving." },
     import: {
       region: "Import plan",
       title: "Import a plan",
@@ -368,7 +372,10 @@ export const en = {
       spendCapBlock: "Waiting on a spend cap: the {{period}} cap for {{scope}} is {{cap}} tokens and the next claim needs {{grant}}. It resumes on its own once the cap is raised or a new period starts.",
       spendCapLink: "See usage and caps",
       planLine: "{{goal}} · plan {{hash}} · graph v{{graphVersion}}",
+      sourceRequirement: "Inspect source requirement",
       stop: "stop {{mode}} {{state}} · accepted {{accepted}} · deadline {{deadline}} · {{n}} frozen run(s): {{runs}}",
+      stopping: "Stopping",
+      stopped: "Stopped",
       stopBanner: { how: stopBannerHow, exit: stopBannerExit },
       workItems: "Work items",
       filterRegion: "Filter work items by label",
@@ -387,11 +394,14 @@ export const en = {
       estimates: "Estimates",
       estimateLine: "{{estimateId}} · v{{version}} · {{state}} · {{mode}} profile {{profileId}} {{hash}}",
       waiting: "Waiting for the ledger to answer: {{commands}}",
-      dispatch: "Dispatch",
+      dispatch: "Execution controls",
+      continuableWork: "Continuable work",
+      retryableWork: "Retryable work",
+      unresolvedWork: "Unresolved work",
       start: "Start",
-      pause: "Pause dispatch",
-      handoffStop: "Handoff stop",
-      resume: "Resume dispatch",
+      pause: "Pause new tasks",
+      handoffStop: "Save progress and stop",
+      resume: "Continue execution",
       continueSelected: "Continue selected tasks ({{n}})",
       continueTask: "Continue task {{taskId}}",
       retryFromHead: "Retry creates a new run from the current group branch head and needs a new budget reservation.",
@@ -628,7 +638,8 @@ export const en = {
     save: "Save proposal",
     reestimate: "Re-estimate",
     confirmWaits: "Confirm waits for this proposal version's agent selections to resolve.",
-    confirm: "Confirm budget",
+    confirmDestination: "Review the Agent selections below or check installation and defaults in",
+    confirm: "Confirm task plan",
     provenanceModel: "model {{estimateId}}",
   },
   loopPlan: {
@@ -772,6 +783,7 @@ export const en = {
   },
   // N1 spec §11.2: the Requirements section.
   requirements: {
+    goToPreparation: "Go to task preparation",
     ownerRaisesLimit: "Only an owner can raise this limit; ask one to.",
     title: "Requirements",
     list: "Requirement list",
@@ -846,6 +858,7 @@ export const en = {
   },
   settings: {
     browserScope: "Theme and language are remembered in this browser.",
+    showAdvanced: "Show continuous improvement",
     agentScope: "Agent defaults belong to the shared panel operator. Existing confirmed groups keep their frozen choices.",
     account: "Account", chooseProject: "Choose a concrete project in the project picker to view or change its settings.",
     projectScope: "Defaults for {{project}}. Existing groups keep their own choices.",

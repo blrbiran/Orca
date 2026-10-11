@@ -517,7 +517,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       {!archived && <button type="button" disabled={!editable || hasBadDraft(drafts) || editedOperations(view, drafts).length === 0} onClick={submitEdit}>{t("budget.save")}</button>}
       {estimator !== null && !archived && <button type="button" disabled={estimator.profile === null} onClick={submitEstimate}>{t("budget.reestimate")}</button>}
       {editable && <GroupIntegrationConfirm view={view} suggestedTarget={props.suggestedTarget ?? null} onCommand={onCommand} />}
-      {editable && shownSelectionsHash === null && <p role="note">{t("budget.confirmWaits")}</p>}
+      {editable && shownSelectionsHash === null && <p role="note">{t("budget.confirmWaits")} {t("budget.confirmDestination")} <a href="#global-settings">{t("nav.globalSettings")}</a></p>}
       {!archived && <button type="button" disabled={confirmBlocked || shownSelectionsHash === null || integrationBlocked || hasBadDraft(drafts)} onClick={submitConfirm}>{t("budget.confirm")}</button>}
     </section>
   );

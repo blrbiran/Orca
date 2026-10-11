@@ -51,6 +51,8 @@ import {
 import type { CorrectionForm, PanelRefusal, RecordCorrectionInput } from "./api.js";
 import { bannersFor, readDismissed, writeDismissed } from "./chainBanner.js";
 import { ChainBanners, ChainPanel } from "./ChainPanel.js";
+import { readShowAdvanced, writeShowAdvanced } from "./advancedPreference.js";
+import { archiveOpen } from "./runFacts.js";
 import type { ChainOutcome } from "./ChainPanel.js";
 import {
   AGENT_PREFERENCES_PATH,
@@ -226,6 +228,7 @@ export function App(): JSX.Element {
   const [status, setStatus] = useState<DecisionStatus>("unreviewed");
   const [allRows, setAllRows] = useState<DecisionStatusRow[] | null>(null);
   const [theme, setTheme] = useState<ThemePref>(() => readTheme(browserStorage()));
+  const [showAdvanced, setShowAdvanced] = useState(() => readShowAdvanced(browserStorage()));
   useEffect(() => {
     const onHash = (): void => { navigationSeq.current++; setSection(sectionFromHash(window.location.hash)); };
     window.addEventListener("hashchange", onHash);
@@ -504,6 +507,24 @@ export function App(): JSX.Element {
     for (const [index, action] of actions.entries()) {
       revision = await sendControl(index === 0 ? action : { ...action, expectedRevision: revision! });
       if (revision === null) return;
+    }
+  };
+
+  /** Card actions read the exact owner at click time; a stale card cannot submit its old revision. */
+  const sendGroupCardAction = async (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string): Promise<void> => {
+    try {
+      const summaryOwner = controlNow.current.groups[groupId];
+      if (summaryOwner === undefined || summaryOwner.repoId !== repoId) return;
+      const fresh = summaryOwner.state === "clarifying" ? await fetchRequirement(groupId) : await fetchControlGroup(groupId);
+      if (fresh.summary.groupId !== groupId || fresh.summary.repoId !== repoId) return;
+      if (verb === "unarchive-group" ? fresh.summary.archived !== true : fresh.summary.archived === true) return;
+      // The full group view exposes the same active-run guards as the detail. The ledger remains authoritative.
+      if (verb === "archive-group" && fresh.schema === "orca-control-group-v1" && !archiveOpen(fresh)) return;
+      if (fresh.schema === "orca-requirement-view-v1") setRequirementViews((all) => ({ ...all, [groupId]: fresh }));
+      else dispatchControl({ type: "group", value: fresh });
+      await sendControl({ verb, groupId, expectedRevision: fresh.summary.commandRevision, payload: {} });
+    } catch (err) {
+      dispatchControl({ type: "refusal", place: "group", groupId, value: controlFailureFrom(err) });
     }
   };
 
@@ -1166,6 +1187,7 @@ export function App(): JSX.Element {
     <ProjectNames.Provider value={nameOf}>
     <Shell
       active={section}
+      showAdvanced={showAdvanced}
       badges={{
         unreviewed: todo.status === "available" ? todo.data?.length ?? null : null,
         chainRunning: chains?.some((r) => r.chain?.state === "running") ?? false,
@@ -1205,6 +1227,13 @@ export function App(): JSX.Element {
       banners={
         <>
           {chains !== null && <ChainBanners banners={bannersFor(chains, dismissed)} onDismiss={dismiss} />}
+          {chains?.filter((repo) => repo.chain?.state === "running").map((repo) => <div key={repo.repoKey} role="status" className="chain-banner">
+            <a href="#chains">{t("chains.activeBanner", { chainId: repo.chain!.chainId })}</a>{" "}
+            <button type="button" onClick={() => { void chainAction(async () => {
+              const answer = await requestChainStop(repo.repoKey, repo.chain!.chainId);
+              return answer.ok ? { kind: "stop-requested", chainId: repo.chain!.chainId } : { kind: "refused", refusal: answer };
+            }); }}>{t("chains.stop")}</button>
+          </div>)}
           <UncertainOperations commands={control.uncertainCommandIds}
             onCheck={(command) => { void resolveUncertain(command, true); }}
             onDismiss={(command) => dispatchControl({ type: "command-dismissed", value: command })} />
@@ -1220,6 +1249,8 @@ export function App(): JSX.Element {
       <SectionPane section="global-settings" active={section}>
         <GlobalSettings
           theme={theme}
+          showAdvanced={showAdvanced}
+          onAdvanced={(value) => { setShowAdvanced(value); writeShowAdvanced(browserStorage(), value); }}
           language={currentLanguage()}
           onLanguage={(lang) => {
             writeLanguage(browserStorage(), lang);
@@ -1312,6 +1343,9 @@ export function App(): JSX.Element {
           focusRequest={overviewFocus?.request}
           focus={overviewFocus?.target.kind === "group" ? overviewFocus.target : null}
           onSelect={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedGroup(id); }}
+          onSelectRequirement={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedRequirement(id); setSection("requirements"); window.location.hash = "requirements"; void readRequirement(id); }}
+          onSourceRequirement={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedRequirement(id); setSection("requirements"); window.location.hash = "requirements"; void readRequirement(id); }}
+          onGroupAction={(groupId, verb, repoId) => { void sendGroupCardAction(groupId, verb, repoId); }}
           onDraft={(key, text) => dispatchControl({ type: "draft", key, text })}
           onCommand={(action) => {
             void sendControl(action);
@@ -1342,6 +1376,9 @@ export function App(): JSX.Element {
       <SectionPane section="requirements" active={section}>
         {controlConfig !== null && control.recovery !== null && (
           <RequirementsPanel config={controlConfig} summary={summaryView(control)} views={requirementViews} selected={selectedRequirement} agents={agents}
+            onPrepare={(groupId) => { navigationSeq.current++; setOverviewFocus(null); setSelectedGroup(groupId); setSection("tasks"); window.location.hash = "tasks"; void readControlGroup(groupId); }}
+            onGroupAction={(groupId, verb, repoId) => { void sendGroupCardAction(groupId, verb, repoId); }}
+            groupRefusals={control.refusals}
             focus={overviewFocus?.target.kind === "requirement" ? overviewFocus.target : null}
             language={currentLanguage()} refusal={requirementRefusal}
             scope={scope} repoLabel={repoLabel} targets={targets} drafts={detailDrafts} onDraft={onDetailDraft}

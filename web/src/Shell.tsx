@@ -54,6 +54,7 @@ export function Shell(props: {
   /** Project registry spec §7 (§12 C5): the project control, at the top of the sidebar. */
   projectControl?: ReactNode;
   banners?: ReactNode;
+  showAdvanced?: boolean;
   children: ReactNode;
 }): JSX.Element {
   const { t } = useTranslation();
@@ -63,7 +64,7 @@ export function Shell(props: {
         <div className="brand" title={t("shell.brandTitle")}><span className="brand-dot" />Orca</div>
         {props.projectControl}
         <ul className="nav">
-          {SECTIONS.map((section) => (
+          {SECTIONS.filter((section) => section !== "chains" || props.showAdvanced === true || props.badges.chainRunning || props.active === "chains").map((section) => (
             <li key={section}>
               <a className="nav-item" href={hashFor(section)} aria-current={section === props.active ? "page" : undefined}>
                 <span>{t(NAV_KEY[section])}</span>

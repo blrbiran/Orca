@@ -15,6 +15,8 @@ import {
 import { enumText } from "./i18n.js";
 import { inScope, type GroupScope } from "./projectScope.js";
 import { hashFor } from "./sections.js";
+import { GroupActionsMenu } from "./GroupActionsMenu.js";
+import type { ControlRefusal } from "./controlState.js";
 
 export interface GroupListProps {
   groups: GroupSummaryV1[];
@@ -22,6 +24,9 @@ export interface GroupListProps {
   scope?: GroupScope;
   repoLabel?: (repoId: string) => string;
   onSelect: (groupId: string) => void;
+  onSelectRequirement?: (groupId: string) => void;
+  onAction?: (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string) => void;
+  refusals?: Record<string, ControlRefusal>;
   /** Tests pin the clock; the page reads it every 30 s. */
   now?: number;
 }
@@ -34,13 +39,13 @@ function updatedText(t: TFunction, minutes: number): string {
   return hours < 48 ? t("control.groupCard.updatedHours", { hours }) : t("control.groupCard.updatedDays", { days: Math.floor(hours / 24) });
 }
 
-function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: string; now: number; onSelect: () => void }): JSX.Element {
+function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: string; now: number; onSelect: () => void; onAction?: GroupListProps["onAction"]; refusal?: ControlRefusal }): JSX.Element {
   const { t } = useTranslation();
   const { group } = props;
   const base = useId();
   const category = groupCategory(group);
   const updated = group.updatedAt === undefined || group.updatedAt === null ? null : Math.max(0, Math.floor((props.now - group.updatedAt) / 60_000));
-  return (
+  return <GroupActionsMenu group={group} onOpen={props.onSelect} onAction={props.onAction} refusal={props.selected ? null : props.refusal}>{(onContextMenu) => (
     <button
       type="button"
       className="group-card"
@@ -49,6 +54,7 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
       aria-labelledby={(props.repoText === "" ? [`${base}-name`] : [`${base}-name`, `${base}-repo`]).join(" ")}
       aria-describedby={`${base}-detail`}
       onClick={props.onSelect}
+      onContextMenu={onContextMenu}
     >
       <span id={`${base}-name`} className="group-card-name">
         {group.groupId} · {enumText("groupState", group.state)}
@@ -69,7 +75,7 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
       </span>
       {props.repoText !== "" && <span id={`${base}-repo`}>{props.repoText}</span>}
     </button>
-  );
+  )}</GroupActionsMenu>;
 }
 
 export function GroupList(props: GroupListProps): JSX.Element {
@@ -99,9 +105,11 @@ export function GroupList(props: GroupListProps): JSX.Element {
         ) : listed.length === 0 ? <p>{t("control.noGroups")}</p> : shown.length === 0 && <p>{t("control.groupFilter.empty")}</p>}
         {shown.map((group) => group.state === "clarifying" ? (
           // N1 spec §11.2: a clarifying group has no group view (DR25); it is operated in Requirements until accept.
-          <a key={group.groupId} className="group-card" href={hashFor("requirements")}>{group.groupId} · {enumText("groupState", group.state)} · {t("control.requirementBadge")}{label(group.repoId)}</a>
+          <GroupActionsMenu key={group.groupId} group={group} onOpen={() => props.onSelectRequirement?.(group.groupId)} onAction={props.onAction} refusal={props.refusals?.[group.groupId]}>{(onContextMenu) => (
+            <a className="group-card" href={hashFor("requirements")} onClick={() => props.onSelectRequirement?.(group.groupId)} onContextMenu={onContextMenu}>{group.groupId} · {enumText("groupState", group.state)} · {t("control.requirementBadge")}{label(group.repoId)}</a>
+          )}</GroupActionsMenu>
         ) : (
-          <GroupCard key={group.groupId} group={group} selected={group.groupId === props.selected} repoText={label(group.repoId)} now={now} onSelect={() => props.onSelect(group.groupId)} />
+          <GroupCard key={group.groupId} group={group} selected={group.groupId === props.selected} repoText={label(group.repoId)} now={now} onSelect={() => props.onSelect(group.groupId)} onAction={props.onAction} refusal={props.refusals?.[group.groupId]} />
         ))}
       </nav>
     </>

@@ -249,11 +249,11 @@ describe("BudgetEditor token fields", () => {
     render(<Editor onCommand={onCommand} />);
     const handoff = screen.getByRole("textbox", { name: /^Hand off at context tokens/ });
     fireEvent.change(handoff, { target: { value: "150,000" } });
-    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
     expect((onCommand.mock.calls[0]![0] as ControlAction).payload).toMatchObject({ contextPolicy: { handoffAtContextTokens: 150_000 } });
     fireEvent.change(handoff, { target: { value: "150k" } });
-    expect((screen.getByRole("button", { name: "Confirm budget" }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    expect((screen.getByRole("button", { name: "Confirm task plan" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
     expect(onCommand).toHaveBeenCalledTimes(1);
   });
   it("keeps activeMs, attempts and sessions as plain numeric text", () => {
@@ -265,7 +265,7 @@ describe("BudgetEditor token fields", () => {
     const stored = { [CONTEXT_POLICY_KEY("g")]: "invalid", [groupLimitKey("g", "tokens")]: "invalid" };
     render(<AccountContext.Provider value={owner}><EditorWith initial={stored} onCommand={vi.fn()} /></AccountContext.Provider>);
     expect(screen.queryByRole("alert")).toBeNull();
-    expect((screen.getByRole("button", { name: "Confirm budget" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Confirm task plan" }) as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getByRole("textbox", { name: /^Hand off at context tokens/ }) as HTMLInputElement).value).toBe("0");
   });
   it("accepts a blank handoff field as unset: no error, and Confirm sends null (review I2)", () => {
@@ -275,8 +275,8 @@ describe("BudgetEditor token fields", () => {
     fireEvent.change(handoff, { target: { value: "150,000" } });
     fireEvent.change(handoff, { target: { value: "" } });
     expect(screen.queryByRole("alert")).toBeNull();
-    expect((screen.getByRole("button", { name: "Confirm budget" }) as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    expect((screen.getByRole("button", { name: "Confirm task plan" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
     expect((onCommand.mock.calls[0]![0] as ControlAction).payload).toMatchObject({ contextPolicy: { handoffAtContextTokens: null } });
   });
   it("final review M-T10: the group limit's magnitude hint sits beside its input, outside the label's text", () => {

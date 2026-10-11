@@ -8,6 +8,7 @@ import type { OverviewTarget } from "./overviewNavigation.js";
 import { useContext, useEffect, useState, type JSX } from "react";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { useTranslation } from "react-i18next";
+import { GroupActionsMenu } from "./GroupActionsMenu.js";
 import { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText, refusalText } from "./i18n.js";
 import type { PanelLanguage } from "./i18n.js";
 import { TokenInput } from "./TokenInput.js";
@@ -247,7 +248,7 @@ function RaiseLimit(props: { view: View; onCommand: OnCommand } & EditableDrafts
   );
 }
 
-function Detail(props: { view: View; onCommand: OnCommand } & EditableDrafts): JSX.Element {
+function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId: string) => void } & EditableDrafts): JSX.Element {
   const { t } = useTranslation();
   const { view } = props, groupId = view.summary.groupId;
   const editable: EditableDrafts = { drafts: props.drafts, onDraft: props.onDraft };
@@ -273,6 +274,8 @@ function Detail(props: { view: View; onCommand: OnCommand } & EditableDrafts): J
   return (
     <article aria-label={view.requirement.slug ?? groupId}>
       <h3>{view.requirement.slug ?? groupId} · {enumText("groupState", view.summary.state)}</h3>
+      {view.requirement.acceptedDraftNo !== null && view.summary.state !== "clarifying" &&
+        <button type="button" onClick={() => props.onPrepare?.(groupId)}>{t("requirements.goToPreparation")}</button>}
       {archived ? <section aria-label={t("control.group.archivedRegion")}>
         <p>{t("control.group.archivedBanner")}</p>
         <button type="button" onClick={() => props.onCommand({ verb: "unarchive-group", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("control.group.unarchive")}</button>
@@ -330,6 +333,9 @@ function Detail(props: { view: View; onCommand: OnCommand } & EditableDrafts): J
 
 export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kind: "requirement" }> | null; config: ControlConfigV1; summary: ControlSummaryV1; views: Record<string, RequirementViewV1>; selected: string | null;
   agents: AgentsViewV1 | null; language: PanelLanguage; onSelect: (groupId: string) => void;
+  onPrepare?: (groupId: string) => void;
+  onGroupAction?: (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string) => void;
+  groupRefusals?: Record<string, ControlRefusal>;
   /** `submitted` names the draft a success may clear, when it is still unchanged (spec §11 R2). */
   onCommand: (action: ControlAction, submitted?: Submitted) => void;
   /** The control state's last refusal: a refused requirement command is explained here, where it was pressed. */
@@ -365,15 +371,18 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
           <label><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.currentTarget.checked)} />{t("requirements.showArchived")}</label>
           {scope?.kind === "unresolved" ? <p role="note">{t("project.listUnavailable")}</p> : listed.length === 0 && <p>{t("requirements.none")}</p>}
           {listed.map((group) => (
-            <button key={group.groupId} type="button" aria-current={group.groupId === props.selected} onClick={() => props.onSelect(group.groupId)}>
+            <GroupActionsMenu key={group.groupId} group={group} onOpen={() => props.onSelect(group.groupId)} onAction={props.onGroupAction}
+              refusal={group.groupId === props.selected ? null : props.groupRefusals?.[group.groupId]}>{(onContextMenu) => (
+            <button type="button" aria-current={group.groupId === props.selected} onClick={() => props.onSelect(group.groupId)} onContextMenu={onContextMenu}>
               {group.groupId} · {enumText("groupState", group.state)}
               {scope?.kind === "all" ? ` · ${props.repoLabel?.(group.repoId) ?? group.repoId}` : ""}
             </button>
+            )}</GroupActionsMenu>
           ))}
           <NewRequirement config={props.config} agents={props.agents} language={props.language} onCommand={onCommand} repoId={props.repoId} onRepo={props.onRepo}
             scope={scope} targets={props.targets} repoLabel={props.repoLabel} {...editable} />
         </nav>
-        {view !== undefined && <Detail view={view} onCommand={onCommand} {...editable} />}
+        {view !== undefined && <Detail view={view} onCommand={onCommand} onPrepare={props.onPrepare} {...editable} />}
       </div>
     </section>
   );

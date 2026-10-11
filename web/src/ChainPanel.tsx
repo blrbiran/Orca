@@ -100,6 +100,7 @@ export function ChainPanel({
   return (
     <section className="chains">
       <h2>{t("chains.title")}</h2>
+      <p>{t("chains.scope")}</p>
       <ChainBanners banners={banners} onDismiss={onDismiss} />
       {repos.map((r) => (
         <div key={r.repoKey} className="chain-repo" data-repo-key={r.repoKey}>

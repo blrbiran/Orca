@@ -209,7 +209,7 @@ describe("an archived group takes no edit anywhere on the page (spec §6.3)", ()
     fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
     const names = allRegionActions();
     for (const expected of [
-      /^use \d+ for/, /^Apply row/, /^Apply all/, /^Set limit/, /^Save proposal/, /^Re-estimate/, /^Confirm budget/, /^Save integration/, /^Retry integration/, /^Resolve with an agent/,
+      /^use \d+ for/, /^Apply row/, /^Apply all/, /^Set limit/, /^Save proposal/, /^Re-estimate/, /^Confirm task plan/, /^Save integration/, /^Retry integration/, /^Resolve with an agent/,
       /^Re-read agent/, /^Set group worker agent/, /^Set agent for task a/, /^Change plan/, /^Remove x/, /^Add system label/, /^Restore plan labels/,
     ]) {
       expect(names.some((name) => expected.test(name)), String(expected)).toBe(true);

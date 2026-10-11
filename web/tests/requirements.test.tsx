@@ -165,7 +165,7 @@ describe("a clarifying group in Task control (N1 spec §11.2)", () => {
     render(<ControlPanel config={config} summary={summaryWith(view)} recovery={{ schema: "orca-control-recovery-v1", epoch: "e-1", dispatchBlocked: false, blockers: [] }}
       groups={{}} selected={null} drafts={{}} uncertain={[]} refusal={null} refetchRequired={false} onSelect={onSelect} onDraft={() => {}} onCommand={() => {}} />);
     const groups = screen.getByRole("navigation", { name: "Control groups" });
-    expect(within(groups).queryAllByRole("button")).toHaveLength(0);
+    expect(within(groups).getByRole("button", { name: "More actions" })).toBeTruthy();
     const link = within(groups).getByRole("link");
     expect(link.getAttribute("href")).toBe("#requirements");
     expect(link.textContent).toBe("r · clarifying · requirement — open in Requirements");

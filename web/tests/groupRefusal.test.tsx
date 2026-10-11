@@ -63,12 +63,12 @@ describe("a group's refusal stays with its group (spec §2.2(d))", () => {
     };
     render(<App />);
     let g1 = await openGroup("g1");
-    fireEvent.click(within(g1).getByRole("button", { name: "Pause dispatch" }));
+    fireEvent.click(within(g1).getByRole("button", { name: "Pause new tasks" }));
     const notice = await within(g1).findByTestId("group-refusal");
     expect(notice.textContent).toContain(enErrors["stop-mode-conflict"]);
     expect(within(notice).getByText("stop-mode-conflict").tagName).toBe("CODE");
     // At the top: before the actions and before the budget editor.
-    const pause = within(g1).getByRole("button", { name: "Pause dispatch" });
+    const pause = within(g1).getByRole("button", { name: "Pause new tasks" });
     expect(notice.compareDocumentPosition(pause) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(notice.compareDocumentPosition(g1.querySelector('[aria-label="Budget proposal"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Only there: the code is on screen once (not also on the panel's own line).
@@ -77,7 +77,7 @@ describe("a group's refusal stays with its group (spec §2.2(d))", () => {
     const g2 = await openGroup("g2");
     expect(within(g2).queryByTestId("group-refusal")).toBeNull();
     const before = groupReads("g2");
-    fireEvent.click(within(g2).getByRole("button", { name: "Pause dispatch" }));
+    fireEvent.click(within(g2).getByRole("button", { name: "Pause new tasks" }));
     // The success is recorded before the group is read again, so this read means g2's success was handled.
     await waitFor(() => expect(groupReads("g2")).toBeGreaterThan(before));
     // Fix round 1: g1's refusal, though not on screen while g2 is open, keeps Task control's badge lit.
@@ -85,7 +85,7 @@ describe("a group's refusal stays with its group (spec §2.2(d))", () => {
 
     g1 = await openGroup("g1");
     expect(within(g1).getByTestId("group-refusal").textContent).toContain(enErrors["stop-mode-conflict"]);
-    fireEvent.click(within(g1).getByRole("button", { name: "Pause dispatch" }));
+    fireEvent.click(within(g1).getByRole("button", { name: "Pause new tasks" }));
     await waitFor(() => expect(within(screen.getByRole("region", { name: "Control group g1" })).queryByTestId("group-refusal")).toBeNull());
     expect(screen.queryByTestId("nav-dot-tasks")).toBeNull();
   });
@@ -96,7 +96,7 @@ describe("a group's refusal stays with its group (spec §2.2(d))", () => {
     lookup = async () => json({ schema: "orca-command-lookup-v1", originalStatus: 200, body: { schema: "orca-command-success-v1", commandRevision: 7 } });
     render(<App />);
     const g1 = await openGroup("g1");
-    fireEvent.click(within(g1).getByRole("button", { name: "Pause dispatch" }));
+    fireEvent.click(within(g1).getByRole("button", { name: "Pause new tasks" }));
     await within(g1).findByTestId("group-refusal");
     await waitFor(() => expect(within(screen.getByRole("region", { name: "Control group g1" })).queryByTestId("group-refusal")).toBeNull(), { timeout: 6000 });
     expect(screen.queryByTestId("nav-dot-tasks")).toBeNull();

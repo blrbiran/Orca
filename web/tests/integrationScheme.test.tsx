@@ -144,7 +144,7 @@ describe("the scheme on the confirm step (spec §3.2, §9.1)", () => {
     const onCommand = confirm(draftGroup(record()));
     const region = screen.getByRole("region", { name: "Integration of this group" });
     expect(region.textContent).toContain("After each task: push orca/g to origin and keep one draft GitHub PR into main up to date");
-    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
     const [action] = sent(onCommand);
     expect(action).toMatchObject({ verb: "confirm", payload: { integrationHash: HASH, selectionsHash: "9".repeat(64) } });
   });
@@ -152,7 +152,7 @@ describe("the scheme on the confirm step (spec §3.2, §9.1)", () => {
   it("confirms a keep group with no integrationHash key at all", () => {
     const onCommand = confirm(draftGroup());
     expect(screen.getByRole("region", { name: "Integration of this group" }).textContent).toContain("merging into main is the person's");
-    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
     const [action] = sent(onCommand);
     expect(action?.verb).toBe("confirm");
     expect(Object.hasOwn(action!.payload, "integrationHash")).toBe(false);
@@ -177,14 +177,14 @@ describe("the scheme on the confirm step (spec §3.2, §9.1)", () => {
     const region = screen.getByRole("region", { name: "Integration of this group" });
     expect(within(region).queryAllByRole("button")).toEqual([]);
     expect(screen.getByText("Only an owner can confirm a group whose work Orca merges or pushes.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
     expect(onCommand).not.toHaveBeenCalled();
   });
 
   it("lets a member confirm a keep group as before", () => {
     const onCommand = confirm(draftGroup(), member);
     expect(screen.queryByText("Only an owner can confirm a group whose work Orca merges or pushes.")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm budget" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
     expect(sent(onCommand).map((action) => action.verb)).toEqual(["confirm"]);
   });
 });
