@@ -10,7 +10,7 @@ import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
-import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegraded, classifyEstimateOutput } from "./estimator.js";
+import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegradationReasons, classifyEstimateOutput } from "./estimator.js";
 import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
@@ -516,8 +516,10 @@ export class WebControlService {
         this.deps.profileRouter.resolve("budget-estimate", estimate.profile.profileId, estimate.profile.profileHash);
         // Found capped before the probe: re-checked here (the block recorded or cleared), never claimed unprobed.
         if (observation === null) { gateClaim(this.store, id, estimate.grant.tokens, at, "estimate"); return null; }
-        if (estimateCapabilityDegraded(estimate.request, observation, estimate.mode)) {
+        const degradationReasons = estimateCapabilityDegradationReasons(estimate.request, observation, estimate.mode);
+        if (degradationReasons.length > 0) {
           estimate.state = "blocked-capability"; estimate.reasonCode = "estimate-capability-degraded";
+          estimate.compatibilityReasonCodes = degradationReasons;
           group.ledger.committedRemaining = residual(group.reserved, zero(), estimate.grant);
           setReserve(proposal, residual(group.limit, group.used, group.ledger.committedRemaining));
           this.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run(estimate.state, canonicalBytes(estimate).toString("utf8"), id, estimateId);

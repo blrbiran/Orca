@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBudgetEstimateRequest, complex1mDefaults, estimateCapabilityDegraded } from "../../src/control/estimator.js";
+import { buildBudgetEstimateRequest, complex1mDefaults, estimateCapabilityDegraded, estimateCapabilityDegradationReasons } from "../../src/control/estimator.js";
 import { ESTIMATE_INSTRUCTIONS } from "../../src/control/estimatePrompt.js";
 import { canonicalBytes } from "../../src/control/canonicalJson.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
@@ -36,6 +36,7 @@ describe("frozen estimator", () => {
       expect(result.requiredRequestTokens).toBe(serialized + 17 + 64000);
       expect(result.contract).toMatchObject({ requestHash: result.requestHash, framingTokenOverhead: 17, maxOutputTokens: 64000 });
       expect(estimateCapabilityDegraded(result.request!, { ...observation, observed: { ...observation.observed, contextWindowTokens: 999999 } })).toBe(true);
+      expect(estimateCapabilityDegradationReasons(result.request!, { ...observation, observed: { ...observation.observed, contextWindowTokens: 999999 } })).toContain("context-window-degraded");
       expect(estimateCapabilityDegraded(result.request!, { ...observation, observed: { ...observation.observed, handoffExecution: null } })).toBe(true);
       expect(estimateCapabilityDegraded(result.request!, observation)).toBe(false);
       const tooLarge = buildBudgetEstimateRequest({ planHash: plan.planHash, planCanonicalJson: plan.canonicalJson, profile: h.frozen, observation: { ...observation, observed: { ...observation.observed, contextWindowTokens: 1 } }, mode: "soft" });

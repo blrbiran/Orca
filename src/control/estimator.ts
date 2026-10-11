@@ -114,16 +114,20 @@ export function buildBudgetEstimateRequest(input: EstimateInput): FrozenEstimate
     request, requestHash, contract, contractHash: sha256Canonical(contract), inputTokens, requiredRequestTokens };
 }
 export function estimateCapabilityDegraded(request: BudgetEstimateRequestV1, observation: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">, mode: "strict" | "soft" = "strict"): boolean {
+  return estimateCapabilityDegradationReasons(request, observation, mode).length > 0;
+}
+
+/** Local reasons for a selected estimator that no longer satisfies its queued request. */
+export function estimateCapabilityDegradationReasons(request: BudgetEstimateRequestV1, observation: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">, mode: "strict" | "soft" = "strict"): string[] {
   if (observation.profile.profileHash !== request.estimatorProfile.profileHash) throw new ControlError("profile-changed");
   const current = intersectCapabilities(observation.profile.snapshot.profile.capabilities, observation.observed), frozen = request.estimatorCapabilities;
   const order = ["unavailable", "phase-end", "realtime"], budgetOrder = ["unavailable", "soft", "bounded"];
-  return !estimatorCompatibility(observation, mode).compatible
-    || current.contextWindowTokens === null || current.contextWindowTokens < frozen.contextWindowTokens
-    || order.indexOf(current.usageObservation) < order.indexOf(frozen.usageObservation)
-    || order.indexOf(current.contextObservation) < order.indexOf(frozen.contextObservation)
-    || budgetOrder.indexOf(current.budgetEnforcement) < budgetOrder.indexOf(frozen.budgetEnforcement)
-    || current.handoffControl !== "durable" || current.handoffExecution === null
-    || (mode === "strict" && !current.requestBoundProof?.workDimensions.includes("tokens"));
+  const reasons: string[] = [...estimatorCompatibility(observation, mode).reasonCodes];
+  if (current.contextWindowTokens !== null && current.contextWindowTokens < frozen.contextWindowTokens) reasons.push("context-window-degraded");
+  if (order.indexOf(current.usageObservation) < order.indexOf(frozen.usageObservation)) reasons.push("usage-observation-degraded");
+  if (order.indexOf(current.contextObservation) < order.indexOf(frozen.contextObservation)) reasons.push("context-observation-degraded");
+  if (budgetOrder.indexOf(current.budgetEnforcement) < budgetOrder.indexOf(frozen.budgetEnforcement)) reasons.push("budget-enforcement-degraded");
+  return [...new Set(reasons)];
 }
 export type EstimateOutputClass =
   | { ok: true; output: BudgetEstimateV1 }

@@ -169,7 +169,7 @@ export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
   const text = (value: string | null | undefined): string => (typeof value === "string" ? value : "");
   const masked = (field: Field): boolean => isMasked(prefix, field, props.current, props.planned, drafts);
   const agentText = props.fixedAgent ?? draft("agent", text(props.current?.agent));
-  const below = masked("agent") ? props.inheritedAgent : props.planned?.agent ?? props.inheritedAgent ?? props.inheritance?.selection.agent;
+  const below = masked("agent") ? props.inheritedAgent ?? props.inheritance?.selection.agent : props.planned?.agent ?? props.inheritedAgent ?? props.inheritance?.selection.agent;
   const priorAgent = typeof props.current?.agent === "string" ? props.current.agent : below;
   const switched = props.fixedAgent === undefined && agentText !== "" && priorAgent !== undefined && agentText !== priorAgent;
   const effective = installationOf(agents, agentText === "" ? below : agentText);
@@ -177,7 +177,7 @@ export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
   const contextText = draft("context", switched ? "" : contextValue(props.current?.contextWindow ?? undefined));
   const unsupportedContext = errors.find((error) => error.field === "contextWindow");
   const inheritedHint = (field: "model" | "contextWindow"): string | null => {
-    if (!props.inheritance || props.current?.[field] !== undefined) return null;
+    if (!props.inheritance || (props.current?.[field] !== undefined && props.current?.[field] !== null)) return null;
     const value = props.inheritance.selection[field];
     const label = field === "contextWindow" ? contextLabel(value as ContextWindowV1) : String(value);
     return t("agents.inheritConcrete", { value: label, source: enumText("selectionSource", props.inheritance.provenance[field]) });
@@ -203,7 +203,7 @@ export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
         <label>
           {t("agents.label.agent")}
           <select name={`${prefix}:agent`} value={agentText} onChange={change("agent")}>
-            <option value="">{props.inheritance && props.current?.agent === undefined
+            <option value="">{props.inheritance && (props.current?.agent === undefined || props.current.agent === null)
               ? t("agents.inheritConcrete", { value: props.inheritance.selection.agent, source: enumText("selectionSource", props.inheritance.provenance.agent) })
               : props.planned?.agent !== undefined && !masked("agent") ? t("agents.inheritPlan", { agent: props.planned.agent }) : t("agents.inherit")}</option>
             {agents.installations.map((row) => <option key={row.id} value={row.id}>{row.id} ({row.kind} {row.version})</option>)}

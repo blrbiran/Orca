@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readEstimateRecord } from "../../src/control/queries.js";
+import { readControlGroup } from "../../src/panel/controlViews.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { fixtureResolveAgent } from "./fixtures/agents.js";
 import { webFixture } from "./fixtures/web.js";
@@ -35,7 +36,8 @@ describe("the estimator's single-call gates, each on its own (ruling 24)", () =>
     const h = await webFixture(); try {
       answerNull(h);
       expect(await new WebControlService(h.deps).claimEstimate("g", h.estimateId)).toBeNull();
-      expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "blocked-capability", reasonCode: "estimate-capability-degraded" });
+      expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "blocked-capability", reasonCode: "estimate-capability-degraded", compatibilityReasonCodes: ["single-call-unavailable"] });
+      expect(readControlGroup(h.store, "epoch", "g").estimates[0]).toMatchObject({ reasonCode: "estimate-capability-degraded", compatibilityReasonCodes: ["single-call-unavailable"] });
       expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()!.n).toBe(0);
       const seen = await h.resolveAgent.mock.results.at(-1)!.value;
       expect(seen).toMatchObject({ singleCallExecution: null });

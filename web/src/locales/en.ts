@@ -344,7 +344,7 @@ export const en = {
     import: {
       region: "Import plan",
       title: "Import a plan",
-      noEstimator: "No estimator profile is configured for this panel, so a plan cannot be imported. Restart it with --estimator-profile and --estimate-mode.",
+      noEstimator: "No estimator profile is configured. You can import a plan without an estimate; review its default budget before confirmation. To run estimates, restart with --estimator-profile and --estimate-mode.",
       noRepository: "No trusted repository and plan are configured for this panel.",
       noPlan: "No plan is configured for this repository, so nothing can be imported into it.",
       notUnderControl: "This project is not under task control: restart the panel with --repo for it to import plans here.",

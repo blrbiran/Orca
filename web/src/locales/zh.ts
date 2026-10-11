@@ -230,7 +230,7 @@ export const zh: Translation<typeof en> = {
     import: {
       region: "导入计划",
       title: "导入一个计划",
-      noEstimator: "这个面板没有配置估算 profile，所以不能导入计划。请带上 --estimator-profile 和 --estimate-mode 重启它。",
+      noEstimator: "未配置估算 profile。仍可以导入计划，但不会生成估算建议；请在确认前检查默认预算。要运行估算，请带上 --estimator-profile 和 --estimate-mode 重启面板。",
       noRepository: "这个面板没有配置受信任的仓库和计划。",
       noPlan: "这个仓库没有配置计划，所以不能导入到这里。",
       notUnderControl: "这个项目不在任务控制之下：要在这里导入计划，请用 --repo 给出它并重启面板。",

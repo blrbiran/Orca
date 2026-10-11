@@ -133,9 +133,8 @@ function ImportForm(props: ImportFormProps): JSX.Element {
     <section aria-label={t("control.import.region")}>
       <h3>{t("control.import.title")}</h3>
       {props.refusal ? <RefusalNotice refusal={props.refusal} testId="import-refusal" /> : null}
-      {props.config.defaults === null ? (
-        <p role="note">{t("control.import.noEstimator")}</p>
-      ) : scope?.kind === "unresolved" ? (
+      {props.config.defaults === null && <p role="note">{t("control.import.noEstimator")}</p>}
+      {scope?.kind === "unresolved" ? (
         <p role="note">{t("project.listUnavailable")}</p>
       ) : fixed === null ? (
         <p role="note">{t("control.import.notUnderControl")}</p>
@@ -202,6 +201,7 @@ function ImportForm(props: ImportFormProps): JSX.Element {
 
 function importPlan(props: ImportFormProps, repoId: string, planId: string): void {
   const groupId = `group-${nextCommandId()}`;
+  const defaults = props.config.defaults;
   props.onCommand({
     verb: "import-plan",
     groupId,
@@ -210,9 +210,7 @@ function importPlan(props: ImportFormProps, repoId: string, planId: string): voi
       groupId,
       repoId,
       planId,
-      estimatorProfileId: props.config.defaults!.estimatorProfileId,
-      estimatorProfileHash: props.config.defaults!.estimatorProfileHash,
-      estimateMode: props.config.defaults!.estimateMode,
+      ...(defaults === null ? {} : { estimatorProfileId: defaults.estimatorProfileId, estimatorProfileHash: defaults.estimatorProfileHash, estimateMode: defaults.estimateMode }),
     },
   });
 }

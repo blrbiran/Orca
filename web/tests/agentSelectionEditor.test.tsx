@@ -254,6 +254,21 @@ describe("the plan's layer under the panel's at each level (ruling review R7)", 
   const prefs: OperatorPreferencesV1 = { defaultAgent: "claude", perAgent: {} };
   const box = (container: HTMLElement, name: string): HTMLInputElement | null => container.querySelector(`input[type="checkbox"][name="${name}"]`);
 
+  it("shows concrete value and source for Agent, model and context masked from the plan", () => {
+    const inherited = frozen({ agent: "claude", model: "claude-fable-5", contextWindow: 1_000_000 },
+      { agent: "operator", model: "operator-agent", contextWindow: "operator-agent" });
+    const preview = withPlan({
+      planLayers: { group: { worker: { agent: "codex", model: "gpt-6-plan", contextWindow: "agent-default" } }, tasks: { a: null, b: null } },
+      groupOverrides: { worker: { agent: null, model: null, contextWindow: null } },
+      rolePreviews: { worker: { kind: "resolved", frozen: inherited }, estimator: { kind: "resolved", frozen: inherited } },
+    });
+    const { container } = renderView({ preview, preferences: { defaultAgent: "claude", perAgent: { claude: { model: "claude-fable-5", contextWindow: 1_000_000 } } } });
+    const fields = container.querySelector('fieldset[aria-label="Group worker"]') as HTMLElement;
+    expect(fields.textContent).toContain("inherit claude from operator");
+    expect(fields.textContent).toContain("inherit claude-fable-5 from operator-agent");
+    expect(fields.textContent).toContain("inherit 1000000 tokens from operator-agent");
+  });
+
   it("shows the plan's values with a box to ignore each, and sends a ticked one as null", () => {
     const onCommand = vi.fn();
     const { container } = renderView({ onCommand, preview: withPlan(), preferences: prefs, drafts: { "g:agent:task:a:mask:model": "1" } });

@@ -77,11 +77,11 @@ describe("the panel says when it has no execution port", () => {
 });
 
 describe("the panel says when no estimator was configured", () => {
-  it("refuses to offer a plan import, and says which flags are missing", () => {
+  it("offers import without an estimate and says which flags enable estimates", () => {
     const html = render({ defaults: null });
     expect(html).toContain("No estimator profile is configured");
     expect(html).toContain("--estimator-profile");
-    expect(html).not.toContain("Import plan</button>");
+    expect(html).toContain("Import plan</button>");
   });
 
   it("offers the import when an estimator is configured", () => {
