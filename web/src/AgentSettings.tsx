@@ -136,7 +136,7 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
             {t(`agents.updates.${change.kind}`)}: {change.installationId} — {change.version} ({change.command.join(" ")})
             </label>
             <div>{t("agents.updates.resolvedPath")}: <code style={{ overflowWrap: "anywhere" }}>{change.realpath}</code></div>
-            {change.unavailableReason && <p role="alert">{t("agents.updates.configurationUnavailable")} <code>{change.unavailableReason}</code></p>}
+            {change.unavailableReason && <p role="alert">{t("agents.updates.changeUnavailable")} <code>{change.unavailableReason}</code></p>}
             {change.kind === "addition" && !change.unavailableReason && (change.installation === undefined
               ? <p role="alert">{t("agents.updates.configurationUnavailable")}</p>
               : <details open><summary>{t("agents.updates.installationConfiguration")}</summary>

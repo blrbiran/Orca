@@ -41,3 +41,19 @@ it("selects a reviewable OMP addition without substituting the machine's model",
   fireEvent.click(screen.getByRole("button", { name: "Apply selected changes" }));
   expect(onApplyUpdates).toHaveBeenCalledWith(["omp-add"]);
 });
+
+it("does not let an operator select an OMP version update that lost its frozen model", () => {
+  const agents: AgentsViewV1 = { schema: "orca-agents-view-v1", installations: [
+    { id: "omp", kind: "omp", version: "1.0", defaults: { model: "proxy/old-model", contextWindow: "agent-default" }, contextOptions: ["agent-default"] },
+  ] };
+  const preferences: AgentPreferencesViewV1 = { schema: "orca-agent-preferences-v1", operatorId: "operator-1", revision: 1, preferences: { defaultAgent: "omp", perAgent: {} } };
+  const state: AgentInstallationStateV1 = { schema: "orca-agent-installation-state-v1", revision: 0, pending: false, pendingCommand: null, observation: null, failureCode: null,
+    preview: { schema: "orca-agent-detection-preview-v1", previewId: "preview-version", baseTableHash: "a".repeat(64), observedAt: "2026-10-12T00:00:00.000Z", installed: [], changes: [
+      { changeId: "omp-version", kind: "version", installationId: "omp", command: ["/tmp/omp"], realpath: "/tmp/omp", version: "2.0", unavailableReason: "omp-frozen-model-unavailable" },
+    ] } };
+  render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} installationState={state} />);
+  expect((screen.getByLabelText(/Version: omp/) as HTMLInputElement).disabled).toBe(true);
+  expect(screen.getByRole("alert").textContent).toContain("This update cannot be selected");
+  expect(screen.getByRole("alert").textContent).toContain("omp-frozen-model-unavailable");
+  expect((screen.getByRole("button", { name: "Apply selected changes" }) as HTMLButtonElement).disabled).toBe(true);
+});
