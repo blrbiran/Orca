@@ -163,23 +163,21 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 现在的接手入口（2026-10-11，滚动更新）
+### 4.0 现在的接手入口（2026-10-12，滚动更新）
 
-**交接边界**：本轮 feedback-followup Tasks 1–7 已完成、独立 spec/quality Approved，并按人的授权本地合入 main；captureRevision 整合 P2 和 Task7 R1 I1/I2/M1 都关闭。Tasks 8–14 留后续，不继续实现，也不称十四项全轮接受。旧 issue-fixes、D9/M3、M5/M6、feedback-maintenance 不重做。接手现查 main、工作区、worktree 与远端，不把当前 HEAD 写成常量。
+**交接边界**：feedback-followup Tasks 1–14 已实现、逐项复审并完成 Task 14 全轮审查；Orca 与 ccloop 成果已按本轮授权快进到各自本地 main。Results 5 另行完成；原 `progress-results-20261010/Orca` 工作树的旧 HEAD、21 项 WIP 内容与状态指纹复核一致，不要清理。旧 issue-fixes、D9/M3、M5/M6、feedback-maintenance 和 Task 7 已关闭的复审问题不重做。接手时现查 main、worktree 和远端状态，本文不把活 HEAD 写成常量。
 
-**入口与证据**：计划 docs/superpowers/plans/2026-10-11-feedback-followup.md；四份同日 feedback-followup、token-policy、saved-result-recovery、agent-preparation spec。台账 .superpowers/sdd/2026-10-11-feedback-followup/progress.md；最终独立整合审查 handoff-integration-review.md；新 main 门、完整 raw/JSON/命令/RC/源码和逐名跳过见 handoff-merged-verification-report.md 与 handoff-merged-evidence/。裁定与成本见 implementation-rulings.md，保存验证须读 §6.11–6.14。
+**此前成果的边界**：Results 5 按真实 owner／attempt／revision 展示保存成果，预览下载隔离账户、项目和 epoch；同 owner 的隐藏重开与进展刷新保留已接纳的 captureRevision。可选 token 的 `null` 只表示所写上限无限，不表示已观测用量为零。Tasks 5–7 的保存验证只跑新的 check／verifier、只记新用量，原失败及已记历史 WORK 不改写；普通旧 archive 缺真实发布命名空间 ref 时明确不可用，不能从当前目标仓伪造历史证据或批准。普通重试须有真实成功命令凭据及 current/latest/inactive/generation 绑定；缺 marker、ready 或没看到 worker 均不证明零用量或自动执行授权。细节见本轮台账与四份 spec。
 
-**完成内容**：Results5 另行完成，成果按真实 owner/attempt/revision/验收/交付展示，预览下载隔离账户、项目和 epoch；同 owner 隐藏重开/进展刷新保留已接纳 captureRevision，整组拒绝不推进记忆，null 仍未知。原 /Users/biran/.codex/worktrees/progress-results-20261010/Orca 的旧 WIP 保留，不清理。Task2 修复两个旧 preview-backoff fake-clock 全量超时，没有增加15s限时或永久 flake 豁免。Tasks3–4 可选 token 策略的 null 只表示 token 无上限，实际用量仍有限安全整数，其余四维预留、时间/次数/会话/handoff/账户项目限制保持。
+**本轮可用能力**：Task 8 让组的主要 Agent 与空角色覆盖按能力兼容地继承，预估器缺席仍可导入／确认／开跑。Tasks 9–10 在 ccloop 与 Orca 接通安装观察、手动重新探测、预览和 owner 显式应用，带持久 intent／receipt、同命令重试和不确定 outbox；Orca 增加单向 schema 13 的安装表与 outbox，用户偏好修订不冒充安装修订。Task 11 把无法核实的命令按原 ID 停放、可显式重查，不自动重发。Task 12 完成执行／准备／菜单与高级链导航。Task 13 提供事实型 Activity、失败原因和受授权保存证据，并修正文档。Task 14 修掉 ccloop Claude runner 的重复发布竞态及随后发现的无效答案中止分支；精确历史 `ClaudePhaseAborted` 交错仍未证成，不能据此宣称真实 provider 稳定性。
 
-**保存验证**：Tasks5–7 完成严格确定性 execute 规范化、不可变保存证据、仅重新验证、死 worker 机械结算，以及真实 owner/成员/冻结语义/历史结账、显式命令、新 run/outbox、实际 F/H 预留、撤销 fence、UI/权限和正常交付。只跑新 check/verifier、只记新用量，原失败和已记历史 WORK 不改写、不重收费。正常失败后的普通重试须有真实成功命令凭据与 current/latest/inactive/generation 绑定；positive noDispatch 证明独立，ready/缺 marker/没看到 worker 不等于零用量或自动执行授权。完成/成功任务不再给保存验证按钮，不可用文案不保证普通重试可用。
+**最终门与证据**：计划 `docs/superpowers/plans/2026-10-11-feedback-followup.md`；台账 `.superpowers/sdd/2026-10-11-feedback-followup/progress.md`；逐项 report／review、`task-14-native-gates-report.md`、`task-14-native-evidence-manifest.json`、`task-14-final-evidence-review.md`、`task-14-browser-report.md` 与五张截图均已入库。最终产品源码上的 Orca 根级 JSON 为 3772 条中 3742 过、0 失败、30 条逐名条件跳过；其后只改一条 Web 测试等待，main Web 正式检查 987/987、0 跳过，类型／构建通过。正式 control 1881 过／27 条条件跳过、scheduler 202/202、chain 首阶段 213/213＋链环境全量 3742 过／30 跳过、panel 0–14、默认 pin 3/3、历史保存成果专用 23/23、真实本地工具隔离夹具 3/3、全量临时目录检查内部 3772 条退出 0 且残留 0；ccloop 全量 1601/1601、正式 control 793/793、实际打包 fake-worker 成功。根级 30 条跳过中的 29 条已在专用门实跑，唯一未跑的是实际 launchd 冒烟。原生门为 Darwin arm64／Node 22.13.1；隔离浏览器夹具使用 Node 24。旧红、沙箱 EPERM、负载超时、两目录泄漏及其修复证据均保留，不能倒写成从未失败。
 
-**当前整合门**：从实际合入 main 的源码新建无硬链接副本，Orca e066/934：root391文件3695通过/30明确条件跳过（control169/1840通过/27跳过，panel73/608通过），Web106文件926通过零跳过，类型/build/资源通过，实际保存专用2文件23条全部通过零跳过，实际面板0–14共15步通过。ccloop 当前源76f/446：类型/build通过，全量串行147文件1566通过零跳过。旧 abcbe backend/root 与 final UI 的历史范围未重标，本次新门真正绑定 e066。root23条保存 opt-in 已由专用门实跑，另7条外部门逐名说明；不能猜跳过数作全轮通过。当前实测 Node22.13.1/darwinarm64，不搬用旧 Node24或 Linux 结论。
+**本地整合审计**：本地 main 快进、合入后类型／构建／Web 门、只读远端观察、Results 5 指纹与 Git 配置保留见 `task-14-local-integration-report.md`；台账末尾的 post-integration correction 覆盖其开头仍保留的旧“Tasks 8–14 待做”快照。
 
-**可用边界**：当前 malformed capsule、转换后的旧 Claude 输出、普通旧 resultRepo 缺真实发布命名空间 ref 均可明确不可用。完整 archive primitive 正例不表示标准旧生命周期全部可恢复；不补 ref、从当前 target 重建历史或伪造批准。真实 source main 的既有 ignored ccmem MD 保留未复制/删除；934声明源码逐字节对应验证副本，935文件物理目录 hash 未重标。
+**浏览器边界**：隔离真实面板以 owner/member 登录，在桌面 1600×900、手机 390×844、短高 1280×540 测过菜单、焦点、侧栏页脚、项目切换、Activity、Results 从缺失到部分、文本预览与下载按钮；下载端点另用同一测试账户读得 HTTP 200、`42\n` 三字节。IAB 未取得下载文件事件；一次坏 fake-worker PATH 后的瞬时 control-read 500 在干净根未复现。安装探测读到本机标准路径中的真实 Claude 候选，但没有选择／应用，也无 provider 调用；真实安装 apply 的并发和权限由 API／测试覆盖，Linux 原生 `/usr/bin/flock` 未在这台 macOS 验证。
 
-**接手后续**：从 Task8 继续主要 Agent＋角色覆盖（能力兼容的 estimator 默认共用）、安装观察/手动 detect＋预览＋owner apply、未解命令停放、执行/准备/导航菜单、事实诊断与文档，最后 Task14 全轮门及真实桌面/手机浏览器几何。运行 Chain 必须保留状态和停止入口；目前无真实实例，不为演示造组。旧 Claude 并行停止/重复输出与 stale-exit 竞态已诊断，修复留 Task14；串行绿不是已修或永久豁免。真实服务和 Linux 原生捕获无本轮通过证据。
-
-**依赖与真实环境**：package/lock 仍 pin ccloop ab824d16004de2d3c1613a76ec0431520aa16cc9，新能力门明确选从本轮 main 构建的 CLI；本地合并不等于发布、repin 或运行切换。schema12 单向，真实旧库升级/备份/旧 owner 退役及面板/daemon/ccmem 数据根切换未做。测试隔离 HOME/XDG/TMPDIR/CCMEM_DATA_ROOT 并去掉 CCMEM_CONFIG_PATH，socket 用短真实目录，无付费 provider。本轮未 push，最终只读远端状态见整合审计；新隔离树显式从当前本地 main 起，不直接用未同步远端或旧 stub，不用固定 SHA。ccloop B4/真实 GitHub、ccmem T13/备份/daemon 旧债继续有效。
+**依赖与真实环境**：Orca package/lock 的默认 ccloop pin 仍是 `ab824d16004de2d3c1613a76ec0431520aa16cc9`；新安装能力的配对门明确指定本轮新 CLI，本地合并不等于发布、repin 或运行切换。schema 12 已合入且代码现可升 schema 13，但真实旧库备份、单向升级、旧 owner 退役、面板／daemon／ccmem 数据根切换均未做；没有远端 push、付费 provider 或真实服务操作。ccmem 本轮仅滚动 handoff，既有 T13／备份／daemon、ccloop B4／真实 GitHub 等挂账继续有效。下一步由人审核本轮裁定和部署时机；执行真实切换前须重新取证当前本地／远端分支与数据根，并先完成备份。
 
 ### 4.0.w 会话 `e34dc963`（2026-10-08～09）留下的结论（**前半已由人合并推送；过程删了，结论留在这里**）
 
