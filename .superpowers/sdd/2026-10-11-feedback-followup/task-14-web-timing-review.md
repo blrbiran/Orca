@@ -1,0 +1,9 @@
+# Task 14 Overview timing criterion scoped review
+
+Range: Orca `d8603f4..3efec98`. Read-only review; no source/index/HEAD changes or suite rerun.
+
+**Verdict: Approved. No Critical, Important or Minor finding.** Only `web/tests/overviewApp.test.tsx` changes. The test still holds the old `/api/control/groups/ga` owner response, then releases it only after a newer Overview projection is visible. The old fixed 2100 ms sleep is replaced by a unique updated goal (`ga refreshed`) and `findByRole` for the Overview button ([overviewApp.test.tsx:126](/private/tmp/orca-feedback-followup-task8-20261011/web/tests/overviewApp.test.tsx#L126)). The initial button was already rendered before the goal mutation, and App rereads Overview on its 2000 ms active-section timer ([App.tsx:835](/private/tmp/orca-feedback-followup-task8-20261011/web/src/App.tsx#L835), [App.tsx:156](/private/tmp/orca-feedback-followup-task8-20261011/web/src/App.tsx#L156)); the new button text is rendered from `group.goal` ([Overview.tsx:19](/private/tmp/orca-feedback-followup-task8-20261011/web/src/Overview.tsx#L19)). If no new source read/render occurs, the wait rejects within 7000 ms rather than falsely passing.
+
+The stale-owner assertions remain unchanged: releasing the held old response must not open Control group `ga`, and the UI must show “no longer available” ([overviewApp.test.tsx:130](/private/tmp/orca-feedback-followup-task8-20261011/web/tests/overviewApp.test.tsx#L130)). The 7000 ms local wait allows more than three nominal poll intervals and stays below the test's existing 15-second deadline. No product file, global timeout, skip condition or assertion was changed.
+
+Evidence remains source-qualified: the prior default-worker formal Web gate was RC1 (986/987), while the same source's whole Overview file was 19/19 and controlled two-worker Web was 987/987. The controller reports postcommit formal Web 987/987. I did not reinterpret the earlier RC1 or claim a separate rerun.

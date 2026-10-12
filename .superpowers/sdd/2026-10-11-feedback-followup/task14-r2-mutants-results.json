@@ -1,0 +1,47 @@
+[
+  {
+    "name": "M1-final-exit-recheck",
+    "clone": "/private/tmp/ccloop-task14-r2-M1-final-exit-recheck-_kf4ois4",
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "publishes one complete execute",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "wrapperExit": 1,
+    "wrapperOutput": "{\"repo\": \"/private/tmp/ccloop-task14-r2-M1-final-exit-recheck-_kf4ois4\", \"command\": [\"node_modules/.bin/vitest\", \"run\", \"tests/runtime/claude/claudePhaseRunner.test.ts\", \"-t\", \"publishes one complete execute\", \"--maxWorkers=1\", \"--minWorkers=1\"], \"rc\": 1, \"elapsedSeconds\": 6.7739808559417725, \"log\": \"/private/tmp/orca-followup-runs/t14-r2-M1-final-exit-recheck/output.log\", \"source\": \"d4e408b9ce0466949134b29995056400f9239d74\", \"sourceTreeSHA256\": \"bd928b307cf923b024e3c5449b2aa7bd840a78e3c6852841cd709710e30170d1\", \"sourceFiles\": 450}"
+  },
+  {
+    "name": "M2-response-ownership",
+    "clone": "/private/tmp/ccloop-task14-r2-M2-response-ownership-x930krb7",
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "finishes its owned stdout response",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "wrapperExit": 1,
+    "wrapperOutput": "{\"repo\": \"/private/tmp/ccloop-task14-r2-M2-response-ownership-x930krb7\", \"command\": [\"node_modules/.bin/vitest\", \"run\", \"tests/runtime/claude/claudePhaseRunner.test.ts\", \"-t\", \"finishes its owned stdout response\", \"--maxWorkers=1\", \"--minWorkers=1\"], \"rc\": 1, \"elapsedSeconds\": 1.0998268127441406, \"log\": \"/private/tmp/orca-followup-runs/t14-r2-M2-response-ownership/output.log\", \"source\": \"d4e408b9ce0466949134b29995056400f9239d74\", \"sourceTreeSHA256\": \"fa4c2d2e721a125bc6fd98b5c0ec420525f83e84ef3c86c663f11c02b6321d94\", \"sourceFiles\": 450}"
+  },
+  {
+    "name": "M6-invalid-answer-timeout-fallback",
+    "clone": "/private/tmp/ccloop-task14-r2-M6-invalid-answer-timeout-fallback-4mp1rn26",
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "publishes one timeout partial when an interrupted exit-zero CLI",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "wrapperExit": 1,
+    "wrapperOutput": "{\"repo\": \"/private/tmp/ccloop-task14-r2-M6-invalid-answer-timeout-fallback-4mp1rn26\", \"command\": [\"node_modules/.bin/vitest\", \"run\", \"tests/runtime/claude/claudePhaseRunner.test.ts\", \"-t\", \"publishes one timeout partial when an interrupted exit-zero CLI\", \"--maxWorkers=1\", \"--minWorkers=1\"], \"rc\": 1, \"elapsedSeconds\": 3.5065369606018066, \"log\": \"/private/tmp/orca-followup-runs/t14-r2-M6-invalid-answer-timeout-fallback/output.log\", \"source\": \"d4e408b9ce0466949134b29995056400f9239d74\", \"sourceTreeSHA256\": \"b7db5c024168b7993aff48053025bcdfc8862940f859ff72af9e6f934bdc6381\", \"sourceFiles\": 450}"
+  }
+]

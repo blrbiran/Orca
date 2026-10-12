@@ -1,0 +1,228 @@
+{
+  "sourceHead": "87463dc8188676d36d987ac506acc36041f98040",
+  "sourceTree": "11ed492fda9eb02abd9111f7cc53bcd7cfcc9c1c",
+  "branch": "codex/feedback-followup-task8",
+  "ccloopBinary": "/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js",
+  "ccloopHead": "ab824d16004de2d3c1613a76ec0431520aa16cc9",
+  "tmpdir": "/private/tmp",
+  "gates": [
+    {
+      "name": "typecheck",
+      "command": [
+        "rtk",
+        "proxy",
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "cwd": "/private/tmp/orca-feedback-followup-task8-20261011",
+      "startedAt": "2026-10-11T16:30:11.162000+00:00",
+      "durationSeconds": 9.56,
+      "exitCode": 0,
+      "rawLog": "/private/tmp/orca-feedback-followup-task8-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task8-fix-typecheck.log",
+      "testSummaryLines": []
+    },
+    {
+      "name": "root-build",
+      "command": [
+        "rtk",
+        "proxy",
+        "npm",
+        "run",
+        "build"
+      ],
+      "cwd": "/private/tmp/orca-feedback-followup-task8-20261011",
+      "startedAt": "2026-10-11T16:30:20.727321+00:00",
+      "durationSeconds": 4.8,
+      "exitCode": 0,
+      "rawLog": "/private/tmp/orca-feedback-followup-task8-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task8-fix-root-build.log",
+      "testSummaryLines": []
+    },
+    {
+      "name": "web-build",
+      "command": [
+        "rtk",
+        "proxy",
+        "npm",
+        "run",
+        "build",
+        "--workspace",
+        "web"
+      ],
+      "cwd": "/private/tmp/orca-feedback-followup-task8-20261011",
+      "startedAt": "2026-10-11T16:30:25.529238+00:00",
+      "durationSeconds": 1.24,
+      "exitCode": 0,
+      "rawLog": "/private/tmp/orca-feedback-followup-task8-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task8-fix-web-build.log",
+      "testSummaryLines": []
+    },
+    {
+      "name": "focused-root",
+      "command": [
+        "rtk",
+        "proxy",
+        "npm",
+        "test",
+        "--",
+        "tests/control/agentSelection.test.ts",
+        "tests/control/agentFreeze.test.ts",
+        "tests/control/agentPlanImport.test.ts",
+        "tests/control/agentPlanPanelMerge.test.ts",
+        "tests/control/agentSelectionE2E.test.ts",
+        "tests/control/planImport.test.ts",
+        "tests/control/requirementCommands.test.ts",
+        "tests/control/requirementAccept.test.ts",
+        "tests/control/requirementE2E.test.ts",
+        "tests/control/requirementGuards.test.ts",
+        "tests/control/estimatorCompatibility.test.ts",
+        "tests/control/estimator.test.ts",
+        "tests/control/estimateSingleCallGate.test.ts",
+        "tests/control/estimatePrompt.test.ts",
+        "tests/control/estimateOutcome.test.ts",
+        "tests/panel/agentSelectionApi.test.ts",
+        "tests/panel/requirementApi.test.ts",
+        "tests/panel/requirementRoutes.test.ts",
+        "tests/panel/webParity.test.ts",
+        "tests/panel/controlMount.test.ts"
+      ],
+      "cwd": "/private/tmp/orca-feedback-followup-task8-20261011",
+      "startedAt": "2026-10-11T16:30:26.772376+00:00",
+      "durationSeconds": 158.85,
+      "exitCode": 0,
+      "rawLog": "/private/tmp/orca-feedback-followup-task8-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task8-fix-focused-root.log",
+      "testSummaryLines": [
+        "Test Files  20 passed (20)",
+        "Tests  252 passed (252)",
+        "Duration  158.43s (tests 97%, transform 2%, import 1%)"
+      ]
+    },
+    {
+      "name": "full-web",
+      "command": [
+        "rtk",
+        "proxy",
+        "npm",
+        "run",
+        "check",
+        "--workspace",
+        "web"
+      ],
+      "cwd": "/private/tmp/orca-feedback-followup-task8-20261011",
+      "startedAt": "2026-10-11T16:33:05.630301+00:00",
+      "durationSeconds": 32.31,
+      "exitCode": 1,
+      "rawLog": "/private/tmp/orca-feedback-followup-task8-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task8-fix-full-web.log",
+      "testSummaryLines": [
+        "Test Files  1 failed | 106 passed (107)",
+        "Tests  1 failed | 940 passed (941)",
+        "Duration  26.33s (tests 59%, environment 26%, import 6%, transform 6%, setup 2%)"
+      ]
+    },
+    {
+      "name": "diff-check",
+      "command": [
+        "/usr/bin/git",
+        "diff",
+        "381362e1fb88878f7e36846e2d39fe5da94dd570..HEAD",
+        "--check"
+      ],
+      "cwd": "/private/tmp/orca-feedback-followup-task8-20261011",
+      "startedAt": "2026-10-11T16:33:37.927342+00:00",
+      "durationSeconds": 0.07,
+      "exitCode": 0,
+      "rawLog": "/private/tmp/orca-feedback-followup-task8-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task8-fix-diff-check.log",
+      "testSummaryLines": []
+    },
+    {
+      "name": "overview-isolated-1",
+      "command": [
+        "rtk",
+        "proxy",
+        "npm",
+        "exec",
+        "--",
+        "vitest",
+        "run",
+        "tests/overviewDecisionNavigation.test.tsx"
+      ],
+      "cwd": "/private/tmp/orca-feedback-followup-task8-20261011/web",
+      "startedAt": "2026-10-11T16:34:08.514815+00:00",
+      "durationSeconds": 4.64,
+      "exitCode": 0,
+      "rawLog": "/private/tmp/orca-feedback-followup-task8-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task8-fix-overview-isolated-1.log",
+      "testSummaryLines": [
+        "Test Files  1 passed (1)",
+        "Tests  10 passed (10)",
+        "Duration  4.03s (tests 75%, transform 12%, environment 10%, import 3%, setup 1%)"
+      ]
+    },
+    {
+      "name": "overview-isolated-2",
+      "command": [
+        "rtk",
+        "proxy",
+        "npm",
+        "exec",
+        "--",
+        "vitest",
+        "run",
+        "tests/overviewDecisionNavigation.test.tsx"
+      ],
+      "cwd": "/private/tmp/orca-feedback-followup-task8-20261011/web",
+      "startedAt": "2026-10-11T16:34:13.157598+00:00",
+      "durationSeconds": 4.48,
+      "exitCode": 0,
+      "rawLog": "/private/tmp/orca-feedback-followup-task8-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task8-fix-overview-isolated-2.log",
+      "testSummaryLines": [
+        "Test Files  1 passed (1)",
+        "Tests  10 passed (10)",
+        "Duration  4.01s (tests 75%, transform 12%, environment 10%, import 3%, setup 1%)"
+      ]
+    },
+    {
+      "name": "overview-isolated-3",
+      "command": [
+        "rtk",
+        "proxy",
+        "npm",
+        "exec",
+        "--",
+        "vitest",
+        "run",
+        "tests/overviewDecisionNavigation.test.tsx"
+      ],
+      "cwd": "/private/tmp/orca-feedback-followup-task8-20261011/web",
+      "startedAt": "2026-10-11T16:34:17.633271+00:00",
+      "durationSeconds": 4.46,
+      "exitCode": 0,
+      "rawLog": "/private/tmp/orca-feedback-followup-task8-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task8-fix-overview-isolated-3.log",
+      "testSummaryLines": [
+        "Test Files  1 passed (1)",
+        "Tests  10 passed (10)",
+        "Duration  3.99s (tests 75%, transform 12%, environment 10%, import 3%, setup 1%)"
+      ]
+    },
+    {
+      "name": "full-web-retry",
+      "command": [
+        "rtk",
+        "proxy",
+        "npm",
+        "run",
+        "check",
+        "--workspace",
+        "web"
+      ],
+      "cwd": "/private/tmp/orca-feedback-followup-task8-20261011",
+      "startedAt": "2026-10-11T16:34:22.093528+00:00",
+      "durationSeconds": 29.07,
+      "exitCode": 0,
+      "rawLog": "/private/tmp/orca-feedback-followup-task8-20261011/.superpowers/sdd/2026-10-11-feedback-followup/task8-fix-full-web-retry.log",
+      "testSummaryLines": [
+        "Test Files  107 passed (107)",
+        "Tests  941 passed (941)",
+        "Duration  23.82s (tests 56%, environment 28%, import 7%, transform 6%, setup 3%)"
+      ]
+    }
+  ]
+}

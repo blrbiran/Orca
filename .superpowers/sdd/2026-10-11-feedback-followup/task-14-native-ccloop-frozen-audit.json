@@ -1,0 +1,148 @@
+{
+  "currentSource": {
+    "repo": "/private/tmp/ccloop-feedback-followup-task9-20261011",
+    "command": [
+      "node",
+      "-e",
+      "0"
+    ],
+    "rc": 0,
+    "elapsedSeconds": 0.05183887481689453,
+    "log": "/private/tmp/orca-followup-runs/t14-native-source-ccloop/output.log",
+    "source": "e7f69f964cacfc8023b2d03e80a5f9db0694d5d3",
+    "sourceTreeSHA256": "696d4499dcbb7410b30ca9b8ba0dbf7a559c745ae22ac3880c1a9b98ad6b8092",
+    "sourceFiles": 450
+  },
+  "entries": [
+    {
+      "name": "t14-r2-typecheck",
+      "rc": 0,
+      "sourceTreeSHA256": "696d4499dcbb7410b30ca9b8ba0dbf7a559c745ae22ac3880c1a9b98ad6b8092",
+      "sourceMatchesCurrent": true,
+      "files": [
+        {
+          "leaf": "output.log",
+          "path": "/private/tmp/orca-followup-runs/t14-r2-typecheck/output.log",
+          "expectedSHA256": "443df7778c6055e93ca0f3f4fabce5cbbe7205fa5689a62bd08268806118c185",
+          "actualSHA256": "443df7778c6055e93ca0f3f4fabce5cbbe7205fa5689a62bd08268806118c185",
+          "matches": true
+        },
+        {
+          "leaf": "result.json",
+          "path": "/private/tmp/orca-followup-runs/t14-r2-typecheck/result.json",
+          "expectedSHA256": "f2f9683df2d510ced18921219105feb55e39ae5d0903ea83f6b002f3caea902b",
+          "actualSHA256": "f2f9683df2d510ced18921219105feb55e39ae5d0903ea83f6b002f3caea902b",
+          "matches": true
+        }
+      ],
+      "testCounts": null
+    },
+    {
+      "name": "t14-r2-build",
+      "rc": 0,
+      "sourceTreeSHA256": "696d4499dcbb7410b30ca9b8ba0dbf7a559c745ae22ac3880c1a9b98ad6b8092",
+      "sourceMatchesCurrent": true,
+      "files": [
+        {
+          "leaf": "output.log",
+          "path": "/private/tmp/orca-followup-runs/t14-r2-build/output.log",
+          "expectedSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd",
+          "actualSHA256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd",
+          "matches": true
+        },
+        {
+          "leaf": "result.json",
+          "path": "/private/tmp/orca-followup-runs/t14-r2-build/result.json",
+          "expectedSHA256": "7fd85940cf8fc2d289004905e5b393a3edf8a9a770dffdf00ef5a54c405f24e6",
+          "actualSHA256": "7fd85940cf8fc2d289004905e5b393a3edf8a9a770dffdf00ef5a54c405f24e6",
+          "matches": true
+        }
+      ],
+      "testCounts": null
+    },
+    {
+      "name": "t14-r2-full-two-workers",
+      "rc": 0,
+      "sourceTreeSHA256": "696d4499dcbb7410b30ca9b8ba0dbf7a559c745ae22ac3880c1a9b98ad6b8092",
+      "sourceMatchesCurrent": true,
+      "files": [
+        {
+          "leaf": "output.log",
+          "path": "/private/tmp/orca-followup-runs/t14-r2-full-two-workers/output.log",
+          "expectedSHA256": "65f2459fafc1d8f9e82f385d4400c738d1f18c30d5ca10f5242f638c27afb829",
+          "actualSHA256": "65f2459fafc1d8f9e82f385d4400c738d1f18c30d5ca10f5242f638c27afb829",
+          "matches": true
+        },
+        {
+          "leaf": "tests.json",
+          "path": "/private/tmp/orca-followup-runs/t14-r2-full-two-workers/tests.json",
+          "expectedSHA256": "a90dbab8e8019a8e4373a2d147f6afe467f2c715f678e650777b698538f0c165",
+          "actualSHA256": "a90dbab8e8019a8e4373a2d147f6afe467f2c715f678e650777b698538f0c165",
+          "matches": true
+        },
+        {
+          "leaf": "result.json",
+          "path": "/private/tmp/orca-followup-runs/t14-r2-full-two-workers/result.json",
+          "expectedSHA256": "4c051d22b2d69e76258a2a27f5760bcac04900f5e6767158acbdf63df9820c4f",
+          "actualSHA256": "4c051d22b2d69e76258a2a27f5760bcac04900f5e6767158acbdf63df9820c4f",
+          "matches": true
+        }
+      ],
+      "testCounts": {
+        "numTotalTests": 1601,
+        "numPassedTests": 1601,
+        "numFailedTests": 0,
+        "numPendingTests": 0,
+        "numTodoTests": 0
+      }
+    },
+    {
+      "name": "t14-r2-formal",
+      "rc": 0,
+      "sourceTreeSHA256": "696d4499dcbb7410b30ca9b8ba0dbf7a559c745ae22ac3880c1a9b98ad6b8092",
+      "sourceMatchesCurrent": true,
+      "files": [
+        {
+          "leaf": "output.log",
+          "path": "/private/tmp/orca-followup-runs/t14-r2-formal/output.log",
+          "expectedSHA256": "b26a7c90a35931bcb548e267ea30fa52aff4075155a742c9421214497d8cde57",
+          "actualSHA256": "b26a7c90a35931bcb548e267ea30fa52aff4075155a742c9421214497d8cde57",
+          "matches": true
+        },
+        {
+          "leaf": "result.json",
+          "path": "/private/tmp/orca-followup-runs/t14-r2-formal/result.json",
+          "expectedSHA256": "c575e54645224aa844998ed5c947c4c49e6e0962d460015913a16e5f7f170e75",
+          "actualSHA256": "c575e54645224aa844998ed5c947c4c49e6e0962d460015913a16e5f7f170e75",
+          "matches": true
+        }
+      ],
+      "testCounts": null
+    },
+    {
+      "name": "t14-r2-known-reds",
+      "rc": 0,
+      "sourceTreeSHA256": "696d4499dcbb7410b30ca9b8ba0dbf7a559c745ae22ac3880c1a9b98ad6b8092",
+      "sourceMatchesCurrent": true,
+      "files": [
+        {
+          "leaf": "output.log",
+          "path": "/private/tmp/orca-followup-runs/t14-r2-known-reds/output.log",
+          "expectedSHA256": "850c3b5ad30db87d360bd17c77a39c4627fc6d7226ae7a37f446a6ab62243259",
+          "actualSHA256": "850c3b5ad30db87d360bd17c77a39c4627fc6d7226ae7a37f446a6ab62243259",
+          "matches": true
+        },
+        {
+          "leaf": "result.json",
+          "path": "/private/tmp/orca-followup-runs/t14-r2-known-reds/result.json",
+          "expectedSHA256": "c435ede546d2b1ea87e6e8df636fac872f98355f7acbb11b5f1a6b8512c028d3",
+          "actualSHA256": "c435ede546d2b1ea87e6e8df636fac872f98355f7acbb11b5f1a6b8512c028d3",
+          "matches": true
+        }
+      ],
+      "testCounts": null
+    }
+  ],
+  "allFilesMatch": true,
+  "allSourcesMatch": true
+}

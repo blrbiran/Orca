@@ -1,0 +1,13 @@
+# Task 14 i18n gate blocker: scoped Orca fix
+
+Source `/private/tmp/orca-feedback-followup-task8-20261011`, branch `codex/feedback-followup-task8`. Parent `9343641a4e631fa6bcc7c454848c112a44607f2c`; commit `dc5f34a417b41a0851cd63c4a6b50447e8f297b2`; exact tree `3f5d4ff29c60e460029e5cc840e9d74a090ecef2`. Only six source/test files changed. Worktree clean except the pre-existing untracked `node_modules` symlink. No `progress.md`, main, remote, ccloop pin, real user data, service or provider touched.
+
+`tests/panel/scanPanelText.test.ts` was retained as the RED gate. It reported exactly two extra sites: the English literal `"The activity response is malformed"` and one `POST ${path}`. The first is a user-facing fallback and now uses `i18n.t("control.activity.responseInvalid")` with English and Chinese resources. The second is the agent-installation preview's `refusalOf` diagnostic; it preserves the actual method and route exactly like the two existing approved command POST sites. The scanner gained one exact duplicate allow-list entry with an explanatory comment, no wildcard or scanner change. Behavioral tests confirm the malformed Activity response keeps status 200, `activity-response-invalid`, the exact GET route, and the selected language's message; the installation-preview 503 keeps `http-503`, the exact POST route, and localized fallback. Existing 5xx uncertain-command tests still assert `http-502` plus the localized may-not-have-committed message and `POST /api/control/x` route.
+
+## Commands, raw output and RC
+
+- `rtk npm exec -- vitest run tests/panel/scanPanelText.test.ts` at source root: RED RC 1, one expected inventory failure naming both sites ([raw log](task-14-i18n-scan-red.log)); after the fix GREEN RC 0, 3/3 ([raw log](task-14-i18n-scan-green.log)).
+- `rtk npm exec -- vitest run tests/taskActivity.test.tsx` from `web`: RED RC 1 for the Chinese message ([raw log](task-14-i18n-web-red.log)). `rtk npm exec -- vitest run tests/taskActivity.test.tsx tests/refusalText.test.tsx` after the fix: RC 0, 2 files/22 tests ([raw log](task-14-i18n-web-focused.log)).
+- `rtk npm run check --workspace web`: RC 0, 111 files/987 tests ([raw log](task-14-i18n-web-full.log)).
+- `rtk npm run typecheck`: RC 0 ([raw log](task-14-i18n-root-type.log)); `rtk npm run build`: RC 0 ([raw log](task-14-i18n-root-build.log)); `rtk npm run build --workspace web`: RC 0 ([raw log](task-14-i18n-web-build.log)). The Vite >500 kB chunk advisory remains.
+- `rtk git diff --check`: RC 0. Commit used one-command `rtk git -c core.hooksPath=/dev/null commit -m 'fix(panel): localize malformed activity response'`, RC 0. The final native whole-root gate remains with the Task 14 controller.

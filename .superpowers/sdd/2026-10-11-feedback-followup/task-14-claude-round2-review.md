@@ -1,0 +1,19 @@
+# Task 14 Claude scoped re-review, round 2
+
+Range: ccloop `d4e408b9ce0466949134b29995056400f9239d74..e7f69f964cacfc8023b2d03e80a5f9db0694d5d3`. I read the complete diff and the round-two fix report. Read-only review; no source/index/HEAD changes and no suite rerun.
+
+## Prior finding verdict
+
+**ADDRESSED.** My prior review correctly identified the outcome mismatch but incorrectly predicted empty stdout. The real-child RED established that the dirty interrupted execute produced **one error partial**, because main had already claimed finalization before validating the missing or malformed envelope. This was still wrong: the interrupted path requires a timeout partial. The round-two code records the first signal ([claude-phase-runner.mjs:325](/private/tmp/ccloop-feedback-followup-task9-20261011/scripts/claude-phase-runner.mjs#L325)), distinguishes successful child close from validated complete answer ([claude-phase-runner.mjs:665](/private/tmp/ccloop-feedback-followup-task9-20261011/scripts/claude-phase-runner.mjs#L665), [claude-phase-runner.mjs:712](/private/tmp/ccloop-feedback-followup-task9-20261011/scripts/claude-phase-runner.mjs#L712)), and chooses a Git-derived timeout partial only when the child closed successfully after an interrupt but its answer was invalid ([claude-phase-runner.mjs:729](/private/tmp/ccloop-feedback-followup-task9-20261011/scripts/claude-phase-runner.mjs#L729)). A normal exit-0 missing answer remains an error partial.
+
+The added real-child criteria cover no result and malformed result separately, both with a dirty worktree, held stdout pipe and graceful TERM exit; each asserts one timeout partial and the recorded signal ([claudePhaseRunner.test.ts:900](/private/tmp/ccloop-feedback-followup-task9-20261011/tests/runtime/claude/claudePhaseRunner.test.ts#L900)). The un-interrupted control asserts error rather than timeout ([claudePhaseRunner.test.ts:933](/private/tmp/ccloop-feedback-followup-task9-20261011/tests/runtime/claude/claudePhaseRunner.test.ts#L933)). These target the actual RED behavior and M6 reversion failed both cases. The original response-owner and final-exit M1/M2 mutants also remain killed. The frozen-source report records focused 74/74, formal 793/793 and two-worker unfiltered full 1601/1601 with no skips, plus type/build RC0; I did not reinterpret or rerun those logs.
+
+## New Critical or Important findings
+
+None confirmed in this narrow diff. The new condition applies only in the existing execute fallback. A validated successful answer is marked ready before its asynchronous stdout write and remains owned by main; interrupt cannot append a second response while main owns finalization ([claude-phase-runner.mjs:712](/private/tmp/ccloop-feedback-followup-task9-20261011/scripts/claude-phase-runner.mjs#L712), [claude-phase-runner.mjs:328](/private/tmp/ccloop-feedback-followup-task9-20261011/scripts/claude-phase-runner.mjs#L328)). A nonzero or signaled child does not set `claudeExitedSuccessfully`, so the new exit-0 classification cannot authorize its envelope. The plan, verify and single-call branches do not use the new execute fallback; parent-gone and repeated-signal handling were not changed by round two.
+
+The exact historical `ClaudePhaseAborted` interleaving is still unproven, as stated in the fix report. The earlier default-worker full run's CLI timeout and Codex `io-error` remain separate retained failures; the green two-worker run is a fresh gate on the same round-two source, not a retroactive waiver. Linux lock behavior, Orca gates, authenticated browser geometry and live providers are outside this scoped verdict.
+
+## Verdict
+
+**Prior Important: ADDRESSED. Scoped Claude fix: READY to return to Task 14 final integration review**, subject to the remaining whole-round gates and browser work. The original duplicate-publication Critical remains addressed by round one.

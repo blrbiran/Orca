@@ -1,0 +1,218 @@
+[
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/agentUpdatePaired.test.ts",
+    "name": "paired reviewed installation update CLI > observes, previews, and applies one accepted version while preserving custom table fields",
+    "fileStatus": "passed",
+    "condition": "ORCA_TASK9_CCLOOP_BIN absent"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/agentUpdatePaired.test.ts",
+    "name": "paired reviewed installation update CLI > keeps the pinned old peer usable for ordinary agents while refusing update observation",
+    "fileStatus": "passed",
+    "condition": "ORCA_TASK9_CCLOOP_BIN absent"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/agentUpdatePaired.test.ts",
+    "name": "paired reviewed installation update CLI > keeps an unknown Task 9 apply pending when the configured peer becomes old, then accepts the original receipt",
+    "fileStatus": "passed",
+    "condition": "ORCA_TASK9_CCLOOP_BIN absent"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/ccloopDefaultE2E.test.ts",
+    "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset > resolves the package in this checkout, whose runtime finds the scripts the package ships",
+    "fileStatus": "passed",
+    "condition": "ORCA_CCLOOP_DEFAULT_E2E != 1; dedicated gate requires ORCA_CCLOOP_BIN absent"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/ccloopDefaultE2E.test.ts",
+    "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset > runs orca agents init and show through the installed ccloop",
+    "fileStatus": "passed",
+    "condition": "ORCA_CCLOOP_DEFAULT_E2E != 1; dedicated gate requires ORCA_CCLOOP_BIN absent"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/ccloopDefaultE2E.test.ts",
+    "name": "Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset > boots the panel with an execution port, while an explicit empty ORCA_CCLOOP_BIN still turns it off",
+    "fileStatus": "passed",
+    "condition": "ORCA_CCLOOP_DEFAULT_E2E != 1; dedicated gate requires ORCA_CCLOOP_BIN absent"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/ccloopProtocol.integration.test.ts",
+    "name": "real ccloop protocol > accepts, accounts, commits a handoff, resumes a dirty snapshot, and collects a fresh execution",
+    "fileStatus": "failed",
+    "condition": "file setup failed under sandbox; individual criterion did not execute"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/ccloopProtocol.integration.test.ts",
+    "name": "real ccloop protocol > recovers the Orca SIGKILL boundary without duplicating checkpoint or D3 Markdown: after-archive",
+    "fileStatus": "failed",
+    "condition": "file setup failed under sandbox; individual criterion did not execute"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/ccloopProtocol.integration.test.ts",
+    "name": "real ccloop protocol > recovers the Orca SIGKILL boundary without duplicating checkpoint or D3 Markdown: before-projection",
+    "fileStatus": "failed",
+    "condition": "file setup failed under sandbox; individual criterion did not execute"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/driverSkillsReal.test.ts",
+    "name": "A2 with a real syncskill (spec \u00a710.8 C5) > injects the frozen skill, private and read-only, and records exactly the lock file's entries",
+    "fileStatus": "passed",
+    "condition": "ORCA_SYNCSKILL_REAL_BIN absent; dedicated local binary fixture gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "genuine schema10 owner \u2192 paired saved verification > keeps the standard old detached archive unavailable after real owner settlement",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "genuine schema10 owner \u2192 paired saved verification > reserves a distinct linked verifier run, skips plan/execute, books only new usage and lands normally",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "fences the actual immutable old11 owner before any unprepared saved run can dispatch",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "rechecks the actual revision and current membership when ordinary retry wins async preparation",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "refuses the actual current spend cap without a run or commitment leak",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "ends reject without executor retry, landing or an interrupted-source exception",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "ends modify without executor retry, landing or an interrupted-source exception",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "mechanically reaps before-entry and admits a new explicit successor with each inherited WORK charge once",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "mechanically reaps usage-settled and admits a new explicit successor with each inherited WORK charge once",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "preserves authored optional cumulative exhaustion in every dimension after an actual old-worker settlement",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "keeps post-entry unknown usage blocked until a genuine owner settlement, then preserves the same original lineage",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "missing prepared/entry markers never infer zero spend or permit a successor, even after owner charging",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "revokes a prepared but unaccepted fence and resolves its held reservation through the actual stop path",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "keeps original taskResult metadata opaque instead of treating answer-shaped artifact references as controller authority",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "refuses forged settlement receipts and changed current graph/target/frozen semantics without touching source failure",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "rechecks every finite reserve dimension using real owner limit commands",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "refuses hash-valid substituted reservation identities and never repairs supplied private authority modes",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "keeps the original candidate/base through harmless target-tip drift and uses ordinary reconciliation",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "archives the current malformed capsule through the private channel but keeps original normalization failure unavailable",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts",
+    "name": "ends a known real verifier timeout without executing, landing or admitting an interrupted exception",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRetryAuthorization.paired.test.ts",
+    "name": "explicit ordinary retry after unsuccessful saved verification > authorizes a distinct normal run after reject only through the actual successful retry receipt",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRetryAuthorization.paired.test.ts",
+    "name": "explicit ordinary retry after unsuccessful saved verification > authorizes a distinct normal run after modify only through the actual successful retry receipt",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRetryAuthorization.paired.test.ts",
+    "name": "explicit ordinary retry after unsuccessful saved verification > authorizes a distinct normal run after delay only through the actual successful retry receipt",
+    "fileStatus": "passed",
+    "condition": "ORCA_SAVED_RESULT_VERIFY != 1; dedicated historical roots/current feature peer gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/memory/ccmemReal.test.ts",
+    "name": "a real ccmem (spec \u00a76.3 R1) > reads back one global and one project memory through the adapter",
+    "fileStatus": "passed",
+    "condition": "ORCA_CCMEM_REAL_BIN absent; dedicated local binary fixture gate"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/service/realSmoke.test.ts",
+    "name": "real launchd smoke (opt-in) > install \u2192 answering \u2192 restart \u2192 stop \u2192 start \u2192 uninstall, under a relocated label",
+    "fileStatus": "passed",
+    "condition": "ORCA_SERVICE_REAL != 1; actual launchd service excluded by Task14 scope"
+  },
+  {
+    "file": "/private/tmp/orca-feedback-followup-task8-20261011/tests/skills/syncskillReal.test.ts",
+    "name": "a real syncskill (spec \u00a710.8 C12, C18) > profile ls leaves the sync dir byte-identical; inject's lock entries equal the lock file; ~/.syncskill is untouched",
+    "fileStatus": "passed",
+    "condition": "ORCA_SYNCSKILL_REAL_BIN absent; dedicated local binary fixture gate"
+  }
+]

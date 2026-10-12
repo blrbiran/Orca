@@ -1,0 +1,46 @@
+[
+  {
+    "name": "tests/chain/gateCheck.test.ts > checkGate: D-launch spec \u00a75.2 items 1\u20133 (review C1), with must-catch samples > K6 settings.json is not JSON",
+    "failure": "Vitest existing 5000ms timeout in default-worker full-suite phase"
+  },
+  {
+    "name": "tests/chain/gateCheck.test.ts > checkGate: D-launch spec \u00a75.2 items 1\u20133 (review C1), with must-catch samples > K13 without CLAUDE_CONFIG_DIR the user-level settings are $HOME/.claude/settings.json; an unreadable one fails too",
+    "failure": "Vitest existing 5000ms timeout in default-worker full-suite phase"
+  },
+  {
+    "name": "tests/control/archivedWakePerformance.test.ts > archived wake performance at actual entry points > defers 100 archived groups with three wakes for three pumps, one lookup and parse per group",
+    "failure": "Vitest existing 5000ms timeout in default-worker full-suite phase"
+  },
+  {
+    "name": "tests/control/requirementCommands.test.ts > requirement-draft-feedback and recovery-retry (N1 spec \u00a711.1 item 4, DR15) > re-queues a failed draft as the next draft with a fresh retry count (Task 8 carry)",
+    "failure": "Vitest existing 5000ms timeout in default-worker full-suite phase"
+  },
+  {
+    "name": "tests/control/retryTask.test.ts > retry-task refusals (spec \u00a74.2(2), \u00a74.4) > refuses a run blocked for any other reason: a succeeded run out of bounds, a transient failure, another step",
+    "failure": "Vitest existing 5000ms timeout in default-worker full-suite phase"
+  },
+  {
+    "name": "tests/control/retryTask.test.ts > retry-task refusals (spec \u00a74.2(2), \u00a74.4) > refuses a stopped group with stop-mode-conflict and a clarifying group with group-state-invalid",
+    "failure": "Vitest existing 5000ms timeout in default-worker full-suite phase"
+  },
+  {
+    "name": "tests/control/retryTask.test.ts > retry-task refusals (spec \u00a74.2(2), \u00a74.4) > refuses on either half of the stop guard alone: stopped without an intent, an intent without stopped",
+    "failure": "Vitest existing 5000ms timeout in default-worker full-suite phase"
+  },
+  {
+    "name": "tests/control/settleUnknownUsage.test.ts > D9 proof, pending, rollback and replay boundaries > strictly rejects fake charged marker and manually filled request state",
+    "failure": "Vitest existing 5000ms timeout in default-worker full-suite phase"
+  },
+  {
+    "name": "tests/control/settleUnknownUsage.test.ts > D9 does not erase other frozen runs > keeps another run's unknown/open request blocker (silent=false)",
+    "failure": "Vitest existing 5000ms timeout in default-worker full-suite phase"
+  },
+  {
+    "name": "tests/control/settleUnknownUsage.test.ts > D9 does not erase other frozen runs > keeps another run's unknown/open request blocker (silent=true)",
+    "failure": "Vitest existing 5000ms timeout in default-worker full-suite phase"
+  },
+  {
+    "name": "tests/panel/auth.test.ts > login and sessions (spec \u00a73.2-\u00a73.4) > a wrong current password ends no session",
+    "failure": "Vitest existing 5000ms timeout in default-worker full-suite phase"
+  }
+]

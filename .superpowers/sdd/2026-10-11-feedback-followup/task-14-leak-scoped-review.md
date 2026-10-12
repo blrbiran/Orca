@@ -1,0 +1,11 @@
+# Task 14 saved-result skip and TMP leak scoped review
+
+Range: Orca `1c6682c..d8603f4`. Read-only review of the full two-file diff, the saved-result gate and the leak evidence. No source, index, HEAD or suite run was changed by this reviewer.
+
+**Verdict: Approved for this scoped test-harness fix. No Critical, Important or Minor finding.**
+
+Both paired files replace collection-time `skipIf` with a `beforeEach(ctx.skip)` guard on the **same** opt-in value `ORCA_SAVED_RESULT_VERIFY === "1"` ([savedResultRecovery.paired.test.ts:6](/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRecovery.paired.test.ts#L6), [savedResultRetryAuthorization.paired.test.ts:10](/private/tmp/orca-feedback-followup-task8-20261011/tests/control/savedResultRetryAuthorization.paired.test.ts#L10)). The first file's top-level guard covers its whole file, including tests outside the initial `describe`; the second file's guard covers its whole `describe`. No test body, assertion, fixture, production source, timeout, or opt-in prerequisite changed. When the variable is `1`, the guards do nothing and all 23 existing cases remain collected and runnable; the previous source's dedicated paired gate was 23/23 RC0 (`t14-native-verify-saved6/output.log`). A fresh opt-in run on the new commit is still a separate final gate, not something this review claims.
+
+Without opt-in, the tests are now collected and skipped at runtime, allowing Vitest's file-level cleanup path to run. The old-source leak runner had Vitest exit 0, 3772 tests, but two leftover empty `orca-tmp-*` roots (`t14-native-tmp-leak6/output.log`). Each paired file independently left exactly one such root (`t14-native-leak-paired-{A,B}/output.log`). The controller reports focused postcommit no-opt-in leak RC0 with 23 collected and zero leftovers; that supports the scoped mechanism without broadening the skip condition. The leak script treats test failures separately from leftover detection ([check-tmp-leak.mjs:4](/private/tmp/orca-feedback-followup-task8-20261011/scripts/check-tmp-leak.mjs#L4)), so its old RC1 is evidence of the two roots, not failed saved-result criteria.
+
+**Integration limit:** full leak and paired opt-in gates on the committed final source remain controller-owned. This approval covers only the two-file skip-hook change.

@@ -1,0 +1,1100 @@
+[
+  {
+    "name": "t14-fix-red-runner",
+    "rc": 1,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "e1c5ba8c64fd75e7de2739f71ffa41b2622f9cac8574c3c8ca6326fa1810aaca",
+    "elapsedSeconds": 4.525987863540649,
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "publishes one complete execute",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-red-runner/output.log",
+        "size": 1412,
+        "sha256": "802356e192a96cb54ae493f23d39281501d2898ba65dcfdffebcd86084e46ba6"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-red-runner/result.json",
+        "size": 562,
+        "sha256": "ec63752c2dc7ff9053e0f31a0be29df0fce051e04c4603336603b3002cddde55"
+      }
+    }
+  },
+  {
+    "name": "t14-fix-green-runner",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "c7075951435cdfc56e6426823abee38140feab1cbf451d85ca8705cf22af4ee8",
+    "elapsedSeconds": 3.9016172885894775,
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "publishes one complete execute",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-green-runner/output.log",
+        "size": 479,
+        "sha256": "c7f99e323559b0d677cfb12241a480cf968ff690cbfe499197914fa87bfd90a8"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-green-runner/result.json",
+        "size": 565,
+        "sha256": "6adb1bc1ea8b386e1b60fa9b585efb4449479f8692da8c9c95ff95d2a7198fed"
+      }
+    }
+  },
+  {
+    "name": "t14-fix-owner-test",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "610399535770f8910848fb6dbb59ecbc8bd73fe8f8eabb25d8dca18174fe3402",
+    "elapsedSeconds": 3.5620458126068115,
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "finishes its owned stdout response",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-owner-test/output.log",
+        "size": 452,
+        "sha256": "504bc411b4b5125876e2e2c65e4ab62faa1a87feb47f67b0e8c7b5aac85326ee"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-owner-test/result.json",
+        "size": 567,
+        "sha256": "9532a0f2b29dff665c314280970f5da2c4eb8ceb2b74c876d9251577b795fc88"
+      }
+    }
+  },
+  {
+    "name": "t14-fix-adapter-focused",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "521625598ba87c028ca6259b7595f09c58152fb57b8d85c6a021104eec375289",
+    "elapsedSeconds": 8.183315992355347,
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/runtime/claude/claudeAgentAdapter.test.ts",
+      "-t",
+      "after a stop|already carries tokenUsage|gated CLI|killed before exit|plan stopped after its answer",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-adapter-focused/output.log",
+        "size": 934,
+        "sha256": "f733776e515fc89aa280160975b923a4bc388cbfda8d0d269ac128f1f461ec03"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-adapter-focused/result.json",
+        "size": 636,
+        "sha256": "9ef685e5a6af47b644230c724374fdbe768ecf6cd0208aada10eb4c5b0149cf1"
+      }
+    }
+  },
+  {
+    "name": "t14-fix-focused",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "521625598ba87c028ca6259b7595f09c58152fb57b8d85c6a021104eec375289",
+    "elapsedSeconds": 32.25315809249878,
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "tests/runtime/claude/claudeAgentAdapter.test.ts",
+      "tests/runtime/claude/fakeClaudeCli.test.ts",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-focused/output.log",
+        "size": 4139,
+        "sha256": "f077b393114c58ffbcb95fd340fcd1bea331c6baa2f2e9d2b62859a6b086675d"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-focused/result.json",
+        "size": 616,
+        "sha256": "8264b9f93765c0de2290adc77d66cfd64f790f5a132112c1a0faefb51463d232"
+      }
+    }
+  },
+  {
+    "name": "t14-fix-gated-success",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "9a9e611af93e53e7782303bef8f9a9780406ff870c83df3acbb106fcd1d6c5ed",
+    "elapsedSeconds": 4.7727742195129395,
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "publishes one complete execute",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-gated-success/output.log",
+        "size": 479,
+        "sha256": "63232a6d57e9c1ff74cfacd3178d267fd31c2385567ef4bce82b4b9431ffd592"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-gated-success/result.json",
+        "size": 566,
+        "sha256": "f09cb4217dd28650897150e360746caea10d81d5e377b4fd7a4e8405cf850e5b"
+      }
+    }
+  },
+  {
+    "name": "t14-fix-nonzero-control",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "64436ae73af1d96133e265637eaa97708e8d9f5e0c4cf61c5bc7aee20119adb0",
+    "elapsedSeconds": 3.905027151107788,
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "does not publish a complete envelope",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-nonzero-control/output.log",
+        "size": 450,
+        "sha256": "5288d06fe33765d29022be332ee1488ec9a89772be9ffb107105549d1c9f437a"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-nonzero-control/result.json",
+        "size": 573,
+        "sha256": "0406226b5623042016a38fb24997e8cb81b2b0c7d304e903a8e04726e93e7b67"
+      }
+    }
+  },
+  {
+    "name": "t14-final-focused",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "98f6990a4ac02f9881f6d5748782439f2dc2d6bf61f954f6179bda6bff31efce",
+    "elapsedSeconds": 29.28388786315918,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "tests/runtime/claude/claudeAgentAdapter.test.ts",
+      "tests/runtime/claude/fakeClaudeCli.test.ts",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-focused/output.log",
+        "size": 4241,
+        "sha256": "5d11ca04040f8aa69e299129a358aa83f08f343f74516953f021518aea06ca4a"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-focused/result.json",
+        "size": 625,
+        "sha256": "9ada702eda50db3b5991ef04aa49e6145c326d347eec6bb2d78c9608504745a5"
+      }
+    }
+  },
+  {
+    "name": "t14-final-typecheck",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "98f6990a4ac02f9881f6d5748782439f2dc2d6bf61f954f6179bda6bff31efce",
+    "elapsedSeconds": 3.9910128116607666,
+    "command": [
+      "npm",
+      "run",
+      "typecheck"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-typecheck/output.log",
+        "size": 59,
+        "sha256": "443df7778c6055e93ca0f3f4fabce5cbbe7205fa5689a62bd08268806118c185"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-typecheck/result.json",
+        "size": 421,
+        "sha256": "54a3fb91820083a88f49ffd36f997c5c8a526a51ba7c200a6d9e5dcb2391a32b"
+      }
+    }
+  },
+  {
+    "name": "t14-final-build",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "98f6990a4ac02f9881f6d5748782439f2dc2d6bf61f954f6179bda6bff31efce",
+    "elapsedSeconds": 4.593458890914917,
+    "command": [
+      "npm",
+      "run",
+      "build"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-build/output.log",
+        "size": 399,
+        "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-build/result.json",
+        "size": 412,
+        "sha256": "b7813675f0fa740a4b5ccbb0df8205d0bdeda46b46d871c7fb536ef3197b3526"
+      }
+    }
+  },
+  {
+    "name": "t14-final-full",
+    "rc": 1,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "98f6990a4ac02f9881f6d5748782439f2dc2d6bf61f954f6179bda6bff31efce",
+    "elapsedSeconds": 148.78813409805298,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/t14-final-full/tests.json"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-full/output.log",
+        "size": 81,
+        "sha256": "61b5118b4e6a891fecb3bbfed26af68291747a709311867064428c59aa24b29d"
+      },
+      "tests.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-full/tests.json",
+        "size": 569611,
+        "sha256": "0794cbb42f478e821c48bca5e8deb500e00e3f3c1206d088aaf19f458b1a130e"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-full/result.json",
+        "size": 521,
+        "sha256": "fb757040f224b7afca4d59ace4b753eb138c41900b431db1c567e1eadbaf1faa"
+      }
+    },
+    "testCounts": {
+      "numTotalTests": 1598,
+      "numPassedTests": 1596,
+      "numFailedTests": 2,
+      "numPendingTests": 0,
+      "numTodoTests": 0
+    },
+    "failedNames": [
+      "parseArgs > returns 0 for the example contract run",
+      "Codex skill phase lifetime > keeps links during ignore-term and cleans after child closes"
+    ]
+  },
+  {
+    "name": "t14-final-formal",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "98f6990a4ac02f9881f6d5748782439f2dc2d6bf61f954f6179bda6bff31efce",
+    "elapsedSeconds": 142.5133991241455,
+    "command": [
+      "npm",
+      "run",
+      "verify:control"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-formal/output.log",
+        "size": 56946,
+        "sha256": "332bc76f316c67251be3d0caa3210365c7b4a7f793efd099e51ebe5a8ba1c11d"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-formal/result.json",
+        "size": 422,
+        "sha256": "44bc74415db2f919c1326b3b88aa1072156f773202ffa9841e24b2abafb1b1e3"
+      }
+    }
+  },
+  {
+    "name": "t14-final-full-two-workers",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "98f6990a4ac02f9881f6d5748782439f2dc2d6bf61f954f6179bda6bff31efce",
+    "elapsedSeconds": 315.03982377052307,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/t14-final-full-two-workers/tests.json",
+      "--maxWorkers=2",
+      "--minWorkers=2"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-full-two-workers/output.log",
+        "size": 93,
+        "sha256": "0a1310e9e5aab69734d6b7da0fd1dc9efe7ade520afed530dc6bbd19b382c559"
+      },
+      "tests.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-full-two-workers/tests.json",
+        "size": 568353,
+        "sha256": "fdf7eb3f6d6f23b40acc1ae0501bf2cba1c9b733df50aa0c15a89bd093e4d041"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-full-two-workers/result.json",
+        "size": 589,
+        "sha256": "1f3266b53015bf716f8693e7ba8b8ce92b4aa9acc67a680b8161c81843d7052d"
+      }
+    },
+    "testCounts": {
+      "numTotalTests": 1598,
+      "numPassedTests": 1598,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "numTodoTests": 0
+    },
+    "failedNames": []
+  },
+  {
+    "name": "t14-final-known-reds",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "98f6990a4ac02f9881f6d5748782439f2dc2d6bf61f954f6179bda6bff31efce",
+    "elapsedSeconds": 0.044291019439697266,
+    "command": [
+      "node",
+      "scripts/check-known-reds.mjs",
+      "/private/tmp/orca-followup-runs/t14-final-full-two-workers/tests.json"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-known-reds/output.log",
+        "size": 48,
+        "sha256": "850c3b5ad30db87d360bd17c77a39c4627fc6d7226ae7a37f446a6ab62243259"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-final-known-reds/result.json",
+        "size": 510,
+        "sha256": "4a7e858f6c439dbd0e09c770579caf1ac8d2dce9962a8b522153eb9bd7bbc2a7"
+      }
+    }
+  },
+  {
+    "name": "t14-cli-file-1",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "98f6990a4ac02f9881f6d5748782439f2dc2d6bf61f954f6179bda6bff31efce",
+    "elapsedSeconds": 5.2199342250823975,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/cli/cli.test.ts",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/t14-cli-file-1/tests.json",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-cli-file-1/output.log",
+        "size": 81,
+        "sha256": "8d279916d032e4fcba55ce9a28f9cab7aab2bbb7a93248ef82337db08cb36cfc"
+      },
+      "tests.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-cli-file-1/tests.json",
+        "size": 11567,
+        "sha256": "447eaa6f577c6c90ee1c3faafe6f41acc4b38b3ba8c420265333074bc36fdaac"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-cli-file-1/result.json",
+        "size": 594,
+        "sha256": "c2f17afdebfb108ad097379c483dd70f4bf20e18167af8ef23482376d3f8b342"
+      }
+    },
+    "testCounts": {
+      "numTotalTests": 37,
+      "numPassedTests": 37,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "numTodoTests": 0
+    },
+    "failedNames": []
+  },
+  {
+    "name": "t14-cli-file-2",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "98f6990a4ac02f9881f6d5748782439f2dc2d6bf61f954f6179bda6bff31efce",
+    "elapsedSeconds": 4.4205920696258545,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/cli/cli.test.ts",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/t14-cli-file-2/tests.json",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-cli-file-2/output.log",
+        "size": 81,
+        "sha256": "1028dfbae5937530cb69620560fa217d40cba4529ce5b3cd966e83ef47ba4b70"
+      },
+      "tests.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-cli-file-2/tests.json",
+        "size": 11571,
+        "sha256": "cfaa5897066f1f55c65363ac88b87c44a7dc128e24d51322df5e72129441c90c"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-cli-file-2/result.json",
+        "size": 594,
+        "sha256": "4ed76ff91e9a9c81c739d56a9b2b5cf03594e64cceb95e604eb90f1c5dd27746"
+      }
+    },
+    "testCounts": {
+      "numTotalTests": 37,
+      "numPassedTests": 37,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "numTodoTests": 0
+    },
+    "failedNames": []
+  },
+  {
+    "name": "t14-cli-file-3",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "98f6990a4ac02f9881f6d5748782439f2dc2d6bf61f954f6179bda6bff31efce",
+    "elapsedSeconds": 4.282325029373169,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/cli/cli.test.ts",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/t14-cli-file-3/tests.json",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-cli-file-3/output.log",
+        "size": 81,
+        "sha256": "3bae753cb1de5fcc90d5d223dedad5ac470275329c67bb9064b4ecf486e041bb"
+      },
+      "tests.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-cli-file-3/tests.json",
+        "size": 11573,
+        "sha256": "4fce637551f45009bcb58b446fc6986a7db72e255582ff96b4285b3695c48e6b"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-cli-file-3/result.json",
+        "size": 593,
+        "sha256": "371b463861719aa83be901ca9380d364171f4b33d253e595106ee89107d3c828"
+      }
+    },
+    "testCounts": {
+      "numTotalTests": 37,
+      "numPassedTests": 37,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "numTodoTests": 0
+    },
+    "failedNames": []
+  },
+  {
+    "name": "t14-codex-file-1",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "98f6990a4ac02f9881f6d5748782439f2dc2d6bf61f954f6179bda6bff31efce",
+    "elapsedSeconds": 4.484575986862183,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/codex/runCodexPhase.test.ts",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/t14-codex-file-1/tests.json",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-codex-file-1/output.log",
+        "size": 83,
+        "sha256": "d543afba063b111eb6250cbb5a51afbef84b0a5e953eb7c611edf61d5ca92c8d"
+      },
+      "tests.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-codex-file-1/tests.json",
+        "size": 6914,
+        "sha256": "f23b98ef601865b5a795a06cc958c9428109d3960c709745f9b483b0d22037c2"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-codex-file-1/result.json",
+        "size": 617,
+        "sha256": "fce9becf37f6bd359e772acbf86846c1944206c1eb4e953a822559ecf3207752"
+      }
+    },
+    "testCounts": {
+      "numTotalTests": 24,
+      "numPassedTests": 24,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "numTodoTests": 0
+    },
+    "failedNames": []
+  },
+  {
+    "name": "t14-codex-file-2",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "98f6990a4ac02f9881f6d5748782439f2dc2d6bf61f954f6179bda6bff31efce",
+    "elapsedSeconds": 4.423949718475342,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/codex/runCodexPhase.test.ts",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/t14-codex-file-2/tests.json",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-codex-file-2/output.log",
+        "size": 83,
+        "sha256": "e308cf6e50a216c88e24385c5d8603537922dc6ef3030b72f79b9614e891c34c"
+      },
+      "tests.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-codex-file-2/tests.json",
+        "size": 6918,
+        "sha256": "fcfa7f7c92cf5c2d509de2217ed51400c83ad29b113205f8545dcc93b6c21fd8"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-codex-file-2/result.json",
+        "size": 617,
+        "sha256": "761b35e7902a48db14a215d4977c2c134c5f3ac5c28fc1132d9b5fd677c74f4f"
+      }
+    },
+    "testCounts": {
+      "numTotalTests": 24,
+      "numPassedTests": 24,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "numTodoTests": 0
+    },
+    "failedNames": []
+  },
+  {
+    "name": "t14-codex-file-3",
+    "rc": 0,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "98f6990a4ac02f9881f6d5748782439f2dc2d6bf61f954f6179bda6bff31efce",
+    "elapsedSeconds": 4.4605700969696045,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/codex/runCodexPhase.test.ts",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/t14-codex-file-3/tests.json",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-codex-file-3/output.log",
+        "size": 83,
+        "sha256": "bb5d91079ee7937bf80419de777dbc5eb465a0adc20ce9d6fc1fc5af6f7423eb"
+      },
+      "tests.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-codex-file-3/tests.json",
+        "size": 6928,
+        "sha256": "19ce231413b99e5e84ea986bffe1d65a2d66dea8dc7168aaa557b0a6715b588c"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-codex-file-3/result.json",
+        "size": 618,
+        "sha256": "da2c129be119f6ae6238857291e2209b74cd78661032d5d37e88fbe22c5d5437"
+      }
+    },
+    "testCounts": {
+      "numTotalTests": 24,
+      "numPassedTests": 24,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "numTodoTests": 0
+    },
+    "failedNames": []
+  },
+  {
+    "name": "t14-fix-M1-final-exit-recheck",
+    "rc": 1,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "4be8104a338eadd381506a86c2de3a0720c01036849cfbc10e59bf635d47356d",
+    "elapsedSeconds": 1.786064863204956,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "publishes one complete execute",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-M1-final-exit-recheck/output.log",
+        "size": 1729,
+        "sha256": "e0ffa0a44506a85539e6c64f0f103c8be94beaff3eca1444709c9006181cb810"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-M1-final-exit-recheck/result.json",
+        "size": 585,
+        "sha256": "75876609eadebdca167636b0b2918f564ec21924cb096306df04eb4ef8935a3f"
+      }
+    }
+  },
+  {
+    "name": "t14-fix-M2-response-ownership",
+    "rc": 1,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "e62a91ede9da6e0c32f78d9ddb28a0df5f0487b6c401247582be504ef3c38075",
+    "elapsedSeconds": 1.3447089195251465,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "finishes its owned stdout response",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-M2-response-ownership/output.log",
+        "size": 1369,
+        "sha256": "b9b34aad9109cac8be4efe06d8cd354e94c5c6cc0e6ec1f678b63cbf9f3fa618"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-M2-response-ownership/result.json",
+        "size": 590,
+        "sha256": "58c22fc7af1d15a2465f51e82fc8e68620c198862ab08d55b8fd5b6384095432"
+      }
+    }
+  },
+  {
+    "name": "t14-fix-M3-preserve-explicit-usage",
+    "rc": 1,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "94994ccdeff41c6a908460a883936ca77d78ff0231d3d514008cf6fd2a851224",
+    "elapsedSeconds": 0.8763430118560791,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudeAgentAdapter.test.ts",
+      "-t",
+      "keeps explicit usage after a gated CLI",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-M3-preserve-explicit-usage/output.log",
+        "size": 1720,
+        "sha256": "d2a1777bfa3b3f5817b62e97859150aa8d427aa1e7c0cc62e9e244aec81e1197"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-M3-preserve-explicit-usage/result.json",
+        "size": 605,
+        "sha256": "d12432ee145cb57f0b07ae76ac28b5c09ea974636ebd9825ef0988f342903172"
+      }
+    }
+  },
+  {
+    "name": "t14-fix-M4-successful-exit-proof",
+    "rc": 1,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "a9c558379a55cf6e2840dd4d18bd1a319f670eefc85268402f677473a76b33af",
+    "elapsedSeconds": 0.8581480979919434,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudeAgentAdapter.test.ts",
+      "-t",
+      "keeps explicit usage after a gated CLI",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-M4-successful-exit-proof/output.log",
+        "size": 1787,
+        "sha256": "6787f79a55f4293aba63ed90305d1c021bd7ff3bde36968ff81f5dcbffafb0cc"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-M4-successful-exit-proof/result.json",
+        "size": 601,
+        "sha256": "fd2592769803fe6c8ab0d9cb6f6f2bd04f1203df35ab1b88fa68c26b89f16d3d"
+      }
+    }
+  },
+  {
+    "name": "t14-fix-M5-phase-boundary",
+    "rc": 1,
+    "source": "74194c8e048de2143766db9726be7cf0fe96c300",
+    "sourceTreeSHA256": "5674110e55db2270d528ca865498226d8806e4ad40d8540b1ee212b76f5e429e",
+    "elapsedSeconds": 0.8332779407501221,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudeAgentAdapter.test.ts",
+      "-t",
+      "a plan stopped after its answer",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-M5-phase-boundary/output.log",
+        "size": 1352,
+        "sha256": "72fbfb5ad311839dab00a7b3b5338de4345f127fb2b4800b3db1236e91b9d8bc"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-fix-M5-phase-boundary/result.json",
+        "size": 580,
+        "sha256": "2fb8f4d7e7f9ccfa3d69aafd947b854156fe0595467c69cd9290f767add6796a"
+      }
+    }
+  },
+  {
+    "name": "t14-r2-red-exit-zero-invalid",
+    "rc": 1,
+    "source": "d4e408b9ce0466949134b29995056400f9239d74",
+    "sourceTreeSHA256": "eb9a16208120f3f90606377f94df36cd611455f8d99550ffe5a75cbf67496e55",
+    "elapsedSeconds": 6.199826955795288,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "publishes one timeout partial when an interrupted exit-zero CLI",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-red-exit-zero-invalid/output.log",
+        "size": 2106,
+        "sha256": "7c0212e3a8c6bb766a642aa2660e3269b9f5a148843f5092151e664a7b9760a6"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-red-exit-zero-invalid/result.json",
+        "size": 612,
+        "sha256": "e317b8364c799572aa6c7fd4151efb5908ff121c23c15a518f57bbbfa0ecaced"
+      }
+    }
+  },
+  {
+    "name": "t14-r2-green-exit-zero-invalid",
+    "rc": 0,
+    "source": "d4e408b9ce0466949134b29995056400f9239d74",
+    "sourceTreeSHA256": "b611b36b32ec09c7ea57c6688dc29559fbf211b3883b0a837d191e1e1233c562",
+    "elapsedSeconds": 5.637387037277222,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "publishes one timeout partial when an interrupted exit-zero CLI",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-green-exit-zero-invalid/output.log",
+        "size": 588,
+        "sha256": "74cb661a19b89f99c4571df1044d5d6e3b604e9db9b07c53346baad908f0cfb8"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-green-exit-zero-invalid/result.json",
+        "size": 614,
+        "sha256": "6174805e7735917b96553fad28203f8cd78c930350f20032b1b61db0745faae0"
+      }
+    }
+  },
+  {
+    "name": "t14-r2-focused",
+    "rc": 0,
+    "source": "d4e408b9ce0466949134b29995056400f9239d74",
+    "sourceTreeSHA256": "696d4499dcbb7410b30ca9b8ba0dbf7a559c745ae22ac3880c1a9b98ad6b8092",
+    "elapsedSeconds": 35.63765501976013,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "tests/runtime/claude/claudeAgentAdapter.test.ts",
+      "tests/runtime/claude/fakeClaudeCli.test.ts",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-focused/output.log",
+        "size": 4586,
+        "sha256": "138fdd1fbc1529a8ad945abefa5328351a93d7b09a6217fa0cf77b3f34f5b1df"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-focused/result.json",
+        "size": 622,
+        "sha256": "545e31b7097ead4b7dcaa8cbb1524cf750726aaca8e5917f2e3c0f0e67a98c1c"
+      }
+    }
+  },
+  {
+    "name": "t14-r2-typecheck",
+    "rc": 0,
+    "source": "d4e408b9ce0466949134b29995056400f9239d74",
+    "sourceTreeSHA256": "696d4499dcbb7410b30ca9b8ba0dbf7a559c745ae22ac3880c1a9b98ad6b8092",
+    "elapsedSeconds": 4.200636863708496,
+    "command": [
+      "npm",
+      "run",
+      "typecheck"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-typecheck/output.log",
+        "size": 59,
+        "sha256": "443df7778c6055e93ca0f3f4fabce5cbbe7205fa5689a62bd08268806118c185"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-typecheck/result.json",
+        "size": 417,
+        "sha256": "f2f9683df2d510ced18921219105feb55e39ae5d0903ea83f6b002f3caea902b"
+      }
+    }
+  },
+  {
+    "name": "t14-r2-build",
+    "rc": 0,
+    "source": "d4e408b9ce0466949134b29995056400f9239d74",
+    "sourceTreeSHA256": "696d4499dcbb7410b30ca9b8ba0dbf7a559c745ae22ac3880c1a9b98ad6b8092",
+    "elapsedSeconds": 4.7704222202301025,
+    "command": [
+      "npm",
+      "run",
+      "build"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-build/output.log",
+        "size": 399,
+        "sha256": "aefbc9b778e411edd79554b58143dc8c252dbc805ec4e91e0c180ac3c2e15cfd"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-build/result.json",
+        "size": 410,
+        "sha256": "7fd85940cf8fc2d289004905e5b393a3edf8a9a770dffdf00ef5a54c405f24e6"
+      }
+    }
+  },
+  {
+    "name": "t14-r2-full-two-workers",
+    "rc": 0,
+    "source": "d4e408b9ce0466949134b29995056400f9239d74",
+    "sourceTreeSHA256": "696d4499dcbb7410b30ca9b8ba0dbf7a559c745ae22ac3880c1a9b98ad6b8092",
+    "elapsedSeconds": 312.10922598838806,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "--reporter=json",
+      "--outputFile=/private/tmp/orca-followup-runs/t14-r2-full-two-workers/tests.json",
+      "--maxWorkers=2",
+      "--minWorkers=2"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-full-two-workers/output.log",
+        "size": 90,
+        "sha256": "65f2459fafc1d8f9e82f385d4400c738d1f18c30d5ca10f5242f638c27afb829"
+      },
+      "tests.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-full-two-workers/tests.json",
+        "size": 569426,
+        "sha256": "a90dbab8e8019a8e4373a2d147f6afe467f2c715f678e650777b698538f0c165"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-full-two-workers/result.json",
+        "size": 583,
+        "sha256": "4c051d22b2d69e76258a2a27f5760bcac04900f5e6767158acbdf63df9820c4f"
+      }
+    },
+    "testCounts": {
+      "numTotalTests": 1601,
+      "numPassedTests": 1601,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "numTodoTests": 0
+    },
+    "failedNames": []
+  },
+  {
+    "name": "t14-r2-formal",
+    "rc": 0,
+    "source": "d4e408b9ce0466949134b29995056400f9239d74",
+    "sourceTreeSHA256": "696d4499dcbb7410b30ca9b8ba0dbf7a559c745ae22ac3880c1a9b98ad6b8092",
+    "elapsedSeconds": 142.1293659210205,
+    "command": [
+      "npm",
+      "run",
+      "verify:control"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-formal/output.log",
+        "size": 56128,
+        "sha256": "b26a7c90a35931bcb548e267ea30fa52aff4075155a742c9421214497d8cde57"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-formal/result.json",
+        "size": 419,
+        "sha256": "c575e54645224aa844998ed5c947c4c49e6e0962d460015913a16e5f7f170e75"
+      }
+    }
+  },
+  {
+    "name": "t14-r2-known-reds",
+    "rc": 0,
+    "source": "d4e408b9ce0466949134b29995056400f9239d74",
+    "sourceTreeSHA256": "696d4499dcbb7410b30ca9b8ba0dbf7a559c745ae22ac3880c1a9b98ad6b8092",
+    "elapsedSeconds": 0.040985107421875,
+    "command": [
+      "node",
+      "scripts/check-known-reds.mjs",
+      "/private/tmp/orca-followup-runs/t14-r2-full-two-workers/tests.json"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-known-reds/output.log",
+        "size": 48,
+        "sha256": "850c3b5ad30db87d360bd17c77a39c4627fc6d7226ae7a37f446a6ab62243259"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-known-reds/result.json",
+        "size": 501,
+        "sha256": "c435ede546d2b1ea87e6e8df636fac872f98355f7acbb11b5f1a6b8512c028d3"
+      }
+    }
+  },
+  {
+    "name": "t14-r2-M1-final-exit-recheck",
+    "rc": 1,
+    "source": "d4e408b9ce0466949134b29995056400f9239d74",
+    "sourceTreeSHA256": "bd928b307cf923b024e3c5449b2aa7bd840a78e3c6852841cd709710e30170d1",
+    "elapsedSeconds": 6.7739808559417725,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "publishes one complete execute",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-M1-final-exit-recheck/output.log",
+        "size": 1732,
+        "sha256": "e075150112818e0d4f0f25770c4f811ced9e6f894d665ccca76c0dd6c992dc52"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-M1-final-exit-recheck/result.json",
+        "size": 588,
+        "sha256": "f376a00f285340518b9ac54b4470e8165fe0e1858e00373e1d1bbadca5849cf5"
+      }
+    }
+  },
+  {
+    "name": "t14-r2-M2-response-ownership",
+    "rc": 1,
+    "source": "d4e408b9ce0466949134b29995056400f9239d74",
+    "sourceTreeSHA256": "fa4c2d2e721a125bc6fd98b5c0ec420525f83e84ef3c86c663f11c02b6321d94",
+    "elapsedSeconds": 1.0998268127441406,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "finishes its owned stdout response",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-M2-response-ownership/output.log",
+        "size": 1372,
+        "sha256": "5e9621c4aa90a7473179fba49c59a03f0c6ec26c43a856df019be56cfb6e4877"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-M2-response-ownership/result.json",
+        "size": 592,
+        "sha256": "311a72f913ebb6aceaa5601736ff4a6e4f74c0187029f413871b8b49e906d6ef"
+      }
+    }
+  },
+  {
+    "name": "t14-r2-M6-invalid-answer-timeout-fallback",
+    "rc": 1,
+    "source": "d4e408b9ce0466949134b29995056400f9239d74",
+    "sourceTreeSHA256": "b7db5c024168b7993aff48053025bcdfc8862940f859ff72af9e6f934bdc6381",
+    "elapsedSeconds": 3.5065369606018066,
+    "command": [
+      "node_modules/.bin/vitest",
+      "run",
+      "tests/runtime/claude/claudePhaseRunner.test.ts",
+      "-t",
+      "publishes one timeout partial when an interrupted exit-zero CLI",
+      "--maxWorkers=1",
+      "--minWorkers=1"
+    ],
+    "files": {
+      "output.log": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-M6-invalid-answer-timeout-fallback/output.log",
+        "size": 2127,
+        "sha256": "c685c6c1eeabbb036506a5819a84d55b9acf8b71b87ba6c50c8addccb8519653"
+      },
+      "result.json": {
+        "path": "/private/tmp/orca-followup-runs/t14-r2-M6-invalid-answer-timeout-fallback/result.json",
+        "size": 647,
+        "sha256": "2141c0c5de5b27a8c5d1a8ffd6af54a33226d4aa70fafb08462c31346ab1b893"
+      }
+    }
+  }
+]
