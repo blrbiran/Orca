@@ -6,7 +6,8 @@ import { spawnSync } from "node:child_process";
 
 const chain = spawnSync("npx", ["vitest", "run", "tests/chain"], { stdio: "inherit" });
 if (chain.status !== 0) process.exit(chain.status ?? 1);
-const leak = spawnSync("npx", ["vitest", "run"], {
+// Bound parallel load so the full-suite chain-session check remains deterministic under CI contention.
+const leak = spawnSync("npx", ["vitest", "run", "--maxWorkers=2"], {
   stdio: "inherit",
   env: { ...process.env, ORCA_CHAIN_ID: "chain-deadbeef", ORCA_CHAIN_SESSION: "deadbeef-0000-4000-8000-000000000000" },
 });
