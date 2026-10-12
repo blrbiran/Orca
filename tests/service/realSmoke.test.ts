@@ -37,6 +37,18 @@ async function untilStatus(code: number, text: string, ms = 30_000): Promise<str
     await new Promise((r) => setTimeout(r, 500));
   }
 }
+async function untilUnloaded(ms = 30_000): Promise<void> {
+  const target = `${launchDomain()}/${label}`;
+  const deadline = Date.now() + ms;
+  for (;;) {
+    const printed = spawnSync("launchctl", ["print", target], { encoding: "utf8" });
+    if (printed.status === 3 || printed.status === 113 || printed.status === 125) return;
+    if (printed.status !== 0 || Date.now() > deadline) {
+      throw new Error(`launchctl print ${target} did not become unloaded: ${printed.status} ${printed.stdout}${printed.stderr}`);
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
 afterAll(async () => {
   if (!real || root === "") return;
   spawnSync("launchctl", ["bootout", `${launchDomain()}/${label}`]);
@@ -79,7 +91,7 @@ describe("real launchd smoke (opt-in)", () => {
     expect(started.status, started.stderr).toBe(0);
     expect(orca("status").status).toBe(0);
     expect(orca("uninstall").status).toBe(0);
-    expect(spawnSync("launchctl", ["print", `${launchDomain()}/${label}`]).status).not.toBe(0);
     expect(existsSync(join(root, "la", `${label}.plist`))).toBe(false);
+    await untilUnloaded();
   }, 180_000);
 });
