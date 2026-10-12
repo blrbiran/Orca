@@ -165,7 +165,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ### 4.0 现在的接手入口（2026-10-12，滚动更新）
 
-**交接边界**：feedback-followup Tasks 1–14 已实现、逐项复审并完成 Task 14 全轮审查；Orca 与 ccloop 成果已按本轮授权快进到各自本地 main。Results 5 另行完成；原 `progress-results-20261010/Orca` 工作树的旧 HEAD、21 项 WIP 内容与状态指纹复核一致，不要清理。旧 issue-fixes、D9/M3、M5/M6、feedback-maintenance 和 Task 7 已关闭的复审问题不重做。接手时现查 main、worktree 和远端状态，本文不把活 HEAD 写成常量。
+**交接边界**：feedback-followup Tasks 1–14 已实现、逐项复审并完成 Task 14 全轮审查；Orca 与 ccloop 成果已按本轮授权快进到各自本地 main。Results 5 也已另行完成；2026-10-12 复核旧 `progress-results-20261010/Orca` 的 21 项 WIP 后，确认其功能和测试均已在 main 且 main 含更新的保护，无独有代码须合。旧 WIP 已逐项校验并归档在 `/Users/biran/code/skills/loop/orca_archived_files/results5-wip-20261012.tar.gz`（同名 `.manifest.json`），对应工作树和已合入分支已清理；其他 detached 工作树未动。旧 issue-fixes、D9/M3、M5/M6、feedback-maintenance 和 Task 7 已关闭的复审问题不重做。接手时现查 main、worktree 和远端状态，本文不把活 HEAD 写成常量。
 
 **此前成果的边界**：Results 5 按真实 owner／attempt／revision 展示保存成果，预览下载隔离账户、项目和 epoch；同 owner 的隐藏重开与进展刷新保留已接纳的 captureRevision。可选 token 的 `null` 只表示所写上限无限，不表示已观测用量为零。Tasks 5–7 的保存验证只跑新的 check／verifier、只记新用量，原失败及已记历史 WORK 不改写；普通旧 archive 缺真实发布命名空间 ref 时明确不可用，不能从当前目标仓伪造历史证据或批准。普通重试须有真实成功命令凭据及 current/latest/inactive/generation 绑定；缺 marker、ready 或没看到 worker 均不证明零用量或自动执行授权。细节见本轮台账与四份 spec。
 
@@ -179,7 +179,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 **本轮真实切换（2026-10-12）**：后续会话从 Orca 本地 main 新建 `codex/live-service-cutover`，按 `docs/handoff/2026-10-12-live-service-cutover.md` 的命令、备份清单与回退步骤执行。真实两份控制库开工时分别是 schema 9、7（此前「真实 schema 12」仅为代码基线，不能当成数据版本）；完整备份并先对副本演练后，两份真实库均已升 13、完整性 `ok`，死 owner 锁已由恢复机制退役。旧 `panel.sh` 已改名保留，正式 `dev.orca.panel` LaunchAgent 在 7777 应答，服务显式使用原 panel 控制根及真实 ccmem 数据根；ccmem daemon 原进程未重启。真实 ccmem CLI 从该根导出 version 0.7、3901 条；没有付费 provider 或真实任务执行。真实 launchd 隔离冒烟原测试因卸载异步两次红，等实际卸载的修正后在 Node 22／24 各 1/1 通过。
 
-**pin 与本地整合**：ccloop 远端 main 已由人推到本轮新 CLI；Orca 用仓库脚本将 package/lock 重钉到该已发布提交，默认解析 3/3、配对新旧 CLI 3/3、干净副本 `npm ci` 通过。新服务已重装为使用默认固定包、没有本地 `ORCA_CCLOOP_BIN` 覆盖。人分别授权后，Orca、ccloop、ccmem 的本轮分支均以 `--ff-only` 合入各自本地 main；Orca main 现含新 pin，本轮未推远端。本轮额外原生完整根级测试 3739 过／0 失败／33 条条件跳过（比 Task 14 多 3 条未传配对 CLI 的跳过，已在专用门 3/3 通过）；普通沙箱的 EPERM 失败原样留证。Results 5 原工作树 21 项 WIP 指纹复核未变。Linux 原生锁、真实网页登录记忆页、付费 provider、ccmem 自身 schema/daemon 迁移仍未验；既有 T13／备份挂账及 ccloop B4 继续有效。
+**pin 与本地整合**：ccloop 远端 main 已由人推到本轮新 CLI；Orca 用仓库脚本将 package/lock 重钉到该已发布提交，默认解析 3/3、配对新旧 CLI 3/3、干净副本 `npm ci` 通过。新服务已重装为使用默认固定包、没有本地 `ORCA_CCLOOP_BIN` 覆盖。人分别授权后，Orca、ccloop、ccmem 的本轮分支均以 `--ff-only` 合入各自本地 main；Orca main 现含新 pin。本席未执行 push；合入后收尾 `ls-remote` 观测三仓远端 main 已由人推进到本轮合入提交，合入后交接更正当时仍仅本地。本轮额外原生完整根级测试 3739 过／0 失败／33 条条件跳过（比 Task 14 多 3 条未传配对 CLI 的跳过，已在专用门 3/3 通过）；普通沙箱的 EPERM 失败原样留证。Results 5 清理前 21 项 WIP 指纹复核未变，当前 main 的 Web 新门 987/987、旧 WIP 已归档并清理；细节见 `docs/handoff/2026-10-12-live-service-cutover.md`。Linux 原生锁、真实网页登录记忆页、付费 provider、ccmem 自身 schema/daemon 迁移仍未验；既有 T13／备份挂账及 ccloop B4 继续有效。
 
 ### 4.0.w 会话 `e34dc963`（2026-10-08～09）留下的结论（**前半已由人合并推送；过程删了，结论留在这里**）
 

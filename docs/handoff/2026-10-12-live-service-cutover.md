@@ -1,6 +1,6 @@
 # 2026-10-12 本机服务切换记录
 
-本记录接续 `handoff.md` §4.0 和 `.superpowers/sdd/2026-10-11-feedback-followup/task-14-native-gates-report.md`。本轮从 Orca 本地 `main` 建 `codex/live-service-cutover` 分支；ccloop 远端 `main` 在 repin 前经 `git ls-remote` 确认已到提交主题 `docs(handoff): roll Orca followup state in place`。人分别授权后，Orca、ccloop、ccmem 的本轮分支均以 `--ff-only` 合入各自本地 main；本轮未推送。Results 5 原工作树的 HEAD、porcelain SHA256 与 21 项文件／软链接指纹按上轮基准重算后全部相同。
+本记录接续 `handoff.md` §4.0 和 `.superpowers/sdd/2026-10-11-feedback-followup/task-14-native-gates-report.md`。本轮从 Orca 本地 `main` 建 `codex/live-service-cutover` 分支；ccloop 远端 `main` 在 repin 前经 `git ls-remote` 确认已到提交主题 `docs(handoff): roll Orca followup state in place`。人分别授权后，Orca、ccloop、ccmem 的本轮分支均以 `--ff-only` 合入各自本地 main。本席未执行 push；合入后的收尾 `ls-remote` 观测到三仓远端 main 已由人推进到各自合入提交，最后一笔“合入后交接更正”当时仍仅在本地。Results 5 原工作树的 HEAD、porcelain SHA256 与 21 项文件／软链接指纹按上轮基准重算后全部相同。
 
 ## 实际数据与备份
 
@@ -29,3 +29,9 @@ SQLite backup API 建立了两库、`accounts.sqlite` 和真实 `~/.claude/ccmem
 ## 回退
 
 如需撤销，先停止 `dev.orca.panel`，确认端口、socket 与两个控制库的 owner 均无活写入者，再根据 manifest 校验备份 SHA256。若切换后产生任何新任务／账户数据，先保全新增数据，不能直接用旧副本覆盖。无新写入时可将两份 `control.sqlite` 和 `accounts.sqlite` 备份复制到各原目录的临时名，校验后原子替换；JWT key、agents/profile 和旧 launcher 也在同一备份集。随后卸载新服务，并将 `panel.sh.retired-20261012` 还原为原名。ccmem daemon 始终活着；只有在确认它已停止且确有 ccmem 数据损坏时，才考虑其独立备份和 WAL 恢复，不能直接覆盖运行中的全局库。
+
+## Results 5 后续核对与清理
+
+本轮追加核对原 `progress-results-20261010/Orca` 工作树：其已提交分支 tip 经 `git merge-base --is-ancestor` 证实已在 main，21 项 WIP 里每个路径都已在 main；6 项字节相同，其余是 main 的后续版本。旧 WIP 的 Results 入口、组件、双语文案、预览下载和原测试均已由 main 包含；main 又补了跨刷新保存权威、登录撤销下载、旧响应拒绝和中文状态翻译等保护。将旧文件覆写 main 会倒退这些修正，没有独有代码需要再合。私有 HOME 下、Node 24 的 `npm run --ws check` 在当前 main 通过 111 文件／987 测试；原始记录在 `/private/tmp/orca-followup-runs/results5-web-current-20261012/`。
+
+清理前按上一轮 `original-wip-before.json` 复核旧 HEAD、porcelain SHA256 和 21 项文件／软链接指纹不变，将全部 WIP 归档到 `/Users/biran/code/skills/loop/orca_archived_files/results5-wip-20261012.tar.gz`，清单为同目录 `.manifest.json`；归档 SHA256、21 个 tar 成员和每项内容再次校验一致。Codex 原生附加工具因“由另一个任务拥有”拒绝接管该工作树；在用户明确要求清理且可恢复归档完成后，使用 Git 移除该脏工作树并以 `branch -d` 删除已合入的分支。`git worktree list` 已无该路径。其他 detached 工作树未动。
