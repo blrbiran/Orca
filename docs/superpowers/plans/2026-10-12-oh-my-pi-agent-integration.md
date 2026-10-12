@@ -86,7 +86,7 @@
 ### Task 4: Orca preview/UI and control compatibility
 
 **Files:**
-- Modify: `src/control/agentInstallationProtocol.ts`, `web/src/controlTypes.ts`, `web/src/AgentSettings.tsx`
+- Modify: `src/control/agentInstallationProtocol.ts`, `web/src/controlTypes.ts`, `web/src/AgentSettings.tsx`, `web/src/locales/en.ts`, `web/src/locales/zh.ts`
 - Create: `web/tests/ompAgentSettings.test.tsx`, `tests/control/ompAgentPort.test.ts`
 
 **Interfaces:**
@@ -106,7 +106,7 @@
 
 - [ ] **Step 1: Build a one-file disposable target** with one exact required check and target path. Record a pre-run file and directory snapshot; the configured provider must be reachable. Copy only the OMP settings/model definition needed for this machine into a `0700` temporary HOME (private files `0600`), redirect all HOME/XDG/OMP state there, and never print credentials. Use only a local ccloop build through Orca's execution-port override.
 - [ ] **Step 2: Verify a short no-tool OMP call** reports the selected provider/model and nonzero reconciling usage. Inspect each phase's rendered system prompt and effective tool list before the coding run.
-- [ ] **Step 3: Run one real Orca task** through plan, execute, verify. Preserve event logs, phase artifacts, controller result, allowed-path diff, and Orca/ccloop usage ledger. Run an explicit artifact check that returns nonzero for missing phases, unknown or mismatched usage, forbidden events, changed out-of-scope paths, or missing successful required check. Inspect in-allowlist extra work separately; any material overrun fails the pilot.
+- [ ] **Step 3: Run one real Orca task** through plan, execute, verify. Preserve event logs, phase artifacts, controller result, allowed-path diff, and Orca/ccloop usage ledger. Run an explicit artifact check that returns nonzero for missing phases, unknown or mismatched usage, forbidden events, direct Git staging/reset/commit/checkout/branch commands, changed out-of-scope paths, or missing successful required check. Inspect in-allowlist extra work separately; any material overrun fails the pilot.
 - [ ] **Step 4: Run final ccloop and Orca gates** unfiltered to complete logs; read them whole and report every skip and any environment-specific failure. Recheck no production Orca pin or launchd service changed.
 - [ ] **Step 5: Document exact evidence and limitations, then commit local docs.** Do not turn this one accepted run into a reliability claim.
 
