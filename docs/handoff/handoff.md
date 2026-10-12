@@ -177,7 +177,9 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 **浏览器边界**：隔离真实面板以 owner/member 登录，在桌面 1600×900、手机 390×844、短高 1280×540 测过菜单、焦点、侧栏页脚、项目切换、Activity、Results 从缺失到部分、文本预览与下载按钮；下载端点另用同一测试账户读得 HTTP 200、`42\n` 三字节。IAB 未取得下载文件事件；一次坏 fake-worker PATH 后的瞬时 control-read 500 在干净根未复现。安装探测读到本机标准路径中的真实 Claude 候选，但没有选择／应用，也无 provider 调用；真实安装 apply 的并发和权限由 API／测试覆盖，Linux 原生 `/usr/bin/flock` 未在这台 macOS 验证。
 
-**依赖与真实环境**：Orca package/lock 的默认 ccloop pin 仍是 `ab824d16004de2d3c1613a76ec0431520aa16cc9`；新安装能力的配对门明确指定本轮新 CLI，本地合并不等于发布、repin 或运行切换。schema 12 已合入且代码现可升 schema 13，但真实旧库备份、单向升级、旧 owner 退役、面板／daemon／ccmem 数据根切换均未做；没有远端 push、付费 provider 或真实服务操作。ccmem 本轮仅滚动 handoff，既有 T13／备份／daemon、ccloop B4／真实 GitHub 等挂账继续有效。下一步由人审核本轮裁定和部署时机；执行真实切换前须重新取证当前本地／远端分支与数据根，并先完成备份。
+**本轮真实切换（2026-10-12）**：后续会话从 Orca 本地 main 新建 `codex/live-service-cutover`，按 `docs/handoff/2026-10-12-live-service-cutover.md` 的命令、备份清单与回退步骤执行。真实两份控制库开工时分别是 schema 9、7（此前「真实 schema 12」仅为代码基线，不能当成数据版本）；完整备份并先对副本演练后，两份真实库均已升 13、完整性 `ok`，死 owner 锁已由恢复机制退役。旧 `panel.sh` 已改名保留，正式 `dev.orca.panel` LaunchAgent 在 7777 应答，服务显式使用原 panel 控制根及真实 ccmem 数据根；ccmem daemon 原进程未重启。真实 ccmem CLI 从该根导出 version 0.7、3901 条；没有付费 provider 或真实任务执行。真实 launchd 隔离冒烟原测试因卸载异步两次红，等实际卸载的修正后在 Node 22／24 各 1/1 通过。
+
+**pin 与尚待整合**：ccloop 远端 main 已由人推到本轮新 CLI；本 Orca 分支用仓库脚本将 package/lock 重钉到该已发布提交，默认解析 3/3、配对新旧 CLI 3/3、干净副本 `npm ci` 通过。新服务已重装为使用默认固定包、没有本地 `ORCA_CCLOOP_BIN` 覆盖。该 Orca 分支尚未合入或推送，因此本地 main 仍保留旧 `ab824d1` pin；运行服务依赖当前分支安装的包，合入前勿在此 checkout 跑会恢复旧 lock 的 `npm ci`。本轮额外原生完整根级测试 3739 过／0 失败／33 条条件跳过（比 Task 14 多 3 条未传配对 CLI 的跳过，已在专用门 3/3 通过）；普通沙箱的 EPERM 失败原样留证。Results 5 原工作树 21 项 WIP 指纹复核未变。Linux 原生锁、真实网页登录记忆页、付费 provider、ccmem 自身 schema/daemon 迁移仍未验；既有 T13／备份挂账及 ccloop B4 继续有效。
 
 ### 4.0.w 会话 `e34dc963`（2026-10-08～09）留下的结论（**前半已由人合并推送；过程删了，结论留在这里**）
 
