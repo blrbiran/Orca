@@ -1,6 +1,6 @@
 # 2026-10-12 本机服务切换记录
 
-本记录接续 `handoff.md` §4.0 和 `.superpowers/sdd/2026-10-11-feedback-followup/task-14-native-gates-report.md`。本轮从 Orca 本地 `main` 建 `codex/live-service-cutover` 分支；ccloop 远端 `main` 在 repin 前经 `git ls-remote` 确认已到提交主题 `docs(handoff): roll Orca followup state in place`。Orca 分支尚未合入或推送；Results 5 原工作树的 HEAD、porcelain SHA256 与 21 项文件／软链接指纹按上轮基准重算后全部相同。
+本记录接续 `handoff.md` §4.0 和 `.superpowers/sdd/2026-10-11-feedback-followup/task-14-native-gates-report.md`。本轮从 Orca 本地 `main` 建 `codex/live-service-cutover` 分支；ccloop 远端 `main` 在 repin 前经 `git ls-remote` 确认已到提交主题 `docs(handoff): roll Orca followup state in place`。人分别授权后，Orca、ccloop、ccmem 的本轮分支均以 `--ff-only` 合入各自本地 main；本轮未推送。Results 5 原工作树的 HEAD、porcelain SHA256 与 21 项文件／软链接指纹按上轮基准重算后全部相同。
 
 ## 实际数据与备份
 
@@ -24,7 +24,7 @@ SQLite backup API 建立了两库、`accounts.sqlite` 和真实 `~/.claude/ccmem
 
 原生完整根级 Vitest 因普通沙箱缺少 `ps`／loopback 权限，首次 3772 条里 1927 失败，其中 1695 条为 `spawnSync ps EPERM`、52 条为 `listen EPERM`；原始日志保留在 `/private/tmp/orca-followup-runs/cutover-root-20261012/`。使用本机进程权限、私有 HOME/XDG/CCMEM_DATA_ROOT 和短 TMPDIR 的完整重跑退出 0：3772 条中 3739 通过、0 失败、33 条条件跳过，证据在 `/private/tmp/orca-followup-runs/cutover-root-native-20261012/` 与 `/private/tmp/orca-root-native-20261012.json`。相对 Task 14 的 30 条，多 3 条是未传 Task 9 配对 CLI 时的条件跳过；这 3 条另以新旧 CLI 通过。此轮完整根级门在 repin 前执行；repin 后的默认包 3/3 和配对 3/3 分别实跑，未重复整套 22 分钟门。
 
-本轮没有付费 provider 调用、真实任务执行或 Linux 原生锁验证，也没有对生产 ccmem 库执行 schema 迁移。真实网页登录与记忆页没有使用人的密码做端到端会话验证；已验证服务应答、未登录拒绝和真实 ccmem CLI 导出。Orca 本地 `main` 仍保持上轮 pin；当前运行服务依赖本分支安装的包。合入本分支前不要在此 checkout 上运行会复原旧 lock 的 `npm ci`。
+本轮没有付费 provider 调用、真实任务执行或 Linux 原生锁验证，也没有对生产 ccmem 库执行 schema 迁移。真实网页登录与记忆页没有使用人的密码做端到端会话验证；已验证服务应答、未登录拒绝和真实 ccmem CLI 导出。Orca 本地 main 现已包含新 pin；当前运行服务使用该 main checkout 已安装的固定包。
 
 ## 回退
 

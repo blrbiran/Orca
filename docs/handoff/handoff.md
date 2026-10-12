@@ -179,7 +179,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 **本轮真实切换（2026-10-12）**：后续会话从 Orca 本地 main 新建 `codex/live-service-cutover`，按 `docs/handoff/2026-10-12-live-service-cutover.md` 的命令、备份清单与回退步骤执行。真实两份控制库开工时分别是 schema 9、7（此前「真实 schema 12」仅为代码基线，不能当成数据版本）；完整备份并先对副本演练后，两份真实库均已升 13、完整性 `ok`，死 owner 锁已由恢复机制退役。旧 `panel.sh` 已改名保留，正式 `dev.orca.panel` LaunchAgent 在 7777 应答，服务显式使用原 panel 控制根及真实 ccmem 数据根；ccmem daemon 原进程未重启。真实 ccmem CLI 从该根导出 version 0.7、3901 条；没有付费 provider 或真实任务执行。真实 launchd 隔离冒烟原测试因卸载异步两次红，等实际卸载的修正后在 Node 22／24 各 1/1 通过。
 
-**pin 与尚待整合**：ccloop 远端 main 已由人推到本轮新 CLI；本 Orca 分支用仓库脚本将 package/lock 重钉到该已发布提交，默认解析 3/3、配对新旧 CLI 3/3、干净副本 `npm ci` 通过。新服务已重装为使用默认固定包、没有本地 `ORCA_CCLOOP_BIN` 覆盖。该 Orca 分支尚未合入或推送，因此本地 main 仍保留旧 `ab824d1` pin；运行服务依赖当前分支安装的包，合入前勿在此 checkout 跑会恢复旧 lock 的 `npm ci`。本轮额外原生完整根级测试 3739 过／0 失败／33 条条件跳过（比 Task 14 多 3 条未传配对 CLI 的跳过，已在专用门 3/3 通过）；普通沙箱的 EPERM 失败原样留证。Results 5 原工作树 21 项 WIP 指纹复核未变。Linux 原生锁、真实网页登录记忆页、付费 provider、ccmem 自身 schema/daemon 迁移仍未验；既有 T13／备份挂账及 ccloop B4 继续有效。
+**pin 与本地整合**：ccloop 远端 main 已由人推到本轮新 CLI；Orca 用仓库脚本将 package/lock 重钉到该已发布提交，默认解析 3/3、配对新旧 CLI 3/3、干净副本 `npm ci` 通过。新服务已重装为使用默认固定包、没有本地 `ORCA_CCLOOP_BIN` 覆盖。人分别授权后，Orca、ccloop、ccmem 的本轮分支均以 `--ff-only` 合入各自本地 main；Orca main 现含新 pin，本轮未推远端。本轮额外原生完整根级测试 3739 过／0 失败／33 条条件跳过（比 Task 14 多 3 条未传配对 CLI 的跳过，已在专用门 3/3 通过）；普通沙箱的 EPERM 失败原样留证。Results 5 原工作树 21 项 WIP 指纹复核未变。Linux 原生锁、真实网页登录记忆页、付费 provider、ccmem 自身 schema/daemon 迁移仍未验；既有 T13／备份挂账及 ccloop B4 继续有效。
 
 ### 4.0.w 会话 `e34dc963`（2026-10-08～09）留下的结论（**前半已由人合并推送；过程删了，结论留在这里**）
 
