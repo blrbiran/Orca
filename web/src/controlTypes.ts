@@ -556,7 +556,7 @@ export type AgentInstallationObservationV1 = {
 };
 export type AgentInstallationPreviewV1 = Omit<AgentInstallationObservationV1, "schema"> & {
   schema: "orca-agent-detection-preview-v1"; previewId: string;
-  changes: Array<{ changeId: string; kind: "version" | "path" | "addition"; installationId: string; command: string[]; realpath: string; version: string; installation?: Record<string, unknown> }>;
+  changes: Array<{ changeId: string; kind: "version" | "path" | "addition"; installationId: string; command: string[]; realpath: string; version: string; installation?: Record<string, unknown>; unavailableReason?: string }>;
 };
 export type AgentInstallationStateV1 = { schema: "orca-agent-installation-state-v1"; revision: number; pending: boolean;
   pendingCommand: null | { schema: "orca-raw-command-v1"; commandId: string; expectedRevision: number; actorId: string; verb: "apply-agent-update"; target: { kind: "operator"; operatorId: string }; payload: { previewId: string; baseTableHash: string; acceptedChangeIds: string[] } };

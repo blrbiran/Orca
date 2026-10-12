@@ -15,6 +15,7 @@ const change = z.object({
   changeId: idSchema, kind: z.enum(["version", "path", "addition"]), installationId: idSchema,
   command: z.array(z.string()).min(1), realpath: z.string().min(1), version: z.string().min(1),
   installation: z.record(z.unknown()).optional(),
+  unavailableReason: z.string().min(1).optional(),
 }).strict();
 export const agentPreviewSchema = agentObservationSchema.omit({ schema: true }).extend({
   schema: z.literal("orca-agent-detection-preview-v1"), previewId: idSchema, changes: z.array(change),

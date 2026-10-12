@@ -129,14 +129,15 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
         {updatePreview && <>
           <p>{t("agents.updates.review")}</p>
           {updatePreview.changes.length === 0 ? <p role="status">{t("agents.updates.noChanges")}</p> : <ul>{updatePreview.changes.map((change) => <li key={change.changeId}>
-            <label><input type="checkbox" disabled={change.kind === "addition" && change.installation === undefined} checked={selected.includes(change.changeId)} onChange={(event) => {
+            <label><input type="checkbox" disabled={change.unavailableReason !== undefined || (change.kind === "addition" && change.installation === undefined)} checked={selected.includes(change.changeId)} onChange={(event) => {
               const ids = event.currentTarget.checked ? [...selected, change.changeId] : selected.filter((id) => id !== change.changeId);
               setAccepted({ previewId: updatePreview.previewId, ids });
             }} />
             {t(`agents.updates.${change.kind}`)}: {change.installationId} — {change.version} ({change.command.join(" ")})
             </label>
             <div>{t("agents.updates.resolvedPath")}: <code style={{ overflowWrap: "anywhere" }}>{change.realpath}</code></div>
-            {change.kind === "addition" && (change.installation === undefined
+            {change.unavailableReason && <p role="alert">{t("agents.updates.configurationUnavailable")} <code>{change.unavailableReason}</code></p>}
+            {change.kind === "addition" && !change.unavailableReason && (change.installation === undefined
               ? <p role="alert">{t("agents.updates.configurationUnavailable")}</p>
               : <details open><summary>{t("agents.updates.installationConfiguration")}</summary>
                   <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(change.installation, null, 2)}</pre>
