@@ -1,4 +1,4 @@
-import {describe,it,expect} from 'vitest';
+import {beforeEach,describe,it,expect} from 'vitest';
 import {readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {savedResultWorld} from './fixtures/savedResultWorld.js';
@@ -7,7 +7,8 @@ import {deliverScheduledStart,nextClaimableTask} from '../../src/control/webDisp
 import {hasSavedOrdinaryRetryAuthorization} from '../../src/control/savedResultNoDispatch.js';
 import {withCommandContext} from '../../src/control/commandClient.js';
 
-describe.skipIf(process.env.ORCA_SAVED_RESULT_VERIFY!=='1')('explicit ordinary retry after unsuccessful saved verification',()=>{
+describe('explicit ordinary retry after unsuccessful saved verification',()=>{
+ beforeEach(ctx=>{if(process.env.ORCA_SAVED_RESULT_VERIFY!=='1')ctx.skip();});
  it.each(['reject','modify','delay'] as const)('authorizes a distinct normal run after %s only through the actual successful retry receipt',async verify=>{
   const f=await savedResultWorld({verify,...(verify==='delay'?{timeoutMs:3000}:{})});try{
    const e=await f.service.savedResultEligibility(f.source.runId);if(e.status!=='eligible')throw Error(JSON.stringify(e));

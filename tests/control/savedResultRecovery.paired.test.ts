@@ -1,10 +1,10 @@
 import {currentSavedResultSource} from "../../src/control/savedResultRecovery.js";
-import {describe,it as test,expect} from 'vitest';
+import {beforeEach,describe,it,expect} from 'vitest';
 import {savedResultWorld,schema11Reader} from './fixtures/savedResultWorld.js';
 import {readDriverRun,readStartEnvelope,replenishStartWakes} from '../../src/control/executionDriver.js';
 
-const it=test.skipIf(process.env.ORCA_SAVED_RESULT_VERIFY!=='1');
-describe.skipIf(process.env.ORCA_SAVED_RESULT_VERIFY!=='1')('genuine schema10 owner → paired saved verification',()=>{
+beforeEach(ctx=>{if(process.env.ORCA_SAVED_RESULT_VERIFY!=='1')ctx.skip();});
+describe('genuine schema10 owner → paired saved verification',()=>{
  it('keeps the standard old detached archive unavailable after real owner settlement',async()=>{
   const f=await savedResultWorld({completeArchive:false});try{expect(await f.service.savedResultEligibility(f.source.runId)).toMatchObject({status:'unavailable',reason:'saved-result-legacy-ref-missing'});expect(f.calls()).toEqual(['plan','execute']);}finally{await f.cleanup();}
  },60000);
