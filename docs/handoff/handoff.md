@@ -163,7 +163,7 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 
 ## 四、⛔ 下一件事
 
-### 4.0 现在的接手入口（2026-10-12，滚动更新）
+### 4.0 现在的接手入口（2026-10-13，滚动更新）
 
 **交接边界**：feedback-followup Tasks 1–14 已实现、逐项复审并完成 Task 14 全轮审查；Orca 与 ccloop 成果已按本轮授权快进到各自本地 main。Results 5 也已另行完成；2026-10-12 复核旧 `progress-results-20261010/Orca` 的 21 项 WIP 后，确认其功能和测试均已在 main 且 main 含更新的保护，无独有代码须合。旧 WIP 已逐项校验并归档在 `/Users/biran/code/skills/loop/orca_archived_files/results5-wip-20261012.tar.gz`（同名 `.manifest.json`），对应工作树和已合入分支已清理；其他 detached 工作树未动。旧 issue-fixes、D9/M3、M5/M6、feedback-maintenance 和 Task 7 已关闭的复审问题不重做。接手时现查 main、worktree 和远端状态，本文不把活 HEAD 写成常量。
 
@@ -184,6 +184,10 @@ SIGINT/SIGTERM 每 epoch 恰好写一条 shutdown；`--no-control` 关掉时行�
 **本次续轮（证据与命令见 `docs/handoff/2026-10-12-followup-acceptance.md`）**：ccmem 原 Q6 的 WAL 安全迁移备份修复和测试临时根清理已快进其本地 main，专用判据旧实现见红，最终全量 760/760；生产 daemon 仍是原进程，真实库未用于测试。ccloop 的真实 Codex execute 在旧固定包下因 provider strict schema 拒绝 optional `taskResult`，新 `codex/codex-strict-output-wire` 分支修复后，全量 1602/1602、独立审查无待修项；用它的**本地构建**在隔离 Orca 任务中跑通真实 Codex plan／execute／verify 并落地，账本与 ccloop 同为 102919 tokens。正式 Orca pin 与 launchd 服务**尚未**使用此修复：ccloop 先按 Rule 13 分别获合并／push 授权，发布后 Orca 当前 `codex/codex-wire-repin` 才能运行 `scripts/pin-ccloop.mjs`、复验并按 Rule 15 单独获合 main／push 授权。真实 Claude 隔离任务遇周额度限制，未跑完；正式 owner 登录后的 Results／Memory 尚未验。
 
 **Linux 与 GitHub 边界**：Ubuntu 24.04 arm64 临时 VM 的 Orca typecheck、构建、systemd 用户服务安装／HTTP 200／重启／停止／再启动／卸载、Orca 跨进程 repo 锁及 ccloop `/usr/bin/flock` 两进程串行均实跑通过，VM 现已停。GitHub keyring 有 `repo` scope，但失效的 `GH_TOKEN`／`GITHUB_TOKEN` 环境值须先清除；私有验收库和本地测试提交已建，测试分支 push 按 Rule 15 待逐次授权，PR 尚未创建。另有两处 detached 旧工作树均无独有提交，删除分别待授权；三库远端状态接手仍须现查。路线图中 memory 自动 correction 写回、LiteLLM 与 A2A 运行时仍未落地；A2A 按人裁排远期，当前没有 correction 样本，也没有 ccmem 外部引用／幂等导入契约，不能宣称记忆写回已闭环。旧 ccloop B4／Claude 历史交错与 ccmem T13 仍挂账。
+
+**OMP 接入新轮（2026-10-12～13；当前仓库根已迁到 `/Users/biran/code/skills/orca/`）**：独立审查后的设计和执行计划在 `docs/superpowers/specs/2026-10-12-oh-my-pi-agent-integration-design.md`、`docs/superpowers/plans/2026-10-12-oh-my-pi-agent-integration.md`。Orca 实现在隔离工作树 `/private/tmp/orca-omp-integration-20261012` 的 `codex/omp-integration`；ccloop 实现在 `/private/tmp/ccloop-omp-agent-20261012` 的 `codex/omp-agent-integration`，均为本地提交，未合并／push。OMP 作为可选安装进入 detect、精确模型解析、受保护 preview/apply、面板选择和 ccloop plan／execute／verify；模型从每台机器的 OMP 配置探测，**不把本机 `local-litellm/ep-20261012204110-nvhqw` 设为默认**。受限单次 CLI、阶段提示、无扩展／技能、事件与用量审计、Git HEAD 不变和重命名双端路径检查都已实现；Git 忽略文件及主机侧作用仍非完整沙箱。OMP 暂无 syncskill 注入和单次预估。
+
+**OMP 验收与待办**：最终隔离真实 Orca 任务用本地 ccloop 构建完成 plan／execute／verify，只落地 `answer.txt` 的 `42\n`，Orca 与 OMP 用量同为 **27729 tokens**；独立审计检查了实际工具调用、模型、阶段、Git 元数据命令和落地路径。详细的成功与两次有信息价值的中间失败均在 `docs/handoff/2026-10-12-oh-my-pi-acceptance.md`，原始证据在 `/private/tmp/orca-omp-real-kBuY5OHQ/`；LiteLLM 测试进程已停。ccloop OMP 定向 20/20、typecheck/build 通过，最终原生全量 **1631/1638、7 红、0 skip**：两条旧“只含 claude/codex”判据须按 ccloop Rule 15 由人**点名授权整条改写**；一条 5 秒更新判据独跑通过；四条 saved-result worker 在全量未及时封口、其文件隔离 28/28。Orca 最终 Web **990/990**、typecheck/build／panel 门通过；正式 control 用本机真实 agent 表跑 1876/1909、30 条条件跳过、3 红，其中协议夹具改用要求的 fake Codex integration 表后 3/3，另两条 `taskResultPaired` 硬编码旧配对二进制，不接受本地 OMP 路径，完整日志见验收记录。以上不等于全量绿。下一步先取得两条旧测试的具名授权并复验，再依原边界分别处理 ccloop 严格 wire 发布、OMP 分支整合／push、Orca 正式 repin／服务复验、GitHub 验收；ccmem 本地修复的 daemon 升级与远端 push 仍另待授权。不要动现有 `codex/codex-wire-repin` 或 `codex/codex-strict-output-wire` 旧任务状态来伪造完成。
 
 ### 4.0.w 会话 `e34dc963`（2026-10-08～09）留下的结论（**前半已由人合并推送；过程删了，结论留在这里**）
 
