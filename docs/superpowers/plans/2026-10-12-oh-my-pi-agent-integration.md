@@ -69,31 +69,31 @@
 ### Task 3: OMP phase runner, result decoder, and fake end-to-end control path
 
 **Files:**
-- Create: `src/runtime/omp/runOmpPhase.ts`, `src/runtime/omp/ompProtocol.ts`, `src/runtime/omp/ompAdapter.ts`, `src/runtime/omp/phasePrompt.ts`, `tests/runtime/omp/ompPhase.test.ts`, `tests/control/ompEndToEnd.test.ts`
+- Create: `src/runtime/omp/runOmpPhase.ts`, `src/runtime/omp/ompProtocol.ts`, `src/runtime/omp/ompAdapter.ts`, `src/runtime/omp/phasePrompt.ts`, `src/runtime/omp/worktreeSnapshot.ts`, `tests/runtime/omp/ompPhase.test.ts`, `tests/control/ompEndToEnd.test.ts`
 - Modify: `src/agents/omp.ts`
 
 **Interfaces:**
 - `runOmpPhase(config: MaterializedAgentConfigV1, phase: "plan" | "execute" | "verify", prompt: string, context: AttemptContext)` returns bounded event evidence, process outcome, and private evidence path; registers the process before writing stdin and reaps its group on stop.
-- `decodeOmpPhase(phase, events, finalText, expectedSelector)` validates OMP terminal state, exact frozen provider/model, phase result schema, and reconciled per-model token usage. Incomplete usage is evidence only, not `observedTokens`.
+- `decodeOmpPhase(phase, events, expectedSelector)` takes the final answer from the authoritative event stream and validates OMP terminal state, exact frozen provider/model, phase result schema, and reconciled per-model token usage. Incomplete usage is evidence only, not `observedTokens`.
 - `OmpAdapter implements RuntimeAdapter` builds the existing business prompts and its own phase system prompt, and returns ccloop's existing result types.
 
-- [ ] **Step 1: Write failing fake-OMP tests** for argv/system-prompt-file privacy, tool lists, profile/model consistency, process registration, timeout/abort, output limit, forbidden tool or continuation events, plan/verify mutation, disallowed execute path, JSON ambiguity, multi-message/cache usage, error usage unknown, and complete plan → execute → verify through ccloop control.
+- [ ] **Step 1: Write failing fake-OMP tests** for argv/system-prompt-file privacy, tool lists, profile/model consistency, process registration, timeout/abort, output limit, forbidden tool or continuation events, plan/verify mutation, disallowed execute path, OMP-created commit with clean status, rename from a forbidden source into an allowed destination, JSON ambiguity, multi-message/cache usage, error usage unknown, and complete plan → execute → verify through ccloop control.
 - [ ] **Step 2: Run `rtk proxy npx vitest run tests/runtime/omp/ompPhase.test.ts tests/control/ompEndToEnd.test.ts`** and confirm the intended failures.
-- [ ] **Step 3: Implement runner, parser, phase prompts and adapter.** Reuse existing prompt builders, execution normalizer, private evidence helpers, and controller checks without changing their historical contracts. Record a lower bound only in diagnostic evidence on interrupted calls.
+- [ ] **Step 3: Implement runner, parser, phase prompts and adapter.** Reuse existing prompt builders, execution normalizer, private evidence helpers, and controller checks without changing their historical contracts. Record a lower bound only in diagnostic evidence on interrupted calls. Include HEAD in plan/verify read-only snapshots; before returning execute, reject any HEAD movement, then independently observe Git-visible tracked/untracked paths with rename detection off (both endpoints) and require an exact match with OMP's `changedFiles`, so the controller's existing path policy sees actual paths rather than an unverified claim.
 - [ ] **Step 4: Run targeted tests, `rtk proxy npm run typecheck`, and `rtk proxy npm run build`** to exit 0. Run the full ccloop suite unfiltered with controlled concurrency and capture its complete log; investigate any new red before continuing.
 - [ ] **Step 5: Commit only Task 3 files locally.**
 
 ### Task 4: Orca preview/UI and control compatibility
 
 **Files:**
-- Modify: `src/control/webProtocol.ts`, `src/control/ccloopPort.ts`, `web/src/AgentSettings.tsx`, `web/src/locales/en.ts`, `web/src/locales/zh.ts`
-- Create: `tests/panel/ompAgentSettings.test.ts`, `tests/control/ompAgentPort.test.ts`
+- Modify: `src/control/agentInstallationProtocol.ts`, `web/src/controlTypes.ts`, `web/src/AgentSettings.tsx`
+- Create: `web/tests/ompAgentSettings.test.tsx`, `tests/control/ompAgentPort.test.ts`
 
 **Interfaces:**
 - Orca parses the optional `unavailableReason` in the ccloop installation preview, shows it, and disables selection for unavailable version/path changes. Its existing generic agent preferences and frozen task selections accept kind `omp` without a special model name.
 
 - [ ] **Step 1: Add failing tests** for a disabled unavailable change, a normal selectable OMP addition, exact default displayed from ccloop, per-task override and frozen selection, and continued `skills-unsupported-agent` refusal for an OMP task with syncskill.
-- [ ] **Step 2: Run `rtk proxy npx vitest run tests/panel/ompAgentSettings.test.ts tests/control/ompAgentPort.test.ts`** and observe the intended failures.
+- [ ] **Step 2: Run `rtk proxy npm test -- tests/control/ompAgentPort.test.ts` and `rtk proxy npm exec vitest run tests/ompAgentSettings.test.tsx` from `web/`** and observe the intended failures.
 - [ ] **Step 3: Implement only the protocol/UI additions and localized reason text.** Keep ccloop authoritative for model validity.
 - [ ] **Step 4: Run targeted tests, `rtk proxy npm run typecheck`, `rtk proxy npm run build --workspace web`, and `rtk proxy npm run --workspace web check`** to exit 0. Then run the relevant Orca control/panel gates with the local ccloop build.
 - [ ] **Step 5: Commit only Task 4 files locally.**
