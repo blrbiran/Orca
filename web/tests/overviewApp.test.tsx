@@ -123,9 +123,9 @@ it("an owner read older than the live projection cannot reopen after progress re
  globalThis.fetch = (async (input, init) => String(input) === "/api/control/groups/ga" ? held : base(input, init)) as typeof fetch;
  render(<App />); const page = await screen.findByRole("region", { name: "Overview" });
  fireEvent.click(await within(page).findByRole("button", { name: "Review budget · ga" }));
- overview = { ...overview, changeSeq: 8, groups: overview.groups.map((g) => ({ ...g, commandRevision: 9, projectionSeq: 8 })) };
- // Poll the real App active Overview source, then release the earlier owner read (changeSeq 4).
- await new Promise((resolve) => setTimeout(resolve, 2100));
+ overview = { ...overview, changeSeq: 8, groups: overview.groups.map((g) => ({ ...g, commandRevision: 9, projectionSeq: 8, ...(g.groupId === "ga" ? { goal: "ga refreshed" } : {}) })) };
+ // Wait for the real App active Overview source to render the new projection before releasing the earlier owner read (changeSeq 4).
+ await within(page).findByRole("button", { name: "ga refreshed" }, { timeout: 7_000 });
  await act(async () => { release(json(panel.groupViews.ga)); });
  expect(screen.queryByRole("region", { name: "Control group ga" })).toBeNull();
  expect(await screen.findByRole("alert")).toHaveProperty("textContent", expect.stringContaining("no longer available"));
