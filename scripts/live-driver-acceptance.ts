@@ -1,21 +1,23 @@
 // Live acceptance of the execution driver (spec docs/superpowers/specs/2026-09-25-execution-driver-design.md,
 // §1 "real codex live acceptance belongs to the human"). One soft Web group, one task, driven from import to
 // settle through the assembled control runtime -- the same service, wake pump and driver loop `orca panel`
-// mounts, without HTTP -- against a real ccloop build (ORCA_CCLOOP_BIN, containing C1-C4) and either real
-// codex or ccloop's scripted fake codex. Exit 0 only if every check in `checks` holds; summary.json in
+// mounts, without HTTP -- against a real ccloop build (ORCA_CCLOOP_BIN, containing C1-C4) and a selected
+// real or fixture agent. Exit 0 only if every check in `checks` holds; summary.json in
 // --output records each check, the ledger, and every usage number copied from ccloop's evidence.
 //
-// This SPENDS MONEY with --codex: nothing here caps dollars. The caps are tokens and time, all soft or
+// Real --codex, --claude and --omp modes may SPEND MONEY: nothing here caps dollars. The caps are tokens and time, all soft or
 // best-effort: the contract tokenBudget (checked at phase end), the group token limit (a breach blocks new
 // work, it does not stop a running phase), codex timeoutMs per phase, and the outer --deadline-ms watchdog,
 // which kills every codex process group ccloop registered.
 //
 // Rule 17: Orca's own writes all go under --output (ORCA_CONTROL_DIR, ORCA_CORRECTIONS_DIR); ~/.orca is
-// snapshotted and must not change. HOME is NOT relocated: real codex reads its credentials and config from
-// ~/.codex and writes its own logs there (accepted by the human, 2026-09-25, session af3dc0d3).
+// snapshotted and must not change. Existing real Codex/Claude modes retain their historical HOME behavior.
+// For --omp, the caller must redirect HOME/XDG and pass a private copied --omp-config-dir; this script checks
+// the absolute path but does not create or copy the operator's OMP credentials.
 //
 // usage: tsx scripts/live-driver-acceptance.ts --ccloop-bin <abs dist/cli.js> --output <new dir>
-//          (--codex <abs codex binary> --model <name> | --fake | --claude <abs claude binary> --model <name> | --fake-claude)
+//          (--codex <abs codex binary> --model <name> | --fake | --claude <abs claude binary> --model <name> | --fake-claude
+//           | --omp <abs omp binary> --model <provider/model> --omp-config-dir <private absolute directory>)
 //          [--group-tokens 3000000] [--task-tokens 1000000] [--task-attempts 1] [--active-ms 600000]
 //          [--call-usd 2] [--deadline-ms 900000] [--context-window 1000000] [--scenario single|conflict|deadline|estimate]
 //
@@ -79,11 +81,12 @@ const ccloopBin = args["ccloop-bin"];
 const output = args.output;
 if (!ccloopBin || !isAbsolute(ccloopBin) || !output) throw new Error("--ccloop-bin <absolute> and --output <new dir> are required");
 const fakeClaude = args["fake-claude"] === "1";
-const modes = [fake, args.codex !== undefined, fakeClaude, args.claude !== undefined].filter(Boolean).length;
-if (modes !== 1) throw new Error("give exactly one of --codex <abs path> --model <name>, --fake, --claude <abs path> --model <name>, or --fake-claude");
-const live = args.codex ?? args.claude;
-if (live !== undefined && (!isAbsolute(live) || !args.model)) throw new Error("--codex/--claude must be absolute and --model is required");
-const kind: "codex" | "claude" = args.claude !== undefined || fakeClaude ? "claude" : "codex";
+const modes = [fake, args.codex !== undefined, fakeClaude, args.claude !== undefined, args.omp !== undefined].filter(Boolean).length;
+if (modes !== 1) throw new Error("give exactly one of --codex <abs path> --model <name>, --fake, --claude <abs path> --model <name>, --fake-claude, or --omp <abs path> --model <selector> --omp-config-dir <abs path>");
+const live = args.codex ?? args.claude ?? args.omp;
+if (live !== undefined && (!isAbsolute(live) || !args.model)) throw new Error("--codex/--claude/--omp must be absolute and --model is required");
+if (args.omp !== undefined && (!args["omp-config-dir"] || !isAbsolute(args["omp-config-dir"]))) throw new Error("--omp-config-dir must be absolute");
+const kind: "codex" | "claude" | "omp" = args.omp !== undefined ? "omp" : args.claude !== undefined || fakeClaude ? "claude" : "codex";
 const isFake = fake || fakeClaude;
 for (const key of Object.keys(process.env)) if (key.startsWith("CLAUDE") && key !== "CLAUDE_CONFIG_DIR") delete process.env[key];
 if (existsSync(output)) throw new Error(`refusing an existing --output ${output}`);
@@ -99,6 +102,7 @@ const activeMs = Number(args["active-ms"] ?? 600_000);
 const callUsd = String(args["call-usd"] ?? "2");
 const scenario = args.scenario ?? "single";
 if (scenario !== "single" && scenario !== "conflict" && scenario !== "deadline" && scenario !== "estimate") throw new Error("--scenario is single, conflict, deadline or estimate");
+if (kind === "omp" && scenario !== "single") throw new Error("--omp acceptance currently supports only --scenario single");
 // The deadline scenario reads what ccloop's claude runner observed in the stream; codex has no such file.
 if (scenario === "deadline" && kind !== "claude") throw new Error("--scenario deadline needs --claude or --fake-claude");
 if (scenario === "estimate" && kind !== "claude") throw new Error("--scenario estimate needs --claude or --fake-claude");
@@ -182,7 +186,9 @@ const claudeCommand = fakeClaude
   ? [...claudeTee, process.execPath, fakeClaudeCli, "script", marker, scriptPath]
   : [...claudeTee, args.claude ?? "", ...CLAUDE_ISOLATION];
 const tablePath = join(root, "agents.json");
-const installation = kind === "codex"
+const installation = kind === "omp"
+  ? { kind: "omp", command: [args.omp!], version: versionOf([args.omp!]), configDir: args["omp-config-dir"]!, timeoutMs: 120_000, killGraceMs: 5_000, profile: null, defaultModel: args.model! }
+  : kind === "codex"
   ? { kind: "codex", command: codexCommand, version: versionOf(codexCommand), configDir: null, timeoutMs: 120_000, killGraceMs: 5_000, sandbox: "workspace-write", budgetMode: "soft" }
   : { kind: "claude", command: claudeCommand, version: versionOf(claudeCommand), configDir: null, timeoutMs: 600_000, killGraceMs: 5_000 };
 await writeFile(tablePath, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: { [kind]: installation } }), { mode: 0o600 });
@@ -430,7 +436,15 @@ const delivered = (id: string): unknown => runtime.store.db.prepare("SELECT deli
 // (2026-09-27), spec §6.4), marked `observed`. `aborted` and `endedAt` come from ccloop's outcome.json, so the
 // deadline scenario can order the continuation after the cut.
 type Call = { role: string; phase: string; file: string; usage: unknown; total: number | null; observed?: boolean; aborted?: boolean; endedAt?: number };
-const calls: Call[] = kind === "codex"
+const calls: Call[] = kind === "omp"
+  ? findEvidence("events.jsonl").filter((file) => file.includes("/omp/")).map((file) => {
+    const messages = readFileSync(file, "utf8").split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line)).filter((row) => row.type === "message_end" && row.message?.role === "assistant");
+    const usage = messages.map((row) => row.message.usage);
+    const total = usage.length > 0 && usage.every((row) => Number.isSafeInteger(row?.totalTokens)) ? usage.reduce((sum, row) => sum + row.totalTokens, 0) : null;
+    const phase = file.split("/omp/")[1]!.split("/")[1]!;
+    return { role: file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, usage, total };
+  })
+  : kind === "codex"
   ? findEvidence("events.jsonl").filter((file) => file.includes("/codex/")).map((file) => {
     const completed = readFileSync(file, "utf8").split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line)).filter((row) => row.type === "turn.completed");
     const usage = completed.at(-1)?.usage ?? null;
@@ -560,6 +574,11 @@ if (kind === "claude") {
   const expected = (m: string) => contextWindow === 1_000_000 ? `${m}[1m]` : m;
   const models = Object.values(summary.agents as Record<string, { model: string }>).map((agent) => expected(agent.model));
   checks.claudeArgvModel = claudeModels.length > 0 && claudeModels.length === rawClaude.length && claudeModels.every((model) => model !== null && models.includes(model));
+}
+if (kind === "omp") {
+  const ompCalls = calls.filter((call) => call.role === "worker");
+  checks.ompModel = ompCalls.length === 3 && ompCalls.every((call) => Array.isArray(call.usage) && call.usage.length > 0);
+  checks.ompNoExtraPhase = JSON.stringify(phasesOf("worker")) === JSON.stringify(["execute", "plan", "verify"]);
 }
 if (fake && scenario === "single") checks.fakeCallsExact = existsSync(`${marker}.calls`) && readFileSync(`${marker}.calls`, "utf8").trim().split("\n").join(",") === "plan,execute,verify";
 if (fakeClaude && scenario === "single") checks.fakeCallsExact = existsSync(`${marker}.tasks`) && readFileSync(`${marker}.tasks`, "utf8").trim().split("\n").map((line) => line.split(" ")[0]).join(",") === "plan,execute,verify";

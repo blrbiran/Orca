@@ -1,0 +1,29 @@
+# OMP isolated acceptance — 2026-10-12 to 13
+
+## Scope and isolation
+
+The local `codex/omp-agent-integration` ccloop build at `/private/tmp/ccloop-omp-agent-20261012/dist/cli.js` was used through Orca's `ORCA_CCLOOP_BIN` override. The formal Orca ccloop dependency pin and launchd panel were not changed. A disposable Git repository, control store, run directory, HOME, XDG directories and OMP configuration copy lived under `/private/tmp/orca-omp-real-kBuY5OHQ`. The copied configuration files were mode `0600` within mode `0700` directories. This pilot used this machine's `local-litellm/ep-20261012204110-nvhqw` selector; it is **acceptance data**, not a product default. This LiteLLM alias routes to the user's deepseek-v4.1-flash deployment.
+
+The user's `~/.litellm/run.sh` started the local proxy for this run; `/health/liveliness` returned 200. A separate short OMP no-tool call returned the frozen provider/model and 4,325 nonzero input/output/cache tokens with a terminal stop. Its private event log is `/private/tmp/orca-omp-real-kBuY5OHQ/no-tool.jsonl`. Both LiteLLM listeners started during this task were stopped after acceptance; ports 4000 and 15672 have no listener now.
+
+## Real Orca task
+
+Final command shape (the full command and output are preserved in `/private/tmp/orca-omp-real-kBuY5OHQ/acceptance-prompt2.log`):
+
+```text
+HOME=<private HOME> XDG_CONFIG_HOME=<private XDG> XDG_CACHE_HOME=<private XDG> XDG_STATE_HOME=<private XDG> PI_CODING_AGENT_DIR=<private OMP config>
+npm exec tsx scripts/live-driver-acceptance.ts -- --ccloop-bin /private/tmp/ccloop-omp-agent-20261012/dist/cli.js --output /private/tmp/orca-omp-real-kBuY5OHQ/acceptance-prompt2 --omp /Users/biran/.bun/bin/omp --model local-litellm/ep-20261012204110-nvhqw --omp-config-dir <private OMP config> --scenario single --deadline-ms 600000
+```
+
+The real Orca group imported and confirmed one task, froze its OMP selection, ran one plan, execute and verify, and settled. The only landed path was `answer.txt`, with exact bytes `42\n`; the user's source branch and index were unchanged. All harness checks were true in [`summary.json`](/private/tmp/orca-omp-real-kBuY5OHQ/acceptance-prompt2/summary.json). The three calls reported 4,223 (plan), 13,296 (execute) and 10,210 (verify) tokens, totaling 27,729. Orca's usage ledger reported 27,729 known tokens. OMP's zero `cost` fields are not evidence that the proxy model is free.
+
+The independent auditor `scripts/verify-omp-acceptance.ts` returned `verified: true` in `/private/tmp/orca-omp-real-kBuY5OHQ/independent-audit-prompt2.json`. It re-read the event streams and checked exact provider/model, one terminal event per phase, no continuation or forbidden tools, no direct Git staging/reset/commit/checkout/branch command, completed four-field usage, per-phase argv/system prompts, private evidence permissions, ledger equality, the only changed path and exact output bytes. Execute's two bash calls were `printf '42\\n' > answer.txt && od -c answer.txt && wc -c < answer.txt && ls -la` and `test "$(cat answer.txt)" = 42 && echo "CHECK_PASS"; git status --porcelain`. No material extra work within the allowed path was observed on this run.
+
+Earlier pilot evidence is retained rather than overwritten. `/private/tmp/orca-omp-real-kBuY5OHQ/acceptance/summary.json` was successful before the independent review's HEAD guard. `/private/tmp/orca-omp-real-kBuY5OHQ/acceptance-final/summary.json` succeeded after that guard but OMP temporarily used `git add -N` and `git reset`; the strengthened auditor correctly rejects it (`audit-git-metadata-red.log`). `/private/tmp/orca-omp-real-kBuY5OHQ/acceptance-prompt/summary.json` failed because the model returned `rejectCategory: null` in verify, which the strict decoder rejected; a verifier-specific prompt now requires the contract's exact field types. These runs show why success status alone is insufficient. They do not establish a reliability rate.
+
+## Gates and remaining boundary
+
+- ccloop targeted OMP phase/control tests after the review and prompt fixes: 20/20; typecheck/build passed. Final native full suite: 1,631/1,638, 7 failures and zero skips. Two historical exact-two-kind assertions await the named whole-test rewrite authorization required by ccloop Rule 15. One update test hit its 5-second limit in both full and file-wide runs, but the isolated case passed in 4.3 seconds. Four saved-result worker tests did not seal in the full run; that entire file passed 28/28 in isolation. No OMP test failed. Logs: `/private/tmp/ccloop-omp-final-full-native.log`, `/private/tmp/ccloop-omp-final-updates-target.log`, `/private/tmp/ccloop-omp-final-saved-recovery-isolated.log`.
+- Orca OMP protocol/UI tests and typecheck passed; final web workspace suite passed 990/990 and panel gate passed. A previous concurrent web run had one unrelated `memoryLayout` scroll timing failure, which passed 2/2 alone before the green full rerun. The broad control gate with the user's production agent table had three failures: one test expects a fake Codex `integration` table and passed 3/3 with that private fixture on rerun; two `taskResultPaired` tests hardcode older exact binary paths, so the local OMP build is outside their intended matrix. Logs: `/private/tmp/orca-omp-final-web-check-retry.log`, `/private/tmp/orca-omp-final-panel-gate.log`, `/private/tmp/orca-omp-task4-control-gate.log`, `/private/tmp/orca-omp-ccloop-protocol-fake-table.log`.
+- OMP host-side and Git-ignored writes are outside the adapter's Git-visible changed-path check. The phase tool list and scoped prompt reduce overrun, but this is not host containment. One accepted task is a pilot, not a reliability claim.
+- Keep ccloop merge/push, Orca dependency repin/service restart, and GitHub publication behind their separate existing owner authorization boundaries.
