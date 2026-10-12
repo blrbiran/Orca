@@ -1,7 +1,6 @@
 import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createCcloopExecutionPort } from "../../src/control/ccloopPort.js";
 import { applyAgentUpdate, hasPendingAgentUpdate, pendingAgentUpdateCommand, reconcilePendingAgentUpdates } from "../../src/control/agentUpdates.js";
@@ -12,8 +11,9 @@ import { openTestStore } from "./fixtures/store.js";
 import { readAgentPreferences } from "../../src/control/agentPreferences.js";
 
 const pairedBinary = process.env.ORCA_TASK9_CCLOOP_BIN;
+const oldBinary = process.env.ORCA_TASK9_OLD_CCLOOP_BIN;
 
-describe.skipIf(!pairedBinary)("paired reviewed installation update CLI", () => {
+describe.skipIf(!pairedBinary || !oldBinary)("paired reviewed installation update CLI", () => {
   it("observes, previews, and applies one accepted version while preserving custom table fields", async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), "orca-agent-paired-")));
     const h = await openTestStore();
@@ -52,7 +52,7 @@ describe.skipIf(!pairedBinary)("paired reviewed installation update CLI", () => 
       const cli = join(root, "fake-claude");
       await writeFile(cli, '#!/bin/sh\necho "2.1.283"\n', { mode: 0o700 });
       await writeFile(table, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: { custom: { kind: "claude", command: [cli], version: "2.1.283", configDir: null, timeoutMs: 1234, killGraceMs: 77 } } }), { mode: 0o600 });
-      const old = createCcloopExecutionPort({ binary: realpathSync(resolve("node_modules/ccloop/dist/cli.js")), agentsTablePath: table, timeoutMs: 10_000 });
+      const old = createCcloopExecutionPort({ binary: oldBinary!, agentsTablePath: table, timeoutMs: 10_000 });
       expect((await old.listAgents()).installations.map((row) => row.id)).toEqual(["custom"]);
       await expect(old.observeAgentInstallations!()).rejects.toMatchObject({ code: "control-agent-update-unsupported" });
     } finally { await rm(root, { recursive: true, force: true }); }
@@ -83,7 +83,7 @@ describe.skipIf(!pairedBinary)("paired reviewed installation update CLI", () => 
       expect(JSON.parse(changed.toString()).installations.custom.version).toBe("2.1.283");
       h.store.close();
       reopened = await openControlStore({ stateDir: join(h.root, "state") });
-      const oldPort = createCcloopExecutionPort({ binary: realpathSync(resolve("node_modules/ccloop/dist/cli.js")), agentsTablePath: table, timeoutMs: 10_000 });
+      const oldPort = createCcloopExecutionPort({ binary: oldBinary!, agentsTablePath: table, timeoutMs: 10_000 });
       await expect(applyAgentUpdate({ store: reopened, port: oldPort }, command, { client: "web", principal: "user:owner" }))
         .rejects.toMatchObject({ code: "control-agent-update-unsupported" });
       expect(hasPendingAgentUpdate(reopened, "human")).toBe(true);
