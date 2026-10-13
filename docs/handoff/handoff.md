@@ -93,14 +93,28 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 **驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 **Codex 只支持 `phase-end`＋`soft`：任何地方不许宣称 strict token 封顶**；软 token 预算也不能说成严格金钱上限。
 
-### 3.3 本会话（`808feb6a`，2026-10-13）的状态
+### 3.3 会话 `6b7843ec`（2026-10-13 晚）的状态 —— **先读这一节**
 
-- **Tier 0 闸门生效**：本会话触碰的所有仓里，agent 做不成合并进 main、push、删分支／worktree ⇒ 由人在自己终端做。
-- **ccloop**（全部本地、未推；origin/main 未变）：
-  - `codex/codex-strict-output-wire`：`fix(codex): send strict execute result schema` ＋ `docs(handoff): roll Orca OMP line in place`。
-  - `codex/omp-agent-integration`：已 rebase 到 strict-wire 之上（包含它），另有两笔**人 2026-10-13 点名授权**的判据改写 `test(agents): rewrite the claude/codex-only kind criteria to include omp`、`test(omp): make two criteria independent of PATH's node and omp probe time`。
-  - `codex/omp-skills`：叠在上面，本会话的 OMP skill 注入（`feat(omp): list Orca's frozen skill snapshot to every OMP phase`、`test(omp): refuse a missing ompSkillsDir at accept`）。工作树 `/private/tmp/ccloop-omp-agent-20261012`。
-- **Orca**（全部本地、未推；本地 main 比 origin/main 多两笔文档提交）：`codex/codex-wire-repin`（只有 handoff 文档＋两笔 `chore(checkpoint): orca-dev-808feb6a …`）→ `codex/omp-skills`（已 rebase 其上，**包含 `codex/omp-integration` 的全部提交**；旧 `codex/omp-integration` 指针停在 rebase 前，合并后删；本分支另有`feat(skills): let omp tasks load frozen syncskill skills`、`test(skills): run an OMP task with frozen skills against real ccloop`、`test(skills): restore write access before removing OMP E2E worlds`；工作树 `/private/tmp/orca-omp-integration-20261012`）。
+- **人已合并并推送**：ccloop main 与 Orca main 都已含 strict-wire＋OMP＋OMP skills（`ls-remote` 与本地一致）。
+  🔴 **但 Orca 合并时跳过了 repin**：main 的 `package.json` 仍钉旧 ccloop `2026ef1…`（历史值，比 ccloop main 少 15 笔，不含 strict-wire／OMP）⇒ **默认 pin 下 OMP 与 `ompSkillsDir` 不可用**。
+- **repin 已在分支上做完、等人合推**：Orca `codex/repin-ccloop-760c314`，一笔 `chore(deps): repin ccloop to the pushed OMP skills main`（`pin-ccloop.mjs` 全部检查 ok、`npm ci` 复现）。门（本会话，`ORCA_CCLOOP_BIN`＝同提交的 `clone --local` 构建 `/private/tmp/ccl-760c`）：
+  typecheck／build／web build／`verify:ccloop-pin`／`verify:panel`／`--ws check` 全 RC 0；`verify:control` 1882/1914、30 跳过、2 红（`taskResultPaired` 已登记环境红）；
+  根级全量 3732/3778、36 跳过、10 红 = 2 条 `taskResultPaired` ＋ 8 条超时（`gateCheck` K1／K12、`retryTask` 三条、`schedulerBridge` 一条 30 s、`settleUnknownUsage`「keeps another run's…」两条），单文件重跑结果见 `known-load-flakes.md` 本会话行。**不等于全量绿。**
+  ⚠️ `ORCA_CCLOOP_BIN` **不能**指 `node_modules/ccloop/dist/cli.js`：npm 包不带 `tests/fixtures`，按 bin 位置找 fake 的判据会成片假红（本会话第一次 `verify:control` 57 红即此）。
+- **真 Codex 可用的模型**：`gpt-6-luna` 在本机 codex-cli 0.160.0 下实跑 `turn.completed` 成功（2026-10-13，一次 `pong` 探针，输入 80128 tokens——本机 codex 会加载用户插件／skills）。「Codex 额度用完」不覆盖它；付费跑仍要人每次开口。
+- **外部测试反馈 `orca_archived_files/issue-20261008.md` 的分诊**（对照当前代码，两席只读子代理＋控制器抽查）：
+  - 45/46/48/49/50（429）：**ccloop 未修** —— codex 非零退出一律 `codex-exit-error`、run 直接 `failed`（`src/controller/runLoop.ts` 的 `PhaseExecutionError` 分支），无分类、无退避；「尝试 1/3」只是预算显示，阶段异常不会开第 2 次尝试；`--ephemeral` 仍在。退出时无 `turn.completed` ⇒ 用量 null ⇒ Orca 侧未知用量。人裁：**做「识别 429/5xx＋阶段内有限退避重试」，不做去 `--ephemeral`／codex 会话续跑、多 provider、任务间强制等待**；**等人从测试者处拿一份真实 429 的 `events.jsonl`** 再写匹配规则。
+  - 46（无重试按钮）：一般是「先结算未知用量再重试」两步；**真死路是 work 预算不限**（`settleUnknownUsage.ts` 拒 `unlimited-remainder`、`retryTask.ts` 拒 `usage-unknown`），且一个未知用量 run 会让整组停派（`groupUsageUnknown`）。⇒ D（下条）。
+  - 47：归档报错来自卡片 ⋯ 菜单，`RefusalNotice` 无动作入口 ⇒ 并入 D 的 Part B。
+  - 39／15：解码已修（无外层 `result` 可收、夹说明文字可提取唯一 JSON、plan 提示词已加强）；格式失败不重问，新 run 的 saved-result capsule 恢复按设计一律失败。**等新失败样本再定**。41：`activity` 返回 `{entries:[…]}`，测试者读错字段，失败原因 UI 已有。32：Overview 关注队列已有。34／35：设计轮。
+- **D（进行中）**：spec `docs/superpowers/specs/2026-10-13-unmetered-usage-settlement-design.md`（分支 `codex/unmetered-settlement`，工作树 `/Users/biran/code/skills/orca/Orca-wt/unmetered`，叠在 repin 分支上，**只有 spec、没有代码**）。
+  **人裁（2026-10-13，本会话）**：不限预算 run 的未知用量由 owner **放行不记数**（人否决「owner 填有限数」：「每次都让用户填基本不可能实现」）——这**具名推翻** `2026-10-11-token-policy-design.md` 里 "Never book … guessed usage / require manual finite settlement" 对 null 剩余的那半句（原文不改，更正在新 spec §A.1）。
+  已核：work 剩余为 null **只在**任务 ceiling 为 null 且无组上限、无任何花费上限时出现（`fundedAllowance.ts` `decideFundedAllowance`），所以放行绕不过任何在执行的上限。
+  实现要点（spec §A.2–A.5、§B）：新 acknowledge `release-unmetered`、marker 方法 `owner-acknowledged-unmetered`、只有 work tokens 维为 null 其余照 `remaining-grant`、`hasValidUsageSettlement` 要认新形状、组 ledger 加「用量不完整」标、Web 永不显示成 0。
+  ⚠️ 既有判据 `tests/control/tokenPolicyStop.test.ts`「holds an unknown nullable stop and refuses remaining-grant settlement」断言预览 `allowed:false`——它编码的正是被推翻的裁决，实现时要改写并在提交说明里点名。
+
+### 3.3a 会话 `808feb6a`（2026-10-13 早）的结论（分支已由人合并）
+
 - **OMP skill 注入**（spec `docs/superpowers/specs/2026-10-13-omp-skill-injection-design.md`）：新 work 字段 `ompSkillsDir`（protocol 3、4），与 `skillPluginDir`／`codexSkillsDir` 三选一；非 omp kind 在 accept 拒 `skills-unsupported-agent`；OMP 仍带 `--no-skills`／`--no-extensions`，由 ccloop 在每个 phase 的私有 system prompt 末尾加 `<skills>` 清单（名字、≤1024 字符的一行描述、`SKILL.md` 绝对路径）；快照不合法在 spawn 前失败 `omp-skills-source-invalid:<detail>`。Orca 的 confirm／set-task-loop／A2 接受 omp，驱动传 `<snapshot>/skills`。证据：ccloop 12 条变异全红（clone，基线 20/20，还原 0/0 字节）；Orca 5 条变异全红（基线 51/51）；`tests/control/ompSkillsE2E.test.ts` 对本地 ccloop 构建通过，路由变异让它以真 ccloop 的 `accept-refused:2:skills-unsupported-agent` 变红。**没有任何真 provider 跑**（Codex 额度耗尽、LiteLLM 端点已停）。
 - **ccloop 全量证据**（`codex/omp-agent-integration`，omp-skills 之前）：两笔授权改写后三次原生全量 1632/1639、1635/1639、1635/1639；每个红文件单跑 3/3 绿（负载 10–33），列表见 `known-load-flakes.md` 的 ccloop 段。`ompUpdates` "preserves the unavailable reason…" 单跑 3.1–3.3 s、负载下超时一次，**未改写**（不在人的授权内），已标记。
 - **本会话最终门**（两仓 `codex/omp-skills` 顶上，2026-10-13；本机同时有别的会话，负载 6–27，每行都记了）：
@@ -108,7 +122,9 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
   - Orca：typecheck／build／web build 过；根级全量（`ORCA_CCLOOP_BIN`＝本地 ccloop 构建）3725/3778、36 跳过、17 红：15 条是 5 s／30 s 超时，分布在 `gateCheck`、`driverRecovery`、`integrationKeep`、`retryTask`、`schedulerBridge`、`settleUnknownUsage` 六个文件，单独各 3/3 绿；2 条 `taskResultPaired` 硬编码旧配对二进制、不收本地构建（同上一轮）。Web `--ws check` 990/990。
   - **以上不等于全量绿**；原始日志在会话 scratchpad，会话结束即失效，结论只在这里。
 - **仓库外的修复**（人授权「三处都按你说的改」）：`~/.claude/plugins/ccmem` 软链改指新 ccmem 路径；`~/Library/LaunchAgents/com.ccmem.daemon.plist` 先备份为 `com.ccmem.daemon.plist.bak.20261013`，改了 daemon main 路径和 `CCMEM_CLAUDE_P_COMMAND`（旧值是已不存在的 cmux shim）；改前 `sqlite3 .backup` 到 `~/.claude/ccmem/global.db.bak.1791853763689`（integrity ok）；daemon 用 launchctl bootout／bootstrap 重启，`ccmem admin daemon status` 报 alive、schema 16、新路径。
-- **发现未修**：ccmem `admin daemon status` 在磁盘 plist 与 `renderPlist()` 不同时仍报 `plist=in_sync`（疑似 `scripts/lib/admin/daemon.mjs` `describePlistDrift` 的漂移检测缺陷，n＝1，根因未查）；daemon.err.log 末尾有 `vec_backfill failed: 403 Country, region, or territory not supported` 与 `Connection error.`，行无时间戳，不知是否早于重启。
+- **发现未修**：ccmem `admin daemon status` 在磁盘 plist 与 `renderPlist()` 不同时仍报 `plist=in_sync`（疑似 `scripts/lib/admin/daemon.mjs` `describePlistDrift` 的漂移检测缺陷，n＝1，根因未查）；daemon.err.log 末尾的 `vec_backfill failed: 403 …`／`Connection error.` **早于重启**（会话 `6b7843ec` 现测：plist 的 StandardErrorPath 就是它，文件 mtime 2026-09-08，重启后零新行）。
+  **重启后行为复验（`6b7843ec`，只读 `~/.claude/ccmem/{daemon-cost,metrics}.jsonl`，以备份文件名里的毫秒 epoch 1791853763689 为重启时刻）**：`summarize_pending` 11 次、10 次 `exit_code=0`、1 次 1 ⇒ daemon 的 `claude -p` 已恢复；
+  但 hook 检索 9 次全是 `B-fail`／`B-circuit`，`retrieval_embed_error` 为 `429 You have no credits remaining` ×3、`Request timed out.` ×3 ⇒ **embedding 账号无额度，属人的账号，agent 不碰凭据**。
 - 🔴 **Orca 面板服务仍指旧路径**：`~/.orca/panel/run.sh` 与 `~/.orca/panel/service.json` exec `/Users/biran/code/skills/loop/Orca/dist/cli.js`。正在跑的 7777 进程早于搬迁；**一重启就会失败**，要从新路径重装（排在 repin 之后，§四）。
 - 本机：`/opt/homebrew/bin/node` 坏（缺 libsimdjson）；nvm Node 22.13.1 在 PATH 首位；`/usr/local/bin/node` 是 24.13.0（正式服务用它）。
 - 上下文：本会话越过了 Rule 6 的 T1（330k），人明说本会话不考虑上下文大小；检查点记了越线。
@@ -125,13 +141,15 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.1 人在自己终端跑的（agent 被 Tier 0 拦；每一件都要人单独点头，非门合并一律 `--ff-only`）
 
-1. **ccloop**：main `--ff-only` 到 `codex/omp-skills`（它含 strict-wire 与 omp-agent-integration），然后 push main。
-2. **Orca repin**：在 `codex/omp-skills`（它从 main 起，含 `codex/codex-wire-repin` 与全部 OMP 提交）顶上跑`node scripts/pin-ccloop.mjs <刚推上去的 ccloop 完整 40 位提交号>`（它要求干净树，成功后留下改过的 package.json／lock 由调用方提交）；然后跑门（后台、重定向、整份读回；至少 typecheck、web build、`verify:ccloop-pin`、`verify:control`、`verify:panel`、`--ws check`、全量 vitest），再 `--ff-only` 合进 main、push。repin 之后 OMP 的 skills E2E 应改由默认 pin 跑一次（不再靠本地 `ORCA_CCLOOP_BIN`）。
-3. **面板服务从新路径重装**：在 `/Users/biran/code/skills/orca/Orca` 上 `npm ci`／build 后 `orca panel install`（端口、控制根、账户根、ccmem 根照`2026-10-12-live-service-cutover.md` 的配置），确认 `~/.orca/panel/run.sh`／`service.json` 指新路径，`orca panel status` 为 running、7777 首页 200。
-4. **清理**：删已合入的分支（两仓的 `codex/*`）与工作树 `/private/tmp/ccloop-omp-agent-20261012`、`/private/tmp/orca-omp-integration-20261012`；另有两条**失效的工作树记录**（`.git` 文件指旧仓路径，提交已在 main）：Orca `/Users/biran/.codex/worktrees/feedback-followup-20261011/Orca`、ccloop `/private/tmp/orca-results-ccloop-20261010` ⇒ `git worktree prune`／移除。syncskill 的 `dev` 分支按人裁保留。
+1. ~~ccloop ff＋push~~、~~Orca ff＋push~~：人已做（2026-10-13）。
+2. **Orca repin 合推**：`git checkout main && git merge --ff-only codex/repin-ccloop-760c314 && git push origin main`（门的结果见 §3.3）。
+3. **面板服务从新路径重装**（在 repin 合推之后）：在 `/Users/biran/code/skills/orca/Orca` 上 `npm ci`／build 后 `orca panel install`（端口、控制根、账户根、ccmem 根照`2026-10-12-live-service-cutover.md` 的配置），确认 `~/.orca/panel/run.sh`／`service.json` 指新路径，`orca panel status` 为 running、7777 首页 200。
+4. **清理**：删已合入的分支（两仓的 `codex/*`，**不含**仍在进行的 `codex/unmetered-settlement`、待合的 `codex/repin-ccloop-760c314`）与工作树 `/private/tmp/ccloop-omp-agent-20261012`、`/private/tmp/orca-omp-integration-20261012`；本会话留下的 `/private/tmp/ccl-760c`（ccloop 测试 clone）与 `/private/tmp/og-yV1y`（门日志）不是 worktree，可 `/bin/rm -rf`；另有两条**失效的工作树记录**（`.git` 文件指旧仓路径，提交已在 main）：Orca `/Users/biran/.codex/worktrees/feedback-followup-20261011/Orca`、ccloop `/private/tmp/orca-results-ccloop-20261010` ⇒ `git worktree prune`／移除。syncskill 的 `dev` 分支按人裁保留。
 
 ### 4.2 agent 的活（上面做完、或与之无关时）
 
+0. **D：放行不记数＋失败任务的出路可见**（§3.3）。新会话在 `codex/unmetered-settlement` 工作树里按 spec TDD 实现，每个新分支点名变异看见红；改的既有判据单列。完成后跑全量门，再交人合推（它叠在 repin 分支上，repin 先合）。
+0b. **C：ccloop 识别 429／5xx＋阶段内有限退避**（§3.3 的分诊）：**等人给真实 `events.jsonl`**；拿到后在 ccloop 先写短 spec 再 TDD（守 ccloop 自己的规则：改既有判据要人逐条点名）。完成后可用 `gpt-6-luna` 做一次真 Codex 回归（付费，先问人）。
 1. **OMP skills 的真 provider 验收**：有可用 provider 时（LiteLLM 端点要人起；Codex 额度已耗尽），照 `2026-10-12-oh-my-pi-acceptance.md` 的隔离形状、带一个声明 skill 的任务跑一次，独立审计（`scripts/verify-omp-acceptance.ts`）要能看见 `<skills>` 块与 `SKILL.md` 的 read 调用。**模型选择器只是验收数据，不设默认。**
 2. **ccmem 适配 Codex 与 oh-my-pi**：人的**下一个项目**，未开始；先 brainstorming，记在 ccmem 与 Orca 两边的 handoff。
 3. **OMP 仍延后的**：OMP 子 agent、交互式审批桥、codex 专属的 saved-result 恢复对 omp 的支持；single-call 不提供（理由见 §五）。

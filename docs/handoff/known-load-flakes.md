@@ -34,6 +34,9 @@
 | `tests/control/retryTask.test.ts` › refuses a run blocked for any other reason: a succeeded run out of bounds, a transient failure, another step | 5 s 超时 | issue-fixes F2（人 2026-10-09 点名同意登记）：观测提交 `11027ab`（历史），隔离 clone 负载约 10；负载 5–6 单跑 3/3 绿。证据 `.superpowers/sdd/2026-10-08-issue-fixes/progress.md` Task F2 |
 | `tests/control/retryTask.test.ts` › refuses a stopped group with stop-mode-conflict and a clarifying group with group-state-invalid | 同上 | 同上 |
 | `tests/control/retryTask.test.ts` › refuses on either half of the stop guard alone: stopped without an intent, an intent without stopped | 同上 | 同上 |
+| `tests/chain/gateCheck.test.ts` › K1 PreToolUse removed | 5 s 超时 | `6b7843ec` 2026-10-13 repin 分支根级全量（负载 12–17）红一次；单文件 3/3 绿（负载 6.9–8.2）。同一跑里 K12 也红（已登记） |
+| `tests/control/schedulerBridge.test.ts` › runs a real conflicting graph through durable control: success | 30 s 超时 | `808feb6a` 2026-10-13 全量里见过（未逐名登记）；`6b7843ec` 同上全量再红，单文件 3/3 绿（负载 6.5–7.2） |
+| `tests/control/settleUnknownUsage.test.ts` › D9 does not erase other frozen runs › keeps another run's unknown/open request blocker（silent=false 与 silent=true 两条） | 5 s 超时 | `6b7843ec` 同上全量红，单文件 3/3 绿（负载 5.3–7.9）。同一跑 `retryTask` 已登记的三条也红、单文件 3/3 绿 |
 | `tests/control/requirementCommands.test.ts` › re-queues a failed draft as the next draft with a fresh retry count (Task 8 carry) | 同上 | 同上 |
 | `web/tests/controlCommandRecovery.test.tsx` › drops the id when the lookup returns the command's retained result | 超时 | `e5f56bfe` 2026-09-25：单跑 3/3 绿 |
 | `web/tests/memoryLayout.test.tsx`（scroll timing 那条） | 并发 web 运行里时序红一次 | OMP 一轮 2026-10-12：单跑 2/2 绿，随后全量 990/990（`docs/handoff/2026-10-12-oh-my-pi-acceptance.md`） |
