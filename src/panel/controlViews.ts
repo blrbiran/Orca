@@ -984,8 +984,9 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
       budgetMode: proposal.budgetMode, contextPolicy: proposal.contextPolicy, profiles: proposal.profiles,
       executionSnapshotHash: proposal.executionSnapshotHash,
     },
-    // Spec 2026-10-13-unmetered-usage-settlement-design.md §A.4: derived, never persisted; > 0 means the totals are a lower bound.
-    ledger: { ...body.ledger, unmeteredRuns: Number(store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id=? AND json_extract(body,'$.usageSettlement.method')='owner-acknowledged-unmetered'").get(groupId)!.n) },
+    // Spec 2026-10-13-unmetered-usage-settlement-design.md §A.4: derived from the run views below (the read snapshot's one
+    // batched run read; no extra query), never persisted; > 0 means the totals are a lower bound.
+    ledger: { ...body.ledger, unmeteredRuns: 0 },
     allocations,
     workItems: workViews(store, groupId, plan, snapshot, archived.plan, readSnapshot),
     // validateExecutionSnapshot has already proved the group record's reconcile slot equals the snapshot's.
@@ -1004,6 +1005,7 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     // Integration spec §4: only for a non-keep scheme, so a keep group's view is what it was.
     ...integrationView(body),
   };
+  view.ledger.unmeteredRuns = view.runs.filter(run => run.unknownUsageSettlement?.settlement?.method === "owner-acknowledged-unmetered").length;
   const parsed = groupViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`group-view:${parsed.error.issues[0]?.path.join(".")}:${parsed.error.issues[0]?.message}`);
   return parsed.data;

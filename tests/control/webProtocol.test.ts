@@ -367,6 +367,7 @@ describe("Web control protocol", () => {
         explicitUnallocatedReserve: amount,
         budgetDeficit: amount,
         usageUnknown: false,
+        unmeteredRuns: 0,
       },
       allocations: [
         allocation("goal-review", "g:goal-review", "review"),

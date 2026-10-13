@@ -18,7 +18,7 @@ import { TaskResults } from "./TaskResults.js";
 import { LoopPlanCard } from "./LoopPlanCard.js";
 import { RunReason } from "./RunReason.js";
 import { explainRunReason } from "./refusalExplain.js";
-import { reasonCode, retryRunOpen, taskRunNumber } from "./runFacts.js";
+import { hasFailureOutcome, reasonCode, retryRunOpen, taskRunNumber } from "./runFacts.js";
 import i18n, { enumText } from "./i18n.js";
 import { UsageSettlement } from "./UsageSettlement.js";
 import type { Role } from "./auth.js";
@@ -277,7 +277,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
                 </button>
               )}
               {/* Retry is hidden while usage is unknown (runFacts.ts retryRunOpen): show the way forward instead of nothing. */}
-              {run.unknownUsageSettlement !== undefined && run.unknownUsageSettlement.settlement === undefined && (
+              {(hasFailureOutcome(run) || run.state === "blocked") && run.unknownUsageSettlement !== undefined && run.unknownUsageSettlement.settlement === undefined && (
                 <UsageSettlement key={JSON.stringify([view.summary.commandRevision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles}
                   archived={archived} groupId={groupId} revision={view.summary.commandRevision} onCommand={onCommand} />
               )}

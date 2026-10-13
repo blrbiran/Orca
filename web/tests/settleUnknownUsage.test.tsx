@@ -148,3 +148,11 @@ describe("the way forward for a failed task with unknown usage", () => {
     finally { await i18n.changeLanguage("en"); }
   });
 });
+
+it("task detail does not offer settlement for a healthy running run whose usage is not yet reported", () => {
+  // Review finding (session 7f37d261): every fresh run starts with unknown usage; only failed or blocked runs hide Retry for it.
+  const running = run({ state: "running", unknownUsageSettlement: { generation: 1, highWater: 0, remaining, allowed: false, refusalReason: "run-usage-not-settleable", acknowledge: "charge-remaining-grant" as const } });
+  render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "progress", taskId: "a", runId: null }} view={{ ...view([running]), workItems: [workItem({ taskId: "a", status: "active", currentRunId: "run-a" })] }} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} roles={["owner"]} />);
+  const task = document.querySelector<HTMLElement>('section[data-task-id="a"]')!;
+  expect(within(task).queryByText("This run has unknown usage.")).toBeNull();
+});

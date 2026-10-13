@@ -7,7 +7,7 @@ import {readCanonicalRecord} from './snapshot.js';
 import {readConfirmedTaskExecution} from './executionSnapshot.js';
 import {createStartingRun,readFrozenSnapshot,probeBlocksDispatch} from './webDispatch.js';
 import {readStopIntent,readRunBody,saveRunBody,releaseCommitment,reserveCommitment,setAllocationStates,commandSuccess,latestRequestForRun,ADOPTABLE_STATES} from './stopIntent.js';
-import {hasValidUsageSettlement,settlementProof,settlementArtifact,settlementSame} from './usageSettlement.js';
+import {hasValidUsageSettlement,lineageWorkUsage,settlementProof,settlementArtifact,settlementSame} from './usageSettlement.js';
 import {hasOptionalTaskPolicy,decideFundedAllowance,readFundedAllowance} from './fundedAllowance.js';
 import {finiteCommitment} from './tokenPolicy.js';
 import {groupUsageUnknown,add} from './budget.js';
@@ -125,9 +125,10 @@ export async function applyVerifySavedResult(deps:StopDeps,command:VerifySavedRe
     ||evidence.sourceIdentity.envelopeHash!==current.run.drive.envelopeHash||evidence.sourceIdentity.executionId!==current.run.executionId)throw new ControlError('saved-result-source-stale');
    // Rehash the entire source closure in the authoritative transaction after the asynchronous probe.
    recoveryClosure(deps.store,[source.source]);
-   const inheritedBase=add(current.source.tokenPolicy?.inheritedUsage??zero(),current.run.cumulative.work);
+   // Lineage inherits observed usage only (lineageWorkUsage, ruling 2026-10-13); savedRecoveryAccounting below keeps the raw run accounting.
+   const inheritedBase=add(current.source.tokenPolicy?.inheritedUsage??zero(),lineageWorkUsage(current.run));
    let inherited=inheritedBase;
-   if(current.predecessor){if(!settlementSame(current.predecessor.recoveryOf,of))throw new ControlError('saved-result-source-stale');inherited=add(current.predecessor.funding.inheritedUsage,current.current.cumulative.work);}
+   if(current.predecessor){if(!settlementSame(current.predecessor.recoveryOf,of))throw new ControlError('saved-result-source-stale');inherited=add(current.predecessor.funding.inheritedUsage,lineageWorkUsage(current.current));}
    const originalAccounting=savedRecoveryAccounting(deps.store,current.run);
    const old=current.current;
    if(Number(deps.store.db.prepare('SELECT active FROM runs WHERE id=?').get(old.runId)?.active)===1){
