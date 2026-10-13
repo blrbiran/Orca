@@ -1,7 +1,7 @@
 {
   "name": "orca",
   "version": "0.1.0",
-  "description": "Leave it to Orca \u2014 every idea, made real.",
+  "description": "Leave it to Orca — every idea, made real.",
   "private": true,
   "workspaces": [
     "web"
@@ -32,7 +32,7 @@
   "dependencies": {
     "@ast-grep/cli": "0.45.3",
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "ccloop": "github:blrbiran/ccloop#2026ef14627bedb7a874bde561026e1484af3350",
+    "ccloop": "github:blrbiran/ccloop#760c314190228e32acbde3b4f4bc2e4e836de62a",
     "express": "^5.1.0",
     "zod": "^3.23.8"
   },
