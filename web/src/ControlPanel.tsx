@@ -242,11 +242,11 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         * reads are what a person needs after a crash -- so this says why the commands will refuse.
         */}
       {config.executionPort === "unconfigured" && (
-        <p role="alert">{t("control.noPort")}</p>
+        <p role="note" data-tone="warn">{t("control.noPort")}</p>
       )}
-      {summary.resetRequired && <p role="alert">{t("control.resetRequired")}</p>}
-      {refetchRequired && <p role="alert">{t("control.refetchRequired")}</p>}
-      {recovery.dispatchBlocked && <p role="alert">{t("control.dispatchBlockedRecovery")}</p>}
+      {summary.resetRequired && <p role="alert" data-tone="danger">{t("control.resetRequired")}</p>}
+      {refetchRequired && <p role="alert" data-tone="info">{t("control.refetchRequired")}</p>}
+      {recovery.dispatchBlocked && <p role="alert" data-tone="danger">{t("control.dispatchBlockedRecovery")}</p>}
       {/* Keyed by repository, so another project starts on its own first plan. */}
       <div id="overview-control-import" tabIndex={-1} data-overview-region="import">
       <ImportForm

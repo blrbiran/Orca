@@ -13,7 +13,7 @@ export function Overview(props: { model: OverviewModel; onOpen: (target: Overvie
    <section aria-label={t("overview.progress")}><h3>{t("overview.progress")}</h3>
     {model.scopeUnavailable && <p role="status">{t("overview.scopeUnavailable")}</p>}
     {model.sources.filter((s) => s.kind === "progress" && s.status !== "available").map((s) => <p role="status" key={s.kind}>{t(`overview.source.${s.kind}`)} · {t(`overview.status.${s.status}`)}{s.error ? ` · ${s.error}` : ""}</p>)}
-    {model.issues.map((issue, i) => <p role="alert" key={JSON.stringify([issue.groupId, issue.reason, i])}>{issue.groupId ?? t("overview.global")} · {issue.reason}</p>)}
+    {model.issues.map((issue, i) => <p role="alert" data-tone="warn" key={JSON.stringify([issue.groupId, issue.reason, i])}>{issue.groupId ?? t("overview.global")} · {issue.reason}</p>)}
     {model.progress.length === 0 && model.complete && <p>{t("overview.noProgress")}</p>}
     <ul className="overview-progress">{model.progress.map(({ group, owner, ownerUnknown, target }) => <li key={group.groupId}>
      <div><button type="button" onClick={() => props.onOpen(target)}>{group.goal || group.groupId}</button><span>{owner || t("overview.global")}{ownerUnknown ? ` · ${t("overview.ownerUnknown")}` : ""}</span></div>

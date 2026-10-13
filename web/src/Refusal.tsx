@@ -27,7 +27,7 @@ export function Refusal({
 }): JSX.Element {
   const { t } = useTranslation();
   return (
-    <div className="refusal" role="alert">
+    <div className="refusal" role="alert" data-tone="danger">
       <p>
         <code data-testid="refusal-code">{refusal.code}</code>
       </p>

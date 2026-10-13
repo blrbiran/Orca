@@ -144,16 +144,16 @@ a { color: var(--accent); }
 .count { color: var(--muted); font-size: var(--text-sm); font-family: var(--mono); }
 .empty { color: var(--muted); border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 18px; text-align: center; margin: 12px; }
 
-/* Alerts and notes rendered by existing components */
-[role="alert"], .chain-banner, .callout {
-  border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--border)); background: var(--danger-subtle);
-  color: var(--text-strong); border-radius: var(--radius-sm); padding: 10px 12px; margin: 0 0 8px; font-size: var(--text-sm);
-}
-[role="note"], [role="status"] {
-  border: 1px solid color-mix(in srgb, var(--info) 34%, var(--border)); background: var(--info-subtle);
+/* Taste refinement spec P1-1/§7: role is semantics; status and note are neutral, an alert with no stated tone is an error. */
+[role="alert"], [role="note"], [role="status"], .callout, .chain-banner {
+  border: 1px solid var(--border); background: var(--bg); color: var(--text-strong);
   border-radius: var(--radius-sm); padding: 10px 12px; margin: 0 0 8px; font-size: var(--text-sm);
 }
-[role="status"] { border-color: color-mix(in srgb, var(--ok) 34%, var(--border)); background: var(--ok-subtle); }
+[role="alert"]:not([data-tone]) { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: var(--danger-subtle); }
+[data-tone="info"] { border-color: color-mix(in srgb, var(--info) 40%, var(--border)); background: var(--info-subtle); }
+[data-tone="ok"] { border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); background: var(--ok-subtle); }
+[data-tone="warn"] { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); background: var(--warn-subtle); }
+[data-tone="danger"] { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: var(--danger-subtle); }
 
 /* Controls */
 button, .btn {

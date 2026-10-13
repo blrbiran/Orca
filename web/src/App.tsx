@@ -1175,7 +1175,7 @@ export function App(): JSX.Element {
         }}
       />
       </div>
-      {inline?.status.kind === "recorded" && <p role="status">{t(inline.status.text)}</p>}
+      {inline?.status.kind === "recorded" && <p role="status" data-tone="ok">{t(inline.status.text)}</p>}
       {inline?.status.kind === "refused" && (
         <Refusal
           refusal={inline.payload === null ? withoutRetry(inline.status.refusal) : inline.status.refusal}
@@ -1229,7 +1229,7 @@ export function App(): JSX.Element {
       banners={
         <>
           {chains !== null && <ChainBanners banners={bannersFor(chains, dismissed)} onDismiss={dismiss} />}
-          {chains?.filter((repo) => repo.chain?.state === "running").map((repo) => <div key={repo.repoKey} role="status" className="chain-banner">
+          {chains?.filter((repo) => repo.chain?.state === "running").map((repo) => <div key={repo.repoKey} role="status" data-tone="info" className="chain-banner">
             <a href="#chains">{t("chains.activeBanner", { chainId: repo.chain!.chainId })}</a>{" "}
             <button type="button" onClick={() => { void chainAction(async () => {
               const answer = await requestChainStop(repo.repoKey, repo.chain!.chainId);
