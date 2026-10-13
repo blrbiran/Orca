@@ -1199,7 +1199,8 @@ export function App(): JSX.Element {
         event.preventDefault();
         void submitDecision({ projectKey: selected.projectKey, decisionId: selected.id }, "agree", null, undefined, { reviewed: selected, before: visibleDecisionRows });
       } else if (action === "correct") {
-        const box = document.querySelector<HTMLTextAreaElement>('.section-pane[data-section="decisions"] textarea[name="because"]');
+        const pane = document.querySelector('.section-pane[data-section="decisions"]');
+        const box = pane?.querySelector<HTMLTextAreaElement>('textarea[name="because"]') ?? null;
         if (box !== null) { event.preventDefault(); box.focus(); }
       }
     };

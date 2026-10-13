@@ -49,4 +49,12 @@ describe("narrow shell (P1-2)", () => {
     expect(r).toContain("var(--warn-subtle)");
     expect(r).not.toContain("--danger");
   });
+  it("keeps the one-row nav from widening the page past the viewport (final verification, 390px measured 548)", () => {
+    // A bare `1fr` track has an `auto` minimum, so it grows to the nowrap nav's min-content and the whole column
+    // (project control, caveat) overflows the viewport. `minmax(0, 1fr)` caps the track; the nav then scrolls inside it.
+    const at = css.indexOf("@media (max-width: 760px) {");
+    expect(at).toBeGreaterThan(-1);
+    const block = css.slice(at, css.indexOf("\n}\n", at));
+    expect(block).toMatch(/\n {2}\.shell \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  });
 });

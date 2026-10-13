@@ -268,7 +268,7 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .caveats, .caveat, .stale-bias { color: var(--muted); font-size: var(--text-xs); }
 
 @media (max-width: 760px) {
-  .shell { grid-template-columns: 1fr; }
+  .shell { grid-template-columns: minmax(0, 1fr); }
   .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; }
   .nav { flex-direction: row; flex-wrap: wrap; width: 100%; border-bottom: 1px solid var(--border); }
   .nav-item { border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
