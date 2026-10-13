@@ -1,0 +1,56 @@
+{
+  "v": 1,
+  "runId": "orca-dev-808feb6a",
+  "runtime": "claude-code",
+  "sessionRef": "808feb6a-79d7-4141-ac26-25e92af92eea",
+  "writtenAt": "2026-10-13T01:58:52.917Z",
+  "head": "e9ab7dddf201d5acc0ae876823c2a914dfd42d7a",
+  "level": {
+    "kind": "reading",
+    "level": 336070,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Orca codex/omp-skills (worktree /private/tmp/orca-omp-integration-20261012): accept omp in assertSkillsAgent and driver A2, route ompSkillsDir, schema/startEnvelope/locales, tests, mutation checks",
+    "Orca gates against local ccloop build of codex/omp-skills",
+    "clean and update Orca/ccloop/ccmem handoffs; executive summary to the human"
+  ],
+  "open": [
+    "Context passed T1 330k; the human said to ignore context size this session (2026-10-13), breach surfaced here",
+    "ccloop codex/omp-skills done: ompSkillsDir, 12/12 mutations red, base 20/20",
+    "OMP single-call stays null by design: OMP 18.10.1 cannot cap one call's output (spec 2026-10-13-omp-skill-injection-design.md §4)"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "ccloop: checkout main && merge --ff-only codex/omp-skills (stacked on codex/omp-agent-integration incl. strict-wire) && push origin main"
+    },
+    {
+      "kind": "irreversible",
+      "what": "Orca: repin ccloop to the pushed commit (scripts/pin-ccloop.mjs), ff main to codex/omp-skills, push"
+    },
+    {
+      "kind": "irreversible",
+      "what": "delete merged branches/worktrees in Orca and ccloop; prune two dangling worktree records"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /private/tmp/ccloop-omp-agent-20261012 log --oneline main..codex/omp-skills",
+      "exitCode": 0,
+      "commit": "e9ab7dddf201d5acc0ae876823c2a914dfd42d7a",
+      "observedAt": "2026-10-13T01:58:52.824Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-808feb6a-TkdUMw/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /private/tmp/orca-omp-integration-20261012 log --oneline main..codex/omp-skills",
+      "exitCode": 0,
+      "commit": "e9ab7dddf201d5acc0ae876823c2a914dfd42d7a",
+      "observedAt": "2026-10-13T01:58:52.862Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-808feb6a-TkdUMw/2.txt"
+    }
+  ]
+}
