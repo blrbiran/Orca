@@ -26,7 +26,7 @@ describe("narrow shell (P1-2)", () => {
     const b = narrow();
     expect(b).toMatch(/\.nav \{[^}]*flex-wrap: nowrap;[^}]*overflow-x: auto;/);
     // overflow-x: auto makes overflow-y auto too, which would clip the 2px focus ring + offset of a nav item.
-    expect(b).toMatch(/\.nav \{[^}]*padding: 4px 2px;/);
+    expect(b).toMatch(/\.nav \{[^}]*padding: 4px;/);
     expect(b).toMatch(/\.sidebar-foot \{[^}]*display: none;/);
     // Review Focus 5: once Task 7 hides the never-enabled Add/Rename, the caption is the only explanation left.
     expect(b).not.toContain(".project-control .caveat");

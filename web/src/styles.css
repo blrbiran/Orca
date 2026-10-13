@@ -349,7 +349,7 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
   .authenticated-shell > .notices { max-height: none; }
   .authenticated-shell .sidebar { height: auto; max-height: none; overflow: visible; gap: 8px; padding: 8px 12px; }
   .authenticated-shell .content { overflow: visible; }
-  .nav { flex-wrap: nowrap; overflow-x: auto; padding: 4px 2px; }
+  .nav { flex-wrap: nowrap; overflow-x: auto; padding: 4px; }
   .nav-item { white-space: nowrap; }
   .sidebar-foot { display: none; }
 }
