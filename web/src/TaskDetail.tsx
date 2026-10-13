@@ -119,16 +119,20 @@ const CCLOOP_STEP: Record<string, string> = { planning: "plan", executing: "exec
 function activityText(entry: ActivityEntryV1): string {
   const kind = enumText("activityKind", entry.kind);
   const body = entry.body;
-  if (entry.kind === "usage-settled" && body.method === "remaining-grant" && typeof body.charged === "object" && body.charged !== null) {
+  const unmetered = body.method === "owner-acknowledged-unmetered";
+  if (entry.kind === "usage-settled" && (body.method === "remaining-grant" || unmetered) && typeof body.charged === "object" && body.charged !== null) {
     const charged = body.charged as Record<string, unknown>;
     const buckets = (["work", "handoff"] as const).flatMap(bucket => {
       const amount = charged[bucket];
       if (typeof amount !== "object" || amount === null) return [];
       const fields = amount as Record<string, unknown>;
-      if (!["tokens", "activeMs", "attempts", "sessions"].every(dimension => typeof fields[dimension] === "number")) return [];
+      // Only an unmetered release's work tokens may be null; they are named as not metered, never dropped or shown as 0.
+      const tokensUnmetered = unmetered && bucket === "work" && fields.tokens === null;
+      if (!["activeMs", "attempts", "sessions"].every(dimension => typeof fields[dimension] === "number") || (!tokensUnmetered && typeof fields.tokens !== "number")) return [];
+      if (tokensUnmetered) return [i18n.t("control.settlement.activityChargeUnmetered", { bucket: i18n.t(`control.settlement.${bucket}`), activeMs: fields.activeMs as number, attempts: fields.attempts as number, sessions: fields.sessions as number })];
       return [i18n.t("control.settlement.activityCharge", { bucket: i18n.t(`control.settlement.${bucket}`), tokens: fields.tokens as number, activeMs: fields.activeMs as number, attempts: fields.attempts as number, sessions: fields.sessions as number })];
     });
-    return `${kind} · ${i18n.t("control.settlement.method")} · ${buckets.join(" · ")}`;
+    return `${kind} · ${i18n.t(unmetered ? "control.settlement.methodUnmetered" : "control.settlement.method")} · ${buckets.join(" · ")}`;
   }
   if (entry.kind === "phase" && typeof body.step === "string") {
     const step = enumText("progressStep", CCLOOP_STEP[body.step] ?? body.step);

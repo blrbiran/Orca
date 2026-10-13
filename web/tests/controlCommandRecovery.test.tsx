@@ -306,7 +306,7 @@ it("D9 uses authenticated App roles and retains the original command id after lo
   window.sessionStorage.clear();
   const fallback = globalThis.fetch;
   const posted: { commandId: string; expectedRevision: number; payload: unknown }[] = [];
-  const r = { ...groupView.runs[0]!, state: "blocked", outcome: "failed", unknownUsageSettlement: { generation: 1, highWater: 2, remaining: { work: amount(2), handoff: amount(3) }, allowed: true, refusalReason: null } };
+  const r = { ...groupView.runs[0]!, state: "blocked", outcome: "failed", unknownUsageSettlement: { generation: 1, highWater: 2, remaining: { work: amount(2), handoff: amount(3) }, allowed: true, refusalReason: null, acknowledge: "charge-remaining-grant" } };
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === "/api/projects") return jsonResponse({ projects: [{ projectKey: "orca", controlRepoId: "orca" }] });

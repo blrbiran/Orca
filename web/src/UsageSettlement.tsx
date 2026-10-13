@@ -8,10 +8,11 @@ import { refusalText } from "./i18n.js";
 
 /** Read-only server amounts: never recompute the authoritative charge in the browser. */
 function ChargeTable({ amounts, settled }: { amounts: { work: import("./controlTypes.js").BudgetAmount; handoff: Amount }; settled: boolean }): JSX.Element {
+  // An unlimited (null) work token dimension is released unmetered: it is never rendered as 0 or left blank.
   const { t } = useTranslation();
   return <table aria-label={t(settled ? "control.settlement.charged" : "control.settlement.remaining")}>
     <thead><tr>{(["bucket", "tokens", "activeMs", "attempts", "sessions"] as const).map(key => <th key={key}>{t(`control.settlement.${key}`)}</th>)}</tr></thead>
-    <tbody>{(["work", "handoff"] as const).map(bucket => <tr key={bucket}><th>{t(`control.settlement.${bucket}`)}</th>{(["tokens", "activeMs", "attempts", "sessions"] as const).map(dimension => <td key={dimension}>{amounts[bucket][dimension]}</td>)}</tr>)}</tbody>
+    <tbody>{(["work", "handoff"] as const).map(bucket => <tr key={bucket}><th>{t(`control.settlement.${bucket}`)}</th>{(["tokens", "activeMs", "attempts", "sessions"] as const).map(dimension => <td key={dimension}>{amounts[bucket][dimension] ?? t("control.settlement.notMetered")}</td>)}</tr>)}</tbody>
   </table>;
 }
 
@@ -24,18 +25,21 @@ export function UsageSettlement({ run, roles, archived, groupId, revision, onCom
   if (!preview) return null;
   if (preview.settlement) {
     const marker = preview.settlement;
-    return <div><p>{t("control.settlement.receipt", { method: t("control.settlement.method"), principal: marker.principal, at: new Date(marker.at).toISOString() })}</p><ChargeTable amounts={marker.charged} settled /><p>{t("control.settlement.after")}</p></div>;
+    const unmetered = marker.method === "owner-acknowledged-unmetered";
+    return <div><p>{t("control.settlement.receipt", { method: t(unmetered ? "control.settlement.methodUnmetered" : "control.settlement.method"), principal: marker.principal, at: new Date(marker.at).toISOString() })}</p><ChargeTable amounts={marker.charged} settled /><p>{t(unmetered ? "control.settlement.afterUnmetered" : "control.settlement.after")}</p></div>;
   }
   const owner = roles?.includes("owner") === true;
+  // The server names the one acknowledgement this remainder admits; the browser never chooses between charge and release.
+  const release = preview.acknowledge === "release-unmetered";
   return <div>
     <p>{t("control.settlement.unknown")}</p>
     {!owner && <p>{t("control.settlement.contactOwner")}</p>}
     {preview.refusalReason && <p role="status">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p>}
-    {!archived && owner && preview.allowed && run.taskId !== null && (!open ? <button type="button" onClick={() => setOpen(true)}>{t("control.settlement.open")}</button> : <div role="group" aria-label={t("control.settlement.confirmation")}>
+    {!archived && owner && preview.allowed && run.taskId !== null && (!open ? <button type="button" onClick={() => setOpen(true)}>{t(release ? "control.settlement.releaseOpen" : "control.settlement.open")}</button> : <div role="group" aria-label={t("control.settlement.confirmation")}>
       <ChargeTable amounts={preview.remaining} settled={false} />
-      <p>{t("control.settlement.warning")}</p>
-      <label><input type="checkbox" checked={approved} onChange={event => setApproved(event.currentTarget.checked)} />{t("control.settlement.approve")}</label>
-      <button type="button" disabled={!approved} onClick={() => { if (!approved) return; setOpen(false); setApproved(false); onCommand({ verb: "settle-unknown-usage", groupId, expectedRevision: revision, payload: { taskId: run.taskId!, runId: run.runId, generation: preview.generation, acknowledge: "charge-remaining-grant" } }); }}>{t("control.settlement.confirm")}</button>
+      <p>{t(release ? "control.settlement.releaseWarning" : "control.settlement.warning")}</p>
+      <label><input type="checkbox" checked={approved} onChange={event => setApproved(event.currentTarget.checked)} />{t(release ? "control.settlement.releaseApprove" : "control.settlement.approve")}</label>
+      <button type="button" disabled={!approved} onClick={() => { if (!approved) return; setOpen(false); setApproved(false); onCommand({ verb: "settle-unknown-usage", groupId, expectedRevision: revision, payload: { taskId: run.taskId!, runId: run.runId, generation: preview.generation, acknowledge: preview.acknowledge } }); }}>{t(release ? "control.settlement.releaseConfirm" : "control.settlement.confirm")}</button>
       <button type="button" onClick={() => { setOpen(false); setApproved(false); }}>{t("control.settlement.cancel")}</button>
     </div>)}
   </div>;

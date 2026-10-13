@@ -513,6 +513,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         {t("budget.ledger", { used: view.ledger.used.tokens, committed: view.ledger.committedRemaining.tokens, reserve: view.ledger.explicitUnallocatedReserve.tokens===null?t("budget.unlimited"):view.ledger.explicitUnallocatedReserve.tokens })}
         {view.ledger.budgetDeficit.tokens > 0 ? t("budget.deficit", { deficit: view.ledger.budgetDeficit.tokens }) : ""}
         {view.ledger.usageUnknown ? t("budget.usageUnknown") : ""}
+        {view.ledger.unmeteredRuns > 0 ? t("budget.usageIncomplete", { count: view.ledger.unmeteredRuns }) : ""}
       </p>
       {!archived && <button type="button" disabled={!editable || hasBadDraft(drafts) || editedOperations(view, drafts).length === 0} onClick={submitEdit}>{t("budget.save")}</button>}
       {estimator !== null && !archived && <button type="button" disabled={estimator.profile === null} onClick={submitEstimate}>{t("budget.reestimate")}</button>}
