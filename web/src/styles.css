@@ -250,7 +250,17 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .group-badge { padding: 0 6px; border-radius: 999px; background: var(--danger); color: var(--on-accent); font-weight: 600; }
 
 /* Metrics (existing MetricsView markup) */
-.section-pane [data-testid$="-rate"], .section-pane [data-testid="panel-coverage-rate"] { font-size: 24px; font-weight: 700; color: var(--text-strong); letter-spacing: -0.03em; }
+.metric-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.metric-tile { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; background: var(--bg); }
+.metric-tile h2, .metric-health h2 { font-size: var(--text-xs); font-weight: 600; color: var(--muted); margin: 0 0 4px; }
+.metric-value { font-size: 28px; font-weight: 700; color: var(--text-strong); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 0; }
+.metric-notes { margin-top: 6px; color: var(--muted); font-size: var(--text-xs); }
+.metric-notes ul { margin: 0; padding-left: 16px; }
+.metric-health { display: flex; flex-wrap: wrap; gap: 8px 24px; border-top: 1px solid var(--border); padding-top: 12px; }
+.metric-health > div { display: flex; flex-direction: column; }
+.metric-health p { font-size: var(--text-sm); font-variant-numeric: tabular-nums; margin: 0; }
+.table-scroll { overflow-x: auto; max-width: 100%; }
+.table-scroll table { min-width: 520px; }
 .caveats, .caveat, .stale-bias { color: var(--muted); font-size: var(--text-xs); }
 
 @media (max-width: 760px) {
