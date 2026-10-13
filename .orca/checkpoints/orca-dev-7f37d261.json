@@ -1,0 +1,43 @@
+{
+  "v": 1,
+  "runId": "orca-dev-7f37d261",
+  "runtime": "claude-code",
+  "sessionRef": "7f37d261-9850-49ab-ae9c-6f74a2085a30",
+  "writtenAt": "2026-10-13T14:47:39.571Z",
+  "head": "7a3d6842c6b81c0a95806cb58db213ac7a0f0833",
+  "level": {
+    "kind": "reading",
+    "level": 332028,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "D Task 6: mutations in a clone, full gate, whole-branch review, spec correction note (branch codex/unmetered-settlement, worktree Orca-wt/unmetered)",
+    "C: ccloop spec + TDD for Codex 429 recognition and in-phase bounded backoff",
+    "Update Orca/ccloop/ccmem handoffs"
+  ],
+  "open": [
+    "Session crossed T1 330k; human said to ignore context size this session"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "merge codex/unmetered-settlement into Orca main (--ff-only) and push, after D gate"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "review: lineage inherits only observed usage for an unmetered release (human chose this mid-session)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca-wt/unmetered log --oneline -9",
+      "exitCode": 0,
+      "commit": "7a3d6842c6b81c0a95806cb58db213ac7a0f0833",
+      "observedAt": "2026-10-13T14:47:39.519Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-7f37d261-Xo1rFD/1.txt"
+    }
+  ]
+}
