@@ -14,11 +14,14 @@ import type { DecisionListRow, MetricsReport, PanelCoverage } from "../src/types
 
 const QUESTION_A = "question A";
 const QUESTION_B = "question B";
+const QUESTION_C = "question C";
 const row = (id: string, question: string): DecisionListRow =>
   ({ projectKey: "github.com/x/y", id, at: "2026-10-01T00:00:00.000Z", kind: "reconcile", scope: "cross-repo", verdict: "ok", question }) as DecisionListRow;
 const A = row("A", QUESTION_A);
 const B = row("B", QUESTION_B);
-const decisionOf = (id: string): Decision => ({ id, question: id === "A" ? QUESTION_A : QUESTION_B, chose: `chose ${id}`, because: `because ${id}`, alternatives: [] });
+const C = row("C", QUESTION_C);
+const QUESTIONS: Record<string, string> = { A: QUESTION_A, B: QUESTION_B, C: QUESTION_C };
+const decisionOf = (id: string): Decision => ({ id, question: QUESTIONS[id] ?? id, chose: `chose ${id}`, because: `because ${id}`, alternatives: [] });
 
 const REPORT: MetricsReport = {
   as_of: "2026-09-16T00:00:00.000Z",
@@ -61,17 +64,22 @@ const posts = (path: string): Array<{ url: string; body: string }> => sent.filte
 let hold: Promise<void> | null = null;
 /** When true, GET /api/decision answers 500. */
 let decisionFails = false;
+/** GET /api/todo answers `rows` until a review is recorded, `afterReview` from then on. */
+let rows: DecisionListRow[] = [A, B];
+let afterReview: DecisionListRow[] = [B];
 
 beforeEach(async () => {
   sent = [];
   hold = null;
   decisionFails = false;
+  rows = [A, B];
+  afterReview = [B];
   let reviewed = false;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
     const method = init?.method ?? "GET";
     sent.push({ url, method, body: typeof init?.body === "string" ? init.body : "" });
-    if (url.startsWith("/api/todo")) return json(200, { rows: reviewed ? [B] : [A, B] });
+    if (url.startsWith("/api/todo")) return json(200, { rows: reviewed ? afterReview : rows });
     if (url.startsWith("/api/metrics")) return json(200, { report: REPORT, panel_review_coverage: COVERAGE });
     if (url.startsWith("/api/decision?")) {
       if (decisionFails) return json(500, { code: "decision-read-failed", message: "the decision read failed" });
@@ -100,12 +108,15 @@ const question = (): string | null => within(detail()).queryByTestId("decision-q
 async function openA(): Promise<void> {
   render(<App />);
   await waitFor(() => expect(document.querySelector('[data-section="decisions"]')?.getAttribute("data-active")).toBe("true"));
-  await waitFor(() => expect(document.querySelectorAll(".decision-list li button")).toHaveLength(2));
+  await waitFor(() => expect(document.querySelectorAll(".decision-list li button")).toHaveLength(rows.length));
   fireEvent.click(within(document.querySelector(".decision-list") as HTMLElement).getByText(QUESTION_A).closest("button")!);
   await waitFor(() => expect(question()).toBe(QUESTION_A));
 }
 
 const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 50));
+const openRow = (q: string): void => {
+  fireEvent.click(within(document.querySelector(".decision-list") as HTMLElement).getByText(q).closest("button")!);
+};
 
 describe("the decision review loop", () => {
   it("after a successful Agree, opens the next row once the reviewed one has left the list, and counts it", async () => {
@@ -159,5 +170,49 @@ describe("the decision review loop", () => {
     fireEvent.click(within(document.querySelector(".decision-list") as HTMLElement).getByText(QUESTION_B).closest("button")!);
     expect((await screen.findByRole("heading", { name: "orca panel could not load" })).tagName).toBe("H1");
     expect(screen.getByTestId("error-code").textContent).toBe("decision-read-failed");
+  });
+
+  it("records one review for a second 'a' on a row whose Agree is already recorded (fix round 1)", async () => {
+    await openA();
+    fireEvent.keyDown(document.body, { key: "j" });
+    await waitFor(() => expect(question()).toBe(QUESTION_B));
+    fireEvent.keyDown(document.body, { key: "a" });
+    // B is the last unreviewed row, so it stays open once its Agree is recorded.
+    await waitFor(() => expect(within(detail()).queryByRole("status")?.textContent).toBe("Recorded as reviewed."));
+    await waitFor(() => expect(document.querySelectorAll(".decision-list li button")).toHaveLength(1));
+    fireEvent.keyDown(document.body, { key: "a" });
+    await settle();
+    expect(posts("/api/reviews")).toHaveLength(1);
+    expect(screen.getByTestId("reviewed-count").textContent).toBe("Reviewed this session: 1");
+  });
+
+  it("does not move the person when they opened another row while the Agree was in flight (fix round 1)", async () => {
+    rows = [A, B, C];
+    afterReview = [B, C];
+    await openA();
+    let release!: () => void;
+    hold = new Promise<void>((r) => { release = r; });
+    fireEvent.click(within(detail()).getByRole("button", { name: "Agree" }));
+    await waitFor(() => expect(posts("/api/reviews")).toHaveLength(1));
+    openRow(QUESTION_C);
+    await waitFor(() => expect(question()).toBe(QUESTION_C));
+    release();
+    await waitFor(() => expect(document.querySelectorAll(".decision-list li button")).toHaveLength(2));
+    await settle();
+    expect(question()).toBe(QUESTION_C);
+  });
+
+  it("puts the cursor in the correction's reason with 'c' (fix round 1)", async () => {
+    await openA();
+    fireEvent.keyDown(document.body, { key: "c" });
+    expect(document.activeElement).toBe(document.querySelector('.section-pane[data-section="decisions"] textarea[name="because"]'));
+  });
+
+  it("goes back to the previous row with 'k' (fix round 1)", async () => {
+    await openA();
+    fireEvent.keyDown(document.body, { key: "j" });
+    await waitFor(() => expect(question()).toBe(QUESTION_B));
+    fireEvent.keyDown(document.body, { key: "k" });
+    await waitFor(() => expect(question()).toBe(QUESTION_A));
   });
 });

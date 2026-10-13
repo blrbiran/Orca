@@ -1186,7 +1186,11 @@ export function App(): JSX.Element {
           event.preventDefault(); openDecisionRow(to);
           requestAnimationFrame(() => document.querySelector('.decision-row[aria-current="true"]')?.scrollIntoView?.({ block: "nearest" }));
         }
-      } else if (action === "agree" && selected !== null && decision !== null && inlineRequest(decisionRequests, selected)?.status.kind !== "pending") {
+      } else if (action === "agree" && selected !== null && decision !== null) {
+        // Fix round 1: no second Agree while one is in flight, nor once one is recorded for this row (the ledger would
+        // keep a duplicate review, and the session count would count it twice).
+        const record = inlineRequest(decisionRequests, selected);
+        if (record?.status.kind === "pending" || (record?.status.kind === "recorded" && record.verb === "agree")) return;
         event.preventDefault();
         void submitDecision({ projectKey: selected.projectKey, decisionId: selected.id }, "agree", null, undefined, { reviewed: selected, before: visibleDecisionRows });
       } else if (action === "correct") {
