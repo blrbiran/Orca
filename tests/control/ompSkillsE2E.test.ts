@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -18,7 +18,18 @@ import { ccloopWorlds, g, noBlocked, realBinary, startGroup, until, workRuns } f
 const { world, removeRoots, relocateHome } = ccloopWorlds({ rootPrefix: "orca-omp-skills-e2e-", epochPrefix: "epoch-omp-skills-e2e-" });
 const FAKE_SYNCSKILL = resolve("tests/skills/fixtures/fake-syncskill.mjs");
 const extra: string[] = [];
+// A run blocked before it settles keeps its read-only snapshot (as in skillsE2E.test.ts); restore write access so the
+// world roots can be removed rather than leaked.
+function restoreTestPermissions(path: string): void {
+  let stat;
+  try { stat = lstatSync(path); } catch { return; }
+  if (stat.isSymbolicLink()) return;
+  chmodSync(path, (stat.mode & 0o777) | 0o700);
+  if (stat.isDirectory()) for (const name of readdirSync(path)) restoreTestPermissions(join(path, name));
+}
+const ownedWorldRoots: string[] = [];
 afterAll(async () => {
+  for (const root of ownedWorldRoots) restoreTestPermissions(root);
   await removeRoots();
   for (const dir of extra) await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });
@@ -45,6 +56,7 @@ describe("an OMP run with skills against real ccloop", { timeout: 300_000 }, () 
     const w = await world([{ taskId: "a", targetPaths: ["answer.txt"], agent: { agent: "omp" }, loop: loopWithSkills }], {}, {
       env: { ORCA_SYNCSKILL_BIN: syncskill, FAKE_SYNCSKILL_MODE: "inject-ok", FAKE_SYNCSKILL_LOG: join(fakeDir, "syncskill.jsonl") },
     });
+    ownedWorldRoots.push(w.root);
     const fakeOmp = resolve(dirname(realBinary!), "..", "tests", "fixtures", "fake-omp.mjs");
     const marker = join(fakeDir, "omp-marker");
     const omp = join(fakeDir, "omp");
