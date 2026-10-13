@@ -35,4 +35,8 @@ describe("page template (P2-6)", () => {
       expect(read(f).match(/className="btn-primary"/g)?.length, f).toBe(n);
     }
   });
+  it("does not recolour a disabled primary on hover (final review M1)", () => {
+    expect(css).toContain(".btn-primary:hover:not(:disabled) {");
+    expect(css).not.toMatch(/\.btn-primary:hover \{/);
+  });
 });

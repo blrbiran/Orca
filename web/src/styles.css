@@ -165,7 +165,7 @@ button, .btn {
 }
 button:hover { background: var(--bg-hover); }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.btn-primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--text-strong)); }
+.btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, var(--text-strong)); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 input, select, textarea {
   font: inherit; font-size: var(--text-sm); color: var(--text-strong); background: var(--bg);

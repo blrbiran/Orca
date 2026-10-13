@@ -215,4 +215,34 @@ describe("the decision review loop", () => {
     fireEvent.keyDown(document.body, { key: "k" });
     await waitFor(() => expect(question()).toBe(QUESTION_A));
   });
+
+  it("does not re-open the same row when 'k' is pressed on the first row after a re-read replaced its object (final review M5)", async () => {
+    await openA();
+    // Leaving for Overview and coming back re-reads the todo list: same decision, fresh row objects.
+    const go = async (hash: string, section: string): Promise<void> => {
+      window.location.hash = hash; fireEvent(window, new HashChangeEvent("hashchange"));
+      await waitFor(() => expect(document.querySelector(`[data-section="${section}"]`)?.getAttribute("data-active")).toBe("true"));
+    };
+    rows = rows.map((r) => ({ ...r }));
+    await go("#overview", "overview");
+    await settle();
+    await go("#decisions", "decisions");
+    await settle();
+    const reads = (): number => sent.filter((r) => r.method === "GET" && r.url.startsWith("/api/decision?") && r.url.includes("decisionId=A")).length;
+    const before = reads();
+    fireEvent.keyDown(document.body, { key: "k" });
+    await settle();
+    expect(reads()).toBe(before);
+    expect(question()).toBe(QUESTION_A);
+  });
+
+  it("ignores 'a' while focus is on a control outside the Decisions pane (final review M6)", async () => {
+    await openA();
+    const outside = Array.from(document.querySelectorAll<HTMLElement>("button")).find((b) => b.closest('.section-pane[data-section="decisions"]') === null);
+    expect(outside).toBeDefined();
+    outside!.focus();
+    fireEvent.keyDown(outside!, { key: "a" });
+    await settle();
+    expect(posts("/api/reviews")).toHaveLength(0);
+  });
 });

@@ -1179,10 +1179,15 @@ export function App(): JSX.Element {
     const onKey = (event: KeyboardEvent): void => {
       const action = reviewKeyAction(event);
       if (action === null) return;
+      // Final review M6 (WCAG 2.1.4): act only with focus on the page body or inside the Decisions pane, never while it
+      // sits on some other control (an account-bar or notice button), where a stray `a` would record an Agree.
+      const target = event.target as Element | null;
+      if (target !== document.body && target?.closest?.('.section-pane[data-section="decisions"]') == null) return;
       const at = selected === null ? -1 : visibleDecisionRows.findIndex((row) => rowKey(row) === rowKey(selected));
       if (action === "next" || action === "previous") {
         const to = visibleDecisionRows[action === "next" ? at + 1 : Math.max(at - 1, 0)];
-        if (to !== undefined) {
+        // Final review M5: j on the last row / k on the first resolves to the open row itself; do not re-open (re-fetch) it.
+        if (to !== undefined && (selected === null || rowKey(to) !== rowKey(selected))) {
           event.preventDefault(); openDecisionRow(to);
           requestAnimationFrame(() => document.querySelector('.decision-row[aria-current="true"]')?.scrollIntoView?.({ block: "nearest" }));
         }

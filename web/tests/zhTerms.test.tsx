@@ -11,4 +11,14 @@ describe("zh terms (P2-7)", () => {
     expect(zh.chains.activeBanner).toBe("链 {{chainId}} 正在运行");
     expect(zh.settings.showAdvanced).toContain("链");
   });
+  it("never leaves the English role words owner/member inside a zh sentence (final review M2)", () => {
+    const strings: string[] = [];
+    const walk = (v: unknown): void => {
+      if (typeof v === "string") strings.push(v);
+      else if (v !== null && typeof v === "object") Object.values(v).forEach(walk);
+    };
+    walk(zh);
+    expect(strings.length).toBeGreaterThan(100);
+    expect(strings.filter((v) => /\b(owner|member)\b/i.test(v.replace(/\{\{[^}]*\}\}/g, "").replace(/<[^>]*>/g, "")))).toEqual([]);
+  });
 });

@@ -21,5 +21,5 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 - One primary per view: only `.btn-primary` is filled with the accent. `type="submit"` alone is a secondary button.
 
 ## Layout
-- ≥761px: fixed shell, sidebar and content scroll independently. ≤760px: the page scrolls as a whole; nav is one horizontally scrolling row; footer and long sidebar captions hide.
+- ≥761px: fixed shell, sidebar and content scroll independently. ≤760px wide or ≤560px tall: the page scrolls as a whole; nav is one horizontally scrolling row; the footer hides. The project caption stays (it explains the hidden Add/Rename).
 - Panes stay mounted; only `.section-pane:not([data-active="true"])` hides one.
