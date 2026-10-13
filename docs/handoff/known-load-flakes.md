@@ -43,6 +43,11 @@
 
 web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条的历史观测早于或独立于此。
 
+- **2026-10-13 会话 `7f37d261`（D 分支 `codex/unmetered-settlement`，与 ccloop 全量并跑，负载峰值 156）**：根级全量 48 红中 45 条超时、1 条 `tests/panel/security.test.ts` 进程 5 s 未退、2 条 `taskResultPaired`（环境红）。
+  23 个红文件逐个单跑各 3/3 绿（负载 5–24，日志 `/private/tmp/rerun/`，会话结束即可删）：`chain/gateCheck`、`checkpoint/resume`、`control/{archivedWakePerformance,driverLanding,driverProgress,driverRecovery,driverRequirementSplit,retryTask,schedulerBridge,settleUnknownUsage,webMutations}`、
+  `panel/{agentSelectionApi,auth,controlApi,controlOverview,controlOverviewApi,controlPollPerformance,controlSocketGate,correctApi,decisionsApi,integrationApi,metricsApi,security}`。
+  ⚠️ 同一轮第一次全量里 `controlPollPerformance` 与 `webProtocol` 的红**不是** flake：是 D 自己引入的（`unmeteredRuns` 另查库、夹具缺字段），已修（提交 `fix(control): count unmetered runs from the view, …`）。
+
 ### 已修、不再豁免的（再红就当新问题查）
 
 - `tests/control/driverSettle.test.ts` 真 git 场景：全量＋并发下撞 5 s，已给 30 s。再红要查。
@@ -62,6 +67,8 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 
 - 2026-10-13 会话 `808feb6a`，`codex/omp-agent-integration` 原生全量（1632/1639、1635/1639、1635/1639）里红过、单跑 3/3 绿（负载 10–33）的文件：
   `verifySavedResult`、`codexAdapter`、codex adapter、`cli parseArgs`、`savedResultRecovery.native`（dist 重建竞态）。
+- 2026-10-13 会话 `7f37d261`，`codex/codex-rate-limit-backoff` 全量 1627/1669、35 红（与 Orca 全量并跑，负载峰值 205）：14 个红文件逐个单跑，12 个 3/3 绿；
+  `ompUpdates`（下条那条）2/3；`verifySavedResult` › "r1 command interruption modified=true …" 2/3（一条匹配断言，不是超时；文件不含 codex 代码；之后 main 3/3、分支 3/3 绿）⇒ **n＝1、未证成的候选 flake，不归因 C**。
 - `ompUpdates` › "preserves the unavailable reason…"：单跑 3.1–3.3 s，负载下超时一次；**未改写**（不在人的授权内），改写要人点名。
 - 2026-10-12 OMP 一轮：一条 5 s 更新判据全量与整文件都超时、单例 4.3 s 过；四条 saved-result worker 全量里未及时封口、整文件 28/28。
 - 更早：`codexWatchdog` 在负载 33 下红过（ccloop 人裁 139：负载下 1.5 s 太紧）；`runLoop.integration.test.ts` 里 19 条 `perAttemptTimeoutMs: 20` 的真 plan／verify 判据
