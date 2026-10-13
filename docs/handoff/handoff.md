@@ -97,7 +97,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 - **人已合并并推送**：ccloop main 与 Orca main 都已含 strict-wire＋OMP＋OMP skills（`ls-remote` 与本地一致）。
   🔴 **但 Orca 合并时跳过了 repin**：main 的 `package.json` 仍钉旧 ccloop `2026ef1…`（历史值，比 ccloop main 少 15 笔，不含 strict-wire／OMP）⇒ **默认 pin 下 OMP 与 `ompSkillsDir` 不可用**。
-- **repin 已在分支上做完、等人合推**：Orca `codex/repin-ccloop-760c314`，一笔 `chore(deps): repin ccloop to the pushed OMP skills main`（`pin-ccloop.mjs` 全部检查 ok、`npm ci` 复现）。门（本会话，`ORCA_CCLOOP_BIN`＝同提交的 `clone --local` 构建 `/private/tmp/ccl-760c`）：
+- **repin 已由人合推**（2026-10-13 晚；以下为合推前的门记录）：Orca `codex/repin-ccloop-760c314`，一笔 `chore(deps): repin ccloop to the pushed OMP skills main`（`pin-ccloop.mjs` 全部检查 ok、`npm ci` 复现）。门（本会话，`ORCA_CCLOOP_BIN`＝同提交的 `clone --local` 构建 `/private/tmp/ccl-760c`）：
   typecheck／build／web build／`verify:ccloop-pin`／`verify:panel`／`--ws check` 全 RC 0；`verify:control` 1882/1914、30 跳过、2 红（`taskResultPaired` 已登记环境红）；
   根级全量 3732/3778、36 跳过、10 红 = 2 条 `taskResultPaired` ＋ 8 条超时（`gateCheck` K1／K12、`retryTask` 三条、`schedulerBridge` 一条 30 s、`settleUnknownUsage`「keeps another run's…」两条），单文件重跑结果见 `known-load-flakes.md` 本会话行。**不等于全量绿。**
   ⚠️ `ORCA_CCLOOP_BIN` **不能**指 `node_modules/ccloop/dist/cli.js`：npm 包不带 `tests/fixtures`，按 bin 位置找 fake 的判据会成片假红（本会话第一次 `verify:control` 57 红即此）。
@@ -125,7 +125,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **发现未修**：ccmem `admin daemon status` 在磁盘 plist 与 `renderPlist()` 不同时仍报 `plist=in_sync`（疑似 `scripts/lib/admin/daemon.mjs` `describePlistDrift` 的漂移检测缺陷，n＝1，根因未查）；daemon.err.log 末尾的 `vec_backfill failed: 403 …`／`Connection error.` **早于重启**（会话 `6b7843ec` 现测：plist 的 StandardErrorPath 就是它，文件 mtime 2026-09-08，重启后零新行）。
   **重启后行为复验（`6b7843ec`，只读 `~/.claude/ccmem/{daemon-cost,metrics}.jsonl`，以备份文件名里的毫秒 epoch 1791853763689 为重启时刻）**：`summarize_pending` 11 次、10 次 `exit_code=0`、1 次 1 ⇒ daemon 的 `claude -p` 已恢复；
   但 hook 检索 9 次全是 `B-fail`／`B-circuit`，`retrieval_embed_error` 为 `429 You have no credits remaining` ×3、`Request timed out.` ×3 ⇒ **embedding 账号无额度，属人的账号，agent 不碰凭据**。
-- 🔴 **Orca 面板服务仍指旧路径**：`~/.orca/panel/run.sh` 与 `~/.orca/panel/service.json` exec `/Users/biran/code/skills/loop/Orca/dist/cli.js`。正在跑的 7777 进程早于搬迁；**一重启就会失败**，要从新路径重装（排在 repin 之后，§四）。
+- 面板服务曾指旧路径 `/Users/biran/code/skills/loop/Orca/dist/cli.js`；已于 2026-10-13 晚由人从新路径重装（§4.1 第 3 条）。注意 `ORCA_CCMEM_BIN`／`ORCA_SYNCSKILL_BIN` 当时也指着搬迁前的软链目标，重装时一并改成了新仓路径。
 - 本机：`/opt/homebrew/bin/node` 坏（缺 libsimdjson）；nvm Node 22.13.1 在 PATH 首位；`/usr/local/bin/node` 是 24.13.0（正式服务用它）。
 - 上下文：本会话越过了 Rule 6 的 T1（330k），人明说本会话不考虑上下文大小；检查点记了越线。
 
@@ -142,8 +142,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ### 4.1 人在自己终端跑的（agent 被 Tier 0 拦；每一件都要人单独点头，非门合并一律 `--ff-only`）
 
 1. ~~ccloop ff＋push~~、~~Orca ff＋push~~：人已做（2026-10-13）。
-2. **Orca repin 合推**：`git checkout main && git merge --ff-only codex/repin-ccloop-760c314 && git push origin main`（门的结果见 §3.3）。
-3. **面板服务从新路径重装**（在 repin 合推之后）：在 `/Users/biran/code/skills/orca/Orca` 上 `npm ci`／build 后 `orca panel install`（端口、控制根、账户根、ccmem 根照`2026-10-12-live-service-cutover.md` 的配置），确认 `~/.orca/panel/run.sh`／`service.json` 指新路径，`orca panel status` 为 running、7777 首页 200。
+2. ~~Orca repin 合推~~：人已做（2026-10-13 晚）。
+3. ~~面板服务从新路径重装~~：人已做（2026-10-13 晚，会话 `6b7843ec` 现核：`service.json` 的 entry 为 `/Users/biran/code/skills/orca/Orca/dist/cli.js`、node `/usr/local/bin/node`、无 `ORCA_CCLOOP_BIN` 覆盖、`ORCA_CCMEM_BIN`／`ORCA_SYNCSKILL_BIN` 指新仓；`panel status` launchd running、7777 首页 200；人同时把 `/usr/local/bin/ccmem` 与全局 `syncskill` 软链修到新仓）。原步骤留作再装参考：在 `/Users/biran/code/skills/orca/Orca` 上 `npm ci`／build 后 `orca panel install`（端口、控制根、账户根、ccmem 根照`2026-10-12-live-service-cutover.md` 的配置），确认 `~/.orca/panel/run.sh`／`service.json` 指新路径，`orca panel status` 为 running、7777 首页 200。
 4. **清理**：删已合入的分支（两仓的 `codex/*`，**不含**仍在进行的 `codex/unmetered-settlement`、待合的 `codex/repin-ccloop-760c314`）与工作树 `/private/tmp/ccloop-omp-agent-20261012`、`/private/tmp/orca-omp-integration-20261012`；本会话留下的 `/private/tmp/ccl-760c`（ccloop 测试 clone）与 `/private/tmp/og-yV1y`（门日志）不是 worktree，可 `/bin/rm -rf`；另有两条**失效的工作树记录**（`.git` 文件指旧仓路径，提交已在 main）：Orca `/Users/biran/.codex/worktrees/feedback-followup-20261011/Orca`、ccloop `/private/tmp/orca-results-ccloop-20261010` ⇒ `git worktree prune`／移除。syncskill 的 `dev` 分支按人裁保留。
 
 ### 4.2 agent 的活（上面做完、或与之无关时）
