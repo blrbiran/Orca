@@ -678,7 +678,7 @@ export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
 ]);
 // Issue fixes spec §4.2(2): start a task again whose current run ccloop ended failed. Group target; the task is named here.
 export const retryTaskPayloadSchema = z.object({ taskId: idSchema }).strict();
-export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.literal("charge-remaining-grant") }).strict();
+export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]) }).strict();
 
 const proposalTargetSchema = z.discriminatedUnion("scope", [
   z
@@ -1275,7 +1275,7 @@ export const runViewSchema = z
     // Retry-task button keys on it). Optional on the wire like `git`; the server always gives both, null when absent.
     stopReason: nonemptyString.nullable().optional(),
     outcome: nonemptyString.nullable().optional(),
-    unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), settlement: usageSettlementSchema.optional() }).strict().optional(),
+    unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]), settlement: usageSettlementSchema.optional() }).strict().optional(),
     continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,
     // Board spec 2026-10-03 D4: the git facts the run's drive record holds -- the workspace mode it ran in, the work
@@ -1583,7 +1583,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
       wakeId: nonemptyString,
     })
     .strict(),
-  z.object({ kind: z.literal("usage-settled"), taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, charged: z.object({ work: amountSchema, handoff: amountSchema }).strict(), at: safeInteger, method: z.literal("remaining-grant") }).strict(),
+  // The receipt copies the marker (usageSettlement.ts), whose schema ties a null work token charge to the unmetered method.
+  z.object({ kind: z.literal("usage-settled"), taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, charged: z.object({ work: amountSchema.extend({ tokens: amountSchema.shape.tokens.nullable() }).strict(), handoff: amountSchema }).strict(), at: safeInteger, method: z.enum(["remaining-grant", "owner-acknowledged-unmetered"]) }).strict(),
   z.object({ kind: z.literal("task-retried"), taskId: idSchema, fromRunId: idSchema }).strict(),
   z
     .object({

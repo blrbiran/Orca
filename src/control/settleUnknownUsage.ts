@@ -7,13 +7,16 @@ import { commandClientFor, commandPrincipalFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
 import { readGroup, readBudgetProposal, readWork, saveGroup } from "./queries.js";
 import { ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readStopIntent, settleManuallyFailedRequestInTransaction } from "./stopIntent.js";
-import { releasedSettlementCheckpoint, settlementProof, settlementSame, usageSettlementSchema, type SettlementRun } from "./usageSettlement.js";
+import { releasedSettlementCheckpoint, settlementProof, settlementSame, unmeteredChargeSchema, usageSettlementSchema, type SettlementRun } from "./usageSettlement.js";
 import { bookSettledUsage } from "./usageLedger.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
 import type { RawAuthorityCommandV1, CommandSuccessV1, CommandErrorBodyV1 } from "./webProtocol.js";
 
 export type SettleUnknownUsageCommand = Extract<RawAuthorityCommandV1, { verb: "settle-unknown-usage" }>;
+export type SettleAcknowledge = SettleUnknownUsageCommand["payload"]["acknowledge"];
+/** The acknowledgement a run's remainder admits: an unlimited work token remainder can only be released unmetered. */
+export const settlementAcknowledgeFor = (run: SettlementRun): SettleAcknowledge => run.remaining.work.tokens === null ? "release-unmetered" : "charge-remaining-grant";
 export interface SettleUnknownUsageDeps { store: ControlStore; admissionGate?: AdmissionGate; now?: () => Date; beforeCommit?: () => void; afterEvidence?: () => Promise<void> }
 
 /** Optional request-local raw work reader; writers omit it and retain their transaction's database reads. */
@@ -23,10 +26,10 @@ export interface SettlementAdmissionReadContext {
   readWork(id: string): unknown;
 }
 
-export function settlementAdmission(store: ControlStore, run: SettlementRun, context?: SettlementAdmissionReadContext): "committed" | "released" {
+export function settlementAdmission(store: ControlStore, run: SettlementRun, context?: SettlementAdmissionReadContext, acknowledge: SettleAcknowledge = settlementAcknowledgeFor(run)): "committed" | "released" {
   const group = readGroup(store, run.groupId), work = (context?.store === store && context.groupId === run.groupId
     ? context.readWork(run.workItemId) : readWork(store, run.groupId, run.workItemId)) as unknown as { taskId: string; currentRunId?: string; status: string; grant: unknown; pendingRunId?: string | null };
-  if(run.remaining.work.tokens===null)throw new ControlError("run-usage-not-settleable","unlimited-remainder");
+  if (acknowledge !== settlementAcknowledgeFor(run)) throw new ControlError("run-usage-not-settleable", run.remaining.work.tokens === null ? "unlimited-remainder" : "finite-remainder");
   if (isGroupArchived(store, run.groupId)) throw new ControlError("group-archived");
   if (run.usageSettlement !== undefined) throw new ControlError("run-usage-settled");
   if ((group as { status?: string }).status === "clarifying") throw new ControlError("group-state-invalid", "clarifying");
@@ -58,7 +61,7 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
     let evidence: { body: unknown; proof: ReturnType<typeof settlementProof>; checkpoint: ReturnType<typeof releasedSettlementCheckpoint> | null } | { error: unknown };
     try {
       const run = readRun(store, command.payload.runId) as unknown as SettlementRun;
-      const disposition = settlementAdmission(store, run);
+      const disposition = settlementAdmission(store, run, undefined, command.payload.acknowledge);
       evidence = { body: structuredClone(run), proof: settlementProof(store, run), checkpoint: disposition === "released" ? releasedSettlementCheckpoint(store, run) : null };
     } catch (error) { evidence = { error }; }
     await deps.afterEvidence?.();
@@ -67,23 +70,27 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
       apply: context => {
         const groupId = groupCommandTarget(command), run = readRun(store, command.payload.runId) as unknown as SettlementRun;
         if (run.groupId !== groupId || run.taskId !== command.payload.taskId || run.generation !== command.payload.generation) throw new ControlError("run-usage-not-settleable", "identity");
-        const disposition = settlementAdmission(store, run);
+        const disposition = settlementAdmission(store, run, undefined, command.payload.acknowledge);
         if ("error" in evidence) throw evidence.error;
         if (!settlementSame(run, evidence.body) || !settlementSame(settlementProof(store, run), evidence.proof)
           || (disposition === "released" && !settlementSame(releasedSettlementCheckpoint(store, run), evidence.checkpoint))) throw new ControlError("run-usage-not-settleable", "evidence-changed");
-        const charged = {work:amountSchema.parse(run.remaining.work),handoff:amountSchema.parse(run.remaining.handoff)}, at = (deps.now ?? (() => new Date()))().getTime();
+        const unmetered = command.payload.acknowledge === "release-unmetered", at = (deps.now ?? (() => new Date()))().getTime();
+        const charged = unmetered ? unmeteredChargeSchema.parse({ work: run.remaining.work, handoff: run.remaining.handoff })
+          : { work: amountSchema.parse(run.remaining.work), handoff: amountSchema.parse(run.remaining.handoff) };
         const request = latestRequestForRun(store, groupId, run.runId);
-        const marker = usageSettlementSchema.parse({ method: "remaining-grant", commandId: command.commandId, principal, at,
+        const marker = usageSettlementSchema.parse({ method: unmetered ? "owner-acknowledged-unmetered" : "remaining-grant", commandId: command.commandId, principal, at,
           groupId, taskId: run.taskId, workItemId: run.workItemId, runId: run.runId, generation: run.generation, highWater: run.highWater,
           charged, reservationDisposition: disposition, ...evidence.proof,
           ...(disposition === "released" ? { handoffResolution: { requestId: request!.requestId, previousState: "settled-unrecoverable", previousFailureCode: "usage-unsettled", ...evidence.checkpoint! } } : {}),
         });
-        const group = readGroup(store, groupId), delta = add(charged.work, charged.handoff);
+        // Unmetered work tokens book nothing: the run keeps its observed cumulative and its unlimited (null) remainder.
+        const work = { ...charged.work, tokens: charged.work.tokens ?? 0 }, group = readGroup(store, groupId), delta = add(work, charged.handoff);
         group.used = add(group.used, delta);
         if (disposition === "committed") group.reserved = subtract(group.reserved, delta);
         for (const b of ["work", "handoff"] as const) {
-          run.cumulative[b] = add(run.cumulative[b], charged[b]); run.remaining[b] = { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }; run.unknown[b] = false;
-          bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: b, tokens: charged[b].tokens, appliedAt: at });
+          const amount = b === "work" ? work : charged.handoff;
+          run.cumulative[b] = add(run.cumulative[b], amount); run.remaining[b] = { tokens: b === "work" && unmetered ? null : 0, activeMs: 0, attempts: 0, sessions: 0 } as never; run.unknown[b] = false;
+          if (charged[b].tokens !== null) bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: b, tokens: charged[b].tokens, appliedAt: at });
         }
         run.usageSettlement = marker;
         // Preserve endedAt/activity: this is manual accounting, not another provider terminalisation/release.
@@ -96,7 +103,8 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
         if (disposition === "released") settleManuallyFailedRequestInTransaction(store, groupId, request!.requestId, marker);
         recordActivity(store, { groupId, taskId: run.taskId, runId: run.runId, kind: "usage-settled", body: { method: marker.method, charged, principal, at } });
         deps.beforeCommit?.();
-        return commandSuccess(context, { kind: "usage-settled", taskId: run.taskId!, runId: run.runId, generation: run.generation, charged, at, method: marker.method });
+        const receipt = { kind: "usage-settled" as const, taskId: run.taskId!, runId: run.runId, generation: run.generation, at };
+        return commandSuccess(context, { ...receipt, charged: marker.charged, method: marker.method });
       },
     }).body;
   } finally { release?.(); }

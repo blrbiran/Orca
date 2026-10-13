@@ -12,7 +12,7 @@ import { readAgentPreferences } from "../control/agentPreferences.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
 import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint } from "../control/usageSettlement.js";
-import { settlementAdmission } from "../control/settleUnknownUsage.js";
+import { settlementAcknowledgeFor, settlementAdmission } from "../control/settleUnknownUsage.js";
 import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { dimensions } from "../control/commands.js";
@@ -1179,6 +1179,6 @@ function settlementPreview(store: ControlStore, run: z.infer<typeof persistedRun
     if (result === undefined) throw new ControlError("work-not-found");
     return decodedValue(result);
   } }); settlementProof(store, run); if (disposition === "released") releasedSettlementCheckpoint(store, run); } catch (error) { refusalReason = error instanceof ControlError ? error.code : "run-usage-not-settleable"; }
-  return { unknownUsageSettlement: { generation: run.generation, highWater: run.highWater, remaining: run.remaining, allowed: refusalReason === null, refusalReason,
+  return { unknownUsageSettlement: { generation: run.generation, highWater: run.highWater, remaining: run.remaining, allowed: refusalReason === null, refusalReason, acknowledge: settlementAcknowledgeFor(run),
     ...(run.usageSettlement === undefined ? {} : { settlement: run.usageSettlement }) } };
 }

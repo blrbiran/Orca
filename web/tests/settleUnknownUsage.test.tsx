@@ -8,7 +8,7 @@ import { controlCommandPath, commandEnvelope } from "../src/controlApi.js";
 import { config, run, view } from "./usageRecoveryFixture.js";
 afterEach(cleanup);
 const remaining = { work: { tokens: 91, activeMs: 920, attempts: 3, sessions: 4 }, handoff: { tokens: 51, activeMs: 520, attempts: 5, sessions: 6 } };
-const failed = () => run({ state: "blocked", outcome: "failed", stopReason: "Error: codex-event-error", unknownUsageSettlement: { generation: 7, highWater: 2, remaining, allowed: true, refusalReason: null } });
+const failed = () => run({ state: "blocked", outcome: "failed", stopReason: "Error: codex-event-error", unknownUsageSettlement: { generation: 7, highWater: 2, remaining, allowed: true, refusalReason: null, acknowledge: "charge-remaining-grant" as const } });
 const show = (roles: ("owner" | "member")[], r = failed()) => { const onCommand = vi.fn(); const result = render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([r])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} roles={roles} />); return { ...result, onCommand }; };
 describe("owner conservative usage settlement", () => {
   it("requires explicit confirmation of all dimensions of both buckets and sends identity only", () => {

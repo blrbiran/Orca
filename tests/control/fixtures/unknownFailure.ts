@@ -6,8 +6,8 @@ import { driverHarness } from "./driverHarness.js";
 import { latestRequestForRun } from "../../../src/control/stopIntent.js";
 export const ds = ["tokens", "activeMs", "attempts", "sessions"] as const;
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
-export async function unknownFailure(tasks = [{ taskId: "a" }], reportedPartial = true, options: { claimOther?: boolean; workTokens?: number; silentOther?: boolean; extraReserve?: boolean; spentAllTokens?: boolean; missing?: boolean } = {}) {
-  const t = await driverHarness(tasks, { behaviour: id => options.silentOther && id === "b" ? "stoppable-silent" : "failed", ...(options.workTokens ? { workTokens: () => options.workTokens! } : {}), stopReason: () => "provider crashed" });
+export async function unknownFailure(tasks = [{ taskId: "a" }], reportedPartial = true, options: { claimOther?: boolean; workTokens?: number; silentOther?: boolean; extraReserve?: boolean; spentAllTokens?: boolean; missing?: boolean; tokenPolicy?: "optional-v1" } = {}) {
+  const t = await driverHarness(tasks, { ...(options.tokenPolicy ? { tokenPolicy: options.tokenPolicy } : {}), behaviour: id => options.silentOther && id === "b" ? "stoppable-silent" : "failed", ...(options.workTokens ? { workTokens: () => options.workTokens! } : {}), stopReason: () => "provider crashed" });
   const collect = t.fake.port.collect;
   t.fake.port.collect = async (envelope, after) => {
     const report = await collect(envelope, after);

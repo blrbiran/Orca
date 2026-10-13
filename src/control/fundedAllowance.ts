@@ -1,6 +1,6 @@
 import {readCanonicalRecord} from "./snapshot.js";
 import {savedRecoverySchema,savedResultAdmissionSchema,recoveryPolicyAuthoritySchema} from "./savedResultProtocol.js";
-import {settlementArtifact,settlementSame} from "./usageSettlement.js";
+import {lineageWorkUsage,settlementArtifact,settlementSame} from "./usageSettlement.js";
 import {sha256Canonical} from "./canonicalJson.js";
 import { archivedMarkOf } from "./archivedMark.js";
 import { readArtifact } from "./archive.js";
@@ -43,7 +43,7 @@ export function inheritedWorkUsage(store:ControlStore,groupId:string,workItemId:
   const run=JSON.parse(String(row.body)) as RunRecord;
   if(row.active===1||!isTerminalRunState(run.state)||run.unknown.work||run.unknown.handoff)return null;
   if(store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId,run.highWater))return null;
-  total=add(total,amountSchema.parse(run.cumulative.work));
+  total=add(total,amountSchema.parse(lineageWorkUsage(run)));
  }
  return total;
 }
@@ -137,7 +137,7 @@ export function readFundedAllowance(store:ControlStore,run:{runId:string;groupId
  let inherited=zero();
  for(const previous of store.db.prepare("SELECT body FROM runs WHERE group_id=? AND work_item_id=? AND rowid<(SELECT rowid FROM runs WHERE id=?) ORDER BY rowid").all(run.groupId,run.workItemId,run.runId)){
   const source=JSON.parse(String(previous.body));if(source.unknown.work||source.unknown.handoff)throw new ControlError("recovery-blocked","funded-unknown-lineage");
-  inherited=add(inherited,amountSchema.parse(source.cumulative.work));
+  inherited=add(inherited,amountSchema.parse(lineageWorkUsage(source)));
  }
  if(!canonicalBytes(inherited).equals(canonicalBytes(parsed.data.inheritedUsage)))throw new ControlError("recovery-blocked","funded-lineage");
  const remaining=remainingBudget(authored,inherited),actual=parsed.data.grant.work;

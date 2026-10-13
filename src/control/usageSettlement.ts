@@ -9,13 +9,19 @@ import type { ControlStore } from "./store.js";
 import type { Amount, ArtifactRef, Candidate, Grant } from "./types.js";
 
 const pair = z.object({ work: amountSchema, handoff: amountSchema }).strict();
-export const usageSettlementSchema = z.object({
-  method: z.literal("remaining-grant"), commandId: idSchema, principal: z.string().regex(/^user:.+/), at: safeInteger,
+/** Spec 2026-10-13-unmetered-usage-settlement-design.md §A.3: only the unlimited work token dimension is unmetered. */
+export const unmeteredChargeSchema = z.object({ work: amountSchema.extend({ tokens: z.null() }).strict(), handoff: amountSchema }).strict();
+const markerFields = {
+  commandId: idSchema, principal: z.string().regex(/^user:.+/), at: safeInteger,
   groupId: idSchema, taskId: idSchema, workItemId: idSchema, runId: idSchema, generation: safeInteger.positive(), highWater: safeInteger,
-  charged: pair, reservationDisposition: z.enum(["committed", "released"]), report: artifactSchema,
+  reservationDisposition: z.enum(["committed", "released"]), report: artifactSchema,
   stopProof: z.object({ executionId: z.string().min(1), generation: safeInteger.positive(), isolated: z.literal(true), source: artifactSchema }).strict(),
   handoffResolution: z.object({ requestId: idSchema, previousState: z.literal("settled-unrecoverable"), previousFailureCode: z.literal("usage-unsettled"), checkpointId: idSchema, checkpointHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional(),
-}).strict().superRefine((v, ctx) => {
+};
+export const usageSettlementSchema = z.union([
+  z.object({ method: z.literal("remaining-grant"), charged: pair, ...markerFields }).strict(),
+  z.object({ method: z.literal("owner-acknowledged-unmetered"), charged: unmeteredChargeSchema, ...markerFields }).strict(),
+]).superRefine((v, ctx) => {
   if ((v.reservationDisposition === "released") !== (v.handoffResolution !== undefined)) ctx.addIssue({ code: "custom", message: "settlement-disposition-resolution" });
 });
 export type UsageSettlement = z.infer<typeof usageSettlementSchema>;
@@ -85,6 +91,17 @@ export function releasedSettlementCheckpoint(store: ControlStore, run: Settlemen
   } catch { throw new ControlError("run-stop-proof-required", "handoff-checkpoint"); }
 }
 
+/**
+ * A run's work usage as the task's authored budget sees it (human ruling 2026-10-13, session 7f37d261): the group books the
+ * conservative charge of an unmetered release, but the task lineage inherits only what the provider observed, so a released
+ * task stays retryable. Every lineage sum uses this one function; a remaining-grant settlement keeps its charge in the lineage.
+ */
+export function lineageWorkUsage(run: { cumulative: { work: Amount }; usageSettlement?: unknown }): Amount {
+  const m = run.usageSettlement as UsageSettlement | undefined, work = run.cumulative.work;
+  if (m?.method !== "owner-acknowledged-unmetered") return work;
+  return { tokens: work.tokens, activeMs: work.activeMs - m.charged.work.activeMs, attempts: work.attempts - m.charged.work.attempts, sessions: work.sessions - m.charged.work.sessions };
+}
+
 /** A persisted marker must be backed by the authority receipt, unchanged provider highWater and immutable proof. */
 export function hasValidUsageSettlement(store: ControlStore, subject: unknown): boolean {
   try {
@@ -100,6 +117,10 @@ export function hasValidUsageSettlement(store: ControlStore, subject: unknown): 
     }
     if (!unknown) return false;
     for (const b of ["work", "handoff"] as const) for (const d of ds) {
+      if (m.method === "owner-acknowledged-unmetered" && b === "work" && d === "tokens") {
+        if (run.grant.work.tokens !== null || run.remaining.work.tokens !== null || m.charged.work.tokens !== null || run.cumulative.work.tokens !== baseline.work.tokens) return false;
+        continue;
+      }
       if (run.grant[b][d]===null || run.remaining[b][d] !== 0 || m.charged[b][d] !== Math.max(run.grant[b][d]! - baseline[b][d], 0)
         || run.cumulative[b][d] !== baseline[b][d] + m.charged[b][d]) return false;
     }

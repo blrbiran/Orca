@@ -221,11 +221,14 @@ export type WorkItemViewV1 = {
 export type RunSkillLockV1 = {
   name: string; source: { name: string; type: string; url: string; branch?: string } | null; resolved_commit: string | null; content_md5: string;
 };
-export type SettleUnknownUsagePayloadV1 = { taskId: string; runId: string; generation: number; acknowledge: "charge-remaining-grant" };
-export type UsageSettlementV1 = { method: "remaining-grant"; commandId: string; principal: string; at: number; groupId: string; taskId: string; workItemId: string; runId: string; generation: number; highWater: number; charged: { work: Amount; handoff: Amount }; reservationDisposition: "committed" | "released"; report: { artifactId: string; hash: string }; stopProof: { executionId: string; generation: number; isolated: true; source: { artifactId: string; hash: string } }; handoffResolution?: { requestId: string; previousState: "settled-unrecoverable"; previousFailureCode: "usage-unsettled"; checkpointId: string; checkpointHash: string } };
+export type SettleAcknowledgeV1 = "charge-remaining-grant" | "release-unmetered";
+export type SettleUnknownUsagePayloadV1 = { taskId: string; runId: string; generation: number; acknowledge: SettleAcknowledgeV1 };
+/** The unlimited work token dimension of an unmetered release is booked as nothing (null), never as 0. */
+export type UnmeteredChargeV1 = { work: Omit<Amount, "tokens"> & { tokens: null }; handoff: Amount };
+export type UsageSettlementV1 = ({ method: "remaining-grant"; charged: { work: Amount; handoff: Amount } } | { method: "owner-acknowledged-unmetered"; charged: UnmeteredChargeV1 }) & { commandId: string; principal: string; at: number; groupId: string; taskId: string; workItemId: string; runId: string; generation: number; highWater: number; reservationDisposition: "committed" | "released"; report: { artifactId: string; hash: string }; stopProof: { executionId: string; generation: number; isolated: true; source: { artifactId: string; hash: string } }; handoffResolution?: { requestId: string; previousState: "settled-unrecoverable"; previousFailureCode: "usage-unsettled"; checkpointId: string; checkpointHash: string } };
 export type RunViewV1 = {
   recoveryOf?:RecoveryOf;savedResultOrdinaryRetry?:boolean;
-  unknownUsageSettlement?: { generation: number; highWater: number; remaining: { work: BudgetAmount; handoff: Amount }; allowed: boolean; refusalReason: string | null; settlement?: UsageSettlementV1 };
+  unknownUsageSettlement?: { generation: number; highWater: number; remaining: { work: BudgetAmount; handoff: Amount }; allowed: boolean; refusalReason: string | null; acknowledge: SettleAcknowledgeV1; settlement?: UsageSettlementV1 };
   runId: string;
   taskId: string | null;
   estimateId: string | null;
@@ -484,7 +487,7 @@ export type CommandSuccessV1 = {
   result:
     | {kind:"saved-result-verification-started";taskId:string;runId:string;recoveryOf:RecoveryOf}
 
-    | { kind: "usage-settled"; taskId: string; runId: string; generation: number; charged: { work: Amount; handoff: Amount }; at: number; method: "remaining-grant" }
+    | { kind: "usage-settled"; taskId: string; runId: string; generation: number; charged: { work: Omit<Amount, "tokens"> & { tokens: number | null }; handoff: Amount }; at: number; method: "remaining-grant" | "owner-acknowledged-unmetered" }
     | { kind: "imported"; groupId: string; estimateId: string; estimateState: "queued" | "blocked-capability" | "input-too-large"; estimateReasonCode: string | null }
     | { kind: "proposal-edited"; proposalVersion: number }
     | { kind: "estimate-created"; estimateId: string; estimateVersion: number; estimateState: "queued" | "blocked-capability" | "input-too-large"; reasonCode: string | null; wakeId: string | null }

@@ -13,7 +13,7 @@ import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from
 import { frozenWorkAgent } from "./agentFreeze.js";
 import { continuationIdentity, registrationOf } from "./continuation.js";
 import { validateRetryGrantSource } from "./retryGrant.js";
-import { hasValidUsageSettlement, releasedSettlementCheckpoint, settlementSame } from "./usageSettlement.js";
+import { hasValidUsageSettlement, lineageWorkUsage, releasedSettlementCheckpoint, settlementSame } from "./usageSettlement.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { recordActivity } from "./activity.js";
 import { add, groupUsageUnknown } from "./budget.js";
@@ -138,7 +138,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         if (run.usageSettlement !== undefined && !hasValidUsageSettlement(store, run)) throw new ControlError("recovery-blocked", "retry-settlement");
         if(hasOptionalTaskPolicy(store,groupId,taskId)) {
           const funding=readFundedAllowance(store,run as never);if(!funding)throw new ControlError("recovery-blocked","retry-funding-missing");
-          const inherited=add(funding.inheritedUsage,run.cumulative.work);
+          const inherited=add(funding.inheritedUsage,lineageWorkUsage(run));
           const left=remainingBudget(work.grant.work,inherited);
           if(dimensions.some(d=>left[d]===0))throw new ControlError("task-not-retryable","authored-budget-exhausted");
           if(!released){saveRunBody(store,{...run,state:"settled-failed",recoverable:false,drive:{...drive,cleanedUp:false}},false);releaseCommitment(store,groupId,add(finiteCommitment(run.remaining.work),run.remaining.handoff));}
