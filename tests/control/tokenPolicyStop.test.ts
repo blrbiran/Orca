@@ -3,6 +3,7 @@ import { expect,it } from "vitest";
 import { driverHarness } from "./fixtures/driverHarness.js";
 import { readWork } from "../../src/control/queries.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
+import { withCommandContext } from "../../src/control/commandClient.js";
 it("stops an unbounded task with its authored ceiling intact, then admits a finite group ceiling",async()=>{
  const x=await driverHarness([{taskId:"a",tokenBudget:null}],{tokenPolicy:"optional-v1",killGraceMs:0,behaviour:()=>"stoppable"});
  const driver=x.driver();try {
@@ -22,14 +23,20 @@ it("stops an unbounded task with its authored ceiling intact, then admits a fini
  }finally{await driver.stop();await x.h.dispose();}
 });
 
-it("holds an unknown nullable stop and refuses remaining-grant settlement",async()=>{
+// Rewritten 2026-10-13 (spec 2026-10-13-unmetered-usage-settlement-design.md §A.1): it used to encode "a null remainder is
+// never settleable". It now encodes: a charge of a null remainder is still refused as unlimited, and the unmetered release is
+// for failed tasks only, so a handoff-stopped (not failed) run stays held. Each refusal is pinned by its reason, not its code.
+it("holds an unknown nullable stop: refuses a charge as unlimited and a release as not a failed task",async()=>{
  const x=await driverHarness([{taskId:"a",tokenBudget:null}],{tokenPolicy:"optional-v1",killGraceMs:0,behaviour:()=>"stoppable-usage-unknown"});const driver=x.driver();try {
   const id=await x.claim();await x.until(driver,()=>x.body(id).state==="accepted");
   const before=readControlGroup(x.h.store,"epoch","g").ledger.committedRemaining.tokens;
   await x.service.handoffStop(x.h.command("handoff-stop",{}));
   await x.until(driver,()=>{const r=x.body(id);if(r.state==="blocked")throw new Error(JSON.stringify(r.drive));return r.state==="settled-unrecoverable";});
   const view=readControlGroup(x.h.store,"epoch","g");expect(view.ledger.usageUnknown).toBe(true);expect(view.ledger.committedRemaining.tokens).toBe(before);
-  expect(view.runs[0]!.unknownUsageSettlement).toMatchObject({allowed:false,refusalReason:"run-usage-not-settleable"});
+  expect(view.runs[0]!.unknownUsageSettlement).toMatchObject({allowed:false,refusalReason:"run-usage-not-settleable",acknowledge:"release-unmetered"});
+  const settle=(acknowledge:string)=>{const c=x.h.command("settle-unknown-usage" as any,{taskId:"a",runId:id,generation:1,acknowledge});return withCommandContext(c.commandId,{client:"web",principal:"user:owner"},()=>(x.service as any).settleUnknownUsage(c));};
+  expect((await settle("charge-remaining-grant")).error.message).toBe("run-usage-not-settleable:unlimited-remainder");
+  expect((await settle("release-unmetered")).error.message).toBe("run-usage-not-settleable:current-failed-task");
   expect(x.service.setSpendCap({schema:"orca-raw-command-v1",commandId:"cap-after-unknown",actorId:"human",expectedRevision:0,verb:"set-spend-cap",target:{kind:"spend"},payload:{scope:"all",period:"total",tokens:5_000_000}})).toMatchObject({error:{code:"active-unbounded-budget-conflict"}});
  }finally{await driver.stop();await x.h.dispose();}
 });
