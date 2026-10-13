@@ -79,7 +79,7 @@ describe("Metrics layout (P2-5)", () => {
   });
   it("lets wide usage tables scroll inside their own box", () => {
     const usage = src("../src/UsagePanel.tsx");
-    expect(usage.match(/<div className="table-scroll">/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(usage.match(/<div className="table-scroll">/g)?.length).toBe(3);
     const css = src("../src/styles.css");
     const at = css.indexOf(".table-scroll {");
     expect(at).toBeGreaterThan(-1);
