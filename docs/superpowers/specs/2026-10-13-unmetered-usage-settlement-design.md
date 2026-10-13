@@ -95,3 +95,23 @@ Criteria: each new element asserted in zh and en with full text, and each remove
 
 ccloop-side transient (429) classification and backoff (separate ccloop spec, waits for a real `events.jsonl` sample);
 format re-ask; wizard and visual restyle.
+
+## Corrections (Orca session 7f37d261, 2026-10-13, during implementation)
+
+The text above is kept as written; these notes record where the implementation departs from it and why.
+
+1. **Lineage inherits observed usage only (human ruling, this session).** §A.3 charges work activeMs/attempts/sessions
+   from the remaining grant. Under `optional-v1` (the only policy that yields a null work token remainder) a retry's
+   authored budget is "authored grant minus lineage cumulative", so that charge exhausts attempts and the retry is
+   refused `authored-budget-exhausted` (measured), which contradicts §A.3's last line. The human chose: the group books the
+   conservative charge, and a task's lineage inherits only what the provider observed. `lineageWorkUsage()`
+   (`src/control/usageSettlement.ts`) is that rule; every lineage sum uses it (`inheritedWorkUsage` and
+   `readFundedAllowance` in `fundedAllowance.ts`, `retryTask.ts`, `savedResultRecovery.ts`). A fresh run after a release
+   still needs group headroom for the non-token dimensions, as after any remaining-grant settlement.
+2. **One count instead of a flag.** §A.4's `usageIncomplete: true` is the group view's `ledger.unmeteredRuns > 0`
+   (derived from the run views, never persisted). Results show no usage totals today, so nothing is flagged there.
+3. **Scope of the release.** Admission still requires a current failed task (§A.2's list), so a handoff-stopped (not
+   failed) run with unknown usage and an unlimited remainder stays held (`current-failed-task`), pinned by the rewritten
+   `tests/control/tokenPolicyStop.test.ts` criterion. Whether to open that path is a separate decision.
+4. **§B.1 placement.** Task detail shows the settlement entry only for failed or blocked runs: every fresh run starts with
+   unknown usage, and only those runs hide Retry for it.
