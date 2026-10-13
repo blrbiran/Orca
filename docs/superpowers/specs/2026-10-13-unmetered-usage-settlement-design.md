@@ -46,14 +46,16 @@ refuse" to "refuse unless the acknowledgement is `release-unmetered`".
 
 ### A.3 Effect
 
-Marker `usageSettlement` gains method `"owner-acknowledged-unmetered"` (schema union; the existing `remaining-grant`
-variant is byte-identical). Its `charged` is `{ work: null, handoff: <Amount> }`:
+Marker `usageSettlement` gains method `"owner-acknowledged-unmetered"` (the existing `remaining-grant` marker shape is
+unchanged). Only the work **token** dimension is unlimited; every other dimension is finite and keeps the one existing
+rule (charge the conservative remaining grant). So `charged.work.tokens` is `null` and everything else is an integer:
 
-- **work**: nothing booked. `run.cumulative.work` keeps exactly the observed usage; `group.used`, the usage ledger and
-  per-model accounting receive no work row for this settlement. `run.remaining.work` becomes the zero amount with
-  `tokens: null` kept (unlimited stays unlimited); `unknown.work = false`.
-- **handoff**: the handoff grant is always finite, so it is charged exactly as `remaining-grant` charges it today
-  (conservative remaining grant), keeping one rule for finite buckets.
+- **work tokens**: nothing booked. `run.cumulative.work.tokens` keeps exactly the observed usage; `group.used.tokens`,
+  the usage ledger and per-model accounting receive no work token row. `run.remaining.work.tokens` stays `null`
+  (unlimited stays unlimited).
+- **work activeMs / attempts / sessions** and the whole **handoff** bucket: charged exactly as `remaining-grant`
+  charges them today.
+- Both unknown flags are cleared, as `remaining-grant` clears them: in this code "unknown" means "unsettled".
 - Reservation disposition, request resolution and activity follow the existing code path; the activity row carries the
   new method and `charged.work: null`.
 
@@ -69,8 +71,8 @@ After the command, `retry-task` admits the run as it admits a `remaining-grant`-
 
 ### A.5 Criteria (each must be seen red by deleting its own branch)
 
-1. Null remainder + `release-unmetered` succeeds; `group.used.tokens` unchanged for work; marker method and
-   `charged.work === null` exact.
+1. Null remainder + `release-unmetered` succeeds; `group.used.tokens` grows by the handoff charge only; marker method
+   and `charged.work.tokens === null` exact; no work token ledger row.
 2. Null remainder + `charge-remaining-grant` still refused `unlimited-remainder` (literal).
 3. Finite remainder + `release-unmetered` refused `finite-remainder` (literal).
 4. After release, `retry-task` succeeds (previously `usage-unknown`).
