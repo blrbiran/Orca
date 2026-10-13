@@ -40,7 +40,7 @@ const view: GroupViewV1 = {
   summary: { groupId: "g", repoId: "orca", state: "running", commandRevision: 6, projectionSeq: 4, stopMode: "pause", stopState: "paused", claimBlocked: true, recoveryBlockerCount: 1 },
   graphVersion: 1, plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "goal-x", successConditions: ["s-1"] },
   proposal: { state: "confirmed", proposalVersion: 2, planHash: "a".repeat(64), budgetMode: "soft", contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
-  ledger: { groupLimit: amount(100), used: amount(10), committedRemaining: amount(20), explicitUnallocatedReserve: amount(70), budgetDeficit: amount(0), usageUnknown: false },
+  ledger: { groupLimit: amount(100), used: amount(10), committedRemaining: amount(20), explicitUnallocatedReserve: amount(70), budgetDeficit: amount(0), usageUnknown: false, unmeteredRuns: 0 },
   allocations: [], workItems: [item],
   estimates: [{ estimateId: "est-1", estimateVersion: 1, state: "interrupted", profile: { profileId: "p1", profileHash: "b".repeat(64) }, mode: "strict", requestHash: null, outputHash: null, output: null, reasonCode: null }],
   runs: [run], checkpoints: [],

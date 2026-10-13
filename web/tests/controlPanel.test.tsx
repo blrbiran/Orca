@@ -37,7 +37,7 @@ function groupView(over: Partial<GroupViewV1> = {}): GroupViewV1 {
     proposal: { state: "confirmed", proposalVersion: 2, planHash: "a".repeat(64), budgetMode: "soft", contextPolicy: { handoffAtContextTokens: null }, profiles: {
       estimator: { profileId: "all", profileHash: "b".repeat(64) }, worker: { profileId: "all", profileHash: "b".repeat(64) },
       handoff: { profileId: "all", profileHash: "b".repeat(64) }, goalReview: { profileId: "all", profileHash: "b".repeat(64) } }, executionSnapshotHash: "c".repeat(64) },
-    ledger: { groupLimit: amount(9_000_000), used: amount(1_000_000), committedRemaining: amount(3_000_000), explicitUnallocatedReserve: amount(5_000_000), budgetDeficit: amount(0), usageUnknown: false },
+    ledger: { groupLimit: amount(9_000_000), used: amount(1_000_000), committedRemaining: amount(3_000_000), explicitUnallocatedReserve: amount(5_000_000), budgetDeficit: amount(0), usageUnknown: false, unmeteredRuns: 0 },
     allocations: [
       { ownerKind: "task", ownerId: "a", bucket: "work", state: "active", amount: amount(3_000_000), fieldProvenance: provenance("complex-1m-default") },
       { ownerKind: "task", ownerId: "b", bucket: "work", state: "draft-encumbered", amount: amount(2_000_000), fieldProvenance: provenance("model", "est-1") },

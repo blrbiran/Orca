@@ -25,7 +25,7 @@ const view: GroupViewV1 = {
   graphVersion: 1,
   plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "Ship", successConditions: ["passes"] },
   proposal: { state: "editable", proposalVersion: 2, planHash: "a".repeat(64), budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
-  ledger: { groupLimit: amount(9_000), used: amount(0), committedRemaining: amount(3_000), explicitUnallocatedReserve: amount(6_000), budgetDeficit: amount(0), usageUnknown: false },
+  ledger: { groupLimit: amount(9_000), used: amount(0), committedRemaining: amount(3_000), explicitUnallocatedReserve: amount(6_000), budgetDeficit: amount(0), usageUnknown: false, unmeteredRuns: 0 },
   allocations: [{ ownerKind: "task", ownerId: "a", bucket: "work", state: "draft-encumbered", amount: amount(3_000), fieldProvenance: provenance }],
   workItems: [{ taskId: "a", status: "draft", dependencyTaskIds: [], targetVersion: 1, configHash: null, originalContractHash: "e".repeat(64), derivedContractHash: null, currentRunId: null, pendingRunId: null, lineageRunIds: [] }],
   estimates: [], runs: [], checkpoints: [], handoffRequests: [], stop: null, recoveryBlockers: [], recentCommandIds: [],

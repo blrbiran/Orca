@@ -41,7 +41,7 @@ const view = (stale = false, loopVersion = 2): GroupViewV1 => ({
   graphVersion: 1,
   plan: { repoId: "orca", planId: "plan-demo", planHash: PLAN, goal: "Ship", successConditions: ["passes"] },
   proposal: { state: "editable", proposalVersion: 2, planHash: PLAN, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
-  ledger: { groupLimit: amount(90_000), used: amount(0), committedRemaining: amount(6_600), explicitUnallocatedReserve: amount(6_000), budgetDeficit: amount(0), usageUnknown: false },
+  ledger: { groupLimit: amount(90_000), used: amount(0), committedRemaining: amount(6_600), explicitUnallocatedReserve: amount(6_000), budgetDeficit: amount(0), usageUnknown: false, unmeteredRuns: 0 },
   allocations: [
     { ownerKind: "task", ownerId: "a", bucket: "work", state: "draft-encumbered", amount: amount(3_000), fieldProvenance: provenance },
     { ownerKind: "task", ownerId: "a", bucket: "handoff", state: "draft-encumbered", amount: amount(300), fieldProvenance: provenance },

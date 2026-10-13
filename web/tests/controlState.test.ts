@@ -37,7 +37,7 @@ const groupView = (over: Partial<GroupViewV1> = {}): GroupViewV1 => ({
     committedRemaining: { tokens: 1000, activeMs: 0, attempts: 0, sessions: 0 },
     explicitUnallocatedReserve: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 },
     budgetDeficit: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 },
-    usageUnknown: false,
+    usageUnknown: false, unmeteredRuns: 0,
   },
   allocations: [],
   workItems: [],

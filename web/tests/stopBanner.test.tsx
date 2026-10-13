@@ -28,7 +28,7 @@ const view = (state: GroupViewV1["summary"]["state"], stop: Stop | null): GroupV
   summary: { groupId: "g", repoId: "orca", state, commandRevision: 6, projectionSeq: 4, stopMode: stop?.mode ?? null, stopState: stop?.state ?? null, claimBlocked: false, recoveryBlockerCount: 0 },
   graphVersion: 1, plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "Ship", successConditions: ["done"] },
   proposal: { state: "confirmed", proposalVersion: 2, planHash: "a".repeat(64), budgetMode: "soft", contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: "c".repeat(64) },
-  ledger: { groupLimit: amount(9_000), used: amount(10), committedRemaining: amount(0), explicitUnallocatedReserve: amount(8_990), budgetDeficit: amount(0), usageUnknown: false },
+  ledger: { groupLimit: amount(9_000), used: amount(10), committedRemaining: amount(0), explicitUnallocatedReserve: amount(8_990), budgetDeficit: amount(0), usageUnknown: false, unmeteredRuns: 0 },
   allocations: [], workItems: [], estimates: [], runs: [settled], checkpoints: [], handoffRequests: [], stop, recoveryBlockers: [], recentCommandIds: [],
 });
 const shutdownStop = (state: Stop["state"]): Stop =>
