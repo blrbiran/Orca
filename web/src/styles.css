@@ -325,8 +325,10 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .account-name { font-weight: 600; color: var(--text-strong); }
 .account-role { color: var(--muted); font-size: var(--text-xs); }
 .account-menu { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--border); }
-.notices { padding: 8px 24px; border-bottom: 1px solid var(--border); background: var(--danger-subtle); }
+.notices { padding: 6px 24px; border-bottom: 1px solid var(--border); background: var(--warn-subtle); font-size: var(--text-sm); }
 .notices ul { margin: 0; padding-left: 16px; }
+.notices li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.notices button { padding: 2px 10px; }
 .usage-pickers, .usage-new-cap, .usage-calendar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 12px 0; }
 .usage-headline { display: flex; gap: 24px; }
 .usage-headline dd { margin: 0; font-size: var(--text-lg); font-weight: 600; }
@@ -340,10 +342,22 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .authenticated-shell .sidebar { position: static; height: 100%; min-height: 0; overflow-y: auto; }
 .authenticated-shell .content { min-height: 0; overflow-y: auto; }
 .run-state > div { margin-bottom: 4px; }
-@media (max-width: 760px) {
-  .authenticated-shell > .shell { grid-template-rows: minmax(0, auto) minmax(0, 1fr); }
-  .authenticated-shell .sidebar { height: auto; max-height: 45dvh; }
+/* Narrow screens: the page scrolls as a whole (taste refinement P1-2). */
+@media (max-width: 760px), (max-height: 560px) {
+  .authenticated-shell { height: auto; min-height: 100dvh; overflow: visible; }
+  .authenticated-shell > .shell { overflow: visible; grid-template-rows: auto auto; }
+  .authenticated-shell > .notices { max-height: none; }
+  .authenticated-shell .sidebar { height: auto; max-height: none; overflow: visible; gap: 8px; padding: 8px 12px; }
+  .authenticated-shell .content { overflow: visible; }
+  .nav { flex-wrap: nowrap; overflow-x: auto; }
+  .nav-item { white-space: nowrap; }
+  .sidebar-foot { display: none; }
 }
+@media (pointer: coarse) {
+  button, select, input, .nav-item { min-height: 44px; }
+}
+.skip-link { position: absolute; left: -9999px; top: 8px; z-index: 100; }
+.skip-link:focus { left: 8px; }
 
 /* Progress spec layout B: primary progress first, queue beside it when space allows. */
 .overview-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }

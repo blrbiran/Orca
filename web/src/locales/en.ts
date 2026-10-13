@@ -223,6 +223,7 @@ export const en = {
     brandTitle: "Leave it to Orca — every idea, made real.",
     chainRunning: "a chain is running",
     needsAttention: "needs attention",
+    skipToContent: "Skip to content",
     theme: "Theme",
     language: "Language",
     project: "Project",
@@ -905,6 +906,7 @@ export const en = {
     noticeLine: "{{kind}}: {{subject}} · {{at}}",
     noticeKind: { "user-created": "user created", "password-changed": "password changed", "user-disabled": "user disabled", "key-rotated": "signing key rotated" },
     dismiss: "Dismiss",
+    dismissAll: "Dismiss all",
   },
   usage: {
     title: "Usage",

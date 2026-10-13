@@ -109,6 +109,7 @@ export const zh: Translation<typeof en> = {
     brandTitle: "交给 Orca —— 每个想法，都能成真。",
     chainRunning: "有一条链在运行",
     needsAttention: "需要处理",
+    skipToContent: "跳到正文",
     theme: "主题",
     language: "语言",
     project: "项目",
@@ -800,6 +801,7 @@ export const zh: Translation<typeof en> = {
     noticeLine: "{{kind}}：{{subject}} · {{at}}",
     noticeKind: { "user-created": "新增了用户", "password-changed": "修改了密码", "user-disabled": "停用了用户", "key-rotated": "更换了签名密钥" },
     dismiss: "知道了",
+    dismissAll: "全部知道了",
   },
   usage: {
     title: "用量",

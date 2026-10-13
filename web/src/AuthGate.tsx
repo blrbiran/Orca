@@ -281,6 +281,13 @@ function Notices(): JSX.Element | null {
     setRefusal(answer.ok ? null : answer);
     await read();
   };
+  const dismissAll = async (): Promise<void> => {
+    for (const notice of notices) {
+      const answer = await ackNotice(notice.seq);
+      if (!answer.ok) { setRefusal(answer); break; }
+    }
+    await read();
+  };
   if (notices.length === 0 && refusal === null) return null;
   return (
     <section className="notices" aria-label={t("auth.noticesTitle")}>
@@ -296,6 +303,9 @@ function Notices(): JSX.Element | null {
           </li>
         ))}
       </ul>
+      {notices.length > 1 && (
+        <button type="button" onClick={() => void dismissAll()}>{t("auth.dismissAll")}</button>
+      )}
       {refusal !== null && <Refusal refusal={refusal} />}
     </section>
   );
