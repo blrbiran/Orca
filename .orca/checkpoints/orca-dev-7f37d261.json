@@ -3,41 +3,53 @@
   "runId": "orca-dev-7f37d261",
   "runtime": "claude-code",
   "sessionRef": "7f37d261-9850-49ab-ae9c-6f74a2085a30",
-  "writtenAt": "2026-10-13T14:47:39.571Z",
-  "head": "7a3d6842c6b81c0a95806cb58db213ac7a0f0833",
+  "writtenAt": "2026-10-13T15:26:46.900Z",
+  "head": "7e5c8abca5ac5c4e77e7cd91f7eda75786960a21",
   "level": {
     "kind": "reading",
-    "level": 332028,
+    "level": 453672,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
-    "band": 1
+    "band": 2
   },
   "next": [
-    "D Task 6: mutations in a clone, full gate, whole-branch review, spec correction note (branch codex/unmetered-settlement, worktree Orca-wt/unmetered)",
-    "C: ccloop spec + TDD for Codex 429 recognition and in-phase bounded backoff",
-    "Update Orca/ccloop/ccmem handoffs"
+    "Finish D gate rerun (branch codex/unmetered-settlement, rebased on main), spec correction section",
+    "C: widen M17 timing margin, finish ccloop gate",
+    "Favicon for Orca web from DoWhiz favicon.ico",
+    "Update Orca/ccloop/ccmem handoffs; rebase D onto main after handoff commit"
   ],
   "open": [
-    "Session crossed T1 330k; human said to ignore context size this session"
+    "Session past T2 450k; human said to ignore context size this session"
   ],
   "awaitingHuman": [
     {
       "kind": "irreversible",
-      "what": "merge codex/unmetered-settlement into Orca main (--ff-only) and push, after D gate"
+      "what": "Orca: ff-merge codex/unmetered-settlement and push main"
+    },
+    {
+      "kind": "irreversible",
+      "what": "ccloop: ff-merge codex/codex-rate-limit-backoff and push, then Orca repin"
     },
     {
       "kind": "named-authorization",
-      "what": "review: lineage inherits only observed usage for an unmetered release (human chose this mid-session)"
+      "what": "review lineage-observed-only ruling implementation and unmeteredRuns naming"
     }
   ],
   "measurements": [
     {
-      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca-wt/unmetered log --oneline -9",
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca-wt/unmetered log --oneline -3",
       "exitCode": 0,
-      "commit": "7a3d6842c6b81c0a95806cb58db213ac7a0f0833",
-      "observedAt": "2026-10-13T14:47:39.519Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-7f37d261-Xo1rFD/1.txt"
+      "commit": "7e5c8abca5ac5c4e77e7cd91f7eda75786960a21",
+      "observedAt": "2026-10-13T15:26:46.597Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-7f37d261-b94g6W/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/ccloop-wt/codex-429 log --oneline -4",
+      "exitCode": 0,
+      "commit": "7e5c8abca5ac5c4e77e7cd91f7eda75786960a21",
+      "observedAt": "2026-10-13T15:26:46.690Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-7f37d261-b94g6W/2.txt"
     }
   ]
 }
