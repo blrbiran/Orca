@@ -1,7 +1,8 @@
 # Orca 面板 UI 重做 —— handoff（UI 这一批专用）
 
 > ✅ **第一批（§〇–§五）已由人 merge 进 main（2026-09-27）；结论已并回 `docs/handoff/handoff.md` §三、§四 4.0.a、§6.19、§9.0d —— 以那里为准。**
-> 🔵 **第二批在飞：读 §六**（人要求后续问题继续追加在本文）。
+> ✅ 第二批（§六）已合入 main。
+> 🔵 **第三批（精修，分支 `ui/panel-taste`）待人视觉验收与合并：读 §七。**（人要求后续问题继续追加在本文）
 
 > **读者是下一个 agent。** 这一批 UI 改动的交接写在本文，**不写进 `docs/handoff/handoff.md`**；
 > 等 UI 基本 ready、由人决定合并时，再把本文的结论并回 `handoff.md`。
@@ -13,13 +14,13 @@
 ## 〇、先跑这些，以输出为准
 
 ```bash
-git -C /Users/biran/code/skills/loop/Orca worktree list      # 找 ui/panel-redesign 的 worktree 在哪
-git -C <worktree> log --oneline main..ui/panel-redesign       # 这一批的全部提交
+git -C /Users/biran/code/skills/orca/Orca worktree list      # 找当前 UI 分支的 worktree（第三批：ui/panel-taste）
+git -C <worktree> log --oneline main..<分支>                  # 这一批的全部提交
 git -C <worktree> status --porcelain                          # 期望只有 ?? node_modules 与 ?? web/node_modules（两个软链，永不提交）
 ```
 
-🔴 **别的 agent 在 `main` 与主工作树 `/Users/biran/code/skills/loop/Orca` 上干活。** 本批一律只在 worktree 的
-`ui/panel-redesign` 分支上做；主工作树里不跑 build／测试、不提交、不 checkout。合并、push、删 worktree／分支都归人（CLAUDE.md Rule 15）。
+🔴 **别的 agent 在 `main` 与主工作树 `/Users/biran/code/skills/orca/Orca` 上干活**（仓库 2026-10-13 从 `loop/` 搬到 `orca/`，下文旧批次里的 `loop/` 路径同理替换）。UI 工作一律只在 worktree 的
+UI 分支上做；主工作树里不跑 build／测试、不提交、不 checkout。合并、push、删 worktree／分支都归人（CLAUDE.md Rule 15）。
 
 ⚠️ worktree 目录建在会话 scratchpad（`/private/tmp/...`）下，**重启会丢目录，提交不会丢**（在主仓库的对象库里）。
 目录没了就从主仓库 `git worktree add <新路径> ui/panel-redesign`，并把新路径告诉人；`git worktree prune` 不归你。
@@ -154,3 +155,49 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 - 真 `~/.orca` 新写入的数据留不留。
 - 未钉住的一处：`contrast.test.ts` 只量深色块；浅色的 `--on-accent`（白字叠 `#2563eb`，约 5.17）没有判据。
 
+
+---
+
+## 七、第三批：impeccable 评审后的精修（分支 `ui/panel-taste`，会话 `62660548`，2026-10-13/14）
+
+**worktree**：`/Users/biran/code/skills/orca/Orca-wt/ui-taste`（不在 scratchpad，重启不丢），从 main 主题行 `feat(web): give the panel the DoWhiz favicon` 那一笔拉出。
+**状态自查**：`git -C <worktree> log --oneline main..ui/panel-taste` 非空 ⇒ 未合。合并、push、删 worktree／分支归人（Rule 15）。
+
+**唯一真相源（别重新推导）**
+| 材料 | 路径（worktree 内） |
+|---|---|
+| spec（§7 = 独立审查后的修订，覆盖前文） | `docs/superpowers/specs/2026-10-14-panel-taste-refinement-design.md` |
+| 计划（Task 1–9，含 Global Constraints／Review Focus） | `docs/superpowers/plans/2026-10-14-panel-taste-refinement.md` |
+| 执行台账（每个任务的审查、修复轮、全部 `Ruling:`、deferred minor） | `.superpowers/sdd/2026-10-14-panel-taste-refinement/progress.md`（`git add -f`） |
+| 终审报告（含 20 条 deferred minor 的分拣表） | 同目录 `final-review.md` |
+| `web/DESIGN.md` | 主题 token、语气（data-tone）、字号、主按钮、布局规则 —— 以后改 UI 先读它 |
+
+**人裁（会话 62660548）**：四条 P1 + P2 全做、P3 不做；浅色暖中性；深色**不许暖**（agent 建议中性石墨，人未否）；服务端不动；评审／实施用 impeccable（主）＋ taste-skill 的 redesign/minimalist（辅）。
+
+**做了什么**（按主题行找，`git log main..ui/panel-taste`）：
+- token：浅色暖纸、深色中性石墨、浅色 accent `#1d4ed8`；`web/tests/lightTheme.test.ts` 新钉浅色对比度与两个浅色块逐字相同。
+- 语气：`role=status/note` 默认中性，**无 `data-tone` 的 `role=alert` 仍红**；颜色只由 `data-tone="info|ok|warn|danger"` 给；「未配置执行端口」改 `note`＋warn。
+- 外壳：≤760px 宽或 ≤560px 高整页滚动；导航单行横滚（`minmax(0,1fr)` 防撑宽）；页脚隐藏、项目说明保留；通知暖色＋「全部知道了」；跳到正文（按钮，不碰 hash 路由）；`pointer: coarse` 44px。
+- 审阅：同意成功且行离开列表后自动跳下一条；j/k/a/c（只在 Decisions、焦点在 body 或 Decisions 区内、非输入框、非按住、无在途、已记录的同意不再发）；「本次已审 n」。
+- Overview：决策最多 3 条＋「查看全部 n 条决策」；去掉卡套卡与整列 `aria-live`。
+- Metrics：三张比率卡片、说明常显（依既有契约不折叠）、数据健康一行、用量表横滚；**只改了 zh 说明**。
+- 模板：字号 14/18/22；只有 `.btn-primary` 填色（各视图主操作显式标）；永不可用的项目按钮隐藏；中文角色名 所有者/成员、Chains 统一叫「链」、缺 ccmem 不再回显英文原句。
+
+**现测**（干净 clone，分支尖端＝主题行 `fix(web): final verification — …`；命令与日志在台账 Task 9 段）：typecheck／web build／`--ws check`（web 123 文件／1050 条）／`verify:panel` RC 0；根 vitest 的红全部是负载超时（单跑全绿：gateCheck、driverRecovery、**driverRequirementSplit、retryTask、settleUnknownUsage —— 后三个不在旧基线 flake 名单，补登**）＋ `taskResultPaired`（**在 main 基线 cfb7728 上同样红**：硬编码 ccloop 路径，环境性、既有）。impeccable 检测器 `[]`；真浏览器 390／320px 无横向溢出（20/20）；真 `~/.orca` 前后不变。
+- 方法：每任务 TDD＋变异（clone 内，0 字节还原）＋独立任务审查；全分支终审（opus）＋一次集中修复＋验证后修复，各带范围复审。
+
+**⚠️ 本批踩到的（下次直接用）**
+1. 🔴 **en 的 metrics 说明与服务端句子逐字一致**，被根测试 `tests/metrics/noteCodes.test.ts` 钉着 —— 只跑 `--ws check` 看不见它；改 web 文案后要跑根测试。
+2. 🔴 **根测试 `scanPanelText` 会把 web 源码里带空格的字符串字面量当作未翻译文案**（如后代选择器）—— 同样只在根套件里出现。
+3. 🔴 **worktree 里软链的 `node_modules` 会被 `git add` 扫进去**（`node_modules/` 带斜杠不匹配软链）；已在根 `.gitignore` 加 `/node_modules`、`/web/node_modules`。一律按路径 stage。
+4. jsdom 不实现 `isContentEditable`、不把 `contentEditable=` 反射成属性；新测试文件要 `// @vitest-environment jsdom`（web 默认 node）；locale 是具名导出。
+5. 子 agent 在本机删 clone（`rm -rf`）会被闸门拦 —— scratchpad 里留有 `mut-t3`、`mut-t4f`、`mut-t5`、`mut-t7`、`mut-t9fix`、`t9/`，均为干净 clone，人可删。
+
+**awaitingHuman**
+- 视觉验收（截图：会话 scratchpad `shots/before|after|after-fix`；或自起面板 `npm run build --workspace web` 后看）。
+- 🔴 合并 `ui/panel-taste` 进 main、push —— 人做（Tier 0）：`cd /Users/biran/code/skills/orca/Orca && git pull --ff-only && git merge --no-ff ui/panel-taste && git push`。合并后把本节结论并回 `handoff.md`。
+- 是否授权改写 `shell.test.tsx`：让「无执行端口」不再点亮任务控制的红点（现在红点与琥珀色说明不一致）。
+- 是否授权改服务端句子＋`noteCodes.test.ts`：让英文 metrics 说明也去掉 spec 引用。
+- 是否授权改写 `metricsNotes.test.tsx`：去掉「数据健康」行里标题与计数文字的重复（「未解析的决策 / 未解析的决策：0」）。
+- 是否要客户端延时发送的「撤销同意」（现在同意即记录，误同意只能补一条纠正）。
+- 终审分拣为「可以留」的 18 条 minor 与 M4/M7（台账 `## Final review` 段）是否排进下一轮。
