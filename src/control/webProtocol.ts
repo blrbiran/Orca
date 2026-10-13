@@ -1411,6 +1411,7 @@ export const groupViewSchema = z
         explicitUnallocatedReserve: budgetAmountSchema,
         budgetDeficit: amountSchema,
         usageUnknown: z.boolean(),
+        unmeteredRuns: safeInteger.nonnegative(),
       })
       .strict(),
     allocations: z.array(allocationViewSchema),

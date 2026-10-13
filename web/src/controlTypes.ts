@@ -315,7 +315,7 @@ export type GroupViewV1 = {
     profiles: null | { estimator: ProfileBindingV1 | null; worker: ProfileBindingV1; handoff: ProfileBindingV1; goalReview: ProfileBindingV1 };
     executionSnapshotHash: string | null;
   };
-  ledger: { groupLimit: BudgetAmount; used: Amount; committedRemaining: Amount; explicitUnallocatedReserve: BudgetAmount; budgetDeficit: Amount; usageUnknown: boolean };
+  ledger: { groupLimit: BudgetAmount; used: Amount; committedRemaining: Amount; explicitUnallocatedReserve: BudgetAmount; budgetDeficit: Amount; usageUnknown: boolean; /** Server always sends it (derived); optional so view fixtures need not repeat 0. */ unmeteredRuns?: number };
   allocations: AllocationViewV1[];
   workItems: WorkItemViewV1[];
   /** Wave 3 M-5: the group's frozen reconcile selection. Optional here only so literal fixtures need no edit; absent reads as null. */

@@ -984,7 +984,8 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
       budgetMode: proposal.budgetMode, contextPolicy: proposal.contextPolicy, profiles: proposal.profiles,
       executionSnapshotHash: proposal.executionSnapshotHash,
     },
-    ledger: body.ledger,
+    // Spec 2026-10-13-unmetered-usage-settlement-design.md §A.4: derived, never persisted; > 0 means the totals are a lower bound.
+    ledger: { ...body.ledger, unmeteredRuns: Number(store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id=? AND json_extract(body,'$.usageSettlement.method')='owner-acknowledged-unmetered'").get(groupId)!.n) },
     allocations,
     workItems: workViews(store, groupId, plan, snapshot, archived.plan, readSnapshot),
     // validateExecutionSnapshot has already proved the group record's reconcile slot equals the snapshot's.

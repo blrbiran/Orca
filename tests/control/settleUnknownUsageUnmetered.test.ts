@@ -42,6 +42,7 @@ describe("unmetered release of an unlimited run's unknown usage", () => {
       expect(after.unknown).toEqual({ work: false, handoff: false });
       expect(after.usageSettlement).toMatchObject({ method: "owner-acknowledged-unmetered", charged: { work: { tokens: null } } });
       expect(hasValidUsageSettlement(x.h.store, after)).toBe(true);
+      expect(readControlGroup(x.h.store, "epoch", "g").ledger.unmeteredRuns).toBe(1);
       const prior = JSON.parse(String(x.h.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq DESC LIMIT 1").get(id)!.body));
       expect(() => recordUsage(x.h.store, { ...prior, eventSeq: prior.eventSeq + 1 })).toThrow("run-usage-settled");
       // Review Focus 2/3: the null work token allowance belongs to the new method and its exact shape only.
@@ -81,7 +82,9 @@ describe("unmetered release of an unlimited run's unknown usage", () => {
       expect(refused.error).toMatchObject({ code: "run-usage-not-settleable" });
       expect(refused.error.message).toContain("finite-remainder");
       expect(readControlGroup(t.h.store, "epoch", "g").runs[0]!.unknownUsageSettlement).toMatchObject({ allowed: true, acknowledge: "charge-remaining-grant" });
+      expect(readControlGroup(t.h.store, "epoch", "g").ledger.unmeteredRuns).toBe(0);
       expect(await settle(t, runId)).not.toHaveProperty("error");
+      expect(readControlGroup(t.h.store, "epoch", "g").ledger.unmeteredRuns).toBe(0);
       const stored = t.body(runId).usageSettlement;
       expect(stored.method).toBe("remaining-grant");
       expect(usageSettlementSchema.parse(stored)).toEqual(stored);
