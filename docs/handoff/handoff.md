@@ -149,7 +149,13 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ### 4.2 agent 的活（上面做完、或与之无关时）
 
 0. **D：放行不记数＋失败任务的出路可见**（§3.3）。新会话在 `codex/unmetered-settlement` 工作树里按 spec TDD 实现，每个新分支点名变异看见红；改的既有判据单列。完成后跑全量门，再交人合推（它叠在 repin 分支上，repin 先合）。
-0b. **C：ccloop 识别 429／5xx＋阶段内有限退避**（§3.3 的分诊）：**等人给真实 `events.jsonl`**；拿到后在 ccloop 先写短 spec 再 TDD（守 ccloop 自己的规则：改既有判据要人逐条点名）。完成后可用 `gpt-6-luna` 做一次真 Codex 回归（付费，先问人）。
+0b. **C：ccloop 识别 429＋阶段内有限退避**（§3.3 的分诊）。**真实样本已到**（人 2026-10-13 提供，测试者的 `recommendations` 任务）：
+   `/Users/biran/code/skills/orca/orca_archived_files/recommendations-{1,2}-events.jsonl`，两份都只有 4 行：`thread.started`、`turn.started`、
+   `{"type":"error","message":"exceeded retry limit, last status: 429 Too Many Requests"}`、`{"type":"turn.failed","error":{"message":"<同一句>"}}` —— **失败发生在任何 `item.*` 之前**。
+   控制器（`6b7843ec`）的设计建议，**未经人裁**：① 判定式只认 `turn.failed.error.message`／`error.message` 里的 `last status: 429`（5xx 无样本，不承诺）；
+   ② **只在「`turn.started` 后零 `item.*` 即 429 失败」时**阶段内有限退避重试（工作区未被动过），有 item 的 429 只把原因改报 `codex-rate-limited`、照旧失败；
+   ③ **待人裁**：失败调用没有 `turn.completed` ⇒ 用量 null ⇒ 重试成功后 run 仍是未知用量、Orca 照样卡住。选项 (i) 对「零 item＋429」调用记 0（理由：HTTP 层被拒、429 通常不计费——本质是推定零，与 D 同类）；(ii) 坚持 null，重试成功后仍需 owner 结算。控制器倾向 (i)。
+   在 ccloop 先写短 spec 再 TDD（守 ccloop 自己的规则：改既有判据要人逐条点名）。完成后可用 `gpt-6-luna` 做一次真 Codex 回归（付费，先问人）。
 1. **OMP skills 的真 provider 验收**：有可用 provider 时（LiteLLM 端点要人起；Codex 额度已耗尽），照 `2026-10-12-oh-my-pi-acceptance.md` 的隔离形状、带一个声明 skill 的任务跑一次，独立审计（`scripts/verify-omp-acceptance.ts`）要能看见 `<skills>` 块与 `SKILL.md` 的 read 调用。**模型选择器只是验收数据，不设默认。**
 2. **ccmem 适配 Codex 与 oh-my-pi**：人的**下一个项目**，未开始；先 brainstorming，记在 ccmem 与 Orca 两边的 handoff。
 3. **OMP 仍延后的**：OMP 子 agent、交互式审批桥、codex 专属的 saved-result 恢复对 omp 的支持；single-call 不提供（理由见 §五）。
