@@ -250,6 +250,9 @@ export const en = {
   decisions: {
     title: "Unreviewed high-tier decisions",
     count: "{{shown}} of {{total}}",
+    reviewedThisSession: "Reviewed this session: {{n}}",
+    keyHint: "Keys: j / k next and previous, a agree, c write a correction",
+    correctionTitle: "Disagree? Record a correction",
     lede: "High-tier decisions an agent recorded that nobody has reviewed yet. Open one, read it, then Agree or Correct.",
     titleReviewed: "Reviewed decisions",
     ledeReviewed: "Decisions someone has already reviewed, at any tier. Open one to read it again or record a correction.",

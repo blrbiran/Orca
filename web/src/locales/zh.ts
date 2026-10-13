@@ -136,6 +136,9 @@ export const zh: Translation<typeof en> = {
   decisions: {
     title: "未评审的高层级决策",
     count: "{{shown}} / {{total}}",
+    reviewedThisSession: "本次已审 {{n}} 条",
+    keyHint: "快捷键：j / k 上下切换，a 同意，c 写纠正",
+    correctionTitle: "不同意？记一条纠正",
     lede: "agent 记录下、还没人评审过的高层级决策。打开一条，读完，然后点「同意」或「纠正」。",
     titleReviewed: "已评审的决策",
     ledeReviewed: "已经有人评审过的决策，不论层级。打开一条可以重读，或记录一条纠正。",

@@ -108,7 +108,10 @@ import { overviewFocusId } from "./overviewNavigation.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
 import { ErrorPage } from "./ErrorPage.js";
 import i18n, { currentLanguage, writeLanguage } from "./i18n.js";
-import { DecisionsView, NO_FILTER, rowsForStatus } from "./DecisionsView.js";
+import { DecisionsView, NO_FILTER, filterRows, rowsForStatus } from "./DecisionsView.js";
+import { rowKey } from "./DecisionList.js";
+import { nextAfterReview } from "./reviewFlow.js";
+import { reviewKeyAction } from "./reviewKeys.js";
 import type { DecisionFilter, DecisionStatus } from "./DecisionsView.js";
 import { MemoryView } from "./MemoryView.js";
 import { pickProject, projectName, readProject, writeProject } from "./project.js";
@@ -226,6 +229,9 @@ export function App(): JSX.Element {
   // Spec §9.2(1): Unreviewed reads /api/todo (home.todo, also the sidebar badge); the other two read /api/decisions.
   const [status, setStatus] = useState<DecisionStatus>("unreviewed");
   const [allRows, setAllRows] = useState<DecisionStatusRow[] | null>(null);
+  /** Taste refinement P1-3: reviews this browser recorded since it opened the panel, and a pending move to the next row. */
+  const [reviewedThisSession, setReviewedThisSession] = useState(0);
+  const [pendingAdvance, setPendingAdvance] = useState<{ reviewed: DecisionListRow; before: DecisionListRow[] } | null>(null);
   const [theme, setTheme] = useState<ThemePref>(() => readTheme(browserStorage()));
   const [showAdvanced, setShowAdvanced] = useState(() => readShowAdvanced(browserStorage()));
   useEffect(() => {
@@ -1078,6 +1084,10 @@ export function App(): JSX.Element {
     status === "unreviewed" ? todo.data ?? [] : rowsForStatus(allRows ?? [], status);
   // Final review M-T8: Reviewed / All before their first read are loading, not empty.
   const statusLoading = status === "unreviewed" ? todo.status === "loading" : allRows === null;
+  // The Decisions pane's rows and filter, shared by both of its branches and by the review loop (taste refinement P1-3).
+  const scopedDecisionRows = projects === null || scope.kind === "all" ? statusRows : statusRows.filter((row) => row.projectKey === project);
+  const effectiveDecisionFilter = projects === null ? filter : { ...filter, projectKey: "" };
+  const visibleDecisionRows = filterRows(scopedDecisionRows, effectiveDecisionFilter);
 
   /**
    * Parked finding N-1 / ruling R71. Opening another row takes the previous
@@ -1124,6 +1134,7 @@ export function App(): JSX.Element {
     verb: "agree" | "correct",
     payload: RecordCorrectionInput | null,
     submittedForm?: CorrectionForm,
+    advanceFrom?: { reviewed: DecisionListRow; before: DecisionListRow[] },
   ): Promise<void> => {
     const requestId = nextCommandId();
     const sent = payload === null ? null : { ...payload };
@@ -1137,7 +1148,9 @@ export function App(): JSX.Element {
       }
       setDecisionRequests((all) => settleRequest(all, requestId, { kind: "recorded", text: verb === "agree" ? "decisions.recordedReviewed" : "decisions.correctionRecorded" }));
       if (submittedForm !== undefined) setDetailDrafts((all) => clearIfUnchanged(all, "correction", correctionKey(owner.projectKey, owner.decisionId), submittedForm));
+      setReviewedThisSession((n) => n + 1);
       await Promise.all([readTodo(), loadHome()]);
+      if (verb === "agree" && advanceFrom !== undefined) setPendingAdvance(advanceFrom);
     } catch (err) {
       setDecisionRequests((all) => settleRequest(all, requestId, { kind: "refused", refusal: failureFrom(err) }));
     }
@@ -1147,6 +1160,43 @@ export function App(): JSX.Element {
     const retry = retryPayload(record);
     if (retry !== null) void submitDecision(record.owner, "correct", retry);
   };
+
+  // Taste refinement P1-3: once the list has been re-read after an Agree, open the row that followed the reviewed one
+  // -- only if that row is still the open one and has left the list. Runs every render; returns at once when idle.
+  useEffect(() => {
+    if (pendingAdvance === null) return;
+    setPendingAdvance(null);
+    if (selected === null || rowKey(selected) !== rowKey(pendingAdvance.reviewed)) return;
+    const next = nextAfterReview(pendingAdvance.before, pendingAdvance.reviewed, visibleDecisionRows);
+    if (next !== null) openDecisionRow(next);
+  }, [pendingAdvance, visibleDecisionRows]);
+
+  // Taste refinement P1-3: j / k move, a agrees, c starts a correction -- on the Decisions pane only, never while
+  // typing (reviewKeyAction), and never a second Agree while this decision's first is in flight (Review Focus 2).
+  // No dependency array: rebound every render, so the handler always reads the current state.
+  useEffect(() => {
+    if (section !== "decisions") return;
+    const onKey = (event: KeyboardEvent): void => {
+      const action = reviewKeyAction(event);
+      if (action === null) return;
+      const at = selected === null ? -1 : visibleDecisionRows.findIndex((row) => rowKey(row) === rowKey(selected));
+      if (action === "next" || action === "previous") {
+        const to = visibleDecisionRows[action === "next" ? at + 1 : Math.max(at - 1, 0)];
+        if (to !== undefined) {
+          event.preventDefault(); openDecisionRow(to);
+          requestAnimationFrame(() => document.querySelector('.decision-row[aria-current="true"]')?.scrollIntoView?.({ block: "nearest" }));
+        }
+      } else if (action === "agree" && selected !== null && decision !== null && inlineRequest(decisionRequests, selected)?.status.kind !== "pending") {
+        event.preventDefault();
+        void submitDecision({ projectKey: selected.projectKey, decisionId: selected.id }, "agree", null, undefined, { reviewed: selected, before: visibleDecisionRows });
+      } else if (action === "correct") {
+        const box = document.querySelector<HTMLTextAreaElement>('.section-pane[data-section="decisions"] textarea[name="because"]');
+        if (box !== null) { event.preventDefault(); box.focus(); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   if (error !== null) return <ErrorPage failure={error} />;
 
@@ -1167,7 +1217,7 @@ export function App(): JSX.Element {
         draft={detailDrafts.correction[correctionKey(selected.projectKey, selected.id)]}
         onDraft={(form) => onDetailDraft("correction", correctionKey(selected.projectKey, selected.id), form)}
         onAgree={() => {
-          void submitDecision({ projectKey: selected.projectKey, decisionId: selected.id }, "agree", null);
+          void submitDecision({ projectKey: selected.projectKey, decisionId: selected.id }, "agree", null, undefined, { reviewed: selected, before: visibleDecisionRows });
         }}
         onCorrect={(form) => {
           const owner = { projectKey: selected.projectKey, decisionId: selected.id };
@@ -1399,19 +1449,20 @@ export function App(): JSX.Element {
         {todo.status !== "available" && <p role="status">{t("overview.source.decisions")} · {t(`overview.status.${todo.status}`)}{todo.error ? ` · ${todo.error}` : ""}</p>}
         {projects === null ? (
           // Plan decision P2: without a project list the rows keep today's repository filter.
-          <DecisionsView rows={statusRows} status={status} onStatus={setStatus} loading={statusLoading} sourceStatus={status === "unreviewed" ? todo.status : undefined} filter={filter} onFilter={setFilter} selected={selected} onOpen={openDecisionRow} detail={detail} />
+          <DecisionsView rows={scopedDecisionRows} status={status} onStatus={setStatus} loading={statusLoading} sourceStatus={status === "unreviewed" ? todo.status : undefined} filter={effectiveDecisionFilter} onFilter={setFilter} selected={selected} onOpen={openDecisionRow} detail={detail} reviewedCount={reviewedThisSession} />
         ) : (
           // With one, the pane follows the global scope: rows are restricted here, and its repository select is the sidebar's.
           <DecisionsView
-            rows={scope.kind === "all" ? statusRows : statusRows.filter((row) => row.projectKey === project)}
+            rows={scopedDecisionRows}
             status={status}
             onStatus={setStatus}
             loading={statusLoading} sourceStatus={status === "unreviewed" ? todo.status : undefined}
-            filter={{ ...filter, projectKey: "" }}
+            filter={effectiveDecisionFilter}
             onFilter={setFilter}
             selected={selected}
             onOpen={openDecisionRow}
             detail={detail}
+            reviewedCount={reviewedThisSession}
             scope={{
               projects,
               value: scope.kind === "all" ? ALL_PROJECTS : project ?? "",

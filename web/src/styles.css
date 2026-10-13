@@ -214,6 +214,10 @@ th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .actions { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 16px; }
 .detail-help { color: var(--muted); font-size: var(--text-xs); margin: 6px 0 14px; }
 .detail-note { color: var(--warn); background: var(--warn-subtle); padding: 6px 10px; border-radius: var(--radius-sm); font-size: var(--text-xs); margin: 0 0 12px; }
+/* Taste refinement P1-3: the review loop's key hint, and the correction form set apart under its own title. */
+.kbd-hint { color: var(--muted); font-size: var(--text-xs); margin: -6px 0 12px; }
+.correction-form { border-top: 1px dashed var(--border); margin-top: 16px; padding-top: 12px; }
+.correction-title { font-size: var(--text-sm); color: var(--muted); }
 
 /* Task control */
 nav[aria-label="Control groups"] button[aria-current="true"] { background: var(--accent-subtle); border-color: var(--accent); }

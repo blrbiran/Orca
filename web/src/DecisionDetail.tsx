@@ -122,6 +122,8 @@ export function DecisionDetail({
             onCorrect?.(form);
           }}
         >
+          {/* Taste refinement P1-3. Not an <h3>: the detail's h3s are its reading blocks (pinned by decisionsI18n.test.tsx). */}
+          <p className="correction-title" role="heading" aria-level={3}>{t("decisions.correctionTitle")}</p>
           <label>
             {t("decisions.kind")}
             <select name="kind" value={form.kind} onChange={(e) => edit({ kind: e.currentTarget.value as CorrectionKind })}>
