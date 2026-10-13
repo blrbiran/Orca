@@ -110,6 +110,11 @@ it("a server archive refusal remains visible at the card where it was requested"
   await openCardMenu();
   fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }));
   expect((await screen.findByTestId("card-refusal-g")).textContent).toContain("archive-run-active");
+  // Spec 2026-10-13-unmetered-usage-settlement-design.md §B.3: the refusal offers the way to the group's dispatch controls.
+  fireEvent.click(within(screen.getByTestId("card-refusal-g").parentElement!).getByRole("button", { name: "Open dispatch controls" }));
+  const detail = await screen.findByRole("region", { name: "Control group g" });
+  await waitFor(() => expect(within(detail).getByRole("tab", { name: "Preparation" }).getAttribute("aria-selected")).toBe("true"));
+  expect(panel.posts).toHaveLength(1);
 });
 
 it("a running chain keeps its banner and Stop access while advanced navigation is off", async () => {

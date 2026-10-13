@@ -1348,6 +1348,7 @@ export function App(): JSX.Element {
           onSelectRequirement={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedRequirement(id); setSection("requirements"); window.location.hash = "requirements"; void readRequirement(id); }}
           onSourceRequirement={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedRequirement(id); setSection("requirements"); window.location.hash = "requirements"; void readRequirement(id); }}
           onGroupAction={(groupId, verb, repoId) => { void sendGroupCardAction(groupId, verb, repoId); }}
+          onOpenDispatch={(groupId) => { const request = ++navigationSeq.current; setSelectedGroup(groupId); setOverviewFocus({ target: { kind: "group", groupId, region: "dispatch", taskId: null, runId: null }, request }); }}
           onDraft={(key, text) => dispatchControl({ type: "draft", key, text })}
           onCommand={(action) => {
             void sendControl(action);

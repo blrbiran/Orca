@@ -27,6 +27,7 @@ export interface GroupListProps {
   onSelectRequirement?: (groupId: string) => void;
   onAction?: (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string) => void;
   refusals?: Record<string, ControlRefusal>;
+  onOpenDispatch?: (groupId: string) => void;
   /** Tests pin the clock; the page reads it every 30 s. */
   now?: number;
 }
@@ -39,13 +40,13 @@ function updatedText(t: TFunction, minutes: number): string {
   return hours < 48 ? t("control.groupCard.updatedHours", { hours }) : t("control.groupCard.updatedDays", { days: Math.floor(hours / 24) });
 }
 
-function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: string; now: number; onSelect: () => void; onAction?: GroupListProps["onAction"]; refusal?: ControlRefusal }): JSX.Element {
+function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: string; now: number; onSelect: () => void; onAction?: GroupListProps["onAction"]; refusal?: ControlRefusal; onOpenDispatch?: () => void }): JSX.Element {
   const { t } = useTranslation();
   const { group } = props;
   const base = useId();
   const category = groupCategory(group);
   const updated = group.updatedAt === undefined || group.updatedAt === null ? null : Math.max(0, Math.floor((props.now - group.updatedAt) / 60_000));
-  return <GroupActionsMenu group={group} onOpen={props.onSelect} onAction={props.onAction} refusal={props.selected ? null : props.refusal}>{(onContextMenu) => (
+  return <GroupActionsMenu group={group} onOpen={props.onSelect} onAction={props.onAction} refusal={props.selected ? null : props.refusal} onOpenDispatch={props.onOpenDispatch}>{(onContextMenu) => (
     <button
       type="button"
       className="group-card"
@@ -109,7 +110,7 @@ export function GroupList(props: GroupListProps): JSX.Element {
             <a className="group-card" href={hashFor("requirements")} onClick={() => props.onSelectRequirement?.(group.groupId)} onContextMenu={onContextMenu}>{group.groupId} · {enumText("groupState", group.state)} · {t("control.requirementBadge")}{label(group.repoId)}</a>
           )}</GroupActionsMenu>
         ) : (
-          <GroupCard key={group.groupId} group={group} selected={group.groupId === props.selected} repoText={label(group.repoId)} now={now} onSelect={() => props.onSelect(group.groupId)} onAction={props.onAction} refusal={props.refusals?.[group.groupId]} />
+          <GroupCard key={group.groupId} group={group} selected={group.groupId === props.selected} repoText={label(group.repoId)} now={now} onSelect={() => props.onSelect(group.groupId)} onAction={props.onAction} refusal={props.refusals?.[group.groupId]} onOpenDispatch={props.onOpenDispatch && (() => props.onOpenDispatch!(group.groupId))} />
         ))}
       </nav>
     </>

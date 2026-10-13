@@ -20,6 +20,8 @@ import { RunReason } from "./RunReason.js";
 import { explainRunReason } from "./refusalExplain.js";
 import { reasonCode, retryRunOpen, taskRunNumber } from "./runFacts.js";
 import i18n, { enumText } from "./i18n.js";
+import { UsageSettlement } from "./UsageSettlement.js";
+import type { Role } from "./auth.js";
 
 export const labelsDraftKey = (groupId: string, taskId: string): string => `labels:${groupId}:${taskId}`;
 
@@ -190,6 +192,8 @@ export interface TaskDetailProps {
   workspaceMode?: "worktree" | "clone" | null;
   /** Issue-fixes spec §6.3: an archived group refuses every command but the unarchive, so no editor is offered (read-only). */
   archived?: boolean;
+  /** Spec 2026-10-13-unmetered-usage-settlement §B.1: who may settle the unknown usage that hides Retry here. */
+  roles?: readonly Role[];
 }
 
 export function TaskDetail(props: TaskDetailProps): JSX.Element {
@@ -271,6 +275,11 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
                 <button type="button" onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: item.taskId } })}>
                   {t("control.group.retryTask", { taskId: item.taskId })}
                 </button>
+              )}
+              {/* Retry is hidden while usage is unknown (runFacts.ts retryRunOpen): show the way forward instead of nothing. */}
+              {run.unknownUsageSettlement !== undefined && run.unknownUsageSettlement.settlement === undefined && (
+                <UsageSettlement key={JSON.stringify([view.summary.commandRevision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles}
+                  archived={archived} groupId={groupId} revision={view.summary.commandRevision} onCommand={onCommand} />
               )}
             </li>
           ))}

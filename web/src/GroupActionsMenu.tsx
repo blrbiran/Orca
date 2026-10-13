@@ -17,6 +17,8 @@ export function GroupActionsMenu(props: {
   onOpen: () => void;
   onAction?: (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string) => void;
   refusal?: ControlRefusal | null;
+  /** Spec 2026-10-13-unmetered-usage-settlement §B.3: archive-run-active is resolved from the group's dispatch controls. */
+  onOpenDispatch?: () => void;
   children: (onContextMenu: (event: MouseEvent<HTMLElement>) => void) => JSX.Element;
 }): JSX.Element {
   const { t } = useTranslation();
@@ -60,5 +62,6 @@ export function GroupActionsMenu(props: {
       </button>
     </div>}
     {props.refusal && <RefusalNotice refusal={props.refusal} testId={`card-refusal-${props.group.groupId}`} />}
+    {props.refusal?.code === "archive-run-active" && props.onOpenDispatch && <button type="button" onClick={props.onOpenDispatch}>{t("control.groupMenu.openDispatch")}</button>}
   </div>;
 }

@@ -463,7 +463,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 
 </>,
       }} />
-      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} resultsActive={props.active !== false && region === "results"} resultsScope={props.resultsScope ?? ""} />}
+      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} roles={props.roles} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} resultsActive={props.active !== false && region === "results"} resultsScope={props.resultsScope ?? ""} />}
     </section>
   );
 }

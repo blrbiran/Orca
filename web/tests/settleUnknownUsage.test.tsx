@@ -6,6 +6,7 @@ import i18n from "../src/i18n.js";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { controlCommandPath, commandEnvelope } from "../src/controlApi.js";
 import { config, run, view } from "./usageRecoveryFixture.js";
+import { workItem } from "./fixtures/board.js";
 afterEach(cleanup);
 const remaining = { work: { tokens: 91, activeMs: 920, attempts: 3, sessions: 4 }, handoff: { tokens: 51, activeMs: 520, attempts: 5, sessions: 6 } };
 const failed = () => run({ state: "blocked", outcome: "failed", stopReason: "Error: codex-event-error", unknownUsageSettlement: { generation: 7, highWater: 2, remaining, allowed: true, refusalReason: null, acknowledge: "charge-remaining-grant" as const } });
@@ -122,5 +123,28 @@ describe("owner unmetered release", () => {
     cleanup(); shown(0); expect(document.body.textContent).not.toContain("usage incomplete");
     await i18n.changeLanguage("zh");
     try { cleanup(); shown(2); expect(document.body.textContent).toContain(" · 用量不完整：2 个运行被不计量放行"); } finally { await i18n.changeLanguage("en"); }
+  });
+});
+
+// Spec 2026-10-13-unmetered-usage-settlement-design.md §B.1–B.2: where Retry is hidden for unknown usage, the way forward shows.
+describe("the way forward for a failed task with unknown usage", () => {
+  const inTask = (roles: ("owner" | "member")[]) => render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "progress", taskId: "a", runId: null }} view={{ ...view([failed()]), workItems: [workItem({ taskId: "a", status: "blocked", currentRunId: "run-a" })] }} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} roles={roles} />);
+  it("task detail shows the settlement entry instead of nothing", async () => {
+    inTask(["owner"]);
+    const task = document.querySelector<HTMLElement>('section[data-task-id="a"]')!;
+    expect(within(task).queryByRole("button", { name: /Retry/ })).toBeNull();
+    expect(within(task).getByText("This run has unknown usage.")).toBeTruthy();
+    expect(within(task).getByRole("button", { name: "Settle unknown usage" })).toBeTruthy();
+    await i18n.changeLanguage("zh");
+    try { expect(within(task).getByText("此运行有未知用量。")).toBeTruthy(); expect(within(task).getByRole("button", { name: "结清未知用量" })).toBeTruthy(); }
+    finally { await i18n.changeLanguage("en"); }
+  });
+  it("a stop-mode-conflict preview says to resume dispatch first, in en and zh", async () => {
+    const r = failed(); r.unknownUsageSettlement!.allowed = false; r.unknownUsageSettlement!.refusalReason = "stop-mode-conflict";
+    show(["owner"], r);
+    expect(screen.getByText("The group's current stop does not allow this command. Leave the stop first (\"Resume dispatch\", or the resume offered after a handoff), then try again.")).toBeTruthy();
+    await i18n.changeLanguage("zh");
+    try { expect(screen.getByText("组当前的停止方式不允许这条命令。先解除停止（「恢复调度」，或交接后提供的恢复），再重试。")).toBeTruthy(); }
+    finally { await i18n.changeLanguage("en"); }
   });
 });
