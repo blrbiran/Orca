@@ -118,7 +118,7 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
         <option value="">{t("requirements.agentDefault")}</option>
         {(props.agents?.installations ?? []).map((installation) => <option key={installation.id} value={installation.id}>{installation.id}</option>)}</select></label>
       <p role="note">{t("requirements.capabilityNote")}</p>
-      <button type="submit" disabled={idea.trim() === "" || repoId === "" || limitBad}>{t("requirements.open")}</button>
+      <button type="submit" className="btn-primary" disabled={idea.trim() === "" || repoId === "" || limitBad}>{t("requirements.open")}</button>
     </form>
   );
 }

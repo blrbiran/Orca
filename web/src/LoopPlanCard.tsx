@@ -209,7 +209,7 @@ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; curre
         </label>
       ))}
       {blocked !== null && <p role="alert">{blocked}</p>}
-      <button type="submit" disabled={blocked !== null}>{consequence?.text ?? blocked}</button>
+      <button type="submit" className="btn-primary" disabled={blocked !== null}>{consequence?.text ?? blocked}</button>
       <button type="button" onClick={() => onDraft(key, "")}>{t("loopPlan.discard")}</button>
     </form>
   );

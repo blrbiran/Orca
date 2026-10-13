@@ -320,3 +320,10 @@ it("keeps the account bar and panel in the same viewport frame", async () => {
   expect(frame!.querySelector(":scope > .account-bar")).not.toBeNull();
   expect(frame!.querySelector(":scope > .shell")).not.toBeNull();
 });
+
+it("marks the login submit as the page's one primary action (P2-6)", async () => {
+  meAnswers = [{ status: 401, body: LOGIN_REQUIRED }];
+  render(<AuthGate><p>app body</p></AuthGate>);
+  await screen.findByRole("form", { name: /log in/i });
+  expect(screen.getByRole("button", { name: "Log in" }).className).toContain("btn-primary");
+});

@@ -160,7 +160,7 @@ export function ChainPanel({
           {t("chains.formTimeout")}
           <input key={repoKey} name="sessionTimeoutMin" type="number" min="1" defaultValue={selected?.defaultSessionTimeoutMin ?? ""} />
         </label>
-        <button type="submit" data-action="start-chain">
+        <button type="submit" className="btn-primary" data-action="start-chain">
           {t("chains.start")}
         </button>
       </form>
