@@ -2,11 +2,19 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { enumText } from "./i18n.js";
 import type { WorkItemCategoryV1 } from "./controlTypes.js";
-import type { OverviewModel } from "./overviewModel.js";
+import type { OverviewModel, OverviewQueueRow } from "./overviewModel.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
+/** Taste refinement P1-4: the queue keeps every step that is not a decision review, and at most this many reviews. */
+export const OVERVIEW_DECISION_LIMIT = 3;
+export function visibleQueue(queue: OverviewQueueRow[]): { rows: OverviewQueueRow[]; hiddenDecisions: number; decisions: number } {
+  let shown = 0;
+  const decisions = queue.filter((row) => row.target.kind === "decision").length;
+  const rows = queue.filter((row) => row.target.kind !== "decision" || shown++ < OVERVIEW_DECISION_LIMIT);
+  return { rows, hiddenDecisions: decisions - Math.min(decisions, OVERVIEW_DECISION_LIMIT), decisions };
+}
 /** Progress first in DOM and narrow layouts; each queue row only opens its owner. */
 export function Overview(props: { model: OverviewModel; onOpen: (target: OverviewTarget) => void; onImport: () => void; onRequirement: () => void }): JSX.Element {
- const { t } = useTranslation(); const { model } = props;
+ const { t } = useTranslation(); const { model } = props; const queue = visibleQueue(model.queue);
  return <section aria-label={t("overview.title")} className="overview">
   <div className="overview-heading"><h2>{t("overview.title")}</h2><div><button type="button" onClick={props.onRequirement}>{t("overview.newRequirement")}</button><button type="button" onClick={props.onImport}>{t("overview.import")}</button></div></div>
   <div className="overview-layout">
@@ -22,13 +30,14 @@ export function Overview(props: { model: OverviewModel; onOpen: (target: Overvie
      {group.counts && <p className="overview-counts">{Object.entries(group.counts).map(([kind, n]) => <span key={kind}>{t(`control.graph.category.${kind as WorkItemCategoryV1}`)} {n}</span>)}</p>}
     </li>)}</ul>
    </section>
-   <section aria-label={t("overview.queue")} aria-live="polite"><h3>{t("overview.queue")}</h3>
+   <section aria-label={t("overview.queue")}><h3>{t("overview.queue")}</h3>
     {model.sources.filter((s) => s.kind !== "progress" && s.status !== "available").map((s) => <p role="status" key={s.kind}>{t(`overview.source.${s.kind}`)} · {t(`overview.status.${s.status}`)}{s.error ? ` · ${s.error}` : ""}</p>)}
-    <ul className="overview-queue">{model.queue.map((row) => <li key={row.key}>
+    <ul className="overview-queue">{queue.rows.map((row) => <li key={row.key}>
      <button type="button" onClick={() => props.onOpen(row.target)}>{t(`overview.step.${row.kind}`)} · {row.target.kind === "group" || row.target.kind === "requirement" ? row.target.groupId : row.target.kind === "decision" ? row.target.id : t("overview.global")}</button>
      <p>{row.owner || t("overview.global")}{row.ownerUnknown ? ` · ${t("overview.ownerUnknown")}` : ""} · {row.reason}</p>
      {row.ownerRequired && <p>{t("overview.ownerRequired")}</p>}
     </li>)}</ul>
+    {queue.hiddenDecisions > 0 && <p><a href="#decisions">{t("overview.viewAllDecisions", { n: queue.decisions })}</a></p>}
     {model.queue.length === 0 && model.complete && <p>{t("overview.noAttention")}</p>}
    </section>
   </div>
