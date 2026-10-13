@@ -234,3 +234,20 @@ it("selects Codex skills path from the table kind of the frozen installation and
  const dir=realpathSync(skillsDirOf(t,runId));expect(envelopeOf(t,runId).work.codexSkillsDir).toBe(realpathSync(join(dir,"skills")));expect(envelopeOf(t,runId).work).not.toHaveProperty("skillPluginDir");
  const lock=JSON.parse(readFileSync(join(dir,"skills/syncskill-lock.json"),"utf8"));expect(t.body(runId).drive.skills).toEqual({dir,profile:null,lock:lock.skills});
 });
+
+// OMP skill injection (spec 2026-10-13-omp-skill-injection-design.md, session 808feb6a): an omp run gets the snapshot's
+// skills directory as ompSkillsDir, and neither of the other two fields.
+it("selects the OMP skills path from the table kind of the frozen installation",async()=>{
+ const fake=await fakeSyncskill("inject-ok");
+ const t=await driverHarness([{taskId:"a",agent:CLAUDE,loop:withSkills("a",{names:["alpha"]})}],{syncskill:fake.o,agentKinds:{installations:[{id:FIXTURE_OTHER_AGENT_ID,kind:"omp",defaults:{model:"gateway/model-a",contextWindow:"agent-default"},contextOptions:["agent-default"],version:"18.10.1"}]}});disposeWithSnapshots(t);
+ const runId=await t.claim();expect(stepA1(t.deps,runId)).toBe(true);expect(await stepA2(t.deps,runId)).toBe(true);
+ const dir=realpathSync(skillsDirOf(t,runId));const work=envelopeOf(t,runId).work;
+ expect(work.ompSkillsDir).toBe(realpathSync(join(dir,"skills")));expect(work).not.toHaveProperty("skillPluginDir");expect(work).not.toHaveProperty("codexSkillsDir");
+});
+
+it("still blocks a run at A2 whose frozen installation is of a kind that loads no skills",async()=>{
+ const fake=await fakeSyncskill("inject-ok");
+ const t=await driverHarness([{taskId:"a",agent:CLAUDE,loop:withSkills("a",{names:["alpha"]})}],{syncskill:fake.o,agentKinds:{installations:[{id:FIXTURE_OTHER_AGENT_ID,kind:"other",defaults:{model:"fixture",contextWindow:"agent-default"},contextOptions:["agent-default"],version:"fixture"}]}});disposeWithSnapshots(t);
+ const runId=await t.claim();expect(stepA1(t.deps,runId)).toBe(true);expect(await stepA2(t.deps,runId)).toBe(true);
+ expect(JSON.stringify(t.body(runId))).toContain(`skills-unsupported-agent:a:${FIXTURE_OTHER_AGENT_ID}:other`);
+});

@@ -153,6 +153,13 @@ describe("the skill plugin directory on a loop envelope (syncskill integration s
   });
 });
 
+// OMP skill injection (spec 2026-10-13, session 808feb6a): the third field, mutually exclusive with both others.
+it("carries only ompSkillsDir for an OMP skill run and rejects it beside either other directory field",()=>{
+ const built=toStartEnvelope(ledgerEnvelope(),runRow(),{...work,ompSkillsDir:"/tmp/ws/skills-run-1/skills"},contract);
+ expect(built.work).toEqual({kind:"loop",contract,targetRepo:"/tmp/repo",base:"v1",sourceDir:"/tmp/src",ompSkillsDir:"/tmp/ws/skills-run-1/skills"});
+ for(const other of [{skillPluginDir:"/tmp/plugin"},{codexSkillsDir:"/tmp/skills"}])expect(()=>toStartEnvelope(ledgerEnvelope(),runRow(),{...work,...other,ompSkillsDir:"/tmp/omp-skills"},contract)).toThrow("start-envelope-conflict");
+});
+
 it("carries only codexSkillsDir for a Codex skill run and rejects both directory fields",()=>{
  const built=toStartEnvelope(ledgerEnvelope(),runRow(),{...work,codexSkillsDir:"/tmp/ws/skills-run-1/skills"},contract);
  expect(built.work).toEqual({kind:"loop",contract,targetRepo:"/tmp/repo",base:"v1",sourceDir:"/tmp/src",codexSkillsDir:"/tmp/ws/skills-run-1/skills"});

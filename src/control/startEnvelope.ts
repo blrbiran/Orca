@@ -43,6 +43,8 @@ export interface StartEnvelopeWork {
   /** Syncskill integration spec §10.6: the run's skill snapshot; absent for a run without skills (no key on the wire). */
   skillPluginDir?: string;
   codexSkillsDir?: string;
+  /** OMP skill injection (2026-10-13): the snapshot's `skills` directory for an omp run, as for codex. */
+  ompSkillsDir?: string;
 }
 
 /** The checks both translations share (see toStartEnvelope's comment), and the claim built from the run row. */
@@ -114,6 +116,7 @@ export function toStartEnvelope(
       // Absent stays absent, so a run without skills keeps its exact envelope bytes and hash.
       ...(work.skillPluginDir !== undefined ? { skillPluginDir: work.skillPluginDir } : {}),
       ...(work.codexSkillsDir !== undefined ? { codexSkillsDir: work.codexSkillsDir } : {}),
+      ...(work.ompSkillsDir !== undefined ? { ompSkillsDir: work.ompSkillsDir } : {}),
     },
   };
   // Parsed against the repository's own start-envelope schema rather than merely typed as one, so

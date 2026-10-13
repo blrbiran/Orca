@@ -1117,7 +1117,7 @@ export const zhErrors: Record<string, string> = {
   // Syncskill integration spec §10.5 / §10.8 C4 (plan Task 4): confirm's skill-set refusals.
   "skills-profile-empty": "这个技能 profile 里没有技能，不能确认。",
   "skills-shape": "技能名或 profile 名不合法。",
-  "skills-unsupported-agent": "只有 claude 或 codex 能加载技能，这个任务选的 agent 两者都不是：{{message}}",
+  "skills-unsupported-agent": "只有 claude、codex 或 omp 能加载技能，这个任务选的 agent 都不是：{{message}}",
   "syncskill-failed": "syncskill 执行失败：{{message}}",
   "syncskill-missing": "找不到 syncskill：ORCA_SYNCSKILL_BIN 必须是一个能运行的绝对路径。",
   "syncskill-output-invalid": "syncskill 的输出读不懂。",

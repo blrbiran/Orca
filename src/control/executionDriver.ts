@@ -304,7 +304,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   if (confirmed.skills !== null) {
     try {
       skillsKind = (await portFor(deps,run).listAgents()).installations.find(installation=>installation.id===frozenAgent.agent.agent)?.kind;
-      if (skillsKind !== "claude" && skillsKind !== "codex") {
+      if (skillsKind !== "claude" && skillsKind !== "codex" && skillsKind !== "omp") {
         blockRun(deps,runId,"A2",`skills-unsupported-agent:${run.taskId}:${frozenAgent.agent.agent}:${skillsKind ?? "not-in-table"}`);
         return true;
       }
@@ -324,7 +324,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   const packageRecord=recovery?{...materializeRecoveryPackage(store,drive.sourceDir,recovery),recoveryOf:recovery.recoveryOf}:undefined;
   if(recovery)write(deps,()=>{assertCurrentSavedRecovery(store,readDriverRun(store,runId),(deps.now?.()??new Date()).getTime());const admission=savedResultAdmissionSchema.parse(JSON.parse(settlementArtifactBytes(store,recovery.admission).toString()));publishRecoveryFence(drive.sourceDir,admission,packageRecord!.packageHash,packageRecord!.admissionHash);});
   const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), {...run,...(packageRecord?{savedResultRecovery:packageRecord}:{})}, {
-    sourceDir: drive.sourceDir, targetRepo, base, ...(skills !== null ? skillsKind === "codex" ? { codexSkillsDir: join(skills.dir,"skills") } : { skillPluginDir: skills.dir } : {}),
+    sourceDir: drive.sourceDir, targetRepo, base, ...(skills !== null ? skillsKind === "codex" ? { codexSkillsDir: join(skills.dir,"skills") } : skillsKind === "omp" ? { ompSkillsDir: join(skills.dir,"skills") } : { skillPluginDir: skills.dir } : {}),
   }, contract, inputCheckpoint);
   const envelopeHash = sha256Canonical(envelope);
   return write(deps, () => {

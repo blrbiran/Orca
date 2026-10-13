@@ -1179,7 +1179,7 @@ export const enErrors: Record<string, string> = {
   // Syncskill integration spec §10.5 / §10.8 C4 (plan Task 4): confirm's skill-set refusals.
   "skills-profile-empty": "This skill profile has no skills, so it cannot be confirmed.",
   "skills-shape": "A skill name or profile name is not valid.",
-  "skills-unsupported-agent": "Skills load only on a claude or codex agent, and the agent chosen for this task is neither: {{detail}}",
+  "skills-unsupported-agent": "Skills load only on a claude, codex or omp agent, and the agent chosen for this task is none of them: {{detail}}",
   "syncskill-failed": "syncskill failed: {{detail}}",
   "syncskill-missing": "syncskill was not found. ORCA_SYNCSKILL_BIN must be an absolute path to a program that runs.",
   "syncskill-output-invalid": "syncskill's output could not be read.",

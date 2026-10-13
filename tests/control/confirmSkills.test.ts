@@ -171,6 +171,12 @@ describe("confirm checks the supported installation kind for skills", () => {
     expect(snapshotOf(h).skills).toEqual([{taskId:"a",profile:null,names:["x"]}]);
     expect(fake.calls()).toEqual([]);
   });
+  // OMP skill injection (spec 2026-10-13-omp-skill-injection-design.md, session 808feb6a): omp joins claude and codex.
+  it("confirms OMP skills by the installation kind", async () => {
+    const { h, answer } = await confirmWithPort([{ taskId: "a", loop: withSkills("a", { names: ["x"] }) }], async () => ({ installations: [{ id: "codex", kind: "omp" }] }));
+    confirmedOrThrow(answer);
+    expect(snapshotOf(h).skills).toEqual([{ taskId: "a", profile: null, names: ["x"] }]);
+  });
   it("refuses an unsupported table kind before confirmation",async()=>{
     const {h,answer}=await confirmWithPort([{taskId:"a",loop:withSkills("a",{names:["x"]})}],async()=>({installations:[{id:"codex",kind:"other"}]}));
     expect(answer).toMatchObject({error:{code:"skills-unsupported-agent",message:"skills-unsupported-agent:a:codex:other"}});expectUnconfirmed(h,["a"]);
