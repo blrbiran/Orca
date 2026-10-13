@@ -144,7 +144,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 1. ~~ccloop ff＋push~~、~~Orca ff＋push~~：人已做（2026-10-13）。
 2. ~~Orca repin 合推~~：人已做（2026-10-13 晚）。
 3. ~~面板服务从新路径重装~~：人已做（2026-10-13 晚，会话 `6b7843ec` 现核：`service.json` 的 entry 为 `/Users/biran/code/skills/orca/Orca/dist/cli.js`、node `/usr/local/bin/node`、无 `ORCA_CCLOOP_BIN` 覆盖、`ORCA_CCMEM_BIN`／`ORCA_SYNCSKILL_BIN` 指新仓；`panel status` launchd running、7777 首页 200；人同时把 `/usr/local/bin/ccmem` 与全局 `syncskill` 软链修到新仓）。原步骤留作再装参考：在 `/Users/biran/code/skills/orca/Orca` 上 `npm ci`／build 后 `orca panel install`（端口、控制根、账户根、ccmem 根照`2026-10-12-live-service-cutover.md` 的配置），确认 `~/.orca/panel/run.sh`／`service.json` 指新路径，`orca panel status` 为 running、7777 首页 200。
-4. **清理**：删已合入的分支（两仓的 `codex/*`，**不含**仍在进行的 `codex/unmetered-settlement`、待合的 `codex/repin-ccloop-760c314`）与工作树 `/private/tmp/ccloop-omp-agent-20261012`、`/private/tmp/orca-omp-integration-20261012`；本会话留下的 `/private/tmp/ccl-760c`（ccloop 测试 clone）与 `/private/tmp/og-yV1y`（门日志）不是 worktree，可 `/bin/rm -rf`；另有两条**失效的工作树记录**（`.git` 文件指旧仓路径，提交已在 main）：Orca `/Users/biran/.codex/worktrees/feedback-followup-20261011/Orca`、ccloop `/private/tmp/orca-results-ccloop-20261010` ⇒ `git worktree prune`／移除。syncskill 的 `dev` 分支按人裁保留。
+4. ~~清理~~：人已做（2026-10-13 晚）。**还剩**两条失效工作树记录（下句）未清，`git worktree list` 现测仍在；`prune` 清不掉就 `git worktree remove --force <路径>`。原文：删已合入的分支（两仓的 `codex/*`，**不含**仍在进行的 `codex/unmetered-settlement`、待合的 `codex/repin-ccloop-760c314`）与工作树 `/private/tmp/ccloop-omp-agent-20261012`、`/private/tmp/orca-omp-integration-20261012`；本会话留下的 `/private/tmp/ccl-760c`（ccloop 测试 clone）与 `/private/tmp/og-yV1y`（门日志）不是 worktree，可 `/bin/rm -rf`；另有两条**失效的工作树记录**（`.git` 文件指旧仓路径，提交已在 main）：Orca `/Users/biran/.codex/worktrees/feedback-followup-20261011/Orca`、ccloop `/private/tmp/orca-results-ccloop-20261010` ⇒ `git worktree prune`／移除。syncskill 的 `dev` 分支按人裁保留。
 
 ### 4.2 agent 的活（上面做完、或与之无关时）
 
@@ -154,7 +154,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
    `{"type":"error","message":"exceeded retry limit, last status: 429 Too Many Requests"}`、`{"type":"turn.failed","error":{"message":"<同一句>"}}` —— **失败发生在任何 `item.*` 之前**。
    控制器（`6b7843ec`）的设计建议，**未经人裁**：① 判定式只认 `turn.failed.error.message`／`error.message` 里的 `last status: 429`（5xx 无样本，不承诺）；
    ② **只在「`turn.started` 后零 `item.*` 即 429 失败」时**阶段内有限退避重试（工作区未被动过），有 item 的 429 只把原因改报 `codex-rate-limited`、照旧失败；
-   ③ **待人裁**：失败调用没有 `turn.completed` ⇒ 用量 null ⇒ 重试成功后 run 仍是未知用量、Orca 照样卡住。选项 (i) 对「零 item＋429」调用记 0（理由：HTTP 层被拒、429 通常不计费——本质是推定零，与 D 同类）；(ii) 坚持 null，重试成功后仍需 owner 结算。控制器倾向 (i)。
+   ③ **人裁（2026-10-13，会话 `6b7843ec`）选 (i)**：「开始后没有任何动作就被 429 拒掉」的那次调用**用量记 0**（`turn.started` 后零 `item.*`、紧接带 429 的 `turn.failed`；理由：HTTP 层被拒、429 通常不计费）。
+      条件之外（有 item、或无法判定）一律仍记 null，不外推。否则重试成功后 run 仍是未知用量、Orca 照样卡住。①②是控制器建议，写 spec 时可再定，③是人裁。
    在 ccloop 先写短 spec 再 TDD（守 ccloop 自己的规则：改既有判据要人逐条点名）。完成后可用 `gpt-6-luna` 做一次真 Codex 回归（付费，先问人）。
 1. **OMP skills 的真 provider 验收**：有可用 provider 时（LiteLLM 端点要人起；Codex 额度已耗尽），照 `2026-10-12-oh-my-pi-acceptance.md` 的隔离形状、带一个声明 skill 的任务跑一次，独立审计（`scripts/verify-omp-acceptance.ts`）要能看见 `<skills>` 块与 `SKILL.md` 的 read 调用。**模型选择器只是验收数据，不设默认。**
 2. **ccmem 适配 Codex 与 oh-my-pi**：人的**下一个项目**，未开始；先 brainstorming，记在 ccmem 与 Orca 两边的 handoff。
@@ -338,7 +339,9 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 八、什么在等人（awaitingHuman）
 
-- §4.1 的四件（ccloop ff＋push；Orca repin→门→ff＋push；面板服务从新路径重装；分支／工作树清理含两条失效记录）。
+- push 本地 main 上尚未推送的 handoff 提交（`ls-remote` 与 `git status -sb` 现核）；两条失效工作树记录：Orca `/Users/biran/.codex/worktrees/feedback-followup-20261011/Orca`、ccloop `/private/tmp/orca-results-ccloop-20261010`。
+- **ccmem 的 embedding 账号无额度**（`429 You have no credits remaining`，§3.3a）⇒ 语义检索不可用，要人充值或换 key。
+- D、C 合并进 main 与 push（各自完成并过门之后）。
 - **人要审的本会话决定**：OMP single-call 继续不提供（§五 5.2.11）；OMP skill 注入的设计取舍（spec `2026-10-13-omp-skill-injection-design.md`）；`ompUpdates` 那条负载下超时的判据要不要改写（要人点名）。
 - **未审完的轮次裁定**（各台账 `Ruling:` 行）：面板项目过滤（`.superpowers/sdd/2026-10-06-panel-project-filtering/progress.md`，含改写的 `web/tests/projectSwitcher.test.tsx` F，不同意就回滚并重议 P1）、Task control 刷新＋项目切换（会话 `08011394`，提交说明里）、syncskill 跟进（会话 `9d95e6c8`，改了 web 夹具与 `skillsE2E` I1）、面板 HTTP＋syncskill 补三件（会话 `16ab00f2`）、UI 一轮被改写的四条判据（计划 Global Constraints 的 `REWRITTEN … U1–U4` 注释）。人回复后把对应条删掉。
 - **面板的真浏览器视觉验收**（深浅主题、屏幕几何、依赖图 SVG）——只做过 Playwright／隔离浏览器截图，人没看过第二批以后。
