@@ -120,10 +120,11 @@ export function MemoryView({ active, project, onProject }: {
       <h2>{t("memory.title")}</h2>
       {status === null && refusal === null && <p className="empty">{t(started ? "memory.loading" : "memory.notOpened")}</p>}
       {health !== undefined && health.status === "unavailable" && (
-        <>
+        health.code === "ccmem-missing" ? (
+          <p role="note" data-tone="warn">{t("memory.configureHint")} <code data-testid="refusal-code">{health.code}</code></p>
+        ) : (
           <Refusal refusal={{ status: null, code: health.code, message: health.message }} />
-          {health.code === "ccmem-missing" && <p className="caveat">{t("memory.configureHint")}</p>}
-        </>
+        )
       )}
       {status !== null && status.repos.length === 0 && <p className="empty">{t("memory.noRepos")}</p>}
       {ready && (

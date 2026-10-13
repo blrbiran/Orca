@@ -95,7 +95,7 @@ export const zh: Translation<typeof en> = {
   }
 },
   detail: { regions: "任务组详情", progress: "进度", preparation: "准备", problem: "问题", results: "结果", runs: "运行与证据", technical: "技术详情", resultsMissing: "工作已完成，但缺少结果说明。", resultsNotProduced: "此处尚未产出结果说明。", resultsEvidence: "已有运行证据仍可查看。任务完成、目标评审与 Git 交付是独立的事实。", openRun: "查看运行操作与证据 · {{runId}}", goalReview: "任务组正在评审目标；任务完成不代表目标已被接受。", nextAction: "查看进度、准备或问题；各区域保留当前读取状态允许的操作。" },
-  nav: { overview: "概览", sections: "分区", decisions: "决策", chains: "连续改进（高级）", tasks: "任务控制", requirements: "需求", memory: "记忆", metrics: "指标", globalSettings: "全局设置", projectSettings: "项目设置" },
+  nav: { overview: "概览", sections: "分区", decisions: "决策", chains: "链（高级）", tasks: "任务控制", requirements: "需求", memory: "记忆", metrics: "指标", globalSettings: "全局设置", projectSettings: "项目设置" },
   overview: {
     title: "概览", progress: "进展", queue: "需要你处理", newRequirement: "新建需求", import: "导入计划",
     global: "全局控制", ownerUnknown: "所属项目未登记", ownerRequired: "这一步需要所有者处理。",
@@ -179,7 +179,7 @@ export const zh: Translation<typeof en> = {
     dismissOperation: "关闭",
   },
   chains: {
-    activeBanner: "连续改进 {{chainId}} 正在运行",
+    activeBanner: "链 {{chainId}} 正在运行",
     scope: "这项高级流程目前用于 Orca 自身开发的链，不会跨任务组自动规划或执行。",
     notLoaded: "链尚未加载。",
     title: "链",
@@ -765,7 +765,7 @@ export const zh: Translation<typeof en> = {
   },
   settings: {
     browserScope: "主题和语言只记在当前浏览器里。",
-    showAdvanced: "显示连续改进",
+    showAdvanced: "显示链（连续改进）",
     agentScope: "Agent 默认值属于面板共用的 operator。已确认的任务组保留冻结时的选择。",
     account: "账户", chooseProject: "请在项目选择器中选择一个具体项目，再查看或修改它的设置。",
     projectScope: "{{project}} 的默认值。已有任务组保留各自的选择。",
@@ -793,7 +793,7 @@ export const zh: Translation<typeof en> = {
     mismatch: "两次输入的密码不一致。",
     logOut: "退出登录",
     menu: "菜单",
-    role: { owner: "owner", member: "member" },
+    role: { owner: "所有者", member: "成员" },
     roleLabel: "角色",
     addUser: "添加用户",
     userName: "新用户的用户名",
