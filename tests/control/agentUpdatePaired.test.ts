@@ -1,7 +1,7 @@
 import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { createCcloopExecutionPort } from "../../src/control/ccloopPort.js";
 import { applyAgentUpdate, hasPendingAgentUpdate, pendingAgentUpdateCommand, reconcilePendingAgentUpdates } from "../../src/control/agentUpdates.js";
 import { lookupCommandResult } from "../../src/control/commandLedger.js";
@@ -13,7 +13,11 @@ import { readAgentPreferences } from "../../src/control/agentPreferences.js";
 const pairedBinary = process.env.ORCA_TASK9_CCLOOP_BIN;
 const oldBinary = process.env.ORCA_TASK9_OLD_CCLOOP_BIN;
 
-describe.skipIf(!pairedBinary || !oldBinary)("paired reviewed installation update CLI", () => {
+// Skipped at run time, not with describe.skipIf: a file skipped at collection runs no hooks, so
+// tests/setup/scopeTmpdir.ts never removes its temp root (scripts/check-tmp-leak.mjs counted it).
+describe("paired reviewed installation update CLI", () => {
+  beforeEach((ctx) => { if (!pairedBinary || !oldBinary) ctx.skip(); });
+
   it("observes, previews, and applies one accepted version while preserving custom table fields", async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), "orca-agent-paired-")));
     const h = await openTestStore();
