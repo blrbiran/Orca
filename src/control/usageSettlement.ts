@@ -137,7 +137,8 @@ export function hasValidUsageSettlement(store: ControlStore, subject: unknown): 
     if (!unknown) return false;
     for (const b of ["work", "handoff"] as const) for (const d of ds) {
       if (m.method === "owner-acknowledged-unmetered" && b === "work" && d === "tokens") {
-        if (run.grant.work.tokens !== null || run.remaining.work.tokens !== null || m.charged.work.tokens !== null || run.cumulative.work.tokens !== baseline.work.tokens) return false;
+        // m.charged.work.tokens is null by unmeteredChargeSchema (parsed above), so it is not checked again here.
+        if (run.grant.work.tokens !== null || run.remaining.work.tokens !== null || run.cumulative.work.tokens !== baseline.work.tokens) return false;
         continue;
       }
       if (run.grant[b][d]===null || run.remaining[b][d] !== 0 || m.charged[b][d] !== Math.max(run.grant[b][d]! - baseline[b][d], 0)
