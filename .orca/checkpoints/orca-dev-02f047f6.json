@@ -2,51 +2,72 @@
   "v": 1,
   "runId": "orca-dev-02f047f6",
   "runtime": "claude-code",
-  "sessionRef": "02f047f6-eaf0-4001-a187-f11d5bd3f85e",
-  "writtenAt": "2026-10-14T16:13:35.628Z",
-  "head": "ab94603acfa5d09e1eb465f39a158c6a350cf10c",
+  "sessionRef": "02f047f6",
+  "writtenAt": "2026-10-14T19:18:03.044Z",
+  "head": "18a1c2a05cff995bf80d0831061a6c96e9158b56",
   "level": {
-    "kind": "reading",
-    "level": 454591,
-    "windowTokens": 1000000,
-    "t1": 330000,
-    "t2": 450000,
-    "band": 2
+    "kind": "no-reading",
+    "reason": "transcript line 1 belongs to session 02f047f6-eaf0-4001-a187-f11d5bd3f85e, not 02f047f6"
   },
   "next": [
-    "single-call: Tasks 0-10 complete (ledger Orca-wt/omp-single-call/.superpowers/sdd/2026-10-14-omp-single-call/progress.md); final whole-branch review running; then one fix wave, Orca gate, Task 11 repin after the human pushes ccloop codex/omp-single-call (522cd61c354e209129542d3a9b5b5ae8c5167fd2)",
-    "feedback branch fix/web-start-group-running: #53, #56/#57, README, #59 done (review of #59 running); #62 in progress; #61 deferred (needs named rewrite of web/tests/controlI18n.test.tsx:144/:76); #58 after single-call",
-    "update Orca/ccloop/ccmem handoffs at the end"
+    "Human: push ccloop codex/omp-catalog-diagnostics, ff ccloop main to it, push; ff-only Orca codex/round-20261014 into main and push (safe before the repin); push ccmem main (one handoff commit)",
+    "Agent after the ccloop push: plan Task 11 repin (scripts/pin-ccloop.mjs in a worktree with real node_modules), then the full Orca gate without ORCA_CCLOOP_BIN",
+    "Task 13 paid OMP single-call acceptance: ask the human first, after profile.json declares contextWindowTokens and framingTokenOverhead >= ~2047",
+    "#61 after the human names the controlI18n.test.tsx rewrite; Orca half of #58 together with spec §8 'cap refusals not visible'"
   ],
   "open": [
-    "T2 crossed (451728 > 450000) in controller session 02f047f6; the human said not to consider context size this session; continuing",
-    "ccloop gate at 522cd61: full 1697/1707 passed, 3 timeouts (cli parseArgs, savedResultRecovery.native x2) under load 93-116; rerun alone in progress"
+    "T1/T2 crossed in controller session 02f047f6; the human said not to consider context size this session",
+    "gate5 (ccloop 3c911c3): two assertion-shaped reds (phaseTimeoutUsage codex-io-error vs codex-timeout; skillsController fixture marker missing) 3/3 green alone — n=1 candidates, not exempted",
+    "a0f4e0f subject line ('read it once per process') is stale, reverted by 3c911c3; not amended"
   ],
   "awaitingHuman": [
     {
       "kind": "irreversible",
-      "what": "push ccloop codex/omp-single-call so Orca can repin (Task 11)"
-    },
-    {
-      "kind": "named-authorization",
-      "what": "#61: name the rewrite of web/tests/controlI18n.test.tsx:144 and :76 (attempt label) and confirm the target field providerAttemptOrdinal"
+      "what": "push ccloop codex/omp-catalog-diagnostics and ff main; ff-only merge Orca codex/round-20261014; push ccmem main"
     },
     {
       "kind": "irreversible",
-      "what": "orphan process PID 7541 (fake-omp.mjs from a Task 6 mutation run) — kill if still alive"
+      "what": "delete superseded branches/worktrees: Orca codex/omp-single-call, fix/web-start-group-running, fix/feedback-20261014, codex/repin-ccloop-3069dbf, codex/unmetered-handoff-stop, ui/panel-taste; ccloop codex/omp-single-call, codex/omp-updates-timeout; prune stale worktree records (Orca handoff §4.1)"
+    },
+    {
+      "kind": "irreversible",
+      "what": "kill orphan processes 7541 (fake-omp), 9260, 58085, 85784 after ps -p check; remove /private/tmp/osc, /private/tmp/ccl-3069, /private/tmp/og-b395"
     },
     {
       "kind": "named-authorization",
-      "what": "~/.orca/profile.json: contextWindowTokens is null and framingTokenOverhead 17 vs measured omp overhead <= 2047 tokens"
+      "what": "~/.orca/profile.json: contextWindowTokens null; framingTokenOverhead 17 vs measured ~2047"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "#61 rewrite of web/tests/controlI18n.test.tsx :76/:144 and target field providerAttemptOrdinal; registry.test.ts title rename"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "decide: server refusing a second start while executionPending; codex-rate-limited in refusalCoverage VIEW_REASONS; LoopPlanCard editable while running"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "review this session's rulings (Orca handoff §8 list; ledgers' Ruling lines) and the 221-file restore incident"
+    },
+    {
+      "kind": "ccloop-change",
+      "what": "ccloop worktreeManager ATTEMPT_IDENTITY: add -c core.hooksPath=/dev/null (Qoder post-commit slows worktree runs); behaviour change, needs the human"
     }
   ],
   "measurements": [
     {
-      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca-wt/web-start-running log --oneline adaa73dc..HEAD",
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca-wt/round-20261014 log --oneline main..HEAD",
       "exitCode": 0,
-      "commit": "ab94603acfa5d09e1eb465f39a158c6a350cf10c",
-      "observedAt": "2026-10-14T16:13:35.573Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-02f047f6-rYQ1vi/1.txt"
+      "commit": "18a1c2a05cff995bf80d0831061a6c96e9158b56",
+      "observedAt": "2026-10-14T19:18:02.936Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-02f047f6-LBrX0Q/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/ccloop-wt/omp-catalog-diagnostics log --oneline main..HEAD",
+      "exitCode": 0,
+      "commit": "18a1c2a05cff995bf80d0831061a6c96e9158b56",
+      "observedAt": "2026-10-14T19:18:02.974Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-02f047f6-LBrX0Q/2.txt"
     }
   ]
 }
