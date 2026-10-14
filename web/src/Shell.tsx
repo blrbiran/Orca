@@ -60,6 +60,7 @@ export function Shell(props: {
   const { t } = useTranslation();
   return (
     <div className="shell">
+      <button type="button" className="skip-link" onClick={() => document.getElementById("main-content")?.focus()}>{t("shell.skipToContent")}</button>
       <nav className="sidebar" aria-label={t("nav.sections")}>
         <div className="brand" title={t("shell.brandTitle")}><span className="brand-dot" />Orca</div>
         {props.projectControl}
@@ -77,7 +78,7 @@ export function Shell(props: {
           {props.footer.map((line) => <p key={line}>{line}</p>)}
         </div>
       </nav>
-      <main className="content">
+      <main className="content" id="main-content" tabIndex={-1}>
         <div className="chain-banners">{props.banners}</div>
         {props.children}
       </main>

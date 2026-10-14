@@ -7,6 +7,7 @@
  * answers them anyway.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { within } from "@testing-library/react";
 import type { JSX } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getJson, noteAnswer, recordReview } from "../src/api.js";
@@ -292,6 +293,22 @@ describe("AuthGate (spec §7)", () => {
     expect(sent.map((call) => call.body)).toEqual([{ name: "bob", role: "member", password: "bob's long password" }]);
     expect(sent[0]!.headers["x-orca-csrf"]).toBe("t");
   });
+
+  // Taste refinement P1-2: two or more notices can be acknowledged at once.
+  it("acknowledges every open notice with one Dismiss all", async () => {
+    notices = [
+      { seq: 3, at: 0, kind: "user-created", body: { name: "eve" } },
+      { seq: 5, at: 0, kind: "password-changed", body: { name: "eve" } },
+    ];
+    meAnswers = [me({ name: "olga", roles: ["owner"] })];
+    render(<AuthGate><p>app body</p></AuthGate>);
+    const banner = await screen.findByRole("region", { name: /security notices/i });
+    notices = [];
+    fireEvent.click(within(banner).getByRole("button", { name: "Dismiss all" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: /security notices/i })).toBeNull());
+    expect(posts("/api/auth/notices/3/ack")).toHaveLength(1);
+    expect(posts("/api/auth/notices/5/ack")).toHaveLength(1);
+  });
 });
 
 it("keeps the account bar and panel in the same viewport frame", async () => {
@@ -302,4 +319,11 @@ it("keeps the account bar and panel in the same viewport frame", async () => {
   expect(frame).not.toBeNull();
   expect(frame!.querySelector(":scope > .account-bar")).not.toBeNull();
   expect(frame!.querySelector(":scope > .shell")).not.toBeNull();
+});
+
+it("marks the login submit as the page's one primary action (P2-6)", async () => {
+  meAnswers = [{ status: 401, body: LOGIN_REQUIRED }];
+  render(<AuthGate><p>app body</p></AuthGate>);
+  await screen.findByRole("form", { name: /log in/i });
+  expect(screen.getByRole("button", { name: "Log in" }).className).toContain("btn-primary");
 });

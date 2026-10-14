@@ -221,4 +221,12 @@ describe("MemoryView (spec §5.2, W1)", () => {
     expect(await screen.findByRole("navigation", { name: "记忆列表" })).toBeTruthy();
     expect(screen.getByText("全局")).toBeTruthy();
   });
+
+  it("does not echo the server's English sentence when ccmem is not configured (P2-7)", async () => {
+    status = { ...OK_STATUS, health: { status: "unavailable", code: "ccmem-missing", message: "ORCA_CCMEM_BIN is not set; configure it" } };
+    render(<MemoryView active />);
+    expect((await screen.findByTestId("refusal-code")).textContent).toBe("ccmem-missing");
+    expect(document.body.textContent).not.toContain("is not set");
+    expect(screen.getByText(/Set ORCA_CCMEM_BIN/)).toBeTruthy();
+  });
 });

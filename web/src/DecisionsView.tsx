@@ -101,6 +101,8 @@ export function DecisionsView(props: {
   selected?: Pick<DecisionListRow, "projectKey" | "id"> | null;
   onOpen?: (row: DecisionListRow) => void;
   detail?: ReactNode;
+  /** Taste refinement P1-3: reviews recorded in this browser since the panel opened; shown once there is one. */
+  reviewedCount?: number;
 }): JSX.Element {
   const { t } = useTranslation();
   const name = useProjectName();
@@ -120,10 +122,14 @@ export function DecisionsView(props: {
       <div className="section-head">
         <h1>{t(heading.title)}</h1>
         <span className="count" data-testid="decision-count">{props.sourceStatus !== undefined && props.sourceStatus !== "available" ? "—" : t("decisions.count", { shown: shown.length, total: props.rows.length })}</span>
+        {props.reviewedCount !== undefined && props.reviewedCount > 0 && (
+          <span className="count" data-testid="reviewed-count">{t("decisions.reviewedThisSession", { n: props.reviewedCount })}</span>
+        )}
       </div>
       <p className="section-lede">
         {t(heading.lede)}
       </p>
+      <p className="kbd-hint">{t("decisions.keyHint")}</p>
       <div className="filters">
         {props.status !== undefined && (
           <label>

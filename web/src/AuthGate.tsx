@@ -145,7 +145,7 @@ function LoginForm({ ended, changed, onLoggedIn }: { ended: boolean; changed: bo
         {changed && <p role="status">{t("auth.passwordChanged")}</p>}
         <label>{t("auth.name")}<input name="name" autoComplete="username" value={name} onChange={(e) => setName(e.currentTarget.value)} /></label>
         <label>{t("auth.password")}<input name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.currentTarget.value)} /></label>
-        <button type="submit">{t("auth.logIn")}</button>
+        <button type="submit" className="btn-primary">{t("auth.logIn")}</button>
         {refusal !== null && <Refusal refusal={refusal} />}
         <p className="auth-hint">{t("auth.loginHint")}</p>
       </form>
@@ -183,7 +183,7 @@ function ChangePasswordForm({ me, onChanged, initial = true }: { me: Me; onChang
         <label>{t("auth.currentPassword")}<input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.currentTarget.value)} /></label>
         <label>{t("auth.newPassword")}<input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.currentTarget.value)} /></label>
         <label>{t("auth.newPasswordAgain")}<input type="password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.currentTarget.value)} /></label>
-        <button type="submit">{t("auth.changePassword")}</button>
+        <button type="submit" className="btn-primary">{t("auth.changePassword")}</button>
         {refusal !== null && <Refusal refusal={refusal} />}
       </form>
     </Frame>
@@ -281,6 +281,13 @@ function Notices(): JSX.Element | null {
     setRefusal(answer.ok ? null : answer);
     await read();
   };
+  const dismissAll = async (): Promise<void> => {
+    for (const notice of notices) {
+      const answer = await ackNotice(notice.seq);
+      if (!answer.ok) { setRefusal(answer); break; }
+    }
+    await read();
+  };
   if (notices.length === 0 && refusal === null) return null;
   return (
     <section className="notices" aria-label={t("auth.noticesTitle")}>
@@ -296,6 +303,9 @@ function Notices(): JSX.Element | null {
           </li>
         ))}
       </ul>
+      {notices.length > 1 && (
+        <button type="button" onClick={() => void dismissAll()}>{t("auth.dismissAll")}</button>
+      )}
       {refusal !== null && <Refusal refusal={refusal} />}
     </section>
   );

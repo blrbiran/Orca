@@ -167,6 +167,7 @@ function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean;
       )}
 
       <h3>{t("usage.byModel")}</h3>
+      <div className="table-scroll">
       <table>
         <thead>
           <tr>
@@ -183,13 +184,14 @@ function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean;
           ))}
         </tbody>
       </table>
+      </div>
       {grouped && (
-        <table data-testid="usage-groups">
+        <div className="table-scroll"><table data-testid="usage-groups">
           <thead><tr><th>{t("usage.th.group")}</th><th>{t("usage.th.total")}</th></tr></thead>
           <tbody>
             {view.range.groups.map((group) => <tr key={group.key ?? "\u0000unattributed"}><td>{label(group.key)}</td><td>{group.tokens}</td></tr>)}
           </tbody>
-        </table>
+        </table></div>
       )}
       <ul className="caveats">
         <li data-testid="usage-unattributed">{t("usage.counts.unattributed", { n: view.counts.unattributedRows })}</li>
@@ -222,6 +224,7 @@ function Caps({ view, owner, project, onSend }: { view: UsageViewV1; owner: bool
       {view.caps.length === 0 ? (
         <p data-testid="usage-no-caps">{t("usage.noCaps")}</p>
       ) : (
+        <div className="table-scroll">
         <table>
           <thead>
             <tr>
@@ -255,6 +258,7 @@ function Caps({ view, owner, project, onSend }: { view: UsageViewV1; owner: bool
             })}
           </tbody>
         </table>
+        </div>
       )}
       {owner && (
         <form

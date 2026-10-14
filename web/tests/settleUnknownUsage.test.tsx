@@ -102,7 +102,9 @@ describe("owner unmetered release", () => {
       expect(screen.getByRole("checkbox", { name: "我理解并同意此次放行" })).toBeTruthy();
       expect(screen.getByRole("button", { name: "确认不可撤销的放行" })).toBeTruthy();
       cleanup(); show(["owner"], released());
-      expect(screen.getByText("user:owner 于 1970-01-01T00:00:01.234Z 结清 · owner 不计量放行")).toBeTruthy();
+      // REWRITTEN (human authorisation, session 1f3cceb2, merging ui/panel-taste): the zh role word is 所有者
+      // (taste refinement P2-7, pinned by zhTerms); only the word changed, the intent is the same.
+      expect(screen.getByText("user:owner 于 1970-01-01T00:00:01.234Z 结清 · 所有者不计量放行")).toBeTruthy();
       expect(screen.getByText("已不计量放行。失败原因保留；恢复调度后可另行重试，仍须有足够预算。")).toBeTruthy();
     } finally { await i18n.changeLanguage("en"); }
   });
@@ -114,7 +116,9 @@ describe("owner unmetered release", () => {
       expect(line).toContain("usage settled · released unmetered by owner · Work: tokens not metered, 920 ms, 3 attempts, 4 sessions · Handoff: 51 tokens, 520 ms, 5 attempts, 6 sessions");
       await i18n.changeLanguage("zh");
       cleanup(); render(<RunActivity runId="run-a" changeSeq={1} />);
-      expect((await screen.findByRole("listitem")).textContent!).toContain("owner 不计量放行 · 工作：token 不计量，920 毫秒，3 次尝试，4 个会话 · 交接：51 token，520 毫秒，5 次尝试，6 个会话");
+      // REWRITTEN (human authorisation, session 1f3cceb2, merging ui/panel-taste): the zh role word is 所有者
+      // (taste refinement P2-7, pinned by zhTerms); only the word changed, the intent is the same.
+      expect((await screen.findByRole("listitem")).textContent!).toContain("所有者不计量放行 · 工作：token 不计量，920 毫秒，3 次尝试，4 个会话 · 交接：51 token，520 毫秒，5 次尝试，6 个会话");
     } finally { await i18n.changeLanguage("en"); vi.unstubAllGlobals(); }
   });
   it("tells the budget reader the group's usage is incomplete", async () => {

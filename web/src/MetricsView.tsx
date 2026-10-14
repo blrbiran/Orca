@@ -37,43 +37,51 @@ function noteText(sentence: string, code: string | undefined): string {
 export function MetricsView({ report, coverage }: { report: MetricsReport; coverage: PanelCoverage }): JSX.Element {
   const { t } = useTranslation();
   return (
-    <section>
-      <h2>{t("metrics.correctionRate")}</h2>
-      <p data-testid="correction-rate">{formatRate(report.correction_rate.rate_excluding_stale)}</p>
-      <ul className="caveats" data-testid="correction-rate-caveats">
-        {report.correction_rate.caveats.map((caveat, index) => (
-          <li key={caveat}>{noteText(caveat, report.correction_rate.caveatCodes?.[index])}</li>
-        ))}
-      </ul>
-
-      <h2>{t("metrics.repairRate")}</h2>
-      <p data-testid="repair-rate">{formatRate(report.repair_rate.rate)}</p>
-      <ul className="caveats" data-testid="repair-rate-caveats">
-        {report.repair_rate.caveats.map((caveat, index) => (
-          <li key={caveat}>{noteText(caveat, report.repair_rate.caveatCodes?.[index])}</li>
-        ))}
-      </ul>
-      <p className="stale-bias" data-testid="stale-bias">
-        {noteText(report.repair_rate.stale_only.known_bias, report.repair_rate.stale_only.knownBiasCode)}
-      </p>
-
-      <h2>{t("metrics.reviewCoverage")}</h2>
-      <p className="caveat" data-testid="review-coverage-reason">
-        {noteText(report.review_coverage.reason, report.review_coverage.reasonCode)}
-      </p>
-      <p data-testid="panel-coverage-rate">{formatRate(coverage.rate)}</p>
-      <p className="caveat" data-testid="panel-coverage-caveat">
-        {noteText(coverage.caveat, coverage.caveatCode)}
-      </p>
-
-      <h2>{t("metrics.unresolvedTitle")}</h2>
-      <p data-testid="unresolved-count">{t("metrics.unresolvedCount", { n: report.unresolved_decisions.length })}</p>
-
-      <h2>{t("metrics.malformedTitle")}</h2>
-      <p data-testid="malformed-count">{t("metrics.malformedCount", { n: report.malformed_lines.length })}</p>
-
-      <h2>{t("metrics.futureTitle")}</h2>
-      <p data-testid="excluded-as-future">{t("metrics.futureCount", { n: report.excluded_as_future })}</p>
+    <section className="metrics">
+      <div className="metric-tiles">
+        <div className="metric-tile">
+          <h2>{t("metrics.correctionRate")}</h2>
+          <p className="metric-value" data-testid="correction-rate">{formatRate(report.correction_rate.rate_excluding_stale)}</p>
+          <div className="metric-notes">
+            <ul className="caveats" data-testid="correction-rate-caveats">
+              {report.correction_rate.caveats.map((caveat, index) => (
+                <li key={caveat}>{noteText(caveat, report.correction_rate.caveatCodes?.[index])}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <div className="metric-tile">
+          <h2>{t("metrics.repairRate")}</h2>
+          <p className="metric-value" data-testid="repair-rate">{formatRate(report.repair_rate.rate)}</p>
+          <div className="metric-notes">
+            <ul className="caveats" data-testid="repair-rate-caveats">
+              {report.repair_rate.caveats.map((caveat, index) => (
+                <li key={caveat}>{noteText(caveat, report.repair_rate.caveatCodes?.[index])}</li>
+              ))}
+            </ul>
+            <p className="stale-bias" data-testid="stale-bias">
+              {noteText(report.repair_rate.stale_only.known_bias, report.repair_rate.stale_only.knownBiasCode)}
+            </p>
+          </div>
+        </div>
+        <div className="metric-tile">
+          <h2>{t("metrics.reviewCoverage")}</h2>
+          <p className="metric-value" data-testid="panel-coverage-rate">{formatRate(coverage.rate)}</p>
+          <div className="metric-notes">
+            <p className="caveat" data-testid="review-coverage-reason">
+              {noteText(report.review_coverage.reason, report.review_coverage.reasonCode)}
+            </p>
+            <p className="caveat" data-testid="panel-coverage-caveat">
+              {noteText(coverage.caveat, coverage.caveatCode)}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="metric-health">
+        <div><h2>{t("metrics.unresolvedTitle")}</h2><p data-testid="unresolved-count">{t("metrics.unresolvedCount", { n: report.unresolved_decisions.length })}</p></div>
+        <div><h2>{t("metrics.malformedTitle")}</h2><p data-testid="malformed-count">{t("metrics.malformedCount", { n: report.malformed_lines.length })}</p></div>
+        <div><h2>{t("metrics.futureTitle")}</h2><p data-testid="excluded-as-future">{t("metrics.futureCount", { n: report.excluded_as_future })}</p></div>
+      </div>
     </section>
   );
 }

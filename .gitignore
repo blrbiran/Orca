@@ -19,6 +19,8 @@
 .worktrees/
 .claude/worktrees/
 node_modules/
+/node_modules
+/web/node_modules
 dist/
 .orca/chain-logs/
 

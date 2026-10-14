@@ -11,7 +11,7 @@ export function RefusalNotice({ refusal, testId }: { refusal: ControlRefusal; te
   useTranslation(); // re-render when the language changes: explainRefusal reads it
   const { text, items } = explainRefusal(refusal);
   return (
-    <div className="refusal" role="alert" data-testid={testId} data-status={refusal.status ?? ""}>
+    <div className="refusal" role="alert" data-tone="danger" data-testid={testId} data-status={refusal.status ?? ""}>
       <p>{text}</p>
       {items.length > 0 && (
         <ul>

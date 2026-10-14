@@ -34,7 +34,7 @@ export function UsageSettlement({ run, roles, archived, groupId, revision, onCom
   return <div>
     <p>{t("control.settlement.unknown")}</p>
     {!owner && <p>{t("control.settlement.contactOwner")}</p>}
-    {preview.refusalReason && <p role="status">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p>}
+    {preview.refusalReason && <p role="status" data-tone="warn">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p>}
     {!archived && owner && preview.allowed && run.taskId !== null && (!open ? <button type="button" onClick={() => setOpen(true)}>{t(release ? "control.settlement.releaseOpen" : "control.settlement.open")}</button> : <div role="group" aria-label={t("control.settlement.confirmation")}>
       <ChargeTable amounts={preview.remaining} settled={false} />
       <p>{t(release ? "control.settlement.releaseWarning" : "control.settlement.warning")}</p>

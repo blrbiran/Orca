@@ -37,6 +37,9 @@ export function progressText(chain: ChainView): string {
   return i18n.t("chains.sessionProgress", { n, cost: costText(chain.costUsd) });
 }
 
+/** Taste refinement P1-1: a finished chain is good news; only an anomaly is an alarm. */
+export const BANNER_TONE = { done: "ok", blocked: "warn", limit: "warn", anomaly: "danger" } as const satisfies Record<Banner["category"], "ok" | "warn" | "danger">;
+
 /**
  * Panel UI redesign spec §5.1: the banners, lifted out verbatim so App can show them above
  * every section. ChainPanel still renders the ones it is given (App passes none).
@@ -46,7 +49,7 @@ export function ChainBanners({ banners, onDismiss }: { banners: readonly Banner[
   return (
     <>
       {banners.map((b) => (
-        <div key={b.chainId} role="alert" className={`chain-banner chain-banner-${b.category}`} data-chain-id={b.chainId}>
+        <div key={b.chainId} role="alert" data-tone={BANNER_TONE[b.category]} className={`chain-banner chain-banner-${b.category}`} data-chain-id={b.chainId}>
           <strong>{b.text}</strong>
           <span>{` ${b.repoKey}: ${b.reason}`}</span>
           {b.awaitingHuman.length > 0 && (
@@ -157,7 +160,7 @@ export function ChainPanel({
           {t("chains.formTimeout")}
           <input key={repoKey} name="sessionTimeoutMin" type="number" min="1" defaultValue={selected?.defaultSessionTimeoutMin ?? ""} />
         </label>
-        <button type="submit" data-action="start-chain">
+        <button type="submit" className="btn-primary" data-action="start-chain">
           {t("chains.start")}
         </button>
       </form>
