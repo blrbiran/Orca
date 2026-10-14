@@ -26,7 +26,7 @@ interface Call { method: string; url: string; headers: Record<string, string>; b
 let calls: Call[];
 let meAnswers: Array<{ status: number; body: unknown }>;
 let notices: unknown[];
-let routes: Record<string, () => Response>;
+let routes: Record<string, () => Response | Promise<Response>>;
 
 beforeEach(() => {
   calls = []; meAnswers = []; notices = []; routes = {};
@@ -308,6 +308,64 @@ describe("AuthGate (spec §7)", () => {
     await waitFor(() => expect(screen.queryByRole("region", { name: /security notices/i })).toBeNull());
     expect(posts("/api/auth/notices/3/ack")).toHaveLength(1);
     expect(posts("/api/auth/notices/5/ack")).toHaveLength(1);
+  });
+
+  // Taste round 2 task 6.
+  it("acknowledges each notice once when Dismiss all is pressed twice in a row", async () => {
+    notices = [
+      { seq: 3, at: 0, kind: "user-created", body: { name: "eve" } },
+      { seq: 5, at: 0, kind: "password-changed", body: { name: "eve" } },
+    ];
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    routes["POST /api/auth/notices/3/ack"] = async () => { await held; return jsonResponse({ acknowledged: true }); };
+    meAnswers = [me({ name: "olga", roles: ["owner"] })];
+    render(<AuthGate><p>app body</p></AuthGate>);
+    const banner = await screen.findByRole("region", { name: /security notices/i });
+    const button = within(banner).getByRole("button", { name: "Dismiss all" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    for (const b of within(banner).getAllByRole("button", { name: "Dismiss" })) expect((b as HTMLButtonElement).disabled).toBe(true);
+    notices = [];
+    release();
+    await waitFor(() => expect(screen.queryByRole("region", { name: /security notices/i })).toBeNull());
+    expect(posts("/api/auth/notices/3/ack")).toHaveLength(1);
+    expect(posts("/api/auth/notices/5/ack")).toHaveLength(1);
+  });
+
+  it("drops an earlier refusal once Dismiss all succeeds", async () => {
+    notices = [
+      { seq: 3, at: 0, kind: "user-created", body: { name: "eve" } },
+      { seq: 5, at: 0, kind: "password-changed", body: { name: "eve" } },
+      { seq: 7, at: 0, kind: "user-created", body: { name: "fay" } },
+    ];
+    let refuse = true;
+    routes["POST /api/auth/notices/3/ack"] = () => refuse ? jsonResponse({ code: "notice-ack-failed", message: "no" }, 409) : jsonResponse({ acknowledged: true });
+    meAnswers = [me({ name: "olga", roles: ["owner"] })];
+    render(<AuthGate><p>app body</p></AuthGate>);
+    const banner = await screen.findByRole("region", { name: /security notices/i });
+    fireEvent.click(within(banner).getAllByRole("button", { name: "Dismiss" })[0]!);
+    await within(banner).findByTestId("refusal-code");
+    refuse = false;
+    notices = [{ seq: 5, at: 0, kind: "password-changed", body: { name: "eve" } }, { seq: 7, at: 0, kind: "user-created", body: { name: "fay" } }];
+    fireEvent.click(within(banner).getByRole("button", { name: "Dismiss all" }));
+    notices = [];
+    await waitFor(() => expect(screen.queryByRole("region", { name: /security notices/i })).toBeNull());
+  });
+
+  it("shows a refusal and offers Dismiss all again when an acknowledgement request fails outright (spec §6 I4)", async () => {
+    notices = [
+      { seq: 3, at: 0, kind: "user-created", body: { name: "eve" } },
+      { seq: 5, at: 0, kind: "password-changed", body: { name: "eve" } },
+    ];
+    routes["POST /api/auth/notices/3/ack"] = () => { throw new TypeError("Failed to fetch"); };
+    meAnswers = [me({ name: "olga", roles: ["owner"] })];
+    render(<AuthGate><p>app body</p></AuthGate>);
+    const banner = await screen.findByRole("region", { name: /security notices/i });
+    fireEvent.click(within(banner).getByRole("button", { name: "Dismiss all" }));
+    await within(banner).findByTestId("refusal-code");
+    expect((within(banner).getByRole("button", { name: "Dismiss all" }) as HTMLButtonElement).disabled).toBe(false);
+    for (const b of within(banner).getAllByRole("button", { name: "Dismiss" })) expect((b as HTMLButtonElement).disabled).toBe(false);
   });
 });
 

@@ -281,12 +281,19 @@ function Notices(): JSX.Element | null {
     setRefusal(answer.ok ? null : answer);
     await read();
   };
+  const [dismissing, setDismissing] = useState(false);
   const dismissAll = async (): Promise<void> => {
-    for (const notice of notices) {
-      const answer = await ackNotice(notice.seq);
-      if (!answer.ok) { setRefusal(answer); break; }
-    }
-    await read();
+    setDismissing(true);
+    try {
+      let refused: PanelRefusal | null = null;
+      for (const notice of notices) {
+        const answer = await ackNotice(notice.seq);
+        if (!answer.ok) { refused = answer; break; }
+      }
+      setRefusal(refused);
+      await read();
+    } catch (err) { setRefusal(failureFrom(err)); }
+    finally { setDismissing(false); }
   };
   if (notices.length === 0 && refusal === null) return null;
   return (
@@ -299,12 +306,12 @@ function Notices(): JSX.Element | null {
               subject: noticeSubject(notice.body, names),
               at: new Date(notice.at).toLocaleString(),
             })}
-            <button type="button" onClick={() => void dismiss(notice.seq)}>{t("auth.dismiss")}</button>
+            <button type="button" disabled={dismissing} onClick={() => void dismiss(notice.seq)}>{t("auth.dismiss")}</button>
           </li>
         ))}
       </ul>
       {notices.length > 1 && (
-        <button type="button" onClick={() => void dismissAll()}>{t("auth.dismissAll")}</button>
+        <button type="button" disabled={dismissing} onClick={() => void dismissAll()}>{t("auth.dismissAll")}</button>
       )}
       {refusal !== null && <Refusal refusal={refusal} />}
     </section>
