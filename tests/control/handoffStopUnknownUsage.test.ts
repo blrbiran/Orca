@@ -157,7 +157,7 @@ describe("handoff-stopped run: refusals and what the settlement leaves behind", 
   it("a stopped group whose stop intent is gone refuses the settlement as a stop-mode conflict", async () => {
     const { x, driver, id } = await stopped("optional-v1", null); try {
       x.h.store.db.prepare("DELETE FROM stop_intents WHERE group_id='g'").run();
-      expect((await settle(x, id, "release-unmetered")).error.code).toBe("stop-mode-conflict");
+      expect((await settle(x, id, "release-unmetered")).error).toMatchObject({ code: "stop-mode-conflict" });
     } finally { await driver.stop(); await x.h.dispose(); }
   });
   it("the preview refuses a checkpoint the command would refuse (missing snapshot artifact)", async () => {
