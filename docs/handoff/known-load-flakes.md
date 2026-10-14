@@ -47,6 +47,11 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
   23 个红文件逐个单跑各 3/3 绿（负载 5–24，日志 `/private/tmp/rerun/`，会话结束即可删）：`chain/gateCheck`、`checkpoint/resume`、`control/{archivedWakePerformance,driverLanding,driverProgress,driverRecovery,driverRequirementSplit,retryTask,schedulerBridge,settleUnknownUsage,webMutations}`、
   `panel/{agentSelectionApi,auth,controlApi,controlOverview,controlOverviewApi,controlPollPerformance,controlSocketGate,correctApi,decisionsApi,integrationApi,metricsApi,security}`。
   ⚠️ 同一轮第一次全量里 `controlPollPerformance` 与 `webProtocol` 的红**不是** flake：是 D 自己引入的（`unmeteredRuns` 另查库、夹具缺字段），已修（提交 `fix(control): count unmetered runs from the view, …`）。
+- **2026-10-14 会话 `b39a5527`（repin 分支 `codex/repin-ccloop-3069dbf`，观测提交＝主题行 `test(control): show the stop-mode refusal's diff instead of a TypeError`；`ORCA_CCLOOP_BIN`＝ccloop `3069dbf` 的 build clone）**：
+  根级全量（负载 16–44）19 红：17 条超时（`gateCheck` K13、`archivedWakePerformance`、`driverLanding` 「leaves the branch alone when it moved between the merge and the swap…」、`driverRecovery`、`driverRequirementSplit`、`retryTask` stop guard、`schedulerBridge`、`settleUnknownUsage` D9 两条、`tokenPolicyStop`「a fresh retry preserves prior finite attempts and sessions under unlimited tokens」、`controlOverview`「keeps queued estimates out of human preparation…」、`controlRecoveryApi` 三条、`integrationApi`「refuses set-group-integration from an agent…」）＋ 2 条 `taskResultPaired` 环境红。
+  同树第二次全量（负载约 20）只剩那 2 条环境红。红文件负载 5–18 下逐个单跑 3/3 绿（日志 `/private/tmp/og-b395/rerun/`，会话结束即可删）。
+  ⚠️ **两条断言形状、未豁免的候选**（n＝1，都红在被测停止动作**之前**的前置状态上，像真 ccloop 下的时序竞争，未证成）：`agentSelectionE2E` C3 `expected [ 'b', 'd' ] to deeply equal [ 'a', 'b', 'd' ]`（`:292`，与上表 C3 的 `until` 超时**不是同一形状**）；
+  `handoffE2E` H5 `expected [ 'collected', 'collected' ] to deeply equal [ 'collected', 'accepted' ]`（`:260`）。两文件各单跑 3/3 绿（6/6、12/12 执行，无跳过）。**再见就当新问题查。**
 
 ### 已修、不再豁免的（再红就当新问题查）
 
@@ -62,6 +67,7 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 - `taskResultPaired` 两条硬编码旧配对二进制路径；用本地 ccloop 构建（如 OMP 分支）跑会红（2026-10-12～13 观测）。
 - 普通沙箱下 `spawnSync ps EPERM`／`listen EPERM` 大面积红（2026-10-10、10-12）⇒ 用本机进程权限重跑。
 - `TMPDIR` 太长（tsx socket 超 104 字节、`EADDRINUSE`）或是软链（git 报真实路径）⇒ 各约 7 条假红；用短真目录。
+- `check-tmp-leak.mjs` 每次留 1 个只含空 `orca-ccmem-*`／`orca-test-control-*` 的 `orca-tmp-*`：`agentUpdatePaired` 用 `describe.skipIf` 在收集期整文件跳过（没设 `ORCA_TASK9_*` 时）⇒ 由提交 `test(control): skip the paired update criterion at run time …` 修（2026-10-14 `b39a5527`，在 repin 分支上，随它合进 main）。再见就找别的收集期整文件跳过。
 
 ## ccloop 侧（供 Orca 跑 ccloop 全量时对照；**权威名单在 ccloop 仓自己的 handoff 与 `scripts/check-known-reds.mjs`**）
 
