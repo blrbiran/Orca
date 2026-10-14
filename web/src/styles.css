@@ -374,6 +374,10 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 @media (pointer: coarse) {
   button, select, input, .nav-item { min-height: 44px; }
 }
+@media (pointer: coarse) {
+  input[type="checkbox"], input[type="radio"] { min-height: 0; }
+  .kbd-hint { display: none; }
+}
 .skip-link { position: absolute; left: -9999px; top: 8px; z-index: 100; }
 .skip-link:focus { left: 8px; }
 

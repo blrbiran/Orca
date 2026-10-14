@@ -22,4 +22,5 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 
 ## Layout
 - ≥761px: fixed shell, sidebar and content scroll independently. ≤760px wide or ≤560px tall: the page scrolls as a whole; nav is one horizontally scrolling row; the footer hides. The project caption stays (it explains the hidden Add/Rename).
+- On touch (`pointer: coarse`) buttons, selects, inputs and nav items are at least 44px tall; checkboxes and radios keep their native size; the j/k/a/c hint is hidden.
 - Panes stay mounted; only `.section-pane:not([data-active="true"])` hides one.
