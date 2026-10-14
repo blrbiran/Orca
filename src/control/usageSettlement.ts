@@ -14,7 +14,8 @@ export const unmeteredChargeSchema = z.object({ work: amountSchema.extend({ toke
 const markerFields = {
   commandId: idSchema, principal: z.string().regex(/^user:.+/), at: safeInteger,
   groupId: idSchema, taskId: idSchema, workItemId: idSchema, runId: idSchema, generation: safeInteger.positive(), highWater: safeInteger,
-  reservationDisposition: z.enum(["committed", "released"]), report: artifactSchema,
+  // "recovered": spec 2026-10-14-handoff-stop-unknown-usage-design.md §3.2, a handoff-stopped run settled back to recoverable.
+  reservationDisposition: z.enum(["committed", "released", "recovered"]), report: artifactSchema,
   stopProof: z.object({ executionId: z.string().min(1), generation: safeInteger.positive(), isolated: z.literal(true), source: artifactSchema }).strict(),
   handoffResolution: z.object({ requestId: idSchema, previousState: z.literal("settled-unrecoverable"), previousFailureCode: z.literal("usage-unsettled"), checkpointId: idSchema, checkpointHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional(),
 };
@@ -22,7 +23,7 @@ export const usageSettlementSchema = z.union([
   z.object({ method: z.literal("remaining-grant"), charged: pair, ...markerFields }).strict(),
   z.object({ method: z.literal("owner-acknowledged-unmetered"), charged: unmeteredChargeSchema, ...markerFields }).strict(),
 ]).superRefine((v, ctx) => {
-  if ((v.reservationDisposition === "released") !== (v.handoffResolution !== undefined)) ctx.addIssue({ code: "custom", message: "settlement-disposition-resolution" });
+  if ((v.reservationDisposition !== "committed") !== (v.handoffResolution !== undefined)) ctx.addIssue({ code: "custom", message: "settlement-disposition-resolution" });
 });
 export type UsageSettlement = z.infer<typeof usageSettlementSchema>;
 export interface SettlementRun {
@@ -54,6 +55,14 @@ function candidateIdentity(c: Candidate, run: SettlementRun): void {
 }
 export function settlementProof(store: ControlStore, run: SettlementRun): { report: ArtifactRef; stopProof: UsageSettlement["stopProof"] } {
   try {
+    if (run.drive?.outcome === null) {
+      // Spec 2026-10-14-handoff-stop-unknown-usage-design.md §3.2: a run the handoff stopped while working has no terminal
+      // report; its handoff checkpoint carries the stop proof, and its handoff packet stands in as the marker's report.
+      const c = storedCheckpoint(store, run).c;
+      if (c.result !== "partial" || !c.stopProof) throw new Error("checkpoint-not-partial");
+      validateStopProof(store, run, c);
+      return { report: c.handoff, stopProof: c.stopProof };
+    }
     const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='report'").get(`report:${run.runId}`);
     if (!row) throw new Error("report-missing");
     const source = artifactSchema.parse(JSON.parse(String(row.body)).source);
@@ -71,23 +80,30 @@ function validateStopProof(store: ControlStore, run: SettlementRun, c: Candidate
   const proof = JSON.parse(settlementArtifact(store, c.stopProof.source).toString());
   if (proof.isolated !== true || proof.executionId !== run.executionId || proof.generation !== run.generation) throw new Error("stop-proof-content");
 }
+function storedCheckpoint(store: ControlStore, run: SettlementRun): { c: Candidate; hash: string } {
+  if (!run.checkpointId) throw new Error("checkpoint-missing");
+  const row = store.db.prepare("SELECT hash,body FROM checkpoints WHERE id=? AND run_id=?").get(run.checkpointId, run.runId);
+  if (!row) throw new Error("checkpoint-missing");
+  const path = join(store.stateDir, "checkpoints", run.runId, `${run.checkpointId}.json`);
+  if (!lstatSync(path).isFile() || lstatSync(path).isSymbolicLink()) throw new Error("checkpoint-path");
+  const bytes = readFileSync(path), c = candidateSchema.parse(JSON.parse(bytes.toString()));
+  if (createHash("sha256").update(bytes).digest("hex") !== row.hash || !bytes.equals(Buffer.from(String(row.body)))) throw new Error("checkpoint-hash");
+  candidateIdentity(c, run);
+  if (c.checkpointId !== run.checkpointId) throw new Error("checkpoint-identity");
+  return { c, hash: String(row.hash) };
+}
+
 /** Recompute every non-usage handoff condition, rather than trusting the failureCode string. */
 export function releasedSettlementCheckpoint(store: ControlStore, run: SettlementRun): { checkpointId: string; checkpointHash: string } {
   try {
-    if (!run.checkpointId) throw new Error("checkpoint-missing");
-    const row = store.db.prepare("SELECT hash,body FROM checkpoints WHERE id=? AND run_id=?").get(run.checkpointId, run.runId);
-    if (!row) throw new Error("checkpoint-missing");
-    const path = join(store.stateDir, "checkpoints", run.runId, `${run.checkpointId}.json`);
-    if (!lstatSync(path).isFile() || lstatSync(path).isSymbolicLink()) throw new Error("checkpoint-path");
-    const bytes = readFileSync(path), c = candidateSchema.parse(JSON.parse(bytes.toString()));
-    if (createHash("sha256").update(bytes).digest("hex") !== row.hash || !bytes.equals(Buffer.from(String(row.body)))) throw new Error("checkpoint-hash");
-    candidateIdentity(c, run);
-    if (c.checkpointId !== run.checkpointId || c.terminalOutcome === "succeeded" || c.terminalOutcome !== run.drive?.outcome
+    const { c, hash } = storedCheckpoint(store, run);
+    // A failed run's checkpoint names its failure; a run stopped while working (no outcome) has a partial one (2026-10-14 §3.1).
+    if (c.terminalOutcome === "succeeded" || (run.drive?.outcome === null ? c.result !== "partial" : c.terminalOutcome !== run.drive?.outcome)
       || c.missing.length || c.unresolvedRequestIds.length || c.snapshot === null) throw new Error("checkpoint-incomplete");
     validateStopProof(store, run, c);
     for (const ref of [...c.artifacts, c.handoff, c.snapshot]) settlementArtifact(store, ref);
     for (const event of store.db.prepare("SELECT body FROM usage_events WHERE run_id=? AND seq<=?").all(run.runId, run.highWater)) settlementArtifact(store, JSON.parse(String(event.body)).source);
-    return { checkpointId: c.checkpointId, checkpointHash: String(row.hash) };
+    return { checkpointId: c.checkpointId, checkpointHash: hash };
   } catch { throw new ControlError("run-stop-proof-required", "handoff-checkpoint"); }
 }
 
@@ -98,8 +114,11 @@ export function releasedSettlementCheckpoint(store: ControlStore, run: Settlemen
  */
 export function lineageWorkUsage(run: { cumulative: { work: Amount }; usageSettlement?: unknown }): Amount {
   const m = run.usageSettlement as UsageSettlement | undefined, work = run.cumulative.work;
-  if (m?.method !== "owner-acknowledged-unmetered") return work;
-  return { tokens: work.tokens, activeMs: work.activeMs - m.charged.work.activeMs, attempts: work.attempts - m.charged.work.attempts, sessions: work.sessions - m.charged.work.sessions };
+  // A run settled back to recoverable (spec 2026-10-14-handoff-stop-unknown-usage-design.md §3.2) is continued, so the same
+  // ruling holds for its remaining-grant charge: otherwise the charge exhausts the authored budget the continuation needs.
+  if (m === undefined || (m.method !== "owner-acknowledged-unmetered" && m.reservationDisposition !== "recovered")) return work;
+  const c = m.charged.work;
+  return { tokens: c.tokens === null ? work.tokens : work.tokens - c.tokens, activeMs: work.activeMs - c.activeMs, attempts: work.attempts - c.attempts, sessions: work.sessions - c.sessions };
 }
 
 /** A persisted marker must be backed by the authority receipt, unchanged provider highWater and immutable proof. */
@@ -135,9 +154,11 @@ export function hasValidUsageSettlement(store: ControlStore, subject: unknown): 
       const h = m.handoffResolution, c = releasedSettlementCheckpoint(store, run);
       if (c.checkpointId !== h.checkpointId || c.checkpointHash !== h.checkpointHash) return false;
       const r = store.db.prepare("SELECT state,body FROM handoff_requests WHERE group_id=? AND id=? AND run_id=?").get(run.groupId, h.requestId, run.runId);
-      if (!r || r.state !== "settled-failed") return false;
+      // A recovered run's request settled recoverable with no failure (spec 2026-10-14-handoff-stop-unknown-usage-design.md §3.2).
+      const recovered = m.reservationDisposition === "recovered", state = recovered ? "settled-recoverable" : "settled-failed";
+      if (!r || r.state !== state) return false;
       const body = JSON.parse(String(r.body));
-      if (body.requestId !== h.requestId || body.runId !== run.runId || body.state !== "settled-failed" || body.failureCode !== h.previousFailureCode) return false;
+      if (body.requestId !== h.requestId || body.runId !== run.runId || body.state !== state || body.failureCode !== (recovered ? null : h.previousFailureCode)) return false;
     }
     return true;
   } catch { return false; }

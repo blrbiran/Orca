@@ -925,6 +925,18 @@ export function handoffRequestFromOutbox(store: ControlStore, requestId: string)
 }
 
 /** D9 only: commitments were already released; never terminaliseRun/releaseCommitment a second time. */
+/**
+ * Spec 2026-10-14-handoff-stop-unknown-usage-design.md §3.2: the owner settled the unknown usage of a run the handoff stopped
+ * while it worked, so its request settles recoverable, as it would have with known usage.
+ */
+export function settleRecoveredRequestInTransaction(store: ControlStore, groupId: string, requestId: string, marker: UsageSettlement): void {
+  const request = readHandoffRequest(store, groupId, requestId).request;
+  if (request.state !== "settled-unrecoverable" || request.failureCode !== "usage-unsettled" || marker.reservationDisposition !== "recovered" || marker.handoffResolution?.requestId !== requestId) throw new ControlError("run-usage-not-settleable", "handoff-resolution");
+  saveHandoffRequest(store, groupId, { ...request, state: "settled-recoverable", failureCode: null });
+  const intent = readStopIntent(store, groupId);
+  if (intent && intent.mode !== "pause") rewriteStopIntentState(store, groupId, intent, deriveStopState(store, groupId, intent.frozenRunIds));
+}
+
 export function settleManuallyFailedRequestInTransaction(store: ControlStore, groupId: string, requestId: string, marker: UsageSettlement): void {
   const request = readHandoffRequest(store, groupId, requestId).request;
   if (request.state !== "settled-unrecoverable" || request.failureCode !== "usage-unsettled" || marker.reservationDisposition !== "released" || marker.handoffResolution?.requestId !== requestId) throw new ControlError("run-usage-not-settleable", "handoff-resolution");
