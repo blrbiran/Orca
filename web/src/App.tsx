@@ -551,7 +551,8 @@ export function App(): JSX.Element {
       setAgentsRetry(null);
     } catch (err) {
       const refusal = controlFailureFrom(err);
-      dispatchControl({ type: "refusal", place: "panel", groupId: null, value: refusal });
+      // The amber no-port note already says this, so it is not a panel alert (taste round 2, H1-b).
+      if (refusal.code !== "control-port-unconfigured") dispatchControl({ type: "refusal", place: "panel", groupId: null, value: refusal });
       setAgentsFailure(refusal.code);
       // An unconfigured port stays so until the panel restarts: nothing to retry.
       if (!retry || controlConfig?.executionPort !== "configured") return;
