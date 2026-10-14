@@ -3,7 +3,8 @@
 > ✅ **第一批（§〇–§五）已由人 merge 进 main（2026-09-27）；结论已并回 `docs/handoff/handoff.md` §三、§四 4.0.a、§6.19、§9.0d —— 以那里为准。**
 > ✅ 第二批（§六）已合入 main。
 > ✅ 第三批（§七，精修）已由人合入 main 并 push（合并提交主题行 `Merge branch 'ui/panel-taste'`）；稳定结论已并入 `handoff.md` §五 5.2.6、§六 6.7。
-> 🔵 **第三批第二轮（§七.二，同一分支 `ui/panel-taste`）待人视觉验收与合并：读 §七.二。**（人要求后续问题继续追加在本文）
+> ✅ 第三批第二轮（§七.二）已由人合入 main 并 push（合并提交主题行 `Merge branch 'ui/panel-taste'`，2026-10-14）。
+> 🔵 **第二轮之后的跟进（§七.三）待人视觉验收与合并；第二轮本身也还欠视觉验收。**（人要求后续问题继续追加在本文）
 
 > **读者是下一个 agent。** 这一批 UI 改动的交接写在本文，**不写进 `docs/handoff/handoff.md`**；
 > 等 UI 基本 ready、由人决定合并时，再把本文的结论并回 `handoff.md`。
@@ -200,7 +201,7 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 
 ## 七.二、第三批第二轮（分支 `ui/panel-taste`，会话 `1f3cceb2`，2026-10-14）
 
-**状态自查**：`git -C /Users/biran/code/skills/orca/Orca-wt/ui-taste log --oneline main..ui/panel-taste` 非空 ⇒ 未合。⚠️ main 在本轮期间又被别的 agent 推进过（至少一笔 `chore(checkpoint): …`），`--ff-only` 不成，合并用 `--no-ff`。
+**状态**：已由人合入 main 并 push（会话 `fb98aa31` 现测：`git log main..ui/panel-taste` 为空，分支尖端 `docs(handoff): cite the round-2 measurements…` 是 main 的祖先）。此后本分支的提交属于第二轮之后的跟进。
 
 **唯一真相源**
 | 材料 | 路径（worktree 内） |
@@ -232,10 +233,25 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 5. `cp` 在本机是 `cp -i` 别名：覆盖文件用 `/bin/cp -f`，否则静默不覆盖（本轮合并时差点把冲突标记 stage 进去）。
 
 **awaitingHuman**
-- 🔴 视觉验收第二轮，然后合并 `ui/panel-taste` 进 main 并 push —— 人做（Tier 0）：`cd /Users/biran/code/skills/orca/Orca && git pull --ff-only && git merge --no-ff ui/panel-taste && git push`。合并后本节稳定结论并入 `handoff.md`。
-- 要人知情／审的 agent 裁定（台账 `Ruling:` 行）：
-  - **R-a**：`tests/fixtures/metrics/golden.json` 四处句子跟着 H2 改了（人授权的是服务端句子＋`noteCodes`，金样不在点名里）。不同意就回滚该笔。
-  - **A7 取消**：人批准过「答复轮加主按钮」，但需求页已有常驻主按钮「新需求」，再加会同屏两个主按钮，违反 `DESIGN.md`；`template.test.ts` 未动。要做得先定「需求页哪个是主按钮」。
-- 未授权、只登记的：`refetchRequired` 是 info 色却仍点亮红点（同 H1 的形状，要改得授权改 `shell.test.tsx` 那一行）；每次加载头 3–5 s 闪红色「server reset required」（首次 summary 按规格 resetRequired，要不要在首读时不显示归人定）；单条「Dismiss」无 try/catch、不与「全部知道了」互斥（服务端幂等，已进 `handoff.md` 已知缺口）。
+- 🔴 视觉验收第二轮（合并与 push 人已做完；稳定结论已在 Task 11 并入 `handoff.md` 5.2.6 与已知缺口）。
+- agent 裁定 R-a（金样随 H2 改）与 A7 取消（需求页不加第二个主按钮）：人在会话 `fb98aa31` 追认。
+- 登记项的去向见 §七.三。
 - 本会话留下的 clone（都是干净副本，删除归人）：会话 `1f3cceb2` 的 scratchpad 下 `final/`、`base/`、`mut-t1`、`mut-t1b`、`mut-t2`、`mut-t3`、`mut-t4`、`mut-t5`、`mut-t6`、`mut-t7`、`mut-t10`、`mut-t12`。
 - Rule 6：主控会话上下文超过 T1（orca level hook 报 420,331／T1 330,000，会话后段），人已说本会话不考虑上下文；已记台账。
+
+---
+
+## 七.三、第二轮之后的跟进（分支 `ui/panel-taste`，会话 `fb98aa31`，2026-10-14）
+
+**人裁**：R-a、A7 取消均追认；B1、B3 授权按 agent 建议做；B2（加载头 3–5 s 的红色「server reset required」）**不改**，保留规格行为。
+
+**做了什么**（按主题行找，`git log main..ui/panel-taste`）：
+- `fix(web): stop a projection refetch from lighting the red tasks dot` —— `refetchRequired` 移出 `ControlAlertInput`（同 I2 的做法）。改写 `web/tests/shell.test.tsx`：`quiet` 去掉该键、refetch 那行改期望 `false`（类型断言传入以示被忽略）、describe 标题 five → four，每处带 `REWRITTEN (human authorisation, session fb98aa31)`。
+- `fix(web): make a single notice Dismiss fail loudly and exclude Dismiss all` —— `dismiss()` 与 `dismissAll` 同用 `dismissing` 守卫＋try/catch/finally；`web/tests/authGate.test.tsx` 只新增两条。
+- `handoff.md` 5.2.6 的红点例外只剩 B2；已知缺口删掉单条 Dismiss 那条。
+
+**现测**（`git clone --local --branch ui/panel-taste` 的干净副本，尖端＝主题行 `fix(web): make a single notice Dismiss fail…`，load 8.06）：先红后绿各见过（shell 第 41 行；authGate 新两条）。变异 M1（恢复改前 `Shell.tsx`／`App.tsx`）→ `shell.test.tsx:41` 红；M2（`dismiss()` 不置守卫）→ `authGate.test.tsx:402` 红；M3（去掉 catch）→ `authGate.test.tsx:382` 红；还原后 `git diff`／`--cached` 0／0 字节。typecheck／web build／`--ws check`（124 文件／1076 条全过）／根 `tests/metrics` ＋ `tests/panel/scanPanelText.test.ts`（68 条全过）均 RC 0。日志在会话 `fb98aa31` scratchpad 的 `vlogs/`、`m1-3.log`。未跑 `verify:panel` 与根全量（只动了 web）。
+
+**awaitingHuman**
+- 🔴 视觉验收（第二轮＋本节两处）；然后人合并本分支进 main 并 push（Tier 0）。`handoff.md` 的两处改动与 main 上同段上下文逐行相同（会话 `fb98aa31` 比对），预期无冲突。
+- 本会话的变异 clone：会话 `fb98aa31` scratchpad 下 `mut/`（干净，删除归人）。

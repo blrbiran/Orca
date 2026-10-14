@@ -276,12 +276,16 @@ function Notices(): JSX.Element | null {
     } catch (err) { setRefusal(failureFrom(err)); }
   }, []);
   useEffect(() => { void read(); }, [read]);
-  const dismiss = async (seq: number): Promise<void> => {
-    const answer = await ackNotice(seq);
-    setRefusal(answer.ok ? null : answer);
-    await read();
-  };
   const [dismissing, setDismissing] = useState(false);
+  const dismiss = async (seq: number): Promise<void> => {
+    setDismissing(true);
+    try {
+      const answer = await ackNotice(seq);
+      setRefusal(answer.ok ? null : answer);
+      await read();
+    } catch (err) { setRefusal(failureFrom(err)); }
+    finally { setDismissing(false); }
+  };
   const dismissAll = async (): Promise<void> => {
     setDismissing(true);
     try {

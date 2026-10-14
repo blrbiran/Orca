@@ -11,10 +11,12 @@ import type { Section } from "./sections.js";
 
 const NAV_KEY = { overview: "nav.overview", decisions: "nav.decisions", chains: "nav.chains", tasks: "nav.tasks", requirements: "nav.requirements", memory: "nav.memory", metrics: "nav.metrics", "global-settings": "nav.globalSettings", "project-settings": "nav.projectSettings" } as const satisfies Record<Section, string>;
 
-/** The five conditions under which ControlPanel renders a role="alert" line ("no execution port" is a note, not an alert). */
+/**
+ * The four conditions that light the red nav dot. "No execution port" is a note, and "projection refetch
+ * required" is an info-toned re-read that clears itself, so neither is an alert here.
+ */
 export interface ControlAlertInput {
   resetRequired: boolean;
-  refetchRequired: boolean;
   dispatchBlocked: boolean;
   blockers: number;
   refusal: boolean;
@@ -24,7 +26,6 @@ export function controlAlert(input: ControlAlertInput | null): boolean {
   if (input === null) return false;
   return (
     input.resetRequired ||
-    input.refetchRequired ||
     input.dispatchBlocked ||
     input.blockers > 0 ||
     input.refusal

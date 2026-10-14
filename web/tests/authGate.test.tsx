@@ -367,6 +367,47 @@ describe("AuthGate (spec §7)", () => {
     expect((within(banner).getByRole("button", { name: "Dismiss all" }) as HTMLButtonElement).disabled).toBe(false);
     for (const b of within(banner).getAllByRole("button", { name: "Dismiss" })) expect((b as HTMLButtonElement).disabled).toBe(false);
   });
+
+  // Human authorisation, session fb98aa31 (B3): a single Dismiss fails as loudly as Dismiss all does.
+  it("shows a refusal and re-enables the buttons when one Dismiss fails outright", async () => {
+    notices = [
+      { seq: 3, at: 0, kind: "user-created", body: { name: "eve" } },
+      { seq: 5, at: 0, kind: "password-changed", body: { name: "eve" } },
+    ];
+    routes["POST /api/auth/notices/3/ack"] = () => { throw new TypeError("Failed to fetch"); };
+    meAnswers = [me({ name: "olga", roles: ["owner"] })];
+    render(<AuthGate><p>app body</p></AuthGate>);
+    const banner = await screen.findByRole("region", { name: /security notices/i });
+    fireEvent.click(within(banner).getAllByRole("button", { name: "Dismiss" })[0]!);
+    await within(banner).findByTestId("refusal-code");
+    expect((within(banner).getByRole("button", { name: "Dismiss all" }) as HTMLButtonElement).disabled).toBe(false);
+    for (const b of within(banner).getAllByRole("button", { name: "Dismiss" })) expect((b as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  // Human authorisation, session fb98aa31 (B3): while one Dismiss is in flight, nothing else can acknowledge,
+  // so Dismiss all cannot send a second ack for the same notice.
+  it("disables every acknowledgement button while one Dismiss is in flight", async () => {
+    notices = [
+      { seq: 3, at: 0, kind: "user-created", body: { name: "eve" } },
+      { seq: 5, at: 0, kind: "password-changed", body: { name: "eve" } },
+    ];
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    routes["POST /api/auth/notices/3/ack"] = async () => { await held; return jsonResponse({ acknowledged: true }); };
+    meAnswers = [me({ name: "olga", roles: ["owner"] })];
+    render(<AuthGate><p>app body</p></AuthGate>);
+    const banner = await screen.findByRole("region", { name: /security notices/i });
+    fireEvent.click(within(banner).getAllByRole("button", { name: "Dismiss" })[0]!);
+    const all = within(banner).getByRole("button", { name: "Dismiss all" }) as HTMLButtonElement;
+    await waitFor(() => expect(all.disabled).toBe(true));
+    for (const b of within(banner).getAllByRole("button", { name: "Dismiss" })) expect((b as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(all);
+    notices = [{ seq: 5, at: 0, kind: "password-changed", body: { name: "eve" } }];
+    release();
+    await waitFor(() => expect(within(banner).queryByRole("button", { name: "Dismiss all" })).toBeNull());
+    expect(posts("/api/auth/notices/3/ack")).toHaveLength(1);
+    expect(posts("/api/auth/notices/5/ack")).toHaveLength(0);
+  });
 });
 
 it("keeps the account bar and panel in the same viewport frame", async () => {
