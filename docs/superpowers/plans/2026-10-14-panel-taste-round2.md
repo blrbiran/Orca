@@ -430,3 +430,16 @@ describe("notice tones per site (final review T2)", () => {
 - [ ] **Step 4: handoff_ui.md §七** — replace the awaitingHuman list: merge+push done (merge commit subject `Merge branch 'ui/panel-taste'`, with the UsageSettlement conflict + zh `所有者不计量放行` fix); #3/#4/#5 done; undo-agree not wanted (human, 1f3cceb2); group A done; group B left (list stays in final-review.md). New awaitingHuman: visual review + merge of round 2.
 - [ ] **Step 5: handoff.md** — conclusions only, no process (spec §6 M-f; the file is already ~66K). Fold batch 3 conclusions (DESIGN.md as the UI rulebook; root tests that guard web copy: noteCodes, scanPanelText; symlinked node_modules + path-only add; tone rules) into the matching sections, Chinese, no hashes.
 - [ ] **Step 6: Commit** `git add -f .superpowers/sdd/2026-10-14-panel-taste-round2/progress.md && git add docs/handoff/handoff_ui.md docs/handoff/handoff.md docs/superpowers/plans/2026-10-14-panel-taste-round2.md && git commit -m "docs(handoff): record panel taste round 2 and fold batch 3 into the Orca handoff"`
+
+### Task 12: A no-port panel's agents read does not raise a red refusal (spec §7 H1-b)
+
+**Files:**
+- Modify: `web/src/App.tsx` (`loadAgents` catch, ~552-556)
+- Test: a new App-level case — put it in the existing file that already serves `executionPort: "unconfigured"` to the App with an agents 422 (`web/tests/agentPreviewRefresh.test.tsx` has the harness: `servedConfig`, `agentsFailures`); append a new `it`, existing cases unchanged.
+
+- [ ] **Step 1: Failing case.** With `servedConfig = { ...config, executionPort: "unconfigured" }` and the agents read answering 422 `control-port-unconfigured`, render the App, wait for the Task control pane, and assert: `screen.queryByTestId("nav-dot-tasks")` is null; no element in the Task control pane whose text contains `control-port-unconfigured · HTTP 422` outside the agent-selection section (the panel refusal line); the amber `p[role="note"][data-tone="warn"]` no-port note is present.
+- [ ] **Step 2:** run it → FAIL (dot present / panel refusal present).
+- [ ] **Step 3: Implement.** In `loadAgents`'s catch, compute `refusal` as today; call `dispatchControl({ type: "refusal", place: "panel", … })` only when `refusal.code !== "control-port-unconfigured"`; keep `setAgentsFailure(refusal.code)` unconditional; add a one-line comment: the amber no-port note already says this, so it is not a panel alert (taste round 2, H1-b).
+- [ ] **Step 4:** focused file green, then web `npm run --ws check`.
+- [ ] **Step 5: Mutation (clone).** Remove the `!== "control-port-unconfigured"` condition → new case red. Restore 0/0.
+- [ ] **Step 6: Commit** `fix(web): a no-port panel's agents read no longer raises a red refusal`.

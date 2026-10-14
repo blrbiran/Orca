@@ -101,3 +101,18 @@ seven Minor. Dispositions:
   handoff); only its §七 status lines are replaced.
 - **M-g** M4's reset also clears the selection (`setSelected(null)`), so a Reviewed row does not stay open over the
   unreviewed list.
+
+## 7. Found in real-browser verification (same session, after Tasks 1–10; overrides the text above)
+
+A redirected panel with no execution port (round-2 tip) still showed the red nav dot. After the page settled, the
+only lit condition was a panel-level refusal `control-port-unconfigured · HTTP 422`, produced by `loadAgents`
+(`web/src/App.tsx` ~543-569) reading `GET /api/control/agents`, which the server refuses when no port is configured.
+So H1's intent ("no execution port is an amber note, not a red alert") was not met in the real no-port panel.
+
+- **H1-b** `loadAgents` no longer records `control-port-unconfigured` as a panel-level refusal; it still records it as
+  `agentsFailure` (the agent-selection section keeps saying why, pinned by `web/tests/agentPreviewRefresh.test.tsx`
+  "says why on an unconfigured port"). Any other code is still a panel refusal. Criterion: an App-level jsdom case
+  with `executionPort: "unconfigured"` and a 422 `control-port-unconfigured` agents read shows no
+  `nav-dot-tasks` and no panel refusal line, while the amber note is present.
+- Measured on the same panel: `pointer: coarse` context hides `.kbd-hint` (`display: none`) and gives buttons 44px
+  (36px without touch); no page error in 18 page loads (6 sections × dark/light/phone); no horizontal overflow.
