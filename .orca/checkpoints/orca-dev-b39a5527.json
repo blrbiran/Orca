@@ -3,11 +3,11 @@
   "runId": "orca-dev-b39a5527",
   "runtime": "claude-code",
   "sessionRef": "b39a5527-3160-4b15-9563-fd6a387bd770",
-  "writtenAt": "2026-10-14T04:41:06.030Z",
-  "head": "5004ed387f1e9d419052a55be96186cd52714f6a",
+  "writtenAt": "2026-10-14T04:41:33.643Z",
+  "head": "96191623a83a354da5fc7cb828d735638a9309eb",
   "level": {
     "kind": "reading",
-    "level": 142639,
+    "level": 144069,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
@@ -21,7 +21,7 @@
   "open": [
     "Gate on the repin branch is not all green: first full run 19 reds at load 16-44 (17 timeouts, 2 assertion-shaped C3/H5), second full run only the 2 taskResultPaired environment reds; all red files 3/3 green alone at load 5-18 (see known-load-flakes.md b39a5527 entry)",
     "agentSelectionE2E C3 and handoffE2E H5 assertion-shaped reds are unexempted candidates (n=1)",
-    "T2 overrun: this session's context level exceeds 450000 (the human said not to consider context size this session); level measured by this command"
+    "T2 overrun before this session's compaction (about 452k > 450000; the human said not to consider context size this session); after compaction the level is the one this command measures"
   ],
   "awaitingHuman": [
     {
@@ -45,9 +45,9 @@
     {
       "command": "cd /Users/biran/code/skills/orca/Orca-wt/repin && ./node_modules/.bin/vitest run tests/control/handoffStopUnknownUsage.test.ts tests/control/tokenPolicyStop.test.ts tests/control/savedResultUnmeteredLineage.test.ts tests/control/agentUpdatePaired.test.ts",
       "exitCode": 0,
-      "commit": "5004ed387f1e9d419052a55be96186cd52714f6a",
-      "observedAt": "2026-10-14T04:41:05.952Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-b39a5527-VhFGYz/1.txt"
+      "commit": "96191623a83a354da5fc7cb828d735638a9309eb",
+      "observedAt": "2026-10-14T04:41:33.587Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-b39a5527-10mq6x/1.txt"
     }
   ]
 }
