@@ -1,0 +1,189 @@
+# Review package: d6bdc9b3..HEAD
+
+## Commits
+39f994c9 feat(control): size and send the estimate with the agent's own output cap when larger
+
+## Files changed
+ src/control/estimator.ts                  | 13 +++++-
+ tests/control/singleCallOutputCap.test.ts | 67 +++++++++++++++++++++++++++++++
+ 2 files changed, 78 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/src/control/estimator.ts b/src/control/estimator.ts
+index 0fa843dd..089051e1 100644
+--- a/src/control/estimator.ts
++++ b/src/control/estimator.ts
+@@ -2,20 +2,21 @@ import { budgetAmountSchema, type BudgetAmount } from "./tokenPolicy.js";
+ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+ import { dimensions, zero } from "./commands.js";
+ import { ControlError } from "./errors.js";
+ import { buildEstimatePrompt } from "./estimatePrompt.js";
+ import { estimatorCompatibility } from "./estimatorCompatibility.js";
+ import { intersectCapabilities, type FrozenProfile, type ObservedProfile } from "./profiles.js";
+ import { amountSchema } from "./schema.js";
+ import type { ControlStore } from "./store.js";
+ import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
+ import type { Amount } from "./types.js";
++import type { AgentResolution } from "./agentSelection.js";
+ import { budgetEstimateRequestSchema, budgetEstimateSchema, controlPlanSchema, estimateExecutionContractSchema,
+   type AmountProvenanceV1, type BudgetEstimateRequestV1, type BudgetEstimateV1, type EstimateExecutionContractV1 } from "./webProtocol.js";
+ 
+ export const TASK_WORK: Amount = Object.freeze({ tokens: 3_000_000, activeMs: 14_400_000, attempts: 3, sessions: 3 });
+ export const TASK_HANDOFF: Amount = Object.freeze({ tokens: 300_000, activeMs: 1_800_000, attempts: 0, sessions: 0 });
+ export const GOAL_REVIEW: Amount = Object.freeze({ tokens: 1_000_000, activeMs: 3_600_000, attempts: 1, sessions: 1 });
+ export const ESTIMATE_GRANT: Amount = Object.freeze({ tokens: 250_000, activeMs: 900_000, attempts: 1, sessions: 1 });
+ export const safeNumber = (value: bigint): number => {
+   if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) throw new ControlError("numeric-overflow");
+   return Number(value);
+@@ -46,20 +47,27 @@ export interface DefaultLedger { base: Amount; reserve: Amount; limit: Amount }
+ export function complex1mDefaults(taskCount: number): DefaultLedger {
+   if (!Number.isSafeInteger(taskCount) || taskCount < 0) throw new ControlError("numeric-overflow");
+   const base = zero(), reserve = zero(), limit = zero();
+   for (const d of dimensions) {
+     const total = BigInt(taskCount) * (BigInt(TASK_WORK[d]) + BigInt(TASK_HANDOFF[d])) + BigInt(GOAL_REVIEW[d]) + BigInt(ESTIMATE_GRANT[d]);
+     const extra = (total * 20n + 99n) / 100n;
+     base[d] = safeNumber(total); reserve[d] = safeNumber(extra); limit[d] = safeNumber(total + extra);
+   }
+   return { base, reserve, limit };
+ }
++/**
++ * OMP single call (spec 2026-10-14 §4): the output bound a single call is sized and sent with -- the preflight's cap, or the
++ * agent's own catalog cap when that is larger (omp cannot lower its cap per call; ccloop refuses at spawn if it rose).
++ */
++export function singleCallOutputBound(preflightMaxOutputTokens: number, resolution: Pick<AgentResolution, "singleCallOutputCap"> | null): number {
++  return Math.max(preflightMaxOutputTokens, resolution?.singleCallOutputCap ?? 0);
++}
+ export interface EstimateInput {
+   planHash: string; planCanonicalJson: string; profile: FrozenProfile;
+   /**
+    * W6 (loop plans spec §5.1): the plan with every task's effective contract, which the request carries for the model to
+    * read; absent, the archive itself. planHash stays the archive's: it is the plan's identity the answer must echo.
+    */
+   effectivePlanCanonicalJson?: string;
+   observation: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">;
+   mode: "strict" | "soft";
+   exactTokenCount?: (profile: FrozenProfile, promptBytes: Buffer) => number;
+@@ -98,24 +106,25 @@ export function buildBudgetEstimateRequest(input: EstimateInput): FrozenEstimate
+   if (preflight.tokenizer.kind === "exact") {
+     if (!input.exactTokenCount) return { ...blocked, request, requestHash };
+     const count = input.exactTokenCount(profile, promptBytes);
+     if (!Number.isSafeInteger(count) || count < 0) throw new ControlError("numeric-overflow");
+     serialized = BigInt(count);
+   } else {
+     const { numerator, denominator } = preflight.tokenizer;
+     serialized = (BigInt(promptBytes.length) * BigInt(numerator) + BigInt(denominator) - 1n) / BigInt(denominator);
+   }
+   const inputTokens = safeNumber(serialized + BigInt(preflight.framingTokenOverhead));
+-  const requiredRequestTokens = safeNumber(BigInt(inputTokens) + BigInt(preflight.maxOutputTokens));
++  const bound = singleCallOutputBound(preflight.maxOutputTokens, observation.resolution);
++  const requiredRequestTokens = safeNumber(BigInt(inputTokens) + BigInt(bound));
+   const contract = estimateExecutionContractSchema.parse({ schema: "orca-estimate-execution-contract-v1", requestHash, grant: ESTIMATE_GRANT,
+     profile: request.estimatorProfile, estimatorCapabilities: request.estimatorCapabilities, instructionVersion: preflight.instructionVersion,
+-    responseSchemaVersion: preflight.schemaVersion, tokenizer: preflight.tokenizer, framingTokenOverhead: preflight.framingTokenOverhead, maxOutputTokens: preflight.maxOutputTokens });
++    responseSchemaVersion: preflight.schemaVersion, tokenizer: preflight.tokenizer, framingTokenOverhead: preflight.framingTokenOverhead, maxOutputTokens: bound });
+   const tooLarge = requiredRequestTokens > observed.contextWindowTokens || requiredRequestTokens > ESTIMATE_GRANT.tokens;
+   return { state: tooLarge ? "input-too-large" : "queued", reasonCode: tooLarge ? "estimate-input-too-large" : null,
+     request, requestHash, contract, contractHash: sha256Canonical(contract), inputTokens, requiredRequestTokens };
+ }
+ export function estimateCapabilityDegraded(request: BudgetEstimateRequestV1, observation: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">, mode: "strict" | "soft" = "strict"): boolean {
+   return estimateCapabilityDegradationReasons(request, observation, mode).length > 0;
+ }
+ 
+ /** Local reasons for a selected estimator that no longer satisfies its queued request. */
+ export function estimateCapabilityDegradationReasons(request: BudgetEstimateRequestV1, observation: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">, mode: "strict" | "soft" = "strict"): string[] {
+diff --git a/tests/control/singleCallOutputCap.test.ts b/tests/control/singleCallOutputCap.test.ts
+index 30161fc8..318bec70 100644
+--- a/tests/control/singleCallOutputCap.test.ts
++++ b/tests/control/singleCallOutputCap.test.ts
+@@ -1,13 +1,18 @@
+ import { describe, expect, it } from "vitest";
+ import { frozenSlotOf, type AgentResolution } from "../../src/control/agentSelection.js";
+ import { ccloopResolutionSchema } from "../../src/control/ccloopPort.js";
++import { canonicalBytes } from "../../src/control/canonicalJson.js";
++import { buildBudgetEstimateRequest, ESTIMATE_GRANT, persistEstimateArtifacts, readEstimateContract, singleCallOutputBound } from "../../src/control/estimator.js";
++import { readArchivedPlan } from "../../src/control/queries.js";
++import { singleCallHandler, type SingleCallPrepareDeps } from "../../src/control/singleCallPurposes.js";
++import { webFixture } from "./fixtures/web.js";
+ 
+ // OMP single call (spec 2026-10-14-omp-single-call-design.md §4, criterion 10): ccloop now states the cap an agent's single
+ // call runs under. Orca must accept it (or the strict schema refuses every omp resolution once ccloop is repinned), refuse
+ // a value that could not be a cap, keep refusing keys it does not know, and never freeze it into a slot.
+ const answer = (extra: Record<string, unknown> = {}) => ({
+   protocol: 3, selection: { agent: "omp", model: "gateway/model-a", contextWindow: "agent-default" }, configHash: "d".repeat(64), timeoutMs: 120_000, killGraceMs: 5_000,
+   capabilities: { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: 200_000, requestBoundProof: null },
+   singleCallExecution: "v1", ...extra,
+ });
+ 
+@@ -24,10 +29,72 @@ describe("singleCallOutputCap on the resolution (criterion 10)", () => {
+     }
+     expect(ccloopResolutionSchema.safeParse(answer({ singleCallOutputCap: 8_192, outputCap: 8_192 })).success).toBe(false);
+   });
+ 
+   it("is never frozen into a slot", () => {
+     const { protocol: _protocol, ...parsed } = ccloopResolutionSchema.parse(answer({ singleCallOutputCap: 8_192 }));
+     const slot = frozenSlotOf(parsed as AgentResolution, { agent: "omp" }, { agent: "operator", model: "descriptor", contextWindow: "descriptor" });
+     expect(Object.keys(slot).sort()).toEqual(["capabilities", "configHash", "killGraceMs", "partial", "provenance", "selection", "timeoutMs"]);
+   });
+ });
++
++// Criteria 8 and 9 (spec §4): omp cannot take the request's cap, so Orca sizes and sends the larger of the preflight's cap
++// and the agent's own -- otherwise the estimate would book less than the call can spend, and ccloop's spawn check
++// (row.maxTokens <= maxOutputTokens) would refuse every omp estimate whose catalog cap is above the preflight's.
++type Fixture = Awaited<ReturnType<typeof webFixture>>;
++async function build(h: Fixture, cap: number | null | undefined) {
++  const plan = readArchivedPlan(h.store, "g");
++  const observation = await h.deps.profileRouter.probe(h.frozen, { agent: "codex" });
++  const withCap = cap === undefined ? observation : { ...observation, resolution: { ...observation.resolution!, singleCallOutputCap: cap } };
++  return buildBudgetEstimateRequest({ planHash: plan.planHash, planCanonicalJson: plan.canonicalJson, profile: h.frozen, observation: withCap, mode: "strict" });
++}
++
++describe("the estimate's output bound (criteria 8 and 9)", () => {
++  it("C8: a cap above the preflight value is the contract's maxOutputTokens, read back for the envelope, and sizes the request", async () => {
++    const h = await webFixture(); try {
++      const raised = await build(h, 100_000);
++      expect(raised.state).toBe("queued");
++      expect(raised.contract!.maxOutputTokens).toBe(100_000);
++      expect(raised.requiredRequestTokens).toBe(raised.inputTokens! + 100_000);
++      // The single-call envelope takes contract.maxOutputTokens (singleCallPurposes.ts ESTIMATE.prepare) from the persisted contract.
++      persistEstimateArtifacts(h.store, "g", "estimate-cap", raised);
++      expect(readEstimateContract(h.store, "g", "estimate-cap").maxOutputTokens).toBe(100_000);
++    } finally { await h.dispose(); }
++  });
++
++  // Controller ruling I1: spec §5.8 names the envelope, so the envelope itself is measured -- ESTIMATE.prepare's
++  // maxOutputTokens is what ccloop receives as the request's cap and checks the catalog row against at spawn.
++  it("C8: the single-call envelope ESTIMATE.prepare sends carries the raised bound", async () => {
++    const h = await webFixture(); try {
++      const raised = await build(h, 100_000);
++      // A second estimate record beside the fixture's own, carrying the fixture's request; its contract is the raised one.
++      const row = h.store.db.prepare("SELECT body FROM estimates WHERE group_id='g' AND id=?").get(h.estimateId)!;
++      const record = { ...JSON.parse(String(row.body)), estimateId: "estimate-cap", estimateVersion: 2 };
++      h.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES ('g','estimate-cap',2,?,?)").run(record.state, canonicalBytes(record).toString("utf8"));
++      persistEstimateArtifacts(h.store, "g", "estimate-cap", raised);
++      const envelope = await singleCallHandler("estimate").prepare({ store: h.store } as unknown as SingleCallPrepareDeps, { runId: "run-cap", groupId: "g", workItemId: "estimate", estimateId: "estimate-cap" });
++      expect(envelope).toMatchObject({ maxOutputTokens: 100_000 });
++    } finally { await h.dispose(); }
++  });
++
++  it("C8: no cap, a null cap or a smaller cap leaves today's numbers", async () => {
++    const h = await webFixture(); try {
++      for (const cap of [undefined, null, 1_000]) {
++        const today = await build(h, cap);
++        expect([cap, today.state, today.contract!.maxOutputTokens, today.requiredRequestTokens! - today.inputTokens!]).toEqual([cap, "queued", 64_000, 64_000]);
++      }
++    } finally { await h.dispose(); }
++  });
++
++  it("C9: a cap of 250 001 with a small input is input-too-large, though the input alone fits", async () => {
++    const h = await webFixture(); try {
++      const result = await build(h, 250_001);
++      expect(result.inputTokens!).toBeLessThan(ESTIMATE_GRANT.tokens);
++      expect(result).toMatchObject({ state: "input-too-large", reasonCode: "estimate-input-too-large", requiredRequestTokens: result.inputTokens! + 250_001 });
++    } finally { await h.dispose(); }
++  });
++
++  it("takes the larger of the preflight cap and the agent's cap", () => {
++    expect([singleCallOutputBound(64_000, null), singleCallOutputBound(64_000, {}), singleCallOutputBound(64_000, { singleCallOutputCap: null }),
++      singleCallOutputBound(64_000, { singleCallOutputCap: 16_384 }), singleCallOutputBound(64_000, { singleCallOutputCap: 524_288 })]).toEqual([64_000, 64_000, 64_000, 64_000, 524_288]);
++  });
++});

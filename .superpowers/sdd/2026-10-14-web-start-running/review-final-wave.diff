@@ -1,0 +1,142 @@
+931b030d docs(skills): tell agents a Web-started group stays ready until executionPending clears
+927c146b fix(web): show the retry budget hint wherever Retry is offered
+diff --git a/skills/orca-control/SKILL.md b/skills/orca-control/SKILL.md
+index ee2ac057..c854d6b1 100644
+--- a/skills/orca-control/SKILL.md
++++ b/skills/orca-control/SKILL.md
+@@ -24,16 +24,17 @@ it into a draft task group. Read the returned state rather than infer success fr
+ 1. Read `config`, `summary` and `recovery`. Choose a concrete registered repository; never guess a filesystem path.
+ 2. Open a requirement only with a single-call capable agent (the pinned Codex adapter lacks that capability), or import
+    a registered plan. Read the group/requirement before each edit; use its current `commandRevision`.
+ 3. Review task goals, acceptance, limits, optional token policy, workspace and integration. Check the effective worker,
+    estimator and reconcile Agent selections, plus worker, handoff and goal-review profile bindings. Confirm the task
+    plan with real profile/selection hashes from the reads, then send `groups/<id>/start` at the new revision.
+    Confirmation and start are separate.
+ 4. Poll `groups/<id>` every 30–60 seconds. The driver schedules dependencies within a started group automatically.
++   A group's `state` stays `ready` while a Web-started first run is pending or executing; read `executionPending` on the group summary before sending `start` (the server still accepts a second start while one is pending).
+ 5. On failure, read `groups/<id>`, `runs/<id>/activity`, `runs/<id>/evidence` and, for a saved execution failure,
+    `runs/<id>/saved-result-eligibility`. Report the recorded phase, typed cause when present, raw code and run/attempt
+    identity. Older unknown causes stay unknown; never infer token exhaustion from a decode error. Use only the
+    evidence manifest's authorized routes. A successful command response does not prove provider completion.
+ 
+ Example diagnosis (replace ids with those returned by your reads):
+ 
+ ```sh
+diff --git a/web/src/ControlGroupView.tsx b/web/src/ControlGroupView.tsx
+index 244caa2d..a7b1bc98 100644
+--- a/web/src/ControlGroupView.tsx
++++ b/web/src/ControlGroupView.tsx
+@@ -53,40 +53,43 @@ export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; chec
+   return view.runs.flatMap((run) => {
+     if (run.taskId === null || run.continuable !== true || run.state === "settled-failed") return [];
+     const checkpoint = view.checkpoints.find((candidate) => candidate.runId === run.runId && candidate.state !== "unknown");
+     return checkpoint ? [{ run, checkpointId: checkpoint.checkpointId }] : [];
+   });
+ }
+ 
+ /** A run's retry, as the Runs table offers it; the Problems row and the work item row offer this same one (feedback #56/#57). */
+-function RunRetry({ view, run, archived, onCommand }: { view: GroupViewV1; run: RunViewV1; archived: boolean; onCommand: (action: ControlAction) => void }): JSX.Element | null {
++function RunRetry({ view, run, archived, onCommand, active = true }: { view: GroupViewV1; run: RunViewV1; archived: boolean; onCommand: (action: ControlAction) => void; active?: boolean }): JSX.Element | null {
+   const { t } = useTranslation();
+   const groupId = view.summary.groupId;
+   const revision = view.summary.commandRevision;
+   // Execution driver final review I5: a run the driver blocked carries its reason on the run, not as a
+   // recovery blocker, so its one remedy (spec §2.3, the run-scope recovery-retry) is offered here.
+   // Issue fixes spec §4.2(5): a run ccloop ended failed is retried as a task (a new run), and only where the
+   // server accepts retry-task; it never falls back to the run-scope recovery-retry, which refuses a terminal
+   // failure (run-terminal-failed). Any other blocked run keeps recovery-retry.
+-  return archived ? null : hasFailureOutcome(run) ? (retryRunOpen(view, run) ? (
++  // The budget-reservation hint travels with the retry wherever it is offered (Runs table, Problems row, work item row);
++  // a row in a hidden pane (`active` false) does not repeat it, as it does not repeat the settlement's reason.
++  const button = hasFailureOutcome(run) ? (retryRunOpen(view, run) ? (
+     <button
+       type="button"
+       onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: revision, payload: { taskId: String(run.taskId) } })}
+     >
+       {t("control.group.retryTask", { taskId: String(run.taskId) })}
+     </button>
+   ) : null) : run.state === "blocked" && run.blockedReason ? (
+     <button
+       type="button"
+       onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId } })}
+     >
+       {t("control.group.retryRun", { id: run.taskId ?? run.runId })}
+     </button>
+   ) : null;
++  return archived ? null : <>{active && retryRunOpen(view, run) && <p>{t("control.group.retryFromHead")}</p>}{button}</>;
+ }
+ 
+ import { overviewRegionId } from "./overviewNavigation.js";
+ import { GroupResults } from "./GroupResults.js";
+ import { GroupDetailRegions } from "./GroupDetailRegions.js";
+ import { defaultDetailRegion, dispatchDetailRegion, focusedDetailRegion, runRegionId, type DetailRegion } from "./detailRegion.js";
+ import type { OverviewTarget } from "./overviewNavigation.js";
+ 
+@@ -179,17 +182,17 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+ 
+   // Feedback #56/#57: a run's remedies -- retry, settlement, saved-result verification -- beside its reason wherever a row
+   // shows one, each the existing button behind its existing gate. Verification belongs to the task's current run.
+   // `active`: the row's pane is the one shown. Hidden panes stay mounted, and each eligibility read spawns a ccloop child,
+   // so a hidden row neither reads eligibility nor repeats the settlement's one-line reason (fix round 1).
+   const remedies = (run: RunViewV1, active: boolean): JSX.Element => {
+     const item = view.workItems.find((candidate) => candidate.taskId === run.taskId && candidate.currentRunId === run.runId);
+     return <div key={`remedies-${run.runId}`}>
+-      <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
++      <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} active={active} />
+       <UsageSettlement compact active={active} key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
+       {item !== undefined && <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} active={active} />}
+     </div>;
+   };
+ 
+   const dispatchControls = (<>
+       <div id={overviewRegionId("group", groupId, "dispatch")} tabIndex={-1} data-overview-region="dispatch">
+       <h3>{t("control.group.dispatch")}</h3>
+@@ -427,17 +430,16 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+         <tbody>
+           {runsInCreationOrder(view.runs).map((run, index) => (
+             <tr key={run.runId} id={runRegionId(groupId, run.runId)} tabIndex={-1} data-run-id={run.runId}>
+               <td>{run.taskId ?? run.estimateId ?? <details><summary>{t("control.group.runLabel", { n: index + 1 })}</summary><code>{run.runId}</code></details>}</td>
+               <td>{enumText("runPhase", run.phase)}</td>
+               <td className="run-state">
+                 <div>{enumText("runState", run.state)}</div>
+                 <div><RunReason run={run} /></div>
+-                {retryRunOpen(view, run) && <p>{t("control.group.retryFromHead")}</p>}
+                 <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
+                 {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}
+                 <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}</div>
+                 <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
+               </td>
+               <td><details><summary>{run.profile.profileId}</summary><code>{run.profile.profileHash}</code></details></td>
+               <td><span title={formatTokens(run.used.tokens, currentLanguage())}>{shortTokens(run.used.tokens, "en")}</span></td>
+               <td>{run.remaining.tokens===null ? t(run.tokenRemainingStatus==="unknown"?"control.progress.tokensUnknown":"budget.unlimited") : <span title={formatTokens(run.remaining.tokens, currentLanguage())}>{shortTokens(run.remaining.tokens, "en")}</span>}</td>
+diff --git a/web/tests/remediesInRows.test.tsx b/web/tests/remediesInRows.test.tsx
+index ff5703c0..a58c7f97 100644
+--- a/web/tests/remediesInRows.test.tsx
++++ b/web/tests/remediesInRows.test.tsx
+@@ -74,16 +74,26 @@ describe("Retry where the problem is shown (feedback #56/#57)", () => {
+       expect(within(problemRow()).queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
+       cleanup();
+       show(v, "progress");
+       expect(within(workRow()).queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
+       cleanup();
+     }
+   });
+ 
++  it("shows the budget-reservation hint next to Retry in both rows, as the Runs table does", () => {
++    const hint = "Retry creates a new run from the current group branch head and needs a new budget reservation.";
++    for (const [region, row] of [["runs", () => document.body], ["problem", () => problemRow()], ["progress", () => workRow()]] as const) {
++      show(failedGroup(), region);
++      const retry = within(row()).getByRole("button", { name: "Retry task a" });
++      expect(within(retry.parentElement!).getByText(hint)).toBeTruthy();
++      cleanup();
++    }
++  });
++
+   it("keeps the raw reason beside the friendly explanation in both rows", () => {
+     for (const [region, row] of [["problem", () => problemRow()], ["progress", () => workRow()]] as const) {
+       show(failedGroup(), region);
+       expect(within(row()).getByText(/did not answer in the required JSON format/)).toBeTruthy();
+       expect(within(row()).getByText("Error: codex-result-invalid: /runs/r/attempt-1")).toBeTruthy();
+       cleanup();
+     }
+   });

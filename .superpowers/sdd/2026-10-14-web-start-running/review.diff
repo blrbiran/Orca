@@ -1,0 +1,308 @@
+7404c703 fix(web): stop offering Start while a Web-started group's first run executes
+ src/control/webProtocol.ts        |  4 ++++
+ src/panel/controlOverview.ts      |  3 +--
+ src/panel/controlViews.ts         | 20 ++++++++++++++++++++
+ tests/control/webDispatch.test.ts | 31 +++++++++++++++++++++++++++++++
+ web/src/ControlGroupView.tsx      |  3 ++-
+ web/src/controlTypes.ts           |  2 ++
+ web/src/detailRegion.ts           |  3 ++-
+ web/tests/stopBanner.test.tsx     | 15 +++++++++++++++
+ 8 files changed, 77 insertions(+), 4 deletions(-)
+diff --git a/src/control/webProtocol.ts b/src/control/webProtocol.ts
+index 6cf6f74d..fd4ae71a 100644
+--- a/src/control/webProtocol.ts
++++ b/src/control/webProtocol.ts
+@@ -1072,20 +1072,24 @@ export const groupSummarySchema = z
+     requirement: requirementSummarySchema.optional(),
+     // Issue-fixes spec §6.2: optional on the wire so older fixtures parse; the server always gives every one. `goal` is the
+     // plan's goal, or a clarifying group's idea; `branch` is orca/<groupId>; `counts` are §6.1's categories over the plan's
+     // tasks (a work item that cannot be read is in no count); `updatedAt` is the `at` of the group's newest activity row,
+     // null before the first; `archived` says whether the body carries an archive mark (§6.3).
+     goal: nonemptyString.optional(),
+     branch: nonemptyString.optional(),
+     counts: z.object({ idle: safeInteger, running: safeInteger, waiting: safeInteger, blocked: safeInteger, done: safeInteger }).strict().optional(),
+     updatedAt: safeInteger.nullable().optional(),
+     archived: z.boolean().optional(),
++    // Feedback #53: a start wake is undelivered or a task is executing (an active run or a busy work status). A
++    // Web-started group stays `ready` through its first run, so this, not `state`, says it is not startable.
++    // Given for every group with a plan; optional on the wire so older fixtures still parse.
++    executionPending: z.boolean().optional(),
+   })
+   .strict();
+ 
+ /** Progress and human steps are navigation hints, never executable command authority. */
+ export const overviewDestinationSchema = z.discriminatedUnion("kind", [
+   z.object({ kind: z.literal("requirement"), groupId: idSchema, region: z.enum(["answers", "draft", "problem"]) }).strict(),
+   z.object({ kind: z.literal("group"), groupId: idSchema, region: z.enum(["preparation", "dispatch", "problem", "integration", "results"]), taskId: idSchema.nullable(), runId: idSchema.nullable() }).strict(),
+   z.object({ kind: z.literal("recovery") }).strict(),
+ ]);
+ export const overviewStepSchema = z.object({
+diff --git a/src/panel/controlOverview.ts b/src/panel/controlOverview.ts
+index 58c9547e..46a8c07d 100644
+--- a/src/panel/controlOverview.ts
++++ b/src/panel/controlOverview.ts
+@@ -1,21 +1,20 @@
+ import type { ControlStore } from "../control/store.js";
+ import { ControlError } from "../control/errors.js";
+ import { readProjectionState } from "../control/projectionJournal.js";
+ import { readGroupIntegration } from "../control/integrationScheme.js";
+ import { readSpendCapBlock } from "../control/spendCaps.js";
+ import { hasRequirementBlock } from "../control/requirementRecords.js";
+ import { compareText, overviewSchema, type OverviewV1, type OverviewStepV1, type OverviewDestinationV1 } from "../control/webProtocol.js";
+-import { decodeRecoveryBlockerRow, readOverviewGroupSource } from "./controlViews.js";
++import { BUSY_WORK, decodeRecoveryBlockerRow, readOverviewGroupSource } from "./controlViews.js";
+ 
+ type Source = NonNullable<ReturnType<typeof readOverviewGroupSource>>;
+-const BUSY_WORK = new Set(["running", "active", "starting", "start-unknown", "held", "continuing"]);
+ const UNKNOWN_RUN = new Set(["unknown", "attempt-unknown", "attempt-proof-invalid"]);
+ const PRIORITY: Record<OverviewStepV1["kind"], number> = {
+   "requirement-attention": 0, "task-attention": 0, "stop-review": 0, "recovery-review": 0, "integration-review": 0,
+   "requirement-answer": 1, "requirement-review": 1, "budget-review": 2, "start-review": 3,
+ };
+ 
+ /** Synchronous, request-local stored facts only. Navigation never asserts command eligibility. */
+ export function readControlOverview(store: ControlStore, epoch: string): OverviewV1 {
+   const changeSeq = readProjectionState(store).changeSeq;
+   const groups: OverviewV1["groups"] = [], issues: OverviewV1["issues"] = [];
+diff --git a/src/panel/controlViews.ts b/src/panel/controlViews.ts
+index 3b5a45e5..56d7eaa9 100644
+--- a/src/panel/controlViews.ts
++++ b/src/panel/controlViews.ts
+@@ -352,20 +352,39 @@ function taskCompletion(snapshot: GroupReadSnapshot, plan: ReturnType<typeof rea
+     let work: StoredWork | null = null;
+     try { work = decodedValue(snapshot.decodeWork(task.taskId)) as StoredWork ?? null; } catch { work = null; }
+     if (work?.status === "done" || work?.status === "completed") done += 1;
+     if (work !== null) {
+       try { counts[categoryOf(snapshot, work)] += 1; } catch { /* in no count: the view names it */ }
+     }
+   }
+   return { completion: { done, total: plan.tasks.length }, counts };
+ }
+ 
++/** Work statuses that mean a task's execution is under way (shared with the overview's start gate). */
++export const BUSY_WORK = new Set(["running", "active", "starting", "start-unknown", "held", "continuing"]);
++
++/**
++ * Feedback #53: a Web start only queues a wake and its claim only marks the work item, so the stored group
++ * status stays `ready` (active-ready) through the first run. The summary says whether a dispatch wake is
++ * undelivered or execution is busy, the same facts the overview's start gate refuses on, so the group view's
++ * Start gate and dispatch region read the server's answer instead of the stored status alone.
++ */
++function executionPending(store: ControlStore, groupId: string, snapshot: GroupReadSnapshot, plan: ReturnType<typeof readArchivedPlan>["plan"]): boolean {
++  const pendingWake = store.db.prepare("SELECT kind FROM scheduler_wakes WHERE group_id=? AND delivered=0").all(groupId)
++    .some(row => ["start", "no-start", "resume", "continuation"].includes(String(row.kind)));
++  if (pendingWake || snapshot.runsByRowid.some(row => row.active === 1)) return true;
++  return plan.tasks.some(task => {
++    const result = snapshot.decodeWork(task.taskId);
++    return result?.ok === true && BUSY_WORK.has(String((result.value as { status?: unknown } | null)?.status));
++  });
++}
++
+ /**
+  * Final review finding 4: the requirement's own call (a clarify or split run, never a work run of the group it became)
+  * that the driver blocked, with its reason; null when there is none.
+  */
+ function blockedRequirementRun(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot): RequirementSummaryV1["blockedRun"] {
+   const rows = snapshot === undefined
+     ? store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1 ORDER BY rowid").all(groupId)
+     : snapshot.runsByRowid.filter(row => row.active === 1);
+   for (const row of rows) {
+     const run = (snapshot === undefined ? JSON.parse(String(row.body)) : decodedValue(snapshot.decodeRun(String(row.id)))) as { phase?: string; state?: string; drive?: { blockedReason?: string | null } };
+@@ -426,20 +445,21 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
+     projectionSeq: Number(versions.projection_seq),
+     stopMode: stop?.mode ?? null,
+     stopState: stop?.state ?? null,
+     claimBlocked: blockers.length > 0,
+     recoveryBlockerCount: blockers.length,
+     ...(tally === null ? {} : { completion: tally.completion, counts: tally.counts }),
+     goal: archived !== null ? archived.plan.goal : readRequirementGroup(store, groupId).requirement.idea,
+     branch: workBranchRef(groupId).slice("refs/heads/".length),
+     updatedAt: latestGroupActivityAt(store, groupId),
+     archived: archivedMarkOf(body) !== null,
++    ...(archived === null ? {} : { executionPending: executionPending(store, groupId, readSnapshot!, archived.plan) }),
+     ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),
+   };
+   const parsed = groupSummarySchema.safeParse(summary);
+   if (!parsed.success) return blocked(`group-summary:${parsed.error.issues[0]?.message ?? "invalid"}`);
+   return parsed.data;
+ }
+ 
+ /** Stored overview facts share one lazy row snapshot; detail still owns proof/profile admission. */
+ export function readOverviewGroupSource(store: ControlStore, groupId: string) {
+   const body = groupBody(store, groupId);
+diff --git a/tests/control/webDispatch.test.ts b/tests/control/webDispatch.test.ts
+index 9f6853b2..b3f39d60 100644
+--- a/tests/control/webDispatch.test.ts
++++ b/tests/control/webDispatch.test.ts
+@@ -263,20 +263,51 @@ describe("scheduler wake delivery", () => {
+       const scheduled = await service.start(h.command("start", {}));
+       if ("error" in scheduled || scheduled.result.kind !== "scheduled") throw new Error("start rejected");
+       await deliverSchedulerWakes(h.store, createWebWakeHandlers({ ...h.deps, service }));
+       const view = readControlGroup(h.store, "epoch-test", "g");
+       expect(view.recoveryBlockers).toEqual([]);
+       const started = workRuns(h.store)[0];
+       expect(view.runs).toContainEqual(expect.objectContaining({ runId: started.runId, state: "starting" }));
+     } finally { await h.dispose(); }
+   });
+ 
++  // Feedback #53: a Web start only queues a wake and its claim only marks the work item running, so the stored
++  // group status stays `ready` (active-ready, which the overview criteria keep) through the first run. The Start
++  // button and the dispatch region must read a server fact that says the group is not startable both while the
++  // start wake waits and once the claim has created a run, or the panel offers Start a second time mid-run.
++  it("says a confirmed group that nobody has started has no pending execution, so Start stays offered", async () => {
++    const { h } = await startedFixture(); try {
++      expect(readControlGroup(h.store, "epoch-test", "g").summary).toMatchObject({ state: "ready", executionPending: false });
++    } finally { await h.dispose(); }
++  });
++
++  it("says a web-started group's execution is pending while its start wake is undelivered", async () => {
++    const { h, service } = await startedFixture(); try {
++      expect(readControlGroup(h.store, "epoch-test", "g").summary.state).toBe("ready");
++      const scheduled = await service.start(h.command("start", {}));
++      if ("error" in scheduled || scheduled.result.kind !== "scheduled") throw new Error("start rejected");
++      expect(workRuns(h.store)).toEqual([]);
++      expect(readControlGroup(h.store, "epoch-test", "g").summary.executionPending, "undelivered start wake").toBe(true);
++    } finally { await h.dispose(); }
++  });
++
++  it("says a web-started group's execution is pending once the claim has created its run", async () => {
++    const { h, service } = await startedFixture(); try {
++      const scheduled = await service.start(h.command("start", {}));
++      if ("error" in scheduled || scheduled.result.kind !== "scheduled") throw new Error("start rejected");
++      await deliverSchedulerWakes(h.store, createWebWakeHandlers({ ...h.deps, service }));
++      expect(workRuns(h.store).map((run) => run.state)).toEqual(["starting"]);
++      expect(h.store.db.prepare("SELECT count(*) AS n FROM scheduler_wakes WHERE group_id='g' AND delivered=0").get()!.n).toBe(0);
++      expect(readControlGroup(h.store, "epoch-test", "g").summary.executionPending, "claimed run").toBe(true);
++    } finally { await h.dispose(); }
++  });
++
+   it("keeps a failed-before-provider run booked at its unspent grant so the panel read path stays open", async () => {
+     const { h, service } = await startedFixture(); try {
+       const scheduled = await service.start(h.command("start", {}));
+       if ("error" in scheduled || scheduled.result.kind !== "scheduled") throw new Error("start rejected");
+       await deliverSchedulerWakes(h.store, createWebWakeHandlers({ ...h.deps, service }));
+       const failed = workRuns(h.store)[0];
+       await settleProviderAttempt({ store: h.store, profileRouter: h.deps.profileRouter }, { runId: failed.runId, phase: "work", firstAttemptProof: "invalid" });
+       const view = readControlGroup(h.store, "epoch-test", "g");
+       expect(view.summary.state).not.toBe("blocked");
+       expect(view.recoveryBlockers).toEqual([]);
+diff --git a/web/src/ControlGroupView.tsx b/web/src/ControlGroupView.tsx
+index 682f71d7..c8789238 100644
+--- a/web/src/ControlGroupView.tsx
++++ b/web/src/ControlGroupView.tsx
+@@ -146,21 +146,22 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+       <dl className="execution-work-kinds">
+         <dt>{t("control.group.continuableWork")}</dt><dd>{continuable.length}</dd>
+         <dt>{t("control.group.retryableWork")}</dt><dd>{retryableCount}</dd>
+         <dt>{t("control.group.unresolvedWork")}</dt><dd>{unresolvedCount}</dd>
+       </dl>
+       {continuable.length > 0 && <p>{t("control.group.continueFromCheckpoint")}</p>}
+       {handoffActive && view.summary.stopState === "handoff-complete" && <p>{t("control.group.resumeForRetry")}</p>}
+       {!archived && (
+         <>
+           {/* Issue-fixes spec §3.2 (4): start refuses every stop intent (stop-mode-conflict), so it is not offered under one. */}
+-          {view.summary.state === "ready" && stopMode === null && (
++          {/* Feedback #53: a Web-started group stays ready through its first run; executionPending is the server's "not startable". */}
++          {view.summary.state === "ready" && view.summary.executionPending !== true && stopMode === null && (
+             <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.start")}</button>
+           )}
+           {!handoffActive && stopMode !== "pause" && (
+             <>
+               <button type="button" onClick={() => onCommand({ verb: "pause-dispatch", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.pause")}</button>
+               <button type="button" onClick={() => onCommand({ verb: "handoff-stop", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.handoffStop")}</button>
+             </>
+           )}
+           {stopMode === "pause" && (
+             <button type="button" onClick={() => onCommand({ verb: "resume-dispatch", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.resume")}</button>
+diff --git a/web/src/controlTypes.ts b/web/src/controlTypes.ts
+index 908002e7..8b2b88ce 100644
+--- a/web/src/controlTypes.ts
++++ b/web/src/controlTypes.ts
+@@ -74,20 +74,22 @@ export type GroupSummaryV1 = {
+   /** Labels and progress spec §4.1: tasks done out of the plan's tasks. Optional so literal fixtures need no edit. */
+   completion?: { done: number; total: number };
+   /** N1 spec §11.2: present on a group that carries a requirement block. */
+   requirement?: RequirementSummaryV1;
+   /** Issue-fixes spec §6.2: optional so literal fixtures need no edit; the server always sends each. */
+   goal?: string;
+   branch?: string;
+   counts?: Record<WorkItemCategoryV1, number>;
+   updatedAt?: number | null;
+   archived?: boolean;
++  /** Feedback #53: a start wake is undelivered or a task is executing; a Web-started group stays `ready` meanwhile. */
++  executionPending?: boolean;
+ };
+ 
+ /** N1 spec §4.2 and §7: a round's records (src/control/requirementSchemas.ts roundBodySchema, field for field). */
+ export type RequirementCallRecordV1 = {
+   runId: string;
+   overviewHash: string | null;
+   commit: string | null;
+   usage: Amount | null;
+   outcome: "valid" | "invalid" | "failed" | "interrupted";
+   reason: string | null;
+diff --git a/web/src/detailRegion.ts b/web/src/detailRegion.ts
+index 3159b2d7..a274f195 100644
+--- a/web/src/detailRegion.ts
++++ b/web/src/detailRegion.ts
+@@ -2,18 +2,19 @@
+ import type { GroupViewV1 } from "./controlTypes.js";
+ import type { GroupRegion } from "./overviewNavigation.js";
+ export const DETAIL_REGIONS = ["progress", "preparation", "problem", "results", "runs", "technical"] as const;
+ export type DetailRegion = typeof DETAIL_REGIONS[number];
+ export function defaultDetailRegion(view: GroupViewV1): DetailRegion {
+   if (view.summary.state === "done") return "results";
+   if (view.summary.state === "draft") return "preparation";
+   return "progress";
+ }
+ export function dispatchDetailRegion(view: GroupViewV1): DetailRegion {
+-  return view.summary.state === "draft" || view.summary.state === "ready" ? "preparation" : "problem";
++  // Feedback #47/#53: a ready group whose execution is pending (a start wake waits or a task runs) is not in preparation.
++  return view.summary.state === "draft" || (view.summary.state === "ready" && view.summary.executionPending !== true) ? "preparation" : "problem";
+ }
+ export function focusedDetailRegion(view: GroupViewV1, region: GroupRegion): DetailRegion {
+   if (region === "dispatch") return dispatchDetailRegion(view);
+   if (region === "integration") return "results";
+   return region;
+ }
+ export const runRegionId = (groupId: string, runId: string): string => `detail-run-${encodeURIComponent(groupId)}-${encodeURIComponent(runId)}`;
+diff --git a/web/tests/stopBanner.test.tsx b/web/tests/stopBanner.test.tsx
+index 72d49cab..dc5d0948 100644
+--- a/web/tests/stopBanner.test.tsx
++++ b/web/tests/stopBanner.test.tsx
+@@ -80,20 +80,35 @@ describe("the stop banner (issue-fixes spec §3.2 (4))", () => {
+     fireEvent.click(screen.getByRole("button", { name: "Continue execution" }));
+     expect(onCommand).toHaveBeenCalledWith({ verb: "resume-dispatch", groupId: "g", expectedRevision: 6, payload: {} });
+   });
+ 
+   it("renders no banner, and the Start button, for a ready group with no stop intent", () => {
+     mount(view("ready", null));
+     expect(screen.queryByTestId("stop-banner")).toBeNull();
+     expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
+   });
+ 
++  // Feedback #53 (and the #47 half): a Web-started group stays `ready` through its first run; the server's
++  // executionPending, not the stored state, says it is not startable and that its controls belong under Problems.
++  it("does not offer Start on a ready group whose execution is pending", () => {
++    const shown = view("ready", null); shown.summary.executionPending = true;
++    mount(shown);
++    expect(screen.getByRole("button", { name: "Pause new tasks" })).toBeTruthy();
++    expect(screen.queryByRole("button", { name: "Start" }), "Start while execution is pending").toBeNull();
++  });
++
++  it("opens a pending-execution ready group's execution controls under Problems, not Preparation", () => {
++    const shown = view("ready", null); shown.summary.executionPending = true;
++    mount(shown);
++    expect(screen.getByRole("tab", { selected: true }).textContent, "dispatch region").toBe("Problems");
++  });
++
+   // Final review M2: a handoff-partial stop has no recovery blocker, so Retry recovery never appears there; archive is
+   // accepted at handoff-partial (archiveGroup.ts), so Archive group is the way out the banner names, and it is offered.
+   it("names Archive group as the way out of handoff-partial, offers it, and no longer points at Retry recovery", async () => {
+     mount(view("running", shutdownStop("handoff-partial")));
+     const text = screen.getByTestId("stop-banner").textContent ?? "";
+     expect(text).toContain("Way out: press Archive group under Execution controls.");
+     expect(text).not.toContain("Retry recovery");
+     expect(screen.getByRole("button", { name: "Archive group" })).toBeTruthy();
+     cleanup();
+     await i18n.changeLanguage("zh");

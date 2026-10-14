@@ -1,0 +1,6 @@
+# Feedback branch final fix wave (hand-back saved by controller, session 02f047f6)
+Commits 927c146b fix(web): show the retry budget hint wherever Retry is offered; 931b030d docs(skills): tell agents a Web-started group stays ready until executionPending clears.
+- RunRetry renders control.group.retryFromHead itself when retryRunOpen; Runs-table duplicate removed (hint now sits just before Retry, after settlement/attempt lines); RunRetry takes `active` (default true), remedies passes its own (hidden panes stay mounted; without it handoffFailedRetry.test.tsx broke on multiple matches — passes unedited now).
+- New it in remediesInRows.test.tsx: hint in same container as "Retry task a" in Runs table, Problems row, work row. Red first in clone; mutation (drop hint) red; restore by sha256 (first round used `git checkout -- .` in the clone — sha256 is the real proof).
+- SKILL.md: one line under step 4 (executionPending; server still accepts a second start). tests/entry/skill.test.ts green.
+- Gates: web tsc 0, web build 0, web full 1096/1097 (loopPlanDraft flake, 3/3 alone), root panel 616/616, entry/service/metrics pass; root tests/control without ORCA_CCLOOP_BIN: 10 red in 5 files (also red on unmodified base clone) — environment.

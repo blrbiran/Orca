@@ -1,0 +1,1567 @@
+522cd61 fix(omp): keep a single call's refusal when its diagnostic write fails
+a83a142 feat(omp): decode one single-call answer fail-closed and book its observed usage
+281c4e1 feat(omp): check the catalog cap at spawn and run one call with tools and retries off
+d9f7a80 refactor(omp): run one omp process from its argv, cwd and time limit
+c3d2759 feat(omp): decide the window, single-call answer and cap from the catalog row
+8c98b6b feat(omp): read the model catalog as rows with their window and cap
+ src/agents/claude.ts                         |   4 +
+ src/agents/codex.ts                          |   4 +
+ src/agents/materialize.ts                    |  25 ++-
+ src/agents/omp.ts                            |   9 +-
+ src/agents/ompModels.ts                      |  33 ++-
+ src/agents/registry.ts                       |  16 +-
+ src/agents/types.ts                          |   9 +
+ src/control/accept.ts                        |   4 +-
+ src/control/command.ts                       |   7 +-
+ src/runtime/omp/ompAdapter.ts                |  28 ++-
+ src/runtime/omp/ompProtocol.ts               |   2 +-
+ src/runtime/omp/ompSingleCall.ts             | 132 ++++++++++++
+ src/runtime/omp/phasePrompt.ts               |  12 ++
+ src/runtime/omp/runOmpPhase.ts               |  55 +++--
+ src/runtime/types.ts                         |   5 +-
+ tests/agents/ompCatalog.test.ts              |  69 ++++++
+ tests/agents/ompSingleCallResolution.test.ts |  71 +++++++
+ tests/control/ompSingleCallAccept.test.ts    |  73 +++++++
+ tests/control/ompSingleCallWorker.test.ts    |  74 +++++++
+ tests/fixtures/fake-omp.mjs                  |  27 ++-
+ tests/runtime/omp/ompSingleCall.test.ts      | 306 +++++++++++++++++++++++++++
+ 21 files changed, 921 insertions(+), 44 deletions(-)
+diff --git a/src/agents/claude.ts b/src/agents/claude.ts
+index 4e5fe13..ef8eec2 100644
+--- a/src/agents/claude.ts
++++ b/src/agents/claude.ts
+@@ -69,12 +69,16 @@ export const claudeDescriptor: AgentDescriptor = {
+       requestBoundProof: null,
+     };
+   },
+   // Orca single-call estimate (2026-09-27), Task 0 item 1 (claude 2.1.283, static only): `--tools ""` turns every tool
+   // off (claude --help: 'Use "" to disable all tools') and CLAUDE_CODE_MAX_OUTPUT_TOKENS sets max_tokens.
+   singleCallExecution() {
+     return "v1";
+   },
++  // OMP single call (Orca spec 2026-10-14 §3.2): CLAUDE_CODE_MAX_OUTPUT_TOKENS takes the request's own cap.
++  singleCallOutputCap() {
++    return null;
++  },
+   createAdapter(config, options) {
+     return new ClaudeAgentAdapter(config, options);
+   },
+ };
+diff --git a/src/agents/codex.ts b/src/agents/codex.ts
+index d783f83..16de6c2 100644
+--- a/src/agents/codex.ts
++++ b/src/agents/codex.ts
+@@ -49,13 +49,17 @@ export const codexDescriptor: AgentDescriptor = {
+       requestBoundProof: null,
+     };
+   },
+   // Orca single-call estimate (2026-09-27), Task 0 item 1 (codex-cli 0.155.1): no config caps the model's output, so a
+   // single call cannot be bounded the way spec §4.4 asks.
+   singleCallExecution() {
+     return null;
+   },
++  // OMP single call (Orca spec 2026-10-14 §3.2): codex runs no single call; nothing to bound.
++  singleCallOutputCap() {
++    return null;
++  },
+   createAdapter(config, options) {
+     const { configDir } = config.installation;
+     return new CodexAdapter(toCodexConfig(config), configDir === null ? undefined : { CODEX_HOME: configDir }, options?.codexSkillsDir);
+   },
+ };
+diff --git a/src/agents/materialize.ts b/src/agents/materialize.ts
+index 8007b44..0e32496 100644
+--- a/src/agents/materialize.ts
++++ b/src/agents/materialize.ts
+@@ -1,19 +1,20 @@
+ import { spawn } from "node:child_process";
+ import { z } from "zod";
+ import { canonicalHash } from "../control/protocol.js";
+ import { descriptorDefaults, getDescriptor } from "./registry.js";
+-import { readOmpModels } from "./ompModels.js";
++import { readOmpCatalog, readOmpModels } from "./ompModels.js";
+ import { parseInstallation } from "./table.js";
+ import {
+   AgentError,
+   agentSelectionSchema,
+   type AgentResolutionV1,
+   type AgentsTableV1,
++  type CatalogRowV1,
+   type MaterializedAgentConfigV1,
+   type PartialSelectionV1,
+ } from "./types.js";
+ 
+ const VERSION_PATTERN = /\d+\.\d+\.\d+(?:-[\w.]+)?/;
+ const VERSION_OUTPUT_LIMIT = 64 * 1024;
+ const VERSION_TIMEOUT_MS = 10_000;
+ 
+@@ -82,17 +83,21 @@ export function agentConfigHash(config: MaterializedAgentConfigV1): string {
+ 
+ /**
+  * Fills the partial selection from the installation's descriptor defaults, validates it, materializes the
+  * config and checks the installed version (spec §4.6). Fields the partial carries are echoed verbatim (M5).
+  */
+ export async function resolveAgent(
+   table: AgentsTableV1,
+   partial: PartialSelectionV1,
+-  deps: { probeVersion?: (command: string[]) => Promise<string | null>; probeModels?: typeof readOmpModels } = {},
++  deps: {
++    probeVersion?: (command: string[]) => Promise<string | null>;
++    probeModels?: typeof readOmpModels;
++    probeCatalog?: typeof readOmpCatalog;
++  } = {},
+ ): Promise<{ config: MaterializedAgentConfigV1; resolution: AgentResolutionV1 }> {
+   if (partial.agent === undefined) throw new AgentError("agent-unselected");
+   const installation = Object.hasOwn(table.installations, partial.agent) ? table.installations[partial.agent] : undefined;
+   if (installation === undefined) throw new AgentError("agent-installation-missing", partial.agent);
+   const descriptor = getDescriptor(installation.kind);
+   const defaults = descriptorDefaults(descriptor, installation);
+   const selection = {
+     agent: partial.agent,
+@@ -107,27 +112,37 @@ export async function resolveAgent(
+   // plain Error: `control` exits 1 (Orca treats it as unknown and retries) and `run --agents` exits 1 with a message
+   // that is not a code (Orca: reconcile-spawn). Only an observed version that differs from the table is a drift.
+   if (observed === null) {
+     throw new Error(`Could not observe the version of installation ${JSON.stringify(partial.agent)}: \`--version\` answered no x.y.z (table ${installation.version})`);
+   }
+   if (observed !== installation.version) {
+     throw new AgentError("agent-version-drift", `${partial.agent}: table ${installation.version}, observed ${observed}`);
+   }
+-  if (installation.kind === "omp" && !(await (deps.probeModels ?? readOmpModels)(installation)).includes(selection.model)) {
+-    throw new AgentError("agent-selection-invalid", `OMP model is not an exact catalog selector: ${selection.model}`);
++  // OMP single call (Orca spec 2026-10-14 §3.2): the selected catalog row decides the window, the single-call answer and
++  // its cap. `probeModels` is the selector-only injection older criteria use; its rows declare no numbers.
++  let row: CatalogRowV1 | undefined;
++  if (installation.kind === "omp") {
++    const rows: CatalogRowV1[] = deps.probeCatalog !== undefined ? await deps.probeCatalog(installation)
++      : deps.probeModels !== undefined
++        ? (await deps.probeModels(installation)).map((selector) => ({ selector, provider: selector.slice(0, selector.indexOf("/")), contextWindow: null, maxTokens: null }))
++        : await readOmpCatalog(installation);
++    row = rows.find((candidate) => candidate.selector === selection.model);
++    if (row === undefined) throw new AgentError("agent-selection-invalid", `OMP model is not an exact catalog selector: ${selection.model}`);
+   }
+   return {
+     config,
+     resolution: {
+       selection,
+       configHash: agentConfigHash(config),
+       timeoutMs: installation.timeoutMs,
+       killGraceMs: installation.killGraceMs,
+-      capabilities: descriptor.capabilities(config),
++      capabilities: descriptor.capabilities(config, row),
++      singleCallExecution: descriptor.singleCallExecution(config, row),
++      singleCallOutputCap: descriptor.singleCallOutputCap(config, row),
+     },
+   };
+ }
+ 
+ const materializedShape = z
+   .object({ schema: z.literal("ccloop-agent-config-v1"), kind: z.string(), installation: z.unknown(), selection: agentSelectionSchema })
+   .strict();
+ 
+diff --git a/src/agents/omp.ts b/src/agents/omp.ts
+index b7c0a15..7d9c5c3 100644
+--- a/src/agents/omp.ts
++++ b/src/agents/omp.ts
+@@ -1,12 +1,13 @@
+ import { isAbsolute } from "node:path";
+ import { z } from "zod";
+ import type { AgentDescriptor } from "./registry.js";
+ import { OmpAdapter } from "../runtime/omp/ompAdapter.js";
++import { ompSingleCallExecution } from "./ompModels.js";
+ import { AgentError, assertContextOption, assertModel, commonSearchDirs } from "./types.js";
+ 
+ export const ompDescriptor: AgentDescriptor = {
+   kind: "omp",
+   binary: "omp",
+   searchDirs: ({ home, platform }) => commonSearchDirs({ home, platform }),
+   configDirEnv: "PI_CODING_AGENT_DIR",
+   defaultsForInstallation: (installation) => ({ model: installation.defaultModel as string, contextWindow: "agent-default" }),
+@@ -22,22 +23,24 @@ export const ompDescriptor: AgentDescriptor = {
+       throw new AgentError("agents-table-invalid", "omp named profile cannot use configDir");
+     }
+   },
+   validateSelection(selection) {
+     assertModel(selection.model);
+     assertContextOption(["agent-default"], selection);
+     if (!/^[^/\s]+\/.+$/u.test(selection.model)) throw new AgentError("agent-selection-invalid", "omp model must be provider-qualified");
+   },
+-  capabilities() {
++  capabilities(_config, row) {
+     return {
+       usageObservation: "phase-end",
+       budgetEnforcement: "soft",
+       contextObservation: "unavailable",
+       handoffControl: "durable",
+       handoffExecution: "mechanical-in-run-v1",
+-      contextWindowTokens: null,
++      // OMP single call (Orca spec 2026-10-14 §1.2, §3.2): the selected catalog row's window, omp's defaults included.
++      contextWindowTokens: row?.contextWindow ?? null,
+       requestBoundProof: null,
+     };
+   },
+-  singleCallExecution() { return null; },
++  singleCallExecution(_config, row) { return ompSingleCallExecution(row); },
++  singleCallOutputCap(_config, row) { return row?.maxTokens ?? null; },
+   createAdapter(config, options) { return new OmpAdapter(config, options?.ompSkillsDir); },
+ };
+diff --git a/src/agents/ompModels.ts b/src/agents/ompModels.ts
+index 27fbaf6..e7080d0 100644
+--- a/src/agents/ompModels.ts
++++ b/src/agents/ompModels.ts
+@@ -1,10 +1,10 @@
+ import { spawn } from "node:child_process";
+-import type { InstallationV1 } from "./types.js";
++import type { CatalogRowV1, InstallationV1 } from "./types.js";
+ 
+ const OUTPUT_LIMIT = 1024 * 1024;
+ const PROBE_TIMEOUT_MS = 10_000;
+ 
+ export function canonicalOmpSelector(input: string, selectors: readonly string[]): string | null {
+   if (selectors.includes(input)) return input;
+   const matches = selectors.filter((selector) => selector.slice(selector.indexOf("/") + 1) === input);
+   return matches.length === 1 ? matches[0]! : null;
+@@ -42,30 +42,47 @@ async function runOmpJson(installation: InstallationV1, args: string[]): Promise
+       if (aborted || spawnError !== null || code !== 0) { reject(new Error("omp-model-catalog-unavailable")); return; }
+       try {
+         resolve(JSON.parse(Buffer.concat(stdoutChunks).toString("utf8")) as unknown);
+       } catch { reject(new Error("omp-model-catalog-invalid")); }
+     });
+   });
+ }
+ 
+-/** Read the catalog under the same structured profile/configuration as a phase. This never sends a model prompt. */
+-export async function readOmpModels(installation: InstallationV1): Promise<string[]> {
++const positiveSafe = (value: unknown): number | null => (typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null);
++
++/**
++ * OMP single call (Orca spec 2026-10-14 §3.1): the catalog's rows from its one spawn, read under the same structured
++ * profile/configuration as a phase. A number is kept only when it is a positive safe integer. This never sends a model prompt.
++ */
++export async function readOmpCatalog(installation: InstallationV1): Promise<CatalogRowV1[]> {
+   const parsed = await runOmpJson(installation, ["models", "--json"]);
+   if (parsed === null || typeof parsed !== "object" || !Array.isArray((parsed as { models?: unknown }).models)) throw new Error("omp-model-catalog-invalid");
+-  const rows = (parsed as { models: unknown[] }).models;
+-  const selectors = rows.map((row) => {
++  const rows = (parsed as { models: unknown[] }).models.map((row): CatalogRowV1 => {
+     if (row === null || typeof row !== "object") throw new Error("omp-model-catalog-invalid");
+     const value = row as Record<string, unknown>;
+     if (typeof value.provider !== "string" || typeof value.id !== "string" || typeof value.selector !== "string"
+       || value.selector !== `${value.provider}/${value.id}` || value.selector.length > 200) throw new Error("omp-model-catalog-invalid");
+-    return value.selector;
++    return { selector: value.selector, provider: value.provider, contextWindow: positiveSafe(value.contextWindow), maxTokens: positiveSafe(value.maxTokens) };
+   });
+-  if (new Set(selectors).size !== selectors.length) throw new Error("omp-model-catalog-invalid");
+-  return selectors;
++  if (new Set(rows.map((row) => row.selector)).size !== rows.length) throw new Error("omp-model-catalog-invalid");
++  return rows;
++}
++
++/** Read the catalog under the same structured profile/configuration as a phase. This never sends a model prompt. */
++export async function readOmpModels(installation: InstallationV1): Promise<string[]> {
++  return (await readOmpCatalog(installation)).map((row) => row.selector);
++}
++
++/**
++ * OMP single call (Orca spec 2026-10-14 §2, §3.2): "v1" only when the row declares the cap pi-ai sends (maxTokens) and its
++ * provider is not openrouter, for which pi-ai sends no cap unless one is given explicitly.
++ */
++export function ompSingleCallExecution(row: CatalogRowV1 | undefined): "v1" | null {
++  return row !== undefined && row.maxTokens !== null && row.provider !== "openrouter" ? "v1" : null;
+ }
+ 
+ export async function readOmpConfiguredDefault(installation: InstallationV1): Promise<string | null> {
+   const parsed = await runOmpJson(installation, ["config", "get", "modelRoles", "--json"]);
+   if (parsed === null || typeof parsed !== "object") return null;
+   const value = (parsed as { value?: unknown }).value;
+   if (value === null || typeof value !== "object") return null;
+   const model = (value as { default?: unknown }).default;
+diff --git a/src/agents/registry.ts b/src/agents/registry.ts
+index 1a47cbf..9f4d269 100644
+--- a/src/agents/registry.ts
++++ b/src/agents/registry.ts
+@@ -2,16 +2,17 @@ import type { z } from "zod";
+ import type { RuntimeAdapter } from "../runtime/types.js";
+ import { claudeDescriptor } from "./claude.js";
+ import { codexDescriptor } from "./codex.js";
+ import { ompDescriptor } from "./omp.js";
+ import {
+   AgentError,
+   type AgentSelectionV1,
+   type CapabilityViewV1,
++  type CatalogRowV1,
+   type ContextWindow,
+   type MaterializedAgentConfigV1,
+ } from "./types.js";
+ 
+ /**
+  * One agent kind (spec 2026-09-26 §4.1). A new kind is one descriptor plus one adapter, registered below;
+  * Orca never sees more than the kind string.
+  */
+@@ -26,23 +27,34 @@ export interface AgentDescriptor {
+   /** Kind-only installation fields, merged into the strict installation schema. */
+   installationExtras: z.ZodRawShape;
+   /** The values `agents detect` writes for installationExtras in a draft table. */
+   draftInstallationExtras: Record<string, unknown>;
+   /** Arguments `agents detect` writes after the binary in a draft's `command`; none when absent. */
+   draftCommandArgs?: readonly string[];
+   validateInstallation?: (installation: MaterializedAgentConfigV1["installation"]) => void;
+   validateSelection(selection: AgentSelectionV1): void;
+-  capabilities(config: MaterializedAgentConfigV1): CapabilityViewV1;
++  /** `row` is the selected catalog row for a kind that has a catalog (omp, OMP single call 2026-10-14 §3.2), else undefined. */
++  capabilities(config: MaterializedAgentConfigV1, row?: CatalogRowV1): CapabilityViewV1;
+   /**
+    * Orca single-call estimate (2026-09-27), spec §4.4: "v1" when this kind can run one read-only structured call with
+    * an output-token cap and every tool turned off; null when either cannot be done. A sibling of capabilities, not a
+    * key of it: Orca does not intersect it with a profile or freeze it into a task.
++   *
++   * *** ERRATUM (OMP single call, Orca spec 2026-10-14 §3.2) *** "when this kind can run" no longer holds for omp: its
++   * answer is decided per selected catalog row (`row`, at resolution), not per kind -- "v1" only when that row declares
++   * a maxTokens and its provider is not openrouter. Claude and codex still answer per kind.
+    */
+-  singleCallExecution(config: MaterializedAgentConfigV1): "v1" | null;
++  singleCallExecution(config: MaterializedAgentConfigV1, row?: CatalogRowV1): "v1" | null;
++  /**
++   * OMP single call (Orca spec 2026-10-14 §3.2): the output cap the kind's single call actually runs under, from its catalog
++   * row; null means the call honours the request's maxOutputTokens. A sibling of singleCallExecution: never in the
++   * seven-key view, never frozen.
++   */
++  singleCallOutputCap(config: MaterializedAgentConfigV1, row?: CatalogRowV1): number | null;
+   /**
+    * Orca syncskill integration (2026-10-03), spec §10.7: each skill directory field is honoured by one kind only --
+    * `skillPluginDir` by claude, `codexSkillsDir` by codex (H6), `ompSkillsDir` by omp (2026-10-13); accept refuses the rest.
+    */
+   createAdapter(config: MaterializedAgentConfigV1, options?: { skillPluginDir?: string; codexSkillsDir?: string; ompSkillsDir?: string }): RuntimeAdapter;
+ }
+ 
+ const DESCRIPTORS: readonly AgentDescriptor[] = [claudeDescriptor, codexDescriptor, ompDescriptor];
+diff --git a/src/agents/types.ts b/src/agents/types.ts
+index ab85f96..60b6b48 100644
+--- a/src/agents/types.ts
++++ b/src/agents/types.ts
+@@ -25,28 +25,37 @@ export interface CapabilityViewV1 {
+   requestBoundProof: {
+     scheme: "adapter-request-bound-v1";
+     version: string;
+     workDimensions: string[];
+     handoffDimensions: string[];
+     evidenceKind: string;
+   } | null;
+ }
++/**
++ * OMP single call (Orca spec 2026-10-14-omp-single-call-design.md §3.1): one row of a kind's model catalog, as ccloop uses
++ * it. A number is kept only when the catalog gave a positive safe integer; anything else is null.
++ */
++export interface CatalogRowV1 { selector: string; provider: string; contextWindow: number | null; maxTokens: number | null }
+ export interface MaterializedAgentConfigV1 {
+   schema: "ccloop-agent-config-v1";
+   kind: string;
+   installation: InstallationV1;
+   selection: AgentSelectionV1;
+ }
+ export interface AgentResolutionV1 {
+   selection: AgentSelectionV1;
+   configHash: string;
+   timeoutMs: number;
+   killGraceMs: number;
+   capabilities: CapabilityViewV1;
++  /** Orca single-call estimate (2026-09-27) §4.4; decided at resolution since OMP single call (Orca spec 2026-10-14 §3.2). */
++  singleCallExecution: "v1" | null;
++  /** OMP single call (Orca spec 2026-10-14 §3.2): the cap the call actually runs under; null = it honours the request's maxOutputTokens. Never frozen. */
++  singleCallOutputCap: number | null;
+ }
+ 
+ /** Every code an AgentError can carry (agent selection spec §7, plus the plan's additions). */
+ export const AGENT_ERROR_CODES = [
+   "agents-table-invalid",
+   "agent-installation-missing",
+   "agent-context-unsupported",
+   "agent-selection-invalid",
+diff --git a/src/control/accept.ts b/src/control/accept.ts
+index eeba63c..c601853 100644
+--- a/src/control/accept.ts
++++ b/src/control/accept.ts
+@@ -1,14 +1,13 @@
+ import {loadSavedResultRecovery} from "./savedResultRecovery.js";
+ import { fileURLToPath } from "node:url";
+ import { randomUUID } from "node:crypto";
+ import { join } from "node:path";
+ import { resolveAgent } from "../agents/materialize.js";
+-import { getDescriptor } from "../agents/registry.js";
+ import { readAgentsTable } from "../agents/table.js";
+ import { atomicReplacePrivateFile, ensurePrivateDirectory } from "./paths.js";
+ import {
+   canonicalHash,
+   canonicalJson,
+   ControlProtocolError,
+   type StartEnvelopeV3,
+ } from "./protocol.js";
+@@ -80,17 +79,18 @@ export async function acceptStart(
+   const table = await readAgentsTable(binding.agentsTablePath);
+   const { config, resolution } = await resolveAgent(table, input.claim.agent);
+   const configHash = resolution.configHash;
+   if (configHash !== input.claim.configHash) {
+     throw new ControlProtocolError("control-config-hash-mismatch");
+   }
+   // Orca single-call estimate (2026-09-27), spec §5.1: refused here, before anything is persisted, even when Orca's
+   // preflight let it through.
+-  if (input.work.kind === "single-call" && getDescriptor(config.kind).singleCallExecution(config) === null) {
++  // OMP single call (Orca spec 2026-10-14 §3.2): the resolution's answer, which for omp comes from the catalog row.
++  if (input.work.kind === "single-call" && resolution.singleCallExecution === null) {
+     throw new ControlProtocolError("single-call-unsupported");
+   }
+   // Orca skill directory fields are paired with the CLI kind whose loader owns them; refuse before anything persists.
+   if (
+     input.work.kind === "loop" &&
+     ((input.work.skillPluginDir !== undefined && config.kind !== "claude") ||
+       (input.work.codexSkillsDir !== undefined && config.kind !== "codex") ||
+       (input.work.ompSkillsDir !== undefined && config.kind !== "omp"))
+diff --git a/src/control/command.ts b/src/control/command.ts
+index 99f55e1..3d7ae7d 100644
+--- a/src/control/command.ts
++++ b/src/control/command.ts
+@@ -90,16 +90,18 @@ const capabilitiesSchema = z.union([
+     .object({
+       protocol: z.literal(3),
+       selection: agentSelectionSchema,
+       configHash: z.string().regex(/^[a-f0-9]{64}$/),
+       timeoutMs: z.number().int().positive().max(2_147_483_647),
+       killGraceMs: z.number().int().nonnegative().max(60_000),
+       capabilities: capabilityViewSchema,
+       singleCallExecution: z.enum(["v1"]).nullable(),
++      // OMP single call (Orca spec 2026-10-14 §3.2). Optional, so an answer without it (a handler stand-in) still parses.
++      singleCallOutputCap: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable().optional(),
+     })
+     .strict(),
+ ]);
+ const executionStatusSchema = z.discriminatedUnion("kind", [
+   z.object({ kind: z.literal("absent") }).strict(),
+   z.object({ kind: z.literal("accepted"), executionId: z.string().min(1), configHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+   z.object({ kind: z.literal("unknown") }).strict(),
+   z.object({
+@@ -244,20 +246,21 @@ async function tableView(agentsTablePath: string): Promise<unknown> {
+ 
+ async function defaultHandler(request: ControlRequestV1, context: ControlContextV1): Promise<unknown> {
+   if (request.method === "features") return { protocol: 1, tokenPolicy: "optional-v1", savedResultRecovery: "v1", agentInstallationUpdate: "v1" };
+   if (request.method === "agent-installation-observe") return observeAgentInstallations(context.agentsTablePath);
+   if (request.method === "agent-installation-preview") return previewAgentInstallations(context.agentsTablePath);
+   if (request.method === "agent-installation-apply") return applyAgentInstallations(context.agentsTablePath, request);
+   if (request.method === "capabilities") {
+     if (request.agent === null) return await tableView(context.agentsTablePath);
+-    const { config, resolution } = await resolveAgent(await readAgentsTable(context.agentsTablePath), request.agent);
++    const { resolution } = await resolveAgent(await readAgentsTable(context.agentsTablePath), request.agent);
+     // Orca single-call estimate (2026-09-27), spec §4.4: a sibling of `capabilities`, like timeoutMs and killGraceMs,
+     // so the seven-key view (frozen into Orca profiles and task records) stays exactly as it is.
+-    return { protocol: 3, ...resolution, singleCallExecution: getDescriptor(config.kind).singleCallExecution(config) };
++    // OMP single call (Orca spec 2026-10-14 §3.2): singleCallExecution and singleCallOutputCap now come with the resolution.
++    return { protocol: 3, ...resolution };
+   }
+   if (request.method === "accept") {
+     return await acceptStart(request.input, { agentsTablePath: context.agentsTablePath });
+   }
+   if (request.method === "inspect") {
+     return await inspectExecution(request.input);
+   }
+   if (request.method === "handoff") {
+diff --git a/src/runtime/omp/ompAdapter.ts b/src/runtime/omp/ompAdapter.ts
+index 5c34b48..7488f6b 100644
+--- a/src/runtime/omp/ompAdapter.ts
++++ b/src/runtime/omp/ompAdapter.ts
+@@ -1,16 +1,17 @@
+ import { writeFile } from "node:fs/promises";
+ import { join } from "node:path";
+ import type { MaterializedAgentConfigV1 } from "../../agents/types.js";
+ import { buildExecutorPrompt, buildPlannerPrompt, buildVerifierPrompt } from "../claude/prompts.js";
+-import type { AttemptContext, RuntimeAdapter } from "../types.js";
++import type { AttemptContext, RuntimeAdapter, SingleCallRequest, SingleCallResult } from "../types.js";
+ import type { PhaseResults } from "../codex/protocol.js";
+ import { decodeOmpPhase, ompUsageLowerBound } from "./ompProtocol.js";
+ import { runOmpPhase } from "./runOmpPhase.js";
++import { decodeOmpSingleCall, runOmpSingleCall } from "./ompSingleCall.js";
+ import type { OmpPhase } from "./phasePrompt.js";
+ import { observedChangedPaths, worktreeHead, worktreeSnapshot } from "./worktreeSnapshot.js";
+ 
+ export class OmpAdapter implements RuntimeAdapter {
+   constructor(private readonly config: MaterializedAgentConfigV1, private readonly skillsDir?: string) {}
+ 
+   private async phase<P extends OmpPhase>(phase: P, prompt: string, context: AttemptContext): Promise<PhaseResults[P]> {
+     const before = phase === "execute" ? null : await worktreeSnapshot(context.worktreePath);
+@@ -57,9 +58,34 @@ export class OmpAdapter implements RuntimeAdapter {
+       return execution;
+     }
+     catch (error) {
+       if (context.abortSignal?.aborted && !(error !== null && typeof error === "object" && "observedTokens" in error)) return null;
+       throw error;
+     }
+   }
+   verify(context: AttemptContext) { return this.phase("verify", buildVerifierPrompt(context), context); }
++
++  /**
++   * OMP single call (Orca spec 2026-10-14 §3.3): one read-only structured call bounded by the catalog cap, refused before
++   * spawning when that cap exceeds the request's. A process that did not end cleanly books null even after a complete
++   * message (§3.3.7); its observed total stays diagnostic, as for a phase.
++   */
++  async singleCall(request: SingleCallRequest): Promise<SingleCallResult> {
++    const outcome = await runOmpSingleCall(this.config, request);
++    if (outcome.reason !== "completed") {
++      const lowerBound = ompUsageLowerBound(outcome.events);
++      // Best-effort diagnostic: a failed write must not replace the refusal below and its booking.
++      if (lowerBound !== null) await writeFile(join(outcome.evidenceDir, "usage-lower-bound.json"), JSON.stringify({ tokens: lowerBound }), { mode: 0o600 }).catch(() => undefined);
++      // Ruling m4: a pre-spawn abort, a timeoutMs <= 0 or a spawn error is neverStarted (books 0, as types.ts observedTokensOf).
++      throw Object.assign(new Error(`omp-${outcome.reason}: ${outcome.evidenceDir}`), { neverStarted: outcome.neverStarted });
++    }
++    try {
++      const result = decodeOmpSingleCall(outcome.events, this.config.selection.model, outcome.evidenceDir);
++      await writeFile(join(outcome.evidenceDir, "usage.json"), JSON.stringify(result.usageEvidence), { mode: 0o600 });
++      return result;
++    } catch (error) {
++      // Best-effort diagnostic: a failed write must not replace the decode refusal and its booking.
++      await writeFile(join(outcome.evidenceDir, "decode-error.txt"), String(error), { mode: 0o600 }).catch(() => undefined);
++      throw error;
++    }
++  }
+ }
+diff --git a/src/runtime/omp/ompProtocol.ts b/src/runtime/omp/ompProtocol.ts
+index 6d7d5e0..53e3bea 100644
+--- a/src/runtime/omp/ompProtocol.ts
++++ b/src/runtime/omp/ompProtocol.ts
+@@ -4,17 +4,17 @@ import { normalizeExecutionFinal } from "../executionNormalizer.js";
+ import type { UsageEvidence } from "../types.js";
+ import { phaseFinalAccepts, scanFinalMessage, verificationSchema, type PhaseResults } from "../codex/protocol.js";
+ import type { OmpPhase } from "./phasePrompt.js";
+ 
+ const planSchema = z.object({ summary: z.string(), primaryTargetPaths: z.array(z.string()) }).strict();
+ const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+ const safe = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+ 
+-function assistantUsage(message: Record<string, unknown>): { input: number; output: number; cacheRead: number; cacheWrite: number; total: number } {
++export function assistantUsage(message: Record<string, unknown>): { input: number; output: number; cacheRead: number; cacheWrite: number; total: number } {
+   if (!record(message.usage)) throw new Error("omp-usage-invalid");
+   const { input, output, cacheRead, cacheWrite, totalTokens } = message.usage;
+   if (!safe(input) || !safe(output) || !safe(cacheRead) || !safe(cacheWrite) || !safe(totalTokens)
+     || input + output + cacheRead + cacheWrite !== totalTokens) throw new Error("omp-usage-invalid");
+   return { input, output, cacheRead, cacheWrite, total: totalTokens };
+ }
+ 
+ /** The diagnostic lower bound never becomes a ccloop usage observation. */
+diff --git a/src/runtime/omp/ompSingleCall.ts b/src/runtime/omp/ompSingleCall.ts
+new file mode 100644
+index 0000000..8b1f28d
+--- /dev/null
++++ b/src/runtime/omp/ompSingleCall.ts
+@@ -0,0 +1,132 @@
++import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
++import { join } from "node:path";
++import { ompSingleCallExecution, readOmpCatalog } from "../../agents/ompModels.js";
++import type { CatalogRowV1, MaterializedAgentConfigV1 } from "../../agents/types.js";
++import type { ModelUsageV1 } from "../../control/usage.js";
++import { SingleCallOutputInvalid, type SingleCallRequest, type SingleCallResult, type UsageEvidence } from "../types.js";
++import { assistantUsage } from "./ompProtocol.js";
++import { singleCallSystemPrompt } from "./phasePrompt.js";
++import { runOmpProcess, type OmpPhaseOutcome } from "./runOmpPhase.js";
++
++/**
++ * OMP single call (Orca spec 2026-10-14 §3.3.3): switches off session auto-retry, model fallback, the loop guard, the
++ * advisor and auto-compaction. Keys confirmed against omp 18.10.1 in plan Task 0 (spec §7), applied on top of the
++ * operator's config.yml: omp deep-merges a --config file (YAML; JSON is YAML) after its own configuration.
++ */
++export const OMP_SINGLE_CALL_OVERLAY = {
++  retry: { enabled: false, modelFallback: false },
++  model: { loopGuard: { enabled: false } },
++  advisor: { enabled: false },
++  compaction: { enabled: false },
++} as const;
++
++/** §3.3.1: refused before anything was spawned, so nothing was sent; observedTokensOf books 0 for it. */
++export class OmpSingleCallRefused extends Error {
++  readonly neverStarted = true;
++  constructor(readonly code: "omp-single-call-cap-exceeded" | "omp-single-call-unavailable", detail: string) {
++    super(`${code}: ${detail}`);
++    this.name = "OmpSingleCallRefused";
++  }
++}
++
++/**
++ * §3.3.1-§3.3.4: re-reads the selected catalog row immediately before spawning and runs only when it still answers "v1"
++ * and its cap is at most the request's maxOutputTokens; then one `omp -p` with tools, rules and LSP off under the overlay.
++ */
++export async function runOmpSingleCall(config: MaterializedAgentConfigV1, request: SingleCallRequest): Promise<OmpPhaseOutcome> {
++  let rows: CatalogRowV1[];
++  try { rows = await readOmpCatalog(config.installation); }
++  catch (error) { throw new OmpSingleCallRefused("omp-single-call-unavailable", `catalog ${error instanceof Error ? error.message : String(error)}`); }
++  const row = rows.find((candidate) => candidate.selector === config.selection.model);
++  if (row === undefined || row.maxTokens === null || ompSingleCallExecution(row) !== "v1") throw new OmpSingleCallRefused("omp-single-call-unavailable", config.selection.model);
++  if (row.maxTokens > request.maxOutputTokens) throw new OmpSingleCallRefused("omp-single-call-cap-exceeded", `catalog maxTokens ${row.maxTokens} > maxOutputTokens ${request.maxOutputTokens}`);
++  const root = join(request.runDir, "omp", "1", "single-call");
++  await mkdir(root, { recursive: true, mode: 0o700 });
++  const evidenceDir = await mkdtemp(join(root, "call-"));
++  const systemPath = join(evidenceDir, "system-prompt.md");
++  const overlayPath = join(evidenceDir, "config-overlay.yml");
++  await Promise.all([
++    writeFile(systemPath, singleCallSystemPrompt(request.responseSchema), { mode: 0o600 }),
++    writeFile(overlayPath, `${JSON.stringify(OMP_SINGLE_CALL_OVERLAY)}\n`, { mode: 0o600 }),
++  ]);
++  const profile = config.installation.profile as string | null;
++  const args = ["--profile", profile ?? "default", "--no-extensions", "--no-skills", "--no-rules", "--no-lsp", "--no-tools",
++    "--no-session", "--no-title", "--no-prewalk", "--model", config.selection.model, "--mode", "json", "-p",
++    "--system-prompt", systemPath, "--cwd", request.cwd, "--config", overlayPath];
++  return runOmpProcess(config, {
++    args, prompt: request.prompt, cwd: request.cwd, evidenceDir, phase: "single-call",
++    timeoutMs: Math.min(request.timeoutMs, config.installation.timeoutMs),
++    abortSignal: request.signal, onProcessRegistered: request.onProcessRegistered,
++  });
++}
++
++const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
++
++/** §3.3.6: the trimmed text, with at most one surrounding fenced block removed, must parse to a plain non-array object. */
++export function parseSingleCallObject(text: string): Record<string, unknown> | undefined {
++  let body = text.trim();
++  const fenced = /^```[A-Za-z0-9_-]*\n([\s\S]*)\n```$/.exec(body);
++  if (fenced) body = fenced[1]!.trim();
++  let value: unknown;
++  try { value = JSON.parse(body); } catch { return undefined; }
++  return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
++}
++
++/** §3.3.7: the assistant messages' usage with the per-model breakdown; unreadable usage is "not observed" (null). */
++function observedUsage(messages: Record<string, unknown>[], selector: string): { total: number; usageEvidence: UsageEvidence; modelUsage: ModelUsageV1[] } {
++  const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
++  for (const message of messages) {
++    const usage = assistantUsage(message);
++    for (const key of ["input", "output", "cacheRead", "cacheWrite", "total"] as const) totals[key] += usage[key];
++  }
++  if (!Object.values(totals).every(Number.isSafeInteger) || totals.total === 0) throw new Error("omp-usage-invalid");
++  const usageEvidence: UsageEvidence = {
++    usageStatus: "present",
++    fields: {
++      input_tokens: { status: "absent" }, output_tokens: { status: "absent" },
++      inputTokens: { status: "finite", value: totals.input }, outputTokens: { status: "finite", value: totals.output },
++    },
++    cacheFields: {
++      cache_creation_input_tokens: { status: "finite", value: totals.cacheWrite },
++      cache_read_input_tokens: { status: "finite", value: totals.cacheRead },
++    },
++    selectedInputField: "inputTokens", selectedOutputField: "outputTokens", normalizedTotal: totals.total,
++  };
++  return { total: totals.total, usageEvidence, modelUsage: [{ model: selector, input: totals.input, output: totals.output, cacheRead: totals.cacheRead, cacheWrite: totals.cacheWrite }] };
++}
++
++/**
++ * §3.3.5-§3.3.7, fail closed: exactly one assistant message, no tool event, the selected model, a "stop" with one object.
++ * Every refusal after the usage was read books that observed total; "length" is a truncated answer (output-invalid).
++ */
++export function decodeOmpSingleCall(events: string, expectedSelector: string, evidenceDir: string): SingleCallResult {
++  const messages: Record<string, unknown>[] = [];
++  let toolEvent = false;
++  for (const line of events.split("\n")) {
++    if (!line.trim()) continue;
++    let raw: unknown;
++    // Ruling m4: an unparseable line is not a readable usage, so this refusal books null (not observed), never 0.
++    try { raw = JSON.parse(line); } catch { throw new Error("omp-events-invalid"); }
++    if (!record(raw) || typeof raw.type !== "string") throw new Error("omp-events-invalid");
++    if (raw.type.startsWith("tool_execution_") || raw.type === "extension_ui_request" || raw.type.includes("subagent")) toolEvent = true;
++    if (raw.type === "message_end" && record(raw.message) && raw.message.role === "assistant") messages.push(raw.message);
++  }
++  if (messages.length === 0) throw new Error("omp-no-completion");
++  const usage = observedUsage(messages, expectedSelector);
++  const observed = { observedTokens: usage.total };
++  if (messages.length > 1) throw Object.assign(new Error("omp-single-call-multiple-requests"), observed);
++  if (toolEvent) throw Object.assign(new Error("omp-phase-tool-forbidden"), observed);
++  const message = messages[0]!;
++  if (`${message.provider}/${message.model}` !== expectedSelector) throw Object.assign(new Error("omp-model-mismatch"), observed);
++  if (message.stopReason === "length") throw new SingleCallOutputInvalid(evidenceDir, usage.total, usage.usageEvidence);
++  if (message.stopReason !== "stop") {
++    const reason = typeof message.stopReason === "string" && /^[A-Za-z]{1,32}$/.test(message.stopReason) ? message.stopReason : "invalid";
++    throw Object.assign(new Error(`omp-single-call-stop:${reason}`), { code: `omp-single-call-stop:${reason}`, ...observed });
++  }
++  const text = Array.isArray(message.content)
++    ? message.content.filter((item): item is { type: "text"; text: string } => record(item) && item.type === "text" && typeof item.text === "string").map((item) => item.text).join("")
++    : "";
++  const output = parseSingleCallObject(text);
++  if (output === undefined) throw new SingleCallOutputInvalid(evidenceDir, usage.total, usage.usageEvidence);
++  return { output, tokenUsage: usage.total, usageEvidence: usage.usageEvidence, modelUsage: usage.modelUsage };
++}
+diff --git a/src/runtime/omp/phasePrompt.ts b/src/runtime/omp/phasePrompt.ts
+index d1e5711..ba20bfa 100644
+--- a/src/runtime/omp/phasePrompt.ts
++++ b/src/runtime/omp/phasePrompt.ts
+@@ -9,8 +9,20 @@ export function phaseSystemPrompt(phase: OmpPhase): string {
+     `This invocation is the ${action}.`,
+     "The phase is complete when you return one final JSON object with the fields the user prompt requests. Stop immediately then.",
+     "Do not start another plan, execute, verify, retry, subagent, or background follow-up.",
+     "Do not claim that the whole task is accepted; ccloop owns checks, retries, and final status.",
+     "Do not run git add, git reset, git commit, git checkout, or git branch; ccloop owns Git staging, commits, and publication.",
+     ...(phase === "verify" ? ['In the final JSON, rejectCategory must be a string; use "" when approved, never null. safeToRetry must be false when approved.'] : []),
+   ].join("\n");
+ }
++
++/**
++ * OMP single call (Orca spec 2026-10-14 §3.3.4): the whole answer is one JSON object satisfying the request's schema.
++ * Task 0 measured this prompt's request-body overhead against the operator's framingTokenOverhead (spec §7).
++ */
++export function singleCallSystemPrompt(responseSchema: Record<string, unknown>): string {
++  return [
++    "This invocation is one ccloop single call: answer the user prompt once, with no tools and no follow-up.",
++    "Reply with exactly one JSON object that satisfies the JSON Schema below, and nothing else: no prose before or after it.",
++    JSON.stringify(responseSchema),
++  ].join("\n");
++}
+diff --git a/src/runtime/omp/runOmpPhase.ts b/src/runtime/omp/runOmpPhase.ts
+index 8b712ee..c7d9a93 100644
+--- a/src/runtime/omp/runOmpPhase.ts
++++ b/src/runtime/omp/runOmpPhase.ts
+@@ -15,52 +15,75 @@ export interface OmpPhaseOutcome {
+   reason: "completed" | "aborted" | "timeout" | "spawn-error" | "exit-error" | "output-limit" | "io-error";
+   code: number | null;
+   signal: NodeJS.Signals | null;
+   events: string;
+   evidenceDir: string;
+   neverStarted: boolean;
+ }
+ 
++/**
++ * OMP single call (Orca spec 2026-10-14 §3.3): what one omp process needs. A phase and a single call differ only in these:
++ * their argv, cwd, evidence directory, time limit and the name written into the process registration.
++ * Precondition: evidenceDir must already exist; runOmpProcess never creates it (each caller mkdtemps its own, mode 0700).
++ */
++export interface OmpProcessInput {
++  args: string[];
++  prompt: string;
++  cwd: string;
++  evidenceDir: string;
++  timeoutMs: number;
++  phase: string;
++  abortSignal?: AbortSignal;
++  onProcessRegistered?: AttemptContext["onProcessRegistered"];
++}
++
+ export async function runOmpPhase(
+   config: MaterializedAgentConfigV1, phase: OmpPhase, prompt: string, context: AttemptContext, options: { skillsDir?: string } = {},
+ ): Promise<OmpPhaseOutcome> {
+   // OMP skill injection (spec 2026-10-13): checked before anything is spawned; OMP's own discovery stays off below.
+   const skills = options.skillsDir === undefined ? "" : await ompSkillsPromptBlock(options.skillsDir, context.worktreePath);
+   const root = join(context.runDir, "omp", String(context.attempt), phase);
+   await mkdir(root, { recursive: true, mode: 0o700 });
+   const evidenceDir = await mkdtemp(join(root, "call-"));
+   const systemPath = join(evidenceDir, "system-prompt.md");
+-  const eventsPath = join(evidenceDir, "events.jsonl");
+-  const stderrPath = join(evidenceDir, "stderr.log");
+-  await Promise.all([
+-    writeFile(systemPath, skills === "" ? phaseSystemPrompt(phase) : `${phaseSystemPrompt(phase)}\n\n${skills}`, { mode: 0o600 }),
+-    writeFile(eventsPath, "", { mode: 0o600 }),
+-    writeFile(stderrPath, "", { mode: 0o600 }),
+-  ]);
++  await writeFile(systemPath, skills === "" ? phaseSystemPrompt(phase) : `${phaseSystemPrompt(phase)}\n\n${skills}`, { mode: 0o600 });
+   const tools = phase === "execute" ? "read,grep,glob,edit,write,bash" : "read,grep,glob";
+   const profile = config.installation.profile as string | null;
+   const args = ["--profile", profile ?? "default", "--no-extensions", "--no-skills", "--no-tools", "--tools", tools,
+     "--no-session", "--no-title", "--no-prewalk", "--model", config.selection.model,
+     "--mode", "json", "-p", "--system-prompt", systemPath, "--cwd", context.worktreePath];
++  return runOmpProcess(config, {
++    args, prompt, cwd: context.worktreePath, evidenceDir, phase,
++    timeoutMs: Math.min(config.installation.timeoutMs, context.state.budgetSnapshot.timeRemainingMs),
++    abortSignal: context.abortSignal, onProcessRegistered: context.onProcessRegistered,
++  });
++}
++
++export async function runOmpProcess(config: MaterializedAgentConfigV1, input: OmpProcessInput): Promise<OmpPhaseOutcome> {
++  const { args, evidenceDir } = input;
++  const eventsPath = join(evidenceDir, "events.jsonl");
++  const stderrPath = join(evidenceDir, "stderr.log");
++  await Promise.all([writeFile(eventsPath, "", { mode: 0o600 }), writeFile(stderrPath, "", { mode: 0o600 })]);
+   const result: OmpPhaseOutcome = { reason: "completed", code: null, signal: null, events: "", evidenceDir, neverStarted: false };
+   const persist = async (): Promise<OmpPhaseOutcome> => {
+     await writeFile(join(evidenceDir, "outcome.json"), JSON.stringify({ reason: result.reason, code: result.code, signal: result.signal, neverStarted: result.neverStarted, executable: config.installation.command[0], args }, null, 2), { mode: 0o600 });
+     return result;
+   };
+-  if (context.abortSignal?.aborted) { result.reason = "aborted"; result.neverStarted = true; return persist(); }
+-  const timeoutMs = Math.min(config.installation.timeoutMs, context.state.budgetSnapshot.timeRemainingMs);
++  if (input.abortSignal?.aborted) { result.reason = "aborted"; result.neverStarted = true; return persist(); }
++  const timeoutMs = input.timeoutMs;
+   if (timeoutMs <= 0) { result.reason = "timeout"; result.neverStarted = true; return persist(); }
++  const profile = config.installation.profile as string | null;
+   const env: NodeJS.ProcessEnv = { ...process.env, OMP_PROFILE: profile ?? "default" };
+   if (config.installation.configDir !== null) env.PI_CODING_AGENT_DIR = config.installation.configDir;
+   const chunks: Buffer[] = [];
+   let stdoutBytes = 0;
+   let stderrBytes = 0;
+   await new Promise<void>((resolve) => {
+-    const child = spawn(config.installation.command[0], args, { cwd: context.worktreePath, env, detached: true, stdio: ["pipe", "pipe", "pipe"] });
++    const child = spawn(config.installation.command[0], args, { cwd: input.cwd, env, detached: true, stdio: ["pipe", "pipe", "pipe"] });
+     let stopped = false;
+     let closed = false;
+     let killTimer: NodeJS.Timeout | undefined;
+     let drainTimer: NodeJS.Timeout | undefined;
+     const kill = (signal: NodeJS.Signals): void => {
+       if (child.pid === undefined) return;
+       try { process.kill(-child.pid, signal); } catch { child.kill(signal); }
+     };
+@@ -68,17 +91,17 @@ export async function runOmpPhase(
+       if (stopped || closed) return;
+       stopped = true;
+       result.reason = reason;
+       kill("SIGTERM");
+       killTimer = setTimeout(() => kill("SIGKILL"), config.installation.killGraceMs);
+     };
+     const abort = (): void => stop("aborted");
+     const timer = setTimeout(() => stop("timeout"), timeoutMs);
+-    context.abortSignal?.addEventListener("abort", abort, { once: true });
++    input.abortSignal?.addEventListener("abort", abort, { once: true });
+     child.stdout.on("data", (chunk: Buffer) => {
+       const kept = chunk.subarray(0, Math.max(0, OUTPUT_LIMIT - stdoutBytes));
+       stdoutBytes += chunk.length;
+       try { appendFileSync(eventsPath, kept); } catch { stop("io-error"); }
+       chunks.push(kept);
+       if (stdoutBytes > OUTPUT_LIMIT) stop("output-limit");
+     });
+     child.stderr.on("data", (chunk: Buffer) => {
+@@ -89,35 +112,35 @@ export async function runOmpPhase(
+     });
+     child.stdin.on("error", () => { if (!closed && !stopped) stop("io-error"); });
+     child.on("error", () => { result.neverStarted = true; stop("spawn-error"); });
+     child.once("spawn", () => {
+       void (async () => {
+         try {
+           const { stdout } = await execFileAsync("ps", ["-o", "lstart=", "-p", String(child.pid)], { env: { ...process.env, TZ: "UTC", LC_ALL: "C" }, timeout: 1000 });
+           if (!stdout.trim()) throw new Error("process identity unavailable");
+-          const registration = { pid: child.pid!, pgid: child.pid!, startedAt: stdout.trim(), phase };
++          const registration = { pid: child.pid!, pgid: child.pid!, startedAt: stdout.trim(), phase: input.phase };
+           await writeFile(join(evidenceDir, "process.json"), JSON.stringify(registration), { mode: 0o600 });
+-          await context.onProcessRegistered?.(registration);
+-          if (!closed && !stopped) child.stdin.end(prompt);
++          await input.onProcessRegistered?.(registration);
++          if (!closed && !stopped) child.stdin.end(input.prompt);
+         } catch { stop("io-error"); }
+       })();
+     });
+     child.on("exit", (code, signal) => {
+       result.code = code;
+       result.signal = signal;
+       if (!stopped && (code !== 0 || signal !== null)) result.reason = "exit-error";
+       drainTimer = setTimeout(() => { kill("SIGKILL"); child.stdout.destroy(); child.stderr.destroy(); }, 1000);
+     });
+     child.on("close", () => {
+       closed = true;
+       kill("SIGKILL");
+       clearTimeout(timer);
+       clearTimeout(killTimer);
+       clearTimeout(drainTimer);
+-      context.abortSignal?.removeEventListener("abort", abort);
++      input.abortSignal?.removeEventListener("abort", abort);
+       result.events = Buffer.concat(chunks).toString("utf8");
+       resolve();
+     });
+-    if (context.abortSignal?.aborted) abort();
++    if (input.abortSignal?.aborted) abort();
+   });
+   return persist();
+ }
+diff --git a/src/runtime/types.ts b/src/runtime/types.ts
+index 91f31b1..3dcb48c 100644
+--- a/src/runtime/types.ts
++++ b/src/runtime/types.ts
+@@ -222,11 +222,14 @@ export type VerificationResult = {
+ };
+ 
+ export interface RuntimeAdapter {
+   /** H6: a phase owns filesystem cleanup that must finish before controller timeout cleanup. */
+   readonly awaitAbortedPhaseCleanup?: boolean;
+   plan(context: AttemptContext): Promise<AttemptPlan>;
+   execute(context: AttemptContext): Promise<ExecutePhaseResult>;
+   verify(context: AttemptContext): Promise<VerificationResult>;
+-  /** Orca single-call estimate (2026-09-27): only a kind whose descriptor answers singleCallExecution "v1" has it. */
++  /** Orca single-call estimate (2026-09-27): only a kind whose descriptor answers singleCallExecution "v1" has it.
++   * *** ERRATUM (OMP single call, Orca spec 2026-10-14 §3.2, Orca session 02f047f6, 2026-10-14) -- the omp adapter has it while its
++   * descriptor answers "v1" only for some catalog rows: for omp the answer is decided per selected catalog row (accept
++   * refuses the rest by the resolution) and re-checked at spawn, where the adapter refuses again. *** */
+   singleCall?(request: SingleCallRequest): Promise<SingleCallResult>;
+ }
+diff --git a/tests/agents/ompCatalog.test.ts b/tests/agents/ompCatalog.test.ts
+new file mode 100644
+index 0000000..b2de992
+--- /dev/null
++++ b/tests/agents/ompCatalog.test.ts
+@@ -0,0 +1,69 @@
++import { mkdtemp, rm, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterEach, describe, expect, it } from "vitest";
++import { ompSingleCallExecution, readOmpCatalog, readOmpModels } from "../../src/agents/ompModels.js";
++import type { InstallationV1 } from "../../src/agents/types.js";
++
++// OMP single call (Orca spec 2026-10-14-omp-single-call-design.md §3.1): the catalog's one spawn gives rows, and a number is
++// used only when it is a positive safe integer -- so a malformed or absent value can never become a context window or the
++// output bound Orca books. §3.2: only a row that declares the cap pi-ai sends, from a provider other than openrouter (for
++// which pi-ai sends no cap without an explicit one), may answer "v1".
++const dirs: string[] = [];
++afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true }); });
++
++async function catalogInstallation(models: unknown[]): Promise<InstallationV1> {
++  const dir = await mkdtemp(join(tmpdir(), "ccloop-omp-rows-"));
++  dirs.push(dir);
++  const binary = join(dir, "omp");
++  await writeFile(binary, `#!/usr/bin/env node
++const args = process.argv.slice(2);
++if (args.includes("models")) { process.stdout.write(${JSON.stringify(`${JSON.stringify({ models })}\n`)}); process.exit(0); }
++process.exit(2);
++`, { mode: 0o700 });
++  return { kind: "omp", command: [binary], version: "18.10.1", configDir: null, timeoutMs: 10_000, killGraceMs: 50, defaultModel: "gateway/a", profile: null };
++}
++const row = (provider: string, id: string, numbers: Record<string, unknown>) => ({ provider, id, selector: `${provider}/${id}`, kind: "chat", ...numbers });
++
++describe("OMP catalog rows (omp single call §3.1)", () => {
++  it("keeps contextWindow and maxTokens only when each is a positive safe integer, with the row's provider", async () => {
++    const installation = await catalogInstallation([
++      row("gateway", "a", { contextWindow: 200_000, maxTokens: 8_192 }),
++      row("gateway", "zero", { contextWindow: 0, maxTokens: 0 }),
++      row("gateway", "negative", { contextWindow: -1, maxTokens: -5 }),
++      row("gateway", "fraction", { contextWindow: 1.5, maxTokens: 2.5 }),
++      row("gateway", "string", { contextWindow: "128000", maxTokens: "16384" }),
++      row("gateway", "unsafe", { contextWindow: 2 ** 53, maxTokens: 2 ** 53 }),
++      row("gateway", "absent", {}),
++      row("openrouter", "vendor/m", { contextWindow: 64_000, maxTokens: 4_096 }),
++    ]);
++    const none = { contextWindow: null, maxTokens: null };
++    expect(await readOmpCatalog(installation)).toEqual([
++      { selector: "gateway/a", provider: "gateway", contextWindow: 200_000, maxTokens: 8_192 },
++      { selector: "gateway/zero", provider: "gateway", ...none },
++      { selector: "gateway/negative", provider: "gateway", ...none },
++      { selector: "gateway/fraction", provider: "gateway", ...none },
++      { selector: "gateway/string", provider: "gateway", ...none },
++      { selector: "gateway/unsafe", provider: "gateway", ...none },
++      { selector: "gateway/absent", provider: "gateway", ...none },
++      { selector: "openrouter/vendor/m", provider: "openrouter", contextWindow: 64_000, maxTokens: 4_096 },
++    ]);
++    // The selector-list callers (detect, updates, older criteria) keep exactly what they had: the selectors, in order.
++    expect(await readOmpModels(installation)).toEqual([
++      "gateway/a", "gateway/zero", "gateway/negative", "gateway/fraction", "gateway/string", "gateway/unsafe", "gateway/absent", "openrouter/vendor/m",
++    ]);
++  });
++
++  it("still refuses a row whose selector is not provider/id, from both readers", async () => {
++    const installation = await catalogInstallation([{ provider: "gateway", id: "a", selector: "gateway/b", maxTokens: 8 }]);
++    await expect(readOmpCatalog(installation)).rejects.toThrow("omp-model-catalog-invalid");
++    await expect(readOmpModels(installation)).rejects.toThrow("omp-model-catalog-invalid");
++  });
++
++  it("answers v1 only for a row with a cap whose provider is not openrouter", () => {
++    expect(ompSingleCallExecution({ selector: "gateway/a", provider: "gateway", contextWindow: null, maxTokens: 8_192 })).toBe("v1");
++    expect(ompSingleCallExecution({ selector: "gateway/a", provider: "gateway", contextWindow: 200_000, maxTokens: null })).toBeNull();
++    expect(ompSingleCallExecution({ selector: "openrouter/vendor/m", provider: "openrouter", contextWindow: 64_000, maxTokens: 4_096 })).toBeNull();
++    expect(ompSingleCallExecution(undefined)).toBeNull();
++  });
++});
+diff --git a/tests/agents/ompSingleCallResolution.test.ts b/tests/agents/ompSingleCallResolution.test.ts
+new file mode 100644
+index 0000000..c3f27d2
+--- /dev/null
++++ b/tests/agents/ompSingleCallResolution.test.ts
+@@ -0,0 +1,71 @@
++import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join, resolve } from "node:path";
++import { afterEach, describe, expect, it } from "vitest";
++import { claudeDescriptor } from "../../src/agents/claude.js";
++import { codexDescriptor } from "../../src/agents/codex.js";
++import { resolveAgent } from "../../src/agents/materialize.js";
++import type { CatalogRowV1, InstallationV1, MaterializedAgentConfigV1 } from "../../src/agents/types.js";
++import { runControlCommand } from "../../src/control/command.js";
++import { writeAgentsTable } from "../control/agentsFixture.js";
++
++// OMP single call (Orca spec 2026-10-14-omp-single-call-design.md §3.2, criterion 1): the selected catalog row decides the
++// resolution's context window, its single-call answer and the cap that call runs under -- Orca sizes the estimate by the
++// cap, and refuses the call by the answer -- so a resolution that ignored the row would let omp run unbounded or never.
++const FAKE_OMP = resolve("tests/fixtures/fake-omp.mjs");
++const dirs: string[] = [];
++afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true }); });
++
++const installation: InstallationV1 = {
++  kind: "omp", command: ["/opt/omp"], version: "18.10.1", configDir: null, timeoutMs: 1_800_000, killGraceMs: 5_000, defaultModel: "gateway/model-a", profile: null,
++};
++const table = { schema: "ccloop-agents-table-v1" as const, installations: { work: installation } };
++const rows: CatalogRowV1[] = [
++  { selector: "gateway/model-a", provider: "gateway", contextWindow: 200_000, maxTokens: 8_192 },
++  { selector: "gateway/no-cap", provider: "gateway", contextWindow: 128_000, maxTokens: null },
++  { selector: "openrouter/vendor/m", provider: "openrouter", contextWindow: 64_000, maxTokens: 4_096 },
++];
++const deps = { probeVersion: async () => "18.10.1", probeCatalog: async () => rows };
++
++describe("the omp resolution takes its numbers from the selected catalog row (criterion 1)", () => {
++  it("C1: a row with a cap answers its window, v1 and its cap", async () => {
++    const { resolution } = await resolveAgent(table, { agent: "work" }, deps);
++    expect([resolution.capabilities.contextWindowTokens, resolution.singleCallExecution, resolution.singleCallOutputCap]).toEqual([200_000, "v1", 8_192]);
++  });
++
++  it("C1: a row without maxTokens answers null for both, keeping its window", async () => {
++    const { resolution } = await resolveAgent(table, { agent: "work", model: "gateway/no-cap" }, deps);
++    expect([resolution.capabilities.contextWindowTokens, resolution.singleCallExecution, resolution.singleCallOutputCap]).toEqual([128_000, null, null]);
++  });
++
++  it("C1: an openrouter row answers singleCallExecution null although it declares a cap", async () => {
++    const { resolution } = await resolveAgent(table, { agent: "work", model: "openrouter/vendor/m" }, deps);
++    expect([resolution.capabilities.contextWindowTokens, resolution.singleCallExecution, resolution.singleCallOutputCap]).toEqual([64_000, null, 4_096]);
++  });
++
++  it("still refuses a model the catalog does not list, by name", async () => {
++    await expect(resolveAgent(table, { agent: "work", model: "gateway/absent" }, deps)).rejects.toMatchObject({ code: "agent-selection-invalid" });
++  });
++
++  it("leaves claude's and codex's cap null: their calls honour the request's maxOutputTokens", () => {
++    const config = (kind: "claude" | "codex"): MaterializedAgentConfigV1 => ({
++      schema: "ccloop-agent-config-v1", kind,
++      installation: { kind, command: ["/bin/echo"], version: "1.2.3", configDir: null, timeoutMs: 1000, killGraceMs: 50, ...(kind === "codex" ? { sandbox: "workspace-write", budgetMode: "soft" } : {}) },
++      selection: { agent: kind, model: kind === "claude" ? "claude-opus-5-5" : "gpt-6-sol", contextWindow: "agent-default" },
++    });
++    expect([claudeDescriptor.singleCallOutputCap(config("claude")), codexDescriptor.singleCallOutputCap(config("codex"))]).toEqual([null, null]);
++  });
++
++  it("C1 on the wire: control capabilities prints the row's values through ccloop's strict answer schema", async () => {
++    const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-omp-resolution-wire-")));
++    dirs.push(dir);
++    const marker = join(dir, "omp-marker");
++    await writeFile(`${marker}.catalog.json`, JSON.stringify([{ provider: "gateway", kind: "chat", id: "model-a", selector: "gateway/model-a", contextWindow: 200000, maxTokens: 8192 }]));
++    const binary = join(dir, "omp");
++    await writeFile(binary, `#!/bin/sh\nexec '${process.execPath}' '${FAKE_OMP}' '${marker}' "$@"\n`, { mode: 0o700 });
++    const { path } = await writeAgentsTable({ omp: { ...installation, command: [binary], timeoutMs: 10_000, killGraceMs: 50 } }, dir);
++    const result = await runControlCommand(["capabilities", "--agents", path], JSON.stringify({ agent: { agent: "omp" } }));
++    expect(result.code, result.stderr).toBe(0);
++    expect(JSON.parse(result.stdout)).toMatchObject({ protocol: 3, capabilities: { contextWindowTokens: 200_000 }, singleCallExecution: "v1", singleCallOutputCap: 8_192 });
++  });
++});
+diff --git a/tests/control/ompSingleCallAccept.test.ts b/tests/control/ompSingleCallAccept.test.ts
+new file mode 100644
+index 0000000..ba51a6d
+--- /dev/null
++++ b/tests/control/ompSingleCallAccept.test.ts
+@@ -0,0 +1,73 @@
++import { mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join, resolve } from "node:path";
++import { afterEach, describe, expect, it } from "vitest";
++import { resolveAgent } from "../../src/agents/materialize.js";
++import { acceptStart } from "../../src/control/accept.js";
++import { runControlCommand } from "../../src/control/command.js";
++import { singleCallEnvelope, writeAgentsTable } from "./agentsFixture.js";
++
++// OMP single call (Orca spec 2026-10-14 §3.2, criterion 2): accept refuses single-call work by the resolution's answer --
++// for omp, the selected catalog row's -- not by the installation's config alone, which cannot tell a row with a cap from
++// one without. Both directions are pinned: a config-only answer would refuse the admitted call too.
++const FAKE_OMP = resolve("tests/fixtures/fake-omp.mjs");
++const dirs: string[] = [];
++afterEach(async () => {
++  for (const dir of dirs.splice(0)) {
++    let pid: number | undefined;
++    try {
++      pid = (JSON.parse(await readFile(join(dir, "control", "accepted.json"), "utf8")) as { worker?: { pid?: number } }).worker?.pid;
++    } catch {}
++    for (const deadline = Date.now() + 10_000; pid !== undefined && Date.now() < deadline; await new Promise((r) => setTimeout(r, 20))) {
++      try { process.kill(pid, 0); } catch { break; }
++    }
++    await rm(dir, { recursive: true, force: true });
++  }
++});
++
++async function ompTable() {
++  const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-omp-accept-")));
++  dirs.push(dir);
++  const marker = join(dir, "omp-marker");
++  await writeFile(`${marker}.catalog.json`, JSON.stringify([
++    { provider: "gateway", kind: "chat", id: "model-a", selector: "gateway/model-a", contextWindow: 200000, maxTokens: 8192 },
++    { provider: "gateway", kind: "chat", id: "no-cap", selector: "gateway/no-cap", contextWindow: 128000 },
++  ]));
++  const binary = join(dir, "omp");
++  await writeFile(binary, `#!/bin/sh\nexec '${process.execPath}' '${FAKE_OMP}' '${marker}' "$@"\n`, { mode: 0o700 });
++  return await writeAgentsTable({
++    omp: { kind: "omp", command: [binary], version: "18.10.1", configDir: null, timeoutMs: 10_000, killGraceMs: 50, defaultModel: "gateway/model-a", profile: null },
++  }, dir);
++}
++async function sourceDir(): Promise<string> {
++  const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-omp-accept-source-")));
++  dirs.push(dir);
++  return dir;
++}
++
++describe("accept uses the resolution for omp single calls (criterion 2)", { timeout: 30_000 }, () => {
++  it("C2: refuses an omp single call whose resolution answers null, by name and before anything is persisted", async () => {
++    const { path, table } = await ompTable();
++    const source = await sourceDir();
++    const { resolution } = await resolveAgent(table, { agent: "omp", model: "gateway/no-cap" });
++    expect(resolution.singleCallExecution).toBeNull();
++    const envelope = singleCallEnvelope({ sourceDir: source, agent: resolution.selection, configHash: resolution.configHash });
++    expect(await runControlCommand(["accept", "--agents", path], JSON.stringify(envelope))).toEqual({ code: 2, stdout: "", stderr: "single-call-unsupported\n" });
++    expect(await readdir(source)).toEqual([]);
++  });
++
++  it("C2: admits an omp single call whose resolution answers v1 and seals its envelope", async () => {
++    const { path, table } = await ompTable();
++    const source = await sourceDir();
++    const { resolution } = await resolveAgent(table, { agent: "omp" });
++    expect(resolution.singleCallExecution).toBe("v1");
++    const envelope = singleCallEnvelope({ sourceDir: source, agent: resolution.selection, configHash: resolution.configHash });
++    const status = await acceptStart(envelope, {
++      agentsTablePath: path,
++      workerCommand: [resolve("node_modules/.bin/tsx"), resolve("tests/fixtures/control-worker.mjs")],
++      receiptTimeoutMs: 2_000,
++    });
++    expect(status.kind).toBe("accepted");
++    expect(JSON.parse(await readFile(join(source, "control", "envelope.json"), "utf8"))).toEqual(envelope);
++  });
++});
+diff --git a/tests/control/ompSingleCallWorker.test.ts b/tests/control/ompSingleCallWorker.test.ts
+new file mode 100644
+index 0000000..7d23165
+--- /dev/null
++++ b/tests/control/ompSingleCallWorker.test.ts
+@@ -0,0 +1,74 @@
++import { existsSync } from "node:fs";
++import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join, resolve } from "node:path";
++import { afterEach, describe, expect, it } from "vitest";
++import { resolveAgent } from "../../src/agents/materialize.js";
++import { parseAgentsTable } from "../../src/agents/table.js";
++import { collectExecution } from "../../src/control/collect.js";
++import { readEvidence } from "../../src/control/evidence.js";
++import { atomicReplacePrivateFile, ensurePrivateDirectory } from "../../src/control/paths.js";
++import { canonicalHash, canonicalJson } from "../../src/control/protocol.js";
++import { writeAccepted } from "../../src/control/store.js";
++import { runControlWorker } from "../../src/control/worker.js";
++import { singleCallEnvelope } from "./agentsFixture.js";
++
++// OMP single call (Orca spec 2026-10-14 §3.3.1, §3.3.7) through the control worker, read back as Orca reads it: a complete
++// call books its observed usage and answer; a call refused at spawn because the catalog cap rose above the envelope's
++// maxOutputTokens (4096 here) books 0 and names the cap -- nothing was sent, so nothing may be charged.
++const FAKE_OMP = resolve("tests/fixtures/fake-omp.mjs");
++const dirs: string[] = [];
++afterEach(async () => {
++  for (const dir of dirs.splice(0)) {
++    try {
++      for (const registered of JSON.parse(await readFile(join(dir, "control", "processes.json"), "utf8")) as Array<{ pgid: number }>) {
++        try { process.kill(-registered.pgid, "SIGKILL"); } catch {}
++      }
++    } catch {}
++    await rm(dir, { recursive: true, force: true });
++  }
++});
++
++async function world(maxTokens: number) {
++  const sourceDir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-omp-single-source-")));
++  const aux = await realpath(await mkdtemp(join(tmpdir(), "ccloop-omp-single-aux-")));
++  dirs.push(sourceDir, aux);
++  const marker = join(aux, "omp-marker");
++  await writeFile(`${marker}.catalog.json`, JSON.stringify([{ provider: "gateway", kind: "chat", id: "model-a", selector: "gateway/model-a", contextWindow: 200000, maxTokens }]));
++  const binary = join(aux, "omp");
++  await writeFile(binary, `#!/bin/sh\nexec '${process.execPath}' '${FAKE_OMP}' '${marker}' "$@"\n`, { mode: 0o700 });
++  const table = parseAgentsTable({ schema: "ccloop-agents-table-v1", installations: {
++    omp: { kind: "omp", command: [binary], version: "18.10.1", configDir: null, timeoutMs: 60_000, killGraceMs: 300, defaultModel: "gateway/model-a", profile: null },
++  } });
++  const { config, resolution } = await resolveAgent(table, { agent: "omp" });
++  const envelope = singleCallEnvelope({ sourceDir, agent: resolution.selection, configHash: resolution.configHash });
++  const controlDir = join(sourceDir, "control");
++  await ensurePrivateDirectory(sourceDir, controlDir);
++  await atomicReplacePrivateFile(sourceDir, join(controlDir, "config.json"), Buffer.from(canonicalJson(config)));
++  await atomicReplacePrivateFile(sourceDir, join(controlDir, "envelope.json"), Buffer.from(canonicalJson(envelope)));
++  await writeAccepted(sourceDir, {
++    protocol: 1, envelopeHash: canonicalHash(envelope), executionId: "execution-1", configHash: envelope.claim.configHash,
++    generation: 1, acceptedAt: new Date().toISOString(), launch: "intended", worker: null,
++  });
++  await runControlWorker(["--source-dir", sourceDir, "--execution-id", "execution-1", "--nonce", "nonce-1"]);
++  const collected = await collectExecution(envelope, 0);
++  const record = JSON.parse((await readEvidence(sourceDir, collected.candidate!.handoff)).toString("utf8")) as { outcome: string; errorCode: string | null };
++  return { sourceDir, marker, collected, record };
++}
++const booked = (events: Array<{ bucket: string; cumulative: { tokens: number } | null }>) => events.map((event) => [event.bucket, event.cumulative?.tokens ?? null]);
++
++describe("omp single calls through the control worker", { timeout: 30_000 }, () => {
++  it("books a complete call's observed usage and its answer", async () => {
++    const w = await world(4096);
++    expect(booked(w.collected.events)).toEqual([["work", 14], ["handoff", 0]]);
++    expect(w.record).toMatchObject({ outcome: "complete", errorCode: null });
++    expect(JSON.parse((await readEvidence(w.sourceDir, w.collected.candidate!.artifacts[0]!)).toString("utf8"))).toEqual({ answer: "42" });
++  });
++
++  it("C3: books 0 and names the cap when the catalog cap exceeds the envelope's maxOutputTokens", async () => {
++    const w = await world(8192);
++    expect(booked(w.collected.events)).toEqual([["work", 0], ["handoff", 0]]);
++    expect(w.record).toMatchObject({ outcome: "failed", errorCode: "omp-single-call-cap-exceeded" });
++    expect(existsSync(`${w.marker}.calls`)).toBe(false);
++  });
++});
+diff --git a/tests/fixtures/fake-omp.mjs b/tests/fixtures/fake-omp.mjs
+index 9d4e711..992ca7d 100644
+--- a/tests/fixtures/fake-omp.mjs
++++ b/tests/fixtures/fake-omp.mjs
+@@ -2,36 +2,57 @@
+ // A fake `omp` (oh-my-pi 18.10.1) for criteria and for Orca's real-ccloop worlds (OMP skill injection, 2026-10-13).
+ // Installations allow only the binary in `command`, so a test wraps this in a tiny shell script:
+ //   exec <node> <this file> <marker> "$@"
+ // ccloop puts --no-extensions/--profile before a subcommand, so subcommands are found anywhere in argv.
+ // It answers `--version`, the model catalog and the configured default, and runs a plan/execute/verify phase the way
+ // ccloop drives OMP (system prompt file, prompt on stdin, JSON events on stdout). Per phase it appends the phase name to
+ // `<marker>.calls`; when the system prompt lists frozen skills it reads every listed SKILL.md (as a model told to would)
+ // and appends each one's bytes to `<marker>.skills`. Execute sets answer.txt to 42.
+-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
++import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
++import { dirname } from "node:path";
+ 
+ const [marker, ...args] = process.argv.slice(2);
+ if (args.includes("--version")) {
+   process.stdout.write("18.10.1\n");
+   process.exit(0);
+ }
++// OMP single call (Orca spec 2026-10-14 §5): `<marker>.catalog.json`, when present, is the catalog's rows; without it the
++// one row below, as before.
+ if (args.includes("models")) {
+-  const row = { provider: "gateway", kind: "chat", id: "model-a", selector: "gateway/model-a", contextWindow: 200000, maxTokens: 8192 };
+-  process.stdout.write(`${JSON.stringify({ models: [row] })}\n`);
++  const rows = existsSync(`${marker}.catalog.json`) ? JSON.parse(readFileSync(`${marker}.catalog.json`, "utf8"))
++    : [{ provider: "gateway", kind: "chat", id: "model-a", selector: "gateway/model-a", contextWindow: 200000, maxTokens: 8192 }];
++  process.stdout.write(`${JSON.stringify({ models: rows })}\n`);
+   process.exit(0);
+ }
+ if (args.includes("config")) {
+   process.stdout.write(`${JSON.stringify({ value: { default: "gateway/model-a" } })}\n`);
+   process.exit(0);
+ }
+ 
+ let prompt = "";
+ for await (const chunk of process.stdin) prompt += chunk.toString();
+ const system = readFileSync(args[args.indexOf("--system-prompt") + 1], "utf8");
++// OMP single call (Orca spec 2026-10-14 §5): ccloop's single-call system prompt says "one ccloop single call". Records the
++// call and its argv, then prints `<marker>.single.json` ({rows?, exitCode?, hang?}) or one complete {"answer":"42"}.
++// `holdOpen` keeps the process running after the rows (for an abort after a complete message); `blockFiles` makes each
++// named path in the call's evidence directory a directory, so ccloop's write of that diagnostic file fails.
++if (system.includes("one ccloop single call")) {
++  appendFileSync(`${marker}.calls`, "single-call\n");
++  appendFileSync(`${marker}.argv`, `${JSON.stringify(args)}\n`);
++  const script = existsSync(`${marker}.single.json`) ? JSON.parse(readFileSync(`${marker}.single.json`, "utf8")) : {};
++  for (const name of script.blockFiles ?? []) mkdirSync(`${dirname(args[args.indexOf("--system-prompt") + 1])}/${name}`);
++  if (script.hang === true) setInterval(() => {}, 1000);
++  else {
++    const answer = { role: "assistant", content: [{ type: "text", text: "{\"answer\":\"42\"}" }], provider: "gateway", model: "model-a", stopReason: "stop", usage: { input: 8, output: 2, cacheRead: 3, cacheWrite: 1, totalTokens: 14, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
++    const rows = script.rows ?? [{ type: "agent_start" }, { type: "message_end", message: answer }, { type: "agent_end", isTerminal: true, yielded: true, messages: [answer] }];
++    process.stdout.write(rows.map((row) => `${JSON.stringify(row)}\n`).join(""), () => { if (script.holdOpen === true) setInterval(() => {}, 1000); else process.exit(script.exitCode ?? 0); });
++  }
++  await new Promise(() => {});
++}
+ const phase = system.includes("execution phase") ? "execute" : system.includes("verification phase") ? "verify" : "plan";
+ appendFileSync(`${marker}.calls`, `${phase}\n`);
+ for (const match of system.matchAll(/\(SKILL\.md: ([^)]+)\)$/gmu)) appendFileSync(`${marker}.skills`, readFileSync(match[1], "utf8"));
+ if (phase === "execute") writeFileSync("answer.txt", "42\n");
+ const result = phase === "plan" ? { summary: "Set answer to 42", primaryTargetPaths: ["answer.txt"] }
+   : phase === "execute" ? { changedFiles: ["answer.txt"], diffPatch: "", commandOutputs: [], stdoutStderrLog: "wrote answer" }
+     : { approved: true, rejectCategory: "", primaryTargetPaths: ["answer.txt"], failingCommand: null, safeToRetry: false, evidence: ["answer is 42"], pauseSignals: [], stopSignals: [] };
+ const message = { role: "assistant", content: [{ type: "text", text: JSON.stringify(result) }], provider: "gateway", model: "model-a", stopReason: "stop", usage: { input: 8, output: 2, cacheRead: 3, cacheWrite: 1, totalTokens: 14, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
+diff --git a/tests/runtime/omp/ompSingleCall.test.ts b/tests/runtime/omp/ompSingleCall.test.ts
+new file mode 100644
+index 0000000..fa2494a
+--- /dev/null
++++ b/tests/runtime/omp/ompSingleCall.test.ts
+@@ -0,0 +1,306 @@
++import { existsSync } from "node:fs";
++import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { dirname, join, resolve } from "node:path";
++import { afterEach, describe, expect, it } from "vitest";
++import type { MaterializedAgentConfigV1 } from "../../../src/agents/types.js";
++import { OmpAdapter } from "../../../src/runtime/omp/ompAdapter.js";
++import { OMP_SINGLE_CALL_OVERLAY, decodeOmpSingleCall, parseSingleCallObject, runOmpSingleCall } from "../../../src/runtime/omp/ompSingleCall.js";
++import { observedTokensOf, SingleCallOutputInvalid, type SingleCallRequest } from "../../../src/runtime/types.js";
++
++// OMP single call (Orca spec 2026-10-14-omp-single-call-design.md §3.3). Orca books the catalog cap as the call's output
++// bound; omp cannot take a per-call cap, so a cap that rose above the request's must refuse the call before anything is
++// sent (criterion 3), and the call must run with every tool, rule and LSP off, under the overlay that switches omp's own
++// retries and model switches off (criterion 4) -- otherwise one booked request could become several, or a tool run.
++const FAKE_OMP = resolve("tests/fixtures/fake-omp.mjs");
++const SCHEMA = { type: "object", properties: { answer: { type: "string" } }, required: ["answer"], additionalProperties: false };
++const dirs: string[] = [];
++afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true }); });
++
++async function ompWorld(options: { catalog?: unknown; single?: unknown; installationTimeoutMs?: number } = {}) {
++  const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-omp-single-")));
++  dirs.push(dir);
++  const marker = join(dir, "omp-marker");
++  if (options.catalog !== undefined) await writeFile(`${marker}.catalog.json`, JSON.stringify(options.catalog));
++  if (options.single !== undefined) await writeFile(`${marker}.single.json`, JSON.stringify(options.single));
++  const binary = join(dir, "omp");
++  await writeFile(binary, `#!/bin/sh\nexec '${process.execPath}' '${FAKE_OMP}' '${marker}' "$@"\n`, { mode: 0o700 });
++  const runDir = join(dir, "run");
++  const cwd = join(runDir, "cwd");
++  await mkdir(cwd, { recursive: true, mode: 0o700 });
++  const config: MaterializedAgentConfigV1 = {
++    schema: "ccloop-agent-config-v1", kind: "omp",
++    installation: { kind: "omp", command: [binary], version: "18.10.1", configDir: null, timeoutMs: options.installationTimeoutMs ?? 10_000, killGraceMs: 50, defaultModel: "gateway/model-a", profile: null },
++    selection: { agent: "omp", model: "gateway/model-a", contextWindow: "agent-default" },
++  };
++  const request = (over: Partial<SingleCallRequest> = {}): SingleCallRequest => ({
++    prompt: "Estimate the plan below.", responseSchema: SCHEMA, maxOutputTokens: 8_192, cwd, runDir, timeoutMs: 60_000, ...over,
++  });
++  return { dir, marker, binary, config, request };
++}
++const modelA = (numbers: Record<string, unknown>) => ({ provider: "gateway", kind: "chat", id: "model-a", selector: "gateway/model-a", contextWindow: 200000, ...numbers });
++const failureOf = async (promise: Promise<unknown>): Promise<unknown> => promise.then(() => null, (error: unknown) => error);
++
++describe("spawn-time check (§3.3.1, criterion 3)", () => {
++  it("C3: refuses before spawning when the catalog cap exceeds the request's maxOutputTokens, booking 0", async () => {
++    const w = await ompWorld({ catalog: [modelA({ maxTokens: 8192 })] });
++    const failure = await failureOf(runOmpSingleCall(w.config, w.request({ maxOutputTokens: 4_096 })));
++    expect(failure).toMatchObject({ code: "omp-single-call-cap-exceeded", neverStarted: true });
++    expect(observedTokensOf(failure)).toBe(0);
++    expect(existsSync(`${w.marker}.calls`)).toBe(false);
++  });
++
++  it("C3: runs when the catalog cap equals the request's maxOutputTokens", async () => {
++    const w = await ompWorld({ catalog: [modelA({ maxTokens: 8192 })] });
++    const outcome = await runOmpSingleCall(w.config, w.request({ maxOutputTokens: 8_192 }));
++    expect(outcome).toMatchObject({ reason: "completed", neverStarted: false });
++    expect(await readFile(`${w.marker}.calls`, "utf8")).toBe("single-call\n");
++  });
++
++  it("refuses as unavailable, never started, when the row lost its cap, the model left the catalog, or the catalog cannot be read", async () => {
++    for (const catalog of [[modelA({})], [{ ...modelA({ maxTokens: 8192 }), id: "other", selector: "gateway/other" }], "not rows"]) {
++      const w = await ompWorld({ catalog });
++      const failure = await failureOf(runOmpSingleCall(w.config, w.request()));
++      expect([catalog, failure]).toEqual([catalog, expect.objectContaining({ code: "omp-single-call-unavailable", neverStarted: true })]);
++      expect(observedTokensOf(failure)).toBe(0);
++      expect(existsSync(`${w.marker}.calls`)).toBe(false);
++    }
++  }, 20_000);
++
++  // Controller ruling (Task 4, Review Focus 2): a catalog probe that exits non-zero or prints no JSON at spawn time is
++  // the same refusal, and no model process is spawned -- proved by the fake's own call log, not only by the error code.
++  it("refuses as unavailable, never started, when the catalog probe exits non-zero or prints bad JSON", async () => {
++    for (const probe of ["exit 3", "printf 'not json\\n'; exit 0"]) {
++      const w = await ompWorld();
++      await writeFile(w.binary, `#!/bin/sh\nfor a in "$@"; do if [ "$a" = models ]; then ${probe}; fi; done\nexec '${process.execPath}' '${FAKE_OMP}' '${w.marker}' "$@"\n`, { mode: 0o700 });
++      const failure = await failureOf(runOmpSingleCall(w.config, w.request()));
++      expect([probe, failure]).toEqual([probe, expect.objectContaining({ code: "omp-single-call-unavailable", neverStarted: true })]);
++      expect(observedTokensOf(failure)).toBe(0);
++      expect(existsSync(`${w.marker}.calls`)).toBe(false);
++      expect(existsSync(`${w.marker}.argv`)).toBe(false);
++    }
++  }, 20_000);
++});
++
++describe("argv (§3.3.2-§3.3.4, criterion 4)", () => {
++  it("C4: passes exactly the single-call argv: tools, rules and LSP off, no --tools list, the overlay, the request's cwd", async () => {
++    const w = await ompWorld();
++    const request = w.request();
++    await runOmpSingleCall(w.config, request);
++    const [argv] = (await readFile(`${w.marker}.argv`, "utf8")).trimEnd().split("\n").map((line) => JSON.parse(line) as string[]);
++    expect(argv).toEqual([
++      "--profile", "default", "--no-extensions", "--no-skills", "--no-rules", "--no-lsp", "--no-tools",
++      "--no-session", "--no-title", "--no-prewalk", "--model", "gateway/model-a", "--mode", "json", "-p",
++      "--system-prompt", expect.stringMatching(/\/run\/omp\/1\/single-call\/call-[^/]+\/system-prompt\.md$/),
++      "--cwd", request.cwd,
++      "--config", expect.stringMatching(/\/run\/omp\/1\/single-call\/call-[^/]+\/config-overlay\.yml$/),
++    ]);
++    expect(argv).not.toContain("--tools");
++    expect(JSON.parse(await readFile(argv![argv!.indexOf("--config") + 1]!, "utf8"))).toEqual(OMP_SINGLE_CALL_OVERLAY);
++    const system = await readFile(argv![argv!.indexOf("--system-prompt") + 1]!, "utf8");
++    expect(system).toContain("one ccloop single call");
++    expect(system).toContain(JSON.stringify(SCHEMA));
++  });
++});
++
++// Controller ruling (Task 4 review): an openrouter row has a cap but pi-ai sends none for it, so the spawn-time check
++// must refuse it as unavailable even when its cap fits -- otherwise the booked bound would not bind the call.
++describe("spawn-time check, openrouter (§3.3.1)", () => {
++  it("refuses an openrouter row as unavailable, never started, even when its cap fits", async () => {
++    const w = await ompWorld({ catalog: [{ provider: "openrouter", kind: "chat", id: "vendor/m", selector: "openrouter/vendor/m", contextWindow: 200000, maxTokens: 4096 }] });
++    const config: MaterializedAgentConfigV1 = { ...w.config, selection: { ...w.config.selection, model: "openrouter/vendor/m" } };
++    const failure = await failureOf(runOmpSingleCall(config, w.request({ maxOutputTokens: 8_192 })));
++    expect(failure).toMatchObject({ code: "omp-single-call-unavailable", neverStarted: true });
++    expect(observedTokensOf(failure)).toBe(0);
++    expect(existsSync(`${w.marker}.calls`)).toBe(false);
++  });
++});
++
++// Controller ruling (Task 4 review): the call's evidence holds the prompt's schema and the overlay; it is private to the
++// operator, as every other evidence directory is -- the modes are set explicitly, never left to the umask.
++describe("evidence modes (§3.3.2)", () => {
++  it("keeps the call's evidence directory 0700 and its overlay and system prompt 0600", async () => {
++    const w = await ompWorld();
++    await runOmpSingleCall(w.config, w.request());
++    const [argv] = (await readFile(`${w.marker}.argv`, "utf8")).trimEnd().split("\n").map((line) => JSON.parse(line) as string[]);
++    const systemPath = argv![argv!.indexOf("--system-prompt") + 1]!;
++    const overlayPath = argv![argv!.indexOf("--config") + 1]!;
++    const mode = async (path: string) => (await stat(path)).mode & 0o777;
++    expect([await mode(dirname(systemPath)), await mode(systemPath), await mode(overlayPath)]).toEqual([0o700, 0o600, 0o600]);
++    expect(dirname(overlayPath)).toBe(dirname(systemPath));
++  });
++});
++
++const usage = { input: 8, output: 2, cacheRead: 3, cacheWrite: 1, totalTokens: 14, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
++const message = (over: Record<string, unknown> = {}) => ({ role: "assistant", content: [{ type: "text", text: "{\"answer\":\"42\"}" }], provider: "gateway", model: "model-a", stopReason: "stop", usage, ...over });
++const end = (m: unknown) => ({ type: "message_end", message: m });
++const lines = (...rows: unknown[]) => `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`;
++const decodeFailure = (events: string): unknown => { try { decodeOmpSingleCall(events, "gateway/model-a", "/evidence"); return null; } catch (error) { return error; } };
++
++describe("decode (§3.3.5, criterion 5): one request, no tool, the selected model", () => {
++  it("decodes one complete answer with its usage and per-model breakdown", () => {
++    expect(decodeOmpSingleCall(lines({ type: "agent_start" }, end(message()), { type: "agent_end", isTerminal: true }), "gateway/model-a", "/evidence")).toEqual({
++      output: { answer: "42" }, tokenUsage: 14,
++      usageEvidence: expect.objectContaining({ usageStatus: "present", normalizedTotal: 14 }),
++      modelUsage: [{ model: "gateway/model-a", input: 8, output: 2, cacheRead: 3, cacheWrite: 1 }],
++    });
++  });
++
++  it("C5: refuses two assistant messages as multiple requests, booking both", () => {
++    expect(decodeFailure(lines(end(message()), end(message())))).toMatchObject({ message: "omp-single-call-multiple-requests", observedTokens: 28 });
++  });
++
++  it("C5: refuses a tool event even beside a complete answer, booking what was spent", () => {
++    expect(decodeFailure(lines({ type: "tool_execution_start", toolCallId: "t1", toolName: "read" }, end(message())))).toMatchObject({ message: "omp-phase-tool-forbidden", observedTokens: 14 });
++  });
++
++  it("C5: refuses an extension UI request or a subagent event like a tool event", () => {
++    expect(decodeFailure(lines({ type: "extension_ui_request" }, end(message())))).toMatchObject({ message: "omp-phase-tool-forbidden", observedTokens: 14 });
++    expect(decodeFailure(lines({ type: "subagent_start" }, end(message())))).toMatchObject({ message: "omp-phase-tool-forbidden", observedTokens: 14 });
++  });
++
++  it("C5: refuses an answer from a different model, booking what was spent", () => {
++    expect(decodeFailure(lines(end(message({ model: "model-b" }))))).toMatchObject({ message: "omp-model-mismatch", observedTokens: 14 });
++  });
++
++  it("books null when there is no assistant message or its usage is not readable", () => {
++    for (const events of [lines({ type: "agent_start" }), lines(end(message({ usage: { ...usage, totalTokens: 15 } }))), "not json\n"]) {
++      expect(observedTokensOf(decodeFailure(events))).toBeNull();
++    }
++  });
++});
++
++describe("stop reasons (§3.3.5, criterion 6)", () => {
++  it("C6: a length stop is an output-invalid answer that still books the observed usage", () => {
++    const failure = decodeFailure(lines(end(message({ stopReason: "length", content: [{ type: "text", text: "{\"answer\":\"4\"}" }] }))));
++    expect(failure).toBeInstanceOf(SingleCallOutputInvalid);
++    expect(failure).toMatchObject({ code: "single-call-output-invalid", tokenUsage: 14, usageEvidence: expect.objectContaining({ normalizedTotal: 14 }) });
++  });
++
++  it("C6: another stop reason is the named failure, booking the observed usage", () => {
++    for (const stopReason of ["error", "toolUse", "aborted"]) {
++      expect([stopReason, decodeFailure(lines(end(message({ stopReason }))))]).toEqual([stopReason, expect.objectContaining({ code: `omp-single-call-stop:${stopReason}`, observedTokens: 14 })]);
++    }
++  });
++
++  it("keeps the failure code bounded when the stop reason is not a short word", () => {
++    for (const stopReason of [{ nested: true }, "x".repeat(33), "has space"]) {
++      expect(decodeFailure(lines(end(message({ stopReason }))))).toMatchObject({ code: "omp-single-call-stop:invalid" });
++    }
++  });
++});
++
++describe("output rule (§3.3.6, criterion 7)", () => {
++  it("C7: only one plain object, with at most one fence around it, is an answer", () => {
++    expect(parseSingleCallObject("[{\"answer\":\"42\"}]")).toBeUndefined();
++    expect(parseSingleCallObject("42")).toBeUndefined();
++    expect(parseSingleCallObject("null")).toBeUndefined();
++    expect(parseSingleCallObject("Here: {\"answer\":\"4\"} and {\"answer\":\"2\"}")).toBeUndefined();
++    expect(parseSingleCallObject("```json\n{\"a\":1}\n```\n```json\n{\"a\":2}\n```")).toBeUndefined();
++    expect(parseSingleCallObject("```json\n{\"answer\":\"42\"}\n```")).toEqual({ answer: "42" });
++    expect(parseSingleCallObject("  {\"answer\":\"42\"}\n")).toEqual({ answer: "42" });
++  });
++
++  it("C7: an answer that is not one object is output-invalid and books what the call spent", () => {
++    for (const text of ["[{\"answer\":\"42\"}]", "42", ""]) {
++      const failure = decodeFailure(lines(end(message({ content: [{ type: "text", text }] }))));
++      expect([text, failure instanceof SingleCallOutputInvalid, (failure as { tokenUsage?: unknown } | null)?.tokenUsage]).toEqual([text, true, 14]);
++    }
++  });
++});
++
++describe("OmpAdapter.singleCall (§3.3, §3.3.7)", () => {
++  it("returns the fake's answer through the real process path", async () => {
++    const w = await ompWorld();
++    await expect(new OmpAdapter(w.config).singleCall(w.request())).resolves.toMatchObject({ output: { answer: "42" }, tokenUsage: 14 });
++  });
++
++  it("books null when omp exits non-zero after a complete message, and uses none of it", async () => {
++    const w = await ompWorld({ single: { exitCode: 3 } });
++    const failure = await failureOf(new OmpAdapter(w.config).singleCall(w.request()));
++    expect((failure as Error).message).toMatch(/^omp-exit-error: /);
++    expect(observedTokensOf(failure)).toBeNull();
++  });
++
++  it("stops the call at the request's time limit when it is below the installation's", async () => {
++    const w = await ompWorld({ single: { hang: true }, installationTimeoutMs: 30_000 });
++    const started = Date.now();
++    const failure = await failureOf(new OmpAdapter(w.config).singleCall(w.request({ timeoutMs: 300 })));
++    expect((failure as Error).message).toMatch(/^omp-timeout: /);
++    expect(Date.now() - started).toBeLessThan(10_000);
++    expect(observedTokensOf(failure)).toBeNull();
++  });
++});
++
++// Fix round 1 (Orca session 02f047f6, 2026-10-14). Real omp 18.10.1 (measured in Task 0) prints the assistant message
++// three times -- message_start, message_end and turn_end all carry it with the same usage. Only message_end is the
++// request; counting every event that carries an assistant message would book one call two or three times over (and
++// refuse it as "multiple requests").
++describe("decode, real omp event shape (§3.3.5, §3.3.7)", () => {
++  it("decodes the real stream's one assistant message once, with its usage not doubled", () => {
++    const user = { role: "user", content: [{ type: "text", text: "Estimate the plan below." }] };
++    const answer = message();
++    const events = lines(
++      { type: "session", id: "s1" }, { type: "agent_start" }, { type: "turn_start" },
++      { type: "message_start", message: user }, { type: "message_end", message: user },
++      { type: "message_start", message: answer },
++      { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "{\"answer\":" } },
++      { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "\"42\"}" } },
++      { type: "message_end", message: answer },
++      { type: "turn_end", message: answer, toolResults: [] },
++      { type: "agent_end", isTerminal: true, messages: [user, answer] },
++    );
++    expect(decodeOmpSingleCall(events, "gateway/model-a", "/evidence")).toEqual({
++      output: { answer: "42" }, tokenUsage: 14,
++      usageEvidence: expect.objectContaining({ usageStatus: "present", normalizedTotal: 14 }),
++      modelUsage: [{ model: "gateway/model-a", input: 8, output: 2, cacheRead: 3, cacheWrite: 1 }],
++    });
++  });
++});
++
++// Fix round 1 (Orca session 02f047f6, 2026-10-14). Review Focus 3: an aborted call did not end cleanly, so even a
++// complete assistant message already printed is neither booked (null, §3.3.7) nor used -- the stop was ours, and what
++// omp would have printed next is unknown.
++describe("OmpAdapter.singleCall, abort after a complete message (§3.3.7)", () => {
++  it("books null and uses no output when the request is aborted after a complete message_end", async () => {
++    const w = await ompWorld({ single: { holdOpen: true } });
++    const controller = new AbortController();
++    const root = join(w.request().runDir, "omp", "1", "single-call");
++    const pending = failureOf(new OmpAdapter(w.config).singleCall(w.request({ signal: controller.signal })));
++    // Abort only once ccloop itself has received the complete message (its events file holds the message_end).
++    const received = async (): Promise<boolean> => {
++      for (const name of existsSync(root) ? await readdir(root) : []) {
++        const path = join(root, name, "events.jsonl");
++        if (existsSync(path) && (await readFile(path, "utf8")).includes("\"message_end\"")) return true;
++      }
++      return false;
++    };
++    const deadline = Date.now() + 8_000;
++    while (!(await received()) && Date.now() < deadline) await new Promise((done) => setTimeout(done, 20));
++    expect(await received()).toBe(true);
++    controller.abort();
++    const failure = await pending;
++    expect(failure).toBeInstanceOf(Error);
++    expect((failure as Error).message).toMatch(/^omp-aborted: /);
++    expect(failure).not.toHaveProperty("output");
++    expect(observedTokensOf(failure)).toBeNull();
++  }, 15_000);
++});
++
++// Fix round 1 (Orca session 02f047f6, 2026-10-14). The diagnostic files are evidence only: a failed write of one must
++// not replace the refusal it describes, or the booking that refusal carries would be lost (a model-mismatch spent 14).
++describe("OmpAdapter.singleCall, diagnostic writes are best-effort", () => {
++  it("keeps the decode refusal and its booking when decode-error.txt cannot be written", async () => {
++    const answer = message({ model: "model-b" });
++    const w = await ompWorld({ single: { blockFiles: ["decode-error.txt"], rows: [{ type: "agent_start" }, end(answer), { type: "agent_end", isTerminal: true, messages: [answer] }] } });
++    const failure = await failureOf(new OmpAdapter(w.config).singleCall(w.request()));
++    expect(failure).toMatchObject({ message: "omp-model-mismatch", observedTokens: 14 });
++  });
++
++  it("keeps the process refusal when usage-lower-bound.json cannot be written", async () => {
++    const w = await ompWorld({ single: { exitCode: 3, blockFiles: ["usage-lower-bound.json"] } });
++    const failure = await failureOf(new OmpAdapter(w.config).singleCall(w.request()));
++    expect((failure as Error).message).toMatch(/^omp-exit-error: /);
++    expect(observedTokensOf(failure)).toBeNull();
++  });
++});

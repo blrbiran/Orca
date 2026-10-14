@@ -1,0 +1,230 @@
+# Review package: a83a142..HEAD
+
+## Commits
+522cd61 fix(omp): keep a single call's refusal when its diagnostic write fails
+
+## Files changed
+ src/runtime/omp/ompAdapter.ts           |  6 ++-
+ src/runtime/types.ts                    |  2 +-
+ tests/fixtures/fake-omp.mjs             |  8 +++-
+ tests/runtime/omp/ompSingleCall.test.ts | 75 ++++++++++++++++++++++++++++++++-
+ 4 files changed, 85 insertions(+), 6 deletions(-)
+
+## Diff
+diff --git a/src/runtime/omp/ompAdapter.ts b/src/runtime/omp/ompAdapter.ts
+index 07c58f5..7488f6b 100644
+--- a/src/runtime/omp/ompAdapter.ts
++++ b/src/runtime/omp/ompAdapter.ts
+@@ -66,24 +66,26 @@ export class OmpAdapter implements RuntimeAdapter {
+ 
+   /**
+    * OMP single call (Orca spec 2026-10-14 §3.3): one read-only structured call bounded by the catalog cap, refused before
+    * spawning when that cap exceeds the request's. A process that did not end cleanly books null even after a complete
+    * message (§3.3.7); its observed total stays diagnostic, as for a phase.
+    */
+   async singleCall(request: SingleCallRequest): Promise<SingleCallResult> {
+     const outcome = await runOmpSingleCall(this.config, request);
+     if (outcome.reason !== "completed") {
+       const lowerBound = ompUsageLowerBound(outcome.events);
+-      if (lowerBound !== null) await writeFile(join(outcome.evidenceDir, "usage-lower-bound.json"), JSON.stringify({ tokens: lowerBound }), { mode: 0o600 });
++      // Best-effort diagnostic: a failed write must not replace the refusal below and its booking.
++      if (lowerBound !== null) await writeFile(join(outcome.evidenceDir, "usage-lower-bound.json"), JSON.stringify({ tokens: lowerBound }), { mode: 0o600 }).catch(() => undefined);
+       // Ruling m4: a pre-spawn abort, a timeoutMs <= 0 or a spawn error is neverStarted (books 0, as types.ts observedTokensOf).
+       throw Object.assign(new Error(`omp-${outcome.reason}: ${outcome.evidenceDir}`), { neverStarted: outcome.neverStarted });
+     }
+     try {
+       const result = decodeOmpSingleCall(outcome.events, this.config.selection.model, outcome.evidenceDir);
+       await writeFile(join(outcome.evidenceDir, "usage.json"), JSON.stringify(result.usageEvidence), { mode: 0o600 });
+       return result;
+     } catch (error) {
+-      await writeFile(join(outcome.evidenceDir, "decode-error.txt"), String(error), { mode: 0o600 });
++      // Best-effort diagnostic: a failed write must not replace the decode refusal and its booking.
++      await writeFile(join(outcome.evidenceDir, "decode-error.txt"), String(error), { mode: 0o600 }).catch(() => undefined);
+       throw error;
+     }
+   }
+ }
+diff --git a/src/runtime/types.ts b/src/runtime/types.ts
+index a9c4428..3dcb48c 100644
+--- a/src/runtime/types.ts
++++ b/src/runtime/types.ts
+@@ -221,15 +221,15 @@ export type VerificationResult = {
+   modelUsage?: ModelUsageV1[];
+ };
+ 
+ export interface RuntimeAdapter {
+   /** H6: a phase owns filesystem cleanup that must finish before controller timeout cleanup. */
+   readonly awaitAbortedPhaseCleanup?: boolean;
+   plan(context: AttemptContext): Promise<AttemptPlan>;
+   execute(context: AttemptContext): Promise<ExecutePhaseResult>;
+   verify(context: AttemptContext): Promise<VerificationResult>;
+   /** Orca single-call estimate (2026-09-27): only a kind whose descriptor answers singleCallExecution "v1" has it.
+-   * *** ERRATUM (OMP single call, Orca spec 2026-10-14 §3.2, session 7ea088aa) -- the omp adapter has it while its
++   * *** ERRATUM (OMP single call, Orca spec 2026-10-14 §3.2, Orca session 02f047f6, 2026-10-14) -- the omp adapter has it while its
+    * descriptor answers "v1" only for some catalog rows: for omp the answer is decided per selected catalog row (accept
+    * refuses the rest by the resolution) and re-checked at spawn, where the adapter refuses again. *** */
+   singleCall?(request: SingleCallRequest): Promise<SingleCallResult>;
+ }
+diff --git a/tests/fixtures/fake-omp.mjs b/tests/fixtures/fake-omp.mjs
+index 5fbd5aa..992ca7d 100644
+--- a/tests/fixtures/fake-omp.mjs
++++ b/tests/fixtures/fake-omp.mjs
+@@ -1,20 +1,21 @@
+ #!/usr/bin/env node
+ // A fake `omp` (oh-my-pi 18.10.1) for criteria and for Orca's real-ccloop worlds (OMP skill injection, 2026-10-13).
+ // Installations allow only the binary in `command`, so a test wraps this in a tiny shell script:
+ //   exec <node> <this file> <marker> "$@"
+ // ccloop puts --no-extensions/--profile before a subcommand, so subcommands are found anywhere in argv.
+ // It answers `--version`, the model catalog and the configured default, and runs a plan/execute/verify phase the way
+ // ccloop drives OMP (system prompt file, prompt on stdin, JSON events on stdout). Per phase it appends the phase name to
+ // `<marker>.calls`; when the system prompt lists frozen skills it reads every listed SKILL.md (as a model told to would)
+ // and appends each one's bytes to `<marker>.skills`. Execute sets answer.txt to 42.
+-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
++import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
++import { dirname } from "node:path";
+ 
+ const [marker, ...args] = process.argv.slice(2);
+ if (args.includes("--version")) {
+   process.stdout.write("18.10.1\n");
+   process.exit(0);
+ }
+ // OMP single call (Orca spec 2026-10-14 §5): `<marker>.catalog.json`, when present, is the catalog's rows; without it the
+ // one row below, as before.
+ if (args.includes("models")) {
+   const rows = existsSync(`${marker}.catalog.json`) ? JSON.parse(readFileSync(`${marker}.catalog.json`, "utf8"))
+@@ -25,29 +26,32 @@ if (args.includes("models")) {
+ if (args.includes("config")) {
+   process.stdout.write(`${JSON.stringify({ value: { default: "gateway/model-a" } })}\n`);
+   process.exit(0);
+ }
+ 
+ let prompt = "";
+ for await (const chunk of process.stdin) prompt += chunk.toString();
+ const system = readFileSync(args[args.indexOf("--system-prompt") + 1], "utf8");
+ // OMP single call (Orca spec 2026-10-14 §5): ccloop's single-call system prompt says "one ccloop single call". Records the
+ // call and its argv, then prints `<marker>.single.json` ({rows?, exitCode?, hang?}) or one complete {"answer":"42"}.
++// `holdOpen` keeps the process running after the rows (for an abort after a complete message); `blockFiles` makes each
++// named path in the call's evidence directory a directory, so ccloop's write of that diagnostic file fails.
+ if (system.includes("one ccloop single call")) {
+   appendFileSync(`${marker}.calls`, "single-call\n");
+   appendFileSync(`${marker}.argv`, `${JSON.stringify(args)}\n`);
+   const script = existsSync(`${marker}.single.json`) ? JSON.parse(readFileSync(`${marker}.single.json`, "utf8")) : {};
++  for (const name of script.blockFiles ?? []) mkdirSync(`${dirname(args[args.indexOf("--system-prompt") + 1])}/${name}`);
+   if (script.hang === true) setInterval(() => {}, 1000);
+   else {
+     const answer = { role: "assistant", content: [{ type: "text", text: "{\"answer\":\"42\"}" }], provider: "gateway", model: "model-a", stopReason: "stop", usage: { input: 8, output: 2, cacheRead: 3, cacheWrite: 1, totalTokens: 14, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
+     const rows = script.rows ?? [{ type: "agent_start" }, { type: "message_end", message: answer }, { type: "agent_end", isTerminal: true, yielded: true, messages: [answer] }];
+-    process.stdout.write(rows.map((row) => `${JSON.stringify(row)}\n`).join(""), () => process.exit(script.exitCode ?? 0));
++    process.stdout.write(rows.map((row) => `${JSON.stringify(row)}\n`).join(""), () => { if (script.holdOpen === true) setInterval(() => {}, 1000); else process.exit(script.exitCode ?? 0); });
+   }
+   await new Promise(() => {});
+ }
+ const phase = system.includes("execution phase") ? "execute" : system.includes("verification phase") ? "verify" : "plan";
+ appendFileSync(`${marker}.calls`, `${phase}\n`);
+ for (const match of system.matchAll(/\(SKILL\.md: ([^)]+)\)$/gmu)) appendFileSync(`${marker}.skills`, readFileSync(match[1], "utf8"));
+ if (phase === "execute") writeFileSync("answer.txt", "42\n");
+ const result = phase === "plan" ? { summary: "Set answer to 42", primaryTargetPaths: ["answer.txt"] }
+   : phase === "execute" ? { changedFiles: ["answer.txt"], diffPatch: "", commandOutputs: [], stdoutStderrLog: "wrote answer" }
+     : { approved: true, rejectCategory: "", primaryTargetPaths: ["answer.txt"], failingCommand: null, safeToRetry: false, evidence: ["answer is 42"], pauseSignals: [], stopSignals: [] };
+diff --git a/tests/runtime/omp/ompSingleCall.test.ts b/tests/runtime/omp/ompSingleCall.test.ts
+index 6026101..fa2494a 100644
+--- a/tests/runtime/omp/ompSingleCall.test.ts
++++ b/tests/runtime/omp/ompSingleCall.test.ts
+@@ -1,12 +1,12 @@
+ import { existsSync } from "node:fs";
+-import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
++import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+ import { tmpdir } from "node:os";
+ import { dirname, join, resolve } from "node:path";
+ import { afterEach, describe, expect, it } from "vitest";
+ import type { MaterializedAgentConfigV1 } from "../../../src/agents/types.js";
+ import { OmpAdapter } from "../../../src/runtime/omp/ompAdapter.js";
+ import { OMP_SINGLE_CALL_OVERLAY, decodeOmpSingleCall, parseSingleCallObject, runOmpSingleCall } from "../../../src/runtime/omp/ompSingleCall.js";
+ import { observedTokensOf, SingleCallOutputInvalid, type SingleCallRequest } from "../../../src/runtime/types.js";
+ 
+ // OMP single call (Orca spec 2026-10-14-omp-single-call-design.md §3.3). Orca books the catalog cap as the call's output
+ // bound; omp cannot take a per-call cap, so a cap that rose above the request's must refuse the call before anything is
+@@ -224,10 +224,83 @@ describe("OmpAdapter.singleCall (§3.3, §3.3.7)", () => {
+ 
+   it("stops the call at the request's time limit when it is below the installation's", async () => {
+     const w = await ompWorld({ single: { hang: true }, installationTimeoutMs: 30_000 });
+     const started = Date.now();
+     const failure = await failureOf(new OmpAdapter(w.config).singleCall(w.request({ timeoutMs: 300 })));
+     expect((failure as Error).message).toMatch(/^omp-timeout: /);
+     expect(Date.now() - started).toBeLessThan(10_000);
+     expect(observedTokensOf(failure)).toBeNull();
+   });
+ });
++
++// Fix round 1 (Orca session 02f047f6, 2026-10-14). Real omp 18.10.1 (measured in Task 0) prints the assistant message
++// three times -- message_start, message_end and turn_end all carry it with the same usage. Only message_end is the
++// request; counting every event that carries an assistant message would book one call two or three times over (and
++// refuse it as "multiple requests").
++describe("decode, real omp event shape (§3.3.5, §3.3.7)", () => {
++  it("decodes the real stream's one assistant message once, with its usage not doubled", () => {
++    const user = { role: "user", content: [{ type: "text", text: "Estimate the plan below." }] };
++    const answer = message();
++    const events = lines(
++      { type: "session", id: "s1" }, { type: "agent_start" }, { type: "turn_start" },
++      { type: "message_start", message: user }, { type: "message_end", message: user },
++      { type: "message_start", message: answer },
++      { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "{\"answer\":" } },
++      { type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "\"42\"}" } },
++      { type: "message_end", message: answer },
++      { type: "turn_end", message: answer, toolResults: [] },
++      { type: "agent_end", isTerminal: true, messages: [user, answer] },
++    );
++    expect(decodeOmpSingleCall(events, "gateway/model-a", "/evidence")).toEqual({
++      output: { answer: "42" }, tokenUsage: 14,
++      usageEvidence: expect.objectContaining({ usageStatus: "present", normalizedTotal: 14 }),
++      modelUsage: [{ model: "gateway/model-a", input: 8, output: 2, cacheRead: 3, cacheWrite: 1 }],
++    });
++  });
++});
++
++// Fix round 1 (Orca session 02f047f6, 2026-10-14). Review Focus 3: an aborted call did not end cleanly, so even a
++// complete assistant message already printed is neither booked (null, §3.3.7) nor used -- the stop was ours, and what
++// omp would have printed next is unknown.
++describe("OmpAdapter.singleCall, abort after a complete message (§3.3.7)", () => {
++  it("books null and uses no output when the request is aborted after a complete message_end", async () => {
++    const w = await ompWorld({ single: { holdOpen: true } });
++    const controller = new AbortController();
++    const root = join(w.request().runDir, "omp", "1", "single-call");
++    const pending = failureOf(new OmpAdapter(w.config).singleCall(w.request({ signal: controller.signal })));
++    // Abort only once ccloop itself has received the complete message (its events file holds the message_end).
++    const received = async (): Promise<boolean> => {
++      for (const name of existsSync(root) ? await readdir(root) : []) {
++        const path = join(root, name, "events.jsonl");
++        if (existsSync(path) && (await readFile(path, "utf8")).includes("\"message_end\"")) return true;
++      }
++      return false;
++    };
++    const deadline = Date.now() + 8_000;
++    while (!(await received()) && Date.now() < deadline) await new Promise((done) => setTimeout(done, 20));
++    expect(await received()).toBe(true);
++    controller.abort();
++    const failure = await pending;
++    expect(failure).toBeInstanceOf(Error);
++    expect((failure as Error).message).toMatch(/^omp-aborted: /);
++    expect(failure).not.toHaveProperty("output");
++    expect(observedTokensOf(failure)).toBeNull();
++  }, 15_000);
++});
++
++// Fix round 1 (Orca session 02f047f6, 2026-10-14). The diagnostic files are evidence only: a failed write of one must
++// not replace the refusal it describes, or the booking that refusal carries would be lost (a model-mismatch spent 14).
++describe("OmpAdapter.singleCall, diagnostic writes are best-effort", () => {
++  it("keeps the decode refusal and its booking when decode-error.txt cannot be written", async () => {
++    const answer = message({ model: "model-b" });
++    const w = await ompWorld({ single: { blockFiles: ["decode-error.txt"], rows: [{ type: "agent_start" }, end(answer), { type: "agent_end", isTerminal: true, messages: [answer] }] } });
++    const failure = await failureOf(new OmpAdapter(w.config).singleCall(w.request()));
++    expect(failure).toMatchObject({ message: "omp-model-mismatch", observedTokens: 14 });
++  });
++
++  it("keeps the process refusal when usage-lower-bound.json cannot be written", async () => {
++    const w = await ompWorld({ single: { exitCode: 3, blockFiles: ["usage-lower-bound.json"] } });
++    const failure = await failureOf(new OmpAdapter(w.config).singleCall(w.request()));
++    expect((failure as Error).message).toMatch(/^omp-exit-error: /);
++    expect(observedTokensOf(failure)).toBeNull();
++  });
++});

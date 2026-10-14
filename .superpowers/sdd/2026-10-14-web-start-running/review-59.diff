@@ -1,0 +1,274 @@
+d3922f34 fix(panel): show the Runs table in creation order (feedback #59)
+ src/control/webProtocol.ts                 |  3 ++
+ src/panel/controlViews.ts                  |  4 +++
+ tests/panel/controlPollPerformance.test.ts | 16 +++++++++
+ web/src/ControlGroupView.tsx               | 12 ++++++-
+ web/src/controlTypes.ts                    |  2 ++
+ web/tests/runsTableOrder.test.tsx          | 56 ++++++++++++++++++++++++++++++
+ 6 files changed, 92 insertions(+), 1 deletion(-)
+diff --git a/src/control/webProtocol.ts b/src/control/webProtocol.ts
+index fd4ae71a..3cbf03bb 100644
+--- a/src/control/webProtocol.ts
++++ b/src/control/webProtocol.ts
+@@ -1302,20 +1302,23 @@ export const runViewSchema = z
+         }).strict()),
+       })
+       .strict()
+       .optional(),
+     // Issue-fixes spec §5.2: wall-clock times (ms) -- started when A1 reserved the first attempt, ended when it first
+     // landed or settled, and the time of its newest activity row. null for a run written before schema 9. Optional on
+     // the wire so older fixtures still parse; the server always gives them.
+     startedAt: safeInteger.nullable().optional(),
+     endedAt: safeInteger.nullable().optional(),
+     lastActivityAt: safeInteger.nullable().optional(),
++    // Feedback #59: the run's creation position in its group (1-based, rowid order); `runs` itself stays in id order.
++    // Optional on the wire so older fixtures still parse; the server always gives it.
++    createdOrdinal: positiveSafeInteger.optional(),
+   })
+   .strict();
+ 
+ export const estimateViewSchema = z
+   .object({
+     estimateId: idSchema,
+     estimateVersion: positiveSafeInteger,
+     state: z.enum(["queued", "running", "start-unknown", "ready", "failed", "interrupted", "blocked-capability", "input-too-large"]),
+     profile: profileBindingSchema.nullable(),
+     mode: z.enum(["strict", "soft"]),
+diff --git a/src/panel/controlViews.ts b/src/panel/controlViews.ts
+index 56d7eaa9..7ee4e447 100644
+--- a/src/panel/controlViews.ts
++++ b/src/panel/controlViews.ts
+@@ -836,20 +836,23 @@ function continuableRun(store: ControlStore, run: z.infer<typeof persistedRunSch
+   if (workRow === undefined) return false;
+   const work = parseSnapshot(workBodySchema, snapshot.decodeWork(run.workItemId), `run-work-invalid:${run.runId}`);
+   if (work.currentRunId !== run.runId || work.status !== "held") return false;
+   if (dimensions.some((dimension) => run.remaining.work[dimension] !== null && run.remaining.work[dimension]! <= 0)) return false;
+   const row = store.db.prepare("SELECT body FROM checkpoints WHERE id=? AND run_id=?").get(run.checkpointId, run.runId);
+   return row !== undefined && (parseJson(row.body, `checkpoint-invalid:${run.checkpointId}`) as { result?: unknown }).result === "partial";
+ }
+ 
+ function runViews(store: ControlStore, groupId: string, graphVersion: number, proposal: ReturnType<typeof readBudgetProposal>, snapshot: GroupReadSnapshot): RunViewV1[] {
+   const activity = readLatestRunActivityByGroup(store, groupId);
++  // Feedback #59: the set stays in id order (the wire's canonical order); each run also carries its creation position,
++  // the 1-based place of its row in the snapshot's rowid order -- total, and stable because runs are never deleted.
++  const createdOrdinal = new Map(snapshot.runsByRowid.map((row, index) => [String(row.id), index + 1]));
+   return [...snapshot.runsByRowid].sort((left, right) => compareText(left.id, right.id)).map(row => {
+     const runId = String(row.id);
+     const run = parseSnapshot(persistedRunSchema, snapshot.decodeRun(runId), `run-invalid:${runId}`);
+     if (run.runId !== runId || run.groupId !== groupId || String(row.group_id) !== groupId
+       || run.workItemId !== String(row.work_item_id) || run.generation !== Number(row.generation)
+       || !validAccounting(run)) return blocked(`run-identity:${runId}`);
+ 
+     if (run.usageSettlement !== undefined && !hasValidUsageSettlement(store, run)) return blocked(`run-usage-settlement:${runId}`);
+     const state = displayRunState(run);
+     const terminal = ["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed"].includes(state);
+@@ -925,20 +928,21 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
+       ...settlementPreview(store, run, snapshot),
+       continuable: continuableRun(store, run, snapshot),
+       evidenceIds: artifactIdsForRun(store, runId, run),
+       git: run.drive === undefined ? null : { workspaceMode: run.drive.workspaceMode, base: run.drive.base, landedCommit: run.drive.landedCommit },
+       // §4.6: the lock A2 recorded. `dir` is a local path of this machine and stays out of the view; omitted for a run without skills.
+       ...(run.drive?.skills == null ? {} : { skills: { profile: run.drive.skills.profile, lock: run.drive.skills.lock } }),
+       // Issue-fixes spec §5.2: the run's times; null for a run written before schema 9.
+       startedAt: run.startedAt ?? null,
+       endedAt: run.endedAt ?? null,
+       lastActivityAt: activity.get(runId)?.at ?? null,
++      createdOrdinal: createdOrdinal.get(runId)!,
+     };
+   });
+ }
+ 
+ function checkpointViews(store: ControlStore, groupId: string, readSnapshot: GroupReadSnapshot): CheckpointViewV1[] {
+   return store.db.prepare("SELECT checkpoints.id,checkpoints.run_id,checkpoints.body FROM checkpoints JOIN runs ON runs.id=checkpoints.run_id WHERE runs.group_id=? ORDER BY checkpoints.id").all(groupId).map(row => {
+     const raw = parseJson(row.body, `checkpoint-invalid:${String(row.id)}`) as Record<string, unknown>;
+     if (raw.checkpointId !== String(row.id) || raw.runId !== String(row.run_id) || typeof raw.taskId !== "string") return blocked("checkpoint-identity");
+     const snapshot = artifactSchema.safeParse(raw.snapshot).success ? artifactSchema.parse(raw.snapshot) : null;
+     const missing = Array.isArray(raw.missing) ? raw.missing : [];
+diff --git a/tests/panel/controlPollPerformance.test.ts b/tests/panel/controlPollPerformance.test.ts
+index 912c573d..a8bcfee3 100644
+--- a/tests/panel/controlPollPerformance.test.ts
++++ b/tests/panel/controlPollPerformance.test.ts
+@@ -177,20 +177,36 @@ describe("control poll request snapshots", () => {
+       h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('a-current','g','t00',2,1,?)").run(JSON.stringify({ ...original, runId: "a-current", generation: 2 }));
+       save(h, "t00", { ...work(h, "t00"), lineageRunIds: ["a-current", "z-history"], currentRunId: "a-current" });
+       const counter = installControlReadCounters(h.store);
+       try {
+         counter.reset(); const view = readControlGroup(counter.store, "e", "g"); bounds(counter.snapshot(), true);
+         expect(view.runs.map(r => r.runId)).toEqual(["a-current", "z-history"]);
+         expect(view.workItems[0]).toMatchObject({ currentRunId: "a-current", lineageRunIds: ["a-current", "z-history"], progress: { runId: "a-current" } });
+       } finally { counter.restore(); }
+     } finally { await h.dispose(); }
+   });
++  // Feedback #59: the wire keeps runs in id order (UUIDs, random to a person), so each run also carries its creation
++  // position, the 1-based place of its row in the group's rowid-ordered snapshot, for the Runs table to show creation order.
++  it("gives each run its creation position while the runs set stays in id order", async () => {
++    const { h, runId } = await claimed(3);
++    try {
++      const original = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body));
++      // Created m-first, then z-second, then a-third: id order (a, m, z) differs from creation order (m, z, a).
++      h.store.db.prepare("UPDATE runs SET id='m-first',active=0,body=? WHERE id=?").run(JSON.stringify({ ...original, runId: "m-first", state: "settled-failed" }), runId);
++      h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('z-second','g','t00',2,0,?)").run(JSON.stringify({ ...original, runId: "z-second", generation: 2, state: "settled-failed" }));
++      h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('a-third','g','t00',3,1,?)").run(JSON.stringify({ ...original, runId: "a-third", generation: 3 }));
++      save(h, "t00", { ...work(h, "t00"), lineageRunIds: ["a-third", "m-first", "z-second"], currentRunId: "a-third" });
++      const view = readControlGroup(h.store, "e", "g");
++      expect(view.runs.map(r => r.runId)).toEqual(["a-third", "m-first", "z-second"]);
++      expect(view.runs.map(r => [r.runId, r.createdOrdinal])).toEqual([["a-third", 3], ["m-first", 1], ["z-second", 2]]);
++    } finally { await h.dispose(); }
++  });
+   it("pins strict schema, authority, amendment and frozen agent refusals through the real group reader", async () => {
+     const { h, runId } = await claimed(3);
+     try {
+       const original = work(h, "t00");
+       for (const [body, detail] of [
+         [{ ...original, dependsOn: "bad" }, "work-item-invalid:t00:Expected array, received string"],
+         [{ ...original, workItemId: "foreign" }, "work-item-authority:t00"],
+         [{ ...original, amendmentHash: "0".repeat(64), loopVersion: 1 }, "task-amendment-invalid:t00"],
+         [{ ...original, agent: { ...original.agent, model: "foreign" } }, "work-item-agent:t00"],
+       ] as const) {
+diff --git a/web/src/ControlGroupView.tsx b/web/src/ControlGroupView.tsx
+index 790385be..244caa2d 100644
+--- a/web/src/ControlGroupView.tsx
++++ b/web/src/ControlGroupView.tsx
+@@ -28,20 +28,30 @@ import type {
+ } from "./controlTypes.js";
+ import type { ControlRefusal, UncertainCommand } from "./controlState.js";
+ import { LabelChips, SavedResultEntry, TaskDetail, progressText } from "./TaskDetail.js";
+ import { planText } from "./LoopPlanCard.js";
+ import { currentLanguage, enumText } from "./i18n.js";
+ import { formatTokens, shortTokens } from "./TokenInput.js";
+ import { capScopeText } from "./UsagePanel.js";
+ 
+ const short = (hash: string): string => hash.slice(0, 12);
+ 
++/**
++ * Feedback #59: the Runs table's display order. The view sends runs in id order (UUIDs); when every run carries its
++ * creation position the table shows creation order, else the order it was sent in. Nothing else reorders runs.
++ */
++function runsInCreationOrder(runs: readonly RunViewV1[]): readonly RunViewV1[] {
++  return runs.every((run) => run.createdOrdinal !== undefined)
++    ? [...runs].sort((left, right) => left.createdOrdinal! - right.createdOrdinal!)
++    : runs;
++}
++
+ /**
+  * A held run the person may continue: the server marks it `continuable` (handoff delivery spec §13.1 C-4),
+  * because a normally completed run also displays as `settled-recoverable` and must never be continued.
+  */
+ export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; checkpointId: string }> {
+   return view.runs.flatMap((run) => {
+     if (run.taskId === null || run.continuable !== true || run.state === "settled-failed") return [];
+     const checkpoint = view.checkpoints.find((candidate) => candidate.runId === run.runId && candidate.state !== "unknown");
+     return checkpoint ? [{ run, checkpointId: checkpoint.checkpointId }] : [];
+   });
+@@ -408,21 +418,21 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+       <h3>{t("control.group.runs")}</h3>
+       <table>
+         <thead>
+           <tr>
+             <th>{t("control.group.runsTh.run")}</th><th>{t("control.group.runsTh.phase")}</th><th>{t("control.group.runsTh.state")}</th>
+             <th>{t("control.group.runsTh.profile")}</th><th>{t("control.group.runsTh.used")}</th><th>{t("control.group.runsTh.remaining")}</th>
+             <th>{t("control.group.runsTh.evidence")}</th>
+           </tr>
+         </thead>
+         <tbody>
+-          {view.runs.map((run, index) => (
++          {runsInCreationOrder(view.runs).map((run, index) => (
+             <tr key={run.runId} id={runRegionId(groupId, run.runId)} tabIndex={-1} data-run-id={run.runId}>
+               <td>{run.taskId ?? run.estimateId ?? <details><summary>{t("control.group.runLabel", { n: index + 1 })}</summary><code>{run.runId}</code></details>}</td>
+               <td>{enumText("runPhase", run.phase)}</td>
+               <td className="run-state">
+                 <div>{enumText("runState", run.state)}</div>
+                 <div><RunReason run={run} /></div>
+                 {retryRunOpen(view, run) && <p>{t("control.group.retryFromHead")}</p>}
+                 <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
+                 {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}
+                 <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}</div>
+diff --git a/web/src/controlTypes.ts b/web/src/controlTypes.ts
+index 8b2b88ce..98937e2d 100644
+--- a/web/src/controlTypes.ts
++++ b/web/src/controlTypes.ts
+@@ -254,20 +254,22 @@ export type RunViewV1 = {
+   continuable?: boolean;
+   evidenceIds: string[];
+   /** Board spec 2026-10-03 D4: optional here so literal fixtures need no edit; the server always sends it. */
+   git?: { workspaceMode: "worktree" | "clone"; base: string | null; landedCommit: string | null } | null;
+   /** Syncskill integration spec §4.6: the skills the run was given (syncskill's lock); absent for a run without skills. */
+   skills?: { profile: string | null; lock: RunSkillLockV1[] };
+   /** Issue-fixes spec §5.2: wall-clock times (ms); null for a run written before schema 9. Optional so literal fixtures need no edit; the server always sends them. */
+   startedAt?: number | null;
+   endedAt?: number | null;
+   lastActivityAt?: number | null;
++  /** Feedback #59: creation position in the group (1-based); `runs` stays in id order. Optional so literal fixtures need no edit; the server always sends it. */
++  createdOrdinal?: number;
+ };
+ export type BudgetEstimateV1 = {
+   schema: "budget-estimate-v1";
+   planHash: string;
+   tasks: Array<{
+     taskId: string;
+     complexity: "S" | "M" | "L" | "XL";
+     confidence: "low" | "medium" | "high";
+     work: Amount;
+     handoff: Amount;
+diff --git a/web/tests/runsTableOrder.test.tsx b/web/tests/runsTableOrder.test.tsx
+new file mode 100644
+index 00000000..8ecd55a3
+--- /dev/null
++++ b/web/tests/runsTableOrder.test.tsx
+@@ -0,0 +1,56 @@
++// @vitest-environment jsdom
++/**
++ * Feedback #59: the group view sends runs in id order (the wire's canonical set order), and run ids are UUIDs, so the
++ * Runs table read as a random order. Each run also carries `createdOrdinal`, its creation position; the Runs table
++ * shows rows in that order and numbers its "Run n" fallback label by the same position. A view without the field on
++ * every run keeps the order it was sent in.
++ */
++import { cleanup, render } from "@testing-library/react";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import i18n from "../src/i18n.js";
++import { ControlGroupView } from "../src/ControlGroupView.js";
++import type { Amount, ControlConfigV1, GroupViewV1, RunViewV1 } from "../src/controlTypes.js";
++
++const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
++const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
++const config: ControlConfigV1 = {
++  schema: "orca-control-config-v1", epoch: "epoch-a", repositories: [{ repoId: "orca", displayName: "Orca" }],
++  plans: [{ planId: "plan-demo", repoId: "orca", displayName: "Demo plan" }],
++  profiles: [{ profileId: "all", profileHash: "b".repeat(64), allowedWorkKinds: ["task", "budget-estimate", "handoff", "goal-review"], contextTokenizer: null, workMaxOutputTokens: 1000, declared: capability, observed: capability, observedAt: "2026-09-25T00:00:00.000Z", probeFailureCode: null }],
++  defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
++};
++// Review-style runs (no task, no estimate) so the run cell shows the "Run n" label.
++const run = (runId: string, createdOrdinal?: number): RunViewV1 => ({
++  runId, taskId: null, estimateId: null, generation: 1, state: "settled-restartable", phase: "work", claimOrdinal: null, providerAttemptOrdinal: 1,
++  profile: { profileId: "all", profileHash: "b".repeat(64) }, used: amount(10), remaining: amount(90), failureCode: null, evidenceIds: [],
++  ...(createdOrdinal === undefined ? {} : { createdOrdinal }),
++});
++const view = (runs: RunViewV1[]): GroupViewV1 => ({
++  schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 4,
++  summary: { groupId: "g", repoId: "orca", state: "running", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
++  graphVersion: 1, plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "Ship", successConditions: ["done"] },
++  proposal: { state: "confirmed", proposalVersion: 2, planHash: "a".repeat(64), budgetMode: "soft", contextPolicy: { handoffAtContextTokens: null }, profiles: {
++    estimator: { profileId: "all", profileHash: "b".repeat(64) }, worker: { profileId: "all", profileHash: "b".repeat(64) },
++    handoff: { profileId: "all", profileHash: "b".repeat(64) }, goalReview: { profileId: "all", profileHash: "b".repeat(64) } }, executionSnapshotHash: "c".repeat(64) },
++  ledger: { groupLimit: amount(9_000_000), used: amount(10), committedRemaining: amount(3_000_000), explicitUnallocatedReserve: amount(5_999_990), budgetDeficit: amount(0), usageUnknown: false, unmeteredRuns: 0 },
++  allocations: [], workItems: [], estimates: [], runs, checkpoints: [], handoffRequests: [], stop: null, recoveryBlockers: [], recentCommandIds: [],
++});
++const rows = (container: HTMLElement): Array<[string | null, string]> =>
++  [...container.querySelectorAll("tr[data-run-id]")].map((row) => [row.getAttribute("data-run-id"), row.querySelector("td summary")?.textContent ?? ""]);
++const renderRuns = (runs: RunViewV1[]) =>
++  render(<ControlGroupView view={view(runs)} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container;
++
++beforeEach(async () => { await i18n.changeLanguage("en"); });
++afterEach(cleanup);
++
++describe("the Runs table's order (feedback #59)", () => {
++  it("shows runs in creation order and numbers Run 1..3 by it, though the view sends them in id order", () => {
++    // Sent in id order a, m, z; created m, z, a.
++    const container = renderRuns([run("a-third", 3), run("m-first", 1), run("z-second", 2)]);
++    expect(rows(container)).toEqual([["m-first", "Run 1"], ["z-second", "Run 2"], ["a-third", "Run 3"]]);
++  });
++  it("keeps the order the view sent when any run lacks its creation position", () => {
++    const container = renderRuns([run("a-third", 3), run("m-first"), run("z-second", 2)]);
++    expect(rows(container)).toEqual([["a-third", "Run 1"], ["m-first", "Run 2"], ["z-second", "Run 3"]]);
++  });
++});

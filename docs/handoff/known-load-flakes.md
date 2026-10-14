@@ -54,6 +54,10 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
   同树第二次全量（负载约 20）只剩那 2 条环境红。红文件负载 5–18 下逐个单跑 3/3 绿（日志 `/private/tmp/og-b395/rerun/`，会话结束即可删）。
   ⚠️ **两条断言形状、未豁免的候选**（n＝1，都红在被测停止动作**之前**的前置状态上，像真 ccloop 下的时序竞争，未证成）：`agentSelectionE2E` C3 `expected [ 'b', 'd' ] to deeply equal [ 'a', 'b', 'd' ]`（`:292`，与上表 C3 的 `until` 超时**不是同一形状**）；
   `handoffE2E` H5 `expected [ 'collected', 'collected' ] to deeply equal [ 'collected', 'accepted' ]`（`:260`）。两文件各单跑 3/3 绿（6/6、12/12 执行，无跳过）。**再见就当新问题查。**
+- **2026-10-14～15 会话 `02f047f6`（single-call 分支与反馈分支，再合成 `codex/round-20261014`；`ORCA_CCLOOP_BIN`＝ccloop 主题行 `fix(omp): keep a decoded single-call answer when its usage evidence write fails` 的 build clone）**：
+  - 两轮门（single-call 分支、round 分支）各两次根级全量（负载 15–30）：第一次分别 18 红、12 红；超时都落在上表已登记的形状里（`gateCheck` K6／K12／K13、`driverReconcileN`、`driverRecovery`、`driverRequirementSplit`、`integrationKeep`、`retryTask`、`schedulerBridge`、`settleUnknownUsage`），**同树第二次全量都只剩 2 条 `taskResultPaired` 环境红**。`gateCheck` K6「settings.json is not JSON」是新名字、同形状（5 s 超时，第二次全量绿）。
+  - **新登记** `tests/scheduler/reconcile.test.ts` › names the files a reconciled commit still has conflict markers in：5 s 超时，`verify:scheduler` 201/202（负载 13）；未单跑，之后 round 分支（同样的改动）`verify:scheduler` 0 红。
+  - **新登记的 web 条**（实施子代理 `--ws check` 与别的会话并跑时见到，各单跑 3/3 绿）：`web/tests/reviewApp.test.tsx` › records one review for a second 'a'…（**基线上也红**）、`controlCommandRecovery` › drops the id…（上表已有）、`loopPlanDraft` › keeps the draft through a refusal…、`projectSwitcher` › C: the Requirements, Chains and Memory selects…、`loopSuggestionDraft.test.tsx` 第 99 行那条（行号为当时观测）。
 
 ### 已修、不再豁免的（再红就当新问题查）
 
@@ -78,6 +82,11 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
   `verifySavedResult`、`codexAdapter`、codex adapter、`cli parseArgs`、`savedResultRecovery.native`（dist 重建竞态）。
 - 2026-10-13 会话 `7f37d261`，`codex/codex-rate-limit-backoff` 全量 1627/1669、35 红（与 Orca 全量并跑，负载峰值 205）：14 个红文件逐个单跑，12 个 3/3 绿；
   `ompUpdates`（下条那条）2/3；`verifySavedResult` › "r1 command interruption modified=true …" 2/3（一条匹配断言，不是超时；文件不含 codex 代码；之后 main 3/3、分支 3/3 绿）⇒ **n＝1、未证成的候选 flake，不归因 C**。
+- 2026-10-14～15 会话 `02f047f6`（ccloop `codex/omp-single-call` 各 Task 与门；负载 10–116，与 Orca 门并跑）：
+  `ompPhase` › "stopped phase" 组合命令下 2/2 红、**BASE clone 上同样红**、单跑 3/3 绿；Task 5 扫描 11 红在 5 个未改文件（`updates`、`phasesCompleted`、`runLoop.integration`、`verifySavedResult`、`savedResultRecovery.native`），各单跑 3/3 绿——⚠️ 其中三种**不是超时**：`verifySavedResult` 值不符、`runLoop` ENOENT、`savedResultRecovery.native` ENOTEMPTY；
+  门：`savedResultRecovery.native` ×2 30 s 超时（单跑 3/3，负载 80／20／10）；`verify:control` 里 `runCodexPhase` › "kills a TERM-ignoring process before returning abort" **断言形状** `expected 'io-error' to be 'aborted'`（241 ms，单跑 3/3 绿，分支不碰 `src/runtime/codex`）⇒ n＝1 候选，未豁免。
+  分支头门（2026-10-15，负载 15–27）：`phasesCompleted`「writes one count per phase…」5 s 超时、`extractFinalObject` 3 s 性能阈值 ×2（plan／execute）、两条断言形状 n＝1 候选（`phaseTimeoutUsage` codex 得 `codex-io-error` 而非 `codex-timeout`；`skillsController`「preserves plan skill cleanup failure across handoff-abort」`fixture marker missing`），4 个文件单跑各 3/3 绿（负载 13–24）。
+  ⚠️ `tests/cli/cli.test.ts` › "returns 0 for the example contract run" 在**主仓 ccloop 的工作树**里 3/3 红是**环境**不是 flake：attempt 的 `git commit` 跑了主仓 `.git/hooks/post-commit`（Qoder，每次约 2 s），clone 里不慢（`.superpowers/sdd/2026-10-14-omp-single-call/debug-cli-slowdown.md`）⇒ **ccloop 门在 `clone --local` 里跑**。
 - `ompUpdates` › "preserves the unavailable reason…"：单跑 3.1–3.3 s，负载下超时一次；**未改写**（不在人的授权内），改写要人点名。
 - 2026-10-12 OMP 一轮：一条 5 s 更新判据全量与整文件都超时、单例 4.3 s 过；四条 saved-result worker 全量里未及时封口、整文件 28/28。
 - 更早：`codexWatchdog` 在负载 33 下红过（ccloop 人裁 139：负载下 1.5 s 太紧）；`runLoop.integration.test.ts` 里 19 条 `perAttemptTimeoutMs: 20` 的真 plan／verify 判据

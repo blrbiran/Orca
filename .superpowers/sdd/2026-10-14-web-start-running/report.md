@@ -1,0 +1,17 @@
+# #53 implementer report (subagent of session 02f047f6, 2026-10-14; saved by the controller from the hand-back)
+Base adaa73dc, commit 7404c703 fix(web): stop offering Start while a Web-started group's first run executes.
+- Fix (option 3): groupSummarySchema + web GroupSummaryV1 gain optional `executionPending: boolean`, set for every planned group by `executionPending()` in src/panel/controlViews.ts (undelivered start/no-start/resume/continuation wake, an active run, or a plan task in BUSY_WORK — the Overview start-gate facts). BUSY_WORK exported once from controlViews, imported by controlOverview. ControlGroupView offers Start only when state==="ready" && executionPending!==true && stopMode===null; dispatchDetailRegion sends a ready+pending group to "problem" (#47 half). No persisted state, no table schema, no strings.
+- Option 1 (view reports state "running") tried and reverted: reds tests/panel/controlOverviewApi.test.ts lines 32 and 97 (active-ready asserted "ready"). Option 2 (persist running at Web claim like budget.ts:162) ruled out: same criterion 97, and misses the start→claim window.
+- Group status writers checked: commands.ts:70 ready; usage.ts:43 blocked/stopped; budget.ts:162 running; continuation.ts:44 running; executionDriver.ts:1085 running; checkpoints.ts:103 review; webService.ts:334 draft; webService.ts:858 ready; webDispatch createStartingRun touches only the work item (root cause).
+- RED before fix (clone of adaa73dc + new tests): server 3 failed (w53-red-server.log); web 2 failed (w53-web-red.log). GREEN: webDispatch+controlOverviewApi 43 passed; stopBanner+detailRegions 29 passed.
+- Mutations in /private/tmp/osc/mut/w53 (sha256 restored identical; git diff/--cached 0 bytes): M1 executionPending:false → 2 red; M2 UI ignores field → 2 red; M3 executionPending:true → 1 red (idle criterion).
+- Gates: typecheck RC0; web build RC0; web 1080/1080; root (ORCA_CCLOOP_BIN=main ccloop dist) 3756 passed / 8 failed / 36 skipped: integrationKeep, retryTask, settleUnknownUsage 3/3 green alone (load); ompSkillsE2E (1) and taskResultPaired (2) also red on pre-fix code (registered environment reds).
+- Concerns: (1) server still accepts a second start while active-ready (scheduleStart checks stored status only); (2) option 1 needs the human to name the two controlOverviewApi rewrites; (3) web/src/LoopPlanCard.tsx:183 same root (opens on draft/ready), untouched.
+Logs: /private/tmp/osc/logs/w53-*.
+
+## Fix round 1 (implementer hand-back, saved by controller)
+Commit 10282010 test(control): pin each executionPending disjunct on its own (tests/control/webDispatch.test.ts only).
+- "busy work status alone" (work item a set to start-unknown; asserts 0 active runs, 0 undelivered dispatch wakes) and "active run alone" (claimed, then work a set back to ready; asserts 1 active run for a, 0 dispatch wakes).
+- Mutations in fresh clone of 10282010 (sha256 controlViews.ts restored identical 6cb66cd8…; diff/--cached 0 B): (a) drop active-run → only "active run alone" red; (b) drop BUSY_WORK → only "busy work alone" red; (c) drop wake → only "undelivered start wake" red.
+- Found: the fixture's budget-estimate wake, once delivered, creates an active estimate run; the active-run disjunct counts estimate runs (as Overview does). Preconditions narrowed to dispatch wakes and work item a.
+- webDispatch + controlOverviewApi 45/45 RC0 (w53-r1-green.log). Temp probe test created and deleted.

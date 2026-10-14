@@ -1,0 +1,227 @@
+5095d367 fix(web): read saved-result eligibility only from the shown row, and say why settle is absent
+ web/src/ControlGroupView.tsx      | 12 +++++++-----
+ web/src/TaskDetail.tsx            |  9 ++++++---
+ web/src/UsageSettlement.tsx       | 13 +++++++++----
+ web/tests/remediesInRows.test.tsx | 35 +++++++++++++++++++++++++++++++++++
+ 4 files changed, 57 insertions(+), 12 deletions(-)
+diff --git a/web/src/ControlGroupView.tsx b/web/src/ControlGroupView.tsx
+index 42ce9e39..790385be 100644
+--- a/web/src/ControlGroupView.tsx
++++ b/web/src/ControlGroupView.tsx
+@@ -162,26 +162,28 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+     : view.workItems.filter((item) => (item.labels ?? []).some((label) => activeFilter.includes(label)));
+   const toggleFilter = (label: string): void =>
+     setLabelFilter((current) => (current.includes(label) ? current.filter((other) => other !== label) : [...current, label]));
+   const openItem = view.workItems.find((item) => item.taskId === openTask);
+   const workspace = props.workspaceFor?.(view.plan.repoId) ?? props.workspace;
+   const workspaceMode = workspace === undefined ? undefined
+     : workspace !== null && workspace.repoId === view.plan.repoId ? workspace.workspaceMode : null;
+ 
+   // Feedback #56/#57: a run's remedies -- retry, settlement, saved-result verification -- beside its reason wherever a row
+   // shows one, each the existing button behind its existing gate. Verification belongs to the task's current run.
+-  const remedies = (run: RunViewV1): JSX.Element => {
++  // `active`: the row's pane is the one shown. Hidden panes stay mounted, and each eligibility read spawns a ccloop child,
++  // so a hidden row neither reads eligibility nor repeats the settlement's one-line reason (fix round 1).
++  const remedies = (run: RunViewV1, active: boolean): JSX.Element => {
+     const item = view.workItems.find((candidate) => candidate.taskId === run.taskId && candidate.currentRunId === run.runId);
+     return <div key={`remedies-${run.runId}`}>
+       <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
+-      <UsageSettlement compact key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
+-      {item !== undefined && <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} />}
++      <UsageSettlement compact active={active} key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
++      {item !== undefined && <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} active={active} />}
+     </div>;
+   };
+ 
+   const dispatchControls = (<>
+       <div id={overviewRegionId("group", groupId, "dispatch")} tabIndex={-1} data-overview-region="dispatch">
+       <h3>{t("control.group.dispatch")}</h3>
+       <dl className="execution-work-kinds">
+         <dt>{t("control.group.continuableWork")}</dt><dd>{continuable.length}</dd>
+         <dt>{t("control.group.retryableWork")}</dt><dd>{retryableCount}</dd>
+         <dt>{t("control.group.unresolvedWork")}</dt><dd>{unresolvedCount}</dd>
+@@ -336,21 +338,21 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+         </thead>
+         <tbody>
+           {shownItems.map((item) => (
+             <tr key={item.taskId}>
+               <td>
+                 <button type="button" aria-expanded={openTask === item.taskId} onClick={() => setOpenTask(openTask === item.taskId ? null : item.taskId)}>
+                   {item.taskId}
+                 </button>
+               </td>
+               <td>{enumText("workStatus", item.status)}{view.runs.filter(run => run.runId === item.currentRunId).map(run => <RunReason key={run.runId} run={run} />)}
+-                {view.runs.filter(run => run.runId === item.currentRunId).map(run => remedies(run))}</td>
++                {view.runs.filter(run => run.runId === item.currentRunId).map(run => remedies(run, props.active !== false && region === "progress"))}</td>
+               <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
+               <td>{progressText(item.progress)}</td>
+               <td>{item.currentRunId ?? t("common.none")}</td>
+               <td>{item.pendingRunId ?? t("common.none")}</td>
+               <td>{item.dependencyTaskIds.join(", ") || t("common.none")}</td>
+             </tr>
+           ))}
+         </tbody>
+       </table>
+ 
+@@ -378,21 +380,21 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+           drafts={drafts} onDraft={onDraft} onCommand={onCommand}
+         />
+       )}
+ 
+ {dispatchRegion === "preparation" && dispatchControls}</>,
+         problem: <>
+       <h3>{t("detail.problem")}</h3>
+       {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
+       {view.runs.filter(run => hasFailureOutcome(run) || run.state === "blocked" || run.unknownUsageSettlement !== undefined || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
+         <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
+-        {remedies(run)}
++        {remedies(run, props.active !== false && region === "problem")}
+         <button type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>
+       </div>)}
+ {dispatchRegion === "problem" && dispatchControls}</>,
+         results: <>
+       <GroupResults view={view} active={props.active !== false && region === "results"} scope={props.resultsScope ?? ""} />
+       <p>{t("detail.resultsEvidence")}</p>
+       {view.runs.map(run => <button key={run.runId} type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>)}
+       <div id={overviewRegionId("group", groupId, "integration")} tabIndex={-1} data-overview-region="integration">
+       <GitScheme view={view} workspace={workspace} onCommand={onCommand} archived={archived} />
+       {/* Fix round 1 F1: a started group's scheme stays an owner's to change, outside the (button-free for keep) Git section. */}
+diff --git a/web/src/TaskDetail.tsx b/web/src/TaskDetail.tsx
+index 22948eb1..481313e2 100644
+--- a/web/src/TaskDetail.tsx
++++ b/web/src/TaskDetail.tsx
+@@ -283,24 +283,27 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
+                   archived={archived} groupId={groupId} revision={view.summary.commandRevision} onCommand={onCommand} />
+               )}
+             </li>
+           ))}
+         </ul>
+       )}
+     </section>
+   );
+ }
+ 
+-/** The task's saved-result verification behind its one gate (runFacts.ts savedResultSourceRunId), wherever it is offered. */
+-export function SavedResultEntry(props:{view:GroupViewV1;item:WorkItemViewV1;onCommand:(action:ControlAction)=>void;archived:boolean}):JSX.Element|null {
++/**
++ * The task's saved-result verification behind its one gate (runFacts.ts savedResultSourceRunId), wherever it is offered.
++ * `active === false` (a hidden pane) renders nothing, so no eligibility read -- a ccloop child per GET -- is made for it.
++ */
++export function SavedResultEntry(props:{view:GroupViewV1;item:WorkItemViewV1;onCommand:(action:ControlAction)=>void;archived:boolean;active?:boolean}):JSX.Element|null {
+   const {view,item}=props;const runId=savedResultSourceRunId(view,item);
+-  return runId===null?null:<SavedResultAction key={`verify-${item.currentRunId}`} runId={runId} groupId={view.summary.groupId} taskId={item.taskId} revision={view.summary.commandRevision} changeSeq={view.changeSeq} onCommand={props.onCommand} disabled={props.archived||view.summary.stopMode!==null}/>;
++  return runId===null||props.active===false?null:<SavedResultAction key={`verify-${item.currentRunId}`} runId={runId} groupId={view.summary.groupId} taskId={item.taskId} revision={view.summary.commandRevision} changeSeq={view.changeSeq} onCommand={props.onCommand} disabled={props.archived||view.summary.stopMode!==null}/>;
+ }
+ 
+ /** Source availability is read-only; an explicit click submits the frozen tuple under the visible revision. */
+ export function SavedResultAction(props:{runId:string;groupId:string;taskId:string;revision:number;changeSeq:number;onCommand:(action:ControlAction)=>void;disabled?:boolean}):JSX.Element {
+  const {t}=useTranslation();const [answer,setAnswer]=useState<SavedResultEligibilityV1|null>(null);
+  useEffect(()=>{let live=true;setAnswer(null);fetchSavedResultEligibility(props.runId).then(value=>{if(live)setAnswer(value);},error=>{if(live)setAnswer({status:"unavailable",reason:controlFailureFrom(error).code});});return()=>{live=false;};},[props.runId,props.changeSeq,props.revision]);
+  if(answer===null)return <></>;
+  if(answer.status==="unavailable")return <p className="detail-note">{t("control.savedResult.unavailable")} <code>{answer.reason}</code></p>;
+  const source=answer.recoveryOf;
+  return <div><button type="button" disabled={props.disabled} onClick={()=>props.onCommand({verb:"verify-saved-result",groupId:props.groupId,taskId:props.taskId,expectedRevision:props.revision,payload:{sourceRunId:source.sourceRunId,sourceAttempt:source.sourceAttempt,capsuleHash:source.capsuleHash}})}>{t("control.savedResult.verify")}</button><p className="detail-note">{t("control.savedResult.cost")}</p></div>;
+diff --git a/web/src/UsageSettlement.tsx b/web/src/UsageSettlement.tsx
+index 34ab5ad4..b6e80e92 100644
+--- a/web/src/UsageSettlement.tsx
++++ b/web/src/UsageSettlement.tsx
+@@ -11,40 +11,45 @@ function ChargeTable({ amounts, settled }: { amounts: { work: import("./controlT
+   // An unlimited (null) work token dimension is released unmetered: it is never rendered as 0 or left blank.
+   const { t } = useTranslation();
+   return <table aria-label={t(settled ? "control.settlement.charged" : "control.settlement.remaining")}>
+     <thead><tr>{(["bucket", "tokens", "activeMs", "attempts", "sessions"] as const).map(key => <th key={key}>{t(`control.settlement.${key}`)}</th>)}</tr></thead>
+     <tbody>{(["work", "handoff"] as const).map(bucket => <tr key={bucket}><th>{t(`control.settlement.${bucket}`)}</th>{(["tokens", "activeMs", "attempts", "sessions"] as const).map(dimension => <td key={dimension}>{amounts[bucket][dimension] ?? t("control.settlement.notMetered")}</td>)}</tr>)}</tbody>
+   </table>;
+ }
+ 
+ /**
+  * The caller keys by the preview/revision/roles so changing evidence or identity discards prior consent. `compact`
+- * (feedback #56/#57: a row that already shows the run's reason) offers only the settlement itself, behind the same gate.
++ * (feedback #56/#57: a row that already shows the run's reason) offers only the settlement itself, behind the same gate;
++ * where it offers no button it keeps one line saying why (the server's refusal, else contact an owner), shown only while
++ * the row is `active` (its pane is the one shown, fix round 1).
+  */
+-export function UsageSettlement({ run, roles, archived, groupId, revision, onCommand, compact = false }: { run: RunViewV1; roles?: readonly Role[]; archived: boolean; groupId: string; revision: number; onCommand: (action: ControlAction) => void; compact?: boolean }): JSX.Element | null {
++export function UsageSettlement({ run, roles, archived, groupId, revision, onCommand, compact = false, active = true }: { run: RunViewV1; roles?: readonly Role[]; archived: boolean; groupId: string; revision: number; onCommand: (action: ControlAction) => void; compact?: boolean; active?: boolean }): JSX.Element | null {
+   const { t } = useTranslation();
+   const [open, setOpen] = useState(false);
+   const [approved, setApproved] = useState(false);
+   const preview = run.unknownUsageSettlement;
+   if (!preview) return null;
+   if (preview.settlement) {
+     if (compact) return null;
+     const marker = preview.settlement;
+     const unmetered = marker.method === "owner-acknowledged-unmetered";
+     return <div><p>{t("control.settlement.receipt", { method: t(unmetered ? "control.settlement.methodUnmetered" : "control.settlement.method"), principal: marker.principal, at: new Date(marker.at).toISOString() })}</p><ChargeTable amounts={marker.charged} settled /><p>{t(marker.reservationDisposition === "recovered" ? "control.settlement.afterRecovered" : unmetered ? "control.settlement.afterUnmetered" : "control.settlement.after")}</p></div>;
+   }
+   const owner = roles?.includes("owner") === true;
+   // The server names the one acknowledgement this remainder admits; the browser never chooses between charge and release.
+   const release = preview.acknowledge === "release-unmetered";
++  const offered = !archived && owner && preview.allowed && run.taskId !== null;
++  const refusal = preview.refusalReason ? <p role="status" data-tone="warn">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p> : null;
++  if (compact && !offered) return !active ? null : refusal ?? (!owner ? <p>{t("control.settlement.contactOwner")}</p> : null);
+   return <div>
+     {!compact && <p>{t("control.settlement.unknown")}</p>}
+     {!compact && !owner && <p>{t("control.settlement.contactOwner")}</p>}
+-    {!compact && preview.refusalReason && <p role="status" data-tone="warn">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p>}
+-    {!archived && owner && preview.allowed && run.taskId !== null && (!open ? <button type="button" onClick={() => setOpen(true)}>{t(release ? "control.settlement.releaseOpen" : "control.settlement.open")}</button> : <div role="group" aria-label={t("control.settlement.confirmation")}>
++    {!compact && refusal}
++    {offered && (!open ? <button type="button" onClick={() => setOpen(true)}>{t(release ? "control.settlement.releaseOpen" : "control.settlement.open")}</button> : <div role="group" aria-label={t("control.settlement.confirmation")}>
+       <ChargeTable amounts={preview.remaining} settled={false} />
+       <p>{t(release ? "control.settlement.releaseWarning" : "control.settlement.warning")}</p>
+       <label><input type="checkbox" checked={approved} onChange={event => setApproved(event.currentTarget.checked)} />{t(release ? "control.settlement.releaseApprove" : "control.settlement.approve")}</label>
+       <button type="button" disabled={!approved} onClick={() => { if (!approved) return; setOpen(false); setApproved(false); onCommand({ verb: "settle-unknown-usage", groupId, expectedRevision: revision, payload: { taskId: run.taskId!, runId: run.runId, generation: preview.generation, acknowledge: preview.acknowledge } }); }}>{t(release ? "control.settlement.releaseConfirm" : "control.settlement.confirm")}</button>
+       <button type="button" onClick={() => { setOpen(false); setApproved(false); }}>{t("control.settlement.cancel")}</button>
+     </div>)}
+   </div>;
+ }
+diff --git a/web/tests/remediesInRows.test.tsx b/web/tests/remediesInRows.test.tsx
+index e791b8e0..ff5703c0 100644
+--- a/web/tests/remediesInRows.test.tsx
++++ b/web/tests/remediesInRows.test.tsx
+@@ -170,10 +170,45 @@ describe("Verify saved results where the problem is shown (feedback #56/#57)", (
+     show(v, "problem");
+     await new Promise((resolve) => setTimeout(resolve, 0));
+     expect(within(problemRow()).queryByRole("button", { name: "Verify saved results" })).toBeNull();
+     cleanup();
+     show(v, "progress");
+     await new Promise((resolve) => setTimeout(resolve, 0));
+     expect(within(workRow()).queryByRole("button", { name: "Verify saved results" })).toBeNull();
+     expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith("/saved-result-eligibility"))).toHaveLength(0);
+   });
+ });
++
++// Fix round 1: eligibility is read by spawning a ccloop child per GET, and the Problems and Progress panes stay mounted
++// while hidden -- so a row asks only while its pane is the one shown.
++describe("the rows read saved-result eligibility only while their pane is shown (fix round 1)", () => {
++  const eligibilityReads = (): number => vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith("/saved-result-eligibility")).length;
++  it("adds no eligibility read with the Runs region selected, and one with the Problems region selected", async () => {
++    eligible();
++    show(failedGroup(), "runs");
++    await new Promise((resolve) => setTimeout(resolve, 20));
++    expect(eligibilityReads()).toBe(0);
++    cleanup();
++    show(failedGroup(), "problem");
++    await within(problemRow()).findByRole("button", { name: "Verify saved results" });
++    expect(eligibilityReads()).toBe(1);
++  });
++});
++
++describe("a compact settlement that offers no button still says why (fix round 1)", () => {
++  it("tells a member to contact an owner, in both rows", () => {
++    for (const [region, row] of [["problem", () => problemRow()], ["progress", () => workRow()]] as const) {
++      show(failedGroup(unknownUsage(true)), region, ["member"]);
++      expect(within(row()).getByText("Contact an owner to review and settle unknown usage.")).toBeTruthy();
++      cleanup();
++    }
++  });
++  it("shows the server's refusal where the settlement is not allowed, in both rows", () => {
++    const refused = failedGroup(unknownUsage(false));
++    refused.runs[0]!.unknownUsageSettlement!.refusalReason = "run-stop-proof-required";
++    for (const [region, row] of [["problem", () => problemRow()], ["progress", () => workRow()]] as const) {
++      show(refused, region);
++      expect(within(row()).getByText(/complete isolated stop proof/)).toBeTruthy();
++      cleanup();
++    }
++  });
++});

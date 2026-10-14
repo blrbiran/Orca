@@ -1,0 +1,123 @@
+# Review package: 39f994c9..HEAD
+
+## Commits
+f00d6910 feat(control): send clarify and split with the same single-call output bound
+
+## Files changed
+ src/control/requirementCommands.ts           |  3 ++-
+ src/control/requirementRecords.ts            |  3 ++-
+ tests/control/requirementOutputBound.test.ts | 30 ++++++++++++++++++++++++++++
+ 3 files changed, 34 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/src/control/requirementCommands.ts b/src/control/requirementCommands.ts
+index fc14c5d3..0f85cbd5 100644
+--- a/src/control/requirementCommands.ts
++++ b/src/control/requirementCommands.ts
+@@ -1,18 +1,19 @@
+ import type { BudgetAmount } from "./tokenPolicy.js";
+ import { createHash } from "node:crypto";
+ import { readGroupAgentOverrides } from "./agentFreeze.js";
+ import { applyWebCommand, preflightWebCommand } from "./commandLedger.js";
+ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+ import { dimensions } from "./commands.js";
+ import { ControlError } from "./errors.js";
+ import { estimatorCompatibility } from "./estimatorCompatibility.js";
++import { singleCallOutputBound } from "./estimator.js";
+ import {
+   estimatorSlotFor, normalizeControlPlan, writeImportedPlan, type AsyncImportDeps, type ImportDefaults, type ImportDeps, type PreparedEstimatorSlot,
+ } from "./planImport.js";
+ import type { ExecutionProfileRouter, FrozenProfile } from "./profiles.js";
+ import { renderRequirementDocument } from "./requirementDocument.js";
+ import {
+   insertClarifyingGroup, latestDraft, latestRound, newDraft, newRound, queueRequirementCall, readDraft, readRequirementGroup, readRounds, saveRequirementGroup,
+   writeDraft, writeRound,
+ } from "./requirementRecords.js";
+ import { writeCanonicalRecord } from "./snapshot.js";
+@@ -87,21 +88,21 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
+         if (deps.store.db.prepare("SELECT id FROM groups WHERE id=?").get(payload.groupId)) throw new ControlError("group-already-exists");
+         if (slot.outcome.kind !== "frozen") throw new ControlError("agent-selection-rejected", `estimator:${slot.outcome.code}`);
+         const preflight = profile.snapshot.profile.estimatorPreflight;
+         if (!preflight) throw new ControlError("control-estimator-unconfigured");
+         const compatibility = estimatorCompatibility(slot.observation, estimateMode);
+         if (!compatibility.compatible) throw new ControlError("agent-selection-rejected", `estimator:${compatibility.reasonCodes.join(",")}`);
+         const requirementId = sha256Canonical({ groupId: payload.groupId, commandId: command.commandId }).slice(0, 32);
+         insertClarifyingGroup(deps.store, {
+           groupId: payload.groupId, repoId: payload.repoId, idea: payload.idea, limit: payload.limit, contentLanguage: payload.contentLanguage,
+           createdOn: now.toISOString().slice(0, 10), requirementId, profile: { profileId: profile.snapshot.profile.profileId, profileHash: profile.profileHash },
+-          agentSlot: slot.outcome.slot, agentOverrides: payload.agent === null ? {} : { estimator: payload.agent }, maxOutputTokens: preflight.maxOutputTokens,
++          agentSlot: slot.outcome.slot, agentOverrides: payload.agent === null ? {} : { estimator: payload.agent }, maxOutputTokens: singleCallOutputBound(preflight.maxOutputTokens, slot.observation.resolution),
+         });
+         writeRound(deps.store, payload.groupId, newRound(1));
+         const wakeId = queueRequirementCall(deps.store, payload.groupId, `open-${context.nextCommandRevision}`);
+         return commandSuccess(context, { kind: "requirement-opened", groupId: payload.groupId, requirementId, roundNo: 1, wakeId }, 201);
+       },
+     }).body;
+   } finally { release?.(); }
+ }
+ 
+ /** Spec §11.1 item 2 (DR10, DR11): every question answered, every proposal decided; the next round only while the frontier is open. */
+diff --git a/src/control/requirementRecords.ts b/src/control/requirementRecords.ts
+index abf13e44..6564c59a 100644
+--- a/src/control/requirementRecords.ts
++++ b/src/control/requirementRecords.ts
+@@ -14,21 +14,22 @@ import type { FrozenSlot } from "./agentSelection.js";
+ import {
+   draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema, SLUG_PATTERN,
+   type DraftBody, type RoundBody,
+ } from "./requirementSchemas.js";
+ 
+ /** N1 spec §4.1: the requirement block a clarifying group (and later the group it became) carries. */
+ export const requirementBlockSchema = z.object({
+   requirementId: z.string().regex(/^[a-f0-9]{32}$/), repoId: idSchema, slug: z.string().regex(SLUG_PATTERN).nullable(),
+   contentLanguage: z.enum(["en", "zh"]), createdOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), idea: z.string().min(1),
+   profile: profileBindingSchema, agentSlot: frozenSlotSchema,
+-  /** DR8: the profile's estimatorPreflight.maxOutputTokens, frozen at open; every call of this requirement asks for it. */
++  /** DR8: the profile's estimatorPreflight.maxOutputTokens, frozen at open; every call of this requirement asks for it.
++   * OMP single call (spec 2026-10-14 §4; Orca session 02f047f6, 2026-10-14): since then the larger of that and the agent's singleCallOutputCap. */
+   maxOutputTokens: safeInteger.positive(),
+   consensus: z.object({ roundNo: safeInteger.positive(), at: canonicalTimestampSchema, openBranches: z.array(z.string().min(1)), openQuestions: z.array(questionIdSchema) }).strict().nullable(),
+   acceptedDraftNo: safeInteger.positive().nullable(),
+   document: z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), recordHash: z.string().regex(/^[a-f0-9]{64}$/), frozenAt: canonicalTimestampSchema }).strict().nullable(),
+   export: requirementExportSchema,
+ }).strict();
+ export type RequirementBlock = z.infer<typeof requirementBlockSchema>;
+ 
+ export interface ClarifyingGroupInput {
+   groupId: string; repoId: string; idea: string; limit: BudgetAmount; contentLanguage: "en" | "zh"; createdOn: string; requirementId: string;
+diff --git a/tests/control/requirementOutputBound.test.ts b/tests/control/requirementOutputBound.test.ts
+new file mode 100644
+index 00000000..efae0bff
+--- /dev/null
++++ b/tests/control/requirementOutputBound.test.ts
+@@ -0,0 +1,30 @@
++import { describe, expect, it } from "vitest";
++import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
++import { readRequirementGroup } from "../../src/control/requirementRecords.js";
++import { WebControlService } from "../../src/control/webService.js";
++import { requirementHarness } from "./fixtures/requirementHarness.js";
++import { profileSnapshot } from "./fixtures/web.js";
++
++// OMP single call (spec 2026-10-14 §4): clarify and split are single calls too, so they send the same bound as the estimate --
++// the larger of the preflight's cap and the agent's own -- or ccloop's spawn check refuses every omp call whose catalog
++// cap is above the preflight's. The bound is frozen at requirement-open with the rest of the requirement (DR8).
++const open = (groupId: string) => ({
++  schema: "orca-raw-command-v1", commandId: `open-${groupId}`, actorId: "human", expectedRevision: 0, verb: "requirement-open", target: { kind: "group", groupId },
++  payload: { groupId, repoId: "repo", idea: "Let people export their notes as Markdown.", contentLanguage: "zh" },
++}) as never;
++
++describe("clarify and split send the estimate's output bound", () => {
++  it("freezes the agent's cap as the requirement's maxOutputTokens when it is above the preflight value, and the preflight value otherwise", async () => {
++    const x = await requirementHarness({ answers: [], startAt: "none" });
++    try {
++      for (const [groupId, cap, expected] of [["cap-high", 100_000, 100_000], ["cap-low", 1_000, 64_000], ["cap-null", null, 64_000]] as const) {
++        const port = { ...x.fake.port, resolveAgent: async (partial: Parameters<typeof x.fake.port.resolveAgent>[0]) => ({ ...await x.fake.port.resolveAgent(partial), singleCallOutputCap: cap }) };
++        const profile = resolveProfile(profileSnapshot(), port);
++        const service = new WebControlService({ ...x.service.deps, profileRouter: createExecutionProfileRouter([profile]),
++          defaults: () => ({ estimatorProfileId: "all", estimatorProfileHash: profile.profileHash, estimateMode: "strict" as const }) });
++        expect(await service.openRequirement(open(groupId))).toMatchObject({ result: { kind: "requirement-opened", groupId } });
++        expect([groupId, readRequirementGroup(x.store, groupId).requirement.maxOutputTokens]).toEqual([groupId, expected]);
++      }
++    } finally { await x.dispose(); }
++  });
++});

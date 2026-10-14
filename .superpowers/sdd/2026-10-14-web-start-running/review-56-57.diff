@@ -1,0 +1,567 @@
+9480ffcb fix(web): offer retry, settlement and saved-result verify where the problem shows
+ web/src/ControlGroupView.tsx      |  65 +++++++++-----
+ web/src/TaskDetail.tsx            |  10 ++-
+ web/src/UsageSettlement.tsx       |  14 +--
+ web/src/runFacts.ts               |  13 ++-
+ web/tests/remediesInRows.test.tsx | 179 ++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 251 insertions(+), 30 deletions(-)
+diff --git a/web/src/ControlGroupView.tsx b/web/src/ControlGroupView.tsx
+index c8789238..42ce9e39 100644
+--- a/web/src/ControlGroupView.tsx
++++ b/web/src/ControlGroupView.tsx
+@@ -20,40 +20,67 @@ import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
+ import { RefusalNotice } from "./RefusalNotice.js";
+ import { RunReason } from "./RunReason.js";
+ import { archiveOpen, hasFailureOutcome, retryRunOpen } from "./runFacts.js";
+ import { UsageSettlement } from "./UsageSettlement.js";
+ import { SkillsGiven } from "./SkillsGiven.js";
+ import type {
+   AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
+   RunViewV1,
+ } from "./controlTypes.js";
+ import type { ControlRefusal, UncertainCommand } from "./controlState.js";
+-import { LabelChips, TaskDetail, progressText } from "./TaskDetail.js";
++import { LabelChips, SavedResultEntry, TaskDetail, progressText } from "./TaskDetail.js";
+ import { planText } from "./LoopPlanCard.js";
+ import { currentLanguage, enumText } from "./i18n.js";
+ import { formatTokens, shortTokens } from "./TokenInput.js";
+ import { capScopeText } from "./UsagePanel.js";
+ 
+ const short = (hash: string): string => hash.slice(0, 12);
+ 
+ /**
+  * A held run the person may continue: the server marks it `continuable` (handoff delivery spec §13.1 C-4),
+  * because a normally completed run also displays as `settled-recoverable` and must never be continued.
+  */
+ export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; checkpointId: string }> {
+   return view.runs.flatMap((run) => {
+     if (run.taskId === null || run.continuable !== true || run.state === "settled-failed") return [];
+     const checkpoint = view.checkpoints.find((candidate) => candidate.runId === run.runId && candidate.state !== "unknown");
+     return checkpoint ? [{ run, checkpointId: checkpoint.checkpointId }] : [];
+   });
+ }
+ 
++/** A run's retry, as the Runs table offers it; the Problems row and the work item row offer this same one (feedback #56/#57). */
++function RunRetry({ view, run, archived, onCommand }: { view: GroupViewV1; run: RunViewV1; archived: boolean; onCommand: (action: ControlAction) => void }): JSX.Element | null {
++  const { t } = useTranslation();
++  const groupId = view.summary.groupId;
++  const revision = view.summary.commandRevision;
++  // Execution driver final review I5: a run the driver blocked carries its reason on the run, not as a
++  // recovery blocker, so its one remedy (spec §2.3, the run-scope recovery-retry) is offered here.
++  // Issue fixes spec §4.2(5): a run ccloop ended failed is retried as a task (a new run), and only where the
++  // server accepts retry-task; it never falls back to the run-scope recovery-retry, which refuses a terminal
++  // failure (run-terminal-failed). Any other blocked run keeps recovery-retry.
++  return archived ? null : hasFailureOutcome(run) ? (retryRunOpen(view, run) ? (
++    <button
++      type="button"
++      onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: revision, payload: { taskId: String(run.taskId) } })}
++    >
++      {t("control.group.retryTask", { taskId: String(run.taskId) })}
++    </button>
++  ) : null) : run.state === "blocked" && run.blockedReason ? (
++    <button
++      type="button"
++      onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId } })}
++    >
++      {t("control.group.retryRun", { id: run.taskId ?? run.runId })}
++    </button>
++  ) : null;
++}
++
+ import { overviewRegionId } from "./overviewNavigation.js";
+ import { GroupResults } from "./GroupResults.js";
+ import { GroupDetailRegions } from "./GroupDetailRegions.js";
+ import { defaultDetailRegion, dispatchDetailRegion, focusedDetailRegion, runRegionId, type DetailRegion } from "./detailRegion.js";
+ import type { OverviewTarget } from "./overviewNavigation.js";
+ 
+ export interface ControlGroupViewProps {
+   active?: boolean;
+   resultsScope?: string;
+   focusRequest?: number;
+@@ -133,20 +160,31 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+   const shownItems = activeFilter.length === 0
+     ? view.workItems
+     : view.workItems.filter((item) => (item.labels ?? []).some((label) => activeFilter.includes(label)));
+   const toggleFilter = (label: string): void =>
+     setLabelFilter((current) => (current.includes(label) ? current.filter((other) => other !== label) : [...current, label]));
+   const openItem = view.workItems.find((item) => item.taskId === openTask);
+   const workspace = props.workspaceFor?.(view.plan.repoId) ?? props.workspace;
+   const workspaceMode = workspace === undefined ? undefined
+     : workspace !== null && workspace.repoId === view.plan.repoId ? workspace.workspaceMode : null;
+ 
++  // Feedback #56/#57: a run's remedies -- retry, settlement, saved-result verification -- beside its reason wherever a row
++  // shows one, each the existing button behind its existing gate. Verification belongs to the task's current run.
++  const remedies = (run: RunViewV1): JSX.Element => {
++    const item = view.workItems.find((candidate) => candidate.taskId === run.taskId && candidate.currentRunId === run.runId);
++    return <div key={`remedies-${run.runId}`}>
++      <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
++      <UsageSettlement compact key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
++      {item !== undefined && <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} />}
++    </div>;
++  };
++
+   const dispatchControls = (<>
+       <div id={overviewRegionId("group", groupId, "dispatch")} tabIndex={-1} data-overview-region="dispatch">
+       <h3>{t("control.group.dispatch")}</h3>
+       <dl className="execution-work-kinds">
+         <dt>{t("control.group.continuableWork")}</dt><dd>{continuable.length}</dd>
+         <dt>{t("control.group.retryableWork")}</dt><dd>{retryableCount}</dd>
+         <dt>{t("control.group.unresolvedWork")}</dt><dd>{unresolvedCount}</dd>
+       </dl>
+       {continuable.length > 0 && <p>{t("control.group.continueFromCheckpoint")}</p>}
+       {handoffActive && view.summary.stopState === "handoff-complete" && <p>{t("control.group.resumeForRetry")}</p>}
+@@ -297,21 +335,22 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+           </tr>
+         </thead>
+         <tbody>
+           {shownItems.map((item) => (
+             <tr key={item.taskId}>
+               <td>
+                 <button type="button" aria-expanded={openTask === item.taskId} onClick={() => setOpenTask(openTask === item.taskId ? null : item.taskId)}>
+                   {item.taskId}
+                 </button>
+               </td>
+-              <td>{enumText("workStatus", item.status)}{view.runs.filter(run => run.runId === item.currentRunId).map(run => <RunReason key={run.runId} run={run} />)}</td>
++              <td>{enumText("workStatus", item.status)}{view.runs.filter(run => run.runId === item.currentRunId).map(run => <RunReason key={run.runId} run={run} />)}
++                {view.runs.filter(run => run.runId === item.currentRunId).map(run => remedies(run))}</td>
+               <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
+               <td>{progressText(item.progress)}</td>
+               <td>{item.currentRunId ?? t("common.none")}</td>
+               <td>{item.pendingRunId ?? t("common.none")}</td>
+               <td>{item.dependencyTaskIds.join(", ") || t("common.none")}</td>
+             </tr>
+           ))}
+         </tbody>
+       </table>
+ 
+@@ -339,20 +378,21 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+           drafts={drafts} onDraft={onDraft} onCommand={onCommand}
+         />
+       )}
+ 
+ {dispatchRegion === "preparation" && dispatchControls}</>,
+         problem: <>
+       <h3>{t("detail.problem")}</h3>
+       {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
+       {view.runs.filter(run => hasFailureOutcome(run) || run.state === "blocked" || run.unknownUsageSettlement !== undefined || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
+         <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
++        {remedies(run)}
+         <button type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>
+       </div>)}
+ {dispatchRegion === "problem" && dispatchControls}</>,
+         results: <>
+       <GroupResults view={view} active={props.active !== false && region === "results"} scope={props.resultsScope ?? ""} />
+       <p>{t("detail.resultsEvidence")}</p>
+       {view.runs.map(run => <button key={run.runId} type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>)}
+       <div id={overviewRegionId("group", groupId, "integration")} tabIndex={-1} data-overview-region="integration">
+       <GitScheme view={view} workspace={workspace} onCommand={onCommand} archived={archived} />
+       {/* Fix round 1 F1: a started group's scheme stays an owner's to change, outside the (button-free for keep) Git section. */}
+@@ -377,40 +417,21 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+             <tr key={run.runId} id={runRegionId(groupId, run.runId)} tabIndex={-1} data-run-id={run.runId}>
+               <td>{run.taskId ?? run.estimateId ?? <details><summary>{t("control.group.runLabel", { n: index + 1 })}</summary><code>{run.runId}</code></details>}</td>
+               <td>{enumText("runPhase", run.phase)}</td>
+               <td className="run-state">
+                 <div>{enumText("runState", run.state)}</div>
+                 <div><RunReason run={run} /></div>
+                 {retryRunOpen(view, run) && <p>{t("control.group.retryFromHead")}</p>}
+                 <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
+                 {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}
+                 <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}</div>
+-                {/* Execution driver final review I5: a run the driver blocked carries its reason on the run, not as a
+-                    recovery blocker, so its one remedy (spec §2.3, the run-scope recovery-retry) is offered here. */}
+-                {/* Issue fixes spec §4.2(5): a run ccloop ended failed is retried as a task (a new run), and only where the
+-                    server accepts retry-task; it never falls back to the run-scope recovery-retry, which refuses a terminal
+-                    failure (run-terminal-failed). Any other blocked run keeps recovery-retry. */}
+-                {archived ? null : hasFailureOutcome(run) ? (retryRunOpen(view, run) ? (
+-                  <button
+-                    type="button"
+-                    onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: revision, payload: { taskId: String(run.taskId) } })}
+-                  >
+-                    {t("control.group.retryTask", { taskId: String(run.taskId) })}
+-                  </button>
+-                ) : null) : run.state === "blocked" && run.blockedReason ? (
+-                  <button
+-                    type="button"
+-                    onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId } })}
+-                  >
+-                    {t("control.group.retryRun", { id: run.taskId ?? run.runId })}
+-                  </button>
+-                ) : null}
++                <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
+               </td>
+               <td><details><summary>{run.profile.profileId}</summary><code>{run.profile.profileHash}</code></details></td>
+               <td><span title={formatTokens(run.used.tokens, currentLanguage())}>{shortTokens(run.used.tokens, "en")}</span></td>
+               <td>{run.remaining.tokens===null ? t(run.tokenRemainingStatus==="unknown"?"control.progress.tokensUnknown":"budget.unlimited") : <span title={formatTokens(run.remaining.tokens, currentLanguage())}>{shortTokens(run.remaining.tokens, "en")}</span>}</td>
+               <td>
+                 <EvidenceLink runId={run.runId} />
+                 {run.evidenceIds.length > 0 && <details><summary>{t("control.group.evidenceCount", { n: run.evidenceIds.length })}</summary><ul>{run.evidenceIds.map((id) => <li key={id}><code>{id}</code></li>)}</ul></details>}
+               </td>
+             </tr>
+           ))}
+diff --git a/web/src/TaskDetail.tsx b/web/src/TaskDetail.tsx
+index 500a6d8d..22948eb1 100644
+--- a/web/src/TaskDetail.tsx
++++ b/web/src/TaskDetail.tsx
+@@ -11,21 +11,21 @@
+ import { useEffect, useState } from "react";
+ import type { JSX } from "react";
+ import { useTranslation } from "react-i18next";
+ import { controlFailureFrom, fetchSavedResultEligibility, downloadEvidenceArtifact, fetchRunActivity, fetchRunEvidence, type ControlAction } from "./controlApi.js";
+ import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
+ import type { SavedResultEligibilityV1, ActivityEntryV1, EvidenceManifestV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
+ import { TaskResults } from "./TaskResults.js";
+ import { LoopPlanCard } from "./LoopPlanCard.js";
+ import { RunReason } from "./RunReason.js";
+ import { explainRunReason } from "./refusalExplain.js";
+-import { hasFailureOutcome, reasonCode, retryRunOpen, taskRunNumber } from "./runFacts.js";
++import { hasFailureOutcome, reasonCode, retryRunOpen, savedResultSourceRunId, taskRunNumber } from "./runFacts.js";
+ import i18n, { enumText } from "./i18n.js";
+ import { UsageSettlement } from "./UsageSettlement.js";
+ import type { Role } from "./auth.js";
+ 
+ export const labelsDraftKey = (groupId: string, taskId: string): string => `labels:${groupId}:${taskId}`;
+ 
+ /** A system label and a custom one look different (spec §4.2); the class is the whole difference. */
+ export function LabelChips(props: { labels: string[] | undefined }): JSX.Element {
+   const { t } = useTranslation();
+   const labels = props.labels ?? [];
+@@ -255,21 +255,21 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
+       <button type="button" disabled={draft === null} onClick={() => onDraft(key, "")}>{t("control.task.discard")}</button>
+       <button type="button" onClick={() => send(null, current)}>{t("control.task.restore")}</button>
+         </>
+       )}
+       <p>
+         {t("control.task.progress", { progress: progressText(item.progress) })}
+         {item.progress?.lastTransitionAt ? t("control.task.lastTransition", { at: item.progress.lastTransitionAt }) : ""}
+       </p>
+       <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={props.workspaceMode} archived={archived} />
+       {item.currentRunId !== null && <RunActivity key={item.currentRunId} runId={item.currentRunId} changeSeq={view.changeSeq} />}
+-      {item.status!=="completed"&&item.currentRunId!==null&&runs.some(run=>run.runId===item.currentRunId&&run.outcome!=="succeeded"&&(run.outcome==="failed"||run.recoveryOf!==undefined))&&<SavedResultAction key={`verify-${item.currentRunId}`}  runId={runs.find(run=>run.runId===item.currentRunId)?.recoveryOf?.sourceRunId??item.currentRunId} groupId={groupId} taskId={item.taskId} revision={view.summary.commandRevision} changeSeq={view.changeSeq} onCommand={onCommand} disabled={archived||view.summary.stopMode!==null}/> }
++      <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} />
+       <h5>{t("control.task.runsOf", { taskId: item.taskId })}</h5>
+       {/* Issue fixes spec §4.2(2): the run number counts the runs that reached the provider. */}
+       {runNumber > 0 && <p>{t("control.task.runNumber", { n: runNumber })}</p>}
+       {runs.length === 0 ? <p>{t("common.none")}</p> : (
+         <ul>
+           {runs.map((run) => (
+             <li key={run.runId}>
+               {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)}<RunReason run={run} /> <EvidenceList runId={run.runId} />
+               {retryRunOpen(view, run) && !archived && (
+                 <button type="button" onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: item.taskId } })}>
+@@ -283,19 +283,25 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
+                   archived={archived} groupId={groupId} revision={view.summary.commandRevision} onCommand={onCommand} />
+               )}
+             </li>
+           ))}
+         </ul>
+       )}
+     </section>
+   );
+ }
+ 
++/** The task's saved-result verification behind its one gate (runFacts.ts savedResultSourceRunId), wherever it is offered. */
++export function SavedResultEntry(props:{view:GroupViewV1;item:WorkItemViewV1;onCommand:(action:ControlAction)=>void;archived:boolean}):JSX.Element|null {
++  const {view,item}=props;const runId=savedResultSourceRunId(view,item);
++  return runId===null?null:<SavedResultAction key={`verify-${item.currentRunId}`} runId={runId} groupId={view.summary.groupId} taskId={item.taskId} revision={view.summary.commandRevision} changeSeq={view.changeSeq} onCommand={props.onCommand} disabled={props.archived||view.summary.stopMode!==null}/>;
++}
++
+ /** Source availability is read-only; an explicit click submits the frozen tuple under the visible revision. */
+ export function SavedResultAction(props:{runId:string;groupId:string;taskId:string;revision:number;changeSeq:number;onCommand:(action:ControlAction)=>void;disabled?:boolean}):JSX.Element {
+  const {t}=useTranslation();const [answer,setAnswer]=useState<SavedResultEligibilityV1|null>(null);
+  useEffect(()=>{let live=true;setAnswer(null);fetchSavedResultEligibility(props.runId).then(value=>{if(live)setAnswer(value);},error=>{if(live)setAnswer({status:"unavailable",reason:controlFailureFrom(error).code});});return()=>{live=false;};},[props.runId,props.changeSeq,props.revision]);
+  if(answer===null)return <></>;
+  if(answer.status==="unavailable")return <p className="detail-note">{t("control.savedResult.unavailable")} <code>{answer.reason}</code></p>;
+  const source=answer.recoveryOf;
+  return <div><button type="button" disabled={props.disabled} onClick={()=>props.onCommand({verb:"verify-saved-result",groupId:props.groupId,taskId:props.taskId,expectedRevision:props.revision,payload:{sourceRunId:source.sourceRunId,sourceAttempt:source.sourceAttempt,capsuleHash:source.capsuleHash}})}>{t("control.savedResult.verify")}</button><p className="detail-note">{t("control.savedResult.cost")}</p></div>;
+ }
+diff --git a/web/src/UsageSettlement.tsx b/web/src/UsageSettlement.tsx
+index 6cf3c882..34ab5ad4 100644
+--- a/web/src/UsageSettlement.tsx
++++ b/web/src/UsageSettlement.tsx
+@@ -9,38 +9,42 @@ import { refusalText } from "./i18n.js";
+ /** Read-only server amounts: never recompute the authoritative charge in the browser. */
+ function ChargeTable({ amounts, settled }: { amounts: { work: import("./controlTypes.js").BudgetAmount; handoff: Amount }; settled: boolean }): JSX.Element {
+   // An unlimited (null) work token dimension is released unmetered: it is never rendered as 0 or left blank.
+   const { t } = useTranslation();
+   return <table aria-label={t(settled ? "control.settlement.charged" : "control.settlement.remaining")}>
+     <thead><tr>{(["bucket", "tokens", "activeMs", "attempts", "sessions"] as const).map(key => <th key={key}>{t(`control.settlement.${key}`)}</th>)}</tr></thead>
+     <tbody>{(["work", "handoff"] as const).map(bucket => <tr key={bucket}><th>{t(`control.settlement.${bucket}`)}</th>{(["tokens", "activeMs", "attempts", "sessions"] as const).map(dimension => <td key={dimension}>{amounts[bucket][dimension] ?? t("control.settlement.notMetered")}</td>)}</tr>)}</tbody>
+   </table>;
+ }
+ 
+-/** The caller keys by the preview/revision/roles so changing evidence or identity discards prior consent. */
+-export function UsageSettlement({ run, roles, archived, groupId, revision, onCommand }: { run: RunViewV1; roles?: readonly Role[]; archived: boolean; groupId: string; revision: number; onCommand: (action: ControlAction) => void }): JSX.Element | null {
++/**
++ * The caller keys by the preview/revision/roles so changing evidence or identity discards prior consent. `compact`
++ * (feedback #56/#57: a row that already shows the run's reason) offers only the settlement itself, behind the same gate.
++ */
++export function UsageSettlement({ run, roles, archived, groupId, revision, onCommand, compact = false }: { run: RunViewV1; roles?: readonly Role[]; archived: boolean; groupId: string; revision: number; onCommand: (action: ControlAction) => void; compact?: boolean }): JSX.Element | null {
+   const { t } = useTranslation();
+   const [open, setOpen] = useState(false);
+   const [approved, setApproved] = useState(false);
+   const preview = run.unknownUsageSettlement;
+   if (!preview) return null;
+   if (preview.settlement) {
++    if (compact) return null;
+     const marker = preview.settlement;
+     const unmetered = marker.method === "owner-acknowledged-unmetered";
+     return <div><p>{t("control.settlement.receipt", { method: t(unmetered ? "control.settlement.methodUnmetered" : "control.settlement.method"), principal: marker.principal, at: new Date(marker.at).toISOString() })}</p><ChargeTable amounts={marker.charged} settled /><p>{t(marker.reservationDisposition === "recovered" ? "control.settlement.afterRecovered" : unmetered ? "control.settlement.afterUnmetered" : "control.settlement.after")}</p></div>;
+   }
+   const owner = roles?.includes("owner") === true;
+   // The server names the one acknowledgement this remainder admits; the browser never chooses between charge and release.
+   const release = preview.acknowledge === "release-unmetered";
+   return <div>
+-    <p>{t("control.settlement.unknown")}</p>
+-    {!owner && <p>{t("control.settlement.contactOwner")}</p>}
+-    {preview.refusalReason && <p role="status" data-tone="warn">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p>}
++    {!compact && <p>{t("control.settlement.unknown")}</p>}
++    {!compact && !owner && <p>{t("control.settlement.contactOwner")}</p>}
++    {!compact && preview.refusalReason && <p role="status" data-tone="warn">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p>}
+     {!archived && owner && preview.allowed && run.taskId !== null && (!open ? <button type="button" onClick={() => setOpen(true)}>{t(release ? "control.settlement.releaseOpen" : "control.settlement.open")}</button> : <div role="group" aria-label={t("control.settlement.confirmation")}>
+       <ChargeTable amounts={preview.remaining} settled={false} />
+       <p>{t(release ? "control.settlement.releaseWarning" : "control.settlement.warning")}</p>
+       <label><input type="checkbox" checked={approved} onChange={event => setApproved(event.currentTarget.checked)} />{t(release ? "control.settlement.releaseApprove" : "control.settlement.approve")}</label>
+       <button type="button" disabled={!approved} onClick={() => { if (!approved) return; setOpen(false); setApproved(false); onCommand({ verb: "settle-unknown-usage", groupId, expectedRevision: revision, payload: { taskId: run.taskId!, runId: run.runId, generation: preview.generation, acknowledge: preview.acknowledge } }); }}>{t(release ? "control.settlement.releaseConfirm" : "control.settlement.confirm")}</button>
+       <button type="button" onClick={() => { setOpen(false); setApproved(false); }}>{t("control.settlement.cancel")}</button>
+     </div>)}
+   </div>;
+ }
+diff --git a/web/src/runFacts.ts b/web/src/runFacts.ts
+index e09a2f98..72deebb6 100644
+--- a/web/src/runFacts.ts
++++ b/web/src/runFacts.ts
+@@ -1,16 +1,16 @@
+ /**
+  * Issue fixes spec §4.2(5): the facts the runs table and the task detail decide a run's reason and button by. Pure (type
+  * imports only, no React or i18n), so the server's criteria compute the same run number the panel shows
+  * (tests/control/retryTask.test.ts).
+  */
+-import type { GroupViewV1, RunViewV1 } from "./controlTypes.js";
++import type { GroupViewV1, RunViewV1, WorkItemViewV1 } from "./controlTypes.js";
+ 
+ /** Failure is historical evidence: accounting and handoff state changes do not erase its cause. */
+ export function hasFailureOutcome(run: RunViewV1): boolean {
+   return run.outcome != null && run.outcome !== "succeeded";
+ }
+ 
+ /** Existing active failed-run classification, retained for callers of the original predicate. */
+ export function isTerminalFailure(run: RunViewV1): boolean {
+   return run.state === "blocked" && hasFailureOutcome(run);
+ }
+@@ -51,20 +51,31 @@ export function retryRunOpen(view: GroupViewV1, run: RunViewV1): boolean {
+   const allocations = view.allocations.filter(item => item.ownerKind === "task" && item.ownerId === run.taskId);
+   const allocated = (state: "held" | "terminal"): boolean => ["work", "handoff"].every(bucket => allocations.some(item => item.bucket === bucket && item.state === state));
+   if (run.state === "settled-recoverable") return work.status === "held" && allocated("held")
+     && view.handoffRequests.some(request => request.runId === run.runId && request.state === "settled-recoverable")
+     && view.checkpoints.some(checkpoint => checkpoint.runId === run.runId && checkpoint.state === "complete" && checkpoint.snapshotHash !== null);
+   return run.state === "settled-failed" && work.status === "blocked" && allocated("terminal")
+     && run.unknownUsageSettlement?.settlement?.reservationDisposition === "released"
+     && view.handoffRequests.some(request => request.runId === run.runId && request.state === "settled-failed");
+ }
+ 
++/**
++ * The run whose saved result a task offers to verify (its current run, or the source that run recovers from), or null
++ * where the task offers no verification: the task detail's gate, shared by every place that offers the button
++ * (feedback #56/#57), so none of them re-derives it.
++ */
++export function savedResultSourceRunId(view: GroupViewV1, item: WorkItemViewV1): string | null {
++  const runs = view.runs.filter((run) => run.taskId === item.taskId);
++  if (!(item.status!=="completed"&&item.currentRunId!==null&&runs.some(run=>run.runId===item.currentRunId&&run.outcome!=="succeeded"&&(run.outcome==="failed"||run.recoveryOf!==undefined)))) return null;
++  return runs.find(run=>run.runId===item.currentRunId)?.recoveryOf?.sourceRunId??item.currentRunId;
++}
++
+ /**
+  * The run states the group view shows only for an inactive run: controlViews.ts runViews refuses a view in which a run's
+  * `active` flag disagrees with this set, so every other state is an active run.
+  */
+ const INACTIVE_RUN_STATES: ReadonlySet<RunViewV1["state"]> = new Set([
+   "failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed",
+ ]);
+ 
+ /**
+  * Final review M1: the server's archive guards (src/control/archiveGroup.ts refuseArchive), in its order, so Archive is
+diff --git a/web/tests/remediesInRows.test.tsx b/web/tests/remediesInRows.test.tsx
+new file mode 100644
+index 00000000..e791b8e0
+--- /dev/null
++++ b/web/tests/remediesInRows.test.tsx
+@@ -0,0 +1,179 @@
++// @vitest-environment jsdom
++/**
++ * Feedback #56/#57 (and #39's remainder): retry, settlement and saved-result verification were offered only in the Runs
++ * table and at the bottom of the task detail, while the overview jumps to the Problems region, which offered only "open
++ * run". The same buttons, behind the same gates, are now offered in the Problems row and in the work item row -- and each
++ * sends exactly the command its existing counterpart sends, so a person who finds it there is not handed a second,
++ * subtly different action.
++ */
++import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import { ControlGroupView } from "../src/ControlGroupView.js";
++import { TaskDetail } from "../src/TaskDetail.js";
++import type { ControlAction } from "../src/controlApi.js";
++import type { GroupViewV1, RunViewV1 } from "../src/controlTypes.js";
++import { config, run, view, workItem } from "./fixtures/board.js";
++
++afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
++
++type Region = "problem" | "progress" | "runs";
++const FAILED: Partial<RunViewV1> = { state: "blocked", blockedReason: "terminal:failed", outcome: "failed", stopReason: "Error: codex-result-invalid: /runs/r/attempt-1" };
++const failedGroup = (over: Partial<RunViewV1> = {}): GroupViewV1 =>
++  view([workItem({ taskId: "a", status: "blocked", currentRunId: "run-a", lineageRunIds: ["run-a"] })], [run({ ...FAILED, ...over })]);
++const show = (v: GroupViewV1, region: Region, roles: ("owner" | "member")[] = ["owner"]) => {
++  const onCommand = vi.fn<(action: ControlAction) => void>();
++  render(<ControlGroupView focus={{ kind: "group", groupId: "g", region, taskId: null, runId: null }} view={v} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} roles={roles} />);
++  return onCommand;
++};
++const problemRow = (runId = "run-a"): HTMLElement => document.querySelector<HTMLElement>(`[data-problem-run-id="${runId}"]`)!;
++const workRow = (taskId = "a"): HTMLElement => within(screen.getByRole("tabpanel")).getByRole("button", { name: taskId }).closest("tr")!;
++/** The command the Runs table's own button sends: the reference every new site is compared to. */
++const runsTableCommand = (v: GroupViewV1, name: string): ControlAction => {
++  const onCommand = show(v, "runs");
++  fireEvent.click(within(screen.getByRole("tabpanel")).getByRole("button", { name }));
++  cleanup();
++  expect(onCommand).toHaveBeenCalledTimes(1);
++  return onCommand.mock.calls[0]![0];
++};
++
++describe("Retry where the problem is shown (feedback #56/#57)", () => {
++  it("offers the Runs table's Retry task in the Problems row, sending the same retry-task", () => {
++    const reference = runsTableCommand(failedGroup(), "Retry task a");
++    const onCommand = show(failedGroup(), "problem");
++    fireEvent.click(within(problemRow()).getByRole("button", { name: "Retry task a" }));
++    expect(onCommand.mock.calls).toEqual([[reference]]);
++  });
++
++  it("offers the Runs table's Retry task in the work item row, sending the same retry-task", () => {
++    const reference = runsTableCommand(failedGroup(), "Retry task a");
++    const onCommand = show(failedGroup(), "progress");
++    fireEvent.click(within(workRow()).getByRole("button", { name: "Retry task a" }));
++    expect(onCommand.mock.calls).toEqual([[reference]]);
++  });
++
++  it("offers the Runs table's Retry run for a driver-blocked run in both rows, sending the same recovery-retry", () => {
++    const blocked = failedGroup({ state: "blocked", blockedReason: "out-of-bounds:x", outcome: "succeeded", stopReason: null });
++    const reference = runsTableCommand(blocked, "Retry run a");
++    let onCommand = show(blocked, "problem");
++    fireEvent.click(within(problemRow()).getByRole("button", { name: "Retry run a" }));
++    expect(onCommand.mock.calls).toEqual([[reference]]);
++    cleanup();
++    onCommand = show(blocked, "progress");
++    fireEvent.click(within(workRow()).getByRole("button", { name: "Retry run a" }));
++    expect(onCommand.mock.calls).toEqual([[reference]]);
++  });
++
++  it("offers no Retry in either row where the Runs table offers none (a stop intent, an archived group)", () => {
++    const stopped: GroupViewV1 = { ...failedGroup(), stop: { mode: "handoff", state: "handoff-complete", frozenRunIds: [], acceptedAt: "2026-10-08T00:00:00.000Z", deadlineAt: null } };
++    const archived: GroupViewV1 = { ...failedGroup(), summary: { ...failedGroup().summary, archived: true } };
++    for (const v of [stopped, archived]) {
++      show(v, "runs");
++      expect(screen.queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
++      cleanup();
++      show(v, "problem");
++      expect(within(problemRow()).queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
++      cleanup();
++      show(v, "progress");
++      expect(within(workRow()).queryAllByRole("button", { name: /^Retry (run|task)/ })).toHaveLength(0);
++      cleanup();
++    }
++  });
++
++  it("keeps the raw reason beside the friendly explanation in both rows", () => {
++    for (const [region, row] of [["problem", () => problemRow()], ["progress", () => workRow()]] as const) {
++      show(failedGroup(), region);
++      expect(within(row()).getByText(/did not answer in the required JSON format/)).toBeTruthy();
++      expect(within(row()).getByText("Error: codex-result-invalid: /runs/r/attempt-1")).toBeTruthy();
++      cleanup();
++    }
++  });
++});
++
++const remaining = { work: { tokens: 91, activeMs: 920, attempts: 3, sessions: 4 }, handoff: { tokens: 51, activeMs: 520, attempts: 5, sessions: 6 } };
++const unknownUsage = (allowed: boolean): Partial<RunViewV1> => ({
++  stopReason: "Error: codex-event-error",
++  unknownUsageSettlement: { generation: 7, highWater: 2, remaining, allowed, refusalReason: null, acknowledge: "charge-remaining-grant" as const },
++});
++const settle = (scope: HTMLElement): void => {
++  fireEvent.click(within(scope).getByRole("button", { name: "Settle unknown usage" }));
++  fireEvent.click(within(scope).getByRole("checkbox", { name: "I understand and approve this charge" }));
++  fireEvent.click(within(scope).getByRole("button", { name: "Confirm irreversible settlement" }));
++};
++
++describe("Settle unknown usage where the problem is shown (feedback #56/#57)", () => {
++  it("offers the Runs table's settlement in both rows, sending the same settle-unknown-usage", () => {
++    const v = failedGroup(unknownUsage(true));
++    const runsCommand = show(v, "runs");
++    settle(screen.getByRole("tabpanel"));
++    cleanup();
++    expect(runsCommand).toHaveBeenCalledTimes(1);
++    const reference = runsCommand.mock.calls[0]![0];
++    expect(reference.verb).toBe("settle-unknown-usage");
++    let onCommand = show(v, "problem");
++    settle(problemRow());
++    expect(onCommand.mock.calls).toEqual([[reference]]);
++    cleanup();
++    onCommand = show(v, "progress");
++    settle(workRow());
++    expect(onCommand.mock.calls).toEqual([[reference]]);
++  });
++
++  it("offers no settlement in either row where the Runs table offers none (a member, a refused settlement)", () => {
++    for (const [v, roles] of [[failedGroup(unknownUsage(true)), ["member"]], [failedGroup(unknownUsage(false)), ["owner"]]] as const) {
++      show(v, "runs", [...roles]);
++      expect(screen.queryByRole("button", { name: "Settle unknown usage" })).toBeNull();
++      cleanup();
++      show(v, "problem", [...roles]);
++      expect(within(problemRow()).queryByRole("button", { name: "Settle unknown usage" })).toBeNull();
++      cleanup();
++      show(v, "progress", [...roles]);
++      expect(within(workRow()).queryByRole("button", { name: "Settle unknown usage" })).toBeNull();
++      cleanup();
++    }
++  });
++});
++
++const recoveryOf = { sourceRunId: "run-a", sourceAttempt: 1, capsuleHash: "a".repeat(64), snapshotHash: "b".repeat(64), normalizedExecutionHash: "c".repeat(64) };
++const eligible = (): void => {
++  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input).endsWith("/saved-result-eligibility")
++    ? new Response(JSON.stringify({ status: "eligible", recoveryOf }), { status: 200, headers: { "content-type": "application/json" } })
++    : new Response("", { status: 404 })));
++};
++
++describe("Verify saved results where the problem is shown (feedback #56/#57)", () => {
++  it("offers the task detail's verification in both rows, sending the same verify-saved-result", async () => {
++    eligible();
++    const v = failedGroup();
++    const detailCommand = vi.fn<(action: ControlAction) => void>();
++    render(<TaskDetail view={v} item={v.workItems[0]!} drafts={{}} onDraft={vi.fn()} onCommand={detailCommand} />);
++    fireEvent.click(await screen.findByRole("button", { name: "Verify saved results" }));
++    cleanup();
++    expect(detailCommand).toHaveBeenCalledTimes(1);
++    const reference = detailCommand.mock.calls[0]![0];
++    expect(reference.verb).toBe("verify-saved-result");
++    let onCommand = show(v, "problem");
++    fireEvent.click(await within(problemRow()).findByRole("button", { name: "Verify saved results" }));
++    expect(onCommand.mock.calls).toEqual([[reference]]);
++    cleanup();
++    onCommand = show(v, "progress");
++    fireEvent.click(await within(workRow()).findByRole("button", { name: "Verify saved results" }));
++    expect(onCommand.mock.calls).toEqual([[reference]]);
++  });
++
++  it("offers no verification in either row where the task detail offers none (a succeeded run)", async () => {
++    eligible();
++    const v = failedGroup({ state: "blocked", blockedReason: "out-of-bounds:x", outcome: "succeeded", stopReason: null });
++    render(<TaskDetail view={v} item={v.workItems[0]!} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
++    await screen.findByText("Runs of a");
++    expect(screen.queryByRole("button", { name: "Verify saved results" })).toBeNull();
++    cleanup();
++    show(v, "problem");
++    await new Promise((resolve) => setTimeout(resolve, 0));
++    expect(within(problemRow()).queryByRole("button", { name: "Verify saved results" })).toBeNull();
++    cleanup();
++    show(v, "progress");
++    await new Promise((resolve) => setTimeout(resolve, 0));
++    expect(within(workRow()).queryByRole("button", { name: "Verify saved results" })).toBeNull();
++    expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith("/saved-result-eligibility"))).toHaveLength(0);
++  });
++});

@@ -1,0 +1,81 @@
+9f891098 fix(web): explain a Codex 429 (codex-rate-limited) in the run reason
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index 64d61ebe..23213cd3 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -1316,16 +1316,18 @@ export const enErrors: Record<string, string> = {
+   "stop-proof-generation": "ccloop's stop proof belongs to a different attempt of this run.",
+   "inspect-unknown": "After several checks ccloop still cannot tell whether this run is alive. Choose \"Retry run\" once ccloop can answer.",
+   "accept-refused": "ccloop refused to accept this run: {{detail}}",
+   "candidate-without-terminal": "ccloop stopped this run without a final report, so it cannot be settled.",
+   "terminal": "ccloop finished this run without success (outcome {{detail}}).",
+   // Issue fixes spec §4.2(1): ccloop's failure reasons, matched by their prefix up to the first ':' (the rest is evidence).
+   "codex-exit-error": "The model process exited with an error before it gave an answer. Look at the run's evidence, then retry the task.",
+   "codex-event-error": "The model reported an error, for example a quota or service failure.",
++  // Feedback #62: Codex answered HTTP 429 and ccloop's backoff ran out; the detail is the evidence dir, kept out of the sentence.
++  "codex-rate-limited": "The provider rate-limited the Codex call (HTTP 429). Retry the task later, once the provider quota window has passed; a call refused before any work booked no usage.",
+   "codex-events-invalid": "The model's event stream could not be read.",
+   "codex-no-completion": "The model stopped without finishing its turn.",
+   "codex-result-invalid": "The model did not answer in the required JSON format.",
+   "codex-skills-cleanup-failed": "The skills given to the model could not be removed afterwards.",
+   "codex-skills-path-conflict": "A skill's path collides with a file already in the workspace.",
+   "codex-skills-pending": "Skills from an earlier attempt were still in the workspace.",
+   "codex-skills-setup-failed": "The model's skills could not be put in place.",
+   "codex-skills-source-invalid": "A skill's source is not valid.",
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index fffa9403..2ece1792 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -1254,16 +1254,18 @@ export const zhErrors: Record<string, string> = {
+   "stop-proof-generation": "ccloop 的停止证明属于这个运行的另一代。",
+   "inspect-unknown": "多次检查后 ccloop 仍说不清这个运行是否还活着；ccloop 能回答后再重试运行。",
+   "accept-refused": "ccloop 拒绝接受这个运行：{{detail}}",
+   "candidate-without-terminal": "ccloop 停止了这个运行，但没有最终报告，所以无法结算。",
+   "terminal": "ccloop 结束了这个运行，但没有成功（结果 {{detail}}）。",
+   // Issue fixes spec §4.2(1): ccloop's failure reasons, matched by their prefix up to the first ':' (the rest is evidence).
+   "codex-exit-error": "模型进程在给出答案之前就出错退出了。先查看这次运行的证据，再重试这个任务。",
+   "codex-event-error": "模型报告了错误，例如额度用尽或服务故障。",
++  // Feedback #62: Codex answered HTTP 429 and ccloop's backoff ran out; the detail is the evidence dir, kept out of the sentence.
++  "codex-rate-limited": "服务商对这次 Codex 调用限流了（HTTP 429）。请稍后重试这个任务，等服务商的额度窗口过去之后再试；开始工作之前就被拒绝的调用不计用量。",
+   "codex-events-invalid": "读不懂模型的事件流。",
+   "codex-no-completion": "模型没有完成这一轮就停了。",
+   "codex-result-invalid": "模型没有按要求的 JSON 格式作答。",
+   "codex-skills-cleanup-failed": "给模型的 skills 事后没能移除。",
+   "codex-skills-path-conflict": "某个 skill 的路径和工作区里已有的文件冲突。",
+   "codex-skills-pending": "工作区里还留着上一次尝试的 skills。",
+   "codex-skills-setup-failed": "没能为模型放好 skills。",
+   "codex-skills-source-invalid": "某个 skill 的来源不合法。",
+diff --git a/web/tests/codexRateLimited.test.tsx b/web/tests/codexRateLimited.test.tsx
+new file mode 100644
+index 00000000..c840a46a
+--- /dev/null
++++ b/web/tests/codexRateLimited.test.tsx
+@@ -0,0 +1,28 @@
++/**
++ * Feedback #62 (with #45/#48): ccloop fails a phase `codex-rate-limited: <evidenceDir>` when Codex answers HTTP 429 and its
++ * backoff is used up (ccloop 3069dbf src/runtime/codex/codexAdapter.ts). The run view must say what happened and what to
++ * do, in the reader's language, with the raw reason beside it -- not the bare code alone. The texts are written out here
++ * (not read from the tables) so a dropped entry and a zh entry left in English both turn this red.
++ */
++import { renderToStaticMarkup } from "react-dom/server";
++import { describe, expect, it } from "vitest";
++import i18n from "../src/i18n.js";
++import { RunReason } from "../src/RunReason.js";
++import { run } from "./fixtures/board.js";
++
++const EN = "The provider rate-limited the Codex call (HTTP 429). Retry the task later, once the provider quota window has passed; a call refused before any work booked no usage.";
++const ZH = "服务商对这次 Codex 调用限流了（HTTP 429）。请稍后重试这个任务，等服务商的额度窗口过去之后再试；开始工作之前就被拒绝的调用不计用量。";
++const failed = run({ runId: "run-429", state: "blocked", outcome: "failed", stopReason: "Error: codex-rate-limited: /x/y" });
++
++describe("a Codex 429 shows words, not only a code (feedback #62)", () => {
++  it("explains it in English beside the raw reason, and keeps the evidence path out of the sentence", () => {
++    const html = renderToStaticMarkup(<RunReason run={failed} />);
++    expect(html, "en text").toContain(`${EN} <code>Error: codex-rate-limited: /x/y</code>`);
++  });
++
++  it("explains it in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const html = renderToStaticMarkup(<RunReason run={failed} />);
++    expect(html, "zh text").toContain(`${ZH} <code>Error: codex-rate-limited: /x/y</code>`);
++  });
++});

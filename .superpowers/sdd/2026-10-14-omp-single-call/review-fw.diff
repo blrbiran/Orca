@@ -1,0 +1,120 @@
+bd1ddc3 fix(omp): keep a decoded single-call answer when its usage evidence write fails
+5ee1c6e docs(agents): attribute the singleCallExecution erratum to its session
+diff --git a/src/agents/registry.ts b/src/agents/registry.ts
+index 9f4d269..a071ee7 100644
+--- a/src/agents/registry.ts
++++ b/src/agents/registry.ts
+@@ -34,17 +34,17 @@ export interface AgentDescriptor {
+   validateSelection(selection: AgentSelectionV1): void;
+   /** `row` is the selected catalog row for a kind that has a catalog (omp, OMP single call 2026-10-14 §3.2), else undefined. */
+   capabilities(config: MaterializedAgentConfigV1, row?: CatalogRowV1): CapabilityViewV1;
+   /**
+    * Orca single-call estimate (2026-09-27), spec §4.4: "v1" when this kind can run one read-only structured call with
+    * an output-token cap and every tool turned off; null when either cannot be done. A sibling of capabilities, not a
+    * key of it: Orca does not intersect it with a profile or freeze it into a task.
+    *
+-   * *** ERRATUM (OMP single call, Orca spec 2026-10-14 §3.2) *** "when this kind can run" no longer holds for omp: its
++   * *** ERRATUM (OMP single call, Orca spec 2026-10-14 §3.2, Orca session 02f047f6, 2026-10-14) *** "when this kind can run" no longer holds for omp: its
+    * answer is decided per selected catalog row (`row`, at resolution), not per kind -- "v1" only when that row declares
+    * a maxTokens and its provider is not openrouter. Claude and codex still answer per kind.
+    */
+   singleCallExecution(config: MaterializedAgentConfigV1, row?: CatalogRowV1): "v1" | null;
+   /**
+    * OMP single call (Orca spec 2026-10-14 §3.2): the output cap the kind's single call actually runs under, from its catalog
+    * row; null means the call honours the request's maxOutputTokens. A sibling of singleCallExecution: never in the
+    * seven-key view, never frozen.
+diff --git a/src/runtime/omp/ompAdapter.ts b/src/runtime/omp/ompAdapter.ts
+index 7488f6b..506ee3f 100644
+--- a/src/runtime/omp/ompAdapter.ts
++++ b/src/runtime/omp/ompAdapter.ts
+@@ -75,17 +75,18 @@ export class OmpAdapter implements RuntimeAdapter {
+       const lowerBound = ompUsageLowerBound(outcome.events);
+       // Best-effort diagnostic: a failed write must not replace the refusal below and its booking.
+       if (lowerBound !== null) await writeFile(join(outcome.evidenceDir, "usage-lower-bound.json"), JSON.stringify({ tokens: lowerBound }), { mode: 0o600 }).catch(() => undefined);
+       // Ruling m4: a pre-spawn abort, a timeoutMs <= 0 or a spawn error is neverStarted (books 0, as types.ts observedTokensOf).
+       throw Object.assign(new Error(`omp-${outcome.reason}: ${outcome.evidenceDir}`), { neverStarted: outcome.neverStarted });
+     }
+     try {
+       const result = decodeOmpSingleCall(outcome.events, this.config.selection.model, outcome.evidenceDir);
+-      await writeFile(join(outcome.evidenceDir, "usage.json"), JSON.stringify(result.usageEvidence), { mode: 0o600 });
++      // Best-effort evidence: a failed write must not turn the decoded, observed answer into a null-booked failure.
++      await writeFile(join(outcome.evidenceDir, "usage.json"), JSON.stringify(result.usageEvidence), { mode: 0o600 }).catch(() => undefined);
+       return result;
+     } catch (error) {
+       // Best-effort diagnostic: a failed write must not replace the decode refusal and its booking.
+       await writeFile(join(outcome.evidenceDir, "decode-error.txt"), String(error), { mode: 0o600 }).catch(() => undefined);
+       throw error;
+     }
+   }
+ }
+diff --git a/tests/runtime/omp/ompSingleCall.test.ts b/tests/runtime/omp/ompSingleCall.test.ts
+index fa2494a..7ff5321 100644
+--- a/tests/runtime/omp/ompSingleCall.test.ts
++++ b/tests/runtime/omp/ompSingleCall.test.ts
+@@ -299,8 +299,19 @@ describe("OmpAdapter.singleCall, diagnostic writes are best-effort", () => {
+ 
+   it("keeps the process refusal when usage-lower-bound.json cannot be written", async () => {
+     const w = await ompWorld({ single: { exitCode: 3, blockFiles: ["usage-lower-bound.json"] } });
+     const failure = await failureOf(new OmpAdapter(w.config).singleCall(w.request()));
+     expect((failure as Error).message).toMatch(/^omp-exit-error: /);
+     expect(observedTokensOf(failure)).toBeNull();
+   });
+ });
++
++// Final fix wave (Orca session 02f047f6, 2026-10-14). usage.json is evidence of an answer already decoded and observed:
++// a failed write of it must not turn that good answer into a failure, which would book null instead of the 14 spent.
++describe("OmpAdapter.singleCall, the usage evidence write is best-effort", () => {
++  it("returns the decoded answer and its observed usage when usage.json cannot be written", async () => {
++    const w = await ompWorld({ single: { blockFiles: ["usage.json"] } });
++    await expect(new OmpAdapter(w.config).singleCall(w.request())).resolves.toMatchObject({
++      output: { answer: "42" }, tokenUsage: 14, usageEvidence: expect.objectContaining({ usageStatus: "present", normalizedTotal: 14 }),
++    });
++  });
++});
+=== ORCA
+d1b89c34 docs(spec): record the omp single-call residuals found during implementation
+diff --git a/docs/superpowers/specs/2026-10-14-omp-single-call-design.md b/docs/superpowers/specs/2026-10-14-omp-single-call-design.md
+index d3c840ef..c0304a4f 100644
+--- a/docs/superpowers/specs/2026-10-14-omp-single-call-design.md
++++ b/docs/superpowers/specs/2026-10-14-omp-single-call-design.md
+@@ -152,3 +152,40 @@ Orca:
+   `framingTokenOverhead`; the system prompt is not in it. Finding for the operator (their `~/.orca/profile.json`), not code.
+ - contextPromotion.enabled under the real config: false.
+ - Commands: plan `docs/superpowers/plans/2026-10-14-omp-single-call.md` Task 0 Steps 4-7.
++
++## 8. Residuals found during implementation (Orca session 02f047f6, 2026-10-14)
++
++Appended after the final whole-branch review. Evidence is cited at Orca `f00d6910` (worktree `Orca-wt/omp-single-call`)
++and ccloop `bd1ddc3` (branch `codex/omp-single-call`); sections 1-7 above are unchanged.
++
++- **Release order.** ccloop from `c3d2759` on prints `singleCallOutputCap` in every resolution, for every kind
++  (ccloop `src/agents/materialize.ts:140`, printed whole by `src/control/command.ts:258`; claude and codex answer null,
++  `src/agents/claude.ts:78-80`, `src/agents/codex.ts:58-60`). Orca's resolution schema is `.strict()`, and before
++  `d6bdc9b3` it had no such key (`git show d6bdc9b3^:src/control/ccloopPort.ts`, line 45), so such an Orca refuses every
++  resolution from that ccloop. Orca `d6bdc9b3` (`src/control/ccloopPort.ts:47`) must therefore merge before, or together
++  with, the ccloop repin, and no Orca checkout without it may point `ORCA_CCLOOP_BIN` at a ccloop that contains `c3d2759`.
++- **The spawn-time catalog probe is outside the call's time limit and abort.** ccloop `src/runtime/omp/ompSingleCall.ts:38`
++  reads the catalog (`readOmpCatalog`, bounded only by `PROBE_TIMEOUT_MS = 10_000`, `src/agents/ompModels.ts:5`, `:32`)
++  before `runOmpProcess` gets `timeoutMs: min(request.timeoutMs, installation.timeoutMs)` and the abort signal
++  (`ompSingleCall.ts:58-59`); the probe takes neither. The worker sets `request.timeoutMs` to
++  `activeMs - SINGLE_CALL_ACTIVE_MARGIN_MS` (10 000; `src/control/singleCall.ts:47`, `:87`), so a probe that uses its whole
++  10 s consumes the margin, and the call's elapsed time can exceed the run's `activeMs` grant by about `killGraceMs` plus
++  reap latency (the final review's estimate: ~1 s). An abort during the probe waits for the probe; the call then never
++  starts and books 0.
++- **Clarify / split freeze the bound at requirement open.** Orca `src/control/requirementCommands.ts:98` stores
++  `singleCallOutputBound(...)` as the requirement's `maxOutputTokens`, and every later clarify / split call sends that
++  stored value (`src/control/requirementCalls.ts:246`). If the catalog cap rises later, ccloop refuses each later call of
++  that requirement at spawn (`omp-single-call-cap-exceeded`, booked 0; ccloop `ompSingleCall.ts:42`) and nothing
++  recomputes the stored bound. §4's "Orca needs no claim-time recompute" holds only for the estimate: each new estimate
++  recomputes the bound from the current resolution (`src/control/estimator.ts:116`).
++- **Cap refusals are not visible in Orca** (pre-existing behaviour, not introduced here). Orca parses ccloop's single-call
++  record including `errorCode` (`src/control/executionDriver.ts:649`) but never reads it; a failed record leaves
++  `rawOutput` null (`executionDriver.ts:688`), which the estimate classifies as `estimate-call-failed`
++  (`src/control/estimator.ts:146`), clarify as invalid `no-output` (`src/control/requirementClarify.ts:80`), and split as
++  schema-invalid (`src/control/requirementCalls.ts:270-276`). The operator does not see `omp-single-call-cap-exceeded` or
++  `omp-single-call-unavailable` by name.
++- **Environment, not this feature:** ccloop `tests/cli/cli.test.ts:77` "returns 0 for the example contract run" is slow
++  (and can time out) when run from a git worktree of the main ccloop checkout: the attempt commit
++  (ccloop `src/workspace/worktreeManager.ts:111-115`, `ATTEMPT_IDENTITY` at `:38`) runs that repository's
++  `.git/hooks/post-commit`, which a `git clone --local` does not have. See
++  `.superpowers/sdd/2026-10-14-omp-single-call/debug-cli-slowdown.md`.

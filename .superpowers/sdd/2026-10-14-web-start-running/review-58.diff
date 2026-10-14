@@ -1,0 +1,212 @@
+3c911c3 refactor(omp): drop the in-process catalog memo
+a0f4e0f feat(omp): name why the model catalog probe failed and read it once per process
+ src/agents/ompModels.ts                    | 57 +++++++++++++++++++++--------
+ tests/agents/ompCatalogDiagnostics.test.ts | 58 ++++++++++++++++++++++++++++++
+ tests/fixtures/fake-omp.mjs                |  8 +++++
+ 3 files changed, 109 insertions(+), 14 deletions(-)
+diff --git a/src/agents/ompModels.ts b/src/agents/ompModels.ts
+index e7080d0..e44a02f 100644
+--- a/src/agents/ompModels.ts
++++ b/src/agents/ompModels.ts
+@@ -1,65 +1,94 @@
+ import { spawn } from "node:child_process";
+ import type { CatalogRowV1, InstallationV1 } from "./types.js";
+ 
+ const OUTPUT_LIMIT = 1024 * 1024;
+ const PROBE_TIMEOUT_MS = 10_000;
++const STDERR_KEEP = 4096;
++const STDERR_TAIL_BYTES = 400;
++
++/**
++ * Feedback #58: the last <= 400 bytes of a probe's stderr for its error message -- decoded as UTF-8 from a character
++ * boundary, control characters as spaces, whitespace collapsed, cut on whole characters. Empty when nothing is left.
++ */
++function stderrTail(kept: Buffer): string {
++  let start = 0;
++  while (start < kept.length && (kept[start]! & 0xc0) === 0x80) start += 1;
++  const text = kept.subarray(start).toString("utf8").replace(/\p{Cc}/gu, " ").replace(/\s+/gu, " ").trim();
++  const chars = Array.from(text);
++  let bytes = 0;
++  let from = chars.length;
++  while (from > 0 && bytes + Buffer.byteLength(chars[from - 1]!) <= STDERR_TAIL_BYTES) { from -= 1; bytes += Buffer.byteLength(chars[from]!); }
++  return chars.slice(from).join("").trim();
++}
+ 
+ export function canonicalOmpSelector(input: string, selectors: readonly string[]): string | null {
+   if (selectors.includes(input)) return input;
+   const matches = selectors.filter((selector) => selector.slice(selector.indexOf("/") + 1) === input);
+   return matches.length === 1 ? matches[0]! : null;
+ }
+ 
+-async function runOmpJson(installation: InstallationV1, args: string[]): Promise<unknown> {
++async function runOmpJson(installation: InstallationV1, args: string[], timeoutMs = PROBE_TIMEOUT_MS): Promise<unknown> {
+   const profile = installation.profile as string | null;
+   const env: NodeJS.ProcessEnv = { ...process.env, OMP_PROFILE: profile ?? "default" };
+   if (installation.configDir !== null) env.PI_CODING_AGENT_DIR = installation.configDir;
+   return await new Promise<unknown>((resolve, reject) => {
+     const child = spawn(installation.command[0], ["--no-extensions", "--profile", profile ?? "default", ...args], {
+       detached: true, env, stdio: ["ignore", "pipe", "pipe"],
+     });
+     const stdoutChunks: Buffer[] = [];
+     let bytes = 0;
+-    let aborted = false;
+-    let spawnError: Error | null = null;
+-    const kill = (): void => {
+-      if (aborted) return;
+-      aborted = true;
++    let aborted: string | null = null;
++    let spawnError: NodeJS.ErrnoException | null = null;
++    let stderr: Buffer = Buffer.alloc(0);
++    const kill = (reason: string): void => {
++      if (aborted !== null) return;
++      aborted = reason;
+       if (child.pid !== undefined) {
+         try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
+       }
+     };
+-    const timer = setTimeout(kill, PROBE_TIMEOUT_MS);
++    const timer = setTimeout(() => kill(`timeout ${timeoutMs}ms`), timeoutMs);
+     child.stdout.on("data", (chunk: Buffer) => {
+       bytes += chunk.length;
+-      if (bytes > OUTPUT_LIMIT) { kill(); return; }
++      if (bytes > OUTPUT_LIMIT) { kill("output-limit"); return; }
+       stdoutChunks.push(chunk);
+     });
+-    child.stderr.on("data", (chunk: Buffer) => { if (chunk.length > OUTPUT_LIMIT) kill(); });
+-    child.on("error", (error: Error) => { spawnError = error; });
+-    child.on("close", (code) => {
++    child.stderr.on("data", (chunk: Buffer) => {
++      if (chunk.length > OUTPUT_LIMIT) kill("output-limit");
++      stderr = Buffer.concat([stderr, chunk.subarray(Math.max(0, chunk.length - STDERR_KEEP))]);
++      if (stderr.length > STDERR_KEEP) stderr = stderr.subarray(stderr.length - STDERR_KEEP);
++    });
++    child.on("error", (error: NodeJS.ErrnoException) => { spawnError = error; });
++    child.on("close", (code, signal) => {
+       clearTimeout(timer);
+-      if (aborted || spawnError !== null || code !== 0) { reject(new Error("omp-model-catalog-unavailable")); return; }
++      // Feedback #58: the code stays the message's prefix (callers match it); the detail names why, never stdout or env.
++      const reason = aborted ?? (spawnError !== null ? `spawn ${spawnError.code ?? spawnError.message}`
++        : code === null ? `signal ${signal ?? "unknown"}` : code !== 0 ? `exit ${code}` : null);
++      if (reason !== null) {
++        const tail = stderrTail(stderr);
++        reject(new Error(`omp-model-catalog-unavailable: ${reason}${tail === "" ? "" : ` · stderr: ${tail}`}`));
++        return;
++      }
+       try {
+         resolve(JSON.parse(Buffer.concat(stdoutChunks).toString("utf8")) as unknown);
+       } catch { reject(new Error("omp-model-catalog-invalid")); }
+     });
+   });
+ }
+ 
+ const positiveSafe = (value: unknown): number | null => (typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null);
+ 
+ /**
+  * OMP single call (Orca spec 2026-10-14 §3.1): the catalog's rows from its one spawn, read under the same structured
+  * profile/configuration as a phase. A number is kept only when it is a positive safe integer. This never sends a model prompt.
+  */
+-export async function readOmpCatalog(installation: InstallationV1): Promise<CatalogRowV1[]> {
+-  const parsed = await runOmpJson(installation, ["models", "--json"]);
++export async function readOmpCatalog(installation: InstallationV1, options: { timeoutMs?: number } = {}): Promise<CatalogRowV1[]> {
++  const parsed = await runOmpJson(installation, ["models", "--json"], options.timeoutMs);
+   if (parsed === null || typeof parsed !== "object" || !Array.isArray((parsed as { models?: unknown }).models)) throw new Error("omp-model-catalog-invalid");
+   const rows = (parsed as { models: unknown[] }).models.map((row): CatalogRowV1 => {
+     if (row === null || typeof row !== "object") throw new Error("omp-model-catalog-invalid");
+     const value = row as Record<string, unknown>;
+     if (typeof value.provider !== "string" || typeof value.id !== "string" || typeof value.selector !== "string"
+       || value.selector !== `${value.provider}/${value.id}` || value.selector.length > 200) throw new Error("omp-model-catalog-invalid");
+     return { selector: value.selector, provider: value.provider, contextWindow: positiveSafe(value.contextWindow), maxTokens: positiveSafe(value.maxTokens) };
+   });
+diff --git a/tests/agents/ompCatalogDiagnostics.test.ts b/tests/agents/ompCatalogDiagnostics.test.ts
+new file mode 100644
+index 0000000..98f23ef
+--- /dev/null
++++ b/tests/agents/ompCatalogDiagnostics.test.ts
+@@ -0,0 +1,58 @@
++import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join, resolve } from "node:path";
++import { afterEach, describe, expect, it } from "vitest";
++import { readOmpCatalog } from "../../src/agents/ompModels.js";
++import type { InstallationV1 } from "../../src/agents/types.js";
++
++// Feedback #58: a failed catalog probe used to say only `omp-model-catalog-unavailable`, so an operator could not tell a
++// timeout from a broken config. The code stays the message's prefix (callers match it) with the reason and a bounded,
++// sanitised stderr tail after it.
++const FAKE_OMP = resolve("tests/fixtures/fake-omp.mjs");
++const dirs: string[] = [];
++afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true }); });
++
++async function world(models: Record<string, unknown>) {
++  const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-omp-diag-")));
++  dirs.push(dir);
++  const marker = join(dir, "omp-marker");
++  await writeFile(`${marker}.models.json`, JSON.stringify(models));
++  const binary = join(dir, "omp");
++  await writeFile(binary, `#!/bin/sh\nexec '${process.execPath}' '${FAKE_OMP}' '${marker}' "$@"\n`, { mode: 0o700 });
++  const installation: InstallationV1 = { kind: "omp", command: [binary], version: "18.10.1", configDir: null, timeoutMs: 10_000, killGraceMs: 50, defaultModel: "gateway/model-a", profile: null };
++  return { installation };
++}
++const messageOf = async (promise: Promise<unknown>): Promise<string> => promise.then(
++  () => { throw new Error("expected a rejection"); },
++  (error: unknown) => (error instanceof Error ? error.message : String(error)),
++);
++
++describe("catalog probe diagnostics (feedback #58)", () => {
++  it("C58a: a non-zero exit names its code and the stderr tail after the unchanged code", async () => {
++    const w = await world({ exitCode: 3, stderr: "boom: no config\n" });
++    const message = await messageOf(readOmpCatalog(w.installation));
++    expect(message.startsWith("omp-model-catalog-unavailable: exit 3")).toBe(true);
++    expect(message).toContain("stderr: boom: no config");
++  });
++
++  it("C58b: a probe that never answers is reported as a timeout, not as the exit the kill caused", async () => {
++    const w = await world({ hang: true });
++    const message = await messageOf(readOmpCatalog(w.installation, { timeoutMs: 300 }));
++    expect(message.startsWith("omp-model-catalog-unavailable: timeout 300ms")).toBe(true);
++  }, 20_000);
++
++  it("C58c: the stderr tail is at most 400 bytes of valid UTF-8 without control bytes, and is the END of stderr", async () => {
++    const stderr = `${"x".repeat(10_240)}\u0007\u001b[31m${"é😀\u0001\r\n".repeat(120)}\u0000end!`;
++    const w = await world({ exitCode: 1, stderr });
++    const message = await messageOf(readOmpCatalog(w.installation));
++    const tail = message.slice(message.indexOf(" · stderr: ") + " · stderr: ".length);
++    expect(message).toContain(" · stderr: ");
++    expect(Buffer.byteLength(tail, "utf8")).toBeLessThanOrEqual(400);
++    expect(Buffer.byteLength(tail, "utf8")).toBeGreaterThan(300);
++    expect(/\p{Cc}/u.test(tail)).toBe(false);
++    expect(tail.includes("�")).toBe(false);
++    expect(Buffer.from(tail, "utf8").toString("utf8")).toBe(tail);
++    expect(tail.endsWith("é😀 end!")).toBe(true);
++    expect(tail.includes("x")).toBe(false);
++  });
++});
+diff --git a/tests/fixtures/fake-omp.mjs b/tests/fixtures/fake-omp.mjs
+index 992ca7d..57a78d8 100644
+--- a/tests/fixtures/fake-omp.mjs
++++ b/tests/fixtures/fake-omp.mjs
+@@ -13,16 +13,24 @@ import { dirname } from "node:path";
+ const [marker, ...args] = process.argv.slice(2);
+ if (args.includes("--version")) {
+   process.stdout.write("18.10.1\n");
+   process.exit(0);
+ }
+ // OMP single call (Orca spec 2026-10-14 §5): `<marker>.catalog.json`, when present, is the catalog's rows; without it the
+ // one row below, as before.
+ if (args.includes("models")) {
++  // Feedback #58: `<marker>.models.json` ({exitCode?, stderr?, hang?}), when present, prints `stderr`, then hangs or exits
++  // with `exitCode`; without exitCode or hang it prints the catalog below. Without the file nothing changes.
++  if (existsSync(`${marker}.models.json`)) {
++    const script = JSON.parse(readFileSync(`${marker}.models.json`, "utf8"));
++    if (script.stderr !== undefined) await new Promise((done) => process.stderr.write(script.stderr, done));
++    if (script.hang === true) { setInterval(() => {}, 1000); await new Promise(() => {}); }
++    if (script.exitCode !== undefined) process.exit(script.exitCode);
++  }
+   const rows = existsSync(`${marker}.catalog.json`) ? JSON.parse(readFileSync(`${marker}.catalog.json`, "utf8"))
+     : [{ provider: "gateway", kind: "chat", id: "model-a", selector: "gateway/model-a", contextWindow: 200000, maxTokens: 8192 }];
+   process.stdout.write(`${JSON.stringify({ models: rows })}\n`);
+   process.exit(0);
+ }
+ if (args.includes("config")) {
+   process.stdout.write(`${JSON.stringify({ value: { default: "gateway/model-a" } })}\n`);
+   process.exit(0);
