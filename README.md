@@ -206,7 +206,12 @@ estimate, and each task starts from default budget allocations that you edit by 
   (or `--root`) **projects are fixed at launch**, the UI cannot add or rename any (the server answers
   `projects-from-command-line`), and `--projects-file` together with `--repo`/`--root` is refused. To add one, restart the
   panel. An installed service started with `--repo` is in this mode too: run `orca panel install` again without `--repo`
-  to get file mode.
+  to get file mode. That moves the panel to a different control store: with one `--repo` it was
+  `$ORCA_CONTROL_DIR/<repo key encoded as in "Plans for Task control">`, in file mode it is `$ORCA_CONTROL_DIR/panel`, which starts
+  empty. To keep the old store, point `controlStateDir` in `projects.json` (or `--control-state-dir`, which wins over it) at the
+  old directory, and give the project the same `id` as the old `--repo` key, because the control repository id is derived from
+  the id by the same encoding. A project id must match `[a-z0-9_]` then `[a-z0-9._-]*` ending in `[a-z0-9_]`, so a key with
+  capitals cannot be reused.
 - Control state (a SQLite store, plus run copies and workspaces beside it) lives under `$ORCA_CONTROL_DIR`
   (default `$HOME/.orca/control/<repo key>` with one `--repo`). With more than one `--repo` there is no single key to name it
   after, so you must also pass `--control-state-dir <path>`.
@@ -325,7 +330,7 @@ without one, use the service commands (`orca panel ...`, from `src/cli.ts`):
 | `logs [-f] [-n <lines>]` | The panel's log files (macOS, detached) or its journal (Linux). Default 200 lines. |
 
 Things the install checks: the service runs `node dist/cli.js`, so run `npm run build` first (`service-dist-missing`, or
-`service-dist-stale` when a `src` file is newer than `dist/cli.js`); every path in `--repo`, `--root`, `--profile`, `--plan`,
+`service-dist-stale` when a `src/**/*.ts` file is newer than `dist/cli.js`); every path in `--repo`, `--root`, `--profile`, `--plan`,
 `--projects-file`, `--control-state-dir` and `--dist`, and every captured variable, must be absolute
 (`service-path-not-absolute`); `--service` is added by Orca, leave it out; the args are checked with the panel's own parser.
 To change args or variables, run `install` again (it is safe to repeat). Under launchd or systemd, `install`, `start` and `restart` wait until the panel answers
@@ -429,21 +434,21 @@ Groups come from an accepted requirement or from an imported plan (**Import plan
 
 #### Group states
 
-A group's `state` is one of seven values (the server's group summary). Each is written by the code named here.
+A group's `state` is one of seven values (the server's group summary). From the panel, a group moves as follows; the control store's direct API (`createGroup`, `putWork`) also writes `draft` and `ready`.
 
 | State | Meaning, and what moves a group there |
 |---|---|
 | `clarifying` | A requirement still being clarified and split. Created by **Start clarifying**; accepting the split leaves it. |
 | `draft` | Tasks exist but the plan is not confirmed. Accepting a split, or **Import plan**, creates it; changing a confirmed proposal's budget or selection reopens it. |
 | `ready` | The plan is confirmed (**Confirm task plan**). **Start** is accepted only in this state. |
-| `running` | Set when a task is claimed or continued through the control store's claim, continuation and retry paths, and when a handoff checkpoint settles on a group that is not stopped. |
+| `running` | Set by the control store's direct claim, continuation and retry paths, and when a handoff checkpoint settles on a group that is not stopped. A Web Start's first claim does not set it (see below). |
 | `review` | Set when a run's checkpoint is committed, unless the group is `blocked`. It does not stop dispatch: `ready`, `running` and `review` all accept new runs. |
-| `blocked` | A plan group whose run used more than its grant on some dimension. A later checkpoint does not clear it. |
+| `blocked` | A plan group whose run used more than its grant on some dimension. A later checkpoint does not clear it; **Retry task** moves it back to `running`. |
 | `done` | Part of the vocabulary and shown as completed, but no code sets it on a group today. Progress is per task: `completion` counts finished tasks. |
 
 A Web **Start** only queues a start wake and marks the task, so the group keeps state `ready` while its first run executes.
-The summary therefore carries `executionPending` (an undelivered start, resume or continuation wake, an active run, or a
-task that is running, starting, held or continuing), and the panel hides **Start** while it is true. Read `state` together
+The summary therefore carries `executionPending` (an undelivered start, no-start, resume or continuation wake, an active run, or a
+task that is running, active, starting, start-unknown, held or continuing), and the panel hides **Start** while it is true. Read `state` together
 with it.
 
 Stopping is separate from `state`. A group can also carry a stop intent: `stopMode` is `pause`, `shutdown` or `handoff`, and
@@ -471,7 +476,7 @@ output ID as the attachment name. Refused or unsafe outputs offer no invented co
 polls the saved read model; hiding it or changing account/project/epoch retires pending reads and downloads. These
 reads do not call an Agent, summarize, backfill or reconstruct missing historical work.
 
-The installed ccloop pin remains `ab824d1`. An old peer reports source `unsupported` with missing explanation while
+The installed ccloop is the commit pinned in `package.json` (`npm run verify:ccloop-pin` checks it). An old peer reports source `unsupported` with missing explanation while
 ordinary task execution continues. Live saved results require a paired ccloop build with the optional result channel;
 local feature verification does not publish that build, repin the package, or change a running service. Publishing
 the paired producer and deliberately repinning/restarting remain separate release steps.
