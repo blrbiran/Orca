@@ -146,7 +146,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ### 4.1 人在自己终端跑的（agent 被 Tier 0 拦；每一件都要人单独点头，非门合并一律 `--ff-only`）
 
 1. **Orca**：push 本地 main（检查点、本 handoff）；repin 分支是从 main 的旧位置分出的（main 之后只多了 `docs/handoff/**` 与 `.orca/checkpoints/**` 的提交，与分支改的文件不相交）⇒ 先在 `Orca-wt/repin` 里 `git rebase main`，再在主仓 `git merge --ff-only codex/repin-ccloop-3069dbf` 并 push（repin ＋ 交接停止出路 ＋ D/C 挂账 ＋ OMP 调研文档 ＋ tmp 泄漏修复）。之后可删分支与工作树 `Orca-wt/repin`（真实 `node_modules`，不是软链）、被它取代的 `codex/unmetered-handoff-stop` 与工作树 `Orca-wt/unmetered-handoff`（`node_modules`、`web/node_modules` 是软链）。
-2. **ccloop**：push 本地 main（handoff）；`git merge --ff-only codex/omp-updates-timeout` 并 push；之后可删分支与工作树 `ccloop-wt/omp-updates-timeout`（`node_modules` 软链）。
+2. **ccloop**：push 本地 main（handoff）；先在 `ccloop-wt/omp-updates-timeout` 里 `git rebase main`（main 只多了 handoff 提交，不相交），再 `git merge --ff-only codex/omp-updates-timeout` 并 push；之后可删分支与工作树 `ccloop-wt/omp-updates-timeout`（`node_modules` 软链）。
 3. **ccmem**：push 本地 main（handoff）。
 4. **面板**：在新 main 上 `npm ci`（pin 变了）、`npm run build`、`npm run build --workspace web`，再 `node dist/cli.js panel restart`（`ui/panel-taste` 与本轮改动才上线；现在服务的 dist 早于那次合并）。然后在面板「设置 → Agent → 安装更新 → 重新检测」应用 omp 的「新增安装」。
 5. **临时目录**（都不是 worktree，可 `/bin/rm -rf`）：`/private/tmp/ccl-3069`（门用的 ccloop clone，`node_modules` 是软链）、`/private/tmp/og-b395`（门日志与 fake 安装表）。
