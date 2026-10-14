@@ -79,6 +79,16 @@ describe("Retry where the problem is shown (feedback #56/#57)", () => {
     }
   });
 
+  it("shows the budget-reservation hint next to Retry in both rows, as the Runs table does", () => {
+    const hint = "Retry creates a new run from the current group branch head and needs a new budget reservation.";
+    for (const [region, row] of [["runs", () => document.body], ["problem", () => problemRow()], ["progress", () => workRow()]] as const) {
+      show(failedGroup(), region);
+      const retry = within(row()).getByRole("button", { name: "Retry task a" });
+      expect(within(retry.parentElement!).getByText(hint)).toBeTruthy();
+      cleanup();
+    }
+  });
+
   it("keeps the raw reason beside the friendly explanation in both rows", () => {
     for (const [region, row] of [["problem", () => problemRow()], ["progress", () => workRow()]] as const) {
       show(failedGroup(), region);

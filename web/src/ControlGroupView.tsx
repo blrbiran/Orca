@@ -58,7 +58,7 @@ export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; chec
 }
 
 /** A run's retry, as the Runs table offers it; the Problems row and the work item row offer this same one (feedback #56/#57). */
-function RunRetry({ view, run, archived, onCommand }: { view: GroupViewV1; run: RunViewV1; archived: boolean; onCommand: (action: ControlAction) => void }): JSX.Element | null {
+function RunRetry({ view, run, archived, onCommand, active = true }: { view: GroupViewV1; run: RunViewV1; archived: boolean; onCommand: (action: ControlAction) => void; active?: boolean }): JSX.Element | null {
   const { t } = useTranslation();
   const groupId = view.summary.groupId;
   const revision = view.summary.commandRevision;
@@ -67,7 +67,9 @@ function RunRetry({ view, run, archived, onCommand }: { view: GroupViewV1; run: 
   // Issue fixes spec §4.2(5): a run ccloop ended failed is retried as a task (a new run), and only where the
   // server accepts retry-task; it never falls back to the run-scope recovery-retry, which refuses a terminal
   // failure (run-terminal-failed). Any other blocked run keeps recovery-retry.
-  return archived ? null : hasFailureOutcome(run) ? (retryRunOpen(view, run) ? (
+  // The budget-reservation hint travels with the retry wherever it is offered (Runs table, Problems row, work item row);
+  // a row in a hidden pane (`active` false) does not repeat it, as it does not repeat the settlement's reason.
+  const button = hasFailureOutcome(run) ? (retryRunOpen(view, run) ? (
     <button
       type="button"
       onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: revision, payload: { taskId: String(run.taskId) } })}
@@ -82,6 +84,7 @@ function RunRetry({ view, run, archived, onCommand }: { view: GroupViewV1; run: 
       {t("control.group.retryRun", { id: run.taskId ?? run.runId })}
     </button>
   ) : null;
+  return archived ? null : <>{active && retryRunOpen(view, run) && <p>{t("control.group.retryFromHead")}</p>}{button}</>;
 }
 
 import { overviewRegionId } from "./overviewNavigation.js";
@@ -184,7 +187,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const remedies = (run: RunViewV1, active: boolean): JSX.Element => {
     const item = view.workItems.find((candidate) => candidate.taskId === run.taskId && candidate.currentRunId === run.runId);
     return <div key={`remedies-${run.runId}`}>
-      <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
+      <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} active={active} />
       <UsageSettlement compact active={active} key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
       {item !== undefined && <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} active={active} />}
     </div>;
@@ -432,7 +435,6 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               <td className="run-state">
                 <div>{enumText("runState", run.state)}</div>
                 <div><RunReason run={run} /></div>
-                {retryRunOpen(view, run) && <p>{t("control.group.retryFromHead")}</p>}
                 <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
                 {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}
                 <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}</div>
