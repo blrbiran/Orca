@@ -229,4 +229,12 @@ describe("MemoryView (spec §5.2, W1)", () => {
     expect(document.body.textContent).not.toContain("is not set");
     expect(screen.getByText(/Set ORCA_CCMEM_BIN/)).toBeTruthy();
   });
+
+  it("shows the full refusal, not the configure hint, for any other unavailable code (final review T8)", async () => {
+    status = { ...OK_STATUS, health: { status: "unavailable", code: "ccmem-failed", message: "ccmem exited 2" } };
+    render(<MemoryView active />);
+    expect((await screen.findByTestId("refusal-code")).textContent).toBe("ccmem-failed");
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.queryByText(/Set ORCA_CCMEM_BIN/)).toBeNull();
+  });
 });
