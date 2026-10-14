@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { en } from "../src/locales/en.js";
 import { zh } from "../src/locales/zh.js";
 import { MetricsView } from "../src/MetricsView.js";
 import type { MetricsReport, PanelCoverage } from "../src/types.js";
@@ -76,6 +77,12 @@ describe("Metrics layout (P2-5)", () => {
     const row = html.slice(html.indexOf('class="metric-health"'));
     expect(row.length).toBeGreaterThan(0);
     for (const id of ["unresolved-count", "malformed-count", "excluded-as-future"]) expect(row).toContain(`data-testid="${id}"`);
+  });
+  it("states each data-health count once: the heading names it, the line under it is the number", () => {
+    const report: MetricsReport = { ...REPORT, unresolved_decisions: REPORT.unresolved_decisions.slice(0, 2), malformed_lines: REPORT.malformed_lines.slice(0, 1), excluded_as_future: 3 };
+    const html = renderToStaticMarkup(<MetricsView report={report} coverage={COVERAGE} />);
+    for (const [title, id, n] of [["Unresolved decisions", "unresolved-count", "2"], ["Malformed lines", "malformed-count", "1"], [en.metrics.futureTitle, "excluded-as-future", "3"]] as const)
+      expect(html).toContain(`<h2>${title}</h2><p data-testid="${id}">${n}</p>`);
   });
   it("lets wide usage tables scroll inside their own box", () => {
     const usage = src("../src/UsagePanel.tsx");

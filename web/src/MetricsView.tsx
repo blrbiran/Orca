@@ -78,9 +78,9 @@ export function MetricsView({ report, coverage }: { report: MetricsReport; cover
         </div>
       </div>
       <div className="metric-health">
-        <div><h2>{t("metrics.unresolvedTitle")}</h2><p data-testid="unresolved-count">{t("metrics.unresolvedCount", { n: report.unresolved_decisions.length })}</p></div>
-        <div><h2>{t("metrics.malformedTitle")}</h2><p data-testid="malformed-count">{t("metrics.malformedCount", { n: report.malformed_lines.length })}</p></div>
-        <div><h2>{t("metrics.futureTitle")}</h2><p data-testid="excluded-as-future">{t("metrics.futureCount", { n: report.excluded_as_future })}</p></div>
+        <div><h2>{t("metrics.unresolvedTitle")}</h2><p data-testid="unresolved-count">{report.unresolved_decisions.length}</p></div>
+        <div><h2>{t("metrics.malformedTitle")}</h2><p data-testid="malformed-count">{report.malformed_lines.length}</p></div>
+        <div><h2>{t("metrics.futureTitle")}</h2><p data-testid="excluded-as-future">{report.excluded_as_future}</p></div>
       </div>
     </section>
   );

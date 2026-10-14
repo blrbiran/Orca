@@ -1026,11 +1026,8 @@ export const en = {
     repairRate: "Repair rate",
     reviewCoverage: "Review coverage",
     unresolvedTitle: "Unresolved decisions",
-    unresolvedCount: "Unresolved decisions: {{n}}",
     malformedTitle: "Malformed lines",
-    malformedCount: "Malformed lines: {{n}}",
     futureTitle: "Excluded as future",
-    futureCount: "Excluded as future: {{n}}",
     note: metricsNote,
   },
   enums: {

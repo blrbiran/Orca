@@ -920,11 +920,8 @@ export const zh: Translation<typeof en> = {
     repairRate: "修复率",
     reviewCoverage: "评审覆盖率",
     unresolvedTitle: "未解析的决策",
-    unresolvedCount: "未解析的决策：{{n}}",
     malformedTitle: "格式错误的行",
-    malformedCount: "格式错误的行：{{n}}",
     futureTitle: "因日期在未来而排除",
-    futureCount: "因日期在未来而排除：{{n}}",
     note: {
       "no-review-coverage": "评审覆盖率还没有数据：只有在面板上做的评审会产生它。纠正率要和覆盖率一起看，不能单独解读。",
       "unresolved-decisions": "有些纠正指向的决策不在扫描到的台账里；它们计入总数，但不属于任何决策类型分组。",
