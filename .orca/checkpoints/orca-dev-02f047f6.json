@@ -3,42 +3,50 @@
   "runId": "orca-dev-02f047f6",
   "runtime": "claude-code",
   "sessionRef": "02f047f6-eaf0-4001-a187-f11d5bd3f85e",
-  "writtenAt": "2026-10-14T15:27:42.561Z",
-  "head": "adaa73dcd441146f98e198269cfbf44370c44c12",
+  "writtenAt": "2026-10-14T16:13:35.628Z",
+  "head": "ab94603acfa5d09e1eb465f39a158c6a350cf10c",
   "level": {
     "kind": "reading",
-    "level": 334042,
+    "level": 454591,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
-    "band": 1
+    "band": 2
   },
   "next": [
-    "Ledger: Orca-wt/omp-single-call/.superpowers/sdd/2026-10-14-omp-single-call/progress.md — Tasks 0-4 complete, Task 5 a83a142 under review; then Task 6 (ccloop mutations), 7-10 (Orca), 11 repin after the human pushes ccloop codex/omp-single-call",
-    "Feedback branch fix/web-start-group-running (Orca-wt/web-start-running): #53 and #56/#57 complete; README in progress; then #59, #61, #62 copy; #58 after single-call",
-    "Update Orca/ccloop/ccmem handoffs at the end"
+    "single-call: Tasks 0-10 complete (ledger Orca-wt/omp-single-call/.superpowers/sdd/2026-10-14-omp-single-call/progress.md); final whole-branch review running; then one fix wave, Orca gate, Task 11 repin after the human pushes ccloop codex/omp-single-call (522cd61c354e209129542d3a9b5b5ae8c5167fd2)",
+    "feedback branch fix/web-start-group-running: #53, #56/#57, README, #59 done (review of #59 running); #62 in progress; #61 deferred (needs named rewrite of web/tests/controlI18n.test.tsx:144/:76); #58 after single-call",
+    "update Orca/ccloop/ccmem handoffs at the end"
   ],
   "open": [
-    "T1 crossed (330305 > 330000) in controller session 02f047f6; the human said not to consider context size this session",
-    "Unregistered load flakes seen this session (web reviewApp/controlCommandRecovery/loopPlanDraft/projectSwitcher; ccloop ompPhase 'stopped phase', verifySavedResult, runLoop.integration, savedResultRecovery.native, updates, phasesCompleted) — all 3/3 alone"
+    "T2 crossed (451728 > 450000) in controller session 02f047f6; the human said not to consider context size this session; continuing",
+    "ccloop gate at 522cd61: full 1697/1707 passed, 3 timeouts (cli parseArgs, savedResultRecovery.native x2) under load 93-116; rerun alone in progress"
   ],
   "awaitingHuman": [
     {
       "kind": "irreversible",
-      "what": "push ccloop branch codex/omp-single-call when Task 6 is complete (Orca Task 11 repin needs it)"
+      "what": "push ccloop codex/omp-single-call so Orca can repin (Task 11)"
     },
     {
       "kind": "named-authorization",
-      "what": "~/.orca/profile.json: declare contextWindowTokens and raise framingTokenOverhead (Task 0 measured omp overhead <= 2047 tokens vs 17) before any paid acceptance"
+      "what": "#61: name the rewrite of web/tests/controlI18n.test.tsx:144 and :76 (attempt label) and confirm the target field providerAttemptOrdinal"
+    },
+    {
+      "kind": "irreversible",
+      "what": "orphan process PID 7541 (fake-omp.mjs from a Task 6 mutation run) — kill if still alive"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "~/.orca/profile.json: contextWindowTokens is null and framingTokenOverhead 17 vs measured omp overhead <= 2047 tokens"
     }
   ],
   "measurements": [
     {
-      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/ccloop-wt/omp-single-call log --oneline 7909637..HEAD",
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca-wt/web-start-running log --oneline adaa73dc..HEAD",
       "exitCode": 0,
-      "commit": "adaa73dcd441146f98e198269cfbf44370c44c12",
-      "observedAt": "2026-10-14T15:27:42.510Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-02f047f6-fYjL0z/1.txt"
+      "commit": "ab94603acfa5d09e1eb465f39a158c6a350cf10c",
+      "observedAt": "2026-10-14T16:13:35.573Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-02f047f6-rYQ1vi/1.txt"
     }
   ]
 }
