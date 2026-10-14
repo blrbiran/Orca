@@ -73,6 +73,19 @@ describe("dark theme contrast (human visual review, session f8281a60)", () => {
     expect(ratio(selected, card)).toBeGreaterThanOrEqual(1.4);
   });
 
+  // Human visual acceptance (session fb98aa31): "in dark mode the inputs are too dark". Fields used --bg, the darkest
+  // layer, so every input sank below the card it sits on. A field steps LIGHTER than its card, like every other layer.
+  it("raises inputs, selects and textareas above the card and the page they sit on", () => {
+    const rule = css.slice(css.indexOf("input, select, textarea {"), css.indexOf("}", css.indexOf("input, select, textarea {")));
+    expect(rule).toMatch(/background:\s*var\(--field\);/);
+    const raw = token("field");
+    const via = /^var\(--([a-z-]+)\)$/.exec(raw);
+    const field = hex(via ? token(via[1]!) : raw);
+    expect(luminance(field)).toBeGreaterThan(luminance(card));
+    expect(luminance(field)).toBeGreaterThan(luminance(bg));
+    expect(ratio(hex(token("text-strong")), field)).toBeGreaterThanOrEqual(7);
+  });
+
   // Issue-fixes spec §6.5 (review E9): in EVERY theme block, node text and the amber "no progress" text stay readable on every
   // category fill (painted over that block's own card); the stall text is checked on every fill, running being the one it appears on.
   it("keeps node text and stall text readable on every work-item category fill in the dark and both light blocks", () => {

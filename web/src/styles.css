@@ -6,6 +6,7 @@
   color-scheme: dark;
   --bg: #0e0f11;
   --bg-elevated: #1f2125;
+  --field: var(--bg-elevated); /* form fields step lighter than the card they sit on */
   --bg-hover: #282a2f;
   --card: #1b1c1f;
   --border: #393b41;
@@ -48,6 +49,7 @@
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #f6f4ef; --bg-elevated: #fffdf9; --bg-hover: #eeeae2; --card: #fffdf9;
+  --field: var(--bg);
   --border: #e3ddd1; --border-strong: #cfc7b8; --text: #3d3830; --text-strong: #1c1915; --muted: #6a645a;
   --accent: #1d4ed8; --accent-subtle: rgba(29, 78, 216, 0.1);
   --ok: #15803d; --warn: #b45309; --danger: #b91c1c; --info: #1d4ed8;
@@ -62,6 +64,7 @@
   :root:not([data-theme="dark"]) {
     color-scheme: light;
     --bg: #f6f4ef; --bg-elevated: #fffdf9; --bg-hover: #eeeae2; --card: #fffdf9;
+    --field: var(--bg);
     --border: #e3ddd1; --border-strong: #cfc7b8; --text: #3d3830; --text-strong: #1c1915; --muted: #6a645a;
     --accent: #1d4ed8; --accent-subtle: rgba(29, 78, 216, 0.1);
     --ok: #15803d; --warn: #b45309; --danger: #b91c1c; --info: #1d4ed8;
@@ -168,7 +171,7 @@ button:hover { background: var(--bg-hover); }
 .btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, var(--text-strong)); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 input, select, textarea {
-  font: inherit; font-size: var(--text-sm); color: var(--text-strong); background: var(--bg);
+  font: inherit; font-size: var(--text-sm); color: var(--text-strong); background: var(--field);
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 6px 8px;
 }
 textarea { min-height: 72px; width: 100%; resize: vertical; }

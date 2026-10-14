@@ -91,3 +91,10 @@ describe("category tints follow the palette (final review M7)", () => {
     }
   });
 });
+
+// Human visual acceptance (session fb98aa31) asked only for lighter DARK fields; a light field stays the paper well (--bg).
+describe("form fields in the light theme", () => {
+  it("keeps --field on --bg in both light blocks", () => {
+    for (const block of [manual, system]) expect(tok(block, "field")).toBe("var(--bg)");
+  });
+});
