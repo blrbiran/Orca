@@ -34,4 +34,9 @@ describe("metrics sentence codes (spec §3.4, §6.10)", () => {
     expect(coverage.caveatCode).toBe("reviewed-is-deliberate");
     expect(notes["reviewed-is-deliberate"]).toBe(coverage.caveat);
   });
+  it("speaks to the reader: no spec, section or erratum citation in any sentence (human, session 1f3cceb2)", () => {
+    const r = computeMetrics(OBS, { bucket: "month" });
+    const sentences = [...r.correction_rate.caveats, ...r.repair_rate.caveats, r.repair_rate.stale_only.known_bias, r.review_coverage.reason, computePanelCoverage([], []).caveat];
+    for (const s of sentences) expect(s, s).not.toMatch(/§|\bspec\b|ERRATUM|\bA' |schema\.ts/);
+  });
 });

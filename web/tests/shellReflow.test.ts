@@ -57,4 +57,12 @@ describe("narrow shell (P1-2)", () => {
     const block = css.slice(at, css.indexOf("\n}\n", at));
     expect(block).toMatch(/\n {2}\.shell \{ grid-template-columns: minmax\(0, 1fr\); \}/);
   });
+  it("keeps checkboxes and radios at their own size on touch, and hides the key hint there", () => {
+    const first = css.indexOf("@media (pointer: coarse) {");
+    const second = css.lastIndexOf("@media (pointer: coarse) {");
+    expect(second).toBeGreaterThan(first); // a second block, after the pinned first one
+    const block = css.slice(second, css.indexOf("\n}", second));
+    expect(block).toMatch(/input\[type="checkbox"\], input\[type="radio"\] \{ min-height: 0;/);
+    expect(block).toMatch(/\.kbd-hint \{ display: none;/);
+  });
 });

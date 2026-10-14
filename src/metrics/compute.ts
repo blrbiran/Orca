@@ -38,8 +38,8 @@ export interface ComputeOptions {
 }
 
 const NO_REVIEW_COVERAGE =
-  "review coverage has no data: its only producer is the panel (E2 spec §3.5), " +
-  "and A' §4.4 says the correction rate must never be read on its own";
+  "review coverage has no data: only the panel produces it, " +
+  "and the correction rate must never be read on its own";
 
 const UNRESOLVED_CAVEAT =
   "some corrections point at decisions outside what was scanned (see unresolved_decisions); " +
@@ -47,8 +47,7 @@ const UNRESOLVED_CAVEAT =
 
 const STALE_BIAS =
   "systematically low: closing a stale correction requires the chose_instead field " +
-  "(CLI flag --chose-instead) that corrections/schema.ts says a stale may not have " +
-  "(E2 spec §3.2.1, A' ERRATUM 3)";
+  "(CLI flag --chose-instead), which a stale correction must not have";
 
 function bucketOf(at: string): string {
   return at.slice(0, 7);

@@ -551,7 +551,8 @@ export function App(): JSX.Element {
       setAgentsRetry(null);
     } catch (err) {
       const refusal = controlFailureFrom(err);
-      dispatchControl({ type: "refusal", place: "panel", groupId: null, value: refusal });
+      // The amber no-port note already says this, so it is not a panel alert (taste round 2, H1-b).
+      if (refusal.code !== "control-port-unconfigured") dispatchControl({ type: "refusal", place: "panel", groupId: null, value: refusal });
       setAgentsFailure(refusal.code);
       // An unconfigured port stays so until the panel restarts: nothing to retry.
       if (!retry || controlConfig?.executionPort !== "configured") return;
@@ -1254,10 +1255,9 @@ export function App(): JSX.Element {
         unreviewed: todo.status === "available" ? todo.data?.length ?? null : null,
         chainRunning: chains?.some((r) => r.chain?.state === "running") ?? false,
         controlAlert: controlAlert(
-          summary === null || controlConfig === null || control.recovery === null
+          summary === null || control.recovery === null
             ? null
             : {
-                executionPort: controlConfig.executionPort,
                 resetRequired: summary.resetRequired,
                 refetchRequired: control.refetchRequired,
                 dispatchBlocked: summary.dispatchBlocked || control.recovery.dispatchBlocked,
@@ -1351,6 +1351,7 @@ export function App(): JSX.Element {
         {overviewNavigationFailure && <p role="alert">{overviewNavigationFailure}</p>}
         <Overview model={overviewModel} onOpen={openOverviewTarget}
           onImport={() => openOverviewTarget({ kind: "global-control", region: "import" })}
+          onViewDecisions={() => { setStatus("unreviewed"); setFilter(NO_FILTER); setSelected(null); }}
           onRequirement={() => { navigationSeq.current++; setSelectedRequirement(null); setSection("requirements"); window.location.hash = "requirements"; }} />
       </SectionPane>
       <SectionPane section="chains" active={section}>

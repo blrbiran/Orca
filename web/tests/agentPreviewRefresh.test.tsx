@@ -373,6 +373,27 @@ describe("the proposal view when the installation table cannot be read, and afte
     expect(confirmButton().disabled).toBe(true);
   });
 
+  it("does not raise a red panel refusal or the red nav dot when a no-port panel's agents read answers control-port-unconfigured (taste round 2, H1-b)", async () => {
+    servedConfig = { ...config, executionPort: "unconfigured" };
+    const unconfigured = () => json({ error: { code: "control-port-unconfigured", message: "No execution port is configured.", commandRevision: null, evidenceIds: [], retryable: false } }, 422);
+    agentsFailures = [unconfigured, unconfigured, unconfigured];
+    previewAnswers = [];
+    // The fixture summary sits at changeSeq 4, which a first read takes for a gap and marks refetch-required -- a
+    // second, unrelated reason for the dot. Serve changeSeq 1 so only the agents refusal could light it.
+    const served = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
+      String(input).startsWith("/api/control/summary") ? json({ ...summary, changeSeq: 1 }) : served(input, init)) as typeof fetch;
+    render(<App />);
+    // The amber no-port note says why at panel level ...
+    await waitFor(() => expect(document.querySelector('p[role="note"][data-tone="warn"]')).not.toBeNull());
+    // ... the agents read has answered 422 control-port-unconfigured (the agent-section text is covered by the case above) ...
+    await waitFor(() => expect(agentsReads).toBe(1));
+    await settle();
+    // ... and neither the panel refusal line (ControlPanel's p[role=alert][data-status]) nor the red dot is raised for it.
+    expect([...document.querySelectorAll('p[role="alert"][data-status]')].map((line) => line.textContent)).toEqual([]);
+    expect(screen.queryByTestId("nav-dot-tasks")).toBeNull();
+  });
+
   it("drops the preview a confirm was refused on as agent-selection-rejected, so the refused hash cannot be sent again", async () => {
     let release = (): void => {};
     const held = new Promise<Response>((resolve) => { release = () => resolve(json(preview(SECOND))); });

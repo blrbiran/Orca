@@ -74,7 +74,7 @@
       }
     ],
     "caveats": [
-      "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own",
+      "review coverage has no data: only the panel produces it, and the correction rate must never be read on its own",
       "some corrections point at decisions outside what was scanned (see unresolved_decisions); they count in the totals but sit in no decision-kind bucket"
     ],
     "caveatCodes": [
@@ -90,7 +90,7 @@
       "numerator_overturned": 0,
       "denominator_corrections": 1,
       "rate": 0,
-      "known_bias": "systematically low: closing a stale correction requires the chose_instead field (CLI flag --chose-instead) that corrections/schema.ts says a stale may not have (E2 spec §3.2.1, A' ERRATUM 3)",
+      "known_bias": "systematically low: closing a stale correction requires the chose_instead field (CLI flag --chose-instead), which a stale correction must not have",
       "knownBiasCode": "stale-bias"
     },
     "buckets": [
@@ -110,7 +110,7 @@
       }
     ],
     "caveats": [
-      "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own"
+      "review coverage has no data: only the panel produces it, and the correction rate must never be read on its own"
     ],
     "caveatCodes": [
       "no-review-coverage"
@@ -164,7 +164,7 @@
   ],
   "review_coverage": {
     "available": false,
-    "reason": "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own",
+    "reason": "review coverage has no data: only the panel produces it, and the correction rate must never be read on its own",
     "reasonCode": "no-review-coverage"
   },
   "excluded_as_future": 0,

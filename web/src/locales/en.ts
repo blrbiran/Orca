@@ -28,9 +28,9 @@ const kindHelp = {
 
 // Panel i18n spec §3.4: each English note is the server's sentence byte for byte (tests/metrics/noteCodes.test.ts).
 const metricsNote = {
-  "no-review-coverage": "review coverage has no data: its only producer is the panel (E2 spec §3.5), and A' §4.4 says the correction rate must never be read on its own",
+  "no-review-coverage": "review coverage has no data: only the panel produces it, and the correction rate must never be read on its own",
   "unresolved-decisions": "some corrections point at decisions outside what was scanned (see unresolved_decisions); they count in the totals but sit in no decision-kind bucket",
-  "stale-bias": "systematically low: closing a stale correction requires the chose_instead field (CLI flag --chose-instead) that corrections/schema.ts says a stale may not have (E2 spec §3.2.1, A' ERRATUM 3)",
+  "stale-bias": "systematically low: closing a stale correction requires the chose_instead field (CLI flag --chose-instead), which a stale correction must not have",
   "reviewed-is-deliberate": "`reviewed` is a deliberate act, so this number can sit near zero for a long time -- and a long-zero coverage is not distinguishable from nobody looking. Read it with the backlog, not on its own.",
 } as const satisfies Record<MetricsNoteCode | "reviewed-is-deliberate", string>;
 
@@ -1027,11 +1027,8 @@ export const en = {
     repairRate: "Repair rate",
     reviewCoverage: "Review coverage",
     unresolvedTitle: "Unresolved decisions",
-    unresolvedCount: "Unresolved decisions: {{n}}",
     malformedTitle: "Malformed lines",
-    malformedCount: "Malformed lines: {{n}}",
     futureTitle: "Excluded as future",
-    futureCount: "Excluded as future: {{n}}",
     note: metricsNote,
   },
   enums: {

@@ -74,3 +74,20 @@ describe("dark theme is a neutral graphite (human ruling R3: not warm)", () => {
     }
   });
 });
+
+const rgbOf = (v: string): string => {
+  const m = /^rgba\((\d+),\s*(\d+),\s*(\d+),/.exec(v);
+  if (m) return `${m[1]},${m[2]},${m[3]}`;
+  return hex(v).join(",");
+};
+// blockOf(":root {") matches the first ":root {" in styles.css, which is the dark block (line 5);
+// the light selectors are ":root[data-theme=..." and ":root:not(...)", which do not contain ":root {".
+const darkBlock = blockOf(":root {");
+describe("category tints follow the palette (final review M7)", () => {
+  it("tints idle with --muted and done with --accent, in dark and both light blocks", () => {
+    for (const block of [darkBlock, manual, system]) {
+      expect(rgbOf(tok(block, "cat-idle"))).toBe(rgbOf(tok(block, "muted")));
+      expect(rgbOf(tok(block, "cat-done"))).toBe(rgbOf(tok(block, "accent")));
+    }
+  });
+});

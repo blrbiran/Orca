@@ -54,9 +54,10 @@ describe("metrics notes in the reader's language (spec §6.10)", () => {
       zh.metrics.unresolvedTitle, zh.metrics.malformedTitle, zh.metrics.futureTitle,
     ]);
     expect(view.getByTestId("correction-rate").textContent).toBe(zh.metrics.unknownRate);
-    expect(view.getByTestId("unresolved-count").textContent).toBe("未解析的决策：0");
-    expect(view.getByTestId("malformed-count").textContent).toBe("格式错误的行：0");
-    expect(view.getByTestId("excluded-as-future").textContent).toBe("因日期在未来而排除：0");
+    // REWRITTEN (human authorisation, session 1f3cceb2): the h2 above names the count in the reader's language (pinned a few lines up), so the line repeats only the number.
+    expect(view.getByTestId("unresolved-count").textContent).toBe("0");
+    expect(view.getByTestId("malformed-count").textContent).toBe("0");
+    expect(view.getByTestId("excluded-as-future").textContent).toBe("0");
     // Each note site read where it is shown: the zh no-review-coverage note is also the correction caveat's, so a
     // toContain on the whole text could not see the review-coverage reason or a repair caveat left as sent.
     expect(view.getByTestId("review-coverage-reason").textContent).toBe(zh.metrics.note["no-review-coverage"]);

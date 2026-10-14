@@ -11,9 +11,8 @@ import type { Section } from "./sections.js";
 
 const NAV_KEY = { overview: "nav.overview", decisions: "nav.decisions", chains: "nav.chains", tasks: "nav.tasks", requirements: "nav.requirements", memory: "nav.memory", metrics: "nav.metrics", "global-settings": "nav.globalSettings", "project-settings": "nav.projectSettings" } as const satisfies Record<Section, string>;
 
-/** The six conditions under which ControlPanel renders a role="alert" line. */
+/** The five conditions under which ControlPanel renders a role="alert" line ("no execution port" is a note, not an alert). */
 export interface ControlAlertInput {
-  executionPort: string;
   resetRequired: boolean;
   refetchRequired: boolean;
   dispatchBlocked: boolean;
@@ -24,7 +23,6 @@ export interface ControlAlertInput {
 export function controlAlert(input: ControlAlertInput | null): boolean {
   if (input === null) return false;
   return (
-    input.executionPort === "unconfigured" ||
     input.resetRequired ||
     input.refetchRequired ||
     input.dispatchBlocked ||

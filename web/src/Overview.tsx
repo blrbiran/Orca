@@ -13,7 +13,7 @@ export function visibleQueue(queue: OverviewQueueRow[]): { rows: OverviewQueueRo
   return { rows, hiddenDecisions: decisions - Math.min(decisions, OVERVIEW_DECISION_LIMIT), decisions };
 }
 /** Progress first in DOM and narrow layouts; each queue row only opens its owner. */
-export function Overview(props: { model: OverviewModel; onOpen: (target: OverviewTarget) => void; onImport: () => void; onRequirement: () => void }): JSX.Element {
+export function Overview(props: { model: OverviewModel; onOpen: (target: OverviewTarget) => void; onImport: () => void; onRequirement: () => void; onViewDecisions?: () => void }): JSX.Element {
  const { t } = useTranslation(); const { model } = props; const queue = visibleQueue(model.queue);
  return <section aria-label={t("overview.title")} className="overview">
   <div className="overview-heading"><h2>{t("overview.title")}</h2><div><button type="button" onClick={props.onRequirement}>{t("overview.newRequirement")}</button><button type="button" onClick={props.onImport}>{t("overview.import")}</button></div></div>
@@ -37,7 +37,7 @@ export function Overview(props: { model: OverviewModel; onOpen: (target: Overvie
      <p>{row.owner || t("overview.global")}{row.ownerUnknown ? ` · ${t("overview.ownerUnknown")}` : ""} · {row.reason}</p>
      {row.ownerRequired && <p>{t("overview.ownerRequired")}</p>}
     </li>)}</ul>
-    {queue.hiddenDecisions > 0 && <p><a href="#decisions">{t("overview.viewAllDecisions", { n: queue.decisions })}</a></p>}
+    {queue.hiddenDecisions > 0 && <p><a href="#decisions" onClick={() => props.onViewDecisions?.()}>{t("overview.viewAllDecisions", { n: queue.decisions })}</a></p>}
     {model.queue.length === 0 && model.complete && <p>{t("overview.noAttention")}</p>}
    </section>
   </div>

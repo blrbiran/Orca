@@ -186,7 +186,7 @@ function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean;
       </table>
       </div>
       {grouped && (
-        <div className="table-scroll"><table data-testid="usage-groups">
+        <div className="table-scroll"><table data-testid="usage-groups" className="table-narrow">
           <thead><tr><th>{t("usage.th.group")}</th><th>{t("usage.th.total")}</th></tr></thead>
           <tbody>
             {view.range.groups.map((group) => <tr key={group.key ?? "\u0000unattributed"}><td>{label(group.key)}</td><td>{group.tokens}</td></tr>)}

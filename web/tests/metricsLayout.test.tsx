@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { en } from "../src/locales/en.js";
 import { zh } from "../src/locales/zh.js";
 import { MetricsView } from "../src/MetricsView.js";
 import type { MetricsReport, PanelCoverage } from "../src/types.js";
@@ -77,6 +78,12 @@ describe("Metrics layout (P2-5)", () => {
     expect(row.length).toBeGreaterThan(0);
     for (const id of ["unresolved-count", "malformed-count", "excluded-as-future"]) expect(row).toContain(`data-testid="${id}"`);
   });
+  it("states each data-health count once: the heading names it, the line under it is the number", () => {
+    const report: MetricsReport = { ...REPORT, unresolved_decisions: REPORT.unresolved_decisions.slice(0, 2), malformed_lines: REPORT.malformed_lines.slice(0, 1), excluded_as_future: 3 };
+    const html = renderToStaticMarkup(<MetricsView report={report} coverage={COVERAGE} />);
+    for (const [title, id, n] of [["Unresolved decisions", "unresolved-count", "2"], ["Malformed lines", "malformed-count", "1"], [en.metrics.futureTitle, "excluded-as-future", "3"]] as const)
+      expect(html).toContain(`<h2>${title}</h2><p data-testid="${id}">${n}</p>`);
+  });
   it("lets wide usage tables scroll inside their own box", () => {
     const usage = src("../src/UsagePanel.tsx");
     expect(usage.match(/<div className="table-scroll">/g)?.length).toBe(3);
@@ -85,8 +92,13 @@ describe("Metrics layout (P2-5)", () => {
     expect(at).toBeGreaterThan(-1);
     expect(css.slice(at, css.indexOf("}", at))).toContain("overflow-x: auto");
   });
+  it("does not force the two-column groups table to scroll", () => {
+    expect(src("../src/UsagePanel.tsx")).toContain('<table data-testid="usage-groups" className="table-narrow">');
+    const css = src("../src/styles.css");
+    expect(css).toMatch(/\.table-scroll \.table-narrow \{ min-width: 0;/);
+  });
   it("speaks to the reader, not in spec citations (zh only)", () => {
-    // en mirrors the server's sentences byte for byte (en.ts:29), pinned by tests/metrics/noteCodes.test.ts, so it is not reworded here.
+    // en mirrors the server's sentences byte for byte; tests/metrics/noteCodes.test.ts pins that neither carries a citation.
     const notes = Object.values(zh.metrics.note).join("\n");
     expect(notes).not.toMatch(/§|ERRATUM|spec|schema\.ts|unresolved_decisions|chose_instead|`reviewed`/);
   });
