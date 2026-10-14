@@ -1254,10 +1254,9 @@ export function App(): JSX.Element {
         unreviewed: todo.status === "available" ? todo.data?.length ?? null : null,
         chainRunning: chains?.some((r) => r.chain?.state === "running") ?? false,
         controlAlert: controlAlert(
-          summary === null || controlConfig === null || control.recovery === null
+          summary === null || control.recovery === null
             ? null
             : {
-                executionPort: controlConfig.executionPort,
                 resetRequired: summary.resetRequired,
                 refetchRequired: control.refetchRequired,
                 dispatchBlocked: summary.dispatchBlocked || control.recovery.dispatchBlocked,

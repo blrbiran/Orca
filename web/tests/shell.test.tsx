@@ -18,17 +18,21 @@ describe("sections (ruling U2)", () => {
 });
 
 const quiet: ControlAlertInput = {
-  executionPort: "configured", resetRequired: false, refetchRequired: false, dispatchBlocked: false, blockers: 0, refusal: false,
+  // REWRITTEN (human authorisation, session 1f3cceb2): executionPort is no longer an alert input.
+  resetRequired: false, refetchRequired: false, dispatchBlocked: false, blockers: 0, refusal: false,
 };
 
-describe("controlAlert (spec §5.1, the six alert conditions ControlPanel renders)", () => {
+// REWRITTEN (human authorisation, session 1f3cceb2): five alert conditions now, not six.
+describe("controlAlert (the five alert conditions ControlPanel renders as role=alert)", () => {
   it("is false when nothing is wrong and when the control plane is not mounted", () => {
     expect(controlAlert(quiet)).toBe(false);
     expect(controlAlert(null)).toBe(false);
   });
 
   it("is true for each condition on its own", () => {
-    expect(controlAlert({ ...quiet, executionPort: "unconfigured" })).toBe(true);
+    // REWRITTEN (human authorisation, session 1f3cceb2): "no execution port" is an amber role="note"
+    // (taste refinement P1-1), not an alert, so it must not light the red nav dot.
+    expect(controlAlert({ ...quiet, executionPort: "unconfigured" } as ControlAlertInput)).toBe(false);
     expect(controlAlert({ ...quiet, resetRequired: true })).toBe(true);
     expect(controlAlert({ ...quiet, refetchRequired: true })).toBe(true);
     expect(controlAlert({ ...quiet, dispatchBlocked: true })).toBe(true);
