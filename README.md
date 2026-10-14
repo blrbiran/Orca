@@ -2,7 +2,7 @@
 
 _Leave it to Orca — every idea, made real._
 
-Orca turns an idea into tasks, runs those tasks with coding agents (Claude Code or Codex), and lands the results
+Orca turns an idea into tasks, runs those tasks with coding agents (Claude Code, Codex or OMP), and lands the results
 on a git branch for you to review. You drive it from a local Web panel.
 
 This README is about that panel: what Orca is, how to install and configure it, how to start the panel, what each
@@ -22,7 +22,7 @@ Orca is the system layer. Some pieces are separate projects:
 | Piece | Role | Required? |
 |---|---|---|
 | **Orca** (this repository) | Decides which tasks run, in what order and what in parallel; keeps budgets; records its choices in a decision ledger (`.decisions/`); serves the Web panel. | yes |
-| **ccloop** | Runs **one** task as a loop with an agent CLI (`claude` or `codex`). A separate repository, pinned as a git dependency in `package.json` and installed by `npm install`. | yes |
+| **ccloop** | Runs **one** task as a loop with an agent CLI (`claude`, `codex` or `omp`). A separate repository, pinned as a git dependency in `package.json` and installed by `npm install`. | yes |
 | **ccmem** | A memory layer. The panel can show it read-only. | optional |
 | **syncskill** | Supplies skills to tasks. | optional |
 
@@ -35,7 +35,9 @@ whether that branch goes into `main`.
 - macOS or Linux (`package.json` lists only `darwin` and `linux`).
 - Node.js 22.13.1 or newer (the control store uses Node's built-in SQLite).
 - git.
-- At least one agent CLI, installed and logged in: Claude Code (`claude`) and/or Codex (`codex`).
+- At least one agent CLI, installed and logged in: Claude Code (`claude`), Codex (`codex`) and/or OMP (`omp`, oh-my-pi).
+  Orca does not install any of them. For OMP, the supported installation shape and a hand-written table entry are in
+  ccloop's README, section 6.4 (`omp`); this README does not repeat an install command.
 
 ## Install
 
@@ -52,7 +54,9 @@ npm run build --workspace web     # builds the panel; without it the panel refus
 node_modules/.bin/tsx src/cli.ts <command> ...
 ```
 
-(`npm run ledger -- <command> ...` is the same thing through npm.) Below, `orca <command>` is short for that.
+(`npm run ledger -- <command> ...` is the same thing through npm.) Below, `orca <command>` is short for that; if you
+want a real `orca` on your PATH, alias it yourself, because Orca ships none. `npm run build` (the root one, not only the
+`web` one) compiles `dist/cli.js`; `orca panel install` needs it (see [Run the panel as a service](#run-the-panel-as-a-service)).
 
 ## Configure
 
@@ -80,6 +84,51 @@ version drift with `agent-version-drift`. Run `orca agents show`, then `orca age
 installations. With an existing table, inspect `<table>.draft.json` and the printed differences. Preserve your existing
 custom commands, configuration directories and defaults; back up the old table before deliberately replacing it with
 reviewed values. Restart the panel to load the new table. Do not delete the only copy of your configuration.
+
+#### Agent kinds and the installation table
+
+The table is JSON of schema `ccloop-agents-table-v1`: `{ "schema": ..., "installations": { "<id>": { ... } } }`, one
+entry per installed CLI, keyed by an id (letters, digits, `_`, `.`, `-`; it must start with a letter or digit). Orca does not
+define the entry's shape: ccloop checks it (the fields below are from ccloop at the commit Orca pins, `src/agents/`),
+and `orca agents show` runs that check. Every field is required; an unknown field is refused.
+
+| Field | Kinds | Rule |
+|---|---|---|
+| `kind` | all | `claude`, `codex` or `omp` |
+| `command` | all | array; the first element is an **absolute** path to the executable. `claude` and `codex` accept further arguments; `omp` accepts exactly one element |
+| `version` | all | the CLI's version string, as detected; see "After upgrading an agent CLI" |
+| `configDir` | all | an absolute path, or `null` |
+| `timeoutMs` | all | positive integer |
+| `killGraceMs` | all | integer 0 to 60000 |
+| `sandbox` | `codex` | `read-only` or `workspace-write` |
+| `budgetMode` | `codex` | only `soft` |
+| `defaultModel` | `omp` | `<provider>/<model>` |
+| `profile` | `omp` | `null`, or a profile name; a non-null `profile` together with a non-null `configDir` is refused |
+
+`claude` has no extra fields. The file and its directory must belong to you and must not be group- or world-writable,
+the file must be a regular file (not a symlink) at its own real path, and at most 1 MiB. Minimal entries, with
+placeholder paths (let `orca agents init` fill `version`, and prefer its output to hand-writing: for `claude` it also
+adds isolation arguments to `command` that these minimal examples leave out):
+
+```json
+{
+  "schema": "ccloop-agents-table-v1",
+  "installations": {
+    "claude": { "kind": "claude", "command": ["<absolute-path-to-claude>"], "version": "<detected-version>",
+                "configDir": null, "timeoutMs": 1800000, "killGraceMs": 5000 },
+    "codex":  { "kind": "codex", "command": ["<absolute-path-to-codex>"], "version": "<detected-version>",
+                "configDir": null, "timeoutMs": 1800000, "killGraceMs": 5000,
+                "sandbox": "workspace-write", "budgetMode": "soft" },
+    "omp":    { "kind": "omp", "command": ["<absolute-path-to-omp>"], "version": "<detected-version>",
+                "configDir": null, "timeoutMs": 1800000, "killGraceMs": 5000,
+                "profile": null, "defaultModel": "<provider>/<model>" }
+  }
+}
+```
+
+What each kind can do in Orca today: loop work runs on all three. Frozen task skills work on all three (see
+[Optional integrations](#6-optional-integrations)). Clarifying and splitting a requirement, and estimating, need a bounded
+single call, which only `claude` provides; `codex` and `omp` do not provide it (**not yet** available for `omp`).
 
 ### 2. ccloop
 
@@ -146,11 +195,21 @@ estimate, and each task starts from default budget allocations that you edit by 
 
 ### 4. Repositories and where state lives
 
-- `--repo <key>=<path-to-repo>` registers a repository you want Orca to work on. Repeatable. **Projects are fixed at
-  launch**: to add one, restart the panel.
+- **Projects.** With no `--repo` and no `--root`, the panel runs in *file mode*: its projects are the list in
+  `$HOME/.orca/projects.json` (`$ORCA_PROJECTS_FILE` overrides the path), `{ "version": 1, "projects": [{ "id", "name", "path" }] }`.
+  A missing file is an empty list. In the UI you can **add** a project (a name and the absolute path of a git repository's
+  top-level directory) and **rename** one. Removing a project or changing its path needs a restart, as does changing the file's
+  optional `controlStateDir`; the panel names such pending changes. A hand edit that adds a project or changes a name applies
+  without a restart; a file broken while the panel runs keeps the last good list, and one broken at start is refused (`projects-file-invalid`). In file mode the control state defaults to
+  `$ORCA_CONTROL_DIR/panel` (or the file's `controlStateDir`), so `--control-state-dir` is not needed.
+- `--repo <key>=<path-to-repo>` is the alternative: it registers a repository on the command line. Repeatable. With `--repo`
+  (or `--root`) **projects are fixed at launch**, the UI cannot add or rename any (the server answers
+  `projects-from-command-line`), and `--projects-file` together with `--repo`/`--root` is refused. To add one, restart the
+  panel. An installed service started with `--repo` is in this mode too: run `orca panel install` again without `--repo`
+  to get file mode.
 - Control state (a SQLite store, plus run copies and workspaces beside it) lives under `$ORCA_CONTROL_DIR`
-  (default `$HOME/.orca/control/<repo key>`). With more than one `--repo` there is no single key to name it after,
-  so you must also pass `--control-state-dir <path>`.
+  (default `$HOME/.orca/control/<repo key>` with one `--repo`). With more than one `--repo` there is no single key to name it
+  after, so you must also pass `--control-state-dir <path>`.
   This build upgrades that store (`control.sqlite`) to schema version 9 on its first start (from 7 or 8; version 9 adds
   the activity record), and the upgrade is one-way (an older build refuses a version-9 store with
   `control-schema-unsupported`), so back up `control.sqlite` before you first start it.
@@ -167,7 +226,7 @@ You can reach tasks two ways:
 2. **From a plan file** you wrote, registered at launch with `--plan <planId>=<repoId>=<path-to-plan.json>`. The
    panel only ever reads plans named on its command line.
 
-`<repoId>` is **not** the `<key>` you gave `--repo`; it is that key encoded as `<key>-<first 8 hex of sha256(key)>`.
+`<repoId>` is **not** the `<key>` you gave `--repo` (in file mode, the project's `id`); it is that key encoded as `<key>-<first 8 hex of sha256(key)>`.
 To compute it:
 
 ```sh
@@ -220,7 +279,7 @@ The import form uses registered plans for the selected project; if several exist
 | Variable | Effect |
 |---|---|
 | `ORCA_CCMEM_BIN` = absolute path to `ccmem` | turns on the read-only **Memory** section. Opening it starts ccmem, and ccmem may migrate its own data directory when it opens it. Unset: ccmem is never started. |
-| `ORCA_SYNCSKILL_BIN` = absolute path to `syncskill` | lets a loop task declare `"skills": {"profile": "<name>"}` or `"skills": {"names": ["<skill>", ...]}`. Frozen task skills work with **Claude and Codex** installations. Other agent kinds are refused (`skills-unsupported-agent`); this does not give Codex single-call clarification/estimation capability. Unset: Orca never starts syncskill. |
+| `ORCA_SYNCSKILL_BIN` = absolute path to `syncskill` | lets a loop task declare `"skills": {"profile": "<name>"}` or `"skills": {"names": ["<skill>", ...]}`. Frozen task skills work with **Claude, Codex and OMP** installations. Other agent kinds are refused (`skills-unsupported-agent`); this does not give Codex or OMP single-call clarification/estimation capability. Unset: Orca never starts syncskill. |
 
 ## Start the panel
 
@@ -235,11 +294,13 @@ export ORCA_AGENTS_TABLE="$HOME/.orca/agents.json"
 exec node_modules/.bin/tsx src/cli.ts panel \
   --by <you> \
   --port 7777 \
-  --repo <key>=<path-to-repo> \
   --profile <path-to-profile.json> \
   --estimator-profile all --estimate-mode soft
+  # --repo <key>=<path-to-repo>                            # instead of the UI's project list: fixes the projects at launch
   # --plan <planId>=<repoId>=<path-to-plan.json>          # optional, see "Plans for Task control"
 ```
+
+As written it runs in file mode (see [Repositories](#4-repositories-and-where-state-lives)): add your projects in the UI.
 
 - `--by <who>` is required: every review and correction is stamped with it.
 - `--port` defaults to `0` (a random free port).
@@ -249,6 +310,26 @@ exec node_modules/.bin/tsx src/cli.ts panel \
 - If it says `control plane mounted with no execution port`, see [ccloop](#2-ccloop).
 - Stop it with Ctrl-C. It drains before exiting; a second Ctrl-C exits at once, and the next start may then have to
   recover first.
+
+### Run the panel as a service
+
+`orca panel <args>` is the same command as `orca panel run <args>` and runs in your terminal. To keep the panel running
+without one, use the service commands (`orca panel ...`, from `src/cli.ts`):
+
+| Command | What it does |
+|---|---|
+| `install [--dry-run] <panel run args>` | Records the args, and the `ORCA_*` path variables of your shell that the service needs (`ORCA_AGENTS_TABLE`, `ORCA_CCLOOP_BIN`, `ORCA_CCMEM_BIN`, `ORCA_SYNCSKILL_BIN`, `ORCA_CONTROL_DIR`, `ORCA_CORRECTIONS_DIR`, `ORCA_PROJECTS_FILE`, `SYNCSKILL_DIR`, `CCMEM_DATA_ROOT`), in `~/.orca/panel/service.json`, and installs a per-user service: a launchd LaunchAgent on macOS, a systemd user unit on Linux. `--dry-run` prints the files and runs nothing. |
+| `start [--detach]` | Starts that service. Without a service manager it refuses unless you pass `--detach`, which starts a plain process that neither restarts after a crash nor survives a reboot. |
+| `stop`, `restart`, `uninstall` | Drive the service. `restart` rewrites the service files from the recorded `service.json`; it does not pick up new args or variables. |
+| `status` | The manager's view plus a real request to the panel. Exit 0 only if the panel answered; refuses with `service-not-installed` if nothing is installed. |
+| `logs [-f] [-n <lines>]` | The panel's log files (macOS, detached) or its journal (Linux). Default 200 lines. |
+
+Things the install checks: the service runs `node dist/cli.js`, so run `npm run build` first (`service-dist-missing`, or
+`service-dist-stale` when a `src` file is newer than `dist/cli.js`); every path in `--repo`, `--root`, `--profile`, `--plan`,
+`--projects-file`, `--control-state-dir` and `--dist`, and every captured variable, must be absolute
+(`service-path-not-absolute`); `--service` is added by Orca, leave it out; the args are checked with the panel's own parser.
+To change args or variables, run `install` again (it is safe to repeat). Under launchd or systemd, `install`, `start` and `restart` wait until the panel answers
+and say so, or exit 1. These commands change your running system, so a coding agent should ask you before running them.
 
 ### Logging in
 
@@ -292,10 +373,10 @@ the URL hash. Language and theme switches are in the sidebar.
 
 ### Requirements
 
-Clarification and splitting need a bounded **single call**. The pinned Codex adapter does not provide that capability;
-use Claude for this section. With only Codex installed, write a plan using the [Plans for Task control](#5-plans-for-task-control-optional) example and import it in
+Clarification and splitting need a bounded **single call**. The pinned Codex adapter does not provide that capability,
+and neither does the OMP adapter (not yet); use Claude for this section. With only Codex or OMP installed, write a plan using the [Plans for Task control](#5-plans-for-task-control-optional) example and import it in
 **Task control**, then review/set task budgets manually if no capable estimator is available. The form allows an
-explicitly selected Codex installation to be submitted, but the server refuses it because it lacks the single-call
+explicitly selected Codex or OMP installation to be submitted, but the server refuses it because it lacks the single-call
 capability. A default selection is also resolved by the server, so ensure your default supports single calls.
 
 1. Pick a repository, type the idea, set a token limit, the content language and the agent, and press
@@ -345,6 +426,29 @@ Groups come from an accepted requirement or from an imported plan (**Import plan
   person: the panel has no button for either.
 - **Recovery:** after a crash the panel reconciles before it accepts connections; anything it cannot settle is shown
   as a blocker, and it will not start new runs until recovery is observed.
+
+#### Group states
+
+A group's `state` is one of seven values (the server's group summary). Each is written by the code named here.
+
+| State | Meaning, and what moves a group there |
+|---|---|
+| `clarifying` | A requirement still being clarified and split. Created by **Start clarifying**; accepting the split leaves it. |
+| `draft` | Tasks exist but the plan is not confirmed. Accepting a split, or **Import plan**, creates it; changing a confirmed proposal's budget or selection reopens it. |
+| `ready` | The plan is confirmed (**Confirm task plan**). **Start** is accepted only in this state. |
+| `running` | Set when a task is claimed or continued through the control store's claim, continuation and retry paths, and when a handoff checkpoint settles on a group that is not stopped. |
+| `review` | Set when a run's checkpoint is committed, unless the group is `blocked`. It does not stop dispatch: `ready`, `running` and `review` all accept new runs. |
+| `blocked` | A plan group whose run used more than its grant on some dimension. A later checkpoint does not clear it. |
+| `done` | Part of the vocabulary and shown as completed, but no code sets it on a group today. Progress is per task: `completion` counts finished tasks. |
+
+A Web **Start** only queues a start wake and marks the task, so the group keeps state `ready` while its first run executes.
+The summary therefore carries `executionPending` (an undelivered start, resume or continuation wake, an active run, or a
+task that is running, starting, held or continuing), and the panel hides **Start** while it is true. Read `state` together
+with it.
+
+Stopping is separate from `state`. A group can also carry a stop intent: `stopMode` is `pause`, `shutdown` or `handoff`, and
+`stopState` is `paused`, `handoff-pending`, `handoff-partial`, `handoff-unresolved` or `handoff-complete` (both `null` when
+none). **Start** is refused with `stop-mode-conflict` while an intent exists.
 
 The group and requirement cards have **More actions** for exact details, archive or unarchive, and copying the group id.
 Archiving preserves records; it is refused while work or a stop is still in flight.
@@ -411,7 +515,8 @@ maximum sessions, a soft maximum cost in USD, session timeout) and stops one aft
 
 ## Known limitations
 
-- Projects are registered at launch by `--repo`; the sidebar's selected project switches the panel's project views.
+- With `--repo` or `--root`, projects are fixed at launch; in file mode (the default) the UI adds and renames projects, and
+  removing one or changing its path needs a restart. The sidebar's selected project switches the panel's project views.
   A project's registered plans remain bound to its repository.
 - No Orca command writes the profile snapshot; you write it by hand.
 - Paid acceptance runs against real agents so far are **n=1** each: they show the path works, not how reliably.
@@ -466,7 +571,7 @@ Chains have a soft cost limit checked after each session.
 |---|---|
 | No task control plane | Check whether the panel was started with `--no-control`. A missing execution port is different: reads work, but work cannot start. Check `ORCA_AGENTS_TABLE` and ccloop configuration in the panel process. An expired login requires logging in; it does not mean the control plane is missing. |
 | `agent-version-drift` | Review a newly detected agents draft after upgrading the CLI, preserve custom configuration and restart the panel; see the agents-table instructions above. |
-| Codex cannot clarify or estimate | Single-call capability is unavailable on the pinned Codex adapter. Use a capable agent for clarification/estimation; a task worker may still use Codex. |
+| Codex or OMP cannot clarify or estimate | Single-call capability is unavailable on the pinned Codex and OMP adapters. Use a capable agent for clarification/estimation; a task worker may still use Codex or OMP. |
 | Start is missing or `stop-mode-conflict` | Read the stop banner. Resume a pause with **Resume dispatch**. After a completed handoff, use the resume dialog; select no continuations when you only want to clear the completed stop before retrying a failed task. Pending/unresolved handoffs need recovery first; a partial handoff can be archived. Do not edit `stop_intents` or group JSON in SQLite. |
 | A task ended failed | Inspect its failure reason, recent activity and evidence. **Retry task** creates a new task attempt when allowed; **Retry recovery** is for recoverable blocked runs, not terminal task failures. Unknown usage or insufficient budget can still prevent a retry. |
 | Activity says `null` or reports no history for an invalid body | A valid empty run answers `{ "schema": "orca-run-activity-v1", "runId": "…", "entries": [] }`. A missing run or damaged row is an error. Re-read the run and inspect the named refusal; do not treat `null` as an empty feed. |
