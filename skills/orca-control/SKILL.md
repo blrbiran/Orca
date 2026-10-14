@@ -29,6 +29,7 @@ it into a draft task group. Read the returned state rather than infer success fr
    plan with real profile/selection hashes from the reads, then send `groups/<id>/start` at the new revision.
    Confirmation and start are separate.
 4. Poll `groups/<id>` every 30–60 seconds. The driver schedules dependencies within a started group automatically.
+   A group's `state` stays `ready` while a Web-started first run is pending or executing; read `executionPending` on the group summary before sending `start` (the server still accepts a second start while one is pending).
 5. On failure, read `groups/<id>`, `runs/<id>/activity`, `runs/<id>/evidence` and, for a saved execution failure,
    `runs/<id>/saved-result-eligibility`. Report the recorded phase, typed cause when present, raw code and run/attempt
    identity. Older unknown causes stay unknown; never infer token exhaustion from a decode error. Use only the
