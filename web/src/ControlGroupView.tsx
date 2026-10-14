@@ -27,7 +27,7 @@ import type {
   RunViewV1,
 } from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
-import { LabelChips, TaskDetail, progressText } from "./TaskDetail.js";
+import { LabelChips, SavedResultEntry, TaskDetail, progressText } from "./TaskDetail.js";
 import { planText } from "./LoopPlanCard.js";
 import { currentLanguage, enumText } from "./i18n.js";
 import { formatTokens, shortTokens } from "./TokenInput.js";
@@ -45,6 +45,33 @@ export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; chec
     const checkpoint = view.checkpoints.find((candidate) => candidate.runId === run.runId && candidate.state !== "unknown");
     return checkpoint ? [{ run, checkpointId: checkpoint.checkpointId }] : [];
   });
+}
+
+/** A run's retry, as the Runs table offers it; the Problems row and the work item row offer this same one (feedback #56/#57). */
+function RunRetry({ view, run, archived, onCommand }: { view: GroupViewV1; run: RunViewV1; archived: boolean; onCommand: (action: ControlAction) => void }): JSX.Element | null {
+  const { t } = useTranslation();
+  const groupId = view.summary.groupId;
+  const revision = view.summary.commandRevision;
+  // Execution driver final review I5: a run the driver blocked carries its reason on the run, not as a
+  // recovery blocker, so its one remedy (spec §2.3, the run-scope recovery-retry) is offered here.
+  // Issue fixes spec §4.2(5): a run ccloop ended failed is retried as a task (a new run), and only where the
+  // server accepts retry-task; it never falls back to the run-scope recovery-retry, which refuses a terminal
+  // failure (run-terminal-failed). Any other blocked run keeps recovery-retry.
+  return archived ? null : hasFailureOutcome(run) ? (retryRunOpen(view, run) ? (
+    <button
+      type="button"
+      onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: revision, payload: { taskId: String(run.taskId) } })}
+    >
+      {t("control.group.retryTask", { taskId: String(run.taskId) })}
+    </button>
+  ) : null) : run.state === "blocked" && run.blockedReason ? (
+    <button
+      type="button"
+      onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId } })}
+    >
+      {t("control.group.retryRun", { id: run.taskId ?? run.runId })}
+    </button>
+  ) : null;
 }
 
 import { overviewRegionId } from "./overviewNavigation.js";
@@ -139,6 +166,17 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const workspace = props.workspaceFor?.(view.plan.repoId) ?? props.workspace;
   const workspaceMode = workspace === undefined ? undefined
     : workspace !== null && workspace.repoId === view.plan.repoId ? workspace.workspaceMode : null;
+
+  // Feedback #56/#57: a run's remedies -- retry, settlement, saved-result verification -- beside its reason wherever a row
+  // shows one, each the existing button behind its existing gate. Verification belongs to the task's current run.
+  const remedies = (run: RunViewV1): JSX.Element => {
+    const item = view.workItems.find((candidate) => candidate.taskId === run.taskId && candidate.currentRunId === run.runId);
+    return <div key={`remedies-${run.runId}`}>
+      <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
+      <UsageSettlement compact key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
+      {item !== undefined && <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} />}
+    </div>;
+  };
 
   const dispatchControls = (<>
       <div id={overviewRegionId("group", groupId, "dispatch")} tabIndex={-1} data-overview-region="dispatch">
@@ -304,7 +342,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                   {item.taskId}
                 </button>
               </td>
-              <td>{enumText("workStatus", item.status)}{view.runs.filter(run => run.runId === item.currentRunId).map(run => <RunReason key={run.runId} run={run} />)}</td>
+              <td>{enumText("workStatus", item.status)}{view.runs.filter(run => run.runId === item.currentRunId).map(run => <RunReason key={run.runId} run={run} />)}
+                {view.runs.filter(run => run.runId === item.currentRunId).map(run => remedies(run))}</td>
               <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
               <td>{progressText(item.progress)}</td>
               <td>{item.currentRunId ?? t("common.none")}</td>
@@ -346,6 +385,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
       {view.runs.filter(run => hasFailureOutcome(run) || run.state === "blocked" || run.unknownUsageSettlement !== undefined || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
         <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
+        {remedies(run)}
         <button type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>
       </div>)}
 {dispatchRegion === "problem" && dispatchControls}</>,
@@ -384,26 +424,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
                 {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}
                 <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}</div>
-                {/* Execution driver final review I5: a run the driver blocked carries its reason on the run, not as a
-                    recovery blocker, so its one remedy (spec §2.3, the run-scope recovery-retry) is offered here. */}
-                {/* Issue fixes spec §4.2(5): a run ccloop ended failed is retried as a task (a new run), and only where the
-                    server accepts retry-task; it never falls back to the run-scope recovery-retry, which refuses a terminal
-                    failure (run-terminal-failed). Any other blocked run keeps recovery-retry. */}
-                {archived ? null : hasFailureOutcome(run) ? (retryRunOpen(view, run) ? (
-                  <button
-                    type="button"
-                    onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: revision, payload: { taskId: String(run.taskId) } })}
-                  >
-                    {t("control.group.retryTask", { taskId: String(run.taskId) })}
-                  </button>
-                ) : null) : run.state === "blocked" && run.blockedReason ? (
-                  <button
-                    type="button"
-                    onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId } })}
-                  >
-                    {t("control.group.retryRun", { id: run.taskId ?? run.runId })}
-                  </button>
-                ) : null}
+                <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
               </td>
               <td><details><summary>{run.profile.profileId}</summary><code>{run.profile.profileHash}</code></details></td>
               <td><span title={formatTokens(run.used.tokens, currentLanguage())}>{shortTokens(run.used.tokens, "en")}</span></td>

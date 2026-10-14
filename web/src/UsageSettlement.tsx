@@ -16,14 +16,18 @@ function ChargeTable({ amounts, settled }: { amounts: { work: import("./controlT
   </table>;
 }
 
-/** The caller keys by the preview/revision/roles so changing evidence or identity discards prior consent. */
-export function UsageSettlement({ run, roles, archived, groupId, revision, onCommand }: { run: RunViewV1; roles?: readonly Role[]; archived: boolean; groupId: string; revision: number; onCommand: (action: ControlAction) => void }): JSX.Element | null {
+/**
+ * The caller keys by the preview/revision/roles so changing evidence or identity discards prior consent. `compact`
+ * (feedback #56/#57: a row that already shows the run's reason) offers only the settlement itself, behind the same gate.
+ */
+export function UsageSettlement({ run, roles, archived, groupId, revision, onCommand, compact = false }: { run: RunViewV1; roles?: readonly Role[]; archived: boolean; groupId: string; revision: number; onCommand: (action: ControlAction) => void; compact?: boolean }): JSX.Element | null {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [approved, setApproved] = useState(false);
   const preview = run.unknownUsageSettlement;
   if (!preview) return null;
   if (preview.settlement) {
+    if (compact) return null;
     const marker = preview.settlement;
     const unmetered = marker.method === "owner-acknowledged-unmetered";
     return <div><p>{t("control.settlement.receipt", { method: t(unmetered ? "control.settlement.methodUnmetered" : "control.settlement.method"), principal: marker.principal, at: new Date(marker.at).toISOString() })}</p><ChargeTable amounts={marker.charged} settled /><p>{t(marker.reservationDisposition === "recovered" ? "control.settlement.afterRecovered" : unmetered ? "control.settlement.afterUnmetered" : "control.settlement.after")}</p></div>;
@@ -32,9 +36,9 @@ export function UsageSettlement({ run, roles, archived, groupId, revision, onCom
   // The server names the one acknowledgement this remainder admits; the browser never chooses between charge and release.
   const release = preview.acknowledge === "release-unmetered";
   return <div>
-    <p>{t("control.settlement.unknown")}</p>
-    {!owner && <p>{t("control.settlement.contactOwner")}</p>}
-    {preview.refusalReason && <p role="status" data-tone="warn">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p>}
+    {!compact && <p>{t("control.settlement.unknown")}</p>}
+    {!compact && !owner && <p>{t("control.settlement.contactOwner")}</p>}
+    {!compact && preview.refusalReason && <p role="status" data-tone="warn">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p>}
     {!archived && owner && preview.allowed && run.taskId !== null && (!open ? <button type="button" onClick={() => setOpen(true)}>{t(release ? "control.settlement.releaseOpen" : "control.settlement.open")}</button> : <div role="group" aria-label={t("control.settlement.confirmation")}>
       <ChargeTable amounts={preview.remaining} settled={false} />
       <p>{t(release ? "control.settlement.releaseWarning" : "control.settlement.warning")}</p>

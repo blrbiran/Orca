@@ -3,7 +3,7 @@
  * imports only, no React or i18n), so the server's criteria compute the same run number the panel shows
  * (tests/control/retryTask.test.ts).
  */
-import type { GroupViewV1, RunViewV1 } from "./controlTypes.js";
+import type { GroupViewV1, RunViewV1, WorkItemViewV1 } from "./controlTypes.js";
 
 /** Failure is historical evidence: accounting and handoff state changes do not erase its cause. */
 export function hasFailureOutcome(run: RunViewV1): boolean {
@@ -56,6 +56,17 @@ export function retryRunOpen(view: GroupViewV1, run: RunViewV1): boolean {
   return run.state === "settled-failed" && work.status === "blocked" && allocated("terminal")
     && run.unknownUsageSettlement?.settlement?.reservationDisposition === "released"
     && view.handoffRequests.some(request => request.runId === run.runId && request.state === "settled-failed");
+}
+
+/**
+ * The run whose saved result a task offers to verify (its current run, or the source that run recovers from), or null
+ * where the task offers no verification: the task detail's gate, shared by every place that offers the button
+ * (feedback #56/#57), so none of them re-derives it.
+ */
+export function savedResultSourceRunId(view: GroupViewV1, item: WorkItemViewV1): string | null {
+  const runs = view.runs.filter((run) => run.taskId === item.taskId);
+  if (!(item.status!=="completed"&&item.currentRunId!==null&&runs.some(run=>run.runId===item.currentRunId&&run.outcome!=="succeeded"&&(run.outcome==="failed"||run.recoveryOf!==undefined)))) return null;
+  return runs.find(run=>run.runId===item.currentRunId)?.recoveryOf?.sourceRunId??item.currentRunId;
 }
 
 /**

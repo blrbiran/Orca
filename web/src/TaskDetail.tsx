@@ -18,7 +18,7 @@ import { TaskResults } from "./TaskResults.js";
 import { LoopPlanCard } from "./LoopPlanCard.js";
 import { RunReason } from "./RunReason.js";
 import { explainRunReason } from "./refusalExplain.js";
-import { hasFailureOutcome, reasonCode, retryRunOpen, taskRunNumber } from "./runFacts.js";
+import { hasFailureOutcome, reasonCode, retryRunOpen, savedResultSourceRunId, taskRunNumber } from "./runFacts.js";
 import i18n, { enumText } from "./i18n.js";
 import { UsageSettlement } from "./UsageSettlement.js";
 import type { Role } from "./auth.js";
@@ -262,7 +262,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       </p>
       <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={props.workspaceMode} archived={archived} />
       {item.currentRunId !== null && <RunActivity key={item.currentRunId} runId={item.currentRunId} changeSeq={view.changeSeq} />}
-      {item.status!=="completed"&&item.currentRunId!==null&&runs.some(run=>run.runId===item.currentRunId&&run.outcome!=="succeeded"&&(run.outcome==="failed"||run.recoveryOf!==undefined))&&<SavedResultAction key={`verify-${item.currentRunId}`}  runId={runs.find(run=>run.runId===item.currentRunId)?.recoveryOf?.sourceRunId??item.currentRunId} groupId={groupId} taskId={item.taskId} revision={view.summary.commandRevision} changeSeq={view.changeSeq} onCommand={onCommand} disabled={archived||view.summary.stopMode!==null}/> }
+      <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} />
       <h5>{t("control.task.runsOf", { taskId: item.taskId })}</h5>
       {/* Issue fixes spec §4.2(2): the run number counts the runs that reached the provider. */}
       {runNumber > 0 && <p>{t("control.task.runNumber", { n: runNumber })}</p>}
@@ -288,6 +288,12 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       )}
     </section>
   );
+}
+
+/** The task's saved-result verification behind its one gate (runFacts.ts savedResultSourceRunId), wherever it is offered. */
+export function SavedResultEntry(props:{view:GroupViewV1;item:WorkItemViewV1;onCommand:(action:ControlAction)=>void;archived:boolean}):JSX.Element|null {
+  const {view,item}=props;const runId=savedResultSourceRunId(view,item);
+  return runId===null?null:<SavedResultAction key={`verify-${item.currentRunId}`} runId={runId} groupId={view.summary.groupId} taskId={item.taskId} revision={view.summary.commandRevision} changeSeq={view.changeSeq} onCommand={props.onCommand} disabled={props.archived||view.summary.stopMode!==null}/>;
 }
 
 /** Source availability is read-only; an explicit click submits the frozen tuple under the visible revision. */
