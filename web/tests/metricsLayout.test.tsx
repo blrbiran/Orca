@@ -86,7 +86,7 @@ describe("Metrics layout (P2-5)", () => {
     expect(css.slice(at, css.indexOf("}", at))).toContain("overflow-x: auto");
   });
   it("speaks to the reader, not in spec citations (zh only)", () => {
-    // en mirrors the server's sentences byte for byte (en.ts:29), pinned by tests/metrics/noteCodes.test.ts, so it is not reworded here.
+    // en mirrors the server's sentences byte for byte; tests/metrics/noteCodes.test.ts pins that neither carries a citation.
     const notes = Object.values(zh.metrics.note).join("\n");
     expect(notes).not.toMatch(/§|ERRATUM|spec|schema\.ts|unresolved_decisions|chose_instead|`reviewed`/);
   });
