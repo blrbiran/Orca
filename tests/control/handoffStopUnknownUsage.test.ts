@@ -4,15 +4,17 @@ import { describe, expect, it } from "vitest";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { readBudgetProposal, readWork } from "../../src/control/queries.js";
-import { groupStopState, latestRequestForRun } from "../../src/control/stopIntent.js";
+import { groupStopState, latestRequestForRun, saveHandoffRequest } from "../../src/control/stopIntent.js";
+import { unlinkSync } from "node:fs";
+import { join } from "node:path";
 import { usageSettlementSchema } from "../../src/control/usageSettlement.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
 
-async function stopped(tokenPolicy: "optional-v1" | undefined, tokenBudget: number | null) {
-  const x = await driverHarness([{ taskId: "a", tokenBudget }], { ...(tokenPolicy ? { tokenPolicy } : {}), killGraceMs: 0, behaviour: () => "stoppable-usage-unknown" });
+async function stopped(tokenPolicy: "optional-v1" | undefined, tokenBudget: number | null, behaviour: "stoppable-usage-unknown" | "stoppable-handoff-usage-unknown" = "stoppable-usage-unknown") {
+  const x = await driverHarness([{ taskId: "a", tokenBudget }], { ...(tokenPolicy ? { tokenPolicy } : {}), killGraceMs: 0, behaviour: () => behaviour });
   const driver = x.driver();
   const id = await x.claim();
   await x.until(driver, () => x.body(id).state === "accepted");
@@ -131,6 +133,58 @@ describe("handoff-stopped run: continuation headroom", { timeout: 60_000 }, () =
       expect((await settle(x, id, "release-unmetered")).error).toBeUndefined();
       expect(await x.service.resumeFromHandoff(x.h.command("resume-from-handoff", { selections: [{ taskId: "a", predecessorRunId: id, checkpointId: x.body(id).checkpointId }] }))).not.toHaveProperty("error");
       expect(await deliverScheduledStart(x.dispatch, "g")).toEqual({ kind: "blocked", reason: "funded-allowance-unavailable" });
+    } finally { await driver.stop(); await x.h.dispose(); }
+  });
+});
+
+// Independent mutation battery (session b39a5527): these pin the branches it found unwatched.
+describe("handoff-stopped run: refusals and what the settlement leaves behind", { timeout: 60_000 }, () => {
+  const preview = (x: Harness) => readControlGroup(x.h.store, "epoch", "g").runs[0]!.unknownUsageSettlement;
+  it("a running run with unknown usage is not a stopped one: refused as not a failed task", async () => {
+    const x = await driverHarness([{ taskId: "a", tokenBudget: null }], { tokenPolicy: "optional-v1", killGraceMs: 0, behaviour: () => "stoppable-usage-unknown" });
+    const driver = x.driver(); try {
+      const id = await x.claim(); await x.until(driver, () => x.body(id).state === "accepted");
+      expect((await settle(x, id, "release-unmetered")).error.message).toBe("run-usage-not-settleable:current-failed-task");
+    } finally { await driver.stop(); await x.h.dispose(); }
+  });
+  it("a stopped run whose request did not fail on usage is refused, in the preview and the command", async () => {
+    const { x, driver, id } = await stopped("optional-v1", null); try {
+      x.h.store.transaction(() => saveHandoffRequest(x.h.store, "g", { ...latestRequestForRun(x.h.store, "g", id)!, failureCode: "candidate-incomplete" } as never));
+      expect(preview(x)).toMatchObject({ allowed: false, refusalReason: "run-usage-not-settleable" });
+      expect((await settle(x, id, "release-unmetered")).error.message).toBe("run-usage-not-settleable:stopped-handoff");
+    } finally { await driver.stop(); await x.h.dispose(); }
+  });
+  it("a stopped group whose stop intent is gone refuses the settlement as a stop-mode conflict", async () => {
+    const { x, driver, id } = await stopped("optional-v1", null); try {
+      x.h.store.db.prepare("DELETE FROM stop_intents WHERE group_id='g'").run();
+      expect((await settle(x, id, "release-unmetered")).error.code).toBe("stop-mode-conflict");
+    } finally { await driver.stop(); await x.h.dispose(); }
+  });
+  it("the preview refuses a checkpoint the command would refuse (missing snapshot artifact)", async () => {
+    const { x, driver, id } = await stopped("optional-v1", null); try {
+      const c = JSON.parse(String(x.h.store.db.prepare("SELECT body FROM checkpoints WHERE id=?").get(x.body(id).checkpointId)!.body));
+      unlinkSync(join(x.h.store.stateDir, "artifacts", c.snapshot.artifactId, "data"));
+      expect(preview(x)).toMatchObject({ allowed: false, refusalReason: "run-stop-proof-required" });
+      expect((await settle(x, id, "release-unmetered")).error.code).toBe("run-stop-proof-required");
+    } finally { await driver.stop(); await x.h.dispose(); }
+  });
+  it("persists the group's stop as complete once the recovered request settles", async () => {
+    const { x, driver, id } = await stopped("optional-v1", null); try {
+      const state = () => JSON.parse(String(x.h.store.db.prepare("SELECT body FROM stop_intents WHERE group_id='g'").get()!.body)).state;
+      expect(state()).toBe("handoff-partial");
+      expect((await settle(x, id, "release-unmetered")).error).toBeUndefined();
+      expect(state()).toBe("handoff-complete");
+    } finally { await driver.stop(); await x.h.dispose(); }
+  });
+  it("finite-legacy with observed work usage parks the grant minus that usage, not the original grant", async () => {
+    const { x, driver, id } = await stopped(undefined, 1_000_000, "stoppable-handoff-usage-unknown"); try {
+      const g = group(x);
+      const twice = { tokens: 2 * (2999990 + 300000), activeMs: 2 * (14399995 + 1800000), attempts: 4, sessions: 4 } as Record<string, number>;
+      expect(x.service.setLimit(x.h.command("set-limit", { limit: Object.fromEntries(Object.keys(twice).map(d => [d, g.used[d] + g.reserved[d] + twice[d]])) as any }))).not.toHaveProperty("error");
+      expect((await settle(x, id, "charge-remaining-grant")).error).toBeUndefined();
+      const parked = { work: { tokens: 2999990, activeMs: 14399995, attempts: 2, sessions: 2 }, handoff: { tokens: 300000, activeMs: 1800000, attempts: 0, sessions: 0 } };
+      expect(readWork(x.h.store, "g", "a").grant).toEqual(parked);
+      expect(Object.fromEntries(taskAllocations(x).map(a => [a.bucket, a.amount]))).toEqual(parked);
     } finally { await driver.stop(); await x.h.dispose(); }
   });
 });

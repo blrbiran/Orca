@@ -1181,7 +1181,7 @@ function settlementPreview(store: ControlStore, run: z.infer<typeof persistedRun
     const result = snapshot.decodeWork(id);
     if (result === undefined) throw new ControlError("work-not-found");
     return decodedValue(result);
-  } }); settlementProof(store, run); if (disposition === "released") releasedSettlementCheckpoint(store, run); } catch (error) { refusalReason = error instanceof ControlError ? error.code : "run-usage-not-settleable"; }
+  } }); settlementProof(store, run); if (disposition !== "committed") releasedSettlementCheckpoint(store, run); } catch (error) { refusalReason = error instanceof ControlError ? error.code : "run-usage-not-settleable"; }
   return { unknownUsageSettlement: { generation: run.generation, highWater: run.highWater, remaining: run.remaining, allowed: refusalReason === null, refusalReason, acknowledge: settlementAcknowledgeFor(run),
     ...(run.usageSettlement === undefined ? {} : { settlement: run.usageSettlement }) } };
 }
