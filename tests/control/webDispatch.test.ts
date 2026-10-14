@@ -301,6 +301,32 @@ describe("scheduler wake delivery", () => {
     } finally { await h.dispose(); }
   });
 
+  // Each executionPending disjunct alone: a claimed run is both an active run and a busy work status, so the
+  // criterion above cannot tell which one guards it. These two hold exactly one fact each. (The fixture's
+  // budget-estimate wake is not a dispatch wake and is not counted.)
+  it("says execution is pending on a busy work status alone, with no active run and no undelivered wake", async () => {
+    const { h } = await startedFixture(); try {
+      const work = JSON.parse(String(h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body));
+      h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='a'").run(JSON.stringify({ ...work, status: "start-unknown" }));
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id='g' AND active=1").get()!.n).toBe(0);
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM scheduler_wakes WHERE group_id='g' AND delivered=0 AND kind IN ('start','no-start','resume','continuation')").get()!.n).toBe(0);
+      expect(readControlGroup(h.store, "epoch-test", "g").summary.executionPending, "busy work status only").toBe(true);
+    } finally { await h.dispose(); }
+  });
+
+  it("says execution is pending on an active run alone, with no busy work status and no undelivered wake", async () => {
+    const { h, service } = await startedFixture(); try {
+      const scheduled = await service.start(h.command("start", {}));
+      if ("error" in scheduled || scheduled.result.kind !== "scheduled") throw new Error("start rejected");
+      await deliverSchedulerWakes(h.store, createWebWakeHandlers({ ...h.deps, service }));
+      const work = JSON.parse(String(h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body));
+      h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='a'").run(JSON.stringify({ ...work, status: "ready" }));
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id='g' AND work_item_id='a' AND active=1").get()!.n).toBe(1);
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM scheduler_wakes WHERE group_id='g' AND delivered=0 AND kind IN ('start','no-start','resume','continuation')").get()!.n).toBe(0);
+      expect(readControlGroup(h.store, "epoch-test", "g").summary.executionPending, "active run only").toBe(true);
+    } finally { await h.dispose(); }
+  });
+
   it("keeps a failed-before-provider run booked at its unspent grant so the panel read path stays open", async () => {
     const { h, service } = await startedFixture(); try {
       const scheduled = await service.start(h.command("start", {}));
