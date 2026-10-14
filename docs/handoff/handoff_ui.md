@@ -2,7 +2,8 @@
 
 > ✅ **第一批（§〇–§五）已由人 merge 进 main（2026-09-27）；结论已并回 `docs/handoff/handoff.md` §三、§四 4.0.a、§6.19、§9.0d —— 以那里为准。**
 > ✅ 第二批（§六）已合入 main。
-> 🔵 **第三批（精修，分支 `ui/panel-taste`）待人视觉验收与合并：读 §七。**（人要求后续问题继续追加在本文）
+> ✅ 第三批（§七，精修）已由人合入 main 并 push（合并提交主题行 `Merge branch 'ui/panel-taste'`）；稳定结论已并入 `handoff.md` §五 5.2.6、§六 6.7。
+> 🔵 **第三批第二轮（§七.二，同一分支 `ui/panel-taste`）待人视觉验收与合并：读 §七.二。**（人要求后续问题继续追加在本文）
 
 > **读者是下一个 agent。** 这一批 UI 改动的交接写在本文，**不写进 `docs/handoff/handoff.md`**；
 > 等 UI 基本 ready、由人决定合并时，再把本文的结论并回 `handoff.md`。
@@ -191,13 +192,50 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 2. 🔴 **根测试 `scanPanelText` 会把 web 源码里带空格的字符串字面量当作未翻译文案**（如后代选择器）—— 同样只在根套件里出现。
 3. 🔴 **worktree 里软链的 `node_modules` 会被 `git add` 扫进去**（`node_modules/` 带斜杠不匹配软链）；已在根 `.gitignore` 加 `/node_modules`、`/web/node_modules`。一律按路径 stage。
 4. jsdom 不实现 `isContentEditable`、不把 `contentEditable=` 反射成属性；新测试文件要 `// @vitest-environment jsdom`（web 默认 node）；locale 是具名导出。
-5. 子 agent 在本机删 clone（`rm -rf`）会被闸门拦 —— scratchpad 里留有 `mut-t3`、`mut-t4f`、`mut-t5`、`mut-t7`、`mut-t9fix`、`t9/`，均为干净 clone，人可删。
+5. 子 agent 在本机删 clone（`rm -rf`）会被闸门拦 —— 留下的干净 clone 由人删（删除命令已给人）。
+
+**第三批原 awaitingHuman 的去向（人在会话 `1f3cceb2` 答复）**：合并＋push 已由人完成（合并时 `UsageSettlement.tsx` 冲突两边都留；main 新文案 zh `owner 不计量放行` 与 `zhTerms` 冲突，人选改成 `所有者不计量放行` 并授权改写 `settleUnknownUsage.test.tsx` 两处字面量）；三条判据改写已授权并在第二轮做完；「撤销同意」人说暂不做；终审 minor 人选了 A 组 9 条进第二轮，B 组 11 条留在 `final-review.md` 不做。
+
+---
+
+## 七.二、第三批第二轮（分支 `ui/panel-taste`，会话 `1f3cceb2`，2026-10-14）
+
+**状态自查**：`git -C /Users/biran/code/skills/orca/Orca-wt/ui-taste log --oneline main..ui/panel-taste` 非空 ⇒ 未合。⚠️ main 在本轮期间又被别的 agent 推进过（至少一笔 `chore(checkpoint): …`），`--ff-only` 不成，合并用 `--no-ff`。
+
+**唯一真相源**
+| 材料 | 路径（worktree 内） |
+|---|---|
+| spec（§6＝独立审查后的修订、§7＝真浏览器里发现的 H1-b，均覆盖前文） | `docs/superpowers/specs/2026-10-14-panel-taste-round2-design.md` |
+| 计划（Task 1–12，Task 9 撤回） | `docs/superpowers/plans/2026-10-14-panel-taste-round2.md` |
+| 台账（每个任务的审查、全部 `Ruling:`、deferred minor、终审分拣、验证日志位置） | `.superpowers/sdd/2026-10-14-panel-taste-round2/progress.md` |
+
+**做了什么**（按主题行找，`git log main..ui/panel-taste`）：
+- 「无执行端口」不再点亮任务控制的红点（`controlAlert` 去掉该条件；无端口面板 agents 读的 422 `control-port-unconfigured` 不再记成面板 refusal，代理选择区仍显示原因）。
+- 英文 metrics 两句说明去掉 spec 引用：服务端 `src/metrics/compute.ts`、web `en.ts`、金样 `tests/fixtures/metrics/golden.json` 一起改（CLI 的 JSON 与纯文本输出措辞随之变）。
+- 「数据健康」行：标题下只写数字（删了三个 `*Count` key）。
+- Overview「查看全部 n 条决策」点击时把 Decisions 重置为未审、无筛选、无选中。
+- 依赖图类别色 `--cat-idle`／`--cat-done` 改从各自块的 `--muted`／`--accent` 取底色。
+- 「全部知道了」：运行中禁用全部知道按钮、成功清掉旧 refusal、网络失败显示 refusal 并恢复按钮。
+- 触屏：复选框／单选保持原生尺寸、快捷键提示隐藏（第二个 `@media (pointer: coarse)` 块，第一个块逐字未动）；`DESIGN.md` 加了触屏一行。
+- 两列的用量组表不再在手机上被撑宽横滚（`table-narrow`）。
+- 新判据：各提示位置的 `data-tone`（`web/tests/toneSites.test.tsx`）、非 ccmem-missing 的记忆不可用码显示完整 Refusal。
+- 被改写的既有判据（每行带 `REWRITTEN (human authorisation, session 1f3cceb2)`）：`shell.test.tsx` 21/24/31、`metricsNotes.test.tsx` 57–59、`noteCodes.test.ts` 只加一条；`golden.json` 四处句子（agent 裁定 R-a，见下）。
+
+**现测**（干净 clone；命令与日志见台账 `Task 11` 段）：typecheck／web build／`--ws check`（124 文件／1073 条）／`verify:panel` RC 0（观测提交：主题行 `test(web): pin each notice site's tone and the generic memory refusal`；Task 12 那笔之后 web `agentPreviewRefresh` 14/14、`--ws check` 的 2 条红是负载超时，单跑全过）。根 vitest 28 红＝18 条 5 s 超时（5 个文件单跑各 3/3 绿，`integrationKeep` 新登记进 `known-load-flakes.md`）＋ `taskResultPaired` ×2（基线）＋ `ompSkillsE2E`（分支与 main 基线都红，真 ccloop 环境性）。真浏览器（改道面板、无端口、深浅＋390px 触屏，18 次加载无 pageerror、无横向溢出）：加载 6 s 后红点灭、无告警；触屏下按钮 44px、提示隐藏。真 `~/.orca` 前后不变。
+- 方法：spec 独立审查（0 Critical／4 Important，全部采纳）→ 计划 → 每任务实施子代理＋独立任务审查＋clone 内变异（字节 0/0 还原）→ 全分支 opus 终审（代码可合；3 条文档 Important 已修）。
+
+**⚠️ 本轮踩到的**
+1. 🔴 **`scanPanelText` 是根测试 `tests/panel/scanPanelText.test.ts`**，不在 web 套件里（本轮一度误记成 `web/tests/i18nPseudo.test.tsx`，已更正）。
+2. 🔴 **orca gate 连 clone 里的 `git merge` 也拦**（按分支名 main 判）⇒ 预演合并用只读 `git merge-tree --write-tree` 摊进 clone 跑。
+3. 截图前要等页面稳定 ≥ 6 s：加载头几秒「server reset required」「projection refetch required」会点亮红点，1.2 s 就截图会误判。
+4. 新面板首次登录强制改密码（`POST /api/auth/password`，带 `x-orca-csrf`）；复制别处的控制目录会 `control-host-mismatch`，要新建。
+5. `cp` 在本机是 `cp -i` 别名：覆盖文件用 `/bin/cp -f`，否则静默不覆盖（本轮合并时差点把冲突标记 stage 进去）。
 
 **awaitingHuman**
-- 视觉验收（截图：会话 scratchpad `shots/before|after|after-fix`；或自起面板 `npm run build --workspace web` 后看）。
-- 🔴 合并 `ui/panel-taste` 进 main、push —— 人做（Tier 0）：`cd /Users/biran/code/skills/orca/Orca && git pull --ff-only && git merge --no-ff ui/panel-taste && git push`。合并后把本节结论并回 `handoff.md`。
-- 是否授权改写 `shell.test.tsx`：让「无执行端口」不再点亮任务控制的红点（现在红点与琥珀色说明不一致）。
-- 是否授权改服务端句子＋`noteCodes.test.ts`：让英文 metrics 说明也去掉 spec 引用。
-- 是否授权改写 `metricsNotes.test.tsx`：去掉「数据健康」行里标题与计数文字的重复（「未解析的决策 / 未解析的决策：0」）。
-- 是否要客户端延时发送的「撤销同意」（现在同意即记录，误同意只能补一条纠正）。
-- 终审分拣为「可以留」的 18 条 minor 与 M4/M7（台账 `## Final review` 段）是否排进下一轮。
+- 🔴 视觉验收第二轮，然后合并 `ui/panel-taste` 进 main 并 push —— 人做（Tier 0）：`cd /Users/biran/code/skills/orca/Orca && git pull --ff-only && git merge --no-ff ui/panel-taste && git push`。合并后本节稳定结论并入 `handoff.md`。
+- 要人知情／审的 agent 裁定（台账 `Ruling:` 行）：
+  - **R-a**：`tests/fixtures/metrics/golden.json` 四处句子跟着 H2 改了（人授权的是服务端句子＋`noteCodes`，金样不在点名里）。不同意就回滚该笔。
+  - **A7 取消**：人批准过「答复轮加主按钮」，但需求页已有常驻主按钮「新需求」，再加会同屏两个主按钮，违反 `DESIGN.md`；`template.test.ts` 未动。要做得先定「需求页哪个是主按钮」。
+- 未授权、只登记的：`refetchRequired` 是 info 色却仍点亮红点（同 H1 的形状，要改得授权改 `shell.test.tsx` 那一行）；每次加载头 3–5 s 闪红色「server reset required」（首次 summary 按规格 resetRequired，要不要在首读时不显示归人定）；单条「Dismiss」无 try/catch、不与「全部知道了」互斥（服务端幂等，已进 `handoff.md` 已知缺口）。
+- 本会话留下的 clone（都是干净副本，删除归人）：会话 `1f3cceb2` 的 scratchpad 下 `final/`、`base/`、`mut-t1`、`mut-t1b`、`mut-t2`、`mut-t3`、`mut-t4`、`mut-t5`、`mut-t6`、`mut-t7`、`mut-t10`、`mut-t12`。
+- Rule 6：主控会话上下文超过 T1（约 41 万／33 万），人已说本会话不考虑上下文；已记台账。

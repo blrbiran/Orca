@@ -41,7 +41,7 @@
 | `web/tests/controlCommandRecovery.test.tsx` › drops the id when the lookup returns the command's retained result | 超时 | `e5f56bfe` 2026-09-25：单跑 3/3 绿 |
 | `web/tests/memoryLayout.test.tsx`（scroll timing 那条） | 并发 web 运行里时序红一次 | OMP 一轮 2026-10-12：单跑 2/2 绿，随后全量 990/990（`docs/handoff/2026-10-12-oh-my-pi-acceptance.md`） |
 | `tests/control/integrationKeep.test.ts` › lands and settles through the driver with no integration child started, its body unchanged, and a quiet round after | 5 s 超时 | 会话 `1f3cceb2` 2026-10-14（UI 精修第二轮，分支 `ui/panel-taste`，负载 11–18）：根全量红，单文件 3/3 绿；同一跑 `driverRecovery`／`driverRequirementSplit`／`retryTask`／`settleUnknownUsage` 已登记各条也红、单文件各 3/3 绿 |
-| `web/tests/{controlPollSettles,controlCommandRecovery,projectScopeRecovery,agentPreviewRefresh,projectSwitcher,groupRefusal}.test.tsx`（App 级，具体测试各次不同） | `--ws check` 全并行下超时 | 会话 `1f3cceb2` 2026-10-14：实施子代理在主工作树另一 agent 同时跑时见到 1–4 个文件红，单跑全绿；干净 clone 上同一提交的 `--ws check` 124 文件全过 |
+| `web/tests/{controlPollSettles,controlCommandRecovery,projectScopeRecovery,agentPreviewRefresh,projectSwitcher,groupRefusal}.test.tsx`（App 级，具体测试各次不同） | `--ws check` 全并行下超时 | 会话 `1f3cceb2` 2026-10-14：实施子代理在主工作树另一 agent 同时跑时见到 1–4 个文件红，单跑全绿；干净 clone 上 `--ws check` 124 文件／1073 条全过（观测提交：主题行 `test(web): pin each notice site's tone and the generic memory refusal`，早于该轮 Task 12） |
 
 web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条的历史观测早于或独立于此。
 
