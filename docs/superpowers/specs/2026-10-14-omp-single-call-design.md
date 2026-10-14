@@ -40,7 +40,7 @@ Retries: session auto-retry re-spends output and is switched off by the overlay 
 The catalog reader returns rows (`selector`, `contextWindow`, `maxTokens`, `provider`) from its one spawn; the existing
 selector-list callers keep their behaviour. A number is used only when it is a positive safe integer.
 
-### 3.2 The resolution decides, and accept and the worker use the resolution
+### 3.2 The resolution decides; capabilities and accept use it (the worker re-checks at spawn, §3.3.1)
 `resolveAgent` already reads the catalog for omp. From the selected row it now produces, in the resolution:
 - `capabilities.contextWindowTokens`: the row's `contextWindow`, else null;
 - `singleCallExecution`: `"v1"` only when the row has a `maxTokens` and its provider is not `openrouter`, else null;
@@ -70,7 +70,8 @@ timeout of `min(request.timeoutMs, installation.timeoutMs)`, and passes no `--to
    `framingTokenOverhead` must cover the difference (recorded in the plan with the measured number).
 5. **Decode** (fail closed; observed usage still booked):
    - exactly one assistant `message_end`; more is `omp-single-call-multiple-requests`;
-   - no `tool_execution_*` event (`omp-phase-tool-forbidden`);
+   - no `tool_execution_*`, `extension_ui_request` or `*subagent*` event (`omp-phase-tool-forbidden`, as the phase
+     decoder refuses them);
    - the message's `provider/model` equals the selection (`omp-model-mismatch`, as `decodeOmpPhase` does);
    - `stopReason`: `"stop"` decodes; `"length"` is a truncated answer → `SingleCallOutputInvalid`; any other
      (`"error"`, `"toolUse"`, `"aborted"`, …) is `omp-single-call-stop:<reason>`.
