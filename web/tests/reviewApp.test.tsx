@@ -246,3 +246,27 @@ describe("the decision review loop", () => {
     expect(posts("/api/reviews")).toHaveLength(0);
   });
 });
+
+const kindFilter = (): HTMLSelectElement => document.querySelector('select[name="filter-kind"]') as HTMLSelectElement;
+describe("Overview's view-all link (final review M4)", () => {
+  it("resets Decisions to the unreviewed, unfiltered list it counted", async () => {
+    // Four unreviewed rows, one of a different kind, so the Kind filter visibly narrows the list.
+    rows = [A, B, C, { ...row("D", "question D"), kind: "interface" } as DecisionListRow];
+    await openA();
+    expect(document.querySelectorAll(".decision-list li button")).toHaveLength(4);
+    fireEvent.change(kindFilter(), { target: { value: "interface" } });
+    await waitFor(() => expect(document.querySelectorAll(".decision-list li button")).toHaveLength(1));
+    window.location.hash = "#overview";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    const link = await screen.findByRole("link", { name: "View all 4 decisions" });
+    expect(link.getAttribute("href")).toBe("#decisions");
+    fireEvent.click(link);
+    // jsdom does not follow hash links on click.
+    window.location.hash = "#decisions";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await waitFor(() => expect((kindFilter()).value).toBe(""));
+    expect(document.querySelectorAll(".decision-list li button")).toHaveLength(4);
+    // The row opened before the detour is no longer open.
+    expect(question()).not.toBe(QUESTION_A);
+  });
+});

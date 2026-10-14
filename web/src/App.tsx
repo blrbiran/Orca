@@ -1350,6 +1350,7 @@ export function App(): JSX.Element {
         {overviewNavigationFailure && <p role="alert">{overviewNavigationFailure}</p>}
         <Overview model={overviewModel} onOpen={openOverviewTarget}
           onImport={() => openOverviewTarget({ kind: "global-control", region: "import" })}
+          onViewDecisions={() => { setStatus("unreviewed"); setFilter(NO_FILTER); setSelected(null); }}
           onRequirement={() => { navigationSeq.current++; setSelectedRequirement(null); setSection("requirements"); window.location.hash = "requirements"; }} />
       </SectionPane>
       <SectionPane section="chains" active={section}>
