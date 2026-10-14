@@ -152,3 +152,40 @@ Orca:
   `framingTokenOverhead`; the system prompt is not in it. Finding for the operator (their `~/.orca/profile.json`), not code.
 - contextPromotion.enabled under the real config: false.
 - Commands: plan `docs/superpowers/plans/2026-10-14-omp-single-call.md` Task 0 Steps 4-7.
+
+## 8. Residuals found during implementation (Orca session 02f047f6, 2026-10-14)
+
+Appended after the final whole-branch review. Evidence is cited at Orca `f00d6910` (worktree `Orca-wt/omp-single-call`)
+and ccloop `bd1ddc3` (branch `codex/omp-single-call`); sections 1-7 above are unchanged.
+
+- **Release order.** ccloop from `c3d2759` on prints `singleCallOutputCap` in every resolution, for every kind
+  (ccloop `src/agents/materialize.ts:140`, printed whole by `src/control/command.ts:258`; claude and codex answer null,
+  `src/agents/claude.ts:78-80`, `src/agents/codex.ts:58-60`). Orca's resolution schema is `.strict()`, and before
+  `d6bdc9b3` it had no such key (`git show d6bdc9b3^:src/control/ccloopPort.ts`, line 45), so such an Orca refuses every
+  resolution from that ccloop. Orca `d6bdc9b3` (`src/control/ccloopPort.ts:47`) must therefore merge before, or together
+  with, the ccloop repin, and no Orca checkout without it may point `ORCA_CCLOOP_BIN` at a ccloop that contains `c3d2759`.
+- **The spawn-time catalog probe is outside the call's time limit and abort.** ccloop `src/runtime/omp/ompSingleCall.ts:38`
+  reads the catalog (`readOmpCatalog`, bounded only by `PROBE_TIMEOUT_MS = 10_000`, `src/agents/ompModels.ts:5`, `:32`)
+  before `runOmpProcess` gets `timeoutMs: min(request.timeoutMs, installation.timeoutMs)` and the abort signal
+  (`ompSingleCall.ts:58-59`); the probe takes neither. The worker sets `request.timeoutMs` to
+  `activeMs - SINGLE_CALL_ACTIVE_MARGIN_MS` (10 000; `src/control/singleCall.ts:47`, `:87`), so a probe that uses its whole
+  10 s consumes the margin, and the call's elapsed time can exceed the run's `activeMs` grant by about `killGraceMs` plus
+  reap latency (the final review's estimate: ~1 s). An abort during the probe waits for the probe; the call then never
+  starts and books 0.
+- **Clarify / split freeze the bound at requirement open.** Orca `src/control/requirementCommands.ts:98` stores
+  `singleCallOutputBound(...)` as the requirement's `maxOutputTokens`, and every later clarify / split call sends that
+  stored value (`src/control/requirementCalls.ts:246`). If the catalog cap rises later, ccloop refuses each later call of
+  that requirement at spawn (`omp-single-call-cap-exceeded`, booked 0; ccloop `ompSingleCall.ts:42`) and nothing
+  recomputes the stored bound. §4's "Orca needs no claim-time recompute" holds only for the estimate: each new estimate
+  recomputes the bound from the current resolution (`src/control/estimator.ts:116`).
+- **Cap refusals are not visible in Orca** (pre-existing behaviour, not introduced here). Orca parses ccloop's single-call
+  record including `errorCode` (`src/control/executionDriver.ts:649`) but never reads it; a failed record leaves
+  `rawOutput` null (`executionDriver.ts:688`), which the estimate classifies as `estimate-call-failed`
+  (`src/control/estimator.ts:146`), clarify as invalid `no-output` (`src/control/requirementClarify.ts:80`), and split as
+  schema-invalid (`src/control/requirementCalls.ts:270-276`). The operator does not see `omp-single-call-cap-exceeded` or
+  `omp-single-call-unavailable` by name.
+- **Environment, not this feature:** ccloop `tests/cli/cli.test.ts:77` "returns 0 for the example contract run" is slow
+  (and can time out) when run from a git worktree of the main ccloop checkout: the attempt commit
+  (ccloop `src/workspace/worktreeManager.ts:111-115`, `ATTEMPT_IDENTITY` at `:38`) runs that repository's
+  `.git/hooks/post-commit`, which a `git clone --local` does not have. See
+  `.superpowers/sdd/2026-10-14-omp-single-call/debug-cli-slowdown.md`.
