@@ -32,9 +32,11 @@ type Field = "agent" | "model" | "contextWindow";
 type Provenance = Record<Field, ProvenanceSource | null>;
 
 /** Single-call estimate spec §4.4: `singleCallExecution` sits beside the seven-key view, like timeoutMs/killGraceMs. */
-export interface AgentResolution { selection: AgentSelection; configHash: string; timeoutMs: number; killGraceMs: number; capabilities: CapabilityViewV1; singleCallExecution: "v1" | null }
+// OMP single call (spec 2026-10-14 §4): so does `singleCallOutputCap` when ccloop states it; null or absent = the call honours the request's cap.
+export interface AgentResolution { selection: AgentSelection; configHash: string; timeoutMs: number; killGraceMs: number; capabilities: CapabilityViewV1; singleCallExecution: "v1" | null; singleCallOutputCap?: number | null }
 /** What confirmation and import freeze; `singleCallExecution` is never frozen (spec §4.4: no persisted schema changes). */
-export interface FrozenSlot extends Omit<AgentResolution, "singleCallExecution"> { partial: PartialSelection; provenance: Record<Field, ProvenanceSource> }
+// OMP single call (spec 2026-10-14 §4): nor is `singleCallOutputCap`.
+export interface FrozenSlot extends Omit<AgentResolution, "singleCallExecution" | "singleCallOutputCap"> { partial: PartialSelection; provenance: Record<Field, ProvenanceSource> }
 
 /**
  * Single-call estimate spec §4.4 (drafter finding F3): a frozen slot is written field by field, so a field ccloop adds
