@@ -6,6 +6,7 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions } from "./commands.js";
 import { ControlError } from "./errors.js";
 import { estimatorCompatibility } from "./estimatorCompatibility.js";
+import { singleCallOutputBound } from "./estimator.js";
 import {
   estimatorSlotFor, normalizeControlPlan, writeImportedPlan, type AsyncImportDeps, type ImportDefaults, type ImportDeps, type PreparedEstimatorSlot,
 } from "./planImport.js";
@@ -94,7 +95,7 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
         insertClarifyingGroup(deps.store, {
           groupId: payload.groupId, repoId: payload.repoId, idea: payload.idea, limit: payload.limit, contentLanguage: payload.contentLanguage,
           createdOn: now.toISOString().slice(0, 10), requirementId, profile: { profileId: profile.snapshot.profile.profileId, profileHash: profile.profileHash },
-          agentSlot: slot.outcome.slot, agentOverrides: payload.agent === null ? {} : { estimator: payload.agent }, maxOutputTokens: preflight.maxOutputTokens,
+          agentSlot: slot.outcome.slot, agentOverrides: payload.agent === null ? {} : { estimator: payload.agent }, maxOutputTokens: singleCallOutputBound(preflight.maxOutputTokens, slot.observation.resolution),
         });
         writeRound(deps.store, payload.groupId, newRound(1));
         const wakeId = queueRequirementCall(deps.store, payload.groupId, `open-${context.nextCommandRevision}`);

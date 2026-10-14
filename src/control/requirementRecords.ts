@@ -21,7 +21,8 @@ export const requirementBlockSchema = z.object({
   requirementId: z.string().regex(/^[a-f0-9]{32}$/), repoId: idSchema, slug: z.string().regex(SLUG_PATTERN).nullable(),
   contentLanguage: z.enum(["en", "zh"]), createdOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), idea: z.string().min(1),
   profile: profileBindingSchema, agentSlot: frozenSlotSchema,
-  /** DR8: the profile's estimatorPreflight.maxOutputTokens, frozen at open; every call of this requirement asks for it. */
+  /** DR8: the profile's estimatorPreflight.maxOutputTokens, frozen at open; every call of this requirement asks for it.
+   * OMP single call (spec 2026-10-14 §4; Orca session 02f047f6, 2026-10-14): since then the larger of that and the agent's singleCallOutputCap. */
   maxOutputTokens: safeInteger.positive(),
   consensus: z.object({ roundNo: safeInteger.positive(), at: canonicalTimestampSchema, openBranches: z.array(z.string().min(1)), openQuestions: z.array(questionIdSchema) }).strict().nullable(),
   acceptedDraftNo: safeInteger.positive().nullable(),
