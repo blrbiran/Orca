@@ -19,11 +19,13 @@ describe("sections (ruling U2)", () => {
 
 const quiet: ControlAlertInput = {
   // REWRITTEN (human authorisation, session 1f3cceb2): executionPort is no longer an alert input.
-  resetRequired: false, refetchRequired: false, dispatchBlocked: false, blockers: 0, refusal: false,
+  // REWRITTEN (human authorisation, session fb98aa31): refetchRequired is no longer an alert input.
+  resetRequired: false, dispatchBlocked: false, blockers: 0, refusal: false,
 };
 
 // REWRITTEN (human authorisation, session 1f3cceb2): five alert conditions now, not six.
-describe("controlAlert (the five alert conditions ControlPanel renders as role=alert)", () => {
+// REWRITTEN (human authorisation, session fb98aa31): four, not five.
+describe("controlAlert (the four alert conditions that light the red nav dot)", () => {
   it("is false when nothing is wrong and when the control plane is not mounted", () => {
     expect(controlAlert(quiet)).toBe(false);
     expect(controlAlert(null)).toBe(false);
@@ -34,7 +36,9 @@ describe("controlAlert (the five alert conditions ControlPanel renders as role=a
     // (taste refinement P1-1), not an alert, so it must not light the red nav dot.
     expect(controlAlert({ ...quiet, executionPort: "unconfigured" } as ControlAlertInput)).toBe(false);
     expect(controlAlert({ ...quiet, resetRequired: true })).toBe(true);
-    expect(controlAlert({ ...quiet, refetchRequired: true })).toBe(true);
+    // REWRITTEN (human authorisation, session fb98aa31): "projection refetch required" is an info-toned,
+    // self-clearing re-read, not an alert, so it must not light the red nav dot either.
+    expect(controlAlert({ ...quiet, refetchRequired: true } as ControlAlertInput)).toBe(false);
     expect(controlAlert({ ...quiet, dispatchBlocked: true })).toBe(true);
     expect(controlAlert({ ...quiet, blockers: 1 })).toBe(true);
     expect(controlAlert({ ...quiet, refusal: true })).toBe(true);

@@ -1259,7 +1259,6 @@ export function App(): JSX.Element {
             ? null
             : {
                 resetRequired: summary.resetRequired,
-                refetchRequired: control.refetchRequired,
                 dispatchBlocked: summary.dispatchBlocked || control.recovery.dispatchBlocked,
                 blockers: control.recovery.blockers.length,
                 refusal: control.panelRefusal !== null || control.importRefusal !== null || Object.keys(control.refusals).length > 0,
