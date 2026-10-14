@@ -9,6 +9,7 @@ import { amountSchema } from "./schema.js";
 import type { ControlStore } from "./store.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import type { Amount } from "./types.js";
+import type { AgentResolution } from "./agentSelection.js";
 import { budgetEstimateRequestSchema, budgetEstimateSchema, controlPlanSchema, estimateExecutionContractSchema,
   type AmountProvenanceV1, type BudgetEstimateRequestV1, type BudgetEstimateV1, type EstimateExecutionContractV1 } from "./webProtocol.js";
 
@@ -52,6 +53,13 @@ export function complex1mDefaults(taskCount: number): DefaultLedger {
     base[d] = safeNumber(total); reserve[d] = safeNumber(extra); limit[d] = safeNumber(total + extra);
   }
   return { base, reserve, limit };
+}
+/**
+ * OMP single call (spec 2026-10-14 §4): the output bound a single call is sized and sent with -- the preflight's cap, or the
+ * agent's own catalog cap when that is larger (omp cannot lower its cap per call; ccloop refuses at spawn if it rose).
+ */
+export function singleCallOutputBound(preflightMaxOutputTokens: number, resolution: Pick<AgentResolution, "singleCallOutputCap"> | null): number {
+  return Math.max(preflightMaxOutputTokens, resolution?.singleCallOutputCap ?? 0);
 }
 export interface EstimateInput {
   planHash: string; planCanonicalJson: string; profile: FrozenProfile;
@@ -105,10 +113,11 @@ export function buildBudgetEstimateRequest(input: EstimateInput): FrozenEstimate
     serialized = (BigInt(promptBytes.length) * BigInt(numerator) + BigInt(denominator) - 1n) / BigInt(denominator);
   }
   const inputTokens = safeNumber(serialized + BigInt(preflight.framingTokenOverhead));
-  const requiredRequestTokens = safeNumber(BigInt(inputTokens) + BigInt(preflight.maxOutputTokens));
+  const bound = singleCallOutputBound(preflight.maxOutputTokens, observation.resolution);
+  const requiredRequestTokens = safeNumber(BigInt(inputTokens) + BigInt(bound));
   const contract = estimateExecutionContractSchema.parse({ schema: "orca-estimate-execution-contract-v1", requestHash, grant: ESTIMATE_GRANT,
     profile: request.estimatorProfile, estimatorCapabilities: request.estimatorCapabilities, instructionVersion: preflight.instructionVersion,
-    responseSchemaVersion: preflight.schemaVersion, tokenizer: preflight.tokenizer, framingTokenOverhead: preflight.framingTokenOverhead, maxOutputTokens: preflight.maxOutputTokens });
+    responseSchemaVersion: preflight.schemaVersion, tokenizer: preflight.tokenizer, framingTokenOverhead: preflight.framingTokenOverhead, maxOutputTokens: bound });
   const tooLarge = requiredRequestTokens > observed.contextWindowTokens || requiredRequestTokens > ESTIMATE_GRANT.tokens;
   return { state: tooLarge ? "input-too-large" : "queued", reasonCode: tooLarge ? "estimate-input-too-large" : null,
     request, requestHash, contract, contractHash: sha256Canonical(contract), inputTokens, requiredRequestTokens };
