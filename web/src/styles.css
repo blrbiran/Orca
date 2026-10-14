@@ -265,6 +265,7 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .metric-health p { font-size: var(--text-sm); font-variant-numeric: tabular-nums; margin: 0; }
 .table-scroll { overflow-x: auto; max-width: 100%; }
 .table-scroll table { min-width: 520px; }
+.table-scroll .table-narrow { min-width: 0; }
 .caveats, .caveat, .stale-bias { color: var(--muted); font-size: var(--text-xs); }
 
 @media (max-width: 760px) {

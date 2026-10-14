@@ -92,6 +92,11 @@ describe("Metrics layout (P2-5)", () => {
     expect(at).toBeGreaterThan(-1);
     expect(css.slice(at, css.indexOf("}", at))).toContain("overflow-x: auto");
   });
+  it("does not force the two-column groups table to scroll", () => {
+    expect(src("../src/UsagePanel.tsx")).toContain('<table data-testid="usage-groups" className="table-narrow">');
+    const css = src("../src/styles.css");
+    expect(css).toMatch(/\.table-scroll \.table-narrow \{ min-width: 0;/);
+  });
   it("speaks to the reader, not in spec citations (zh only)", () => {
     // en mirrors the server's sentences byte for byte; tests/metrics/noteCodes.test.ts pins that neither carries a citation.
     const notes = Object.values(zh.metrics.note).join("\n");
