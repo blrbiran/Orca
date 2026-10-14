@@ -270,6 +270,37 @@ describe("scheduler wake delivery", () => {
     } finally { await h.dispose(); }
   });
 
+  // Feedback #53: a Web start only queues a wake and its claim only marks the work item running, so the stored
+  // group status stays `ready` (active-ready, which the overview criteria keep) through the first run. The Start
+  // button and the dispatch region must read a server fact that says the group is not startable both while the
+  // start wake waits and once the claim has created a run, or the panel offers Start a second time mid-run.
+  it("says a confirmed group that nobody has started has no pending execution, so Start stays offered", async () => {
+    const { h } = await startedFixture(); try {
+      expect(readControlGroup(h.store, "epoch-test", "g").summary).toMatchObject({ state: "ready", executionPending: false });
+    } finally { await h.dispose(); }
+  });
+
+  it("says a web-started group's execution is pending while its start wake is undelivered", async () => {
+    const { h, service } = await startedFixture(); try {
+      expect(readControlGroup(h.store, "epoch-test", "g").summary.state).toBe("ready");
+      const scheduled = await service.start(h.command("start", {}));
+      if ("error" in scheduled || scheduled.result.kind !== "scheduled") throw new Error("start rejected");
+      expect(workRuns(h.store)).toEqual([]);
+      expect(readControlGroup(h.store, "epoch-test", "g").summary.executionPending, "undelivered start wake").toBe(true);
+    } finally { await h.dispose(); }
+  });
+
+  it("says a web-started group's execution is pending once the claim has created its run", async () => {
+    const { h, service } = await startedFixture(); try {
+      const scheduled = await service.start(h.command("start", {}));
+      if ("error" in scheduled || scheduled.result.kind !== "scheduled") throw new Error("start rejected");
+      await deliverSchedulerWakes(h.store, createWebWakeHandlers({ ...h.deps, service }));
+      expect(workRuns(h.store).map((run) => run.state)).toEqual(["starting"]);
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM scheduler_wakes WHERE group_id='g' AND delivered=0").get()!.n).toBe(0);
+      expect(readControlGroup(h.store, "epoch-test", "g").summary.executionPending, "claimed run").toBe(true);
+    } finally { await h.dispose(); }
+  });
+
   it("keeps a failed-before-provider run booked at its unspent grant so the panel read path stays open", async () => {
     const { h, service } = await startedFixture(); try {
       const scheduled = await service.start(h.command("start", {}));

@@ -153,7 +153,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {!archived && (
         <>
           {/* Issue-fixes spec §3.2 (4): start refuses every stop intent (stop-mode-conflict), so it is not offered under one. */}
-          {view.summary.state === "ready" && stopMode === null && (
+          {/* Feedback #53: a Web-started group stays ready through its first run; executionPending is the server's "not startable". */}
+          {view.summary.state === "ready" && view.summary.executionPending !== true && stopMode === null && (
             <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.start")}</button>
           )}
           {!handoffActive && stopMode !== "pause" && (

@@ -5,10 +5,9 @@ import { readGroupIntegration } from "../control/integrationScheme.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
 import { hasRequirementBlock } from "../control/requirementRecords.js";
 import { compareText, overviewSchema, type OverviewV1, type OverviewStepV1, type OverviewDestinationV1 } from "../control/webProtocol.js";
-import { decodeRecoveryBlockerRow, readOverviewGroupSource } from "./controlViews.js";
+import { BUSY_WORK, decodeRecoveryBlockerRow, readOverviewGroupSource } from "./controlViews.js";
 
 type Source = NonNullable<ReturnType<typeof readOverviewGroupSource>>;
-const BUSY_WORK = new Set(["running", "active", "starting", "start-unknown", "held", "continuing"]);
 const UNKNOWN_RUN = new Set(["unknown", "attempt-unknown", "attempt-proof-invalid"]);
 const PRIORITY: Record<OverviewStepV1["kind"], number> = {
   "requirement-attention": 0, "task-attention": 0, "stop-review": 0, "recovery-review": 0, "integration-review": 0,

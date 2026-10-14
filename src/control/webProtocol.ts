@@ -1079,6 +1079,10 @@ export const groupSummarySchema = z
     counts: z.object({ idle: safeInteger, running: safeInteger, waiting: safeInteger, blocked: safeInteger, done: safeInteger }).strict().optional(),
     updatedAt: safeInteger.nullable().optional(),
     archived: z.boolean().optional(),
+    // Feedback #53: a start wake is undelivered or a task is executing (an active run or a busy work status). A
+    // Web-started group stays `ready` through its first run, so this, not `state`, says it is not startable.
+    // Given for every group with a plan; optional on the wire so older fixtures still parse.
+    executionPending: z.boolean().optional(),
   })
   .strict();
 

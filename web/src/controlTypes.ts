@@ -81,6 +81,8 @@ export type GroupSummaryV1 = {
   counts?: Record<WorkItemCategoryV1, number>;
   updatedAt?: number | null;
   archived?: boolean;
+  /** Feedback #53: a start wake is undelivered or a task is executing; a Web-started group stays `ready` meanwhile. */
+  executionPending?: boolean;
 };
 
 /** N1 spec §4.2 and §7: a round's records (src/control/requirementSchemas.ts roundBodySchema, field for field). */

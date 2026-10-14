@@ -9,7 +9,8 @@ export function defaultDetailRegion(view: GroupViewV1): DetailRegion {
   return "progress";
 }
 export function dispatchDetailRegion(view: GroupViewV1): DetailRegion {
-  return view.summary.state === "draft" || view.summary.state === "ready" ? "preparation" : "problem";
+  // Feedback #47/#53: a ready group whose execution is pending (a start wake waits or a task runs) is not in preparation.
+  return view.summary.state === "draft" || (view.summary.state === "ready" && view.summary.executionPending !== true) ? "preparation" : "problem";
 }
 export function focusedDetailRegion(view: GroupViewV1, region: GroupRegion): DetailRegion {
   if (region === "dispatch") return dispatchDetailRegion(view);

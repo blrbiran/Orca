@@ -359,6 +359,25 @@ function taskCompletion(snapshot: GroupReadSnapshot, plan: ReturnType<typeof rea
   return { completion: { done, total: plan.tasks.length }, counts };
 }
 
+/** Work statuses that mean a task's execution is under way (shared with the overview's start gate). */
+export const BUSY_WORK = new Set(["running", "active", "starting", "start-unknown", "held", "continuing"]);
+
+/**
+ * Feedback #53: a Web start only queues a wake and its claim only marks the work item, so the stored group
+ * status stays `ready` (active-ready) through the first run. The summary says whether a dispatch wake is
+ * undelivered or execution is busy, the same facts the overview's start gate refuses on, so the group view's
+ * Start gate and dispatch region read the server's answer instead of the stored status alone.
+ */
+function executionPending(store: ControlStore, groupId: string, snapshot: GroupReadSnapshot, plan: ReturnType<typeof readArchivedPlan>["plan"]): boolean {
+  const pendingWake = store.db.prepare("SELECT kind FROM scheduler_wakes WHERE group_id=? AND delivered=0").all(groupId)
+    .some(row => ["start", "no-start", "resume", "continuation"].includes(String(row.kind)));
+  if (pendingWake || snapshot.runsByRowid.some(row => row.active === 1)) return true;
+  return plan.tasks.some(task => {
+    const result = snapshot.decodeWork(task.taskId);
+    return result?.ok === true && BUSY_WORK.has(String((result.value as { status?: unknown } | null)?.status));
+  });
+}
+
 /**
  * Final review finding 4: the requirement's own call (a clarify or split run, never a work run of the group it became)
  * that the driver blocked, with its reason; null when there is none.
@@ -433,6 +452,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     branch: workBranchRef(groupId).slice("refs/heads/".length),
     updatedAt: latestGroupActivityAt(store, groupId),
     archived: archivedMarkOf(body) !== null,
+    ...(archived === null ? {} : { executionPending: executionPending(store, groupId, readSnapshot!, archived.plan) }),
     ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),
   };
   const parsed = groupSummarySchema.safeParse(summary);

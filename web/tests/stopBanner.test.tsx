@@ -87,6 +87,21 @@ describe("the stop banner (issue-fixes spec §3.2 (4))", () => {
     expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
   });
 
+  // Feedback #53 (and the #47 half): a Web-started group stays `ready` through its first run; the server's
+  // executionPending, not the stored state, says it is not startable and that its controls belong under Problems.
+  it("does not offer Start on a ready group whose execution is pending", () => {
+    const shown = view("ready", null); shown.summary.executionPending = true;
+    mount(shown);
+    expect(screen.getByRole("button", { name: "Pause new tasks" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Start" }), "Start while execution is pending").toBeNull();
+  });
+
+  it("opens a pending-execution ready group's execution controls under Problems, not Preparation", () => {
+    const shown = view("ready", null); shown.summary.executionPending = true;
+    mount(shown);
+    expect(screen.getByRole("tab", { selected: true }).textContent, "dispatch region").toBe("Problems");
+  });
+
   // Final review M2: a handoff-partial stop has no recovery blocker, so Retry recovery never appears there; archive is
   // accepted at handoff-partial (archiveGroup.ts), so Archive group is the way out the banner names, and it is offered.
   it("names Archive group as the way out of handoff-partial, offers it, and no longer points at Retry recovery", async () => {
