@@ -66,3 +66,10 @@ So an OMP single call cannot honour `maxOutputTokens`, which is exactly why Code
 answering `null`; estimates, clarify and split stay blocked for an omp selection with the existing
 `single-call-unavailable` reason. Reopening this needs either an OMP flag that caps one invocation or a decision to accept
 an unbounded single call, which would change the §4.4 contract and Orca's budget reasoning.
+
+## Correction (Orca session b39a5527, 2026-10-14)
+
+§4's first reason (OMP sends no per-call output token cap) does not hold for `api: anthropic-messages` models: omp
+18.10.1 always sends `max_tokens` there, taken from the model's catalog `maxTokens` (measured against a fake server; see
+`2026-10-14-omp-single-call-options.md`). It is still a catalog value, not a per-call cap, and the retry reason holds
+in part, so the conclusion (no single-call for omp today) stands until the human picks an option from that note.
