@@ -1,0 +1,50 @@
+{
+  "v": 1,
+  "runId": "orca-dev-b39a5527",
+  "runtime": "claude-code",
+  "sessionRef": "b39a5527-3160-4b15-9563-fd6a387bd770",
+  "writtenAt": "2026-10-14T01:23:07.247Z",
+  "head": "4afd9d5bbb248d5281757018b8c514960178782e",
+  "level": {
+    "kind": "reading",
+    "level": 334673,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Item 1 (handoff-stopped unknown usage -> recovered, continue from checkpoint) implemented on branch codex/unmetered-handoff-stop in /Users/biran/code/skills/orca/Orca-wt/unmetered-handoff: spec 78989aa, control 16e23cf, web a759e75; targeted criteria green",
+    "Then: item 3 (0b): savedResultRecovery lineage criterion, D M1 finite-remainder weak criterion, D M6 dead check removal",
+    "Then: independent mutation battery in git clone --local (subagent), then full gate (not concurrent with another full run), then handoff updates in Orca/ccloop/ccmem",
+    "Then: Orca repin to ccloop 3069dbf0397884fbcaf1a7040577389a72c9d2e6 (C is pushed)"
+  ],
+  "open": [
+    "web criteria for the new TaskDetail branch and recovered receipt were written after the code: not yet seen red",
+    "settleUnknownUsage 'settlement before handoff' timed out once in a 42-file run (load 9), 3/3 green alone (load 6-8): registered flake shape",
+    "taskResultPaired 2 reds: registered environment reds"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "OMP: confirm single-call stays unprovided; review omp skill injection spec; name or not the ccloop ompUpdates timeout criterion rewrite"
+    },
+    {
+      "kind": "irreversible",
+      "what": "Panel: owner applies the omp 'new installation' under Settings > Agent > Install updates (agents.json lacks omp); rebuild + panel restart for ui-taste merge (dist built 08:06, merge 08:41)"
+    },
+    {
+      "kind": "irreversible",
+      "what": "Merge/push codex/unmetered-handoff-stop after gates; delete stale worktree records still listed"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "cd /Users/biran/code/skills/orca/Orca-wt/unmetered-handoff && ./node_modules/.bin/vitest run tests/control/handoffStopUnknownUsage.test.ts tests/control/tokenPolicyStop.test.ts",
+      "exitCode": 0,
+      "commit": "4afd9d5bbb248d5281757018b8c514960178782e",
+      "observedAt": "2026-10-14T01:23:07.187Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-b39a5527-asiMGY/1.txt"
+    }
+  ]
+}
