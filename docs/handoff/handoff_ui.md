@@ -3,7 +3,8 @@
 > ✅ **第一批（§〇–§五）已由人 merge 进 main（2026-09-27）；结论已并回 `docs/handoff/handoff.md` §三、§四 4.0.a、§6.19、§9.0d —— 以那里为准。**
 > ✅ 第二批（§六）已合入 main。
 > ✅ 第三批（§七，精修）已由人合入 main 并 push（合并提交主题行 `Merge branch 'ui/panel-taste'`）；稳定结论已并入 `handoff.md` §五 5.2.6、§六 6.7。
-> 🔵 **第三批第二轮（§七.二，同一分支 `ui/panel-taste`）待人视觉验收与合并：读 §七.二。**（人要求后续问题继续追加在本文）
+> ✅ 第三批第二轮（§七.二）已由人合入 main 并 push（合并提交主题行 `Merge branch 'ui/panel-taste'`，2026-10-14）。
+> 🔵 **第二轮还欠人做视觉验收；§七.二 awaitingHuman 里的裁定与登记项待人定。**（人要求后续问题继续追加在本文）
 
 > **读者是下一个 agent。** 这一批 UI 改动的交接写在本文，**不写进 `docs/handoff/handoff.md`**；
 > 等 UI 基本 ready、由人决定合并时，再把本文的结论并回 `handoff.md`。
@@ -200,7 +201,7 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 
 ## 七.二、第三批第二轮（分支 `ui/panel-taste`，会话 `1f3cceb2`，2026-10-14）
 
-**状态自查**：`git -C /Users/biran/code/skills/orca/Orca-wt/ui-taste log --oneline main..ui/panel-taste` 非空 ⇒ 未合。⚠️ main 在本轮期间又被别的 agent 推进过（至少一笔 `chore(checkpoint): …`），`--ff-only` 不成，合并用 `--no-ff`。
+**状态**：已由人合入 main 并 push（会话 `fb98aa31` 现测：`git log main..ui/panel-taste` 为空，分支尖端 `docs(handoff): cite the round-2 measurements…` 是 main 的祖先）。此后本分支的提交属于第二轮之后的跟进。
 
 **唯一真相源**
 | 材料 | 路径（worktree 内） |
@@ -232,7 +233,7 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 5. `cp` 在本机是 `cp -i` 别名：覆盖文件用 `/bin/cp -f`，否则静默不覆盖（本轮合并时差点把冲突标记 stage 进去）。
 
 **awaitingHuman**
-- 🔴 视觉验收第二轮，然后合并 `ui/panel-taste` 进 main 并 push —— 人做（Tier 0）：`cd /Users/biran/code/skills/orca/Orca && git pull --ff-only && git merge --no-ff ui/panel-taste && git push`。合并后本节稳定结论并入 `handoff.md`。
+- 🔴 视觉验收第二轮（合并与 push 人已做完；稳定结论已在 Task 11 并入 `handoff.md` 5.2.6 与已知缺口）。
 - 要人知情／审的 agent 裁定（台账 `Ruling:` 行）：
   - **R-a**：`tests/fixtures/metrics/golden.json` 四处句子跟着 H2 改了（人授权的是服务端句子＋`noteCodes`，金样不在点名里）。不同意就回滚该笔。
   - **A7 取消**：人批准过「答复轮加主按钮」，但需求页已有常驻主按钮「新需求」，再加会同屏两个主按钮，违反 `DESIGN.md`；`template.test.ts` 未动。要做得先定「需求页哪个是主按钮」。
