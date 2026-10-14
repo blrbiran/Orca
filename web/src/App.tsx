@@ -1185,7 +1185,7 @@ export function App(): JSX.Element {
       // Visual acceptance (session fb98aa31): Decisions' own nav link also counts -- clicking it is how a person
       // arrives here, and focus stays on it.
       const target = event.target as Element | null;
-      if (target !== document.body && target?.closest?.('.section-pane[data-section="decisions"], .nav-item[href="#decisions"]') == null) return;
+      if (target !== document.body && target?.closest?.('.section-pane[data-section="decisions"]') == null && target?.closest?.('.nav-item[href="#decisions"]') == null) return;
       const at = selected === null ? -1 : visibleDecisionRows.findIndex((row) => rowKey(row) === rowKey(selected));
       if (action === "next" || action === "previous") {
         const to = visibleDecisionRows[action === "next" ? at + 1 : Math.max(at - 1, 0)];
