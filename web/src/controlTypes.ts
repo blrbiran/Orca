@@ -261,6 +261,8 @@ export type RunViewV1 = {
   startedAt?: number | null;
   endedAt?: number | null;
   lastActivityAt?: number | null;
+  /** Feedback #59: creation position in the group (1-based); `runs` stays in id order. Optional so literal fixtures need no edit; the server always sends it. */
+  createdOrdinal?: number;
 };
 export type BudgetEstimateV1 = {
   schema: "budget-estimate-v1";

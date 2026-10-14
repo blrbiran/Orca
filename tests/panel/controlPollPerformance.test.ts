@@ -184,6 +184,22 @@ describe("control poll request snapshots", () => {
       } finally { counter.restore(); }
     } finally { await h.dispose(); }
   });
+  // Feedback #59: the wire keeps runs in id order (UUIDs, random to a person), so each run also carries its creation
+  // position, the 1-based place of its row in the group's rowid-ordered snapshot, for the Runs table to show creation order.
+  it("gives each run its creation position while the runs set stays in id order", async () => {
+    const { h, runId } = await claimed(3);
+    try {
+      const original = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body));
+      // Created m-first, then z-second, then a-third: id order (a, m, z) differs from creation order (m, z, a).
+      h.store.db.prepare("UPDATE runs SET id='m-first',active=0,body=? WHERE id=?").run(JSON.stringify({ ...original, runId: "m-first", state: "settled-failed" }), runId);
+      h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('z-second','g','t00',2,0,?)").run(JSON.stringify({ ...original, runId: "z-second", generation: 2, state: "settled-failed" }));
+      h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('a-third','g','t00',3,1,?)").run(JSON.stringify({ ...original, runId: "a-third", generation: 3 }));
+      save(h, "t00", { ...work(h, "t00"), lineageRunIds: ["a-third", "m-first", "z-second"], currentRunId: "a-third" });
+      const view = readControlGroup(h.store, "e", "g");
+      expect(view.runs.map(r => r.runId)).toEqual(["a-third", "m-first", "z-second"]);
+      expect(view.runs.map(r => [r.runId, r.createdOrdinal])).toEqual([["a-third", 3], ["m-first", 1], ["z-second", 2]]);
+    } finally { await h.dispose(); }
+  });
   it("pins strict schema, authority, amendment and frozen agent refusals through the real group reader", async () => {
     const { h, runId } = await claimed(3);
     try {

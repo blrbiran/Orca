@@ -843,6 +843,9 @@ function continuableRun(store: ControlStore, run: z.infer<typeof persistedRunSch
 
 function runViews(store: ControlStore, groupId: string, graphVersion: number, proposal: ReturnType<typeof readBudgetProposal>, snapshot: GroupReadSnapshot): RunViewV1[] {
   const activity = readLatestRunActivityByGroup(store, groupId);
+  // Feedback #59: the set stays in id order (the wire's canonical order); each run also carries its creation position,
+  // the 1-based place of its row in the snapshot's rowid order -- total, and stable because runs are never deleted.
+  const createdOrdinal = new Map(snapshot.runsByRowid.map((row, index) => [String(row.id), index + 1]));
   return [...snapshot.runsByRowid].sort((left, right) => compareText(left.id, right.id)).map(row => {
     const runId = String(row.id);
     const run = parseSnapshot(persistedRunSchema, snapshot.decodeRun(runId), `run-invalid:${runId}`);
@@ -932,6 +935,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       startedAt: run.startedAt ?? null,
       endedAt: run.endedAt ?? null,
       lastActivityAt: activity.get(runId)?.at ?? null,
+      createdOrdinal: createdOrdinal.get(runId)!,
     };
   });
 }

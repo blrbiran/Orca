@@ -1309,6 +1309,9 @@ export const runViewSchema = z
     startedAt: safeInteger.nullable().optional(),
     endedAt: safeInteger.nullable().optional(),
     lastActivityAt: safeInteger.nullable().optional(),
+    // Feedback #59: the run's creation position in its group (1-based, rowid order); `runs` itself stays in id order.
+    // Optional on the wire so older fixtures still parse; the server always gives it.
+    createdOrdinal: positiveSafeInteger.optional(),
   })
   .strict();
 

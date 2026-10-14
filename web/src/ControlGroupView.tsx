@@ -36,6 +36,16 @@ import { capScopeText } from "./UsagePanel.js";
 const short = (hash: string): string => hash.slice(0, 12);
 
 /**
+ * Feedback #59: the Runs table's display order. The view sends runs in id order (UUIDs); when every run carries its
+ * creation position the table shows creation order, else the order it was sent in. Nothing else reorders runs.
+ */
+function runsInCreationOrder(runs: readonly RunViewV1[]): readonly RunViewV1[] {
+  return runs.every((run) => run.createdOrdinal !== undefined)
+    ? [...runs].sort((left, right) => left.createdOrdinal! - right.createdOrdinal!)
+    : runs;
+}
+
+/**
  * A held run the person may continue: the server marks it `continuable` (handoff delivery spec §13.1 C-4),
  * because a normally completed run also displays as `settled-recoverable` and must never be continued.
  */
@@ -415,7 +425,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           </tr>
         </thead>
         <tbody>
-          {view.runs.map((run, index) => (
+          {runsInCreationOrder(view.runs).map((run, index) => (
             <tr key={run.runId} id={runRegionId(groupId, run.runId)} tabIndex={-1} data-run-id={run.runId}>
               <td>{run.taskId ?? run.estimateId ?? <details><summary>{t("control.group.runLabel", { n: index + 1 })}</summary><code>{run.runId}</code></details>}</td>
               <td>{enumText("runPhase", run.phase)}</td>
