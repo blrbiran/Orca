@@ -134,3 +134,21 @@ Orca:
 - Not code: the operator's `~/.orca/profile.json` declares `contextWindowTokens: null`, and `intersectCapabilities`
   turns that into null, so every estimator of any kind is blocked `context-unavailable` until the profile declares a
   window. That file is the operator's to change.
+
+## 7. Task 0 measurements (session 02f047f6, 2026-10-14; Orca commit 5bb51869, omp 18.10.1; raw logs were in /private/tmp/osc/t0, gone)
+
+- Overlay (confirmed; `config get` under the real config.yml, by `PI_CONFIG_FILES` — `config get` ignores `--config`, it answered the
+  same as no overlay for every key; the run itself honours `--config`, see the POST counts):
+  `{"retry":{"enabled":false,"modelFallback":false},"model":{"loopGuard":{"enabled":false}},"advisor":{"enabled":false},"compaction":{"enabled":false}}`.
+  Per key, none → overlay: retry.enabled true → false; retry.modelFallback true → false; model.loopGuard.enabled true → false;
+  advisor.enabled false → false (already off in the operator's config); compaction.enabled true → false.
+- Model POSTs (fake Anthropic server, ccloop's argv, `--config` overlay): ok+overlay 1 (rc 0, one assistant `message_end`,
+  `stopReason` `stop`, provider `fake`, model `fake-model`, usage input 11 / output 5); drop-after-text+overlay 1 (rc 1, the
+  assistant `message_end` has `stopReason` `error`); drop-after-text, no overlay 4. `max_tokens` sent: 1234 (catalog 1234).
+  `tools`: `[]`.
+- Request body 3098 B, prompt 28 B, overhead 3070 B (system 2652 B, of which ccloop's system prompt file is 1645 B with
+  BUDGET_ESTIMATE_JSON_SCHEMA embedded) ⇒ ≤ 2047 tokens at 2/3; operator framingTokenOverhead 17 ⇒ does not cover.
+  Orca's input count (`src/control/estimator.ts`, `buildBudgetEstimateRequest`) is the prompt bytes plus
+  `framingTokenOverhead`; the system prompt is not in it. Finding for the operator (their `~/.orca/profile.json`), not code.
+- contextPromotion.enabled under the real config: false.
+- Commands: plan `docs/superpowers/plans/2026-10-14-omp-single-call.md` Task 0 Steps 4-7.
