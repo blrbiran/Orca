@@ -73,6 +73,20 @@ Marker: `reservationDisposition: "recovered"` with the same `handoffResolution` 
 previous state and failure code, checkpoint id and hash). `"released"` ⇔ `handoffResolution` becomes
 `{"released","recovered"}` ⇔ `handoffResolution`. Existing markers parse unchanged.
 
+### 3.2a Settled during implementation
+
+- **Evidence.** Such a run has no terminal report (no `report:` outbox row). `settlementProof` takes its stop proof from
+  the handoff checkpoint, which must be `partial`, and records the checkpoint's handoff packet as the marker's `report`.
+  `releasedSettlementCheckpoint` accepts a `partial` checkpoint for a run with no outcome (a failed run's checkpoint must
+  still name its failure).
+- **Lineage.** `lineageWorkUsage` also excludes a `recovered` marker's `remaining-grant` charge (D's Corrections §1 rule,
+  applied here): otherwise the charge (all remaining attempts) leaves the continuation `budget-overrun`. A failed run's
+  `remaining-grant` settlement keeps its charge in the lineage, unchanged.
+- **Non-token headroom.** Continuing still needs group headroom for the continuation's non-token grant, as D ruled for a
+  retry after a release; without it the claim is held `funded-allowance-unavailable` (pinned).
+- **Web.** Task detail shows the settlement entry for a `settled-unrecoverable` run; a `recovered` receipt says the run
+  continues from its checkpoint.
+
 ### 3.3 After
 
 `resume-from-handoff` (or `continue-task` once dispatch resumes) accepts the run as a recoverable predecessor with no

@@ -115,3 +115,11 @@ The text above is kept as written; these notes record where the implementation d
    `tests/control/tokenPolicyStop.test.ts` criterion. Whether to open that path is a separate decision.
 4. **§B.1 placement.** Task detail shows the settlement entry only for failed or blocked runs: every fresh run starts with
    unknown usage, and only those runs hide Retry for it.
+
+## Corrections (Orca session b39a5527, 2026-10-14)
+
+1. **Corrections §3 is superseded.** The human opened the path on 2026-10-14: a handoff-stopped (not failed) run with
+   unknown usage is now settled back to recoverable and continued from its checkpoint, under every budget shape (the dead
+   end was measured under finite budgets too, not only unlimited ones). Design:
+   `docs/superpowers/specs/2026-10-14-handoff-stop-unknown-usage-design.md`. The criterion Corrections §3 names was
+   rewritten again in the commit `feat(control): settle a handoff-stopped run's unknown usage back to recoverable`.
