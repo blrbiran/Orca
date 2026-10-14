@@ -290,10 +290,13 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
   );
 }
 
-/** The task's saved-result verification behind its one gate (runFacts.ts savedResultSourceRunId), wherever it is offered. */
-export function SavedResultEntry(props:{view:GroupViewV1;item:WorkItemViewV1;onCommand:(action:ControlAction)=>void;archived:boolean}):JSX.Element|null {
+/**
+ * The task's saved-result verification behind its one gate (runFacts.ts savedResultSourceRunId), wherever it is offered.
+ * `active === false` (a hidden pane) renders nothing, so no eligibility read -- a ccloop child per GET -- is made for it.
+ */
+export function SavedResultEntry(props:{view:GroupViewV1;item:WorkItemViewV1;onCommand:(action:ControlAction)=>void;archived:boolean;active?:boolean}):JSX.Element|null {
   const {view,item}=props;const runId=savedResultSourceRunId(view,item);
-  return runId===null?null:<SavedResultAction key={`verify-${item.currentRunId}`} runId={runId} groupId={view.summary.groupId} taskId={item.taskId} revision={view.summary.commandRevision} changeSeq={view.changeSeq} onCommand={props.onCommand} disabled={props.archived||view.summary.stopMode!==null}/>;
+  return runId===null||props.active===false?null:<SavedResultAction key={`verify-${item.currentRunId}`} runId={runId} groupId={view.summary.groupId} taskId={item.taskId} revision={view.summary.commandRevision} changeSeq={view.changeSeq} onCommand={props.onCommand} disabled={props.archived||view.summary.stopMode!==null}/>;
 }
 
 /** Source availability is read-only; an explicit click submits the frozen tuple under the visible revision. */

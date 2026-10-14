@@ -18,9 +18,11 @@ function ChargeTable({ amounts, settled }: { amounts: { work: import("./controlT
 
 /**
  * The caller keys by the preview/revision/roles so changing evidence or identity discards prior consent. `compact`
- * (feedback #56/#57: a row that already shows the run's reason) offers only the settlement itself, behind the same gate.
+ * (feedback #56/#57: a row that already shows the run's reason) offers only the settlement itself, behind the same gate;
+ * where it offers no button it keeps one line saying why (the server's refusal, else contact an owner), shown only while
+ * the row is `active` (its pane is the one shown, fix round 1).
  */
-export function UsageSettlement({ run, roles, archived, groupId, revision, onCommand, compact = false }: { run: RunViewV1; roles?: readonly Role[]; archived: boolean; groupId: string; revision: number; onCommand: (action: ControlAction) => void; compact?: boolean }): JSX.Element | null {
+export function UsageSettlement({ run, roles, archived, groupId, revision, onCommand, compact = false, active = true }: { run: RunViewV1; roles?: readonly Role[]; archived: boolean; groupId: string; revision: number; onCommand: (action: ControlAction) => void; compact?: boolean; active?: boolean }): JSX.Element | null {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [approved, setApproved] = useState(false);
@@ -35,11 +37,14 @@ export function UsageSettlement({ run, roles, archived, groupId, revision, onCom
   const owner = roles?.includes("owner") === true;
   // The server names the one acknowledgement this remainder admits; the browser never chooses between charge and release.
   const release = preview.acknowledge === "release-unmetered";
+  const offered = !archived && owner && preview.allowed && run.taskId !== null;
+  const refusal = preview.refusalReason ? <p role="status" data-tone="warn">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p> : null;
+  if (compact && !offered) return !active ? null : refusal ?? (!owner ? <p>{t("control.settlement.contactOwner")}</p> : null);
   return <div>
     {!compact && <p>{t("control.settlement.unknown")}</p>}
     {!compact && !owner && <p>{t("control.settlement.contactOwner")}</p>}
-    {!compact && preview.refusalReason && <p role="status" data-tone="warn">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p>}
-    {!archived && owner && preview.allowed && run.taskId !== null && (!open ? <button type="button" onClick={() => setOpen(true)}>{t(release ? "control.settlement.releaseOpen" : "control.settlement.open")}</button> : <div role="group" aria-label={t("control.settlement.confirmation")}>
+    {!compact && refusal}
+    {offered && (!open ? <button type="button" onClick={() => setOpen(true)}>{t(release ? "control.settlement.releaseOpen" : "control.settlement.open")}</button> : <div role="group" aria-label={t("control.settlement.confirmation")}>
       <ChargeTable amounts={preview.remaining} settled={false} />
       <p>{t(release ? "control.settlement.releaseWarning" : "control.settlement.warning")}</p>
       <label><input type="checkbox" checked={approved} onChange={event => setApproved(event.currentTarget.checked)} />{t(release ? "control.settlement.releaseApprove" : "control.settlement.approve")}</label>

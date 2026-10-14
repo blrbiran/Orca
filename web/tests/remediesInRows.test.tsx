@@ -177,3 +177,38 @@ describe("Verify saved results where the problem is shown (feedback #56/#57)", (
     expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith("/saved-result-eligibility"))).toHaveLength(0);
   });
 });
+
+// Fix round 1: eligibility is read by spawning a ccloop child per GET, and the Problems and Progress panes stay mounted
+// while hidden -- so a row asks only while its pane is the one shown.
+describe("the rows read saved-result eligibility only while their pane is shown (fix round 1)", () => {
+  const eligibilityReads = (): number => vi.mocked(fetch).mock.calls.filter(([input]) => String(input).endsWith("/saved-result-eligibility")).length;
+  it("adds no eligibility read with the Runs region selected, and one with the Problems region selected", async () => {
+    eligible();
+    show(failedGroup(), "runs");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(eligibilityReads()).toBe(0);
+    cleanup();
+    show(failedGroup(), "problem");
+    await within(problemRow()).findByRole("button", { name: "Verify saved results" });
+    expect(eligibilityReads()).toBe(1);
+  });
+});
+
+describe("a compact settlement that offers no button still says why (fix round 1)", () => {
+  it("tells a member to contact an owner, in both rows", () => {
+    for (const [region, row] of [["problem", () => problemRow()], ["progress", () => workRow()]] as const) {
+      show(failedGroup(unknownUsage(true)), region, ["member"]);
+      expect(within(row()).getByText("Contact an owner to review and settle unknown usage.")).toBeTruthy();
+      cleanup();
+    }
+  });
+  it("shows the server's refusal where the settlement is not allowed, in both rows", () => {
+    const refused = failedGroup(unknownUsage(false));
+    refused.runs[0]!.unknownUsageSettlement!.refusalReason = "run-stop-proof-required";
+    for (const [region, row] of [["problem", () => problemRow()], ["progress", () => workRow()]] as const) {
+      show(refused, region);
+      expect(within(row()).getByText(/complete isolated stop proof/)).toBeTruthy();
+      cleanup();
+    }
+  });
+});

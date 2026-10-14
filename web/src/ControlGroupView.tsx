@@ -169,12 +169,14 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 
   // Feedback #56/#57: a run's remedies -- retry, settlement, saved-result verification -- beside its reason wherever a row
   // shows one, each the existing button behind its existing gate. Verification belongs to the task's current run.
-  const remedies = (run: RunViewV1): JSX.Element => {
+  // `active`: the row's pane is the one shown. Hidden panes stay mounted, and each eligibility read spawns a ccloop child,
+  // so a hidden row neither reads eligibility nor repeats the settlement's one-line reason (fix round 1).
+  const remedies = (run: RunViewV1, active: boolean): JSX.Element => {
     const item = view.workItems.find((candidate) => candidate.taskId === run.taskId && candidate.currentRunId === run.runId);
     return <div key={`remedies-${run.runId}`}>
       <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
-      <UsageSettlement compact key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
-      {item !== undefined && <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} />}
+      <UsageSettlement compact active={active} key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
+      {item !== undefined && <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} active={active} />}
     </div>;
   };
 
@@ -343,7 +345,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 </button>
               </td>
               <td>{enumText("workStatus", item.status)}{view.runs.filter(run => run.runId === item.currentRunId).map(run => <RunReason key={run.runId} run={run} />)}
-                {view.runs.filter(run => run.runId === item.currentRunId).map(run => remedies(run))}</td>
+                {view.runs.filter(run => run.runId === item.currentRunId).map(run => remedies(run, props.active !== false && region === "progress"))}</td>
               <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
               <td>{progressText(item.progress)}</td>
               <td>{item.currentRunId ?? t("common.none")}</td>
@@ -385,7 +387,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
       {view.runs.filter(run => hasFailureOutcome(run) || run.state === "blocked" || run.unknownUsageSettlement !== undefined || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
         <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
-        {remedies(run)}
+        {remedies(run, props.active !== false && region === "problem")}
         <button type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>
       </div>)}
 {dispatchRegion === "problem" && dispatchControls}</>,
