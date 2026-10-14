@@ -162,7 +162,7 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 ## 七、第三批：impeccable 评审后的精修（分支 `ui/panel-taste`，会话 `62660548`，2026-10-13/14）
 
 **worktree**：`/Users/biran/code/skills/orca/Orca-wt/ui-taste`（不在 scratchpad，重启不丢），从 main 主题行 `feat(web): give the panel the DoWhiz favicon` 那一笔拉出。
-**状态自查**：`git -C <worktree> log --oneline main..ui/panel-taste` 非空 ⇒ 未合。合并、push、删 worktree／分支归人（Rule 15）。
+**状态**：第三批已合入 main；这个分支此后的提交属于第二轮，状态自查见 §七.二。合并、push、删 worktree／分支归人（Rule 15）。
 
 **唯一真相源（别重新推导）**
 | 材料 | 路径（worktree 内） |
@@ -219,9 +219,9 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 - 触屏：复选框／单选保持原生尺寸、快捷键提示隐藏（第二个 `@media (pointer: coarse)` 块，第一个块逐字未动）；`DESIGN.md` 加了触屏一行。
 - 两列的用量组表不再在手机上被撑宽横滚（`table-narrow`）。
 - 新判据：各提示位置的 `data-tone`（`web/tests/toneSites.test.tsx`）、非 ccmem-missing 的记忆不可用码显示完整 Refusal。
-- 被改写的既有判据（每行带 `REWRITTEN (human authorisation, session 1f3cceb2)`）：`shell.test.tsx` 21/24/31、`metricsNotes.test.tsx` 57–59、`noteCodes.test.ts` 只加一条；`golden.json` 四处句子（agent 裁定 R-a，见下）。
+- 被改写的既有判据（每行带 `REWRITTEN (human authorisation, session 1f3cceb2)`）：`shell.test.tsx` 三处（当前第 21、25、33 行的注释）、`metricsNotes.test.tsx` 57–59、`noteCodes.test.ts` 只加一条；`golden.json` 四处句子（agent 裁定 R-a，见下）。
 
-**现测**（干净 clone；命令与日志见台账 `Task 11` 段）：typecheck／web build／`--ws check`（124 文件／1073 条）／`verify:panel` RC 0（观测提交：主题行 `test(web): pin each notice site's tone and the generic memory refusal`；Task 12 那笔之后 web `agentPreviewRefresh` 14/14、`--ws check` 的 2 条红是负载超时，单跑全过）。根 vitest 28 红＝18 条 5 s 超时（5 个文件单跑各 3/3 绿，`integrationKeep` 新登记进 `known-load-flakes.md`）＋ `taskResultPaired` ×2（基线）＋ `ompSkillsE2E`（分支与 main 基线都红，真 ccloop 环境性）。真浏览器（改道面板、无端口、深浅＋390px 触屏，18 次加载无 pageerror、无横向溢出）：加载 6 s 后红点灭、无告警；触屏下按钮 44px、提示隐藏。真 `~/.orca` 前后不变。
+**现测**（干净 clone；命令与日志见台账 `Task 11` 段）：typecheck／web build／`--ws check`（124 文件／1073 条）／`verify:panel` RC 0（观测提交：主题行 `test(web): pin each notice site's tone and the generic memory refusal`；Task 12 那笔：`agentPreviewRefresh` 14/14（台账目录 `logs/task-12-green5.log`），其 `--ws check` 2 条红为负载超时（`logs/task-12-check3.log`），两文件单跑 15/15（`logs/task-12-rerun.log`））。根 vitest 28 红＝18 条 5 s 超时（5 个文件单跑各 3/3 绿，`integrationKeep` 新登记进 `known-load-flakes.md`）＋ `taskResultPaired` ×2（基线）＋ `ompSkillsE2E`（分支与 main 基线都红，真 ccloop 环境性）。真浏览器（改道面板、无端口、深浅＋390px 触屏，18 次加载无 pageerror、`scrollWidth − clientWidth` 均为 0（会话 `1f3cceb2` scratchpad `shots/round2/measure.json`，由 `shots.py` 产出，观测于 Task 10 那笔；Task 12 那笔重拍同样为空））：加载 6 s 后红点灭、无告警；触屏下按钮 44px、提示隐藏。真 `~/.orca` 前后不变。
 - 方法：spec 独立审查（0 Critical／4 Important，全部采纳）→ 计划 → 每任务实施子代理＋独立任务审查＋clone 内变异（字节 0/0 还原）→ 全分支 opus 终审（代码可合；3 条文档 Important 已修）。
 
 **⚠️ 本轮踩到的**
@@ -238,4 +238,4 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
   - **A7 取消**：人批准过「答复轮加主按钮」，但需求页已有常驻主按钮「新需求」，再加会同屏两个主按钮，违反 `DESIGN.md`；`template.test.ts` 未动。要做得先定「需求页哪个是主按钮」。
 - 未授权、只登记的：`refetchRequired` 是 info 色却仍点亮红点（同 H1 的形状，要改得授权改 `shell.test.tsx` 那一行）；每次加载头 3–5 s 闪红色「server reset required」（首次 summary 按规格 resetRequired，要不要在首读时不显示归人定）；单条「Dismiss」无 try/catch、不与「全部知道了」互斥（服务端幂等，已进 `handoff.md` 已知缺口）。
 - 本会话留下的 clone（都是干净副本，删除归人）：会话 `1f3cceb2` 的 scratchpad 下 `final/`、`base/`、`mut-t1`、`mut-t1b`、`mut-t2`、`mut-t3`、`mut-t4`、`mut-t5`、`mut-t6`、`mut-t7`、`mut-t10`、`mut-t12`。
-- Rule 6：主控会话上下文超过 T1（约 41 万／33 万），人已说本会话不考虑上下文；已记台账。
+- Rule 6：主控会话上下文超过 T1（orca level hook 报 420,331／T1 330,000，会话后段），人已说本会话不考虑上下文；已记台账。
