@@ -1321,6 +1321,8 @@ export const enErrors: Record<string, string> = {
   // Issue fixes spec §4.2(1): ccloop's failure reasons, matched by their prefix up to the first ':' (the rest is evidence).
   "codex-exit-error": "The model process exited with an error before it gave an answer. Look at the run's evidence, then retry the task.",
   "codex-event-error": "The model reported an error, for example a quota or service failure.",
+  // Feedback #62: Codex answered HTTP 429 and ccloop's backoff ran out; the detail is the evidence dir, kept out of the sentence.
+  "codex-rate-limited": "The provider rate-limited the Codex call (HTTP 429). Retry the task later, once the provider quota window has passed; a call refused before any work booked no usage.",
   "codex-events-invalid": "The model's event stream could not be read.",
   "codex-no-completion": "The model stopped without finishing its turn.",
   "codex-result-invalid": "The model did not answer in the required JSON format.",

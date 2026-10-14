@@ -1259,6 +1259,8 @@ export const zhErrors: Record<string, string> = {
   // Issue fixes spec §4.2(1): ccloop's failure reasons, matched by their prefix up to the first ':' (the rest is evidence).
   "codex-exit-error": "模型进程在给出答案之前就出错退出了。先查看这次运行的证据，再重试这个任务。",
   "codex-event-error": "模型报告了错误，例如额度用尽或服务故障。",
+  // Feedback #62: Codex answered HTTP 429 and ccloop's backoff ran out; the detail is the evidence dir, kept out of the sentence.
+  "codex-rate-limited": "服务商对这次 Codex 调用限流了（HTTP 429）。请稍后重试这个任务，等服务商的额度窗口过去之后再试；开始工作之前就被拒绝的调用不计用量。",
   "codex-events-invalid": "读不懂模型的事件流。",
   "codex-no-completion": "模型没有完成这一轮就停了。",
   "codex-result-invalid": "模型没有按要求的 JSON 格式作答。",
