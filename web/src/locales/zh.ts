@@ -384,6 +384,7 @@ export const zh: Translation<typeof en> = {
       methodUnmetered: "所有者不计量放行",
       notMetered: "不计量",
       afterUnmetered: "已不计量放行。失败原因保留；恢复调度后可另行重试，仍须有足够预算。",
+      afterRecovered: "已结清。此运行是被交接停止的，不是失败，所以可以从保存的 checkpoint 续跑：在「执行控制」里选中它（「继续选中的任务」）。续跑仍须组上限有余量。",
       releaseOpen: "不计量放行未知用量",
       releaseWarning: "此运行的工作 token 不设上限，未知的工作 token 无法按额度记入。放行不记入任何工作 token 数，组的 token 总数因此只是下限。其他各项上限照剩余额度记入。放行不能撤销，也不会重新运行任务。",
       releaseApprove: "我理解并同意此次放行",

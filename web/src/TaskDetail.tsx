@@ -276,8 +276,9 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
                   {t("control.group.retryTask", { taskId: item.taskId })}
                 </button>
               )}
-              {/* Retry is hidden while usage is unknown (runFacts.ts retryRunOpen): show the way forward instead of nothing. */}
-              {(hasFailureOutcome(run) || run.state === "blocked") && run.unknownUsageSettlement !== undefined && run.unknownUsageSettlement.settlement === undefined && (
+              {/* Retry is hidden while usage is unknown (runFacts.ts retryRunOpen): show the way forward instead of nothing.
+                  A handoff stop with unknown usage ends settled-unrecoverable with no failure (spec 2026-10-14-handoff-stop-unknown-usage-design.md). */}
+              {(hasFailureOutcome(run) || run.state === "blocked" || run.state === "settled-unrecoverable") && run.unknownUsageSettlement !== undefined && run.unknownUsageSettlement.settlement === undefined && (
                 <UsageSettlement key={JSON.stringify([view.summary.commandRevision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles}
                   archived={archived} groupId={groupId} revision={view.summary.commandRevision} onCommand={onCommand} />
               )}

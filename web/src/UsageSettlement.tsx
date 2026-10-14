@@ -26,7 +26,7 @@ export function UsageSettlement({ run, roles, archived, groupId, revision, onCom
   if (preview.settlement) {
     const marker = preview.settlement;
     const unmetered = marker.method === "owner-acknowledged-unmetered";
-    return <div><p>{t("control.settlement.receipt", { method: t(unmetered ? "control.settlement.methodUnmetered" : "control.settlement.method"), principal: marker.principal, at: new Date(marker.at).toISOString() })}</p><ChargeTable amounts={marker.charged} settled /><p>{t(unmetered ? "control.settlement.afterUnmetered" : "control.settlement.after")}</p></div>;
+    return <div><p>{t("control.settlement.receipt", { method: t(unmetered ? "control.settlement.methodUnmetered" : "control.settlement.method"), principal: marker.principal, at: new Date(marker.at).toISOString() })}</p><ChargeTable amounts={marker.charged} settled /><p>{t(marker.reservationDisposition === "recovered" ? "control.settlement.afterRecovered" : unmetered ? "control.settlement.afterUnmetered" : "control.settlement.after")}</p></div>;
   }
   const owner = roles?.includes("owner") === true;
   // The server names the one acknowledgement this remainder admits; the browser never chooses between charge and release.

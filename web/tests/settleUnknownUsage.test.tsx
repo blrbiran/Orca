@@ -160,3 +160,26 @@ it("task detail does not offer settlement for a healthy running run whose usage 
   const task = document.querySelector<HTMLElement>('section[data-task-id="a"]')!;
   expect(within(task).queryByText("This run has unknown usage.")).toBeNull();
 });
+
+describe("a handoff-stopped run with unknown usage (spec 2026-10-14-handoff-stop-unknown-usage-design.md)", () => {
+  const unlimited = { work: { tokens: null, activeMs: 920, attempts: 3, sessions: 4 }, handoff: remaining.handoff };
+  const stopped = () => run({ state: "settled-unrecoverable", outcome: null, unknownUsageSettlement: { generation: 7, highWater: 2, remaining: unlimited, allowed: true, refusalReason: null, acknowledge: "release-unmetered" as const } });
+  const recovered = () => run({ state: "settled-recoverable", outcome: null, unknownUsageSettlement: { generation: 7, highWater: 2, remaining: { work: { ...unlimited.work, activeMs: 0, attempts: 0, sessions: 0 }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } }, allowed: false, refusalReason: "run-usage-settled", acknowledge: "release-unmetered" as const,
+    settlement: { method: "owner-acknowledged-unmetered", charged: unlimited, principal: "user:owner", at: 1234, reservationDisposition: "recovered" } as NonNullable<ReturnType<typeof run>["unknownUsageSettlement"]>["settlement"] } });
+  it("task detail shows the release entry for it, in en and zh", async () => {
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "progress", taskId: "a", runId: null }} view={{ ...view([stopped()]), workItems: [workItem({ taskId: "a", status: "blocked", currentRunId: "run-a" })] }} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} roles={["owner"]} />);
+    const task = document.querySelector<HTMLElement>('section[data-task-id="a"]')!;
+    expect(within(task).getByRole("button", { name: "Release unknown usage unmetered" })).toBeTruthy();
+    await i18n.changeLanguage("zh");
+    try { expect(within(task).getByRole("button", { name: "不计量放行未知用量" })).toBeTruthy(); }
+    finally { await i18n.changeLanguage("en"); }
+  });
+  it("its receipt says it can continue from its checkpoint, not that a failure remains, in en and zh", async () => {
+    show(["owner"], recovered());
+    expect(screen.getByText("Settled. A handoff stopped this run, not a failure, so it can continue from its saved checkpoint: choose it under Execution controls (\"Continue selected tasks\"). Continuing still needs room under the group limit.")).toBeTruthy();
+    expect(screen.queryByText(/The failure remains/)).toBeNull();
+    await i18n.changeLanguage("zh");
+    try { expect(screen.getByText("已结清。此运行是被交接停止的，不是失败，所以可以从保存的 checkpoint 续跑：在「执行控制」里选中它（「继续选中的任务」）。续跑仍须组上限有余量。")).toBeTruthy(); }
+    finally { await i18n.changeLanguage("en"); }
+  });
+});

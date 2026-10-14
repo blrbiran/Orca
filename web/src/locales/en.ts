@@ -485,6 +485,7 @@ export const en = {
       methodUnmetered: "released unmetered by owner",
       notMetered: "not metered",
       afterUnmetered: "Released unmetered. The failure remains; retry is a separate action after dispatch resumes and still requires budget.",
+      afterRecovered: "Settled. A handoff stopped this run, not a failure, so it can continue from its saved checkpoint: choose it under Execution controls (\"Continue selected tasks\"). Continuing still needs room under the group limit.",
       releaseOpen: "Release unknown usage unmetered",
       releaseWarning: "This run has no work token limit, so nothing can be charged for its unknown work tokens. Releasing records no work token number; the group's token totals become a lower bound. Every other limit is charged from the remaining grant. It cannot be undone and does not restart the task.",
       releaseApprove: "I understand and approve this release",
