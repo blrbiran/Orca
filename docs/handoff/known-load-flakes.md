@@ -40,6 +40,8 @@
 | `tests/control/requirementCommands.test.ts` › re-queues a failed draft as the next draft with a fresh retry count (Task 8 carry) | 同上 | 同上 |
 | `web/tests/controlCommandRecovery.test.tsx` › drops the id when the lookup returns the command's retained result | 超时 | `e5f56bfe` 2026-09-25：单跑 3/3 绿 |
 | `web/tests/memoryLayout.test.tsx`（scroll timing 那条） | 并发 web 运行里时序红一次 | OMP 一轮 2026-10-12：单跑 2/2 绿，随后全量 990/990（`docs/handoff/2026-10-12-oh-my-pi-acceptance.md`） |
+| `tests/control/integrationKeep.test.ts` › lands and settles through the driver with no integration child started, its body unchanged, and a quiet round after | 5 s 超时 | 会话 `1f3cceb2` 2026-10-14（UI 精修第二轮，分支 `ui/panel-taste`，负载 11–18）：根全量红，单文件 3/3 绿；同一跑 `driverRecovery`／`driverRequirementSplit`／`retryTask`／`settleUnknownUsage` 已登记各条也红、单文件各 3/3 绿 |
+| `web/tests/{controlPollSettles,controlCommandRecovery,projectScopeRecovery,agentPreviewRefresh,projectSwitcher,groupRefusal}.test.tsx`（App 级，具体测试各次不同） | `--ws check` 全并行下超时 | 会话 `1f3cceb2` 2026-10-14：实施子代理在主工作树另一 agent 同时跑时见到 1–4 个文件红，单跑全绿；干净 clone 上同一提交的 `--ws check` 124 文件全过 |
 
 web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条的历史观测早于或独立于此。
 
@@ -60,6 +62,7 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 - 没 `npm run build --workspace web` 就跑 `tests/panel` ⇒ `panel-dist-missing`。
 - `ORCA_AGENTS_TABLE` 的 fake codex 不是 `integration` 模式，或用了真实 agent 表 ⇒ `tests/control/ccloopProtocol.integration.test.ts` 红。
 - `taskResultPaired` 两条硬编码旧配对二进制路径；用本地 ccloop 构建（如 OMP 分支）跑会红（2026-10-12～13 观测）。
+- `tests/control/ompSkillsE2E.test.ts` 以 `ZodError … payload.selectionsHash … received null` 红：会话 `1f3cceb2` 2026-10-14 用 `ORCA_CCLOOP_BIN` 指向本机 ccloop 构建时，分支与 main 基线上都 3/3 红 ⇒ 真 ccloop 版本与夹具不配套，不是 flake，也不是 UI 改动造成。
 - 普通沙箱下 `spawnSync ps EPERM`／`listen EPERM` 大面积红（2026-10-10、10-12）⇒ 用本机进程权限重跑。
 - `TMPDIR` 太长（tsx socket 超 104 字节、`EADDRINUSE`）或是软链（git 报真实路径）⇒ 各约 7 条假红；用短真目录。
 
