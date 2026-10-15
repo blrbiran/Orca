@@ -321,7 +321,16 @@ describe("the plan's layer under the panel's at each level (ruling review R7)", 
       mode: "soft", requestHash: null, outputHash: null, output: null, reasonCode: "estimate-call-failed:omp-new-thing" };
     const { container } = renderView({ preview, view: view({ estimates: [estimate] }) });
     expect(row(container, "task:b").querySelector('[role="alert"]')!.textContent).toContain("omp-model-catalog-unavailable · omp could not list its model catalog. Check that omp is installed and starts, then retry.");
-    expect(container.textContent).toContain("estimate-call-failed:omp-new-thing · omp-new-thing");
+    expect(container.textContent).toContain("estimate-call-failed:omp-new-thing");
+  });
+
+  // Fix-wave ruling (final review m1): the estimate line already shows the reason code, so an unknown code is not repeated after it.
+  it("shows an estimate's unknown ccloop code once", () => {
+    const estimate: GroupViewV1["estimates"][number] = { estimateId: "estimate-1", estimateVersion: 1, state: "failed", profile: { profileId: "all", profileHash: "b".repeat(64) },
+      mode: "soft", requestHash: null, outputHash: null, output: null, reasonCode: "estimate-call-failed:omp-new-thing" };
+    const { container } = renderView({ view: view({ estimates: [estimate] }) });
+    const line = [...container.querySelectorAll("li")].find((li) => li.textContent!.includes("estimate-call-failed"))!;
+    expect(line.textContent).toMatch(/ · estimate-call-failed:omp-new-thing$/);
   });
 
   // Controller ruling on A7 (plan R3): an unknown code's explanation is the code itself, so the slot shows it once.

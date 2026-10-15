@@ -29,7 +29,7 @@ it into a draft task group. Read the returned state rather than infer success fr
    plan with real profile/selection hashes from the reads, then send `groups/<id>/start` at the new revision.
    Confirmation and start are separate.
 4. Poll `groups/<id>` every 30–60 seconds. The driver schedules dependencies within a started group automatically.
-   A group's `state` stays `ready` while a Web-started first run is pending or executing; read `executionPending` on the group summary: while it is true the server refuses `start` with `group-execution-pending` (409) and dispatches the group's next task itself.
+   A group's `state` stays `ready` while a Web-started first run is pending or executing; read `executionPending` on the group summary: while it is true the server refuses `start` with `group-execution-pending` (409); the group is already starting or running, and a second start is not needed.
 5. On failure, read `groups/<id>`, `runs/<id>/activity`, `runs/<id>/evidence` and, for a saved execution failure,
    `runs/<id>/saved-result-eligibility`. Report the recorded phase, typed cause when present, raw code and run/attempt
    identity. Older unknown causes stay unknown; never infer token exhaustion from a decode error. Use only the
@@ -118,6 +118,7 @@ publication, package repin and production service changes are separate human rel
 2. `orca control send <route> --expected-revision <N> --payload '<json>'`. Payload shapes are in the table (section 8).
 3. `revision-conflict` (409) means state moved since you read. Re-read and decide again; do not blindly resend with a bumped number.
 4. Other 4xx bodies name the panel's reason code; read it, do not retry the same payload.
+5. A ccloop failure answers 424 `ccloop-failed` with ccloop's own code and detail in the message (`ccloop-failed:<code>[: <detail>]`); it is a definite refusal, not an uncertain outcome, so fix the cause that code names before sending again.
 
 ## 4. Retries and idempotency
 

@@ -18,7 +18,8 @@ export function RefusalNotice({ refusal, testId }: { refusal: ControlRefusal; te
           {items.map((item, index) => <li key={index}>{item}</li>)}
         </ul>
       )}
-      <p><code className="refusal-code">{refusal.code}</code></p>
+      {/* ccloop error codes spec (2026-10-15) §4.6, human ruling 2: a ccloop failure shows ccloop's code and its detail (the server cut it to 512). */}
+      <p><code className="refusal-code">{refusal.code === "ccloop-failed" ? refusal.message : refusal.code}</code></p>
     </div>
   );
 }

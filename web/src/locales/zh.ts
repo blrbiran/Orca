@@ -1068,7 +1068,7 @@ export const zhErrors: Record<string, string> = {
   "group-project-conflict": "组与项目的绑定冲突。",
   "group-reserve-insufficient": "组余量不够：{{message}}。请在「预算提案」里调高「组上限」或调低别的分配，然后再试。",
   "group-review-budget-unavailable": "组的评审预算不够。",
-  "group-execution-pending": "这个组已在启动或运行中；它的下一个任务会自动派发。",
+  "group-execution-pending": "这个组已在启动或运行中，不需要再次启动。",
   "group-state-invalid": "组当前的状态不允许这个操作。",
   "group-stopped": "组已停止。",
   "handoff-budget-unavailable": "交接预算不够。",

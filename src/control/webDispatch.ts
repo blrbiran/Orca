@@ -124,7 +124,6 @@ function success(context: WebCommandContext, result: CommandSuccessV1["result"],
   } };
 }
 
-/** Commit the durable start wake only after the frozen profiles still probe clean. */
 /** Start guard spec (2026-10-15) §3.2: a group with a plan whose execution is pending; a clarifying group is left to requirement-not-split. */
 function startRefusedAsPending(store: ControlStore, groupId: string): boolean {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
@@ -135,6 +134,7 @@ function refuseStart(store: ControlStore, command: StartCommand): CommandResult 
   const refusal = new ControlError("group-execution-pending");
   return applyWebCommand<CommandResult>(store, { rawCommand: command, expand: () => { throw refusal; }, apply: () => { throw refusal; } }).body;
 }
+/** Commit the durable start wake only after the frozen profiles still probe clean. */
 export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand): Promise<CommandResult> {
   const { store, profileRouter, admissionGate } = deps;
   const replay = preflightWebCommand<CommandResult>(store, command);

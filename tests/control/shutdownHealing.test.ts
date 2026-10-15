@@ -105,7 +105,7 @@ describe("startup recovery heals empty-frozen-set shutdown intents (issue-fixes 
   // Review Focus 1: a store already stranded by an older Orca. It is written at schema 8 (no activity table, built the way
   // schema8.test.ts builds older stores), holds the empty-frozen-set intent and a run without startedAt, and must migrate
   // on the normal open, heal, render its views with null times, and accept `start`.
-  it("a stranded v8 store migrates, heals, renders a run with startedAt null, and then accepts start", async () => {
+  it("a stranded v8 store migrates, heals, renders a run with startedAt null, and then dispatches the queued wake and refuses a second start", async () => {
     const { h, service } = await confirmedGroup(); try {
       const first = await service.start(h.command("start", {}));
       expect("error" in first ? first.error.code : first.result.kind).toBe("scheduled");

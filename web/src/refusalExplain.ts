@@ -5,7 +5,7 @@
  */
 import type { ControlRefusal } from "./controlState.js";
 import i18n, { errorEntry, fillEntry, refusalDetail, refusalText } from "./i18n.js";
-import { codeAndDetail, explainCcloopCode, peerExitReason } from "./ccloopCodes.js";
+import { codeAndDetail, explainBesideCode, explainCcloopCode, peerExitReason } from "./ccloopCodes.js";
 
 const PLAN_REJECTED = "control-plan-rejected";
 const PLAN_ITEMS = ["target-repo-mismatch", "missing-goal", "missing-success-conditions", "duplicate-success-condition"];
@@ -48,6 +48,9 @@ export function explainRunReason(reason: string): string | null {
   const entry = errorEntry(prefix);
   if (entry === undefined) return null;
   if (PEER_PREFIXES.has(prefix)) { const { code, detail } = peerExitReason(rest); return fillEntry(entry, { message: reason, status: "", detail: explainCcloopCode(code, detail) }); }
-  if (USAGE_UNKNOWN.has(prefix) && rest !== "") return `${fillEntry(entry, { message: reason, status: "", detail: "" })} ${explainCcloopCode(rest, "")}`;
+  if (USAGE_UNKNOWN.has(prefix) && rest !== "") {
+    const words = explainBesideCode(rest), base = fillEntry(entry, { message: reason, status: "", detail: "" }); // the reason (with its code) is shown beside this
+    return words === null ? base : `${base} ${words}`;
+  }
   return fillEntry(entry, { message: reason, status: "", detail: rest });
 }

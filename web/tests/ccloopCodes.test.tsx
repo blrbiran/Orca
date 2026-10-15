@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import i18n from "../src/i18n.js";
 import { codeAndDetail, explainCcloopCode, explainEstimateReason, peerExitReason } from "../src/ccloopCodes.js";
 import { explainRefusal, explainRunReason } from "../src/refusalExplain.js";
+import { RefusalNotice } from "../src/RefusalNotice.js";
 import { RequirementsPanel } from "../src/RequirementsPanel.js";
 import { RunReason } from "../src/RunReason.js";
 import { SavedResultAction } from "../src/TaskDetail.js";
@@ -80,7 +81,7 @@ describe("each surface (spec A §4.6 table)", () => {
   it("an estimate's reason code", async () => {
     expect([explainEstimateReason("agent-selection-rejected:estimator:omp-model-catalog-unavailable"), explainEstimateReason("estimate-call-failed:omp-single-call-cap-exceeded"),
       explainEstimateReason("estimate-call-failed:omp-new-thing"), explainEstimateReason("estimate-output-invalid")])
-      .toEqual(["omp could not list its model catalog. Check that omp is installed and starts, then retry.", EN_CAP, "omp-new-thing", null]);
+      .toEqual(["omp could not list its model catalog. Check that omp is installed and starts, then retry.", EN_CAP, null, null]);
     await i18n.changeLanguage("zh");
     expect(explainEstimateReason("estimate-call-failed:omp-single-call-cap-exceeded")).toBe(ZH_CAP);
   });
@@ -104,7 +105,7 @@ describe("each surface (spec A §4.6 table)", () => {
     const shown = (language: "en" | "zh") => render(<RequirementsPanel config={config} summary={summaryWith(failed)} views={{ r: failed }} selected="r" agents={null} language={language} onSelect={() => {}} onCommand={vi.fn()} />).container.textContent ?? "";
     const en = shown("en");
     expect(en).toContain(`omp-single-call-cap-exceeded · ${EN_CAP}`);
-    expect(en).toContain("requirement-usage-unknown:omp-new-thing · This requirement call's usage is unknown, so its budget cannot be settled. omp-new-thing");
+    expect(en).toContain("requirement-usage-unknown:omp-new-thing · This requirement call's usage is unknown, so its budget cannot be settled. · ");
     cleanup();
     await i18n.changeLanguage("zh");
     expect(shown("zh")).toContain(`omp-single-call-cap-exceeded · ${ZH_CAP}`);
@@ -122,6 +123,34 @@ describe("each surface (spec A §4.6 table)", () => {
     cleanup();
     const drafting: RequirementViewV1 = { ...view, rounds: [{ ...view.rounds[0]!, state: "drafting", calls: [call("run-1", "omp-model-catalog-invalid")] }] };
     expect(panel(drafting).textContent).not.toContain("omp-model-catalog-invalid");
+  });
+
+  // Final review I1 (spec A §2, human ruling 2): a 424 ccloop-failed notice shows ccloop's own code and its detail beside the
+  // words -- also when the entry has no detail slot (single-call-unsupported), and in zh where Orca's entries name it {{message}}.
+  it("a refusal notice shows ccloop's code and detail beside the words, in both languages", async () => {
+    const notice = (message: string) => {
+      const { container } = render(<RefusalNotice refusal={{ status: 424, code: "ccloop-failed", message, commandRevision: 3 }} testId="n" />);
+      const parts = [...container.querySelectorAll("p")].map((p) => p.textContent);
+      cleanup();
+      return parts;
+    };
+    expect(notice("ccloop-failed:omp-model-catalog-unavailable: spawn ENOENT")).toEqual([EN_CATALOG, "ccloop-failed:omp-model-catalog-unavailable: spawn ENOENT"]);
+    expect(notice("ccloop-failed:single-call-unsupported: codex has no single call")).toEqual([
+      "This agent cannot make single calls (estimate, clarify, split); choose another agent.", "ccloop-failed:single-call-unsupported: codex has no single call"]);
+    await i18n.changeLanguage("zh");
+    expect(notice("ccloop-failed:omp-model-catalog-unavailable: spawn ENOENT")).toEqual([ZH_CATALOG, "ccloop-failed:omp-model-catalog-unavailable: spawn ENOENT"]);
+    expect(notice("ccloop-failed:agent-version-drift: recorded 1.2.0, found 1.3.0")).toEqual([
+      "agent 版本与记录的不一致：recorded 1.2.0, found 1.3.0", "ccloop-failed:agent-version-drift: recorded 1.2.0, found 1.3.0"]);
+  });
+
+  // Fix-wave ruling (final review m1): the blocked-run line already shows the reason with its code, so an unknown code's
+  // words (the bare code) are not added after it.
+  it("an unknown code is shown once on the blocked-run line", () => {
+    const view = requirementView("failed");
+    const blocked: RequirementViewV1 = { ...view, summary: { ...view.summary, requirement: { ...view.summary.requirement!, blockedRun: { runId: "run-2", reason: "requirement-usage-unknown:omp-new-thing" } } } };
+    const { container } = render(<RequirementsPanel config={config} summary={summaryWith(blocked)} views={{ r: blocked }} selected="r" agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} />);
+    expect([...container.querySelectorAll('p[role="alert"]')].map((p) => p.textContent)).toContain(
+      "requirement-usage-unknown:omp-new-thing · This requirement call's usage is unknown, so its budget cannot be settled. · This step's call is blocked; Retry this call runs the blocked step again. Retry this call");
   });
 
   // Controller ruling on A7 (plan R3): an unknown code's explanation is the code itself, so these surfaces show it once.

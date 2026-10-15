@@ -17,7 +17,7 @@ function ccloopEntry(code: string): string | undefined {
 
 export function explainCcloopCode(code: string, detail: string): string {
   const entry = ccloopEntry(code) ?? errorEntry(code);
-  if (entry !== undefined) return fillEntry(entry, { message: "", status: "", detail });
+  if (entry !== undefined) return fillEntry(entry, { message: detail, status: "", detail }); // zh Orca entries name the detail {{message}}
   return detail === "" ? i18n.t("ccloop.genericNoDetail", { code }) : i18n.t("ccloop.generic", { code, detail });
 }
 
@@ -44,9 +44,9 @@ export function peerExitReason(rest: string): { code: string; detail: string } {
 
 const ESTIMATOR_REJECTED = "agent-selection-rejected:estimator:";
 const CALL_FAILED = "estimate-call-failed:";
-/** An estimate's reason that carries a ccloop code (§4.3 estimator slot, §4.5 failed call); null for any other. */
+/** An estimate's reason that carries a ccloop code (§4.3 estimator slot, §4.5 failed call); null for any other, and null when the words would only repeat the code shown beside them. */
 export function explainEstimateReason(reasonCode: string): string | null {
-  if (reasonCode.startsWith(ESTIMATOR_REJECTED)) return explainCcloopCode(reasonCode.slice(ESTIMATOR_REJECTED.length), "");
-  if (reasonCode.startsWith(CALL_FAILED)) return explainCcloopCode(reasonCode.slice(CALL_FAILED.length), "");
+  if (reasonCode.startsWith(ESTIMATOR_REJECTED)) return explainBesideCode(reasonCode.slice(ESTIMATOR_REJECTED.length));
+  if (reasonCode.startsWith(CALL_FAILED)) return explainBesideCode(reasonCode.slice(CALL_FAILED.length));
   return null;
 }
