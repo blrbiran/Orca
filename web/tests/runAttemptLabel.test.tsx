@@ -33,30 +33,34 @@ describe("the Runs table's attempt and run number (feedback #61)", () => {
   });
 });
 
-const uncounted = () => view([workItem({ taskId: "b", status: "active", currentRunId: "rb-2", lineageRunIds: ["rb-1", "rb-2"] })], [
-  run({ runId: "rb-1", taskId: "b", state: "failed-before-provider", claimOrdinal: 1, providerAttemptOrdinal: 2, createdOrdinal: 1 }),
-  run({ runId: "est-run", taskId: null, estimateId: "est-1", phase: "estimate", claimOrdinal: 2, providerAttemptOrdinal: 4, createdOrdinal: 2 }),
-  run({ runId: "rb-2", taskId: "b", state: "running", claimOrdinal: 3, providerAttemptOrdinal: 1, createdOrdinal: 3 }),
+const uncounted = () => view([workItem({ taskId: "b", status: "active", currentRunId: "rb-3", lineageRunIds: ["rb-1", "rb-2", "rb-3"] })], [
+  run({ runId: "rb-1", taskId: "b", state: "blocked", blockedReason: "why", claimOrdinal: 1, providerAttemptOrdinal: 1, createdOrdinal: 1 }),
+  run({ runId: "rb-2", taskId: "b", state: "failed-before-provider", claimOrdinal: 2, providerAttemptOrdinal: 2, createdOrdinal: 2 }),
+  run({ runId: "rb-3", taskId: "b", state: "running", claimOrdinal: 3, providerAttemptOrdinal: 1, createdOrdinal: 3 }),
+  run({ runId: "est-run", taskId: null, estimateId: "est-1", phase: "estimate", claimOrdinal: 4, providerAttemptOrdinal: 4, createdOrdinal: 4 }),
 ]);
 const shownUncounted = () => stateCells(render(<ControlGroupView view={uncounted()} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container);
 
+// The guard in runNumberOf only matters when an uncounted run FOLLOWS a counted one of its task: as the task's first run it counts 0 anyway.
 describe("a run its task does not count shows no task run number (feedback #61)", () => {
-  it("in English: a failed-before-provider run and an estimate run keep the attempt label only; the counted run is run 1", () => {
-    const [failed, estimate, counted] = shownUncounted();
-    expect(failed).toContain(" · attempt 2 in this run (claim 1)");
+  it("in English: the uncounted run between two counted ones keeps the attempt label only, and the next counted run is run 2", () => {
+    const [first, failed, second, estimate] = shownUncounted();
+    expect(first).toContain(" · attempt 1 in this run (claim 1) · run 1 of this task");
+    expect(failed).toContain(" · attempt 2 in this run (claim 2)");
     expect(failed).not.toContain("of this task");
-    expect(estimate).toContain(" · attempt 4 in this run (claim 2)");
+    expect(second).toContain(" · attempt 1 in this run (claim 3) · run 2 of this task");
+    expect(estimate).toContain(" · attempt 4 in this run (claim 4)");
     expect(estimate).not.toContain("of this task");
-    expect(counted).toContain(" · attempt 1 in this run (claim 3) · run 1 of this task");
   });
 
   it("in Chinese", async () => {
     await i18n.changeLanguage("zh");
-    const [failed, estimate, counted] = shownUncounted();
-    expect(failed).toContain(" · 本次运行内第 2 次尝试（认领序号 1）");
+    const [first, failed, second, estimate] = shownUncounted();
+    expect(first).toContain(" · 本次运行内第 1 次尝试（认领序号 1） · 这个任务的第 1 次运行");
+    expect(failed).toContain(" · 本次运行内第 2 次尝试（认领序号 2）");
     expect(failed).not.toContain("这个任务的第");
-    expect(estimate).toContain(" · 本次运行内第 4 次尝试（认领序号 2）");
+    expect(second).toContain(" · 本次运行内第 1 次尝试（认领序号 3） · 这个任务的第 2 次运行");
+    expect(estimate).toContain(" · 本次运行内第 4 次尝试（认领序号 4）");
     expect(estimate).not.toContain("这个任务的第");
-    expect(counted).toContain(" · 本次运行内第 1 次尝试（认领序号 3） · 这个任务的第 1 次运行");
   });
 });
