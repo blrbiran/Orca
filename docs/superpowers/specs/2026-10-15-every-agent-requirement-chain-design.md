@@ -13,6 +13,15 @@ Orca (parts C, D). Human rulings this spec rests on (2026-10-15, this session, i
 - R6. The spawn-time catalog probe moves inside the call's deadline and abort (Orca omp single-call spec
   `2026-10-14-omp-single-call-design.md` §8 residual), with the diagnosis below.
 
+Rulings from the spec review (2026-10-15, same session, after the first draft):
+
+- R7. A profile that declares `contextWindowTokens: null` means "not declared", not "forbid": the intersection takes the
+  observed value (§6.3). Without this, the live `~/.orca/profile.json` (`contextWindowTokens: null`) blocks the chain
+  for every kind, whatever ccloop reports.
+- R8. The omp spawn-time re-check may read the cache. The risk -- a provider raising a model's cap inside the 30-minute
+  lifetime without a config change ccloop can see -- is accepted as rare (§4.1).
+- R9. Codex: research a clean, machine-independent prompt first (§2.5, §6.1); if no way is found, go on without it.
+
 External feedback: `issue-20261008.md` Issue 67 (Requirements page refuses codex and omp). Its "omp hangs when stdin is
 not a TTY" and the proposed `node-pty` fix are not adopted: the hang does not reproduce (§2.1).
 
@@ -32,7 +41,9 @@ Each is a command that exits 0 or non-zero (Orca CLAUDE.md Rule 4); the plan nam
    view carries the overrun; one at or under the bound carries none.
 6. Orca web: the selection editor offers the installation's models as a datalist for omp and codex, accepts free text,
    and shows the reason when the list cannot be read.
-7. Full gates of both repositories as their handoffs define them; Orca `npm run verify` segments run separately.
+7. Orca: with a profile declaring `contextWindowTokens: null` and ccloop reporting a window, `estimatorCompatibility`
+   has no `context-unavailable`; with ccloop reporting null it still does (R7).
+8. Full gates of both repositories as their handoffs define them; Orca `npm run verify` segments run separately.
 
 ## 2. Measured facts (zero-cost; no model was called)
 
@@ -92,6 +103,25 @@ Not covered: a third-party model behind `ANTHROPIC_BASE_URL` whose window is bel
 - The phase adapter already runs `codex exec --json --ephemeral --sandbox read-only --output-schema <file> -o <file> -`
   (`src/runtime/codex/runCodexPhase.ts:28-30`) and reads `input_tokens`/`output_tokens` per completion.
 
+### 2.5 What a codex call carries besides the prompt (codex-cli 0.160.0, `codex debug prompt-input hi`, no request sent)
+
+Rendered in an empty, non-git working directory; sizes are the JSON items' bytes.
+
+| setup | total | skills instructions | multi-agent text | AGENTS.md / environment |
+|---|---|---|---|---|
+| the user's own HOME and CODEX_HOME | 67307 | ~64 KB (the user's skills) | 3.4 KB | present |
+| + `-c features.<tool>=false` for every tool flag of §2.4 | 59214 | 56 KB | 3.4 KB (even with `multi_agent=false`) | present |
+| empty `CODEX_HOME` only | 32616 | 28 KB (`~/.agents/skills`, 95 skills, plus Codex's own) | 3.4 KB | environment |
+| empty `HOME` and empty `CODEX_HOME` | 12322 | 7.3 KB | 3.4 KB | environment |
+| empty both + `include_permissions_instructions`, `include_apps_instructions`, `include_collaboration_mode_instructions`, `include_environment_context` = false, `project_doc_max_bytes=0`, `features.multi_agent=false`, `features.skip_host_skill_discovery=true` | 6332 | 2.3 KB (Codex's bundled skills only) | 3.4 KB | none |
+
+So the feature flags remove no injected text, and the user's skills, AGENTS.md and environment reach every codex call
+unless HOME and CODEX_HOME are private. The last row is fixed and machine-independent (~1.5k tokens). `prompt-input`
+shows input items, not tool definitions: whether tools are really off is not shown by it (§9, paid check).
+An empty CODEX_HOME has no `auth.json` and no `config.toml` (custom providers live there); §6.1 says how they are reached.
+Found in passing, not fixed here: the codex **phase** adapter runs with the user's HOME and CODEX_HOME, so every codex
+loop phase today carries the user's skills and AGENTS.md -- against Orca's "a run is reproducible" rule for skills.
+
 ## 3. Part A -- ccloop: list an installation's models
 
 A new control method `models` and its CLI twin `ccloop agents models`:
@@ -128,9 +158,11 @@ signal, refresh })`, which reads the cache first.
 - **Lifetime**: a hit is used for at most 30 minutes after `observedAt`; after that it is a miss. A change the key
   cannot see (a provider's remote model list) is bounded only by this lifetime.
 - **refresh**: `refresh: true` skips the read, probes, and writes the result.
-- **Safety does not rest on the cache**: a stale omp row can only make Orca reserve a bound the call no longer has; omp's
-  own overlay plus the spawn-time `cap-exceeded` refusal (re-check reads through the same key, so a config edit is seen)
-  keep a call from exceeding what was reserved.
+- **The accepted risk (R8)**: ccloop does not pass an output cap to omp; omp writes up to its catalog's cap, which is why
+  the spawn-time re-check exists. The re-check reads through the same key, so a config edit is seen. A cap raised on the
+  provider side without a config change is not seen for up to 30 minutes; such a call can then write more than Orca
+  reserved, and the overrun shows only in the booked usage. (The first draft said the overlay prevents this; it does
+  not -- the overlay turns off retries and fallbacks, not the output cap.)
 
 ### 4.2 Where it is written (ccloop's registration of an out-of-repo write)
 
@@ -168,10 +200,22 @@ signal, refresh })`, which reads the cache first.
 - `contextWindowTokens` for codex = the row's `context_window` (not multiplied by
   `effective_context_window_percent`; that percent is Codex's own compaction headroom, and Orca adds its own preflight
   margin). `capabilities()` therefore stops being static for codex, like omp's.
-- The codex adapter gains `singleCall`: `codex exec --json --ephemeral --color never --model <m> --sandbox read-only
-  -C <empty private cwd> --output-schema <schema> -o <final> -c features.<f>=false … -` for each tool flag that
-  `codex features list` reports present on this version (the adapter keeps a list; a flag missing on the installed
-  version is skipped, not an error). Timeout and abort as the phase adapter.
+- The codex adapter gains `singleCall`: `codex exec --json --ephemeral --color never --skip-git-repo-check --model <m>
+  --sandbox read-only -C <empty private cwd> --output-schema <schema> -o <final> <isolation> <tool flags> -`.
+  Timeout and abort as the phase adapter.
+- **Isolation (R9, from §2.5)**: the call runs with a private, empty `HOME` and a private `CODEX_HOME` under the run
+  directory, plus the `-c` keys of §2.5's last row. The private `CODEX_HOME` holds symlinks (never copies) to the
+  installation's `auth.json` and `config.toml`, so login and custom providers keep working. ⚠️ This handles the path of
+  a credential file; the plan step that adds it is named to the human before it is written. If the linked
+  `config.toml` re-introduces injected text (MCP servers, instructions), the plan adds the matching `-c` override and
+  re-renders §2.5's table. Fallback if isolation cannot be made to work: run with the user's environment and record that
+  codex single calls are not reproducible and carry the user's skills (R9: go on without it).
+- **Tool flags**: `-c features.<f>=false` for each tool flag the installed version lists. Codex refuses an unknown flag
+  (`Unknown feature flag`), so the list comes from `codex features list`, read once and kept in the catalog cache entry
+  (§4.1), never spawned per call.
+- **Window**: when the installation's `config.toml` sets `model_context_window`, that value wins over the catalog's.
+- **Framing**: the fixed residue of §2.5 (~1.5k tokens) is measured per codex version (as omp's ~2047 was) and is the
+  codex profile's `framingTokenOverhead`; the plan says where it is declared.
 - Decoding fails closed: any tool or command event, more than one completed agent message, or no object ⇒
   `codex-single-call-not-single:<what>`; usage observed so far is booked, never 0 for null.
 - Usage: `input_tokens`, `output_tokens` (reasoning included in output, as Codex reports it), cache fields, per model.
@@ -188,6 +232,14 @@ signal, refresh })`, which reads the cache first.
 - Web: the call row shows "Codex cannot cap a call's output; this call went N tokens over its declared bound". The
   result is used as normal.
 - Wording rule: nothing in the web, README or SKILL.md may call a codex single call bounded or capped.
+
+### 6.3 Orca: a declared-null window (R7)
+
+`intersectCapabilities` (`src/control/profiles.ts:119-122`) takes the observed `contextWindowTokens` when the profile
+declares null, and the minimum when both are numbers; an observed null stays null. This changes behaviour beyond codex:
+every kind whose ccloop now reports a window (claude 1M and, with part E, claude default; omp; codex) becomes estimable
+under the live profile, so importing a plan starts a real estimate call where it was `blocked-capability` before. The
+plan lists every criterion that asserts the old null-wins rule, each named to the human before rewriting.
 
 ## 7. Part E -- Claude default window
 
@@ -212,12 +264,14 @@ comment at `claude.ts:67` is kept and an ERRATUM line appended (ccloop Rule 16) 
 - Existing criteria this changes (to be listed exactly in the plan, each named to the human before rewriting under
   ccloop Rule 15): codex `singleCallExecution`/`contextWindowTokens` expectations; claude `agent-default`
   `contextWindowTokens: null` expectations; Orca fixtures that assert codex estimates are `blocked-capability`.
-- Paid, each asked separately when reached: one real codex single call (`gpt-6-luna`) to confirm one request with
-  tools off; one real omp requirement chain on this machine with a warm and a cold cache.
+- Paid, each asked separately when reached: one real codex single call (`gpt-6-luna`), isolated as §6.1, to confirm
+  exactly one model request, no tool event, and the framing overhead; one real omp requirement chain on this machine with a warm and a cold cache.
 
 ## 10. Out of scope and residuals
 
 - A third-party claude model below 200000 behind `ANTHROPIC_BASE_URL` is over-reported (§2.3).
 - The tester's actual omp root cause stays unknown until their log shows a stage (§4.3); the cache removes most probes
   either way.
+- The codex multi-agent instructions (3.4 KB) survive every switch tried in §2.5; they stay in the framing overhead.
+- The codex phase adapter's exposure to the user's skills and AGENTS.md (§2.5) is registered, not fixed here.
 - Codex subagents, OMP skills real-provider acceptance, and everything else in Orca handoff §4.2 not named here.
