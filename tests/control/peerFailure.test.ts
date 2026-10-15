@@ -12,6 +12,8 @@ describe("peerFailure (spec A §4.1)", () => {
     expect(peerFailure(peer("2:omp-model-catalog-unavailable: spawn ENOENT"))).toEqual({ exit: "2", code: "omp-model-catalog-unavailable", detail: "spawn ENOENT" });
     expect(peerFailure(peer("2:agent-version-drift"))).toEqual({ exit: "2", code: "agent-version-drift", detail: "" });
     expect(peerFailure(peer("2:agent-x something else"))).toEqual({ exit: "2", code: "agent-x", detail: "something else" });
+    // A code followed by a final colon (nothing after it) is still ccloop's code (K1's `:$` branch).
+    expect(peerFailure(peer("2:agent-version-drift:"))).toEqual({ exit: "2", code: "agent-version-drift", detail: "" });
   });
 
   it("names no code for a URL, an upper-case word or a 65-character run, and keeps the whole stderr as the detail", () => {
@@ -24,6 +26,9 @@ describe("peerFailure (spec A §4.1)", () => {
 
   it("replaces every C0 and C1 control character with a space and trims", () => {
     expect(peerFailure(peer("2:agent-config-invalid: line1\nline2\tx\u0085y\u0007"))).toEqual({ exit: "2", code: "agent-config-invalid", detail: "line1 line2 x y" });
+    // NUL is in the C0 set (replaced); DEL (\u007f) is in neither set (kept).
+    expect(peerFailure(peer("1:x\u0000y"))).toEqual({ exit: "1", code: null, detail: "x y" });
+    expect(peerFailure(peer("1:x\u007fy"))).toEqual({ exit: "1", code: null, detail: "x\u007fy" });
   });
 
   it("cuts the detail to 512 UTF-16 units with a trailing ellipsis, never splitting a surrogate pair", () => {
