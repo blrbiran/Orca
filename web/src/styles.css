@@ -6,7 +6,8 @@
   color-scheme: dark;
   --bg: #0e0f11;
   --bg-elevated: #1f2125;
-  --field: var(--bg-elevated); /* form fields step lighter than the card they sit on */
+  --well: #212327; /* inset boxes (tiles, notices, detail blocks) step lighter than their card; never the page colour */
+  --field: var(--bg-hover); /* form fields step lighter again, above the card and any well they sit in */
   --bg-hover: #282a2f;
   --card: #1b1c1f;
   --border: #393b41;
@@ -49,7 +50,7 @@
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #f6f4ef; --bg-elevated: #fffdf9; --bg-hover: #eeeae2; --card: #fffdf9;
-  --field: var(--bg);
+  --well: var(--bg); --field: var(--bg);
   --border: #e3ddd1; --border-strong: #cfc7b8; --text: #3d3830; --text-strong: #1c1915; --muted: #6a645a;
   --accent: #1d4ed8; --accent-subtle: rgba(29, 78, 216, 0.1);
   --ok: #15803d; --warn: #b45309; --danger: #b91c1c; --info: #1d4ed8;
@@ -64,7 +65,7 @@
   :root:not([data-theme="dark"]) {
     color-scheme: light;
     --bg: #f6f4ef; --bg-elevated: #fffdf9; --bg-hover: #eeeae2; --card: #fffdf9;
-    --field: var(--bg);
+    --well: var(--bg); --field: var(--bg);
     --border: #e3ddd1; --border-strong: #cfc7b8; --text: #3d3830; --text-strong: #1c1915; --muted: #6a645a;
     --accent: #1d4ed8; --accent-subtle: rgba(29, 78, 216, 0.1);
     --ok: #15803d; --warn: #b45309; --danger: #b91c1c; --info: #1d4ed8;
@@ -109,7 +110,7 @@ a { color: var(--accent); }
 .nav-item:focus-visible, .project-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .project-control {
   display: flex; flex-direction: column; gap: 8px; padding: 10px; font-size: var(--text-xs);
-  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--well); border: 1px solid var(--border); border-radius: var(--radius);
 }
 .project-control > label { margin-bottom: 0; }
 .project-control select { width: 100%; }
@@ -144,7 +145,7 @@ a { color: var(--accent); }
   background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
 }
 .section-pane section { padding: 16px; margin-bottom: 16px; }
-.section-pane section section { background: var(--bg); box-shadow: none; }
+.section-pane section section { background: var(--well); box-shadow: none; }
 .section-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
 .section-lede { color: var(--muted); font-size: var(--text-sm); margin-bottom: 12px; }
 .count { color: var(--muted); font-size: var(--text-sm); font-family: var(--mono); }
@@ -152,7 +153,7 @@ a { color: var(--accent); }
 
 /* Taste refinement spec P1-1/§7: role is semantics; status and note are neutral, an alert with no stated tone is an error. */
 [role="alert"], [role="note"], [role="status"], .callout, .chain-banner {
-  border: 1px solid var(--border); background: var(--bg); color: var(--text-strong);
+  border: 1px solid var(--border); background: var(--well); color: var(--text-strong);
   border-radius: var(--radius-sm); padding: 10px 12px; margin: 0 0 8px; font-size: var(--text-sm);
 }
 [role="alert"]:not([data-tone]) { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: var(--danger-subtle); }
@@ -212,7 +213,7 @@ th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 }
 .row-id { font-size: var(--text-xs); color: var(--muted); }
 .decision-detail h2 { font-size: 18px; overflow-wrap: anywhere; }
-.detail-block { padding: 12px 14px; margin: 12px 0; background: var(--bg); box-shadow: none; }
+.detail-block { padding: 12px 14px; margin: 12px 0; background: var(--well); box-shadow: none; }
 .detail-block h3 { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 .detail-block p, .alternatives li { overflow-wrap: anywhere; }
 .alternatives { margin: 0; padding-left: 18px; }
@@ -258,7 +259,7 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 
 /* Metrics (existing MetricsView markup) */
 .metric-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
-.metric-tile { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; background: var(--bg); }
+.metric-tile { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; background: var(--well); }
 .metric-tile h2, .metric-health h2 { font-size: var(--text-xs); font-weight: 600; color: var(--muted); margin: 0 0 4px; }
 .metric-value { font-size: 28px; font-weight: 700; color: var(--text-strong); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 0; }
 .metric-notes { margin-top: 6px; color: var(--muted); font-size: var(--text-xs); }

@@ -5,7 +5,8 @@
 > ✅ 第三批（§七，精修）已由人合入 main 并 push（合并提交主题行 `Merge branch 'ui/panel-taste'`）；稳定结论已并入 `handoff.md` §五 5.2.6、§六 6.7。
 > ✅ 第三批第二轮（§七.二）已由人合入 main 并 push（合并提交主题行 `Merge branch 'ui/panel-taste'`，2026-10-14）。
 > ✅ 第二轮与 §七.三 已由人视觉验收、合并并 push（会话 `fb98aa31`）。
-> 🔵 **视觉验收提出的两处（§七.四，分支 `ui/panel-taste` 重建）待人复验与合并。**（人要求后续问题继续追加在本文）
+> ✅ §七.四 已由人复验、合并并 push（之后人删了分支与 worktree）。
+> 🔵 **§七.五（深色框过暗；分支 `ui/panel-taste` 再次从 main 重建）人已复验通过，待人合并与 push。**（人要求后续问题继续追加在本文）
 
 > **读者是下一个 agent。** 这一批 UI 改动的交接写在本文，**不写进 `docs/handoff/handoff.md`**；
 > 等 UI 基本 ready、由人决定合并时，再把本文的结论并回 `handoff.md`。
@@ -278,3 +279,27 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 **awaitingHuman**
 - 🔴 复验这两处，然后合并本分支进 main 并 push（Tier 0，人做）。
 - 本会话的 clone 与改道环境（干净副本，删除归人）：会话 `fb98aa31` scratchpad 下 `mut2/`、`mut3/`、`data/`、`v2/`、`viz-env/`。
+
+---
+
+## 七.五、复验：深色下的框太暗；j/k 只滚动（分支 `ui/panel-taste`，会话 `9b012714`，2026-10-15）
+
+⚠️ 人合并 §七.四 后又删了分支与 worktree；本节分支从 main（主题行 `Merge branch 'ui/panel-taste'`）**重建的同名分支**，worktree 仍在 `/Users/biran/code/skills/orca/Orca-wt/ui-taste`。
+
+**人的输入**：深色 metrics 的 Correction rate 框、Project 框、`Agent defaults have not been read.` 提示框等太暗；j/k 只让 Decisions 列表的滚动条动，期望选中的条目跟着切换。
+**人裁**：深色模式下**不许有任何框用页面底色**（`--bg` 只给页面本身）。
+
+**根因与修法**（`fix(web): lift dark inset boxes off the page colour onto a --well step`）：
+- 5 处框（`.project-control`、`.section-pane section section`、通知框共用规则、`.detail-block`、`.metric-tile`）底色是 `--bg`，比所在卡片还暗。新增 `--well`：深色 `#212327`，两个浅色块 `var(--bg)`（浅色外观不变）。
+- 深色 `--field` 随之从 `--bg-elevated` 上调为 `--bg-hover`，保持 卡片 < 框 < 输入框。`DESIGN.md` 的输入框那行改写为两者合一的一行。
+- 新判据（只新增，未改写既有判据）：`contrast.test.ts` 新增一条 —— 5 个选择器必须是 `var(--well)`、整份样式表里**只有 `body`** 的底色是 `var(--bg)`、well 比卡片亮且 ≥1.05、边线/well ≥1.4、field 比 well 亮、正文 ≥7、次要 ≥4.5；`lightTheme.test.ts` 新增「两个浅色块 `--well` = `var(--bg)`」。
+
+**j/k：代码没问题，不改** —— 真浏览器（无扩展的 headless Chromium）里点导航后按 j、点行后按 j j j k，选中行序号 0→1、0→1→2→3→2，焦点分别在 `A.nav-item`／`BUTTON.decision-row`。本机 Chrome Default 配置装了 **Vimium**（扩展 id `dbepggeogbaibhgnhhndojpepiihcmeb`），它默认把 j/k 绑成滚动并吞掉按键 —— 与「只动滚动条」吻合。**未在人的 Chrome 里直接验证**；人复验时在 Vimium 里把面板地址加入排除（或临时停用）再试。
+
+**现测**（干净 clone `git clone --local --branch ui/panel-taste`，尖端＝上面那笔，load 22.19）：新判据先红（2 条红、既有 12 条绿）后绿。变异 W1–W5（5 处逐一改回 `var(--bg)`）→ `contrast.test.ts:100` 红；W6（深色 well = `#0e0f11`）→ `:110`；W7（field 改回 elevated）→ `:113`；W8（浅色 well = elevated）→ `lightTheme.test.ts:43` 与新条红；W9（新增一条 `var(--bg)` 规则）→ `contrast.test.ts:103`。还原 `git diff`／`--cached` 0／0 字节。typecheck／web build／`--ws check`（127 文件／1103 条）／根 `tests/metrics` ＋ `scanPanelText`（10 文件／68 条）RC 0。日志：会话 `9b012714` scratchpad `vlogs/`、`mut.log`。
+真浏览器（改道面板 `viz2.sh`、无端口、数据为 main 的 clone，`probe.py` → `probe-out.json`）：深色下可见元素里只有 `body` 是 rgb(14,15,17)；metric tile／project／detail-block／通知框 rgb(33,35,39)，卡片 rgb(27,28,31)，输入框 rgb(40,42,47)；浅色框与输入框仍为 rgb(246,244,239)；无 pageerror。真 `~/.orca` 前后不变。
+
+**awaitingHuman**
+- ✅ 人已复验（会话 `9b012714`）：深色框「没问题了」；把面板地址加入 Vimium 排除列表后 j/k 正常 —— Vimium 吞键得到确认。
+- 🔴 合并本分支进 main 并 push（Tier 0，人做）。
+- 本会话的 clone 与改道环境（干净副本，删除归人）：会话 `9b012714` scratchpad 下 `mut/`、`data/`、`v2/`。

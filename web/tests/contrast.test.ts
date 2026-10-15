@@ -86,6 +86,35 @@ describe("dark theme contrast (human visual review, session f8281a60)", () => {
     expect(ratio(hex(token("text-strong")), field)).toBeGreaterThanOrEqual(7);
   });
 
+  // Human visual acceptance (session 9b012714): "the Correction rate box, the Project box, the 'Agent defaults have not
+  // been read.' box are too dark". Every inset box (metric tile, project control, notice, detail block, nested section)
+  // painted --bg, the page itself, so it sank below the card around it. In dark NO box may wear the page colour: a well
+  // steps lighter than its card, keeps a visible edge, and a field inside it steps lighter again.
+  it("lifts every inset box above its card and leaves --bg to the page alone", () => {
+    const wellRule = (selector: string): string => {
+      const at = css.indexOf(`${selector} {`);
+      if (at === -1) throw new Error(`no rule ${selector}`);
+      return css.slice(at, css.indexOf("}", at));
+    };
+    for (const selector of [".project-control", ".section-pane section section", ".detail-block", ".metric-tile", '[role="alert"], [role="note"], [role="status"], .callout, .chain-banner']) {
+      expect(wellRule(selector), selector).toMatch(/background:\s*var\(--well\);/);
+    }
+    const bgUsers = [...css.matchAll(/([^{}]+)\{[^}]*background(?:-color)?:\s*var\(--bg\)/g)].map((m) => m[1]!.trim());
+    expect(bgUsers).toEqual(["body"]);
+    const resolve = (name: string): Rgb => {
+      const raw = token(name);
+      const via = /^var\(--([a-z-]+)\)$/.exec(raw);
+      return hex(via ? token(via[1]!) : raw);
+    };
+    const well = resolve("well");
+    expect(luminance(well)).toBeGreaterThan(luminance(card));
+    expect(ratio(well, card)).toBeGreaterThanOrEqual(1.05);
+    expect(ratio(hex(token("border")), well)).toBeGreaterThanOrEqual(1.4);
+    expect(luminance(resolve("field"))).toBeGreaterThan(luminance(well));
+    expect(ratio(hex(token("text")), well)).toBeGreaterThanOrEqual(7);
+    expect(ratio(hex(token("muted")), well)).toBeGreaterThanOrEqual(4.5);
+  });
+
   // Issue-fixes spec §6.5 (review E9): in EVERY theme block, node text and the amber "no progress" text stay readable on every
   // category fill (painted over that block's own card); the stall text is checked on every fill, running being the one it appears on.
   it("keeps node text and stall text readable on every work-item category fill in the dark and both light blocks", () => {
