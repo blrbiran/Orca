@@ -8,6 +8,7 @@ import { hasObservedUsage, readRun, saveRun } from "./budget.js";
 import { persistCanonicalCheckpoint, verifyCandidateArtifacts } from "./checkpoints.js";
 import { hashPayload } from "./commands.js";
 import { ControlError } from "./errors.js";
+import { peerFailureLogLine } from "./ccloopPort.js";
 import {
   ADOPTABLE_STATES, handoffRequestFromOutbox, latestRequestForRun, readHandoffRequest, saveHandoffRequest,
   settleCompletedRunRequestInTransaction, settleHandoffRequestInTransaction, type HandoffRequestBody,
@@ -145,7 +146,7 @@ export async function restartRun(deps: ExecutionDriverDeps, runId: string, reque
 async function inspectUnderStop(deps: ExecutionDriverDeps, run: DriverRun, request: HandoffRequestBody): Promise<boolean> {
   let status: ExecutionStatus;
   try { status = await portFor(deps, run).inspect(readStartEnvelope(deps.store, run)); }
-  catch { status = { kind: "unknown" }; }
+  catch (error) { const line = peerFailureLogLine(run.runId, error); if (line !== null) process.stderr.write(line); status = { kind: "unknown" }; }
   if (status.kind === "absent") return restartRun(deps, run.runId, request.requestId);
   if (status.kind === "unknown") return countUnknownUnderStop(deps, run, request);
   const executionId = status.kind === "accepted" ? status.executionId : status.proof.executionId;
@@ -189,7 +190,7 @@ async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, requ
       const ack = await portFor(deps, run).requestHandoff(readStartEnvelope(store, run), handoffRequestFromOutbox(store, request.requestId));
       // spec Minor f: a replayed request is answered `complete` once the candidate exists; both mean ccloop holds it.
       delivered = ack.requestId === request.requestId && (ack.kind === "latched" || ack.kind === "complete");
-    } catch { delivered = false; }
+    } catch (error) { const line = peerFailureLogLine(run.runId, error); if (line !== null) process.stderr.write(line); delivered = false; }
     deps.crash?.("H-after-deliver");
     if (!delivered) return await settleIfPastGrace(deps, run, request);
     return write(deps, () => {

@@ -16,7 +16,7 @@ import { readRun, saveRun } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { commitCandidate } from "./checkpoints.js";
 import { hashPayload } from "./commands.js";
-import { peerExitText, peerFailure } from "./ccloopPort.js";
+import { peerExitText, peerFailure, peerFailureLogLine } from "./ccloopPort.js";
 import { ControlError } from "./errors.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { privateDirectory } from "./paths.js";
@@ -477,6 +477,7 @@ export async function stepB(deps: ExecutionDriverDeps, runId: string): Promise<b
       blockRun(deps, runId, "B", `accept-refused:${peerExitText(peerFailure(error)!)}`);
       return true;
     }
+    const line = peerFailureLogLine(runId, error); if (line !== null) process.stderr.write(line);
     status = { kind: "unknown" };
   }
   deps.crash?.("B-after-accept");
@@ -489,7 +490,7 @@ export async function stepBPrime(deps: ExecutionDriverDeps, runId: string): Prom
   if (run.state !== "unknown" || run.drive === undefined) return false;
   let status: ExecutionStatus;
   try { status = await portFor(deps, run).inspect(readStartEnvelope(deps.store, run)); }
-  catch { status = { kind: "unknown" }; }
+  catch (error) { const line = peerFailureLogLine(runId, error); if (line !== null) process.stderr.write(line); status = { kind: "unknown" }; }
   if(status.kind==="unknown"&&(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&await settleDeadSavedRecovery(deps,run)){
     const current=readDriverRun(deps.store,runId);status=await portFor(deps,current).inspect(readStartEnvelope(deps.store,current));
   }
@@ -553,7 +554,7 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
       write(deps,()=>{const current=readDriverRun(store,runId);current.savedSource={authorityKind:"execution-format-failure-v1",source:page.capsule,attempt:page.attempt};saveDriverRun(store,current);});
     }
   }
-  }catch{write(deps,()=>{const current=readDriverRun(store,runId);current.savedSourceUnavailable="saved-result-evidence-unavailable";saveDriverRun(store,current);});}
+  }catch(error){const line=peerFailureLogLine(runId,error);if(line!==null)process.stderr.write(line);write(deps,()=>{const current=readDriverRun(store,runId);current.savedSourceUnavailable="saved-result-evidence-unavailable";saveDriverRun(store,current);});}
   const candidate = report.candidate;
   if (candidate && (candidate.runId !== runId || candidate.generation !== run.generation || candidate.workItemId !== run.workItemId)) {
     throw new ControlError("report-identity-conflict");

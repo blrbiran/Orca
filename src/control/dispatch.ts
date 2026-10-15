@@ -8,6 +8,7 @@ import { getRun, readGroup, readWork } from "./queries.js";
 import { hashPayload } from "./commands.js";
 import { assertClaimIdentity } from "./ownership.js";
 import { ControlError } from "./errors.js";
+import { peerFailureLogLine } from "./ccloopPort.js";
 import { startEnvelopeSchema } from "./schema.js";
 import type { AdmissionGate } from "./admissionGate.js";
 
@@ -40,7 +41,8 @@ async function send(store:ControlStore,port:ExecutionPort,input:StartEnvelope,ga
  if(current.deadlineAt && Date.now()>=Date.parse(current.deadlineAt)) throw new ControlError("group-deadline-expired");
  let status:ExecutionStatus;
  try { status=await port.accept(input); }
- catch {
+ catch (error) {
+  const line=peerFailureLogLine(input.claim.runId,error);if(line!==null)process.stderr.write(line);
   try {persistStatus(store,input,{kind:"unknown"},gate);} catch(error) {if(error instanceof ControlError&&error.code==="panel-draining")throw error;throw error;}
   throw new ControlError("start-outcome-unknown");
  }
@@ -73,7 +75,7 @@ export async function reconcileStart(store:ControlStore,port:ExecutionPort,runId
  const input=readEnvelope(store,runId);assertClaimIdentity(store,input.claim);
  if(getRun(store,runId).state==="settled") return getRun(store,runId);
  let status:ExecutionStatus;
- try {status=await port.inspect(input);}catch {status={kind:"unknown"};}
+ try {status=await port.inspect(input);}catch (error) {const line=peerFailureLogLine(runId,error);if(line!==null)process.stderr.write(line);status={kind:"unknown"};}
  if(status.kind==="absent") {
   const group=readGroup(store,input.claim.groupId);
   if(!group.stopped && !store.dispatchBlocked) {

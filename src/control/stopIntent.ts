@@ -654,6 +654,7 @@ export async function beginHandoffAttempt(deps: StopDeps, requestId: string): Pr
       // A run with no frozen selection asks `{}`, which ccloop refuses: capability-unavailable, never a guessed agent.
       const observed = await profileRouter.probe(profile, run.agent ?? {});
       const cap: CapabilityViewV1 = observed.observed;
+      if (observed.probeFailureCode !== null) process.stderr.write(`orca-driver: ${run.runId}: ccloop ${observed.probeFailureCode}\n`);
       if (observed.probeFailureCode !== null || cap.handoffControl !== "durable" || cap.handoffExecution !== "model-assisted-v1") {
         const reasonCode = "handoff-capability-unavailable";
         store.transaction(() => {
