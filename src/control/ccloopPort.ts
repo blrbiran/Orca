@@ -48,14 +48,70 @@ const agentResolutionSchema=z.object({protocol:z.literal(3),selection:agentSelec
 export const ccloopCollectionSchema=collectionSchema;
 export const ccloopResolutionSchema=agentResolutionSchema;
 
+/** Spec 2026-10-15 ccloop error codes §4.1: the most of a peer's stderr Orca keeps or shows, in UTF-16 code units. */
+export const PEER_DETAIL_MAX = 512;
 /**
- * The ccloop error code inside a `control-peer-exit` (ccloop prints `<code>[:detail]` on stderr and exits non-zero),
+ * ccloop's leading code: `<exit>:<code>` followed by the end, whitespace, `: ` or a final `:` -- so `1:file:///x` names
+ * no code (plan correction K1: a bare `:` after the code is a URL's, not ccloop's `<code>: <detail>`).
+ */
+const PEER_CODE = /^[^:]*:([a-z][a-z0-9-]{0,63})(?=$|\s|:\s|:$)/;
+/** C0 and C1 control characters, written as \u escapes in this source (never as raw bytes). */
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u0080-\u009f]/g;
+export interface PeerFailure { readonly exit: string; readonly code: string | null; readonly detail: string }
+
+function cutDetail(text: string): string {
+  const flat = text.trim().replace(CONTROL_CHARACTERS, " ").trim();
+  if (flat.length <= PEER_DETAIL_MAX) return flat;
+  let end = PEER_DETAIL_MAX - 1;
+  const last = flat.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+  return `${flat.slice(0, end)}…`;
+}
+
+/**
+ * A `control-peer-exit` (ccloop exited non-zero; its detail is `<exit>:<stderr>`) taken apart: the exit, ccloop's leading
+ * code when it printed one, and the rest of its stderr cut for storage and display. Null for any other failure.
+ */
+export function peerFailure(error: unknown): PeerFailure | null {
+  if (!(error instanceof ControlError) || error.code !== "control-peer-exit") return null;
+  const raw = error.detail ?? "";
+  const colon = raw.indexOf(":");
+  const exit = colon === -1 ? raw : raw.slice(0, colon), stderr = colon === -1 ? "" : raw.slice(colon + 1);
+  const code = PEER_CODE.exec(raw)?.[1] ?? null;
+  return { exit, code, detail: cutDetail(code === null ? stderr : stderr.slice(code.length).replace(/^:/, "")) };
+}
+
+/**
+ * The ccloop error code inside a `control-peer-exit` (ccloop prints `<code>[: detail]` on stderr and exits non-zero),
  * or null for any other failure. Agent selection spec §7: `agent-selection-rejected:<taskId|slot>:<ccloop code>`
  * names the code, so it is read here, where the peer's output is parsed, and nowhere else.
  */
-export function peerErrorCode(error:unknown):string|null {
- if(!(error instanceof ControlError)||error.code!=="control-peer-exit"||error.detail===undefined)return null;
- const match=/^[^:]*:([a-z][a-z0-9-]*)/.exec(error.detail);return match?match[1]!:null;
+export function peerErrorCode(error: unknown): string | null {
+  return peerFailure(error)?.code ?? null;
+}
+
+/** §4.3: the code Orca stores for a failure -- ccloop's own for a peer exit (else `control-peer-exit`), another ControlError's code. */
+export function peerCode(error: ControlError): string {
+  if (error.code !== "control-peer-exit") return error.code;
+  return peerFailure(error)?.code ?? "control-peer-exit";
+}
+
+/** §4.4: a peer exit after its reason prefix -- `<exit>[:<code>][: <detail>]`, the detail cut. */
+export function peerExitText(failure: PeerFailure): string {
+  const body = failure.code === null ? failure.detail : failure.detail === "" ? failure.code : `${failure.code}: ${failure.detail}`;
+  return body === "" ? failure.exit : `${failure.exit}:${body}`;
+}
+
+/** §4.2: the message of a `ccloop-failed` answer. */
+export function ccloopFailedMessage(failure: PeerFailure): string {
+  return `ccloop-failed:${failure.code ?? "unknown"}${failure.detail === "" ? "" : `: ${failure.detail}`}`;
+}
+
+/** §4.9: the stderr line for a peer failure a path leaves as "unknown"; null for any other failure. */
+export function peerFailureLogLine(runId: string, error: unknown): string | null {
+  const failure = peerFailure(error);
+  if (failure === null) return null;
+  return `orca-driver: ${runId}: ccloop ${failure.code ?? "unknown"}${failure.detail === "" ? "" : `: ${failure.detail}`}\n`;
 }
 /** Agent selection spec §7: ccloop's refusals of a selection or table, which a caller must be able to tell apart. */
 // Wave-2 review m-1 (2026-09-26): agent-unselected too -- ccloop refuses a partial selection with no agent by that name
