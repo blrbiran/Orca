@@ -137,8 +137,10 @@ describe("startup recovery heals empty-frozen-set shutdown intents (issue-fixes 
         const view = readControlGroup(store, "epoch", "g");
         expect(view.runs.find((entry) => entry.runId === claim.runId)).toMatchObject({ startedAt: null, endedAt: null });
         const after = new WebControlService({ ...h.deps, store });
+        // #53 (spec 2026-10-15 start guard §3.2): after healing the queued no-start wake dispatches the task; a second start while it runs is refused
+        expect(await deliverScheduledStart({ store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate }, "g")).toMatchObject({ kind: "claimed" });
         const started = await after.start(h.rawCommand("start-after-upgrade", revisionOf(store), "start", { kind: "group", groupId: "g" }, {}) as Parameters<typeof after.start>[0]);
-        expect("error" in started ? started.error.code : started.result.kind).toBe("scheduled");
+        expect("error" in started ? started.error.code : started.result.kind).toBe("group-execution-pending");
       } finally { store.close(); }
     } finally { await h.dispose().catch(() => undefined); }
   });
