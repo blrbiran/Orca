@@ -245,6 +245,27 @@ describe("the decision review loop", () => {
     await settle();
     expect(posts("/api/reviews")).toHaveLength(0);
   });
+
+  // Human visual acceptance (session fb98aa31): "j / k / a / c do nothing". A person reaches Decisions by clicking its
+  // nav link, and focus stays on that link -- neither the body nor the pane, so M6 dropped every key.
+  it("moves with 'j' while focus is still on the Decisions nav link that brought the person here", async () => {
+    render(<App />);
+    await waitFor(() => expect(document.querySelectorAll(".decision-list li button")).toHaveLength(rows.length));
+    const link = document.querySelector<HTMLElement>('.nav-item[href="#decisions"]')!;
+    link.focus();
+    fireEvent.keyDown(link, { key: "j" });
+    await waitFor(() => expect(question()).toBe(QUESTION_A));
+  });
+
+  it("still ignores the keys while focus is on another section's nav link (final review M6 stays narrow)", async () => {
+    render(<App />);
+    await waitFor(() => expect(document.querySelectorAll(".decision-list li button")).toHaveLength(rows.length));
+    const link = document.querySelector<HTMLElement>('.nav-item[href="#metrics"]')!;
+    link.focus();
+    fireEvent.keyDown(link, { key: "j" });
+    await settle();
+    expect(question()).toBeNull();
+  });
 });
 
 const kindFilter = (): HTMLSelectElement => document.querySelector('select[name="filter-kind"]') as HTMLSelectElement;

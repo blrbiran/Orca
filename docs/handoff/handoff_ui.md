@@ -4,7 +4,8 @@
 > ✅ 第二批（§六）已合入 main。
 > ✅ 第三批（§七，精修）已由人合入 main 并 push（合并提交主题行 `Merge branch 'ui/panel-taste'`）；稳定结论已并入 `handoff.md` §五 5.2.6、§六 6.7。
 > ✅ 第三批第二轮（§七.二）已由人合入 main 并 push（合并提交主题行 `Merge branch 'ui/panel-taste'`，2026-10-14）。
-> 🔵 **第二轮之后的跟进（§七.三）待人视觉验收与合并；第二轮本身也还欠视觉验收。**（人要求后续问题继续追加在本文）
+> ✅ 第二轮与 §七.三 已由人视觉验收、合并并 push（会话 `fb98aa31`）。
+> 🔵 **视觉验收提出的两处（§七.四，分支 `ui/panel-taste` 重建）待人复验与合并。**（人要求后续问题继续追加在本文）
 
 > **读者是下一个 agent。** 这一批 UI 改动的交接写在本文，**不写进 `docs/handoff/handoff.md`**；
 > 等 UI 基本 ready、由人决定合并时，再把本文的结论并回 `handoff.md`。
@@ -255,3 +256,25 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 **awaitingHuman**
 - 🔴 视觉验收（第二轮＋本节两处）；然后人合并本分支进 main 并 push（Tier 0）。`handoff.md` 的两处改动与 main 上同段上下文逐行相同（会话 `fb98aa31` 比对），预期无冲突。
 - 本会话的变异 clone：会话 `fb98aa31` scratchpad 下 `mut/`（干净，删除归人）。
+
+---
+
+## 七.四、视觉验收的两处问题（分支 `ui/panel-taste`，会话 `fb98aa31`，2026-10-14）
+
+⚠️ 人合并 §七.三 后删了旧分支与 worktree；本节的分支是从 main（主题行 `Merge branch 'ui/panel-taste'`，含 §七.三）**重建的同名分支**，worktree 仍在 `/Users/biran/code/skills/orca/Orca-wt/ui-taste`。
+
+**人的输入**：深色模式下输入框太深；Decisions 页的 `j / k / a / c` 不生效；其他暂未见明显问题。
+
+**根因与修法**（按主题行找，`git log main..ui/panel-taste`）：
+- 输入框：`input, select, textarea` 的底色是 `--bg`（最暗的页面层），比所在卡片还暗。新增 `--field`：深色 = `--bg-elevated`，两个浅色块 = `--bg`（浅色不变）。`fix(web): lift dark form fields above the card they sit on`；`DESIGN.md` 加一行。
+- 快捷键：真浏览器复现 —— 点侧边栏「Decisions」后焦点留在该导航链接上，既非 body 也不在 Decisions 区内，被 M6 守卫（`App.tsx` 的 review-key effect）整体丢弃；blur 到 body 后 `j` 正常。修法：只多放行 Decisions 自己的导航链接，其他导航链接仍忽略。`fix(web): honour j/k/a/c while focus is on the Decisions nav link` ＋ `fix(web): split the review-key focus check so scanPanelText sees no prose`（复合选择器里的空格被根测试 `scanPanelText` 当成未翻译文案 —— §七「踩到的」第 2 条的同一个坑）。
+- 未验证的另一可能：中文输入法开着时按键 `key` 为 `Process`，快捷键同样不响应。本次没改；人复验时若仍不生效，先切到英文输入。
+
+**现测**（干净 clone，尖端＝主题行 `fix(web): split the review-key focus check…`，load 25.6）：新判据先红后绿（contrast、lightTheme、reviewApp 各自新增，均为新增、未改写既有判据）。变异 MF1（深色 `--field` 改回 `--bg`）→ `contrast.test.ts:84` 红；MF2（输入规则改回 `var(--bg)`）→ `:80` 红；MF3（浅色 `--field` 改 elevated）→ `lightTheme.test.ts:43,98` 红；MK1（去掉导航链接放行）→ `reviewApp.test.tsx:257` 红；MK2（放宽到任意 `.nav-item`）→ `:267` 红；还原 0／0 字节。typecheck／web build／`--ws check`（124 文件／1082 条）／根 `tests/metrics` ＋ `scanPanelText`（68 条）RC 0。日志：会话 `fb98aa31` scratchpad `vlogs3/`。
+真浏览器（改道面板、无端口、数据为 main 的 clone，`keys.py`）：点导航后焦点在 `A.nav-item`，按 `j` 打开第一行；深色下筛选框底色 rgb(31,33,37) 叠在 rgb(14,15,17) 上，浅色仍为 rgb(246,244,239)；无 pageerror。
+
+**⚠️ 踩到的**：面板在启动时缓存 `web/dist`，重新 build 后**必须重启面板**才会发新 bundle（实测：发出的 `index.js` 比磁盘少 30 字节、不含新选择器，重启后一致）。
+
+**awaitingHuman**
+- 🔴 复验这两处，然后合并本分支进 main 并 push（Tier 0，人做）。
+- 本会话的 clone 与改道环境（干净副本，删除归人）：会话 `fb98aa31` scratchpad 下 `mut2/`、`mut3/`、`data/`、`v2/`、`viz-env/`。

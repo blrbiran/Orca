@@ -6,6 +6,7 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 - Light = warm paper (`--bg #f6f4ef`, cards `#fffdf9`, warm grey text). Dark = neutral graphite (channels within 10, blue ≥ red); never warm.
 - Layers separate by stepping LIGHTER in dark, DARKER-edged in light. Values are pinned by `tests/contrast.test.ts` and `tests/lightTheme.test.ts` — re-run both before changing any token.
 - The two light blocks are identical by rule (`lightTheme.test.ts`).
+- Form fields paint `--field`: one step lighter than the card in dark (`--bg-elevated`), the paper well (`--bg`) in light.
 
 ## Tone, not role
 - `role` is semantics for assistive tech only. A box with `role=alert|status|note` is NEUTRAL by default.
