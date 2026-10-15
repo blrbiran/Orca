@@ -98,3 +98,10 @@ describe("form fields in the light theme", () => {
     for (const block of [manual, system]) expect(tok(block, "field")).toBe("var(--bg)");
   });
 });
+
+// Human visual acceptance (session 9b012714) asked for lighter DARK wells only; a light well stays the paper (--bg).
+describe("inset wells in the light theme", () => {
+  it("keeps --well on --bg in both light blocks", () => {
+    for (const block of [manual, system]) expect(tok(block, "well")).toBe("var(--bg)");
+  });
+});
