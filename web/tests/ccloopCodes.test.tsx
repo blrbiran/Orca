@@ -21,8 +21,8 @@ import { config, requirementView, summaryWith } from "./fixtures/requirement.js"
 
 const EN_CATALOG = "omp could not list its model catalog (spawn ENOENT). Check that omp is installed and starts, then retry.";
 const ZH_CATALOG = "omp 无法列出它的模型目录（spawn ENOENT）。请确认 omp 已安装且能启动，然后重试。";
-const EN_CAP = "omp's catalog now caps this model's output above the bound this requirement was opened with, so the call was refused before it started. Retry: a retry recomputes the bound from the current catalog.";
-const ZH_CAP = "omp 目录里这个模型的输出上限已高于这个需求开启时定下的上限，调用在开始前被拒绝。请重试：重试会按当前目录重新计算上限。";
+const EN_CAP = "omp's catalog now caps this model's output above the bound this call was prepared with, so the call was refused before it started. Retry: a retry or a new estimate recomputes the bound from the current catalog.";
+const ZH_CAP = "omp 目录里这个模型的输出上限已高于这次调用准备时定下的上限，调用在开始前被拒绝。请重试：重试或重新估算会按当前目录重新计算上限。";
 
 afterEach(async () => { cleanup(); vi.unstubAllGlobals(); await i18n.changeLanguage("en"); });
 

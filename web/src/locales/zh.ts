@@ -1293,7 +1293,7 @@ export const zhErrors: Record<string, string> = {
 export const zhCcloopErrors: Record<string, string> = {
   "omp-model-catalog-unavailable": "omp 无法列出它的模型目录（{{detail}}）。请确认 omp 已安装且能启动，然后重试。",
   "omp-model-catalog-invalid": "omp 的模型目录无法读取（{{detail}}）。",
-  "omp-single-call-cap-exceeded": "omp 目录里这个模型的输出上限已高于这个需求开启时定下的上限，调用在开始前被拒绝。请重试：重试会按当前目录重新计算上限。",
+  "omp-single-call-cap-exceeded": "omp 目录里这个模型的输出上限已高于这次调用准备时定下的上限，调用在开始前被拒绝。请重试：重试或重新估算会按当前目录重新计算上限。",
   "omp-single-call-unavailable": "omp 无法用所选模型完成这次单次调用（{{detail}}）。",
   "agent-config-invalid": "这个 agent 的配置无效（{{detail}}）。",
   "single-call-unsupported": "这个 agent 不能做单次调用（估算、澄清、拆分），请换一个 agent。",

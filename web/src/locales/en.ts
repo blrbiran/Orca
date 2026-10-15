@@ -1357,7 +1357,7 @@ export const enErrors: Record<string, string> = {
 export const enCcloopErrors: Record<string, string> = {
   "omp-model-catalog-unavailable": "omp could not list its model catalog ({{detail}}). Check that omp is installed and starts, then retry.",
   "omp-model-catalog-invalid": "omp's model catalog could not be read ({{detail}}).",
-  "omp-single-call-cap-exceeded": "omp's catalog now caps this model's output above the bound this requirement was opened with, so the call was refused before it started. Retry: a retry recomputes the bound from the current catalog.",
+  "omp-single-call-cap-exceeded": "omp's catalog now caps this model's output above the bound this call was prepared with, so the call was refused before it started. Retry: a retry or a new estimate recomputes the bound from the current catalog.",
   "omp-single-call-unavailable": "omp cannot make this single call with the selected model ({{detail}}).",
   "agent-config-invalid": "The agent's configuration is not valid ({{detail}}).",
   "single-call-unsupported": "This agent cannot make single calls (estimate, clarify, split); choose another agent.",
