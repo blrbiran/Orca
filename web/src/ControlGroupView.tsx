@@ -20,7 +20,7 @@ import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import { RunReason } from "./RunReason.js";
 import { explainEstimateReason } from "./ccloopCodes.js";
-import { archiveOpen, hasFailureOutcome, retryRunOpen } from "./runFacts.js";
+import { archiveOpen, hasFailureOutcome, retryRunOpen, runNumberOf } from "./runFacts.js";
 import { UsageSettlement } from "./UsageSettlement.js";
 import { SkillsGiven } from "./SkillsGiven.js";
 import type {
@@ -429,7 +429,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           </tr>
         </thead>
         <tbody>
-          {runsInCreationOrder(view.runs).map((run, index) => (
+          {runsInCreationOrder(view.runs).map((run, index, orderedRuns) => (
             <tr key={run.runId} id={runRegionId(groupId, run.runId)} tabIndex={-1} data-run-id={run.runId}>
               <td>{run.taskId ?? run.estimateId ?? <details><summary>{t("control.group.runLabel", { n: index + 1 })}</summary><code>{run.runId}</code></details>}</td>
               <td>{enumText("runPhase", run.phase)}</td>
@@ -438,7 +438,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 <div><RunReason run={run} /></div>
                 <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
                 {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}
-                <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}</div>
+                <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}{runNumberOf(view, run, orderedRuns.slice(0, index + 1)) > 0 ? t("control.group.taskRun", { n: runNumberOf(view, run, orderedRuns.slice(0, index + 1)) }) : ""}</div>
                 <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
               </td>
               <td><details><summary>{run.profile.profileId}</summary><code>{run.profile.profileHash}</code></details></td>

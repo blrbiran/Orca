@@ -99,3 +99,10 @@ export function lineageRunNumber(lineageRunIds: readonly string[], runs: readonl
   const lineage = new Set(lineageRunIds);
   return runs.filter((run) => lineage.has(run.runId) && run.state !== "failed-before-provider"&&run.outcome!=="not-started"&&!run.savedResultOrdinaryRetry).length;
 }
+
+/** Feedback #61: this run's number among its task's runs -- lineageRunNumber over the runs created up to and including it; 0 when it is not counted. */
+export function runNumberOf(view: GroupViewV1, run: RunViewV1, createdUpTo: readonly RunViewV1[]): number {
+  if (run.taskId === null) return 0;
+  const lineage = view.workItems.find((item) => item.taskId === run.taskId)?.lineageRunIds ?? [];
+  return lineageRunNumber(lineage, [run]) === 1 ? lineageRunNumber(lineage, createdUpTo) : 0;
+}
