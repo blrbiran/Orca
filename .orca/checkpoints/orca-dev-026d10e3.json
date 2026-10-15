@@ -3,42 +3,49 @@
   "runId": "orca-dev-026d10e3",
   "runtime": "claude-code",
   "sessionRef": "026d10e3-005e-40ee-83dc-c4a74a3191f4",
-  "writtenAt": "2026-10-15T02:31:19.670Z",
-  "head": "0cc0691d959adcd64685a3427eb55319752feb70",
+  "writtenAt": "2026-10-15T06:38:58.972Z",
+  "head": "295f7d2545bdef0dc5725c839852736694dbdd2c",
   "level": {
     "kind": "reading",
-    "level": 493598,
+    "level": 744871,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
     "band": 2
   },
   "next": [
-    "SDD execution of docs/superpowers/plans/2026-10-15-error-codes-and-start-guard.md on feat/error-codes-start-guard; ledger .superpowers/sdd/2026-10-15-error-codes-and-start-guard/progress.md",
-    "S3 on ccloop codex/attempt-commit-no-hooks; ccloop gate /private/tmp/ccq4-gate/rc.txt",
-    "Then update three handoffs and give the human a <=10-line executive summary"
+    "After the human pushes ccloop codex/attempt-commit-no-hooks: repin Orca (scripts/pin-ccloop.mjs in a worktree with real node_modules) and gate with ORCA_CCLOOP_BIN set",
+    "ccloop round: OMP model drop-down (new catalog command) + spawn-time probe inside the call's time limit"
   ],
   "open": [
-    "Human authorized ignoring context size this session (T2 overrun recorded here)",
-    "Real omp estimate retry needs a separate human yes (model listed task twice)"
+    "Human authorized ignoring context size this session (T1/T2 overrun recorded)",
+    "One more real omp estimate (paid) needs a separate human yes",
+    "~/.orca/profile.json left unchanged on purpose (global single profile)"
   ],
   "awaitingHuman": [
     {
       "kind": "irreversible",
-      "what": "push/merge test/omp-single-call-acceptance, feat/error-codes-start-guard, ccloop codex/attempt-commit-no-hooks"
+      "what": "ff-merge+push Orca feat/error-codes-start-guard; ccloop codex/attempt-commit-no-hooks; push ccmem main"
     },
     {
       "kind": "irreversible",
-      "what": "delete superseded branches/worktrees; kill orphan worker.js 6165 14693 23125 66086"
+      "what": "delete superseded branches/worktrees and temp dirs listed in Orca handoff §4.1; kill orphan worker.js 6165 14693 23125 66086 first"
     }
   ],
   "measurements": [
     {
-      "command": "cat /Users/biran/code/skills/orca/Orca-wt/error-codes-start-guard/.superpowers/sdd/2026-10-15-error-codes-and-start-guard/progress.md",
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca ls-remote origin refs/heads/main",
       "exitCode": 0,
-      "commit": "0cc0691d959adcd64685a3427eb55319752feb70",
-      "observedAt": "2026-10-15T02:31:19.606Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-026d10e3-JTNAkz/1.txt"
+      "commit": "295f7d2545bdef0dc5725c839852736694dbdd2c",
+      "observedAt": "2026-10-15T06:38:58.857Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-026d10e3-TT8B4S/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca merge-base --is-ancestor main feat/error-codes-start-guard",
+      "exitCode": 0,
+      "commit": "295f7d2545bdef0dc5725c839852736694dbdd2c",
+      "observedAt": "2026-10-15T06:38:58.912Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-026d10e3-TT8B4S/2.txt"
     }
   ]
 }
