@@ -5,6 +5,7 @@
  */
 import type { ControlRefusal } from "./controlState.js";
 import i18n, { errorEntry, fillEntry, refusalDetail, refusalText } from "./i18n.js";
+import { codeAndDetail, explainCcloopCode, peerExitReason } from "./ccloopCodes.js";
 
 const PLAN_REJECTED = "control-plan-rejected";
 const PLAN_ITEMS = ["target-repo-mismatch", "missing-goal", "missing-success-conditions", "duplicate-success-condition"];
@@ -30,14 +31,23 @@ export function planItemText(item: string): string {
 
 /** A refusal's explanation, and for a refused plan its problems one per line (empty for every other refusal). */
 export function explainRefusal(refusal: ControlRefusal): { text: string; items: string[] } {
+  // ccloop error codes spec (2026-10-15) §4.6: a ccloop failure is explained by ccloop's own code.
+  if (refusal.code === "ccloop-failed") { const { code, detail } = codeAndDetail(refusalDetail(refusal)); return { text: explainCcloopCode(code, detail), items: [] }; }
   const detail = refusal.code === PLAN_REJECTED ? refusalDetail(refusal) : "";
   if (detail === "") return { text: refusalText(refusal), items: [] };
   return { text: i18n.t("refusal.planRejected"), items: detail.split("\n").map(planItemText) };
 }
 
+/** ccloop error codes spec (2026-10-15) §4.6: prefixes whose detail is a peer exit, and the usage-unknown blocks that may carry a code. */
+const PEER_PREFIXES = new Set(["control-peer-exit", "accept-refused"]);
+const USAGE_UNKNOWN = new Set(["estimate-usage-unknown", "requirement-usage-unknown"]);
 /** A blocked run's reason explained by its prefix up to the first ':' (the rest is its detail); null when there are no words for it. */
 export function explainRunReason(reason: string): string | null {
   const cut = reason.indexOf(":");
-  const entry = errorEntry(cut === -1 ? reason : reason.slice(0, cut));
-  return entry === undefined ? null : fillEntry(entry, { message: reason, status: "", detail: cut === -1 ? "" : reason.slice(cut + 1) });
+  const prefix = cut === -1 ? reason : reason.slice(0, cut), rest = cut === -1 ? "" : reason.slice(cut + 1);
+  const entry = errorEntry(prefix);
+  if (entry === undefined) return null;
+  if (PEER_PREFIXES.has(prefix)) { const { code, detail } = peerExitReason(rest); return fillEntry(entry, { message: reason, status: "", detail: explainCcloopCode(code, detail) }); }
+  if (USAGE_UNKNOWN.has(prefix) && rest !== "") return `${fillEntry(entry, { message: reason, status: "", detail: "" })} ${explainCcloopCode(rest, "")}`;
+  return fillEntry(entry, { message: reason, status: "", detail: rest });
 }

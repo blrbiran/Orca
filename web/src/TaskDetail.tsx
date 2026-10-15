@@ -18,6 +18,7 @@ import { TaskResults } from "./TaskResults.js";
 import { LoopPlanCard } from "./LoopPlanCard.js";
 import { RunReason } from "./RunReason.js";
 import { explainRunReason } from "./refusalExplain.js";
+import { explainCcloopCode } from "./ccloopCodes.js";
 import { hasFailureOutcome, reasonCode, retryRunOpen, savedResultSourceRunId, taskRunNumber } from "./runFacts.js";
 import i18n, { enumText } from "./i18n.js";
 import { UsageSettlement } from "./UsageSettlement.js";
@@ -304,7 +305,8 @@ export function SavedResultAction(props:{runId:string;groupId:string;taskId:stri
  const {t}=useTranslation();const [answer,setAnswer]=useState<SavedResultEligibilityV1|null>(null);
  useEffect(()=>{let live=true;setAnswer(null);fetchSavedResultEligibility(props.runId).then(value=>{if(live)setAnswer(value);},error=>{if(live)setAnswer({status:"unavailable",reason:controlFailureFrom(error).code});});return()=>{live=false;};},[props.runId,props.changeSeq,props.revision]);
  if(answer===null)return <></>;
- if(answer.status==="unavailable")return <p className="detail-note">{t("control.savedResult.unavailable")} <code>{answer.reason}</code></p>;
+ // ccloop error codes spec (2026-10-15) §4.6: a known code is explained beside it; an unknown one (generic text = the code) is not repeated.
+ if(answer.status==="unavailable"){const words=explainCcloopCode(answer.reason, "");return <p className="detail-note">{t("control.savedResult.unavailable")} <code>{answer.reason}</code>{words!==answer.reason?` ${words}`:""}</p>;}
  const source=answer.recoveryOf;
  return <div><button type="button" disabled={props.disabled} onClick={()=>props.onCommand({verb:"verify-saved-result",groupId:props.groupId,taskId:props.taskId,expectedRevision:props.revision,payload:{sourceRunId:source.sourceRunId,sourceAttempt:source.sourceAttempt,capsuleHash:source.capsuleHash}})}>{t("control.savedResult.verify")}</button><p className="detail-note">{t("control.savedResult.cost")}</p></div>;
 }

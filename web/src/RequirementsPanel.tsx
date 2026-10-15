@@ -10,6 +10,8 @@ import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { useTranslation } from "react-i18next";
 import { GroupActionsMenu } from "./GroupActionsMenu.js";
 import { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText, refusalText } from "./i18n.js";
+import { explainCcloopCode } from "./ccloopCodes.js";
+import { explainRunReason } from "./refusalExplain.js";
 import type { PanelLanguage } from "./i18n.js";
 import { TokenInput } from "./TokenInput.js";
 import type { ControlAction } from "./controlApi.js";
@@ -258,6 +260,8 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
   const accepted = (decisions: Round["glossaryDecisions"]) => new Set((decisions ?? []).filter((d) => d.accept).map((d) => d.id));
   const reason = view.summary.requirement?.waiting ?? view.summary.requirement?.reasonCode ?? null;
   const step = view.requirement.consensus === null ? round : draft;
+  // ccloop error codes spec (2026-10-15) §4.5-§4.6: a failed step names its latest failed call's ccloop code.
+  const failedCall = step?.state === "failed" ? [...step.calls].reverse().find((call) => call.outcome === "failed") ?? null : null;
   const drafting = step?.state === "drafting";
   // Spec §11.1: recovery-retry re-queues a failed or interrupted round or draft -- one the person stopped carries no reason code.
   const stalled = step?.state === "failed" || step?.state === "interrupted";
@@ -266,6 +270,9 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
   const retryable = (reason !== null && RETRYABLE.includes(reason)) || stalled || stopped;
   // Final review finding 4: the step's call blocked by the driver, retried on its run.
   const blockedRun = view.summary.requirement?.blockedRun ?? null;
+  // ccloop error codes spec (2026-10-15) §4.6: only a blocked reason that carries a ccloop code after its prefix is explained;
+  // a bare reason keeps its code alone (web/tests/requirements.test.tsx "names a blocked call's reason ...").
+  const blockedWords = blockedRun?.reason?.includes(":") ? explainRunReason(blockedRun.reason) : null;
   const exportState = view.requirement.export.state;
   const archived = view.summary.archived === true;
   const archiveAllowed = view.summary.state === "clarifying" && !drafting && blockedRun === null
@@ -298,8 +305,9 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
           {retryable && <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "group", groupId } })}>{t("requirements.retry")}</button>}
         </p>
       )}
+      {!archived && failedCall?.reason != null && <p role="status">{failedCall.reason} · {explainCcloopCode(failedCall.reason, "")}</p>}
       {!archived && blockedRun !== null && (
-        <p role="alert">{blockedRun.reason !== null && <>{blockedRun.reason} · </>}{t("requirements.blockedRun")}{" "}
+        <p role="alert">{blockedRun.reason !== null && <>{blockedRun.reason}{blockedWords !== null ? ` · ${blockedWords}` : ""} · </>}{t("requirements.blockedRun")}{" "}
           <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId } })}>{t("requirements.retryRun")}</button>
         </p>
       )}

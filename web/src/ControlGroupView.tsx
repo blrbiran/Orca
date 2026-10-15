@@ -19,6 +19,7 @@ import { GitScheme } from "./GitScheme.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import { RunReason } from "./RunReason.js";
+import { explainEstimateReason } from "./ccloopCodes.js";
 import { archiveOpen, hasFailureOutcome, retryRunOpen } from "./runFacts.js";
 import { UsageSettlement } from "./UsageSettlement.js";
 import { SkillsGiven } from "./SkillsGiven.js";
@@ -486,6 +487,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                   hash: estimate.profile === null ? "" : short(estimate.profile.profileHash),
                 })}
                 {estimate.reasonCode !== null ? ` · ${estimate.reasonCode}` : ""}
+                {estimate.reasonCode !== null && explainEstimateReason(estimate.reasonCode) !== null ? ` · ${explainEstimateReason(estimate.reasonCode)}` : ""}
                 {estimate.compatibilityReasonCodes?.length ? ` · ${estimate.compatibilityReasonCodes.join(", ")}` : ""}
               </li>
             ))}

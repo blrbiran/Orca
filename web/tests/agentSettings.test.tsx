@@ -174,4 +174,11 @@ describe("the Agents settings page (agent selection spec §6.8)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save agent preferences" }));
     expect(onSave).toHaveBeenCalledWith({ perAgent: {} } satisfies OperatorPreferencesV1, 4);
   });
+
+  // ccloop error codes spec (2026-10-15) §4.6: the installation panel explains ccloop's code beside it.
+  it("explains a failed detection's ccloop code", () => {
+    const state: AgentInstallationStateV1 = { schema: "orca-agent-installation-state-v1", revision: 0, pending: false, pendingCommand: null, failureCode: "agent-config-invalid", observation: null, preview: null };
+    const { container } = render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} installationState={state} />);
+    expect(container.textContent).toContain("Detection unavailable · agent-config-invalid The agent's configuration is not valid.");
+  });
 });

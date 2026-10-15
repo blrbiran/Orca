@@ -930,6 +930,8 @@ export const zh: Translation<typeof en> = {
       "reviewed-is-deliberate": "「已评审」需要人主动标记，所以这个数可能长时间接近零——长期为零和没人看分辨不出来。请结合积压一起看。",
     },
   },
+  // ccloop error codes spec (2026-10-15) §4.6: a ccloop code with no entry in either table.
+  ccloop: { generic: "{{code}}：{{detail}}", genericNoDetail: "{{code}}" },
   enums: {
     theme: { system: "跟随系统", light: "浅色", dark: "深色" },
     decisionKind: { dependency: "依赖", interface: "接口", scheduling: "调度", abandon: "放弃", criteria: "判据", boundary: "边界", reconcile: "协调" },
@@ -997,6 +999,7 @@ export const zhErrors: Record<string, string> = {
   "agent-selection-invalid": "agent 选择不合法：{{message}}",
   "agent-selection-rejected": "ccloop 拒绝了这个 agent 选择：{{message}}",
   "ccloop-failed": "ccloop 执行失败：{{detail}}",
+  "control-peer-exit": "ccloop 出错退出：{{detail}}",
   "agent-unselected": "有槽位没有选定 agent。",
   "agent-version-drift": "agent 版本与记录的不一致：{{message}}",
   "agents-table-invalid": "agent 安装表不合法：{{message}}",
@@ -1282,4 +1285,15 @@ export const zhErrors: Record<string, string> = {
   "requirement-usage-unknown": "这次需求调用的用量未知，所以它的预算无法结算。",
   "estimate-usage-unknown": "这次估算调用的用量未知，所以它的预算无法结算。",
   "repository-path": "解析不到这个组的仓库路径；确认仓库仍已登记并且存在，然后重试运行。",
+};
+
+/** ccloop error codes spec (2026-10-15) §4.7: ccloop's own codes an operator can act on; each may interpolate only {{detail}}. */
+export const zhCcloopErrors: Record<string, string> = {
+  "omp-model-catalog-unavailable": "omp 无法列出它的模型目录（{{detail}}）。请确认 omp 已安装且能启动，然后重试。",
+  "omp-model-catalog-invalid": "omp 的模型目录无法读取（{{detail}}）。",
+  "omp-single-call-cap-exceeded": "omp 目录里这个模型的输出上限已高于这个需求开启时定下的上限，调用在开始前被拒绝。请重试：重试会按当前目录重新计算上限。",
+  "omp-single-call-unavailable": "omp 无法用所选模型完成这次单次调用（{{detail}}）。",
+  "agent-config-invalid": "这个 agent 的配置无效（{{detail}}）。",
+  "single-call-unsupported": "这个 agent 不能做单次调用（估算、澄清、拆分），请换一个 agent。",
+  "single-call-output-invalid": "模型的回答不是这次调用要求的 JSON。",
 };

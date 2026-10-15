@@ -312,4 +312,15 @@ describe("the plan's layer under the panel's at each level (ruling review R7)", 
     expect(ticked).not.toBeNull();
     expect(ticked!.checked).toBe(true);
   });
+
+  // ccloop error codes spec (2026-10-15) §4.6: a slot's ccloop code is explained beside it, and an estimate's reason too.
+  it("explains a slot's ccloop code and an estimate's ccloop reason in words beside the code", () => {
+    const base = resolvedPreview();
+    const preview = { ...base, slots: [base.slots[0]!, base.slots[1]!, { key: "task:b", slot: "worker" as const, taskId: "b", outcome: { kind: "unavailable" as const, code: "omp-model-catalog-unavailable" } }], selectionsHash: null };
+    const estimate: GroupViewV1["estimates"][number] = { estimateId: "estimate-1", estimateVersion: 1, state: "failed", profile: { profileId: "all", profileHash: "b".repeat(64) },
+      mode: "soft", requestHash: null, outputHash: null, output: null, reasonCode: "estimate-call-failed:omp-new-thing" };
+    const { container } = renderView({ preview, view: view({ estimates: [estimate] }) });
+    expect(row(container, "task:b").querySelector('[role="alert"]')!.textContent).toContain("omp-model-catalog-unavailable · omp could not list its model catalog. Check that omp is installed and starts, then retry.");
+    expect(container.textContent).toContain("estimate-call-failed:omp-new-thing · omp-new-thing");
+  });
 });

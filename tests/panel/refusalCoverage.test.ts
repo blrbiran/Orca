@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { controlErrorCatalog } from "../../src/panel/controlErrors.js";
-import { enErrors } from "../../web/src/locales/en.js";
-import { zhErrors } from "../../web/src/locales/zh.js";
+import { enCcloopErrors, enErrors } from "../../web/src/locales/en.js";
+import { zhCcloopErrors, zhErrors } from "../../web/src/locales/zh.js";
 
 /**
  * Panel i18n spec §3.2, §6.4; spec 2026-10-08 §2.2(a): every refusal code with a machine-readable source has an entry in
@@ -46,6 +46,8 @@ const VIEW_REASONS = [
   "agent-unfrozen", "repository-path", "continuation-registration", "skills-unsupported-agent", "skills-inject-failed",
   "config-hash-mismatch", "stop-proof-generation", "inspect-unknown", "accept-refused", "candidate-without-terminal", "terminal",
   "out-of-bounds", "single-call-record-invalid", "single-call-prompt-mismatch", "settle-incomplete",
+  // ccloop error codes spec (2026-10-15) §4.4, §4.7: a peer exit's stored run reason.
+  "control-peer-exit",
   // src/control/requirementCalls.ts, src/control/singleCallPurposes.ts (prepare's `blocked`, `usageUnknownReason`)
   "requirement-call-target-moved", "estimate-request-missing", "requirement-usage-unknown", "estimate-usage-unknown",
   // Issue fixes spec §4.2(1): ccloop's stop reasons (the run view's stopReason, after web/src/runFacts.ts reasonCode).
@@ -83,6 +85,20 @@ describe("refusal coverage in both languages (panel i18n spec §6.4; spec 2026-1
     for (const [code, text] of Object.entries(enErrors)) {
       expect(text.includes(code), code).toBe(false);
       if (code !== "http-status") expect(text.includes("{{message}}"), code).toBe(false);
+    }
+  });
+
+  // ccloop error codes spec (2026-10-15) §4.7: the ccloop codes an operator can act on, held to both languages as VIEW_REASONS is.
+  const CCLOOP_CODES = ["omp-model-catalog-unavailable", "omp-model-catalog-invalid", "omp-single-call-cap-exceeded", "omp-single-call-unavailable",
+    "agent-config-invalid", "single-call-unsupported", "single-call-output-invalid"];
+  it("has an en and a zh ccloop entry for every CCLOOP_CODES code, the same codes in both, each interpolating only {{detail}}", () => {
+    for (const table of [enCcloopErrors, zhCcloopErrors]) expect(CCLOOP_CODES.filter((code) => !has(table, code))).toEqual([]);
+    expect(Object.keys(enCcloopErrors).sort()).toEqual(Object.keys(zhCcloopErrors).sort());
+    for (const [lang, table] of [["en", enCcloopErrors], ["zh", zhCcloopErrors]] as const) {
+      for (const [code, text] of Object.entries(table)) {
+        expect(text.trim(), `${lang} ${code}`).not.toBe("");
+        expect([...text.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1]).filter((name) => name !== "detail"), `${lang} ${code}`).toEqual([]);
+      }
     }
   });
 });

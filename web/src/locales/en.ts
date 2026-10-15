@@ -1031,6 +1031,8 @@ export const en = {
     futureTitle: "Excluded as future",
     note: metricsNote,
   },
+  // ccloop error codes spec (2026-10-15) §4.6: a ccloop code with no entry in either table.
+  ccloop: { generic: "{{code}}: {{detail}}", genericNoDetail: "{{code}}" },
   enums: {
     theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,
     groupState, roundState, draftState, exportState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep, activityKind,
@@ -1060,6 +1062,8 @@ export const enErrors: Record<string, string> = {
   "agent-selection-rejected": "ccloop refused this agent selection: {{detail}}",
   // ccloop error codes spec (2026-10-15) §4.2: ccloop exited non-zero; the detail is `<code>: <detail>` (web/src/ccloopCodes.ts explains a known code).
   "ccloop-failed": "ccloop failed: {{detail}}",
+  // ccloop error codes spec §4.4: a peer exit's stored run reason; the detail is ccloop's code explained (web/src/refusalExplain.ts).
+  "control-peer-exit": "ccloop exited with an error: {{detail}}",
   "agent-unselected": "A slot has no agent selected. Choose an agent for every slot, then confirm.",
   "agent-version-drift": "The agent's version differs from the recorded one: {{detail}}",
   "agents-table-invalid": "The agents table is not valid: {{detail}}",
@@ -1345,4 +1349,15 @@ export const enErrors: Record<string, string> = {
   "requirement-usage-unknown": "This requirement call's usage is unknown, so its budget cannot be settled.",
   "estimate-usage-unknown": "This estimate call's usage is unknown, so its budget cannot be settled.",
   "repository-path": "The group's repository path could not be resolved. Check that the repository is still registered and exists, then choose \"Retry run\".",
+};
+
+/** ccloop error codes spec (2026-10-15) §4.7: ccloop's own codes an operator can act on; each may interpolate only {{detail}}. */
+export const enCcloopErrors: Record<string, string> = {
+  "omp-model-catalog-unavailable": "omp could not list its model catalog ({{detail}}). Check that omp is installed and starts, then retry.",
+  "omp-model-catalog-invalid": "omp's model catalog could not be read ({{detail}}).",
+  "omp-single-call-cap-exceeded": "omp's catalog now caps this model's output above the bound this requirement was opened with, so the call was refused before it started. Retry: a retry recomputes the bound from the current catalog.",
+  "omp-single-call-unavailable": "omp cannot make this single call with the selected model ({{detail}}).",
+  "agent-config-invalid": "The agent's configuration is not valid ({{detail}}).",
+  "single-call-unsupported": "This agent cannot make single calls (estimate, clarify, split); choose another agent.",
+  "single-call-output-invalid": "The model's answer was not the JSON this call asked for.",
 };
