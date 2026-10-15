@@ -38,7 +38,7 @@ export interface ImportDefaults {
 /** Agent selection spec §6.4 (§12 I9): the estimator slot, resolved before the import's transaction. */
 export type EstimatorSlotOutcome =
   | { kind: "frozen"; partial: PartialSelection; slot: FrozenSlot }
-  | { kind: "rejected"; partial: PartialSelection | null; code: KnownControlErrorCode };
+  | { kind: "rejected"; partial: PartialSelection | null; code: string };
 export interface PreparedEstimatorSlot { outcome: EstimatorSlotOutcome; observation: ObservedProfile; layerAuthority: string }
 
 export interface ImportDeps {
@@ -144,7 +144,7 @@ export function normalizeControlPlan(source: AllowlistedPlanSource): ControlPlan
 
 /** Spec §6.4 / §7: an estimator selection that failed is a blocked estimate named after the failure. */
 const ESTIMATOR_REJECTED_PREFIX = "agent-selection-rejected:estimator:";
-export function rejectedEstimatorRequest(code: KnownControlErrorCode): FrozenEstimateRequest {
+export function rejectedEstimatorRequest(code: string): FrozenEstimateRequest {
   return { state: "blocked-capability", reasonCode: `${ESTIMATOR_REJECTED_PREFIX}${code}`, requestHash: null, request: null, contract: null, contractHash: null, inputTokens: null, requiredRequestTokens: null };
 }
 

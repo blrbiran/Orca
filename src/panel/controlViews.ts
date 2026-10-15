@@ -9,6 +9,7 @@ import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executi
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
+import { peerCode } from "../control/ccloopPort.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
 import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint } from "../control/usageSettlement.js";
@@ -1188,7 +1189,7 @@ export async function readSelectionPreview(
     } catch (error) {
       if (!(error instanceof ControlError)) throw error;
       return (nonDurableControlErrorClassifications as Record<string, string>)[error.code] === "transient"
-        ? { kind: "unavailable" as const, code: error.code }
+        ? { kind: "unavailable" as const, code: peerCode(error) }
         : { kind: "rejected" as const, code: error.code };
     }
   };

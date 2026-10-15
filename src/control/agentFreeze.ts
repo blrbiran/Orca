@@ -1,6 +1,7 @@
 import { readAgentPreferences } from "./agentPreferences.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, selectionsHashV2, slotLayers, type AgentResolution, type FrozenSlot, type GroupAgentOverrides, type PanelPartialSelection, type PartialSelection, type ProvenanceSource } from "./agentSelection.js";
 import { canonicalBytes } from "./canonicalJson.js";
+import { peerCode } from "./ccloopPort.js";
 import { ControlError, nonDurableControlErrorClassifications } from "./errors.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { readArchivedPlan, readBudgetProposal } from "./queries.js";
@@ -129,7 +130,7 @@ export async function resolveGroupSelections(
       if (error.code === "control-port-unconfigured") throw error;
       if ((nonDurableControlErrorClassifications as Record<string, string>)[error.code] === "transient") {
         if (mode === "confirm") throw error;
-        slots.push({ ...identity, outcome: { kind: "unavailable", code: error.code } });
+        slots.push({ ...identity, outcome: { kind: "unavailable", code: peerCode(error) } });
         continue;
       }
       slots.push({ ...identity, outcome: { kind: "rejected", code: error.code } });

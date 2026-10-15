@@ -7,6 +7,7 @@ import { createExecutionProfileRouter, resolveProfile } from "../../src/control/
 import { profileSnapshot } from "./fixtures/web.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
+import { ControlError } from "../../src/control/errors.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import type { ArtifactRef } from "../../src/control/types.js";
@@ -152,6 +153,18 @@ describe("a saved-result lineage after an unmetered release inherits observed us
       // Source observed {10,5,1,1}, the interrupted recovery observed {7,3,1,1}: neither run's release charge is inherited.
       expect(t.body(second).savedRecovery.funding.inheritedUsage).toEqual({ tokens: 17, activeMs: 8, attempts: 2, sessions: 2 });
       expect(t.body(second).tokenPolicy.inheritedUsage).toEqual({ tokens: 17, activeMs: 8, attempts: 2, sessions: 2 });
+    } finally { await driver.stop(); await t.h.dispose(); }
+  }, 30_000);
+
+  // ccloop error codes spec (2026-10-15) §4.3, criterion 4: the saved-result `unavailable` reason names ccloop's code.
+  it("names ccloop's code when the saved-result eligibility read fails with a peer exit", async () => {
+    const { t, service } = await world(); const driver = t.driver(); try {
+      const source = await t.claim();
+      await t.until(driver, () => t.body(source).state === "blocked");
+      expect(await release(t, service, source)).not.toHaveProperty("error");
+      const failing = { ...(t.fake.port as object), readFeatures: async () => { throw new ControlError("control-peer-exit", "2:control-features-failed: lost"); } };
+      const failingService = new WebControlService({ ...(t.service as any).deps, profileRouter: createExecutionProfileRouter([resolveProfile(profileSnapshot(), failing as never)]) });
+      expect(await failingService.savedResultEligibility(source)).toEqual({ status: "unavailable", reason: "control-features-failed" });
     } finally { await driver.stop(); await t.h.dispose(); }
   }, 30_000);
 });

@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {canonicalBytes,sha256Canonical} from './canonicalJson.js';
+import {peerCode} from './ccloopPort.js';
 import {ControlError} from './errors.js';
 import {applyWebCommand,preflightWebCommand} from './commandLedger.js';
 import {readArchivedPlan,readGroup,readWork,saveWork,readBudgetProposal} from './queries.js';
@@ -101,7 +102,7 @@ export async function readSavedResultEligibility(deps:StopDeps,runId:string):Pro
   if(!settlementSame(sourceRecord(deps.store,again.run),source))return unavailable('saved-result-source-stale');
   if(answer.status==='eligible'&&(answer.sourceIdentity.envelopeHash!==again.run.drive.envelopeHash||answer.recoveryOf.capsuleHash!==source.source.hash))return unavailable('saved-result-source-stale');
   return answer;
- }catch(error){return unavailable(error instanceof ControlError?error.code:error instanceof Error&&error.message.startsWith('saved-result-')?error.message:'saved-result-evidence-unavailable');}
+ }catch(error){return unavailable(error instanceof ControlError?peerCode(error):error instanceof Error&&error.message.startsWith('saved-result-')?error.message:'saved-result-evidence-unavailable');}
  finally{prepared?.dispose();}
 }
 /** Async evidence/capability preparation never publishes authorization; all facts are read again in the ledger transaction. */

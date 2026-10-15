@@ -1,4 +1,4 @@
-import { peerFailure } from "./ccloopPort.js";
+import { peerCode, peerFailure } from "./ccloopPort.js";
 import {retainSavedInterruption,readDriverRun} from "./executionDriver.js";
 import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
 import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
@@ -673,14 +673,14 @@ export class WebControlService {
   async recoverAgentUpdates(): Promise<void> {
     let reconcileFailure: string | null = null;
     try { await reconcilePendingAgentUpdates(this.store, this.deps.port); }
-    catch (error) { reconcileFailure = error instanceof ControlError ? error.code : "control-peer-exit"; }
+    catch (error) { reconcileFailure = error instanceof ControlError ? peerCode(error) : "control-internal-error"; }
     await this.observeAgentUpdates();
     if (reconcileFailure) this.installationFailure = reconcileFailure;
   }
   async observeAgentUpdates(): Promise<void> {
     if (!this.deps.port.observeAgentInstallations) { this.installationFailure = "control-agent-update-unsupported"; return; }
     try { this.installationObservation = await this.deps.port.observeAgentInstallations(); this.installationFailure = null; }
-    catch (error) { this.installationObservation = null; this.installationFailure = error instanceof ControlError ? error.code : "control-peer-exit"; }
+    catch (error) { this.installationObservation = null; this.installationFailure = error instanceof ControlError ? peerCode(error) : "control-internal-error"; }
   }
   agentUpdateView(operatorId: string) {
     return { schema: "orca-agent-installation-state-v1" as const, revision: readAgentUpdateRevision(this.store, operatorId),

@@ -1,4 +1,5 @@
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
+import { peerCode } from "./ccloopPort.js";
 import type { ExecutionPort } from "./executionPort.js";
 import type { AgentResolution, PartialSelection } from "./agentSelection.js";
 import { sha256Canonical } from "./canonicalJson.js";
@@ -22,7 +23,7 @@ export interface ObservedProfile {
   readonly profile: FrozenProfile;
   readonly observed: CapabilityViewV1;
   readonly observedAt: string;
-  readonly probeFailureCode: KnownControlErrorCode | null;
+  readonly probeFailureCode: string | null;
   /**
    * Agent selection spec §4.6: ccloop's answer for the selection the caller asked about -- what an import or a
    * re-estimate freezes. Null when the probe failed.
@@ -132,8 +133,9 @@ export function resolveProfile(snapshot: ExecutionProfileSnapshotV1, port: Execu
   return Object.freeze({ snapshot: closedSnapshot, profileHash: sha256Canonical(closedSnapshot), port });
 }
 
-function probeFailureCode(error: unknown): KnownControlErrorCode {
-  return error instanceof ControlError ? error.code : "control-capability-probe-failed";
+function probeFailureCode(error: unknown): string {
+  // Spec 2026-10-15 ccloop error codes §4.3: a peer exit is stored as ccloop's own code.
+  return error instanceof ControlError ? peerCode(error) : "control-capability-probe-failed";
 }
 
 export function createExecutionProfileRouter(
