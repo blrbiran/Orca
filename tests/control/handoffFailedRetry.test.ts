@@ -11,6 +11,7 @@ import { readBudgetProposal } from "../../src/control/queries.js";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
 import { stepA1, stepA2 } from "../../src/control/executionDriver.js";
 import { deliverScheduledStart, settleProviderAttempt } from "../../src/control/webDispatch.js";
+import { groupExecutionPendingInStore } from "../../src/control/executionPending.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { readWebGroup } from "../../src/control/webService.js";
 import { latestRequestForRun } from "../../src/control/stopIntent.js";
@@ -41,6 +42,8 @@ async function reopen(t: Harness) {
   t.h.command = ((verb: string, payload: unknown) => ({ ...template, commandId: `restart-${randomUUID()}`, verb, payload,
     expectedRevision: Number(store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision) })) as typeof t.h.command;
   t.claim = async () => {
+    // #53 (spec 2026-10-15 start guard §3.2): a fresh start is refused while a resume wake is pending; claim through the driver's path
+    if (groupExecutionPendingInStore(t.h.store, "g")) return claim(t);
     const started = await t.service.start(t.h.command("start", {}));
     if ("error" in started) throw new Error(JSON.stringify(started));
     return claim(t);

@@ -77,10 +77,12 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
   };
   const dispatch = { store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate };
   /** Start guard spec (2026-10-15) §3.2: while the group's execution is pending a second start is refused, so a later
-   * claim is armed as the driver arms it (replenishStartWakes), then delivered. Claims keep the first start's revision. */
+   * claim is armed as the driver arms it (replenishStartWakes), then delivered. Claims keep the first start's revision.
+   * A dispatch wake already waiting (a resume, start or no-start) is delivered as the driver would, not armed again. */
   const claim = async (): Promise<string> => {
     if (groupExecutionPendingInStore(h.store, "g")) {
-      if (replenishStartWakes({ store: h.store, admissionGate: h.deps.admissionGate }).length === 0) throw new Error("claim: the driver would arm no start wake");
+      const waiting = h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g' AND delivered=0 AND kind IN ('start','no-start','resume')").get() !== undefined;
+      if (!waiting && replenishStartWakes({ store: h.store, admissionGate: h.deps.admissionGate }).length === 0) throw new Error("claim: the driver would arm no start wake");
     } else {
       const started = await service.start(h.command("start", {}));
       if ("error" in started) throw new Error(`start refused: ${JSON.stringify(started.error)}`);
