@@ -24,6 +24,8 @@ interface SingleCallOptions {
   stoppable?: boolean;
   /** Runs inside the first collect that has a candidate to give, before it answers. */
   duringCollect?: () => Promise<void>;
+  /** ccloop error codes spec §4.5: the failed call's record errorCode (absent: single-call-output-invalid, as before). */
+  errorCode?: string | null;
 }
 const AMOUNT = { tokens: 100, activeMs: 100, attempts: 1, sessions: 1 };
 export const estimateOutput = (planHash: string) => ({ schema: "budget-estimate-v1", planHash,
@@ -57,7 +59,7 @@ function singleCallPort(options: SingleCallOptions, planHash: () => string) {
         schema: "ccloop-single-call-record-v1",
         promptSha256: sha(Buffer.from(options.tamper === "prompt" ? `${work.prompt} ` : work.prompt, "utf8")),
         responseSchemaSha256: sha256Canonical(work.responseSchema),
-        outcome, outputRef, errorCode: outcome === "failed" ? "single-call-output-invalid" : null,
+        outcome, outputRef, errorCode: outcome === "failed" ? (options.errorCode === undefined ? "single-call-output-invalid" : options.errorCode) : null,
       };
       const executionId = `exec-${claim.runId}`;
       const candidate: Candidate = {

@@ -1115,6 +1115,8 @@ export function completeEstimateInStore(
   deps: { store: ControlStore; admissionGate?: AdmissionGate }, id: string, estimateId: string, rawOutput: unknown, commitTerminal?: () => void,
   // N1 spec §5.1: the estimate purpose's registered classifier (singleCallPurposes.ts); the service method keeps the default.
   classify: typeof classifyEstimateOutput = classifyEstimateOutput,
+  // Spec 2026-10-15 ccloop error codes §4.5: ccloop's code for a failed call (driver-normalised); the service method passes none.
+  callFailure: string | null = null,
 ): void {
   const release = deps.admissionGate?.enter();
   try {
@@ -1141,7 +1143,8 @@ export function completeEstimateInStore(
       // canonical JSON (a lone surrogate, a negative zero) cannot be hashed, so it is an invalid answer too.
       const classified = classify(rawOutput, plan.planHash, plan.plan.tasks.map(t => t.taskId));
       let output: BudgetEstimateV1 | null = null, outputHash: string | null = null;
-      let reasonCode: string | null = classified.ok ? null : classified.reasonCode;
+      let reasonCode: string | null = classified.ok ? null
+        : classified.reasonCode === "estimate-call-failed" && callFailure !== null ? `estimate-call-failed:${callFailure}` : classified.reasonCode;
       if (classified.ok) {
         try { outputHash = sha256Canonical(classified.output); output = classified.output; }
         catch (error) { if (!(error instanceof ControlError)) throw error; reasonCode = "estimate-output-invalid"; }

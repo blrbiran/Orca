@@ -654,6 +654,16 @@ const singleCallRecordSchema = z.object({
 }).strict();
 
 /**
+ * Spec 2026-10-15 ccloop error codes §4.5: the record's errorCode as Orca stores it -- the part before the first `:`
+ * (ccloop prints `omp-single-call-stop:<reason>`) when it is a code, else `unknown`; null stays null.
+ */
+export function normalizeSingleCallErrorCode(errorCode: string | null): string | null {
+  if (errorCode === null) return null;
+  const head = errorCode.split(":", 1)[0]!;
+  return /^[a-z][a-z0-9-]{0,63}$/.test(head) ? head : "unknown";
+}
+
+/**
  * C of an estimate run (single-call estimate spec §6.3): collect as C does; once the stop is proved, check that the
  * call ccloop made is the one Orca sent (the prompt's hash against the stored envelope, controller ruling F10), then
  * settle the estimate and the run in one transaction. A call with no observed usage (aborted or failed) cannot settle
@@ -696,7 +706,9 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
   }
   const handler = singleCallHandler(purpose);
   // N1 spec §8.3: a purpose that must read the target repository to judge its output does so before the transaction.
-  const settled = handler.evaluate === undefined ? rawOutput : await handler.evaluate(deps, run, rawOutput);
+  // §4.5: "the call failed" means outcome !== complete; the handler is told ccloop's (normalised) code, rawOutput is unchanged.
+  const failure = record.outcome === "complete" ? null : normalizeSingleCallErrorCode(record.errorCode);
+  const settled = handler.evaluate === undefined ? rawOutput : await handler.evaluate(deps, run, rawOutput, failure);
   try {
     handler.complete({ store, admissionGate: deps.admissionGate }, run, settled, () => {
       if (openRequestOf(store, run) !== null) throw new ControlError("handoff-request-conflict", "estimate-yields-to-handoff");
@@ -705,9 +717,9 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
       if (current.state !== "accepted") throw new ControlError("start-state-conflict", "estimate-run-moved");
       current.state = "settled-restartable";
       saveDriverRun(store, current);
-    });
+    }, failure);
   } catch (error) {
-    if (error instanceof ControlError && error.code === "run-stop-unconfirmed") { blockRun(deps, runId, "C", handler.usageUnknownReason); return true; }
+    if (error instanceof ControlError && error.code === "run-stop-unconfirmed") { blockRun(deps, runId, "C", failure === null ? handler.usageUnknownReason : `${handler.usageUnknownReason}:${failure}`); return true; }
     if (error instanceof ControlError && error.code === "handoff-request-conflict" && error.detail === "estimate-yields-to-handoff") return false;
     if (error instanceof ControlError && error.code === "start-state-conflict" && error.detail === "estimate-run-moved") return false;
     throw error;

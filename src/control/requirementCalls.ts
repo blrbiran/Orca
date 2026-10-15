@@ -20,6 +20,9 @@ import { clearSpendCapBlock, gateClaim } from "./spendCaps.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
 
+/** Spec 2026-10-15 ccloop error codes §4.5: ccloop refused before spawning (books 0); the same envelope would be refused again. */
+export const PRE_SPAWN_REFUSALS: ReadonlySet<string> = new Set(["omp-single-call-cap-exceeded", "omp-single-call-unavailable"]);
+
 /**
  * N1 spec §5.2, §7 and §8: a requirement's call -- a round's clarify call or a draft's split call --
  * claimed from its durable wake, prepared at A2 with the repository overview, and settled into the clarifying group's
@@ -188,16 +191,16 @@ export const callOf = (run: SettledRun, outcome: CallRecord["outcome"], reason: 
 });
 
 /** Spec §7.3 and H7: a valid round awaits answers; an invalid one is retried at most twice, then fails. */
-function recordClarify(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, rawOutput: unknown): void {
+function recordClarify(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, rawOutput: unknown, failure: string | null): void {
   const round = readRound(store, group.groupId, target.no);
   if (round.state !== "drafting") throw new ControlError("recovery-blocked", "requirement-round-moved");
   const earlierQuestionIds = readRounds(store, group.groupId).filter((r) => r.roundNo < round.roundNo).flatMap((r) => r.result?.questions.map((q) => q.id) ?? []);
   const classified = classifyClarifyOutput(rawOutput, { roundNo: round.roundNo, requirementId: group.requirement.requirementId, earlierQuestionIds });
-  round.calls = [...round.calls, callOf(run, classified.ok ? "valid" : "invalid", classified.ok ? null : classified.reason)];
+  round.calls = [...round.calls, failure !== null ? callOf(run, "failed", failure) : callOf(run, classified.ok ? "valid" : "invalid", classified.ok ? null : classified.reason)];
   if (classified.ok) {
     Object.assign(round, { result: classified.result, state: "awaiting-answers", lastInvalidReason: null });
     if (round.roundNo === 1) group.requirement.slug = classified.result.slug;
-  } else if (round.retries < MAX_AUTO_RETRIES) {
+  } else if (round.retries < MAX_AUTO_RETRIES && (failure === null || !PRE_SPAWN_REFUSALS.has(failure))) {
     Object.assign(round, { retries: round.retries + 1, lastInvalidReason: classified.reason });
     queueRequirementCall(store, group.groupId, `retry-${run.runId}`);
   } else {
@@ -254,8 +257,8 @@ export const CLARIFY_HANDLER: SingleCallHandler = {
         earlier: readRounds(deps.store, run.groupId).filter((r) => r.roundNo < target.no), retryReason: readRound(deps.store, run.groupId, target.no).lastInvalidReason }));
   },
   classify: classifyClarifyOutput,
-  complete(deps, run, rawOutput, commitTerminal) {
-    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordClarify(store, group, target, settled, rawOutput));
+  complete(deps, run, rawOutput, commitTerminal, failure = null) {
+    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordClarify(store, group, target, settled, rawOutput, failure));
   },
   usageUnknownReason: "requirement-usage-unknown",
 };
@@ -290,13 +293,13 @@ async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCallRunRow,
 }
 
 /** Spec §8.3 and H7 (DR9): a valid draft awaits review; an invalid one becomes `invalid` and the next draft is drafted, at most twice. */
-function recordSplit(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, ev: SplitEvaluation): void {
+function recordSplit(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, ev: SplitEvaluation, failure: string | null): void {
   const draft = readDraft(store, group.groupId, target.no);
   if (draft.state !== "drafting") throw new ControlError("recovery-blocked", "requirement-draft-moved");
-  draft.calls = [...draft.calls, callOf(run, ev.ok ? "valid" : "invalid", ev.ok ? null : ev.reasons.join("; "))];
+  draft.calls = [...draft.calls, failure !== null ? callOf(run, "failed", failure) : callOf(run, ev.ok ? "valid" : "invalid", ev.ok ? null : ev.reasons.join("; "))];
   Object.assign(draft, { output: ev.output, plan: ev.ok ? ev.plan : null, draftHash: ev.ok ? ev.draftHash : null, reasons: ev.reasons, layers: ev.layers, implicitEdges: ev.implicitEdges });
   if (ev.ok) draft.state = "awaiting-review";
-  else if (draft.autoRetry < MAX_AUTO_RETRIES) {
+  else if (draft.autoRetry < MAX_AUTO_RETRIES && (failure === null || !PRE_SPAWN_REFUSALS.has(failure))) {
     draft.state = "invalid";
     writeDraft(store, group.groupId, draft);
     writeDraft(store, group.groupId, newDraft(draft.draftNo + 1, draft.autoRetry + 1));
@@ -319,8 +322,8 @@ export const SPLIT_HANDLER: SingleCallHandler = {
   },
   evaluate: evaluateSplit,
   classify: validateSplitDraft,
-  complete(deps, run, evaluation, commitTerminal) {
-    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordSplit(store, group, target, settled, evaluation as SplitEvaluation));
+  complete(deps, run, evaluation, commitTerminal, failure = null) {
+    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordSplit(store, group, target, settled, evaluation as SplitEvaluation, failure));
   },
   usageUnknownReason: "requirement-usage-unknown",
 };

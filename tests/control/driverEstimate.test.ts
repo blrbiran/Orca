@@ -83,7 +83,9 @@ describe("the estimate chain (single-call estimate spec §6.1-§6.3)", () => {
   it("blocks as estimate-usage-unknown, not in a retry loop, when a failed call observed no usage", async () => {
     const x = await estimateHarness({ outcome: "failed", tokens: null }); try {
       await x.rounds(() => x.body().state === "blocked");
-      expect(x.body().drive).toMatchObject({ blockedAt: "C", blockedReason: "estimate-usage-unknown" });
+      // Rewritten for the ccloop error codes spec (2026-10-15; its §5 names this criterion): this now encodes that the
+      // named block also carries ccloop's code for the failed call (the harness's failed calls name single-call-output-invalid).
+      expect(x.body().drive).toMatchObject({ blockedAt: "C", blockedReason: "estimate-usage-unknown:single-call-output-invalid" });
       expect(x.estimate().state).toBe("running");
       expect(x.body().unknown.work).toBe(true);
       const collects = x.fake.calls.collect;
@@ -133,7 +135,8 @@ describe("the estimate chain (single-call estimate spec §6.1-§6.3)", () => {
   });
 
   it.each([
-    ["a call that failed", { outcome: "failed" as const }, "estimate-call-failed"],
+    // Rewritten for the ccloop error codes spec (2026-10-15; §5): a failed call's reason now carries ccloop's code.
+    ["a call that failed", { outcome: "failed" as const }, "estimate-call-failed:single-call-output-invalid"],
     ["an answer for another plan", { output: () => estimateOutput("f".repeat(64)) }, "estimate-output-plan-mismatch"],
     ["an answer that is not an estimate", { output: () => ({ schema: "budget-estimate-v1" }) }, "estimate-output-invalid"],
   ])("fails the estimate with its reason through the driver: %s", async (_label, options, reasonCode) => {

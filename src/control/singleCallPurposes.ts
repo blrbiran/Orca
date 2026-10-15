@@ -27,11 +27,11 @@ export interface SingleCallHandler {
   /** A2: the prompt, the hand-written response schema and the output cap -- or the reason the run is blocked at A2. */
   prepare(deps: SingleCallPrepareDeps, run: SingleCallRunRow): Promise<SingleCallRequest | { blocked: string }>;
   /** Ce, before the transaction: work that reads outside the store (the target repository); its result reaches `complete`. */
-  evaluate?(deps: SingleCallPrepareDeps, run: SingleCallRunRow, rawOutput: unknown): Promise<unknown>;
+  evaluate?(deps: SingleCallPrepareDeps, run: SingleCallRunRow, rawOutput: unknown, failure?: string | null): Promise<unknown>;
   /** Ce: the purpose's own classifier of the raw output (code, never the model). */
   readonly classify: (...args: never[]) => unknown;
   /** Ce: settle the call and its run in one transaction; `commitTerminal` runs first, a throw rolls everything back. */
-  complete(deps: { store: ControlStore; admissionGate?: AdmissionGate }, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void): void;
+  complete(deps: { store: ControlStore; admissionGate?: AdmissionGate }, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void, failure?: string | null): void;
   /** Ce: the block reason when the call's usage is not known (completion answered run-stop-unconfirmed). */
   readonly usageUnknownReason: string;
 }
@@ -50,8 +50,8 @@ const ESTIMATE = {
     };
   },
   classify: classifyEstimateOutput,
-  complete(deps: { store: ControlStore; admissionGate?: AdmissionGate }, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void): void {
-    completeEstimateInStore(deps, run.groupId, String(run.estimateId), rawOutput, commitTerminal, ESTIMATE.classify);
+  complete(deps: { store: ControlStore; admissionGate?: AdmissionGate }, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void, failure: string | null = null): void {
+    completeEstimateInStore(deps, run.groupId, String(run.estimateId), rawOutput, commitTerminal, ESTIMATE.classify, failure);
   },
   usageUnknownReason: "estimate-usage-unknown",
 } as const satisfies SingleCallHandler;

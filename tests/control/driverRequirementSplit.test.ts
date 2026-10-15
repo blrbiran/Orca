@@ -54,7 +54,9 @@ describe("the split purpose on the single-call chain (N1 spec §8)", () => {
     const x = await requirementHarness({ answers: [{ purpose: "split", output: null, outcome: "failed" }, { purpose: "split", output: VALID_SPLIT }], startAt: "split" });
     try {
       await x.until(() => readDraft(x.store, "r", 2).state !== "drafting");
-      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "invalid", output: null, calls: [{ outcome: "invalid" }] });
+      // Rewritten for the ccloop error codes spec (2026-10-15; §5): this now encodes that the failed call is recorded as
+      // failed with ccloop's code, and still uses one of the two automatic retries.
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "invalid", output: null, calls: [{ outcome: "failed", reason: "single-call-output-invalid" }] });
       expect(readDraft(x.store, "r", 2)).toMatchObject({ state: "awaiting-review", autoRetry: 1 });
     } finally { await x.dispose(); }
   });

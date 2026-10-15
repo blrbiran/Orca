@@ -28,7 +28,7 @@ import { profileSnapshot } from "./web.js";
 
 /** N1 plan Task 6: one queued model answer per single call, in order; `purpose` is checked against the prompt's first line. */
 /** `output` may be a function of the prompt (an estimate's answer must echo the plan hash its request carries). */
-export interface QueuedAnswer { purpose: "clarify" | "split" | "estimate"; output: unknown; outcome?: "complete" | "failed" | "aborted"; tokens?: number | null }
+export interface QueuedAnswer { purpose: "clarify" | "split" | "estimate"; output: unknown; outcome?: "complete" | "failed" | "aborted"; tokens?: number | null; errorCode?: string | null }
 const HEADS = { clarify: "Orca requirement clarification, instruction version 1.", split: "Orca requirement split, instruction version 1.", estimate: "You are estimating the budget" } as const;
 const sha = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
 
@@ -65,7 +65,7 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
       const output = typeof answer.output === "function" ? (answer.output as (prompt: string) => unknown)(work.prompt) : answer.output;
       const outputRef = outcome === "complete" ? put(`output-${claim.runId}`, canonicalBytes(output)) : null;
       const record = { schema: "ccloop-single-call-record-v1", promptSha256: sha(Buffer.from(work.prompt, "utf8")), responseSchemaSha256: sha256Canonical(work.responseSchema),
-        outcome, outputRef, errorCode: outcome === "failed" ? "single-call-output-invalid" : null };
+        outcome, outputRef, errorCode: outcome === "failed" ? (answer.errorCode === undefined ? "single-call-output-invalid" : answer.errorCode) : null };
       const executionId = `exec-${claim.runId}`;
       const candidate: Candidate = {
         groupId: claim.groupId, workItemId: claim.workItemId, taskId: claim.taskId, runId: claim.runId, generation: claim.generation,
