@@ -123,7 +123,8 @@ describe("the agents area in Chinese", () => {
     expect(texts(container, "thead th")).toEqual(["槽位", "agent", "模型", "窗口", "这个任务自己的一层"]);
     expect(firstCell(container, "task:a").slice(0, 4)).toEqual(["a", "codex 来自操作者", "gpt-x 来自agent 描述符", "1000000 token 来自计划（组）"]);
     expect(firstCell(container, "task:b").slice(0, 2)).toEqual(["b", "暂时不可用，点「重新读取」再问一次 · ccloop-timeout"]);
-    expect(firstCell(container, "reconcile")).toEqual(["协调", "被拒 · agent-installation-missing", ""]);
+    // A rejected slot shows its code and the Orca-table explanation, spec 2026-10-15 ccloop error codes §4.6.
+    expect(firstCell(container, "reconcile")).toEqual(["协调", "被拒 · agent-installation-missing · 安装表里没有这个 agent。", ""]);
     cleanup();
 
     const stale = render(<AgentSelectionEditor view={view("editable")} agents={agents} preview={{ ...preview, proposalVersion: 1 }} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container;

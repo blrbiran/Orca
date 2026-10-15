@@ -110,6 +110,20 @@ describe("each surface (spec A §4.6 table)", () => {
     expect(shown("zh")).toContain(`omp-single-call-cap-exceeded · ${ZH_CAP}`);
   });
 
+  // A7 review I1: the line names the LATEST failed call of a failed step, and a step that is not failed shows none.
+  it("a failed requirement names its latest failed call, and a drafting one names none", () => {
+    const call = (runId: string, reason: string) => ({ runId, overviewHash: null, commit: null, usage: null, outcome: "failed" as const, reason });
+    const view = requirementView("failed");
+    const twoFailed: RequirementViewV1 = { ...view, rounds: [{ ...view.rounds[0]!, calls: [call("run-1", "omp-model-catalog-invalid"), call("run-2", "omp-single-call-cap-exceeded")] }] };
+    const panel = (shown: RequirementViewV1) => render(<RequirementsPanel config={config} summary={summaryWith(shown)} views={{ r: shown }} selected="r" agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} />).container;
+    const failed = panel(twoFailed);
+    expect([...failed.querySelectorAll('p[role="status"]')].map((p) => p.textContent)).toContain(`omp-single-call-cap-exceeded · ${EN_CAP}`);
+    expect(failed.textContent).not.toContain("omp-model-catalog-invalid");
+    cleanup();
+    const drafting: RequirementViewV1 = { ...view, rounds: [{ ...view.rounds[0]!, state: "drafting", calls: [call("run-1", "omp-model-catalog-invalid")] }] };
+    expect(panel(drafting).textContent).not.toContain("omp-model-catalog-invalid");
+  });
+
   // Controller ruling on A7 (plan R3): an unknown code's explanation is the code itself, so these surfaces show it once.
   it("an unknown code is shown once on the failed-call line and the saved-result line", async () => {
     const view = requirementView("failed");
