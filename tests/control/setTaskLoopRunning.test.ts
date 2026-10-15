@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
 import { WebControlService, readWebGroup } from "../../src/control/webService.js";
 import { deliverScheduledStart, readWorkClaimEnvelope } from "../../src/control/webDispatch.js";
+import { applyPanelShutdown } from "../../src/panel/controlLifecycle.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 import { change, errorOf, loop, workBody } from "./fixtures/taskLoop.js";
 import { webFixture } from "./fixtures/web.js";
@@ -55,6 +56,23 @@ describe("set-task-loop while the group runs (spec B §3.3)", () => {
       expect(await service.setTaskLoop(change(h, "a", { inputs: { goal: "write a, changed" } }))).toMatchObject({ error: { code: "group-state-invalid" } });
     } finally { await h.dispose(); }
   });
+
+  // Fix round 1 (task-B3-review.md, mutation B3x): the real global shutdown, which writes a stop intent only when it freezes
+  // an active run (issue-fixes spec §3.2 S1), so `a` is claimed first. A shutting-down group refuses even an unstarted task.
+  // No admission gate is passed: a drained gate would refuse as panel-draining before the predicate is reached, and the
+  // persisted intent is what a panel serving after the shutdown reads.
+  it("C7: a shutting-down group does not", async () => {
+    const t = await driverHarness([{ taskId: "a", loop: loop("a") }, { taskId: "b", loop: loop("b") }]);
+    try {
+      await t.claim();
+      await applyPanelShutdown({ store: t.h.store, profileRouter: t.h.deps.profileRouter, epoch: "epoch-b3", now: () => new Date("2026-10-15T00:00:00.000Z"), shutdownGraceMs: 1_000 });
+      expect(String(t.h.store.db.prepare("SELECT mode FROM stop_intents WHERE group_id='g'").get()?.mode)).toBe("shutdown");
+      const before = workBody(t.h, "b").derivedContractHash;
+      expect(errorOf(await t.service.setTaskLoop(change(t.h, "b", { inputs: { goal: "write b, changed" } })))).toMatchObject({ code: "group-state-invalid" });
+      expect(workBody(t.h, "b").derivedContractHash).toBe(before);
+      expect(workBody(t.h, "b").amendmentHash).toBeUndefined();
+    } finally { await t.h.dispose(); }
+  }, 60_000);
 
   it("C8: a task whose run finished keeps its contract -- its change is refused, another's is accepted, and its retry runs the contract frozen at its claim", async () => {
     const t = await driverHarness(THREE, { behaviour: (id) => (id === "b" ? "failed" : "succeed") });
