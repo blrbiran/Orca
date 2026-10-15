@@ -135,3 +135,7 @@ makes an active run is checked to use a work run.
 Targeted files while implementing (`tests/control/webDispatch.test.ts`, `setTaskLoop*.test.ts`,
 `requirementGuards.test.ts`, the socket/CLI files, `web/tests/loopPlanEdit.test.tsx`); one full gate before merge with
 `ORCA_CCLOOP_BIN` set.
+
+## Corrections found while planning (Orca session 026d10e3, 2026-10-15)
+
+The implementation plan `docs/superpowers/plans/2026-10-15-error-codes-and-start-guard.md` lists, in its section "Spec corrections found while planning" (K1-K8), where this text disagrees with the code and what is built instead; its "Controller rulings before execution" (R1-R5) settle the open points. Where they differ, the plan's corrected behaviour is what ships; the text above is kept as drafted.

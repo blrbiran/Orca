@@ -204,3 +204,7 @@ update to the new shape): `web/tests/agentPreviewRefresh.test.tsx:184,224,317,33
 
 Targeted files while implementing; one full gate before merge (`npm run verify` with `ORCA_CCLOOP_BIN` set to a ccloop
 build clone and `ORCA_AGENTS_TABLE` to a fake-only table — the scheduler suites need the former).
+
+## Corrections found while planning (Orca session 026d10e3, 2026-10-15)
+
+The implementation plan `docs/superpowers/plans/2026-10-15-error-codes-and-start-guard.md` lists, in its section "Spec corrections found while planning" (K1-K8), where this text disagrees with the code and what is built instead; its "Controller rulings before execution" (R1-R5) settle the open points. Where they differ, the plan's corrected behaviour is what ships; the text above is kept as drafted.

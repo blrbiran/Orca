@@ -50,6 +50,14 @@ Each is planned as written in the right-hand column; the specs are not edited (t
 | K7 | B §5's rewrite list is complete | `tests/control/fixtures/driverHarness.ts:78-84` `claim()` sends a fresh `start` for **every** claim. Criteria that claim twice while a run is active (e.g. `configHashPerTask.test.ts:44`, `driverReconcileN.test.ts:53` and `:73`, `setTaskLoopConfirmed.test.ts:150`) will be refused `group-execution-pending` and go red | Task B2 runs a census and **stops for the human** with the exact list and two options (fixture change vs. named rewrites); nothing is edited before the ruling |
 | K8 | Small item 3: the title is wrong "now that omp also answers singleCallExecution" | The test is in **ccloop** (`tests/agents/registry.test.ts:80`); its drift is `contextWindowTokens`: omp's `capabilities(_config, row)` returns `row?.contextWindow ?? null` (`ccloop src/agents/omp.ts:31-39`), so "null otherwise" is false for omp | Task S3 retitles it in a ccloop worktree; ccloop Rule 15(c)/16 require an appended comment naming the ruling (the published comment at `:79` stays verbatim) |
 
+## Controller rulings before execution (Orca session 026d10e3, 2026-10-15; the human delegated: "有问题先按你的建议执行")
+
+- **R1 (K7):** Option A. `driverHarness.claim()` arms later claims the way the driver does; the fixture change is listed for the human. Task B2 Step 6 does not stop.
+- **R2 (K1-K8):** the two specs are unpublished drafts on this branch; each gets an appended "Corrections found while planning" section pointing at the table above. The plan's right-hand column is what is built.
+- **R3 (generic text):** the fallback sentence must not say "ccloop" (Orca-only codes reach some surfaces, e.g. `saved-result-evidence-unavailable`). `ccloop.generic` = `{{code}}: {{detail}}` (en and zh), `ccloop.genericNoDetail` = `{{code}}`. The lookup order stays: ccloop table, then Orca's table, then the generic form. Task A7's test literals follow mechanically: `ccloop failed with X: y` → `X: y`, `ccloop failed with X.` → `X`, `ccloop 失败（X）：y` → `X：y`, `ccloop 失败（X）。` → `X` (9 occurrences in the A7 steps; the surrounding text of each literal is unchanged).
+- **R4:** the six A8 log-line sites without a criterion are accepted as registered gaps.
+- **R5 (S3):** on ccloop branch `codex/attempt-commit-no-hooks` (worktree `/Users/biran/code/skills/orca/ccloop-wt/attempt-commit-no-hooks`), on top of `fix(workspace): run the attempt commit without the target repository's hooks`.
+
 ## Interpretations recorded (not in the spec text; reversible, Rule 1 step 2)
 
 - **`peerFailure` of a peer exit with no detail** (`new ControlError("control-peer-exit")`): `{ exit: "", code: null, detail: "" }`, so the HTTP answer is `ccloop-failed:unknown` and the stored reason is `control-peer-exit`. The existing criterion at `agentSelectionApi.test.ts:240-265` throws exactly that.
@@ -1103,8 +1111,8 @@ Texts (the criteria below repeat them as literals):
 | key | en | zh |
 |---|---|---|
 | `enErrors/zhErrors["control-peer-exit"]` | `ccloop exited with an error: {{detail}}` | `ccloop 出错退出：{{detail}}` |
-| `ccloop.generic` | `ccloop failed with {{code}}: {{detail}}` | `ccloop 失败（{{code}}）：{{detail}}` |
-| `ccloop.genericNoDetail` | `ccloop failed with {{code}}.` | `ccloop 失败（{{code}}）。` |
+| `ccloop.generic` | `{{code}}: {{detail}}` | `{{code}}：{{detail}}` |
+| `ccloop.genericNoDetail` | `{{code}}` | `{{code}}` |
 | `omp-model-catalog-unavailable` | `omp could not list its model catalog ({{detail}}). Check that omp is installed and starts, then retry.` | `omp 无法列出它的模型目录（{{detail}}）。请确认 omp 已安装且能启动，然后重试。` |
 | `omp-model-catalog-invalid` | `omp's model catalog could not be read ({{detail}}).` | `omp 的模型目录无法读取（{{detail}}）。` |
 | `omp-single-call-cap-exceeded` | `omp's catalog now caps this model's output above the bound this requirement was opened with, so the call was refused before it started. Retry: a retry recomputes the bound from the current catalog.` | `omp 目录里这个模型的输出上限已高于这个需求开启时定下的上限，调用在开始前被拒绝。请重试：重试会按当前目录重新计算上限。` |
@@ -1372,7 +1380,7 @@ Surfaces (each imports `explainCcloopCode` / `explainEstimateReason` from `./ccl
 - `RequirementsPanel.tsx`: in `Detail`, after `const step = …;` (line 260) add `  // ccloop error codes spec (2026-10-15) §4.5-§4.6: a failed step names its latest failed call's ccloop code.\n  const failedCall = step?.state === "failed" ? [...step.calls].reverse().find((call) => call.outcome === "failed") ?? null : null;`; after the `reason` alert's closing `)}` (line 300) add `      {!archived && failedCall?.reason != null && <p role="status">{failedCall.reason} · {explainCcloopCode(failedCall.reason, "")}</p>}`; line 302's `{blockedRun.reason !== null && <>{blockedRun.reason} · </>}` becomes `{blockedRun.reason !== null && <>{blockedRun.reason}{explainRunReason(blockedRun.reason) !== null ? \` · ${explainRunReason(blockedRun.reason)}\` : ""} · </>}`.
 
 Locales:
-- `en.ts`, before `  enums: {` (line 1034): `  // ccloop error codes spec (2026-10-15) §4.6: a ccloop code with no entry in either table.\n  ccloop: { generic: "ccloop failed with {{code}}: {{detail}}", genericNoDetail: "ccloop failed with {{code}}." },`; `zh.ts` the same place inside `zh`: `  ccloop: { generic: "ccloop 失败（{{code}}）：{{detail}}", genericNoDetail: "ccloop 失败（{{code}}）。" },`.
+- `en.ts`, before `  enums: {` (line 1034): `  // ccloop error codes spec (2026-10-15) §4.6: a ccloop code with no entry in either table.\n  ccloop: { generic: "{{code}}: {{detail}}", genericNoDetail: "{{code}}" },`; `zh.ts` the same place inside `zh`: `  ccloop: { generic: "{{code}}：{{detail}}", genericNoDetail: "{{code}}" },`.
 - `enErrors`: after the A2 `"ccloop-failed"` line add `  // ccloop error codes spec §4.4: a peer exit's stored run reason; the detail is ccloop's code explained (web/src/refusalExplain.ts).\n  "control-peer-exit": "ccloop exited with an error: {{detail}}",`; `zhErrors`: `  "control-peer-exit": "ccloop 出错退出：{{detail}}",`.
 - After `enErrors` (`};` at the end of `en.ts`) add `/** ccloop error codes spec (2026-10-15) §4.7: ccloop's own codes an operator can act on; each may interpolate only {{detail}}. */\nexport const enCcloopErrors: Record<string, string> = { … };` with the seven en texts of the table above; in `zh.ts` `export const zhCcloopErrors: Record<string, string> = { … };` with the seven zh texts.
 
