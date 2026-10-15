@@ -54,6 +54,8 @@ const VIEW_REASONS = [
   "codex-result-invalid", "codex-events-invalid", "codex-no-completion", "codex-usage-invalid", "codex-usage-unavailable", "codex-event-error",
   "codex-timeout", "codex-skills-cleanup-failed", "codex-skills-path-conflict", "codex-skills-pending", "codex-skills-setup-failed",
   "codex-skills-source-invalid", "codex-exit-error",
+  // Feedback #62: Codex answered HTTP 429 and ccloop's backoff ran out (ccloop 3069dbf codexAdapter.ts).
+  "codex-rate-limited",
 ];
 const TABLES = { zh: zhErrors, en: enErrors } as const;
 const has = (table: Record<string, string>, code: string): boolean => Object.prototype.hasOwnProperty.call(table, code);
