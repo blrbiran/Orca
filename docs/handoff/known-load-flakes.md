@@ -61,6 +61,8 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 
 **`026d10e3`（2026-10-15）**：`feat/error-codes-start-guard` 终门的首次全量（负载约 11–15，同机另有会话）红 24 条，全是超时形状——`settleUnknownUsage` ×15、`retryTask` ×2、`archivedWakePerformance`、`driverReconcileN`（`the driver did not reach the expected state before the deadline`）、`driverRecovery`、`driverRequirementSplit`、`integrationKeep` 各 1，另 `verify:control` 段 `settleUnknownUsage`「keeps another run's unknown/open request blocker (silent=false)」1 条；同一棵树第二次全量（`verify:chain` 段）全部通过；7 个文件负载 6.4–9.9 下单跑各 3/3 绿。repin 门（同会话）同形：8 超时，第二次全量消失。`profiledService` 在 B2 普查里超时一次、单跑 3/3（新候选，未入表）。
 
+**`ec9ce319`（2026-10-15 晚）**：repin `71053e3` 那一笔的门（clone，负载 11–17）：全量 16 红＝14 条 5 s／30 s 超时（`gateCheck`、`driverRecovery`、`integrationKeep`、`retryTask`、`schedulerBridge`、`settleUnknownUsage`）＋`taskResultPaired`×2；`verify:control` 多 1 条 `settleUnknownUsage` 超时。六个文件同 env 各单跑 3/3 绿（负载 5–34）。⚠️ 全新 clone 先跑测试再 web build 会多出约 50 条 `panel-dist-missing`——不是 flake，是门脚本顺序错。
+
 ### 已修、不再豁免的（再红就当新问题查）
 
 - `tests/control/driverSettle.test.ts` 真 git 场景：全量＋并发下撞 5 s，已给 30 s。再红要查。

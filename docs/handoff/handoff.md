@@ -59,7 +59,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ---
 
-## 三、当前状态（2026-10-15，会话 `026d10e3` 滚动）
+## 三、当前状态（2026-10-15，会话 `ec9ce319` 滚动）
 
 ### 3.1 已经做成的（都已在 Orca／ccloop 的 main 上，除非下面另说）
 
@@ -94,20 +94,27 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 **驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 **Codex 只支持 `phase-end`＋`soft`：任何地方不许宣称 strict token 封顶**；软 token 预算也不能说成严格金钱上限。
 
-### 3.3 会话 `026d10e3`（2026-10-15）的状态 —— **先读这一节**
+### 3.3 会话 `ec9ce319`（2026-10-15 晚）的状态 —— **先读这一节**
+
+- **开工现核**（`ls-remote`）：上一会话 `026d10e3` 列的三条线（Orca `feat/error-codes-start-guard`、ccloop `codex/attempt-commit-no-hooks`、ccmem 本地 main）**人都已合推**；Orca 的 feat 分支已删，ccloop 那条分支本地仍在（与 main 同一笔，删归人）。
+- **ccmem `core.hooksPath`**：人授权后 `--unset`（回默认 `.git/hooks`，里面只剩 `.sample`）；没改成新绝对路径，免得再搬家又坏。
+- **本会话分支 `codex/round-20261015b`**（工作树 `Orca-wt/round-20261015b`，从 main 切）：repin ccloop 到 `71053e3`（主题行 `chore(deps): repin ccloop to 71053e3 so attempt commits skip the target's hooks`）；终审小项 m2（驱动日志行保留 ccloop 全量 stderr）、m6（cap-exceeded 文案在 estimate 行上不再说「需求」）；m5／m7 人裁不修（理由在台账）；新 spec 两笔。台账 `.superpowers/sdd/2026-10-15-round-b/progress.md`（`git add -f`）。**待人合推**。
+- **门**（clone 在 repin 那一笔上，日志 `/private/tmp/o15/logs/`）：除全量／`verify:control`／`verify:chain` 外各段 0、tmpleak 0；第一遍那三段因门脚本把测试排在 web build 之前（`panel-dist-missing`，§6.7 的坑，控制器失误）不算；重跑全量 3816/3865、16 红＝14 条超时＋`taskResultPaired`×2；`verify:control` 1958/1991（paired×2＋1 超时）；`verify:chain` 213/213、其第二次全量只剩 paired×2；tmpleak 0；超时的六个文件同 env 各单跑 3/3 绿 ⇒ **门过（只剩已登记的负载 flake 与固定红）**。m2／m6／验收脚本那几笔只跑了受影响文件。
+- **计划已写**（人要求本轮写完）：`docs/superpowers/plans/2026-10-15-every-agent-requirement-chain.md`，17 个 Task（0 Codex 隔离零成本核；1–9 ccloop；H1 人推 ccloop；10–16 Orca 含 repin 与全门；H2 人合推；付费 P1 真 Codex、P2 真 OMP 链各自先问）。计划顶部「Spec issues found while planning」16 条是实施时对 spec 的具体化（omp 保留自己的 `omp-model-catalog-*` 码、codex 目录失败降级而非拒绝、control 线不打日志行、单次解析共用 30 s 截止等），**第 8 条要人定：版本号缓存会让 shim 背后的升级最多 30 分钟看不见，要不要缓存版本**。要改写的既有判据 E1–E6 已在计划里列到 file:line（ccloop `singleCallCapability.test.ts`、`registry.test.ts:81,83`、`agentsControl.test.ts:110`；Orca `webCcloopSmoke.test.ts:156-159`），**实施前逐条给人点名**。计划由一席子代理写（控制器抽核了提交与 4 处锚点，未经第二席评审）。
+- **spec**：`docs/superpowers/specs/2026-10-15-every-agent-requirement-chain-design.md`——人裁 R1–R9：任一 agent 独立跑完需求链（高优先级）；Codex 单次调用放宽为事后核对上限（`"v1-soft"`）；下拉框覆盖 OMP 与 Codex；**目录缓存落文件放在 ccloop**（静态追踪：5 任务需求一条流程约 40 次目录探测＋40 次 `--version`，大多串行——这才是「omp 一直不可用」的瓶颈）；Claude 默认档报 200000（二进制模型表核过：所有模型 ≥200K）；探测进调用时限；**profile 声明 `contextWindowTokens: null` 改为「未声明」取观测值**（否则真实 `~/.orca/profile.json` 下所有 kind 都被 `context-unavailable` 挡）；omp 起进程前复核可读缓存（人接受 provider 侧改上限的风险）；Codex 先调研隔离。
+- **零成本实测（结论只在 spec §2）**：
+  - omp：stdin 非 TTY **不卡**（1.2 s／冷启动 4.7 s），黑洞代理下 2 s 照常 ⇒ 反馈 #67 的 pty 方案不采纳；测试者的真根因未知，spec 让超时报出阶段与耗时。
+  - Codex 0.160.0：`codex debug models` 有每个模型的 `context_window`；**仍无单次输出上限**；feature flag 关不掉注入文本——每次 codex 调用都带着人的 skills（约 56 KB）、AGENTS.md、环境；私有 HOME＋私有 `CODEX_HOME`＋几个 `include_*` 键可降到约 6 KB 固定残留（multi-agent 那 3.4 KB 去不掉）。**现有 codex 阶段调用同样带着人的 skills**（登记，未修）。
+- **真 OMP estimate 重跑（付费，人同意）**：验收脚本新加 `--estimate-only`（只跑估算即停；人：此类跑会反复出现）。结果 n＝2 同形：传输全过（一条消息、工具关、叠加在、3170 token 记账＝ccloop），**模型把任务列两遍、副本与 groupRationale 填 `"placeholder"`** ⇒ `estimate-output-invalid`。提示词与 schema 里都没有这个词 ⇒ 记为该别名的答案质量；可选：换模型，或 instruction v2 写明任务数（设计活）。隔离根 `/private/tmp/omp15-sUh0` 含 omp 配置副本（**有凭据，删归人**）。
+- **上下文**：本会话越过 T1（检查点 `chore(checkpoint): orca-dev-ec9ce319, …` 在 main 上，本地提交）。
+
+### 3.3d 会话 `026d10e3`（2026-10-15）的结论（三条线已由人合推，见 3.3 开工现核）
 
 人授权本会话不考虑上下文大小（检查点记了 T1／T2 越线），并授权「执行中有问题先按 agent 的建议执行、最后报人审」——本会话的全部 `Ruling:` 在 `.superpowers/sdd/2026-10-15-error-codes-and-start-guard/progress.md`（本分支 `git add -f` 入库）。
 
 **已在 main（人已合推）**：repin（`chore(deps): repin ccloop to dc51022 for the omp single-call and catalog diagnostics`）。门的结论见 §3.4。
 
-**待人合推的线（各自 `--ff-only`；push／合并／删除都归人）：**
-
-| 仓 | 分支（工作树） | 内容 |
-|---|---|---|
-| Orca | `feat/error-codes-start-guard`（`Orca-wt/error-codes-start-guard`） | main 之上：合入 `docs/spec-error-codes-and-start-guard`（两份 spec＋计划＋人裁 R1–R5）＋SDD 实现（A1–A8 错误码、B1–B3 #53、S1 #61、S2 `VIEW_REASONS`、终审修复波次）＋本 handoff |
-| Orca | （同上分支，cherry-pick 进来） | 验收脚本的 OMP estimate／requirement 场景与 `--fake-omp`＋Task 13 台账与证据（`.superpowers/sdd/2026-10-15-omp-single-call-acceptance/`）＋计划 Task 13 打勾与具名更正；原分支 `test/omp-single-call-acceptance`（`Orca-wt/omp-acceptance`）作废待删 |
-| ccloop | `codex/attempt-commit-no-hooks`（`ccloop-wt/attempt-commit-no-hooks`） | `fix(workspace): run the attempt commit without the target repository's hooks`、`test(agents): retitle the context-window criterion…`、ccloop handoff；**合推后 Orca 要再 repin 一次**（§4.2 第 0 条） |
-| ccmem | `main`（本地领先一笔） | `docs(handoff): record the prompt-submit timeouts, the Qoder hook removal and the Orca pointer` |
+三条线的内容：Orca 错误码显示（A1–A8）＋#53 start 守卫（B1–B3）＋#61＋`VIEW_REASONS`＋终审修复波次＋Task 13 验收证据（cherry-pick 自 `test/omp-single-call-acceptance`，原分支作废待删）；ccloop attempt 提交关钩子＋registry 标题；ccmem handoff 一笔。repin 已在本会话分支上（3.3）。
 
 - **错误码显示（spec `docs/superpowers/specs/2026-10-15-ccloop-error-codes-design.md`，#58 Orca 半＋omp single-call spec §8「上限拒绝看不见」）**：
   - ccloop 进程失败（`control-peer-exit`）在 HTTP 上答 **424 `ccloop-failed`**，消息 `ccloop-failed:<ccloop 码|unknown>[: <细节≤512>]`，web 当作确定的拒绝（≥500 才是「不确定」）。⚠️ 例外（计划更正 K2）：`apply-agent-update` 在保留 outbox 行之后才调 ccloop ⇒ 那里的 peer exit 仍答 500（不确定，待对账）；`hasPendingAgentUpdate` 那一合取登记为冗余守卫。
@@ -176,7 +183,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 每一步前 `ls-remote` 现核；删分支前 `git merge-base --is-ancestor <分支> main`（或 `git cherry`）现核。
 
-1. **合推**（顺序无依赖）：Orca `feat/error-codes-start-guard`（已含 Task 13 那两笔的 cherry-pick）；ccloop `codex/attempt-commit-no-hooks`；ccmem 本地 main push。
+1. **合推** Orca `codex/round-20261015b`（repin＋m2＋m6＋spec＋计划＋验收脚本 `--estimate-only`＋台账＋本 handoff；门见 §3.3，已过）；ccloop、ccmem 本地 main 各领先 handoff 提交，push。上一会话的三条线已合推（§3.3 开工现核）。
 2. **面板**（之前已同意、未核是否做过）：合进 main 后 `npm run build`＋`orca panel restart`；「设置 → Agent → 安装更新 → 重新检测」应用 omp「新增安装」。
 3. **删**（只列 agent 确定是自己产生的；merge 后做；`worktree remove` 若报未跟踪文件，那些都是 `.superpowers` 已入库副本，可 `--force`）：
    - Orca：`codex/round-20261014`（`Orca-wt/round-20261014`）、`fix/feedback-20261014`（`Orca-wt/feedback-20261014`）、`codex/omp-single-call`（`Orca-wt/omp-single-call`，要 `-D`，等价补丁都在 main）、`fix/web-start-group-running`（`Orca-wt/web-start-running`，要 `-D` 与 `--force`）、`codex/repin-ccloop-dc51022`（`Orca-wt/repin-dc51022`，已在 main）、`docs/spec-error-codes-and-start-guard`（`Orca-wt/design-20261015`，合进 feat 分支后）、`test/omp-single-call-acceptance`（`Orca-wt/omp-acceptance`，要 `-D`，两笔已 cherry-pick 进 feat 分支），以及合推后的 `feat/error-codes-start-guard`。
@@ -185,16 +192,16 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 4. **孤儿进程**（杀前 `ps -p` 现核）：6165、14693、23125、66086 是会话 `02f047f6` 从 `ccloop-wt/omp-catalog-diagnostics/dist` 起的 `worker.js`——**删那棵工作树之前先杀**。
 5. **临时目录**（不是 worktree，确认无进程在用后 `/bin/rm -rf`）：`/private/tmp/orp-gate`（repin 门与 dc51022 build clone）、`/private/tmp/oec`（本轮 SDD 的门、变异 clone、日志；其中 `mut/final-fix`、`mut/b2-diag`、`mut/a7f-red`、`mut/s1fix2` 是实施席留下的）、`/private/tmp/ccq4-gate`、`/private/tmp/omp13-CMmR`（Task 13 隔离世界，含 omp 配置副本，**含凭据**）、`/private/tmp/oacc-bmsz`（fake-omp 验收输出）。
 6. **`~/.orca/profile.json`**：要不要声明 `contextWindowTokens`、调 `framingTokenOverhead`（OMP 实测约 2047）——见 §3.3 的取舍，归人。
-7. **ccmem**：embedding 额度／换 key；`core.hooksPath` 旧路径改不改。
+7. **ccmem**：embedding 额度／换 key（`core.hooksPath` 已于会话 `ec9ce319` 经人授权 unset）。
 8. **⚠️ 面板服务去掉 `--repo`（反馈 #63）之前读这条**：`~/.orca/panel/run.sh` 带 `--repo orca=…`，所以 UI 不能增改项目。去掉后面板走 `~/.orca/projects.json` 文件模式，控制库会切到 `$ORCA_CONTROL_DIR/panel`（空的），**除非**同时设了 `controlStateDir` 且项目 id 与现在相同——否则看起来像所有历史都没了（数据还在原目录）。改服务是人的事。
 
 ### 4.2 agent 的活
 
-0. **再 repin**（人 push ccloop `codex/attempt-commit-no-hooks` 之后）：在装了真实 `node_modules` 的、基于新 main 的工作树里 `node scripts/pin-ccloop.mjs <40 位 sha>`，再跑全门（scheduler 段必须设 `ORCA_CCLOOP_BIN` 指一份 ccloop build clone，否则 39 条必红）。
-1. **ccloop 那一轮（人已定方向，2026-10-15）**：OMP 模型下拉框——ccloop 新增列模型目录的命令 → Orca API（内存缓存短 TTL＋刷新）→ web datalist（只 OMP、仍可自由输入、取不到时显示原因）；同一轮把 spawn 时目录探测纳入调用时限与 abort（omp single-call spec §8 残余）。先走 brainstorming／spec。
+0. ~~再 repin~~：已在 `codex/round-20261015b`（会话 `ec9ce319`）。repin 的做法仍是：装了真实 `node_modules` 的工作树里 `node scripts/pin-ccloop.mjs <40 位 sha>`，scheduler 段设 `ORCA_CCLOOP_BIN` 指 ccloop build clone；**全新 clone 跑门先 `npm run build --workspace web`**。
+1. **「每个 agent 都能跑需求链」一轮——下一位 agent 从这里开工**：spec `docs/superpowers/specs/2026-10-15-every-agent-requirement-chain-design.md`＋计划 `docs/superpowers/plans/2026-10-15-every-agent-requirement-chain.md`。开工前：读计划顶部 16 条 spec issues；问人第 8 条（缓存版本号与否）；问执行方式（subagent-driven／inline）；Task 0 的软链凭据一步与 E1–E6 改写各要人点名。顺序：ccloop 先、人 push、Orca 与 repin 同落（spec §8）。旧条目「只 OMP 下拉框＋内存缓存短 TTL」已被 R3／R4 取代。spec 里点名要人单独点头的：Codex 私有 `CODEX_HOME` 里软链 `auth.json`／`config.toml`（凭据路径）；两次付费验收。
 2. **真 OMP estimate 再跑一次**（付费，**先问人**）：本轮模型把任务列了两遍；要看一次 `ready` 的估算，或换模型。
 3. **OMP skills 的真 provider 验收**：照 `2026-10-12-oh-my-pi-acceptance.md` 的隔离形状、带一个声明 skill 的任务跑一次，`scripts/verify-omp-acceptance.ts` 要能看见 `<skills>` 块与 `SKILL.md` 的 read（付费，先问人）。
-4. **登记的小项**（终审／任务评审的 deferred minors，台账里有全文）：驱动日志行也被截到 512 ⇒ ccloop 全量 stderr 不再保存在任何地方；`recoveryRetry` 的探测不在 admission gate 内；cap-exceeded 文案在 estimate 行上写的是「requirement」；计划卡对「stopped 无 intent」的组仍给编辑入口（服务端会拒，旧缺口）；`peerFailureLog.test.ts:22` 用 Set 去重；`executionPending` 的 `kind === "task"` 过滤无判据；A8 的 6 处日志行无判据（人裁 R4）；`profiledService` 一次超时（单跑 3/3，候选 flake）。
+4. **登记的小项**（终审／任务评审的 deferred minors，台账里有全文）：~~驱动日志行截断~~、~~cap-exceeded 文案~~ 已修（会话 `ec9ce319`）；`recoveryRetry` 探测在闸门外——人裁不修（与 `setIntegrationScheme`「慢检查放闸门外」同型，Rule 7 两种写法并存，台账 `2026-10-15-round-b`）；计划卡对「stopped 无 intent」的组仍给编辑入口——人裁不修（要动 summary 协议）；m2 新加的三处日志调用点无判据（共用的 `logError` 有）；`peerFailureLog.test.ts:22` 用 Set 去重；`executionPending` 的 `kind === "task"` 过滤无判据；A8 的 6 处日志行无判据（人裁 R4）；`profiledService` 一次超时（单跑 3/3，候选 flake）。
 5. **挂账（都小）**：C 的 `rate-limit.json` 只在被拒的调用目录里；可用 `gpt-6-luna` 做一次真 Codex 回归（付费，先问人）。
 6. **ccmem 适配 Codex 与 oh-my-pi**：人的下一个项目，未开始；先 brainstorming。
 7. **OMP 仍延后的**：子 agent、交互式审批桥、omp 的 saved-result 恢复（人：只是延后）。
@@ -380,7 +387,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 - 合推、repin 顺序、删分支／工作树、临时目录、孤儿进程、`profile.json`、面板：清单与顺序见 §4.1（`ls-remote` 与 `git status -sb` 现核）。
 - **ccmem 的 embedding 账号无额度**（`429 You have no credits remaining`，§3.3a）⇒ 语义检索不可用，要人充值或换 key。
-- **人要审的 `026d10e3` 裁定**（人授权「先按 agent 的建议执行、最后报人审」；全文与「错了的代价」在 `.superpowers/sdd/2026-10-15-error-codes-and-start-guard/progress.md` 的 `Ruling:` 行）：R1 夹具方案 A；R2 spec 追加「planning 时发现的更正」指针；R3 兜底文案不说「ccloop」；R4 A8 的 6 处日志行登记为缺口；R5 S3 叠在 ccloop 分支；`hasPendingAgentUpdate` 登记为冗余守卫；`agentsI18n.test.tsx:126` 与 `shutdownHealing.test.ts:142` 的改写；`handoffFailedRetry` 的 `reopen()` 走夹具认领；「未知码与解释相同只显示一次」；`profile.json` 搁置；ccloop 不为 S3 重跑全量门；终审修复波次的取舍（4 条小项留作登记）。
+- **人已裁（2026-10-15，会话 `ec9ce319`）**：`026d10e3` 的全部裁定同意；其终审 4 条小项按 agent 建议（m2／m6 修、m5／m7 不修）；ccmem `core.hooksPath` unset；真 OMP estimate 重跑同意（未跑）；Qoder 重写钩子不管；spec R1–R9（见 spec 头）。**待人**：合推 `codex/round-20261015b`；计划第 8 条（版本号缓存）；删 `/private/tmp/omp15-sUh0`（含凭据副本）与 `/private/tmp/o15`（门、clone、日志）。
 - **人已裁（2026-10-15，会话 `026d10e3`）**：#53 服务端拒绝执行中的第二次 start、运行中可改未开始任务的 loop 方案（允许动既有判据）；设计轮八问全部按推荐（范围 A+B 一份 spec、C 另起；码名＋细节＋已知码双语；下拉只 OMP 且可自由输入；人点重试重算上限；#53 只对未开始任务生效、具名拒绝码三入口一致；目录按需取＋短 TTL；探测时限放进 C 那一轮）；Q3 `codex-rate-limited` 进 `VIEW_REASONS`；Q4 `ATTEMPT_IDENTITY` 关钩子＋三仓移除 Qoder 钩子；#61 改写那两条；registry 标题改名；清 `refs/ccloop/*`；Task 13 付费验收先做；测试按组跑、合并前跑全量。上一会话 `02f047f6` 的其余裁定人已同意。
 - **人已裁（2026-10-14，会话 `7ea088aa`）**：OMP single-call 走 A＋Orca 按目录上限预占、信目录（含 omp 默认值）、spec 与计划批准；下一轮 = single-call ＋ 反馈优先级 1–7；同意分诊里不采纳的各条（`2026-10-14-feedback-triage.md`）。
 - **人已裁（2026-10-14，会话 `b39a5527`）**：`7f37d261` 的五个决定全部同意，其中「交接停止的未知用量 run」改为放开（已实现，§3.3）；OMP skill 注入方案同意；`ompUpdates` 超时同意放宽（已做）；OMP single-call 要找绕法（调研完，待选方案，§4.2 第 0 条）。
