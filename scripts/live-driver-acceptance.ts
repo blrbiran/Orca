@@ -90,6 +90,7 @@ function parseArgs(argv: string[]): Record<string, string> {
     if (key === "--fake") { out.fake = "1"; continue; }
     if (key === "--fake-claude") { out["fake-claude"] = "1"; continue; }
     if (key === "--fake-omp") { out["fake-omp"] = "1"; continue; }
+if (key === "--estimate-only") { out["estimate-only"] = "1"; continue; }
     const value = argv[++i];
     if (value === undefined) throw new Error(`${key} needs a value`);
     out[key.slice(2)] = value;
@@ -124,6 +125,10 @@ const taskAttempts = Number(args["task-attempts"] ?? (args.scenario === "deadlin
 const activeMs = Number(args["active-ms"] ?? 600_000);
 const callUsd = String(args["call-usd"] ?? "2");
 const scenario = args.scenario ?? "single";
+// --estimate-only (Orca session ec9ce319, 2026-10-15): with --scenario estimate, stop once the estimate settles -- no
+// confirm, start or task run, so a real-provider estimate costs one single call instead of the whole chain.
+const estimateOnly = args["estimate-only"] === "1";
+if (estimateOnly && scenario !== "estimate") throw new Error("--estimate-only needs --scenario estimate");
 if (scenario !== "single" && scenario !== "conflict" && scenario !== "deadline" && scenario !== "estimate" && scenario !== "requirement") throw new Error("--scenario is single, conflict, deadline, estimate or requirement");
 if (kind === "omp" && scenario !== "single" && scenario !== "estimate" && scenario !== "requirement") throw new Error("--omp acceptance supports --scenario single, estimate or requirement");
 if (scenario === "requirement" && kind !== "omp") throw new Error("--scenario requirement needs --omp or --fake-omp");
@@ -492,6 +497,36 @@ if (scenario === "requirement") {
   console.log(JSON.stringify({ summary: join(root, "summary.json"), requirementUsedTokens: group.used.tokens, singleCalls: singleCalls.map((run) => ({ role: run.role, booked: run.bookedTokens })), failed }, null, 2));
   process.exit(failed.length === 0 ? 0 : 1);
 }
+type EstimateRunBody = { runId: string; drive?: { sourceDir: string }; unknown: { work: boolean }; cumulative: { work: { tokens: number } } };
+const readEstimateBody = (): EstimateRunBody | null => {
+  const row = runtime.store.db.prepare("SELECT body FROM runs WHERE group_id='g' AND json_extract(body,'$.phase')='estimate'").get();
+  return row === undefined ? null : JSON.parse(String(row.body)) as EstimateRunBody;
+};
+/** The estimate run's own checks, shared by the whole scenario and --estimate-only. */
+const estimateChecks = (estimateBody: EstimateRunBody | null): void => {
+  // The usage ccloop reported for the estimate run, as Orca booked it: known, positive, equal to ccloop's last event.
+  const events = estimateBody === null ? [] : runtime.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(estimateBody.runId)
+    .map((row) => JSON.parse(String(row.body)) as { bucket: string; cumulative: { tokens: number } | null }).filter((event) => event.bucket === "work");
+  summary.estimateUsage = events;
+  const booked = estimateBody?.cumulative.work.tokens ?? null;
+  checks.estimateUsageBooked = estimateBody !== null && estimateBody.unknown.work === false && booked !== null && booked > 0
+    && events.length > 0 && events.at(-1)!.cumulative?.tokens === booked;
+  if (kind === "claude") {
+    // Tools off, as the claude CLI received it (the tee's argv files, the agent's own record).
+    const argvs = existsSync(claudeRaw) ? readdirSync(claudeRaw).filter((name) => name.endsWith(".argv.json")).map((name) => JSON.parse(readFileSync(join(claudeRaw, name), "utf8")) as string[]) : [];
+    checks.estimateToolsOff = argvs.some((argv) => { const i = argv.indexOf("--tools"); return i >= 0 && argv[i + 1] === ""; });
+  } else {
+    // omp: the estimate run's single call, read from ccloop's own evidence (ompSingleCalls).
+    const singleCalls = ompSingleCalls(runtime);
+    summary.ompSingleCalls = singleCalls;
+    const estimateCalls = singleCalls.filter((run) => run.role === "estimate");
+    checks.ompEstimateClassified = singleCalls.length === 1 && estimateCalls.length === 1 && estimateCalls[0]!.runId === estimateBody?.runId;
+    checks.ompSingleCallOneMessage = estimateCalls.length === 1 && estimateCalls.every(oneMessage);
+    checks.ompSingleCallToolsOff = estimateCalls.length === 1 && estimateCalls.every(toolsOff);
+    checks.ompOverlayPresent = estimateCalls.length === 1 && estimateCalls.every(overlayPresent);
+    checks.ompSingleCallUsageBooked = estimateCalls.length === 1 && estimateCalls.every(usageBooked);
+  }
+};
 try {
   await runtime.recover();
   // estimate: the estimator's slot freezes at import, so the operator's claude-1M preference must be set beforehand.
@@ -515,6 +550,22 @@ try {
     const record = estimateId === null ? null : readEstimateRecord(runtime.store, "g", estimateId);
     summary.estimate = record;
     checks.estimateReady = record?.state === "ready";
+    if (estimateOnly) {
+      await stopRuntime();
+      estimateChecks(readEstimateBody());
+      checks.humanUntouched = JSON.stringify(human()) === JSON.stringify(humanBefore);
+      checks.orcaHomeUntouched = JSON.stringify(snapshot(orcaHome)) === JSON.stringify(orcaHomeBefore);
+      checks.claudeProjectsUntouched = JSON.stringify(claudeProjectsList()) === JSON.stringify(claudeProjectsBefore);
+      if (fakeOmp) checks.fakeCallsExact = fakeOmpCalls() === "single-call";
+      checks.shutdownClean = summary.shutdown === true;
+      summary.checks = checks;
+      summary.finishedAt = new Date().toISOString();
+      runtime.close();
+      await writeFile(join(root, "summary.json"), JSON.stringify(summary, null, 2), { mode: 0o600 });
+      const failed = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name);
+      console.log(JSON.stringify({ summary: join(root, "summary.json"), estimateState: record?.state ?? null, reasonCode: (record as { reasonCode?: unknown } | null)?.reasonCode ?? null, failed }, null, 2));
+      process.exit(failed.length === 0 ? 0 : 1);
+    }
   }
   // A blocked-capability estimate leaves complex-1m-default allocations (task work 3M tokens, 3 attempts), and
   // confirm derives the contract's tokenBudget/maxAttempts/totalRuntimeBudgetMs from them, overriding the
@@ -605,8 +656,7 @@ try {
 }
 
 const runs = workRuns(runtime);
-const estimateRow = runtime.store.db.prepare("SELECT body FROM runs WHERE group_id='g' AND json_extract(body,'$.phase')='estimate'").get();
-const estimateBody = estimateRow === undefined ? null : JSON.parse(String(estimateRow.body)) as { runId: string; drive?: { sourceDir: string }; unknown: { work: boolean }; cumulative: { work: { tokens: number } } };
+const estimateBody = readEstimateBody();
 const estimateSourceDir = estimateBody?.drive?.sourceDir ?? null;
 summary.runs = runs.map((run) => ({ runId: run.runId, task: run.task, state: run.body.state, drive: run.body.drive }));
 const ledger = readControlGroup(runtime.store, runtime.epoch, "g").ledger;
@@ -735,30 +785,7 @@ if (scenario === "deadline") {
   const parked = firstRunId === null ? null : readDriverRun(runtime.store, firstRunId) as unknown as { unknown?: { work?: unknown } };
   checks.unknownWorkFalse = parked?.unknown?.work === false;
 }
-if (scenario === "estimate") {
-  // The usage ccloop reported for the estimate run, as Orca booked it: known, positive, equal to ccloop's last event.
-  const events = estimateBody === null ? [] : runtime.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(estimateBody.runId)
-    .map((row) => JSON.parse(String(row.body)) as { bucket: string; cumulative: { tokens: number } | null }).filter((event) => event.bucket === "work");
-  summary.estimateUsage = events;
-  const booked = estimateBody?.cumulative.work.tokens ?? null;
-  checks.estimateUsageBooked = estimateBody !== null && estimateBody.unknown.work === false && booked !== null && booked > 0
-    && events.length > 0 && events.at(-1)!.cumulative?.tokens === booked;
-  if (kind === "claude") {
-    // Tools off, as the claude CLI received it (the tee's argv files, the agent's own record).
-    const argvs = existsSync(claudeRaw) ? readdirSync(claudeRaw).filter((name) => name.endsWith(".argv.json")).map((name) => JSON.parse(readFileSync(join(claudeRaw, name), "utf8")) as string[]) : [];
-    checks.estimateToolsOff = argvs.some((argv) => { const i = argv.indexOf("--tools"); return i >= 0 && argv[i + 1] === ""; });
-  } else {
-    // omp: the estimate run's single call, read from ccloop's own evidence (ompSingleCalls).
-    const singleCalls = ompSingleCalls(runtime);
-    summary.ompSingleCalls = singleCalls;
-    const estimateCalls = singleCalls.filter((run) => run.role === "estimate");
-    checks.ompEstimateClassified = singleCalls.length === 1 && estimateCalls.length === 1 && estimateCalls[0]!.runId === estimateBody?.runId;
-    checks.ompSingleCallOneMessage = estimateCalls.length === 1 && estimateCalls.every(oneMessage);
-    checks.ompSingleCallToolsOff = estimateCalls.length === 1 && estimateCalls.every(toolsOff);
-    checks.ompOverlayPresent = estimateCalls.length === 1 && estimateCalls.every(overlayPresent);
-    checks.ompSingleCallUsageBooked = estimateCalls.length === 1 && estimateCalls.every(usageBooked);
-  }
-}
+if (scenario === "estimate") estimateChecks(estimateBody);
 checks.everyCallHasUsage = calls.filter((call) => call.role !== "estimate").length > 0 && calls.filter((call) => call.role !== "estimate").every((call) => call.total !== null && call.total > 0);
 checks.ledgerKnown = ledger.usageUnknown === false;
 checks.ledgerMatchesCcloop = scenario === "estimate" ? ledger.used.tokens === calls.filter((call) => call.role !== "estimate").reduce((sum, call) => sum + (call.total ?? 0), 0) + (estimateBody?.cumulative.work.tokens ?? 0) : ledger.used.tokens === ccloopTotal;
