@@ -64,4 +64,15 @@ describe("stored codes keep ccloop's code (spec A §4.3)", () => {
       expect(reconciling.agentUpdateView("human").failureCode).toBe("agent-installation-apply-failed");
     } finally { await h.dispose(); }
   });
+
+  it("F4: a reconciliation that fails with a non-ControlError stores control-internal-error", async () => {
+    const h = await webFixture(); try {
+      const base = h.deps.port as unknown as Record<string, unknown>;
+      const dying = { applyAgentInstallations: async () => { throw new ControlError("control-peer-exit", "2:agent-installation-apply-failed: disk full"); } } as unknown as ExecutionPort;
+      await expect(applyAgentUpdate({ store: h.store, port: dying }, apply, { client: "web", principal: "user:owner" })).rejects.toMatchObject({ code: "control-peer-exit" });
+      const crashing = new WebControlService({ ...h.deps, port: { ...base, applyAgentInstallations: async () => { throw new Error("socket hang up"); }, observeAgentInstallations: async () => observation } as unknown as ExecutionPort });
+      await crashing.recoverAgentUpdates();
+      expect(crashing.agentUpdateView("human").failureCode).toBe("control-internal-error");
+    } finally { await h.dispose(); }
+  });
 });
