@@ -36,4 +36,22 @@ describe("a human group retry recomputes the output bound (spec A §4.8)", () =>
       expect(lines.filter((line) => line.startsWith("orca-control: recovery-retry r:"))).toEqual(["orca-control: recovery-retry r: output bound kept at 64000: omp-model-catalog-unavailable\n"]);
     } finally { spy.mockRestore(); await x.dispose(); }
   });
+
+  it("when the requirement's profile no longer resolves the retry re-queues under the frozen bound and one log line names why", async () => {
+    // §4.8's other fallback ("if the profile no longer resolves"): the router refuses the frozen profile hash with
+    // profile-changed; the retry must still re-queue exactly as before rather than become a new refusal.
+    const x = await requirementHarness({ answers: [CAP_REFUSED, { purpose: "clarify", output: ROUND_ONE }] });
+    const lines: string[] = [];
+    const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { lines.push(String(chunk)); return true; });
+    try {
+      await x.until(() => x.round(1).state === "failed");
+      const row = x.store.db.prepare("SELECT body FROM groups WHERE id=?").get("r") as { body: string };
+      const body = JSON.parse(String(row.body)) as { requirement: { profile: { profileHash: string } } };
+      body.requirement.profile.profileHash = "0".repeat(64);
+      x.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(body), "r");
+      expect(await x.service.recoveryRetry(x.command("recovery-retry", { scope: "group", groupId: "r" }))).toMatchObject({ result: { kind: "recovery-observed", resolved: true } });
+      expect([readRequirementGroup(x.store, "r").requirement.maxOutputTokens, x.round(1).state]).toEqual([64_000, "drafting"]);
+      expect(lines.filter((line) => line.startsWith("orca-control: recovery-retry r:"))).toEqual(["orca-control: recovery-retry r: output bound kept at 64000: profile-changed\n"]);
+    } finally { spy.mockRestore(); await x.dispose(); }
+  });
 });
