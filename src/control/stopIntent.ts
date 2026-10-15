@@ -437,7 +437,7 @@ export function startSchedulerWake(store: ControlStore, groupId: string, startRe
   return wakeId;
 }
 
-export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand): StopCommandResult {
+export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand, outputBound: number | null = null): StopCommandResult {
   const { store } = deps;
   const release = deps.admissionGate?.enter();
   try {
@@ -452,7 +452,7 @@ export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand
         const groupId = target.groupId;
         const observed = target.kind === "run"
           ? retryRun(store, groupId, target.runId, context)
-          : retryGroup(store, groupId, context);
+          : retryGroup(store, groupId, context, outputBound);
         const result: CommandSuccessV1["result"] = {
           kind: "recovery-observed", resolved: observed.resolved,
           blockerCodes: [...new Set(observed.blockerCodes)].sort(), evidenceIds: [...new Set(observed.evidenceIds)].sort(),
@@ -506,12 +506,12 @@ function retryRun(store: ControlStore, groupId: string, runId: string, context: 
   return { resolved: true, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds };
 }
 
-function retryGroup(store: ControlStore, groupId: string, context: WebCommandContext): ObservedRecovery {
+function retryGroup(store: ControlStore, groupId: string, context: WebCommandContext, outputBound: number | null): ObservedRecovery {
   const blockers = clearedBlockers(store, groupId, null);
   // N1 DR15: a requirement's own recovery -- a completed stop lifted, a failed or interrupted call re-queued, a conflicted export retried.
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   const requirement = row !== undefined && hasRequirementBlock(JSON.parse(String(row.body)) as { requirement?: unknown })
-    ? retryRequirementInTransaction(store, groupId, context.nextCommandRevision) : { resolved: false, wakeIds: [] };
+    ? retryRequirementInTransaction(store, groupId, context.nextCommandRevision, outputBound) : { resolved: false, wakeIds: [] };
   return { resolved: blockers.resolved || requirement.resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds: requirement.wakeIds };
 }
 
@@ -522,7 +522,7 @@ function retryGroup(store: ControlStore, groupId: string, context: WebCommandCon
  * draft is drafted with a fresh retry count (the failed or interrupted draft stays as it ended). A conflicted export is
  * set pending again with its wake undelivered.
  */
-function retryRequirementInTransaction(store: ControlStore, groupId: string, revision: number): { resolved: boolean; wakeIds: string[] } {
+function retryRequirementInTransaction(store: ControlStore, groupId: string, revision: number, outputBound: number | null): { resolved: boolean; wakeIds: string[] } {
   const group = readRequirementGroup(store, groupId);
   const wakeIds: string[] = [];
   let resolved = false;
@@ -554,6 +554,9 @@ function retryRequirementInTransaction(store: ControlStore, groupId: string, rev
         requeue = true;
       }
     }
+    // Spec 2026-10-15 ccloop error codes §4.8: a human retry sends the call with the bound recomputed before this
+    // transaction (webService.ts recoveryRetry); null keeps the frozen one. Automatic retries never pass one.
+    if (requeue && outputBound !== null) group.requirement.maxOutputTokens = outputBound;
     if (requeue) { wakeIds.push(queueRequirementCall(store, groupId, `recovery-${revision}`)); resolved = true; }
   }
   if (resolved) saveRequirementGroup(store, group);

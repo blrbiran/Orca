@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createAdmissionGate } from "../../../src/control/admissionGate.js";
+import type { AgentResolution, PartialSelection } from "../../../src/control/agentSelection.js";
 import { canonicalBytes, sha256Canonical } from "../../../src/control/canonicalJson.js";
 import { updateRevision } from "../../../src/control/commandLedger.js";
 import { deliverSchedulerWakes } from "../../../src/control/dispatch.js";
@@ -40,8 +41,9 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
   const put = (artifactId: string, bytes: Buffer): ArtifactRef => { const ref = { artifactId, hash: sha(bytes) }; evidence.set(`${artifactId}:${ref.hash}`, bytes); return ref; };
   const accepted = (envelope: StartEnvelope) => ({ kind: "accepted" as const, executionId: `exec-${envelope.claim.runId}`, configHash: envelope.claim.configHash });
   const resolveAgent = fixtureResolveAgent(() => profileSnapshot().profile.capabilities);
+  let resolveOverride: ((partial: PartialSelection) => Promise<AgentResolution>) | null = null;
   const port: ExecutionPort = {
-    resolveAgent: async (partial) => resolveAgent(partial),
+    resolveAgent: async (partial) => (resolveOverride ?? resolveAgent)(partial),
     listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
     async accept(envelope) { calls.accept.push(structuredClone(envelope)); return accepted(envelope); },
     async inspect(envelope) { return accepted(envelope); },
@@ -78,7 +80,7 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
     },
     async readEvidence(ref) { const bytes = evidence.get(`${ref.artifactId}:${ref.hash}`); if (!bytes) throw new ControlError("control-evidence-context-missing"); return bytes; },
   };
-  return { port, calls };
+  return { port, calls, baseResolveAgent: resolveAgent, setResolveAgent: (fn: ((partial: PartialSelection) => Promise<AgentResolution>) | null) => { resolveOverride = fn; } };
 }
 
 /**

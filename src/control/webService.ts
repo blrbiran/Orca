@@ -1,5 +1,5 @@
 import { peerCode, peerFailure } from "./ccloopPort.js";
-import {retainSavedInterruption,readDriverRun} from "./executionDriver.js";
+import {retainSavedInterruption,readDriverRun,describeError} from "./executionDriver.js";
 import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
 import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
 import { assertNoActiveUnbounded } from "./spendCaps.js";
@@ -11,13 +11,13 @@ import { applyWebCommand, lookupWebCommandReplay, preflightWebCommand, type WebC
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
-import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegradationReasons, classifyEstimateOutput } from "./estimator.js";
+import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegradationReasons, classifyEstimateOutput, singleCallOutputBound } from "./estimator.js";
 import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand } from "./planImport.js";
 import { readAgentPreferences } from "./agentPreferences.js";
-import { intersectCapabilities } from "./profiles.js";
+import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
 import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
 import { effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
 import { agentSelectionSchema, amountSchema } from "./schema.js";
@@ -51,7 +51,7 @@ import type { ControlStore } from "./store.js";
 import type { BudgetEstimateV1, CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, RawAuthorityCommandV1, ProfileBindingV1 } from "./webProtocol.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { budgetBalance } from "./budget.js";
-import { refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
+import { hasRequirementBlock, latestDraft, latestRound, readRequirementGroup, refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall } from "./singleCallLedger.js";
 import {
   applyRequirementAnswer, applyRequirementConsensus, applyRequirementDraftAccept, applyRequirementDraftFeedback, applyRequirementOpen,
@@ -578,7 +578,31 @@ export class WebControlService {
     return applyResumeDispatch(this.stopDeps(), command) as WebCommandResult;
   }
   async recoveryRetry(command: RecoveryRetryCommand): Promise<WebCommandResult> {
-    return applyRecoveryRetry(this.stopDeps(), command) as WebCommandResult;
+    const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
+    const outputBound = command.target.kind === "group" ? await this.retryOutputBound(command.target.groupId) : null;
+    return applyRecoveryRetry(this.stopDeps(), command, outputBound) as WebCommandResult;
+  }
+  /**
+   * Spec 2026-10-15 ccloop error codes §4.8: for a clarifying requirement whose latest round or draft failed or was
+   * interrupted, the output bound its calls would be sent with now -- asked of the frozen selection (plan correction K5)
+   * through the requirement's own profile. Null, with one log line, when it cannot be asked: the retry is as before.
+   */
+  private async retryOutputBound(groupId: string): Promise<number | null> {
+    const row = this.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+    if (row === undefined || !hasRequirementBlock(JSON.parse(String(row.body)) as { requirement?: unknown })) return null;
+    const group = readRequirementGroup(this.store, groupId);
+    if (group.status !== "clarifying") return null;
+    const step = group.requirement.consensus === null ? latestRound(this.store, groupId) : latestDraft(this.store, groupId);
+    if (step === null || (step.state !== "failed" && step.state !== "interrupted")) return null;
+    const kept = (reason: string): null => { process.stderr.write(`orca-control: recovery-retry ${groupId}: output bound kept at ${group.requirement.maxOutputTokens}: ${reason}\n`); return null; };
+    let profile: ReturnType<ExecutionProfileRouter["resolve"]>;
+    try { profile = this.deps.profileRouter.resolve("budget-estimate", group.requirement.profile.profileId, group.requirement.profile.profileHash); }
+    catch (error) { return kept(describeError(error)); }
+    const preflight = profile.snapshot.profile.estimatorPreflight;
+    if (preflight === null) return kept("estimator-preflight-missing");
+    const observation = await this.deps.profileRouter.probe(profile, group.requirement.agentSlot.selection);
+    if (observation.resolution === null) return kept(observation.probeFailureCode ?? "probe-failed");
+    return singleCallOutputBound(preflight.maxOutputTokens, observation.resolution);
   }
   /** N1 spec §11.1. */
   openRequirement(command: RequirementOpenCommand): Promise<WebCommandResult> { return applyRequirementOpen(this.deps, command); }
