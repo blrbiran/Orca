@@ -105,7 +105,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 | 仓 | 分支（工作树） | 内容 |
 |---|---|---|
 | Orca | `feat/error-codes-start-guard`（`Orca-wt/error-codes-start-guard`） | main 之上：合入 `docs/spec-error-codes-and-start-guard`（两份 spec＋计划＋人裁 R1–R5）＋SDD 实现（A1–A8 错误码、B1–B3 #53、S1 #61、S2 `VIEW_REASONS`、终审修复波次）＋本 handoff |
-| Orca | `test/omp-single-call-acceptance`（`Orca-wt/omp-acceptance`） | 验收脚本的 OMP estimate／requirement 场景与 `--fake-omp`＋Task 13 台账与证据（`.superpowers/sdd/2026-10-15-omp-single-call-acceptance/`）＋计划 Task 13 打勾与具名更正 |
+| Orca | （同上分支，cherry-pick 进来） | 验收脚本的 OMP estimate／requirement 场景与 `--fake-omp`＋Task 13 台账与证据（`.superpowers/sdd/2026-10-15-omp-single-call-acceptance/`）＋计划 Task 13 打勾与具名更正；原分支 `test/omp-single-call-acceptance`（`Orca-wt/omp-acceptance`）作废待删 |
 | ccloop | `codex/attempt-commit-no-hooks`（`ccloop-wt/attempt-commit-no-hooks`） | `fix(workspace): run the attempt commit without the target repository's hooks`、`test(agents): retitle the context-window criterion…`、ccloop handoff；**合推后 Orca 要再 repin 一次**（§4.2 第 0 条） |
 | ccmem | `main`（本地领先一笔） | `docs(handoff): record the prompt-submit timeouts, the Qoder hook removal and the Orca pointer` |
 
@@ -176,10 +176,10 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 每一步前 `ls-remote` 现核；删分支前 `git merge-base --is-ancestor <分支> main`（或 `git cherry`）现核。
 
-1. **合推**（顺序无依赖）：Orca `feat/error-codes-start-guard`、Orca `test/omp-single-call-acceptance`（两条都基于含 repin 的 main，互不碰文件——合第二条前现核能否 ff，不能就 rebase 由人定）；ccloop `codex/attempt-commit-no-hooks`；ccmem 本地 main push。
+1. **合推**（顺序无依赖）：Orca `feat/error-codes-start-guard`（已含 Task 13 那两笔的 cherry-pick）；ccloop `codex/attempt-commit-no-hooks`；ccmem 本地 main push。
 2. **面板**（之前已同意、未核是否做过）：合进 main 后 `npm run build`＋`orca panel restart`；「设置 → Agent → 安装更新 → 重新检测」应用 omp「新增安装」。
 3. **删**（只列 agent 确定是自己产生的；merge 后做；`worktree remove` 若报未跟踪文件，那些都是 `.superpowers` 已入库副本，可 `--force`）：
-   - Orca：`codex/round-20261014`（`Orca-wt/round-20261014`）、`fix/feedback-20261014`（`Orca-wt/feedback-20261014`）、`codex/omp-single-call`（`Orca-wt/omp-single-call`，要 `-D`，等价补丁都在 main）、`fix/web-start-group-running`（`Orca-wt/web-start-running`，要 `-D` 与 `--force`）、`codex/repin-ccloop-dc51022`（`Orca-wt/repin-dc51022`，已在 main）、`docs/spec-error-codes-and-start-guard`（`Orca-wt/design-20261015`，合进 feat 分支后）、以及合推后的 `feat/error-codes-start-guard`、`test/omp-single-call-acceptance` 两棵。
+   - Orca：`codex/round-20261014`（`Orca-wt/round-20261014`）、`fix/feedback-20261014`（`Orca-wt/feedback-20261014`）、`codex/omp-single-call`（`Orca-wt/omp-single-call`，要 `-D`，等价补丁都在 main）、`fix/web-start-group-running`（`Orca-wt/web-start-running`，要 `-D` 与 `--force`）、`codex/repin-ccloop-dc51022`（`Orca-wt/repin-dc51022`，已在 main）、`docs/spec-error-codes-and-start-guard`（`Orca-wt/design-20261015`，合进 feat 分支后）、`test/omp-single-call-acceptance`（`Orca-wt/omp-acceptance`，要 `-D`，两笔已 cherry-pick 进 feat 分支），以及合推后的 `feat/error-codes-start-guard`。
    - ccloop：`codex/omp-catalog-diagnostics`、`codex/omp-single-call`（都已在 main）、合推后的 `codex/attempt-commit-no-hooks`。
    - 不确定是否本线产生的（更早轮次）：Orca `codex/repin-ccloop-3069dbf`（`Orca-wt/repin`）、`codex/unmetered-handoff-stop`（`Orca-wt/unmetered-handoff`，要 `-D`）、Codex 建的 `/Users/biran/.codex/worktrees/feedback-followup-20261011/Orca`；ccloop `codex/omp-updates-timeout`（`ccloop-wt/omp-updates-timeout`）与两条 prunable 记录（`git worktree prune`）。
 4. **孤儿进程**（杀前 `ps -p` 现核）：6165、14693、23125、66086 是会话 `02f047f6` 从 `ccloop-wt/omp-catalog-diagnostics/dist` 起的 `worker.js`——**删那棵工作树之前先杀**。
