@@ -24,7 +24,7 @@ import { agentSelectionSchema, amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
 import { estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
-import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
+import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, readStopIntent, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
 import { applySettleUnknownUsage, type SettleUnknownUsageCommand } from "./settleUnknownUsage.js";
 import { applyRetryTask, type RetryTaskCommand } from "./retryTask.js";
@@ -985,10 +985,14 @@ export class WebControlService {
         apply: context => {
           const id = groupId(command), taskId = command.target.taskId, payload = command.payload;
           const group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id), plan = readArchivedPlan(this.store, id);
-          // Step 1. Not prestart: the spec names one code for every state but draft/ready (prestart answers
-          // grant-amendment-unsupported for running/review/done), and a stopped group is refused too.
+          // Step 1. assertKnownConservation first (recovery-blocked before any state refusal, ruling P3). Start guard spec
+          // (2026-10-15) §3.3: a running, reviewing or paused group takes a change to a task that has not started; a handoff
+          // or shutdown stop, a stopped flag with no intent, done and blocked do not.
           assertKnownConservation(this.store, group, proposal);
-          if ((group.status !== "draft" && group.status !== "ready") || group.stopped) throw new ControlError("group-state-invalid");
+          const stopIntent = readStopIntent(this.store, id);
+          const editable = ["draft", "ready", "running", "review"].includes(group.status)
+            && ((!group.stopped && stopIntent === null) || stopIntent?.mode === "pause");
+          if (!editable) throw new ControlError("group-state-invalid");
           const body = workBodyOf(this.store, id, taskId);
           const work = typeof body === "object" && body !== null && !Array.isArray(body) ? body as Record<string, unknown> : null;
           const archived = plan.plan.tasks.find(task => task.taskId === taskId);

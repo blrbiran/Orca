@@ -21,12 +21,25 @@ const expectUntouched = (h: Fixture, proposalVersion: number) => {
 };
 
 describe("set-task-loop refusals (criterion 8)", () => {
-  it.each(["running", "review", "done", "blocked"])("refuses a group whose status is %s as group-state-invalid", async (status) => {
+  // Rewritten for the start guard spec (2026-10-15; its §5 names this criterion; human ruling 2): this now encodes that done
+  // and blocked refuse as group-state-invalid while running and review take a change to an unstarted task (the real
+  // running/review/paused states are built in setTaskLoopRunning.test.ts).
+  it.each(["done", "blocked"])("refuses a group whose status is %s as group-state-invalid", async (status) => {
     const h = await draft();
     try {
       writeGroup(h, (body) => { body.status = status; });
       expect(errorOf(await new WebControlService(h.deps).setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "group-state-invalid" });
       expectUntouched(h, 1);
+    } finally { await h.dispose(); }
+  });
+
+  it.each(["running", "review"])("accepts a change to an unstarted task of a confirmed group whose status is %s", async (status) => {
+    const h = await draft();
+    try {
+      const service = new WebControlService(h.deps);
+      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).not.toHaveProperty("error");
+      writeGroup(h, (body) => { body.status = status; });
+      expect(await service.setTaskLoop(change(h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set", taskId: "a", loopVersion: 1 } });
     } finally { await h.dispose(); }
   });
 

@@ -178,9 +178,9 @@ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; curre
   // Spec §4.2 (D4): only a task that has not started may change; a finished run counts (spec §5.2 step 2).
   const started = (item.status !== "draft" && item.status !== "ready") || item.lineageRunIds.length > 0;
   if (started) return <p>{t("loopPlan.started")}</p>;
-  // Spec §5.2 step 1: the server refuses every group state but draft/ready, and a stopped group, as group-state-invalid;
-  // offering the form there would only let a person fill it in to be refused (final review, B6).
-  const open = (view.summary.state === "draft" || view.summary.state === "ready") && view.summary.stopMode === null;
+  // Start guard spec (2026-10-15) §3.3: the server's predicate -- a running, reviewing or paused group takes a change to an
+  // unstarted task; done, blocked and a handoff or shutdown stop refuse it (group-state-invalid).
+  const open = ["draft", "ready", "running", "review"].includes(view.summary.state) && (view.summary.stopMode === null || view.summary.stopMode === "pause");
   if (!open) return <p>{t("loopPlan.notOpen")}</p>;
   if (draft === null) return <button type="button" onClick={() => onDraft(key, JSON.stringify(draftOf(plan, current)))}>{t("loopPlan.changePlan")}</button>;
   const set = (patch: Partial<LoopDraft>): void => onDraft(key, JSON.stringify({ ...draft, ...patch }));

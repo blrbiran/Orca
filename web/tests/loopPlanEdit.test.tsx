@@ -145,16 +145,22 @@ describe("changing a loop task's plan on its card (spec §4.2)", () => {
     expect(screen.queryByRole("button", { name: "Change plan" })).toBeNull();
   });
 
-  it("offers no change while the group is past ready or stopped, where the server always refuses (group-state-invalid)", () => {
+  // Rewritten for the start guard spec (2026-10-15; its §5 names this criterion): this now encodes the server's predicate --
+  // a running, reviewing or paused group offers the change for an unstarted task; done, blocked and a handoff or shutdown
+  // stop show the plan frozen.
+  it("offers a change while the group runs or is paused, and none where the server refuses (group-state-invalid)", () => {
     const at = (summary: Partial<GroupViewV1["summary"]>): GroupViewV1 => { const base = view([item()]); return { ...base, summary: { ...base.summary, ...summary } }; };
-    for (const shown of [at({ state: "running" }), at({ state: "review" }), at({ stopMode: "pause", stopState: "paused" })]) {
+    for (const shown of [at({ state: "done" }), at({ state: "blocked" }), at({ stopMode: "handoff", stopState: "handoff-complete" }), at({ stopMode: "shutdown", stopState: "handoff-pending" })]) {
       render(<Stateful view={shown} onCommand={vi.fn()} />);
       expect(screen.queryByRole("button", { name: "Change plan" })).toBeNull();
       expect(screen.getByText("The group is not open for changes; the plan is frozen")).toBeTruthy();
       cleanup();
     }
-    render(<Stateful view={at({ state: "draft" })} onCommand={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "Change plan" })).toBeTruthy();
+    for (const shown of [at({ state: "draft" }), at({ state: "running" }), at({ state: "review" }), at({ stopMode: "pause", stopState: "paused" })]) {
+      render(<Stateful view={shown} onCommand={vi.fn()} />);
+      expect(screen.getByRole("button", { name: "Change plan" })).toBeTruthy();
+      cleanup();
+    }
   });
 
   it("counts a task as started by its status alone, or by a run in its lineage alone (spec §5.2 step 2)", () => {

@@ -147,7 +147,8 @@ describe("the budget editor and the loop card in Chinese", () => {
     cleanup();
     expect(card({ item: { ...a, status: "active" } }).container.textContent).toContain("已开始，做法已冻结");
     cleanup();
-    expect(card({ view: { ...view, summary: { ...view.summary, state: "running" } } }).container.textContent).toContain("组当前不接受修改，做法已冻结");
+    // Rewritten for the start guard spec (2026-10-15; §5): a running group now takes the change, so the frozen text is shown for a done one.
+    expect(card({ view: { ...view, summary: { ...view.summary, state: "done" } } }).container.textContent).toContain("组当前不接受修改，做法已冻结");
     cleanup();
     card({ drafts: { [loopDraftKey("g", "a")]: draftWith({ maxFilesTouched: "x" }) } });
     const form = screen.getByRole("form", { name: "修改做法 a" });
