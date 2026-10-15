@@ -258,9 +258,35 @@ describe("agent selection over a real panel (agent selection spec §6.8)", () =>
     expect(answer.selectionsHash).toBeNull();
     // The confirm is not bound to a partial resolution: the transient failure is rethrown, which the panel serves as
     // a retryable internal error (a transient code has no durable status) -- not as a selection refusal.
+    // Rewritten for the ccloop error codes spec (2026-10-15; its §5 names this criterion): this now encodes that the
+    // rethrown peer exit is answered 424 ccloop-failed, retryable, still not a selection refusal; this stand-in printed no code.
     const confirmed = await confirm(panel, "agents-confirm-flaky", "0".repeat(64));
-    expect(confirmed.status).toBe(500);
-    expect(confirmed.body).toMatchObject({ error: { code: "control-internal-error", retryable: true } });
+    expect(confirmed.status).toBe(424);
+    expect(confirmed.body).toMatchObject({ error: { code: "ccloop-failed", message: "ccloop-failed:unknown", retryable: true } });
+    await panel.close();
+  });
+
+  // ccloop error codes spec (2026-10-15) §4.2, criterion 1: ccloop's code and detail reach the browser, and nothing is booked.
+  it.each([
+    ["names its code", "2:omp-model-catalog-unavailable: spawn ENOENT", "ccloop-failed:omp-model-catalog-unavailable: spawn ENOENT"],
+    ["prints no code", "1:Error: socket closed", "ccloop-failed:unknown: Error: socket closed"],
+  ])("answers a confirm whose ccloop %s as 424 ccloop-failed carrying it, and books no command row", async (_label, stderr, message) => {
+    const failing = async (partial: PartialSelection) => {
+      if (partial.agent === "codex") throw new ControlError("control-peer-exit", stderr);
+      return claudeCodexResolveAgent(partial);
+    };
+    const panel = await boot(`epoch-ccloop-${message.length}`, { resolveAgent: failing });
+    expect((await setPreferences(panel, "prefs-c", { defaultAgent: "claude", perAgent: {} })).status).toBe(200);
+    await importPlan(panel);
+    const before = await view(panel);
+    expect((await command(panel, `/api/control/groups/${GROUP}/proposal/agent`, {
+      commandId: "agent-task-c", expectedRevision: before.summary.commandRevision,
+      payload: { baseProposalVersion: before.proposal.proposalVersion, scope: { kind: "task", taskId: "a" }, partial: { agent: "codex" } },
+    })).status).toBe(200);
+    const confirmed = await confirm(panel, "agents-confirm-ccloop", "0".repeat(64));
+    expect(confirmed.status).toBe(424);
+    expect(confirmed.body).toMatchObject({ error: { code: "ccloop-failed", message, retryable: true } });
+    expect(panel.store.db.prepare("SELECT id FROM commands WHERE id='agents-confirm-ccloop'").get()).toBeUndefined();
     await panel.close();
   });
 

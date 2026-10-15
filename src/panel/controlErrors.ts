@@ -1,10 +1,11 @@
 import type { Response } from "express";
+import { ccloopFailedMessage, peerFailure } from "../control/ccloopPort.js";
 import { ControlError, durableCommandErrorStatus, durableCommandErrorStatuses, nonDurableControlErrorClassifications } from "../control/errors.js";
 import { commandErrorBodySchema, compareText, type CommandErrorV1 } from "../control/webProtocol.js";
 import { PANEL_HOST_NOT_ALLOWED } from "./bindGuard.js";
 import { CSRF_REQUIRED, LOGIN_REQUIRED, PASSWORD_CHANGE_REQUIRED } from "./rejection.js";
 
-type ControlHttpStatus = 400 | 401 | 403 | 404 | 409 | 422 | 423 | 500 | 503;
+type ControlHttpStatus = 400 | 401 | 403 | 404 | 409 | 422 | 423 | 424 | 500 | 503;
 type ExistingControlCode = keyof typeof durableCommandErrorStatuses | keyof typeof nonDurableControlErrorClassifications;
 
 const panelOnlyErrorStatuses = {
@@ -18,6 +19,8 @@ const panelOnlyErrorStatuses = {
   "owner-required": 403,
   // Accounts spec §6.3.2: an agent's import-plan or requirement-draft-accept whose limit exceeds the caps' headroom.
   "control-limit-over-cap-headroom": 403,
+  // Spec 2026-10-15 ccloop error codes §4.2: ccloop exited non-zero; the message names its code (or `unknown`) and detail.
+  "ccloop-failed": 424,
   "control-internal-error": 500,
 } as const satisfies Record<string, ControlHttpStatus> & Partial<Record<ExistingControlCode, never>>;
 
@@ -83,6 +86,14 @@ export function sendMappedControlError(
       sendControlError(res, status, error.code, error.message, { ...context, retryable: status === 503 });
       return;
     }
+  }
+  // Spec 2026-10-15 ccloop error codes §4.2: a peer exit is a definite, named failure. A command's ccloop calls run before
+  // its transaction or inside a savepoint that is rolled back, and the code stays transient, so nothing was booked
+  // (apply-agent-update, which reserves first, rethrows an unknown outcome as a plain error: webService.ts).
+  const failure = peerFailure(error);
+  if (failure !== null) {
+    sendControlError(res, 424, "ccloop-failed", ccloopFailedMessage(failure), { ...context, retryable: true });
+    return;
   }
   sendControlError(
     res,

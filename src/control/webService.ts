@@ -1,3 +1,4 @@
+import { peerFailure } from "./ccloopPort.js";
 import {retainSavedInterruption,readDriverRun} from "./executionDriver.js";
 import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
 import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
@@ -710,7 +711,14 @@ export class WebControlService {
           throw new ControlError("agent-installation-update-conflict", "preview-not-owned-or-changed");
         }
       }
-      const result = await applyAgentUpdate({ store: this.store, port: this.deps.port }, command, context);
+      let result: Awaited<ReturnType<typeof applyAgentUpdate>>;
+      try { result = await applyAgentUpdate({ store: this.store, port: this.deps.port }, command, context); }
+      catch (error) {
+        // Plan correction K2 (2026-10-15): ccloop's apply runs after the outbox row is reserved, and a peer exit leaves the
+        // operation pending for same-identity reconciliation -- its outcome is unknown, so it is not a 424 refusal.
+        if (peerFailure(error) !== null && hasPendingAgentUpdate(this.store, command.actorId)) throw new Error("agent-installation-update-outcome-unknown", { cause: error });
+        throw error;
+      }
       if (result.status < 300) {
         this.installationPreview = null;
         await this.observeAgentUpdates();

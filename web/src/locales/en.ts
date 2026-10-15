@@ -1058,6 +1058,8 @@ export const enErrors: Record<string, string> = {
   "agent-selection-changed": "The agent selections changed before the confirmation. Read the group again, then confirm.",
   "agent-selection-invalid": "The agent selection is not valid: {{detail}}",
   "agent-selection-rejected": "ccloop refused this agent selection: {{detail}}",
+  // ccloop error codes spec (2026-10-15) §4.2: ccloop exited non-zero; the detail is `<code>: <detail>` (web/src/ccloopCodes.ts explains a known code).
+  "ccloop-failed": "ccloop failed: {{detail}}",
   "agent-unselected": "A slot has no agent selected. Choose an agent for every slot, then confirm.",
   "agent-version-drift": "The agent's version differs from the recorded one: {{detail}}",
   "agents-table-invalid": "The agents table is not valid: {{detail}}",
