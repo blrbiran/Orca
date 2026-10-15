@@ -181,4 +181,11 @@ describe("the Agents settings page (agent selection spec §6.8)", () => {
     const { container } = render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} installationState={state} />);
     expect(container.textContent).toContain("Detection unavailable · agent-config-invalid The agent's configuration is not valid.");
   });
+
+  // Controller ruling on A7 (plan R3): an unknown code's explanation is the code itself, so it is shown once.
+  it("shows a failed detection's unknown ccloop code once", () => {
+    const state: AgentInstallationStateV1 = { schema: "orca-agent-installation-state-v1", revision: 0, pending: false, pendingCommand: null, failureCode: "omp-new-thing", observation: null, preview: null };
+    render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} installationState={state} />);
+    expect(screen.getByText(/omp-new-thing/).textContent).toBe("Detection unavailable · omp-new-thing");
+  });
 });

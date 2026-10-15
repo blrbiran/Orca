@@ -109,4 +109,16 @@ describe("each surface (spec A §4.6 table)", () => {
     await i18n.changeLanguage("zh");
     expect(shown("zh")).toContain(`omp-single-call-cap-exceeded · ${ZH_CAP}`);
   });
+
+  // Controller ruling on A7 (plan R3): an unknown code's explanation is the code itself, so these surfaces show it once.
+  it("an unknown code is shown once on the failed-call line and the saved-result line", async () => {
+    const view = requirementView("failed");
+    const failed: RequirementViewV1 = { ...view, rounds: [{ ...view.rounds[0]!, calls: [{ runId: "run-1", overviewHash: null, commit: null, usage: null, outcome: "failed", reason: "omp-new-thing" }] }] };
+    const { container } = render(<RequirementsPanel config={config} summary={summaryWith(failed)} views={{ r: failed }} selected="r" agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} />);
+    expect([...container.querySelectorAll('p[role="status"]')].map((p) => p.textContent)).toContain("omp-new-thing");
+    cleanup();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: "unavailable", reason: "omp-new-thing" }), { status: 200, headers: { "content-type": "application/json" } })));
+    render(<SavedResultAction runId="run-1" groupId="g" taskId="a" revision={3} changeSeq={1} onCommand={vi.fn()} />);
+    expect((await screen.findByText("omp-new-thing")).parentElement!.textContent).toBe("Saved results are unavailable for verification. omp-new-thing");
+  });
 });

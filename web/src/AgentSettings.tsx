@@ -8,7 +8,7 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { SelectionFields, contextLabel, draftOf, draftText, installationOf, partialFromFields, selectionFieldErrors, textOrUndefined } from "./AgentFields.js";
 import type { AgentPreferencesViewV1, AgentInstallationStateV1, AgentsViewV1, OperatorPreferencesV1 } from "./controlTypes.js";
-import { explainCcloopCode } from "./ccloopCodes.js";
+import { explainBesideCode } from "./ccloopCodes.js";
 
 const DEFAULT_AGENT_KEY = "agents:default-agent";
 export const AGENTS_OPEN_KEY = "orca.panel.agentsOpen";
@@ -116,7 +116,7 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
       </table>
       {installation && <section aria-label={t("agents.updates.title")}>
         <h4>{t("agents.updates.title")}</h4>
-        {installation.failureCode && <p role="status">{t("agents.updates.unavailable", { code: installation.failureCode })} {explainCcloopCode(installation.failureCode, "")}</p>}
+        {installation.failureCode && <p role="status">{t("agents.updates.unavailable", { code: installation.failureCode })}{explainBesideCode(installation.failureCode) !== null ? ` ${explainBesideCode(installation.failureCode)}` : ""}</p>}
         {pendingUpdate && <div role="status"><p>{t("agents.updates.pending")}</p>
           {pendingId && <><code>{pendingId}</code> <button type="button" disabled={props.updateBusy} onClick={props.onRetryPendingUpdate}>{t("agents.updates.checkPending")}</button></>}
         </div>}

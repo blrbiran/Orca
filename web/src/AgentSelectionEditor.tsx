@@ -13,7 +13,7 @@ import type {
   PanelPartialSelectionV1, PartialSelectionV1, SelectionProvenanceV1, SlotOutcomeV1,
 } from "./controlTypes.js";
 import { enumText } from "./i18n.js";
-import { explainCcloopCode } from "./ccloopCodes.js";
+import { explainBesideCode } from "./ccloopCodes.js";
 
 type Scope = { kind: "group"; slot: AgentSlotV1 } | { kind: "task"; taskId: string };
 
@@ -69,9 +69,10 @@ function SelectionCells(props: { selection: AgentSelectionV1; provenance: Select
 function FailedCell(props: { outcome: Exclude<SlotOutcomeV1, { kind: "resolved" }> }): JSX.Element {
   const { outcome } = props;
   const { t } = useTranslation();
+  const words = explainBesideCode(outcome.code);
   return (
     <td colSpan={3} role="alert" data-outcome={outcome.kind} style={{ color: "red" }}>
-      {outcome.kind === "rejected" ? t("agents.rejected") : t("agents.unavailable")} · {outcome.code} · {explainCcloopCode(outcome.code, "")}
+      {outcome.kind === "rejected" ? t("agents.rejected") : t("agents.unavailable")} · {outcome.code}{words !== null ? ` · ${words}` : ""}
     </td>
   );
 }

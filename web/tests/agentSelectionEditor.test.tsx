@@ -323,4 +323,12 @@ describe("the plan's layer under the panel's at each level (ruling review R7)", 
     expect(row(container, "task:b").querySelector('[role="alert"]')!.textContent).toContain("omp-model-catalog-unavailable · omp could not list its model catalog. Check that omp is installed and starts, then retry.");
     expect(container.textContent).toContain("estimate-call-failed:omp-new-thing · omp-new-thing");
   });
+
+  // Controller ruling on A7 (plan R3): an unknown code's explanation is the code itself, so the slot shows it once.
+  it("shows a slot's unknown ccloop code once, not beside itself", () => {
+    const base = resolvedPreview();
+    const preview = { ...base, slots: [base.slots[0]!, base.slots[1]!, { key: "task:b", slot: "worker" as const, taskId: "b", outcome: { kind: "unavailable" as const, code: "omp-new-thing" } }], selectionsHash: null };
+    const { container } = renderView({ preview });
+    expect(row(container, "task:b").querySelector('[role="alert"]')!.textContent).toBe("unavailable for now, Re-read to ask again · omp-new-thing");
+  });
 });

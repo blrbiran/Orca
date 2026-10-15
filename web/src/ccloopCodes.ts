@@ -21,6 +21,15 @@ export function explainCcloopCode(code: string, detail: string): string {
   return detail === "" ? i18n.t("ccloop.genericNoDetail", { code }) : i18n.t("ccloop.generic", { code, detail });
 }
 
+/**
+ * A code's words for a surface that already shows the code: null when they would only repeat it (plan R3 made the
+ * generic text for an unknown code the bare code), so no surface reads `X · X`.
+ */
+export function explainBesideCode(code: string): string | null {
+  const words = explainCcloopCode(code, "");
+  return words === code ? null : words;
+}
+
 /** `<code>[: <detail>]`, as the server writes it after `ccloop-failed:` and after a peer exit's `<exit>:`; `unknown` when no code leads. */
 export function codeAndDetail(text: string): { code: string; detail: string } {
   const match = CODE_THEN_DETAIL.exec(text);

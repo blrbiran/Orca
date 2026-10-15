@@ -10,7 +10,7 @@ import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { useTranslation } from "react-i18next";
 import { GroupActionsMenu } from "./GroupActionsMenu.js";
 import { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText, refusalText } from "./i18n.js";
-import { explainCcloopCode } from "./ccloopCodes.js";
+import { explainBesideCode } from "./ccloopCodes.js";
 import { explainRunReason } from "./refusalExplain.js";
 import type { PanelLanguage } from "./i18n.js";
 import { TokenInput } from "./TokenInput.js";
@@ -305,7 +305,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
           {retryable && <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "group", groupId } })}>{t("requirements.retry")}</button>}
         </p>
       )}
-      {!archived && failedCall?.reason != null && <p role="status">{failedCall.reason} · {explainCcloopCode(failedCall.reason, "")}</p>}
+      {!archived && failedCall?.reason != null && <p role="status">{failedCall.reason}{explainBesideCode(failedCall.reason) !== null ? ` · ${explainBesideCode(failedCall.reason)}` : ""}</p>}
       {!archived && blockedRun !== null && (
         <p role="alert">{blockedRun.reason !== null && <>{blockedRun.reason}{blockedWords !== null ? ` · ${blockedWords}` : ""} · </>}{t("requirements.blockedRun")}{" "}
           <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId } })}>{t("requirements.retryRun")}</button>
