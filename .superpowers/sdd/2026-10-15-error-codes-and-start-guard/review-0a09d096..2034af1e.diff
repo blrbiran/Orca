@@ -1,0 +1,304 @@
+# Review package: 0a09d096..HEAD
+
+## Commits
+2034af1e feat(control): name ccloop's failure on the paths that treat it as unknown
+
+## Files changed
+ src/control/dispatch.ts              |  6 ++++--
+ src/control/driverHandoff.ts         |  5 +++--
+ src/control/executionDriver.ts       |  7 ++++---
+ src/control/stopIntent.ts            |  1 +
+ tests/control/peerFailureLog.test.ts | 27 +++++++++++++++++++++++++++
+ 5 files changed, 39 insertions(+), 7 deletions(-)
+
+## Diff
+diff --git a/src/control/dispatch.ts b/src/control/dispatch.ts
+index 15382501..49a75634 100644
+--- a/src/control/dispatch.ts
++++ b/src/control/dispatch.ts
+@@ -1,20 +1,21 @@
+ import type { ControlStore } from "./store.js";
+ import type { StatementSync } from "node:sqlite";
+ import { archivedMarkOf } from "./archivedMark.js";
+ import type { ExecutionPort, ExecutionStatus, StartEnvelope } from "./executionPort.js";
+ import type { RunView } from "./types.js";
+ import { assertCapabilities, readRun, saveRun } from "./budget.js";
+ import { getRun, readGroup, readWork } from "./queries.js";
+ import { hashPayload } from "./commands.js";
+ import { assertClaimIdentity } from "./ownership.js";
+ import { ControlError } from "./errors.js";
++import { peerFailureLogLine } from "./ccloopPort.js";
+ import { startEnvelopeSchema } from "./schema.js";
+ import type { AdmissionGate } from "./admissionGate.js";
+ 
+ function admitted<T>(gate:AdmissionGate|undefined,write:()=>T):T {
+  const release=gate?.enter();try{return write();}finally{release?.();}
+ }
+ export function readEnvelope(store:ControlStore,runId:string):StartEnvelope {
+  const row=store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='start'").get("start:"+runId);
+  if(!row) throw new ControlError("start-intent-missing");return JSON.parse(String(row.body));
+ }
+@@ -33,21 +34,22 @@ function persistStatus(store:ControlStore,input:StartEnvelope,status:ExecutionSt
+   saveRun(store,run);return getRun(store,run.runId);
+  }));
+ }
+ async function send(store:ControlStore,port:ExecutionPort,input:StartEnvelope,gate?:AdmissionGate):Promise<RunView> {
+  const current=readGroup(store,input.claim.groupId);
+  if(current.stopped) throw new ControlError("group-stopped");
+  if(store.dispatchBlocked) throw new ControlError("control-recovery-required");
+  if(current.deadlineAt && Date.now()>=Date.parse(current.deadlineAt)) throw new ControlError("group-deadline-expired");
+  let status:ExecutionStatus;
+  try { status=await port.accept(input); }
+- catch {
++ catch (error) {
++  const line=peerFailureLogLine(input.claim.runId,error);if(line!==null)process.stderr.write(line);
+   try {persistStatus(store,input,{kind:"unknown"},gate);} catch(error) {if(error instanceof ControlError&&error.code==="panel-draining")throw error;throw error;}
+   throw new ControlError("start-outcome-unknown");
+  }
+  return persistStatus(store,input,status,gate);
+ }
+ export async function startClaim(store:ControlStore,port:ExecutionPort,input:StartEnvelope,gate?:AdmissionGate):Promise<RunView> {
+  input=startEnvelopeSchema.parse(input) as StartEnvelope;
+  assertClaimIdentity(store,input.claim);
+  if(input.protocol!==3||input.work.kind!=="loop") throw new ControlError("control-protocol-unavailable");
+  const group=readGroup(store,input.claim.groupId);
+@@ -66,21 +68,21 @@ export async function startClaim(store:ControlStore,port:ExecutionPort,input:Sta
+   if(run.state!=="claimed") throw new ControlError("start-state-conflict");
+   store.db.prepare("INSERT INTO outbox VALUES (?, 'start', ?, 0)").run("start:"+run.runId,JSON.stringify(input));
+   run.state="starting";saveRun(store,run);
+  }));
+  return send(store,port,input,gate);
+ }
+ export async function reconcileStart(store:ControlStore,port:ExecutionPort,runId:string,gate?:AdmissionGate):Promise<RunView> {
+  const input=readEnvelope(store,runId);assertClaimIdentity(store,input.claim);
+  if(getRun(store,runId).state==="settled") return getRun(store,runId);
+  let status:ExecutionStatus;
+- try {status=await port.inspect(input);}catch {status={kind:"unknown"};}
++ try {status=await port.inspect(input);}catch (error) {const line=peerFailureLogLine(runId,error);if(line!==null)process.stderr.write(line);status={kind:"unknown"};}
+  if(status.kind==="absent") {
+   const group=readGroup(store,input.claim.groupId);
+   if(!group.stopped && !store.dispatchBlocked) {
+    assertCapabilities(group.budgetMode??"strict",(await port.resolveAgent(input.claim.agent)).capabilities);
+    return send(store,port,input,gate);
+   }
+  }
+  return persistStatus(store,input,status,gate);
+ }
+ 
+diff --git a/src/control/driverHandoff.ts b/src/control/driverHandoff.ts
+index 96c8d387..b65845a7 100644
+--- a/src/control/driverHandoff.ts
++++ b/src/control/driverHandoff.ts
+@@ -1,20 +1,21 @@
+ import {savedDispatchSchema,savedRecoverySchema,savedNoDispatchSchema} from "./savedResultProtocol.js";
+ import {persistRecoveryArtifact} from "./savedResultRecoveryPackage.js";
+ import {sha256Canonical} from "./canonicalJson.js";
+ import {createHash} from "node:crypto";
+ import { join } from "node:path";
+ import { archiveRun } from "./archive.js";
+ import { hasObservedUsage, readRun, saveRun } from "./budget.js";
+ import { persistCanonicalCheckpoint, verifyCandidateArtifacts } from "./checkpoints.js";
+ import { hashPayload } from "./commands.js";
+ import { ControlError } from "./errors.js";
++import { peerFailureLogLine } from "./ccloopPort.js";
+ import {
+   ADOPTABLE_STATES, handoffRequestFromOutbox, latestRequestForRun, readHandoffRequest, saveHandoffRequest,
+   settleCompletedRunRequestInTransaction, settleHandoffRequestInTransaction, type HandoffRequestBody,
+ } from "./stopIntent.js";
+ import { isSingleCallRun, isWebWorkRun } from "./webDispatch.js";
+ import { singleCallPurposeOf } from "./singleCall.js";
+ import { cleanupRunWorkspace, revParse, workBranchRef } from "./workspace.js";
+ import { findLanding } from "./driverLanding.js";
+ import {
+   INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, collectInto, describeError, driverRunIds, groupRepoId, portFor, readDriverRun,
+@@ -138,21 +139,21 @@ export async function restartRun(deps: ExecutionDriverDeps, runId: string, reque
+       settled.savedNoDispatch=persistRecoveryArtifact(store,savedNoDispatchSchema.parse({schema:"orca-saved-result-no-dispatch-v1",groupId:settled.groupId,workItemId:settled.workItemId,taskId:settled.taskId,runId,generation:settled.generation,commandId:settled.commandId,ownerTokenHash:createHash("sha256").update(String(settled.ownerToken)).digest("hex"),admission:recovery.admission,fundingHash:sha256Canonical(recovery.funding),revision:recovery.revision,envelopeHash:settled.drive!.envelopeHash,handoffRequestId:requestId,inspection:"absent",controllerState:"never-submitted",observedAt:store.now()}));saveDriverRun(store,settled);
+     }
+     return true;
+   });
+ }
+ 
+ /** spec §3 `unknown` row and §11 C4: ask ccloop whether the execution exists before deciding anything. */
+ async function inspectUnderStop(deps: ExecutionDriverDeps, run: DriverRun, request: HandoffRequestBody): Promise<boolean> {
+   let status: ExecutionStatus;
+   try { status = await portFor(deps, run).inspect(readStartEnvelope(deps.store, run)); }
+-  catch { status = { kind: "unknown" }; }
++  catch (error) { const line = peerFailureLogLine(run.runId, error); if (line !== null) process.stderr.write(line); status = { kind: "unknown" }; }
+   if (status.kind === "absent") return restartRun(deps, run.runId, request.requestId);
+   if (status.kind === "unknown") return countUnknownUnderStop(deps, run, request);
+   const executionId = status.kind === "accepted" ? status.executionId : status.proof.executionId;
+   // The execution exists: record it and deliver the stop next round, as for any accepted run. A stop only
+   // needs the execution's identity, so a config mismatch here is not re-judged (it was B's question).
+   return write(deps, () => {
+     const current = readDriverRun(deps.store, run.runId);
+     current.executionId = executionId;
+     current.state = "accepted";
+     current.drive = { ...current.drive!, inspectUnknown: 0, blockedAt: null, blockedReason: null };
+@@ -182,21 +183,21 @@ function countUnknownUnderStop(deps: ExecutionDriverDeps, run: DriverRun, reques
+  */
+ async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, request: HandoffRequestBody): Promise<boolean> {
+   const { store } = deps;
+   if (request.state === "request-pending") {
+     if (deps.admissionGate?.draining) return false;
+     let delivered = false;
+     try {
+       const ack = await portFor(deps, run).requestHandoff(readStartEnvelope(store, run), handoffRequestFromOutbox(store, request.requestId));
+       // spec Minor f: a replayed request is answered `complete` once the candidate exists; both mean ccloop holds it.
+       delivered = ack.requestId === request.requestId && (ack.kind === "latched" || ack.kind === "complete");
+-    } catch { delivered = false; }
++    } catch (error) { const line = peerFailureLogLine(run.runId, error); if (line !== null) process.stderr.write(line); delivered = false; }
+     deps.crash?.("H-after-deliver");
+     if (!delivered) return await settleIfPastGrace(deps, run, request);
+     return write(deps, () => {
+       const current = readHandoffRequest(store, run.groupId, request.requestId).request;
+       if (current.state !== "request-pending") return false;
+       saveHandoffRequest(store, run.groupId, { ...current, state: "collecting" });
+       return true;
+     });
+   }
+   const report = await collectInto(deps, run);
+diff --git a/src/control/executionDriver.ts b/src/control/executionDriver.ts
+index 0e02bdc8..f8e6a515 100644
+--- a/src/control/executionDriver.ts
++++ b/src/control/executionDriver.ts
+@@ -9,21 +9,21 @@ import { minTokenCeiling } from "./tokenPolicy.js";
+ import { createTaskResultCollector,type TaskResultCollector } from './taskResultCollector.js';
+ import { createHash } from "node:crypto";
+ import { mkdir, realpath, readFile, writeFile } from "node:fs/promises";
+ import { z } from "zod";
+ import { join } from "node:path";
+ import { archiveRun, readArtifact, writeArtifact } from "./archive.js";
+ import { readRun, saveRun } from "./budget.js";
+ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+ import { commitCandidate } from "./checkpoints.js";
+ import { hashPayload } from "./commands.js";
+-import { peerExitText, peerFailure } from "./ccloopPort.js";
++import { peerExitText, peerFailure, peerFailureLogLine } from "./ccloopPort.js";
+ import { ControlError } from "./errors.js";
+ import { readConfirmedTaskExecution } from "./executionSnapshot.js";
+ import { privateDirectory } from "./paths.js";
+ import { publishPending } from "./projection.js";
+ import { readBudgetProposal, readGroup, readWork } from "./queries.js";
+ import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
+ import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
+ import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
+ import { recordActivity } from "./activity.js";
+ import {artifactSchema,type RunProgress} from "./schema.js";
+@@ -470,33 +470,34 @@ export async function stepB(deps: ExecutionDriverDeps, runId: string): Promise<b
+   if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)assertCurrentSavedRecovery(store,run,(deps.now?.()??new Date()).getTime());
+   if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)write(deps,()=>{const current=readDriverRun(store,runId),marker=savedDispatchSchema.parse(current.savedDispatch);if(marker.state!=="never-submitted"||marker.envelopeHash!==current.drive?.envelopeHash)throw new ControlError("saved-result-source-stale");current.savedDispatch={...marker,state:"submitted"};saveDriverRun(store,current);});
+   let status: ExecutionStatus;
+   try {
+     status = await portFor(deps, run).accept(readStartEnvelope(store, run));
+   } catch (error) {
+     if (error instanceof ControlError && error.code === "control-peer-exit" && (error.detail ?? "").startsWith("2:")) {
+       blockRun(deps, runId, "B", `accept-refused:${peerExitText(peerFailure(error)!)}`);
+       return true;
+     }
++    const line = peerFailureLogLine(runId, error); if (line !== null) process.stderr.write(line);
+     status = { kind: "unknown" };
+   }
+   deps.crash?.("B-after-accept");
+   return persistStatus(deps, runId, status, "B");
+ }
+ 
+ /** B' (spec §2.2): read-only. `absent` re-arms B; ten unknowns in a row block the run. */
+ export async function stepBPrime(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+   const run = readDriverRun(deps.store, runId);
+   if (run.state !== "unknown" || run.drive === undefined) return false;
+   let status: ExecutionStatus;
+   try { status = await portFor(deps, run).inspect(readStartEnvelope(deps.store, run)); }
+-  catch { status = { kind: "unknown" }; }
++  catch (error) { const line = peerFailureLogLine(runId, error); if (line !== null) process.stderr.write(line); status = { kind: "unknown" }; }
+   if(status.kind==="unknown"&&(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&await settleDeadSavedRecovery(deps,run)){
+     const current=readDriverRun(deps.store,runId);status=await portFor(deps,current).inspect(readStartEnvelope(deps.store,current));
+   }
+   if(status.kind==="absent"&&(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&savedDispatchSchema.parse(run.savedDispatch).state!=="never-submitted")status={kind:"unknown"};
+   return persistStatus(deps, runId, status, "B'");
+ }
+ 
+ /**
+  * C (spec §2.2): collect, book usage and evidence, and only once the stop is proved act on the
+  * terminal: succeeded becomes an attempt commit (§3.3) checked against the task's paths (§5.2);
+@@ -546,21 +547,21 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
+     const page=savedResultCollectionSchema.parse(await port.collectSavedResultEvidence(readStartEnvelope(store,run)));
+     if(page.identity.runId!==runId||page.identity.envelopeHash!==run.drive?.envelopeHash||page.identity.executionId!==run.executionId)throw new ControlError("report-identity-conflict");
+     if(page.capsule){
+       const retain=async(ref:import("./types.js").ArtifactRef):Promise<Buffer>=>{const bytes=await port.readSavedResultEvidence!(readStartEnvelope(store,run),page.capsule!,ref);await writeArtifact(store,ref.artifactId,bytes,archiveAdmission(deps));return bytes;};
+       const capsule=executionFormatFailureSchema.parse(JSON.parse((await retain(page.capsule)).toString())),snapshot=savedExecutionSnapshotSchema.parse(JSON.parse((await retain(capsule.snapshot)).toString()));
+       const {usageObservations,...artifacts}=capsule.artifacts;
+       for(const ref of [capsule.verifier.proof,...Object.values(artifacts),...usageObservations.flatMap(a=>[a.source,a.copy]),snapshot.index,snapshot.bundle,snapshot.status,...snapshot.files.map(f=>f.ref)])await retain(ref);
+       write(deps,()=>{const current=readDriverRun(store,runId);current.savedSource={authorityKind:"execution-format-failure-v1",source:page.capsule,attempt:page.attempt};saveDriverRun(store,current);});
+     }
+   }
+-  }catch{write(deps,()=>{const current=readDriverRun(store,runId);current.savedSourceUnavailable="saved-result-evidence-unavailable";saveDriverRun(store,current);});}
++  }catch(error){const line=peerFailureLogLine(runId,error);if(line!==null)process.stderr.write(line);write(deps,()=>{const current=readDriverRun(store,runId);current.savedSourceUnavailable="saved-result-evidence-unavailable";saveDriverRun(store,current);});}
+   const candidate = report.candidate;
+   if (candidate && (candidate.runId !== runId || candidate.generation !== run.generation || candidate.workItemId !== run.workItemId)) {
+     throw new ControlError("report-identity-conflict");
+   }
+   deps.taskResults?.schedule(runId);
+   return report;
+ }
+ 
+ export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+   const { store } = deps;
+diff --git a/src/control/stopIntent.ts b/src/control/stopIntent.ts
+index a6e48e07..4da2a027 100644
+--- a/src/control/stopIntent.ts
++++ b/src/control/stopIntent.ts
+@@ -647,20 +647,21 @@ export async function beginHandoffAttempt(deps: StopDeps, requestId: string): Pr
+       settle(reasonCode);
+       return { kind: "settled-unrecoverable", reasonCode };
+     }
+ 
+     if (prepared.execution === "model-assisted-v1") {
+       const profile = profileRouter.resolve("handoff", run.handoffProfile!.profileId, run.handoffProfile!.profileHash);
+       // Agent selection spec §6.4: handoff has no slot; it is probed with the handed-off run's frozen selection.
+       // A run with no frozen selection asks `{}`, which ccloop refuses: capability-unavailable, never a guessed agent.
+       const observed = await profileRouter.probe(profile, run.agent ?? {});
+       const cap: CapabilityViewV1 = observed.observed;
++      if (observed.probeFailureCode !== null) process.stderr.write(`orca-driver: ${run.runId}: ccloop ${observed.probeFailureCode}\n`);
+       if (observed.probeFailureCode !== null || cap.handoffControl !== "durable" || cap.handoffExecution !== "model-assisted-v1") {
+         const reasonCode = "handoff-capability-unavailable";
+         store.transaction(() => {
+           saveHandoffRequest(store, groupId, { ...request, failureCode: reasonCode });
+         });
+         return { kind: "capability-unavailable", reasonCode };
+       }
+     }
+ 
+     return store.transaction(() => {
+diff --git a/tests/control/peerFailureLog.test.ts b/tests/control/peerFailureLog.test.ts
+new file mode 100644
+index 00000000..4c247a30
+--- /dev/null
++++ b/tests/control/peerFailureLog.test.ts
+@@ -0,0 +1,27 @@
++import { describe, expect, it, vi } from "vitest";
++import { ControlError } from "../../src/control/errors.js";
++import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
++import { driverHarness } from "./fixtures/driverHarness.js";
++import { profileSnapshot } from "./fixtures/web.js";
++
++// ccloop error codes spec (2026-10-15) §4.9: paths that turn a ccloop failure into "unknown" and try again keep doing so,
++// but each names ccloop's failure on stderr once per occurrence, so `orca panel logs` says why a run went unknown.
++describe("unknown-path log lines (spec A §4.9)", () => {
++  it("names the accept and the inspect failures a run went unknown on", async () => {
++    const t = await driverHarness([{ taskId: "a" }]);
++    const lines: string[] = [];
++    const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { lines.push(String(chunk)); return true; });
++    try {
++      const port = t.fake.port as unknown as Record<string, unknown>;
++      port.accept = async () => { throw new ControlError("control-peer-exit", "1:Error: accept lost"); };
++      port.inspect = async () => { throw new ControlError("control-peer-exit", "1:Error: inspect lost"); };
++      t.deps.router = createExecutionProfileRouter([resolveProfile(profileSnapshot(), t.fake.port)]);
++      const runId = await t.claim();
++      await t.until(t.driver(), () => t.body(runId).state === "blocked");
++      expect(t.body(runId).drive).toMatchObject({ blockedReason: "inspect-unknown" });
++      expect([...new Set(lines.filter((line) => line.startsWith(`orca-driver: ${runId}: ccloop`)))]).toEqual([
++        `orca-driver: ${runId}: ccloop unknown: Error: accept lost\n`, `orca-driver: ${runId}: ccloop unknown: Error: inspect lost\n`,
++      ]);
++    } finally { spy.mockRestore(); await t.h.dispose(); }
++  }, 30_000);
++});

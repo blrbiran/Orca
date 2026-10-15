@@ -1,0 +1,585 @@
+# Review package: 373a3ed2..HEAD
+
+## Commits
+a72f3e22 feat(control): carry a single call's errorCode into its estimate, call record and block reason
+
+## Files changed
+ src/control/executionDriver.ts               | 18 ++++++--
+ src/control/requirementCalls.ts              | 23 +++++-----
+ src/control/singleCallPurposes.ts            |  8 ++--
+ src/control/webService.ts                    |  5 ++-
+ tests/control/driverEstimate.test.ts         |  7 ++-
+ tests/control/driverRequirementSplit.test.ts |  4 +-
+ tests/control/fixtures/estimateHarness.ts    |  4 +-
+ tests/control/fixtures/requirementHarness.ts |  4 +-
+ tests/control/singleCallErrorCode.test.ts    | 66 ++++++++++++++++++++++++++++
+ 9 files changed, 115 insertions(+), 24 deletions(-)
+
+## Diff
+diff --git a/src/control/executionDriver.ts b/src/control/executionDriver.ts
+index 23296160..0e02bdc8 100644
+--- a/src/control/executionDriver.ts
++++ b/src/control/executionDriver.ts
+@@ -646,20 +646,30 @@ export const stepA2Estimate = stepA2SingleCall;
+ /** ccloop's record of one single call (contract: `ccloop-single-call-record-v1`). */
+ const singleCallRecordSchema = z.object({
+   schema: z.literal("ccloop-single-call-record-v1"),
+   promptSha256: z.string().regex(/^[a-f0-9]{64}$/),
+   responseSchemaSha256: z.string().regex(/^[a-f0-9]{64}$/),
+   outcome: z.enum(["complete", "aborted", "failed"]),
+   outputRef: z.object({ artifactId: z.string().min(1), hash: z.string().regex(/^[a-f0-9]{64}$/) }).strict().nullable(),
+   errorCode: z.string().min(1).nullable(),
+ }).strict();
+ 
++/**
++ * Spec 2026-10-15 ccloop error codes §4.5: the record's errorCode as Orca stores it -- the part before the first `:`
++ * (ccloop prints `omp-single-call-stop:<reason>`) when it is a code, else `unknown`; null stays null.
++ */
++export function normalizeSingleCallErrorCode(errorCode: string | null): string | null {
++  if (errorCode === null) return null;
++  const head = errorCode.split(":", 1)[0]!;
++  return /^[a-z][a-z0-9-]{0,63}$/.test(head) ? head : "unknown";
++}
++
+ /**
+  * C of an estimate run (single-call estimate spec §6.3): collect as C does; once the stop is proved, check that the
+  * call ccloop made is the one Orca sent (the prompt's hash against the stored envelope, controller ruling F10), then
+  * settle the estimate and the run in one transaction. A call with no observed usage (aborted or failed) cannot settle
+  * (run-stop-unconfirmed) and is blocked by name instead of retried every round. A stop that arrived while this step
+  * was collecting wins (drafter finding F6): the settlement yields and step H closes the run next round.
+  * N1 spec §5.1: written once for every purpose; the purpose's handler builds, classifies and completes.
+  */
+ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+   const { store } = deps;
+@@ -689,32 +699,34 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
+     blockRun(deps, runId, "C", "single-call-prompt-mismatch");
+     return true;
+   }
+   let rawOutput: unknown = null;
+   if (record.outcome === "complete" && record.outputRef !== null) {
+     const text = (await readArtifact(store, record.outputRef)).toString("utf8");
+     try { rawOutput = JSON.parse(text); } catch { rawOutput = text; }
+   }
+   const handler = singleCallHandler(purpose);
+   // N1 spec §8.3: a purpose that must read the target repository to judge its output does so before the transaction.
+-  const settled = handler.evaluate === undefined ? rawOutput : await handler.evaluate(deps, run, rawOutput);
++  // §4.5: "the call failed" means outcome !== complete; the handler is told ccloop's (normalised) code, rawOutput is unchanged.
++  const failure = record.outcome === "complete" ? null : normalizeSingleCallErrorCode(record.errorCode);
++  const settled = handler.evaluate === undefined ? rawOutput : await handler.evaluate(deps, run, rawOutput, failure);
+   try {
+     handler.complete({ store, admissionGate: deps.admissionGate }, run, settled, () => {
+       if (openRequestOf(store, run) !== null) throw new ControlError("handoff-request-conflict", "estimate-yields-to-handoff");
+       const current = readDriverRun(store, runId);
+       // As stepC: the run may have moved while this step awaited ccloop; only an `accepted` run is settled here.
+       if (current.state !== "accepted") throw new ControlError("start-state-conflict", "estimate-run-moved");
+       current.state = "settled-restartable";
+       saveDriverRun(store, current);
+-    });
++    }, failure);
+   } catch (error) {
+-    if (error instanceof ControlError && error.code === "run-stop-unconfirmed") { blockRun(deps, runId, "C", handler.usageUnknownReason); return true; }
++    if (error instanceof ControlError && error.code === "run-stop-unconfirmed") { blockRun(deps, runId, "C", failure === null ? handler.usageUnknownReason : `${handler.usageUnknownReason}:${failure}`); return true; }
+     if (error instanceof ControlError && error.code === "handoff-request-conflict" && error.detail === "estimate-yields-to-handoff") return false;
+     if (error instanceof ControlError && error.code === "start-state-conflict" && error.detail === "estimate-run-moved") return false;
+     throw error;
+   }
+   return true;
+ }
+ /** DR2: the estimate plan's name for the same step; existing criteria call it. */
+ export const stepCEstimate = stepCSingleCall;
+ 
+ export async function savedReport(store: ControlStore, runId: string): Promise<ExecutionReport> {
+diff --git a/src/control/requirementCalls.ts b/src/control/requirementCalls.ts
+index a04fdd8a..8553d0ad 100644
+--- a/src/control/requirementCalls.ts
++++ b/src/control/requirementCalls.ts
+@@ -13,20 +13,23 @@ import {
+ import { MAX_AUTO_RETRIES, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody, type RequirementWaiting } from "./requirementSchemas.js";
+ import { buildSplitPrompt, expandSplitDraft, SPLIT_JSON_SCHEMA, validateSplitDraft, type SplitPlanFile } from "./requirementSplit.js";
+ import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall, type StoppedSingleCallRun } from "./singleCallLedger.js";
+ import { singleCallClaimRowOf } from "./singleCall.js";
+ import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRequest, SingleCallRunRow } from "./singleCallPurposes.js";
+ import { writeCanonicalRecord } from "./snapshot.js";
+ import { clearSpendCapBlock, gateClaim } from "./spendCaps.js";
+ import type { AdmissionGate } from "./admissionGate.js";
+ import type { ControlStore } from "./store.js";
+ 
++/** Spec 2026-10-15 ccloop error codes §4.5: ccloop refused before spawning (books 0); the same envelope would be refused again. */
++export const PRE_SPAWN_REFUSALS: ReadonlySet<string> = new Set(["omp-single-call-cap-exceeded", "omp-single-call-unavailable"]);
++
+ /**
+  * N1 spec §5.2, §7 and §8: a requirement's call -- a round's clarify call or a draft's split call --
+  * claimed from its durable wake, prepared at A2 with the repository overview, and settled into the clarifying group's
+  * own ledger (never releaseRunReserve's legacy branch, survey S28). The claim and settlement plumbing every single call
+  * shares lives in singleCallLedger.ts (PR-I4); the ledger mirror is clarifyingLedger's (PR-I5).
+  */
+ 
+ export type RequirementTarget = { kind: "round" | "draft"; no: number; workItemId: string; purpose: "clarify" | "split" };
+ export interface SettledRun extends StoppedSingleCallRun { overview?: { hash: string; commit: string } | null }
+ 
+@@ -181,30 +184,30 @@ export function settleRequirementCall(
+       closeSingleCall(deps.store, run.runId, { id: receiptId, kind: "single-call-result", body: { groupId: run.groupId, runId: run.runId } });
+     });
+   } finally { release?.(); }
+ }
+ 
+ export const callOf = (run: SettledRun, outcome: CallRecord["outcome"], reason: string | null): CallRecord => ({
+   runId: run.runId, overviewHash: run.overview?.hash ?? null, commit: run.overview?.commit ?? null, usage: run.cumulative.work, outcome, reason,
+ });
+ 
+ /** Spec §7.3 and H7: a valid round awaits answers; an invalid one is retried at most twice, then fails. */
+-function recordClarify(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, rawOutput: unknown): void {
++function recordClarify(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, rawOutput: unknown, failure: string | null): void {
+   const round = readRound(store, group.groupId, target.no);
+   if (round.state !== "drafting") throw new ControlError("recovery-blocked", "requirement-round-moved");
+   const earlierQuestionIds = readRounds(store, group.groupId).filter((r) => r.roundNo < round.roundNo).flatMap((r) => r.result?.questions.map((q) => q.id) ?? []);
+   const classified = classifyClarifyOutput(rawOutput, { roundNo: round.roundNo, requirementId: group.requirement.requirementId, earlierQuestionIds });
+-  round.calls = [...round.calls, callOf(run, classified.ok ? "valid" : "invalid", classified.ok ? null : classified.reason)];
++  round.calls = [...round.calls, failure !== null ? callOf(run, "failed", failure) : callOf(run, classified.ok ? "valid" : "invalid", classified.ok ? null : classified.reason)];
+   if (classified.ok) {
+     Object.assign(round, { result: classified.result, state: "awaiting-answers", lastInvalidReason: null });
+     if (round.roundNo === 1) group.requirement.slug = classified.result.slug;
+-  } else if (round.retries < MAX_AUTO_RETRIES) {
++  } else if (round.retries < MAX_AUTO_RETRIES && (failure === null || !PRE_SPAWN_REFUSALS.has(failure))) {
+     Object.assign(round, { retries: round.retries + 1, lastInvalidReason: classified.reason });
+     queueRequirementCall(store, group.groupId, `retry-${run.runId}`);
+   } else {
+     Object.assign(round, { state: "failed", reasonCode: "clarify-output-invalid", lastInvalidReason: classified.reason });
+   }
+   writeRound(store, group.groupId, round);
+ }
+ 
+ /**
+  * Stop (stopIntent.ts terminaliseRun, inside the request's settlement): the call ended under a stop proof, its usage
+@@ -247,22 +250,22 @@ async function prepareRequirementCall(
+ }
+ 
+ export const CLARIFY_HANDLER: SingleCallHandler = {
+   purpose: "clarify",
+   async prepare(deps, run) {
+     return prepareRequirementCall(deps, run, CLARIFY_JSON_SCHEMA, (target) => readRound(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) =>
+       buildClarifyPrompt({ idea: group.requirement.idea, contentLanguage: group.requirement.contentLanguage, overview: built,
+         earlier: readRounds(deps.store, run.groupId).filter((r) => r.roundNo < target.no), retryReason: readRound(deps.store, run.groupId, target.no).lastInvalidReason }));
+   },
+   classify: classifyClarifyOutput,
+-  complete(deps, run, rawOutput, commitTerminal) {
+-    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordClarify(store, group, target, settled, rawOutput));
++  complete(deps, run, rawOutput, commitTerminal, failure = null) {
++    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordClarify(store, group, target, settled, rawOutput, failure));
+   },
+   usageUnknownReason: "requirement-usage-unknown",
+ };
+ 
+ /** What Ce of a split judged, before its transaction: the parsed output, its expansion and every reason (spec §8.2-§8.4). */
+ interface SplitEvaluation extends Omit<DraftBody, "draftNo" | "state" | "autoRetry" | "waiting" | "feedback" | "reasonCode" | "calls" | "plan"> {
+   schemaValid: boolean; ok: boolean; plan: SplitPlanFile | null;
+ }
+ 
+ /**
+@@ -283,27 +286,27 @@ async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCallRunRow,
+   if (latest === null) throw new ControlError("recovery-blocked", "requirement-understanding-missing");
+   const adrIds = rounds.flatMap((round) => (round.adrDecisions ?? []).filter((decision) => decision.accept).map((decision) => decision.id));
+   const repo = deps.resolveRepository(group.requirement.repoId);
+   const plan = expandSplitDraft(parsed.data, { targetRepo: repo, ccloopBin: deps.ccloopBin, runsDir: deps.roots.runsRoot, groupId: run.groupId, statement: latest.statement, acceptanceCriteria: latest.acceptanceCriteria });
+   const validated = await validateSplitDraft({ output: parsed.data, plan, repo, commit: overview.commit, criterionIds: latest.acceptanceCriteria.map((criterion) => criterion.id), adrIds });
+   // DR12: the hash is of the expanded plan, the bytes the person reviews.
+   return { schemaValid: true, output: parsed.data, plan, draftHash: sha256Canonical(plan), ...validated };
+ }
+ 
+ /** Spec §8.3 and H7 (DR9): a valid draft awaits review; an invalid one becomes `invalid` and the next draft is drafted, at most twice. */
+-function recordSplit(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, ev: SplitEvaluation): void {
++function recordSplit(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, ev: SplitEvaluation, failure: string | null): void {
+   const draft = readDraft(store, group.groupId, target.no);
+   if (draft.state !== "drafting") throw new ControlError("recovery-blocked", "requirement-draft-moved");
+-  draft.calls = [...draft.calls, callOf(run, ev.ok ? "valid" : "invalid", ev.ok ? null : ev.reasons.join("; "))];
++  draft.calls = [...draft.calls, failure !== null ? callOf(run, "failed", failure) : callOf(run, ev.ok ? "valid" : "invalid", ev.ok ? null : ev.reasons.join("; "))];
+   Object.assign(draft, { output: ev.output, plan: ev.ok ? ev.plan : null, draftHash: ev.ok ? ev.draftHash : null, reasons: ev.reasons, layers: ev.layers, implicitEdges: ev.implicitEdges });
+   if (ev.ok) draft.state = "awaiting-review";
+-  else if (draft.autoRetry < MAX_AUTO_RETRIES) {
++  else if (draft.autoRetry < MAX_AUTO_RETRIES && (failure === null || !PRE_SPAWN_REFUSALS.has(failure))) {
+     draft.state = "invalid";
+     writeDraft(store, group.groupId, draft);
+     writeDraft(store, group.groupId, newDraft(draft.draftNo + 1, draft.autoRetry + 1));
+     queueRequirementCall(store, group.groupId, `retry-${run.runId}`);
+     return;
+   } else {
+     Object.assign(draft, { state: "failed", reasonCode: ev.schemaValid ? "split-validation-exhausted" : "split-output-invalid" });
+   }
+   writeDraft(store, group.groupId, draft);
+ }
+@@ -312,15 +315,15 @@ export const SPLIT_HANDLER: SingleCallHandler = {
+   purpose: "split",
+   async prepare(deps, run) {
+     return prepareRequirementCall(deps, run, SPLIT_JSON_SCHEMA, (target) => readDraft(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) =>
+       buildSplitPrompt({
+         document: renderRequirementDocument({ groupId: run.groupId, requirement: group.requirement, rounds: readRounds(deps.store, run.groupId), acceptedSplit: null }),
+         overview: built, earlierDrafts: readDrafts(deps.store, run.groupId).filter((draft) => draft.draftNo < target.no),
+       }));
+   },
+   evaluate: evaluateSplit,
+   classify: validateSplitDraft,
+-  complete(deps, run, evaluation, commitTerminal) {
+-    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordSplit(store, group, target, settled, evaluation as SplitEvaluation));
++  complete(deps, run, evaluation, commitTerminal, failure = null) {
++    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordSplit(store, group, target, settled, evaluation as SplitEvaluation, failure));
+   },
+   usageUnknownReason: "requirement-usage-unknown",
+ };
+diff --git a/src/control/singleCallPurposes.ts b/src/control/singleCallPurposes.ts
+index 97cc470b..d037f220 100644
+--- a/src/control/singleCallPurposes.ts
++++ b/src/control/singleCallPurposes.ts
+@@ -20,44 +20,44 @@ export interface SingleCallRunRow { runId: string; groupId: string; workItemId:
+ export interface SingleCallPrepareDeps {
+   store: ControlStore; roots: WorkspaceRoots; resolveRepository(repoId: string): string; ccloopBin: string; astGrepBin?: string | null;
+   /** N1 spec §6: A2 of a requirement call stores its overview in its own admitted transaction. */
+   admissionGate?: AdmissionGate;
+ }
+ export interface SingleCallHandler {
+   readonly purpose: SingleCallPurpose;
+   /** A2: the prompt, the hand-written response schema and the output cap -- or the reason the run is blocked at A2. */
+   prepare(deps: SingleCallPrepareDeps, run: SingleCallRunRow): Promise<SingleCallRequest | { blocked: string }>;
+   /** Ce, before the transaction: work that reads outside the store (the target repository); its result reaches `complete`. */
+-  evaluate?(deps: SingleCallPrepareDeps, run: SingleCallRunRow, rawOutput: unknown): Promise<unknown>;
++  evaluate?(deps: SingleCallPrepareDeps, run: SingleCallRunRow, rawOutput: unknown, failure?: string | null): Promise<unknown>;
+   /** Ce: the purpose's own classifier of the raw output (code, never the model). */
+   readonly classify: (...args: never[]) => unknown;
+   /** Ce: settle the call and its run in one transaction; `commitTerminal` runs first, a throw rolls everything back. */
+-  complete(deps: { store: ControlStore; admissionGate?: AdmissionGate }, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void): void;
++  complete(deps: { store: ControlStore; admissionGate?: AdmissionGate }, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void, failure?: string | null): void;
+   /** Ce: the block reason when the call's usage is not known (completion answered run-stop-unconfirmed). */
+   readonly usageUnknownReason: string;
+ }
+ 
+ const ESTIMATE = {
+   purpose: "estimate",
+   async prepare(deps: SingleCallPrepareDeps, run: SingleCallRunRow): Promise<SingleCallRequest | { blocked: string }> {
+     const estimateId = String(run.estimateId);
+     const estimate = readEstimateRecord(deps.store, run.groupId, estimateId);
+     if (estimate.request === null) return { blocked: "estimate-request-missing" };
+     const contract = readEstimateContract(deps.store, run.groupId, estimateId);
+     return {
+       prompt: buildEstimatePrompt(contract.instructionVersion, canonicalBytes(estimate.request).toString("utf8")),
+       responseSchema: BUDGET_ESTIMATE_JSON_SCHEMA as Record<string, unknown>,
+       maxOutputTokens: contract.maxOutputTokens,
+     };
+   },
+   classify: classifyEstimateOutput,
+-  complete(deps: { store: ControlStore; admissionGate?: AdmissionGate }, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void): void {
+-    completeEstimateInStore(deps, run.groupId, String(run.estimateId), rawOutput, commitTerminal, ESTIMATE.classify);
++  complete(deps: { store: ControlStore; admissionGate?: AdmissionGate }, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void, failure: string | null = null): void {
++    completeEstimateInStore(deps, run.groupId, String(run.estimateId), rawOutput, commitTerminal, ESTIMATE.classify, failure);
+   },
+   usageUnknownReason: "estimate-usage-unknown",
+ } as const satisfies SingleCallHandler;
+ 
+ const HANDLERS: Readonly<Record<SingleCallPurpose, SingleCallHandler>> = Object.freeze({ estimate: ESTIMATE, clarify: CLARIFY_HANDLER, split: SPLIT_HANDLER });
+ 
+ export function singleCallHandler(purpose: SingleCallPurpose): SingleCallHandler {
+   return HANDLERS[purpose];
+ }
+diff --git a/src/control/webService.ts b/src/control/webService.ts
+index f3180263..b2847337 100644
+--- a/src/control/webService.ts
++++ b/src/control/webService.ts
+@@ -1108,20 +1108,22 @@ function keptExpansion(taskId: string, repoPath: string, current: LoopRecipe, in
+ 
+ /**
+  * The estimate's terminal settlement (formerly WebControlService.completeEstimate's body, moved unchanged so the
+  * execution driver can call it -- single-call estimate spec §6.3, drafter finding F13). `commitTerminal` runs first, in
+  * the same transaction, and a throw from anything here rolls it back with the rest.
+  */
+ export function completeEstimateInStore(
+   deps: { store: ControlStore; admissionGate?: AdmissionGate }, id: string, estimateId: string, rawOutput: unknown, commitTerminal?: () => void,
+   // N1 spec §5.1: the estimate purpose's registered classifier (singleCallPurposes.ts); the service method keeps the default.
+   classify: typeof classifyEstimateOutput = classifyEstimateOutput,
++  // Spec 2026-10-15 ccloop error codes §4.5: ccloop's code for a failed call (driver-normalised); the service method passes none.
++  callFailure: string | null = null,
+ ): void {
+   const release = deps.admissionGate?.enter();
+   try {
+     deps.store.transaction(() => {
+       const estimate = readEstimateRecord(deps.store, id, estimateId), receiptId = `estimate-result:${id}:${estimateId}`;
+       const { rawHash, rawIdentity, canonicalJson: rawCanonicalJson } = identifyRawEstimateOutput(rawOutput);
+       const receipt = deps.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-result'").get(receiptId);
+       if (receipt) {
+         const retained = JSON.parse(String(receipt.body));
+         if (retained.rawHash !== rawHash || retained.rawIdentity !== rawIdentity) throw new ControlError("report-identity-conflict");
+@@ -1134,21 +1136,22 @@ export function completeEstimateInStore(
+       // N1 spec §5.1 (PR-I4): the stop and usage checks are every single call's.
+       const run = verifyStoppedSingleCall(deps.store, rows[0], { groupId: id, workItemId: estimateId, workGrant: estimate.grant });
+       const group = readWebGroup(deps.store, id), proposal = readBudgetProposal(deps.store, id), plan = readArchivedPlan(deps.store, id);
+       assertCallUsageBooked(group, run);
+       const currentBalance = budgetBalance(group.limit, group.used, group.reserved);
+       if (!same(currentBalance.reserve, proposal.explicitUnallocatedReserve) || !same(currentBalance.deficit, group.ledger.budgetDeficit)) throw new ControlError("recovery-blocked");
+       // Single-call estimate spec §6.4: a failed estimate carries its own reason. A schema-valid answer that is not
+       // canonical JSON (a lone surrogate, a negative zero) cannot be hashed, so it is an invalid answer too.
+       const classified = classify(rawOutput, plan.planHash, plan.plan.tasks.map(t => t.taskId));
+       let output: BudgetEstimateV1 | null = null, outputHash: string | null = null;
+-      let reasonCode: string | null = classified.ok ? null : classified.reasonCode;
++      let reasonCode: string | null = classified.ok ? null
++        : classified.reasonCode === "estimate-call-failed" && callFailure !== null ? `estimate-call-failed:${callFailure}` : classified.reasonCode;
+       if (classified.ok) {
+         try { outputHash = sha256Canonical(classified.output); output = classified.output; }
+         catch (error) { if (!(error instanceof ControlError)) throw error; reasonCode = "estimate-output-invalid"; }
+       }
+       estimate.state = output ? "ready" : "failed"; estimate.output = output; estimate.outputHash = outputHash; estimate.reasonCode = reasonCode;
+       if (rawCanonicalJson !== null) writeCanonicalRecord(deps.store, id, rawHash, rawCanonicalJson);
+       if (output) writeCanonicalRecord(deps.store, id, estimate.outputHash!, canonicalBytes(output).toString("utf8"));
+       group.ledger.committedRemaining = residual(group.reserved, zero(), run.remaining.work);
+       const settledBalance = budgetBalance(group.limit, group.used, group.ledger.committedRemaining);
+       group.ledger.budgetDeficit = settledBalance.deficit;
+diff --git a/tests/control/driverEstimate.test.ts b/tests/control/driverEstimate.test.ts
+index eb0e3ac3..5a25399e 100644
+--- a/tests/control/driverEstimate.test.ts
++++ b/tests/control/driverEstimate.test.ts
+@@ -76,21 +76,23 @@ describe("the estimate chain (single-call estimate spec §6.1-§6.3)", () => {
+       await x.driver.round();
+       expect(x.fake.calls.collect).toBe(collects);
+     } finally { await x.h.dispose(); }
+   });
+ 
+   // Controller ruling (2026-09-28): a call that failed with no usage books a null work cumulative too, and must land in
+   // the same named block -- not a C retry every round.
+   it("blocks as estimate-usage-unknown, not in a retry loop, when a failed call observed no usage", async () => {
+     const x = await estimateHarness({ outcome: "failed", tokens: null }); try {
+       await x.rounds(() => x.body().state === "blocked");
+-      expect(x.body().drive).toMatchObject({ blockedAt: "C", blockedReason: "estimate-usage-unknown" });
++      // Rewritten for the ccloop error codes spec (2026-10-15; its §5 names this criterion): this now encodes that the
++      // named block also carries ccloop's code for the failed call (the harness's failed calls name single-call-output-invalid).
++      expect(x.body().drive).toMatchObject({ blockedAt: "C", blockedReason: "estimate-usage-unknown:single-call-output-invalid" });
+       expect(x.estimate().state).toBe("running");
+       expect(x.body().unknown.work).toBe(true);
+       const collects = x.fake.calls.collect;
+       await x.driver.round();
+       expect(x.fake.calls.collect).toBe(collects);
+       expect(x.body().state).toBe("blocked");
+     } finally { await x.h.dispose(); }
+   });
+ 
+   // Final review O-d (2026-09-28): a call record that is not ccloop's single-call record cannot be settled by any later
+@@ -126,21 +128,22 @@ describe("the estimate chain (single-call estimate spec §6.1-§6.3)", () => {
+       expect(x.fake.calls.collect).toBe(1);
+       expect(x.h.store.db.prepare("SELECT COUNT(*) AS n FROM handoff_requests").get()!.n).toBe(0);
+       expect(x.estimate()).toMatchObject({ state: "running", output: null });
+       expect(x.h.store.db.prepare("SELECT id FROM outbox WHERE id=?").get(`estimate-result:g:${x.h.estimateId}`)).toBeUndefined();
+       expect(x.body()).toMatchObject({ state: "blocked", drive: { blockedReason: "moved-while-collecting" } });
+       expect(x.active()).toBe(1);
+     } finally { await x.h.dispose(); }
+   });
+ 
+   it.each([
+-    ["a call that failed", { outcome: "failed" as const }, "estimate-call-failed"],
++    // Rewritten for the ccloop error codes spec (2026-10-15; §5): a failed call's reason now carries ccloop's code.
++    ["a call that failed", { outcome: "failed" as const }, "estimate-call-failed:single-call-output-invalid"],
+     ["an answer for another plan", { output: () => estimateOutput("f".repeat(64)) }, "estimate-output-plan-mismatch"],
+     ["an answer that is not an estimate", { output: () => ({ schema: "budget-estimate-v1" }) }, "estimate-output-invalid"],
+   ])("fails the estimate with its reason through the driver: %s", async (_label, options, reasonCode) => {
+     const x = await estimateHarness(options); try {
+       await x.rounds(() => x.estimate().state !== "running");
+       expect(x.estimate()).toMatchObject({ state: "failed", reasonCode, output: null });
+       expect(x.body().state).toBe("settled-restartable");
+     } finally { await x.h.dispose(); }
+   });
+ 
+diff --git a/tests/control/driverRequirementSplit.test.ts b/tests/control/driverRequirementSplit.test.ts
+index cc82ccaf..e94eeb66 100644
+--- a/tests/control/driverRequirementSplit.test.ts
++++ b/tests/control/driverRequirementSplit.test.ts
+@@ -47,21 +47,23 @@ describe("the split purpose on the single-call chain (N1 spec §8)", () => {
+       await y.until(() => readDraft(y.store, "r", 3).state === "failed");
+       expect(readDraft(y.store, "r", 3)).toMatchObject({ state: "failed", reasonCode: "split-output-invalid" });
+     } finally { await y.dispose(); }
+   });
+ 
+   // Task 6 ruling: a provider failure with no output is an invalid output, and uses one of the two automatic retries.
+   it("hands back a call that failed with no output as one of the two retries", async () => {
+     const x = await requirementHarness({ answers: [{ purpose: "split", output: null, outcome: "failed" }, { purpose: "split", output: VALID_SPLIT }], startAt: "split" });
+     try {
+       await x.until(() => readDraft(x.store, "r", 2).state !== "drafting");
+-      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "invalid", output: null, calls: [{ outcome: "invalid" }] });
++      // Rewritten for the ccloop error codes spec (2026-10-15; §5): this now encodes that the failed call is recorded as
++      // failed with ccloop's code, and still uses one of the two automatic retries.
++      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "invalid", output: null, calls: [{ outcome: "failed", reason: "single-call-output-invalid" }] });
+       expect(readDraft(x.store, "r", 2)).toMatchObject({ state: "awaiting-review", autoRetry: 1 });
+     } finally { await x.dispose(); }
+   });
+ 
+   it("a run whose draft left drafting after its claim is blocked at A2 as requirement-call-target-moved, and never sent", async () => {
+     const x = await requirementHarness({ answers: [{ purpose: "split", output: VALID_SPLIT }], startAt: "split" });
+     try {
+       await x.deliver();
+       expect(x.runs()).toEqual([expect.objectContaining({ state: "starting", workItemId: "draft-1" })]);
+       writeDraft(x.store, "r", { ...readDraft(x.store, "r", 1), state: "interrupted" });
+diff --git a/tests/control/fixtures/estimateHarness.ts b/tests/control/fixtures/estimateHarness.ts
+index b2580c59..3309d896 100644
+--- a/tests/control/fixtures/estimateHarness.ts
++++ b/tests/control/fixtures/estimateHarness.ts
+@@ -17,20 +17,22 @@ import { profileSnapshot, webFixture } from "./web.js";
+ const sha = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
+ type Outcome = "complete" | "failed" | "aborted";
+ interface SingleCallOptions {
+   outcome?: Outcome; tokens?: number | null; output?: (planHash: string) => unknown;
+   /** "prompt": the record names another prompt; "record": the record is not a ccloop single-call record at all. */
+   tamper?: "prompt" | "record";
+   /** Until a handoff request arrives, collect reports usage but no candidate (the call is still running). */
+   stoppable?: boolean;
+   /** Runs inside the first collect that has a candidate to give, before it answers. */
+   duringCollect?: () => Promise<void>;
++  /** ccloop error codes spec §4.5: the failed call's record errorCode (absent: single-call-output-invalid, as before). */
++  errorCode?: string | null;
+ }
+ const AMOUNT = { tokens: 100, activeMs: 100, attempts: 1, sessions: 1 };
+ export const estimateOutput = (planHash: string) => ({ schema: "budget-estimate-v1", planHash,
+   tasks: [{ taskId: "a", complexity: "M", confidence: "high", work: AMOUNT, handoff: { tokens: 0, activeMs: 100, attempts: 0, sessions: 0 }, rationale: "small", assumptions: ["clean tree"] }],
+   goalReviewReserve: AMOUNT, groupRationale: "small" });
+ 
+ function singleCallPort(options: SingleCallOptions, planHash: () => string) {
+   const evidence = new Map<string, Buffer>();
+   const calls = { accept: [] as StartEnvelope[], collect: 0, handoff: 0 };
+   let requested = false, hookRan = false;
+@@ -50,21 +52,21 @@ function singleCallPort(options: SingleCallOptions, planHash: () => string) {
+       const tokens = options.tokens === undefined ? 777 : options.tokens;
+       const events = [{ runId: claim.runId, generation: claim.generation, eventSeq: 1, bucket: "work" as const,
+         cumulative: tokens === null ? null : { tokens, activeMs: 5, attempts: 1, sessions: 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`usage ${claim.runId}`)) }];
+       if (options.stoppable && !requested) return { events, candidate: null, terminal: null };
+       if (!hookRan && options.duringCollect) { hookRan = true; await options.duringCollect(); }
+       const outputRef = outcome === "complete" ? put(`output-${claim.runId}`, canonicalBytes((options.output ?? estimateOutput)(planHash()))) : null;
+       const record = {
+         schema: "ccloop-single-call-record-v1",
+         promptSha256: sha(Buffer.from(options.tamper === "prompt" ? `${work.prompt} ` : work.prompt, "utf8")),
+         responseSchemaSha256: sha256Canonical(work.responseSchema),
+-        outcome, outputRef, errorCode: outcome === "failed" ? "single-call-output-invalid" : null,
++        outcome, outputRef, errorCode: outcome === "failed" ? (options.errorCode === undefined ? "single-call-output-invalid" : options.errorCode) : null,
+       };
+       const executionId = `exec-${claim.runId}`;
+       const candidate: Candidate = {
+         groupId: claim.groupId, workItemId: claim.workItemId, taskId: claim.taskId, runId: claim.runId, generation: claim.generation,
+         graphVersion: claim.graphVersion, targetVersion: claim.targetVersion, checkpointId: `candidate-${claim.runId}`, usageHighWater: 1,
+         result: outcome === "complete" ? "complete" : outcome === "aborted" ? "partial" : "failed",
+         artifacts: outputRef === null ? [] : [outputRef], snapshot: null, missing: [], unresolvedRequestIds: [],
+         stopProof: { executionId, generation: claim.generation, isolated: true, source: put(`stop-${claim.runId}`, Buffer.from(`stop ${executionId}`)) },
+         terminalOutcome: `single-call-${outcome}`,
+         handoff: put(`call-${claim.runId}`, canonicalBytes(options.tamper === "record" ? { ...record, schema: "ccloop-single-call-record-v0" } : record)),
+diff --git a/tests/control/fixtures/requirementHarness.ts b/tests/control/fixtures/requirementHarness.ts
+index 2cb5e804..77df4993 100644
+--- a/tests/control/fixtures/requirementHarness.ts
++++ b/tests/control/fixtures/requirementHarness.ts
+@@ -21,21 +21,21 @@ import { createWebWakeHandlers } from "../../../src/control/webDispatch.js";
+ import { WebControlService, readWebGroup } from "../../../src/control/webService.js";
+ import { controlWorkspaceRoots } from "../../../src/control/workspace.js";
+ import { FIXTURE_AGENT_ID, fixtureResolveAgent, seedPanelOperator, seedPreferences } from "./agents.js";
+ import { clarifyingInput } from "./requirement.js";
+ import { ROUND_TWO } from "./requirementOutputs.js";
+ import { openTestStore } from "./store.js";
+ import { profileSnapshot } from "./web.js";
+ 
+ /** N1 plan Task 6: one queued model answer per single call, in order; `purpose` is checked against the prompt's first line. */
+ /** `output` may be a function of the prompt (an estimate's answer must echo the plan hash its request carries). */
+-export interface QueuedAnswer { purpose: "clarify" | "split" | "estimate"; output: unknown; outcome?: "complete" | "failed" | "aborted"; tokens?: number | null }
++export interface QueuedAnswer { purpose: "clarify" | "split" | "estimate"; output: unknown; outcome?: "complete" | "failed" | "aborted"; tokens?: number | null; errorCode?: string | null }
+ const HEADS = { clarify: "Orca requirement clarification, instruction version 1.", split: "Orca requirement split, instruction version 1.", estimate: "You are estimating the budget" } as const;
+ const sha = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
+ 
+ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
+   const evidence = new Map<string, Buffer>();
+   const calls = { accept: [] as StartEnvelope[], collect: 0 };
+   const byRun = new Map<string, QueuedAnswer>();
+   let requested = false;
+   const put = (artifactId: string, bytes: Buffer): ArtifactRef => { const ref = { artifactId, hash: sha(bytes) }; evidence.set(`${artifactId}:${ref.hash}`, bytes); return ref; };
+   const accepted = (envelope: StartEnvelope) => ({ kind: "accepted" as const, executionId: `exec-${envelope.claim.runId}`, configHash: envelope.claim.configHash });
+@@ -58,21 +58,21 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
+         byRun.set(claim.runId, answer);
+       }
+       const outcome = stoppable && requested ? "aborted" : answer.outcome ?? "complete";
+       const tokens = answer.tokens === undefined ? 777 : answer.tokens;
+       const events = [{ runId: claim.runId, generation: claim.generation, eventSeq: 1, bucket: "work" as const,
+         cumulative: tokens === null ? null : { tokens, activeMs: 5, attempts: 1, sessions: 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`usage ${claim.runId}`)) }];
+       if (stoppable && !requested) return { events, candidate: null, terminal: null };
+       const output = typeof answer.output === "function" ? (answer.output as (prompt: string) => unknown)(work.prompt) : answer.output;
+       const outputRef = outcome === "complete" ? put(`output-${claim.runId}`, canonicalBytes(output)) : null;
+       const record = { schema: "ccloop-single-call-record-v1", promptSha256: sha(Buffer.from(work.prompt, "utf8")), responseSchemaSha256: sha256Canonical(work.responseSchema),
+-        outcome, outputRef, errorCode: outcome === "failed" ? "single-call-output-invalid" : null };
++        outcome, outputRef, errorCode: outcome === "failed" ? (answer.errorCode === undefined ? "single-call-output-invalid" : answer.errorCode) : null };
+       const executionId = `exec-${claim.runId}`;
+       const candidate: Candidate = {
+         groupId: claim.groupId, workItemId: claim.workItemId, taskId: claim.taskId, runId: claim.runId, generation: claim.generation,
+         graphVersion: claim.graphVersion, targetVersion: claim.targetVersion, checkpointId: `candidate-${claim.runId}`, usageHighWater: 1,
+         result: outcome === "complete" ? "complete" : outcome === "aborted" ? "partial" : "failed", artifacts: outputRef === null ? [] : [outputRef], snapshot: null,
+         missing: [], unresolvedRequestIds: [], stopProof: { executionId, generation: claim.generation, isolated: true, source: put(`stop-${claim.runId}`, Buffer.from(`stop ${executionId}`)) },
+         terminalOutcome: `single-call-${outcome}`, handoff: put(`call-${claim.runId}`, canonicalBytes(record)),
+       };
+       return { events, candidate, terminal: null };
+     },
+diff --git a/tests/control/singleCallErrorCode.test.ts b/tests/control/singleCallErrorCode.test.ts
+new file mode 100644
+index 00000000..108ddcab
+--- /dev/null
++++ b/tests/control/singleCallErrorCode.test.ts
+@@ -0,0 +1,66 @@
++import { describe, expect, it } from "vitest";
++import { normalizeSingleCallErrorCode } from "../../src/control/executionDriver.js";
++import { readDraft } from "../../src/control/requirementRecords.js";
++import { estimateHarness } from "./fixtures/estimateHarness.js";
++import { requirementHarness } from "./fixtures/requirementHarness.js";
++import { ROUND_ONE } from "./fixtures/requirementOutputs.js";
++
++// ccloop error codes spec (2026-10-15) §4.5, criterion 6: ccloop's single-call record names why a call failed. Orca now
++// stores that code where it stores the failure, never ccloop's free text; and a call ccloop refused before spawning (its
++// catalog cap or model changed) is not retried automatically, because the same envelope would be refused again.
++const preSpawn = (purpose: "clarify" | "split", errorCode: string) => ({ purpose, output: null, outcome: "failed" as const, tokens: 0, errorCode });
++
++describe("the record's errorCode, normalised (spec A §4.5)", () => {
++  it("keeps a code, cuts at the first colon, and makes anything else unknown (plan correction K4)", () => {
++    expect([null, "omp-single-call-cap-exceeded", "omp-single-call-stop:length", "x:y\n<script>", "<b>x</b>:y\n", "X-Y", "a".repeat(65), ""].map(normalizeSingleCallErrorCode))
++      .toEqual([null, "omp-single-call-cap-exceeded", "omp-single-call-stop", "x", "unknown", "unknown", "unknown", "unknown"]);
++  });
++});
++
++describe("where a failed call is stored (spec A §4.5)", () => {
++  it("estimate: a failed call's reason carries ccloop's code; a hostile one is stored as unknown", async () => {
++    for (const [errorCode, reasonCode] of [["omp-single-call-cap-exceeded", "estimate-call-failed:omp-single-call-cap-exceeded"], ["<b>x</b>:y\n", "estimate-call-failed:unknown"]]) {
++      const x = await estimateHarness({ outcome: "failed", tokens: 0, errorCode }); try {
++        await x.rounds(() => x.estimate().state !== "running");
++        expect(x.estimate()).toMatchObject({ state: "failed", reasonCode });
++      } finally { await x.h.dispose(); }
++    }
++  });
++
++  it("usage unknown: the block reason appends ccloop's code", async () => {
++    const x = await estimateHarness({ outcome: "failed", tokens: null, errorCode: "omp-single-call-unavailable" }); try {
++      await x.rounds(() => x.body().state === "blocked");
++      expect(x.body().drive).toMatchObject({ blockedAt: "C", blockedReason: "estimate-usage-unknown:omp-single-call-unavailable" });
++    } finally { await x.h.dispose(); }
++  });
++
++  it("clarify: a pre-spawn refusal fails the round at once, its one call recorded failed with the code, lastInvalidReason still no-output", async () => {
++    const x = await requirementHarness({ answers: [1, 2, 3].map(() => preSpawn("clarify", "omp-single-call-cap-exceeded")) });
++    try {
++      await x.until(() => x.round(1).state === "failed");
++      expect(x.round(1)).toMatchObject({ state: "failed", retries: 0, reasonCode: "clarify-output-invalid", lastInvalidReason: "no-output" });
++      expect(x.round(1).calls.map((call) => [call.outcome, call.reason])).toEqual([["failed", "omp-single-call-cap-exceeded"]]);
++      expect(x.fake.calls.accept).toHaveLength(1);
++    } finally { await x.dispose(); }
++  });
++
++  it("clarify: any other failed call keeps its automatic retry, recorded failed with its code, and the next prompt says no-output", async () => {
++    const x = await requirementHarness({ answers: [preSpawn("clarify", "<b>x</b>:y\n"), { purpose: "clarify", output: ROUND_ONE }] });
++    try {
++      await x.until(() => x.round(1).state === "awaiting-answers");
++      expect(x.round(1).calls.map((call) => [call.outcome, call.reason])).toEqual([["failed", "unknown"], ["valid", null]]);
++      expect(x.round(1).retries).toBe(1);
++      const second = x.fake.calls.accept[1]!;
++      expect(second.work.kind === "single-call" && second.work.prompt).toContain("no-output");
++    } finally { await x.dispose(); }
++  });
++
++  it("split: a pre-spawn refusal fails the draft at once, its call recorded failed with the code", async () => {
++    const x = await requirementHarness({ answers: [1, 2, 3].map(() => preSpawn("split", "omp-single-call-unavailable")), startAt: "split" });
++    try {
++      await x.until(() => readDraft(x.store, "r", 1).state === "failed");
++      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "failed", autoRetry: 0, reasonCode: "split-output-invalid", calls: [{ outcome: "failed", reason: "omp-single-call-unavailable" }] });
++      expect(x.fake.calls.accept).toHaveLength(1);
++    } finally { await x.dispose(); }
++  });
++});

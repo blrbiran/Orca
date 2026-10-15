@@ -1,0 +1,78 @@
+# Review package: 3c5f21bd..HEAD
+
+## Commits
+0a09d096 test(web): pin the failed call a requirement shows and the explained rejected slot
+
+## Files changed
+ web/tests/agentsI18n.test.tsx  |  3 ++-
+ web/tests/ccloopCodes.test.tsx | 14 ++++++++++++++
+ 2 files changed, 16 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/web/tests/agentsI18n.test.tsx b/web/tests/agentsI18n.test.tsx
+index e146089a..87c4a5e5 100644
+--- a/web/tests/agentsI18n.test.tsx
++++ b/web/tests/agentsI18n.test.tsx
+@@ -116,21 +116,22 @@ describe("the agents area in Chinese", () => {
+     ]);
+     expect(texts(container, "small")).toContain(" 从下次重新估算起使用；和任何提案修改一样，它会推进提案版本。");
+     const worker = fieldset(container, "组 执行");
+     expect([...worker.querySelectorAll("label")].map(ownText)).toEqual(["agent", "忽略计划里的agent（codex）", "模型", "忽略计划里的模型（gpt-5x）", "上下文窗口", "忽略计划里的上下文窗口（1000000 token）"]);
+     expect(firstOption(worker, "agent")).toBe("继承（计划：codex）");
+     expect(firstOption(worker, "context")).toBe("继承");
+     expect(firstOption(fieldset(container, "组 估算"), "agent")).toBe("继承");
+     expect(texts(container, "thead th")).toEqual(["槽位", "agent", "模型", "窗口", "这个任务自己的一层"]);
+     expect(firstCell(container, "task:a").slice(0, 4)).toEqual(["a", "codex 来自操作者", "gpt-x 来自agent 描述符", "1000000 token 来自计划（组）"]);
+     expect(firstCell(container, "task:b").slice(0, 2)).toEqual(["b", "暂时不可用，点「重新读取」再问一次 · ccloop-timeout"]);
+-    expect(firstCell(container, "reconcile")).toEqual(["协调", "被拒 · agent-installation-missing", ""]);
++    // A rejected slot shows its code and the Orca-table explanation, spec 2026-10-15 ccloop error codes §4.6.
++    expect(firstCell(container, "reconcile")).toEqual(["协调", "被拒 · agent-installation-missing · 安装表里没有这个 agent。", ""]);
+     cleanup();
+ 
+     const stale = render(<AgentSelectionEditor view={view("editable")} agents={agents} preview={{ ...preview, proposalVersion: 1 }} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container;
+     expect(texts(stale, `p[role="status"]`)).toEqual(["显示的解析结果属于提案 v1；正在重新读取。确认会等它。"]);
+     cleanup();
+ 
+     const confirmedRoot = render(<AgentSelectionEditor view={view("confirmed")} agents={agents} preview={null} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container;
+     const confirmed = confirmedRoot.textContent ?? "";
+     for (const expected of ["agent（确认时已冻结）", "槽位", "未记录", "协调"]) expect(confirmed, expected).toContain(expected);
+     expect(confirmedRoot.querySelector("section")!.getAttribute("aria-label")).toBe("agent 选择");
+diff --git a/web/tests/ccloopCodes.test.tsx b/web/tests/ccloopCodes.test.tsx
+index f29cc42c..6a813833 100644
+--- a/web/tests/ccloopCodes.test.tsx
++++ b/web/tests/ccloopCodes.test.tsx
+@@ -103,20 +103,34 @@ describe("each surface (spec A §4.6 table)", () => {
+       summary: { ...view.summary, requirement: { ...view.summary.requirement!, blockedRun: { runId: "run-2", reason: "requirement-usage-unknown:omp-new-thing" } } } };
+     const shown = (language: "en" | "zh") => render(<RequirementsPanel config={config} summary={summaryWith(failed)} views={{ r: failed }} selected="r" agents={null} language={language} onSelect={() => {}} onCommand={vi.fn()} />).container.textContent ?? "";
+     const en = shown("en");
+     expect(en).toContain(`omp-single-call-cap-exceeded · ${EN_CAP}`);
+     expect(en).toContain("requirement-usage-unknown:omp-new-thing · This requirement call's usage is unknown, so its budget cannot be settled. omp-new-thing");
+     cleanup();
+     await i18n.changeLanguage("zh");
+     expect(shown("zh")).toContain(`omp-single-call-cap-exceeded · ${ZH_CAP}`);
+   });
+ 
++  // A7 review I1: the line names the LATEST failed call of a failed step, and a step that is not failed shows none.
++  it("a failed requirement names its latest failed call, and a drafting one names none", () => {
++    const call = (runId: string, reason: string) => ({ runId, overviewHash: null, commit: null, usage: null, outcome: "failed" as const, reason });
++    const view = requirementView("failed");
++    const twoFailed: RequirementViewV1 = { ...view, rounds: [{ ...view.rounds[0]!, calls: [call("run-1", "omp-model-catalog-invalid"), call("run-2", "omp-single-call-cap-exceeded")] }] };
++    const panel = (shown: RequirementViewV1) => render(<RequirementsPanel config={config} summary={summaryWith(shown)} views={{ r: shown }} selected="r" agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} />).container;
++    const failed = panel(twoFailed);
++    expect([...failed.querySelectorAll('p[role="status"]')].map((p) => p.textContent)).toContain(`omp-single-call-cap-exceeded · ${EN_CAP}`);
++    expect(failed.textContent).not.toContain("omp-model-catalog-invalid");
++    cleanup();
++    const drafting: RequirementViewV1 = { ...view, rounds: [{ ...view.rounds[0]!, state: "drafting", calls: [call("run-1", "omp-model-catalog-invalid")] }] };
++    expect(panel(drafting).textContent).not.toContain("omp-model-catalog-invalid");
++  });
++
+   // Controller ruling on A7 (plan R3): an unknown code's explanation is the code itself, so these surfaces show it once.
+   it("an unknown code is shown once on the failed-call line and the saved-result line", async () => {
+     const view = requirementView("failed");
+     const failed: RequirementViewV1 = { ...view, rounds: [{ ...view.rounds[0]!, calls: [{ runId: "run-1", overviewHash: null, commit: null, usage: null, outcome: "failed", reason: "omp-new-thing" }] }] };
+     const { container } = render(<RequirementsPanel config={config} summary={summaryWith(failed)} views={{ r: failed }} selected="r" agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} />);
+     expect([...container.querySelectorAll('p[role="status"]')].map((p) => p.textContent)).toContain("omp-new-thing");
+     cleanup();
+     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: "unavailable", reason: "omp-new-thing" }), { status: 200, headers: { "content-type": "application/json" } })));
+     render(<SavedResultAction runId="run-1" groupId="g" taskId="a" revision={3} changeSeq={1} onCommand={vi.fn()} />);
+     expect((await screen.findByText("omp-new-thing")).parentElement!.textContent).toBe("Saved results are unavailable for verification. omp-new-thing");

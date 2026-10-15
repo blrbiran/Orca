@@ -1,0 +1,68 @@
+# Review package: 9eab8af0..HEAD
+
+## Commits
+aa73953d test(control): pin that a shutting-down group refuses a loop-plan change
+
+## Files changed
+ tests/control/setTaskLoopRunning.test.ts | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+## Diff
+diff --git a/tests/control/setTaskLoopRunning.test.ts b/tests/control/setTaskLoopRunning.test.ts
+index 8ee80480..8454f407 100644
+--- a/tests/control/setTaskLoopRunning.test.ts
++++ b/tests/control/setTaskLoopRunning.test.ts
+@@ -1,14 +1,15 @@
+ import { describe, expect, it } from "vitest";
+ import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
+ import { WebControlService, readWebGroup } from "../../src/control/webService.js";
+ import { deliverScheduledStart, readWorkClaimEnvelope } from "../../src/control/webDispatch.js";
++import { applyPanelShutdown } from "../../src/panel/controlLifecycle.js";
+ import { driverHarness } from "./fixtures/driverHarness.js";
+ import { change, errorOf, loop, workBody } from "./fixtures/taskLoop.js";
+ import { webFixture } from "./fixtures/web.js";
+ 
+ // Start guard spec (2026-10-15) §3.3, criteria 7 and 8 (human ruling 2): a task's loop plan stays editable while its group
+ // runs; an edit reaches only tasks not yet started. The states are built by production code, never a flipped status --
+ // a flipped column passes checks that a real running group would not.
+ type T = Awaited<ReturnType<typeof driverHarness>>;
+ const THREE = [{ taskId: "a", loop: loop("a") }, { taskId: "b", loop: loop("b") }, { taskId: "c", loop: loop("c") }];
+ const pendingStart = (t: T) => t.h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g' AND kind IN ('start','no-start') AND delivered=0").get() !== undefined;
+@@ -49,20 +50,37 @@ describe("set-task-loop while the group runs (spec B §3.3)", () => {
+   it("C7: a handoff-stopped group does not", async () => {
+     const h = await webFixture(undefined, [{ taskId: "a", loop: loop("a") }, { taskId: "b", loop: loop("b") }]);
+     try {
+       const service = new WebControlService(h.deps);
+       expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).not.toHaveProperty("error");
+       expect(await service.handoffStop(h.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped" } });
+       expect(await service.setTaskLoop(change(h, "a", { inputs: { goal: "write a, changed" } }))).toMatchObject({ error: { code: "group-state-invalid" } });
+     } finally { await h.dispose(); }
+   });
+ 
++  // Fix round 1 (task-B3-review.md, mutation B3x): the real global shutdown, which writes a stop intent only when it freezes
++  // an active run (issue-fixes spec §3.2 S1), so `a` is claimed first. A shutting-down group refuses even an unstarted task.
++  // No admission gate is passed: a drained gate would refuse as panel-draining before the predicate is reached, and the
++  // persisted intent is what a panel serving after the shutdown reads.
++  it("C7: a shutting-down group does not", async () => {
++    const t = await driverHarness([{ taskId: "a", loop: loop("a") }, { taskId: "b", loop: loop("b") }]);
++    try {
++      await t.claim();
++      await applyPanelShutdown({ store: t.h.store, profileRouter: t.h.deps.profileRouter, epoch: "epoch-b3", now: () => new Date("2026-10-15T00:00:00.000Z"), shutdownGraceMs: 1_000 });
++      expect(String(t.h.store.db.prepare("SELECT mode FROM stop_intents WHERE group_id='g'").get()?.mode)).toBe("shutdown");
++      const before = workBody(t.h, "b").derivedContractHash;
++      expect(errorOf(await t.service.setTaskLoop(change(t.h, "b", { inputs: { goal: "write b, changed" } })))).toMatchObject({ code: "group-state-invalid" });
++      expect(workBody(t.h, "b").derivedContractHash).toBe(before);
++      expect(workBody(t.h, "b").amendmentHash).toBeUndefined();
++    } finally { await t.h.dispose(); }
++  }, 60_000);
++
+   it("C8: a task whose run finished keeps its contract -- its change is refused, another's is accepted, and its retry runs the contract frozen at its claim", async () => {
+     const t = await driverHarness(THREE, { behaviour: (id) => (id === "b" ? "failed" : "succeed") });
+     try {
+       const driver = t.driver();
+       await t.claim();
+       const runB = await claimSecond(t, driver);
+       await t.until(driver, () => readWebGroup(t.h.store, "g").status === "review" && t.body(runB).state === "blocked");
+       const frozen = workBody(t.h, "b").derivedContractHash;
+       expect(t.service.retryTask(t.h.command("retry-task", { taskId: "b" }))).toMatchObject({ result: { kind: "task-retried", taskId: "b" } });
+       expect(workBody(t.h, "b").status).toBe("ready");

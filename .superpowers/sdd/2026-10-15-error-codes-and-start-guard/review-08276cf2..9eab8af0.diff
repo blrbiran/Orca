@@ -1,0 +1,307 @@
+# Review package: 08276cf2..HEAD
+
+## Commits
+9eab8af0 feat(control): let unstarted tasks' loop plans change while the group runs or is paused
+
+## Files changed
+ src/control/webService.ts                | 12 +++--
+ tests/control/setTaskLoop.test.ts        | 15 ++++++-
+ tests/control/setTaskLoopRunning.test.ts | 75 ++++++++++++++++++++++++++++++++
+ web/src/LoopPlanCard.tsx                 |  6 +--
+ web/tests/budgetI18n.test.tsx            |  3 +-
+ web/tests/loopPlanEdit.test.tsx          | 14 ++++--
+ 6 files changed, 112 insertions(+), 13 deletions(-)
+
+## Diff
+diff --git a/src/control/webService.ts b/src/control/webService.ts
+index 7f3f3773..8b954bfe 100644
+--- a/src/control/webService.ts
++++ b/src/control/webService.ts
+@@ -17,21 +17,21 @@ import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_S
+ import type { ExecutionPort } from "./executionPort.js";
+ import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand } from "./planImport.js";
+ import { readAgentPreferences } from "./agentPreferences.js";
+ import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
+ import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
+ import { effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
+ import { agentSelectionSchema, amountSchema } from "./schema.js";
+ import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
+ import { estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
+ import { scheduleStart, type StartCommand } from "./webDispatch.js";
+-import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
++import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, readStopIntent, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
+ import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
+ import { applySettleUnknownUsage, type SettleUnknownUsageCommand } from "./settleUnknownUsage.js";
+ import { applyRetryTask, type RetryTaskCommand } from "./retryTask.js";
+ import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
+ import { prepareResolution } from "./integrationResolve.js";
+ import { controlWorkspaceRoots } from "./workspace.js";
+ import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
+ import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
+ import { isGroupArchived } from "./archivedMark.js";
+ import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
+@@ -978,24 +978,28 @@ export class WebControlService {
+       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
+       // Syncskill integration spec §10.5: the lookup runs before the transaction, as confirm's does (decided synchronously
+       // here, before the first await).
+       const skillLookup = await lookupProfile(profileToLookUp(this.store, groupId(command), command.target.taskId, command.payload.skills), this.deps.syncskill ?? UNCONFIGURED_SYNCSKILL,
+         this.deps.port, confirmedWithSkills(this.store, groupId(command), command.payload.skills));
+       return applyWebCommand<WebCommandResult>(this.store, {
+         rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+         apply: context => {
+           const id = groupId(command), taskId = command.target.taskId, payload = command.payload;
+           const group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id), plan = readArchivedPlan(this.store, id);
+-          // Step 1. Not prestart: the spec names one code for every state but draft/ready (prestart answers
+-          // grant-amendment-unsupported for running/review/done), and a stopped group is refused too.
++          // Step 1. assertKnownConservation first (recovery-blocked before any state refusal, ruling P3). Start guard spec
++          // (2026-10-15) §3.3: a running, reviewing or paused group takes a change to a task that has not started; a handoff
++          // or shutdown stop, a stopped flag with no intent, done and blocked do not.
+           assertKnownConservation(this.store, group, proposal);
+-          if ((group.status !== "draft" && group.status !== "ready") || group.stopped) throw new ControlError("group-state-invalid");
++          const stopIntent = readStopIntent(this.store, id);
++          const editable = ["draft", "ready", "running", "review"].includes(group.status)
++            && ((!group.stopped && stopIntent === null) || stopIntent?.mode === "pause");
++          if (!editable) throw new ControlError("group-state-invalid");
+           const body = workBodyOf(this.store, id, taskId);
+           const work = typeof body === "object" && body !== null && !Array.isArray(body) ? body as Record<string, unknown> : null;
+           const archived = plan.plan.tasks.find(task => task.taskId === taskId);
+           if (!work || work.kind !== "task" || !archived) throw new ControlError("work-not-found");
+           // Step 2: any runs row counts -- a finished run returns its task to ready. Decided inside this transaction, so
+           // this command and the driver's claim (webDispatch.ts nextClaimableTask, createStartingRun) cannot both win.
+           if ((work.status !== "draft" && work.status !== "ready")
+             || this.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=?").get(id, taskId)) throw new ControlError("task-already-started");
+           // Step 3. The in-flight predicate is scheduleStart's (webDispatch.ts), Drafter finding F8.
+           for (const estimate of this.store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(id)) {
+diff --git a/tests/control/setTaskLoop.test.ts b/tests/control/setTaskLoop.test.ts
+index 64073066..d49971fc 100644
+--- a/tests/control/setTaskLoop.test.ts
++++ b/tests/control/setTaskLoop.test.ts
+@@ -14,29 +14,42 @@ import { webFixture } from "./fixtures/web.js";
+  */
+ const draft = () => webFixture(undefined, [{ taskId: "a", loop: loop("a") }, { taskId: "b", loop: loop("b") }, { taskId: "c" }]);
+ const CHANGED = { inputs: { goal: "write a, changed" } };
+ /** Nothing of a refused command stays: the work item has no amendment and the proposal has not moved. */
+ const expectUntouched = (h: Fixture, proposalVersion: number) => {
+   expect(workBody(h, "a").amendmentHash).toBeUndefined();
+   expect(readBudgetProposal(h.store, "g").proposalVersion).toBe(proposalVersion);
+ };
+ 
+ describe("set-task-loop refusals (criterion 8)", () => {
+-  it.each(["running", "review", "done", "blocked"])("refuses a group whose status is %s as group-state-invalid", async (status) => {
++  // Rewritten for the start guard spec (2026-10-15; its §5 names this criterion; human ruling 2): this now encodes that done
++  // and blocked refuse as group-state-invalid while running and review take a change to an unstarted task (the real
++  // running/review/paused states are built in setTaskLoopRunning.test.ts).
++  it.each(["done", "blocked"])("refuses a group whose status is %s as group-state-invalid", async (status) => {
+     const h = await draft();
+     try {
+       writeGroup(h, (body) => { body.status = status; });
+       expect(errorOf(await new WebControlService(h.deps).setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "group-state-invalid" });
+       expectUntouched(h, 1);
+     } finally { await h.dispose(); }
+   });
+ 
++  it.each(["running", "review"])("accepts a change to an unstarted task of a confirmed group whose status is %s", async (status) => {
++    const h = await draft();
++    try {
++      const service = new WebControlService(h.deps);
++      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).not.toHaveProperty("error");
++      writeGroup(h, (body) => { body.status = status; });
++      expect(await service.setTaskLoop(change(h, "a", CHANGED))).toMatchObject({ result: { kind: "task-loop-set", taskId: "a", loopVersion: 1 } });
++    } finally { await h.dispose(); }
++  });
++
+   it("refuses a stopped group as group-state-invalid", async () => {
+     const h = await draft();
+     try {
+       writeGroup(h, (body) => { body.stopped = true; });
+       expect(errorOf(await new WebControlService(h.deps).setTaskLoop(change(h, "a", CHANGED)))).toMatchObject({ code: "group-state-invalid" });
+       expectUntouched(h, 1);
+     } finally { await h.dispose(); }
+   });
+ 
+   it("refuses a ledger with unknown usage as recovery-blocked", async () => {
+diff --git a/tests/control/setTaskLoopRunning.test.ts b/tests/control/setTaskLoopRunning.test.ts
+new file mode 100644
+index 00000000..8ee80480
+--- /dev/null
++++ b/tests/control/setTaskLoopRunning.test.ts
+@@ -0,0 +1,75 @@
++import { describe, expect, it } from "vitest";
++import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
++import { WebControlService, readWebGroup } from "../../src/control/webService.js";
++import { deliverScheduledStart, readWorkClaimEnvelope } from "../../src/control/webDispatch.js";
++import { driverHarness } from "./fixtures/driverHarness.js";
++import { change, errorOf, loop, workBody } from "./fixtures/taskLoop.js";
++import { webFixture } from "./fixtures/web.js";
++
++// Start guard spec (2026-10-15) §3.3, criteria 7 and 8 (human ruling 2): a task's loop plan stays editable while its group
++// runs; an edit reaches only tasks not yet started. The states are built by production code, never a flipped status --
++// a flipped column passes checks that a real running group would not.
++type T = Awaited<ReturnType<typeof driverHarness>>;
++const THREE = [{ taskId: "a", loop: loop("a") }, { taskId: "b", loop: loop("b") }, { taskId: "c", loop: loop("c") }];
++const pendingStart = (t: T) => t.h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g' AND kind IN ('start','no-start') AND delivered=0").get() !== undefined;
++async function claimSecond(t: T, driver: ReturnType<T["driver"]>): Promise<string> {
++  await t.until(driver, () => pendingStart(t));
++  const claimed = await deliverScheduledStart(t.dispatch, "g");
++  if (claimed.kind !== "claimed") throw new Error(JSON.stringify(claimed));
++  return claimed.runId;
++}
++
++describe("set-task-loop while the group runs (spec B §3.3)", () => {
++  it("C7: in a review group, after a checkpoint and with another task running, an unstarted task's plan changes and nothing else does", async () => {
++    const t = await driverHarness(THREE, { behaviour: (id) => (id === "b" ? "stoppable" : "succeed") });
++    try {
++      const driver = t.driver();
++      await t.claim();
++      const runB = await claimSecond(t, driver);
++      await t.until(driver, () => readWebGroup(t.h.store, "g").status === "review" && t.body(runB).state === "accepted");
++      const before = { a: workBody(t.h, "a").derivedContractHash, b: workBody(t.h, "b").derivedContractHash, c: workBody(t.h, "c").derivedContractHash };
++      expect(errorOf(await t.service.setTaskLoop(change(t.h, "b", { inputs: { goal: "write b, changed" } })))).toMatchObject({ code: "task-already-started" });
++      expect(await t.service.setTaskLoop(change(t.h, "c", { inputs: { goal: "write c, changed" } }))).toMatchObject({ result: { kind: "task-loop-set", taskId: "c", loopVersion: 1 } });
++      expect(readConfirmedTaskExecution(t.h.store, "g", "c").contract.objective.goal).toBe("write c, changed");
++      expect([workBody(t.h, "a").derivedContractHash, workBody(t.h, "b").derivedContractHash]).toEqual([before.a, before.b]);
++      expect(workBody(t.h, "c").derivedContractHash).not.toBe(before.c);
++    } finally { await t.h.dispose(); }
++  }, 60_000);
++
++  it("C7: a paused group takes a change to an unstarted task", async () => {
++    const h = await webFixture(undefined, [{ taskId: "a", loop: loop("a") }, { taskId: "b", loop: loop("b") }]);
++    try {
++      const service = new WebControlService(h.deps);
++      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).not.toHaveProperty("error");
++      expect(await service.pauseDispatch(h.command("pause-dispatch", {}))).toMatchObject({ result: { kind: "paused" } });
++      expect(await service.setTaskLoop(change(h, "a", { inputs: { goal: "write a, changed" } }))).toMatchObject({ result: { kind: "task-loop-set", taskId: "a" } });
++    } finally { await h.dispose(); }
++  });
++
++  it("C7: a handoff-stopped group does not", async () => {
++    const h = await webFixture(undefined, [{ taskId: "a", loop: loop("a") }, { taskId: "b", loop: loop("b") }]);
++    try {
++      const service = new WebControlService(h.deps);
++      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).not.toHaveProperty("error");
++      expect(await service.handoffStop(h.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped" } });
++      expect(await service.setTaskLoop(change(h, "a", { inputs: { goal: "write a, changed" } }))).toMatchObject({ error: { code: "group-state-invalid" } });
++    } finally { await h.dispose(); }
++  });
++
++  it("C8: a task whose run finished keeps its contract -- its change is refused, another's is accepted, and its retry runs the contract frozen at its claim", async () => {
++    const t = await driverHarness(THREE, { behaviour: (id) => (id === "b" ? "failed" : "succeed") });
++    try {
++      const driver = t.driver();
++      await t.claim();
++      const runB = await claimSecond(t, driver);
++      await t.until(driver, () => readWebGroup(t.h.store, "g").status === "review" && t.body(runB).state === "blocked");
++      const frozen = workBody(t.h, "b").derivedContractHash;
++      expect(t.service.retryTask(t.h.command("retry-task", { taskId: "b" }))).toMatchObject({ result: { kind: "task-retried", taskId: "b" } });
++      expect(workBody(t.h, "b").status).toBe("ready");
++      expect(errorOf(await t.service.setTaskLoop(change(t.h, "b", { inputs: { goal: "write b, changed" } })))).toMatchObject({ code: "task-already-started" });
++      expect(await t.service.setTaskLoop(change(t.h, "c", { inputs: { goal: "write c, changed" } }))).toMatchObject({ result: { kind: "task-loop-set", taskId: "c" } });
++      const retried = await claimSecond(t, driver);
++      expect([t.body(retried).taskId, readWorkClaimEnvelope(t.h.store, "g", retried).derivedContractHash]).toEqual(["b", frozen]);
++    } finally { await t.h.dispose(); }
++  }, 60_000);
++});
+diff --git a/web/src/LoopPlanCard.tsx b/web/src/LoopPlanCard.tsx
+index 946eaec0..33785e5f 100644
+--- a/web/src/LoopPlanCard.tsx
++++ b/web/src/LoopPlanCard.tsx
+@@ -171,23 +171,23 @@ export interface LoopPlanCardProps {
+ }
+ 
+ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; current: BudgetAmount }): JSX.Element {
+   const { t } = useTranslation();
+   const { view, item, drafts, onDraft, onCommand, plan, current } = props;
+   const groupId = view.summary.groupId, key = loopDraftKey(groupId, item.taskId), draft = readLoopDraft(drafts, key);
+   if (props.archived === true) return <></>;
+   // Spec §4.2 (D4): only a task that has not started may change; a finished run counts (spec §5.2 step 2).
+   const started = (item.status !== "draft" && item.status !== "ready") || item.lineageRunIds.length > 0;
+   if (started) return <p>{t("loopPlan.started")}</p>;
+-  // Spec §5.2 step 1: the server refuses every group state but draft/ready, and a stopped group, as group-state-invalid;
+-  // offering the form there would only let a person fill it in to be refused (final review, B6).
+-  const open = (view.summary.state === "draft" || view.summary.state === "ready") && view.summary.stopMode === null;
++  // Start guard spec (2026-10-15) §3.3: the server's predicate -- a running, reviewing or paused group takes a change to an
++  // unstarted task; done, blocked and a handoff or shutdown stop refuse it (group-state-invalid).
++  const open = ["draft", "ready", "running", "review"].includes(view.summary.state) && (view.summary.stopMode === null || view.summary.stopMode === "pause");
+   if (!open) return <p>{t("loopPlan.notOpen")}</p>;
+   if (draft === null) return <button type="button" onClick={() => onDraft(key, JSON.stringify(draftOf(plan, current)))}>{t("loopPlan.changePlan")}</button>;
+   const set = (patch: Partial<LoopDraft>): void => onDraft(key, JSON.stringify({ ...draft, ...patch }));
+   const checked = payloadOf(draft, plan.skills);
+   const payload = "payload" in checked ? checked.payload : null;
+   const consequence = payload === null ? null : consequenceOf(view, current, payload.work, item.tokenAccountingMode);
+   const blocked = "invalid" in checked ? checked.invalid : consequence!.shortfall;
+   return (
+     <form aria-label={t("loopPlan.changePlanFor", { taskId: item.taskId })} onSubmit={(event) => {
+       event.preventDefault();
+diff --git a/web/tests/budgetI18n.test.tsx b/web/tests/budgetI18n.test.tsx
+index ab7e7258..0d5b5b63 100644
+--- a/web/tests/budgetI18n.test.tsx
++++ b/web/tests/budgetI18n.test.tsx
+@@ -140,21 +140,22 @@ describe("the budget editor and the loop card in Chinese", () => {
+     await i18n.changeLanguage("zh");
+     const a = view.workItems[0]!;
+     const card = (over: { view?: GroupViewV1; item?: WorkItemViewV1; drafts?: Record<string, string> } = {}) =>
+       render(<LoopPlanCard view={over.view ?? view} item={over.item ?? a} drafts={over.drafts ?? {}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+     card();
+     expect(screen.getByRole("list", { name: "做法摘要 a" })).toBeTruthy();
+     expect(screen.getByRole("button", { name: "修改做法" })).toBeTruthy();
+     cleanup();
+     expect(card({ item: { ...a, status: "active" } }).container.textContent).toContain("已开始，做法已冻结");
+     cleanup();
+-    expect(card({ view: { ...view, summary: { ...view.summary, state: "running" } } }).container.textContent).toContain("组当前不接受修改，做法已冻结");
++    // Rewritten for the start guard spec (2026-10-15; §5): a running group now takes the change, so the frozen text is shown for a done one.
++    expect(card({ view: { ...view, summary: { ...view.summary, state: "done" } } }).container.textContent).toContain("组当前不接受修改，做法已冻结");
+     cleanup();
+     card({ drafts: { [loopDraftKey("g", "a")]: draftWith({ maxFilesTouched: "x" }) } });
+     const form = screen.getByRole("form", { name: "修改做法 a" });
+     expect([...form.querySelectorAll("label")].map((label) => label.childNodes[0]?.textContent)).toEqual([
+       "做法", "目标", "完成条件", "只改（每行一个路径）", "检查命令（每行一条）", "不做的事（每行一条）", "相关文档（每行一个）",
+       "不许改（每行一个路径）", "最多改几个文件（留空按默认）", "token 预算", "活跃时间（ms）", "最多尝试次数",
+     ]);
+     expect([...form.querySelectorAll("select, input, textarea")].map((box) => box.getAttribute("aria-label"))).toEqual([
+       "做法", "目标", "完成条件", "只改（每行一个路径）", "检查命令（每行一条）", "不做的事（每行一条）", "相关文档（每行一个）",
+       "不许改（每行一个路径）", "最多改几个文件（留空按默认）", "token 预算", "活跃时间（ms）", "最多尝试次数",
+diff --git a/web/tests/loopPlanEdit.test.tsx b/web/tests/loopPlanEdit.test.tsx
+index eb064aab..5de87b74 100644
+--- a/web/tests/loopPlanEdit.test.tsx
++++ b/web/tests/loopPlanEdit.test.tsx
+@@ -138,30 +138,36 @@ describe("changing a loop task's plan on its card (spec §4.2)", () => {
+ 
+   it("freezes a task that has started, and offers no edit for a hand-written task", () => {
+     render(<Stateful view={view([item({ status: "active", currentRunId: "run-a", lineageRunIds: ["run-a"] })])} onCommand={vi.fn()} />);
+     expect(screen.getByText("Started; the plan is frozen")).toBeTruthy();
+     expect(screen.queryByRole("button", { name: "Change plan" })).toBeNull();
+     cleanup();
+     render(<Stateful view={view([item({ loopPlan: null, objective: { goal: "ship", successCondition: "passes" } })])} onCommand={vi.fn()} />);
+     expect(screen.queryByRole("button", { name: "Change plan" })).toBeNull();
+   });
+ 
+-  it("offers no change while the group is past ready or stopped, where the server always refuses (group-state-invalid)", () => {
++  // Rewritten for the start guard spec (2026-10-15; its §5 names this criterion): this now encodes the server's predicate --
++  // a running, reviewing or paused group offers the change for an unstarted task; done, blocked and a handoff or shutdown
++  // stop show the plan frozen.
++  it("offers a change while the group runs or is paused, and none where the server refuses (group-state-invalid)", () => {
+     const at = (summary: Partial<GroupViewV1["summary"]>): GroupViewV1 => { const base = view([item()]); return { ...base, summary: { ...base.summary, ...summary } }; };
+-    for (const shown of [at({ state: "running" }), at({ state: "review" }), at({ stopMode: "pause", stopState: "paused" })]) {
++    for (const shown of [at({ state: "done" }), at({ state: "blocked" }), at({ stopMode: "handoff", stopState: "handoff-complete" }), at({ stopMode: "shutdown", stopState: "handoff-pending" })]) {
+       render(<Stateful view={shown} onCommand={vi.fn()} />);
+       expect(screen.queryByRole("button", { name: "Change plan" })).toBeNull();
+       expect(screen.getByText("The group is not open for changes; the plan is frozen")).toBeTruthy();
+       cleanup();
+     }
+-    render(<Stateful view={at({ state: "draft" })} onCommand={vi.fn()} />);
+-    expect(screen.getByRole("button", { name: "Change plan" })).toBeTruthy();
++    for (const shown of [at({ state: "draft" }), at({ state: "running" }), at({ state: "review" }), at({ stopMode: "pause", stopState: "paused" })]) {
++      render(<Stateful view={shown} onCommand={vi.fn()} />);
++      expect(screen.getByRole("button", { name: "Change plan" })).toBeTruthy();
++      cleanup();
++    }
+   });
+ 
+   it("counts a task as started by its status alone, or by a run in its lineage alone (spec §5.2 step 2)", () => {
+     render(<Stateful view={view([item({ status: "active" })])} onCommand={vi.fn()} />);
+     expect(screen.getByText("Started; the plan is frozen")).toBeTruthy();
+     cleanup();
+     render(<Stateful view={view([item({ lineageRunIds: ["run-a"] })])} onCommand={vi.fn()} />);
+     expect(screen.getByText("Started; the plan is frozen")).toBeTruthy();
+   });
+ 

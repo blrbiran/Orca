@@ -1,0 +1,451 @@
+# Review package: 4095c659..HEAD
+
+## Commits
+53c9a16a fix(web): show ccloop's code and detail on a ccloop-failed refusal; final-review fix wave
+
+## Files changed
+ skills/orca-control/SKILL.md            |  3 ++-
+ src/control/webDispatch.ts              |  2 +-
+ tests/control/shutdownHealing.test.ts   |  2 +-
+ web/src/RefusalNotice.tsx               |  3 ++-
+ web/src/ccloopCodes.ts                  |  8 ++++----
+ web/src/locales/en.ts                   |  2 +-
+ web/src/locales/zh.ts                   |  2 +-
+ web/src/refusalExplain.ts               |  7 +++++--
+ web/tests/agentSelectionEditor.test.tsx | 11 ++++++++++-
+ web/tests/ccloopCodes.test.tsx          | 33 +++++++++++++++++++++++++++++++--
+ 10 files changed, 58 insertions(+), 15 deletions(-)
+
+## Diff
+diff --git a/skills/orca-control/SKILL.md b/skills/orca-control/SKILL.md
+index 37e07918..87a6483a 100644
+--- a/skills/orca-control/SKILL.md
++++ b/skills/orca-control/SKILL.md
+@@ -22,21 +22,21 @@ execution attempt. A **requirement** is the same group while an idea is clarifie
+ it into a draft task group. Read the returned state rather than infer success from a command being accepted.
+ 
+ 1. Read `config`, `summary` and `recovery`. Choose a concrete registered repository; never guess a filesystem path.
+ 2. Open a requirement only with a single-call capable agent (the pinned Codex adapter lacks that capability), or import
+    a registered plan. Read the group/requirement before each edit; use its current `commandRevision`.
+ 3. Review task goals, acceptance, limits, optional token policy, workspace and integration. Check the effective worker,
+    estimator and reconcile Agent selections, plus worker, handoff and goal-review profile bindings. Confirm the task
+    plan with real profile/selection hashes from the reads, then send `groups/<id>/start` at the new revision.
+    Confirmation and start are separate.
+ 4. Poll `groups/<id>` every 30–60 seconds. The driver schedules dependencies within a started group automatically.
+-   A group's `state` stays `ready` while a Web-started first run is pending or executing; read `executionPending` on the group summary: while it is true the server refuses `start` with `group-execution-pending` (409) and dispatches the group's next task itself.
++   A group's `state` stays `ready` while a Web-started first run is pending or executing; read `executionPending` on the group summary: while it is true the server refuses `start` with `group-execution-pending` (409); the group is already starting or running, and a second start is not needed.
+ 5. On failure, read `groups/<id>`, `runs/<id>/activity`, `runs/<id>/evidence` and, for a saved execution failure,
+    `runs/<id>/saved-result-eligibility`. Report the recorded phase, typed cause when present, raw code and run/attempt
+    identity. Older unknown causes stay unknown; never infer token exhaustion from a decode error. Use only the
+    evidence manifest's authorized routes. A successful command response does not prove provider completion.
+ 
+ Example diagnosis (replace ids with those returned by your reads):
+ 
+ ```sh
+ orca control get summary
+ orca control get groups/<groupId>
+@@ -111,20 +111,21 @@ unsafe/refused outputs do not. Hidden panes make no result reads, and scope/auth
+ Never request an extra summarizer, backfill historical acceptance, or substitute current-tree files for saved bytes.
+ The installed producer remains pinned at `ab824d1`; a local paired feature build is test evidence only. Producer
+ publication, package repin and production service changes are separate human release steps.
+ 
+ ## 3. Writing
+ 
+ 1. Read first and take the current revision from the body; section 9 says which read and which field, per route.
+ 2. `orca control send <route> --expected-revision <N> --payload '<json>'`. Payload shapes are in the table (section 8).
+ 3. `revision-conflict` (409) means state moved since you read. Re-read and decide again; do not blindly resend with a bumped number.
+ 4. Other 4xx bodies name the panel's reason code; read it, do not retry the same payload.
++5. A ccloop failure answers 424 `ccloop-failed` with ccloop's own code and detail in the message (`ccloop-failed:<code>[: <detail>]`); it is a definite refusal, not an uncertain outcome, so fix the cause that code names before sending again.
+ 
+ ## 4. Retries and idempotency
+ 
+ - Without `--command-id` the CLI generates `cli-<uuid>` and returns it as `commandId` in the output envelope. Keep it.
+ - After a timeout (`control-socket-timeout`: the CLI waits 120 s) or any `retryable: true` error, keep the original
+   command id, route, payload and expected revision. **Look up the retained result first**, even if the group appears
+   missing. A found result resolves the outcome; do not send again.
+ - Look up the id under its original scope: group commands `groups/<groupId>/commands/<commandId>`; repository verbs
+   (`set-workspace-mode`, `set-integration-scheme`) `groups/@repository:<repoId>/commands/<commandId>`; operator verbs
+   (`set-agent-preferences`) `groups/@operator:<operatorId>/commands/<commandId>`; spend verbs (`set-spend-cap`,
+diff --git a/src/control/webDispatch.ts b/src/control/webDispatch.ts
+index 721b573d..d082924c 100644
+--- a/src/control/webDispatch.ts
++++ b/src/control/webDispatch.ts
+@@ -117,31 +117,31 @@ function scopedProbeBlocks(store:ControlStore,groupId:string,entry:ScopedObserva
+ }
+ 
+ function success(context: WebCommandContext, result: CommandSuccessV1["result"], status = 200): { status: number; body: CommandSuccessV1 } {
+   return { status, body: {
+     schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId, verb: context.rawCommand.verb,
+     target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,
+     effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash, result,
+   } };
+ }
+ 
+-/** Commit the durable start wake only after the frozen profiles still probe clean. */
+ /** Start guard spec (2026-10-15) §3.2: a group with a plan whose execution is pending; a clarifying group is left to requirement-not-split. */
+ function startRefusedAsPending(store: ControlStore, groupId: string): boolean {
+   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+   if (row === undefined || (JSON.parse(String(row.body)) as { status?: unknown }).status === "clarifying") return false;
+   return groupExecutionPendingInStore(store, groupId);
+ }
+ function refuseStart(store: ControlStore, command: StartCommand): CommandResult {
+   const refusal = new ControlError("group-execution-pending");
+   return applyWebCommand<CommandResult>(store, { rawCommand: command, expand: () => { throw refusal; }, apply: () => { throw refusal; } }).body;
+ }
++/** Commit the durable start wake only after the frozen profiles still probe clean. */
+ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand): Promise<CommandResult> {
+   const { store, profileRouter, admissionGate } = deps;
+   const replay = preflightWebCommand<CommandResult>(store, command);
+   if (replay) return replay.body;
+   const release = admissionGate?.enter();
+   try {
+     // Start guard spec §3.2: refused, ledgered, before the frozen profiles are probed -- a refused start asks no agent.
+     if (startRefusedAsPending(store, groupTarget(command))) return refuseStart(store, command);
+     let degraded = false;let observations:ScopedObservation[]=[];
+     try {
+diff --git a/tests/control/shutdownHealing.test.ts b/tests/control/shutdownHealing.test.ts
+index ad81f87d..3ce9892b 100644
+--- a/tests/control/shutdownHealing.test.ts
++++ b/tests/control/shutdownHealing.test.ts
+@@ -98,21 +98,21 @@ describe("startup recovery heals empty-frozen-set shutdown intents (issue-fixes
+       expect(result.pendingWakeIds).toEqual([]);
+       expect(h.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id=?").get(wakeId)).toMatchObject({ delivered: 1 });
+       expect(Number(h.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g'").get()!.n)).toBeGreaterThan(runsBefore);
+       expect(stopRow(h.store)).toBeUndefined();
+     } finally { await h.dispose(); }
+   });
+ 
+   // Review Focus 1: a store already stranded by an older Orca. It is written at schema 8 (no activity table, built the way
+   // schema8.test.ts builds older stores), holds the empty-frozen-set intent and a run without startedAt, and must migrate
+   // on the normal open, heal, render its views with null times, and accept `start`.
+-  it("a stranded v8 store migrates, heals, renders a run with startedAt null, and then accepts start", async () => {
++  it("a stranded v8 store migrates, heals, renders a run with startedAt null, and then dispatches the queued wake and refuses a second start", async () => {
+     const { h, service } = await confirmedGroup(); try {
+       const first = await service.start(h.command("start", {}));
+       expect("error" in first ? first.error.code : first.result.kind).toBe("scheduled");
+       const claim = await deliverScheduledStart({ store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate }, "g");
+       if (claim.kind !== "claimed") throw new Error(`claim refused: ${JSON.stringify(claim)}`);
+       // A run written by a pre-v9 Orca has no startedAt/endedAt. It is a proved-never-started run, so recovery has no live work to block on.
+       settleProviderAttempt({ store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate }, { runId: claim.runId, phase: "work", firstAttemptProof: "invalid" });
+       const run = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(claim.runId)!.body)) as Record<string, unknown>;
+       delete run.startedAt; delete run.endedAt;
+       h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(run), claim.runId);
+diff --git a/web/src/RefusalNotice.tsx b/web/src/RefusalNotice.tsx
+index e1dd8e89..ee6029a4 100644
+--- a/web/src/RefusalNotice.tsx
++++ b/web/src/RefusalNotice.tsx
+@@ -11,14 +11,15 @@ export function RefusalNotice({ refusal, testId }: { refusal: ControlRefusal; te
+   useTranslation(); // re-render when the language changes: explainRefusal reads it
+   const { text, items } = explainRefusal(refusal);
+   return (
+     <div className="refusal" role="alert" data-tone="danger" data-testid={testId} data-status={refusal.status ?? ""}>
+       <p>{text}</p>
+       {items.length > 0 && (
+         <ul>
+           {items.map((item, index) => <li key={index}>{item}</li>)}
+         </ul>
+       )}
+-      <p><code className="refusal-code">{refusal.code}</code></p>
++      {/* ccloop error codes spec (2026-10-15) §4.6, human ruling 2: a ccloop failure shows ccloop's code and its detail (the server cut it to 512). */}
++      <p><code className="refusal-code">{refusal.code === "ccloop-failed" ? refusal.message : refusal.code}</code></p>
+     </div>
+   );
+ }
+diff --git a/web/src/ccloopCodes.ts b/web/src/ccloopCodes.ts
+index 0db53e28..62e86ce6 100644
+--- a/web/src/ccloopCodes.ts
++++ b/web/src/ccloopCodes.ts
+@@ -10,21 +10,21 @@ import { zhCcloopErrors } from "./locales/zh.js";
+ /** A code as the server writes one before `: <detail>` (src/control/ccloopPort.ts PEER_CODE). */
+ const CODE_THEN_DETAIL = /^([a-z][a-z0-9-]{0,63})(?:$|: ([\s\S]*)$)/;
+ 
+ function ccloopEntry(code: string): string | undefined {
+   const table = currentLanguage() === "zh" ? zhCcloopErrors : enCcloopErrors;
+   return Object.prototype.hasOwnProperty.call(table, code) ? table[code] : undefined;
+ }
+ 
+ export function explainCcloopCode(code: string, detail: string): string {
+   const entry = ccloopEntry(code) ?? errorEntry(code);
+-  if (entry !== undefined) return fillEntry(entry, { message: "", status: "", detail });
++  if (entry !== undefined) return fillEntry(entry, { message: detail, status: "", detail }); // zh Orca entries name the detail {{message}}
+   return detail === "" ? i18n.t("ccloop.genericNoDetail", { code }) : i18n.t("ccloop.generic", { code, detail });
+ }
+ 
+ /**
+  * A code's words for a surface that already shows the code: null when they would only repeat it (plan R3 made the
+  * generic text for an unknown code the bare code), so no surface reads `X · X`.
+  */
+ export function explainBesideCode(code: string): string | null {
+   const words = explainCcloopCode(code, "");
+   return words === code ? null : words;
+@@ -37,16 +37,16 @@ export function codeAndDetail(text: string): { code: string; detail: string } {
+ }
+ 
+ /** A stored peer-exit reason after its prefix: `<exit>[:<code>][: <detail>]` (the server's peerExitText). */
+ export function peerExitReason(rest: string): { code: string; detail: string } {
+   const cut = rest.indexOf(":");
+   return codeAndDetail(cut === -1 ? "" : rest.slice(cut + 1));
+ }
+ 
+ const ESTIMATOR_REJECTED = "agent-selection-rejected:estimator:";
+ const CALL_FAILED = "estimate-call-failed:";
+-/** An estimate's reason that carries a ccloop code (§4.3 estimator slot, §4.5 failed call); null for any other. */
++/** An estimate's reason that carries a ccloop code (§4.3 estimator slot, §4.5 failed call); null for any other, and null when the words would only repeat the code shown beside them. */
+ export function explainEstimateReason(reasonCode: string): string | null {
+-  if (reasonCode.startsWith(ESTIMATOR_REJECTED)) return explainCcloopCode(reasonCode.slice(ESTIMATOR_REJECTED.length), "");
+-  if (reasonCode.startsWith(CALL_FAILED)) return explainCcloopCode(reasonCode.slice(CALL_FAILED.length), "");
++  if (reasonCode.startsWith(ESTIMATOR_REJECTED)) return explainBesideCode(reasonCode.slice(ESTIMATOR_REJECTED.length));
++  if (reasonCode.startsWith(CALL_FAILED)) return explainBesideCode(reasonCode.slice(CALL_FAILED.length));
+   return null;
+ }
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index b70fd4d3..ddad5b40 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -1125,21 +1125,21 @@ export const enErrors: Record<string, string> = {
+   "group-already-exists": "This group already exists.",
+   "group-archived": "This group is archived: it keeps every record but takes no new work. Unarchive it to change or run it.",
+   "group-budget-unavailable": "The group's budget is not enough.",
+   "group-deadline-expired": "The group's deadline has passed.",
+   "group-graph-conflict": "The group's task graph conflicts with the recorded one.",
+   "group-not-found": "The group was not found.",
+   "group-project-binding-required": "The group must be bound to a project.",
+   "group-project-conflict": "The group is bound to a different project.",
+   "group-reserve-insufficient": "The group's unallocated reserve is too small ({{detail}}). Raise the group limit or lower another allocation in the budget editor, then try again.",
+   "group-review-budget-unavailable": "The group's review budget is not enough.",
+-  "group-execution-pending": "This group is already starting or running; its next task is dispatched automatically.",
++  "group-execution-pending": "This group is already starting or running; a second start is not needed.",
+   "group-state-invalid": "The group's current state does not allow this command. Only the buttons its view shows apply now.",
+   "group-stopped": "The group is stopped. Resume it before sending this command.",
+   "handoff-budget-unavailable": "There is not enough budget for the handoff.",
+   "handoff-grant-insufficient": "The handoff's grant is not enough.",
+   "handoff-identity-conflict": "The handoff's identity conflicts with the recorded one.",
+   "handoff-parent-invalid": "The run being handed off is not valid for this handoff.",
+   "handoff-request-conflict": "The handoff request conflicts with one already recorded.",
+   "handoff-work-not-found": "The work to hand off was not found.",
+   "identity-space-exhausted": "No identity numbers are left: {{detail}}",
+   // Integration spec §3.2-§3.4, §8: the integration refusals.
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index c86d90a6..90bb48fc 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -1061,21 +1061,21 @@ export const zhErrors: Record<string, string> = {
+   "group-already-exists": "这个组已存在。",
+   "group-archived": "这个组已归档：记录都保留，但不再接新工作。要修改或运行它，先取消归档。",
+   "group-budget-unavailable": "组预算不够。",
+   "group-deadline-expired": "组的截止时间已过。",
+   "group-graph-conflict": "组的任务图冲突。",
+   "group-not-found": "找不到这个组。",
+   "group-project-binding-required": "组必须绑定到一个项目。",
+   "group-project-conflict": "组与项目的绑定冲突。",
+   "group-reserve-insufficient": "组余量不够：{{message}}。请在「预算提案」里调高「组上限」或调低别的分配，然后再试。",
+   "group-review-budget-unavailable": "组的评审预算不够。",
+-  "group-execution-pending": "这个组已在启动或运行中；它的下一个任务会自动派发。",
++  "group-execution-pending": "这个组已在启动或运行中，不需要再次启动。",
+   "group-state-invalid": "组当前的状态不允许这个操作。",
+   "group-stopped": "组已停止。",
+   "handoff-budget-unavailable": "交接预算不够。",
+   "handoff-grant-insufficient": "交接额度不够。",
+   "handoff-identity-conflict": "交接身份冲突。",
+   "handoff-parent-invalid": "交接的父运行不合法。",
+   "handoff-request-conflict": "交接请求冲突。",
+   "handoff-work-not-found": "找不到要交接的工作。",
+   "identity-space-exhausted": "身份编号已用尽：{{message}}",
+   // Integration spec §3.2-§3.4, §8: the integration refusals.
+diff --git a/web/src/refusalExplain.ts b/web/src/refusalExplain.ts
+index abc1089b..05623b46 100644
+--- a/web/src/refusalExplain.ts
++++ b/web/src/refusalExplain.ts
+@@ -1,18 +1,18 @@
+ /**
+  * Spec 2026-10-08 §2.2(a), (b): what a refusal and a blocked run's reason say in the reader's language. A refused plan's
+  * detail is a list (one item per line, src/scheduler/planFile.ts); each item becomes a line a person can act on, and an
+  * item this panel has no words for is shown verbatim. Pure apart from reading the current language.
+  */
+ import type { ControlRefusal } from "./controlState.js";
+ import i18n, { errorEntry, fillEntry, refusalDetail, refusalText } from "./i18n.js";
+-import { codeAndDetail, explainCcloopCode, peerExitReason } from "./ccloopCodes.js";
++import { codeAndDetail, explainBesideCode, explainCcloopCode, peerExitReason } from "./ccloopCodes.js";
+ 
+ const PLAN_REJECTED = "control-plan-rejected";
+ const PLAN_ITEMS = ["target-repo-mismatch", "missing-goal", "missing-success-conditions", "duplicate-success-condition"];
+ const TASK_ITEMS = ["missing-target-version", "duplicate-dependency", "dangling-dependency", "contract-json", "contract-shape", "contract-canonical"];
+ 
+ /** The current language's planItem entry for a key built at run time, with its placeholders filled. */
+ function itemLine(key: string, values: Record<string, string> = {}): string {
+   return String((i18n.t as (k: string, o?: object) => unknown)(`refusal.planItem.${key}`, values));
+ }
+ 
+@@ -41,13 +41,16 @@ export function explainRefusal(refusal: ControlRefusal): { text: string; items:
+ /** ccloop error codes spec (2026-10-15) §4.6: prefixes whose detail is a peer exit, and the usage-unknown blocks that may carry a code. */
+ const PEER_PREFIXES = new Set(["control-peer-exit", "accept-refused"]);
+ const USAGE_UNKNOWN = new Set(["estimate-usage-unknown", "requirement-usage-unknown"]);
+ /** A blocked run's reason explained by its prefix up to the first ':' (the rest is its detail); null when there are no words for it. */
+ export function explainRunReason(reason: string): string | null {
+   const cut = reason.indexOf(":");
+   const prefix = cut === -1 ? reason : reason.slice(0, cut), rest = cut === -1 ? "" : reason.slice(cut + 1);
+   const entry = errorEntry(prefix);
+   if (entry === undefined) return null;
+   if (PEER_PREFIXES.has(prefix)) { const { code, detail } = peerExitReason(rest); return fillEntry(entry, { message: reason, status: "", detail: explainCcloopCode(code, detail) }); }
+-  if (USAGE_UNKNOWN.has(prefix) && rest !== "") return `${fillEntry(entry, { message: reason, status: "", detail: "" })} ${explainCcloopCode(rest, "")}`;
++  if (USAGE_UNKNOWN.has(prefix) && rest !== "") {
++    const words = explainBesideCode(rest), base = fillEntry(entry, { message: reason, status: "", detail: "" }); // the reason (with its code) is shown beside this
++    return words === null ? base : `${base} ${words}`;
++  }
+   return fillEntry(entry, { message: reason, status: "", detail: rest });
+ }
+diff --git a/web/tests/agentSelectionEditor.test.tsx b/web/tests/agentSelectionEditor.test.tsx
+index 6c97b48b..3231f965 100644
+--- a/web/tests/agentSelectionEditor.test.tsx
++++ b/web/tests/agentSelectionEditor.test.tsx
+@@ -314,21 +314,30 @@ describe("the plan's layer under the panel's at each level (ruling review R7)",
+   });
+ 
+   // ccloop error codes spec (2026-10-15) §4.6: a slot's ccloop code is explained beside it, and an estimate's reason too.
+   it("explains a slot's ccloop code and an estimate's ccloop reason in words beside the code", () => {
+     const base = resolvedPreview();
+     const preview = { ...base, slots: [base.slots[0]!, base.slots[1]!, { key: "task:b", slot: "worker" as const, taskId: "b", outcome: { kind: "unavailable" as const, code: "omp-model-catalog-unavailable" } }], selectionsHash: null };
+     const estimate: GroupViewV1["estimates"][number] = { estimateId: "estimate-1", estimateVersion: 1, state: "failed", profile: { profileId: "all", profileHash: "b".repeat(64) },
+       mode: "soft", requestHash: null, outputHash: null, output: null, reasonCode: "estimate-call-failed:omp-new-thing" };
+     const { container } = renderView({ preview, view: view({ estimates: [estimate] }) });
+     expect(row(container, "task:b").querySelector('[role="alert"]')!.textContent).toContain("omp-model-catalog-unavailable · omp could not list its model catalog. Check that omp is installed and starts, then retry.");
+-    expect(container.textContent).toContain("estimate-call-failed:omp-new-thing · omp-new-thing");
++    expect(container.textContent).toContain("estimate-call-failed:omp-new-thing");
++  });
++
++  // Fix-wave ruling (final review m1): the estimate line already shows the reason code, so an unknown code is not repeated after it.
++  it("shows an estimate's unknown ccloop code once", () => {
++    const estimate: GroupViewV1["estimates"][number] = { estimateId: "estimate-1", estimateVersion: 1, state: "failed", profile: { profileId: "all", profileHash: "b".repeat(64) },
++      mode: "soft", requestHash: null, outputHash: null, output: null, reasonCode: "estimate-call-failed:omp-new-thing" };
++    const { container } = renderView({ view: view({ estimates: [estimate] }) });
++    const line = [...container.querySelectorAll("li")].find((li) => li.textContent!.includes("estimate-call-failed"))!;
++    expect(line.textContent).toMatch(/ · estimate-call-failed:omp-new-thing$/);
+   });
+ 
+   // Controller ruling on A7 (plan R3): an unknown code's explanation is the code itself, so the slot shows it once.
+   it("shows a slot's unknown ccloop code once, not beside itself", () => {
+     const base = resolvedPreview();
+     const preview = { ...base, slots: [base.slots[0]!, base.slots[1]!, { key: "task:b", slot: "worker" as const, taskId: "b", outcome: { kind: "unavailable" as const, code: "omp-new-thing" } }], selectionsHash: null };
+     const { container } = renderView({ preview });
+     expect(row(container, "task:b").querySelector('[role="alert"]')!.textContent).toBe("unavailable for now, Re-read to ask again · omp-new-thing");
+   });
+ });
+diff --git a/web/tests/ccloopCodes.test.tsx b/web/tests/ccloopCodes.test.tsx
+index 6a813833..6fe84880 100644
+--- a/web/tests/ccloopCodes.test.tsx
++++ b/web/tests/ccloopCodes.test.tsx
+@@ -4,20 +4,21 @@
+  * reader's language -- ccloop's table first, then Orca's own table, else a generic sentence that still names the code and
+  * the detail (an unknown code is never dropped). The texts are written out here, not read from the tables, so a dropped
+  * entry and a zh entry left in English both turn this red.
+  */
+ import { cleanup, render, screen } from "@testing-library/react";
+ import { renderToStaticMarkup } from "react-dom/server";
+ import { afterEach, describe, expect, it, vi } from "vitest";
+ import i18n from "../src/i18n.js";
+ import { codeAndDetail, explainCcloopCode, explainEstimateReason, peerExitReason } from "../src/ccloopCodes.js";
+ import { explainRefusal, explainRunReason } from "../src/refusalExplain.js";
++import { RefusalNotice } from "../src/RefusalNotice.js";
+ import { RequirementsPanel } from "../src/RequirementsPanel.js";
+ import { RunReason } from "../src/RunReason.js";
+ import { SavedResultAction } from "../src/TaskDetail.js";
+ import type { RequirementViewV1 } from "../src/controlTypes.js";
+ import { run } from "./fixtures/board.js";
+ import { config, requirementView, summaryWith } from "./fixtures/requirement.js";
+ 
+ const EN_CATALOG = "omp could not list its model catalog (spawn ENOENT). Check that omp is installed and starts, then retry.";
+ const ZH_CATALOG = "omp 无法列出它的模型目录（spawn ENOENT）。请确认 omp 已安装且能启动，然后重试。";
+ const EN_CAP = "omp's catalog now caps this model's output above the bound this requirement was opened with, so the call was refused before it started. Retry: a retry recomputes the bound from the current catalog.";
+@@ -73,21 +74,21 @@ describe("each surface (spec A §4.6 table)", () => {
+     ]);
+     const html = renderToStaticMarkup(<RunReason run={run({ runId: "run-x", state: "blocked", blockedReason: "control-peer-exit:2:omp-model-catalog-unavailable: spawn ENOENT" })} />);
+     expect(html).toContain(`ccloop exited with an error: ${EN_CATALOG} <code>control-peer-exit:2:omp-model-catalog-unavailable: spawn ENOENT</code>`);
+     await i18n.changeLanguage("zh");
+     expect(explainRunReason("control-peer-exit:2:omp-model-catalog-unavailable: spawn ENOENT")).toBe(`ccloop 出错退出：${ZH_CATALOG}`);
+   });
+ 
+   it("an estimate's reason code", async () => {
+     expect([explainEstimateReason("agent-selection-rejected:estimator:omp-model-catalog-unavailable"), explainEstimateReason("estimate-call-failed:omp-single-call-cap-exceeded"),
+       explainEstimateReason("estimate-call-failed:omp-new-thing"), explainEstimateReason("estimate-output-invalid")])
+-      .toEqual(["omp could not list its model catalog. Check that omp is installed and starts, then retry.", EN_CAP, "omp-new-thing", null]);
++      .toEqual(["omp could not list its model catalog. Check that omp is installed and starts, then retry.", EN_CAP, null, null]);
+     await i18n.changeLanguage("zh");
+     expect(explainEstimateReason("estimate-call-failed:omp-single-call-cap-exceeded")).toBe(ZH_CAP);
+   });
+ 
+   // Plan R3 made the generic text the bare code, which this surface already shows; a known code pins the explanation here,
+   // and web/tests/savedResultRecovery.test.tsx pins that an unknown code is not shown twice.
+   it("a saved-result reason", async () => {
+     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: "unavailable", reason: "omp-model-catalog-unavailable" }), { status: 200, headers: { "content-type": "application/json" } })));
+     render(<SavedResultAction runId="run-1" groupId="g" taskId="a" revision={3} changeSeq={1} onCommand={vi.fn()} />);
+     expect((await screen.findByText("omp-model-catalog-unavailable")).parentElement!.textContent).toContain("omp-model-catalog-unavailable omp could not list its model catalog. Check that omp is installed and starts, then retry.");
+@@ -97,40 +98,68 @@ describe("each surface (spec A §4.6 table)", () => {
+     expect((await screen.findByText("omp-model-catalog-unavailable")).parentElement!.textContent).toContain("omp-model-catalog-unavailable omp 无法列出它的模型目录。请确认 omp 已安装且能启动，然后重试。");
+   });
+ 
+   it("a failed requirement: the latest failed call's code, and a blocked call's reason", async () => {
+     const view = requirementView("failed");
+     const failed: RequirementViewV1 = { ...view, rounds: [{ ...view.rounds[0]!, calls: [{ runId: "run-1", overviewHash: null, commit: null, usage: null, outcome: "failed", reason: "omp-single-call-cap-exceeded" }] }],
+       summary: { ...view.summary, requirement: { ...view.summary.requirement!, blockedRun: { runId: "run-2", reason: "requirement-usage-unknown:omp-new-thing" } } } };
+     const shown = (language: "en" | "zh") => render(<RequirementsPanel config={config} summary={summaryWith(failed)} views={{ r: failed }} selected="r" agents={null} language={language} onSelect={() => {}} onCommand={vi.fn()} />).container.textContent ?? "";
+     const en = shown("en");
+     expect(en).toContain(`omp-single-call-cap-exceeded · ${EN_CAP}`);
+-    expect(en).toContain("requirement-usage-unknown:omp-new-thing · This requirement call's usage is unknown, so its budget cannot be settled. omp-new-thing");
++    expect(en).toContain("requirement-usage-unknown:omp-new-thing · This requirement call's usage is unknown, so its budget cannot be settled. · ");
+     cleanup();
+     await i18n.changeLanguage("zh");
+     expect(shown("zh")).toContain(`omp-single-call-cap-exceeded · ${ZH_CAP}`);
+   });
+ 
+   // A7 review I1: the line names the LATEST failed call of a failed step, and a step that is not failed shows none.
+   it("a failed requirement names its latest failed call, and a drafting one names none", () => {
+     const call = (runId: string, reason: string) => ({ runId, overviewHash: null, commit: null, usage: null, outcome: "failed" as const, reason });
+     const view = requirementView("failed");
+     const twoFailed: RequirementViewV1 = { ...view, rounds: [{ ...view.rounds[0]!, calls: [call("run-1", "omp-model-catalog-invalid"), call("run-2", "omp-single-call-cap-exceeded")] }] };
+     const panel = (shown: RequirementViewV1) => render(<RequirementsPanel config={config} summary={summaryWith(shown)} views={{ r: shown }} selected="r" agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} />).container;
+     const failed = panel(twoFailed);
+     expect([...failed.querySelectorAll('p[role="status"]')].map((p) => p.textContent)).toContain(`omp-single-call-cap-exceeded · ${EN_CAP}`);
+     expect(failed.textContent).not.toContain("omp-model-catalog-invalid");
+     cleanup();
+     const drafting: RequirementViewV1 = { ...view, rounds: [{ ...view.rounds[0]!, state: "drafting", calls: [call("run-1", "omp-model-catalog-invalid")] }] };
+     expect(panel(drafting).textContent).not.toContain("omp-model-catalog-invalid");
+   });
+ 
++  // Final review I1 (spec A §2, human ruling 2): a 424 ccloop-failed notice shows ccloop's own code and its detail beside the
++  // words -- also when the entry has no detail slot (single-call-unsupported), and in zh where Orca's entries name it {{message}}.
++  it("a refusal notice shows ccloop's code and detail beside the words, in both languages", async () => {
++    const notice = (message: string) => {
++      const { container } = render(<RefusalNotice refusal={{ status: 424, code: "ccloop-failed", message, commandRevision: 3 }} testId="n" />);
++      const parts = [...container.querySelectorAll("p")].map((p) => p.textContent);
++      cleanup();
++      return parts;
++    };
++    expect(notice("ccloop-failed:omp-model-catalog-unavailable: spawn ENOENT")).toEqual([EN_CATALOG, "ccloop-failed:omp-model-catalog-unavailable: spawn ENOENT"]);
++    expect(notice("ccloop-failed:single-call-unsupported: codex has no single call")).toEqual([
++      "This agent cannot make single calls (estimate, clarify, split); choose another agent.", "ccloop-failed:single-call-unsupported: codex has no single call"]);
++    await i18n.changeLanguage("zh");
++    expect(notice("ccloop-failed:omp-model-catalog-unavailable: spawn ENOENT")).toEqual([ZH_CATALOG, "ccloop-failed:omp-model-catalog-unavailable: spawn ENOENT"]);
++    expect(notice("ccloop-failed:agent-version-drift: recorded 1.2.0, found 1.3.0")).toEqual([
++      "agent 版本与记录的不一致：recorded 1.2.0, found 1.3.0", "ccloop-failed:agent-version-drift: recorded 1.2.0, found 1.3.0"]);
++  });
++
++  // Fix-wave ruling (final review m1): the blocked-run line already shows the reason with its code, so an unknown code's
++  // words (the bare code) are not added after it.
++  it("an unknown code is shown once on the blocked-run line", () => {
++    const view = requirementView("failed");
++    const blocked: RequirementViewV1 = { ...view, summary: { ...view.summary, requirement: { ...view.summary.requirement!, blockedRun: { runId: "run-2", reason: "requirement-usage-unknown:omp-new-thing" } } } };
++    const { container } = render(<RequirementsPanel config={config} summary={summaryWith(blocked)} views={{ r: blocked }} selected="r" agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} />);
++    expect([...container.querySelectorAll('p[role="alert"]')].map((p) => p.textContent)).toContain(
++      "requirement-usage-unknown:omp-new-thing · This requirement call's usage is unknown, so its budget cannot be settled. · This step's call is blocked; Retry this call runs the blocked step again. Retry this call");
++  });
++
+   // Controller ruling on A7 (plan R3): an unknown code's explanation is the code itself, so these surfaces show it once.
+   it("an unknown code is shown once on the failed-call line and the saved-result line", async () => {
+     const view = requirementView("failed");
+     const failed: RequirementViewV1 = { ...view, rounds: [{ ...view.rounds[0]!, calls: [{ runId: "run-1", overviewHash: null, commit: null, usage: null, outcome: "failed", reason: "omp-new-thing" }] }] };
+     const { container } = render(<RequirementsPanel config={config} summary={summaryWith(failed)} views={{ r: failed }} selected="r" agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} />);
+     expect([...container.querySelectorAll('p[role="status"]')].map((p) => p.textContent)).toContain("omp-new-thing");
+     cleanup();
+     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: "unavailable", reason: "omp-new-thing" }), { status: 200, headers: { "content-type": "application/json" } })));
+     render(<SavedResultAction runId="run-1" groupId="g" taskId="a" revision={3} changeSeq={1} onCommand={vi.fn()} />);
+     expect((await screen.findByText("omp-new-thing")).parentElement!.textContent).toBe("Saved results are unavailable for verification. omp-new-thing");

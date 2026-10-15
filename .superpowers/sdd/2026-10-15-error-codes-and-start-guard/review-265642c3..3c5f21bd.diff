@@ -1,0 +1,823 @@
+# Review package: 265642c3..HEAD
+
+## Commits
+3c5f21bd fix(web): show an unknown ccloop code once, not beside itself
+5c54e447 feat(web): explain ccloop's codes in English and Chinese wherever the panel shows one
+
+## Files changed
+ tests/panel/refusalCoverage.test.ts     |  20 +++++-
+ web/src/AgentSelectionEditor.tsx        |   4 +-
+ web/src/AgentSettings.tsx               |   3 +-
+ web/src/ControlGroupView.tsx            |   2 +
+ web/src/RequirementsPanel.tsx           |  10 ++-
+ web/src/TaskDetail.tsx                  |   4 +-
+ web/src/ccloopCodes.ts                  |  52 ++++++++++++++
+ web/src/locales/en.ts                   |  15 ++++
+ web/src/locales/zh.ts                   |  14 ++++
+ web/src/refusalExplain.ts               |  14 +++-
+ web/tests/agentSelectionEditor.test.tsx |  19 +++++
+ web/tests/agentSettings.test.tsx        |  14 ++++
+ web/tests/ccloopCodes.test.tsx          | 124 ++++++++++++++++++++++++++++++++
+ 13 files changed, 287 insertions(+), 8 deletions(-)
+
+## Diff
+diff --git a/tests/panel/refusalCoverage.test.ts b/tests/panel/refusalCoverage.test.ts
+index 011eccd8..66d578c5 100644
+--- a/tests/panel/refusalCoverage.test.ts
++++ b/tests/panel/refusalCoverage.test.ts
+@@ -1,14 +1,14 @@
+ import { describe, expect, it } from "vitest";
+ import { controlErrorCatalog } from "../../src/panel/controlErrors.js";
+-import { enErrors } from "../../web/src/locales/en.js";
+-import { zhErrors } from "../../web/src/locales/zh.js";
++import { enCcloopErrors, enErrors } from "../../web/src/locales/en.js";
++import { zhCcloopErrors, zhErrors } from "../../web/src/locales/zh.js";
+ 
+ /**
+  * Panel i18n spec §3.2, §6.4; spec 2026-10-08 §2.2(a): every refusal code with a machine-readable source has an entry in
+  * BOTH languages -- every code of the control error catalog, every code the web itself makes (http-<n> is the one entry
+  * http-status), the inline server codes without a catalog (listed here by hand, plan Task 10), and the reasons a group
+  * view shows on a blocked run. A code with no entry falls back to the message as sent (web/tests/refusalText.test.tsx), so
+  * a missing entry is visible, but it is a gap this criterion names. Internal codes that never reach the browser (they are
+  * sent as control-internal-error) have no entry.
+  * Rewritten for spec 2026-10-08 §2.3 (human-approved): English added, view-shown reasons added, `detail` allowed.
+  */
+@@ -39,20 +39,22 @@ const BY_HAND = [
+  * Spec 2026-10-08 §2.2(a): a blocked run's reason (drive.blockedReason), matched by its prefix up to the first ':'
+  * (web/src/refusalExplain.ts explainRunReason). The literal reasons of src/control/executionDriver.ts's blockRun calls and
+  * of the single-call purposes' prepare/usageUnknownReason, at b04e2cb; a reason that is free text (describeError) has no
+  * entry and is shown as sent. Part D adds ccloop's stop reasons here.
+  */
+ const VIEW_REASONS = [
+   // src/control/executionDriver.ts blockRun(...)
+   "agent-unfrozen", "repository-path", "continuation-registration", "skills-unsupported-agent", "skills-inject-failed",
+   "config-hash-mismatch", "stop-proof-generation", "inspect-unknown", "accept-refused", "candidate-without-terminal", "terminal",
+   "out-of-bounds", "single-call-record-invalid", "single-call-prompt-mismatch", "settle-incomplete",
++  // ccloop error codes spec (2026-10-15) §4.4, §4.7: a peer exit's stored run reason.
++  "control-peer-exit",
+   // src/control/requirementCalls.ts, src/control/singleCallPurposes.ts (prepare's `blocked`, `usageUnknownReason`)
+   "requirement-call-target-moved", "estimate-request-missing", "requirement-usage-unknown", "estimate-usage-unknown",
+   // Issue fixes spec §4.2(1): ccloop's stop reasons (the run view's stopReason, after web/src/runFacts.ts reasonCode).
+   "codex-result-invalid", "codex-events-invalid", "codex-no-completion", "codex-usage-invalid", "codex-usage-unavailable", "codex-event-error",
+   "codex-timeout", "codex-skills-cleanup-failed", "codex-skills-path-conflict", "codex-skills-pending", "codex-skills-setup-failed",
+   "codex-skills-source-invalid", "codex-exit-error",
+ ];
+ const TABLES = { zh: zhErrors, en: enErrors } as const;
+ const has = (table: Record<string, string>, code: string): boolean => Object.prototype.hasOwnProperty.call(table, code);
+ const required = (): string[] => [...controlErrorCatalog().map((entry) => entry.code), ...WEB_MADE, ...BY_HAND, ...VIEW_REASONS];
+@@ -78,11 +80,25 @@ describe("refusal coverage in both languages (panel i18n spec §6.4; spec 2026-1
+   });
+ 
+   // The code is on screen beside the explanation (spec §2.2(a)); the English text never repeats it, so it interpolates
+   // the detail (the message after `<code>:`), not the whole message. http-status's message carries no code.
+   it("never repeats the code in English", () => {
+     for (const [code, text] of Object.entries(enErrors)) {
+       expect(text.includes(code), code).toBe(false);
+       if (code !== "http-status") expect(text.includes("{{message}}"), code).toBe(false);
+     }
+   });
++
++  // ccloop error codes spec (2026-10-15) §4.7: the ccloop codes an operator can act on, held to both languages as VIEW_REASONS is.
++  const CCLOOP_CODES = ["omp-model-catalog-unavailable", "omp-model-catalog-invalid", "omp-single-call-cap-exceeded", "omp-single-call-unavailable",
++    "agent-config-invalid", "single-call-unsupported", "single-call-output-invalid"];
++  it("has an en and a zh ccloop entry for every CCLOOP_CODES code, the same codes in both, each interpolating only {{detail}}", () => {
++    for (const table of [enCcloopErrors, zhCcloopErrors]) expect(CCLOOP_CODES.filter((code) => !has(table, code))).toEqual([]);
++    expect(Object.keys(enCcloopErrors).sort()).toEqual(Object.keys(zhCcloopErrors).sort());
++    for (const [lang, table] of [["en", enCcloopErrors], ["zh", zhCcloopErrors]] as const) {
++      for (const [code, text] of Object.entries(table)) {
++        expect(text.trim(), `${lang} ${code}`).not.toBe("");
++        expect([...text.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1]).filter((name) => name !== "detail"), `${lang} ${code}`).toEqual([]);
++      }
++    }
++  });
+ });
+diff --git a/web/src/AgentSelectionEditor.tsx b/web/src/AgentSelectionEditor.tsx
+index 400c68d2..cd2a896a 100644
+--- a/web/src/AgentSelectionEditor.tsx
++++ b/web/src/AgentSelectionEditor.tsx
+@@ -6,20 +6,21 @@
+  */
+ import type { JSX } from "react";
+ import { useTranslation } from "react-i18next";
+ import type { ControlAction } from "./controlApi.js";
+ import { SelectionFields, contextLabel, panelPartialFromFields, selectionFieldErrors } from "./AgentFields.js";
+ import type {
+   AgentSelectionPreviewV1, AgentSelectionV1, AgentSlotV1, AgentsViewV1, GroupAgentOverridesV1, GroupViewV1, OperatorPreferencesV1,
+   PanelPartialSelectionV1, PartialSelectionV1, SelectionProvenanceV1, SlotOutcomeV1,
+ } from "./controlTypes.js";
+ import { enumText } from "./i18n.js";
++import { explainBesideCode } from "./ccloopCodes.js";
+ 
+ type Scope = { kind: "group"; slot: AgentSlotV1 } | { kind: "task"; taskId: string };
+ 
+ export const agentDraftPrefix = (groupId: string, scope: Scope): string =>
+   scope.kind === "group" ? `${groupId}:agent:group:${scope.slot}` : `${groupId}:agent:task:${scope.taskId}`;
+ 
+ /** The hash a confirm may carry: only a resolution of this group, at this proposal version, that resolved whole. */
+ export function selectionsHashFor(view: GroupViewV1, preview: AgentSelectionPreviewV1 | null | undefined): string | null {
+   if (!preview || view.proposal.state !== "editable") return null;
+   if (preview.groupId !== view.summary.groupId || preview.proposalVersion !== view.proposal.proposalVersion) return null;
+@@ -61,23 +62,24 @@ function SelectionCells(props: { selection: AgentSelectionV1; provenance: Select
+       <td>{selection.model} <small>{t("agents.from", { source: enumText("selectionSource", provenance.model) })}</small></td>
+       <td>{contextLabel(selection.contextWindow)} <small>{t("agents.from", { source: enumText("selectionSource", provenance.contextWindow) })}</small></td>
+     </>
+   );
+ }
+ 
+ /** A slot that did not resolve: refused for good (rejected), or ccloop did not answer this time (unavailable). */
+ function FailedCell(props: { outcome: Exclude<SlotOutcomeV1, { kind: "resolved" }> }): JSX.Element {
+   const { outcome } = props;
+   const { t } = useTranslation();
++  const words = explainBesideCode(outcome.code);
+   return (
+     <td colSpan={3} role="alert" data-outcome={outcome.kind} style={{ color: "red" }}>
+-      {outcome.kind === "rejected" ? t("agents.rejected") : t("agents.unavailable")} · {outcome.code}
++      {outcome.kind === "rejected" ? t("agents.rejected") : t("agents.unavailable")} · {outcome.code}{words !== null ? ` · ${words}` : ""}
+     </td>
+   );
+ }
+ 
+ export interface AgentSelectionEditorProps {
+   view: GroupViewV1;
+   agents: AgentsViewV1 | null;
+   preview: AgentSelectionPreviewV1 | null;
+   /** This operator's defaults, for the agent a layer inherits; absent until read. */
+   preferences?: OperatorPreferencesV1 | null;
+diff --git a/web/src/AgentSettings.tsx b/web/src/AgentSettings.tsx
+index d8e8298b..a34b4792 100644
+--- a/web/src/AgentSettings.tsx
++++ b/web/src/AgentSettings.tsx
+@@ -1,20 +1,21 @@
+ /**
+  * Agent selection spec §6.8 (T15): the "Agents" settings page. It lists the installation table exactly as the
+  * server read it from ccloop and edits this operator's defaults -- the default agent, each agent's model and
+  * context, and the estimator and reconcile slots -- as one set-agent-preferences under the revision it read.
+  */
+ import { useState } from "react";
+ import type { JSX } from "react";
+ import { useTranslation } from "react-i18next";
+ import { SelectionFields, contextLabel, draftOf, draftText, installationOf, partialFromFields, selectionFieldErrors, textOrUndefined } from "./AgentFields.js";
+ import type { AgentPreferencesViewV1, AgentInstallationStateV1, AgentsViewV1, OperatorPreferencesV1 } from "./controlTypes.js";
++import { explainBesideCode } from "./ccloopCodes.js";
+ 
+ const DEFAULT_AGENT_KEY = "agents:default-agent";
+ export const AGENTS_OPEN_KEY = "orca.panel.agentsOpen";
+ 
+ /** Spec §9.2 item 4: folded unless this browser opened it; storage may be absent or throw, which leaves it folded. */
+ function readOpen(): boolean {
+   try { return localStorage.getItem(AGENTS_OPEN_KEY) === "1"; } catch { return false; }
+ }
+ function writeOpen(open: boolean): void {
+   try { localStorage.setItem(AGENTS_OPEN_KEY, open ? "1" : "0"); } catch { /* not remembered */ }
+@@ -108,21 +109,21 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
+         <tbody>
+           {agents.installations.map((row) => (
+             <tr key={row.id}>
+               <td>{row.id}</td><td>{row.kind}</td><td>{row.version}</td><td>{row.defaults.model}</td><td>{contextLabel(row.defaults.contextWindow)}</td>
+             </tr>
+           ))}
+         </tbody>
+       </table>
+       {installation && <section aria-label={t("agents.updates.title")}>
+         <h4>{t("agents.updates.title")}</h4>
+-        {installation.failureCode && <p role="status">{t("agents.updates.unavailable", { code: installation.failureCode })}</p>}
++        {installation.failureCode && <p role="status">{t("agents.updates.unavailable", { code: installation.failureCode })}{explainBesideCode(installation.failureCode) !== null ? ` ${explainBesideCode(installation.failureCode)}` : ""}</p>}
+         {pendingUpdate && <div role="status"><p>{t("agents.updates.pending")}</p>
+           {pendingId && <><code>{pendingId}</code> <button type="button" disabled={props.updateBusy} onClick={props.onRetryPendingUpdate}>{t("agents.updates.checkPending")}</button></>}
+         </div>}
+         {installation.observation && <>
+           <p>{t("agents.updates.observedAt", { time: installation.observation.observedAt })}</p>
+           <ul>{installation.observation.installed.map((row) => <li key={row.id}>
+             {row.id}: {row.recordedVersion} → {row.observedVersion ?? t("agents.updates.noObservation")} ({t(`agents.updates.${row.status}`)})
+           </li>)}</ul>
+         </>}
+         <button type="button" disabled={props.updateBusy || pendingUpdate || installation.failureCode === "control-agent-update-unsupported"} onClick={props.onDetectUpdates}>{t("agents.updates.detect")}</button>
+diff --git a/web/src/ControlGroupView.tsx b/web/src/ControlGroupView.tsx
+index a7b1bc98..3a962daf 100644
+--- a/web/src/ControlGroupView.tsx
++++ b/web/src/ControlGroupView.tsx
+@@ -12,20 +12,21 @@ import { useLayoutEffect, useState } from "react";
+ import { useTranslation } from "react-i18next";
+ import type { ControlAction } from "./controlApi.js";
+ import { AgentSelectionEditor, selectionsHashFor } from "./AgentSelectionEditor.js";
+ import { BudgetEditor } from "./BudgetEditor.js";
+ import { DependencyGraph } from "./DependencyGraph.js";
+ import { EvidenceLink } from "./EvidenceLink.js";
+ import { GitScheme } from "./GitScheme.js";
+ import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
+ import { RefusalNotice } from "./RefusalNotice.js";
+ import { RunReason } from "./RunReason.js";
++import { explainEstimateReason } from "./ccloopCodes.js";
+ import { archiveOpen, hasFailureOutcome, retryRunOpen } from "./runFacts.js";
+ import { UsageSettlement } from "./UsageSettlement.js";
+ import { SkillsGiven } from "./SkillsGiven.js";
+ import type {
+   AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
+   RunViewV1,
+ } from "./controlTypes.js";
+ import type { ControlRefusal, UncertainCommand } from "./controlState.js";
+ import { LabelChips, SavedResultEntry, TaskDetail, progressText } from "./TaskDetail.js";
+ import { planText } from "./LoopPlanCard.js";
+@@ -479,20 +480,21 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+               <li key={estimate.estimateId}>
+                 {t("control.group.estimateLine", {
+                   estimateId: estimate.estimateId,
+                   version: estimate.estimateVersion,
+                   state: enumText("estimateState", estimate.state),
+                   mode: enumText("budgetMode", estimate.mode),
+                   profileId: estimate.profile?.profileId ?? t("budget.noEstimator"),
+                   hash: estimate.profile === null ? "" : short(estimate.profile.profileHash),
+                 })}
+                 {estimate.reasonCode !== null ? ` · ${estimate.reasonCode}` : ""}
++                {estimate.reasonCode !== null && explainEstimateReason(estimate.reasonCode) !== null ? ` · ${explainEstimateReason(estimate.reasonCode)}` : ""}
+                 {estimate.compatibilityReasonCodes?.length ? ` · ${estimate.compatibilityReasonCodes.join(", ")}` : ""}
+               </li>
+             ))}
+           </ul>
+         </>
+       )}
+ 
+       {uncertain.length > 0 && (
+         <p role="status">{t("control.group.waiting", { commands: uncertain.map((command) => command.commandId).join(", ") })}</p>
+       )}
+diff --git a/web/src/RequirementsPanel.tsx b/web/src/RequirementsPanel.tsx
+index 99c1025e..20bf2d23 100644
+--- a/web/src/RequirementsPanel.tsx
++++ b/web/src/RequirementsPanel.tsx
+@@ -3,20 +3,22 @@
+  * the browser originates only intents. Model-written text is shown as written (human ruling H8); the panel's own words
+  * go through t.
+  */
+ import { overviewRegionId } from "./overviewNavigation.js";
+ import type { OverviewTarget } from "./overviewNavigation.js";
+ import { useContext, useEffect, useState, type JSX } from "react";
+ import { AccountContext, mayHumanOnly } from "./AuthGate.js";
+ import { useTranslation } from "react-i18next";
+ import { GroupActionsMenu } from "./GroupActionsMenu.js";
+ import { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText, refusalText } from "./i18n.js";
++import { explainBesideCode } from "./ccloopCodes.js";
++import { explainRunReason } from "./refusalExplain.js";
+ import type { PanelLanguage } from "./i18n.js";
+ import { TokenInput } from "./TokenInput.js";
+ import type { ControlAction } from "./controlApi.js";
+ import { nextCommandId } from "./controlApi.js";
+ import type { ControlRefusal } from "./controlState.js";
+ import type { AgentsViewV1, ControlConfigV1, ControlSummaryV1, RequirementViewV1 } from "./controlTypes.js";
+ import { inScope } from "./projectScope.js";
+ import type { GroupScope } from "./projectScope.js";
+ import { EMPTY_DRAFTS, answerKey, feedbackKey, limitKey, setDraft } from "./detailDrafts.js";
+ import type { AnswerChoice, AnswerDraft, DetailDrafts, DraftSlot, EditableDrafts, NewRequirementDraft } from "./detailDrafts.js";
+@@ -251,28 +253,33 @@ function RaiseLimit(props: { view: View; onCommand: OnCommand } & EditableDrafts
+ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId: string) => void } & EditableDrafts): JSX.Element {
+   const { t } = useTranslation();
+   const { view } = props, groupId = view.summary.groupId;
+   const editable: EditableDrafts = { drafts: props.drafts, onDraft: props.onDraft };
+   const valid = view.rounds.filter((round) => round.result !== null);
+   const latest = valid.at(-1)?.result ?? null;
+   const round = view.rounds.at(-1) ?? null, draft = view.drafts.at(-1) ?? null;
+   const accepted = (decisions: Round["glossaryDecisions"]) => new Set((decisions ?? []).filter((d) => d.accept).map((d) => d.id));
+   const reason = view.summary.requirement?.waiting ?? view.summary.requirement?.reasonCode ?? null;
+   const step = view.requirement.consensus === null ? round : draft;
++  // ccloop error codes spec (2026-10-15) §4.5-§4.6: a failed step names its latest failed call's ccloop code.
++  const failedCall = step?.state === "failed" ? [...step.calls].reverse().find((call) => call.outcome === "failed") ?? null : null;
+   const drafting = step?.state === "drafting";
+   // Spec §11.1: recovery-retry re-queues a failed or interrupted round or draft -- one the person stopped carries no reason code.
+   const stalled = step?.state === "failed" || step?.state === "interrupted";
+   // Final review finding 5: a stop that completed with no call in flight interrupts nothing; recovery-retry lifts it (DR15).
+   const stopped = view.summary.state === "clarifying" && view.summary.stopState === "handoff-complete";
+   const retryable = (reason !== null && RETRYABLE.includes(reason)) || stalled || stopped;
+   // Final review finding 4: the step's call blocked by the driver, retried on its run.
+   const blockedRun = view.summary.requirement?.blockedRun ?? null;
++  // ccloop error codes spec (2026-10-15) §4.6: only a blocked reason that carries a ccloop code after its prefix is explained;
++  // a bare reason keeps its code alone (web/tests/requirements.test.tsx "names a blocked call's reason ...").
++  const blockedWords = blockedRun?.reason?.includes(":") ? explainRunReason(blockedRun.reason) : null;
+   const exportState = view.requirement.export.state;
+   const archived = view.summary.archived === true;
+   const archiveAllowed = view.summary.state === "clarifying" && !drafting && blockedRun === null
+     && (view.summary.stopMode === null || view.summary.stopMode === "pause"
+       || view.summary.stopState === "handoff-complete" || view.summary.stopState === "handoff-partial");
+   return (
+     <article aria-label={view.requirement.slug ?? groupId}>
+       <h3>{view.requirement.slug ?? groupId} · {enumText("groupState", view.summary.state)}</h3>
+       {view.requirement.acceptedDraftNo !== null && view.summary.state !== "clarifying" &&
+         <button type="button" onClick={() => props.onPrepare?.(groupId)}>{t("requirements.goToPreparation")}</button>}
+@@ -291,22 +298,23 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
+         {view.ledger.limit.tokens!==null&&<progress max={view.ledger.limit.tokens} value={view.ledger.used.tokens} />}
+         {view.ledger.usageUnknown && <p role="status">{t("requirements.usageUnknown")}</p>}
+       </section>
+       <div id={overviewRegionId("requirement", groupId, "problem")} tabIndex={-1} data-overview-region="problem">
+       {!archived && (reason !== null || retryable) && (
+         <p role="alert">{reason !== null && <>{reason}{isReason(reason) ? ` · ${t(`requirements.reason.${reason}`, { groupId })}` : ""} </>}
+           {stopped && <>{t("requirements.stopped")} </>}
+           {retryable && <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "group", groupId } })}>{t("requirements.retry")}</button>}
+         </p>
+       )}
++      {!archived && failedCall?.reason != null && <p role="status">{failedCall.reason}{explainBesideCode(failedCall.reason) !== null ? ` · ${explainBesideCode(failedCall.reason)}` : ""}</p>}
+       {!archived && blockedRun !== null && (
+-        <p role="alert">{blockedRun.reason !== null && <>{blockedRun.reason} · </>}{t("requirements.blockedRun")}{" "}
++        <p role="alert">{blockedRun.reason !== null && <>{blockedRun.reason}{blockedWords !== null ? ` · ${blockedWords}` : ""} · </>}{t("requirements.blockedRun")}{" "}
+           <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId } })}>{t("requirements.retryRun")}</button>
+         </p>
+       )}
+       {!archived && reason === BUDGET_EXHAUSTED && <RaiseLimit view={view} onCommand={props.onCommand} {...editable} />}
+       </div>
+       <section id={overviewRegionId("requirement", groupId, "answers")} tabIndex={-1} data-overview-region="answers" aria-label={t("requirements.rounds")}>
+         <h4>{t("requirements.rounds")}</h4>
+         {view.rounds.map((r) => (
+           <details key={r.roundNo} open={r === round}>
+             <summary>{t("requirements.round", { n: r.roundNo })} · {enumText("roundState", r.state)}</summary>
+diff --git a/web/src/TaskDetail.tsx b/web/src/TaskDetail.tsx
+index 481313e2..356978a2 100644
+--- a/web/src/TaskDetail.tsx
++++ b/web/src/TaskDetail.tsx
+@@ -11,20 +11,21 @@
+ import { useEffect, useState } from "react";
+ import type { JSX } from "react";
+ import { useTranslation } from "react-i18next";
+ import { controlFailureFrom, fetchSavedResultEligibility, downloadEvidenceArtifact, fetchRunActivity, fetchRunEvidence, type ControlAction } from "./controlApi.js";
+ import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
+ import type { SavedResultEligibilityV1, ActivityEntryV1, EvidenceManifestV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
+ import { TaskResults } from "./TaskResults.js";
+ import { LoopPlanCard } from "./LoopPlanCard.js";
+ import { RunReason } from "./RunReason.js";
+ import { explainRunReason } from "./refusalExplain.js";
++import { explainBesideCode } from "./ccloopCodes.js";
+ import { hasFailureOutcome, reasonCode, retryRunOpen, savedResultSourceRunId, taskRunNumber } from "./runFacts.js";
+ import i18n, { enumText } from "./i18n.js";
+ import { UsageSettlement } from "./UsageSettlement.js";
+ import type { Role } from "./auth.js";
+ 
+ export const labelsDraftKey = (groupId: string, taskId: string): string => `labels:${groupId}:${taskId}`;
+ 
+ /** A system label and a custom one look different (spec §4.2); the class is the whole difference. */
+ export function LabelChips(props: { labels: string[] | undefined }): JSX.Element {
+   const { t } = useTranslation();
+@@ -297,14 +298,15 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
+ export function SavedResultEntry(props:{view:GroupViewV1;item:WorkItemViewV1;onCommand:(action:ControlAction)=>void;archived:boolean;active?:boolean}):JSX.Element|null {
+   const {view,item}=props;const runId=savedResultSourceRunId(view,item);
+   return runId===null||props.active===false?null:<SavedResultAction key={`verify-${item.currentRunId}`} runId={runId} groupId={view.summary.groupId} taskId={item.taskId} revision={view.summary.commandRevision} changeSeq={view.changeSeq} onCommand={props.onCommand} disabled={props.archived||view.summary.stopMode!==null}/>;
+ }
+ 
+ /** Source availability is read-only; an explicit click submits the frozen tuple under the visible revision. */
+ export function SavedResultAction(props:{runId:string;groupId:string;taskId:string;revision:number;changeSeq:number;onCommand:(action:ControlAction)=>void;disabled?:boolean}):JSX.Element {
+  const {t}=useTranslation();const [answer,setAnswer]=useState<SavedResultEligibilityV1|null>(null);
+  useEffect(()=>{let live=true;setAnswer(null);fetchSavedResultEligibility(props.runId).then(value=>{if(live)setAnswer(value);},error=>{if(live)setAnswer({status:"unavailable",reason:controlFailureFrom(error).code});});return()=>{live=false;};},[props.runId,props.changeSeq,props.revision]);
+  if(answer===null)return <></>;
+- if(answer.status==="unavailable")return <p className="detail-note">{t("control.savedResult.unavailable")} <code>{answer.reason}</code></p>;
++ // ccloop error codes spec (2026-10-15) §4.6: a known code is explained beside it; an unknown one (generic text = the code) is not repeated.
++ if(answer.status==="unavailable"){const words=explainBesideCode(answer.reason);return <p className="detail-note">{t("control.savedResult.unavailable")} <code>{answer.reason}</code>{words!==null?` ${words}`:""}</p>;}
+  const source=answer.recoveryOf;
+  return <div><button type="button" disabled={props.disabled} onClick={()=>props.onCommand({verb:"verify-saved-result",groupId:props.groupId,taskId:props.taskId,expectedRevision:props.revision,payload:{sourceRunId:source.sourceRunId,sourceAttempt:source.sourceAttempt,capsuleHash:source.capsuleHash}})}>{t("control.savedResult.verify")}</button><p className="detail-note">{t("control.savedResult.cost")}</p></div>;
+ }
+diff --git a/web/src/ccloopCodes.ts b/web/src/ccloopCodes.ts
+new file mode 100644
+index 00000000..0db53e28
+--- /dev/null
++++ b/web/src/ccloopCodes.ts
+@@ -0,0 +1,52 @@
++/**
++ * ccloop error codes spec (2026-10-15) §4.6: ccloop's own code and detail, explained in the reader's language wherever the
++ * panel shows one. ccloop's table first, then the Orca error table (a named refusal both share keeps its Orca text), else
++ * the generic sentence, which still names the code and the detail.
++ */
++import i18n, { currentLanguage, errorEntry, fillEntry } from "./i18n.js";
++import { enCcloopErrors } from "./locales/en.js";
++import { zhCcloopErrors } from "./locales/zh.js";
++
++/** A code as the server writes one before `: <detail>` (src/control/ccloopPort.ts PEER_CODE). */
++const CODE_THEN_DETAIL = /^([a-z][a-z0-9-]{0,63})(?:$|: ([\s\S]*)$)/;
++
++function ccloopEntry(code: string): string | undefined {
++  const table = currentLanguage() === "zh" ? zhCcloopErrors : enCcloopErrors;
++  return Object.prototype.hasOwnProperty.call(table, code) ? table[code] : undefined;
++}
++
++export function explainCcloopCode(code: string, detail: string): string {
++  const entry = ccloopEntry(code) ?? errorEntry(code);
++  if (entry !== undefined) return fillEntry(entry, { message: "", status: "", detail });
++  return detail === "" ? i18n.t("ccloop.genericNoDetail", { code }) : i18n.t("ccloop.generic", { code, detail });
++}
++
++/**
++ * A code's words for a surface that already shows the code: null when they would only repeat it (plan R3 made the
++ * generic text for an unknown code the bare code), so no surface reads `X · X`.
++ */
++export function explainBesideCode(code: string): string | null {
++  const words = explainCcloopCode(code, "");
++  return words === code ? null : words;
++}
++
++/** `<code>[: <detail>]`, as the server writes it after `ccloop-failed:` and after a peer exit's `<exit>:`; `unknown` when no code leads. */
++export function codeAndDetail(text: string): { code: string; detail: string } {
++  const match = CODE_THEN_DETAIL.exec(text);
++  return match ? { code: match[1]!, detail: match[2] ?? "" } : { code: "unknown", detail: text };
++}
++
++/** A stored peer-exit reason after its prefix: `<exit>[:<code>][: <detail>]` (the server's peerExitText). */
++export function peerExitReason(rest: string): { code: string; detail: string } {
++  const cut = rest.indexOf(":");
++  return codeAndDetail(cut === -1 ? "" : rest.slice(cut + 1));
++}
++
++const ESTIMATOR_REJECTED = "agent-selection-rejected:estimator:";
++const CALL_FAILED = "estimate-call-failed:";
++/** An estimate's reason that carries a ccloop code (§4.3 estimator slot, §4.5 failed call); null for any other. */
++export function explainEstimateReason(reasonCode: string): string | null {
++  if (reasonCode.startsWith(ESTIMATOR_REJECTED)) return explainCcloopCode(reasonCode.slice(ESTIMATOR_REJECTED.length), "");
++  if (reasonCode.startsWith(CALL_FAILED)) return explainCcloopCode(reasonCode.slice(CALL_FAILED.length), "");
++  return null;
++}
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index 1e0171d2..25232eda 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -1024,20 +1024,22 @@ export const en = {
+   metrics: {
+     unknownRate: "unknown",
+     correctionRate: "Correction rate",
+     repairRate: "Repair rate",
+     reviewCoverage: "Review coverage",
+     unresolvedTitle: "Unresolved decisions",
+     malformedTitle: "Malformed lines",
+     futureTitle: "Excluded as future",
+     note: metricsNote,
+   },
++  // ccloop error codes spec (2026-10-15) §4.6: a ccloop code with no entry in either table.
++  ccloop: { generic: "{{code}}: {{detail}}", genericNoDetail: "{{code}}" },
+   enums: {
+     theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,
+     groupState, roundState, draftState, exportState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep, activityKind,
+     proposalState, ownerKind, bucket, allocationState, dimension, complexity, confidence, handoffControl, handoffExecution, budgetEnforcement, fieldProvenance,
+     agentSlot, selectionSource,
+   },
+ } as const;
+ 
+ /**
+  * Spec 2026-10-08 §2.2(a): the English text shown for a refusal code (and a blocked run's reason) in place of the
+@@ -1053,20 +1055,22 @@ export const enErrors: Record<string, string> = {
+   "agent-installation-update-stale": "The installation table changed. Detect again before applying.",
+   "agent-installation-update-conflict": "The installation preview or operation conflicts with the current table. Detect again and review it.",
+   "agent-installation-update-invalid": "The proposed installation update is invalid: {{detail}}",
+   "agent-installation-update-pending": "An installation update is still being reconciled. Keep its command ID and check the result.",
+   "control-agent-update-unsupported": "This ccloop version cannot review installation updates. Existing agent settings remain available.",
+   "agent-selection-changed": "The agent selections changed before the confirmation. Read the group again, then confirm.",
+   "agent-selection-invalid": "The agent selection is not valid: {{detail}}",
+   "agent-selection-rejected": "ccloop refused this agent selection: {{detail}}",
+   // ccloop error codes spec (2026-10-15) §4.2: ccloop exited non-zero; the detail is `<code>: <detail>` (web/src/ccloopCodes.ts explains a known code).
+   "ccloop-failed": "ccloop failed: {{detail}}",
++  // ccloop error codes spec §4.4: a peer exit's stored run reason; the detail is ccloop's code explained (web/src/refusalExplain.ts).
++  "control-peer-exit": "ccloop exited with an error: {{detail}}",
+   "agent-unselected": "A slot has no agent selected. Choose an agent for every slot, then confirm.",
+   "agent-version-drift": "The agent's version differs from the recorded one: {{detail}}",
+   "agents-table-invalid": "The agents table is not valid: {{detail}}",
+   "archive-call-in-flight": "A model call for this group is still running ({{detail}}). Archive it once the call has finished.",
+   "archive-integration-resolving": "An agent is resolving this group's integration conflict. Archive it once that has finished.",
+   "archive-run-active": "This group still has an active run. Wait for it to finish, or stop it with Handoff stop, then archive. If the group is paused, press Resume dispatch first: Handoff stop is not offered under a pause.",
+   "archive-stop-pending": "A stop is still settling. Archive the group once its handoff has finished, completely or partially. If it is unresolved, retry recovery first.",
+   "artifact-id-conflict": "The artifact id conflicts with an existing one.",
+   "artifact-not-found": "The artifact was not found.",
+   "budget-overflow": "A budget value is too large: {{detail}}",
+@@ -1339,10 +1343,21 @@ export const enErrors: Record<string, string> = {
+   "out-of-bounds": "The run changed files outside the paths it may change: {{detail}}",
+   "single-call-record-invalid": "The single call's record could not be read.",
+   "single-call-prompt-mismatch": "The single call answered a different prompt from the one sent.",
+   "settle-incomplete": "The run did not finish settling. Choose \"Retry run\".",
+   "requirement-call-target-moved": "The requirement moved on before this call started, so it was not sent.",
+   "estimate-request-missing": "This estimate has no frozen request, so it cannot run.",
+   "requirement-usage-unknown": "This requirement call's usage is unknown, so its budget cannot be settled.",
+   "estimate-usage-unknown": "This estimate call's usage is unknown, so its budget cannot be settled.",
+   "repository-path": "The group's repository path could not be resolved. Check that the repository is still registered and exists, then choose \"Retry run\".",
+ };
++
++/** ccloop error codes spec (2026-10-15) §4.7: ccloop's own codes an operator can act on; each may interpolate only {{detail}}. */
++export const enCcloopErrors: Record<string, string> = {
++  "omp-model-catalog-unavailable": "omp could not list its model catalog ({{detail}}). Check that omp is installed and starts, then retry.",
++  "omp-model-catalog-invalid": "omp's model catalog could not be read ({{detail}}).",
++  "omp-single-call-cap-exceeded": "omp's catalog now caps this model's output above the bound this requirement was opened with, so the call was refused before it started. Retry: a retry recomputes the bound from the current catalog.",
++  "omp-single-call-unavailable": "omp cannot make this single call with the selected model ({{detail}}).",
++  "agent-config-invalid": "The agent's configuration is not valid ({{detail}}).",
++  "single-call-unsupported": "This agent cannot make single calls (estimate, clarify, split); choose another agent.",
++  "single-call-output-invalid": "The model's answer was not the JSON this call asked for.",
++};
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index 556c2acc..9d846bfb 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -923,20 +923,22 @@ export const zh: Translation<typeof en> = {
+     unresolvedTitle: "未解析的决策",
+     malformedTitle: "格式错误的行",
+     futureTitle: "因日期在未来而排除",
+     note: {
+       "no-review-coverage": "评审覆盖率还没有数据：只有在面板上做的评审会产生它。纠正率要和覆盖率一起看，不能单独解读。",
+       "unresolved-decisions": "有些纠正指向的决策不在扫描到的台账里；它们计入总数，但不属于任何决策类型分组。",
+       "stale-bias": "系统性偏低：关闭一条过时纠正需要填「改选」，而过时纠正按规定不能带这一项。",
+       "reviewed-is-deliberate": "「已评审」需要人主动标记，所以这个数可能长时间接近零——长期为零和没人看分辨不出来。请结合积压一起看。",
+     },
+   },
++  // ccloop error codes spec (2026-10-15) §4.6: a ccloop code with no entry in either table.
++  ccloop: { generic: "{{code}}：{{detail}}", genericNoDetail: "{{code}}" },
+   enums: {
+     theme: { system: "跟随系统", light: "浅色", dark: "深色" },
+     decisionKind: { dependency: "依赖", interface: "接口", scheduling: "调度", abandon: "放弃", criteria: "判据", boundary: "边界", reconcile: "协调" },
+     decisionScope: { file: "文件", task: "任务", repo: "仓库", "cross-repo": "跨仓库" },
+     decisionVerdict: { ok: "正常", downgraded: "已降级" },
+     correctionKind: { wrong: "错了", not_my_taste: "不合我意", stale: "过时" },
+     chainStopCategory: { done: "已完成", blocked: "等人处理", limit: "触达上限", anomaly: "异常" },
+     groupState: { clarifying: "需求讨论中", draft: "草稿", ready: "就绪", running: "运行中", review: "待评审", done: "已完成", blocked: "已阻塞" },
+     roundState: { drafting: "起草中", "awaiting-answers": "待回答", answered: "已回答", interrupted: "已中断", failed: "失败" },
+     draftState: { drafting: "起草中", "awaiting-review": "待审", accepted: "已接受", rejected: "已退回", invalid: "已自动退回", interrupted: "已中断", failed: "失败" },
+@@ -990,20 +992,21 @@ export const zhErrors: Record<string, string> = {
+   "agent-installation-missing": "安装表里没有这个 agent：{{message}}",
+   "agent-installation-update-stale": "安装表已变化。请重新检测后再应用。",
+   "agent-installation-update-conflict": "安装预览或操作与当前表冲突。请重新检测并检查。",
+   "agent-installation-update-invalid": "安装更新无效：{{detail}}",
+   "agent-installation-update-pending": "安装更新的结果仍在核对中。请保留命令 ID 并查看结果。",
+   "control-agent-update-unsupported": "这个 ccloop 版本不支持安装更新检查。原有 agent 设置仍可使用。",
+   "agent-selection-changed": "agent 选择在确认时已变化，请重新读取后再确认。",
+   "agent-selection-invalid": "agent 选择不合法：{{message}}",
+   "agent-selection-rejected": "ccloop 拒绝了这个 agent 选择：{{message}}",
+   "ccloop-failed": "ccloop 执行失败：{{detail}}",
++  "control-peer-exit": "ccloop 出错退出：{{detail}}",
+   "agent-unselected": "有槽位没有选定 agent。",
+   "agent-version-drift": "agent 版本与记录的不一致：{{message}}",
+   "agents-table-invalid": "agent 安装表不合法：{{message}}",
+   "archive-call-in-flight": "这个组还有一次模型调用在进行（{{detail}}）。等调用结束后再归档。",
+   "archive-integration-resolving": "agent 正在解决这个组的集成冲突。等它结束后再归档。",
+   "archive-run-active": "这个组还有正在进行的运行。等它结束，或先用“交接停止”停下，再归档。如果组已暂停，先点「恢复调度」：暂停时不提供「交接停止」。",
+   "archive-stop-pending": "停止还没有完成。等交接结束（全部完成或部分完成）后再归档。如果停止状态未解决，请先重试恢复。",
+   "artifact-id-conflict": "产物 id 冲突。",
+   "artifact-not-found": "找不到这个产物。",
+   "budget-overflow": "预算数值溢出：{{message}}",
+@@ -1276,10 +1279,21 @@ export const zhErrors: Record<string, string> = {
+   "out-of-bounds": "运行改了允许范围之外的文件：{{detail}}",
+   "single-call-record-invalid": "单次调用的记录读不懂。",
+   "single-call-prompt-mismatch": "单次调用回答的不是发出去的那个提示。",
+   "settle-incomplete": "运行没有结算完；请重试运行。",
+   "requirement-call-target-moved": "这次调用开始前需求已经往前走了，所以没有发出。",
+   "estimate-request-missing": "这份估算没有冻结的请求，所以无法运行。",
+   "requirement-usage-unknown": "这次需求调用的用量未知，所以它的预算无法结算。",
+   "estimate-usage-unknown": "这次估算调用的用量未知，所以它的预算无法结算。",
+   "repository-path": "解析不到这个组的仓库路径；确认仓库仍已登记并且存在，然后重试运行。",
+ };
++
++/** ccloop error codes spec (2026-10-15) §4.7: ccloop's own codes an operator can act on; each may interpolate only {{detail}}. */
++export const zhCcloopErrors: Record<string, string> = {
++  "omp-model-catalog-unavailable": "omp 无法列出它的模型目录（{{detail}}）。请确认 omp 已安装且能启动，然后重试。",
++  "omp-model-catalog-invalid": "omp 的模型目录无法读取（{{detail}}）。",
++  "omp-single-call-cap-exceeded": "omp 目录里这个模型的输出上限已高于这个需求开启时定下的上限，调用在开始前被拒绝。请重试：重试会按当前目录重新计算上限。",
++  "omp-single-call-unavailable": "omp 无法用所选模型完成这次单次调用（{{detail}}）。",
++  "agent-config-invalid": "这个 agent 的配置无效（{{detail}}）。",
++  "single-call-unsupported": "这个 agent 不能做单次调用（估算、澄清、拆分），请换一个 agent。",
++  "single-call-output-invalid": "模型的回答不是这次调用要求的 JSON。",
++};
+diff --git a/web/src/refusalExplain.ts b/web/src/refusalExplain.ts
+index 9c9bbae4..abc1089b 100644
+--- a/web/src/refusalExplain.ts
++++ b/web/src/refusalExplain.ts
+@@ -1,17 +1,18 @@
+ /**
+  * Spec 2026-10-08 §2.2(a), (b): what a refusal and a blocked run's reason say in the reader's language. A refused plan's
+  * detail is a list (one item per line, src/scheduler/planFile.ts); each item becomes a line a person can act on, and an
+  * item this panel has no words for is shown verbatim. Pure apart from reading the current language.
+  */
+ import type { ControlRefusal } from "./controlState.js";
+ import i18n, { errorEntry, fillEntry, refusalDetail, refusalText } from "./i18n.js";
++import { codeAndDetail, explainCcloopCode, peerExitReason } from "./ccloopCodes.js";
+ 
+ const PLAN_REJECTED = "control-plan-rejected";
+ const PLAN_ITEMS = ["target-repo-mismatch", "missing-goal", "missing-success-conditions", "duplicate-success-condition"];
+ const TASK_ITEMS = ["missing-target-version", "duplicate-dependency", "dangling-dependency", "contract-json", "contract-shape", "contract-canonical"];
+ 
+ /** The current language's planItem entry for a key built at run time, with its placeholders filled. */
+ function itemLine(key: string, values: Record<string, string> = {}): string {
+   return String((i18n.t as (k: string, o?: object) => unknown)(`refusal.planItem.${key}`, values));
+ }
+ 
+@@ -23,21 +24,30 @@ export function planItemText(item: string): string {
+   const kind = item.slice(0, cut);
+   const rest = item.slice(cut + 1);
+   if (TASK_ITEMS.includes(kind)) return itemLine(kind, { task: rest });
+   const split = rest.indexOf(": ");
+   if (kind === "malformed" && split > 0) return itemLine(kind, { path: rest.slice(0, split), msg: rest.slice(split + 2) });
+   return item;
+ }
+ 
+ /** A refusal's explanation, and for a refused plan its problems one per line (empty for every other refusal). */
+ export function explainRefusal(refusal: ControlRefusal): { text: string; items: string[] } {
++  // ccloop error codes spec (2026-10-15) §4.6: a ccloop failure is explained by ccloop's own code.
++  if (refusal.code === "ccloop-failed") { const { code, detail } = codeAndDetail(refusalDetail(refusal)); return { text: explainCcloopCode(code, detail), items: [] }; }
+   const detail = refusal.code === PLAN_REJECTED ? refusalDetail(refusal) : "";
+   if (detail === "") return { text: refusalText(refusal), items: [] };
+   return { text: i18n.t("refusal.planRejected"), items: detail.split("\n").map(planItemText) };
+ }
+ 
++/** ccloop error codes spec (2026-10-15) §4.6: prefixes whose detail is a peer exit, and the usage-unknown blocks that may carry a code. */
++const PEER_PREFIXES = new Set(["control-peer-exit", "accept-refused"]);
++const USAGE_UNKNOWN = new Set(["estimate-usage-unknown", "requirement-usage-unknown"]);
+ /** A blocked run's reason explained by its prefix up to the first ':' (the rest is its detail); null when there are no words for it. */
+ export function explainRunReason(reason: string): string | null {
+   const cut = reason.indexOf(":");
+-  const entry = errorEntry(cut === -1 ? reason : reason.slice(0, cut));
+-  return entry === undefined ? null : fillEntry(entry, { message: reason, status: "", detail: cut === -1 ? "" : reason.slice(cut + 1) });
++  const prefix = cut === -1 ? reason : reason.slice(0, cut), rest = cut === -1 ? "" : reason.slice(cut + 1);
++  const entry = errorEntry(prefix);
++  if (entry === undefined) return null;
++  if (PEER_PREFIXES.has(prefix)) { const { code, detail } = peerExitReason(rest); return fillEntry(entry, { message: reason, status: "", detail: explainCcloopCode(code, detail) }); }
++  if (USAGE_UNKNOWN.has(prefix) && rest !== "") return `${fillEntry(entry, { message: reason, status: "", detail: "" })} ${explainCcloopCode(rest, "")}`;
++  return fillEntry(entry, { message: reason, status: "", detail: rest });
+ }
+diff --git a/web/tests/agentSelectionEditor.test.tsx b/web/tests/agentSelectionEditor.test.tsx
+index 4f8f81d3..6c97b48b 100644
+--- a/web/tests/agentSelectionEditor.test.tsx
++++ b/web/tests/agentSelectionEditor.test.tsx
+@@ -305,11 +305,30 @@ describe("the plan's layer under the panel's at each level (ruling review R7)",
+     expect(container.querySelectorAll('input[type="checkbox"][name^="g:agent:task:b:mask:"]')).toHaveLength(0);
+     expect(container.querySelectorAll('input[type="checkbox"][name^="g:agent:group:estimator:mask:"]')).toHaveLength(0);
+   });
+ 
+   it("shows a stored panel null as the plan's value ignored", () => {
+     const { container } = renderView({ preview: withPlan({ taskOverrides: { a: { model: null }, b: null } }), preferences: prefs });
+     const ticked = box(container, "g:agent:task:a:mask:model");
+     expect(ticked).not.toBeNull();
+     expect(ticked!.checked).toBe(true);
+   });
++
++  // ccloop error codes spec (2026-10-15) §4.6: a slot's ccloop code is explained beside it, and an estimate's reason too.
++  it("explains a slot's ccloop code and an estimate's ccloop reason in words beside the code", () => {
++    const base = resolvedPreview();
++    const preview = { ...base, slots: [base.slots[0]!, base.slots[1]!, { key: "task:b", slot: "worker" as const, taskId: "b", outcome: { kind: "unavailable" as const, code: "omp-model-catalog-unavailable" } }], selectionsHash: null };
++    const estimate: GroupViewV1["estimates"][number] = { estimateId: "estimate-1", estimateVersion: 1, state: "failed", profile: { profileId: "all", profileHash: "b".repeat(64) },
++      mode: "soft", requestHash: null, outputHash: null, output: null, reasonCode: "estimate-call-failed:omp-new-thing" };
++    const { container } = renderView({ preview, view: view({ estimates: [estimate] }) });
++    expect(row(container, "task:b").querySelector('[role="alert"]')!.textContent).toContain("omp-model-catalog-unavailable · omp could not list its model catalog. Check that omp is installed and starts, then retry.");
++    expect(container.textContent).toContain("estimate-call-failed:omp-new-thing · omp-new-thing");
++  });
++
++  // Controller ruling on A7 (plan R3): an unknown code's explanation is the code itself, so the slot shows it once.
++  it("shows a slot's unknown ccloop code once, not beside itself", () => {
++    const base = resolvedPreview();
++    const preview = { ...base, slots: [base.slots[0]!, base.slots[1]!, { key: "task:b", slot: "worker" as const, taskId: "b", outcome: { kind: "unavailable" as const, code: "omp-new-thing" } }], selectionsHash: null };
++    const { container } = renderView({ preview });
++    expect(row(container, "task:b").querySelector('[role="alert"]')!.textContent).toBe("unavailable for now, Re-read to ask again · omp-new-thing");
++  });
+ });
+diff --git a/web/tests/agentSettings.test.tsx b/web/tests/agentSettings.test.tsx
+index 840c4696..efbe997a 100644
+--- a/web/tests/agentSettings.test.tsx
++++ b/web/tests/agentSettings.test.tsx
+@@ -167,11 +167,25 @@ describe("the Agents settings page (agent selection spec §6.8)", () => {
+     const model = container.querySelector('input[name="agents:per:claude:model"]') as HTMLInputElement;
+     const defaultAgent = container.querySelector('select[name="agents:default-agent"]') as HTMLSelectElement;
+     expect(model.value).toBe("claude-fable-5");
+     fireEvent.change(model, { target: { value: "" } });
+     fireEvent.change(defaultAgent, { target: { value: "" } });
+     expect(model.value).toBe("");
+     expect(defaultAgent.value).toBe("");
+     fireEvent.click(screen.getByRole("button", { name: "Save agent preferences" }));
+     expect(onSave).toHaveBeenCalledWith({ perAgent: {} } satisfies OperatorPreferencesV1, 4);
+   });
++
++  // ccloop error codes spec (2026-10-15) §4.6: the installation panel explains ccloop's code beside it.
++  it("explains a failed detection's ccloop code", () => {
++    const state: AgentInstallationStateV1 = { schema: "orca-agent-installation-state-v1", revision: 0, pending: false, pendingCommand: null, failureCode: "agent-config-invalid", observation: null, preview: null };
++    const { container } = render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} installationState={state} />);
++    expect(container.textContent).toContain("Detection unavailable · agent-config-invalid The agent's configuration is not valid.");
++  });
++
++  // Controller ruling on A7 (plan R3): an unknown code's explanation is the code itself, so it is shown once.
++  it("shows a failed detection's unknown ccloop code once", () => {
++    const state: AgentInstallationStateV1 = { schema: "orca-agent-installation-state-v1", revision: 0, pending: false, pendingCommand: null, failureCode: "omp-new-thing", observation: null, preview: null };
++    render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} installationState={state} />);
++    expect(screen.getByText(/omp-new-thing/).textContent).toBe("Detection unavailable · omp-new-thing");
++  });
+ });
+diff --git a/web/tests/ccloopCodes.test.tsx b/web/tests/ccloopCodes.test.tsx
+new file mode 100644
+index 00000000..f29cc42c
+--- /dev/null
++++ b/web/tests/ccloopCodes.test.tsx
+@@ -0,0 +1,124 @@
++// @vitest-environment jsdom
++/**
++ * ccloop error codes spec (2026-10-15) §4.6, criterion 8: wherever the panel shows a ccloop code it explains it in the
++ * reader's language -- ccloop's table first, then Orca's own table, else a generic sentence that still names the code and
++ * the detail (an unknown code is never dropped). The texts are written out here, not read from the tables, so a dropped
++ * entry and a zh entry left in English both turn this red.
++ */
++import { cleanup, render, screen } from "@testing-library/react";
++import { renderToStaticMarkup } from "react-dom/server";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import i18n from "../src/i18n.js";
++import { codeAndDetail, explainCcloopCode, explainEstimateReason, peerExitReason } from "../src/ccloopCodes.js";
++import { explainRefusal, explainRunReason } from "../src/refusalExplain.js";
++import { RequirementsPanel } from "../src/RequirementsPanel.js";
++import { RunReason } from "../src/RunReason.js";
++import { SavedResultAction } from "../src/TaskDetail.js";
++import type { RequirementViewV1 } from "../src/controlTypes.js";
++import { run } from "./fixtures/board.js";
++import { config, requirementView, summaryWith } from "./fixtures/requirement.js";
++
++const EN_CATALOG = "omp could not list its model catalog (spawn ENOENT). Check that omp is installed and starts, then retry.";
++const ZH_CATALOG = "omp 无法列出它的模型目录（spawn ENOENT）。请确认 omp 已安装且能启动，然后重试。";
++const EN_CAP = "omp's catalog now caps this model's output above the bound this requirement was opened with, so the call was refused before it started. Retry: a retry recomputes the bound from the current catalog.";
++const ZH_CAP = "omp 目录里这个模型的输出上限已高于这个需求开启时定下的上限，调用在开始前被拒绝。请重试：重试会按当前目录重新计算上限。";
++
++afterEach(async () => { cleanup(); vi.unstubAllGlobals(); await i18n.changeLanguage("en"); });
++
++describe("explaining a ccloop code", () => {
++  it("reads ccloop's table, then Orca's, else the generic sentence, in English", () => {
++    expect([explainCcloopCode("omp-model-catalog-unavailable", "spawn ENOENT"), explainCcloopCode("omp-model-catalog-unavailable", ""),
++      explainCcloopCode("agent-unselected", ""), explainCcloopCode("omp-new-thing", "x"), explainCcloopCode("omp-new-thing", "")]).toEqual([
++      EN_CATALOG, "omp could not list its model catalog. Check that omp is installed and starts, then retry.",
++      "A slot has no agent selected. Choose an agent for every slot, then confirm.", "omp-new-thing: x", "omp-new-thing"]);
++  });
++
++  it("in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    expect([explainCcloopCode("omp-model-catalog-unavailable", "spawn ENOENT"), explainCcloopCode("omp-new-thing", "x"), explainCcloopCode("omp-new-thing", "")])
++      .toEqual([ZH_CATALOG, "omp-new-thing：x", "omp-new-thing"]);
++  });
++
++  it("takes the server's forms apart as the server wrote them", () => {
++    expect([codeAndDetail("omp-model-catalog-unavailable: spawn ENOENT"), codeAndDetail("agent-version-drift"), codeAndDetail("file:///x"), codeAndDetail("Error: x"), codeAndDetail("")])
++      .toEqual([{ code: "omp-model-catalog-unavailable", detail: "spawn ENOENT" }, { code: "agent-version-drift", detail: "" }, { code: "unknown", detail: "file:///x" },
++        { code: "unknown", detail: "Error: x" }, { code: "unknown", detail: "" }]);
++    expect([peerExitReason("2:agent-config-invalid: bad"), peerExitReason("1"), peerExitReason("1:Error: x")])
++      .toEqual([{ code: "agent-config-invalid", detail: "bad" }, { code: "unknown", detail: "" }, { code: "unknown", detail: "Error: x" }]);
++  });
++});
++
++describe("each surface (spec A §4.6 table)", () => {
++  it("a refusal: ccloop-failed is explained by ccloop's code, in both languages", async () => {
++    const refusal = { status: 424, code: "ccloop-failed", message: "ccloop-failed:omp-model-catalog-unavailable: spawn ENOENT", commandRevision: 3 };
++    expect(explainRefusal(refusal)).toEqual({ text: EN_CATALOG, items: [] });
++    expect(explainRefusal({ ...refusal, message: "ccloop-failed:omp-new-thing: x" }).text).toBe("omp-new-thing: x");
++    await i18n.changeLanguage("zh");
++    expect(explainRefusal(refusal).text).toBe(ZH_CATALOG);
++  });
++
++  it("a run reason: peer exits and accept refusals (old uncut ones too) and usage-unknown with a code", async () => {
++    expect([
++      explainRunReason("control-peer-exit:2:omp-model-catalog-unavailable: spawn ENOENT"),
++      explainRunReason("control-peer-exit:2:omp-new-thing: x"),
++      explainRunReason("accept-refused:2:agent-config-invalid"),
++      explainRunReason("estimate-usage-unknown:single-call-output-invalid"),
++      explainRunReason("estimate-usage-unknown"),
++    ]).toEqual([
++      `ccloop exited with an error: ${EN_CATALOG}`,
++      "ccloop exited with an error: omp-new-thing: x",
++      "ccloop refused to accept this run: The agent's configuration is not valid.",
++      "This estimate call's usage is unknown, so its budget cannot be settled. The model's answer was not the JSON this call asked for.",
++      "This estimate call's usage is unknown, so its budget cannot be settled.",
++    ]);
++    const html = renderToStaticMarkup(<RunReason run={run({ runId: "run-x", state: "blocked", blockedReason: "control-peer-exit:2:omp-model-catalog-unavailable: spawn ENOENT" })} />);
++    expect(html).toContain(`ccloop exited with an error: ${EN_CATALOG} <code>control-peer-exit:2:omp-model-catalog-unavailable: spawn ENOENT</code>`);
++    await i18n.changeLanguage("zh");
++    expect(explainRunReason("control-peer-exit:2:omp-model-catalog-unavailable: spawn ENOENT")).toBe(`ccloop 出错退出：${ZH_CATALOG}`);
++  });
++
++  it("an estimate's reason code", async () => {
++    expect([explainEstimateReason("agent-selection-rejected:estimator:omp-model-catalog-unavailable"), explainEstimateReason("estimate-call-failed:omp-single-call-cap-exceeded"),
++      explainEstimateReason("estimate-call-failed:omp-new-thing"), explainEstimateReason("estimate-output-invalid")])
++      .toEqual(["omp could not list its model catalog. Check that omp is installed and starts, then retry.", EN_CAP, "omp-new-thing", null]);
++    await i18n.changeLanguage("zh");
++    expect(explainEstimateReason("estimate-call-failed:omp-single-call-cap-exceeded")).toBe(ZH_CAP);
++  });
++
++  // Plan R3 made the generic text the bare code, which this surface already shows; a known code pins the explanation here,
++  // and web/tests/savedResultRecovery.test.tsx pins that an unknown code is not shown twice.
++  it("a saved-result reason", async () => {
++    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: "unavailable", reason: "omp-model-catalog-unavailable" }), { status: 200, headers: { "content-type": "application/json" } })));
++    render(<SavedResultAction runId="run-1" groupId="g" taskId="a" revision={3} changeSeq={1} onCommand={vi.fn()} />);
++    expect((await screen.findByText("omp-model-catalog-unavailable")).parentElement!.textContent).toContain("omp-model-catalog-unavailable omp could not list its model catalog. Check that omp is installed and starts, then retry.");
++    cleanup();
++    await i18n.changeLanguage("zh");
++    render(<SavedResultAction runId="run-1" groupId="g" taskId="a" revision={3} changeSeq={2} onCommand={vi.fn()} />);
++    expect((await screen.findByText("omp-model-catalog-unavailable")).parentElement!.textContent).toContain("omp-model-catalog-unavailable omp 无法列出它的模型目录。请确认 omp 已安装且能启动，然后重试。");
++  });
++
++  it("a failed requirement: the latest failed call's code, and a blocked call's reason", async () => {
++    const view = requirementView("failed");
++    const failed: RequirementViewV1 = { ...view, rounds: [{ ...view.rounds[0]!, calls: [{ runId: "run-1", overviewHash: null, commit: null, usage: null, outcome: "failed", reason: "omp-single-call-cap-exceeded" }] }],
++      summary: { ...view.summary, requirement: { ...view.summary.requirement!, blockedRun: { runId: "run-2", reason: "requirement-usage-unknown:omp-new-thing" } } } };
++    const shown = (language: "en" | "zh") => render(<RequirementsPanel config={config} summary={summaryWith(failed)} views={{ r: failed }} selected="r" agents={null} language={language} onSelect={() => {}} onCommand={vi.fn()} />).container.textContent ?? "";
++    const en = shown("en");
++    expect(en).toContain(`omp-single-call-cap-exceeded · ${EN_CAP}`);
++    expect(en).toContain("requirement-usage-unknown:omp-new-thing · This requirement call's usage is unknown, so its budget cannot be settled. omp-new-thing");
++    cleanup();
++    await i18n.changeLanguage("zh");
++    expect(shown("zh")).toContain(`omp-single-call-cap-exceeded · ${ZH_CAP}`);
++  });
++
++  // Controller ruling on A7 (plan R3): an unknown code's explanation is the code itself, so these surfaces show it once.
++  it("an unknown code is shown once on the failed-call line and the saved-result line", async () => {
++    const view = requirementView("failed");
++    const failed: RequirementViewV1 = { ...view, rounds: [{ ...view.rounds[0]!, calls: [{ runId: "run-1", overviewHash: null, commit: null, usage: null, outcome: "failed", reason: "omp-new-thing" }] }] };
++    const { container } = render(<RequirementsPanel config={config} summary={summaryWith(failed)} views={{ r: failed }} selected="r" agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} />);
++    expect([...container.querySelectorAll('p[role="status"]')].map((p) => p.textContent)).toContain("omp-new-thing");
++    cleanup();
++    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: "unavailable", reason: "omp-new-thing" }), { status: 200, headers: { "content-type": "application/json" } })));
++    render(<SavedResultAction runId="run-1" groupId="g" taskId="a" revision={3} changeSeq={1} onCommand={vi.fn()} />);
++    expect((await screen.findByText("omp-new-thing")).parentElement!.textContent).toBe("Saved results are unavailable for verification. omp-new-thing");
++  });
++});

@@ -1,0 +1,435 @@
+# Review package: b76fe1f3..HEAD
+
+## Commits
+969017f1 feat(control): store ccloop's own code where a peer exit is reduced to a code
+
+## Files changed
+ src/control/agentFreeze.ts                        |  3 +-
+ src/control/planImport.ts                         |  4 +-
+ src/control/profiles.ts                           |  8 ++-
+ src/control/savedResultRecovery.ts                |  3 +-
+ src/control/webService.ts                         |  6 +-
+ src/panel/controlViews.ts                         |  3 +-
+ tests/control/peerCodeStored.test.ts              | 67 +++++++++++++++++++++++
+ tests/control/savedResultUnmeteredLineage.test.ts | 13 +++++
+ 8 files changed, 96 insertions(+), 11 deletions(-)
+
+## Diff
+diff --git a/src/control/agentFreeze.ts b/src/control/agentFreeze.ts
+index 248ddeff..59917771 100644
+--- a/src/control/agentFreeze.ts
++++ b/src/control/agentFreeze.ts
+@@ -1,13 +1,14 @@
+ import { readAgentPreferences } from "./agentPreferences.js";
+ import { descriptorProvenance, frozenSlotOf, resolveSelection, selectionsHashV2, slotLayers, type AgentResolution, type FrozenSlot, type GroupAgentOverrides, type PanelPartialSelection, type PartialSelection, type ProvenanceSource } from "./agentSelection.js";
+ import { canonicalBytes } from "./canonicalJson.js";
++import { peerCode } from "./ccloopPort.js";
+ import { ControlError, nonDurableControlErrorClassifications } from "./errors.js";
+ import type { ExecutionPort } from "./executionPort.js";
+ import { readArchivedPlan, readBudgetProposal } from "./queries.js";
+ import type { ControlStore } from "./store.js";
+ import { frozenTaskAgentSchema, groupAgentOverridesSchema, panelPartialSelectionSchema } from "./webProtocol.js";
+ 
+ /**
+  * Agent selection spec §6.4 (W6-1/W6-2): the slots a confirmation freezes -- one worker slot per task, keyed
+  * `task:<taskId>`, and the group's reconcile slot, keyed `reconcile`. The estimator is frozen at import and on each
+  * re-estimate instead, so it is not one of them and not in the selectionsHash.
+@@ -122,21 +123,21 @@ export async function resolveGroupSelections(
+       const resolution = structuredClone(await answers.get(id)!);
+       const frozen: FrozenSlot = frozenSlotOf(resolution, partial, descriptorProvenance(partial, resolution.selection, provenance));
+       slots.push({ ...identity, outcome: { kind: "resolved", frozen } });
+     } catch (error) {
+       if (!(error instanceof ControlError)) throw error;
+       // Assembly spec §3 / ruling R5 (as service.ts profiledCapabilities): "there is no port" is not a refusal of this
+       // selection, so it is raised by its own name rather than recorded against the slot.
+       if (error.code === "control-port-unconfigured") throw error;
+       if ((nonDurableControlErrorClassifications as Record<string, string>)[error.code] === "transient") {
+         if (mode === "confirm") throw error;
+-        slots.push({ ...identity, outcome: { kind: "unavailable", code: error.code } });
++        slots.push({ ...identity, outcome: { kind: "unavailable", code: peerCode(error) } });
+         continue;
+       }
+       slots.push({ ...identity, outcome: { kind: "rejected", code: error.code } });
+     }
+   }
+   const frozen: Record<string, FrozenSlot> = {};
+   for (const slot of slots) if (slot.outcome.kind === "resolved") frozen[slot.key] = slot.outcome.frozen;
+   return {
+     proposalVersion: base.proposalVersion, groupOverrides: base.groupOverrides, taskOverrides: base.taskOverrides, planLayers: base.planLayers, slots,
+     selectionsHash: Object.keys(frozen).length === slots.length ? selectionsHashV2(frozen) : null,
+diff --git a/src/control/planImport.ts b/src/control/planImport.ts
+index 47c75651..f8e392cc 100644
+--- a/src/control/planImport.ts
++++ b/src/control/planImport.ts
+@@ -31,21 +31,21 @@ export type ImportResult = CommandLookupV1["body"];
+ 
+ export interface ImportDefaults {
+   estimatorProfileId: string | null;
+   estimatorProfileHash: string | null;
+   estimateMode: "strict" | "soft";
+ }
+ 
+ /** Agent selection spec §6.4 (§12 I9): the estimator slot, resolved before the import's transaction. */
+ export type EstimatorSlotOutcome =
+   | { kind: "frozen"; partial: PartialSelection; slot: FrozenSlot }
+-  | { kind: "rejected"; partial: PartialSelection | null; code: KnownControlErrorCode };
++  | { kind: "rejected"; partial: PartialSelection | null; code: string };
+ export interface PreparedEstimatorSlot { outcome: EstimatorSlotOutcome; observation: ObservedProfile; layerAuthority: string }
+ 
+ export interface ImportDeps {
+   store: ControlStore;
+   trustedConfig: Pick<TrustedControlConfig, "resolveTarget">;
+   profileRouter: ExecutionProfileRouter;
+   defaults: () => ImportDefaults | null;
+   estimatorObservation: (profile: FrozenProfile) => Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">;
+   estimatorSlot: EstimatorSlotOutcome;
+   estimatorLayerAuthority?: string;
+@@ -137,21 +137,21 @@ export function normalizeControlPlan(source: AllowlistedPlanSource): ControlPlan
+       originalContractCanonicalJson: task.originalContractCanonicalJson,
+     })).sort((left, right) => compare(left.taskId, right.taskId)),
+   };
+   const parsed = controlPlanSchema.safeParse(candidate);
+   if (!parsed.success) return reject(parsed.error.issues[0]?.message ?? "normalized-plan");
+   return parsed.data;
+ }
+ 
+ /** Spec §6.4 / §7: an estimator selection that failed is a blocked estimate named after the failure. */
+ const ESTIMATOR_REJECTED_PREFIX = "agent-selection-rejected:estimator:";
+-export function rejectedEstimatorRequest(code: KnownControlErrorCode): FrozenEstimateRequest {
++export function rejectedEstimatorRequest(code: string): FrozenEstimateRequest {
+   return { state: "blocked-capability", reasonCode: `${ESTIMATOR_REJECTED_PREFIX}${code}`, requestHash: null, request: null, contract: null, contractHash: null, inputTokens: null, requiredRequestTokens: null };
+ }
+ 
+ /** The estimator slot's layered partial as the store has it now; null when no layer names an agent. */
+ function currentEstimatorPartial(store: ControlStore, operatorId: string, group: GroupAgentOverrides, planGroup?: PartialSelection): PartialSelection | null {
+   const prefs = readAgentPreferences(store, operatorId).preferences;
+   try { return resolveSelection(slotLayers("estimator", prefs, group, undefined, { group: planGroup }), prefs.perAgent).partial; }
+   catch (error) {
+     if (error instanceof ControlError && error.code === "agent-unselected") return null;
+     throw error;
+diff --git a/src/control/profiles.ts b/src/control/profiles.ts
+index 6f05ad52..854ec6e0 100644
+--- a/src/control/profiles.ts
++++ b/src/control/profiles.ts
+@@ -1,11 +1,12 @@
+ import { ControlError, type KnownControlErrorCode } from "./errors.js";
++import { peerCode } from "./ccloopPort.js";
+ import type { ExecutionPort } from "./executionPort.js";
+ import type { AgentResolution, PartialSelection } from "./agentSelection.js";
+ import { sha256Canonical } from "./canonicalJson.js";
+ import {
+   capabilityViewSchema,
+   executionProfileSnapshotSchema,
+   type CapabilityViewV1,
+   type ExecutionProfileSnapshotV1,
+   type WebWorkKindV1,
+ } from "./webProtocol.js";
+@@ -15,21 +16,21 @@ type DeclaredCapabilities = ExecutionProfileSnapshotV1["profile"]["capabilities"
+ export interface FrozenProfile {
+   readonly snapshot: Readonly<ExecutionProfileSnapshotV1>;
+   readonly profileHash: string;
+   readonly port: ExecutionPort;
+ }
+ 
+ export interface ObservedProfile {
+   readonly profile: FrozenProfile;
+   readonly observed: CapabilityViewV1;
+   readonly observedAt: string;
+-  readonly probeFailureCode: KnownControlErrorCode | null;
++  readonly probeFailureCode: string | null;
+   /**
+    * Agent selection spec §4.6: ccloop's answer for the selection the caller asked about -- what an import or a
+    * re-estimate freezes. Null when the probe failed.
+    */
+   readonly resolution: AgentResolution | null;
+ }
+ 
+ export interface ExecutionProfileRouter {
+   resolve(workKind: WebWorkKindV1, profileId: string, expectedHash: string): FrozenProfile;
+   /**
+@@ -125,22 +126,23 @@ export function intersectCapabilities(declared: DeclaredCapabilities, observed:
+   };
+ }
+ 
+ export function resolveProfile(snapshot: ExecutionProfileSnapshotV1, port: ExecutionPort = unboundPort): FrozenProfile {
+   const parsed = executionProfileSnapshotSchema.safeParse(snapshot);
+   if (!parsed.success) throw new ControlError("control-profile-invalid", parsed.error.issues[0]?.message);
+   const closedSnapshot = deepFreeze(structuredClone(parsed.data));
+   return Object.freeze({ snapshot: closedSnapshot, profileHash: sha256Canonical(closedSnapshot), port });
+ }
+ 
+-function probeFailureCode(error: unknown): KnownControlErrorCode {
+-  return error instanceof ControlError ? error.code : "control-capability-probe-failed";
++function probeFailureCode(error: unknown): string {
++  // Spec 2026-10-15 ccloop error codes §4.3: a peer exit is stored as ccloop's own code.
++  return error instanceof ControlError ? peerCode(error) : "control-capability-probe-failed";
+ }
+ 
+ export function createExecutionProfileRouter(
+   profiles: readonly FrozenProfile[],
+   options: { now?: () => Date } = {},
+ ): ExecutionProfileRouter {
+   const byId = new Map<string, FrozenProfile>();
+   for (const supplied of profiles) {
+     const id = supplied.snapshot.profile.profileId;
+     if (
+diff --git a/src/control/savedResultRecovery.ts b/src/control/savedResultRecovery.ts
+index 2c407f3a..31f1da4a 100644
+--- a/src/control/savedResultRecovery.ts
++++ b/src/control/savedResultRecovery.ts
+@@ -1,12 +1,13 @@
+ import {createHash} from 'node:crypto';
+ import {canonicalBytes,sha256Canonical} from './canonicalJson.js';
++import {peerCode} from './ccloopPort.js';
+ import {ControlError} from './errors.js';
+ import {applyWebCommand,preflightWebCommand} from './commandLedger.js';
+ import {readArchivedPlan,readGroup,readWork,saveWork,readBudgetProposal} from './queries.js';
+ import {readCanonicalRecord} from './snapshot.js';
+ import {readConfirmedTaskExecution} from './executionSnapshot.js';
+ import {createStartingRun,readFrozenSnapshot,probeBlocksDispatch} from './webDispatch.js';
+ import {readStopIntent,readRunBody,saveRunBody,releaseCommitment,reserveCommitment,setAllocationStates,commandSuccess,latestRequestForRun,ADOPTABLE_STATES} from './stopIntent.js';
+ import {hasValidUsageSettlement,lineageWorkUsage,settlementProof,settlementArtifact,settlementSame} from './usageSettlement.js';
+ import {hasOptionalTaskPolicy,decideFundedAllowance,readFundedAllowance} from './fundedAllowance.js';
+ import {finiteCommitment} from './tokenPolicy.js';
+@@ -94,21 +95,21 @@ export async function readSavedResultEligibility(deps:StopDeps,runId:string):Pro
+  let prepared:ReturnType<typeof prepareRecoverySource>|undefined;
+  try {
+   const current=currentSavedResultSource(deps.store,runId),port=sourcePort(deps,current.run);
+   if((await port.readFeatures?.())?.savedResultRecovery!=='v1'||!port.savedResultSourceEligibility)return unavailable('control-saved-result-unsupported');
+   const source=sourceRecord(deps.store,current.run);prepared=prepareRecoverySource(deps.store,source.source,source.authorityKind);
+   const answer=await port.savedResultSourceEligibility({source:current.source,sourceAttempt:source.attempt,...prepared});
+   const again=currentSavedResultSource(deps.store,runId);
+   if(!settlementSame(sourceRecord(deps.store,again.run),source))return unavailable('saved-result-source-stale');
+   if(answer.status==='eligible'&&(answer.sourceIdentity.envelopeHash!==again.run.drive.envelopeHash||answer.recoveryOf.capsuleHash!==source.source.hash))return unavailable('saved-result-source-stale');
+   return answer;
+- }catch(error){return unavailable(error instanceof ControlError?error.code:error instanceof Error&&error.message.startsWith('saved-result-')?error.message:'saved-result-evidence-unavailable');}
++ }catch(error){return unavailable(error instanceof ControlError?peerCode(error):error instanceof Error&&error.message.startsWith('saved-result-')?error.message:'saved-result-evidence-unavailable');}
+  finally{prepared?.dispose();}
+ }
+ /** Async evidence/capability preparation never publishes authorization; all facts are read again in the ledger transaction. */
+ type RecoveryCommandResult=CommandLookupV1["body"];
+ export async function applyVerifySavedResult(deps:StopDeps,command:VerifySavedResultCommand):Promise<RecoveryCommandResult>{
+  const replay=preflightWebCommand<RecoveryCommandResult>(deps.store,command);if(replay)return replay.body;
+  const release=deps.admissionGate?.enter();
+  try {
+   const evidence=await readSavedResultEligibility(deps,command.payload.sourceRunId);
+   let probes:Awaited<ReturnType<StopDeps['profileRouter']['probe']>>[]=[];
+diff --git a/src/control/webService.ts b/src/control/webService.ts
+index d925f2e5..f3180263 100644
+--- a/src/control/webService.ts
++++ b/src/control/webService.ts
+@@ -1,11 +1,11 @@
+-import { peerFailure } from "./ccloopPort.js";
++import { peerCode, peerFailure } from "./ccloopPort.js";
+ import {retainSavedInterruption,readDriverRun} from "./executionDriver.js";
+ import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
+ import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
+ import { assertNoActiveUnbounded } from "./spendCaps.js";
+ import { hasTokenPolicy, saveTokenPolicy, enableOptionalTokenPolicy } from "./fundedAllowance.js";
+ import { budgetAmountSchema, safeInteger } from "./schema.js";
+ import { z } from "zod";
+ import { randomUUID, createHash } from "node:crypto";
+ import { applyWebCommand, lookupWebCommandReplay, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
+ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+@@ -666,28 +666,28 @@ export class WebControlService {
+     return this.deps.resolveRepository(repoId);
+   }
+   /** Agent selection spec §6.2 layer 1: the operator's defaults, under their own revision. */
+   async setAgentPreferences(command: SetAgentPreferencesCommand): Promise<WebCommandResult> {
+     return applySetAgentPreferences({ store: this.store, admissionGate: this.deps.admissionGate }, command) as WebCommandResult;
+   }
+   /** One startup observation, with pending same-operation reconciliation first. Failure remains visible and nonfatal. */
+   async recoverAgentUpdates(): Promise<void> {
+     let reconcileFailure: string | null = null;
+     try { await reconcilePendingAgentUpdates(this.store, this.deps.port); }
+-    catch (error) { reconcileFailure = error instanceof ControlError ? error.code : "control-peer-exit"; }
++    catch (error) { reconcileFailure = error instanceof ControlError ? peerCode(error) : "control-internal-error"; }
+     await this.observeAgentUpdates();
+     if (reconcileFailure) this.installationFailure = reconcileFailure;
+   }
+   async observeAgentUpdates(): Promise<void> {
+     if (!this.deps.port.observeAgentInstallations) { this.installationFailure = "control-agent-update-unsupported"; return; }
+     try { this.installationObservation = await this.deps.port.observeAgentInstallations(); this.installationFailure = null; }
+-    catch (error) { this.installationObservation = null; this.installationFailure = error instanceof ControlError ? error.code : "control-peer-exit"; }
++    catch (error) { this.installationObservation = null; this.installationFailure = error instanceof ControlError ? peerCode(error) : "control-internal-error"; }
+   }
+   agentUpdateView(operatorId: string) {
+     return { schema: "orca-agent-installation-state-v1" as const, revision: readAgentUpdateRevision(this.store, operatorId),
+       pending: hasPendingAgentUpdate(this.store, operatorId), pendingCommand: pendingAgentUpdateCommand(this.store, operatorId), observation: this.installationObservation,
+       preview: this.installationPreview, failureCode: this.installationFailure };
+   }
+   async previewAgentUpdates(): Promise<AgentPreview> {
+     if (!this.deps.port.previewAgentInstallations) throw new ControlError("control-agent-update-unsupported");
+     if (this.store.db.prepare("SELECT command_id FROM agent_update_outbox WHERE state='pending' LIMIT 1").get()) throw new ControlError("agent-installation-update-pending");
+     const preview = await this.deps.port.previewAgentInstallations();
+diff --git a/src/panel/controlViews.ts b/src/panel/controlViews.ts
+index 7ee4e447..3ba7d23a 100644
+--- a/src/panel/controlViews.ts
++++ b/src/panel/controlViews.ts
+@@ -2,20 +2,21 @@ import {validSavedNoDispatch} from "../control/savedResultNoDispatch.js";
+ import {savedDispatchSchema,recoveryOfSchema,savedRecoverySchema,savedSourceSchema} from "../control/savedResultProtocol.js";
+ import { hasOptionalTaskPolicy, readFundedAllowance } from "../control/fundedAllowance.js";
+ import { tokenPolicySchema, tokenRemainingStatus } from "../control/tokenPolicy.js";
+ import { budgetAmountSchema } from "../control/schema.js";
+ import { readGroupSnapshot, type GroupReadSnapshot, type StoredJsonResult } from "./groupReadSnapshot.js";
+ import { validateRetryGrantSource } from "../control/retryGrant.js";
+ import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executionSnapshot.js";
+ import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
+ import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
+ import { readAgentPreferences } from "../control/agentPreferences.js";
++import { peerCode } from "../control/ccloopPort.js";
+ import type { ExecutionPort } from "../control/executionPort.js";
+ import { z } from "zod";
+ import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint } from "../control/usageSettlement.js";
+ import { settlementAcknowledgeFor, settlementAdmission } from "../control/settleUnknownUsage.js";
+ import { readArtifact } from "../control/archive.js";
+ import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
+ import { dimensions } from "../control/commands.js";
+ import { driveRecordSchema } from "../control/driveRecord.js";
+ import { ControlError, nonDurableControlErrorClassifications } from "../control/errors.js";
+ import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
+@@ -1181,21 +1182,21 @@ export async function readSelectionPreview(
+   const resolved = await resolveGroupSelections({ store, port }, groupId, operatorId, "preview");
+   const prefs = readAgentPreferences(store, operatorId).preferences;
+   const rolePreview = async (slot: "worker" | "estimator") => {
+     try {
+       const { partial, provenance } = resolveSelection(slotLayers(slot, prefs, resolved.groupOverrides, undefined, { group: resolved.planLayers.group.worker }), prefs.perAgent);
+       const answer = await port.resolveAgent(partial);
+       return { kind: "resolved" as const, frozen: frozenSlotOf(answer, partial, descriptorProvenance(partial, answer.selection, provenance)) };
+     } catch (error) {
+       if (!(error instanceof ControlError)) throw error;
+       return (nonDurableControlErrorClassifications as Record<string, string>)[error.code] === "transient"
+-        ? { kind: "unavailable" as const, code: error.code }
++        ? { kind: "unavailable" as const, code: peerCode(error) }
+         : { kind: "rejected" as const, code: error.code };
+     }
+   };
+   const rolePreviews = { worker: await rolePreview("worker"), estimator: await rolePreview("estimator") };
+   const parsed = agentSelectionPreviewSchema.safeParse({ schema: "orca-agent-selection-preview-v1", groupId, ...resolved, rolePreviews });
+   if (!parsed.success) return blocked(`agent-preview:${parsed.error.issues[0]?.path.join(".")}:${parsed.error.issues[0]?.message}`);
+   return parsed.data;
+ }
+ 
+ function settlementPreview(store: ControlStore, run: z.infer<typeof persistedRunSchema>, snapshot: GroupReadSnapshot): Pick<RunViewV1, "unknownUsageSettlement"> {
+diff --git a/tests/control/peerCodeStored.test.ts b/tests/control/peerCodeStored.test.ts
+new file mode 100644
+index 00000000..c3a75028
+--- /dev/null
++++ b/tests/control/peerCodeStored.test.ts
+@@ -0,0 +1,67 @@
++import { describe, expect, it } from "vitest";
++import { applyAgentUpdate } from "../../src/control/agentUpdates.js";
++import { resolveGroupSelections } from "../../src/control/agentFreeze.js";
++import { ControlError } from "../../src/control/errors.js";
++import type { ExecutionPort } from "../../src/control/executionPort.js";
++import { estimatorSlotFor } from "../../src/control/planImport.js";
++import { WebControlService } from "../../src/control/webService.js";
++import { readSelectionPreview } from "../../src/panel/controlViews.js";
++import { webFixture } from "./fixtures/web.js";
++
++// ccloop error codes spec (2026-10-15) §4.3, criteria 3 and 4: where Orca reduces a ccloop failure to a code it keeps
++// ccloop's code, so the estimator, the preview and the installation panel say why -- while the choice between "refused"
++// and "try again" still reads Orca's own classification of the error, so a transient exit is never frozen as a refusal.
++const CATALOG = () => new ControlError("control-peer-exit", "2:omp-model-catalog-unavailable: spawn ENOENT");
++const open = { schema: "orca-raw-command-v1", commandId: "open-r", actorId: "human", expectedRevision: 0, verb: "requirement-open", target: { kind: "group", groupId: "r" },
++  payload: { groupId: "r", repoId: "repo", idea: "Let people export their notes as Markdown." } } as never;
++const apply = { schema: "orca-raw-command-v1", commandId: "update-1", expectedRevision: 0, actorId: "human", verb: "apply-agent-update",
++  target: { kind: "operator", operatorId: "human" }, payload: { previewId: "preview-1", baseTableHash: "a".repeat(64), acceptedChangeIds: ["change-1"] } } as never;
++const observation = { schema: "orca-agent-detection-observation-v1", baseTableHash: "a".repeat(64), observedAt: "2026-10-15T00:00:00.000Z", installed: [] };
++
++describe("stored codes keep ccloop's code (spec A §4.3)", () => {
++  it("F1: the profile probe, every estimator slot built on it and requirement-open name ccloop's code", async () => {
++    const h = await webFixture(); try {
++      h.resolveAgent.mockImplementation(async () => { throw CATALOG(); });
++      expect((await h.deps.profileRouter.probe(h.frozen, { agent: "codex" })).probeFailureCode).toBe("omp-model-catalog-unavailable");
++      expect((await estimatorSlotFor({ store: h.store, profileRouter: h.deps.profileRouter }, "human", {}, h.frozen)).outcome)
++        .toMatchObject({ kind: "rejected", code: "omp-model-catalog-unavailable" });
++      const service = new WebControlService({ ...h.deps, knownRepository: (id: string) => id === "repo" });
++      expect(await service.openRequirement(open)).toMatchObject({ error: { code: "agent-selection-rejected", message: "agent-selection-rejected:estimator:omp-model-catalog-unavailable" } });
++      h.resolveAgent.mockImplementation(async () => { throw new ControlError("control-peer-exit", "1:Error: lost"); });
++      expect((await h.deps.profileRouter.probe(h.frozen, { agent: "codex" })).probeFailureCode).toBe("control-peer-exit");
++    } finally { await h.dispose(); }
++  });
++
++  it("F2: a transient peer exit in a preview is still unavailable and carries ccloop's code; confirm still rethrows it", async () => {
++    const h = await webFixture(); try {
++      h.resolveAgent.mockImplementation(async () => { throw CATALOG(); });
++      const preview = await resolveGroupSelections({ store: h.store, port: h.deps.port }, "g", "human", "preview");
++      expect(preview.slots.map((slot) => [slot.key, slot.outcome])).toEqual([
++        ["reconcile", { kind: "unavailable", code: "omp-model-catalog-unavailable" }],
++        ["task:a", { kind: "unavailable", code: "omp-model-catalog-unavailable" }],
++      ]);
++      await expect(resolveGroupSelections({ store: h.store, port: h.deps.port }, "g", "human", "confirm")).rejects.toMatchObject({ code: "control-peer-exit" });
++      expect((await readSelectionPreview(h.store, h.deps.port, "human", "g")).rolePreviews).toEqual({
++        worker: { kind: "unavailable", code: "omp-model-catalog-unavailable" }, estimator: { kind: "unavailable", code: "omp-model-catalog-unavailable" },
++      });
++    } finally { await h.dispose(); }
++  });
++
++  it("F3: an installation observation and a reconciliation that fail name ccloop's code; a non-ControlError is control-internal-error", async () => {
++    const h = await webFixture(); try {
++      const base = h.deps.port as unknown as Record<string, unknown>;
++      const observing = new WebControlService({ ...h.deps, port: { ...base, observeAgentInstallations: async () => { throw new ControlError("control-peer-exit", "2:agent-config-invalid: bad table"); } } as unknown as ExecutionPort });
++      await observing.observeAgentUpdates();
++      expect(observing.agentUpdateView("human").failureCode).toBe("agent-config-invalid");
++      const crashing = new WebControlService({ ...h.deps, port: { ...base, observeAgentInstallations: async () => { throw new Error("socket hang up"); } } as unknown as ExecutionPort });
++      await crashing.observeAgentUpdates();
++      expect(crashing.agentUpdateView("human").failureCode).toBe("control-internal-error");
++      // A pending operation (ccloop died during apply), reconciled at startup against a ccloop that fails again.
++      const dying = { applyAgentInstallations: async () => { throw new ControlError("control-peer-exit", "2:agent-installation-apply-failed: disk full"); } } as unknown as ExecutionPort;
++      await expect(applyAgentUpdate({ store: h.store, port: dying }, apply, { client: "web", principal: "user:owner" })).rejects.toMatchObject({ code: "control-peer-exit" });
++      const reconciling = new WebControlService({ ...h.deps, port: { ...base, applyAgentInstallations: dying.applyAgentInstallations, observeAgentInstallations: async () => observation } as unknown as ExecutionPort });
++      await reconciling.recoverAgentUpdates();
++      expect(reconciling.agentUpdateView("human").failureCode).toBe("agent-installation-apply-failed");
++    } finally { await h.dispose(); }
++  });
++});
+diff --git a/tests/control/savedResultUnmeteredLineage.test.ts b/tests/control/savedResultUnmeteredLineage.test.ts
+index e59f5d43..f96f10f5 100644
+--- a/tests/control/savedResultUnmeteredLineage.test.ts
++++ b/tests/control/savedResultUnmeteredLineage.test.ts
+@@ -1,19 +1,20 @@
+ import { createHash } from "node:crypto";
+ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+ import { join } from "node:path";
+ import { afterEach, beforeEach, describe, expect, it } from "vitest";
+ import { driverHarness } from "./fixtures/driverHarness.js";
+ import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
+ import { profileSnapshot } from "./fixtures/web.js";
+ import { withCommandContext } from "../../src/control/commandClient.js";
+ import { sha256Canonical } from "../../src/control/canonicalJson.js";
++import { ControlError } from "../../src/control/errors.js";
+ import { WebControlService } from "../../src/control/webService.js";
+ import { readControlGroup } from "../../src/panel/controlViews.js";
+ import type { ArtifactRef } from "../../src/control/types.js";
+ import type { StartEnvelope } from "../../src/control/executionPort.js";
+ 
+ // Human ruling 2026-10-13: a task lineage inherits only provider-observed usage, never the conservative charge an owner's
+ // unmetered release (settle-unknown-usage, acknowledge "release-unmetered") books. The saved-result admission sums the
+ // lineage in two places (savedResultRecovery.ts): from the source run when no recovery precedes it, and from the
+ // interrupted predecessor recovery otherwise. Each `it` pins one of them against the observed usage as literals.
+ 
+@@ -147,11 +148,23 @@ describe("a saved-result lineage after an unmetered release inherits observed us
+       expect(t.body(first).usageSettlement).toMatchObject({ method: "owner-acknowledged-unmetered", charged: { work: { tokens: null, activeMs: 14_399_992, attempts: 1, sessions: 1 } } });
+       expect(t.body(first).savedInterruption).toBeTruthy();
+       raiseLimit(t);
+       const second = await verify(t, service, source);
+       expect(t.body(second).savedRecovery.predecessor).toMatchObject({ runId: first, outcome: "interrupted" });
+       // Source observed {10,5,1,1}, the interrupted recovery observed {7,3,1,1}: neither run's release charge is inherited.
+       expect(t.body(second).savedRecovery.funding.inheritedUsage).toEqual({ tokens: 17, activeMs: 8, attempts: 2, sessions: 2 });
+       expect(t.body(second).tokenPolicy.inheritedUsage).toEqual({ tokens: 17, activeMs: 8, attempts: 2, sessions: 2 });
+     } finally { await driver.stop(); await t.h.dispose(); }
+   }, 30_000);
++
++  // ccloop error codes spec (2026-10-15) §4.3, criterion 4: the saved-result `unavailable` reason names ccloop's code.
++  it("names ccloop's code when the saved-result eligibility read fails with a peer exit", async () => {
++    const { t, service } = await world(); const driver = t.driver(); try {
++      const source = await t.claim();
++      await t.until(driver, () => t.body(source).state === "blocked");
++      expect(await release(t, service, source)).not.toHaveProperty("error");
++      const failing = { ...(t.fake.port as object), readFeatures: async () => { throw new ControlError("control-peer-exit", "2:control-features-failed: lost"); } };
++      const failingService = new WebControlService({ ...(t.service as any).deps, profileRouter: createExecutionProfileRouter([resolveProfile(profileSnapshot(), failing as never)]) });
++      expect(await failingService.savedResultEligibility(source)).toEqual({ status: "unavailable", reason: "control-features-failed" });
++    } finally { await driver.stop(); await t.h.dispose(); }
++  }, 30_000);
+ });

@@ -1,0 +1,120 @@
+# Review package: de176903..HEAD
+
+## Commits
+373a3ed2 feat(control): store a peer exit's run reason cut to its code and 512-unit detail
+
+## Files changed
+ src/control/executionDriver.ts      |  6 +++++-
+ tests/control/peerReasonCut.test.ts | 30 ++++++++++++++++++++++++++++++
+ 2 files changed, 35 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/src/control/executionDriver.ts b/src/control/executionDriver.ts
+index 2d303792..23296160 100644
+--- a/src/control/executionDriver.ts
++++ b/src/control/executionDriver.ts
+@@ -9,20 +9,21 @@ import { minTokenCeiling } from "./tokenPolicy.js";
+ import { createTaskResultCollector,type TaskResultCollector } from './taskResultCollector.js';
+ import { createHash } from "node:crypto";
+ import { mkdir, realpath, readFile, writeFile } from "node:fs/promises";
+ import { z } from "zod";
+ import { join } from "node:path";
+ import { archiveRun, readArtifact, writeArtifact } from "./archive.js";
+ import { readRun, saveRun } from "./budget.js";
+ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+ import { commitCandidate } from "./checkpoints.js";
+ import { hashPayload } from "./commands.js";
++import { peerExitText, peerFailure } from "./ccloopPort.js";
+ import { ControlError } from "./errors.js";
+ import { readConfirmedTaskExecution } from "./executionSnapshot.js";
+ import { privateDirectory } from "./paths.js";
+ import { publishPending } from "./projection.js";
+ import { readBudgetProposal, readGroup, readWork } from "./queries.js";
+ import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
+ import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
+ import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
+ import { recordActivity } from "./activity.js";
+ import {artifactSchema,type RunProgress} from "./schema.js";
+@@ -115,20 +116,23 @@ export interface ExecutionDriver {
+   round(): Promise<boolean>;
+   /** A round now, and another straight after for as long as runs keep moving. */
+   kick(): void;
+   start(intervalMs: number): boolean;
+   /** Stops the timer and waits for the round in flight (spec §2.1 shutdown order). */
+   stop(): Promise<void>;
+   readonly crashed: CrashPoint | null;
+ }
+ 
+ export function describeError(error: unknown): string {
++  // Spec 2026-10-15 ccloop error codes §4.4: a peer exit is stored cut -- `control-peer-exit:<exit>:<code>: <detail≤512>`.
++  const peer = peerFailure(error);
++  if (peer !== null) { const text = peerExitText(peer); return text === "" ? "control-peer-exit" : `control-peer-exit:${text}`; }
+   if (error instanceof ControlError) return error.detail ? `${error.code}:${error.detail}` : error.code;
+   return error instanceof Error && error.message.length > 0 ? error.message : String(error);
+ }
+ 
+ export function readDriverRun(store: ControlStore, runId: string): DriverRun {
+   const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
+   if (!row) throw new ControlError("run-not-found");
+   return JSON.parse(String(row.body)) as DriverRun;
+ }
+ 
+@@ -463,21 +467,21 @@ export async function stepB(deps: ExecutionDriverDeps, runId: string): Promise<b
+     return write(deps, () => { const current = readDriverRun(store, runId); current.state = "accepted"; saveDriverRun(store, current); return true; });
+   }
+   if (store.dispatchBlocked || groupHeld(store, run.groupId) || deps.admissionGate?.draining) return false;
+   if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)assertCurrentSavedRecovery(store,run,(deps.now?.()??new Date()).getTime());
+   if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)write(deps,()=>{const current=readDriverRun(store,runId),marker=savedDispatchSchema.parse(current.savedDispatch);if(marker.state!=="never-submitted"||marker.envelopeHash!==current.drive?.envelopeHash)throw new ControlError("saved-result-source-stale");current.savedDispatch={...marker,state:"submitted"};saveDriverRun(store,current);});
+   let status: ExecutionStatus;
+   try {
+     status = await portFor(deps, run).accept(readStartEnvelope(store, run));
+   } catch (error) {
+     if (error instanceof ControlError && error.code === "control-peer-exit" && (error.detail ?? "").startsWith("2:")) {
+-      blockRun(deps, runId, "B", `accept-refused:${error.detail}`);
++      blockRun(deps, runId, "B", `accept-refused:${peerExitText(peerFailure(error)!)}`);
+       return true;
+     }
+     status = { kind: "unknown" };
+   }
+   deps.crash?.("B-after-accept");
+   return persistStatus(deps, runId, status, "B");
+ }
+ 
+ /** B' (spec §2.2): read-only. `absent` re-arms B; ten unknowns in a row block the run. */
+ export async function stepBPrime(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+diff --git a/tests/control/peerReasonCut.test.ts b/tests/control/peerReasonCut.test.ts
+new file mode 100644
+index 00000000..5a7961fa
+--- /dev/null
++++ b/tests/control/peerReasonCut.test.ts
+@@ -0,0 +1,30 @@
++import { describe, expect, it } from "vitest";
++import { ControlError } from "../../src/control/errors.js";
++import { describeError } from "../../src/control/executionDriver.js";
++import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
++import { driverHarness } from "./fixtures/driverHarness.js";
++import { profileSnapshot } from "./fixtures/web.js";
++
++// ccloop error codes spec (2026-10-15) §4.4, criterion 5: a blocked run's reason used to keep ccloop's whole stderr (up to
++// 24 MiB) and the panel showed it raw. It is stored as `<exit>:<code>: <detail>` with the detail cut to 512 units.
++describe("stored peer-exit reasons are cut (spec A §4.4)", () => {
++  it("describeError stores the cut form", () => {
++    expect([
++      describeError(new ControlError("control-peer-exit", `2:agent-config-invalid: ${"x".repeat(2048)}`)),
++      describeError(new ControlError("control-peer-exit", "2:control-config-hash-mismatch")),
++      describeError(new ControlError("control-peer-exit")),
++      describeError(new ControlError("control-peer-timeout")),
++    ]).toEqual([`control-peer-exit:2:agent-config-invalid: ${"x".repeat(511)}…`, "control-peer-exit:2:control-config-hash-mismatch", "control-peer-exit", "control-peer-timeout"]);
++  });
++
++  it("an accept refusal with a 2 KiB stderr is stored in its cut form", async () => {
++    const t = await driverHarness([{ taskId: "a" }]);
++    try {
++      (t.fake.port as unknown as Record<string, unknown>).accept = async () => { throw new ControlError("control-peer-exit", `2:agent-config-invalid: ${"y".repeat(2048)}`); };
++      t.deps.router = createExecutionProfileRouter([resolveProfile(profileSnapshot(), t.fake.port)]);
++      const runId = await t.claim();
++      await t.until(t.driver(), () => t.body(runId).state === "blocked");
++      expect(t.body(runId).drive).toMatchObject({ blockedAt: "B", blockedReason: `accept-refused:2:agent-config-invalid: ${"y".repeat(511)}…` });
++    } finally { await t.h.dispose(); }
++  }, 30_000);
++});

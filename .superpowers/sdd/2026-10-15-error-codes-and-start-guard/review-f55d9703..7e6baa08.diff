@@ -1,0 +1,171 @@
+# Review package: f55d9703..HEAD
+
+## Commits
+7e6baa08 feat(control): read ccloop's code and cut detail out of a peer exit
+
+## Files changed
+ src/control/ccloopPort.ts         | 64 ++++++++++++++++++++++++++++++++++++---
+ tests/control/peerFailure.test.ts | 61 +++++++++++++++++++++++++++++++++++++
+ 2 files changed, 121 insertions(+), 4 deletions(-)
+
+## Diff
+diff --git a/src/control/ccloopPort.ts b/src/control/ccloopPort.ts
+index 7e8e829f..ce6d00e8 100644
+--- a/src/control/ccloopPort.ts
++++ b/src/control/ccloopPort.ts
+@@ -41,28 +41,84 @@ const evidenceSchema=z.object({artifactId:z.string().min(1),hash:z.string().rege
+ // table view, a partial selection answers that selection's resolution (its seven-key capability view carries no protocol tag).
+ const agentsViewSchema=z.object({protocol:z.literal(3),installations:z.array(z.object({id:idSchema,kind:z.string().min(1),defaults:z.object({model:z.string().min(1),contextWindow:contextWindowSchema}).strict(),contextOptions:z.array(contextWindowSchema).min(1),version:z.string().min(1)}).strict())}).strict();
+ // Single-call estimate spec §4.4: a selection's resolution also answers singleCallExecution, beside the view, never in it.
+ // Accounts D8: `usageBreakdown` is accepted beside it when ccloop states it; Orca consumes no behavior from it.
+ // OMP single call (spec 2026-10-14 §4): `singleCallOutputCap`, when ccloop states it, is the cap the agent's call runs
+ // under; optional (an older ccloop omits it), nullable, never frozen (frozenSlotOf copies field by field).
+ const agentResolutionSchema=z.object({protocol:z.literal(3),selection:agentSelectionSchema,configHash:z.string().regex(/^[a-f0-9]{64}$/),timeoutMs:safeInteger.positive().max(2_147_483_647),killGraceMs:safeInteger.max(60_000),capabilities:capabilityViewSchema,singleCallExecution:z.enum(["v1"]).nullable(),singleCallOutputCap:safeInteger.positive().nullable().optional(),usageBreakdown:z.enum(["per-model","unavailable"]).optional()}).strict();
+ export const ccloopCollectionSchema=collectionSchema;
+ export const ccloopResolutionSchema=agentResolutionSchema;
+ 
++/** Spec 2026-10-15 ccloop error codes §4.1: the most of a peer's stderr Orca keeps or shows, in UTF-16 code units. */
++export const PEER_DETAIL_MAX = 512;
+ /**
+- * The ccloop error code inside a `control-peer-exit` (ccloop prints `<code>[:detail]` on stderr and exits non-zero),
++ * ccloop's leading code: `<exit>:<code>` followed by the end, whitespace, `: ` or a final `:` -- so `1:file:///x` names
++ * no code (plan correction K1: a bare `:` after the code is a URL's, not ccloop's `<code>: <detail>`).
++ */
++const PEER_CODE = /^[^:]*:([a-z][a-z0-9-]{0,63})(?=$|\s|:\s|:$)/;
++/** C0 and C1 control characters, written as \u escapes in this source (never as raw bytes). */
++const CONTROL_CHARACTERS = /[\u0000-\u001f\u0080-\u009f]/g;
++export interface PeerFailure { readonly exit: string; readonly code: string | null; readonly detail: string }
++
++function cutDetail(text: string): string {
++  const flat = text.trim().replace(CONTROL_CHARACTERS, " ").trim();
++  if (flat.length <= PEER_DETAIL_MAX) return flat;
++  let end = PEER_DETAIL_MAX - 1;
++  const last = flat.charCodeAt(end - 1);
++  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
++  return `${flat.slice(0, end)}…`;
++}
++
++/**
++ * A `control-peer-exit` (ccloop exited non-zero; its detail is `<exit>:<stderr>`) taken apart: the exit, ccloop's leading
++ * code when it printed one, and the rest of its stderr cut for storage and display. Null for any other failure.
++ */
++export function peerFailure(error: unknown): PeerFailure | null {
++  if (!(error instanceof ControlError) || error.code !== "control-peer-exit") return null;
++  const raw = error.detail ?? "";
++  const colon = raw.indexOf(":");
++  const exit = colon === -1 ? raw : raw.slice(0, colon), stderr = colon === -1 ? "" : raw.slice(colon + 1);
++  const code = PEER_CODE.exec(raw)?.[1] ?? null;
++  return { exit, code, detail: cutDetail(code === null ? stderr : stderr.slice(code.length).replace(/^:/, "")) };
++}
++
++/**
++ * The ccloop error code inside a `control-peer-exit` (ccloop prints `<code>[: detail]` on stderr and exits non-zero),
+  * or null for any other failure. Agent selection spec §7: `agent-selection-rejected:<taskId|slot>:<ccloop code>`
+  * names the code, so it is read here, where the peer's output is parsed, and nowhere else.
+  */
+-export function peerErrorCode(error:unknown):string|null {
+- if(!(error instanceof ControlError)||error.code!=="control-peer-exit"||error.detail===undefined)return null;
+- const match=/^[^:]*:([a-z][a-z0-9-]*)/.exec(error.detail);return match?match[1]!:null;
++export function peerErrorCode(error: unknown): string | null {
++  return peerFailure(error)?.code ?? null;
++}
++
++/** §4.3: the code Orca stores for a failure -- ccloop's own for a peer exit (else `control-peer-exit`), another ControlError's code. */
++export function peerCode(error: ControlError): string {
++  if (error.code !== "control-peer-exit") return error.code;
++  return peerFailure(error)?.code ?? "control-peer-exit";
++}
++
++/** §4.4: a peer exit after its reason prefix -- `<exit>[:<code>][: <detail>]`, the detail cut. */
++export function peerExitText(failure: PeerFailure): string {
++  const body = failure.code === null ? failure.detail : failure.detail === "" ? failure.code : `${failure.code}: ${failure.detail}`;
++  return body === "" ? failure.exit : `${failure.exit}:${body}`;
++}
++
++/** §4.2: the message of a `ccloop-failed` answer. */
++export function ccloopFailedMessage(failure: PeerFailure): string {
++  return `ccloop-failed:${failure.code ?? "unknown"}${failure.detail === "" ? "" : `: ${failure.detail}`}`;
++}
++
++/** §4.9: the stderr line for a peer failure a path leaves as "unknown"; null for any other failure. */
++export function peerFailureLogLine(runId: string, error: unknown): string | null {
++  const failure = peerFailure(error);
++  if (failure === null) return null;
++  return `orca-driver: ${runId}: ccloop ${failure.code ?? "unknown"}${failure.detail === "" ? "" : `: ${failure.detail}`}\n`;
+ }
+ /** Agent selection spec §7: ccloop's refusals of a selection or table, which a caller must be able to tell apart. */
+ // Wave-2 review m-1 (2026-09-26): agent-unselected too -- ccloop refuses a partial selection with no agent by that name
+ // (exit 2), and it is a selection refusal like the others, not a transient peer exit.
+ const NAMED_REFUSALS=new Set(["agent-installation-missing","agent-context-unsupported","agent-selection-invalid","agent-version-drift","agents-table-invalid","agent-unselected"] as const);
+ type NamedRefusal=typeof NAMED_REFUSALS extends Set<infer T>?T:never;
+ /** A capabilities call's failure: one of ccloop's named refusals is rethrown under its own name, anything else as it was. */
+ function named(error:unknown):unknown {
+  const code=peerErrorCode(error);
+  return code!==null&&NAMED_REFUSALS.has(code as NamedRefusal)?new ControlError(code as NamedRefusal,(error as ControlError).detail):error;
+diff --git a/tests/control/peerFailure.test.ts b/tests/control/peerFailure.test.ts
+new file mode 100644
+index 00000000..13a105bf
+--- /dev/null
++++ b/tests/control/peerFailure.test.ts
+@@ -0,0 +1,61 @@
++import { describe, expect, it } from "vitest";
++import { ccloopFailedMessage, peerCode, peerErrorCode, peerExitText, peerFailure, peerFailureLogLine } from "../../src/control/ccloopPort.js";
++import { ControlError } from "../../src/control/errors.js";
++
++// ccloop error codes spec (2026-10-15) §4.1, criterion 2: ccloop exits non-zero with `<code>[: <detail>]` on stderr and Orca
++// sees `control-peer-exit` with detail `<exit>:<stderr>`. One parser takes it apart; every site that stores or shows a
++// ccloop failure reads it, so a wrong code or an uncut stderr here reaches the database and the browser.
++const peer = (detail?: string) => new ControlError("control-peer-exit", detail);
++
++describe("peerFailure (spec A §4.1)", () => {
++  it("reads ccloop's code and the detail after it", () => {
++    expect(peerFailure(peer("2:omp-model-catalog-unavailable: spawn ENOENT"))).toEqual({ exit: "2", code: "omp-model-catalog-unavailable", detail: "spawn ENOENT" });
++    expect(peerFailure(peer("2:agent-version-drift"))).toEqual({ exit: "2", code: "agent-version-drift", detail: "" });
++    expect(peerFailure(peer("2:agent-x something else"))).toEqual({ exit: "2", code: "agent-x", detail: "something else" });
++  });
++
++  it("names no code for a URL, an upper-case word or a 65-character run, and keeps the whole stderr as the detail", () => {
++    expect(peerFailure(peer("1:file:///x"))).toEqual({ exit: "1", code: null, detail: "file:///x" });
++    expect(peerFailure(peer("1:Error: socket closed"))).toEqual({ exit: "1", code: null, detail: "Error: socket closed" });
++    const sixtyFour = `a${"b".repeat(63)}`;
++    expect(peerFailure(peer(`2:${sixtyFour}: d`))).toEqual({ exit: "2", code: sixtyFour, detail: "d" });
++    expect(peerFailure(peer(`2:${sixtyFour}b: d`))).toEqual({ exit: "2", code: null, detail: `${sixtyFour}b: d` });
++  });
++
++  it("replaces every C0 and C1 control character with a space and trims", () => {
++    expect(peerFailure(peer("2:agent-config-invalid: line1\nline2\tx\u0085y\u0007"))).toEqual({ exit: "2", code: "agent-config-invalid", detail: "line1 line2 x y" });
++  });
++
++  it("cuts the detail to 512 UTF-16 units with a trailing ellipsis, never splitting a surrogate pair", () => {
++    const long = peerFailure(peer(`1:${"a".repeat(600)}`))!;
++    expect([long.code, long.detail, long.detail.length]).toEqual([null, `${"a".repeat(511)}…`, 512]);
++    const emoji = peerFailure(peer(`1:${"😀".repeat(300)}`))!;
++    expect([emoji.detail, emoji.detail.length]).toEqual([`${"😀".repeat(255)}…`, 511]);
++  });
++
++  it("answers an empty failure for a peer exit with no detail, and null for anything that is not a peer exit", () => {
++    expect(peerFailure(peer())).toEqual({ exit: "", code: null, detail: "" });
++    expect(peerFailure(new ControlError("control-peer-timeout"))).toBeNull();
++    expect(peerFailure(new Error("control-peer-exit:2:agent-version-drift"))).toBeNull();
++  });
++});
++
++describe("the forms built on it (spec A §4.2-§4.4, §4.9)", () => {
++  it("peerCode is ccloop's code, else control-peer-exit, and any other ControlError's own code", () => {
++    expect([peerCode(peer("2:omp-model-catalog-unavailable: x")), peerCode(peer("1:Error: x")), peerCode(new ControlError("control-peer-timeout"))])
++      .toEqual(["omp-model-catalog-unavailable", "control-peer-exit", "control-peer-timeout"]);
++    expect([peerErrorCode(peer("1:file:///x")), peerErrorCode(peer("2:agent-version-drift: table says 2.1.0"))]).toEqual([null, "agent-version-drift"]);
++  });
++
++  it("writes the stored, HTTP and log forms", () => {
++    expect([peerExitText(peerFailure(peer("2:agent-config-invalid: bad"))!), peerExitText(peerFailure(peer("2:agent-version-drift"))!),
++      peerExitText(peerFailure(peer("1:Error: x"))!), peerExitText(peerFailure(peer("1"))!), peerExitText(peerFailure(peer())!)])
++      .toEqual(["2:agent-config-invalid: bad", "2:agent-version-drift", "1:Error: x", "1", ""]);
++    expect([ccloopFailedMessage(peerFailure(peer("2:omp-model-catalog-unavailable: spawn ENOENT"))!), ccloopFailedMessage(peerFailure(peer())!),
++      ccloopFailedMessage(peerFailure(peer("1:Error: x"))!)])
++      .toEqual(["ccloop-failed:omp-model-catalog-unavailable: spawn ENOENT", "ccloop-failed:unknown", "ccloop-failed:unknown: Error: x"]);
++    expect([peerFailureLogLine("run-1", peer("2:agent-config-invalid: bad")), peerFailureLogLine("run-1", peer("1:Error: x")),
++      peerFailureLogLine("run-1", new ControlError("control-peer-timeout"))])
++      .toEqual(["orca-driver: run-1: ccloop agent-config-invalid: bad\n", "orca-driver: run-1: ccloop unknown: Error: x\n", null]);
++  });
++});

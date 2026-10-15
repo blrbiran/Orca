@@ -1,0 +1,310 @@
+# Review package: 9b6391aa..HEAD
+
+## Commits
+b76fe1f3 feat(panel): answer a ccloop peer exit as 424 ccloop-failed with its code and detail
+
+## Files changed
+ src/control/webService.ts               | 10 +++++++-
+ src/panel/controlErrors.ts              | 13 +++++++++-
+ tests/panel/agentSelectionApi.test.ts   | 30 ++++++++++++++++++++--
+ tests/panel/ccloopFailedMapping.test.ts | 44 +++++++++++++++++++++++++++++++++
+ web/src/locales/en.ts                   |  2 ++
+ web/src/locales/zh.ts                   |  1 +
+ web/tests/ccloopFailed.test.ts          | 17 +++++++++++++
+ 7 files changed, 113 insertions(+), 4 deletions(-)
+
+## Diff
+diff --git a/src/control/webService.ts b/src/control/webService.ts
+index 76a43373..d925f2e5 100644
+--- a/src/control/webService.ts
++++ b/src/control/webService.ts
+@@ -1,10 +1,11 @@
++import { peerFailure } from "./ccloopPort.js";
+ import {retainSavedInterruption,readDriverRun} from "./executionDriver.js";
+ import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
+ import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
+ import { assertNoActiveUnbounded } from "./spendCaps.js";
+ import { hasTokenPolicy, saveTokenPolicy, enableOptionalTokenPolicy } from "./fundedAllowance.js";
+ import { budgetAmountSchema, safeInteger } from "./schema.js";
+ import { z } from "zod";
+ import { randomUUID, createHash } from "node:crypto";
+ import { applyWebCommand, lookupWebCommandReplay, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
+ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+@@ -703,21 +704,28 @@ export class WebControlService {
+       const preflight = preflightWebCommand<WebCommandResult>(this.store, command);
+       if (preflight) return preflight.body;
+       const pending = hasPendingAgentUpdate(this.store, command.actorId);
+       if (!pending) {
+         const preview = this.installationPreview;
+         if (!preview || preview.previewId !== command.payload.previewId || preview.baseTableHash !== command.payload.baseTableHash
+           || command.payload.acceptedChangeIds.some((id) => !preview.changes.some((change) => change.changeId === id))) {
+           throw new ControlError("agent-installation-update-conflict", "preview-not-owned-or-changed");
+         }
+       }
+-      const result = await applyAgentUpdate({ store: this.store, port: this.deps.port }, command, context);
++      let result: Awaited<ReturnType<typeof applyAgentUpdate>>;
++      try { result = await applyAgentUpdate({ store: this.store, port: this.deps.port }, command, context); }
++      catch (error) {
++        // Plan correction K2 (2026-10-15): ccloop's apply runs after the outbox row is reserved, and a peer exit leaves the
++        // operation pending for same-identity reconciliation -- its outcome is unknown, so it is not a 424 refusal.
++        if (peerFailure(error) !== null && hasPendingAgentUpdate(this.store, command.actorId)) throw new Error("agent-installation-update-outcome-unknown", { cause: error });
++        throw error;
++      }
+       if (result.status < 300) {
+         this.installationPreview = null;
+         await this.observeAgentUpdates();
+       }
+       return result.body as WebCommandResult;
+     } finally {
+       release?.();
+     }
+   }
+   /** Accounts spec §6.1: the spend caps and the usage calendar, under the spend scope's revision (D5). */
+diff --git a/src/panel/controlErrors.ts b/src/panel/controlErrors.ts
+index 3a94e0b7..471e4ee0 100644
+--- a/src/panel/controlErrors.ts
++++ b/src/panel/controlErrors.ts
+@@ -1,30 +1,33 @@
+ import type { Response } from "express";
++import { ccloopFailedMessage, peerFailure } from "../control/ccloopPort.js";
+ import { ControlError, durableCommandErrorStatus, durableCommandErrorStatuses, nonDurableControlErrorClassifications } from "../control/errors.js";
+ import { commandErrorBodySchema, compareText, type CommandErrorV1 } from "../control/webProtocol.js";
+ import { PANEL_HOST_NOT_ALLOWED } from "./bindGuard.js";
+ import { CSRF_REQUIRED, LOGIN_REQUIRED, PASSWORD_CHANGE_REQUIRED } from "./rejection.js";
+ 
+-type ControlHttpStatus = 400 | 401 | 403 | 404 | 409 | 422 | 423 | 500 | 503;
++type ControlHttpStatus = 400 | 401 | 403 | 404 | 409 | 422 | 423 | 424 | 500 | 503;
+ type ExistingControlCode = keyof typeof durableCommandErrorStatuses | keyof typeof nonDurableControlErrorClassifications;
+ 
+ const panelOnlyErrorStatuses = {
+   [LOGIN_REQUIRED]: 401,
+   [PASSWORD_CHANGE_REQUIRED]: 403,
+   [CSRF_REQUIRED]: 403,
+   [PANEL_HOST_NOT_ALLOWED]: 403,
+   // Accounts spec §3.5: the human-only refusals now reach the Web UI too (a member), so they are catalogued.
+   "control-verb-human-only": 403,
+   "control-field-human-only": 403,
+   "owner-required": 403,
+   // Accounts spec §6.3.2: an agent's import-plan or requirement-draft-accept whose limit exceeds the caps' headroom.
+   "control-limit-over-cap-headroom": 403,
++  // Spec 2026-10-15 ccloop error codes §4.2: ccloop exited non-zero; the message names its code (or `unknown`) and detail.
++  "ccloop-failed": 424,
+   "control-internal-error": 500,
+ } as const satisfies Record<string, ControlHttpStatus> & Partial<Record<ExistingControlCode, never>>;
+ 
+ const readErrorStatuses = {
+   "query-invalid": 400,
+   "usage-query-invalid": 400,
+   "control-operation-in-progress": 503,
+   "control-owner-changed": 503,
+   "control-recovery-busy": 503,
+   "control-writer-active": 503,
+@@ -77,18 +80,26 @@ export function sendMappedControlError(
+ ): void {
+   if (error instanceof ControlError) {
+     const durableStatus = durableCommandErrorStatus(error.code);
+     const directStatus = readErrorStatuses[error.code as keyof typeof readErrorStatuses];
+     if (durableStatus !== null || directStatus !== undefined) {
+       const status = (durableStatus ?? directStatus) as ControlHttpStatus;
+       sendControlError(res, status, error.code, error.message, { ...context, retryable: status === 503 });
+       return;
+     }
+   }
++  // Spec 2026-10-15 ccloop error codes §4.2: a peer exit is a definite, named failure. A command's ccloop calls run before
++  // its transaction or inside a savepoint that is rolled back, and the code stays transient, so nothing was booked
++  // (apply-agent-update, which reserves first, rethrows an unknown outcome as a plain error: webService.ts).
++  const failure = peerFailure(error);
++  if (failure !== null) {
++    sendControlError(res, 424, "ccloop-failed", ccloopFailedMessage(failure), { ...context, retryable: true });
++    return;
++  }
+   sendControlError(
+     res,
+     500,
+     "control-internal-error",
+     "The control read could not be completed.",
+     { ...context, retryable: true },
+   );
+ }
+diff --git a/tests/panel/agentSelectionApi.test.ts b/tests/panel/agentSelectionApi.test.ts
+index d46cf29e..402eeede 100644
+--- a/tests/panel/agentSelectionApi.test.ts
++++ b/tests/panel/agentSelectionApi.test.ts
+@@ -251,23 +251,49 @@ describe("agent selection over a real panel (agent selection spec §6.8)", () =>
+       payload: { baseProposalVersion: before.proposal.proposalVersion, scope: { kind: "task", taskId: "a" }, partial: { agent: "codex" } },
+     })).status).toBe(200);
+     const response = await get(panel, `/api/control/groups/${GROUP}/agent-preview`);
+     expect(response.status).toBe(200);
+     const answer = agentSelectionPreviewSchema.parse(await json(response));
+     expect(answer.slots.find((slot) => slot.key === "task:a")!.outcome).toEqual({ kind: "unavailable", code: "control-peer-exit" });
+     expect(answer.slots.find((slot) => slot.key === "reconcile")!.outcome).toMatchObject({ kind: "resolved", frozen: { selection: { agent: "claude" } } });
+     expect(answer.selectionsHash).toBeNull();
+     // The confirm is not bound to a partial resolution: the transient failure is rethrown, which the panel serves as
+     // a retryable internal error (a transient code has no durable status) -- not as a selection refusal.
++    // Rewritten for the ccloop error codes spec (2026-10-15; its §5 names this criterion): this now encodes that the
++    // rethrown peer exit is answered 424 ccloop-failed, retryable, still not a selection refusal; this stand-in printed no code.
+     const confirmed = await confirm(panel, "agents-confirm-flaky", "0".repeat(64));
+-    expect(confirmed.status).toBe(500);
+-    expect(confirmed.body).toMatchObject({ error: { code: "control-internal-error", retryable: true } });
++    expect(confirmed.status).toBe(424);
++    expect(confirmed.body).toMatchObject({ error: { code: "ccloop-failed", message: "ccloop-failed:unknown", retryable: true } });
++    await panel.close();
++  });
++
++  // ccloop error codes spec (2026-10-15) §4.2, criterion 1: ccloop's code and detail reach the browser, and nothing is booked.
++  it.each([
++    ["names its code", "2:omp-model-catalog-unavailable: spawn ENOENT", "ccloop-failed:omp-model-catalog-unavailable: spawn ENOENT"],
++    ["prints no code", "1:Error: socket closed", "ccloop-failed:unknown: Error: socket closed"],
++  ])("answers a confirm whose ccloop %s as 424 ccloop-failed carrying it, and books no command row", async (_label, stderr, message) => {
++    const failing = async (partial: PartialSelection) => {
++      if (partial.agent === "codex") throw new ControlError("control-peer-exit", stderr);
++      return claudeCodexResolveAgent(partial);
++    };
++    const panel = await boot(`epoch-ccloop-${message.length}`, { resolveAgent: failing });
++    expect((await setPreferences(panel, "prefs-c", { defaultAgent: "claude", perAgent: {} })).status).toBe(200);
++    await importPlan(panel);
++    const before = await view(panel);
++    expect((await command(panel, `/api/control/groups/${GROUP}/proposal/agent`, {
++      commandId: "agent-task-c", expectedRevision: before.summary.commandRevision,
++      payload: { baseProposalVersion: before.proposal.proposalVersion, scope: { kind: "task", taskId: "a" }, partial: { agent: "codex" } },
++    })).status).toBe(200);
++    const confirmed = await confirm(panel, "agents-confirm-ccloop", "0".repeat(64));
++    expect(confirmed.status).toBe(424);
++    expect(confirmed.body).toMatchObject({ error: { code: "ccloop-failed", message, retryable: true } });
++    expect(panel.store.db.prepare("SELECT id FROM commands WHERE id='agents-confirm-ccloop'").get()).toBeUndefined();
+     await panel.close();
+   });
+ 
+   // Wave 3 M-1: a damaged stored overrides document is the store's fault, and is named as it is on the preview.
+   it("refuses a proposal-set-agent and a re-estimate over a damaged group overrides document as recovery-blocked, not as a malformed request", async () => {
+     const panel = await boot("epoch-agents-damaged");
+     expect((await setPreferences(panel, "prefs-d", { defaultAgent: "claude", perAgent: {} })).status).toBe(200);
+     await importPlan(panel);
+     const row = panel.store.db.prepare("SELECT body FROM groups WHERE id=?").get(GROUP)!;
+     panel.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), agentOverrides: { worker: { agent: "not an id!" } } }), GROUP);
+diff --git a/tests/panel/ccloopFailedMapping.test.ts b/tests/panel/ccloopFailedMapping.test.ts
+new file mode 100644
+index 00000000..d46942d2
+--- /dev/null
++++ b/tests/panel/ccloopFailedMapping.test.ts
+@@ -0,0 +1,44 @@
++import { describe, expect, it } from "vitest";
++import { ControlError } from "../../src/control/errors.js";
++import type { ExecutionPort } from "../../src/control/executionPort.js";
++import { WebControlService } from "../../src/control/webService.js";
++import { sendMappedControlError } from "../../src/panel/controlErrors.js";
++import { webFixture } from "../control/fixtures/web.js";
++
++// ccloop error codes spec (2026-10-15) §4.2, criterion 1: a peer exit is a definite failure -- the web files a status under
++// 500 as a refusal and stops looking the command up -- so it must carry ccloop's code and detail and stay retryable.
++// Plan correction K2: apply-agent-update is the one command whose ccloop call runs after it reserved durable state.
++const recorder = () => {
++  const r = { statusCode: 0, body: undefined as unknown, status(code: number) { r.statusCode = code; return r; }, json(body: unknown) { r.body = body; return r; } };
++  return r;
++};
++const mapped = (error: unknown) => { const r = recorder(); sendMappedControlError(r as never, error); return { status: r.statusCode, body: r.body }; };
++
++describe("a peer exit over HTTP (spec A §4.2)", () => {
++  it("maps a peer exit to 424 ccloop-failed with ccloop's code and detail, and one with no code as unknown", () => {
++    expect(mapped(new ControlError("control-peer-exit", "2:agent-config-invalid: bad table"))).toEqual({ status: 424,
++      body: { error: { code: "ccloop-failed", message: "ccloop-failed:agent-config-invalid: bad table", commandRevision: null, evidenceIds: [], retryable: true } } });
++    expect(mapped(new ControlError("control-peer-exit"))).toEqual({ status: 424,
++      body: { error: { code: "ccloop-failed", message: "ccloop-failed:unknown", commandRevision: null, evidenceIds: [], retryable: true } } });
++    // Unchanged (spec A §3): a peer timeout and anything that is not a ControlError stay retryable internal errors.
++    expect([mapped(new ControlError("control-peer-timeout")).status, mapped(new Error("boom")).status]).toEqual([500, 500]);
++  });
++
++  it("keeps an apply-agent-update whose ccloop exited after the outbox reserved it an unknown outcome (500), its operation pending", async () => {
++    const h = await webFixture(); try {
++      const port = {
++        ...(h.deps.port as unknown as Record<string, unknown>),
++        previewAgentInstallations: async () => ({ schema: "orca-agent-detection-preview-v1", previewId: "preview-1", baseTableHash: "a".repeat(64),
++          observedAt: "2026-10-15T00:00:00.000Z", installed: [], changes: [{ changeId: "change-1" }] }),
++        applyAgentInstallations: async () => { throw new ControlError("control-peer-exit", "2:agent-installation-apply-failed: disk full"); },
++      } as unknown as ExecutionPort;
++      const service = new WebControlService({ ...h.deps, port });
++      await service.previewAgentUpdates();
++      const command = { schema: "orca-raw-command-v1", commandId: "update-1", expectedRevision: 0, actorId: "human", verb: "apply-agent-update",
++        target: { kind: "operator", operatorId: "human" }, payload: { previewId: "preview-1", baseTableHash: "a".repeat(64), acceptedChangeIds: ["change-1"] } } as never;
++      const failure = await service.applyAgentUpdate(command, { client: "web", principal: "user:owner" }).then(() => null, (error: unknown) => error);
++      expect(mapped(failure).status).toBe(500);
++      expect(h.store.db.prepare("SELECT state FROM agent_update_outbox WHERE operator_id='human'").get()).toEqual({ state: "pending" });
++    } finally { await h.dispose(); }
++  });
++});
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index 23213cd3..1e0171d2 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -1051,20 +1051,22 @@ export const enErrors: Record<string, string> = {
+   "agent-context-unsupported": "The agent does not support this context window: {{detail}}",
+   "agent-installation-missing": "The agents table has no installation of this agent: {{detail}}",
+   "agent-installation-update-stale": "The installation table changed. Detect again before applying.",
+   "agent-installation-update-conflict": "The installation preview or operation conflicts with the current table. Detect again and review it.",
+   "agent-installation-update-invalid": "The proposed installation update is invalid: {{detail}}",
+   "agent-installation-update-pending": "An installation update is still being reconciled. Keep its command ID and check the result.",
+   "control-agent-update-unsupported": "This ccloop version cannot review installation updates. Existing agent settings remain available.",
+   "agent-selection-changed": "The agent selections changed before the confirmation. Read the group again, then confirm.",
+   "agent-selection-invalid": "The agent selection is not valid: {{detail}}",
+   "agent-selection-rejected": "ccloop refused this agent selection: {{detail}}",
++  // ccloop error codes spec (2026-10-15) §4.2: ccloop exited non-zero; the detail is `<code>: <detail>` (web/src/ccloopCodes.ts explains a known code).
++  "ccloop-failed": "ccloop failed: {{detail}}",
+   "agent-unselected": "A slot has no agent selected. Choose an agent for every slot, then confirm.",
+   "agent-version-drift": "The agent's version differs from the recorded one: {{detail}}",
+   "agents-table-invalid": "The agents table is not valid: {{detail}}",
+   "archive-call-in-flight": "A model call for this group is still running ({{detail}}). Archive it once the call has finished.",
+   "archive-integration-resolving": "An agent is resolving this group's integration conflict. Archive it once that has finished.",
+   "archive-run-active": "This group still has an active run. Wait for it to finish, or stop it with Handoff stop, then archive. If the group is paused, press Resume dispatch first: Handoff stop is not offered under a pause.",
+   "archive-stop-pending": "A stop is still settling. Archive the group once its handoff has finished, completely or partially. If it is unresolved, retry recovery first.",
+   "artifact-id-conflict": "The artifact id conflicts with an existing one.",
+   "artifact-not-found": "The artifact was not found.",
+   "budget-overflow": "A budget value is too large: {{detail}}",
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index 2ece1792..556c2acc 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -989,20 +989,21 @@ export const zhErrors: Record<string, string> = {
+   "agent-context-unsupported": "agent 不支持这个上下文窗口：{{message}}",
+   "agent-installation-missing": "安装表里没有这个 agent：{{message}}",
+   "agent-installation-update-stale": "安装表已变化。请重新检测后再应用。",
+   "agent-installation-update-conflict": "安装预览或操作与当前表冲突。请重新检测并检查。",
+   "agent-installation-update-invalid": "安装更新无效：{{detail}}",
+   "agent-installation-update-pending": "安装更新的结果仍在核对中。请保留命令 ID 并查看结果。",
+   "control-agent-update-unsupported": "这个 ccloop 版本不支持安装更新检查。原有 agent 设置仍可使用。",
+   "agent-selection-changed": "agent 选择在确认时已变化，请重新读取后再确认。",
+   "agent-selection-invalid": "agent 选择不合法：{{message}}",
+   "agent-selection-rejected": "ccloop 拒绝了这个 agent 选择：{{message}}",
++  "ccloop-failed": "ccloop 执行失败：{{detail}}",
+   "agent-unselected": "有槽位没有选定 agent。",
+   "agent-version-drift": "agent 版本与记录的不一致：{{message}}",
+   "agents-table-invalid": "agent 安装表不合法：{{message}}",
+   "archive-call-in-flight": "这个组还有一次模型调用在进行（{{detail}}）。等调用结束后再归档。",
+   "archive-integration-resolving": "agent 正在解决这个组的集成冲突。等它结束后再归档。",
+   "archive-run-active": "这个组还有正在进行的运行。等它结束，或先用“交接停止”停下，再归档。如果组已暂停，先点「恢复调度」：暂停时不提供「交接停止」。",
+   "archive-stop-pending": "停止还没有完成。等交接结束（全部完成或部分完成）后再归档。如果停止状态未解决，请先重试恢复。",
+   "artifact-id-conflict": "产物 id 冲突。",
+   "artifact-not-found": "找不到这个产物。",
+   "budget-overflow": "预算数值溢出：{{message}}",
+diff --git a/web/tests/ccloopFailed.test.ts b/web/tests/ccloopFailed.test.ts
+new file mode 100644
+index 00000000..c9211f13
+--- /dev/null
++++ b/web/tests/ccloopFailed.test.ts
+@@ -0,0 +1,17 @@
++// @vitest-environment jsdom
++import { afterEach, describe, expect, it, vi } from "vitest";
++import { sendControlCommand } from "../src/controlApi.js";
++
++afterEach(() => { vi.unstubAllGlobals(); });
++
++// ccloop error codes spec (2026-10-15) §4.2: the server's 424 is only useful if the web files it as a durable refusal --
++// a status of 500 or more is "may not have committed" and is looked up instead (controlApi.ts sendControlCommand). This
++// pins the web side the server change relies on; it is green before Task A2 (no web change is needed).
++describe("a 424 ccloop-failed in the browser", () => {
++  it("is an answered refusal, not an uncertain outcome", async () => {
++    const body = { error: { code: "ccloop-failed", message: "ccloop-failed:omp-model-catalog-unavailable: spawn ENOENT", commandRevision: 3, evidenceIds: [], retryable: true } };
++    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status: 424, headers: { "content-type": "application/json" } })));
++    expect(await sendControlCommand("/api/control/groups/g/confirm", { commandId: "c-1", expectedRevision: 3, payload: {} } as never))
++      .toEqual({ kind: "answered", status: 424, body });
++  });
++});

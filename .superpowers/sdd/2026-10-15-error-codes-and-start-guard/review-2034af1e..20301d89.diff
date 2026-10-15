@@ -1,0 +1,202 @@
+# Review package: 2034af1e..HEAD
+
+## Commits
+20301d89 refactor(control): share the execution-pending predicate between the group view and start
+
+## Files changed
+ src/control/executionPending.ts        | 55 ++++++++++++++++++++++++++++++++++
+ src/panel/controlViews.ts              | 22 ++------------
+ tests/control/executionPending.test.ts | 34 +++++++++++++++++++++
+ 3 files changed, 92 insertions(+), 19 deletions(-)
+
+## Diff
+diff --git a/src/control/executionPending.ts b/src/control/executionPending.ts
+new file mode 100644
+index 00000000..ab4b10f9
+--- /dev/null
++++ b/src/control/executionPending.ts
+@@ -0,0 +1,55 @@
++import type { ControlStore } from "./store.js";
++
++/**
++ * Start guard spec (2026-10-15) §3.1 (feedback #53): a Web start only queues a wake and its claim only marks the work item,
++ * so the stored group status stays `ready` through the first run. One predicate says the group's execution is pending or
++ * running; the group view reads it over its snapshot (Start is hidden), `start` reads it from the store (it is refused).
++ * Defined only for a group with an archived plan; callers check requirement-not-split first.
++ */
++/** Work statuses that mean a task's execution is under way (the overview's start gate reads the same set). */
++export const BUSY_WORK: ReadonlySet<string> = new Set(["running", "active", "starting", "start-unknown", "held", "continuing"]);
++/** The wakes that dispatch a group's work. `continuation` is not one: nothing writes it (continuations arm `resume`). */
++export const EXECUTION_WAKE_KINDS: ReadonlySet<string> = new Set(["start", "no-start", "resume"]);
++
++export interface ExecutionFacts {
++  readonly undeliveredWakeKinds: readonly string[];
++  /** The `phase` of each active run: estimate, clarify and split single calls share the table and do not count. */
++  readonly activeRunPhases: readonly unknown[];
++  readonly taskStatuses: readonly unknown[];
++}
++export function executionPendingFrom(facts: ExecutionFacts): boolean {
++  return facts.undeliveredWakeKinds.some((kind) => EXECUTION_WAKE_KINDS.has(kind))
++    || facts.activeRunPhases.some((phase) => phase === "work")
++    || facts.taskStatuses.some((status) => BUSY_WORK.has(String(status)));
++}
++
++type StoredJson = { ok: true; value: unknown } | { ok: false; error: SyntaxError };
++export interface ExecutionSnapshot {
++  readonly runsByRowid: ReadonlyArray<{ readonly id: string; readonly active: number }>;
++  decodeRun(id: string): StoredJson | undefined;
++  decodeWork(id: string): StoredJson | undefined;
++}
++const field = (result: StoredJson | undefined, name: string): unknown =>
++  result?.ok === true && typeof result.value === "object" && result.value !== null ? (result.value as Record<string, unknown>)[name] : undefined;
++const decode = (body: unknown): StoredJson => { try { return { ok: true, value: JSON.parse(String(body)) }; } catch (error) { return { ok: false, error: error as SyntaxError }; } };
++function undeliveredWakeKinds(store: ControlStore, groupId: string): string[] {
++  return store.db.prepare("SELECT kind FROM scheduler_wakes WHERE group_id=? AND delivered=0").all(groupId).map((row) => String(row.kind));
++}
++
++/** The group view's entry: the facts its read snapshot holds; a row whose body does not decode is skipped. */
++export function groupExecutionPending(store: ControlStore, groupId: string, taskIds: readonly string[], snapshot: ExecutionSnapshot): boolean {
++  return executionPendingFrom({
++    undeliveredWakeKinds: undeliveredWakeKinds(store, groupId),
++    activeRunPhases: snapshot.runsByRowid.filter((row) => row.active === 1).map((row) => field(snapshot.decodeRun(row.id), "phase")),
++    taskStatuses: taskIds.map((taskId) => field(snapshot.decodeWork(taskId), "status")),
++  });
++}
++/** `start`'s entry: the same facts read from the store, inside the caller's transaction (the group's task work items). */
++export function groupExecutionPendingInStore(store: ControlStore, groupId: string): boolean {
++  return executionPendingFrom({
++    undeliveredWakeKinds: undeliveredWakeKinds(store, groupId),
++    activeRunPhases: store.db.prepare("SELECT body FROM runs WHERE group_id=? AND active=1").all(groupId).map((row) => field(decode(row.body), "phase")),
++    taskStatuses: store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId).map((row) => decode(row.body))
++      .filter((result) => field(result, "kind") === "task").map((result) => field(result, "status")),
++  });
++}
+diff --git a/src/panel/controlViews.ts b/src/panel/controlViews.ts
+index 3ba7d23a..95750f25 100644
+--- a/src/panel/controlViews.ts
++++ b/src/panel/controlViews.ts
+@@ -3,20 +3,21 @@ import {savedDispatchSchema,recoveryOfSchema,savedRecoverySchema,savedSourceSche
+ import { hasOptionalTaskPolicy, readFundedAllowance } from "../control/fundedAllowance.js";
+ import { tokenPolicySchema, tokenRemainingStatus } from "../control/tokenPolicy.js";
+ import { budgetAmountSchema } from "../control/schema.js";
+ import { readGroupSnapshot, type GroupReadSnapshot, type StoredJsonResult } from "./groupReadSnapshot.js";
+ import { validateRetryGrantSource } from "../control/retryGrant.js";
+ import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executionSnapshot.js";
+ import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
+ import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
+ import { readAgentPreferences } from "../control/agentPreferences.js";
+ import { peerCode } from "../control/ccloopPort.js";
++import { groupExecutionPending } from "../control/executionPending.js";
+ import type { ExecutionPort } from "../control/executionPort.js";
+ import { z } from "zod";
+ import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint } from "../control/usageSettlement.js";
+ import { settlementAcknowledgeFor, settlementAdmission } from "../control/settleUnknownUsage.js";
+ import { readArtifact } from "../control/archive.js";
+ import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
+ import { dimensions } from "../control/commands.js";
+ import { driveRecordSchema } from "../control/driveRecord.js";
+ import { ControlError, nonDurableControlErrorClassifications } from "../control/errors.js";
+ import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
+@@ -353,38 +354,21 @@ function taskCompletion(snapshot: GroupReadSnapshot, plan: ReturnType<typeof rea
+     let work: StoredWork | null = null;
+     try { work = decodedValue(snapshot.decodeWork(task.taskId)) as StoredWork ?? null; } catch { work = null; }
+     if (work?.status === "done" || work?.status === "completed") done += 1;
+     if (work !== null) {
+       try { counts[categoryOf(snapshot, work)] += 1; } catch { /* in no count: the view names it */ }
+     }
+   }
+   return { completion: { done, total: plan.tasks.length }, counts };
+ }
+ 
+-/** Work statuses that mean a task's execution is under way (shared with the overview's start gate). */
+-export const BUSY_WORK = new Set(["running", "active", "starting", "start-unknown", "held", "continuing"]);
+-
+-/**
+- * Feedback #53: a Web start only queues a wake and its claim only marks the work item, so the stored group
+- * status stays `ready` (active-ready) through the first run. The summary says whether a dispatch wake is
+- * undelivered or execution is busy, the same facts the overview's start gate refuses on, so the group view's
+- * Start gate and dispatch region read the server's answer instead of the stored status alone.
+- */
+-function executionPending(store: ControlStore, groupId: string, snapshot: GroupReadSnapshot, plan: ReturnType<typeof readArchivedPlan>["plan"]): boolean {
+-  const pendingWake = store.db.prepare("SELECT kind FROM scheduler_wakes WHERE group_id=? AND delivered=0").all(groupId)
+-    .some(row => ["start", "no-start", "resume", "continuation"].includes(String(row.kind)));
+-  if (pendingWake || snapshot.runsByRowid.some(row => row.active === 1)) return true;
+-  return plan.tasks.some(task => {
+-    const result = snapshot.decodeWork(task.taskId);
+-    return result?.ok === true && BUSY_WORK.has(String((result.value as { status?: unknown } | null)?.status));
+-  });
+-}
++export { BUSY_WORK } from "../control/executionPending.js";
+ 
+ /**
+  * Final review finding 4: the requirement's own call (a clarify or split run, never a work run of the group it became)
+  * that the driver blocked, with its reason; null when there is none.
+  */
+ function blockedRequirementRun(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot): RequirementSummaryV1["blockedRun"] {
+   const rows = snapshot === undefined
+     ? store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1 ORDER BY rowid").all(groupId)
+     : snapshot.runsByRowid.filter(row => row.active === 1);
+   for (const row of rows) {
+@@ -446,21 +430,21 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
+     projectionSeq: Number(versions.projection_seq),
+     stopMode: stop?.mode ?? null,
+     stopState: stop?.state ?? null,
+     claimBlocked: blockers.length > 0,
+     recoveryBlockerCount: blockers.length,
+     ...(tally === null ? {} : { completion: tally.completion, counts: tally.counts }),
+     goal: archived !== null ? archived.plan.goal : readRequirementGroup(store, groupId).requirement.idea,
+     branch: workBranchRef(groupId).slice("refs/heads/".length),
+     updatedAt: latestGroupActivityAt(store, groupId),
+     archived: archivedMarkOf(body) !== null,
+-    ...(archived === null ? {} : { executionPending: executionPending(store, groupId, readSnapshot!, archived.plan) }),
++    ...(archived === null ? {} : { executionPending: groupExecutionPending(store, groupId, archived.plan.tasks.map((task) => task.taskId), readSnapshot!) }),
+     ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),
+   };
+   const parsed = groupSummarySchema.safeParse(summary);
+   if (!parsed.success) return blocked(`group-summary:${parsed.error.issues[0]?.message ?? "invalid"}`);
+   return parsed.data;
+ }
+ 
+ /** Stored overview facts share one lazy row snapshot; detail still owns proof/profile admission. */
+ export function readOverviewGroupSource(store: ControlStore, groupId: string) {
+   const body = groupBody(store, groupId);
+diff --git a/tests/control/executionPending.test.ts b/tests/control/executionPending.test.ts
+new file mode 100644
+index 00000000..700c3b11
+--- /dev/null
++++ b/tests/control/executionPending.test.ts
+@@ -0,0 +1,34 @@
++import { describe, expect, it } from "vitest";
++import { executionPendingFrom, groupExecutionPendingInStore } from "../../src/control/executionPending.js";
++import { WebControlService } from "../../src/control/webService.js";
++import { readControlGroup } from "../../src/panel/controlViews.js";
++import { profileSnapshot, webFixture } from "./fixtures/web.js";
++
++// Start guard spec (2026-10-15) §3.1: one predicate decides "this group's execution is pending or running" for the group
++// view (which hides Start) and for start's guard (which refuses it) -- two copies drifted once already. An estimate,
++// clarify or split single call shares the runs table and is not execution: it has its own guards.
++async function confirmed() {
++  const h = await webFixture(profileSnapshot());
++  const service = new WebControlService(h.deps);
++  await service.confirm(h.command("confirm", await h.confirmPayload()));
++  return { h, service };
++}
++
++describe("the execution-pending predicate (spec B §3.1)", () => {
++  it("counts only dispatch wakes, work runs and busy work statuses", () => {
++    expect(executionPendingFrom({ undeliveredWakeKinds: ["continuation", "budget-estimate", "requirement-call", "requirement-export"],
++      activeRunPhases: ["single-call", "handoff", undefined], taskStatuses: ["draft", "ready", "done", "blocked", "completed", undefined] })).toBe(false);
++    const one = (facts: Partial<Parameters<typeof executionPendingFrom>[0]>) => executionPendingFrom({ undeliveredWakeKinds: [], activeRunPhases: [], taskStatuses: [], ...facts });
++    expect([one({ undeliveredWakeKinds: ["start"] }), one({ undeliveredWakeKinds: ["no-start"] }), one({ undeliveredWakeKinds: ["resume"] }), one({ activeRunPhases: ["work"] }),
++      ...["running", "active", "starting", "start-unknown", "held", "continuing"].map((status) => one({ taskStatuses: [status] }))])
++      .toEqual([true, true, true, true, true, true, true, true, true, true]);
++  });
++
++  it("an active estimate run alone is not pending, in the view and in the store", async () => {
++    const { h, service } = await confirmed(); try {
++      expect(await service.claimEstimate("g", h.estimateId)).not.toBeNull();
++      expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g' AND active=1").get()!.n).toBe(1);
++      expect([readControlGroup(h.store, "epoch-test", "g").summary.executionPending, groupExecutionPendingInStore(h.store, "g")]).toEqual([false, false]);
++    } finally { await h.dispose(); }
++  });
++});

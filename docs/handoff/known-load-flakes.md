@@ -59,6 +59,8 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
   - **新登记** `tests/scheduler/reconcile.test.ts` › names the files a reconciled commit still has conflict markers in：5 s 超时，`verify:scheduler` 201/202（负载 13）；未单跑，之后 round 分支（同样的改动）`verify:scheduler` 0 红。
   - **新登记的 web 条**（实施子代理 `--ws check` 与别的会话并跑时见到，各单跑 3/3 绿）：`web/tests/reviewApp.test.tsx` › records one review for a second 'a'…（**基线上也红**）、`controlCommandRecovery` › drops the id…（上表已有）、`loopPlanDraft` › keeps the draft through a refusal…、`projectSwitcher` › C: the Requirements, Chains and Memory selects…、`loopSuggestionDraft.test.tsx` 第 99 行那条（行号为当时观测）。
 
+**`026d10e3`（2026-10-15）**：`feat/error-codes-start-guard` 终门的首次全量（负载约 11–15，同机另有会话）红 24 条，全是超时形状——`settleUnknownUsage` ×15、`retryTask` ×2、`archivedWakePerformance`、`driverReconcileN`（`the driver did not reach the expected state before the deadline`）、`driverRecovery`、`driverRequirementSplit`、`integrationKeep` 各 1，另 `verify:control` 段 `settleUnknownUsage`「keeps another run's unknown/open request blocker (silent=false)」1 条；同一棵树第二次全量（`verify:chain` 段）全部通过；7 个文件负载 6.4–9.9 下单跑各 3/3 绿。repin 门（同会话）同形：8 超时，第二次全量消失。`profiledService` 在 B2 普查里超时一次、单跑 3/3（新候选，未入表）。
+
 ### 已修、不再豁免的（再红就当新问题查）
 
 - `tests/control/driverSettle.test.ts` 真 git 场景：全量＋并发下撞 5 s，已给 30 s。再红要查。
@@ -70,7 +72,8 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 
 - 没 `npm run build --workspace web` 就跑 `tests/panel` ⇒ `panel-dist-missing`。
 - `ORCA_AGENTS_TABLE` 的 fake codex 不是 `integration` 模式，或用了真实 agent 表 ⇒ `tests/control/ccloopProtocol.integration.test.ts` 红。
-- `taskResultPaired` 两条硬编码旧配对二进制路径；用本地 ccloop 构建（如 OMP 分支）跑会红（2026-10-12～13 观测）。
+- `taskResultPaired` 两条硬编码旧配对二进制路径；用本地 ccloop 构建（如 OMP 分支）跑会红（2026-10-12～13 观测）。⚠️ 更正（会话 `026d10e3`，2026-10-15 现测）：**不设 `ORCA_CCLOOP_BIN` 也红**（`expected [...] to include undefined`）——它只在变量恰好等于那两条 `/private/tmp/…` 路径之一时才绿，任何正常的门里都是固定红。
+- 不设 `ORCA_CCLOOP_BIN` 跑根级全量或 `verify:scheduler` ⇒ `tests/scheduler/**` 与 `schedulerBridge` 约 39–43 条红（`ccloop bin not found at …/Orca-wt/ccloop/dist/cli.js (from the sibling-directory default)`）；要指一份 ccloop build clone。
 - `tests/control/ompSkillsE2E.test.ts` 以 `ZodError … payload.selectionsHash … received null` 红：会话 `1f3cceb2` 2026-10-14 用 `ORCA_CCLOOP_BIN` 指向本机 ccloop 构建时，分支与 main 基线上都 3/3 红 ⇒ 真 ccloop 版本与夹具不配套，不是 flake，也不是 UI 改动造成。
 - 普通沙箱下 `spawnSync ps EPERM`／`listen EPERM` 大面积红（2026-10-10、10-12）⇒ 用本机进程权限重跑。
 - `TMPDIR` 太长（tsx socket 超 104 字节、`EADDRINUSE`）或是软链（git 报真实路径）⇒ 各约 7 条假红；用短真目录。

@@ -1,0 +1,37 @@
+# Review package: 969017f1..HEAD
+
+## Commits
+de176903 test(control): pin the reconcile fallback code for a non-ControlError
+
+## Files changed
+ tests/control/peerCodeStored.test.ts | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+## Diff
+diff --git a/tests/control/peerCodeStored.test.ts b/tests/control/peerCodeStored.test.ts
+index c3a75028..80a9beeb 100644
+--- a/tests/control/peerCodeStored.test.ts
++++ b/tests/control/peerCodeStored.test.ts
+@@ -57,11 +57,22 @@ describe("stored codes keep ccloop's code (spec A §4.3)", () => {
+       await crashing.observeAgentUpdates();
+       expect(crashing.agentUpdateView("human").failureCode).toBe("control-internal-error");
+       // A pending operation (ccloop died during apply), reconciled at startup against a ccloop that fails again.
+       const dying = { applyAgentInstallations: async () => { throw new ControlError("control-peer-exit", "2:agent-installation-apply-failed: disk full"); } } as unknown as ExecutionPort;
+       await expect(applyAgentUpdate({ store: h.store, port: dying }, apply, { client: "web", principal: "user:owner" })).rejects.toMatchObject({ code: "control-peer-exit" });
+       const reconciling = new WebControlService({ ...h.deps, port: { ...base, applyAgentInstallations: dying.applyAgentInstallations, observeAgentInstallations: async () => observation } as unknown as ExecutionPort });
+       await reconciling.recoverAgentUpdates();
+       expect(reconciling.agentUpdateView("human").failureCode).toBe("agent-installation-apply-failed");
+     } finally { await h.dispose(); }
+   });
++
++  it("F4: a reconciliation that fails with a non-ControlError stores control-internal-error", async () => {
++    const h = await webFixture(); try {
++      const base = h.deps.port as unknown as Record<string, unknown>;
++      const dying = { applyAgentInstallations: async () => { throw new ControlError("control-peer-exit", "2:agent-installation-apply-failed: disk full"); } } as unknown as ExecutionPort;
++      await expect(applyAgentUpdate({ store: h.store, port: dying }, apply, { client: "web", principal: "user:owner" })).rejects.toMatchObject({ code: "control-peer-exit" });
++      const crashing = new WebControlService({ ...h.deps, port: { ...base, applyAgentInstallations: async () => { throw new Error("socket hang up"); }, observeAgentInstallations: async () => observation } as unknown as ExecutionPort });
++      await crashing.recoverAgentUpdates();
++      expect(crashing.agentUpdateView("human").failureCode).toBe("control-internal-error");
++    } finally { await h.dispose(); }
++  });
+ });

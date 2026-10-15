@@ -1,0 +1,53 @@
+# Review package: 8355528b..HEAD
+
+## Commits
+b22a1b57 test(web): pin that an uncounted run shows no task run number (#61)
+
+## Files changed
+ web/tests/runAttemptLabel.test.tsx | 28 ++++++++++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
+
+## Diff
+diff --git a/web/tests/runAttemptLabel.test.tsx b/web/tests/runAttemptLabel.test.tsx
+index e629366c..c706f775 100644
+--- a/web/tests/runAttemptLabel.test.tsx
++++ b/web/tests/runAttemptLabel.test.tsx
+@@ -25,10 +25,38 @@ describe("the Runs table's attempt and run number (feedback #61)", () => {
+     expect(second).toContain(" · attempt 1 in this run (claim 2) · run 2 of this task");
+   });
+ 
+   it("in Chinese", async () => {
+     await i18n.changeLanguage("zh");
+     const [first, second] = shown();
+     expect(first).toContain(" · 本次运行内第 3 次尝试（认领序号 1） · 这个任务的第 1 次运行");
+     expect(second).toContain(" · 本次运行内第 1 次尝试（认领序号 2） · 这个任务的第 2 次运行");
+   });
+ });
++
++const uncounted = () => view([workItem({ taskId: "b", status: "active", currentRunId: "rb-2", lineageRunIds: ["rb-1", "rb-2"] })], [
++  run({ runId: "rb-1", taskId: "b", state: "failed-before-provider", claimOrdinal: 1, providerAttemptOrdinal: 2, createdOrdinal: 1 }),
++  run({ runId: "est-run", taskId: null, estimateId: "est-1", phase: "estimate", claimOrdinal: 2, providerAttemptOrdinal: 4, createdOrdinal: 2 }),
++  run({ runId: "rb-2", taskId: "b", state: "running", claimOrdinal: 3, providerAttemptOrdinal: 1, createdOrdinal: 3 }),
++]);
++const shownUncounted = () => stateCells(render(<ControlGroupView view={uncounted()} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container);
++
++describe("a run its task does not count shows no task run number (feedback #61)", () => {
++  it("in English: a failed-before-provider run and an estimate run keep the attempt label only; the counted run is run 1", () => {
++    const [failed, estimate, counted] = shownUncounted();
++    expect(failed).toContain(" · attempt 2 in this run (claim 1)");
++    expect(failed).not.toContain("of this task");
++    expect(estimate).toContain(" · attempt 4 in this run (claim 2)");
++    expect(estimate).not.toContain("of this task");
++    expect(counted).toContain(" · attempt 1 in this run (claim 3) · run 1 of this task");
++  });
++
++  it("in Chinese", async () => {
++    await i18n.changeLanguage("zh");
++    const [failed, estimate, counted] = shownUncounted();
++    expect(failed).toContain(" · 本次运行内第 2 次尝试（认领序号 1）");
++    expect(failed).not.toContain("这个任务的第");
++    expect(estimate).toContain(" · 本次运行内第 4 次尝试（认领序号 2）");
++    expect(estimate).not.toContain("这个任务的第");
++    expect(counted).toContain(" · 本次运行内第 1 次尝试（认领序号 3） · 这个任务的第 1 次运行");
++  });
++});

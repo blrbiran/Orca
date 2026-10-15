@@ -1,0 +1,546 @@
+# Review package: 20301d89..HEAD
+
+## Commits
+08276cf2 test(control): healing dispatches the queued wake and a second start is refused (#53)
+a3c723c9 test(control): claim through a pending wake and deliver no-start before start under the #53 guard
+f084ed58 feat(control): refuse a second start while the group's execution is pending (#53)
+
+## Files changed
+ skills/orca-control/SKILL.md             |   2 +-
+ src/control/errors.ts                    |   2 +
+ src/control/webDispatch.ts               |  15 ++++
+ tests/control/fixtures/driverHarness.ts  |  16 +++-
+ tests/control/handoffFailedRetry.test.ts |   3 +
+ tests/control/shutdownHealing.test.ts    |   4 +-
+ tests/control/startGuard.test.ts         | 130 +++++++++++++++++++++++++++++++
+ tests/entry/skill.test.ts                |   6 ++
+ tests/panel/startGuardSocket.test.ts     |  36 +++++++++
+ web/src/locales/en.ts                    |   1 +
+ web/src/locales/zh.ts                    |   1 +
+ 11 files changed, 210 insertions(+), 6 deletions(-)
+
+## Diff
+diff --git a/skills/orca-control/SKILL.md b/skills/orca-control/SKILL.md
+index c854d6b1..37e07918 100644
+--- a/skills/orca-control/SKILL.md
++++ b/skills/orca-control/SKILL.md
+@@ -22,21 +22,21 @@ execution attempt. A **requirement** is the same group while an idea is clarifie
+ it into a draft task group. Read the returned state rather than infer success from a command being accepted.
+ 
+ 1. Read `config`, `summary` and `recovery`. Choose a concrete registered repository; never guess a filesystem path.
+ 2. Open a requirement only with a single-call capable agent (the pinned Codex adapter lacks that capability), or import
+    a registered plan. Read the group/requirement before each edit; use its current `commandRevision`.
+ 3. Review task goals, acceptance, limits, optional token policy, workspace and integration. Check the effective worker,
+    estimator and reconcile Agent selections, plus worker, handoff and goal-review profile bindings. Confirm the task
+    plan with real profile/selection hashes from the reads, then send `groups/<id>/start` at the new revision.
+    Confirmation and start are separate.
+ 4. Poll `groups/<id>` every 30–60 seconds. The driver schedules dependencies within a started group automatically.
+-   A group's `state` stays `ready` while a Web-started first run is pending or executing; read `executionPending` on the group summary before sending `start` (the server still accepts a second start while one is pending).
++   A group's `state` stays `ready` while a Web-started first run is pending or executing; read `executionPending` on the group summary: while it is true the server refuses `start` with `group-execution-pending` (409) and dispatches the group's next task itself.
+ 5. On failure, read `groups/<id>`, `runs/<id>/activity`, `runs/<id>/evidence` and, for a saved execution failure,
+    `runs/<id>/saved-result-eligibility`. Report the recorded phase, typed cause when present, raw code and run/attempt
+    identity. Older unknown causes stay unknown; never infer token exhaustion from a decode error. Use only the
+    evidence manifest's authorized routes. A successful command response does not prove provider completion.
+ 
+ Example diagnosis (replace ids with those returned by your reads):
+ 
+ ```sh
+ orca control get summary
+ orca control get groups/<groupId>
+diff --git a/src/control/errors.ts b/src/control/errors.ts
+index 32b72c2a..e00bd54f 100644
+--- a/src/control/errors.ts
++++ b/src/control/errors.ts
+@@ -86,20 +86,22 @@ export const durableCommandErrorStatuses = {
+   "run-usage-settled": 409,
+   "run-usage-not-unknown": 409,
+   "run-generation-conflict": 409,
+   "run-grant-conflict": 409,
+   "run-owner-conflict": 409,
+   // Issue fixes spec §4.2(3): recovery-retry on a run ccloop ended failed; only retry-task moves it.
+   "run-terminal-failed": 409,
+   "start-contract-conflict": 409,
+   "start-envelope-conflict": 409,
+   "start-state-conflict": 409,
++  // Start guard spec (2026-10-15) §3.2: a start while the group's execution is pending or running (feedback #53).
++  "group-execution-pending": 409,
+   "stop-already-active": 409,
+   "stop-mode-conflict": 409,
+   "target-version-conflict": 409,
+   // Loop plans spec §5.2 step 3: the task's plan moved since the person read it.
+   "task-loop-version-conflict": 409,
+   // Issue fixes spec §4.2(2): retry-task on a task whose current run is not one ccloop ended failed (the detail names why).
+   "task-not-retryable": 409,
+   "saved-result-unavailable":409,
+   "saved-result-source-stale":409,
+   "saved-result-usage-unsettled":409,
+diff --git a/src/control/webDispatch.ts b/src/control/webDispatch.ts
+index dea5b8fc..721b573d 100644
+--- a/src/control/webDispatch.ts
++++ b/src/control/webDispatch.ts
+@@ -19,20 +19,21 @@ import type { WakeHandler, WakeHandlers } from "./dispatch.js";
+ import type { ControlStore } from "./store.js";
+ import type { AgentSelection } from "./agentSelection.js";
+ import { frozenWorkAgent } from "./agentFreeze.js";
+ import { claimableContinuations, continuationAlreadyClaimed, continuationWakeBody, type RegisteredContinuation } from "./continuation.js";
+ import { singleCallClaimRowOf } from "./singleCall.js";
+ import { claimRequirementCall } from "./requirementCalls.js";
+ import { hasRequirementBlock, readRequirementGroup } from "./requirementRecords.js";
+ import { archivedMarkOf, isGroupArchived } from "./archivedMark.js";
+ import { claimCapBlocking, gateClaim, clearSpendCapBlock, recordCapBlock, capStatuses } from "./spendCaps.js";
+ import { noteRunWrite, recordActivity } from "./activity.js";
++import { groupExecutionPendingInStore } from "./executionPending.js";
+ 
+ export type Phase = "estimate" | "work" | "handoff" | "single-call";
+ export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
+ /** `now` dates the spend caps' periods at a claim (accounts spec §6.3.1); the service's clock type, the wall clock unless given. */
+ export interface WebDispatchDeps { store: ControlStore; profileRouter: ExecutionProfileRouter; admissionGate?: AdmissionGate; now?: () => Date }
+ export interface AttemptTuple { runId: string; generation: number; phase: Phase; providerAttemptOrdinal: number }
+ export interface DispatchRun {
+   runId: string; groupId: string; workItemId: string; taskId: string | null; generation: number;
+   graphVersion: number; targetVersion: number; commandId: string; configHash: string; agent: AgentSelection;
+   grant: { work: unknown; handoff: unknown }; ownerToken: string; state: string; phase: Phase;
+@@ -117,44 +118,58 @@ function scopedProbeBlocks(store:ControlStore,groupId:string,entry:ScopedObserva
+ 
+ function success(context: WebCommandContext, result: CommandSuccessV1["result"], status = 200): { status: number; body: CommandSuccessV1 } {
+   return { status, body: {
+     schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId, verb: context.rawCommand.verb,
+     target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,
+     effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash, result,
+   } };
+ }
+ 
+ /** Commit the durable start wake only after the frozen profiles still probe clean. */
++/** Start guard spec (2026-10-15) §3.2: a group with a plan whose execution is pending; a clarifying group is left to requirement-not-split. */
++function startRefusedAsPending(store: ControlStore, groupId: string): boolean {
++  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
++  if (row === undefined || (JSON.parse(String(row.body)) as { status?: unknown }).status === "clarifying") return false;
++  return groupExecutionPendingInStore(store, groupId);
++}
++function refuseStart(store: ControlStore, command: StartCommand): CommandResult {
++  const refusal = new ControlError("group-execution-pending");
++  return applyWebCommand<CommandResult>(store, { rawCommand: command, expand: () => { throw refusal; }, apply: () => { throw refusal; } }).body;
++}
+ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand): Promise<CommandResult> {
+   const { store, profileRouter, admissionGate } = deps;
+   const replay = preflightWebCommand<CommandResult>(store, command);
+   if (replay) return replay.body;
+   const release = admissionGate?.enter();
+   try {
++    // Start guard spec §3.2: refused, ledgered, before the frozen profiles are probed -- a refused start asks no agent.
++    if (startRefusedAsPending(store, groupTarget(command))) return refuseStart(store, command);
+     let degraded = false;let observations:ScopedObservation[]=[];
+     try {
+       const snapshot = readFrozenSnapshot(store, groupTarget(command));
+       const bindings = resolveBindings(profileRouter, snapshot);
+       observations = await probeFrozen(profileRouter, bindings, frozenTaskSelections(store, groupTarget(command)));
+       degraded = observations.some(entry=>scopedProbeBlocks(store,groupTarget(command),entry,snapshot.budgetMode,(deps.now?.()??new Date()).getTime()));
+     } catch (error) {
+       // profile-changed and the remaining precedence codes are decided by the synchronous walk below; so is
+       // requirement-not-split (N1 spec §4.1, survey S7), so that a clarifying group's refusal is ledgered.
+       if (!(error instanceof ControlError) || (error.code !== "profile-changed" && error.code !== "requirement-not-split")) throw error;
+     }
+     const outcome = applyWebCommand<CommandResult>(store, {
+       rawCommand: command,
+       expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+       apply: (context) => {
+         const groupId = groupTarget(command);
+         const group = readGroup(store, groupId);
+         if ((group as { status: string }).status === "clarifying") throw new ControlError("requirement-not-split");
++        // And again here: a wake inserted while the probe ran is still caught.
++        if (groupExecutionPendingInStore(store, groupId)) throw new ControlError("group-execution-pending");
+         if (group.status !== "ready") throw new ControlError("group-state-invalid");
+         // N1 spec §9.3: a requirement's group starts only on top of its exported document.
+         if (hasRequirementBlock(group as { requirement?: unknown }) && readRequirementGroup(store, groupId).requirement.export.state !== "done") throw new ControlError("requirement-export-pending");
+         const snapshot = readFrozenSnapshot(store, groupId);
+         if (group.graphVersion !== snapshot.graphVersion) throw new ControlError("plan-version-conflict");
+         if (store.dispatchBlocked || (group as unknown as { ledger?: { usageUnknown?: boolean } }).ledger?.usageUnknown) throw new ControlError("recovery-blocked");
+         if (store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id=?").get(groupId)) throw new ControlError("stop-mode-conflict");
+         for (const row of store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(groupId)) {
+           if (["running", "start-unknown"].includes(String(row.state))) throw new ControlError("estimate-in-flight");
+         }
+diff --git a/tests/control/fixtures/driverHarness.ts b/tests/control/fixtures/driverHarness.ts
+index d68d2fd2..7d9dca86 100644
+--- a/tests/control/fixtures/driverHarness.ts
++++ b/tests/control/fixtures/driverHarness.ts
+@@ -1,18 +1,19 @@
+ import { execFileSync } from "node:child_process";
+ import { writeFile, realpath } from "node:fs/promises";
+ import { join, resolve } from "node:path";
+ import { createExecutionProfileRouter, resolveProfile } from "../../../src/control/profiles.js";
+ import { WebControlService } from "../../../src/control/webService.js";
+ import { deliverScheduledStart } from "../../../src/control/webDispatch.js";
+ import { controlWorkspaceRoots } from "../../../src/control/workspace.js";
+-import { createExecutionDriver, type ExecutionDriver, type ExecutionDriverDeps } from "../../../src/control/executionDriver.js";
++import { createExecutionDriver, replenishStartWakes, type ExecutionDriver, type ExecutionDriverDeps } from "../../../src/control/executionDriver.js";
++import { groupExecutionPendingInStore } from "../../../src/control/executionPending.js";
+ import { fakeCcloopPort, type FakeBehaviour } from "./driverPort.js";
+ import type { AgentsView, StartEnvelope } from "../../../src/control/executionPort.js";
+ import type { SyncskillOptions } from "../../../src/skills/syncskill.js";
+ import { profileSnapshot, webFixture, type WebFixtureOptions, type WebFixtureTask } from "./web.js";
+ 
+ /** A `ccloop run` stand-in for reconciliation criteria (created in Task 6). */
+ export const FAKE_CCLOOP_RUN = resolve("tests/control/fixtures/fake-ccloop-run.mjs");
+ 
+ export const git = (cwd: string, ...args: string[]): string =>
+   execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args], { cwd, encoding: "utf8" }).trim();
+@@ -68,24 +69,31 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
+     ...(options.stopReason ? { stopReason: options.stopReason } : {}),
+   });
+   fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;
+   const deps: ExecutionDriverDeps = {
+     store: h.store, router: createExecutionProfileRouter([resolveProfile(snapshot, fake.port)]), admissionGate: h.deps.admissionGate,
+     roots: controlWorkspaceRoots(h.store.stateDir), resolveRepository: () => repo,
+     ccloopBin: FAKE_CCLOOP_RUN, agentsTablePath: join(h.root, "reconcile-agents.json"),
+     ...(options.syncskill ? { syncskill: options.syncskill } : {}),
+   };
+   const dispatch = { store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate };
+-  /** A fresh start command and its delivery: one more claimed run. */
++  /** Start guard spec (2026-10-15) §3.2: while the group's execution is pending a second start is refused, so a later
++   * claim is armed as the driver arms it (replenishStartWakes), then delivered. Claims keep the first start's revision.
++   * A dispatch wake already waiting (a resume, start or no-start) is delivered as the driver would, not armed again. */
+   const claim = async (): Promise<string> => {
+-    const started = await service.start(h.command("start", {}));
+-    if ("error" in started) throw new Error(`start refused: ${JSON.stringify(started.error)}`);
++    if (groupExecutionPendingInStore(h.store, "g")) {
++      const waiting = h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g' AND delivered=0 AND kind IN ('start','no-start','resume')").get() !== undefined;
++      if (!waiting && replenishStartWakes({ store: h.store, admissionGate: h.deps.admissionGate }).length === 0) throw new Error("claim: the driver would arm no start wake");
++    } else {
++      const started = await service.start(h.command("start", {}));
++      if ("error" in started) throw new Error(`start refused: ${JSON.stringify(started.error)}`);
++    }
+     const delivered = await deliverScheduledStart(dispatch, "g");
+     if (delivered.kind !== "claimed") throw new Error(`claim refused: ${JSON.stringify(delivered)}`);
+     return delivered.runId;
+   };
+   const body = (runId: string) => JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body));
+   const until = async (driver: ExecutionDriver, predicate: () => boolean, rounds = 60): Promise<void> => {
+     for (let i = 0; i < rounds && !predicate(); i += 1) await driver.round();
+     if (!predicate()) throw new Error("the driver did not reach the expected state");
+   };
+   return { h, repo, service, fake, deps, dispatch, claim, body, until, driver: () => createExecutionDriver(deps) };
+diff --git a/tests/control/handoffFailedRetry.test.ts b/tests/control/handoffFailedRetry.test.ts
+index fa0cbe73..9f0ae672 100644
+--- a/tests/control/handoffFailedRetry.test.ts
++++ b/tests/control/handoffFailedRetry.test.ts
+@@ -4,20 +4,21 @@ import { randomUUID } from "node:crypto";
+ import { WebControlService } from "../../src/control/webService.js";
+ import { writeFileSync } from "node:fs";
+ import { join } from "node:path";
+ import { openControlStore } from "../../src/control/store.js";
+ import { validateRetryGrantSource } from "../../src/control/retryGrant.js";
+ import { describe, expect, it } from "vitest";
+ import { readBudgetProposal } from "../../src/control/queries.js";
+ import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
+ import { stepA1, stepA2 } from "../../src/control/executionDriver.js";
+ import { deliverScheduledStart, settleProviderAttempt } from "../../src/control/webDispatch.js";
++import { groupExecutionPendingInStore } from "../../src/control/executionPending.js";
+ import { readControlGroup } from "../../src/panel/controlViews.js";
+ import { readWebGroup } from "../../src/control/webService.js";
+ import { latestRequestForRun } from "../../src/control/stopIntent.js";
+ import { driverHarness, git } from "./fixtures/driverHarness.js";
+ import { work, allocation, active } from "./fixtures/handoffHarness.js";
+ import { unknownFailure, settle, handoff, ds, sum } from "./fixtures/unknownFailure.js";
+ import type { FakeBehaviour } from "./fixtures/driverPort.js";
+ 
+ type Harness = Awaited<ReturnType<typeof driverHarness>>;
+ const retry = (t: Harness) => t.service.retryTask(t.h.command("retry-task", { taskId: "a" }));
+@@ -34,20 +35,22 @@ async function claim(t: Harness) {
+ async function reopen(t: Harness) {
+   const stateDir = t.h.store.stateDir;
+   const template = t.h.command("start", {}), dispose = t.h.dispose;
+   t.h.store.close();
+   const store = await openControlStore({ stateDir });
+   t.h.store = store; t.h.deps.store = store; t.deps.store = store; t.dispatch.store = store;
+   t.service = new WebControlService({ ...t.service.deps, store });
+   t.h.command = ((verb: string, payload: unknown) => ({ ...template, commandId: `restart-${randomUUID()}`, verb, payload,
+     expectedRevision: Number(store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision) })) as typeof t.h.command;
+   t.claim = async () => {
++    // #53 (spec 2026-10-15 start guard §3.2): a fresh start is refused while a resume wake is pending; claim through the driver's path
++    if (groupExecutionPendingInStore(t.h.store, "g")) return claim(t);
+     const started = await t.service.start(t.h.command("start", {}));
+     if ("error" in started) throw new Error(JSON.stringify(started));
+     return claim(t);
+   };
+   t.h.dispose = async () => { store.close(); await dispose(); };
+   view(t);
+ }
+ function advanceHead(t: Harness) {
+   git(t.repo, "checkout", "-q", "orca/g");
+   writeFileSync(join(t.repo, "new-head.txt"), "head after failure\n");
+diff --git a/tests/control/shutdownHealing.test.ts b/tests/control/shutdownHealing.test.ts
+index 1e9d8bb4..ad81f87d 100644
+--- a/tests/control/shutdownHealing.test.ts
++++ b/tests/control/shutdownHealing.test.ts
+@@ -130,16 +130,18 @@ describe("startup recovery heals empty-frozen-set shutdown intents (issue-fixes
+         // D9 correction (controller ruling, 2026-10-09; verify_usage_retry_round at e7df5df): the current migration target is schema 10.
+         expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()?.value).toBe("13");
+         expect(stopRow(store)?.mode).toBe("shutdown");
+         // The panel runs recovery with the driver owning web runs, so the stranded run is not walked (it is the driver's).
+         await recoverControl(store, h.deps.port, undefined, { driverOwnsWebRuns: true });
+         expect(stopRow(store)).toBeUndefined();
+         expect(cleared(store).map((entry) => entry.body)).toEqual([{ reason: "empty-shutdown-intent" }]);
+         const view = readControlGroup(store, "epoch", "g");
+         expect(view.runs.find((entry) => entry.runId === claim.runId)).toMatchObject({ startedAt: null, endedAt: null });
+         const after = new WebControlService({ ...h.deps, store });
++        // #53 (spec 2026-10-15 start guard §3.2): after healing the queued no-start wake dispatches the task; a second start while it runs is refused
++        expect(await deliverScheduledStart({ store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate }, "g")).toMatchObject({ kind: "claimed" });
+         const started = await after.start(h.rawCommand("start-after-upgrade", revisionOf(store), "start", { kind: "group", groupId: "g" }, {}) as Parameters<typeof after.start>[0]);
+-        expect("error" in started ? started.error.code : started.result.kind).toBe("scheduled");
++        expect("error" in started ? started.error.code : started.result.kind).toBe("group-execution-pending");
+       } finally { store.close(); }
+     } finally { await h.dispose().catch(() => undefined); }
+   });
+ });
+diff --git a/tests/control/startGuard.test.ts b/tests/control/startGuard.test.ts
+new file mode 100644
+index 00000000..e71fd264
+--- /dev/null
++++ b/tests/control/startGuard.test.ts
+@@ -0,0 +1,130 @@
++import { describe, expect, it } from "vitest";
++import { lookupCommandResult } from "../../src/control/commandLedger.js";
++import { settleHandoffRequest } from "../../src/control/stopIntent.js";
++import { recordUsage } from "../../src/control/usage.js";
++import { createWebWakeHandlers, deliverScheduledStart } from "../../src/control/webDispatch.js";
++import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
++import { WebControlService } from "../../src/control/webService.js";
++import { requirementHarness } from "./fixtures/requirementHarness.js";
++import { driverHarness } from "./fixtures/driverHarness.js";
++import { profileSnapshot, webFixture } from "./fixtures/web.js";
++
++// Start guard spec (2026-10-15) §3.2, criteria 1-6 (feedback #53): a second start while the group's execution is pending
++// used to be accepted -- a revision bump, an activity row and a redundant wake -- over HTTP, the socket, the CLI and MCP.
++// It is refused by name before the agent is asked, ledgered, and checked again inside the transaction.
++type Fixture = Awaited<ReturnType<typeof webFixture>>;
++async function confirmed(tasks = [{ taskId: "a" }]) {
++  const h = await webFixture(profileSnapshot(), tasks);
++  const service = new WebControlService(h.deps);
++  await service.confirm(h.command("confirm", await h.confirmPayload()));
++  return { h, service };
++}
++const fingerprint = (h: Fixture): string => JSON.stringify({
++  groups: h.store.db.prepare("SELECT id,revision,projection_seq,body FROM groups ORDER BY id").all(),
++  activity: h.store.db.prepare("SELECT * FROM activity ORDER BY seq").all(),
++  wakes: h.store.db.prepare("SELECT id,kind,body,delivered FROM scheduler_wakes ORDER BY rowid").all(),
++  allowances: h.store.db.prepare("SELECT * FROM funded_allowances ORDER BY rowid").all(),
++  work: h.store.db.prepare("SELECT id,body FROM work_items ORDER BY id").all(),
++});
++const setWork = (h: Fixture, patch: Record<string, unknown>) => {
++  const work = JSON.parse(String(h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body));
++  h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='a'").run(JSON.stringify({ ...work, ...patch }));
++};
++
++describe("a second start is refused while execution is pending (spec B §3.2)", () => {
++  it("C1: refuses before asking the agent, changes nothing, and replays the same refusal from the ledger", async () => {
++    const { h, service } = await confirmed(); try {
++      expect(await service.start(h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
++      const before = fingerprint(h), asked = h.asked.length;
++      const second = h.command("start", {}, "second-start");
++      const refused = await service.start(second);
++      expect(refused).toEqual({ error: { code: "group-execution-pending", message: "group-execution-pending", commandRevision: expect.any(Number), evidenceIds: [], retryable: false } });
++      expect([h.asked.length - asked, fingerprint(h) === before]).toEqual([0, true]);
++      expect(lookupCommandResult(h.store, "g", "second-start")).toMatchObject({ originalStatus: 409, body: refused });
++      expect(await service.start(second)).toEqual(refused);
++      expect(h.asked.length - asked).toBe(0);
++    } finally { await h.dispose(); }
++  });
++
++  it.each(["no-start", "resume"])("C2: refuses on an undelivered %s wake alone", async (kind) => {
++    const { h, service } = await confirmed(); try {
++      h.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,?,?,0)").run(`injected-${kind}`, "g", kind, "{}");
++      expect(await service.start(h.command("start", {}))).toMatchObject({ error: { code: "group-execution-pending" } });
++    } finally { await h.dispose(); }
++  });
++
++  it.each(["running", "active", "starting", "start-unknown", "held", "continuing"])("C2: refuses on a %s task alone", async (status) => {
++    const { h, service } = await confirmed(); try {
++      setWork(h, { status });
++      expect(await service.start(h.command("start", {}))).toMatchObject({ error: { code: "group-execution-pending" } });
++    } finally { await h.dispose(); }
++  });
++
++  it("C2: refuses on an active work run alone", async () => {
++    const { h, service } = await confirmed(); try {
++      expect(await service.start(h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
++      await deliverSchedulerWakes(h.store, createWebWakeHandlers({ ...h.deps, service }));
++      setWork(h, { status: "ready" });
++      expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id='g' AND delivered=0 AND kind IN ('start','no-start','resume')").get()!.n).toBe(0);
++      expect(await service.start(h.command("start", {}))).toMatchObject({ error: { code: "group-execution-pending" } });
++    } finally { await h.dispose(); }
++  });
++
++  it("C2: refuses on a held task left by a settled handoff and a resume with no selection (a real state)", async () => {
++    const { h, service } = await confirmed(); try {
++      expect(await service.start(h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
++      const claimed = await deliverScheduledStart(h.deps, "g");
++      if (claimed.kind !== "claimed") throw new Error(JSON.stringify(claimed));
++      recordUsage(h.store, { runId: claimed.runId, generation: 1, eventSeq: 1, bucket: "work", cumulative: { tokens: 10, activeMs: 10, attempts: 1, sessions: 1 }, source: { artifactId: `usage-${claimed.runId}`, hash: "e".repeat(64) } });
++      expect(await service.handoffStop(h.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped" } });
++      const requestId = String(h.store.db.prepare("SELECT id FROM handoff_requests WHERE run_id=?").get(claimed.runId)!.id);
++      settleHandoffRequest({ store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate }, { requestId, outcome: "settled-recoverable" });
++      expect(await service.resumeFromHandoff(h.command("resume-from-handoff", { selections: [] }))).toMatchObject({ result: { kind: "resumed-from-handoff" } });
++      // The driver delivers the resume wake that armed: with no selection and no other task it claims nothing.
++      expect(await deliverScheduledStart(h.deps, "g")).toEqual({ kind: "idle" });
++      // The premise (production state, not written by this test): the held task is the only pending fact.
++      expect([h.store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id='g' AND delivered=0 AND kind IN ('start','no-start','resume')").get()!.n,
++        h.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g' AND active=1 AND json_extract(body,'$.phase')='work'").get()!.n]).toEqual([0, 0]);
++      expect(await service.start(h.command("start", {}))).toMatchObject({ error: { code: "group-execution-pending" } });
++    } finally { await h.dispose(); }
++  });
++
++  it("C3: an active estimate run alone is not execution: start answers estimate-in-flight", async () => {
++    const { h, service } = await confirmed(); try {
++      expect(await service.claimEstimate("g", h.estimateId)).not.toBeNull();
++      expect(await service.start(h.command("start", {}))).toMatchObject({ error: { code: "estimate-in-flight" } });
++    } finally { await h.dispose(); }
++  });
++
++  it("C3: a clarifying group with a call in flight still answers requirement-not-split", async () => {
++    const x = await requirementHarness({ answers: [] });
++    try {
++      await x.deliver();
++      expect(x.runs()).toEqual([expect.objectContaining({ state: "starting", phase: "single-call", active: 1 })]);
++      expect(await x.service.start(x.command("start", {}))).toMatchObject({ error: { code: "requirement-not-split" } });
++    } finally { await x.dispose(); }
++  });
++
++  it("C4: catches a start wake that arrives while the frozen profiles are probed", async () => {
++    const { h, service } = await confirmed(); try {
++      const original = h.resolveAgent.getMockImplementation()!;
++      let injected = false;
++      h.resolveAgent.mockImplementation(async (partial) => {
++        if (!injected) { injected = true; h.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES ('raced-start','g','start','{}',0)").run(); }
++        return original(partial);
++      });
++      expect(await service.start(h.command("start", {}, "raced"))).toMatchObject({ error: { code: "group-execution-pending" } });
++      expect([injected, h.store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id='g' AND kind='start'").get()!.n]).toEqual([true, 1]);
++    } finally { await h.dispose(); }
++  });
++
++  it("C6: after retry-task returns the only task to ready, and before any driver round re-arms a wake, start is accepted", async () => {
++    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "failed" });
++    try {
++      const runId = await t.claim();
++      await t.until(t.driver(), () => t.body(runId).state === "blocked");
++      expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a" }))).toMatchObject({ result: { kind: "task-retried", taskId: "a" } });
++      expect(await t.service.start(t.h.command("start", {}))).toMatchObject({ result: { kind: "scheduled", operation: "start" } });
++    } finally { await t.h.dispose(); }
++  }, 30_000);
++});
+diff --git a/tests/entry/skill.test.ts b/tests/entry/skill.test.ts
+index f870dec3..355c1d3f 100644
+--- a/tests/entry/skill.test.ts
++++ b/tests/entry/skill.test.ts
+@@ -93,11 +93,17 @@ describe("the orca-control skill (spec §7, C18)", () => {
+       // Task 7: the integration read is listed with the other reads.
+       "`repositories/<id>/workspace`, `repositories/<id>/integration`",
+       // Issue fixes spec §4.2(2)-(3): which retry a failed run takes.
+       "run-terminal-failed", "task-not-retryable",
+       // Issue-fixes spec §6.3: what archiving does to every other command, and the guards an agent meets.
+       "refuses every command but `unarchive-group` with `group-archived`", "archive-run-active", "archive-call-in-flight",
+       "still `handoff-pending` or `handoff-unresolved`; `handoff-complete` and `handoff-partial` allow archive; a pause never blocks",
+     ]) expect(skill).toContain(phrase);
+     for (const code of ["`0`", "`1`", "`2`", "`3`"]) expect(skill).toContain(code);
+   });
++
++  // Start guard spec (2026-10-15) §3.2: an agent is told the server refuses a second start, by name.
++  it("names group-execution-pending as the refusal of a second start, and no longer says the server accepts one", () => {
++    expect(skill).toContain("`group-execution-pending`");
++    expect(skill).not.toContain("the server still accepts a second start");
++  });
+ });
+diff --git a/tests/panel/startGuardSocket.test.ts b/tests/panel/startGuardSocket.test.ts
+new file mode 100644
+index 00000000..c29c90c9
+--- /dev/null
++++ b/tests/panel/startGuardSocket.test.ts
+@@ -0,0 +1,36 @@
++import { mkdtemp, realpath } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterAll, describe, expect, it } from "vitest";
++import { runControlCommand } from "../../src/entry/controlCommand.js";
++import { bindControlSocket, buildControlSocketApp, socketPathTooLong } from "../../src/panel/controlSocket.js";
++import { createOverviewFixtures } from "./controlOverviewFixtures.js";
++import { command, createHarness, GROUP, revision } from "./fixtures/controlPanel.js";
++import { overSocket } from "./fixtures/socketPanel.js";
++
++const h = createHarness();
++afterAll(() => h.dispose());
++const { panelFixture, confirm } = createOverviewFixtures(h);
++
++// Start guard spec (2026-10-15) §5 criterion 5: the refusal is the same over the control socket (agents) and through
++// `orca control send` (status 409 in the envelope, exit 2), because both reach scheduleStart through the same routes.
++describe("a second start over the control socket and the CLI (spec B criterion 5)", () => {
++  it("answers 409 group-execution-pending on the socket, and the CLI prints that envelope and exits 2", async () => {
++    const { panel } = await panelFixture(); await confirm(panel);
++    expect((await command(panel, `/api/control/groups/${GROUP}/start`, { commandId: "start-1", expectedRevision: await revision(panel), payload: {} })).status).toBe(202);
++    const stateDir = await realpath(await mkdtemp(join(tmpdir(), "s")));
++    const path = join(stateDir, "control.sock");
++    expect(socketPathTooLong(path)).toBe(false);
++    const bound = await bindControlSocket(buildControlSocketApp({ store: panel.store, epoch: panel.epoch, config: undefined as never, service: panel.service }), path);
++    if (!("close" in bound)) throw new Error(`socket not bound: ${bound.code}: ${bound.detail}`);
++    try {
++      const rev = await revision(panel);
++      const socket = await overSocket(path, "POST", `/api/control/groups/${GROUP}/start`, { "x-orca-client": "cli" }, { commandId: "start-socket", expectedRevision: rev, payload: {} });
++      expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([409, "group-execution-pending"]);
++      const printed: string[] = [];
++      const exit = await runControlCommand(["send", `groups/${GROUP}/start`, "--expected-revision", String(rev), "--payload", "{}", "--command-id", "start-cli", "--control-state-dir", stateDir], {},
++        { write: (line) => { printed.push(line); }, readFile: () => "" });
++      expect([exit, JSON.parse(printed.join("")).status, JSON.parse(printed.join("")).body.error.code]).toEqual([2, 409, "group-execution-pending"]);
++    } finally { await bound.close(); }
++  }, 30_000);
++});
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index 25232eda..5442dca3 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -1124,20 +1124,21 @@ export const enErrors: Record<string, string> = {
+   "group-already-exists": "This group already exists.",
+   "group-archived": "This group is archived: it keeps every record but takes no new work. Unarchive it to change or run it.",
+   "group-budget-unavailable": "The group's budget is not enough.",
+   "group-deadline-expired": "The group's deadline has passed.",
+   "group-graph-conflict": "The group's task graph conflicts with the recorded one.",
+   "group-not-found": "The group was not found.",
+   "group-project-binding-required": "The group must be bound to a project.",
+   "group-project-conflict": "The group is bound to a different project.",
+   "group-reserve-insufficient": "The group's unallocated reserve is too small ({{detail}}). Raise the group limit or lower another allocation in the budget editor, then try again.",
+   "group-review-budget-unavailable": "The group's review budget is not enough.",
++  "group-execution-pending": "This group is already starting or running; its next task is dispatched automatically.",
+   "group-state-invalid": "The group's current state does not allow this command. Only the buttons its view shows apply now.",
+   "group-stopped": "The group is stopped. Resume it before sending this command.",
+   "handoff-budget-unavailable": "There is not enough budget for the handoff.",
+   "handoff-grant-insufficient": "The handoff's grant is not enough.",
+   "handoff-identity-conflict": "The handoff's identity conflicts with the recorded one.",
+   "handoff-parent-invalid": "The run being handed off is not valid for this handoff.",
+   "handoff-request-conflict": "The handoff request conflicts with one already recorded.",
+   "handoff-work-not-found": "The work to hand off was not found.",
+   "identity-space-exhausted": "No identity numbers are left: {{detail}}",
+   // Integration spec §3.2-§3.4, §8: the integration refusals.
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index 9d846bfb..9fc9c0da 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -1060,20 +1060,21 @@ export const zhErrors: Record<string, string> = {
+   "group-already-exists": "这个组已存在。",
+   "group-archived": "这个组已归档：记录都保留，但不再接新工作。要修改或运行它，先取消归档。",
+   "group-budget-unavailable": "组预算不够。",
+   "group-deadline-expired": "组的截止时间已过。",
+   "group-graph-conflict": "组的任务图冲突。",
+   "group-not-found": "找不到这个组。",
+   "group-project-binding-required": "组必须绑定到一个项目。",
+   "group-project-conflict": "组与项目的绑定冲突。",
+   "group-reserve-insufficient": "组余量不够：{{message}}。请在「预算提案」里调高「组上限」或调低别的分配，然后再试。",
+   "group-review-budget-unavailable": "组的评审预算不够。",
++  "group-execution-pending": "这个组已在启动或运行中；它的下一个任务会自动派发。",
+   "group-state-invalid": "组当前的状态不允许这个操作。",
+   "group-stopped": "组已停止。",
+   "handoff-budget-unavailable": "交接预算不够。",
+   "handoff-grant-insufficient": "交接额度不够。",
+   "handoff-identity-conflict": "交接身份冲突。",
+   "handoff-parent-invalid": "交接的父运行不合法。",
+   "handoff-request-conflict": "交接请求冲突。",
+   "handoff-work-not-found": "找不到要交接的工作。",
+   "identity-space-exhausted": "身份编号已用尽：{{message}}",
+   // Integration spec §3.2-§3.4, §8: the integration refusals.

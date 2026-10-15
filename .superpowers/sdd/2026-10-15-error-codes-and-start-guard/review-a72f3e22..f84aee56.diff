@@ -1,0 +1,343 @@
+# Review package: a72f3e22..HEAD
+
+## Commits
+f84aee56 feat(control): recompute a requirement's output bound on a human group retry
+
+## Files changed
+ src/control/stopIntent.ts                    | 13 ++++++----
+ src/control/webService.ts                    | 34 ++++++++++++++++++++----
+ tests/control/fixtures/requirementHarness.ts |  6 +++--
+ tests/control/requirementRetryBound.test.ts  | 39 ++++++++++++++++++++++++++++
+ 4 files changed, 80 insertions(+), 12 deletions(-)
+
+## Diff
+diff --git a/src/control/stopIntent.ts b/src/control/stopIntent.ts
+index ac5de55f..a6e48e07 100644
+--- a/src/control/stopIntent.ts
++++ b/src/control/stopIntent.ts
+@@ -430,36 +430,36 @@ export function applyResumeDispatch(deps: StopDeps, command: ResumeDispatchComma
+ /** Arm one ordinary ready-work dispatch claim for the group under `startRevision`. */
+ export function startSchedulerWake(store: ControlStore, groupId: string, startRevision: number): string {
+   const proposal = readBudgetProposal(store, groupId);
+   if (proposal.state !== "confirmed" || proposal.executionSnapshotHash === null) throw new ControlError("group-state-invalid");
+   const wakeId = `scheduler-wake:${groupId}:${startRevision}`;
+   store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'start',?,0) ON CONFLICT(id) DO NOTHING")
+     .run(wakeId, groupId, canonicalBytes({ groupId, startRevision, executionSnapshotHash: proposal.executionSnapshotHash }).toString("utf8"));
+   return wakeId;
+ }
+ 
+-export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand): StopCommandResult {
++export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand, outputBound: number | null = null): StopCommandResult {
+   const { store } = deps;
+   const release = deps.admissionGate?.enter();
+   try {
+     return applyWebCommand<StopCommandResult>(store, {
+       rawCommand: command,
+       expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+       apply: context => {
+         const target = command.target;
+         // Agent selection spec §12 I10 (plan-review P7): positively exclude the settings-scoped targets
+         // (repository, operator) instead of assuming everything else carries a groupId.
+         if (target.kind !== "group" && target.kind !== "task" && target.kind !== "run") throw new ControlError("control-target-not-allowed");
+         const groupId = target.groupId;
+         const observed = target.kind === "run"
+           ? retryRun(store, groupId, target.runId, context)
+-          : retryGroup(store, groupId, context);
++          : retryGroup(store, groupId, context, outputBound);
+         const result: CommandSuccessV1["result"] = {
+           kind: "recovery-observed", resolved: observed.resolved,
+           blockerCodes: [...new Set(observed.blockerCodes)].sort(), evidenceIds: [...new Set(observed.evidenceIds)].sort(),
+           wakeIds: [...new Set(observed.wakeIds)].sort(),
+         };
+         deps.beforeCommit?.();
+         return commandSuccess(context, result);
+       },
+     }).body;
+   } finally { release?.(); }
+@@ -499,37 +499,37 @@ function retryRun(store: ControlStore, groupId: string, runId: string, context:
+   if (!requestId) return { resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds };
+   const { request } = readHandoffRequest(store, groupId, String(requestId.id));
+   if (request.state !== "outcome-unknown") return { resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds };
+   const identity = `handoff-recovery:${request.requestId}:${context.rawCommand.commandId}`;
+   store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,'handoff-recovery',?,0) ON CONFLICT(id) DO NOTHING")
+     .run(identity, canonicalBytes({ requestId: request.requestId, runId, groupId, commandId: context.rawCommand.commandId, requeuedAt: context.rawCommand.commandId }).toString("utf8"));
+   saveHandoffRequest(store, groupId, { ...request, state: "request-pending", failureCode: null });
+   return { resolved: true, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds };
+ }
+ 
+-function retryGroup(store: ControlStore, groupId: string, context: WebCommandContext): ObservedRecovery {
++function retryGroup(store: ControlStore, groupId: string, context: WebCommandContext, outputBound: number | null): ObservedRecovery {
+   const blockers = clearedBlockers(store, groupId, null);
+   // N1 DR15: a requirement's own recovery -- a completed stop lifted, a failed or interrupted call re-queued, a conflicted export retried.
+   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+   const requirement = row !== undefined && hasRequirementBlock(JSON.parse(String(row.body)) as { requirement?: unknown })
+-    ? retryRequirementInTransaction(store, groupId, context.nextCommandRevision) : { resolved: false, wakeIds: [] };
++    ? retryRequirementInTransaction(store, groupId, context.nextCommandRevision, outputBound) : { resolved: false, wakeIds: [] };
+   return { resolved: blockers.resolved || requirement.resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds: requirement.wakeIds };
+ }
+ 
+ /**
+  * N1 DR15 (spec §11.1 "recovery-retry: a failed or interrupted round or draft"). On a clarifying group: a handoff or
+  * shutdown stop that has completed is lifted (a pause cannot exist there, and a stop still settling stays); then the
+  * latest failed or interrupted round is drafted again in place with a fresh retry count, or, after consensus, the next
+  * draft is drafted with a fresh retry count (the failed or interrupted draft stays as it ended). A conflicted export is
+  * set pending again with its wake undelivered.
+  */
+-function retryRequirementInTransaction(store: ControlStore, groupId: string, revision: number): { resolved: boolean; wakeIds: string[] } {
++function retryRequirementInTransaction(store: ControlStore, groupId: string, revision: number, outputBound: number | null): { resolved: boolean; wakeIds: string[] } {
+   const group = readRequirementGroup(store, groupId);
+   const wakeIds: string[] = [];
+   let resolved = false;
+   if (group.requirement.export.state === "conflict") {
+     const wakeId = `scheduler-wake:${groupId}:requirement-export`;
+     group.requirement.export = { state: "pending", path: null, commit: null, parent: null, detail: null };
+     store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'requirement-export',?,0) ON CONFLICT(id) DO UPDATE SET delivered=0")
+       .run(wakeId, groupId, canonicalBytes({ groupId }).toString("utf8"));
+     wakeIds.push(wakeId);
+     resolved = true;
+@@ -547,20 +547,23 @@ function retryRequirementInTransaction(store: ControlStore, groupId: string, rev
+         writeRound(store, groupId, { ...round, state: "drafting", retries: 0, lastInvalidReason: null, reasonCode: null, waiting: null });
+         requeue = true;
+       }
+     } else {
+       const draft = latestDraft(store, groupId);
+       if (draft !== null && (draft.state === "failed" || draft.state === "interrupted")) {
+         writeDraft(store, groupId, newDraft(draft.draftNo + 1, 0));
+         requeue = true;
+       }
+     }
++    // Spec 2026-10-15 ccloop error codes §4.8: a human retry sends the call with the bound recomputed before this
++    // transaction (webService.ts recoveryRetry); null keeps the frozen one. Automatic retries never pass one.
++    if (requeue && outputBound !== null) group.requirement.maxOutputTokens = outputBound;
+     if (requeue) { wakeIds.push(queueRequirementCall(store, groupId, `recovery-${revision}`)); resolved = true; }
+   }
+   if (resolved) saveRequirementGroup(store, group);
+   return { resolved, wakeIds };
+ }
+ 
+ export function deliverHandoffStop(deps: StopDeps, groupId: string): HandoffDelivery {
+   const { store } = deps;
+   const release = deps.admissionGate?.enter();
+   try {
+diff --git a/src/control/webService.ts b/src/control/webService.ts
+index b2847337..7f3f3773 100644
+--- a/src/control/webService.ts
++++ b/src/control/webService.ts
+@@ -1,30 +1,30 @@
+ import { peerCode, peerFailure } from "./ccloopPort.js";
+-import {retainSavedInterruption,readDriverRun} from "./executionDriver.js";
++import {retainSavedInterruption,readDriverRun,describeError} from "./executionDriver.js";
+ import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
+ import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
+ import { assertNoActiveUnbounded } from "./spendCaps.js";
+ import { hasTokenPolicy, saveTokenPolicy, enableOptionalTokenPolicy } from "./fundedAllowance.js";
+ import { budgetAmountSchema, safeInteger } from "./schema.js";
+ import { z } from "zod";
+ import { randomUUID, createHash } from "node:crypto";
+ import { applyWebCommand, lookupWebCommandReplay, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
+ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+ import { dimensions, zero } from "./commands.js";
+ import { ControlError, type KnownControlErrorCode } from "./errors.js";
+-import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegradationReasons, classifyEstimateOutput } from "./estimator.js";
++import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegradationReasons, classifyEstimateOutput, singleCallOutputBound } from "./estimator.js";
+ import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
+ import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
+ import type { ExecutionPort } from "./executionPort.js";
+ import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand } from "./planImport.js";
+ import { readAgentPreferences } from "./agentPreferences.js";
+-import { intersectCapabilities } from "./profiles.js";
++import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
+ import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
+ import { effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
+ import { agentSelectionSchema, amountSchema } from "./schema.js";
+ import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
+ import { estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
+ import { scheduleStart, type StartCommand } from "./webDispatch.js";
+ import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
+ import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
+ import { applySettleUnknownUsage, type SettleUnknownUsageCommand } from "./settleUnknownUsage.js";
+ import { applyRetryTask, type RetryTaskCommand } from "./retryTask.js";
+@@ -44,21 +44,21 @@ import { claimCapBlocking, clearSpendCapBlock, gateClaim } from "./spendCaps.js"
+ import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from "./labels.js";
+ import { TASK_AMENDMENT_SCHEMA, effectivePlanTask, workBodyOf, writeTaskAmendment } from "./taskAmendments.js";
+ import { expandLoopPlan, expandRecipe, normalizeLoopSkills, type LoopRecipe, type LoopSkills, type LoopTaskExpansion } from "./loopPlans.js";
+ import { taskContractSchema } from "../scheduler/planFile.js";
+ import { profileMembers, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
+ import type { Amount } from "./types.js";
+ import type { ControlStore } from "./store.js";
+ import type { BudgetEstimateV1, CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, RawAuthorityCommandV1, ProfileBindingV1 } from "./webProtocol.js";
+ import type { AdmissionGate } from "./admissionGate.js";
+ import { budgetBalance } from "./budget.js";
+-import { refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
++import { hasRequirementBlock, latestDraft, latestRound, readRequirementGroup, refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
+ import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall } from "./singleCallLedger.js";
+ import {
+   applyRequirementAnswer, applyRequirementConsensus, applyRequirementDraftAccept, applyRequirementDraftFeedback, applyRequirementOpen,
+   type RequirementAnswerCommand, type RequirementConsensusCommand, type RequirementDraftAcceptCommand, type RequirementDraftFeedbackCommand, type RequirementOpenCommand,
+ } from "./requirementCommands.js";
+ 
+ export type ProposalEditCommand = Extract<RawAuthorityCommandV1, { verb: "proposal-edit" }>;
+ export type ReestimateCommand = Extract<RawAuthorityCommandV1, { verb: "estimate" }>;
+ export type ConfirmCommand = Extract<RawAuthorityCommandV1, { verb: "confirm" }>;
+ export type SetLimitCommand = Extract<RawAuthorityCommandV1, { verb: "set-limit" }>;
+@@ -571,21 +571,45 @@ export class WebControlService {
+   async pauseDispatch(command: PauseCommand): Promise<WebCommandResult> {
+     return applyPauseDispatch(this.stopDeps(), command) as WebCommandResult;
+   }
+   async handoffStop(command: HandoffStopCommand): Promise<WebCommandResult> {
+     return applyHandoffStop(this.stopDeps(), command) as WebCommandResult;
+   }
+   async resumeDispatch(command: ResumeDispatchCommand): Promise<WebCommandResult> {
+     return applyResumeDispatch(this.stopDeps(), command) as WebCommandResult;
+   }
+   async recoveryRetry(command: RecoveryRetryCommand): Promise<WebCommandResult> {
+-    return applyRecoveryRetry(this.stopDeps(), command) as WebCommandResult;
++    const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
++    const outputBound = command.target.kind === "group" ? await this.retryOutputBound(command.target.groupId) : null;
++    return applyRecoveryRetry(this.stopDeps(), command, outputBound) as WebCommandResult;
++  }
++  /**
++   * Spec 2026-10-15 ccloop error codes §4.8: for a clarifying requirement whose latest round or draft failed or was
++   * interrupted, the output bound its calls would be sent with now -- asked of the frozen selection (plan correction K5)
++   * through the requirement's own profile. Null, with one log line, when it cannot be asked: the retry is as before.
++   */
++  private async retryOutputBound(groupId: string): Promise<number | null> {
++    const row = this.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
++    if (row === undefined || !hasRequirementBlock(JSON.parse(String(row.body)) as { requirement?: unknown })) return null;
++    const group = readRequirementGroup(this.store, groupId);
++    if (group.status !== "clarifying") return null;
++    const step = group.requirement.consensus === null ? latestRound(this.store, groupId) : latestDraft(this.store, groupId);
++    if (step === null || (step.state !== "failed" && step.state !== "interrupted")) return null;
++    const kept = (reason: string): null => { process.stderr.write(`orca-control: recovery-retry ${groupId}: output bound kept at ${group.requirement.maxOutputTokens}: ${reason}\n`); return null; };
++    let profile: ReturnType<ExecutionProfileRouter["resolve"]>;
++    try { profile = this.deps.profileRouter.resolve("budget-estimate", group.requirement.profile.profileId, group.requirement.profile.profileHash); }
++    catch (error) { return kept(describeError(error)); }
++    const preflight = profile.snapshot.profile.estimatorPreflight;
++    if (preflight === null) return kept("estimator-preflight-missing");
++    const observation = await this.deps.profileRouter.probe(profile, group.requirement.agentSlot.selection);
++    if (observation.resolution === null) return kept(observation.probeFailureCode ?? "probe-failed");
++    return singleCallOutputBound(preflight.maxOutputTokens, observation.resolution);
+   }
+   /** N1 spec §11.1. */
+   openRequirement(command: RequirementOpenCommand): Promise<WebCommandResult> { return applyRequirementOpen(this.deps, command); }
+   answerRequirement(command: RequirementAnswerCommand): WebCommandResult { return applyRequirementAnswer(this.deps, command); }
+   requirementConsensus(command: RequirementConsensusCommand): WebCommandResult { return applyRequirementConsensus(this.deps, command); }
+   requirementDraftFeedback(command: RequirementDraftFeedbackCommand): WebCommandResult { return applyRequirementDraftFeedback(this.deps, command); }
+   /** N1 spec §9.1. */
+   acceptRequirementDraft(command: RequirementDraftAcceptCommand): Promise<WebCommandResult> { return applyRequirementDraftAccept(this.deps, command); }
+   /** Execution driver spec §3.2. A panel started without the repository refuses it by name. */
+   async setWorkspaceMode(command: SetWorkspaceModeCommand): Promise<WebCommandResult> {
+diff --git a/tests/control/fixtures/requirementHarness.ts b/tests/control/fixtures/requirementHarness.ts
+index 77df4993..8f867345 100644
+--- a/tests/control/fixtures/requirementHarness.ts
++++ b/tests/control/fixtures/requirementHarness.ts
+@@ -1,15 +1,16 @@
+ import { execFileSync } from "node:child_process";
+ import { createHash } from "node:crypto";
+ import { mkdir, writeFile } from "node:fs/promises";
+ import { join } from "node:path";
+ import { createAdmissionGate } from "../../../src/control/admissionGate.js";
++import type { AgentResolution, PartialSelection } from "../../../src/control/agentSelection.js";
+ import { canonicalBytes, sha256Canonical } from "../../../src/control/canonicalJson.js";
+ import { updateRevision } from "../../../src/control/commandLedger.js";
+ import { deliverSchedulerWakes } from "../../../src/control/dispatch.js";
+ import { ControlError } from "../../../src/control/errors.js";
+ import { createExecutionDriver, type ExecutionDriverDeps } from "../../../src/control/executionDriver.js";
+ import type { ExecutionPort, ExecutionReport, StartEnvelope } from "../../../src/control/executionPort.js";
+ import { estimatorSlotFor } from "../../../src/control/planImport.js";
+ import { createExecutionProfileRouter, resolveProfile } from "../../../src/control/profiles.js";
+ import { classifyClarifyOutput } from "../../../src/control/requirementClarify.js";
+ import {
+@@ -33,22 +34,23 @@ const HEADS = { clarify: "Orca requirement clarification, instruction version 1.
+ const sha = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
+ 
+ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
+   const evidence = new Map<string, Buffer>();
+   const calls = { accept: [] as StartEnvelope[], collect: 0 };
+   const byRun = new Map<string, QueuedAnswer>();
+   let requested = false;
+   const put = (artifactId: string, bytes: Buffer): ArtifactRef => { const ref = { artifactId, hash: sha(bytes) }; evidence.set(`${artifactId}:${ref.hash}`, bytes); return ref; };
+   const accepted = (envelope: StartEnvelope) => ({ kind: "accepted" as const, executionId: `exec-${envelope.claim.runId}`, configHash: envelope.claim.configHash });
+   const resolveAgent = fixtureResolveAgent(() => profileSnapshot().profile.capabilities);
++  let resolveOverride: ((partial: PartialSelection) => Promise<AgentResolution>) | null = null;
+   const port: ExecutionPort = {
+-    resolveAgent: async (partial) => resolveAgent(partial),
++    resolveAgent: async (partial) => (resolveOverride ?? resolveAgent)(partial),
+     listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
+     async accept(envelope) { calls.accept.push(structuredClone(envelope)); return accepted(envelope); },
+     async inspect(envelope) { return accepted(envelope); },
+     async requestHandoff(_envelope, request) { requested = true; return { kind: "latched", requestId: request.requestId }; },
+     async collect(envelope): Promise<ExecutionReport> {
+       calls.collect += 1;
+       const { claim, work } = envelope;
+       if (work.kind !== "single-call") throw new Error("queuedPort: single calls only");
+       let answer = byRun.get(claim.runId);
+       if (answer === undefined) {
+@@ -71,21 +73,21 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
+         groupId: claim.groupId, workItemId: claim.workItemId, taskId: claim.taskId, runId: claim.runId, generation: claim.generation,
+         graphVersion: claim.graphVersion, targetVersion: claim.targetVersion, checkpointId: `candidate-${claim.runId}`, usageHighWater: 1,
+         result: outcome === "complete" ? "complete" : outcome === "aborted" ? "partial" : "failed", artifacts: outputRef === null ? [] : [outputRef], snapshot: null,
+         missing: [], unresolvedRequestIds: [], stopProof: { executionId, generation: claim.generation, isolated: true, source: put(`stop-${claim.runId}`, Buffer.from(`stop ${executionId}`)) },
+         terminalOutcome: `single-call-${outcome}`, handoff: put(`call-${claim.runId}`, canonicalBytes(record)),
+       };
+       return { events, candidate, terminal: null };
+     },
+     async readEvidence(ref) { const bytes = evidence.get(`${ref.artifactId}:${ref.hash}`); if (!bytes) throw new ControlError("control-evidence-context-missing"); return bytes; },
+   };
+-  return { port, calls };
++  return { port, calls, baseResolveAgent: resolveAgent, setResolveAgent: (fn: ((partial: PartialSelection) => Promise<AgentResolution>) | null) => { resolveOverride = fn; } };
+ }
+ 
+ /**
+  * Task 8 (`startAt: "split"`): round 1 answered with ROUND_TWO's statement and criteria (AC1, AC2, what VALID_SPLIT
+  * traces) and the slug `markdown-export` (controller ruling PR-B2), consensus on round 1, and draft 1 queued -- what
+  * requirement-consensus leaves behind.
+  */
+ function seedConsensus(store: Awaited<ReturnType<typeof openTestStore>>["store"]): void {
+   const group = readRequirementGroup(store, "r");
+   const classified = classifyClarifyOutput({ ...ROUND_TWO, slug: "markdown-export" }, { roundNo: 1, requirementId: group.requirement.requirementId, earlierQuestionIds: [] });
+diff --git a/tests/control/requirementRetryBound.test.ts b/tests/control/requirementRetryBound.test.ts
+new file mode 100644
+index 00000000..3b8191e5
+--- /dev/null
++++ b/tests/control/requirementRetryBound.test.ts
+@@ -0,0 +1,39 @@
++import { describe, expect, it, vi } from "vitest";
++import { ControlError } from "../../src/control/errors.js";
++import { readRequirementGroup } from "../../src/control/requirementRecords.js";
++import { requirementHarness } from "./fixtures/requirementHarness.js";
++import { ROUND_ONE } from "./fixtures/requirementOutputs.js";
++
++// ccloop error codes spec (2026-10-15) §4.8, criterion 7: a call refused for its frozen output bound is not retried
++// automatically (§4.5); a person's group retry recomputes that requirement's bound from the current catalog -- for the
++// selection its calls run (plan correction K5) -- and if the agent cannot be asked, the retry behaves exactly as before.
++const CAP_REFUSED = { purpose: "clarify" as const, output: null, outcome: "failed" as const, tokens: 0, errorCode: "omp-single-call-cap-exceeded" };
++
++describe("a human group retry recomputes the output bound (spec A §4.8)", () => {
++  it("stores the bound recomputed from the frozen selection's current cap, and the next call is sent with it", async () => {
++    const x = await requirementHarness({ answers: [CAP_REFUSED, { purpose: "clarify", output: ROUND_ONE }] });
++    try {
++      await x.until(() => x.round(1).state === "failed");
++      const asked: unknown[] = [];
++      x.fake.setResolveAgent(async (partial) => { asked.push(partial); return { ...(await x.fake.baseResolveAgent(partial)), singleCallOutputCap: 100_000 }; });
++      expect(await x.service.recoveryRetry(x.command("recovery-retry", { scope: "group", groupId: "r" }))).toMatchObject({ result: { kind: "recovery-observed", resolved: true } });
++      expect(readRequirementGroup(x.store, "r").requirement.maxOutputTokens).toBe(100_000);
++      expect(asked).toEqual([{ agent: "codex", model: "fixture-model", contextWindow: "agent-default" }]);
++      await x.until(() => x.round(1).state === "awaiting-answers");
++      expect(x.fake.calls.accept.map((sent) => (sent.work.kind === "single-call" ? sent.work.maxOutputTokens : null))).toEqual([64_000, 100_000]);
++    } finally { await x.dispose(); }
++  });
++
++  it("with a failing probe the retry re-queues under the frozen bound and one log line names why", async () => {
++    const x = await requirementHarness({ answers: [CAP_REFUSED, { purpose: "clarify", output: ROUND_ONE }] });
++    const lines: string[] = [];
++    const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { lines.push(String(chunk)); return true; });
++    try {
++      await x.until(() => x.round(1).state === "failed");
++      x.fake.setResolveAgent(async () => { throw new ControlError("control-peer-exit", "2:omp-model-catalog-unavailable: spawn ENOENT"); });
++      expect(await x.service.recoveryRetry(x.command("recovery-retry", { scope: "group", groupId: "r" }))).toMatchObject({ result: { kind: "recovery-observed", resolved: true } });
++      expect([readRequirementGroup(x.store, "r").requirement.maxOutputTokens, x.round(1).state]).toEqual([64_000, "drafting"]);
++      expect(lines.filter((line) => line.startsWith("orca-control: recovery-retry r:"))).toEqual(["orca-control: recovery-retry r: output bound kept at 64000: omp-model-catalog-unavailable\n"]);
++    } finally { spy.mockRestore(); await x.dispose(); }
++  });
++});
