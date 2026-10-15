@@ -17,9 +17,9 @@
 //
 // usage: tsx scripts/live-driver-acceptance.ts --ccloop-bin <abs dist/cli.js> --output <new dir>
 //          (--codex <abs codex binary> --model <name> | --fake | --claude <abs claude binary> --model <name> | --fake-claude
-//           | --omp <abs omp binary> --model <provider/model> --omp-config-dir <private absolute directory>)
+//           | --omp <abs omp binary> --model <provider/model> --omp-config-dir <private absolute directory> | --fake-omp)
 //          [--group-tokens 3000000] [--task-tokens 1000000] [--task-attempts 1] [--active-ms 600000]
-//          [--call-usd 2] [--deadline-ms 900000] [--context-window 1000000] [--scenario single|conflict|deadline|estimate]
+//          [--call-usd 2] [--deadline-ms 900000] [--context-window 1000000] [--scenario single|conflict|deadline|estimate|requirement]
 //
 // --context-window sets the operator's contextWindow for the agent (claude: 1000000 is `--model <model>[1m]`, spelled
 // by ccloop). --scenario conflict runs two tasks that both append a line to the same file from the same base, so the
@@ -39,6 +39,26 @@
 // written after the import (the plan hash is known then) and before the pump starts. Checks: the estimate is ready,
 // start is not refused (estimate-in-flight is what a stuck estimate costs), and its usage is booked.
 //
+// OMP single call (spec docs/superpowers/specs/2026-10-14-omp-single-call-design.md; plan Task 13). omp has no context
+// option (ccloop's omp descriptor answers only "agent-default"), so for omp --context-window is the profile's declared
+// contextWindowTokens, never a preference; Orca intersects it by min with the catalog row's window ccloop observes
+// (profiles.ts intersectCapabilities), and a null window blocks every estimator (context-unavailable). It defaults to
+// 1000000 for --scenario estimate and requirement. Every omp profile declares framingTokenOverhead 2047 (spec §7's
+// measured request overhead; other kinds keep 17).
+// --scenario estimate under --omp/--fake-omp: as for claude, the estimator slot is the omp installation and one omp
+// single call estimates; the checks read that call's own evidence (below).
+// --scenario requirement (omp kinds only): requirement-open, one clarify call, the round's questions answered with
+// their recommended answers when the round closes the frontier (otherwise consensus closes the round with them open,
+// so no second clarify call is made), consensus, and the split until a draft awaits review (an invalid draft is
+// handed back by Orca, at most twice). Nothing is exported or executed.
+// Every omp single call (estimate, clarify, split) is read from ccloop's evidence directory
+// <sourceDir>/run/omp/1/single-call/call-*/ (events.jsonl, outcome.json with the argv, config-overlay.yml) and
+// <sourceDir>/control/usage.json: exactly one assistant message_end, its usage and stopReason, --no-tools and the
+// --config overlay in the argv, and the tokens Orca booked for the run equal to ccloop's total.
+// --fake-omp: ccloop's tests/fixtures/fake-omp.mjs behind a one-line wrapper script (an omp installation's command is
+// one absolute binary), with a private empty config directory under --output. Its single-call answer is the
+// `<marker>.single.json` rows this script writes before each call.
+//
 // Ruling review 2026-09-27 (paid claude round): --claude runs the real claude CLI. HOME is again NOT relocated (claude
 // reads its OAuth login from the keychain under the real HOME), but the installation's command isolates the call from
 // the person's own Claude Code setup and caps it in dollars (CLAUDE_ISOLATION below), and every CLAUDE* variable this
@@ -57,6 +77,7 @@ import { canonicalBytes } from "../src/control/canonicalJson.js";
 import { resolveGroupSelections } from "../src/control/agentFreeze.js";
 import { readDriverRun } from "../src/control/executionDriver.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../src/control/queries.js";
+import { latestDraft, readDrafts, readRequirementGroup, readRound, readRounds } from "../src/control/requirementRecords.js";
 import { assembleControlRuntime, type ControlRuntime } from "../src/panel/controlAssembly.js";
 import { controlRepoKey, resolveControlOptions } from "../src/panel/controlOptions.js";
 import { readControlGroup } from "../src/panel/controlViews.js";
@@ -68,6 +89,7 @@ function parseArgs(argv: string[]): Record<string, string> {
     if (!key.startsWith("--")) throw new Error(`unexpected argument ${key}`);
     if (key === "--fake") { out.fake = "1"; continue; }
     if (key === "--fake-claude") { out["fake-claude"] = "1"; continue; }
+    if (key === "--fake-omp") { out["fake-omp"] = "1"; continue; }
     const value = argv[++i];
     if (value === undefined) throw new Error(`${key} needs a value`);
     out[key.slice(2)] = value;
@@ -81,13 +103,14 @@ const ccloopBin = args["ccloop-bin"];
 const output = args.output;
 if (!ccloopBin || !isAbsolute(ccloopBin) || !output) throw new Error("--ccloop-bin <absolute> and --output <new dir> are required");
 const fakeClaude = args["fake-claude"] === "1";
-const modes = [fake, args.codex !== undefined, fakeClaude, args.claude !== undefined, args.omp !== undefined].filter(Boolean).length;
-if (modes !== 1) throw new Error("give exactly one of --codex <abs path> --model <name>, --fake, --claude <abs path> --model <name>, --fake-claude, or --omp <abs path> --model <selector> --omp-config-dir <abs path>");
+const fakeOmp = args["fake-omp"] === "1";
+const modes = [fake, args.codex !== undefined, fakeClaude, args.claude !== undefined, args.omp !== undefined, fakeOmp].filter(Boolean).length;
+if (modes !== 1) throw new Error("give exactly one of --codex <abs path> --model <name>, --fake, --claude <abs path> --model <name>, --fake-claude, --omp <abs path> --model <selector> --omp-config-dir <abs path>, or --fake-omp");
 const live = args.codex ?? args.claude ?? args.omp;
 if (live !== undefined && (!isAbsolute(live) || !args.model)) throw new Error("--codex/--claude/--omp must be absolute and --model is required");
 if (args.omp !== undefined && (!args["omp-config-dir"] || !isAbsolute(args["omp-config-dir"]))) throw new Error("--omp-config-dir must be absolute");
-const kind: "codex" | "claude" | "omp" = args.omp !== undefined ? "omp" : args.claude !== undefined || fakeClaude ? "claude" : "codex";
-const isFake = fake || fakeClaude;
+const kind: "codex" | "claude" | "omp" = args.omp !== undefined || fakeOmp ? "omp" : args.claude !== undefined || fakeClaude ? "claude" : "codex";
+const isFake = fake || fakeClaude || fakeOmp;
 for (const key of Object.keys(process.env)) if (key.startsWith("CLAUDE") && key !== "CLAUDE_CONFIG_DIR") delete process.env[key];
 if (existsSync(output)) throw new Error(`refusing an existing --output ${output}`);
 // Backlog #16 (2026-09-29; Orca handoff §4.0): real work needs a task grant of 1,000,000 tokens or more, cumulative
@@ -101,14 +124,15 @@ const taskAttempts = Number(args["task-attempts"] ?? (args.scenario === "deadlin
 const activeMs = Number(args["active-ms"] ?? 600_000);
 const callUsd = String(args["call-usd"] ?? "2");
 const scenario = args.scenario ?? "single";
-if (scenario !== "single" && scenario !== "conflict" && scenario !== "deadline" && scenario !== "estimate") throw new Error("--scenario is single, conflict, deadline or estimate");
-if (kind === "omp" && scenario !== "single") throw new Error("--omp acceptance currently supports only --scenario single");
+if (scenario !== "single" && scenario !== "conflict" && scenario !== "deadline" && scenario !== "estimate" && scenario !== "requirement") throw new Error("--scenario is single, conflict, deadline, estimate or requirement");
+if (kind === "omp" && scenario !== "single" && scenario !== "estimate" && scenario !== "requirement") throw new Error("--omp acceptance supports --scenario single, estimate or requirement");
+if (scenario === "requirement" && kind !== "omp") throw new Error("--scenario requirement needs --omp or --fake-omp");
 // The deadline scenario reads what ccloop's claude runner observed in the stream; codex has no such file.
 if (scenario === "deadline" && kind !== "claude") throw new Error("--scenario deadline needs --claude or --fake-claude");
-if (scenario === "estimate" && kind !== "claude") throw new Error("--scenario estimate needs --claude or --fake-claude");
-const contextWindow = args["context-window"] === undefined ? (scenario === "estimate" ? 1_000_000 : undefined) : Number(args["context-window"]);
+if (scenario === "estimate" && kind !== "claude" && kind !== "omp") throw new Error("--scenario estimate needs --claude, --fake-claude, --omp or --fake-omp");
+const contextWindow = args["context-window"] === undefined ? (scenario === "estimate" || scenario === "requirement" ? 1_000_000 : undefined) : Number(args["context-window"]);
 if (contextWindow !== undefined && (!Number.isSafeInteger(contextWindow) || contextWindow <= 0)) throw new Error("--context-window must be a positive integer");
-if (scenario === "estimate" && contextWindow !== 1_000_000) throw new Error("--scenario estimate needs the 1M window (ccloop reports contextWindowTokens only for it)");
+if (scenario === "estimate" && kind === "claude" && contextWindow !== 1_000_000) throw new Error("--scenario estimate needs the 1M window (ccloop reports contextWindowTokens only for it)");
 /**
  * The real claude call, isolated from the person's own Claude Code setup: no user settings (so no hooks and no
  * plugins, which would also record this session), no MCP servers, no skills, no session written under ~/.claude,
@@ -176,6 +200,14 @@ await writeFile(scriptPath, JSON.stringify(scenario === "single" || scenario ===
 }));
 const fakeCodex = resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-codex.mjs");
 const fakeClaudeCli = resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-claude-cli.mjs");
+// --fake-omp: the fixture's own header -- an installation allows only the binary in `command`, so a wrapper execs it.
+const fakeOmpWrapper = join(root, "fake-omp");
+if (fakeOmp) {
+  await writeFile(fakeOmpWrapper, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-omp.mjs"))} ${JSON.stringify(marker)} "$@"\n`, { mode: 0o700 });
+  await mkdir(join(root, "omp-config"), { mode: 0o700 });
+}
+const ompBinary = fakeOmp ? fakeOmpWrapper : args.omp;
+const ompConfigDir = fakeOmp ? join(root, "omp-config") : args["omp-config-dir"];
 const claudeRaw = join(root, "claude-raw");
 // Agent selection spec §4.2, §6.6: one installation in an agents table handed over as ORCA_AGENTS_TABLE; the
 // model is a selection field (the operator's preference below), and confirmation freezes ccloop's configHash for it.
@@ -187,14 +219,14 @@ const claudeCommand = fakeClaude
   : [...claudeTee, args.claude ?? "", ...CLAUDE_ISOLATION];
 const tablePath = join(root, "agents.json");
 const installation = kind === "omp"
-  ? { kind: "omp", command: [args.omp!], version: versionOf([args.omp!]), configDir: args["omp-config-dir"]!, timeoutMs: 120_000, killGraceMs: 5_000, profile: null, defaultModel: args.model! }
+  ? { kind: "omp", command: [ompBinary!], version: versionOf([ompBinary!]), configDir: ompConfigDir!, timeoutMs: 120_000, killGraceMs: 5_000, profile: null, defaultModel: fakeOmp ? args.model ?? "gateway/model-a" : args.model! }
   : kind === "codex"
   ? { kind: "codex", command: codexCommand, version: versionOf(codexCommand), configDir: null, timeoutMs: 120_000, killGraceMs: 5_000, sandbox: "workspace-write", budgetMode: "soft" }
   : { kind: "claude", command: claudeCommand, version: versionOf(claudeCommand), configDir: null, timeoutMs: 600_000, killGraceMs: 5_000 };
 await writeFile(tablePath, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: { [kind]: installation } }), { mode: 0o600 });
 
 type LiveTask = { taskId: string; files: string[]; goal: string; successCondition: string; check: string };
-const tasks: LiveTask[] = scenario === "single" || scenario === "estimate"
+const tasks: LiveTask[] = scenario === "single" || scenario === "estimate" || scenario === "requirement"
   ? [{ taskId: "a", files: ["answer.txt"], goal: "Create a file named answer.txt at the repository root whose entire content is the characters 42 followed by one newline. Change no other file.", successCondition: "answer.txt holds exactly 42 and a newline", check: 'test "$(cat answer.txt)" = 42' }]
   : scenario === "deadline"
   ? [{ taskId: "a", files: Object.keys(numberFiles),
@@ -227,13 +259,13 @@ const planPath = join(repo, "plan.json");
 await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "live acceptance", successConditions: tasks.map((task) => task.successCondition), tasks: planTasks }));
 
 // The shipped ccloop's capability answer; a null context window makes the estimate blocked-capability (spec §11 D1).
-// estimate: the window claude 1M answers, so the estimate is not blocked-capability.
+// estimate: the window claude 1M answers, so the estimate is not blocked-capability. omp: --context-window (module header).
 const profilePath = join(root, "profile.json");
 await writeFile(profilePath, JSON.stringify({
   schema: "orca-execution-profile-snapshot-v2",
   profile: { profileId: "all", allowedWorkKinds: ["budget-estimate", "goal-review", "handoff", "task"], contextTokenizer: null, workMaxOutputTokens: 1000,
-    capabilities: { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: scenario === "estimate" ? 1_000_000 : null, requestBoundProof: null },
-    estimatorPreflight: { instructionVersion: "1", schemaVersion: "budget-estimate-v1", maxOutputTokens: 64_000, framingTokenOverhead: 17, tokenizer: { kind: "utf8-upper-bound", numerator: 2, denominator: 3, proofRef: "proof" } } },
+    capabilities: { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: kind === "omp" ? contextWindow ?? null : scenario === "estimate" ? 1_000_000 : null, requestBoundProof: null },
+    estimatorPreflight: { instructionVersion: "1", schemaVersion: "budget-estimate-v1", maxOutputTokens: 64_000, framingTokenOverhead: kind === "omp" ? 2047 : 17, tokenizer: { kind: "utf8-upper-bound", numerator: 2, denominator: 3, proofRef: "proof" } } },
   resolved: { proofDocumentContentHashes: ["c".repeat(64)], tokenizerArtifactHashes: [], secretValueHashes: [] },
 }));
 
@@ -295,14 +327,173 @@ let firstRunId: string | null = null;
 let observedPath: string | null = null;
 let handoffState: string | null = null;
 let estimateId: string | null = null;
+// Agent selection spec §6.2 layer 1: the operator's default is the table's codex installation, with --model when live.
+// omp has no context option (module header), so its preference never carries one.
+const setPreferences = async () => {
+  const preferences = await runtime.service.setAgentPreferences(raw(runtime, "preferences", "set-agent-preferences",
+    { preferences: { defaultAgent: kind, perAgent: { [kind]: { ...(isFake ? {} : { model: args.model! }), ...(contextWindow === undefined || kind === "omp" ? {} : { contextWindow }) } } } }, { kind: "operator", operatorId: "human" }));
+  if ("error" in preferences) throw new Error(`set-agent-preferences refused: ${JSON.stringify(preferences.error)}`);
+};
+const stopRuntime = async (): Promise<void> => {
+  summary.shutdown = await runtime.shutdown().catch((e: unknown) => `threw: ${String(e)}`);
+  // Outer watchdog: whatever the ending, no codex process group ccloop registered may outlive this script.
+  const killed: number[] = [];
+  for (const file of findEvidence("process.json")) {
+    const { pgid } = JSON.parse(readFileSync(file, "utf8")) as { pgid: number };
+    try { process.kill(-pgid, "SIGKILL"); killed.push(pgid); } catch { /* already gone */ }
+  }
+  summary.killedProcessGroups = killed;
+};
+/** --fake-omp: the next single call's rows -- one assistant message_end whose text is `output` (fake-omp.mjs `<marker>.single.json`). */
+let fakeOmpCall = 0;
+const fakeOmpAnswer = async (output: unknown): Promise<void> => {
+  fakeOmpCall += 1;
+  // Each call's usage differs, so a booking taken from the wrong call cannot equal it.
+  const usage = { input: 100 * fakeOmpCall, output: 20 * fakeOmpCall, cacheRead: 3, cacheWrite: 1, totalTokens: 120 * fakeOmpCall + 4, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+  const selector = (installation as { defaultModel?: string }).defaultModel!;
+  const message = { role: "assistant", content: [{ type: "text", text: JSON.stringify(output) }], provider: selector.split("/")[0], model: selector.slice(selector.indexOf("/") + 1), stopReason: "stop", usage };
+  await writeFile(`${marker}.single.json`, JSON.stringify({ rows: [{ type: "agent_start" }, { type: "message_end", message }, { type: "agent_end", isTerminal: true, yielded: true, messages: [message] }] }));
+};
+/** ccloop's single-call overlay (ccloop src/runtime/omp/ompSingleCall.ts OMP_SINGLE_CALL_OVERLAY; Orca spec 2026-10-14 §7). */
+const OMP_SINGLE_CALL_OVERLAY = { retry: { enabled: false, modelFallback: false }, model: { loopGuard: { enabled: false } }, advisor: { enabled: false }, compaction: { enabled: false } };
+type RunBody = { phase?: string; purpose?: string; drive?: { sourceDir?: string } | null; cumulative?: { work?: { tokens?: number } }; unknown?: { work?: boolean } };
+/**
+ * Every omp single call (estimate, clarify, split), from ccloop's own evidence: per run, each call directory under
+ * <sourceDir>/run/omp/1/single-call/ (events.jsonl, outcome.json's argv, config-overlay.yml) and the run's
+ * control/usage.json; beside them what Orca booked for the run (its cumulative work tokens and last usage event).
+ */
+const ompSingleCalls = (rt: ControlRuntime) => rt.store.db.prepare("SELECT id,group_id,body FROM runs ORDER BY rowid").all()
+  .map((row) => ({ runId: String(row.id), groupId: String(row.group_id), body: JSON.parse(String(row.body)) as RunBody }))
+  .filter(({ body }) => body.phase === "estimate" || body.phase === "single-call")
+  .map(({ runId, groupId, body }) => {
+    const sourceDir = body.drive?.sourceDir ?? null;
+    const calls = (sourceDir === null ? [] : findAll(join(sourceDir, "run", "omp", "1", "single-call"), "events.jsonl")).map((file) => {
+      const dir = dirname(file);
+      const rows = readFileSync(file, "utf8").split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line) as { type?: string; message?: { role?: string; usage?: { totalTokens?: unknown }; stopReason?: unknown } });
+      const messages = rows.filter((row) => row.type === "message_end" && row.message?.role === "assistant").map((row) => row.message!);
+      const outcome = existsSync(join(dir, "outcome.json")) ? JSON.parse(readFileSync(join(dir, "outcome.json"), "utf8")) as { reason?: string; args?: string[] } : null;
+      const argv = outcome?.args ?? [];
+      const configAt = argv.indexOf("--config");
+      const overlayPath = configAt < 0 ? null : argv[configAt + 1] ?? null;
+      let overlay: unknown = null;
+      try { overlay = overlayPath === null ? null : JSON.parse(readFileSync(overlayPath, "utf8")); } catch { overlay = null; }
+      const totals = messages.map((message) => message.usage?.totalTokens);
+      return {
+        dir, outcome: outcome?.reason ?? null, argv, assistantMessageEnds: messages.length, usage: messages.map((message) => message.usage ?? null),
+        stopReasons: messages.map((message) => message.stopReason ?? null),
+        messageTotal: totals.length > 0 && totals.every((total) => Number.isSafeInteger(total)) ? (totals as number[]).reduce((sum, total) => sum + total, 0) : null,
+        toolsOff: argv.includes("--no-tools") && !argv.includes("--tools"),
+        overlayPath, overlayInCallDir: overlayPath === join(dir, "config-overlay.yml"),
+        overlayMatches: JSON.stringify(overlay) === JSON.stringify(OMP_SINGLE_CALL_OVERLAY),
+      };
+    });
+    let ccloopUsageTokens: number | null = null;
+    try { ccloopUsageTokens = sourceDir === null ? null : (JSON.parse(readFileSync(join(sourceDir, "control", "usage.json"), "utf8")) as { totals?: { work?: { tokens?: number } } }).totals?.work?.tokens ?? null; } catch { ccloopUsageTokens = null; }
+    const events = rt.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(runId)
+      .map((row) => JSON.parse(String(row.body)) as { bucket: string; cumulative: { tokens: number } | null }).filter((event) => event.bucket === "work");
+    return {
+      runId, groupId, role: body.phase === "estimate" ? "estimate" : body.purpose ?? "unknown", sourceDir, calls, ccloopUsageTokens,
+      bookedTokens: body.cumulative?.work?.tokens ?? null, unknownWork: body.unknown?.work ?? null, lastUsageEventTokens: events.at(-1)?.cumulative?.tokens ?? null,
+    };
+  });
+type OmpSingleCallRun = ReturnType<typeof ompSingleCalls>[number];
+/** One call per run, exactly one assistant message_end in it (spec §3.3.5). */
+const oneMessage = (run: OmpSingleCallRun): boolean => run.calls.length === 1 && run.calls[0]!.assistantMessageEnds === 1;
+const toolsOff = (run: OmpSingleCallRun): boolean => run.calls.length > 0 && run.calls.every((call) => call.toolsOff);
+const overlayPresent = (run: OmpSingleCallRun): boolean => run.calls.length > 0 && run.calls.every((call) => call.overlayInCallDir && call.overlayMatches);
+/** Booked = ccloop's usage.json total = the message's totalTokens, known and positive, and the last usage event says the same. */
+const usageBooked = (run: OmpSingleCallRun): boolean => run.unknownWork === false && run.bookedTokens !== null && run.bookedTokens > 0
+  && run.bookedTokens === run.ccloopUsageTokens && run.bookedTokens === run.lastUsageEventTokens
+  && run.calls.length === 1 && run.calls[0]!.messageTotal === run.bookedTokens;
+const fakeOmpCalls = (): string => existsSync(`${marker}.calls`) ? readFileSync(`${marker}.calls`, "utf8").trim().split("\n").join(",") : "";
+if (scenario === "requirement") {
+  // --scenario requirement (module header): open, one clarify call, answers or consensus, one split until a draft awaits review.
+  const requirementGroup = "r";
+  const rawRequirement = (commandId: string, verb: string, payload: unknown) => ({
+    schema: "orca-raw-command-v1", commandId, actorId: "human", verb, target: { kind: "group", groupId: requirementGroup }, payload,
+    expectedRevision: verb === "requirement-open" ? 0 : Number(runtime.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(requirementGroup)!.revision),
+  }) as never;
+  const idea = "Add a file named answer.txt at the repository root whose entire content is the characters 42 followed by one newline. Change no other file.";
+  const deadline = Date.now() + deadlineMs;
+  const until = async (done: () => boolean): Promise<boolean> => {
+    for (;;) {
+      if (done()) return true;
+      if (Date.now() > deadline) { timedOut = true; return false; }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  };
+  try {
+    await runtime.recover();
+    await setPreferences();
+    const opened = await runtime.service.openRequirement(rawRequirement("open", "requirement-open", { groupId: requirementGroup, repoId, idea }));
+    summary.requirementOpened = opened;
+    if ("error" in opened) throw new Error(`requirement-open refused: ${JSON.stringify(opened.error)}`);
+    if (fakeOmp) await fakeOmpAnswer({ slug: "answer-file", statement: idea, acceptanceCriteria: [{ id: "AC1", text: "answer.txt holds exactly 42 and a newline" }],
+      questions: [{ key: "newline", question: "Does answer.txt end with exactly one newline?", recommendedAnswer: "Yes, one trailing newline.", why: "The idea says 42 followed by one newline.", dependsOn: [] }],
+      frontierEmpty: true, openBranches: [], glossary: [], adrs: [] });
+    runtime.startPump(200);
+    // A clarify retry (an invalid answer, handed back by Orca at most twice) keeps round 1 drafting.
+    if (await until(() => readRound(runtime.store, requirementGroup, 1).state !== "drafting")) {
+      const round = readRound(runtime.store, requirementGroup, 1);
+      // Deterministic answers: every question its recommended answer and every proposal accepted, but only when the round
+      // closes the frontier; otherwise answering would queue round 2, so consensus closes round 1 with its questions open.
+      if (round.state === "awaiting-answers" && round.result !== null && round.result.frontierEmpty) {
+        const answered = runtime.service.answerRequirement(rawRequirement("answer", "requirement-answer", {
+          roundNo: 1, answers: round.result.questions.map((q) => ({ id: q.id, kind: "recommended" })),
+          glossaryDecisions: round.result.glossary.map((entry) => ({ id: entry.id, accept: true })), adrDecisions: round.result.adrs.map((adr) => ({ id: adr.id, accept: true })),
+        }));
+        summary.requirementAnswered = answered;
+        if ("error" in answered) throw new Error(`requirement-answer refused: ${JSON.stringify(answered.error)}`);
+      }
+      if (round.result !== null) {
+        if (fakeOmp) await fakeOmpAnswer({ tasks: [{ taskId: "a", title: "Write answer.txt", labels: [], goal: tasks[0]!.goal, successCondition: tasks[0]!.successCondition,
+          targetPaths: ["answer.txt"], checks: [tasks[0]!.check], dependsOn: [], traces: round.result.acceptanceCriteria.map((criterion) => criterion.id) }], notes: "" });
+        const consensus = runtime.service.requirementConsensus(rawRequirement("consensus", "requirement-consensus", { roundNo: 1 }));
+        summary.requirementConsensus = consensus;
+        if ("error" in consensus) throw new Error(`requirement-consensus refused: ${JSON.stringify(consensus.error)}`);
+        // An invalid draft is handed back as the next one (drafting); wait for one that awaits review or failed.
+        await until(() => !["drafting"].includes(latestDraft(runtime.store, requirementGroup)?.state ?? "drafting"));
+      }
+    }
+  } finally {
+    await stopRuntime();
+  }
+  const group = readRequirementGroup(runtime.store, requirementGroup);
+  const rounds = readRounds(runtime.store, requirementGroup);
+  const drafts = readDrafts(runtime.store, requirementGroup);
+  const draft = latestDraft(runtime.store, requirementGroup);
+  summary.requirement = { status: group.status, used: group.used, reserved: group.reserved, ledger: group.ledger, consensus: group.requirement.consensus, rounds, drafts };
+  const singleCalls = ompSingleCalls(runtime);
+  summary.ompSingleCalls = singleCalls;
+  checks.notTimedOut = !timedOut;
+  checks.clarifyCompleted = rounds[0]?.result != null && ["awaiting-answers", "answered"].includes(rounds[0].state);
+  checks.consensusReached = group.requirement.consensus !== null;
+  checks.splitDraftProduced = draft !== null && draft.state === "awaiting-review" && draft.draftHash !== null && draft.plan !== null;
+  // Orca's own record: every call of the requirement is an omp single call, round 1 clarify and the drafts split.
+  const recordedRole = (runId: string): string => rounds.some((r) => r.calls.some((c) => c.runId === runId)) ? "clarify" : drafts.some((d) => d.calls.some((c) => c.runId === runId)) ? "split" : "none";
+  checks.ompRolesClassified = singleCalls.length > 0 && singleCalls.every((run) => run.groupId === requirementGroup && run.role === recordedRole(run.runId))
+    && singleCalls.some((run) => run.role === "clarify") && singleCalls.some((run) => run.role === "split");
+  checks.ompSingleCallOneMessage = singleCalls.length > 0 && singleCalls.every(oneMessage);
+  checks.ompSingleCallToolsOff = singleCalls.length > 0 && singleCalls.every(toolsOff);
+  checks.ompOverlayPresent = singleCalls.length > 0 && singleCalls.every(overlayPresent);
+  checks.ompSingleCallUsageBooked = singleCalls.length > 0 && singleCalls.every(usageBooked);
+  // The clarifying ledger holds exactly what the calls booked, and nothing is still reserved.
+  checks.requirementLedgerMatches = group.ledger.usageUnknown === false && group.used.tokens === singleCalls.reduce((sum, run) => sum + (run.bookedTokens ?? 0), 0) && group.reserved.tokens === 0;
+  if (fakeOmp) checks.fakeCallsExact = fakeOmpCalls() === "single-call,single-call";
+  checks.humanUntouched = JSON.stringify(human()) === JSON.stringify(humanBefore);
+  checks.orcaHomeUntouched = JSON.stringify(snapshot(orcaHome)) === JSON.stringify(orcaHomeBefore);
+  checks.claudeProjectsUntouched = JSON.stringify(claudeProjectsList()) === JSON.stringify(claudeProjectsBefore);
+  checks.shutdownClean = summary.shutdown === true;
+  summary.checks = checks;
+  summary.finishedAt = new Date().toISOString();
+  runtime.close();
+  await writeFile(join(root, "summary.json"), JSON.stringify(summary, null, 2), { mode: 0o600 });
+  const failed = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name);
+  console.log(JSON.stringify({ summary: join(root, "summary.json"), requirementUsedTokens: group.used.tokens, singleCalls: singleCalls.map((run) => ({ role: run.role, booked: run.bookedTokens })), failed }, null, 2));
+  process.exit(failed.length === 0 ? 0 : 1);
+}
 try {
   await runtime.recover();
-  // Agent selection spec §6.2 layer 1: the operator's default is the table's codex installation, with --model when live.
-  const setPreferences = async () => {
-    const preferences = await runtime.service.setAgentPreferences(raw(runtime, "preferences", "set-agent-preferences",
-      { preferences: { defaultAgent: kind, perAgent: { [kind]: { ...(isFake ? {} : { model: args.model! }), ...(contextWindow === undefined ? {} : { contextWindow }) } } } }, { kind: "operator", operatorId: "human" }));
-    if ("error" in preferences) throw new Error(`set-agent-preferences refused: ${JSON.stringify(preferences.error)}`);
-  };
   // estimate: the estimator's slot freezes at import, so the operator's claude-1M preference must be set beforehand.
   if (scenario === "estimate") await setPreferences();
   const imported = await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId, planId: "plan" }));
@@ -313,12 +504,11 @@ try {
     checks.estimateQueued = result?.estimateState === "queued";
     estimateId = result?.estimateId ?? null;
     const planHash = readArchivedPlan(runtime.store, "g").planHash;
-    if (fakeClaude) {
-      const answer = { schema: "budget-estimate-v1", planHash,
-        tasks: [{ taskId: "a", complexity: "S", confidence: "high", work: { tokens: taskTokens, activeMs, attempts: taskAttempts, sessions: taskAttempts }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, rationale: "one file with one line", assumptions: ["answer.txt does not exist yet"] }],
-        goalReviewReserve: { tokens: 1, activeMs: 1, attempts: 0, sessions: 0 }, groupRationale: "a single one-line task" };
-      await writeFile(scriptPath, JSON.stringify({ a: { files: { "answer.txt": "42\n" } }, "single-call": { output: answer } }));
-    }
+    const answer = { schema: "budget-estimate-v1", planHash,
+      tasks: [{ taskId: "a", complexity: "S", confidence: "high", work: { tokens: taskTokens, activeMs, attempts: taskAttempts, sessions: taskAttempts }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, rationale: "one file with one line", assumptions: ["answer.txt does not exist yet"] }],
+      goalReviewReserve: { tokens: 1, activeMs: 1, attempts: 0, sessions: 0 }, groupRationale: "a single one-line task" };
+    if (fakeClaude) await writeFile(scriptPath, JSON.stringify({ a: { files: { "answer.txt": "42\n" } }, "single-call": { output: answer } }));
+    if (fakeOmp) await fakeOmpAnswer(answer);
     runtime.startPump(200);
     const settleBy = Date.now() + deadlineMs;
     while (estimateId !== null && ["queued", "running"].includes(readEstimateRecord(runtime.store, "g", estimateId).state) && Date.now() < settleBy) await new Promise((r) => setTimeout(r, 200));
@@ -411,14 +601,7 @@ try {
   }
   if (settle) await waitFor(() => false, 1000);
 } finally {
-  summary.shutdown = await runtime.shutdown().catch((e: unknown) => `threw: ${String(e)}`);
-  // Outer watchdog: whatever the ending, no codex process group ccloop registered may outlive this script.
-  const killed: number[] = [];
-  for (const file of findEvidence("process.json")) {
-    const { pgid } = JSON.parse(readFileSync(file, "utf8")) as { pgid: number };
-    try { process.kill(-pgid, "SIGKILL"); killed.push(pgid); } catch { /* already gone */ }
-  }
-  summary.killedProcessGroups = killed;
+  await stopRuntime();
 }
 
 const runs = workRuns(runtime);
@@ -442,7 +625,7 @@ const calls: Call[] = kind === "omp"
     const usage = messages.map((row) => row.message.usage);
     const total = usage.length > 0 && usage.every((row) => Number.isSafeInteger(row?.totalTokens)) ? usage.reduce((sum, row) => sum + row.totalTokens, 0) : null;
     const phase = file.split("/omp/")[1]!.split("/")[1]!;
-    return { role: file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, usage, total };
+    return { role: estimateSourceDir !== null && file.startsWith(`${estimateSourceDir}/`) ? "estimate" : file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, usage, total };
   })
   : kind === "codex"
   ? findEvidence("events.jsonl").filter((file) => file.includes("/codex/")).map((file) => {
@@ -560,9 +743,21 @@ if (scenario === "estimate") {
   const booked = estimateBody?.cumulative.work.tokens ?? null;
   checks.estimateUsageBooked = estimateBody !== null && estimateBody.unknown.work === false && booked !== null && booked > 0
     && events.length > 0 && events.at(-1)!.cumulative?.tokens === booked;
-  // Tools off, as the claude CLI received it (the tee's argv files, the agent's own record).
-  const argvs = existsSync(claudeRaw) ? readdirSync(claudeRaw).filter((name) => name.endsWith(".argv.json")).map((name) => JSON.parse(readFileSync(join(claudeRaw, name), "utf8")) as string[]) : [];
-  checks.estimateToolsOff = argvs.some((argv) => { const i = argv.indexOf("--tools"); return i >= 0 && argv[i + 1] === ""; });
+  if (kind === "claude") {
+    // Tools off, as the claude CLI received it (the tee's argv files, the agent's own record).
+    const argvs = existsSync(claudeRaw) ? readdirSync(claudeRaw).filter((name) => name.endsWith(".argv.json")).map((name) => JSON.parse(readFileSync(join(claudeRaw, name), "utf8")) as string[]) : [];
+    checks.estimateToolsOff = argvs.some((argv) => { const i = argv.indexOf("--tools"); return i >= 0 && argv[i + 1] === ""; });
+  } else {
+    // omp: the estimate run's single call, read from ccloop's own evidence (ompSingleCalls).
+    const singleCalls = ompSingleCalls(runtime);
+    summary.ompSingleCalls = singleCalls;
+    const estimateCalls = singleCalls.filter((run) => run.role === "estimate");
+    checks.ompEstimateClassified = singleCalls.length === 1 && estimateCalls.length === 1 && estimateCalls[0]!.runId === estimateBody?.runId;
+    checks.ompSingleCallOneMessage = estimateCalls.length === 1 && estimateCalls.every(oneMessage);
+    checks.ompSingleCallToolsOff = estimateCalls.length === 1 && estimateCalls.every(toolsOff);
+    checks.ompOverlayPresent = estimateCalls.length === 1 && estimateCalls.every(overlayPresent);
+    checks.ompSingleCallUsageBooked = estimateCalls.length === 1 && estimateCalls.every(usageBooked);
+  }
 }
 checks.everyCallHasUsage = calls.filter((call) => call.role !== "estimate").length > 0 && calls.filter((call) => call.role !== "estimate").every((call) => call.total !== null && call.total > 0);
 checks.ledgerKnown = ledger.usageUnknown === false;
@@ -582,6 +777,7 @@ if (kind === "omp") {
 }
 if (fake && scenario === "single") checks.fakeCallsExact = existsSync(`${marker}.calls`) && readFileSync(`${marker}.calls`, "utf8").trim().split("\n").join(",") === "plan,execute,verify";
 if (fakeClaude && scenario === "single") checks.fakeCallsExact = existsSync(`${marker}.tasks`) && readFileSync(`${marker}.tasks`, "utf8").trim().split("\n").map((line) => line.split(" ")[0]).join(",") === "plan,execute,verify";
+if (fakeOmp) checks.fakeCallsExact = fakeOmpCalls() === (scenario === "estimate" ? "single-call,plan,execute,verify" : "plan,execute,verify");
 if (isFake) summary.fakeScripted = existsSync(`${marker}.tasks`) ? readFileSync(`${marker}.tasks`, "utf8").trim().split("\n") : null;
 checks.shutdownClean = summary.shutdown === true;
 
