@@ -16,6 +16,7 @@ import { readRun, saveRun } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { commitCandidate } from "./checkpoints.js";
 import { hashPayload } from "./commands.js";
+import { peerExitText, peerFailure } from "./ccloopPort.js";
 import { ControlError } from "./errors.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { privateDirectory } from "./paths.js";
@@ -122,6 +123,9 @@ export interface ExecutionDriver {
 }
 
 export function describeError(error: unknown): string {
+  // Spec 2026-10-15 ccloop error codes §4.4: a peer exit is stored cut -- `control-peer-exit:<exit>:<code>: <detail≤512>`.
+  const peer = peerFailure(error);
+  if (peer !== null) { const text = peerExitText(peer); return text === "" ? "control-peer-exit" : `control-peer-exit:${text}`; }
   if (error instanceof ControlError) return error.detail ? `${error.code}:${error.detail}` : error.code;
   return error instanceof Error && error.message.length > 0 ? error.message : String(error);
 }
@@ -470,7 +474,7 @@ export async function stepB(deps: ExecutionDriverDeps, runId: string): Promise<b
     status = await portFor(deps, run).accept(readStartEnvelope(store, run));
   } catch (error) {
     if (error instanceof ControlError && error.code === "control-peer-exit" && (error.detail ?? "").startsWith("2:")) {
-      blockRun(deps, runId, "B", `accept-refused:${error.detail}`);
+      blockRun(deps, runId, "B", `accept-refused:${peerExitText(peerFailure(error)!)}`);
       return true;
     }
     status = { kind: "unknown" };
