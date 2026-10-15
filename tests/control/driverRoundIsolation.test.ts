@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AdmissionGate } from "../../src/control/admissionGate.js";
+import { ControlError } from "../../src/control/errors.js";
 import { createExecutionDriver } from "../../src/control/executionDriver.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
 import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
@@ -84,6 +85,33 @@ describe("a round goes on past one group's failure (backlog #3)", () => {
       expect(t.body(second).state).toBe("collected");
       expect(t.body(first).state).toBe("accepted");
       expect(lines).toContain(`orca-driver: ${first}: collect-boom; recording it failed: gate-boom\n`);
+    } finally { await t.h.dispose(); }
+  });
+
+  // Final review m2 (session 026d10e3, ruled 2026-10-15): the stored reason of a peer exit is cut to 512 units, so the
+  // driver's own log line is the last place ccloop's whole stderr (a stack trace) survives. It must not be cut too.
+  it("logs ccloop's whole stderr, not the stored 512-unit cut, for a run whose failure it could not record", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const a = await t.claim();
+      await t.until(t.driver(), () => t.body(a).state === "accepted");
+      const stderr = `collect-failed: ${"x".repeat(600)} END-OF-STACK`;
+      let armed = false;
+      const port: ExecutionPort = {
+        ...t.fake.port,
+        async collect() { armed = true; throw new ControlError("control-peer-exit", `2:${stderr}`); },
+      };
+      const gate = t.h.deps.admissionGate;
+      const faulty: AdmissionGate = {
+        get draining() { return gate.draining; },
+        beginDrain: () => gate.beginDrain(),
+        enter: () => {
+          if (armed) { armed = false; throw new Error("gate-boom"); }
+          return gate.enter();
+        },
+      };
+      captureStderr();
+      await createExecutionDriver({ ...t.deps, admissionGate: faulty, router: createExecutionProfileRouter([resolveProfile(profileSnapshot(), port)]) }).round();
+      expect(lines.filter((line) => line.startsWith(`orca-driver: ${a}: `))).toEqual([`orca-driver: ${a}: control-peer-exit:2:${stderr}; recording it failed: gate-boom\n`]);
     } finally { await t.h.dispose(); }
   });
 });

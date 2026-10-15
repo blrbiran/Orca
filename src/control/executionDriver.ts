@@ -130,6 +130,15 @@ export function describeError(error: unknown): string {
   return error instanceof Error && error.message.length > 0 ? error.message : String(error);
 }
 
+/**
+ * Final review m2 (2026-10-15): the driver's stderr lines keep a peer exit whole. §4.4 cuts only what is stored; with
+ * the stored reason cut, these lines are the one place ccloop's full stderr (a stack trace) is still kept.
+ */
+function logError(error: unknown): string {
+  if (error instanceof ControlError && error.code === "control-peer-exit") return error.detail ? `${error.code}:${error.detail}` : error.code;
+  return describeError(error);
+}
+
 export function readDriverRun(store: ControlStore, runId: string): DriverRun {
   const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
   if (!row) throw new ControlError("run-not-found");
@@ -1013,10 +1022,10 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
                 saveDriverRun(deps.store, current);
               }
             });
-            process.stderr.write(`orca-driver: ${runId}: ${describeError(error)}\n`);
+            process.stderr.write(`orca-driver: ${runId}: ${logError(error)}\n`);
             continue;
           }
-          if (run.drive === undefined) { process.stderr.write(`orca-driver: ${runId}: ${describeError(error)}\n`); continue; }
+          if (run.drive === undefined) { process.stderr.write(`orca-driver: ${runId}: ${logError(error)}\n`); continue; }
           // Final fix wave (FR-C2, controller ruling 2026-09-25): a run that is already blocked stays blocked where it
           // was. `blockedAt` decides which branch closes it under a stop (spec §13.2 I-3) and where a retry resumes it,
           // so a later error on it (a transient collect failure, an H-settle that threw) never moves it -- `stepOf`
@@ -1030,7 +1039,7 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
         } catch (recordError) {
           if (recordError instanceof DriverCrash) throw recordError;
           if (recordError instanceof ControlError && recordError.code === "panel-draining") return progressed;
-          process.stderr.write(`orca-driver: ${runId}: ${describeError(error)}; recording it failed: ${describeError(recordError)}\n`);
+          process.stderr.write(`orca-driver: ${runId}: ${logError(error)}; recording it failed: ${logError(recordError)}\n`);
         }
       }
     }
@@ -1050,7 +1059,7 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
     const current = pass()
       .catch((error: unknown) => {
         if (error instanceof DriverCrash) { crashed = error.point; stopTimer(); return false; }
-        if (!context.stopped) process.stderr.write(`orca-driver: round failed: ${describeError(error)}\n`);
+        if (!context.stopped) process.stderr.write(`orca-driver: round failed: ${logError(error)}\n`);
         return false;
       })
       .finally(() => { inFlight = null; });
