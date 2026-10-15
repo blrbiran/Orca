@@ -26,6 +26,7 @@ import { hasRequirementBlock, readRequirementGroup } from "./requirementRecords.
 import { archivedMarkOf, isGroupArchived } from "./archivedMark.js";
 import { claimCapBlocking, gateClaim, clearSpendCapBlock, recordCapBlock, capStatuses } from "./spendCaps.js";
 import { noteRunWrite, recordActivity } from "./activity.js";
+import { groupExecutionPendingInStore } from "./executionPending.js";
 
 export type Phase = "estimate" | "work" | "handoff" | "single-call";
 export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
@@ -124,12 +125,24 @@ function success(context: WebCommandContext, result: CommandSuccessV1["result"],
 }
 
 /** Commit the durable start wake only after the frozen profiles still probe clean. */
+/** Start guard spec (2026-10-15) §3.2: a group with a plan whose execution is pending; a clarifying group is left to requirement-not-split. */
+function startRefusedAsPending(store: ControlStore, groupId: string): boolean {
+  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+  if (row === undefined || (JSON.parse(String(row.body)) as { status?: unknown }).status === "clarifying") return false;
+  return groupExecutionPendingInStore(store, groupId);
+}
+function refuseStart(store: ControlStore, command: StartCommand): CommandResult {
+  const refusal = new ControlError("group-execution-pending");
+  return applyWebCommand<CommandResult>(store, { rawCommand: command, expand: () => { throw refusal; }, apply: () => { throw refusal; } }).body;
+}
 export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand): Promise<CommandResult> {
   const { store, profileRouter, admissionGate } = deps;
   const replay = preflightWebCommand<CommandResult>(store, command);
   if (replay) return replay.body;
   const release = admissionGate?.enter();
   try {
+    // Start guard spec §3.2: refused, ledgered, before the frozen profiles are probed -- a refused start asks no agent.
+    if (startRefusedAsPending(store, groupTarget(command))) return refuseStart(store, command);
     let degraded = false;let observations:ScopedObservation[]=[];
     try {
       const snapshot = readFrozenSnapshot(store, groupTarget(command));
@@ -148,6 +161,8 @@ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand
         const groupId = groupTarget(command);
         const group = readGroup(store, groupId);
         if ((group as { status: string }).status === "clarifying") throw new ControlError("requirement-not-split");
+        // And again here: a wake inserted while the probe ran is still caught.
+        if (groupExecutionPendingInStore(store, groupId)) throw new ControlError("group-execution-pending");
         if (group.status !== "ready") throw new ControlError("group-state-invalid");
         // N1 spec §9.3: a requirement's group starts only on top of its exported document.
         if (hasRequirementBlock(group as { requirement?: unknown }) && readRequirementGroup(store, groupId).requirement.export.state !== "done") throw new ControlError("requirement-export-pending");

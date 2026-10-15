@@ -1131,6 +1131,7 @@ export const enErrors: Record<string, string> = {
   "group-project-conflict": "The group is bound to a different project.",
   "group-reserve-insufficient": "The group's unallocated reserve is too small ({{detail}}). Raise the group limit or lower another allocation in the budget editor, then try again.",
   "group-review-budget-unavailable": "The group's review budget is not enough.",
+  "group-execution-pending": "This group is already starting or running; its next task is dispatched automatically.",
   "group-state-invalid": "The group's current state does not allow this command. Only the buttons its view shows apply now.",
   "group-stopped": "The group is stopped. Resume it before sending this command.",
   "handoff-budget-unavailable": "There is not enough budget for the handoff.",

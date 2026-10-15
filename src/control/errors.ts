@@ -93,6 +93,8 @@ export const durableCommandErrorStatuses = {
   "start-contract-conflict": 409,
   "start-envelope-conflict": 409,
   "start-state-conflict": 409,
+  // Start guard spec (2026-10-15) §3.2: a start while the group's execution is pending or running (feedback #53).
+  "group-execution-pending": 409,
   "stop-already-active": 409,
   "stop-mode-conflict": 409,
   "target-version-conflict": 409,

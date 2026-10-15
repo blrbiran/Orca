@@ -100,4 +100,10 @@ describe("the orca-control skill (spec §7, C18)", () => {
     ]) expect(skill).toContain(phrase);
     for (const code of ["`0`", "`1`", "`2`", "`3`"]) expect(skill).toContain(code);
   });
+
+  // Start guard spec (2026-10-15) §3.2: an agent is told the server refuses a second start, by name.
+  it("names group-execution-pending as the refusal of a second start, and no longer says the server accepts one", () => {
+    expect(skill).toContain("`group-execution-pending`");
+    expect(skill).not.toContain("the server still accepts a second start");
+  });
 });

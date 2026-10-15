@@ -5,7 +5,8 @@ import { createExecutionProfileRouter, resolveProfile } from "../../../src/contr
 import { WebControlService } from "../../../src/control/webService.js";
 import { deliverScheduledStart } from "../../../src/control/webDispatch.js";
 import { controlWorkspaceRoots } from "../../../src/control/workspace.js";
-import { createExecutionDriver, type ExecutionDriver, type ExecutionDriverDeps } from "../../../src/control/executionDriver.js";
+import { createExecutionDriver, replenishStartWakes, type ExecutionDriver, type ExecutionDriverDeps } from "../../../src/control/executionDriver.js";
+import { groupExecutionPendingInStore } from "../../../src/control/executionPending.js";
 import { fakeCcloopPort, type FakeBehaviour } from "./driverPort.js";
 import type { AgentsView, StartEnvelope } from "../../../src/control/executionPort.js";
 import type { SyncskillOptions } from "../../../src/skills/syncskill.js";
@@ -75,10 +76,15 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     ...(options.syncskill ? { syncskill: options.syncskill } : {}),
   };
   const dispatch = { store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate };
-  /** A fresh start command and its delivery: one more claimed run. */
+  /** Start guard spec (2026-10-15) §3.2: while the group's execution is pending a second start is refused, so a later
+   * claim is armed as the driver arms it (replenishStartWakes), then delivered. Claims keep the first start's revision. */
   const claim = async (): Promise<string> => {
-    const started = await service.start(h.command("start", {}));
-    if ("error" in started) throw new Error(`start refused: ${JSON.stringify(started.error)}`);
+    if (groupExecutionPendingInStore(h.store, "g")) {
+      if (replenishStartWakes({ store: h.store, admissionGate: h.deps.admissionGate }).length === 0) throw new Error("claim: the driver would arm no start wake");
+    } else {
+      const started = await service.start(h.command("start", {}));
+      if ("error" in started) throw new Error(`start refused: ${JSON.stringify(started.error)}`);
+    }
     const delivered = await deliverScheduledStart(dispatch, "g");
     if (delivered.kind !== "claimed") throw new Error(`claim refused: ${JSON.stringify(delivered)}`);
     return delivered.runId;
