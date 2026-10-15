@@ -2228,8 +2228,8 @@ EOF
 
 Not run by this plan without an explicit yes for this run (spec §6: "Real-provider acceptance … is paid and asked for separately").
 
-- [ ] **Step 1: Ask.** State to the human: one omp estimate through the operator's LiteLLM endpoint (`local-litellm/<model>`), soft mode, a one-task plan; expected spend is one request of at most `inputTokens + bound` tokens; preconditions the human owns: (a) `~/.orca/profile.json` must declare a context window (today `contextWindowTokens: null` ⇒ `context-unavailable` for every estimator, spec §6), (b) its `framingTokenOverhead` covers spec §7's measured overhead, (c) the LiteLLM endpoint is up. Wait for an explicit yes.
-- [ ] **Step 2 (only after yes):** run it in a disposable world as `docs/handoff/2026-10-12-oh-my-pi-acceptance.md` did (scratch HOME/XDG/control store, copied omp configuration files mode `0600` in `0700` directories, `ORCA_CCLOOP_BIN=/private/tmp/osc/ccl-build/dist/cli.js`); keep `events.jsonl`, `outcome.json`, `usage.json` and `config-overlay.yml` from the call's evidence directory; record: exactly one assistant `message_end`, its `usage`, the booked tokens, the estimate's state, and LiteLLM's own request count for that minute if the human can read it. Write the result into the handoff (Chinese) with the commit it ran on.
+- [x] **Step 1: Ask.** State to the human: one omp estimate through the operator's LiteLLM endpoint (`local-litellm/<model>`), soft mode, a one-task plan; expected spend is one request of at most `inputTokens + bound` tokens; preconditions the human owns: (a) `~/.orca/profile.json` must declare a context window (today `contextWindowTokens: null` ⇒ `context-unavailable` for every estimator, spec §6), (b) its `framingTokenOverhead` covers spec §7's measured overhead, (c) the LiteLLM endpoint is up. Wait for an explicit yes.
+- [x] **Step 2 (only after yes):** run it in a disposable world as `docs/handoff/2026-10-12-oh-my-pi-acceptance.md` did (scratch HOME/XDG/control store, copied omp configuration files mode `0600` in `0700` directories, `ORCA_CCLOOP_BIN=/private/tmp/osc/ccl-build/dist/cli.js`); keep `events.jsonl`, `outcome.json`, `usage.json` and `config-overlay.yml` from the call's evidence directory; record: exactly one assistant `message_end`, its `usage`, the booked tokens, the estimate's state, and LiteLLM's own request count for that minute if the human can read it. Write the result into the handoff (Chinese) with the commit it ran on.
 
 ---
 
@@ -2237,3 +2237,11 @@ Not run by this plan without an explicit yes for this run (spec §6: "Real-provi
 
 - **Spec coverage:** §3.1 → Task 1; §3.2 → Task 2 (resolution, descriptors, command, accept, strict schema); §3.3.1 → Task 4 (+ worker booking, Task 5); §3.3.2-§3.3.4 → Tasks 0, 4; §3.3.5-§3.3.7 → Task 5; process parameterisation → Task 3; §4 schema/type → Task 7; sizing → Task 8; clarify/split → Task 9; soft-only → unchanged `estimatorCompatibility` (no task: no change); §5 criteria 1-7 → Tasks 2, 4, 5 + Task 6; criteria 8-10 → Tasks 7, 8 + Task 10; §6 paid acceptance → Task 13; repin → Task 11; gates → Task 12.
 - **Names used across tasks:** `CatalogRowV1`, `readOmpCatalog`, `readOmpModels`, `ompSingleCallExecution` (Task 1) → Tasks 2, 4; `runOmpProcess`, `OmpProcessInput`, `OmpPhaseOutcome` (Task 3) → Task 4; `OMP_SINGLE_CALL_OVERLAY`, `OmpSingleCallRefused`, `runOmpSingleCall`, `singleCallSystemPrompt` (Task 4) → Task 5; `decodeOmpSingleCall`, `parseSingleCallObject`, `assistantUsage` (Task 5); `AgentResolution.singleCallOutputCap` (Task 7) → Tasks 8, 9; `singleCallOutputBound` (Task 8) → Task 9.
+
+## Correction (Orca session 026d10e3, 2026-10-15): Task 13 as run
+
+Task 13 Step 1's preconditions (a) and (b) name the operator's `~/.orca/profile.json`; the acceptance harness writes its
+own profile in the disposable world and checks that `~/.orca` is unchanged, so the run needed neither. The harness had
+no omp estimate or requirement scenario; branch `test/omp-single-call-acceptance` added them
+(`test(acceptance): omp single-call estimate and requirement scenarios, --fake-omp`). Results and evidence:
+`.superpowers/sdd/2026-10-15-omp-single-call-acceptance/progress.md`. The text of Tasks 0-13 above is unchanged.

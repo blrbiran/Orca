@@ -1,0 +1,30 @@
+{
+  "reason": "completed",
+  "code": 0,
+  "signal": null,
+  "neverStarted": false,
+  "executable": "/Users/biran/.bun/bin/omp",
+  "args": [
+    "--profile",
+    "default",
+    "--no-extensions",
+    "--no-skills",
+    "--no-rules",
+    "--no-lsp",
+    "--no-tools",
+    "--no-session",
+    "--no-title",
+    "--no-prewalk",
+    "--model",
+    "local-litellm/ep-20261012204110-nvhqw",
+    "--mode",
+    "json",
+    "-p",
+    "--system-prompt",
+    "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-1497b975-3f6e-4f58-bc09-4f9cbb8692a3/run/omp/1/single-call/call-3E8LAM/system-prompt.md",
+    "--cwd",
+    "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-1497b975-3f6e-4f58-bc09-4f9cbb8692a3/run/cwd",
+    "--config",
+    "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-1497b975-3f6e-4f58-bc09-4f9cbb8692a3/run/omp/1/single-call/call-3E8LAM/config-overlay.yml"
+  ]
+}

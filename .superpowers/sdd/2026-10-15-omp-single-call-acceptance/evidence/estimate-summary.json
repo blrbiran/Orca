@@ -1,0 +1,687 @@
+{
+  "mode": "live",
+  "kind": "omp",
+  "scenario": "estimate",
+  "contextWindow": 1000000,
+  "agents": {
+    "a": {
+      "agent": "omp",
+      "model": "local-litellm/ep-20261012204110-nvhqw",
+      "contextWindow": "agent-default"
+    }
+  },
+  "groupTokens": 3000000,
+  "taskTokens": 1000000,
+  "taskAttempts": 1,
+  "activeMs": 600000,
+  "deadlineMs": 900000,
+  "installationCommand": [
+    "/Users/biran/.bun/bin/omp"
+  ],
+  "installationVersion": "18.10.1",
+  "startedAt": "2026-10-15T01:49:10.252Z",
+  "root": "/private/tmp/omp13-CMmR/estimate",
+  "imported": {
+    "schema": "orca-command-success-v1",
+    "commandId": "import",
+    "actorId": "human",
+    "verb": "import-plan",
+    "target": {
+      "kind": "group",
+      "groupId": "g"
+    },
+    "commandRevision": 1,
+    "projectionSeq": 1,
+    "effectivePayloadHash": "0bcffa9a9bb0a1ff4a5a824243aff431892330a29ce513361eddc0cf419b592d",
+    "authorityCommandHash": "a2b5fe16ae2400988ddb058ca4ba3e69ae7233e98da64f7aa893ea6001fd66ba",
+    "result": {
+      "kind": "imported",
+      "groupId": "g",
+      "estimateId": "estimate-7d08513a8f770d633f8ce878",
+      "estimateState": "queued",
+      "estimateReasonCode": null
+    }
+  },
+  "estimate": {
+    "estimateId": "estimate-7d08513a8f770d633f8ce878",
+    "estimateVersion": 1,
+    "state": "failed",
+    "profile": {
+      "profileId": "all",
+      "profileHash": "726ca74b2733b2bc3ebf3d9b1d3f283e0e8caebe8d1470a3591f65fc60b22a82"
+    },
+    "mode": "soft",
+    "requestHash": "c0a4460b1a99a32918a1b0247444634719d7e0173076d50446b0db34fd96be2c",
+    "request": {
+      "schema": "budget-estimate-request-v1",
+      "planHash": "711b9b4fb4ad3659a4ecb01ce5976d4f4612b6d997958bc136d673ad1c572733",
+      "planSnapshotCanonicalJson": "{\"goal\":\"live acceptance\",\"planId\":\"plan\",\"repoId\":\"live-247610f4\",\"schema\":\"orca-control-plan-v1\",\"successConditions\":[\"answer.txt holds exactly 42 and a newline\"],\"tasks\":[{\"dependencyTaskIds\":[],\"originalContractCanonicalJson\":\"{\\\"context\\\":{\\\"buildTestCommands\\\":[\\\"test \\\\\\\"$(cat answer.txt)\\\\\\\" = 42\\\"],\\\"constraints\\\":[],\\\"relevantDocs\\\":[],\\\"repoPath\\\":\\\"/private/tmp/omp13-CMmR/estimate/target\\\",\\\"targetPaths\\\":[\\\"answer.txt\\\"]},\\\"escalationAndExit\\\":{\\\"escalationTargets\\\":[],\\\"pauseOn\\\":[],\\\"stopOn\\\":[],\\\"terminalStates\\\":[\\\"succeeded\\\",\\\"blocked_waiting_human\\\",\\\"exhausted\\\",\\\"cancelled\\\",\\\"failed\\\"]},\\\"executionPolicy\\\":{\\\"autonomyLevel\\\":\\\"L2\\\",\\\"maxAttempts\\\":1,\\\"partialOutcomeRecoveryWindowMs\\\":1000,\\\"perAttemptTimeoutMs\\\":420000,\\\"tokenBudget\\\":1000000,\\\"totalRuntimeBudgetMs\\\":600000,\\\"worktreeRequired\\\":true},\\\"objective\\\":{\\\"goal\\\":\\\"Create a file named answer.txt at the repository root whose entire content is the characters 42 followed by one newline. Change no other file.\\\",\\\"nonGoals\\\":[\\\"changing any file other than answer.txt\\\"],\\\"successCondition\\\":\\\"answer.txt holds exactly 42 and a newline\\\",\\\"taskId\\\":\\\"a\\\"},\\\"safetyPolicy\\\":{\\\"allowlistPaths\\\":[],\\\"denylistPaths\\\":[],\\\"humanGateConditions\\\":[],\\\"maxFilesTouched\\\":1},\\\"verification\\\":{\\\"evidenceRequired\\\":[],\\\"rejectOn\\\":[\\\"failure\\\"],\\\"requiredChecks\\\":[\\\"test \\\\\\\"$(cat answer.txt)\\\\\\\" = 42\\\"],\\\"verifierType\\\":\\\"agent\\\"}}\",\"originalContractHash\":\"cd1964614b9086731031e3d5a78ec11e9159727f8756aaed9994e7cdefcb448d\",\"targetVersion\":1,\"taskId\":\"a\"}]}",
+      "estimatorProfile": {
+        "profileId": "all",
+        "profileHash": "726ca74b2733b2bc3ebf3d9b1d3f283e0e8caebe8d1470a3591f65fc60b22a82"
+      },
+      "estimatorCapabilities": {
+        "contextWindowTokens": 128000,
+        "usageObservation": "phase-end",
+        "budgetEnforcement": "soft",
+        "contextObservation": "unavailable"
+      },
+      "responseSchemaVersion": "budget-estimate-v1",
+      "instructionVersion": "1"
+    },
+    "outputHash": null,
+    "output": null,
+    "reasonCode": "estimate-output-invalid",
+    "grant": {
+      "tokens": 250000,
+      "activeMs": 900000,
+      "attempts": 1,
+      "sessions": 1
+    },
+    "estimatorSlot": {
+      "partial": {
+        "agent": "omp",
+        "model": "local-litellm/ep-20261012204110-nvhqw"
+      },
+      "provenance": {
+        "agent": "group-primary",
+        "model": "group-primary",
+        "contextWindow": "descriptor"
+      },
+      "selection": {
+        "agent": "omp",
+        "model": "local-litellm/ep-20261012204110-nvhqw",
+        "contextWindow": "agent-default"
+      },
+      "configHash": "8cd2cbba203957f082ab3963a77b026ffde881927f14929dd91f2fac5b224112",
+      "timeoutMs": 120000,
+      "killGraceMs": 5000,
+      "capabilities": {
+        "usageObservation": "phase-end",
+        "budgetEnforcement": "soft",
+        "contextObservation": "unavailable",
+        "handoffControl": "durable",
+        "handoffExecution": "mechanical-in-run-v1",
+        "contextWindowTokens": 128000,
+        "requestBoundProof": null
+      }
+    }
+  },
+  "confirmedLedger": {
+    "groupLimit": {
+      "tokens": 3000000,
+      "activeMs": 24840000,
+      "attempts": 6,
+      "sessions": 6
+    },
+    "used": {
+      "tokens": 3226,
+      "activeMs": 13227,
+      "attempts": 1,
+      "sessions": 1
+    },
+    "committedRemaining": {
+      "tokens": 1,
+      "activeMs": 6000000,
+      "attempts": 2,
+      "sessions": 2
+    },
+    "explicitUnallocatedReserve": {
+      "tokens": 2996773,
+      "activeMs": 18826773,
+      "attempts": 3,
+      "sessions": 3
+    },
+    "budgetDeficit": {
+      "tokens": 0,
+      "activeMs": 0,
+      "attempts": 0,
+      "sessions": 0
+    },
+    "usageUnknown": false,
+    "unmeteredRuns": 0
+  },
+  "proposal": {
+    "proposalVersion": 2,
+    "state": "confirmed",
+    "planHash": "711b9b4fb4ad3659a4ecb01ce5976d4f4612b6d997958bc136d673ad1c572733",
+    "groupLimit": {
+      "tokens": 3000000,
+      "activeMs": 24840000,
+      "attempts": 6,
+      "sessions": 6
+    },
+    "explicitUnallocatedReserve": {
+      "tokens": 2996773,
+      "activeMs": 18826773,
+      "attempts": 3,
+      "sessions": 3
+    },
+    "allocations": [
+      {
+        "ownerKind": "goal-review",
+        "ownerId": "g:goal-review",
+        "bucket": "review",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 1,
+          "activeMs": 3600000,
+          "attempts": 1,
+          "sessions": 1
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          }
+        }
+      },
+      {
+        "ownerKind": "reserve",
+        "ownerId": "g:reserve",
+        "bucket": "reserve",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 2996773,
+          "activeMs": 18826773,
+          "attempts": 3,
+          "sessions": 3
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "system",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "system",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "system",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "system",
+            "estimateId": null
+          }
+        }
+      },
+      {
+        "ownerKind": "task",
+        "ownerId": "a",
+        "bucket": "handoff",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 0,
+          "activeMs": 1800000,
+          "attempts": 0,
+          "sessions": 0
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "complex-1m-default",
+            "estimateId": null
+          }
+        }
+      },
+      {
+        "ownerKind": "task",
+        "ownerId": "a",
+        "bucket": "work",
+        "state": "confirmed",
+        "amount": {
+          "tokens": 1000000,
+          "activeMs": 600000,
+          "attempts": 1,
+          "sessions": 1
+        },
+        "fieldProvenance": {
+          "tokens": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "activeMs": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "attempts": {
+            "provenance": "human",
+            "estimateId": null
+          },
+          "sessions": {
+            "provenance": "human",
+            "estimateId": null
+          }
+        }
+      }
+    ],
+    "budgetMode": "soft",
+    "contextPolicy": {
+      "handoffAtContextTokens": 1000000
+    },
+    "profiles": {
+      "estimator": {
+        "profileId": "all",
+        "profileHash": "726ca74b2733b2bc3ebf3d9b1d3f283e0e8caebe8d1470a3591f65fc60b22a82"
+      },
+      "worker": {
+        "profileId": "all",
+        "profileHash": "726ca74b2733b2bc3ebf3d9b1d3f283e0e8caebe8d1470a3591f65fc60b22a82"
+      },
+      "handoff": {
+        "profileId": "all",
+        "profileHash": "726ca74b2733b2bc3ebf3d9b1d3f283e0e8caebe8d1470a3591f65fc60b22a82"
+      },
+      "goalReview": {
+        "profileId": "all",
+        "profileHash": "726ca74b2733b2bc3ebf3d9b1d3f283e0e8caebe8d1470a3591f65fc60b22a82"
+      }
+    },
+    "executionSnapshotHash": "870df335112d9d3ad289ef50c2b7d4ef32433084f5540c606e902332d1b511ae"
+  },
+  "started": "started",
+  "shutdown": true,
+  "killedProcessGroups": [],
+  "runs": [
+    {
+      "runId": "run-489f84d4-c987-46b1-8102-0e3dca9d0c57",
+      "task": "a",
+      "state": "settled",
+      "drive": {
+        "workspaceMode": "worktree",
+        "sourceDir": "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-489f84d4-c987-46b1-8102-0e3dca9d0c57",
+        "workspacePath": "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.workspaces/run-489f84d4-c987-46b1-8102-0e3dca9d0c57",
+        "targetRepo": "/private/tmp/omp13-CMmR/estimate/target",
+        "prepared": true,
+        "base": "ef8cbf37f0ea912f1537342915036287562db307",
+        "envelopeHash": "1efb37775d3c4c0b447093973155d23e4669c580b035024cecd75cd41491aa60",
+        "inspectUnknown": 0,
+        "outcome": "succeeded",
+        "attemptSha": "fc0234c69d77bea249aaf631705f02cc466028d3",
+        "landedCommit": "bbcb82c1e9f6bf0741d9d464637fd50a46615e6c",
+        "reconcile": null,
+        "blockedAt": null,
+        "blockedReason": null,
+        "cleanedUp": true,
+        "cleanupError": null,
+        "publishError": null,
+        "skills": null
+      }
+    }
+  ],
+  "ledger": {
+    "groupLimit": {
+      "tokens": 3000000,
+      "activeMs": 24840000,
+      "attempts": 6,
+      "sessions": 6
+    },
+    "used": {
+      "tokens": 36298,
+      "activeMs": 45108,
+      "attempts": 2,
+      "sessions": 2
+    },
+    "committedRemaining": {
+      "tokens": 1,
+      "activeMs": 3600000,
+      "attempts": 1,
+      "sessions": 1
+    },
+    "explicitUnallocatedReserve": {
+      "tokens": 2963701,
+      "activeMs": 21194892,
+      "attempts": 3,
+      "sessions": 3
+    },
+    "budgetDeficit": {
+      "tokens": 0,
+      "activeMs": 0,
+      "attempts": 0,
+      "sessions": 0
+    },
+    "usageUnknown": false,
+    "unmeteredRuns": 0
+  },
+  "claudeRawCalls": [],
+  "claudeArgvModels": [],
+  "claudeReportedUsd": null,
+  "claudeCallsWithoutCost": 0,
+  "providerCalls": [
+    {
+      "role": "estimate",
+      "phase": "single-call",
+      "file": "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-1497b975-3f6e-4f58-bc09-4f9cbb8692a3/run/omp/1/single-call/call-3E8LAM/events.jsonl",
+      "usage": [
+        {
+          "input": 2359,
+          "output": 867,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 3226,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        }
+      ],
+      "total": 3226
+    },
+    {
+      "role": "worker",
+      "phase": "execute",
+      "file": "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-489f84d4-c987-46b1-8102-0e3dca9d0c57/run/omp/1/execute/call-d69Tft/events.jsonl",
+      "usage": [
+        {
+          "input": 3957,
+          "output": 113,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 4070,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        {
+          "input": 4192,
+          "output": 92,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 4284,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        {
+          "input": 4316,
+          "output": 109,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 4425,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        {
+          "input": 4592,
+          "output": 670,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 5262,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        }
+      ],
+      "total": 18041
+    },
+    {
+      "role": "worker",
+      "phase": "plan",
+      "file": "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-489f84d4-c987-46b1-8102-0e3dca9d0c57/run/omp/1/plan/call-mK1GQq/events.jsonl",
+      "usage": [
+        {
+          "input": 1847,
+          "output": 76,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 1923,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        {
+          "input": 1951,
+          "output": 196,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 2147,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        }
+      ],
+      "total": 4070
+    },
+    {
+      "role": "worker",
+      "phase": "verify",
+      "file": "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-489f84d4-c987-46b1-8102-0e3dca9d0c57/run/omp/1/verify/call-hn6dJI/events.jsonl",
+      "usage": [
+        {
+          "input": 3027,
+          "output": 121,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 3148,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        {
+          "input": 3190,
+          "output": 481,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 3671,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        {
+          "input": 3704,
+          "output": 438,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 4142,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        }
+      ],
+      "total": 10961
+    }
+  ],
+  "ccloopReportedTokens": 36298,
+  "ccloopExecutionPolicies": [
+    {
+      "autonomyLevel": "L2",
+      "maxAttempts": 1,
+      "perAttemptTimeoutMs": 420000,
+      "totalRuntimeBudgetMs": 600000,
+      "tokenBudget": 1000000,
+      "worktreeRequired": true,
+      "partialOutcomeRecoveryWindowMs": 1000
+    }
+  ],
+  "landedContent": "42\n",
+  "reconciled": [],
+  "estimateUsage": [
+    {
+      "runId": "run-1497b975-3f6e-4f58-bc09-4f9cbb8692a3",
+      "generation": 1,
+      "eventSeq": 1,
+      "bucket": "work",
+      "cumulative": {
+        "tokens": 3226,
+        "activeMs": 13227,
+        "attempts": 1,
+        "sessions": 1
+      },
+      "source": {
+        "artifactId": "evidence-824180726e9fd5821ee0e31f5aecea46e41cfb49935ba0fc27d75d52666d770d",
+        "hash": "824180726e9fd5821ee0e31f5aecea46e41cfb49935ba0fc27d75d52666d770d"
+      },
+      "byModel": [
+        {
+          "model": "local-litellm/ep-20261012204110-nvhqw",
+          "input": 2359,
+          "output": 867,
+          "cacheRead": 0,
+          "cacheWrite": 0
+        }
+      ]
+    }
+  ],
+  "ompSingleCalls": [
+    {
+      "runId": "run-1497b975-3f6e-4f58-bc09-4f9cbb8692a3",
+      "groupId": "g",
+      "role": "estimate",
+      "sourceDir": "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-1497b975-3f6e-4f58-bc09-4f9cbb8692a3",
+      "calls": [
+        {
+          "dir": "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-1497b975-3f6e-4f58-bc09-4f9cbb8692a3/run/omp/1/single-call/call-3E8LAM",
+          "outcome": "completed",
+          "argv": [
+            "--profile",
+            "default",
+            "--no-extensions",
+            "--no-skills",
+            "--no-rules",
+            "--no-lsp",
+            "--no-tools",
+            "--no-session",
+            "--no-title",
+            "--no-prewalk",
+            "--model",
+            "local-litellm/ep-20261012204110-nvhqw",
+            "--mode",
+            "json",
+            "-p",
+            "--system-prompt",
+            "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-1497b975-3f6e-4f58-bc09-4f9cbb8692a3/run/omp/1/single-call/call-3E8LAM/system-prompt.md",
+            "--cwd",
+            "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-1497b975-3f6e-4f58-bc09-4f9cbb8692a3/run/cwd",
+            "--config",
+            "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-1497b975-3f6e-4f58-bc09-4f9cbb8692a3/run/omp/1/single-call/call-3E8LAM/config-overlay.yml"
+          ],
+          "assistantMessageEnds": 1,
+          "usage": [
+            {
+              "input": 2359,
+              "output": 867,
+              "cacheRead": 0,
+              "cacheWrite": 0,
+              "totalTokens": 3226,
+              "cost": {
+                "input": 0,
+                "output": 0,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "total": 0
+              }
+            }
+          ],
+          "stopReasons": [
+            "stop"
+          ],
+          "messageTotal": 3226,
+          "toolsOff": true,
+          "overlayPath": "/private/tmp/omp13-CMmR/estimate/control/live-247610f4.runs/run-1497b975-3f6e-4f58-bc09-4f9cbb8692a3/run/omp/1/single-call/call-3E8LAM/config-overlay.yml",
+          "overlayInCallDir": true,
+          "overlayMatches": true
+        }
+      ],
+      "ccloopUsageTokens": 3226,
+      "bookedTokens": 3226,
+      "unknownWork": false,
+      "lastUsageEventTokens": 3226
+    }
+  ],
+  "checks": {
+    "estimateQueued": true,
+    "estimateReady": false,
+    "startAllowed": true,
+    "ccloopPolicyCapped": true,
+    "notTimedOut": true,
+    "runSettled": true,
+    "workDone": true,
+    "cleanedUp": true,
+    "landedBytes": true,
+    "onlyTargetChanged": true,
+    "reconciledAsExpected": true,
+    "humanUntouched": true,
+    "dispatchNotBlocked": true,
+    "published": true,
+    "providerCalls": true,
+    "estimateUsageBooked": true,
+    "ompEstimateClassified": true,
+    "ompSingleCallOneMessage": true,
+    "ompSingleCallToolsOff": true,
+    "ompOverlayPresent": true,
+    "ompSingleCallUsageBooked": true,
+    "everyCallHasUsage": true,
+    "ledgerKnown": true,
+    "ledgerMatchesCcloop": true,
+    "orcaHomeUntouched": true,
+    "claudeProjectsUntouched": true,
+    "ompModel": true,
+    "ompNoExtraPhase": true,
+    "shutdownClean": true
+  },
+  "finishedAt": "2026-10-15T01:50:23.881Z"
+}
