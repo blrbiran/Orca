@@ -6,7 +6,7 @@
 > ✅ 第三批第二轮（§七.二）已由人合入 main 并 push（合并提交主题行 `Merge branch 'ui/panel-taste'`，2026-10-14）。
 > ✅ 第二轮与 §七.三 已由人视觉验收、合并并 push（会话 `fb98aa31`）。
 > ✅ §七.四 已由人复验、合并并 push（之后人删了分支与 worktree）。
-> 🔵 **复验提出的深色框过暗（§七.五，分支 `ui/panel-taste` 再次从 main 重建）待人复验与合并。**（人要求后续问题继续追加在本文）
+> 🔵 **§七.五（深色框过暗；分支 `ui/panel-taste` 再次从 main 重建）人已复验通过，待人合并与 push。**（人要求后续问题继续追加在本文）
 
 > **读者是下一个 agent。** 这一批 UI 改动的交接写在本文，**不写进 `docs/handoff/handoff.md`**；
 > 等 UI 基本 ready、由人决定合并时，再把本文的结论并回 `handoff.md`。
@@ -300,5 +300,6 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 真浏览器（改道面板 `viz2.sh`、无端口、数据为 main 的 clone，`probe.py` → `probe-out.json`）：深色下可见元素里只有 `body` 是 rgb(14,15,17)；metric tile／project／detail-block／通知框 rgb(33,35,39)，卡片 rgb(27,28,31)，输入框 rgb(40,42,47)；浅色框与输入框仍为 rgb(246,244,239)；无 pageerror。真 `~/.orca` 前后不变。
 
 **awaitingHuman**
-- 🔴 复验（Vimium 排除面板地址后再试 j/k），然后合并本分支进 main 并 push（Tier 0，人做）。
+- ✅ 人已复验（会话 `9b012714`）：深色框「没问题了」；把面板地址加入 Vimium 排除列表后 j/k 正常 —— Vimium 吞键得到确认。
+- 🔴 合并本分支进 main 并 push（Tier 0，人做）。
 - 本会话的 clone 与改道环境（干净副本，删除归人）：会话 `9b012714` scratchpad 下 `mut/`、`data/`、`v2/`。
