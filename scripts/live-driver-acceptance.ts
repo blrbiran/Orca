@@ -20,6 +20,7 @@
 //           | --omp <abs omp binary> --model <provider/model> --omp-config-dir <private absolute directory> | --fake-omp)
 //          [--group-tokens 3000000] [--task-tokens 1000000] [--task-attempts 1] [--active-ms 600000]
 //          [--call-usd 2] [--deadline-ms 900000] [--context-window 1000000] [--scenario single|conflict|deadline|estimate|requirement]
+//          [--estimate-only] [--instruction-version 1|2] [--repeat 1]
 //
 // --context-window sets the operator's contextWindow for the agent (claude: 1000000 is `--model <model>[1m]`, spelled
 // by ccloop). --scenario conflict runs two tasks that both append a line to the same file from the same base, so the
@@ -33,11 +34,21 @@
 // the panel's resume must continue it to a landing. Every step reads what D1 in tests/control/agentSelectionE2E.test.ts
 // reads, and the checks fail -- not pass by accident -- if the execute finished before the deadline.
 //
-// --scenario estimate (claude kinds only; single-call estimate spec §8.6): the estimator runs as one ccloop single
-// call. The profile declares claude's 1M window and the operator's preferences are set BEFORE the import, so the
-// import's estimator slot is claude 1M and the estimate queues; under --fake-claude the fake's single-call answer is
-// written after the import (the plan hash is known then) and before the pump starts. Checks: the estimate is ready,
-// start is not refused (estimate-in-flight is what a stuck estimate costs), and its usage is booked.
+// --scenario estimate (single-call estimate spec §8.6): the estimator runs as one ccloop single call. The profile
+// declares claude's 1M window and the operator's preferences are set BEFORE the import, so the import's estimator slot
+// is claude 1M and the estimate queues; under --fake-claude the fake's single-call answer is written after the import
+// (the plan hash is known then) and before the pump starts. Checks: the estimate is ready, start is not refused
+// (estimate-in-flight is what a stuck estimate costs), and its usage is booked.
+// Estimate usable-answer spec §6 "Paid" (plan Task 7, session 4de777f4, 2026-10-17): --codex/--fake run it too, in
+// soft estimate mode (the only mode codex single calls accept), the profile declaring --context-window (default
+// 1000000). --instruction-version (default 2) is written into this script's own profile (estimatorPreflight), never
+// the person's. A settled estimate may queue its one automatic retry (a newer estimate the pump drives), so the
+// script waits until the group's newest estimate is no longer queued, running or start-unknown (--deadline-ms per
+// group). --repeat n (with --estimate-only) runs n estimates of the same plan, each imported into a fresh group (g,
+// g2, ...) after the previous group settled. summary.json's `estimates` lists every estimate (state, reasonCode,
+// repairs, origin, retriedAs, retrySkipped, calls, and the tokens Orca booked from ccloop's evidence) and
+// `estimateTally` counts each repeat as firstCallReady, readyAfterRepair, readyAfterRetry or failed. The fakes answer
+// in a cycle (fakeEstimateAnswers below), and their checks pin each estimate and the tally exactly.
 //
 // OMP single call (spec docs/superpowers/specs/2026-10-14-omp-single-call-design.md; plan Task 13). omp has no context
 // option (ccloop's omp descriptor answers only "agent-default"), so for omp --context-window is the profile's declared
@@ -82,6 +93,10 @@ import { assembleControlRuntime, type ControlRuntime } from "../src/panel/contro
 import { controlRepoKey, resolveControlOptions } from "../src/panel/controlOptions.js";
 import { readControlGroup } from "../src/panel/controlViews.js";
 
+// Task 7 of the estimate usable-answer plan (session 4de777f4, 2026-10-17): an unknown flag is a usage error, so a
+// misspelled or unsupported option (an older script given --repeat) cannot run as if it had been honoured.
+const VALUE_FLAGS = new Set(["ccloop-bin", "output", "codex", "claude", "omp", "model", "omp-config-dir", "group-tokens", "task-tokens", "task-attempts",
+  "active-ms", "call-usd", "deadline-ms", "context-window", "scenario", "instruction-version", "repeat"]);
 function parseArgs(argv: string[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (let i = 0; i < argv.length; i++) {
@@ -90,7 +105,8 @@ function parseArgs(argv: string[]): Record<string, string> {
     if (key === "--fake") { out.fake = "1"; continue; }
     if (key === "--fake-claude") { out["fake-claude"] = "1"; continue; }
     if (key === "--fake-omp") { out["fake-omp"] = "1"; continue; }
-if (key === "--estimate-only") { out["estimate-only"] = "1"; continue; }
+    if (key === "--estimate-only") { out["estimate-only"] = "1"; continue; }
+    if (!VALUE_FLAGS.has(key.slice(2))) throw new Error(`unknown flag ${key}`);
     const value = argv[++i];
     if (value === undefined) throw new Error(`${key} needs a value`);
     out[key.slice(2)] = value;
@@ -134,7 +150,13 @@ if (kind === "omp" && scenario !== "single" && scenario !== "estimate" && scenar
 if (scenario === "requirement" && kind !== "omp") throw new Error("--scenario requirement needs --omp or --fake-omp");
 // The deadline scenario reads what ccloop's claude runner observed in the stream; codex has no such file.
 if (scenario === "deadline" && kind !== "claude") throw new Error("--scenario deadline needs --claude or --fake-claude");
-if (scenario === "estimate" && kind !== "claude" && kind !== "omp") throw new Error("--scenario estimate needs --claude, --fake-claude, --omp or --fake-omp");
+// --instruction-version (estimate usable-answer spec §4.1): the estimator instruction the harness's own profile selects.
+const instructionVersion = args["instruction-version"] ?? "2";
+if (instructionVersion !== "1" && instructionVersion !== "2") throw new Error("--instruction-version is 1 or 2");
+// --repeat (spec §6 "Paid"): n estimates of the same plan, each in a fresh group; only an estimate-only run repeats.
+const repeat = Number(args.repeat ?? 1);
+if (!Number.isSafeInteger(repeat) || repeat < 1) throw new Error("--repeat must be a positive integer");
+if (repeat > 1 && !estimateOnly) throw new Error("--repeat above 1 needs --scenario estimate --estimate-only");
 const contextWindow = args["context-window"] === undefined ? (scenario === "estimate" || scenario === "requirement" ? 1_000_000 : undefined) : Number(args["context-window"]);
 if (contextWindow !== undefined && (!Number.isSafeInteger(contextWindow) || contextWindow <= 0)) throw new Error("--context-window must be a positive integer");
 if (scenario === "estimate" && kind === "claude" && contextWindow !== 1_000_000) throw new Error("--scenario estimate needs the 1M window (ccloop reports contextWindowTokens only for it)");
@@ -206,9 +228,13 @@ await writeFile(scriptPath, JSON.stringify(scenario === "single" || scenario ===
 const fakeCodex = resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-codex.mjs");
 const fakeClaudeCli = resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-claude-cli.mjs");
 // --fake-omp: the fixture's own header -- an installation allows only the binary in `command`, so a wrapper execs it.
+// Before that, it moves `<marker>.single-<n>.json` over `<marker>.single.json` when present, n being one more than the
+// calls `<marker>.calls` has recorded: an answer queued for call n is in place once call n-1 has run and before call n
+// reads it (the estimate scenario's automatic retry, fakeEstimateWrite below); without such a file nothing changes.
 const fakeOmpWrapper = join(root, "fake-omp");
 if (fakeOmp) {
-  await writeFile(fakeOmpWrapper, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-omp.mjs"))} ${JSON.stringify(marker)} "$@"\n`, { mode: 0o700 });
+  const m = JSON.stringify(marker);
+  await writeFile(fakeOmpWrapper, `#!/bin/sh\nn=$(( $(cat ${m}.calls 2>/dev/null | wc -l) + 1 ))\n[ -f ${m}.single-$n.json ] && mv -f ${m}.single-$n.json ${m}.single.json\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(resolve(dirname(ccloopBin), "..", "tests", "fixtures", "fake-omp.mjs"))} ${JSON.stringify(marker)} "$@"\n`, { mode: 0o700 });
   await mkdir(join(root, "omp-config"), { mode: 0o700 });
 }
 const ompBinary = fakeOmp ? fakeOmpWrapper : args.omp;
@@ -264,13 +290,13 @@ const planPath = join(repo, "plan.json");
 await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "live acceptance", successConditions: tasks.map((task) => task.successCondition), tasks: planTasks }));
 
 // The shipped ccloop's capability answer; a null context window makes the estimate blocked-capability (spec §11 D1).
-// estimate: the window claude 1M answers, so the estimate is not blocked-capability. omp: --context-window (module header).
+// estimate: the window claude 1M answers, so the estimate is not blocked-capability; codex and omp: --context-window (module header).
 const profilePath = join(root, "profile.json");
 await writeFile(profilePath, JSON.stringify({
   schema: "orca-execution-profile-snapshot-v2",
   profile: { profileId: "all", allowedWorkKinds: ["budget-estimate", "goal-review", "handoff", "task"], contextTokenizer: null, workMaxOutputTokens: 1000,
-    capabilities: { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: kind === "omp" ? contextWindow ?? null : scenario === "estimate" ? 1_000_000 : null, requestBoundProof: null },
-    estimatorPreflight: { instructionVersion: "1", schemaVersion: "budget-estimate-v1", maxOutputTokens: 64_000, framingTokenOverhead: kind === "omp" ? 2047 : 17, tokenizer: { kind: "utf8-upper-bound", numerator: 2, denominator: 3, proofRef: "proof" } } },
+    capabilities: { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: kind === "omp" || scenario === "estimate" ? contextWindow ?? null : null, requestBoundProof: null },
+    estimatorPreflight: { instructionVersion, schemaVersion: "budget-estimate-v1", maxOutputTokens: 64_000, framingTokenOverhead: kind === "omp" ? 2047 : 17, tokenizer: { kind: "utf8-upper-bound", numerator: 2, denominator: 3, proofRef: "proof" } } },
   resolved: { proofDocumentContentHashes: ["c".repeat(64)], tokenizerArtifactHashes: [], secretValueHashes: [] },
 }));
 
@@ -333,10 +359,13 @@ let observedPath: string | null = null;
 let handoffState: string | null = null;
 let estimateId: string | null = null;
 // Agent selection spec §6.2 layer 1: the operator's default is the table's codex installation, with --model when live.
-// omp has no context option (module header), so its preference never carries one.
+// omp has no context option (module header), so its preference never carries one. Nor does codex's in the estimate
+// scenario: a codex contextWindow preference is refused at import (agent-context-unsupported, observed under --fake on
+// 2026-10-17, plan Task 7), so there the window is only the profile's declaration.
+const preferenceWindow = contextWindow !== undefined && kind !== "omp" && !(kind === "codex" && scenario === "estimate");
 const setPreferences = async () => {
   const preferences = await runtime.service.setAgentPreferences(raw(runtime, "preferences", "set-agent-preferences",
-    { preferences: { defaultAgent: kind, perAgent: { [kind]: { ...(isFake ? {} : { model: args.model! }), ...(contextWindow === undefined || kind === "omp" ? {} : { contextWindow }) } } } }, { kind: "operator", operatorId: "human" }));
+    { preferences: { defaultAgent: kind, perAgent: { [kind]: { ...(isFake ? {} : { model: args.model! }), ...(preferenceWindow ? { contextWindow } : {}) } } } }, { kind: "operator", operatorId: "human" }));
   if ("error" in preferences) throw new Error(`set-agent-preferences refused: ${JSON.stringify(preferences.error)}`);
 };
 const stopRuntime = async (): Promise<void> => {
@@ -351,13 +380,13 @@ const stopRuntime = async (): Promise<void> => {
 };
 /** --fake-omp: the next single call's rows -- one assistant message_end whose text is `output` (fake-omp.mjs `<marker>.single.json`). */
 let fakeOmpCall = 0;
-const fakeOmpAnswer = async (output: unknown): Promise<void> => {
+const fakeOmpAnswer = async (output: unknown, path = `${marker}.single.json`): Promise<void> => {
   fakeOmpCall += 1;
   // Each call's usage differs, so a booking taken from the wrong call cannot equal it.
   const usage = { input: 100 * fakeOmpCall, output: 20 * fakeOmpCall, cacheRead: 3, cacheWrite: 1, totalTokens: 120 * fakeOmpCall + 4, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
   const selector = (installation as { defaultModel?: string }).defaultModel!;
   const message = { role: "assistant", content: [{ type: "text", text: JSON.stringify(output) }], provider: selector.split("/")[0], model: selector.slice(selector.indexOf("/") + 1), stopReason: "stop", usage };
-  await writeFile(`${marker}.single.json`, JSON.stringify({ rows: [{ type: "agent_start" }, { type: "message_end", message }, { type: "agent_end", isTerminal: true, yielded: true, messages: [message] }] }));
+  await writeFile(path, JSON.stringify({ rows: [{ type: "agent_start" }, { type: "message_end", message }, { type: "agent_end", isTerminal: true, yielded: true, messages: [message] }] }));
 };
 /** ccloop's single-call overlay (ccloop src/runtime/omp/ompSingleCall.ts OMP_SINGLE_CALL_OVERLAY; Orca spec 2026-10-14 §7). */
 const OMP_SINGLE_CALL_OVERLAY = { retry: { enabled: false, modelFallback: false }, model: { loopGuard: { enabled: false } }, advisor: { enabled: false }, compaction: { enabled: false } };
@@ -497,34 +526,137 @@ if (scenario === "requirement") {
   console.log(JSON.stringify({ summary: join(root, "summary.json"), requirementUsedTokens: group.used.tokens, singleCalls: singleCalls.map((run) => ({ role: run.role, booked: run.bookedTokens })), failed }, null, 2));
   process.exit(failed.length === 0 ? 0 : 1);
 }
-type EstimateRunBody = { runId: string; drive?: { sourceDir: string }; unknown: { work: boolean }; cumulative: { work: { tokens: number } } };
-const readEstimateBody = (): EstimateRunBody | null => {
-  const row = runtime.store.db.prepare("SELECT body FROM runs WHERE group_id='g' AND json_extract(body,'$.phase')='estimate'").get();
-  return row === undefined ? null : JSON.parse(String(row.body)) as EstimateRunBody;
-};
-/** The estimate run's own checks, shared by the whole scenario and --estimate-only. */
-const estimateChecks = (estimateBody: EstimateRunBody | null): void => {
-  // The usage ccloop reported for the estimate run, as Orca booked it: known, positive, equal to ccloop's last event.
-  const events = estimateBody === null ? [] : runtime.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(estimateBody.runId)
-    .map((row) => JSON.parse(String(row.body)) as { bucket: string; cumulative: { tokens: number } | null }).filter((event) => event.bucket === "work");
-  summary.estimateUsage = events;
-  const booked = estimateBody?.cumulative.work.tokens ?? null;
-  checks.estimateUsageBooked = estimateBody !== null && estimateBody.unknown.work === false && booked !== null && booked > 0
-    && events.length > 0 && events.at(-1)!.cumulative?.tokens === booked;
+type EstimateRunBody = { runId: string; estimateId?: string; drive?: { sourceDir: string }; unknown: { work: boolean }; cumulative: { work: { tokens: number } } };
+/** Every estimate run, oldest first (an automatic retry is a second run in its group); `groupId` narrows to one group. */
+const readEstimateBodies = (groupId?: string): EstimateRunBody[] => runtime.store.db
+  .prepare(`SELECT body FROM runs WHERE json_extract(body,'$.phase')='estimate'${groupId === undefined ? "" : " AND group_id=?"} ORDER BY rowid`)
+  .all(...(groupId === undefined ? [] : [groupId])).map((row) => JSON.parse(String(row.body)) as EstimateRunBody);
+/** The estimate runs' own checks, shared by the whole scenario and --estimate-only. */
+const estimateChecks = (bodies: EstimateRunBody[]): void => {
+  // The usage ccloop reported for each estimate run, as Orca booked it: known, positive, equal to ccloop's last event.
+  const usage = bodies.map((body) => ({ runId: body.runId, events: runtime.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq").all(body.runId)
+    .map((row) => JSON.parse(String(row.body)) as { bucket: string; cumulative: { tokens: number } | null }).filter((event) => event.bucket === "work") }));
+  summary.estimateUsage = usage;
+  checks.estimateUsageBooked = bodies.length > 0 && bodies.every((body, i) => {
+    const booked = body.cumulative.work.tokens, events = usage[i]!.events;
+    return body.unknown.work === false && booked > 0 && events.length > 0 && events.at(-1)!.cumulative?.tokens === booked;
+  });
   if (kind === "claude") {
     // Tools off, as the claude CLI received it (the tee's argv files, the agent's own record).
     const argvs = existsSync(claudeRaw) ? readdirSync(claudeRaw).filter((name) => name.endsWith(".argv.json")).map((name) => JSON.parse(readFileSync(join(claudeRaw, name), "utf8")) as string[]) : [];
     checks.estimateToolsOff = argvs.some((argv) => { const i = argv.indexOf("--tools"); return i >= 0 && argv[i + 1] === ""; });
-  } else {
-    // omp: the estimate run's single call, read from ccloop's own evidence (ompSingleCalls).
+  } else if (kind === "omp") {
+    // omp: each estimate run's single call, read from ccloop's own evidence (ompSingleCalls).
     const singleCalls = ompSingleCalls(runtime);
     summary.ompSingleCalls = singleCalls;
     const estimateCalls = singleCalls.filter((run) => run.role === "estimate");
-    checks.ompEstimateClassified = singleCalls.length === 1 && estimateCalls.length === 1 && estimateCalls[0]!.runId === estimateBody?.runId;
-    checks.ompSingleCallOneMessage = estimateCalls.length === 1 && estimateCalls.every(oneMessage);
-    checks.ompSingleCallToolsOff = estimateCalls.length === 1 && estimateCalls.every(toolsOff);
-    checks.ompOverlayPresent = estimateCalls.length === 1 && estimateCalls.every(overlayPresent);
-    checks.ompSingleCallUsageBooked = estimateCalls.length === 1 && estimateCalls.every(usageBooked);
+    const runIds = new Set(bodies.map((body) => body.runId));
+    checks.ompEstimateClassified = bodies.length > 0 && singleCalls.length === bodies.length && estimateCalls.length === bodies.length && estimateCalls.every((run) => runIds.has(run.runId));
+    checks.ompSingleCallOneMessage = estimateCalls.length === bodies.length && estimateCalls.every(oneMessage);
+    checks.ompSingleCallToolsOff = estimateCalls.length === bodies.length && estimateCalls.every(toolsOff);
+    checks.ompOverlayPresent = estimateCalls.length === bodies.length && estimateCalls.every(overlayPresent);
+    checks.ompSingleCallUsageBooked = estimateCalls.length === bodies.length && estimateCalls.every(usageBooked);
+  }
+};
+/**
+ * The fakes' estimate answers, by repeat (estimate usable-answer plan Task 7), in a cycle: a clean answer in the
+ * instruction's own shape; the shape the person's omp alias answered 3 times in 4 on 2026-10-15 (spec §1: task `a` twice,
+ * the second copy's rationale "placeholder"), which repair turns into a ready estimate; and an answer whose only entry is
+ * a placeholder, which repair cannot use, so it fails, its one automatic retry gets the same answer and fails too, and no
+ * third call is made (A2). The fakes ignore the prompt, so a retry reads the same answer as the call it retries -- except
+ * under --fake-omp, whose wrapper can queue an answer per call: there a fourth kind fails the same way and its retry gets
+ * a clean answer, so it is ready after the retry.
+ */
+type FakeEstimateKind = "first-call" | "repair" | "unrepairable" | "retry";
+const FAKE_ESTIMATE_CYCLE: readonly FakeEstimateKind[] = fakeOmp ? ["first-call", "repair", "unrepairable", "retry"] : ["first-call", "repair", "unrepairable"];
+const fakeEstimateKind = (repeatNo: number): FakeEstimateKind => FAKE_ESTIMATE_CYCLE[(repeatNo - 1) % FAKE_ESTIMATE_CYCLE.length]!;
+/** The answers, one per single call of the repeat's group. */
+const fakeEstimateAnswers = (repeatNo: number, planHash: string): unknown[] => {
+  const entry = { complexity: "S", confidence: "high", work: { tokens: taskTokens, activeMs, attempts: taskAttempts, sessions: taskAttempts }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, rationale: "one file with one line", assumptions: ["answer.txt does not exist yet"] };
+  const shell = { goalReviewReserve: { tokens: 1, activeMs: 1, attempts: 0, sessions: 0 }, groupRationale: "a single one-line task" };
+  const placeholder = { taskId: "a", ...entry, rationale: "placeholder" };
+  // v2 asks for no planHash (spec §4.1): Orca copies it from the request.
+  const clean = instructionVersion === "2" ? { schema: "budget-estimate-answer-v2", tasks: { a: entry }, ...shell } : { schema: "budget-estimate-v1", planHash, tasks: [{ taskId: "a", ...entry }], ...shell };
+  const unusable = { schema: "budget-estimate-v1", planHash, tasks: [placeholder], ...shell };
+  switch (fakeEstimateKind(repeatNo)) {
+    case "first-call": return [clean];
+    case "repair": return [{ schema: "budget-estimate-v1", planHash, tasks: [{ taskId: "a", ...entry }, placeholder], ...shell }];
+    case "unrepairable": return [unusable];
+    case "retry": return [unusable, clean];
+  }
+};
+/** What each fake answer must settle as: per estimate of the repeat's group, oldest first. */
+const fakeExpectedRows = (kindOf: FakeEstimateKind) => kindOf === "first-call" ? [{ state: "ready", repairs: instructionVersion === "2" ? ["answer-v2-converted"] : [], origin: null, retried: false, retrySkipped: null, calls: 1 }]
+  : kindOf === "repair" ? [{ state: "ready", repairs: ["duplicate-task-dropped:a"], origin: null, retried: false, retrySkipped: null, calls: 1 }]
+  : kindOf === "retry" ? [{ state: "failed", repairs: [], origin: null, retried: true, retrySkipped: null, calls: 1 }, { state: "ready", repairs: instructionVersion === "2" ? ["answer-v2-converted"] : [], origin: "auto-retry", retried: false, retrySkipped: null, calls: 1 }]
+  : [{ state: "failed", repairs: [], origin: null, retried: true, retrySkipped: null, calls: 1 }, { state: "failed", repairs: [], origin: "auto-retry", retried: false, retrySkipped: null, calls: 1 }];
+/** Writes the next fake single call's answer where the selected fake reads it; a second answer is for the retry (omp only). */
+let fakeCodexCall = 0;
+const fakeEstimateWrite = async ([output, retryOutput]: unknown[]): Promise<void> => {
+  if (fakeOmp) {
+    await fakeOmpAnswer(output);
+    // The retry is the call after the next one the fake records (the fake-omp wrapper above).
+    if (retryOutput !== undefined) await fakeOmpAnswer(retryOutput, `${marker}.single-${fakeOmpCalls().split(",").filter(Boolean).length + 2}.json`);
+    return;
+  }
+  if (fakeClaude) return writeFile(scriptPath, JSON.stringify({ a: { files: { "answer.txt": "42\n" } }, "single-call": { output } }));
+  // fake-codex.mjs: a single call plays `<marker>.single.json` ({rows, final}); each call's usage differs, as for omp.
+  fakeCodexCall += 1;
+  const text = JSON.stringify(output);
+  await writeFile(`${marker}.single.json`, JSON.stringify({ final: text, rows: [{ type: "thread.started", thread_id: "t" }, { type: "turn.started" },
+    { type: "item.completed", item: { id: "item_0", type: "agent_message", text } }, { type: "turn.completed", usage: { input_tokens: 100 * fakeCodexCall, cached_input_tokens: 0, output_tokens: 20 * fakeCodexCall } }] }));
+};
+/** An estimate still owed an answer: the newest estimate of a group in one of these states is not settled yet. */
+const PENDING_ESTIMATE = ["queued", "running", "start-unknown"];
+const estimateIdsOf = (groupId: string): string[] =>
+  runtime.store.db.prepare("SELECT id FROM estimates WHERE group_id=? ORDER BY estimate_version").all(groupId).map((row) => String(row.id));
+/** Waits until the group's newest estimate settles -- an automatic retry is a newer estimate the pump drives, so this may be two calls. */
+const settleEstimates = async (groupId: string): Promise<void> => {
+  const settleBy = Date.now() + deadlineMs;
+  for (;;) {
+    const newest = estimateIdsOf(groupId).at(-1);
+    if (newest === undefined || !PENDING_ESTIMATE.includes(readEstimateRecord(runtime.store, groupId, newest).state)) return;
+    if (Date.now() > settleBy) { timedOut = true; return; }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+};
+type EstimateChain = { repeat: number; groupId: string; estimateId: string | null; estimateState: string | null; imported: unknown };
+const chains: EstimateChain[] = [];
+/**
+ * summary.estimates (one row per estimate, an automatic retry included) and summary.estimateTally (one outcome per
+ * repeat, read off its group's newest estimate): ready with no repair beyond the v2 shape conversion (spec §4.2 step 1,
+ * not a defect) is firstCallReady; ready with any other repair is readyAfterRepair; ready as an automatic retry is
+ * readyAfterRetry; anything else is failed. Calls and tokens are the estimate's runs and what Orca booked for them from
+ * ccloop's evidence (tool-reported, never estimated; null when any run's usage is unknown).
+ */
+const reportEstimates = (bodies: EstimateRunBody[]): void => {
+  const rowsByChain = chains.map((chain) => estimateIdsOf(chain.groupId).map((id) => {
+    const record = readEstimateRecord(runtime.store, chain.groupId, id);
+    const runs = bodies.filter((body) => body.estimateId === id);
+    return { repeat: chain.repeat, groupId: chain.groupId, estimateId: id, estimateVersion: record.estimateVersion, state: record.state, reasonCode: record.reasonCode,
+      repairs: record.repairs ?? null, origin: record.origin ?? null, retriedAs: record.retriedAs ?? null, retrySkipped: record.retrySkipped ?? null,
+      calls: runs.length, tokens: runs.length > 0 && runs.every((run) => run.unknown.work === false) ? runs.reduce((sum, run) => sum + run.cumulative.work.tokens, 0) : null };
+  }));
+  summary.estimates = rowsByChain.flat();
+  const tally = { firstCallReady: 0, readyAfterRepair: 0, readyAfterRetry: 0, failed: 0 };
+  for (const rows of rowsByChain) {
+    const last = rows.at(-1);
+    if (last === undefined || last.state !== "ready") tally.failed += 1;
+    else if (last.origin !== null) tally.readyAfterRetry += 1;
+    else if ((last.repairs ?? []).every((code) => code === "answer-v2-converted")) tally.firstCallReady += 1;
+    else tally.readyAfterRepair += 1;
+  }
+  summary.estimateTally = tally;
+  checks.estimatesSettled = chains.length === repeat && rowsByChain.every((rows) => rows.length > 0 && !PENDING_ESTIMATE.includes(rows.at(-1)!.state));
+  if (repeat === 1) checks.estimateReady = rowsByChain[0]?.at(-1)?.state === "ready";
+  if (isFake) {
+    const expected = chains.map((chain) => fakeExpectedRows(fakeEstimateKind(chain.repeat)));
+    const observed = rowsByChain.map((rows) => rows.map((row) => ({ state: row.state, repairs: row.repairs, origin: row.origin?.kind ?? null, retried: row.retriedAs !== null, retrySkipped: row.retrySkipped, calls: row.calls })));
+    checks.fakeEstimatesExact = chains.length === repeat && JSON.stringify(observed) === JSON.stringify(expected);
+    const expectedTally = { firstCallReady: 0, readyAfterRepair: 0, readyAfterRetry: 0, failed: 0 };
+    for (const chain of chains) expectedTally[({ "first-call": "firstCallReady", repair: "readyAfterRepair", unrepairable: "failed", retry: "readyAfterRetry" } as const)[fakeEstimateKind(chain.repeat)]] += 1;
+    checks.fakeTallyExact = JSON.stringify(tally) === JSON.stringify(expectedTally);
+    summary.fakeEstimateCalls = expected.flat().length;
   }
 };
 try {
@@ -535,35 +667,41 @@ try {
   summary.imported = imported;
   if (scenario !== "estimate") await setPreferences();
   if (scenario === "estimate") {
-    const result = (imported as { result?: { estimateId?: string; estimateState?: string } }).result;
-    checks.estimateQueued = result?.estimateState === "queued";
-    estimateId = result?.estimateId ?? null;
     const planHash = readArchivedPlan(runtime.store, "g").planHash;
-    const answer = { schema: "budget-estimate-v1", planHash,
-      tasks: [{ taskId: "a", complexity: "S", confidence: "high", work: { tokens: taskTokens, activeMs, attempts: taskAttempts, sessions: taskAttempts }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, rationale: "one file with one line", assumptions: ["answer.txt does not exist yet"] }],
-      goalReviewReserve: { tokens: 1, activeMs: 1, attempts: 0, sessions: 0 }, groupRationale: "a single one-line task" };
-    if (fakeClaude) await writeFile(scriptPath, JSON.stringify({ a: { files: { "answer.txt": "42\n" } }, "single-call": { output: answer } }));
-    if (fakeOmp) await fakeOmpAnswer(answer);
-    runtime.startPump(200);
-    const settleBy = Date.now() + deadlineMs;
-    while (estimateId !== null && ["queued", "running"].includes(readEstimateRecord(runtime.store, "g", estimateId).state) && Date.now() < settleBy) await new Promise((r) => setTimeout(r, 200));
-    const record = estimateId === null ? null : readEstimateRecord(runtime.store, "g", estimateId);
-    summary.estimate = record;
-    checks.estimateReady = record?.state === "ready";
+    // Repeat 1 is the import above (group g). Each later repeat imports the same plan into a fresh group once the
+    // previous group's estimates have settled, so a fake's answer is written before that import, with the pump running.
+    for (let i = 1; i <= repeat && !timedOut; i++) {
+      const groupId = i === 1 ? "g" : `g${i}`;
+      if (isFake) await fakeEstimateWrite(fakeEstimateAnswers(i, planHash));
+      const result = i === 1 ? imported : await runtime.service.importPlan(raw(runtime, `import-${i}`, "import-plan", { groupId, repoId, planId: "plan" }, { kind: "group", groupId }));
+      const queued = (result as { result?: { estimateId?: string; estimateState?: string } }).result;
+      chains.push({ repeat: i, groupId, estimateId: queued?.estimateId ?? null, estimateState: queued?.estimateState ?? null, imported: i === 1 ? null : result });
+      if (queued?.estimateId === undefined) break;
+      if (i === 1) runtime.startPump(200);
+      await settleEstimates(groupId);
+    }
+    summary.estimateChains = chains;
+    checks.estimateQueued = chains.length === repeat && chains.every((chain) => chain.estimateState === "queued");
+    estimateId = chains[0]?.estimateId ?? null;
+    // The import's own estimate in group g, as before --repeat (summary.estimates lists every estimate).
+    summary.estimate = estimateId === null ? null : readEstimateRecord(runtime.store, "g", estimateId);
     if (estimateOnly) {
       await stopRuntime();
-      estimateChecks(readEstimateBody());
+      const bodies = readEstimateBodies();
+      reportEstimates(bodies);
+      estimateChecks(bodies);
+      checks.notTimedOut = !timedOut;
       checks.humanUntouched = JSON.stringify(human()) === JSON.stringify(humanBefore);
       checks.orcaHomeUntouched = JSON.stringify(snapshot(orcaHome)) === JSON.stringify(orcaHomeBefore);
       checks.claudeProjectsUntouched = JSON.stringify(claudeProjectsList()) === JSON.stringify(claudeProjectsBefore);
-      if (fakeOmp) checks.fakeCallsExact = fakeOmpCalls() === "single-call";
+      if (fakeOmp || fake) checks.fakeCallsExact = fakeOmpCalls() === Array(summary.fakeEstimateCalls as number).fill("single-call").join(",");
       checks.shutdownClean = summary.shutdown === true;
       summary.checks = checks;
       summary.finishedAt = new Date().toISOString();
       runtime.close();
       await writeFile(join(root, "summary.json"), JSON.stringify(summary, null, 2), { mode: 0o600 });
       const failed = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name);
-      console.log(JSON.stringify({ summary: join(root, "summary.json"), estimateState: record?.state ?? null, reasonCode: (record as { reasonCode?: unknown } | null)?.reasonCode ?? null, failed }, null, 2));
+      console.log(JSON.stringify({ summary: join(root, "summary.json"), estimateTally: summary.estimateTally, estimates: (summary.estimates as { groupId: string; state: string; reasonCode: unknown; repairs: unknown; tokens: unknown }[]).map(({ groupId, state, reasonCode, repairs, tokens }) => ({ groupId, state, reasonCode, repairs, tokens })), failed }, null, 2));
       process.exit(failed.length === 0 ? 0 : 1);
     }
   }
@@ -656,8 +794,10 @@ try {
 }
 
 const runs = workRuns(runtime);
-const estimateBody = readEstimateBody();
-const estimateSourceDir = estimateBody?.drive?.sourceDir ?? null;
+// Group g's estimate runs (an automatic retry is a second one); a provider call under any of their source dirs is the estimate's.
+const estimateBodies = readEstimateBodies("g");
+const estimateSourceDirs = estimateBodies.flatMap((body) => body.drive?.sourceDir === undefined ? [] : [body.drive.sourceDir]);
+const estimateRole = (file: string): boolean => estimateSourceDirs.some((dir) => file.startsWith(`${dir}/`));
 summary.runs = runs.map((run) => ({ runId: run.runId, task: run.task, state: run.body.state, drive: run.body.drive }));
 const ledger = readControlGroup(runtime.store, runtime.epoch, "g").ledger;
 summary.ledger = ledger;
@@ -675,14 +815,14 @@ const calls: Call[] = kind === "omp"
     const usage = messages.map((row) => row.message.usage);
     const total = usage.length > 0 && usage.every((row) => Number.isSafeInteger(row?.totalTokens)) ? usage.reduce((sum, row) => sum + row.totalTokens, 0) : null;
     const phase = file.split("/omp/")[1]!.split("/")[1]!;
-    return { role: estimateSourceDir !== null && file.startsWith(`${estimateSourceDir}/`) ? "estimate" : file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, usage, total };
+    return { role: estimateRole(file) ? "estimate" : file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, usage, total };
   })
   : kind === "codex"
   ? findEvidence("events.jsonl").filter((file) => file.includes("/codex/")).map((file) => {
     const completed = readFileSync(file, "utf8").split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line)).filter((row) => row.type === "turn.completed");
     const usage = completed.at(-1)?.usage ?? null;
     const phase = file.split("/codex/")[1]!.split("/")[1]!;
-    return { role: estimateSourceDir !== null && file.startsWith(`${estimateSourceDir}/`) ? "estimate" : file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, usage, total: usage === null ? null : Number(usage.input_tokens) + Number(usage.output_tokens) };
+    return { role: estimateRole(file) ? "estimate" : file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, usage, total: usage === null ? null : Number(usage.input_tokens) + Number(usage.output_tokens) };
   })
   : findEvidence("stdout.json").filter((file) => file.includes("/claude/")).map((file) => {
     const text = readFileSync(file, "utf8");
@@ -692,7 +832,7 @@ const calls: Call[] = kind === "omp"
     const dir = dirname(file);
     const outcomePath = join(dir, "outcome.json");
     const outcome = existsSync(outcomePath) ? JSON.parse(readFileSync(outcomePath, "utf8")) as { reason?: string } : null;
-    const base = { role: estimateSourceDir !== null && file.startsWith(`${estimateSourceDir}/`) ? "estimate" : file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, aborted: outcome?.reason === "aborted", endedAt: existsSync(outcomePath) ? statSync(outcomePath).mtimeMs : undefined };
+    const base = { role: estimateRole(file) ? "estimate" : file.includes("/reconcile-") ? "reconcile" : "worker", phase, file, aborted: outcome?.reason === "aborted", endedAt: existsSync(outcomePath) ? statSync(outcomePath).mtimeMs : undefined };
     if (typeof answer?.tokenUsage === "number") return { ...base, usage: answer.usageEvidence ?? null, total: answer.tokenUsage, observed: false };
     let observed: { total?: unknown } | null = null;
     try { observed = JSON.parse(readFileSync(join(dir, "observed-usage.json"), "utf8")); } catch { observed = null; }
@@ -785,10 +925,10 @@ if (scenario === "deadline") {
   const parked = firstRunId === null ? null : readDriverRun(runtime.store, firstRunId) as unknown as { unknown?: { work?: unknown } };
   checks.unknownWorkFalse = parked?.unknown?.work === false;
 }
-if (scenario === "estimate") estimateChecks(estimateBody);
+if (scenario === "estimate") { reportEstimates(estimateBodies); estimateChecks(estimateBodies); }
 checks.everyCallHasUsage = calls.filter((call) => call.role !== "estimate").length > 0 && calls.filter((call) => call.role !== "estimate").every((call) => call.total !== null && call.total > 0);
 checks.ledgerKnown = ledger.usageUnknown === false;
-checks.ledgerMatchesCcloop = scenario === "estimate" ? ledger.used.tokens === calls.filter((call) => call.role !== "estimate").reduce((sum, call) => sum + (call.total ?? 0), 0) + (estimateBody?.cumulative.work.tokens ?? 0) : ledger.used.tokens === ccloopTotal;
+checks.ledgerMatchesCcloop = scenario === "estimate" ? ledger.used.tokens === calls.filter((call) => call.role !== "estimate").reduce((sum, call) => sum + (call.total ?? 0), 0) + estimateBodies.reduce((sum, body) => sum + body.cumulative.work.tokens, 0) : ledger.used.tokens === ccloopTotal;
 checks.orcaHomeUntouched = JSON.stringify(snapshot(orcaHome)) === JSON.stringify(orcaHomeBefore);
 checks.claudeProjectsUntouched = JSON.stringify(claudeProjectsList()) === JSON.stringify(claudeProjectsBefore);
 if (kind === "claude") {
@@ -805,6 +945,7 @@ if (kind === "omp") {
 if (fake && scenario === "single") checks.fakeCallsExact = existsSync(`${marker}.calls`) && readFileSync(`${marker}.calls`, "utf8").trim().split("\n").join(",") === "plan,execute,verify";
 if (fakeClaude && scenario === "single") checks.fakeCallsExact = existsSync(`${marker}.tasks`) && readFileSync(`${marker}.tasks`, "utf8").trim().split("\n").map((line) => line.split(" ")[0]).join(",") === "plan,execute,verify";
 if (fakeOmp) checks.fakeCallsExact = fakeOmpCalls() === (scenario === "estimate" ? "single-call,plan,execute,verify" : "plan,execute,verify");
+if (fake && scenario === "estimate") checks.fakeCallsExact = fakeOmpCalls() === "single-call,plan,execute,verify";
 if (isFake) summary.fakeScripted = existsSync(`${marker}.tasks`) ? readFileSync(`${marker}.tasks`, "utf8").trim().split("\n") : null;
 checks.shutdownClean = summary.shutdown === true;
 
