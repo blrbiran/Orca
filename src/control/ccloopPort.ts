@@ -231,7 +231,10 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
   async listModels(installation:string,refresh:boolean):Promise<AgentModelsView>{
    let answer:unknown;
    try{answer=await raw("models",{installation,refresh});}catch(error){throw named(error);}
-   const {schema:_schema,...view}=parse(agentModelsSchema,answer);return view;
+   const {schema:_schema,...view}=parse(agentModelsSchema,answer);
+   // As resolveAgent's selection echo: a list about another installation is not this request's answer.
+   if(view.installation!==installation)throw new ControlError("control-response-invalid","installation-not-echoed");
+   return view;
   },
   async accept(input){await requireFeatures(input);return parse(executionStatusSchema,await raw("accept",input)) as ExecutionStatus;},
   async inspect(input){await requireFeatures(input);return parse(executionStatusSchema,await raw("inspect",input)) as ExecutionStatus;},

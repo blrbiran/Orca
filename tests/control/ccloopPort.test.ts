@@ -171,6 +171,13 @@ describe("production ccloop execution port",()=>{
     // A field the request left to the descriptor may come back as anything the descriptor says.
     expect((await h.port.resolveAgent({agent:"codex"})).selection.model).toBe("rewritten-model");
   });
+  // Task 13 review Minor, promoted by the Task 14 ruling (Orca session a852f96a, 2026-10-16): a models answer about
+  // another installation is not this request's answer -- shown under the requested id, it would offer one agent's
+  // models for another's selection -- so it is refused as resolveAgent refuses an unechoed selection field.
+  it("refuses a models answer that does not echo the requested installation",async()=>{
+    expect((await (await fixture()).port.listModels!("codex",false)).installation).toBe("codex");
+    await expect((await fixture("ok",{modelsInstallation:"omp"})).port.listModels!("codex",false)).rejects.toMatchObject({code:"control-response-invalid",detail:"installation-not-echoed"});
+  });
   it("refuses a capabilities answer in the retired protocol-2 shape",async()=>{
     await expect((await fixture("protocol-2")).port.resolveAgent({agent:"codex"})).rejects.toThrow("control-response-invalid");
     await expect((await fixture("protocol-2")).port.listAgents()).rejects.toThrow("control-response-invalid");

@@ -60,5 +60,8 @@ else if (method === "read-evidence") {
   const bytes = Buffer.from(config.evidence ?? "evidence");
   value = { artifactId:payload.ref.artifactId,hash:config.badHash ? "0".repeat(64) : createHash("sha256").update(bytes).digest("hex"),base64:bytes.toString("base64") };
 }
+// Task 13 review Minor (Task 14 ruling): a `models` answer for the requested installation, or for `config.modelsInstallation`
+// when the knob names another one -- which the port must refuse as not this request's answer.
+else if (method === "models") value = { schema:"ccloop-models-v1",installation:config.modelsInstallation ?? payload.installation,kind:"codex",source:"probe",observedAt:"2026-10-16T00:00:00.000Z",models:[{ model:"fixture-model",contextWindowTokens:272000,maxOutputTokens:null,singleCallExecution:"v1-soft" }] };
 else throw new Error(`unexpected method ${control} ${method} ${agentsFlag}`);
 process.stdout.write(`${JSON.stringify(value)}\n`);
