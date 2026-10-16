@@ -126,6 +126,8 @@ export function buildEstimatePrompt(instructionVersion: string, requestCanonical
   }
   if (options?.retryProblems && options.retryProblems.length > 0) {
     prompt += `\n\nYour previous answer was rejected for these problems:\n${options.retryProblems.join("\n")}\nAnswer again with one JSON object that fixes all of them.`;
+    // Spec §4.3 Trigger: an answer ccloop could read no JSON object from may have been cut off at the output cap.
+    if (options.retryProblems.includes("no-json-object")) prompt += " Your answer may have been cut off: reply with the JSON object only, and keep each rationale to one sentence.";
   }
   return prompt;
 }

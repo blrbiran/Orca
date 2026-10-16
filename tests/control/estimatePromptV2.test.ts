@@ -81,11 +81,20 @@ describe("the v2 estimate prompt and schema", () => {
   });
 
   it("retryProblems append the feedback paragraph in both versions, after the task line", () => {
-    const tail = "Your previous answer was rejected for these problems:\ntask-missing:b\nno-json-object\nAnswer again with one JSON object that fixes all of them.";
-    const problems = ["task-missing:b", "no-json-object"];
+    const tail = "Your previous answer was rejected for these problems:\ntask-missing:b\ntask-invalid:a:work\nAnswer again with one JSON object that fixes all of them.";
+    const problems = ["task-missing:b", "task-invalid:a:work"];
     expect(buildEstimatePrompt("1", "{}", { taskIds: ["a", "b"], retryProblems: problems })).toBe(`${buildEstimatePrompt("1", "{}")}\n\n${tail}`);
     expect(buildEstimatePrompt("2", "{}", { taskIds: ["a", "b"], retryProblems: problems })).toBe(`${buildEstimatePrompt("2", "{}", { taskIds: ["a", "b"] })}\n\n${tail}`);
     expect(buildEstimatePrompt("2", "{}", { taskIds: ["a"], retryProblems: [] })).toBe(buildEstimatePrompt("2", "{}", { taskIds: ["a"] }));
+  });
+
+  it("adds the cut-off sentence when the problem is no-json-object, and only then", () => {
+    const sentence = " Your answer may have been cut off: reply with the JSON object only, and keep each rationale to one sentence.";
+    for (const version of ["1", "2"]) {
+      const options = { taskIds: ["a"], retryProblems: ["no-json-object"] };
+      expect(buildEstimatePrompt(version, "{}", options)).toBe(`${buildEstimatePrompt(version, "{}", { taskIds: ["a"] })}\n\nYour previous answer was rejected for these problems:\nno-json-object\nAnswer again with one JSON object that fixes all of them.${sentence}`);
+      expect(buildEstimatePrompt(version, "{}", { taskIds: ["a"], retryProblems: ["task-missing:a"] })).not.toContain("cut off");
+    }
   });
 
   it("reads the task ids from the request's plan, in plan order", () => {
