@@ -242,6 +242,12 @@ const estimateRecordSchema = z.object({
   compatibilityReasonCodes: z.array(z.string().min(1)).min(1).optional(),
   // Agent selection spec §6.4: the estimator selection frozen for this estimate (null when it was not resolved).
   estimatorSlot: frozenSlotSchema.nullable(),
+  // Estimate-usable-answer spec §4.3/§4.4: all optional, written only when they apply (absent on rows written before).
+  proposalVersion: safeInteger.positive().optional(),
+  repairs: z.array(z.string().min(1)).optional(),
+  origin: z.object({ kind: z.literal("auto-retry"), of: idSchema, problems: z.array(z.string().min(1).max(200)).min(1).max(20) }).strict().optional(),
+  retriedAs: idSchema.optional(),
+  retrySkipped: z.string().min(1).optional(),
 }).strict().superRefine((value, ctx) => {
   if ((value.request === null) !== (value.requestHash === null)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["request"], message: "estimate-request-hash-mismatch" });
@@ -258,6 +264,9 @@ export interface EstimateRecord {
   outputHash: string | null; output: BudgetEstimateV1 | null; reasonCode: string | null; grant: Amount;
   compatibilityReasonCodes?: string[];
   estimatorSlot: FrozenSlot | null;
+  proposalVersion?: number; repairs?: string[];
+  origin?: { kind: "auto-retry"; of: string; problems: string[] };
+  retriedAs?: string; retrySkipped?: string;
 }
 
 /** Spec §6.4 / §7 (planImport.ts rejectedEstimatorRequest): an estimate blocked because its selection was refused froze none. */

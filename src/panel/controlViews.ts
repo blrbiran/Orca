@@ -602,6 +602,11 @@ function estimateViews(store: ControlStore, groupId: string, currentPlanCanonica
       profile: estimate.profile, mode: estimate.mode, requestHash: estimate.requestHash,
       outputHash: estimate.outputHash, output: estimate.output, reasonCode: estimate.reasonCode,
       ...(estimate.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: estimate.compatibilityReasonCodes }),
+      ...(estimate.proposalVersion === undefined ? {} : { proposalVersion: estimate.proposalVersion }),
+      ...(estimate.repairs === undefined ? {} : { repairs: estimate.repairs }),
+      ...(estimate.origin === undefined ? {} : { origin: estimate.origin }),
+      ...(estimate.retriedAs === undefined ? {} : { retriedAs: estimate.retriedAs }),
+      ...(estimate.retrySkipped === undefined ? {} : { retrySkipped: estimate.retrySkipped }),
       stale: estimateIsStale(estimate, currentPlanCanonicalJson),
     });
     allocations.push(allocationViewSchema.parse({

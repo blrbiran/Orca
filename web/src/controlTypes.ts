@@ -293,6 +293,11 @@ export type EstimateViewV1 = {
   output: BudgetEstimateV1 | null;
   reasonCode: string | null;
   compatibilityReasonCodes?: string[];
+  proposalVersion?: number;
+  repairs?: string[];
+  origin?: { kind: "auto-retry"; of: string; problems: string[] };
+  retriedAs?: string;
+  retrySkipped?: string;
   /** W6: built from contracts a plan change has since replaced; its suggestions are not applied. Absent reads as false. */
   stale?: boolean;
 };

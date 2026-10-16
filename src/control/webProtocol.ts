@@ -418,6 +418,8 @@ export const estimateExecutionContractSchema = z
     tokenizer: tokenizerSchema,
     framingTokenOverhead: safeInteger,
     maxOutputTokens: positiveSafeInteger,
+    // Estimate-usable-answer spec §4.3: present only on an automatic retry's contract.
+    retryProblems: z.array(nonemptyString).min(1).max(20).optional(),
   })
   .strict();
 
@@ -1332,6 +1334,11 @@ export const estimateViewSchema = z
     output: budgetEstimateSchema.nullable(),
     reasonCode: nonemptyString.nullable(),
     compatibilityReasonCodes: z.array(nonemptyString).min(1).optional(),
+    proposalVersion: positiveSafeInteger.optional(),
+    repairs: z.array(nonemptyString).optional(),
+    origin: z.object({ kind: z.literal("auto-retry"), of: idSchema, problems: z.array(nonemptyString).min(1).max(20) }).strict().optional(),
+    retriedAs: idSchema.optional(),
+    retrySkipped: nonemptyString.optional(),
     // W6: built from contracts a set-task-loop change has since replaced; its suggestions are no longer applied. Always
     // set by the projection; optional only so the Web mirror's literal fixtures need no edit (webParity.test.ts).
     stale: z.boolean().optional(),

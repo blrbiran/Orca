@@ -478,7 +478,7 @@ export class WebControlService {
           }
           const estimate = { estimateId, estimateVersion, state: prepared.state, profile: { profileId: command.payload.estimatorProfileId, profileHash: command.payload.estimatorProfileHash }, mode: command.payload.estimateMode,
             requestHash: prepared.requestHash, request: prepared.request, outputHash: null, output: null, reasonCode: prepared.reasonCode,
-            ...(prepared.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: prepared.compatibilityReasonCodes }), grant: ESTIMATE_GRANT, estimatorSlot };
+            ...(prepared.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: prepared.compatibilityReasonCodes }), grant: ESTIMATE_GRANT, estimatorSlot, proposalVersion: proposal.proposalVersion };
           this.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)").run(id, estimateId, estimateVersion, prepared.state, canonicalBytes(estimate).toString("utf8"));
           persistEstimateArtifacts(this.store, id, estimateId, prepared);
           const wakeId = prepared.state === "queued" ? `scheduler-wake:${id}:estimate:${estimateId}` : null;
