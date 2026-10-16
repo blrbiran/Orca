@@ -36,7 +36,9 @@ describe("the estimate prompt (single-call estimate spec §4.2)", () => {
     for (const text of ["budget-estimate-v1", "planHash", "goalReviewReserve", "groupRationale", "assumptions", "\"S\"", "\"XL\"", "\"low\"", "\"high\"", "9007199254740991"]) {
       expect(ESTIMATE_INSTRUCTIONS["1"]).toContain(text);
     }
-    expect(() => buildEstimatePrompt("2", "{}")).toThrow(expect.objectContaining({ code: "recovery-blocked", detail: "estimate-instruction-unknown:2" }));
+    // Ruling (session 4de777f4, 2026-10-17): "2" is now a known instruction version (estimate-usable-answer spec §4.1), so
+    // the unknown-version probe moves to "3".
+    expect(() => buildEstimatePrompt("3", "{}")).toThrow(expect.objectContaining({ code: "recovery-blocked", detail: "estimate-instruction-unknown:3" }));
   });
 
   it("counts the whole prompt under the utf8 upper bound", () => {
@@ -64,7 +66,8 @@ describe("the estimate prompt (single-call estimate spec §4.2)", () => {
 
   it("is blocked-capability for an instruction version Orca does not know", () => {
     const snapshot = profileSnapshot();
-    snapshot.profile.estimatorPreflight = { ...snapshot.profile.estimatorPreflight!, instructionVersion: "2" };
+    snapshot.profile.estimatorPreflight = { ...snapshot.profile.estimatorPreflight!, instructionVersion: "3" };
+    // Ruling (session 4de777f4, 2026-10-17): "2" became a known version (spec §4.1); the unknown one is now "3".
     const { profile, observation } = observe(snapshot);
     expect(buildBudgetEstimateRequest({ planHash, planCanonicalJson, profile, observation, mode: "soft" }))
       .toMatchObject({ state: "blocked-capability", reasonCode: "estimate-blocked-capability", request: null });

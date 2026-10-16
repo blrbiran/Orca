@@ -1,4 +1,5 @@
 import { ControlError } from "./errors.js";
+import type { BudgetEstimateRequestV1 } from "./webProtocol.js";
 
 /**
  * Single-call estimate spec §4.2: the estimator's instruction, by the profile's `instructionVersion`. The prompt ccloop
@@ -55,12 +56,84 @@ const INSTRUCTION_V1 = [
   "- \"planHash\" and every \"taskId\" are copied exactly, and \"tasks\" keeps the plan's order.",
 ].join("\n");
 
-export const ESTIMATE_INSTRUCTIONS: Readonly<Record<string, string>> = Object.freeze({ "1": INSTRUCTION_V1 });
+/**
+ * Estimate-usable-answer spec §4.1: instruction v2. v1's text minus the planHash copy rule and the "sorted" assumption
+ * rule; the answer's "tasks" is an object keyed by taskId (Orca converts it, estimateRepair.ts). Its own constant: "1"
+ * is never edited.
+ */
+const INSTRUCTION_V2 = [
+  "You are estimating the budget of a plan of software tasks before any of them runs. You cannot run, open, edit or inspect anything: you have no tools, and everything you may use is in the request below. Answer with one JSON object and nothing else.",
+  "",
+  "## The request",
+  "",
+  "After this instruction, separated from it by one blank line, comes one JSON object whose \"schema\" is \"budget-estimate-request-v1\". Its fields:",
+  "- \"planSnapshotCanonicalJson\": a JSON document encoded as a string. Parse it. Its \"goal\" and \"successConditions\" describe the whole plan. Its \"tasks\" array lists the tasks in their order; each task has a \"taskId\", its \"dependencyTaskIds\", and \"originalContractCanonicalJson\": the task's contract, itself a JSON document encoded as a string (its objective, the paths it may change, its execution policy and how it is verified).",
+  "- \"estimatorCapabilities.contextWindowTokens\": the context window, in tokens, of the agent that will do the work.",
+  "- Every other field identifies this request. Ignore them.",
+  "After the request comes a line that lists the plan's task ids and their count.",
+  "",
+  "## What to estimate",
+  "",
+  "For each task, estimate what one agent will spend to finish it, as four whole numbers:",
+  "- \"tokens\": every model token the task will consume, input and output, over every call and every attempt;",
+  "- \"activeMs\": the wall-clock milliseconds the agent will be actively working;",
+  "- \"attempts\": how many attempts the task will need;",
+  "- \"sessions\": how many agent sessions it will need.",
+  "Give two such amounts for each task: \"work\", for doing the task, and \"handoff\", for writing down where it stands if it is interrupted partway (usually a small part of work; its attempts and sessions may be 0).",
+  "Give one more amount, \"goalReviewReserve\", for a single review of the finished plan against its goal and success conditions.",
+  "Rate each task's \"complexity\" as one of \"S\", \"M\", \"L\", \"XL\", and your \"confidence\" in its numbers as one of \"low\", \"medium\", \"high\".",
+  "Explain each task's numbers in \"rationale\" (one or two sentences) and list the facts you assumed in \"assumptions\". Explain the plan as a whole in \"groupRationale\".",
+  "A person will read these numbers as advice and may apply them to the plan's budget. Estimate honestly: do not pad them to be safe and do not cut them to look cheap.",
+  "",
+  "## The answer",
+  "",
+  "Answer with exactly this object, with no other key at any level:",
+  "{",
+  "  \"schema\": \"budget-estimate-answer-v2\",",
+  "  \"tasks\": an object with one key for each task of the plan, the key being the task's taskId unchanged, none added, none left out and none written twice, each value",
+  "    { \"complexity\": \"S\" | \"M\" | \"L\" | \"XL\",",
+  "      \"confidence\": \"low\" | \"medium\" | \"high\",",
+  "      \"work\": { \"tokens\": n, \"activeMs\": n, \"attempts\": n, \"sessions\": n },",
+  "      \"handoff\": { \"tokens\": n, \"activeMs\": n, \"attempts\": n, \"sessions\": n },",
+  "      \"rationale\": a non-empty string,",
+  "      \"assumptions\": [ non-empty strings ] },",
+  "  \"goalReviewReserve\": { \"tokens\": n, \"activeMs\": n, \"attempts\": n, \"sessions\": n },",
+  "  \"groupRationale\": a non-empty string",
+  "}",
+  "",
+  "The answer is checked against these rules, and an answer that breaks any one of them is discarded:",
+  "- every n is a whole number from 0 to 9007199254740991, with no fraction, no exponent and no minus sign;",
+  "- \"assumptions\" has at least one entry and no entry appears twice;",
+  "- every string is non-empty, and none is a placeholder such as \"todo\" or \"...\";",
+  "- every taskId of the plan is a key of \"tasks\", copied exactly.",
+].join("\n");
 
-/** Spec §4.2: instruction, "\n\n", request bytes. An unknown version never reaches here (the preflight blocks it). */
-export function buildEstimatePrompt(instructionVersion: string, requestCanonicalJson: string): string {
+export const ESTIMATE_INSTRUCTIONS: Readonly<Record<string, string>> = Object.freeze({ "1": INSTRUCTION_V1, "2": INSTRUCTION_V2 });
+
+export interface EstimatePromptOptions { taskIds: readonly string[]; retryProblems?: readonly string[] }
+
+/**
+ * Spec §4.2: instruction, "\n\n", request bytes. v2 then appends the task list; a retry appends the feedback (spec §4.3).
+ * An unknown version never reaches here (the preflight blocks it). v1 without options is byte-identical to before.
+ */
+export function buildEstimatePrompt(instructionVersion: string, requestCanonicalJson: string, options?: EstimatePromptOptions): string {
   if (!Object.hasOwn(ESTIMATE_INSTRUCTIONS, instructionVersion)) throw new ControlError("recovery-blocked", `estimate-instruction-unknown:${instructionVersion}`);
-  return `${ESTIMATE_INSTRUCTIONS[instructionVersion]}\n\n${requestCanonicalJson}`;
+  let prompt = `${ESTIMATE_INSTRUCTIONS[instructionVersion]}\n\n${requestCanonicalJson}`;
+  if (instructionVersion === "2") {
+    if (!options) throw new ControlError("recovery-blocked", "estimate-task-ids-missing");
+    const ids = options.taskIds;
+    prompt += `\n\nThis plan has ${ids.length} tasks: ${ids.map(id => JSON.stringify(id)).join(", ")}. Answer each exactly once, as a key of "tasks".`;
+  }
+  if (options?.retryProblems && options.retryProblems.length > 0) {
+    prompt += `\n\nYour previous answer was rejected for these problems:\n${options.retryProblems.join("\n")}\nAnswer again with one JSON object that fixes all of them.`;
+  }
+  return prompt;
+}
+
+/** Task ids of the request's plan, in plan order. */
+export function estimateTaskIds(request: BudgetEstimateRequestV1): string[] {
+  const plan = JSON.parse(request.planSnapshotCanonicalJson) as { tasks: { taskId: string }[] };
+  return plan.tasks.map(task => task.taskId);
 }
 
 function deepFreeze<T>(value: T): T {
@@ -113,3 +186,39 @@ export const BUDGET_ESTIMATE_JSON_SCHEMA: Readonly<Record<string, unknown>> = de
   required: ["schema", "planHash", "tasks", "goalReviewReserve", "groupRationale"],
   additionalProperties: false,
 });
+
+/** Spec §4.1: v2's keyed answer, built per request so "each task exactly once, none extra" is structural. */
+function keyedSchema(taskIds: readonly string[]): Record<string, unknown> {
+  const entry = (): Record<string, unknown> => ({
+    type: "object",
+    properties: {
+      complexity: { type: "string", enum: ["S", "M", "L", "XL"] },
+      confidence: { type: "string", enum: ["low", "medium", "high"] },
+      work: amount(),
+      handoff: amount(),
+      rationale: { type: "string" },
+      assumptions: { type: "array", items: { type: "string" } },
+    },
+    required: ["complexity", "confidence", "work", "handoff", "rationale", "assumptions"],
+    additionalProperties: false,
+  });
+  const properties: Record<string, unknown> = {};
+  for (const id of taskIds) Object.defineProperty(properties, id, { value: entry(), enumerable: true, writable: true, configurable: true });
+  return {
+    type: "object",
+    properties: {
+      schema: { type: "string", enum: ["budget-estimate-answer-v2"] },
+      tasks: { type: "object", properties, required: [...taskIds], additionalProperties: false },
+      goalReviewReserve: amount(),
+      groupRationale: { type: "string" },
+    },
+    required: ["schema", "tasks", "goalReviewReserve", "groupRationale"],
+    additionalProperties: false,
+  };
+}
+
+export function estimateResponseSchema(instructionVersion: string, taskIds: readonly string[]): Record<string, unknown> {
+  if (instructionVersion === "1") return BUDGET_ESTIMATE_JSON_SCHEMA as Record<string, unknown>;
+  if (instructionVersion === "2") return keyedSchema(taskIds);
+  throw new ControlError("recovery-blocked", `estimate-instruction-unknown:${instructionVersion}`);
+}

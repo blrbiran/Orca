@@ -1,5 +1,5 @@
 import { canonicalBytes } from "./canonicalJson.js";
-import { BUDGET_ESTIMATE_JSON_SCHEMA, buildEstimatePrompt } from "./estimatePrompt.js";
+import { buildEstimatePrompt, estimateResponseSchema, estimateTaskIds } from "./estimatePrompt.js";
 import { classifyEstimateOutput, readEstimateContract } from "./estimator.js";
 import { readEstimateRecord } from "./queries.js";
 import type { AdmissionGate } from "./admissionGate.js";
@@ -43,9 +43,10 @@ const ESTIMATE = {
     const estimate = readEstimateRecord(deps.store, run.groupId, estimateId);
     if (estimate.request === null) return { blocked: "estimate-request-missing" };
     const contract = readEstimateContract(deps.store, run.groupId, estimateId);
+    const taskIds = estimateTaskIds(estimate.request);
     return {
-      prompt: buildEstimatePrompt(contract.instructionVersion, canonicalBytes(estimate.request).toString("utf8")),
-      responseSchema: BUDGET_ESTIMATE_JSON_SCHEMA as Record<string, unknown>,
+      prompt: buildEstimatePrompt(contract.instructionVersion, canonicalBytes(estimate.request).toString("utf8"), { taskIds, ...(contract.retryProblems ? { retryProblems: contract.retryProblems } : {}) }),
+      responseSchema: estimateResponseSchema(contract.instructionVersion, taskIds),
       maxOutputTokens: contract.maxOutputTokens,
     };
   },

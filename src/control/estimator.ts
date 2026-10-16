@@ -2,7 +2,7 @@ import { budgetAmountSchema, type BudgetAmount } from "./tokenPolicy.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
-import { buildEstimatePrompt } from "./estimatePrompt.js";
+import { buildEstimatePrompt, estimateTaskIds } from "./estimatePrompt.js";
 import { estimatorCompatibility } from "./estimatorCompatibility.js";
 import { intersectCapabilities, type FrozenProfile, type ObservedProfile } from "./profiles.js";
 import { amountSchema } from "./schema.js";
@@ -101,7 +101,7 @@ export function buildBudgetEstimateRequest(input: EstimateInput): FrozenEstimate
   const requestHash = sha256Canonical(request);
   // Spec §4.2 (review I2): both branches count the whole prompt ccloop hands the model -- instruction, blank line and
   // request bytes -- not the request alone.
-  const promptBytes = Buffer.from(buildEstimatePrompt(preflight.instructionVersion, canonicalBytes(request).toString("utf8")), "utf8");
+  const promptBytes = Buffer.from(buildEstimatePrompt(preflight.instructionVersion, canonicalBytes(request).toString("utf8"), { taskIds: estimateTaskIds(request) }), "utf8");
   let serialized: bigint;
   if (preflight.tokenizer.kind === "exact") {
     if (!input.exactTokenCount) return { ...blocked, request, requestHash };
