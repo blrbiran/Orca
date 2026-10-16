@@ -24,6 +24,7 @@ import { agentSelectionSchema, amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
 import { budgetEstimateSchema, estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
 import { problemsFromRefusal, repairEstimateOutput } from "./estimateRepair.js";
+import { decideEstimateRetry, estimateRetryId, writeEstimateRetry } from "./estimateRetry.js";
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, readStopIntent, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
@@ -1145,6 +1146,8 @@ export interface EstimateFailure { reasonCode: string; problems: string[] }
 function estimateFailureProblems(reasonCode: string, callFailure: string | null, repairProblems: string[] | null, judged: unknown, notCanonical: boolean): string[] {
   if (repairProblems !== null) return repairProblems;
   if (reasonCode.startsWith("estimate-call-failed")) return callFailure === "single-call-output-invalid" ? ["no-json-object"] : [];
+  // A repaired answer the classifier still finds about another plan: its planHash or task ids do not match the request.
+  if (reasonCode === "estimate-output-plan-mismatch") return ["plan-mismatch"];
   const parsed = budgetEstimateSchema.safeParse(judged);
   const problems = problemsFromRefusal(parsed.success ? [] : parsed.error.issues, notCanonical);
   return problems.length > 0 ? problems : ["output-not-canonical"];
@@ -1187,10 +1190,10 @@ export function completeEstimateInStore(
       // canonical JSON (a lone surrogate, a negative zero) cannot be hashed, so it is an invalid answer too.
       // Estimate usable-answer spec §4.2: repair runs on every non-null answer before the classifier, which then judges
       // the repaired value and stays the single judge. A null answer is a failed call and never reaches repair.
-      const taskIds = plan.plan.tasks.map(t => t.taskId);
+      const taskIds = plan.plan.tasks.map(t => t.taskId), contract = readEstimateContract(deps.store, id, estimateId);
       let repairs: string[] = [], repairProblems: string[] | null = null, judged: unknown = rawOutput;
       if (rawOutput !== null) {
-        const repaired = repairEstimateOutput(rawOutput, { planHash: plan.planHash, taskIds, instructionVersion: readEstimateContract(deps.store, id, estimateId).instructionVersion });
+        const repaired = repairEstimateOutput(rawOutput, { planHash: plan.planHash, taskIds, instructionVersion: contract.instructionVersion });
         if (repaired.ok) { repairs = repaired.repairs; judged = repaired.output; } else repairProblems = repaired.problems;
       }
       const classified = repairProblems !== null ? { ok: false as const, reasonCode: "estimate-output-invalid" } : classify(judged, plan.planHash, taskIds);
@@ -1211,7 +1214,19 @@ export function completeEstimateInStore(
       const settledBalance = budgetBalance(group.limit, group.used, group.ledger.committedRemaining);
       group.ledger.budgetDeficit = settledBalance.deficit;
       setReserve(proposal, settledBalance.reserve);
+      // Spec §4.3: the one automatic retry, decided on the settled numbers by plain reads only (it never throws).
+      const decision = decideEstimateRetry({ estimate, contract, failure, group, proposalVersion: proposal.proposalVersion,
+        newestEstimateVersion: Number(deps.store.db.prepare("SELECT MAX(estimate_version) AS n FROM estimates WHERE group_id=?").get(id)?.n ?? 0),
+        reserveAfterSettlement: settledBalance.reserve, dispatchBlocked: deps.store.dispatchBlocked });
+      if (decision.kind === "skip") estimate.retrySkipped = decision.code;
+      if (decision.kind === "retry") estimate.retriedAs = estimateRetryId(id, estimateId);
       deps.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run(estimate.state, canonicalBytes(estimate).toString("utf8"), id, estimateId);
+      if (decision.kind === "retry") {
+        writeEstimateRetry(deps.store, id, estimate, contract, decision.problems);
+        // The retry's grant is reserved like any queued estimate's (createEstimate).
+        group.ledger.committedRemaining = sumAmounts([group.ledger.committedRemaining, ESTIMATE_GRANT]);
+        setReserve(proposal, residual(group.limit, group.used, group.ledger.committedRemaining));
+      }
       closeSingleCall(deps.store, run.runId, { id: receiptId, kind: "estimate-result", body: { groupId: id, estimateId, runId: run.runId, rawHash, rawIdentity } });
       saveWebAuthority(deps.store, group, proposal); recordProjectionChange(deps.store, [id]);
     });

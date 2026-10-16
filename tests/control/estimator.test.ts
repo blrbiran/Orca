@@ -213,7 +213,11 @@ describe("frozen estimator", () => {
       const row = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.runId)!.body));
       row.state = "settled-restartable";
       h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), run!.runId);
-      service.completeEstimate("g", h.estimateId, {});
+      // Ruling (session 4de777f4, 2026-10-17): an invalid answer (`{}`) now queues one automatic retry (estimate
+      // usable-answer spec §4.3), whose grant the reserve funds; a call that gave nothing (null) is not retried, so it
+      // keeps this criterion about the refund alone: only the settled remainder returns to the reserve.
+      service.completeEstimate("g", h.estimateId, null);
+      expect(readEstimateRecord(h.store, "g", h.estimateId).retriedAs).toBeUndefined();
       expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! + 249000);
       expect(readControlGroup(h.store, "epoch", "g").ledger.used.tokens).toBe(1000);
     } finally { await h.dispose(); }
