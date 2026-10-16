@@ -72,3 +72,4 @@ Final fix wave dispatched: I1 + M2 + M4 + Task 1 mutation gap (FIX_BASE 13d5792b
 Ruling: M3 (whitespace-only rationale) deferred — the placeholder list is pinned by the spec; changing it needs a spec ruling — cost if wrong: a blank rationale reaches ready.
 Final fix wave: commit 756d3d28; re-review: I1, M2, M4, Task-1 mutation gap all ADDRESSED, no new breakage. Equivalent mutant: removing step 5's unknown-id filter (step 6 reads only plan ids) — parked as equivalent.
 Final: minor (deferred): repairs array unbounded in count; view origin.problems lacks .max(200); capped problems may collide (duplicates)
+Final gate (gate4, observed commit 13d5792b): full 3950 = 3912 pass / 36 skip / 2 red (schedulerBridge 30 s timeout; loopPlanE2E git worktree add at load 42); both alone on HEAD 5fe76708 2/2 runs 10/10 (load 19-26). control/chain/panel/wscheck still running when this was written.
