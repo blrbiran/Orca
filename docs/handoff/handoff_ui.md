@@ -6,7 +6,8 @@
 > ✅ 第三批第二轮（§七.二）已由人合入 main 并 push（合并提交主题行 `Merge branch 'ui/panel-taste'`，2026-10-14）。
 > ✅ 第二轮与 §七.三 已由人视觉验收、合并并 push（会话 `fb98aa31`）。
 > ✅ §七.四 已由人复验、合并并 push（之后人删了分支与 worktree）。
-> 🔵 **§七.五（深色框过暗；分支 `ui/panel-taste` 再次从 main 重建）人已复验通过，待人合并与 push。**（人要求后续问题继续追加在本文）
+> ✅ §七.五（深色框过暗；j/k 是 Vimium 吞键）已由人复验、合并并 push（会话 `9b012714`，2026-10-16 现测：`git merge-base --is-ancestor ui/panel-taste main` RC 0，`origin/main` 与本地 main 一致）。
+> ⚪ **当前没有在飞的 UI 工作、没有待合并的 UI 提交。** 下一轮从 §〇.一 开始。（人要求后续问题继续追加在本文）
 
 > **读者是下一个 agent。** 这一批 UI 改动的交接写在本文，**不写进 `docs/handoff/handoff.md`**；
 > 等 UI 基本 ready、由人决定合并时，再把本文的结论并回 `handoff.md`。
@@ -26,8 +27,22 @@ git -C <worktree> status --porcelain                          # 期望只有 ?? 
 🔴 **别的 agent 在 `main` 与主工作树 `/Users/biran/code/skills/orca/Orca` 上干活**（仓库 2026-10-13 从 `loop/` 搬到 `orca/`，下文旧批次里的 `loop/` 路径同理替换）。UI 工作一律只在 worktree 的
 UI 分支上做；主工作树里不跑 build／测试、不提交、不 checkout。合并、push、删 worktree／分支都归人（CLAUDE.md Rule 15）。
 
-⚠️ worktree 目录建在会话 scratchpad（`/private/tmp/...`）下，**重启会丢目录，提交不会丢**（在主仓库的对象库里）。
-目录没了就从主仓库 `git worktree add <新路径> ui/panel-redesign`，并把新路径告诉人；`git worktree prune` 不归你。
+⚠️ 自第三批起 worktree 固定在 `/Users/biran/code/skills/orca/Orca-wt/ui-taste`（分支 `ui/panel-taste`），不在 scratchpad，重启不丢。
+（第一、二批的 worktree 在 scratchpad 下，早已不在；旧批次里的 `ui/panel-redesign`／`ui/panel-contrast` 只剩历史意义。）
+
+## 〇.一、下一轮怎么开始（会话 `9b012714` 写，2026-10-16）
+
+1. **先查分支与 worktree 还在不在**（人每轮合并后可能删）：`git -C /Users/biran/code/skills/orca/Orca worktree list`、`git -C /Users/biran/code/skills/orca/Orca branch --list 'ui/*'`。
+   - 都不在 ⇒ 从主仓库 `git worktree add ../Orca-wt/ui-taste -b ui/panel-taste main`（只新建，不删任何东西），再软链两个 `node_modules`（指向主工作树的 `node_modules`、`web/node_modules`）。
+   - 都在且 `git log main..ui/panel-taste` 为空 ⇒ 在 worktree 里 `git merge --ff-only main` 跟上 main（会话 `9b012714` 做过，闸门未拦）。
+2. **改 UI 前读** `web/DESIGN.md`（token、data-tone、只有 `.btn-primary` 填色、分区始终挂载、深色分层往亮里走：页面 `--bg` < 卡片 `--card` < 框 `--well` < 输入框 `--field`；**深色下除页面本身外任何框都不许用 `--bg`** —— 人裁，`contrast.test.ts` 钉着）。
+3. **判据纪律**：既有判据不改写（要改先找人逐条授权）；新判据先看到红；变异只在 `git clone --local --branch ui/panel-taste` 副本里做，还原看 `git diff`／`--cached` 字节 0／0。
+4. **验证**（在干净 clone 上跑，别和编辑并发）：`npm run typecheck`、`npm run build --workspace web`、`npm run --ws check`，再加根测试 `npx vitest run tests/metrics tests/panel/scanPanelText.test.ts`（带空格的字符串字面量会被当成未翻译文案）。按路径 `git add`；新 DOM 测试文件第一行 `// @vitest-environment jsdom`。看到红先查 `docs/handoff/known-load-flakes.md`。
+5. **真浏览器**：改道面板（HOME、四个 XDG 根、`ORCA_CONTROL_DIR`／`ORCA_CORRECTIONS_DIR`／`ORCA_PANEL_DIR` 全指向 scratchpad；`unset ORCA_AGENTS_TABLE ORCA_CCMEM_BIN ORCA_CCLOOP_BIN ORCA_SYNCSKILL_BIN`；数据仓库用主仓库的 `git clone --local`），在 worktree 里
+   `./node_modules/.bin/tsx src/cli.ts panel run --by tester --port 7793 --repo orca=<数据 clone> --control-state-dir <控制目录>`。
+   首次登录读 `<控制目录>/initial-password`，随后强制改密码。**重新 build 后必须重启面板**（启动时缓存 `web/dist`）。截图前等 ≥6 s。前后 `ls -laR ~/.orca` 比对，真数据不许被写。
+6. 🔴 **人说「快捷键没反应」先排除浏览器扩展**：人的 Chrome 装了 Vimium，它吞 j/k 等单字母键；先在无扩展的 headless Chromium 里复现，再考虑改代码（§七.五）。
+7. 合并、push、删分支／worktree 归人（Tier 0 闸门会拦 agent），列进 awaitingHuman。
 
 ---
 
@@ -301,5 +316,4 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 
 **awaitingHuman**
 - ✅ 人已复验（会话 `9b012714`）：深色框「没问题了」；把面板地址加入 Vimium 排除列表后 j/k 正常 —— Vimium 吞键得到确认。
-- 🔴 合并本分支进 main 并 push（Tier 0，人做）。
-- 本会话的 clone 与改道环境（干净副本，删除归人）：会话 `9b012714` scratchpad 下 `mut/`、`data/`、`v2/`。
+- ✅ 人已合并进 main 并 push，并删了本会话的 clone 与改道环境。分支 `ui/panel-taste` 与 worktree 人保留着；之后已在 worktree 里 `--ff-only` 跟上 main，再提交本次 handoff 更新。
