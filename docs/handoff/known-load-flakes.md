@@ -63,6 +63,12 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 
 **`ec9ce319`（2026-10-15 晚）**：repin `71053e3` 那一笔的门（clone，负载 11–17）：全量 16 红＝14 条 5 s／30 s 超时（`gateCheck`、`driverRecovery`、`integrationKeep`、`retryTask`、`schedulerBridge`、`settleUnknownUsage`）＋`taskResultPaired`×2；`verify:control` 多 1 条 `settleUnknownUsage` 超时。六个文件同 env 各单跑 3/3 绿（负载 5–34）。⚠️ 全新 clone 先跑测试再 web build 会多出约 50 条 `panel-dist-missing`——不是 flake，是门脚本顺序错。
 
+**`a852f96a`（2026-10-15～16，分支 `codex/every-agent-chain`；明细在 `.superpowers/sdd/2026-10-15-every-agent-requirement-chain/` 的 `task-16-gate-report.md`、`task-10-report.md`、`task-12-report.md`）**：
+- Task 16 门（clone，观测提交＝主题行 `fix(web): number model-list reads, skip a background read in flight, keep a read list on screen`，`ORCA_CCLOOP_BIN`＝本轮 ccloop 分支的 build，负载 8–32、同机有别的会话）：根级全量 14 红＝12 条超时／截止（`gateCheck` K13、`driverReconcileN`、`driverRecovery`、`integrationKeep`、`retryTask` ×4、`schedulerBridge` 30 s、`settleUnknownUsage` D9 ×3）＋`taskResultPaired`×2；`verify:control` 多 1 条 `settleUnknownUsage`「…(silent=false)」；7 个文件同 env 单跑各 3/3 绿（负载 6–18）。
+- Task 10 扫描（负载 116–164，与 ccloop 门、付费跑并跑）：77 条 `Test timed out`＋`driverReconcileN` teardown `ENOTEMPTY`＋`handoffE2E` H2 `expected 1 to be +0`（`:219`，stop 之前先落地了：实时窗口被负载挤掉）；25 个文件各单跑 3/3 绿。⚠️ `handoffE2E` H2 是**断言形状**，n＝1 候选，未豁免。
+- Task 12 根级全量：5 条 5 s 超时（`driverRequirementSplit`、`retryTask` ×2、`settleUnknownUsage` ×2），所在文件单跑绿。
+- web：`--ws check` 与 ccloop 门并跑时两次红在不同的 `findByRole` 超时（先 2 条，再 5 条：`requirementsApp`、`taskLabelsDraft`、`taskLabelsDraftBase`）；`vitest --maxWorkers=2` 1137/1137 RC 0。**没在默认 workers 下单跑** ⇒ 按形状判负载，未证成。
+
 ### 已修、不再豁免的（再红就当新问题查）
 
 - `tests/control/driverSettle.test.ts` 真 git 场景：全量＋并发下撞 5 s，已给 30 s。再红要查。
@@ -92,6 +98,11 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
   门：`savedResultRecovery.native` ×2 30 s 超时（单跑 3/3，负载 80／20／10）；`verify:control` 里 `runCodexPhase` › "kills a TERM-ignoring process before returning abort" **断言形状** `expected 'io-error' to be 'aborted'`（241 ms，单跑 3/3 绿，分支不碰 `src/runtime/codex`）⇒ n＝1 候选，未豁免。
   分支头门（2026-10-15，负载 15–27）：`phasesCompleted`「writes one count per phase…」5 s 超时、`extractFinalObject` 3 s 性能阈值 ×2（plan／execute）、两条断言形状 n＝1 候选（`phaseTimeoutUsage` codex 得 `codex-io-error` 而非 `codex-timeout`；`skillsController`「preserves plan skill cleanup failure across handoff-abort」`fixture marker missing`），4 个文件单跑各 3/3 绿（负载 13–24）。
   ⚠️ `tests/cli/cli.test.ts` › "returns 0 for the example contract run" 在**主仓 ccloop 的工作树**里 3/3 红是**环境**不是 flake：attempt 的 `git commit` 跑了主仓 `.git/hooks/post-commit`（Qoder，每次约 2 s），clone 里不慢（`.superpowers/sdd/2026-10-14-omp-single-call/debug-cli-slowdown.md`）⇒ **ccloop 门在 `clone --local` 里跑**。
+- 2026-10-15～16 会话 `a852f96a`（ccloop `codex/every-agent-chain`，门 run 1–4 都在 clone 里；明细在 Orca 台账目录 `.superpowers/sdd/2026-10-15-every-agent-requirement-chain/` 的 `task-9-gate3-report.md`、`task-9-gate4-report.md` 与台账行）：
+  - run 2、run 3 都红、每次单跑 3/3：`verifySavedResult`「r1 command interruption modified=true…」、`codexAdapter`「outer watchdog kills a previously observed TERM-ignoring detached Codex」（1500 ms 计时）⇒ **提议进 `check-known-reds.mjs`**（名单归人定，本轮未改）。
+  - run 4（负载 7→19、5 分钟 28，与 Orca web 检查重叠）16 红，10 个文件单跑各 3/3（负载 11–21）：`ompUpdates`（3 条 5 s 超时）、`updates`（4 条 5 s 超时）、`accept` 与 `skillPluginDirAccept`（**断言形状** `expected 'unknown' to be 'accepted'`）、`worker`（**断言形状** `'exhausted'` 而非 `'succeeded'`）、`runLoop.integration`（ENOENT `attempts/1/plan.json`）、`taskResultOutcome`（5 s 超时）、`verifySavedResult`（r1 modified=false）、`extractFinalObject`（plan 8380 ms／execute 8262 ms，阈值 3000）、`claudePhaseRunner`（已在名单）。三个断言形状的是 n＝1 候选，未豁免。
+  - run 1（负载到 184，陈旧 tip）不计：7 红＋`verify:control` 32 红＋tmpleak 1 项，每个红文件单跑 3/3 绿（其中 2 个要等负载降到 12 再跑）。
+  - 各 Task 实施期间见到、单跑绿：`updates`「replays… unreadable current table」5037 ms 超时（单跑 15/15）、`command`「validate」5005 ms（单跑 510 ms）、`ompPhase` ready-file 轮询 1000 ms＋afterEach 删目录后才写 `outcome.json` 的 ENOENT（`ompPhase.test.ts:156-168` 既有 teardown 竞态）、`agentsControl`「accepts a claim frozen before the CLI was upgraded」（单跑 2/2）、`runCodexPhase` TERM-ignoring（上表已有的 n＝1）。
 - `ompUpdates` › "preserves the unavailable reason…"：单跑 3.1–3.3 s，负载下超时一次；**未改写**（不在人的授权内），改写要人点名。
 - 2026-10-12 OMP 一轮：一条 5 s 更新判据全量与整文件都超时、单例 4.3 s 过；四条 saved-result worker 全量里未及时封口、整文件 28/28。
 - 更早：`codexWatchdog` 在负载 33 下红过（ccloop 人裁 139：负载下 1.5 s 太紧）；`runLoop.integration.test.ts` 里 19 条 `perAttemptTimeoutMs: 20` 的真 plan／verify 判据
