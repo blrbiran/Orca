@@ -1215,7 +1215,7 @@ export function completeEstimateInStore(
       group.ledger.budgetDeficit = settledBalance.deficit;
       setReserve(proposal, settledBalance.reserve);
       // Spec §4.3: the one automatic retry, decided on the settled numbers by plain reads only (it never throws).
-      const decision = decideEstimateRetry({ estimate, contract, failure, group, proposalVersion: proposal.proposalVersion,
+      const decision = decideEstimateRetry({ estimate, contract, failure, group, proposalVersion: proposal.proposalVersion, proposalConfirmed: proposal.state === "confirmed",
         newestEstimateVersion: Number(deps.store.db.prepare("SELECT MAX(estimate_version) AS n FROM estimates WHERE group_id=?").get(id)?.n ?? 0),
         reserveAfterSettlement: settledBalance.reserve, dispatchBlocked: deps.store.dispatchBlocked });
       if (decision.kind === "skip") estimate.retrySkipped = decision.code;

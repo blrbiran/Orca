@@ -15,7 +15,7 @@ import { estimateExecutionContractSchema, type BudgetEstimateRequestV1, type Est
  * roll the settlement back and leave the estimate `running`, re-driven every round.
  */
 export type RetrySkipCode =
-  | "group-not-prestart" | "budget-deficit" | "usage-unknown" | "dispatch-blocked" | "reserve-insufficient"
+  | "group-not-prestart" | "proposal-confirmed" | "budget-deficit" | "usage-unknown" | "dispatch-blocked" | "reserve-insufficient"
   | "proposal-changed" | "proposal-unknown" | "superseded" | "tokenizer-unavailable" | "input-too-large";
 export type RetryDecision = { kind: "retry"; problems: string[] } | { kind: "skip"; code: RetrySkipCode } | { kind: "none" };
 
@@ -33,8 +33,8 @@ export interface RetryInput {
   estimate: EstimateRecord; contract: EstimateExecutionContractV1;
   failure: { reasonCode: string; problems: string[] } | null;
   group: RetryGroupFacts;
-  /** The budget proposal's current version. */
-  proposalVersion: number;
+  /** The budget proposal's current version, and whether it is confirmed (its advice can no longer be applied). */
+  proposalVersion: number; proposalConfirmed: boolean;
   /** The highest estimate version the group holds. */
   newestEstimateVersion: number;
   /** The group's unallocated reserve after this settlement (a null dimension is unlimited). */
@@ -48,6 +48,8 @@ export function decideEstimateRetry(input: RetryInput): RetryDecision {
   if (failure === null || estimate.origin !== undefined || !RETRYABLE.has(failure.reasonCode) || failure.problems.length === 0) return { kind: "none" };
   const skip = (code: RetrySkipCode): RetryDecision => ({ kind: "skip", code });
   if (group.stopped || Object.hasOwn(group, "archived") || (group.status !== "draft" && group.status !== "ready")) return skip("group-not-prestart");
+  // Controller ruling (Task 5 fix round 1): a confirmed proposal takes no advice (the panel advises an editable one only).
+  if (input.proposalConfirmed) return skip("proposal-confirmed");
   if (dimensions.some(d => group.ledger.budgetDeficit[d] !== 0)) return skip("budget-deficit");
   if (group.ledger.usageUnknown) return skip("usage-unknown");
   if (input.dispatchBlocked) return skip("dispatch-blocked");
@@ -55,9 +57,11 @@ export function decideEstimateRetry(input: RetryInput): RetryDecision {
   if (estimate.proposalVersion === undefined) return skip("proposal-unknown");
   if (estimate.proposalVersion !== input.proposalVersion) return skip("proposal-changed");
   if (input.newestEstimateVersion > estimate.estimateVersion) return skip("superseded");
-  // The settlement transaction holds no token counter: an exact tokenizer cannot size the retry's prompt here.
-  if (contract.tokenizer.kind === "exact") return skip("tokenizer-unavailable");
-  if (estimate.request === null || !retryPromptFits(contract, estimate.request, failure.problems)) return skip("input-too-large");
+  // The settlement transaction holds no token counter: only the utf8 upper bound can size the retry's prompt here.
+  if (contract.tokenizer.kind !== "utf8-upper-bound") return skip("tokenizer-unavailable");
+  // Unreachable: a settling estimate has a request (claimEstimate refuses one without). Guarded so this stays total.
+  if (estimate.request === null) return skip("input-too-large");
+  if (!retryPromptFits(contract, estimate.request, failure.problems)) return skip("input-too-large");
   return { kind: "retry", problems: [...failure.problems] };
 }
 

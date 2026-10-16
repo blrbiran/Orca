@@ -7,10 +7,11 @@ import { stepA1 } from "../../src/control/executionDriver.js";
 import { readBudgetProposal, readEstimateRecord, type EstimateRecord } from "../../src/control/queries.js";
 import { writeCanonicalRecord } from "../../src/control/snapshot.js";
 import { recordUsage } from "../../src/control/usage.js";
-import { completeEstimateInStore, readWebGroup } from "../../src/control/webService.js";
+import { completeEstimateInStore, readWebGroup, WebControlService } from "../../src/control/webService.js";
 import { estimateExecutionContractSchema } from "../../src/control/webProtocol.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { estimateHarness, estimateOutput } from "./fixtures/estimateHarness.js";
+import { webFixture } from "./fixtures/web.js";
 
 // Estimate usable-answer spec §4.3: an estimate whose answer could not be used -- not one whose transport failed --
 // gets exactly one automatic retry that tells the model what was wrong, decided by code inside the failed estimate's
@@ -302,6 +303,26 @@ describe("each condition that rules the retry out is recorded on the failed esti
     } finally { await x.h.dispose(); }
   });
 
+  // Confirm is refused while an estimate runs (estimate-in-flight), so the proposal is confirmed with the estimate
+  // queued, then the estimate is claimed and settles: the shape a queued import estimate takes after an early confirm.
+  it("proposal-confirmed: an estimate that settles on a confirmed proposal (its advice can no longer apply) gets no retry", async () => {
+    const h = await webFixture(); try {
+      const service = new WebControlService(h.deps);
+      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).toMatchObject({ result: { kind: "confirmed" } });
+      const run = await service.claimEstimate("g", h.estimateId);
+      recordUsage(h.store, { runId: run!.runId, generation: 1, eventSeq: 1, bucket: "work", cumulative: { tokens: 10, activeMs: 1, attempts: 1, sessions: 1 }, source: { artifactId: "usage-confirmed", hash: "a".repeat(64) } });
+      const row = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.runId)!.body));
+      row.state = "settled-restartable"; h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), run!.runId);
+      service.completeEstimate("g", h.estimateId, missingTask(readBudgetProposal(h.store, "g").planHash));
+      expect(readBudgetProposal(h.store, "g").state).toBe("confirmed");
+      const failed = readEstimateRecord(h.store, "g", h.estimateId);
+      expect(failed).toMatchObject({ state: "failed", reasonCode: "estimate-output-invalid", retrySkipped: "proposal-confirmed" });
+      expect(failed.retriedAs).toBeUndefined();
+      expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM estimates WHERE group_id='g'").get()!.n).toBe(1);
+      expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id='g' AND kind='budget-estimate' AND json_extract(body,'$.estimateId')<>?").get(h.estimateId)!.n).toBe(0);
+    } finally { await h.dispose(); }
+  });
+
   it("group-not-prestart: the group was stopped", async () => {
     let x!: Harness;
     x = await harness([missingTask], { duringCollect: async () => {
@@ -320,7 +341,7 @@ describe("decideEstimateRetry is total and ordered (spec §4.3)", () => {
     const estimate = { ...x.estimate(), proposalVersion: 1 };
     const input: RetryInput = { estimate, contract: readEstimateContract(x.h.store, "g", x.h.estimateId),
       failure: { reasonCode: "estimate-output-invalid", problems: ["task-missing:a"] }, group: readWebGroup(x.h.store, "g"),
-      proposalVersion: 1, newestEstimateVersion: 1, reserveAfterSettlement: { tokens: null, activeMs: 10_000_000, attempts: 10, sessions: 10 }, dispatchBlocked: false };
+      proposalVersion: 1, proposalConfirmed: false, newestEstimateVersion: 1, reserveAfterSettlement: { tokens: null, activeMs: 10_000_000, attempts: 10, sessions: 10 }, dispatchBlocked: false };
     return { x, input };
   };
 
@@ -344,6 +365,10 @@ describe("decideEstimateRetry is total and ordered (spec §4.3)", () => {
       expect(decideEstimateRetry({ ...input, dispatchBlocked: true })).toEqual({ kind: "skip", code: "dispatch-blocked" });
       expect(decideEstimateRetry({ ...input, group: { ...input.group, archived: { at: 1, actor: "human" } } })).toEqual({ kind: "skip", code: "group-not-prestart" });
       expect(decideEstimateRetry({ ...input, group: { ...input.group, status: "running" } })).toEqual({ kind: "skip", code: "group-not-prestart" });
+      expect(decideEstimateRetry({ ...input, proposalConfirmed: true })).toEqual({ kind: "skip", code: "proposal-confirmed" });
+      // Order: a stopped group is named before a confirmed proposal, a confirmed proposal before a deficit.
+      expect(decideEstimateRetry({ ...input, proposalConfirmed: true, group: { ...input.group, stopped: true } })).toEqual({ kind: "skip", code: "group-not-prestart" });
+      expect(decideEstimateRetry({ ...input, proposalConfirmed: true, group: { ...input.group, ledger: { ...ledger, budgetDeficit: { ...ledger.budgetDeficit, tokens: 1 } } } })).toEqual({ kind: "skip", code: "proposal-confirmed" });
       // A null dimension fits; a finite one short of the grant does not.
       expect(decideEstimateRetry({ ...input, reserveAfterSettlement: { ...input.reserveAfterSettlement, sessions: 0 } })).toEqual({ kind: "skip", code: "reserve-insufficient" });
       // Order: a stopped group with a deficit is named for the group first; a deficit before unknown usage.
