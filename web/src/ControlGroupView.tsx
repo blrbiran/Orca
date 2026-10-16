@@ -137,6 +137,12 @@ workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
   refusal?: ControlRefusal | null;
 }
 
+/** The version of the estimate with this id in the same group; the id itself when the list does not carry it. */
+function estimateVersionOf(view: GroupViewV1, estimateId: string): string {
+  const found = view.estimates.find((candidate) => candidate.estimateId === estimateId);
+  return found === undefined ? estimateId : String(found.estimateVersion);
+}
+
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const { view, config, uncertain, drafts, onDraft, onCommand } = props;
   const { t } = useTranslation();
@@ -496,6 +502,10 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 {estimate.reasonCode !== null ? ` · ${estimate.reasonCode}` : ""}
                 {estimate.reasonCode !== null && explainEstimateReason(estimate.reasonCode) !== null ? ` · ${explainEstimateReason(estimate.reasonCode)}` : ""}
                 {estimate.compatibilityReasonCodes?.length ? ` · ${estimate.compatibilityReasonCodes.join(", ")}` : ""}
+                {(estimate.repairs ?? []).length > 0 ? ` · ${t("control.group.estimateRepaired", { codes: (estimate.repairs ?? []).join(", ") })}` : ""}
+                {estimate.origin !== undefined ? ` · ${t("control.group.estimateRetryOf", { version: estimateVersionOf(view, estimate.origin.of) })}` : ""}
+                {estimate.retriedAs !== undefined ? ` · ${t("control.group.estimateRetriedAs", { version: estimateVersionOf(view, estimate.retriedAs) })}` : ""}
+                {estimate.retrySkipped !== undefined ? ` · ${t("control.group.estimateRetrySkipped", { code: estimate.retrySkipped })}` : ""}
               </li>
             ))}
           </ul>
