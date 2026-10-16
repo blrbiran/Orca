@@ -51,8 +51,11 @@ describe("the permission table (spec §3.5)", () => {
       const commandPaths = commands.map((route) => `POST ${route.path}`);
       // Non-vacuous: the walk sees the reads and every command route.
       expect(registered.filter((entry) => entry.startsWith("GET ")).length).toBeGreaterThanOrEqual(12);
-      // Reviewed detection is the sole POST read/probe: it has no operator command result or table mutation.
-      expect(registered.filter((entry) => !entry.startsWith("GET ") && !commandPaths.includes(entry))).toEqual([
+      // Reviewed detection and the model-list refresh are the only POST probes: no operator command result or table
+      // mutation. Ruling (session 4de777f4, 2026-10-17, criteria changes authorized for this session): the refresh moved
+      // from `GET ?refresh=1` to a POST so the CSRF check covers it.
+      expect(registered.filter((entry) => !entry.startsWith("GET ") && !commandPaths.includes(entry)).sort()).toEqual([
+        "POST /api/control/agents/:installation/models/refresh",
         "POST /api/control/operator/agent-update-preview",
       ]);
       expect(commandPaths.filter((entry) => !registered.includes(entry))).toEqual([]);

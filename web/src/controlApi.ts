@@ -161,17 +161,7 @@ export const MODEL_READ_TIMEOUT_MS = 75_000;
 export async function fetchAgentModels(installation: string, refresh = false): Promise<AgentModelsViewV1> {
   const path = `/api/control/agents/${segment(installation)}/models`;
   if (!refresh) return controlGet<AgentModelsViewV1>(path, AbortSignal.timeout(MODEL_READ_TIMEOUT_MS));
-  const refreshPath = `${path}/refresh`;
-  let res: Response;
-  try {
-    res = await fetch(refreshPath, { method: "POST", headers: { "content-type": "application/json", ...csrfHeader() }, body: "{}", signal: AbortSignal.timeout(MODEL_READ_TIMEOUT_MS) });
-  } catch (err) {
-    throw new ControlRequestError(refusalOf(`POST ${refreshPath}`, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.noAnswer")));
-  }
-  const body: unknown = await res.json().catch(() => undefined);
-  noteAnswer(res.status, body);
-  if (!res.ok) throw new ControlRequestError(refusalOf(`POST ${refreshPath}`, res.status, body, i18n.t("panelErrors.answered", { status: res.status })));
-  return body as AgentModelsViewV1;
+  return controlProbe<AgentModelsViewV1>(`${path}/refresh`, AbortSignal.timeout(MODEL_READ_TIMEOUT_MS));
 }
 export const AGENT_PREFERENCES_PATH = "/api/control/operator/agent-preferences";
 /** This panel operator's defaults and the revision they are at. */
@@ -197,14 +187,16 @@ export function writePendingAgentUpdate(storage: Storage | null | undefined, val
   catch { /* Browsers without session storage still retain the in-memory command for this page. */ }
 }
 export const fetchAgentInstallationState = (): Promise<AgentInstallationStateV1> => controlGet<AgentInstallationStateV1>("/api/control/operator/agent-installations");
-export async function detectAgentInstallations(): Promise<AgentInstallationPreviewV1> {
-  const path = "/api/control/operator/agent-update-preview";
-  const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json", ...csrfHeader() }, body: "{}" });
+/** A probe sent as a POST with an empty body (it changes no ledger, but it spawns an agent CLI, so it carries the CSRF header). */
+async function controlProbe<T>(path: string, signal?: AbortSignal): Promise<T> {
+  // A network failure or the read's time bound throws as fetch threw it; controlFailureFrom names it for the page.
+  const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json", ...csrfHeader() }, body: "{}", ...(signal === undefined ? {} : { signal }) });
   const body: unknown = await res.json().catch(() => undefined);
   noteAnswer(res.status, body);
   if (!res.ok) throw new ControlRequestError(refusalOf(`POST ${path}`, res.status, body, i18n.t("panelErrors.answered", { status: res.status })));
-  return body as AgentInstallationPreviewV1;
+  return body as T;
 }
+export const detectAgentInstallations = (): Promise<AgentInstallationPreviewV1> => controlProbe<AgentInstallationPreviewV1>("/api/control/operator/agent-update-preview");
 export const fetchAgentInstallationPreview = (): Promise<AgentInstallationStateV1> => controlGet<AgentInstallationStateV1>("/api/control/operator/agent-update-preview");
 /** The confirm's own resolution of a group's agent slots, for the proposal version the server holds now. */
 export const fetchAgentPreview = (groupId: string): Promise<AgentSelectionPreviewV1> =>
