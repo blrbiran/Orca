@@ -716,7 +716,6 @@ export const zh: Translation<typeof en> = {
     agent: "Agent",
     showArchived: "显示已归档需求",
     capabilityNote: "需求澄清需要有消耗上界的单次调用。请选择支持此能力的 agent，或在任务控制中导入计划。",
-    codexUnsupported: "Codex 不支持有消耗上界的单次调用澄清。请选择 Claude，或在任务控制中导入计划。",
     agentDefault: "你的默认",
     open: "开始澄清",
     noRepository: "这个面板没有登记仓库。",

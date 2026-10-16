@@ -821,7 +821,6 @@ export const en = {
     agent: "Agent",
     showArchived: "Show archived requirements",
     capabilityNote: "Clarification uses a bounded single call. Choose a supported agent, or import a plan in Task control.",
-    codexUnsupported: "Codex does not support bounded single-call clarification. Choose Claude, or import a plan in Task control.",
     agentDefault: "Your default",
     open: "Start clarifying",
     noRepository: "No repository is registered with this panel.",
