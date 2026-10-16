@@ -5,16 +5,17 @@ import { readStartEnvelope } from '../../src/control/executionDriver.js';
 import { TaskResultUnsupportedError } from '../../src/control/taskResultProtocol.js';
 import { readRunResults } from '../../src/panel/taskResults.js';
 import { ccloopWorlds, realBinary, raw, startGroup, until, workRuns } from './fixtures/ccloopWorld.js';
-const feature = '/private/tmp/orca-results-ccloop-20261010/dist/cli.js';
+// Ruling (session 4de777f4, 2026-10-17, the human authorized rewriting these two criteria): the build is no longer
+// matched against two hardcoded /private/tmp paths, which made both criteria red in every gate. Only the historical
+// ab824d1 build refuses task results; every build ORCA_CCLOOP_BIN names today carries the transport, so it is paired.
 const fixed = '/private/tmp/orca-d9-ccloop-ab824d1/dist/cli.js';
+const paired = realBinary !== fixed;
 const worlds = ccloopWorlds({ rootPrefix: 'orca-task-result-paired-', epochPrefix: 'epoch-result-paired-' });
 afterAll(worlds.removeRoots);
 // Default and feature are deliberately separate native gates/environments; neither changes the package pin.
-describe('result optional transport exact build', { timeout: 120000 }, () => {
+describe.skipIf(!realBinary)('result optional transport exact build', { timeout: 120000 }, () => {
     worlds.relocateHome('orca-task-result-paired-home-');
     it('proves fixed-pin refusal or live saved results before a terminal candidate using the exact selected CLI', async () => {
-        expect([fixed, feature]).toContain(realBinary);
-        const paired = realBinary === feature;
         const w = await worlds.world([{ taskId: 'a', targetPaths: ['shared.txt'] }], { a: { files: { 'shared.txt': 'A\n' }, delayMs: { verify: paired ? 6000 : 0 } } });
         const runtime = await w.boot();
         try {
@@ -61,7 +62,6 @@ describe('result optional transport exact build', { timeout: 120000 }, () => {
         }
     });
     it('proves actual pre-verifier handoff not-run on feature and explicit unsupported on fixed pin',async()=>{
-        expect([fixed,feature]).toContain(realBinary);const paired=realBinary===feature;
         const w=await worlds.world([{taskId:'a',targetPaths:['shared.txt']}],{a:{files:{'shared.txt':'A\n'},delayMs:{execute:6000}}});const runtime=await w.boot();
         try{await startGroup(runtime,w.repoId);runtime.startPump(50);await until(()=>w.calls().includes('execute'),30000,'real execute before handoff');const run=workRuns(runtime)[0];
             const stopped=await runtime.service.handoffStop(raw(runtime,'result4-handoff','handoff-stop',{}));expect(stopped).toMatchObject({result:{kind:'handoff-stopped'}});
