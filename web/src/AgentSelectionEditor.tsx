@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import { SelectionFields, contextLabel, panelPartialFromFields, selectionFieldErrors } from "./AgentFields.js";
 import type {
-  AgentSelectionPreviewV1, AgentSelectionV1, AgentSlotV1, AgentsViewV1, GroupAgentOverridesV1, GroupViewV1, OperatorPreferencesV1,
+  AgentSelectionPreviewV1, AgentSelectionV1, AgentSlotV1, AgentsViewV1, GroupAgentOverridesV1, GroupViewV1, ModelListState, OperatorPreferencesV1,
   PanelPartialSelectionV1, PartialSelectionV1, SelectionProvenanceV1, SlotOutcomeV1,
 } from "./controlTypes.js";
 import { enumText } from "./i18n.js";
@@ -100,6 +100,9 @@ export interface AgentSelectionEditorProps {
   retryNotice?: string | null;
   /** Issue-fixes spec §6.3: an archived group refuses every command but the unarchive, so no action is offered (read-only). */
   archived?: boolean;
+  /** Spec 2026-10-15 §5 (R3): each installation's model list as last read, and (owner only) re-probing one. */
+  models?: (installationId: string) => ModelListState | undefined;
+  onRefreshModels?: (installationId: string) => void;
 }
 
 export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Element {
@@ -180,7 +183,7 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
         const invalid = selectionFieldErrors(agents, prefix, preview.groupOverrides[slot], plannedFor(scope), drafts, inheritedAgent).length > 0;
         return (
           <div key={slot}>
-            <SelectionFields agents={agents} prefix={prefix} label={t("agents.groupSlot", { slot: enumText("agentSlot", slot) })} current={preview.groupOverrides[slot]} planned={plannedFor(scope)} inheritedAgent={inheritedAgent} inheritance={inheritance} drafts={drafts} onDraft={onDraft} />
+            <SelectionFields agents={agents} prefix={prefix} label={t("agents.groupSlot", { slot: enumText("agentSlot", slot) })} current={preview.groupOverrides[slot]} planned={plannedFor(scope)} inheritedAgent={inheritedAgent} inheritance={inheritance} drafts={drafts} onDraft={onDraft} models={props.models} onRefreshModels={props.onRefreshModels} />
             <button type="button" disabled={invalid || Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>{t("agents.setGroup", { slot: enumText("agentSlot", slot) })}</button>
             <button type="button" disabled={preview.groupOverrides[slot] === undefined} onClick={() => send(scope, null)}>{t("agents.clearGroup", { slot: enumText("agentSlot", slot) })}</button>
             {slot === "estimator" && (
@@ -209,7 +212,7 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
                 <td>
                   {scope !== null && !archived && (
                     <>
-                      <SelectionFields agents={agents} prefix={prefix} label={t("agents.taskLayer", { taskId: String(taskId) })} current={own} planned={plannedFor(scope)} inheritedAgent={inherited(scope) ?? (entry.outcome.kind === "resolved" ? entry.outcome.frozen.selection.agent : undefined)} inheritance={entry.outcome.kind === "resolved" ? entry.outcome.frozen : undefined} drafts={drafts} onDraft={onDraft} />
+                      <SelectionFields agents={agents} prefix={prefix} label={t("agents.taskLayer", { taskId: String(taskId) })} current={own} planned={plannedFor(scope)} inheritedAgent={inherited(scope) ?? (entry.outcome.kind === "resolved" ? entry.outcome.frozen.selection.agent : undefined)} inheritance={entry.outcome.kind === "resolved" ? entry.outcome.frozen : undefined} drafts={drafts} onDraft={onDraft} models={props.models} onRefreshModels={props.onRefreshModels} />
                       <button type="button" disabled={invalid || Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>{t("agents.setTask", { taskId: String(taskId) })}</button>
                       <button type="button" disabled={own === undefined} onClick={() => send(scope, null)}>{t("agents.clearTask", { taskId: String(taskId) })}</button>
                     </>

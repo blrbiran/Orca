@@ -669,6 +669,7 @@ export const zh: Translation<typeof en> = {
     resolving: "正在解析 agent 选择…",
     proposalTitle: "agent · 提案 v{{version}}",
     staleResolution: "显示的解析结果属于提案 v{{version}}；正在重新读取。确认会等它。",
+    models: { refresh: "刷新模型列表", loading: "正在读取模型列表…", window: "上下文 {{tokens}} token", unavailable: "读不到模型列表：{{reason}}" },
     unresolved: "下面有一项选择没有解析成功；每个槽位都解析成功之前不提供确认。",
     groupSlot: "组 {{slot}}",
     setGroup: "设置组 {{slot}} 的 agent",
@@ -1299,4 +1300,8 @@ export const zhCcloopErrors: Record<string, string> = {
   "agent-config-invalid": "这个 agent 的配置无效（{{detail}}）。",
   "single-call-unsupported": "这个 agent 不能做单次调用（估算、澄清、拆分），请换一个 agent。",
   "single-call-output-invalid": "模型的回答不是这次调用要求的 JSON。",
+  // Spec 2026-10-15 §5 (plan issues 9, 10).
+  "agent-catalog-unavailable": "agent 列不出它的模型（{{detail}}）。请确认它已安装且能启动，然后重试。",
+  "codex-single-call-not-single": "Codex 在本应只答一次的调用里多次调用了模型或用了工具；已花的用量照记。",
+  "codex-single-call-unavailable": "读不到 Codex 的功能列表，无法关闭它的工具，调用在开始前被拒绝（{{detail}}）。",
 };

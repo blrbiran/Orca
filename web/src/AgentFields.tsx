@@ -5,8 +5,9 @@
  */
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
-import type { AgentInstallationV1, AgentSelectionV1, AgentsViewV1, ContextWindowV1, PanelPartialSelectionV1, PartialSelectionV1, SelectionProvenanceV1 } from "./controlTypes.js";
+import type { AgentInstallationV1, AgentSelectionV1, AgentsViewV1, ContextWindowV1, ModelListState, PanelPartialSelectionV1, PartialSelectionV1, SelectionProvenanceV1 } from "./controlTypes.js";
 import i18n, { enumText } from "./i18n.js";
+import { explainCcloopCode } from "./ccloopCodes.js";
 
 export const contextLabel = (value: ContextWindowV1): string => (value === "agent-default" ? i18n.t("agents.contextDefault") : i18n.t("agents.contextTokens", { value }));
 export const contextValue = (value: ContextWindowV1 | undefined): string => (value === undefined ? "" : String(value));
@@ -151,6 +152,10 @@ export interface SelectionFieldsProps {
   inheritance?: { selection: AgentSelectionV1; provenance: SelectionProvenanceV1 };
   drafts: Record<string, string>;
   onDraft: (key: string, text: string) => void;
+  /** Spec 2026-10-15 §5 (R3): an installation's model list as last read; absent, the box is free text alone. */
+  models?: (installationId: string) => ModelListState | undefined;
+  /** Re-probe an installation's models; the panel passes it only to an owner (absent, no button). */
+  onRefreshModels?: (installationId: string) => void;
 }
 
 export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
@@ -173,6 +178,10 @@ export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
   const priorAgent = typeof props.current?.agent === "string" ? props.current.agent : below;
   const switched = props.fixedAgent === undefined && agentText !== "" && priorAgent !== undefined && agentText !== priorAgent;
   const effective = installationOf(agents, agentText === "" ? below : agentText);
+  // Spec 2026-10-15 §5 (R3): omp and codex offer their installation's models as a datalist; the box stays free text, and an
+  // unreadable list shows ccloop's reason beside it. Claude keeps free text only.
+  const listed = effective !== undefined && (effective.kind === "omp" || effective.kind === "codex") ? props.models?.(effective.id) : undefined;
+  const listId = `${prefix}:models`;
   const errors = selectionFieldErrors(agents, prefix, props.current, props.planned, drafts, below, props.fixedAgent);
   const contextText = draft("context", switched ? "" : contextValue(props.current?.contextWindow ?? undefined));
   const unsupportedContext = errors.find((error) => error.field === "contextWindow");
@@ -213,9 +222,20 @@ export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
       {props.fixedAgent === undefined && maskBox("agent")}
       <label>
         {t("agents.label.model")}
-        <input name={`${prefix}:model`} value={draft("model", switched ? "" : text(props.current?.model))} placeholder={(masked("model") ? undefined : props.planned?.model) ?? effective?.defaults.model ?? ""} onChange={change("model")} />
+        <input name={`${prefix}:model`} value={draft("model", switched ? "" : text(props.current?.model))} placeholder={(masked("model") ? undefined : props.planned?.model) ?? effective?.defaults.model ?? ""} list={listed?.state === "ready" ? listId : undefined} onChange={change("model")} />
+        {listed?.state === "ready" && (
+          <datalist id={listId}>
+            {listed.view.models.map((row) => <option key={row.model} value={row.model} label={row.contextWindowTokens === null ? row.model : t("agents.models.window", { tokens: row.contextWindowTokens })} />)}
+          </datalist>
+        )}
+        {listed?.state === "loading" && <small>{t("agents.models.loading")}</small>}
+        {listed?.state === "unavailable" && <small role="note">{t("agents.models.unavailable", { reason: explainCcloopCode(listed.code, listed.detail) })}</small>}
         {inheritedHint("model") && <small>{inheritedHint("model")}</small>}
       </label>
+      {/* Outside the label: a label holds one control, and the button's words are not the box's name. */}
+      {effective !== undefined && listed !== undefined && props.onRefreshModels !== undefined && (
+        <button type="button" onClick={() => props.onRefreshModels!(effective.id)}>{t("agents.models.refresh")}</button>
+      )}
       {maskBox("model")}
       <label>
         {t("agents.label.context")}

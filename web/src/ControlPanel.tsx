@@ -20,7 +20,7 @@ import { GroupList } from "./GroupList.js";
 import { ALL_PROJECTS } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
 import type {
-  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1,
+  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1, ModelListState,
   RecoveryViewV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
 } from "./controlTypes.js";
 import { initialControlState } from "./controlState.js";
@@ -82,6 +82,9 @@ export interface ControlPanelProps {
   agentsFailure?: string | null;
   /** Ruling review R17: what the page's retry of the agent reads is doing, if anything. */
   retryNotice?: string | null;
+  /** Spec 2026-10-15 §5 (R3): each installation's model list as last read, and (owner only) re-probing one. */
+  models?: (installationId: string) => ModelListState | undefined;
+  onRefreshModels?: (installationId: string) => void;
   /**
    * Project filtering spec §5: which groups the list shows. Undefined: every group, as before. `unresolved`: none,
    * with a note (plan decision P1); `all`: every group, each labelled with its repository.
@@ -280,6 +283,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           onRereadPreview={props.onRereadPreview && (() => props.onRereadPreview?.(view.summary.groupId))}
           agentsFailure={props.agentsFailure}
           retryNotice={props.retryNotice}
+          models={props.models} onRefreshModels={props.onRefreshModels}
           workspace={props.workspace}
           workspaceFor={props.workspaceFor}
           integrationFor={props.integrationFor}

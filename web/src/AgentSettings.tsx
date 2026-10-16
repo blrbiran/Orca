@@ -7,7 +7,7 @@ import { useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { SelectionFields, contextLabel, draftOf, draftText, installationOf, partialFromFields, selectionFieldErrors, textOrUndefined } from "./AgentFields.js";
-import type { AgentPreferencesViewV1, AgentInstallationStateV1, AgentsViewV1, OperatorPreferencesV1 } from "./controlTypes.js";
+import type { AgentPreferencesViewV1, AgentInstallationStateV1, AgentsViewV1, ModelListState, OperatorPreferencesV1 } from "./controlTypes.js";
 import { explainBesideCode } from "./ccloopCodes.js";
 
 const DEFAULT_AGENT_KEY = "agents:default-agent";
@@ -68,6 +68,9 @@ export interface AgentSettingsProps {
   onApplyUpdates?: (ids: string[]) => void;
   onRetryPendingUpdate?: () => void;
   unansweredCommandId?: string | null;
+  /** Spec 2026-10-15 §5 (R3): each installation's model list as last read, and (owner only) re-probing one. */
+  models?: (installationId: string) => ModelListState | undefined;
+  onRefreshModels?: (installationId: string) => void;
 }
 
 export function AgentSettings(props: AgentSettingsProps): JSX.Element {
@@ -160,20 +163,20 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
         </label>
         {defaultAgent && installationOf(agents, defaultAgent) ? (
           <SelectionFields agents={agents} prefix={`agents:per:${defaultAgent}`} label={t("agents.settings.perAgent", { agentId: defaultAgent })} fixedAgent={defaultAgent}
-            current={preferences.preferences.perAgent[defaultAgent]} inheritedAgent={defaultAgent} drafts={drafts} onDraft={onDraft} />
+            current={preferences.preferences.perAgent[defaultAgent]} inheritedAgent={defaultAgent} drafts={drafts} onDraft={onDraft} models={props.models} onRefreshModels={props.onRefreshModels} />
         ) : <p role="note">{t("agents.fieldError.missingAgent")}</p>}
       </div>
       <details>
         <summary>{t("agents.settings.otherDefaults")}</summary>
         {agents.installations.filter((row) => row.id !== defaultAgent).map((row) => (
           <SelectionFields key={row.id} agents={agents} prefix={`agents:per:${row.id}`} label={t("agents.settings.perAgent", { agentId: row.id })} fixedAgent={row.id}
-            current={preferences.preferences.perAgent[row.id]} inheritedAgent={row.id} drafts={drafts} onDraft={onDraft} />
+            current={preferences.preferences.perAgent[row.id]} inheritedAgent={row.id} drafts={drafts} onDraft={onDraft} models={props.models} onRefreshModels={props.onRefreshModels} />
         ))}
       </details>
       <details data-role-overrides="">
         <summary>{t("agents.settings.roleOverrides")}</summary>
-        <SelectionFields agents={agents} prefix="agents:estimator" label={t("agents.settings.estimatorSlot")} current={preferences.preferences.estimator} inheritedAgent={roleInheritedAgent("estimator")} showMissingAgent={false} drafts={drafts} onDraft={onDraft} />
-        <SelectionFields agents={agents} prefix="agents:reconcile" label={t("agents.settings.reconcileSlot")} current={preferences.preferences.reconcile} inheritedAgent={roleInheritedAgent("reconcile")} showMissingAgent={false} drafts={drafts} onDraft={onDraft} />
+        <SelectionFields agents={agents} prefix="agents:estimator" label={t("agents.settings.estimatorSlot")} current={preferences.preferences.estimator} inheritedAgent={roleInheritedAgent("estimator")} showMissingAgent={false} drafts={drafts} onDraft={onDraft} models={props.models} onRefreshModels={props.onRefreshModels} />
+        <SelectionFields agents={agents} prefix="agents:reconcile" label={t("agents.settings.reconcileSlot")} current={preferences.preferences.reconcile} inheritedAgent={roleInheritedAgent("reconcile")} showMissingAgent={false} drafts={drafts} onDraft={onDraft} models={props.models} onRefreshModels={props.onRefreshModels} />
       </details>
       <button type="button" disabled={invalid} onClick={() => props.onSave(preferencesFromDrafts(agents, preferences, drafts), preferences.revision)}>{t("agents.settings.save")}</button>
     </section>

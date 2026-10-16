@@ -25,7 +25,7 @@ import { archiveOpen, hasFailureOutcome, retryRunOpen, runNumberOf } from "./run
 import { UsageSettlement } from "./UsageSettlement.js";
 import { SkillsGiven } from "./SkillsGiven.js";
 import type {
-  AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
+  AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, ModelListState, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
   RunViewV1,
 } from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
@@ -124,6 +124,9 @@ export interface ControlGroupViewProps {
   agentsFailure?: string | null;
   /** Ruling review R17: what the page's retry of the agent reads is doing, if anything. */
   retryNotice?: string | null;
+  /** Spec 2026-10-15 §5 (R3): each installation's model list as last read, and (owner only) re-probing one. */
+  models?: (installationId: string) => ModelListState | undefined;
+  onRefreshModels?: (installationId: string) => void;
   /** Board spec 2026-10-03 B3, D7: the page's read of the repository's workspace mode; absent on pages that never read it. */
   workspace?: RepositoryWorkspaceV1 | null;
 /** Project filtering spec §5: the workspace of one repository; preferred over `workspace` for this group's own repository. */
@@ -391,6 +394,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           onReread={props.onRereadPreview}
           agentsFailure={props.agentsFailure}
           retryNotice={props.retryNotice}
+          models={props.models} onRefreshModels={props.onRefreshModels}
           archived={archived}
           drafts={drafts} onDraft={onDraft} onCommand={onCommand}
         />

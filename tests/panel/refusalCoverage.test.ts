@@ -103,4 +103,6 @@ describe("refusal coverage in both languages (panel i18n spec §6.4; spec 2026-1
       }
     }
   });
+  // Spec 2026-10-15 §5 (plan issues 9, 10): the every-agent chain's codes an operator can meet, held to both languages.
+  it("has en and zh entries for the every-agent chain codes", () => { for (const table of [enCcloopErrors, zhCcloopErrors]) expect(["agent-catalog-unavailable", "codex-single-call-not-single", "codex-single-call-unavailable"].filter((code) => !has(table, code))).toEqual([]); });
 });

@@ -17,6 +17,7 @@ import type {
   AgentInstallationStateV1,
   AgentInstallationPreviewV1,
   AgentSelectionPreviewV1,
+  AgentModelsViewV1,
   AgentsViewV1,
   CommandEnvelopeV1,
   CommandErrorV1,
@@ -149,6 +150,9 @@ export const fetchUsageView = (query: string): Promise<UsageViewV1> => controlGe
 
 /** Agent selection spec §6.8: the installation table, as ccloop answered it through the panel. */
 export const fetchAgentsView = (): Promise<AgentsViewV1> => controlGet<AgentsViewV1>("/api/control/agents");
+/** Spec 2026-10-15 §5 (R3, R4): one installation's models, from ccloop's cache unless `refresh` (owner only) asks it to probe. */
+export const fetchAgentModels = (installation: string, refresh = false): Promise<AgentModelsViewV1> =>
+  controlGet<AgentModelsViewV1>(`/api/control/agents/${segment(installation)}/models${refresh ? "?refresh=1" : ""}`);
 export const AGENT_PREFERENCES_PATH = "/api/control/operator/agent-preferences";
 /** This panel operator's defaults and the revision they are at. */
 export const fetchAgentPreferences = (): Promise<AgentPreferencesViewV1> => controlGet<AgentPreferencesViewV1>(AGENT_PREFERENCES_PATH);

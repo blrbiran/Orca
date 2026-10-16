@@ -773,6 +773,7 @@ export const en = {
     resolving: "Resolving agent selections…",
     proposalTitle: "Agents · proposal v{{version}}",
     staleResolution: "The resolution shown is for proposal v{{version}}; re-reading. Confirm waits for it.",
+    models: { refresh: "Refresh models", loading: "Reading the model list…", window: "{{tokens}} tokens of context", unavailable: "The model list is unavailable: {{reason}}" },
     unresolved: "A selection below did not resolve; confirm is not offered until every slot resolves.",
     groupSlot: "Group {{slot}}",
     setGroup: "Set group {{slot}} agent",
@@ -1363,4 +1364,8 @@ export const enCcloopErrors: Record<string, string> = {
   "agent-config-invalid": "The agent's configuration is not valid ({{detail}}).",
   "single-call-unsupported": "This agent cannot make single calls (estimate, clarify, split); choose another agent.",
   "single-call-output-invalid": "The model's answer was not the JSON this call asked for.",
+  // Spec 2026-10-15 §5 (plan issues 9, 10).
+  "agent-catalog-unavailable": "The agent could not list its models ({{detail}}). Check that it is installed and starts, then retry.",
+  "codex-single-call-not-single": "Codex did more than one model call, or used a tool, in a call that must be a single answer; the usage it spent is booked.",
+  "codex-single-call-unavailable": "Codex's feature list could not be read, so its tools could not be turned off; the call was refused before it started ({{detail}}).",
 };

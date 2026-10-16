@@ -70,6 +70,7 @@ import {
   readPendingAgentUpdate,
   writePendingAgentUpdate,
   fetchAgentPreview,
+  fetchAgentModels,
   fetchAgentsView,
   fetchRepositoryIntegration,
   fetchRepositoryWorkspace,
@@ -90,7 +91,7 @@ import type { ControlAnswer } from "./controlApi.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import { UncertainOperations } from "./UncertainOperations.js";
 import type {
-  AgentPreferencesViewV1, AgentInstallationStateV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, IntegrationSchemeV1, OperatorPreferencesV1, RepositoryIntegrationV1,
+  AgentPreferencesViewV1, AgentInstallationStateV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, IntegrationSchemeV1, ModelListState, OperatorPreferencesV1, RepositoryIntegrationV1,
   RepositoryWorkspaceV1, RequirementViewV1, OverviewV1, RecoveryViewV1,
 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
@@ -107,7 +108,8 @@ import type { OverviewSource } from "./overviewModel.js";
 import { overviewFocusId } from "./overviewNavigation.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
 import { ErrorPage } from "./ErrorPage.js";
-import i18n, { currentLanguage, writeLanguage } from "./i18n.js";
+import i18n, { currentLanguage, refusalDetail, writeLanguage } from "./i18n.js";
+import { codeAndDetail } from "./ccloopCodes.js";
 import { DecisionsView, NO_FILTER, filterRows, rowsForStatus } from "./DecisionsView.js";
 import { rowKey } from "./DecisionList.js";
 import { nextAfterReview } from "./reviewFlow.js";
@@ -260,6 +262,8 @@ export function App(): JSX.Element {
   /** Agent selection spec §6.8: the installation table and this operator's defaults; null until read, or when the port refuses. */
   const [agents, setAgents] = useState<AgentsViewV1 | null>(null);
   const [agentPreferences, setAgentPreferences] = useState<AgentPreferencesViewV1 | null>(null);
+  /** Spec 2026-10-15 §5 (R3): each omp or codex installation's model list as last read, by installation id. */
+  const [agentModels, setAgentModels] = useState<Record<string, ModelListState>>({});
   const [agentInstallations, setAgentInstallations] = useState<AgentInstallationStateV1 | null>(null);
   const [localPendingUpdate, setLocalPendingUpdate] = useState(() => readPendingAgentUpdate(browserSession()));
   const [agentUpdateNotice, setAgentUpdateNotice] = useState<string | null>(null);
@@ -536,6 +540,18 @@ export function App(): JSX.Element {
     }
   };
 
+  /** Spec 2026-10-15 §5 (R3, R4): one installation's models; ccloop's own cache serves a read, `refresh` (owner) re-probes. */
+  const loadModels = async (id: string, refresh: boolean): Promise<void> => {
+    setAgentModels((all) => ({ ...all, [id]: { state: "loading" } }));
+    try {
+      const view = await fetchAgentModels(id, refresh);
+      setAgentModels((all) => ({ ...all, [id]: { state: "ready", view } }));
+    } catch (err) {
+      const refusal = controlFailureFrom(err);
+      const parsed = refusal.code === "ccloop-failed" ? codeAndDetail(refusalDetail(refusal)) : { code: refusal.code, detail: "" };
+      setAgentModels((all) => ({ ...all, [id]: { state: "unavailable", ...parsed } }));
+    }
+  };
   /**
    * Read the installation table and this operator's defaults. Wave 4 review I-1, ruling review R17: a read that
    * failed is retried on AGENT_RETRY_DELAYS_MS while the page is visible (when `retry`), then by the operator.
@@ -545,6 +561,7 @@ export function App(): JSX.Element {
       const table = await fetchAgentsView();
       const preferences = await fetchAgentPreferences();
       setAgents(table);
+      for (const row of table.installations) if (row.kind === "omp" || row.kind === "codex") void loadModels(row.id, false);
       setAgentPreferences(preferences);
       try { setAgentInstallations(await fetchAgentInstallationState()); } catch { setAgentInstallations(null); }
       agentsRetries.current = 0;
@@ -1247,6 +1264,9 @@ export function App(): JSX.Element {
       )}
       </>
     ) : null;
+  const modelsFor = (id: string): ModelListState | undefined => agentModels[id];
+  // Spec 2026-10-15 §5 (R4): only an owner may make ccloop re-probe (the server refuses a member), so only an owner sees the button.
+  const refreshModels = (account?.user.roles ?? []).includes("owner") ? (id: string): void => { void loadModels(id, true); } : undefined;
 
   return (
     <ProjectNames.Provider value={nameOf}>
@@ -1336,6 +1356,7 @@ export function App(): JSX.Element {
             onApplyUpdates: (ids) => { void applyInstallationUpdates(ids); },
             onRetryPendingUpdate: () => { void retryPendingInstallationUpdate(); },
             unansweredCommandId: localPendingUpdate?.commandId ?? null,
+            models: modelsFor, onRefreshModels: refreshModels,
           }}
         />
       </SectionPane>
@@ -1435,6 +1456,7 @@ export function App(): JSX.Element {
           onRereadPreview={manualReread}
             retryNotice={retryNotice(agents === null ? agentsRetry : previewRetry)}
           agentsFailure={agentsFailure}
+          models={modelsFor} onRefreshModels={refreshModels}
         />
       )}
       </SectionPane>
