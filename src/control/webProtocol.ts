@@ -570,23 +570,24 @@ export const budgetEstimateRequestSchema = z
   })
   .strict();
 
+/** One task entry of a budget estimate; estimateRepair judges entries one by one with it. */
+export const budgetEstimateTaskSchema = z
+  .object({
+    taskId: idSchema,
+    complexity: z.enum(["S", "M", "L", "XL"]),
+    confidence: z.enum(["low", "medium", "high"]),
+    work: amountSchema,
+    handoff: amountSchema,
+    rationale: nonemptyString,
+    assumptions: orderedUniqueNonemptyStringsSchema,
+  })
+  .strict();
+
 export const budgetEstimateSchema = z
   .object({
     schema: z.literal("budget-estimate-v1"),
     planHash: hashSchema,
-    tasks: z.array(
-      z
-        .object({
-          taskId: idSchema,
-          complexity: z.enum(["S", "M", "L", "XL"]),
-          confidence: z.enum(["low", "medium", "high"]),
-          work: amountSchema,
-          handoff: amountSchema,
-          rationale: nonemptyString,
-          assumptions: orderedUniqueNonemptyStringsSchema,
-        })
-        .strict(),
-    ),
+    tasks: z.array(budgetEstimateTaskSchema),
     goalReviewReserve: amountSchema,
     groupRationale: nonemptyString,
   })
