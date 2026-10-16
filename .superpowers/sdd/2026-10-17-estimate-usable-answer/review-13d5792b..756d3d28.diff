@@ -1,0 +1,314 @@
+# Review package: 13d5792b..HEAD
+
+## Commits
+756d3d28 fix(control): keep model text in estimate codes canonical so the settlement never throws
+
+## Files changed
+ src/control/estimateRepair.ts        | 29 ++++++++++++++++++++++-----
+ src/control/estimateRetry.ts         |  6 +++++-
+ src/control/webProtocol.ts           |  2 +-
+ tests/control/estimateRepair.test.ts | 37 +++++++++++++++++++++++++++++++++++
+ tests/control/estimateRetry.test.ts  | 38 ++++++++++++++++++++++++++++++++++++
+ 5 files changed, 105 insertions(+), 7 deletions(-)
+
+## Diff
+diff --git a/src/control/estimateRepair.ts b/src/control/estimateRepair.ts
+index 514cae7a..3f6ebcde 100644
+--- a/src/control/estimateRepair.ts
++++ b/src/control/estimateRepair.ts
+@@ -1,40 +1,58 @@
+ import { budgetEstimateSchema, budgetEstimateTaskSchema } from "./webProtocol.js";
+ 
+ /** Rationales (trimmed, lower-cased) that mean "the model filled the slot without answering". The only judgement in repair. */
+ export const PLACEHOLDER_RATIONALES: readonly string[] = ["placeholder", "todo", "tbd", "x", "n/a", "...", "-"];
+ 
+ export interface RepairContext { planHash: string; taskIds: readonly string[]; instructionVersion: string }
+ export type RepairResult = { ok: true; output: unknown; repairs: string[] } | { ok: false; problems: string[] };
+ 
+ const MAX_PROBLEMS = 20, MAX_PROBLEM_CHARS = 200;
+ 
+-/** First 20 problems, each cut to 200 characters. */
++/**
++ * Model-derived text as it may enter a repair or problem code (final-review I1). Canonical JSON refuses a lone
++ * surrogate and the settlement writes these codes through canonicalBytes, so a lone surrogate becomes U+FFFD; the text
++ * is cut at a code point (never inside a surrogate pair) to at most `max` UTF-16 units, the unit zod's `.max` counts.
++ */
++export function modelText(value: string, max = MAX_PROBLEM_CHARS): string {
++  let out = "";
++  for (const point of Array.from(value)) {
++    const safe = point.length === 1 && point >= "\ud800" && point <= "\udfff" ? "\ufffd" : point;
++    if (out.length + safe.length > max) break;
++    out += safe;
++  }
++  return out;
++}
++
++/** First 20 problems, each made well-formed and cut to 200 characters at a code point. */
+ export function capProblems(problems: readonly string[]): string[] {
+-  return problems.slice(0, MAX_PROBLEMS).map(problem => problem.slice(0, MAX_PROBLEM_CHARS));
++  return problems.slice(0, MAX_PROBLEMS).map(problem => modelText(problem));
+ }
+ 
++/** A zod issue path; its keys can be the model's own. */
++const pathText = (path: readonly (string | number)[]) => path.map(segment => modelText(String(segment))).join(".");
++
+ /** The classifier's refusal as problem codes; never empty. */
+ export function problemsFromRefusal(issues: readonly { path: (string | number)[]; message: string }[], notCanonical: boolean): string[] {
+-  const problems = issues.map(issue => `field-invalid:${issue.path.join(".")}:${issue.message}`);
++  const problems = issues.map(issue => `field-invalid:${pathText(issue.path)}:${modelText(issue.message)}`);
+   if (notCanonical) problems.push("output-not-canonical");
+   return capProblems(problems);
+ }
+ 
+ type Obj = Record<string, unknown>;
+ const isObject = (value: unknown): value is Obj => typeof value === "object" && value !== null && !Array.isArray(value);
+ const sameStrings = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+ const isPlaceholder = (entry: Obj) => typeof entry.rationale === "string" && PLACEHOLDER_RATIONALES.includes(entry.rationale.trim().toLowerCase());
+ 
+ /** Zod issue paths as problem suffixes; an unrecognized-keys issue (empty path) is named by its keys. */
+ function issuePaths(issues: readonly { path: (string | number)[]; code: string; keys?: string[] }[]): string[] {
+-  return issues.flatMap(issue => issue.code === "unrecognized_keys" && issue.keys ? issue.keys.map(key => [...issue.path, key].join(".")) : [issue.path.join(".")]);
++  return issues.flatMap(issue => issue.code === "unrecognized_keys" && issue.keys ? issue.keys.map(key => pathText([...issue.path, key])) : [pathText(issue.path)]);
+ }
+ 
+ /** Spec §4.2 steps 1-7, in order. Pure, collects every problem, never throws; the classifier still judges the output. */
+ export function repairEstimateOutput(raw: unknown, ctx: RepairContext): RepairResult {
+   try {
+     return repair(raw, ctx);
+   } catch {
+     return { ok: false, problems: ["not-an-object"] };
+   }
+ }
+@@ -81,21 +99,22 @@ function repair(raw: unknown, ctx: RepairContext): RepairResult {
+     const normalizedIds = new Set<string>();
+     const normalized = attributable.map(entry => {
+       if (!Array.isArray(entry.assumptions) || !entry.assumptions.every(v => typeof v === "string")) return entry;
+       const cleaned = [...new Set((entry.assumptions as string[]).map(v => v.trim()).filter(v => v !== ""))];
+       if (sameStrings(cleaned, entry.assumptions)) return entry;
+       normalizedIds.add(entry.taskId as string);
+       return { ...entry, assumptions: cleaned };
+     });
+     for (const id of ctx.taskIds) if (normalizedIds.has(id)) repairs.push(`assumptions-normalized:${id}`);
+     // 5. Unknown tasks.
+-    const unknown = [...new Set(normalized.filter(e => !planIds.has(e.taskId as string)).map(e => e.taskId as string))].sort();
++    // The ids are the model's own: made well-formed and capped before they enter a code (two may then coincide).
++    const unknown = [...new Set([...new Set(normalized.filter(e => !planIds.has(e.taskId as string)).map(e => e.taskId as string))].sort().map(id => modelText(id)))];
+     for (const id of unknown) repairs.push(`unknown-task-dropped:${id}`);
+     const known = normalized.filter(e => planIds.has(e.taskId as string));
+     // 6. Duplicates: the first usable entry wins.
+     const kept: Obj[] = [], keptIndex = new Map<string, number>();
+     const duplicated: string[] = [];
+     for (const id of ctx.taskIds) {
+       const group = known.filter(e => e.taskId === id);
+       if (group.length === 0) { problems.add(`task-missing:${id}`); continue; }
+       const verdicts = group.map(entry => ({ entry, parsed: budgetEstimateTaskSchema.safeParse(entry) }));
+       const usable = verdicts.find(v => v.parsed.success && !isPlaceholder(v.entry));
+diff --git a/src/control/estimateRetry.ts b/src/control/estimateRetry.ts
+index 0c7cc46d..ca159891 100644
+--- a/src/control/estimateRetry.ts
++++ b/src/control/estimateRetry.ts
+@@ -65,21 +65,25 @@ export function decideEstimateRetry(input: RetryInput): RetryDecision {
+   return { kind: "retry", problems: [...failure.problems] };
+ }
+ 
+ /**
+  * Spec §4.3 size re-check: the retry prompt exactly as `prepare` builds it (singleCallPurposes.ts), through the frozen
+  * tokenizer ratio and framing overhead, plus the frozen output bound, against the frozen window and the grant -- the
+  * same arithmetic as buildBudgetEstimateRequest's queue-time check.
+  */
+ export function retryPromptFits(contract: EstimateExecutionContractV1, request: BudgetEstimateRequestV1, problems: readonly string[]): boolean {
+   if (contract.tokenizer.kind !== "utf8-upper-bound") return false;
+-  const prompt = buildEstimatePrompt(contract.instructionVersion, canonicalBytes(request).toString("utf8"), { taskIds: estimateTaskIds(request), retryProblems: problems });
++  // Final-review M4: estimateTaskIds parses the request's plan snapshot; a snapshot it cannot read must not throw inside
++  // the settlement's decision, so it counts as a prompt that does not fit (`input-too-large`).
++  let taskIds: string[];
++  try { taskIds = estimateTaskIds(request); } catch { return false; }
++  const prompt = buildEstimatePrompt(contract.instructionVersion, canonicalBytes(request).toString("utf8"), { taskIds, retryProblems: problems });
+   const { numerator, denominator } = contract.tokenizer;
+   const serialized = (BigInt(Buffer.byteLength(prompt, "utf8")) * BigInt(numerator) + BigInt(denominator) - 1n) / BigInt(denominator);
+   const required = serialized + BigInt(contract.framingTokenOverhead) + BigInt(contract.maxOutputTokens);
+   return required <= BigInt(contract.estimatorCapabilities.contextWindowTokens) && required <= BigInt(ESTIMATE_GRANT.tokens);
+ }
+ 
+ /** Spec §4.3: the retry's id is derived from the failed estimate, so a replayed settlement names the same row. */
+ export function estimateRetryId(groupId: string, failedEstimateId: string): string {
+   return `estimate-${sha256Canonical({ groupId, retryOf: failedEstimateId }).slice(0, 24)}`;
+ }
+diff --git a/src/control/webProtocol.ts b/src/control/webProtocol.ts
+index 30031a5b..065b6fe1 100644
+--- a/src/control/webProtocol.ts
++++ b/src/control/webProtocol.ts
+@@ -412,21 +412,21 @@ export const estimateExecutionContractSchema = z
+     requestHash: hashSchema,
+     grant: amountSchema,
+     profile: profileBindingSchema,
+     estimatorCapabilities: effectiveEstimatorCapabilitiesSchema,
+     instructionVersion: nonemptyString,
+     responseSchemaVersion: z.literal("budget-estimate-v1"),
+     tokenizer: tokenizerSchema,
+     framingTokenOverhead: safeInteger,
+     maxOutputTokens: positiveSafeInteger,
+     // Estimate-usable-answer spec §4.3: present only on an automatic retry's contract.
+-    retryProblems: z.array(nonemptyString).min(1).max(20).optional(),
++    retryProblems: z.array(nonemptyString.max(200)).min(1).max(20).optional(),
+   })
+   .strict();
+ 
+ export const controlPlanSchema = z
+   .object({
+     schema: z.literal("orca-control-plan-v1"),
+     repoId: idSchema,
+     planId: idSchema,
+     goal: nonemptyString,
+     successConditions: orderedUniqueNonemptyStringsSchema,
+diff --git a/tests/control/estimateRepair.test.ts b/tests/control/estimateRepair.test.ts
+index 939ff13d..b4361fcb 100644
+--- a/tests/control/estimateRepair.test.ts
++++ b/tests/control/estimateRepair.test.ts
+@@ -1,11 +1,12 @@
+ import { describe, expect, it } from "vitest";
++import { canonicalBytes } from "../../src/control/canonicalJson.js";
+ import { classifyEstimateOutput } from "../../src/control/estimator.js";
+ import { PLACEHOLDER_RATIONALES, capProblems, problemsFromRefusal, repairEstimateOutput } from "../../src/control/estimateRepair.js";
+ 
+ const PLAN_HASH = "a".repeat(64);
+ const AMOUNT = { tokens: 1000, activeMs: 2000, attempts: 1, sessions: 1 };
+ const entry = (taskId: string, extra: Record<string, unknown> = {}) => ({
+   taskId, complexity: "S", confidence: "high", work: AMOUNT, handoff: AMOUNT, rationale: `real ${taskId}`, assumptions: ["it is small"], ...extra,
+ });
+ const answer = (taskIds: string[]) => ({
+   schema: "budget-estimate-v1", planHash: PLAN_HASH, tasks: taskIds.map(id => entry(id)), goalReviewReserve: AMOUNT, groupRationale: "small",
+@@ -123,14 +124,50 @@ describe("problem caps and pins", () => {
+     if (!r.ok) {
+       expect(r.problems).toHaveLength(20);
+       expect(r.problems.every(p => p.length <= 200)).toBe(true);
+     }
+   });
+   it("capProblems and problemsFromRefusal", () => {
+     expect(capProblems(Array.from({ length: 25 }, () => "y".repeat(300)))).toHaveLength(20);
+     expect(problemsFromRefusal([{ path: ["tasks", 0, "work"], message: "bad" }], true)).toEqual(["field-invalid:tasks.0.work:bad", "output-not-canonical"]);
+     expect(problemsFromRefusal([], true)).toEqual(["output-not-canonical"]);
+   });
++  it("capProblems never splits a surrogate pair: it cuts at a code point and keeps at most 200 UTF-16 units", () => {
++    // 199 units then an emoji (2 units): a cut at unit 200 would leave a lone high surrogate.
++    const [cut] = capProblems([`${"y".repeat(199)}\u{1F600}`]);
++    expect(cut).toBe("y".repeat(199));
++    expect(capProblems([`${"y".repeat(198)}\u{1F600}z`])).toEqual([`${"y".repeat(198)}\u{1F600}`]);
++    expect(() => canonicalBytes(capProblems([`${"y".repeat(199)}\u{1F600}`, "lone \ud800 and \udc00"]))).not.toThrow();
++    expect(capProblems(["lone \ud800 and \udc00"])).toEqual(["lone \ufffd and \ufffd"]);
++  });
+   it("PLACEHOLDER_RATIONALES is the exact list", () => {
+     expect(PLACEHOLDER_RATIONALES).toEqual(["placeholder", "todo", "tbd", "x", "n/a", "...", "-"]);
+   });
+ });
++
++// Final-review I1: codes carry model-controlled text (task ids, extra keys). Canonical JSON refuses a lone surrogate, and
++// the settlement writes these codes through canonicalBytes: a code it refuses would throw, roll the settlement back and
++// leave the estimate `running` forever. So every model-derived segment is made well-formed and capped.
++describe("model-controlled text in repair and problem codes stays canonical", () => {
++  it("an unknown task id that is a lone surrogate is reported as U+FFFD", () => {
++    const raw = { ...answer(["a"]), tasks: [entry("a"), entry("\ud800")] };
++    const r = repairEstimateOutput(raw, ctx(["a"]));
++    expect(r).toEqual({ ok: true, output: answer(["a"]), repairs: ["unknown-task-dropped:\ufffd"] });
++    expect(() => canonicalBytes(r)).not.toThrow();
++  });
++  it("an unknown task id is cut to 200 UTF-16 units at a code point", () => {
++    const raw = { ...answer(["a"]), tasks: [entry("a"), entry(`${"q".repeat(199)}\u{1F600}${"q".repeat(50)}`)] };
++    const r = repairEstimateOutput(raw, ctx(["a"]));
++    expect(r.ok && r.repairs).toEqual([`unknown-task-dropped:${"q".repeat(199)}`]);
++  });
++  it("a top-level key of 185 x and an emoji: the capped problem does not end in half the emoji", () => {
++    const key = `${"x".repeat(185)}\u{1F600}`;
++    const r = repairEstimateOutput({ ...answer(["a"]), [key]: 1 }, ctx(["a"]));
++    expect(r).toEqual({ ok: false, problems: [`field-invalid:${"x".repeat(185)}`] });
++    expect(() => canonicalBytes(r)).not.toThrow();
++  });
++  it("a lone-surrogate key, top-level or in a task entry, is reported as U+FFFD", () => {
++    const r = repairEstimateOutput({ ...answer(["a"]), tasks: [entry("a", { "\udc00": 1 })], "\ud800": 1 }, ctx(["a"]));
++    expect(r).toEqual({ ok: false, problems: ["field-invalid:\ufffd", "task-invalid:a:\ufffd"] });
++    expect(() => canonicalBytes(r)).not.toThrow();
++  });
++});
+diff --git a/tests/control/estimateRetry.test.ts b/tests/control/estimateRetry.test.ts
+index fff93355..0f1f3e31 100644
+--- a/tests/control/estimateRetry.test.ts
++++ b/tests/control/estimateRetry.test.ts
+@@ -196,20 +196,45 @@ describe("the automatic estimate retry (estimate usable-answer spec §4.3)", ()
+ 
+   it("names a repaired answer the classifier finds about another plan plan-mismatch, and retries it", async () => {
+     const x = await estimateHarness(); try {
+       const planHash = readBudgetProposal(x.h.store, "g").planHash;
+       settleDirect(x, estimateOutput(planHash), { classify: () => ({ ok: false, reasonCode: "estimate-output-plan-mismatch" }) });
+       expect(x.estimate()).toMatchObject({ state: "failed", reasonCode: "estimate-output-plan-mismatch", retriedAs: expectedRetryId(x.h.estimateId) });
+       expect(estimates(x)[1]!.origin!.problems).toEqual(["plan-mismatch"]);
+     } finally { await x.h.dispose(); }
+   });
+ 
++  // Final-review I1: model-controlled text reaches the codes the settlement writes through canonicalBytes. A lone
++  // surrogate there used to throw inside the settlement transaction, so the estimate stayed `running` and the driver
++  // re-drove (and re-paid) it every round, blocking start. These answers must settle like any other.
++  it("settles an answer with a lone-surrogate unknown task id ready, the dropped id reported as U+FFFD", async () => {
++    // Settled directly (as Ce does): the harness's fake ccloop writes its answer canonically, which a lone surrogate is not.
++    const x = await estimateHarness(); try {
++      const good = estimateOutput(readBudgetProposal(x.h.store, "g").planHash);
++      settleDirect(x, { ...good, tasks: [good.tasks[0], { ...good.tasks[0], taskId: "\ud800" }] });
++      expect(x.estimate()).toMatchObject({ state: "ready", reasonCode: null, repairs: ["unknown-task-dropped:\ufffd"] });
++      expect(x.body().state).toBe("settled-restartable");
++    } finally { await x.h.dispose(); }
++  });
++
++  it("settles an answer whose extra key would be capped mid-emoji failed, and queues the retry with the capped problem", async () => {
++    const key = `${"x".repeat(185)}\u{1F600}`;
++    const x = await harness([planHash => ({ ...estimateOutput(planHash), [key]: 1 })]); try {
++      const failed = await settle(x);
++      const retryId = expectedRetryId(x.h.estimateId);
++      expect(failed).toMatchObject({ state: "failed", reasonCode: "estimate-output-invalid", retriedAs: retryId });
++      const problem = `field-invalid:${"x".repeat(185)}`;
++      expect(estimates(x)[1]).toMatchObject({ estimateId: retryId, state: "queued", origin: { kind: "auto-retry", problems: [problem] } });
++      expect(readEstimateContract(x.h.store, "g", retryId).retryProblems).toEqual([problem]);
++    } finally { await x.h.dispose(); }
++  });
++
+   it("writes exactly one retry when the settlement is replayed (the receipt returns early), under the id derived from the failed estimate", async () => {
+     const x = await estimateHarness(); try {
+       const planHash = readBudgetProposal(x.h.store, "g").planHash;
+       settleDirect(x, missingTask(planHash));
+       settleDirect(x, missingTask(planHash), { prepared: true });
+       const all = estimates(x);
+       expect(all.map(e => e.estimateId)).toEqual([x.h.estimateId, expectedRetryId(x.h.estimateId)]);
+       expect(all[0]!.retriedAs).toBe(expectedRetryId(x.h.estimateId));
+       expect(undeliveredWakes(x)).toHaveLength(1);
+     } finally { await x.h.dispose(); }
+@@ -370,19 +395,32 @@ describe("decideEstimateRetry is total and ordered (spec §4.3)", () => {
+       expect(decideEstimateRetry({ ...input, proposalConfirmed: true, group: { ...input.group, stopped: true } })).toEqual({ kind: "skip", code: "group-not-prestart" });
+       expect(decideEstimateRetry({ ...input, proposalConfirmed: true, group: { ...input.group, ledger: { ...ledger, budgetDeficit: { ...ledger.budgetDeficit, tokens: 1 } } } })).toEqual({ kind: "skip", code: "proposal-confirmed" });
+       // A null dimension fits; a finite one short of the grant does not.
+       expect(decideEstimateRetry({ ...input, reserveAfterSettlement: { ...input.reserveAfterSettlement, sessions: 0 } })).toEqual({ kind: "skip", code: "reserve-insufficient" });
+       // Order: a stopped group with a deficit is named for the group first; a deficit before unknown usage.
+       expect(decideEstimateRetry({ ...input, group: { ...input.group, stopped: true, ledger: { ...ledger, budgetDeficit: { ...ledger.budgetDeficit, tokens: 1 } } } })).toEqual({ kind: "skip", code: "group-not-prestart" });
+       expect(decideEstimateRetry({ ...input, dispatchBlocked: true, group: { ...input.group, ledger: { ...ledger, usageUnknown: true, budgetDeficit: { ...ledger.budgetDeficit, tokens: 1 } } } })).toEqual({ kind: "skip", code: "budget-deficit" });
+     } finally { await x.h.dispose(); }
+   });
+ 
++  it("a request whose plan snapshot cannot be read skips input-too-large instead of throwing (final-review M4)", async () => {
++    const { x, input } = await base(); try {
++      for (const planSnapshotCanonicalJson of ["{", "{}", "null"]) {
++        const request = { ...input.estimate.request!, planSnapshotCanonicalJson };
++        expect(retryPromptFits(input.contract, request, ["task-missing:a"])).toBe(false);
++        expect(decideEstimateRetry({ ...input, estimate: { ...input.estimate, request } })).toEqual({ kind: "skip", code: "input-too-large" });
++      }
++    } finally { await x.h.dispose(); }
++  });
++
+   it("caps the problems a retry carries and still sizes the prompt with them", async () => {
+     const { x, input } = await base(); try {
+       const problems = Array.from({ length: 20 }, (_, i) => `task-missing:${String(i).padStart(3, "0")}:${"x".repeat(180)}`);
+       expect(decideEstimateRetry({ ...input, failure: { reasonCode: "estimate-output-invalid", problems } })).toEqual({ kind: "retry", problems });
++      // Final-review M2: the contract caps each entry as the record's origin does (200), so the two cannot disagree.
++      expect(estimateExecutionContractSchema.safeParse({ ...input.contract, retryProblems: ["y".repeat(200)] }).success).toBe(true);
++      expect(estimateExecutionContractSchema.safeParse({ ...input.contract, retryProblems: ["y".repeat(201)] }).success).toBe(false);
+       const tight = { ...input.contract, estimatorCapabilities: { ...input.contract.estimatorCapabilities, contextWindowTokens: 1 } };
+       expect(decideEstimateRetry({ ...input, contract: tight })).toEqual({ kind: "skip", code: "input-too-large" });
+     } finally { await x.h.dispose(); }
+   });
+ });

@@ -1,0 +1,81 @@
+# Review package: fc9a2da1..HEAD
+
+## Commits
+6c66e801 fix(control): the no-json-object retry feedback says the answer may have been cut off
+
+## Files changed
+ src/control/estimatePrompt.ts          |  2 ++
+ tests/control/estimatePromptV2.test.ts | 13 +++++++++++--
+ 2 files changed, 13 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/src/control/estimatePrompt.ts b/src/control/estimatePrompt.ts
+index d2e9b16c..5126aad2 100644
+--- a/src/control/estimatePrompt.ts
++++ b/src/control/estimatePrompt.ts
+@@ -119,20 +119,22 @@ export interface EstimatePromptOptions { taskIds: readonly string[]; retryProble
+ export function buildEstimatePrompt(instructionVersion: string, requestCanonicalJson: string, options?: EstimatePromptOptions): string {
+   if (!Object.hasOwn(ESTIMATE_INSTRUCTIONS, instructionVersion)) throw new ControlError("recovery-blocked", `estimate-instruction-unknown:${instructionVersion}`);
+   let prompt = `${ESTIMATE_INSTRUCTIONS[instructionVersion]}\n\n${requestCanonicalJson}`;
+   if (instructionVersion === "2") {
+     if (!options) throw new ControlError("recovery-blocked", "estimate-task-ids-missing");
+     const ids = options.taskIds;
+     prompt += `\n\nThis plan has ${ids.length} tasks: ${ids.map(id => JSON.stringify(id)).join(", ")}. Answer each exactly once, as a key of "tasks".`;
+   }
+   if (options?.retryProblems && options.retryProblems.length > 0) {
+     prompt += `\n\nYour previous answer was rejected for these problems:\n${options.retryProblems.join("\n")}\nAnswer again with one JSON object that fixes all of them.`;
++    // Spec §4.3 Trigger: an answer ccloop could read no JSON object from may have been cut off at the output cap.
++    if (options.retryProblems.includes("no-json-object")) prompt += " Your answer may have been cut off: reply with the JSON object only, and keep each rationale to one sentence.";
+   }
+   return prompt;
+ }
+ 
+ /** Task ids of the request's plan, in plan order. */
+ export function estimateTaskIds(request: BudgetEstimateRequestV1): string[] {
+   const plan = JSON.parse(request.planSnapshotCanonicalJson) as { tasks: { taskId: string }[] };
+   return plan.tasks.map(task => task.taskId);
+ }
+ 
+diff --git a/tests/control/estimatePromptV2.test.ts b/tests/control/estimatePromptV2.test.ts
+index bc5cfd42..cf3953fe 100644
+--- a/tests/control/estimatePromptV2.test.ts
++++ b/tests/control/estimatePromptV2.test.ts
+@@ -74,27 +74,36 @@ describe("the v2 estimate prompt and schema", () => {
+     expect(schema.properties.tasks.properties.a.properties.taskId).toBeUndefined();
+     for (const word of keywords(schema)) expect(ALLOWED.has(word), word).toBe(true);
+     // Ids that are object-prototype names stay own properties.
+     const odd = estimateResponseSchema("2", ["constructor", "__proto__", "10"]) as any;
+     expect(Object.keys(odd.properties.tasks.properties)).toEqual(expect.arrayContaining(["constructor", "__proto__", "10"]));
+     expect(odd.properties.tasks.required).toEqual(["constructor", "__proto__", "10"]);
+     expect(() => estimateResponseSchema("3", [])).toThrow(expect.objectContaining({ detail: "estimate-instruction-unknown:3" }));
+   });
+ 
+   it("retryProblems append the feedback paragraph in both versions, after the task line", () => {
+-    const tail = "Your previous answer was rejected for these problems:\ntask-missing:b\nno-json-object\nAnswer again with one JSON object that fixes all of them.";
+-    const problems = ["task-missing:b", "no-json-object"];
++    const tail = "Your previous answer was rejected for these problems:\ntask-missing:b\ntask-invalid:a:work\nAnswer again with one JSON object that fixes all of them.";
++    const problems = ["task-missing:b", "task-invalid:a:work"];
+     expect(buildEstimatePrompt("1", "{}", { taskIds: ["a", "b"], retryProblems: problems })).toBe(`${buildEstimatePrompt("1", "{}")}\n\n${tail}`);
+     expect(buildEstimatePrompt("2", "{}", { taskIds: ["a", "b"], retryProblems: problems })).toBe(`${buildEstimatePrompt("2", "{}", { taskIds: ["a", "b"] })}\n\n${tail}`);
+     expect(buildEstimatePrompt("2", "{}", { taskIds: ["a"], retryProblems: [] })).toBe(buildEstimatePrompt("2", "{}", { taskIds: ["a"] }));
+   });
+ 
++  it("adds the cut-off sentence when the problem is no-json-object, and only then", () => {
++    const sentence = " Your answer may have been cut off: reply with the JSON object only, and keep each rationale to one sentence.";
++    for (const version of ["1", "2"]) {
++      const options = { taskIds: ["a"], retryProblems: ["no-json-object"] };
++      expect(buildEstimatePrompt(version, "{}", options)).toBe(`${buildEstimatePrompt(version, "{}", { taskIds: ["a"] })}\n\nYour previous answer was rejected for these problems:\nno-json-object\nAnswer again with one JSON object that fixes all of them.${sentence}`);
++      expect(buildEstimatePrompt(version, "{}", { taskIds: ["a"], retryProblems: ["task-missing:a"] })).not.toContain("cut off");
++    }
++  });
++
+   it("reads the task ids from the request's plan, in plan order", () => {
+     const result = buildFor("2", ["a", "m", "z"]);
+     expect(estimateTaskIds(result.request!)).toEqual(["a", "m", "z"]);
+   });
+ 
+   it("counts the v2 tail in the preflight tokens", () => {
+     const ids = Array.from({ length: 40 }, (_, i) => `task-number-${i}`).sort();
+     const v2 = buildFor("2", ids);
+     const bytes = Buffer.byteLength(buildEstimatePrompt("2", canonicalBytes(v2.request).toString("utf8"), { taskIds: ids }));
+     expect(v2.state).toBe("queued");

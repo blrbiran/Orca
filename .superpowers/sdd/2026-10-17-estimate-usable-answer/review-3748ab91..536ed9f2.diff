@@ -1,0 +1,316 @@
+# Review package: 3748ab91..HEAD
+
+## Commits
+536ed9f2 feat(control): estimate records carry proposalVersion, repairs and retry links
+
+## Files changed
+ src/control/planImport.ts                  |  2 +-
+ src/control/queries.ts                     |  9 ++++
+ src/control/webProtocol.ts                 |  7 +++
+ src/control/webService.ts                  |  2 +-
+ src/panel/controlViews.ts                  |  5 ++
+ tests/control/estimateRecordFields.test.ts | 77 ++++++++++++++++++++++++++++++
+ web/src/controlTypes.ts                    |  5 ++
+ 7 files changed, 105 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/src/control/planImport.ts b/src/control/planImport.ts
+index f8e392cc..6d066212 100644
+--- a/src/control/planImport.ts
++++ b/src/control/planImport.ts
+@@ -355,21 +355,21 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
+     proposalVersion: 1, state: "editable", planHash, groupLimit: limit, explicitUnallocatedReserve,
+     allocations, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null,
+   };
+   deps.store.db.prepare("INSERT INTO budget_proposals(group_id,proposal_version,body) VALUES (?,?,?)")
+     .run(input.groupId, 1, canonicalBytes(proposal).toString("utf8"));
+   const estimate = {
+     estimateId, estimateVersion: 1, state: preflight.state,
+     profile: estimatorProfile === null ? null : { profileId: input.estimatorProfileId, profileHash: input.estimatorProfileHash }, mode: input.estimateMode,
+     requestHash: preflight.requestHash, request: preflight.request, outputHash: null, output: null, reasonCode: preflight.reasonCode,
+     ...(preflight.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: preflight.compatibilityReasonCodes }),
+-    grant: cloneAmount(ESTIMATE_GRANT), estimatorSlot,
++    grant: cloneAmount(ESTIMATE_GRANT), estimatorSlot, proposalVersion: 1,
+   };
+   deps.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)")
+     .run(input.groupId, estimateId, 1, preflight.state, canonicalBytes(estimate).toString("utf8"));
+   persistEstimateArtifacts(deps.store, input.groupId, estimateId, preflight);
+   if (preflight.state === "queued") {
+     const wakeId = `scheduler-wake:${input.groupId}:estimate:${estimateId}`;
+     deps.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?, 'budget-estimate', ?, 0)")
+       .run(wakeId, input.groupId, JSON.stringify({ groupId: input.groupId, estimateId, planHash }));
+   }
+   return { estimateId, preflight };
+diff --git a/src/control/queries.ts b/src/control/queries.ts
+index d70718ab..81b3d806 100644
+--- a/src/control/queries.ts
++++ b/src/control/queries.ts
+@@ -235,36 +235,45 @@ export function readBudgetProposal(store: ControlStore, groupId: string, canonic
+ 
+ const estimateRecordSchema = z.object({
+   estimateId: idSchema, estimateVersion: safeInteger.positive(),
+   state: z.enum(["queued", "running", "start-unknown", "ready", "failed", "interrupted", "blocked-capability", "input-too-large"]),
+   profile: profileBindingSchema.nullable(), mode: z.enum(["strict", "soft"]), requestHash: hashSchema.nullable(),
+   request: budgetEstimateRequestSchema.nullable(), outputHash: hashSchema.nullable(), output: budgetEstimateSchema.nullable(),
+   reasonCode: z.string().min(1).nullable(), grant: amountSchema,
+   compatibilityReasonCodes: z.array(z.string().min(1)).min(1).optional(),
+   // Agent selection spec §6.4: the estimator selection frozen for this estimate (null when it was not resolved).
+   estimatorSlot: frozenSlotSchema.nullable(),
++  // Estimate-usable-answer spec §4.3/§4.4: all optional, written only when they apply (absent on rows written before).
++  proposalVersion: safeInteger.positive().optional(),
++  repairs: z.array(z.string().min(1)).optional(),
++  origin: z.object({ kind: z.literal("auto-retry"), of: idSchema, problems: z.array(z.string().min(1).max(200)).min(1).max(20) }).strict().optional(),
++  retriedAs: idSchema.optional(),
++  retrySkipped: z.string().min(1).optional(),
+ }).strict().superRefine((value, ctx) => {
+   if ((value.request === null) !== (value.requestHash === null)) {
+     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["request"], message: "estimate-request-hash-mismatch" });
+   }
+   if ((value.output === null) !== (value.outputHash === null) || (value.state === "ready") !== (value.output !== null)) {
+     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["output"], message: "estimate-output-state-mismatch" });
+   }
+ });
+ 
+ export interface EstimateRecord {
+   estimateId: string; estimateVersion: number;
+   state: "queued" | "running" | "start-unknown" | "ready" | "failed" | "interrupted" | "blocked-capability" | "input-too-large";
+   profile: ProfileBindingV1 | null; mode: "strict" | "soft"; requestHash: string | null; request: BudgetEstimateRequestV1 | null;
+   outputHash: string | null; output: BudgetEstimateV1 | null; reasonCode: string | null; grant: Amount;
+   compatibilityReasonCodes?: string[];
+   estimatorSlot: FrozenSlot | null;
++  proposalVersion?: number; repairs?: string[];
++  origin?: { kind: "auto-retry"; of: string; problems: string[] };
++  retriedAs?: string; retrySkipped?: string;
+ }
+ 
+ /** Spec §6.4 / §7 (planImport.ts rejectedEstimatorRequest): an estimate blocked because its selection was refused froze none. */
+ function rejectedEstimatorSelection(estimate: z.infer<typeof estimateRecordSchema>): boolean {
+   return (estimate.reasonCode ?? "").startsWith("agent-selection-rejected:estimator:") && estimate.estimatorSlot === null && estimate.request === null;
+ }
+ 
+ /** W6: an estimate's plan snapshot is the archive, or the archive with loop tasks as amended (taskAmendments.ts). */
+ function estimateSnapshotOf(archived: ArchivedPlanAuthority, snapshotCanonicalJson: string): boolean {
+   if (snapshotCanonicalJson === archived.canonicalJson) return true;
+diff --git a/src/control/webProtocol.ts b/src/control/webProtocol.ts
+index 286e8617..30031a5b 100644
+--- a/src/control/webProtocol.ts
++++ b/src/control/webProtocol.ts
+@@ -411,20 +411,22 @@ export const estimateExecutionContractSchema = z
+     schema: z.literal("orca-estimate-execution-contract-v1"),
+     requestHash: hashSchema,
+     grant: amountSchema,
+     profile: profileBindingSchema,
+     estimatorCapabilities: effectiveEstimatorCapabilitiesSchema,
+     instructionVersion: nonemptyString,
+     responseSchemaVersion: z.literal("budget-estimate-v1"),
+     tokenizer: tokenizerSchema,
+     framingTokenOverhead: safeInteger,
+     maxOutputTokens: positiveSafeInteger,
++    // Estimate-usable-answer spec §4.3: present only on an automatic retry's contract.
++    retryProblems: z.array(nonemptyString).min(1).max(20).optional(),
+   })
+   .strict();
+ 
+ export const controlPlanSchema = z
+   .object({
+     schema: z.literal("orca-control-plan-v1"),
+     repoId: idSchema,
+     planId: idSchema,
+     goal: nonemptyString,
+     successConditions: orderedUniqueNonemptyStringsSchema,
+@@ -1325,20 +1327,25 @@ export const estimateViewSchema = z
+     estimateId: idSchema,
+     estimateVersion: positiveSafeInteger,
+     state: z.enum(["queued", "running", "start-unknown", "ready", "failed", "interrupted", "blocked-capability", "input-too-large"]),
+     profile: profileBindingSchema.nullable(),
+     mode: z.enum(["strict", "soft"]),
+     requestHash: hashSchema.nullable(),
+     outputHash: hashSchema.nullable(),
+     output: budgetEstimateSchema.nullable(),
+     reasonCode: nonemptyString.nullable(),
+     compatibilityReasonCodes: z.array(nonemptyString).min(1).optional(),
++    proposalVersion: positiveSafeInteger.optional(),
++    repairs: z.array(nonemptyString).optional(),
++    origin: z.object({ kind: z.literal("auto-retry"), of: idSchema, problems: z.array(nonemptyString).min(1).max(20) }).strict().optional(),
++    retriedAs: idSchema.optional(),
++    retrySkipped: nonemptyString.optional(),
+     // W6: built from contracts a set-task-loop change has since replaced; its suggestions are no longer applied. Always
+     // set by the projection; optional only so the Web mirror's literal fixtures need no edit (webParity.test.ts).
+     stale: z.boolean().optional(),
+   })
+   .strict()
+   .superRefine((value, ctx) => {
+     const ready = value.state === "ready";
+     if (ready !== (value.outputHash !== null && value.output !== null)) issue(ctx, ["output"], "estimate-output-state-mismatch");
+   });
+ 
+diff --git a/src/control/webService.ts b/src/control/webService.ts
+index 8b954bfe..aac9fef9 100644
+--- a/src/control/webService.ts
++++ b/src/control/webService.ts
+@@ -471,21 +471,21 @@ export class WebControlService {
+           this.deps.profileRouter.resolve("budget-estimate", command.payload.estimatorProfileId, command.payload.estimatorProfileHash);
+           const estimateVersion = safeNumber(BigInt(Number(this.store.db.prepare("SELECT MAX(estimate_version) AS n FROM estimates WHERE group_id=?").get(id)?.n ?? 0)) + 1n);
+           const estimateId = `estimate-${sha256Canonical({ groupId: id, planHash: proposal.planHash, version: estimateVersion }).slice(0, 24)}`;
+           if (prepared.state === "queued") {
+             assertKnownConservation(this.store, group, proposal);
+             group.ledger.committedRemaining = sumAmounts([group.reserved, ESTIMATE_GRANT]);
+             setReserve(proposal, residual(group.limit, group.used, group.ledger.committedRemaining));
+           }
+           const estimate = { estimateId, estimateVersion, state: prepared.state, profile: { profileId: command.payload.estimatorProfileId, profileHash: command.payload.estimatorProfileHash }, mode: command.payload.estimateMode,
+             requestHash: prepared.requestHash, request: prepared.request, outputHash: null, output: null, reasonCode: prepared.reasonCode,
+-            ...(prepared.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: prepared.compatibilityReasonCodes }), grant: ESTIMATE_GRANT, estimatorSlot };
++            ...(prepared.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: prepared.compatibilityReasonCodes }), grant: ESTIMATE_GRANT, estimatorSlot, proposalVersion: proposal.proposalVersion };
+           this.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)").run(id, estimateId, estimateVersion, prepared.state, canonicalBytes(estimate).toString("utf8"));
+           persistEstimateArtifacts(this.store, id, estimateId, prepared);
+           const wakeId = prepared.state === "queued" ? `scheduler-wake:${id}:estimate:${estimateId}` : null;
+           if (wakeId) this.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'budget-estimate',?,0)").run(wakeId, id, JSON.stringify({ groupId: id, estimateId, planHash: proposal.planHash }));
+           saveWebAuthority(this.store, group, proposal);
+           return success(context, { kind: "estimate-created", estimateId, estimateVersion, estimateState: prepared.state, reasonCode: prepared.reasonCode, wakeId }, wakeId ? 202 : 200);
+         },
+       }).body;
+     } finally { release?.(); }
+   }
+diff --git a/src/panel/controlViews.ts b/src/panel/controlViews.ts
+index 2b887a8e..c25dee7c 100644
+--- a/src/panel/controlViews.ts
++++ b/src/panel/controlViews.ts
+@@ -595,20 +595,25 @@ function estimateViews(store: ControlStore, groupId: string, currentPlanCanonica
+   const views: EstimateViewV1[] = [];
+   const allocations: AllocationViewV1[] = [];
+   const field = { provenance: "system" as const, estimateId: null };
+   for (const row of rows) {
+     const estimate = readEstimateRecord(store, groupId, String(row.id));
+     views.push({
+       estimateId: estimate.estimateId, estimateVersion: estimate.estimateVersion, state: estimate.state,
+       profile: estimate.profile, mode: estimate.mode, requestHash: estimate.requestHash,
+       outputHash: estimate.outputHash, output: estimate.output, reasonCode: estimate.reasonCode,
+       ...(estimate.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: estimate.compatibilityReasonCodes }),
++      ...(estimate.proposalVersion === undefined ? {} : { proposalVersion: estimate.proposalVersion }),
++      ...(estimate.repairs === undefined ? {} : { repairs: estimate.repairs }),
++      ...(estimate.origin === undefined ? {} : { origin: estimate.origin }),
++      ...(estimate.retriedAs === undefined ? {} : { retriedAs: estimate.retriedAs }),
++      ...(estimate.retrySkipped === undefined ? {} : { retrySkipped: estimate.retrySkipped }),
+       stale: estimateIsStale(estimate, currentPlanCanonicalJson),
+     });
+     allocations.push(allocationViewSchema.parse({
+       ownerKind: "estimate", ownerId: estimate.estimateId, bucket: "work",
+       state: estimate.state === "queued" ? "draft-encumbered" : estimate.state === "running" || estimate.state === "start-unknown" ? "active" : "terminal",
+       amount: estimate.grant,
+       fieldProvenance: { tokens: field, activeMs: field, attempts: field, sessions: field },
+     }));
+   }
+   return { views, allocations };
+diff --git a/tests/control/estimateRecordFields.test.ts b/tests/control/estimateRecordFields.test.ts
+new file mode 100644
+index 00000000..cd40ce2d
+--- /dev/null
++++ b/tests/control/estimateRecordFields.test.ts
+@@ -0,0 +1,77 @@
++import { describe, expect, it } from "vitest";
++import { canonicalBytes } from "../../src/control/canonicalJson.js";
++import { readEstimateRecord } from "../../src/control/queries.js";
++import { readEstimateContract } from "../../src/control/estimator.js";
++import { WebControlService } from "../../src/control/webService.js";
++import { estimateExecutionContractSchema, estimateViewSchema } from "../../src/control/webProtocol.js";
++import { readControlGroup } from "../../src/panel/controlViews.js";
++import { webFixture } from "./fixtures/web.js";
++
++/**
++ * Estimate-usable-answer spec §4.3/§4.4: the record, contract and view learn five optional fields, written only when
++ * they apply. A row written before the change must still decode (canonical bytes unchanged) and show none of them.
++ */
++const FIELDS = ["proposalVersion", "repairs", "origin", "retriedAs", "retrySkipped"] as const;
++const rewrite = (h: Awaited<ReturnType<typeof webFixture>>, edit: (body: Record<string, unknown>) => void) => {
++  const row = h.store.db.prepare("SELECT body FROM estimates WHERE group_id=? AND id=?").get("g", h.estimateId)!;
++  const body = JSON.parse(String(row.body)) as Record<string, unknown>;
++  edit(body);
++  h.store.db.prepare("UPDATE estimates SET body=? WHERE group_id=? AND id=?").run(canonicalBytes(body).toString("utf8"), "g", h.estimateId);
++};
++const viewOf = (h: Awaited<ReturnType<typeof webFixture>>) => readControlGroup(h.store, "epoch", "g").estimates.find((e) => e.estimateId === h.estimateId)!;
++
++describe("estimate record, contract and view fields", () => {
++  it("decodes a record written before the change and its view carries none of the new fields", async () => {
++    const h = await webFixture(undefined, [{ taskId: "a" }]);
++    try {
++      rewrite(h, (body) => { for (const key of FIELDS) delete body[key]; });
++      const record = readEstimateRecord(h.store, "g", h.estimateId);
++      const view = viewOf(h);
++      for (const key of FIELDS) { expect(record).not.toHaveProperty(key); expect(view).not.toHaveProperty(key); }
++    } finally { await h.dispose(); }
++  });
++
++  it("decodes a record carrying all five fields and passes them to the view", async () => {
++    const h = await webFixture(undefined, [{ taskId: "a" }]);
++    try {
++      const origin = { kind: "auto-retry", of: "estimate-failed", problems: ["task-missing:a"] };
++      rewrite(h, (body) => Object.assign(body, { proposalVersion: 1, repairs: [], origin, retriedAs: "estimate-next", retrySkipped: "budget-deficit" }));
++      expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ proposalVersion: 1, repairs: [], origin, retriedAs: "estimate-next", retrySkipped: "budget-deficit" });
++      expect(viewOf(h)).toMatchObject({ proposalVersion: 1, repairs: [], origin, retriedAs: "estimate-next", retrySkipped: "budget-deficit" });
++      expect(estimateViewSchema.safeParse(viewOf(h)).success).toBe(true);
++    } finally { await h.dispose(); }
++  });
++
++  it("refuses a record with an empty origin.problems list", async () => {
++    const h = await webFixture(undefined, [{ taskId: "a" }]);
++    try {
++      rewrite(h, (body) => { body.origin = { kind: "auto-retry", of: "estimate-failed", problems: [] }; });
++      expect(() => readEstimateRecord(h.store, "g", h.estimateId)).toThrow();
++    } finally { await h.dispose(); }
++  });
++
++  it("stamps proposalVersion 1 on a fresh import's estimate and 2 on a re-estimate after one proposal edit", async () => {
++    const h = await webFixture(undefined, [{ taskId: "a" }]);
++    try {
++      expect(readEstimateRecord(h.store, "g", h.estimateId).proposalVersion).toBe(1);
++      expect(viewOf(h).proposalVersion).toBe(1);
++      const service = new WebControlService(h.deps);
++      const edited = await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: 1, scope: { kind: "group", slot: "estimator" }, partial: { model: "panel-estimator" } }));
++      expect(edited).toMatchObject({ result: { kind: "proposal-edited", proposalVersion: 2 } });
++      const created = await service.createEstimate(h.command("estimate", { proposalVersion: 2, estimatorProfileId: "all", estimatorProfileHash: h.frozen.profileHash, estimateMode: "soft" }));
++      if ("error" in created || created.result.kind !== "estimate-created") throw new Error(JSON.stringify(created));
++      expect(readEstimateRecord(h.store, "g", created.result.estimateId).proposalVersion).toBe(2);
++    } finally { await h.dispose(); }
++  });
++
++  it("accepts a contract with retryProblems and refuses an empty list or more than 20", async () => {
++    const h = await webFixture(undefined, [{ taskId: "a" }]);
++    try {
++      const contract = readEstimateContract(h.store, "g", h.estimateId);
++      expect(contract).not.toHaveProperty("retryProblems");
++      expect(estimateExecutionContractSchema.safeParse({ ...contract, retryProblems: ["no-json-object"] }).success).toBe(true);
++      expect(estimateExecutionContractSchema.safeParse({ ...contract, retryProblems: [] }).success).toBe(false);
++      expect(estimateExecutionContractSchema.safeParse({ ...contract, retryProblems: Array.from({ length: 21 }, (_, i) => `p${i}`) }).success).toBe(false);
++    } finally { await h.dispose(); }
++  });
++});
+diff --git a/web/src/controlTypes.ts b/web/src/controlTypes.ts
+index 5a43ba2c..29e387ca 100644
+--- a/web/src/controlTypes.ts
++++ b/web/src/controlTypes.ts
+@@ -286,20 +286,25 @@ export type EstimateViewV1 = {
+   estimateId: string;
+   estimateVersion: number;
+   state: "queued" | "running" | "start-unknown" | "ready" | "failed" | "interrupted" | "blocked-capability" | "input-too-large";
+   profile: ProfileBindingV1 | null;
+   mode: "strict" | "soft";
+   requestHash: string | null;
+   outputHash: string | null;
+   output: BudgetEstimateV1 | null;
+   reasonCode: string | null;
+   compatibilityReasonCodes?: string[];
++  proposalVersion?: number;
++  repairs?: string[];
++  origin?: { kind: "auto-retry"; of: string; problems: string[] };
++  retriedAs?: string;
++  retrySkipped?: string;
+   /** W6: built from contracts a plan change has since replaced; its suggestions are not applied. Absent reads as false. */
+   stale?: boolean;
+ };
+ export type CheckpointViewV1 = { checkpointId: string; taskId: string; runId: string; state: "complete" | "partial" | "unknown"; snapshotHash: string | null; evidenceIds: string[] };
+ export type HandoffRequestViewV1 = {
+   requestId: string;
+   runId: string;
+   state: "request-pending" | "latched" | "collecting" | "settled-recoverable" | "settled-restartable" | "settled-unrecoverable" | "settled-failed" | "outcome-unknown";
+   deadlineAt: string;
+   phaseAttemptOrdinal: number;

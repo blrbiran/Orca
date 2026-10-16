@@ -1,0 +1,233 @@
+# Review package: c71204c9..HEAD
+
+## Commits
+e0c89b7f fix(control): no automatic estimate retry on a confirmed proposal
+
+## Files changed
+ src/control/estimateRetry.ts        | 16 ++++++++++------
+ src/control/webService.ts           |  2 +-
+ tests/control/estimateRetry.test.ts | 29 +++++++++++++++++++++++++++--
+ 3 files changed, 38 insertions(+), 9 deletions(-)
+
+## Diff
+diff --git a/src/control/estimateRetry.ts b/src/control/estimateRetry.ts
+index 005be458..0c7cc46d 100644
+--- a/src/control/estimateRetry.ts
++++ b/src/control/estimateRetry.ts
+@@ -8,63 +8,67 @@ import type { BudgetAmount } from "./tokenPolicy.js";
+ import type { Amount } from "./types.js";
+ import { estimateExecutionContractSchema, type BudgetEstimateRequestV1, type EstimateExecutionContractV1 } from "./webProtocol.js";
+ 
+ /**
+  * Estimate usable-answer spec §4.3: one automatic retry of an estimate that failed because of its answer, with feedback
+  * saying what was wrong. The decision is code (CLAUDE.md Rule 5) and runs inside the failed estimate's settlement
+  * transaction, after its settlement numbers are computed, so it reads plain values only and never throws: a throw would
+  * roll the settlement back and leave the estimate `running`, re-driven every round.
+  */
+ export type RetrySkipCode =
+-  | "group-not-prestart" | "budget-deficit" | "usage-unknown" | "dispatch-blocked" | "reserve-insufficient"
++  | "group-not-prestart" | "proposal-confirmed" | "budget-deficit" | "usage-unknown" | "dispatch-blocked" | "reserve-insufficient"
+   | "proposal-changed" | "proposal-unknown" | "superseded" | "tokenizer-unavailable" | "input-too-large";
+ export type RetryDecision = { kind: "retry"; problems: string[] } | { kind: "skip"; code: RetrySkipCode } | { kind: "none" };
+ 
+ /** Spec §4.3 Trigger: the reasons an answer, not the transport, failed. Every other `estimate-call-failed:*` is not retried. */
+ const RETRYABLE: ReadonlySet<string> = new Set(["estimate-output-invalid", "estimate-output-plan-mismatch", "estimate-call-failed:single-call-output-invalid"]);
+ 
+ /** What the decision reads of the group as the settlement leaves it (webService.ts's group body). */
+ export interface RetryGroupFacts {
+   status: string; stopped: boolean; ledger: { budgetDeficit: Amount; usageUnknown: boolean };
+   /** Issue-fixes spec §6.3: an archived group's body carries `archived` (archivedMark.ts); its presence is enough here. */
+   [key: string]: unknown;
+ }
+ 
+ export interface RetryInput {
+   estimate: EstimateRecord; contract: EstimateExecutionContractV1;
+   failure: { reasonCode: string; problems: string[] } | null;
+   group: RetryGroupFacts;
+-  /** The budget proposal's current version. */
+-  proposalVersion: number;
++  /** The budget proposal's current version, and whether it is confirmed (its advice can no longer be applied). */
++  proposalVersion: number; proposalConfirmed: boolean;
+   /** The highest estimate version the group holds. */
+   newestEstimateVersion: number;
+   /** The group's unallocated reserve after this settlement (a null dimension is unlimited). */
+   reserveAfterSettlement: BudgetAmount;
+   dispatchBlocked: boolean;
+ }
+ 
+ export function decideEstimateRetry(input: RetryInput): RetryDecision {
+   const { estimate, contract, failure, group } = input;
+   // A2: never a retry of a retry.
+   if (failure === null || estimate.origin !== undefined || !RETRYABLE.has(failure.reasonCode) || failure.problems.length === 0) return { kind: "none" };
+   const skip = (code: RetrySkipCode): RetryDecision => ({ kind: "skip", code });
+   if (group.stopped || Object.hasOwn(group, "archived") || (group.status !== "draft" && group.status !== "ready")) return skip("group-not-prestart");
++  // Controller ruling (Task 5 fix round 1): a confirmed proposal takes no advice (the panel advises an editable one only).
++  if (input.proposalConfirmed) return skip("proposal-confirmed");
+   if (dimensions.some(d => group.ledger.budgetDeficit[d] !== 0)) return skip("budget-deficit");
+   if (group.ledger.usageUnknown) return skip("usage-unknown");
+   if (input.dispatchBlocked) return skip("dispatch-blocked");
+   if (dimensions.some(d => { const left = input.reserveAfterSettlement[d]; return left !== null && left < ESTIMATE_GRANT[d]; })) return skip("reserve-insufficient");
+   if (estimate.proposalVersion === undefined) return skip("proposal-unknown");
+   if (estimate.proposalVersion !== input.proposalVersion) return skip("proposal-changed");
+   if (input.newestEstimateVersion > estimate.estimateVersion) return skip("superseded");
+-  // The settlement transaction holds no token counter: an exact tokenizer cannot size the retry's prompt here.
+-  if (contract.tokenizer.kind === "exact") return skip("tokenizer-unavailable");
+-  if (estimate.request === null || !retryPromptFits(contract, estimate.request, failure.problems)) return skip("input-too-large");
++  // The settlement transaction holds no token counter: only the utf8 upper bound can size the retry's prompt here.
++  if (contract.tokenizer.kind !== "utf8-upper-bound") return skip("tokenizer-unavailable");
++  // Unreachable: a settling estimate has a request (claimEstimate refuses one without). Guarded so this stays total.
++  if (estimate.request === null) return skip("input-too-large");
++  if (!retryPromptFits(contract, estimate.request, failure.problems)) return skip("input-too-large");
+   return { kind: "retry", problems: [...failure.problems] };
+ }
+ 
+ /**
+  * Spec §4.3 size re-check: the retry prompt exactly as `prepare` builds it (singleCallPurposes.ts), through the frozen
+  * tokenizer ratio and framing overhead, plus the frozen output bound, against the frozen window and the grant -- the
+  * same arithmetic as buildBudgetEstimateRequest's queue-time check.
+  */
+ export function retryPromptFits(contract: EstimateExecutionContractV1, request: BudgetEstimateRequestV1, problems: readonly string[]): boolean {
+   if (contract.tokenizer.kind !== "utf8-upper-bound") return false;
+diff --git a/src/control/webService.ts b/src/control/webService.ts
+index b38bbdb3..e3358e2c 100644
+--- a/src/control/webService.ts
++++ b/src/control/webService.ts
+@@ -1208,21 +1208,21 @@ export function completeEstimateInStore(
+       const failure: EstimateFailure | null = reasonCode === null ? null : { reasonCode, problems: estimateFailureProblems(reasonCode, callFailure, repairProblems, judged, notCanonical) };
+       estimate.state = output ? "ready" : "failed"; estimate.output = output; estimate.outputHash = outputHash; estimate.reasonCode = failure?.reasonCode ?? null;
+       estimate.repairs = repairs;
+       if (rawCanonicalJson !== null) writeCanonicalRecord(deps.store, id, rawHash, rawCanonicalJson);
+       if (output) writeCanonicalRecord(deps.store, id, estimate.outputHash!, canonicalBytes(output).toString("utf8"));
+       group.ledger.committedRemaining = residual(group.reserved, zero(), run.remaining.work);
+       const settledBalance = budgetBalance(group.limit, group.used, group.ledger.committedRemaining);
+       group.ledger.budgetDeficit = settledBalance.deficit;
+       setReserve(proposal, settledBalance.reserve);
+       // Spec §4.3: the one automatic retry, decided on the settled numbers by plain reads only (it never throws).
+-      const decision = decideEstimateRetry({ estimate, contract, failure, group, proposalVersion: proposal.proposalVersion,
++      const decision = decideEstimateRetry({ estimate, contract, failure, group, proposalVersion: proposal.proposalVersion, proposalConfirmed: proposal.state === "confirmed",
+         newestEstimateVersion: Number(deps.store.db.prepare("SELECT MAX(estimate_version) AS n FROM estimates WHERE group_id=?").get(id)?.n ?? 0),
+         reserveAfterSettlement: settledBalance.reserve, dispatchBlocked: deps.store.dispatchBlocked });
+       if (decision.kind === "skip") estimate.retrySkipped = decision.code;
+       if (decision.kind === "retry") estimate.retriedAs = estimateRetryId(id, estimateId);
+       deps.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run(estimate.state, canonicalBytes(estimate).toString("utf8"), id, estimateId);
+       if (decision.kind === "retry") {
+         writeEstimateRetry(deps.store, id, estimate, contract, decision.problems);
+         // The retry's grant is reserved like any queued estimate's (createEstimate).
+         group.ledger.committedRemaining = sumAmounts([group.ledger.committedRemaining, ESTIMATE_GRANT]);
+         setReserve(proposal, residual(group.limit, group.used, group.ledger.committedRemaining));
+diff --git a/tests/control/estimateRetry.test.ts b/tests/control/estimateRetry.test.ts
+index 189aa057..fff93355 100644
+--- a/tests/control/estimateRetry.test.ts
++++ b/tests/control/estimateRetry.test.ts
+@@ -1,23 +1,24 @@
+ import { describe, expect, it } from "vitest";
+ import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
+ import { buildEstimatePrompt, estimateTaskIds } from "../../src/control/estimatePrompt.js";
+ import { decideEstimateRetry, retryPromptFits, type RetryInput } from "../../src/control/estimateRetry.js";
+ import { ESTIMATE_GRANT, readEstimateContract } from "../../src/control/estimator.js";
+ import { stepA1 } from "../../src/control/executionDriver.js";
+ import { readBudgetProposal, readEstimateRecord, type EstimateRecord } from "../../src/control/queries.js";
+ import { writeCanonicalRecord } from "../../src/control/snapshot.js";
+ import { recordUsage } from "../../src/control/usage.js";
+-import { completeEstimateInStore, readWebGroup } from "../../src/control/webService.js";
++import { completeEstimateInStore, readWebGroup, WebControlService } from "../../src/control/webService.js";
+ import { estimateExecutionContractSchema } from "../../src/control/webProtocol.js";
+ import { readControlGroup } from "../../src/panel/controlViews.js";
+ import { estimateHarness, estimateOutput } from "./fixtures/estimateHarness.js";
++import { webFixture } from "./fixtures/web.js";
+ 
+ // Estimate usable-answer spec §4.3: an estimate whose answer could not be used -- not one whose transport failed --
+ // gets exactly one automatic retry that tells the model what was wrong, decided by code inside the failed estimate's
+ // settlement. Every condition that rules the retry out is recorded by name on the failed estimate, and the settlement
+ // still commits: a decision that threw would leave the estimate `running`, re-driven (and re-paid) every round.
+ type Harness = Awaited<ReturnType<typeof estimateHarness>>;
+ type Options = Parameters<typeof estimateHarness>[0];
+ 
+ /** An answer repair cannot save: it is about task b only, so the plan's task a is missing (estimate-output-invalid). */
+ const missingTask = (planHash: string) => ({ ...estimateOutput(planHash), tasks: [{ ...estimateOutput(planHash).tasks[0], taskId: "b" }] });
+@@ -295,39 +296,59 @@ describe("each condition that rules the retry out is recorded on the failed esti
+       const bytes = Buffer.byteLength(buildEstimatePrompt(contract.instructionVersion, canonicalBytes(request).toString("utf8"), { taskIds: estimateTaskIds(request) }), "utf8");
+       // A window that holds the first call's prompt exactly and nothing more.
+       const window = Math.ceil(bytes * numerator / denominator) + contract.framingTokenOverhead + contract.maxOutputTokens;
+       rewriteContract(x, { estimatorCapabilities: { ...contract.estimatorCapabilities, contextWindowTokens: window } });
+       expect(retryPromptFits({ ...contract, estimatorCapabilities: { ...contract.estimatorCapabilities, contextWindowTokens: window } }, request, [])).toBe(true);
+       await settle(x);
+       expectSkipped(x, "input-too-large");
+     } finally { await x.h.dispose(); }
+   });
+ 
++  // Confirm is refused while an estimate runs (estimate-in-flight), so the proposal is confirmed with the estimate
++  // queued, then the estimate is claimed and settles: the shape a queued import estimate takes after an early confirm.
++  it("proposal-confirmed: an estimate that settles on a confirmed proposal (its advice can no longer apply) gets no retry", async () => {
++    const h = await webFixture(); try {
++      const service = new WebControlService(h.deps);
++      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).toMatchObject({ result: { kind: "confirmed" } });
++      const run = await service.claimEstimate("g", h.estimateId);
++      recordUsage(h.store, { runId: run!.runId, generation: 1, eventSeq: 1, bucket: "work", cumulative: { tokens: 10, activeMs: 1, attempts: 1, sessions: 1 }, source: { artifactId: "usage-confirmed", hash: "a".repeat(64) } });
++      const row = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.runId)!.body));
++      row.state = "settled-restartable"; h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), run!.runId);
++      service.completeEstimate("g", h.estimateId, missingTask(readBudgetProposal(h.store, "g").planHash));
++      expect(readBudgetProposal(h.store, "g").state).toBe("confirmed");
++      const failed = readEstimateRecord(h.store, "g", h.estimateId);
++      expect(failed).toMatchObject({ state: "failed", reasonCode: "estimate-output-invalid", retrySkipped: "proposal-confirmed" });
++      expect(failed.retriedAs).toBeUndefined();
++      expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM estimates WHERE group_id='g'").get()!.n).toBe(1);
++      expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id='g' AND kind='budget-estimate' AND json_extract(body,'$.estimateId')<>?").get(h.estimateId)!.n).toBe(0);
++    } finally { await h.dispose(); }
++  });
++
+   it("group-not-prestart: the group was stopped", async () => {
+     let x!: Harness;
+     x = await harness([missingTask], { duringCollect: async () => {
+       const group = JSON.parse(String(x.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+       x.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...group, stopped: true }));
+     } }); try {
+       await settle(x);
+       expectSkipped(x, "group-not-prestart");
+     } finally { await x.h.dispose(); }
+   });
+ });
+ 
+ describe("decideEstimateRetry is total and ordered (spec §4.3)", () => {
+   const base = async () => {
+     const x = await harness([missingTask]);
+     const estimate = { ...x.estimate(), proposalVersion: 1 };
+     const input: RetryInput = { estimate, contract: readEstimateContract(x.h.store, "g", x.h.estimateId),
+       failure: { reasonCode: "estimate-output-invalid", problems: ["task-missing:a"] }, group: readWebGroup(x.h.store, "g"),
+-      proposalVersion: 1, newestEstimateVersion: 1, reserveAfterSettlement: { tokens: null, activeMs: 10_000_000, attempts: 10, sessions: 10 }, dispatchBlocked: false };
++      proposalVersion: 1, proposalConfirmed: false, newestEstimateVersion: 1, reserveAfterSettlement: { tokens: null, activeMs: 10_000_000, attempts: 10, sessions: 10 }, dispatchBlocked: false };
+     return { x, input };
+   };
+ 
+   it("retries by default and answers none for no failure, a non-retryable code, empty problems or a retry", async () => {
+     const { x, input } = await base(); try {
+       expect(decideEstimateRetry(input)).toEqual({ kind: "retry", problems: ["task-missing:a"] });
+       expect(decideEstimateRetry({ ...input, failure: null })).toEqual({ kind: "none" });
+       expect(decideEstimateRetry({ ...input, failure: { reasonCode: "estimate-call-failed:codex-rate-limited", problems: [] } })).toEqual({ kind: "none" });
+       expect(decideEstimateRetry({ ...input, failure: { reasonCode: "estimate-call-failed", problems: [] } })).toEqual({ kind: "none" });
+       // The trigger is the reason code: a transport failure is never retried, whatever problems it would carry.
+@@ -337,20 +358,24 @@ describe("decideEstimateRetry is total and ordered (spec §4.3)", () => {
+     } finally { await x.h.dispose(); }
+   });
+ 
+   it("names usage-unknown, dispatch-blocked and an archived or past-pre-start group, in order", async () => {
+     const { x, input } = await base(); try {
+       const ledger = input.group.ledger;
+       expect(decideEstimateRetry({ ...input, group: { ...input.group, ledger: { ...ledger, usageUnknown: true } } })).toEqual({ kind: "skip", code: "usage-unknown" });
+       expect(decideEstimateRetry({ ...input, dispatchBlocked: true })).toEqual({ kind: "skip", code: "dispatch-blocked" });
+       expect(decideEstimateRetry({ ...input, group: { ...input.group, archived: { at: 1, actor: "human" } } })).toEqual({ kind: "skip", code: "group-not-prestart" });
+       expect(decideEstimateRetry({ ...input, group: { ...input.group, status: "running" } })).toEqual({ kind: "skip", code: "group-not-prestart" });
++      expect(decideEstimateRetry({ ...input, proposalConfirmed: true })).toEqual({ kind: "skip", code: "proposal-confirmed" });
++      // Order: a stopped group is named before a confirmed proposal, a confirmed proposal before a deficit.
++      expect(decideEstimateRetry({ ...input, proposalConfirmed: true, group: { ...input.group, stopped: true } })).toEqual({ kind: "skip", code: "group-not-prestart" });
++      expect(decideEstimateRetry({ ...input, proposalConfirmed: true, group: { ...input.group, ledger: { ...ledger, budgetDeficit: { ...ledger.budgetDeficit, tokens: 1 } } } })).toEqual({ kind: "skip", code: "proposal-confirmed" });
+       // A null dimension fits; a finite one short of the grant does not.
+       expect(decideEstimateRetry({ ...input, reserveAfterSettlement: { ...input.reserveAfterSettlement, sessions: 0 } })).toEqual({ kind: "skip", code: "reserve-insufficient" });
+       // Order: a stopped group with a deficit is named for the group first; a deficit before unknown usage.
+       expect(decideEstimateRetry({ ...input, group: { ...input.group, stopped: true, ledger: { ...ledger, budgetDeficit: { ...ledger.budgetDeficit, tokens: 1 } } } })).toEqual({ kind: "skip", code: "group-not-prestart" });
+       expect(decideEstimateRetry({ ...input, dispatchBlocked: true, group: { ...input.group, ledger: { ...ledger, usageUnknown: true, budgetDeficit: { ...ledger.budgetDeficit, tokens: 1 } } } })).toEqual({ kind: "skip", code: "budget-deficit" });
+     } finally { await x.h.dispose(); }
+   });
+ 
+   it("caps the problems a retry carries and still sizes the prompt with them", async () => {
+     const { x, input } = await base(); try {

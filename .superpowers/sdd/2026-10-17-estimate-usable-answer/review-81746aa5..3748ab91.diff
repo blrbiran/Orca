@@ -1,0 +1,339 @@
+# Review package: 81746aa5..HEAD
+
+## Commits
+3748ab91 feat(control): repair an estimate answer's mechanical defects (estimateRepair)
+
+## Files changed
+ src/control/estimateRepair.ts        | 123 +++++++++++++++++++++++++++++++
+ src/control/webProtocol.ts           |  27 +++----
+ tests/control/estimateRepair.test.ts | 136 +++++++++++++++++++++++++++++++++++
+ 3 files changed, 273 insertions(+), 13 deletions(-)
+
+## Diff
+diff --git a/src/control/estimateRepair.ts b/src/control/estimateRepair.ts
+new file mode 100644
+index 00000000..514cae7a
+--- /dev/null
++++ b/src/control/estimateRepair.ts
+@@ -0,0 +1,123 @@
++import { budgetEstimateSchema, budgetEstimateTaskSchema } from "./webProtocol.js";
++
++/** Rationales (trimmed, lower-cased) that mean "the model filled the slot without answering". The only judgement in repair. */
++export const PLACEHOLDER_RATIONALES: readonly string[] = ["placeholder", "todo", "tbd", "x", "n/a", "...", "-"];
++
++export interface RepairContext { planHash: string; taskIds: readonly string[]; instructionVersion: string }
++export type RepairResult = { ok: true; output: unknown; repairs: string[] } | { ok: false; problems: string[] };
++
++const MAX_PROBLEMS = 20, MAX_PROBLEM_CHARS = 200;
++
++/** First 20 problems, each cut to 200 characters. */
++export function capProblems(problems: readonly string[]): string[] {
++  return problems.slice(0, MAX_PROBLEMS).map(problem => problem.slice(0, MAX_PROBLEM_CHARS));
++}
++
++/** The classifier's refusal as problem codes; never empty. */
++export function problemsFromRefusal(issues: readonly { path: (string | number)[]; message: string }[], notCanonical: boolean): string[] {
++  const problems = issues.map(issue => `field-invalid:${issue.path.join(".")}:${issue.message}`);
++  if (notCanonical) problems.push("output-not-canonical");
++  return capProblems(problems);
++}
++
++type Obj = Record<string, unknown>;
++const isObject = (value: unknown): value is Obj => typeof value === "object" && value !== null && !Array.isArray(value);
++const sameStrings = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.length && a.every((v, i) => v === b[i]);
++const isPlaceholder = (entry: Obj) => typeof entry.rationale === "string" && PLACEHOLDER_RATIONALES.includes(entry.rationale.trim().toLowerCase());
++
++/** Zod issue paths as problem suffixes; an unrecognized-keys issue (empty path) is named by its keys. */
++function issuePaths(issues: readonly { path: (string | number)[]; code: string; keys?: string[] }[]): string[] {
++  return issues.flatMap(issue => issue.code === "unrecognized_keys" && issue.keys ? issue.keys.map(key => [...issue.path, key].join(".")) : [issue.path.join(".")]);
++}
++
++/** Spec §4.2 steps 1-7, in order. Pure, collects every problem, never throws; the classifier still judges the output. */
++export function repairEstimateOutput(raw: unknown, ctx: RepairContext): RepairResult {
++  try {
++    return repair(raw, ctx);
++  } catch {
++    return { ok: false, problems: ["not-an-object"] };
++  }
++}
++
++function repair(raw: unknown, ctx: RepairContext): RepairResult {
++  if (!isObject(raw)) return { ok: false, problems: ["not-an-object"] };
++  const repairs: string[] = [], problems = new Set<string>();
++  const planIds = new Set(ctx.taskIds);
++  let top: Obj = { ...raw }, entries: unknown[] | null = null;
++
++  // 1. v2 keyed answer -> v1 array, walking the plan's ids (never Object.keys order of the plan).
++  if (ctx.instructionVersion === "2" && isObject(raw.tasks)) {
++    const keyed = raw.tasks;
++    entries = ctx.taskIds.filter(id => Object.hasOwn(keyed, id)).map(id => {
++      const entry = keyed[id];
++      return isObject(entry) ? { ...entry, taskId: id } : { taskId: id };
++    });
++    // Keys the plan does not have ride along as entries so step 5 drops (and reports) them.
++    for (const key of Object.keys(keyed).sort()) {
++      if (planIds.has(key)) continue;
++      const entry = keyed[key];
++      entries.push(isObject(entry) ? { ...entry, taskId: key } : { taskId: key });
++    }
++    top = { ...top, schema: "budget-estimate-v1", planHash: typeof raw.planHash === "string" ? raw.planHash : ctx.planHash };
++    repairs.push("answer-v2-converted");
++  } else if (Array.isArray(raw.tasks)) {
++    entries = raw.tasks;
++  } else {
++    problems.add("field-invalid:tasks");
++  }
++  // 2-3. Name and hash: nothing the model could add.
++  if (top.schema !== "budget-estimate-v1") { top.schema = "budget-estimate-v1"; repairs.push("schema-name-set"); }
++  if (top.planHash !== ctx.planHash) { top.planHash = ctx.planHash; repairs.push("plan-hash-copied"); }
++
++  let tasks: Obj[] = [];
++  if (entries) {
++    // Entries without a string taskId cannot be attributed to a task.
++    const attributable: Obj[] = [];
++    entries.forEach((entry, index) => {
++      if (isObject(entry) && typeof entry.taskId === "string") attributable.push(entry);
++      else problems.add(`field-invalid:tasks.${index}.taskId`);
++    });
++    // 4. Assumptions, in every entry, before any entry is chosen.
++    const normalizedIds = new Set<string>();
++    const normalized = attributable.map(entry => {
++      if (!Array.isArray(entry.assumptions) || !entry.assumptions.every(v => typeof v === "string")) return entry;
++      const cleaned = [...new Set((entry.assumptions as string[]).map(v => v.trim()).filter(v => v !== ""))];
++      if (sameStrings(cleaned, entry.assumptions)) return entry;
++      normalizedIds.add(entry.taskId as string);
++      return { ...entry, assumptions: cleaned };
++    });
++    for (const id of ctx.taskIds) if (normalizedIds.has(id)) repairs.push(`assumptions-normalized:${id}`);
++    // 5. Unknown tasks.
++    const unknown = [...new Set(normalized.filter(e => !planIds.has(e.taskId as string)).map(e => e.taskId as string))].sort();
++    for (const id of unknown) repairs.push(`unknown-task-dropped:${id}`);
++    const known = normalized.filter(e => planIds.has(e.taskId as string));
++    // 6. Duplicates: the first usable entry wins.
++    const kept: Obj[] = [], keptIndex = new Map<string, number>();
++    const duplicated: string[] = [];
++    for (const id of ctx.taskIds) {
++      const group = known.filter(e => e.taskId === id);
++      if (group.length === 0) { problems.add(`task-missing:${id}`); continue; }
++      const verdicts = group.map(entry => ({ entry, parsed: budgetEstimateTaskSchema.safeParse(entry) }));
++      const usable = verdicts.find(v => v.parsed.success && !isPlaceholder(v.entry));
++      if (usable) {
++        keptIndex.set(id, kept.length); kept.push(usable.entry);
++        if (group.length > 1) duplicated.push(id);
++      } else if (verdicts.some(v => v.parsed.success)) {
++        problems.add(`placeholder-entry:${id}`);
++      } else {
++        const failure = verdicts[0].parsed;
++        if (!failure.success) for (const path of issuePaths(failure.error.issues)) problems.add(`task-invalid:${id}:${path}`);
++      }
++    }
++    for (const id of duplicated) repairs.push(`duplicate-task-dropped:${id}`);
++    // 7. Plan order. `kept` is already in plan order; compare it with the order the entries came in.
++    const arrivalOrder = known.filter(e => kept.includes(e)).map(e => e.taskId);
++    if (!sameStrings(arrivalOrder, kept.map(e => e.taskId))) repairs.push("tasks-reordered");
++    tasks = kept;
++    // Top-level fields: judged on the repaired shell with no tasks.
++    const shell = budgetEstimateSchema.safeParse({ ...top, tasks: [] });
++    if (!shell.success) for (const path of issuePaths(shell.error.issues)) problems.add(`field-invalid:${path}`);
++  }
++  if (problems.size > 0) return { ok: false, problems: capProblems([...problems].sort()) };
++  return { ok: true, output: { ...top, tasks }, repairs };
++}
+diff --git a/src/control/webProtocol.ts b/src/control/webProtocol.ts
+index a931b30b..286e8617 100644
+--- a/src/control/webProtocol.ts
++++ b/src/control/webProtocol.ts
+@@ -563,37 +563,38 @@ export const budgetEstimateRequestSchema = z
+     schema: z.literal("budget-estimate-request-v1"),
+     planHash: hashSchema,
+     planSnapshotCanonicalJson: nonemptyString,
+     estimatorProfile: profileBindingSchema,
+     estimatorCapabilities: effectiveEstimatorCapabilitiesSchema,
+     responseSchemaVersion: z.literal("budget-estimate-v1"),
+     instructionVersion: nonemptyString,
+   })
+   .strict();
+ 
++/** One task entry of a budget estimate; estimateRepair judges entries one by one with it. */
++export const budgetEstimateTaskSchema = z
++  .object({
++    taskId: idSchema,
++    complexity: z.enum(["S", "M", "L", "XL"]),
++    confidence: z.enum(["low", "medium", "high"]),
++    work: amountSchema,
++    handoff: amountSchema,
++    rationale: nonemptyString,
++    assumptions: orderedUniqueNonemptyStringsSchema,
++  })
++  .strict();
++
+ export const budgetEstimateSchema = z
+   .object({
+     schema: z.literal("budget-estimate-v1"),
+     planHash: hashSchema,
+-    tasks: z.array(
+-      z
+-        .object({
+-          taskId: idSchema,
+-          complexity: z.enum(["S", "M", "L", "XL"]),
+-          confidence: z.enum(["low", "medium", "high"]),
+-          work: amountSchema,
+-          handoff: amountSchema,
+-          rationale: nonemptyString,
+-          assumptions: orderedUniqueNonemptyStringsSchema,
+-        })
+-        .strict(),
+-    ),
++    tasks: z.array(budgetEstimateTaskSchema),
+     goalReviewReserve: amountSchema,
+     groupRationale: nonemptyString,
+   })
+   .strict()
+   .superRefine((value, ctx) => requireSortedUnique(value.tasks, (task) => task.taskId, ctx, ["tasks"]));
+ 
+ export const commandVerbSchema = z.enum([
+   "import-plan",
+   "proposal-edit",
+   "estimate",
+diff --git a/tests/control/estimateRepair.test.ts b/tests/control/estimateRepair.test.ts
+new file mode 100644
+index 00000000..939ff13d
+--- /dev/null
++++ b/tests/control/estimateRepair.test.ts
+@@ -0,0 +1,136 @@
++import { describe, expect, it } from "vitest";
++import { classifyEstimateOutput } from "../../src/control/estimator.js";
++import { PLACEHOLDER_RATIONALES, capProblems, problemsFromRefusal, repairEstimateOutput } from "../../src/control/estimateRepair.js";
++
++const PLAN_HASH = "a".repeat(64);
++const AMOUNT = { tokens: 1000, activeMs: 2000, attempts: 1, sessions: 1 };
++const entry = (taskId: string, extra: Record<string, unknown> = {}) => ({
++  taskId, complexity: "S", confidence: "high", work: AMOUNT, handoff: AMOUNT, rationale: `real ${taskId}`, assumptions: ["it is small"], ...extra,
++});
++const answer = (taskIds: string[]) => ({
++  schema: "budget-estimate-v1", planHash: PLAN_HASH, tasks: taskIds.map(id => entry(id)), goalReviewReserve: AMOUNT, groupRationale: "small",
++});
++const ctx = (taskIds: string[], instructionVersion = "1") => ({ planHash: PLAN_HASH, taskIds, instructionVersion });
++const judged = (r: ReturnType<typeof repairEstimateOutput>, taskIds: string[]) =>
++  r.ok && classifyEstimateOutput(r.output, PLAN_HASH, taskIds).ok;
++
++describe("repairEstimateOutput: one code per defect", () => {
++  it("answer-v2-converted: a keyed v2 answer becomes the v1 array in plan order", () => {
++    const { taskId: _a, ...a } = entry("a"), { taskId: _b, ...b } = entry("b");
++    const raw = { schema: "budget-estimate-answer-v2", tasks: { b, a }, goalReviewReserve: AMOUNT, groupRationale: "small" };
++    const r = repairEstimateOutput(raw, ctx(["a", "b"], "2"));
++    expect(r).toEqual({ ok: true, output: answer(["a", "b"]), repairs: ["answer-v2-converted"] });
++    expect(judged(r, ["a", "b"])).toBe(true);
++  });
++  it("schema-name-set", () => {
++    const r = repairEstimateOutput({ ...answer(["a"]), schema: "oops" }, ctx(["a"]));
++    expect(r).toEqual({ ok: true, output: answer(["a"]), repairs: ["schema-name-set"] });
++    expect(judged(r, ["a"])).toBe(true);
++  });
++  it("plan-hash-copied", () => {
++    const { planHash: _p, ...rest } = answer(["a"]);
++    const r = repairEstimateOutput(rest, ctx(["a"]));
++    expect(r).toEqual({ ok: true, output: answer(["a"]), repairs: ["plan-hash-copied"] });
++    expect(judged(r, ["a"])).toBe(true);
++  });
++  it("assumptions-normalized: trims, drops empties and exact duplicates", () => {
++    const raw = { ...answer(["a"]), tasks: [entry("a", { assumptions: [" x ", "x", ""] })] };
++    const r = repairEstimateOutput(raw, ctx(["a"]));
++    expect(r).toEqual({ ok: true, output: { ...answer(["a"]), tasks: [entry("a", { assumptions: ["x"] })] }, repairs: ["assumptions-normalized:a"] });
++    expect(judged(r, ["a"])).toBe(true);
++  });
++  it("unknown-task-dropped", () => {
++    const raw = { ...answer(["a"]), tasks: [entry("a"), entry("zz")] };
++    const r = repairEstimateOutput(raw, ctx(["a"]));
++    expect(r).toEqual({ ok: true, output: answer(["a"]), repairs: ["unknown-task-dropped:zz"] });
++    expect(judged(r, ["a"])).toBe(true);
++  });
++  it("duplicate-task-dropped: the evidence shape (real first, placeholder second)", () => {
++    const raw = { ...answer(["a"]), tasks: [entry("a"), entry("a", { rationale: "placeholder" })] };
++    const r = repairEstimateOutput(raw, ctx(["a"]));
++    expect(r).toEqual({ ok: true, output: answer(["a"]), repairs: ["duplicate-task-dropped:a"] });
++    expect(judged(r, ["a"])).toBe(true);
++  });
++  it("duplicate-task-dropped: placeholder first keeps the real one", () => {
++    const raw = { ...answer(["a"]), tasks: [entry("a", { rationale: " TODO " }), entry("a")] };
++    const r = repairEstimateOutput(raw, ctx(["a"]));
++    expect(r).toEqual({ ok: true, output: answer(["a"]), repairs: ["duplicate-task-dropped:a"] });
++    expect(judged(r, ["a"])).toBe(true);
++  });
++  it("tasks-reordered", () => {
++    const raw = { ...answer(["a", "b"]), tasks: [entry("b"), entry("a")] };
++    const r = repairEstimateOutput(raw, ctx(["a", "b"]));
++    expect(r).toEqual({ ok: true, output: answer(["a", "b"]), repairs: ["tasks-reordered"] });
++    expect(judged(r, ["a", "b"])).toBe(true);
++  });
++  it("an already-valid v1 answer needs no repair", () => {
++    const raw = answer(["a", "b"]);
++    const r = repairEstimateOutput(raw, ctx(["a", "b"]));
++    expect(r).toEqual({ ok: true, output: raw, repairs: [] });
++  });
++});
++
++describe("repairEstimateOutput: unrepairable answers collect every problem", () => {
++  it("a missing task and a placeholder together, sorted", () => {
++    const raw = { ...answer(["a"]), tasks: [entry("a", { rationale: "placeholder" })] };
++    expect(repairEstimateOutput(raw, ctx(["a", "b"]))).toEqual({ ok: false, problems: ["placeholder-entry:a", "task-missing:b"] });
++  });
++  it.each([[null], [[]], ["text"]])("%j is not an object", raw => {
++    expect(repairEstimateOutput(raw, ctx(["a"]))).toEqual({ ok: false, problems: ["not-an-object"] });
++  });
++  it("a task missing a field", () => {
++    const { work: _w, ...bad } = entry("a");
++    const r = repairEstimateOutput({ ...answer(["a"]), tasks: [bad] }, ctx(["a"]));
++    expect(r.ok === false && r.problems).toContain("task-invalid:a:work");
++  });
++  it("all assumptions empty leaves the entry unusable", () => {
++    const r = repairEstimateOutput({ ...answer(["a"]), tasks: [entry("a", { assumptions: [" ", ""] })] }, ctx(["a"]));
++    expect(r.ok === false && r.problems).toContain("task-invalid:a:assumptions");
++  });
++  it("a bad top-level field and an extra key are field-invalid", () => {
++    const r = repairEstimateOutput({ ...answer(["a"]), groupRationale: "", extra: 1 }, ctx(["a"]));
++    expect(r).toEqual({ ok: false, problems: ["field-invalid:extra", "field-invalid:groupRationale"] });
++  });
++});
++
++describe("repairEstimateOutput: v2 keyed-answer traps", () => {
++  it("prototype-name and all-digit ids: only own keys count, plan order wins", () => {
++    const { taskId: _t, ...ten } = entry("10");
++    const raw = { schema: "budget-estimate-answer-v2", tasks: { "10": ten }, goalReviewReserve: AMOUNT, groupRationale: "small" };
++    expect(repairEstimateOutput(raw, ctx(["10", "constructor"], "2"))).toEqual({ ok: false, problems: ["task-missing:constructor"] });
++  });
++  it("conversion follows the plan's ids, not Object.keys order", () => {
++    const mk = (id: string) => { const { taskId: _t, ...rest } = entry(id); return rest; };
++    // JSON.parse puts all-digit keys first: "10" precedes "2" and "a" regardless of written order.
++    const tasks = JSON.parse(`{"a":${JSON.stringify(mk("a"))},"2":${JSON.stringify(mk("2"))},"10":${JSON.stringify(mk("10"))}}`);
++    const plan = ["10", "2", "a"];
++    const r = repairEstimateOutput({ schema: "budget-estimate-answer-v2", tasks, goalReviewReserve: AMOUNT, groupRationale: "small" }, ctx(plan, "2"));
++    expect(r.ok && (r.output as { tasks: { taskId: string }[] }).tasks.map(t => t.taskId)).toEqual(plan);
++    expect(r.ok && r.repairs).toEqual(["answer-v2-converted"]);
++  });
++  it("a keyed answer under contract 1 is not converted", () => {
++    const { taskId: _t, ...a } = entry("a");
++    const r = repairEstimateOutput({ schema: "budget-estimate-answer-v2", tasks: { a }, goalReviewReserve: AMOUNT, groupRationale: "small" }, ctx(["a"], "1"));
++    expect(r.ok === false && r.problems.some(p => p.startsWith("field-invalid:tasks"))).toBe(true);
++  });
++});
++
++describe("problem caps and pins", () => {
++  it("30 broken tasks with 300-char ids: at most 20 problems of at most 200 chars", () => {
++    const ids = Array.from({ length: 30 }, (_, i) => `${String(i).padStart(2, "0")}${"z".repeat(298)}`);
++    const r = repairEstimateOutput({ ...answer([]), tasks: [] }, ctx(ids));
++    expect(r.ok).toBe(false);
++    if (!r.ok) {
++      expect(r.problems).toHaveLength(20);
++      expect(r.problems.every(p => p.length <= 200)).toBe(true);
++    }
++  });
++  it("capProblems and problemsFromRefusal", () => {
++    expect(capProblems(Array.from({ length: 25 }, () => "y".repeat(300)))).toHaveLength(20);
++    expect(problemsFromRefusal([{ path: ["tasks", 0, "work"], message: "bad" }], true)).toEqual(["field-invalid:tasks.0.work:bad", "output-not-canonical"]);
++    expect(problemsFromRefusal([], true)).toEqual(["output-not-canonical"]);
++  });
++  it("PLACEHOLDER_RATIONALES is the exact list", () => {
++    expect(PLACEHOLDER_RATIONALES).toEqual(["placeholder", "todo", "tbd", "x", "n/a", "...", "-"]);
++  });
++});

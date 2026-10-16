@@ -1,0 +1,266 @@
+# Review package: 536ed9f2..HEAD
+
+## Commits
+0213d16a feat(control): settle a repairable estimate answer as ready, with its repairs
+
+## Files changed
+ src/control/webService.ts                  | 39 +++++++++++++++---
+ tests/control/driverEstimate.test.ts       |  5 ++-
+ tests/control/estimateOutcome.test.ts      |  7 +++-
+ tests/control/estimateRepairSettle.test.ts | 64 ++++++++++++++++++++++++++++++
+ 4 files changed, 106 insertions(+), 9 deletions(-)
+
+## Diff
+diff --git a/src/control/webService.ts b/src/control/webService.ts
+index aac9fef9..de9f00dc 100644
+--- a/src/control/webService.ts
++++ b/src/control/webService.ts
+@@ -4,32 +4,33 @@ import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResul
+ import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
+ import { assertNoActiveUnbounded } from "./spendCaps.js";
+ import { hasTokenPolicy, saveTokenPolicy, enableOptionalTokenPolicy } from "./fundedAllowance.js";
+ import { budgetAmountSchema, safeInteger } from "./schema.js";
+ import { z } from "zod";
+ import { randomUUID, createHash } from "node:crypto";
+ import { applyWebCommand, lookupWebCommandReplay, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
+ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+ import { dimensions, zero } from "./commands.js";
+ import { ControlError, type KnownControlErrorCode } from "./errors.js";
+-import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegradationReasons, classifyEstimateOutput, singleCallOutputBound } from "./estimator.js";
++import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegradationReasons, classifyEstimateOutput, readEstimateContract, singleCallOutputBound } from "./estimator.js";
+ import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
+ import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
+ import type { ExecutionPort } from "./executionPort.js";
+ import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand } from "./planImport.js";
+ import { readAgentPreferences } from "./agentPreferences.js";
+ import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
+ import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
+ import { effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
+ import { agentSelectionSchema, amountSchema } from "./schema.js";
+ import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
+-import { estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
++import { budgetEstimateSchema, estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
++import { problemsFromRefusal, repairEstimateOutput } from "./estimateRepair.js";
+ import { scheduleStart, type StartCommand } from "./webDispatch.js";
+ import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, readStopIntent, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
+ import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
+ import { applySettleUnknownUsage, type SettleUnknownUsageCommand } from "./settleUnknownUsage.js";
+ import { applyRetryTask, type RetryTaskCommand } from "./retryTask.js";
+ import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
+ import { prepareResolution } from "./integrationResolve.js";
+ import { controlWorkspaceRoots } from "./workspace.js";
+ import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
+ import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
+@@ -1127,20 +1128,35 @@ export class WebControlService {
+ }
+ 
+ function keptExpansion(taskId: string, repoPath: string, current: LoopRecipe, inputs: LoopRecipe["inputs"], skills: LoopSkills | undefined): LoopTaskExpansion {
+   // An explicit `undefined` would make canonical JSON throw, so absent skills are an omitted key.
+   const { skills: _previous, ...rest } = current;
+   const recipe: LoopRecipe = { ...rest, inputs: structuredClone(inputs), ...(skills === undefined ? {} : { skills }) };
+   const expanded = expandRecipe(taskId, repoPath, recipe);
+   return expanded.ok ? { ...expanded, recipe } : expanded;
+ }
+ 
++/** Estimate usable-answer spec §4.3: a failed settlement's reason and the problems a retry would carry. */
++export interface EstimateFailure { reasonCode: string; problems: string[] }
++
++/**
++ * The problems for a failed estimate: repair's own, the classifier's refusal of a repaired answer (never empty), or
++ * `no-json-object` for a call ccloop could read no JSON object from. Every other call failure is not retryable: `[]`.
++ */
++function estimateFailureProblems(reasonCode: string, callFailure: string | null, repairProblems: string[] | null, judged: unknown, notCanonical: boolean): string[] {
++  if (repairProblems !== null) return repairProblems;
++  if (reasonCode.startsWith("estimate-call-failed")) return callFailure === "single-call-output-invalid" ? ["no-json-object"] : [];
++  const parsed = budgetEstimateSchema.safeParse(judged);
++  const problems = problemsFromRefusal(parsed.success ? [] : parsed.error.issues, notCanonical);
++  return problems.length > 0 ? problems : ["output-not-canonical"];
++}
++
+ /**
+  * The estimate's terminal settlement (formerly WebControlService.completeEstimate's body, moved unchanged so the
+  * execution driver can call it -- single-call estimate spec §6.3, drafter finding F13). `commitTerminal` runs first, in
+  * the same transaction, and a throw from anything here rolls it back with the rest.
+  */
+ export function completeEstimateInStore(
+   deps: { store: ControlStore; admissionGate?: AdmissionGate }, id: string, estimateId: string, rawOutput: unknown, commitTerminal?: () => void,
+   // N1 spec §5.1: the estimate purpose's registered classifier (singleCallPurposes.ts); the service method keeps the default.
+   classify: typeof classifyEstimateOutput = classifyEstimateOutput,
+   // Spec 2026-10-15 ccloop error codes §4.5: ccloop's code for a failed call (driver-normalised); the service method passes none.
+@@ -1162,29 +1178,40 @@ export function completeEstimateInStore(
+       const rows = deps.store.db.prepare("SELECT id,active,body FROM runs WHERE group_id=? AND work_item_id=?").all(id, estimateId);
+       if (rows.length !== 1) throw new ControlError("recovery-blocked");
+       // N1 spec §5.1 (PR-I4): the stop and usage checks are every single call's.
+       const run = verifyStoppedSingleCall(deps.store, rows[0], { groupId: id, workItemId: estimateId, workGrant: estimate.grant });
+       const group = readWebGroup(deps.store, id), proposal = readBudgetProposal(deps.store, id), plan = readArchivedPlan(deps.store, id);
+       assertCallUsageBooked(group, run);
+       const currentBalance = budgetBalance(group.limit, group.used, group.reserved);
+       if (!same(currentBalance.reserve, proposal.explicitUnallocatedReserve) || !same(currentBalance.deficit, group.ledger.budgetDeficit)) throw new ControlError("recovery-blocked");
+       // Single-call estimate spec §6.4: a failed estimate carries its own reason. A schema-valid answer that is not
+       // canonical JSON (a lone surrogate, a negative zero) cannot be hashed, so it is an invalid answer too.
+-      const classified = classify(rawOutput, plan.planHash, plan.plan.tasks.map(t => t.taskId));
+-      let output: BudgetEstimateV1 | null = null, outputHash: string | null = null;
++      // Estimate usable-answer spec §4.2: repair runs on every non-null answer before the classifier, which then judges
++      // the repaired value and stays the single judge. A null answer is a failed call and never reaches repair.
++      const taskIds = plan.plan.tasks.map(t => t.taskId);
++      let repairs: string[] = [], repairProblems: string[] | null = null, judged: unknown = rawOutput;
++      if (rawOutput !== null) {
++        const repaired = repairEstimateOutput(rawOutput, { planHash: plan.planHash, taskIds, instructionVersion: readEstimateContract(deps.store, id, estimateId).instructionVersion });
++        if (repaired.ok) { repairs = repaired.repairs; judged = repaired.output; } else repairProblems = repaired.problems;
++      }
++      const classified = repairProblems !== null ? { ok: false as const, reasonCode: "estimate-output-invalid" } : classify(judged, plan.planHash, taskIds);
++      let output: BudgetEstimateV1 | null = null, outputHash: string | null = null, notCanonical = false;
+       let reasonCode: string | null = classified.ok ? null
+         : classified.reasonCode === "estimate-call-failed" && callFailure !== null ? `estimate-call-failed:${callFailure}` : classified.reasonCode;
+       if (classified.ok) {
+         try { outputHash = sha256Canonical(classified.output); output = classified.output; }
+-        catch (error) { if (!(error instanceof ControlError)) throw error; reasonCode = "estimate-output-invalid"; }
++        catch (error) { if (!(error instanceof ControlError)) throw error; reasonCode = "estimate-output-invalid"; notCanonical = true; }
+       }
+-      estimate.state = output ? "ready" : "failed"; estimate.output = output; estimate.outputHash = outputHash; estimate.reasonCode = reasonCode;
++      // Spec §4.3: why the estimate failed and the problems a retry would carry; empty problems = not retryable.
++      const failure: EstimateFailure | null = reasonCode === null ? null : { reasonCode, problems: estimateFailureProblems(reasonCode, callFailure, repairProblems, judged, notCanonical) };
++      estimate.state = output ? "ready" : "failed"; estimate.output = output; estimate.outputHash = outputHash; estimate.reasonCode = failure?.reasonCode ?? null;
++      estimate.repairs = repairs;
+       if (rawCanonicalJson !== null) writeCanonicalRecord(deps.store, id, rawHash, rawCanonicalJson);
+       if (output) writeCanonicalRecord(deps.store, id, estimate.outputHash!, canonicalBytes(output).toString("utf8"));
+       group.ledger.committedRemaining = residual(group.reserved, zero(), run.remaining.work);
+       const settledBalance = budgetBalance(group.limit, group.used, group.ledger.committedRemaining);
+       group.ledger.budgetDeficit = settledBalance.deficit;
+       setReserve(proposal, settledBalance.reserve);
+       deps.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run(estimate.state, canonicalBytes(estimate).toString("utf8"), id, estimateId);
+       closeSingleCall(deps.store, run.runId, { id: receiptId, kind: "estimate-result", body: { groupId: id, estimateId, runId: run.runId, rawHash, rawIdentity } });
+       saveWebAuthority(deps.store, group, proposal); recordProjectionChange(deps.store, [id]);
+     });
+diff --git a/tests/control/driverEstimate.test.ts b/tests/control/driverEstimate.test.ts
+index 5a25399e..2948b0c5 100644
+--- a/tests/control/driverEstimate.test.ts
++++ b/tests/control/driverEstimate.test.ts
+@@ -130,21 +130,24 @@ describe("the estimate chain (single-call estimate spec §6.1-§6.3)", () => {
+       expect(x.estimate()).toMatchObject({ state: "running", output: null });
+       expect(x.h.store.db.prepare("SELECT id FROM outbox WHERE id=?").get(`estimate-result:g:${x.h.estimateId}`)).toBeUndefined();
+       expect(x.body()).toMatchObject({ state: "blocked", drive: { blockedReason: "moved-while-collecting" } });
+       expect(x.active()).toBe(1);
+     } finally { await x.h.dispose(); }
+   });
+ 
+   it.each([
+     // Rewritten for the ccloop error codes spec (2026-10-15; §5): a failed call's reason now carries ccloop's code.
+     ["a call that failed", { outcome: "failed" as const }, "estimate-call-failed:single-call-output-invalid"],
+-    ["an answer for another plan", { output: () => estimateOutput("f".repeat(64)) }, "estimate-output-plan-mismatch"],
++    // Ruling (session 4de777f4, 2026-10-17): repair (estimate usable-answer spec §4.2) now copies a wrong planHash, so an
++    // answer for another plan settles ready (estimateRepairSettle.test.ts); an answer about another task still fails, as
++    // invalid, because repair drops the unknown task and then misses the plan's own -- it never reaches the plan check.
++    ["an answer about another task", { output: (planHash: string) => ({ ...estimateOutput(planHash), tasks: [{ ...estimateOutput(planHash).tasks[0], taskId: "b" }] }) }, "estimate-output-invalid"],
+     ["an answer that is not an estimate", { output: () => ({ schema: "budget-estimate-v1" }) }, "estimate-output-invalid"],
+   ])("fails the estimate with its reason through the driver: %s", async (_label, options, reasonCode) => {
+     const x = await estimateHarness(options); try {
+       await x.rounds(() => x.estimate().state !== "running");
+       expect(x.estimate()).toMatchObject({ state: "failed", reasonCode, output: null });
+       expect(x.body().state).toBe("settled-restartable");
+     } finally { await x.h.dispose(); }
+   });
+ 
+   it("is not an estimate run when its claim row names another run", async () => {
+diff --git a/tests/control/estimateOutcome.test.ts b/tests/control/estimateOutcome.test.ts
+index de1f3dad..9dc048b2 100644
+--- a/tests/control/estimateOutcome.test.ts
++++ b/tests/control/estimateOutcome.test.ts
+@@ -17,22 +17,25 @@ describe("classifying an estimate's raw output (single-call estimate spec §6.4)
+     expect(classifyEstimateOutput({ schema: "budget-estimate-v1" }, planHash, ["a"])).toEqual({ ok: false, reasonCode: "estimate-output-invalid" });
+     expect(classifyEstimateOutput(output("b".repeat(64)), planHash, ["a"])).toEqual({ ok: false, reasonCode: "estimate-output-plan-mismatch" });
+     expect(classifyEstimateOutput(output(planHash, { tasks: [{ ...task, taskId: "b" }] }), planHash, ["a"])).toEqual({ ok: false, reasonCode: "estimate-output-plan-mismatch" });
+     expect(classifyEstimateOutput(output(planHash), planHash, ["a"])).toEqual({ ok: true, output: output(planHash) });
+   });
+ 
+   it.each([
+     ["a call that returned nothing", () => null, "estimate-call-failed"],
+     ["an answer that is not budget-estimate-v1", () => ({ schema: "budget-estimate-v1" }), "estimate-output-invalid"],
+     ["a schema-valid answer that is not canonical JSON", (planHash: string) => output(planHash, { tasks: [{ ...task, work: { ...amount, tokens: -0 } }] }), "estimate-output-invalid"],
+-    ["an answer for another plan", () => output("f".repeat(64)), "estimate-output-plan-mismatch"],
+-    ["an answer about other tasks", (planHash: string) => output(planHash, { tasks: [{ ...task, taskId: "b" }] }), "estimate-output-plan-mismatch"],
++    // Ruling (session 4de777f4, 2026-10-17): repair (estimate usable-answer spec §4.2) runs before the classifier in the
++    // settlement. It copies a wrong planHash, so "an answer for another plan" now settles ready and moved to
++    // estimateRepairSettle.test.ts; an answer about other tasks fails repair (task-missing) and so is invalid. The
++    // classifier's own plan-mismatch verdict is still pinned by the first test of this file.
++    ["an answer about other tasks", (planHash: string) => output(planHash, { tasks: [{ ...task, taskId: "b" }] }), "estimate-output-invalid"],
+   ] as const)("fails the estimate with its reason: %s", async (_label, raw, reasonCode) => {
+     const h = await webFixture(); try {
+       const service = new WebControlService(h.deps), run = await service.claimEstimate("g", h.estimateId);
+       const row = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.runId)!.body));
+       row.state = "settled-restartable";
+       h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), run!.runId);
+       service.completeEstimate("g", h.estimateId, raw(readArchivedPlan(h.store, "g").planHash));
+       expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "failed", reasonCode, output: null, outputHash: null });
+     } finally { await h.dispose(); }
+   });
+diff --git a/tests/control/estimateRepairSettle.test.ts b/tests/control/estimateRepairSettle.test.ts
+new file mode 100644
+index 00000000..4c6e27a7
+--- /dev/null
++++ b/tests/control/estimateRepairSettle.test.ts
+@@ -0,0 +1,64 @@
++import { describe, expect, it } from "vitest";
++import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
++import { readArchivedPlan } from "../../src/control/queries.js";
++import { readCanonicalRecord } from "../../src/control/snapshot.js";
++import { readControlGroup } from "../../src/panel/controlViews.js";
++import { estimateHarness, estimateOutput } from "./fixtures/estimateHarness.js";
++
++// Estimate usable-answer spec §4.2: repair runs in the settlement, before the classifier, so an answer whose only
++// defects are mechanical settles `ready` instead of costing the person a paid call for nothing. Every estimate the
++// settlement completes records what repair changed (`[]` when nothing); the raw answer stays on record as before.
++const settle = async (output: (planHash: string) => unknown, extra: Parameters<typeof estimateHarness>[0] = {}) => {
++  const x = await estimateHarness({ output, ...extra });
++  await x.rounds(() => x.estimate().state !== "running");
++  return x;
++};
++
++describe("repair in the estimate settlement (estimate usable-answer spec §4.2)", () => {
++  it("settles the evidence answer (task a twice, the second a placeholder) ready with the first entry", async () => {
++    // The shape a real paid call returned: the real entry first, then the same task again as a placeholder.
++    const evidence = (planHash: string) => {
++      const good = estimateOutput(planHash);
++      return { ...good, tasks: [good.tasks[0], { ...good.tasks[0], rationale: "placeholder", assumptions: ["placeholder"] }] };
++    };
++    const x = await settle(evidence); try {
++      const planHash = readArchivedPlan(x.h.store, "g").planHash;
++      expect(x.estimate()).toMatchObject({ state: "ready", reasonCode: null, repairs: ["duplicate-task-dropped:a"],
++        output: estimateOutput(planHash), outputHash: sha256Canonical(estimateOutput(planHash)) });
++      // The raw answer, not the repaired one, is what the receipt names and what stays on record.
++      expect(readCanonicalRecord(x.h.store, sha256Canonical(evidence(planHash)))).toBe(canonicalBytes(evidence(planHash)).toString("utf8"));
++      // Usage is booked as for any estimate: repair is not a call.
++      expect(readControlGroup(x.h.store, "epoch", "g").ledger.used.tokens).toBe(777);
++      expect(x.body().state).toBe("settled-restartable");
++    } finally { await x.h.dispose(); }
++  });
++
++  it("records an empty repair list on a valid answer", async () => {
++    const x = await settle(estimateOutput); try {
++      expect(x.estimate()).toMatchObject({ state: "ready", reasonCode: null, repairs: [] });
++    } finally { await x.h.dispose(); }
++  });
++
++  it("settles an answer for another plan hash ready, with the hash copied", async () => {
++    const x = await settle(() => estimateOutput("f".repeat(64))); try {
++      const planHash = readArchivedPlan(x.h.store, "g").planHash;
++      expect(x.estimate()).toMatchObject({ state: "ready", repairs: ["plan-hash-copied"], output: estimateOutput(planHash) });
++    } finally { await x.h.dispose(); }
++  });
++
++  it("fails an answer missing the plan's task as invalid (repair failed; it never reaches the plan-mismatch check), keeping the raw answer", async () => {
++    const missing = (planHash: string) => ({ ...estimateOutput(planHash), tasks: [{ ...estimateOutput(planHash).tasks[0], taskId: "b" }] });
++    const x = await settle(missing); try {
++      const planHash = readArchivedPlan(x.h.store, "g").planHash;
++      expect(x.estimate()).toMatchObject({ state: "failed", reasonCode: "estimate-output-invalid", output: null, outputHash: null, repairs: [] });
++      expect(readCanonicalRecord(x.h.store, sha256Canonical(missing(planHash)))).toBe(canonicalBytes(missing(planHash)).toString("utf8"));
++      expect(readControlGroup(x.h.store, "epoch", "g").ledger.used.tokens).toBe(777);
++    } finally { await x.h.dispose(); }
++  });
++
++  it("fails a call that read no JSON object without running repair", async () => {
++    const x = await settle(estimateOutput, { outcome: "failed", errorCode: "single-call-output-invalid" }); try {
++      expect(x.estimate()).toMatchObject({ state: "failed", reasonCode: "estimate-call-failed:single-call-output-invalid", output: null, repairs: [] });
++    } finally { await x.h.dispose(); }
++  });
++});

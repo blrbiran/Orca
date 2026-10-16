@@ -1,0 +1,188 @@
+# Review package: e0c89b7f..HEAD
+
+## Commits
+9dbbaed2 feat(web): show an estimate's repairs and its automatic retry
+
+## Files changed
+ web/src/ControlGroupView.tsx           | 10 +++++++
+ web/src/locales/en.ts                  |  4 +++
+ web/src/locales/zh.ts                  |  4 +++
+ web/tests/estimateRepairRetry.test.tsx | 55 ++++++++++++++++++++++++++++++++++
+ 4 files changed, 73 insertions(+)
+
+## Diff
+diff --git a/web/src/ControlGroupView.tsx b/web/src/ControlGroupView.tsx
+index e48f8773..ee2921d9 100644
+--- a/web/src/ControlGroupView.tsx
++++ b/web/src/ControlGroupView.tsx
+@@ -130,20 +130,26 @@ export interface ControlGroupViewProps {
+   /** Board spec 2026-10-03 B3, D7: the page's read of the repository's workspace mode; absent on pages that never read it. */
+   workspace?: RepositoryWorkspaceV1 | null;
+ /** Project filtering spec §5: the workspace of one repository; preferred over `workspace` for this group's own repository. */
+ workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
+   /** Integration spec §9.1: a repository's integration read, for the target its confirm step suggests. */
+   integrationFor?: (repoId: string) => RepositoryIntegrationV1 | null;
+   /** Spec 2026-10-08 §2.2(d): this group's last refusal, shown at the top until a later success of this group. */
+   refusal?: ControlRefusal | null;
+ }
+ 
++/** The version of the estimate with this id in the same group; the id itself when the list does not carry it. */
++function estimateVersionOf(view: GroupViewV1, estimateId: string): string {
++  const found = view.estimates.find((candidate) => candidate.estimateId === estimateId);
++  return found === undefined ? estimateId : String(found.estimateVersion);
++}
++
+ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+   const { view, config, uncertain, drafts, onDraft, onCommand } = props;
+   const { t } = useTranslation();
+   const groupId = view.summary.groupId;
+   const revision = view.summary.commandRevision;
+   const stopMode = view.summary.stopMode;
+   // Issue-fixes spec §3.2 (3): a panel shutdown that froze runs is left the same way as a human handoff-stop, through the
+   // resume dialog once its stop state is handoff-complete.
+   const handoffActive = stopMode === "handoff" || stopMode === "shutdown";
+   // Issue-fixes spec §6.3: the server refuses every command of an archived group but the unarchive (group-archived).
+@@ -489,20 +495,24 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+                   estimateId: estimate.estimateId,
+                   version: estimate.estimateVersion,
+                   state: enumText("estimateState", estimate.state),
+                   mode: enumText("budgetMode", estimate.mode),
+                   profileId: estimate.profile?.profileId ?? t("budget.noEstimator"),
+                   hash: estimate.profile === null ? "" : short(estimate.profile.profileHash),
+                 })}
+                 {estimate.reasonCode !== null ? ` · ${estimate.reasonCode}` : ""}
+                 {estimate.reasonCode !== null && explainEstimateReason(estimate.reasonCode) !== null ? ` · ${explainEstimateReason(estimate.reasonCode)}` : ""}
+                 {estimate.compatibilityReasonCodes?.length ? ` · ${estimate.compatibilityReasonCodes.join(", ")}` : ""}
++                {(estimate.repairs ?? []).length > 0 ? ` · ${t("control.group.estimateRepaired", { codes: (estimate.repairs ?? []).join(", ") })}` : ""}
++                {estimate.origin !== undefined ? ` · ${t("control.group.estimateRetryOf", { version: estimateVersionOf(view, estimate.origin.of) })}` : ""}
++                {estimate.retriedAs !== undefined ? ` · ${t("control.group.estimateRetriedAs", { version: estimateVersionOf(view, estimate.retriedAs) })}` : ""}
++                {estimate.retrySkipped !== undefined ? ` · ${t("control.group.estimateRetrySkipped", { code: estimate.retrySkipped })}` : ""}
+               </li>
+             ))}
+           </ul>
+         </>
+       )}
+ 
+       {uncertain.length > 0 && (
+         <p role="status">{t("control.group.waiting", { commands: uncertain.map((command) => command.commandId).join(", ") })}</p>
+       )}
+ 
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index 3dbc7700..5836cc2d 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -392,20 +392,24 @@ export const en = {
+       runsTh: { run: "run", phase: "phase", state: "state", profile: "profile", used: "used", remaining: "remaining", evidence: "evidence" },
+       attempt: " · attempt {{attempt}} in this run (claim {{claim}})",
+       taskRun: " · run {{n}} of this task",
+       retryRun: "Retry run {{id}}",
+       retryTask: "Retry task {{taskId}}",
+       handoffRequests: "Handoff requests",
+       handoffLine: "{{requestId}} · run {{runId}} · {{state}} · deadline {{deadline}}",
+       handoffEvidence: " · evidence {{ids}}",
+       estimates: "Estimates",
+       estimateLine: "{{estimateId}} · v{{version}} · {{state}} · {{mode}} profile {{profileId}} {{hash}}",
++      estimateRepaired: "repaired: {{codes}}",
++      estimateRetryOf: "retry of v{{version}}",
++      estimateRetriedAs: "retried as v{{version}}",
++      estimateRetrySkipped: "retry skipped: {{code}}",
+       waiting: "Waiting for the ledger to answer: {{commands}}",
+       dispatch: "Execution controls",
+       continuableWork: "Continuable work",
+       retryableWork: "Retryable work",
+       unresolvedWork: "Unresolved work",
+       start: "Start",
+       pause: "Pause new tasks",
+       handoffStop: "Save progress and stop",
+       resume: "Continue execution",
+       continueSelected: "Continue selected tasks ({{n}})",
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index 61a47406..74904373 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -291,20 +291,24 @@ export const zh: Translation<typeof en> = {
+       runsTh: { run: "运行", phase: "阶段", state: "状态", profile: "配置", used: "已用", remaining: "剩余", evidence: "证据" },
+       attempt: " · 本次运行内第 {{attempt}} 次尝试（认领序号 {{claim}}）",
+       taskRun: " · 这个任务的第 {{n}} 次运行",
+       retryRun: "重试运行 {{id}}",
+       retryTask: "重试任务 {{taskId}}",
+       handoffRequests: "交接请求",
+       handoffLine: "{{requestId}} · 运行 {{runId}} · {{state}} · 截止 {{deadline}}",
+       handoffEvidence: " · 证据 {{ids}}",
+       estimates: "估算",
+       estimateLine: "{{estimateId}} · v{{version}} · {{state}} · {{mode}} · profile {{profileId}} {{hash}}",
++      estimateRepaired: "已修复：{{codes}}",
++      estimateRetryOf: "第 {{version}} 版的重试",
++      estimateRetriedAs: "已重试为第 {{version}} 版",
++      estimateRetrySkipped: "未重试：{{code}}",
+       waiting: "等待台账回答：{{commands}}",
+       dispatch: "执行控制",
+       continuableWork: "可续跑的工作",
+       retryableWork: "可重试的工作",
+       unresolvedWork: "结果未明的工作",
+       start: "开始",
+       pause: "暂停启动新任务",
+       handoffStop: "保存进度并停止",
+       resume: "继续执行",
+       continueSelected: "继续选中的任务（{{n}}）",
+diff --git a/web/tests/estimateRepairRetry.test.tsx b/web/tests/estimateRepairRetry.test.tsx
+new file mode 100644
+index 00000000..037ff67d
+--- /dev/null
++++ b/web/tests/estimateRepairRetry.test.tsx
+@@ -0,0 +1,55 @@
++// @vitest-environment jsdom
++/**
++ * Estimate-usable-answer spec §4.4: an estimate row names its repairs, the retry it came from, the retry made from it
++ * and why a retry was skipped, in both locales. Old rows (no such fields) show none of it.
++ */
++import { cleanup, fireEvent, render, screen } from "@testing-library/react";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import i18n from "../src/i18n.js";
++import { ControlGroupView } from "../src/ControlGroupView.js";
++import type { Amount, ControlConfigV1, EstimateViewV1, GroupViewV1 } from "../src/controlTypes.js";
++
++const amount = (tokens: number): Amount => ({ tokens, activeMs: 1_000, attempts: 1, sessions: 1 });
++const profile = { profileId: "p1", profileHash: "b".repeat(64) };
++const config: ControlConfigV1 = {
++  schema: "orca-control-config-v1", epoch: "epoch-a", repositories: [{ repoId: "orca", displayName: "Repo X" }],
++  plans: [{ planId: "plan-demo", repoId: "orca", displayName: "Demo P" }], profiles: [], defaults: null, executionPort: "unconfigured", errorCatalog: [],
++};
++const est = (id: string, version: number, extra: Partial<EstimateViewV1>): EstimateViewV1 => ({
++  estimateId: id, estimateVersion: version, state: "failed", profile, mode: "soft", requestHash: null, outputHash: null, output: null, reasonCode: null, ...extra,
++});
++const view = (estimates: EstimateViewV1[]): GroupViewV1 => ({
++  schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 1,
++  summary: { groupId: "g", repoId: "orca", state: "draft", commandRevision: 1, projectionSeq: 1, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
++  graphVersion: 1, plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "g", successConditions: [] },
++  proposal: { state: "editable", proposalVersion: 1, planHash: "a".repeat(64), budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
++  ledger: { groupLimit: amount(100), used: amount(0), committedRemaining: amount(0), explicitUnallocatedReserve: amount(100), budgetDeficit: amount(0), usageUnknown: false, unmeteredRuns: 0 },
++  allocations: [], workItems: [], estimates, runs: [], checkpoints: [], handoffRequests: [], stop: null, recoveryBlockers: [], recentCommandIds: [],
++});
++const rows = [
++  est("e1", 1, { repairs: ["duplicate-task-dropped:a"], retriedAs: "e2", retrySkipped: "proposal-changed" }),
++  est("e2", 2, { origin: { kind: "auto-retry", of: "e1", problems: ["x"] } }),
++];
++const show = async (lang: string, estimates: EstimateViewV1[]): Promise<string> => {
++  await i18n.changeLanguage(lang);
++  const { container } = render(<ControlGroupView view={view(estimates)} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
++  fireEvent.click(screen.getByRole("tab", { name: lang === "zh" ? "技术详情" : "Technical details" }));
++  return container.textContent ?? "";
++};
++
++afterEach(async () => { cleanup(); await i18n.changeLanguage("en"); });
++
++describe("an estimate's repairs and automatic retry (spec §4.4)", () => {
++  it("shows them in English", async () => {
++    const text = await show("en", rows);
++    for (const expected of ["repaired: duplicate-task-dropped:a", "retried as v2", "retry skipped: proposal-changed", "retry of v1"]) expect(text, expected).toContain(expected);
++  });
++  it("shows them in Chinese", async () => {
++    const text = await show("zh", rows);
++    for (const expected of ["已修复", "duplicate-task-dropped:a", "已重试为第 2 版", "未重试：proposal-changed", "第 1 版的重试"]) expect(text, expected).toContain(expected);
++  });
++  it("shows nothing extra for an old row or an empty repairs list", async () => {
++    const text = await show("en", [est("e1", 1, {}), est("e2", 2, { repairs: [] })]);
++    for (const absent of ["repaired", "retry of", "retried as", "retry skipped"]) expect(text, absent).not.toContain(absent);
++  });
++});

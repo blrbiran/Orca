@@ -96,6 +96,17 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 **驱动环只在 port `configured` 时挂；未配置时行为逐字节同前。**
 **Codex 只支持 `phase-end`＋`soft`：任何地方不许宣称 strict token 封顶**；软 token 预算也不能说成严格金钱上限。Codex single-call 是 `"v1-soft"`：输出上限**事后核对、不封顶**（超界显示在记账旁），只在 soft 估算模式下被接受（会话 `a852f96a`，已在 main）。
 
+### 3.2a 会话 `4de777f4`（2026-10-17）「花了钱就一定要拿到能用的估算」一轮 —— **先读这一节**
+
+- **分支** `codex/round-20261017`（工作树 `Orca-wt/round-20261017`，**未合**）。依据：spec `docs/superpowers/specs/2026-10-17-estimate-usable-answer-design.md`（自审＋builder check＋独立审阅后修订）＋计划 `docs/superpowers/plans/2026-10-17-estimate-usable-answer.md`（7 个任务，subagent-driven，每个任务一席实施＋一席审阅，终审一席＋一波修复）。台账（全部 `Ruling:`、deferred minors、事故）：`.superpowers/sdd/2026-10-17-estimate-usable-answer/progress.md`（`git add -f` 入库）。
+- **人的原话**：「花了钱就一定要拿到能用的结果」；Orca 自己修「能接受」；修不好「希望 Orca 自动再调一次」；「这个 session 中允许改必要的判据」；「这一轮都同意付费验收」；codex 只测 `gpt-6-luna`（`gpt-6-sol` 无额度）。
+- **落了什么**：① 确定性修复（`src/control/estimateRepair.ts`：v2 换形、schema 名、planHash 照抄、assumptions 清洗、未知任务丢弃、重复任务取第一条可用的、重排；占位 rationale 名单钉死；模型文字一律过 `modelText` 去孤立代理对、按码点截 200 单元）；② 结算先修后判（`completeEstimateInStore`，记录 `repairs`）；③ 指令 v2＋按计划生成的、以 taskId 为键的响应 schema（v1 字节不变，哈希钉住）；④ **一次**自动重试（`src/control/estimateRetry.ts`：非抛出的判定、`retrySkipped` 码、新估算行＋带 `retryProblems` 的合同＋wake；不是命令台账条目）；⑤ 面板显示「已修复／第 N 版的重试／已重试为第 N 版／未重试：<码>」；⑥ 验收脚本 `--scenario estimate` 支持 `--codex`、`--instruction-version`、`--repeat`、tally，且默认把 `CCLOOP_CACHE_DIR` 放进 `--output`。同分支更早几笔：handoff、`taskResultPaired` 改写、默认 `testTimeout` 20 s、面板模型刷新改 owner-only POST＋75 s 读超时。
+- **门**（全新 clone，观测提交＝主题行 `fix(acceptance): keep ccloop's cache under --output unless the caller set one`，即终审修复**之前**一笔；`ORCA_CCLOOP_BIN`＝ccloop `02cbacc` build；负载 15→55）：ci／web build／typecheck／build／pin／scheduler 0；全量 3950：3912 过、36 跳过、2 红＝`schedulerBridge` 30 s 超时（登记形状）＋`loopPlanE2E` 在负载 42 下 `git worktree add` 失败（待单跑）。其余段与单跑结果见台账末尾。**5 s 超时形状已不再出现**（20 s 默认生效）。终审修复（主题行 `fix(control): keep model text in estimate codes canonical so the settlement never throws`）之后只跑了 9 个受影响文件 94/94＋typecheck。
+- **付费验收未跑**（下一会话做，人已授权本轮，见 §4.2 第 0 条）。没有任何付费调用发生在本轮实现里。
+- ⚠️ **已知缺口**（登记不修）：排队中的自动重试在组开跑、提案确认或被人的新估算取代之后**仍会被领取并真跑**（花钱但结果用不上；spec §4.3 保持既有排队估算行为）；空白 rationale 能过（占位名单是 spec 钉的，改要人裁）；fake codex／claude 不走 retryOutput，`readyAfterRetry` 只有 fake-omp 覆盖。
+- ⚠️ **事故（Rule 17）**：Task 7 实施席有一次 fake codex 跑在改道缓存前，往**真** `~/.cache/ccloop/agent-catalog/` 写了 8 个路径（`769de7de….json` 与 `codex-home/bf533527…/`，内含指向 `~/.codex/auth.json`／`config.toml` 的软链；凭据本身未改）。清单 `/private/tmp/acc-xpI0/ccloop-cache-new.txt`。未删，归人（§4.1）。脚本已修成默认改道。
+- **人用真面板时跑门**：真面板写 `~/.orca/control/panel` 会让测试的 Rule 17 守卫在文件级报红（会话 `4de777f4` 上一轮门约 50 个文件），不是测试写的；跑门挑人不用面板的时段。
+
 ### 3.3 会话 `a852f96a`（2026-10-15～16）「每个 agent 都能跑需求链」一轮 —— **先读这一节**
 
 - **上一轮已收口**（本会话 `ls-remote`＋`merge-base --is-ancestor` 现核）：会话 `ec9ce319` 的 Orca `codex/round-20261015b`（repin 到历史 pin `71053e3`、终审 m2／m6、spec＋计划、验收脚本 `--estimate-only`）与 ccloop `codex/attempt-commit-no-hooks` **人都已合推**。那一轮的台账 `.superpowers/sdd/2026-10-15-round-b/progress.md`（m5／m7 人裁不修的理由在那里）；它的门过了（只剩登记的负载 flake 与固定红），数在 `known-load-flakes.md` 的 `ec9ce319` 条；spec R1–R9 与零成本实测在本轮 spec 头与 §2；ccmem `core.hooksPath` 已 unset（没改成新绝对路径，免得再搬家又坏）；**现有 codex 阶段调用仍带着人的 skills／AGENTS.md**（spec §11.5，登记未修）；真 OMP estimate「任务列两遍」见下面 P2。
@@ -218,8 +229,13 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
    - 不确定归属、留给人：Codex 建的 `/Users/biran/.codex/worktrees/feedback-followup-20261011/Orca`（detached）；`ui/panel-taste` 是 UI 线的。
 2. **ccmem**：embedding 额度／换 key（`core.hooksPath` 已于会话 `ec9ce319` 经人授权 unset）。
 3. **本轮（会话 `4de777f4` 续）的分支 `codex/round-20261017`**（工作树 `Orca-wt/round-20261017`）：门过后由人 `--ff-only` 合推，再删分支与工作树。
+4. **ccloop 分支 `codex/handoff-20261017`**（工作树 `ccloop-wt/handoff-20261017`，只改 handoff）：`--ff-only` 合推，再删。
+5. **profile 切到指令 v2**（付费验收通过后）：先只读核对没有 `queued`／`running` 的估算：`sqlite3 -readonly ~/.orca/control/panel/control.sqlite "select count(*) from estimates where state in ('queued','running','start-unknown')"` 为 0；再把 `~/.orca/profile.json` 的 `estimatorPreflight.instructionVersion` 由 `"1"` 改成 `"2"`（profileHash 会变，排队中的估算会 `profile-changed`）。
+6. **删**（人做）：真 `~/.cache/ccloop/agent-catalog/` 下 Task 7 误写的 8 个路径（清单 `/private/tmp/acc-xpI0/ccloop-cache-new.txt`，`rm -rf` 软链目录只删链）；会话 `4de777f4` 的临时目录 `/private/tmp/{ccb6-qswQ,mutp-swWu,acc-*,mut-*,org6-*,org7-*,cc-r-*,cc-t-*,cc-gate3-*,cc-gate4-*}`（`ccb6-qswQ` 是 pin 的 ccloop build，付费验收要用，**验收后再删**）。
 
 ### 4.2 agent 的活
+
+0. **付费验收（spec §6，人已授权「这一轮都同意付费验收」——跨到下一会话执行，范围就是这三项，不扩大）**：用 `scripts/live-driver-acceptance.ts --scenario estimate --estimate-only --instruction-version 2`：omp 别名 `local-litellm/ep-20261012204110-nvhqw` `--repeat 5`（照 `p2-report.md` 的隔离：私有 HOME／XDG、`--omp-config-dir` 用 `~/.omp/agent/{config.yml,models.yaml}` 的副本）；codex `--codex <bin> --model gpt-6-luna` 一次（soft）；claude 1M 一次。报 tally（firstCallReady／readyAfterRepair／readyAfterRetry／failed）与工具报的 token；`~/.orca` 与 `~/.cache/ccloop` 前后 `ls -laR` 不变。之后补跑终审修复之后的全量门。
 
 0. **repin 的做法**（不变）：装了真实 `node_modules` 的工作树里 `node scripts/pin-ccloop.mjs <40 位 sha>`（它会 `npm install`，**别在软链 `node_modules` 的树或主仓跑**），scheduler 段设 `ORCA_CCLOOP_BIN` 指 ccloop build clone；**全新 clone 跑门先 `npm run build --workspace web`**。
 1. ~~**Task 15**~~ **已做**（会话 `4de777f4`：repin 提交与门见 §3.3／§3.4；下一步只剩人的 H2）。原文：`ls-remote` 确认 ccloop main 已是 H1 推的那笔（主题行见 §4.1 第 1 条）；在 `Orca-wt/every-agent-chain`（自带真实 `npm ci`）里先 `export CCLOOP_CACHE_DIR="$(mktemp -d /private/tmp/cc-XXXX)"`，再 `node scripts/pin-ccloop.mjs <ls-remote 得到的 40 位 sha>`，提交 `chore(deps): repin ccloop to …`。repin 门：typecheck／build／web build；`verify:ccloop-pin`（新 pin）；ccloop 那个 sha 的 `clone --local`＋`npm run build` 作 `ORCA_CCLOOP_BIN`，跑 `verify:scheduler` 与七个真 ccloop／特性文件（`codexRequirementOpen`、`ccloopModels`、`webCcloopSmoke`、`estimatorSoftExecution`、`agentModelsApi`、`singleCallOutputBound`、`declaredNullWindow`，用 JSON reporter 证明 passed 不是 skipped）；Task 16 门用的 ccloop 不是最终 tip（§3.3「门」）⇒ 再跑一次根级全量。过了交 §4.1 的 H2。计划 Task 15 的原文在计划里；spec §8.2：Orca 与 repin 同落。

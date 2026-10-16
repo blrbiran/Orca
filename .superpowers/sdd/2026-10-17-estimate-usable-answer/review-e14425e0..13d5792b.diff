@@ -1,0 +1,87 @@
+# Review package: e14425e0..HEAD
+
+## Commits
+13d5792b fix(acceptance): keep ccloop's cache under --output unless the caller set one
+
+## Files changed
+ scripts/live-driver-acceptance.ts | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/scripts/live-driver-acceptance.ts b/scripts/live-driver-acceptance.ts
+index 92bfb5bd..d53ef488 100644
+--- a/scripts/live-driver-acceptance.ts
++++ b/scripts/live-driver-acceptance.ts
+@@ -4,21 +4,23 @@
+ // mounts, without HTTP -- against a real ccloop build (ORCA_CCLOOP_BIN, containing C1-C4) and a selected
+ // real or fixture agent. Exit 0 only if every check in `checks` holds; summary.json in
+ // --output records each check, the ledger, and every usage number copied from ccloop's evidence.
+ //
+ // Real --codex, --claude and --omp modes may SPEND MONEY: nothing here caps dollars. The caps are tokens and time, all soft or
+ // best-effort: the contract tokenBudget (checked at phase end), the group token limit (a breach blocks new
+ // work, it does not stop a running phase), codex timeoutMs per phase, and the outer --deadline-ms watchdog,
+ // which kills every codex process group ccloop registered.
+ //
+ // Rule 17: Orca's own writes all go under --output (ORCA_CONTROL_DIR, ORCA_CORRECTIONS_DIR); ~/.orca is
+-// snapshotted and must not change. Existing real Codex/Claude modes retain their historical HOME behavior.
++// snapshotted and must not change. ccloop's cache (CCLOOP_CACHE_DIR: agent catalog, codex private home) defaults to
++// <output>/ccloop-cache in every mode when the caller has not set it. Existing real Codex/Claude modes retain their
++// historical HOME behavior.
+ // For --omp, the caller must redirect HOME/XDG and pass a private copied --omp-config-dir; this script checks
+ // the absolute path but does not create or copy the operator's OMP credentials.
+ //
+ // usage: tsx scripts/live-driver-acceptance.ts --ccloop-bin <abs dist/cli.js> --output <new dir>
+ //          (--codex <abs codex binary> --model <name> | --fake | --claude <abs claude binary> --model <name> | --fake-claude
+ //           | --omp <abs omp binary> --model <provider/model> --omp-config-dir <private absolute directory> | --fake-omp)
+ //          [--group-tokens 3000000] [--task-tokens 1000000] [--task-attempts 1] [--active-ms 600000]
+ //          [--call-usd 2] [--deadline-ms 900000] [--context-window 1000000] [--scenario single|conflict|deadline|estimate|requirement]
+ //          [--estimate-only] [--instruction-version 1|2] [--repeat 1]
+ //
+@@ -197,20 +199,24 @@ function snapshot(dir: string): string[] {
+   return rows;
+ }
+ 
+ /** Files named `name` anywhere under `dir`. */
+ function findAll(dir: string, name: string): string[] {
+   if (!existsSync(dir)) return [];
+   return readdirSync(dir, { recursive: true, encoding: "utf8" }).filter((rel) => rel.split("/").pop() === name).map((rel) => join(dir, rel)).sort();
+ }
+ 
+ const root = await realpath(await mkdir(output, { recursive: true, mode: 0o700 }).then(() => output));
++// Rule 17 (Task 7 fix round 1): ccloop's agent-catalog cache and codex private home stay under --output unless the
++// caller chose a cache dir; set before any ccloop process starts, and handed to ccloop in `env` below.
++const ccloopCacheDir = process.env.CCLOOP_CACHE_DIR || join(root, "ccloop-cache");
++process.env.CCLOOP_CACHE_DIR = ccloopCacheDir;
+ const repo = join(root, "target");
+ await mkdir(repo);
+ g(repo, "init", "-q", "-b", "main");
+ await writeFile(join(repo, "README.md"), "live acceptance target\n");
+ g(repo, "add", "README.md");
+ if (scenario === "conflict") { await writeFile(join(repo, "shared.txt"), "base\n"); g(repo, "add", "shared.txt"); }
+ g(repo, "commit", "-qm", "base");
+ 
+ const marker = join(root, "codex-marker.json");
+ const scriptPath = join(root, "codex-script.json");
+@@ -304,21 +310,21 @@ const orcaHome = join(homedir(), ".orca");
+ const orcaHomeBefore = snapshot(orcaHome);
+ // Only the entries directly under ~/.claude/projects: claude's own session files elsewhere may legitimately move.
+ const claudeProjects = join(homedir(), ".claude", "projects");
+ const claudeProjectsList = (): string[] => existsSync(claudeProjects) ? readdirSync(claudeProjects).sort() : ["<absent>"];
+ const claudeProjectsBefore = claudeProjectsList();
+ const human = () => ({ symbolic: g(repo, "symbolic-ref", "HEAD"), head: g(repo, "rev-parse", "HEAD"), index: sha256(join(repo, ".git", "index")), status: g(repo, "status", "--porcelain") });
+ const humanBefore = human();
+ 
+ const repoId = controlRepoKey("live");
+ const repos = [{ projectKey: "live", path: repo }];
+-const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CORRECTIONS_DIR: join(root, "corrections"), ORCA_CCLOOP_BIN: ccloopBin, ORCA_AGENTS_TABLE: tablePath };
++const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CORRECTIONS_DIR: join(root, "corrections"), ORCA_CCLOOP_BIN: ccloopBin, ORCA_AGENTS_TABLE: tablePath, CCLOOP_CACHE_DIR: ccloopCacheDir };
+ process.env.ORCA_CORRECTIONS_DIR = env.ORCA_CORRECTIONS_DIR;
+ const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", "soft", "--control-wake-ms", "200"], env, repos);
+ if (rejection !== null) throw new Error(rejection);
+ 
+ const raw = (runtime: ControlRuntime, commandId: string, verb: string, payload: unknown, target: unknown = { kind: "group", groupId: "g" }) => ({
+   schema: "orca-raw-command-v1", commandId, actorId: "human", verb, target, payload,
+   expectedRevision: verb === "import-plan" || verb === "set-agent-preferences" ? 0 : Number(runtime.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision),
+ }) as never;
+ const workRuns = (runtime: ControlRuntime) => runtime.store.db.prepare("SELECT id,work_item_id,body FROM runs WHERE group_id='g' ORDER BY id").all()
+   .map((row) => ({ runId: String(row.id), task: String(row.work_item_id), body: JSON.parse(String(row.body)) })).filter((row) => row.body.phase === "work");
