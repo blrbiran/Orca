@@ -10,7 +10,8 @@
 2. 是 ⇒ **单文件重跑**（`./node_modules/.bin/vitest run <file>`，重定向到文件再整份读回），**同时记 `uptime`**。
 3. **等负载降下来再判**：`driverRecovery` 那条在负载约 37 时单文件也能连红 3 次 ⇒ 一次单跑红不说明是回归，一次单跑绿也不够——
    负载降到个位数后单文件连跑三次，3/3 绿 ⇒ **不是回归**；仍红 ⇒ 当回归查。
-4. 登记**不等于**全量绿：照实报 failures／skips，写明哪几条是登记过的 flake、单跑结果和负载。不因登记就提高任何测试超时。
+4. 登记**不等于**全量绿：照实报 failures／skips，写明哪几条是登记过的 flake、单跑结果和负载。不因登记就提高**单条**测试的超时。
+   ⚠️ 例外（人 2026-10-17 授权，会话 `4de777f4`）：根 `vitest.config.ts` 的默认 `testTimeout` 由 5 s 提到 20 s——下表的 5 s 超时形状因此应当消失；之后再见到同名超时，按回归查，不再按负载豁免。`taskResultPaired`×2 的环境红同一会话已改写（任何当前 ccloop build 都按「配对」跑），不再是固定红。
 5. 新见到一条没登记的超时：完整输出、观测提交、`uptime`、单跑结果写进下表，再引用。
 6. 机械判定：缝 B 那一轮的判定器（全套 json ⇒ smoke 全过、失败 ⊆ 已知名单、0 pending）代码全文在
    `docs/superpowers/plans/2026-09-24-g1-seam-b-target-version.md` 的 Task 4 Step 1，可直接抄；ccloop 有 `scripts/check-known-reds.mjs`。**名单本身会过期，引用前确认是哪一轮测的。**
