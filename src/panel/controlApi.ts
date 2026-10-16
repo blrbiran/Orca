@@ -295,19 +295,21 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
           res.json(agentsViewSchema.parse({ schema: "orca-agents-view-v1", installations }));
         } catch (error) { sendMappedControlError(res, error); }
       }));
-      // Spec 2026-10-15 §5 (R3, R4): the installation's models for the selection editor; ccloop's file cache serves it.
-      app.get("/api/control/agents/:installation/models", asyncRoute(async (req, res) => {
+      // Spec 2026-10-15 §5 (R3, R4): the installation's models for the selection editor; ccloop's file cache serves a read.
+      // A refresh spawns the agent's CLI and rewrites ccloop's cache, so it is a POST (the session's CSRF check covers it,
+      // session 4de777f4 deferred minor) and owner-only; a GET takes no query at all.
+      const listModels = async (req: Request, res: Response, refresh: boolean): Promise<void> => {
         const installation = String(req.params.installation);
-        const refreshText = req.query.refresh;
-        if (!idSchema.safeParse(installation).success || Object.keys(req.query).some((key) => key !== "refresh") || (refreshText !== undefined && refreshText !== "1")) {
+        if (!idSchema.safeParse(installation).success || Object.keys(req.query).length > 0) {
           sendMappedControlError(res, new ControlError("query-invalid")); return;
         }
-        const refresh = refreshText === "1";
         if (refresh && !owner(res)) return;
         if (port.listModels === undefined) { sendMappedControlError(res, new ControlError("control-protocol-unavailable")); return; }
         try { res.json(agentModelsViewSchema.parse({ schema: "orca-agent-models-v1", ...(await port.listModels(installation, refresh)) })); }
         catch (error) { sendMappedControlError(res, error); }
-      }));
+      };
+      app.get("/api/control/agents/:installation/models", asyncRoute((req, res) => listModels(req, res, false)));
+      app.post("/api/control/agents/:installation/models/refresh", asyncRoute((req, res) => listModels(req, res, true)));
       app.get("/api/control/groups/:groupId/agent-preview", asyncRoute(async (req, res) => {
         const groupId = String(req.params.groupId);
         try { res.json(await readSelectionPreview(deps.store, port, operatorId, groupId)); }

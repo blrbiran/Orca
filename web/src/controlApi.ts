@@ -151,8 +151,28 @@ export const fetchUsageView = (query: string): Promise<UsageViewV1> => controlGe
 /** Agent selection spec §6.8: the installation table, as ccloop answered it through the panel. */
 export const fetchAgentsView = (): Promise<AgentsViewV1> => controlGet<AgentsViewV1>("/api/control/agents");
 /** Spec 2026-10-15 §5 (R3, R4): one installation's models, from ccloop's cache unless `refresh` (owner only) asks it to probe. */
-export const fetchAgentModels = (installation: string, refresh = false): Promise<AgentModelsViewV1> =>
-  controlGet<AgentModelsViewV1>(`/api/control/agents/${segment(installation)}/models${refresh ? "?refresh=1" : ""}`);
+/**
+ * The panel bounds its own ccloop call at 60 s (src/panel/controlAssembly.ts PORT_TIMEOUT_MS); a read with no answer
+ * past that would keep the page's in-flight mark set and skip every background re-read until an owner's Refresh
+ * (session 4de777f4 deferred minor). Past this bound the read fails and the list shows as unavailable.
+ */
+export const MODEL_READ_TIMEOUT_MS = 75_000;
+/** A read is a GET of ccloop's cached list; a refresh re-probes the agent's CLI, so it is a POST carrying the CSRF header. */
+export async function fetchAgentModels(installation: string, refresh = false): Promise<AgentModelsViewV1> {
+  const path = `/api/control/agents/${segment(installation)}/models`;
+  if (!refresh) return controlGet<AgentModelsViewV1>(path, AbortSignal.timeout(MODEL_READ_TIMEOUT_MS));
+  const refreshPath = `${path}/refresh`;
+  let res: Response;
+  try {
+    res = await fetch(refreshPath, { method: "POST", headers: { "content-type": "application/json", ...csrfHeader() }, body: "{}", signal: AbortSignal.timeout(MODEL_READ_TIMEOUT_MS) });
+  } catch (err) {
+    throw new ControlRequestError(refusalOf(`POST ${refreshPath}`, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.noAnswer")));
+  }
+  const body: unknown = await res.json().catch(() => undefined);
+  noteAnswer(res.status, body);
+  if (!res.ok) throw new ControlRequestError(refusalOf(`POST ${refreshPath}`, res.status, body, i18n.t("panelErrors.answered", { status: res.status })));
+  return body as AgentModelsViewV1;
+}
 export const AGENT_PREFERENCES_PATH = "/api/control/operator/agent-preferences";
 /** This panel operator's defaults and the revision they are at. */
 export const fetchAgentPreferences = (): Promise<AgentPreferencesViewV1> => controlGet<AgentPreferencesViewV1>(AGENT_PREFERENCES_PATH);

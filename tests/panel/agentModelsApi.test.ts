@@ -1,6 +1,7 @@
 /**
- * Spec 2026-10-15 §5 (part C, R3, R4): `GET /api/control/agents/:installation/models[?refresh=1]` over a real Panel.
- * Owner and member read; refresh=1 spawns the agent's CLI, so it is owner-only; Orca keeps no cache, so every read
+ * Spec 2026-10-15 §5 (part C, R3, R4): `GET /api/control/agents/:installation/models` and
+ * `POST …/models/refresh` over a real Panel. Owner and member read; a refresh spawns the agent's CLI, so it is an
+ * owner-only POST under the session's CSRF check (session 4de777f4: it was `GET ?refresh=1`, which no CSRF header covered); Orca keeps no cache, so every read
  * reaches the port with the refresh flag the caller sent. RF5: an installation removed from the table is a named,
  * determinate refusal the selection editor can explain.
  */
@@ -17,14 +18,20 @@ const boot = async (epoch: string, options: BootOptions) => h.boot(epoch, await 
 const errorOf = async (response: Response) => ((await json(response)) as { error: { code: string; message: string } }).error;
 
 describe("the model list route (spec 2026-10-15 §5)", () => {
-  // Spec 2026-10-15 §5 (R3, R4): owner and member read; refresh=1 is owner-only (it spawns the CLI); no Orca-side cache.
+  // Spec 2026-10-15 §5 (R3, R4): owner and member read; refresh is owner-only (it spawns the CLI); no Orca-side cache.
+  // Ruling (session 4de777f4, 2026-10-17): rewritten under the human's go-ahead to fix the deferred CSRF minor -- the
+  // refresh moved from `GET ?refresh=1` to `POST …/refresh`, so a GET with that query is now refused like any query.
   it("serves the view to a session, refuses refresh to a member, and passes refresh to the port", async () => {
     const seen: Array<[string, boolean]> = [];
     const panel = await boot("epoch-models", { listModels: async (installation, refresh) => { seen.push([installation, refresh]);
       return { installation, kind: "codex", source: "cache", observedAt: "2026-10-15T00:00:00.000Z", models: [{ model: "gpt-6-sol", contextWindowTokens: 272000, maxOutputTokens: null, singleCallExecution: "v1-soft" }] }; } });
     expect(await json(await get(panel, "/api/control/agents/codex/models"))).toEqual({ schema: "orca-agent-models-v1", installation: "codex", kind: "codex", source: "cache",
       observedAt: "2026-10-15T00:00:00.000Z", models: [{ model: "gpt-6-sol", contextWindowTokens: 272000, maxOutputTokens: null, singleCallExecution: "v1-soft" }] });
-    expect((await get(panel, "/api/control/agents/codex/models?refresh=1")).status).toBe(200);
+    expect((await panel.session.fetch("/api/control/agents/codex/models/refresh", { method: "POST" })).status).toBe(200);
+    // The refresh is a change: without the CSRF header the session's own guard refuses it before the port is asked.
+    const forged = await fetch(`${panel.url}/api/control/agents/codex/models/refresh`, { method: "POST", headers: { cookie: panel.session.cookie } });
+    expect([forged.status, (await errorOf(forged)).code]).toEqual([403, "csrf-required"]);
+    expect((await get(panel, "/api/control/agents/codex/models?refresh=1")).status).toBe(400);
     expect((await get(panel, "/api/control/agents/codex/models", "none")).status).toBe(401);
     expect((await get(panel, "/api/control/agents/codex/models?refresh=yes")).status).toBe(400);
     expect((await get(panel, "/api/control/agents/codex/models?other=1")).status).toBe(400);
@@ -33,7 +40,7 @@ describe("the model list route (spec 2026-10-15 §5)", () => {
     seedUser(join(panel.root, "accounts"), "member", "member");
     const member = await login(panel.url, "member");
     expect((await member.fetch("/api/control/agents/codex/models")).status).toBe(200);
-    const denied = await member.fetch("/api/control/agents/codex/models?refresh=1");
+    const denied = await member.fetch("/api/control/agents/codex/models/refresh", { method: "POST" });
     expect([denied.status, (await errorOf(denied)).code]).toEqual([403, "owner-required"]);
     expect(seen).toEqual([["codex", false], ["codex", true], ["codex", false]]);
   });

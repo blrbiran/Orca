@@ -7,8 +7,9 @@
  * An owner's Refresh still forces a read. Driven against a fake panel whose model answers the test releases by hand.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
+import { MODEL_READ_TIMEOUT_MS } from "../src/controlApi.js";
 import { AccountContext } from "../src/AuthGate.js";
 import type { Me } from "../src/auth.js";
 import type { AgentModelsViewV1, AgentPreferencesViewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, RecoveryViewV1 } from "../src/controlTypes.js";
@@ -35,14 +36,14 @@ const REPORT = { as_of: "2026-09-26T00:00:00.000Z", as_of_mode: "wall_clock", re
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 /** Each models request, in the order the page sent it, held until the test answers it. */
-let modelReads: Array<{ url: string; answer: (view: AgentModelsViewV1) => void }>;
+let modelReads: Array<{ url: string; method: string; csrf: string | null; answer: (view: AgentModelsViewV1) => void }>;
 let agentsReads: number;
 
 beforeEach(() => {
   modelReads = [];
   agentsReads = 0;
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
-  globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
     if (url === "/api/todo") return json({ rows: [] });
     if (url === "/api/projects") return json({ projects: [{ projectKey: "orca", controlRepoId: "orca" }] });
@@ -55,13 +56,17 @@ beforeEach(() => {
     if (url === "/api/control/agents") { agentsReads += 1; return json(agents); }
     if (url === "/api/control/operator/agent-preferences") return json(preferences);
     if (url.startsWith("/api/control/agents/codex/models")) {
-      return new Promise<Response>((resolve) => { modelReads.push({ url, answer: (view) => resolve(json(view)) }); });
+      const method = init?.method ?? "GET", csrf = new Headers(init?.headers).get("x-orca-csrf");
+      return new Promise<Response>((resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal!.reason));
+        modelReads.push({ url, method, csrf, answer: (view) => resolve(json(view)) });
+      });
     }
     return json({ error: { code: "not-found", message: url } }, 404);
   }) as typeof fetch;
 });
 
-afterEach(() => { cleanup(); window.sessionStorage.clear(); });
+afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); document.cookie = "orca_csrf=; max-age=0"; });
 
 /** The model names the codex default's datalist offers now; null when no list is on screen. */
 const listed = (): string[] | null => {
@@ -73,12 +78,15 @@ const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve,
 
 describe("App's model-list reads (spec 2026-10-15 §5, Task 14 fix round 1)", () => {
   it("keeps the newest read's list when an older read answers after it", async () => {
+    document.cookie = "orca_csrf=token-1";
     render(<AccountContext.Provider value={owner}><App /></AccountContext.Provider>);
     await waitFor(() => expect(modelReads).toHaveLength(1));
     // An owner's Refresh forces a read although the first is still in flight. (Every codex fieldset on the page -- the
     // default and the role slots that inherit it -- offers the button; they all refresh the same installation.)
     fireEvent.click((await screen.findAllByRole("button", { name: "Refresh models" }))[0]!);
-    await waitFor(() => expect(modelReads.map((read) => read.url)).toEqual(["/api/control/agents/codex/models", "/api/control/agents/codex/models?refresh=1"]));
+    // Session 4de777f4 (human go-ahead on the deferred CSRF minor): a refresh is a POST that carries the CSRF header.
+    await waitFor(() => expect(modelReads.map((read) => [read.method, read.url, read.csrf])).toEqual([
+      ["GET", "/api/control/agents/codex/models", null], ["POST", "/api/control/agents/codex/models/refresh", "token-1"]]));
     modelReads[1]!.answer(modelsView("gpt-6-new"));
     await waitFor(() => expect(listed()).toEqual(["gpt-6-new"]));
     modelReads[0]!.answer(modelsView("gpt-6-old"));
@@ -111,5 +119,24 @@ describe("App's model-list reads (spec 2026-10-15 §5, Task 14 fix round 1)", ()
     expect(screen.queryByText("Reading the model list…")).toBe(null);
     modelReads[1]!.answer(modelsView("gpt-6-sol", "gpt-6-luna"));
     await waitFor(() => expect(listed()).toEqual(["gpt-6-sol", "gpt-6-luna"]));
+  });
+
+  // Session 4de777f4 (deferred minor, human go-ahead): a read that never answers used to keep the in-flight mark set,
+  // so every background re-read was skipped until an owner's Refresh. Each read is bounded; past the bound it fails,
+  // the list shows as unavailable and the next background read goes out.
+  it("releases a read that never answers at its bound, so the next background read goes out", async () => {
+    const bounds: number[] = [];
+    const fired: AbortController[] = [];
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => { bounds.push(ms); const c = new AbortController(); fired.push(c); return c.signal; });
+    render(<App />);
+    await waitFor(() => expect(modelReads).toHaveLength(1));
+    expect(bounds).toEqual([MODEL_READ_TIMEOUT_MS]);
+    fireEvent.focus(window);
+    await settle();
+    expect(modelReads).toHaveLength(1);
+    fired[0]!.abort(new DOMException("timed out", "TimeoutError"));
+    await waitFor(() => expect(screen.getAllByText(/model list/i).length).toBeGreaterThan(0));
+    fireEvent.focus(window);
+    await waitFor(() => expect(modelReads).toHaveLength(2));
   });
 });
