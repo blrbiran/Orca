@@ -322,6 +322,7 @@ export const en = {
     banner: chainBanner,
   },
   control: {
+    outputBound: { exceeded: "This agent cannot cap a call's output; this call went {{tokens}} tokens over its declared bound." },
     preparation: { reviewTitle: "Review task plan", goal: "Goal: {{goal}}", agentReview: "Review the effective Agent and role selections below before confirming.", workspace: "Workspace: {{mode}}", integrationReview: "Review the integration target below.", tokenPolicy: "Review the optional token policy and allocations below.", sequence: "Confirm the task plan first; Start is a separate action after confirmation." },
     savedResult:{notDispatched:"Verification was not started. Ordinary retry creates a new plan and execution on the current target.",verify:"Verify saved results",cost:"Execution is skipped; validation and verification may consume model usage.",unavailable:"Saved results are unavailable for verification.",lineage:"Verification source: {{runId}} · attempt {{attempt}}"},
     unavailable: "The task control plane is not available on this panel.",

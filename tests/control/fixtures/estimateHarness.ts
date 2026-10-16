@@ -26,6 +26,8 @@ interface SingleCallOptions {
   duringCollect?: () => Promise<void>;
   /** ccloop error codes spec §4.5: the failed call's record errorCode (absent: single-call-output-invalid, as before). */
   errorCode?: string | null;
+  /** Spec 2026-10-15 §6.2: the event's per-model breakdown (absent: none, as before). */
+  byModel?: Array<{ model: string; input: number; output: number; cacheRead: number; cacheWrite: number }>;
 }
 const AMOUNT = { tokens: 100, activeMs: 100, attempts: 1, sessions: 1 };
 export const estimateOutput = (planHash: string) => ({ schema: "budget-estimate-v1", planHash,
@@ -51,7 +53,8 @@ function singleCallPort(options: SingleCallOptions, planHash: () => string) {
       const outcome: Outcome = options.stoppable && requested ? "aborted" : options.outcome ?? "complete";
       const tokens = options.tokens === undefined ? 777 : options.tokens;
       const events = [{ runId: claim.runId, generation: claim.generation, eventSeq: 1, bucket: "work" as const,
-        cumulative: tokens === null ? null : { tokens, activeMs: 5, attempts: 1, sessions: 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`usage ${claim.runId}`)) }];
+        cumulative: tokens === null ? null : { tokens, activeMs: 5, attempts: 1, sessions: 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`usage ${claim.runId}`)),
+        ...(options.byModel === undefined ? {} : { byModel: options.byModel }) }];
       if (options.stoppable && !requested) return { events, candidate: null, terminal: null };
       if (!hookRan && options.duringCollect) { hookRan = true; await options.duringCollect(); }
       const outputRef = outcome === "complete" ? put(`output-${claim.runId}`, canonicalBytes((options.output ?? estimateOutput)(planHash()))) : null;

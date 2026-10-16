@@ -1309,6 +1309,10 @@ export const runViewSchema = z
     startedAt: safeInteger.nullable().optional(),
     endedAt: safeInteger.nullable().optional(),
     lastActivityAt: safeInteger.nullable().optional(),
+    // Spec 2026-10-15 §6.2 (R2): a single call's (estimate or requirement) output bound and, when the observed output (the sum
+    // of its usage event's byModel[].output) went over it, by how much. Optional on the wire; read-time only.
+    outputBound: positiveSafeInteger.optional(),
+    outputBoundExceededBy: positiveSafeInteger.optional(),
     // Feedback #59: the run's creation position in its group (1-based, rowid order); `runs` itself stays in id order.
     // Optional on the wire so older fixtures still parse; the server always gives it.
     createdOrdinal: positiveSafeInteger.optional(),

@@ -263,6 +263,9 @@ export type RunViewV1 = {
   lastActivityAt?: number | null;
   /** Feedback #59: creation position in the group (1-based); `runs` stays in id order. Optional so literal fixtures need no edit; the server always sends it. */
   createdOrdinal?: number;
+  /** Spec 2026-10-15 §6.2: a single call's output bound and, when its observed output went over it, by how much. Read-time only. */
+  outputBound?: number;
+  outputBoundExceededBy?: number;
 };
 export type BudgetEstimateV1 = {
   schema: "budget-estimate-v1";

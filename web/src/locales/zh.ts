@@ -208,6 +208,7 @@ export const zh: Translation<typeof en> = {
     banner: { done: "链已完成", blocked: "链在等你", limit: "链因触达上限而停止", anomaly: "链因异常而停止" },
   },
   control: {
+    outputBound: { exceeded: "该 agent 无法限制单次调用的输出；这次调用比声明的上限多用了 {{tokens}} 个 token。" },
     preparation: { reviewTitle: "检查任务方案", goal: "目标：{{goal}}", agentReview: "确认前请检查下方实际生效的 Agent 和角色选择。", workspace: "工作区：{{mode}}", integrationReview: "请检查下方的集成目标。", tokenPolicy: "请检查下方可选的 token 策略和分配。", sequence: "先确认任务方案；开始执行是确认后的单独操作。" },
     savedResult:{notDispatched:"验证尚未启动。普通重试会从当前目标创建新的计划与执行。",verify:"验证已保存成果",cost:"跳过执行；校验和验证可能消耗模型用量。",unavailable:"已保存成果暂不可验证。",lineage:"验证来源：{{runId}} · 尝试 {{attempt}}"},
     unavailable: "这个面板上没有任务控制面。",

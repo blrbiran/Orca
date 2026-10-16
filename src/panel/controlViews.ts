@@ -28,6 +28,7 @@ import { decodeEstimateRecord, estimateIsStale, readArchivedPlan, readBudgetProp
 import { readCanonicalRecord } from "../control/snapshot.js";
 import { hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
 import { renderRequirementDocument } from "../control/requirementDocument.js";
+import { readEstimateContract } from "../control/estimator.js";
 import { effectivePlanTask } from "../control/taskAmendments.js";
 import type { ControlStore } from "../control/store.js";
 import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, runProgressSchema, safeInteger, type RunProgress } from "../control/schema.js";
@@ -826,6 +827,20 @@ function continuableRun(store: ControlStore, run: z.infer<typeof persistedRunSch
   return row !== undefined && (parseJson(row.body, `checkpoint-invalid:${run.checkpointId}`) as { result?: unknown }).result === "partial";
 }
 
+/** Spec 2026-10-15 §6.2 and plan issue 11: every estimate or requirement single call; computed from the stored usage event. */
+function outputBoundView(store: ControlStore, groupId: string, run: { runId: string; phase: string; estimateId: string | null }): { outputBound?: number; outputBoundExceededBy?: number } {
+  if (run.phase !== "estimate" && run.phase !== "single-call") return {};
+  let bound: number;
+  try {
+    bound = run.phase === "estimate" ? readEstimateContract(store, groupId, run.estimateId!).maxOutputTokens : readRequirementGroup(store, groupId).requirement.maxOutputTokens;
+  } catch { return {}; }
+  const event = store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq DESC").all(run.runId)
+    .map((row) => JSON.parse(String(row.body)) as { bucket: string; byModel?: Array<{ output: number }> | null })
+    .find((candidate) => candidate.bucket === "work" && Array.isArray(candidate.byModel));
+  const output = event?.byModel?.reduce((sum, entry) => sum + entry.output, 0) ?? 0;
+  return output > bound ? { outputBound: bound, outputBoundExceededBy: output - bound } : { outputBound: bound };
+}
+
 function runViews(store: ControlStore, groupId: string, graphVersion: number, proposal: ReturnType<typeof readBudgetProposal>, snapshot: GroupReadSnapshot): RunViewV1[] {
   const activity = readLatestRunActivityByGroup(store, groupId);
   // Feedback #59: the set stays in id order (the wire's canonical order); each run also carries its creation position,
@@ -921,6 +936,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       endedAt: run.endedAt ?? null,
       lastActivityAt: activity.get(runId)?.at ?? null,
       createdOrdinal: createdOrdinal.get(runId)!,
+      ...outputBoundView(store, groupId, run),
     };
   });
 }

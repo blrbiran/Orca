@@ -19,6 +19,7 @@ import { GitScheme } from "./GitScheme.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import { RunReason } from "./RunReason.js";
+import { RunOutputBound } from "./RunOutputBound.js";
 import { explainEstimateReason } from "./ccloopCodes.js";
 import { archiveOpen, hasFailureOutcome, retryRunOpen, runNumberOf } from "./runFacts.js";
 import { UsageSettlement } from "./UsageSettlement.js";
@@ -400,7 +401,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <h3>{t("detail.problem")}</h3>
       {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
       {view.runs.filter(run => hasFailureOutcome(run) || run.state === "blocked" || run.unknownUsageSettlement !== undefined || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
-        <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
+        <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /> <RunOutputBound run={run} /></p>
         {remedies(run, props.active !== false && region === "problem")}
         <button type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>
       </div>)}
@@ -436,6 +437,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               <td className="run-state">
                 <div>{enumText("runState", run.state)}</div>
                 <div><RunReason run={run} /></div>
+                <RunOutputBound run={run} />
                 <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
                 {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}
                 <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}{runNumberOf(view, run, orderedRuns.slice(0, index + 1)) > 0 ? t("control.group.taskRun", { n: runNumberOf(view, run, orderedRuns.slice(0, index + 1)) }) : ""}</div>
