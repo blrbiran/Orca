@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { canonicalBytes } from "../../src/control/canonicalJson.js";
 import { classifyEstimateOutput } from "../../src/control/estimator.js";
 import { PLACEHOLDER_RATIONALES, capProblems, problemsFromRefusal, repairEstimateOutput } from "../../src/control/estimateRepair.js";
 
@@ -130,7 +131,43 @@ describe("problem caps and pins", () => {
     expect(problemsFromRefusal([{ path: ["tasks", 0, "work"], message: "bad" }], true)).toEqual(["field-invalid:tasks.0.work:bad", "output-not-canonical"]);
     expect(problemsFromRefusal([], true)).toEqual(["output-not-canonical"]);
   });
+  it("capProblems never splits a surrogate pair: it cuts at a code point and keeps at most 200 UTF-16 units", () => {
+    // 199 units then an emoji (2 units): a cut at unit 200 would leave a lone high surrogate.
+    const [cut] = capProblems([`${"y".repeat(199)}\u{1F600}`]);
+    expect(cut).toBe("y".repeat(199));
+    expect(capProblems([`${"y".repeat(198)}\u{1F600}z`])).toEqual([`${"y".repeat(198)}\u{1F600}`]);
+    expect(() => canonicalBytes(capProblems([`${"y".repeat(199)}\u{1F600}`, "lone \ud800 and \udc00"]))).not.toThrow();
+    expect(capProblems(["lone \ud800 and \udc00"])).toEqual(["lone \ufffd and \ufffd"]);
+  });
   it("PLACEHOLDER_RATIONALES is the exact list", () => {
     expect(PLACEHOLDER_RATIONALES).toEqual(["placeholder", "todo", "tbd", "x", "n/a", "...", "-"]);
+  });
+});
+
+// Final-review I1: codes carry model-controlled text (task ids, extra keys). Canonical JSON refuses a lone surrogate, and
+// the settlement writes these codes through canonicalBytes: a code it refuses would throw, roll the settlement back and
+// leave the estimate `running` forever. So every model-derived segment is made well-formed and capped.
+describe("model-controlled text in repair and problem codes stays canonical", () => {
+  it("an unknown task id that is a lone surrogate is reported as U+FFFD", () => {
+    const raw = { ...answer(["a"]), tasks: [entry("a"), entry("\ud800")] };
+    const r = repairEstimateOutput(raw, ctx(["a"]));
+    expect(r).toEqual({ ok: true, output: answer(["a"]), repairs: ["unknown-task-dropped:\ufffd"] });
+    expect(() => canonicalBytes(r)).not.toThrow();
+  });
+  it("an unknown task id is cut to 200 UTF-16 units at a code point", () => {
+    const raw = { ...answer(["a"]), tasks: [entry("a"), entry(`${"q".repeat(199)}\u{1F600}${"q".repeat(50)}`)] };
+    const r = repairEstimateOutput(raw, ctx(["a"]));
+    expect(r.ok && r.repairs).toEqual([`unknown-task-dropped:${"q".repeat(199)}`]);
+  });
+  it("a top-level key of 185 x and an emoji: the capped problem does not end in half the emoji", () => {
+    const key = `${"x".repeat(185)}\u{1F600}`;
+    const r = repairEstimateOutput({ ...answer(["a"]), [key]: 1 }, ctx(["a"]));
+    expect(r).toEqual({ ok: false, problems: [`field-invalid:${"x".repeat(185)}`] });
+    expect(() => canonicalBytes(r)).not.toThrow();
+  });
+  it("a lone-surrogate key, top-level or in a task entry, is reported as U+FFFD", () => {
+    const r = repairEstimateOutput({ ...answer(["a"]), tasks: [entry("a", { "\udc00": 1 })], "\ud800": 1 }, ctx(["a"]));
+    expect(r).toEqual({ ok: false, problems: ["field-invalid:\ufffd", "task-invalid:a:\ufffd"] });
+    expect(() => canonicalBytes(r)).not.toThrow();
   });
 });

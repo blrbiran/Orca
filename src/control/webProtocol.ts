@@ -419,7 +419,7 @@ export const estimateExecutionContractSchema = z
     framingTokenOverhead: safeInteger,
     maxOutputTokens: positiveSafeInteger,
     // Estimate-usable-answer spec §4.3: present only on an automatic retry's contract.
-    retryProblems: z.array(nonemptyString).min(1).max(20).optional(),
+    retryProblems: z.array(nonemptyString.max(200)).min(1).max(20).optional(),
   })
   .strict();
 

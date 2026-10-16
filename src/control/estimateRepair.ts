@@ -8,14 +8,32 @@ export type RepairResult = { ok: true; output: unknown; repairs: string[] } | { 
 
 const MAX_PROBLEMS = 20, MAX_PROBLEM_CHARS = 200;
 
-/** First 20 problems, each cut to 200 characters. */
-export function capProblems(problems: readonly string[]): string[] {
-  return problems.slice(0, MAX_PROBLEMS).map(problem => problem.slice(0, MAX_PROBLEM_CHARS));
+/**
+ * Model-derived text as it may enter a repair or problem code (final-review I1). Canonical JSON refuses a lone
+ * surrogate and the settlement writes these codes through canonicalBytes, so a lone surrogate becomes U+FFFD; the text
+ * is cut at a code point (never inside a surrogate pair) to at most `max` UTF-16 units, the unit zod's `.max` counts.
+ */
+export function modelText(value: string, max = MAX_PROBLEM_CHARS): string {
+  let out = "";
+  for (const point of Array.from(value)) {
+    const safe = point.length === 1 && point >= "\ud800" && point <= "\udfff" ? "\ufffd" : point;
+    if (out.length + safe.length > max) break;
+    out += safe;
+  }
+  return out;
 }
+
+/** First 20 problems, each made well-formed and cut to 200 characters at a code point. */
+export function capProblems(problems: readonly string[]): string[] {
+  return problems.slice(0, MAX_PROBLEMS).map(problem => modelText(problem));
+}
+
+/** A zod issue path; its keys can be the model's own. */
+const pathText = (path: readonly (string | number)[]) => path.map(segment => modelText(String(segment))).join(".");
 
 /** The classifier's refusal as problem codes; never empty. */
 export function problemsFromRefusal(issues: readonly { path: (string | number)[]; message: string }[], notCanonical: boolean): string[] {
-  const problems = issues.map(issue => `field-invalid:${issue.path.join(".")}:${issue.message}`);
+  const problems = issues.map(issue => `field-invalid:${pathText(issue.path)}:${modelText(issue.message)}`);
   if (notCanonical) problems.push("output-not-canonical");
   return capProblems(problems);
 }
@@ -27,7 +45,7 @@ const isPlaceholder = (entry: Obj) => typeof entry.rationale === "string" && PLA
 
 /** Zod issue paths as problem suffixes; an unrecognized-keys issue (empty path) is named by its keys. */
 function issuePaths(issues: readonly { path: (string | number)[]; code: string; keys?: string[] }[]): string[] {
-  return issues.flatMap(issue => issue.code === "unrecognized_keys" && issue.keys ? issue.keys.map(key => [...issue.path, key].join(".")) : [issue.path.join(".")]);
+  return issues.flatMap(issue => issue.code === "unrecognized_keys" && issue.keys ? issue.keys.map(key => pathText([...issue.path, key])) : [pathText(issue.path)]);
 }
 
 /** Spec §4.2 steps 1-7, in order. Pure, collects every problem, never throws; the classifier still judges the output. */
@@ -88,7 +106,8 @@ function repair(raw: unknown, ctx: RepairContext): RepairResult {
     });
     for (const id of ctx.taskIds) if (normalizedIds.has(id)) repairs.push(`assumptions-normalized:${id}`);
     // 5. Unknown tasks.
-    const unknown = [...new Set(normalized.filter(e => !planIds.has(e.taskId as string)).map(e => e.taskId as string))].sort();
+    // The ids are the model's own: made well-formed and capped before they enter a code (two may then coincide).
+    const unknown = [...new Set([...new Set(normalized.filter(e => !planIds.has(e.taskId as string)).map(e => e.taskId as string))].sort().map(id => modelText(id)))];
     for (const id of unknown) repairs.push(`unknown-task-dropped:${id}`);
     const known = normalized.filter(e => planIds.has(e.taskId as string));
     // 6. Duplicates: the first usable entry wins.

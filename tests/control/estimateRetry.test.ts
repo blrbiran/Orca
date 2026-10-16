@@ -203,6 +203,31 @@ describe("the automatic estimate retry (estimate usable-answer spec §4.3)", () 
     } finally { await x.h.dispose(); }
   });
 
+  // Final-review I1: model-controlled text reaches the codes the settlement writes through canonicalBytes. A lone
+  // surrogate there used to throw inside the settlement transaction, so the estimate stayed `running` and the driver
+  // re-drove (and re-paid) it every round, blocking start. These answers must settle like any other.
+  it("settles an answer with a lone-surrogate unknown task id ready, the dropped id reported as U+FFFD", async () => {
+    // Settled directly (as Ce does): the harness's fake ccloop writes its answer canonically, which a lone surrogate is not.
+    const x = await estimateHarness(); try {
+      const good = estimateOutput(readBudgetProposal(x.h.store, "g").planHash);
+      settleDirect(x, { ...good, tasks: [good.tasks[0], { ...good.tasks[0], taskId: "\ud800" }] });
+      expect(x.estimate()).toMatchObject({ state: "ready", reasonCode: null, repairs: ["unknown-task-dropped:\ufffd"] });
+      expect(x.body().state).toBe("settled-restartable");
+    } finally { await x.h.dispose(); }
+  });
+
+  it("settles an answer whose extra key would be capped mid-emoji failed, and queues the retry with the capped problem", async () => {
+    const key = `${"x".repeat(185)}\u{1F600}`;
+    const x = await harness([planHash => ({ ...estimateOutput(planHash), [key]: 1 })]); try {
+      const failed = await settle(x);
+      const retryId = expectedRetryId(x.h.estimateId);
+      expect(failed).toMatchObject({ state: "failed", reasonCode: "estimate-output-invalid", retriedAs: retryId });
+      const problem = `field-invalid:${"x".repeat(185)}`;
+      expect(estimates(x)[1]).toMatchObject({ estimateId: retryId, state: "queued", origin: { kind: "auto-retry", problems: [problem] } });
+      expect(readEstimateContract(x.h.store, "g", retryId).retryProblems).toEqual([problem]);
+    } finally { await x.h.dispose(); }
+  });
+
   it("writes exactly one retry when the settlement is replayed (the receipt returns early), under the id derived from the failed estimate", async () => {
     const x = await estimateHarness(); try {
       const planHash = readBudgetProposal(x.h.store, "g").planHash;
@@ -377,10 +402,23 @@ describe("decideEstimateRetry is total and ordered (spec §4.3)", () => {
     } finally { await x.h.dispose(); }
   });
 
+  it("a request whose plan snapshot cannot be read skips input-too-large instead of throwing (final-review M4)", async () => {
+    const { x, input } = await base(); try {
+      for (const planSnapshotCanonicalJson of ["{", "{}", "null"]) {
+        const request = { ...input.estimate.request!, planSnapshotCanonicalJson };
+        expect(retryPromptFits(input.contract, request, ["task-missing:a"])).toBe(false);
+        expect(decideEstimateRetry({ ...input, estimate: { ...input.estimate, request } })).toEqual({ kind: "skip", code: "input-too-large" });
+      }
+    } finally { await x.h.dispose(); }
+  });
+
   it("caps the problems a retry carries and still sizes the prompt with them", async () => {
     const { x, input } = await base(); try {
       const problems = Array.from({ length: 20 }, (_, i) => `task-missing:${String(i).padStart(3, "0")}:${"x".repeat(180)}`);
       expect(decideEstimateRetry({ ...input, failure: { reasonCode: "estimate-output-invalid", problems } })).toEqual({ kind: "retry", problems });
+      // Final-review M2: the contract caps each entry as the record's origin does (200), so the two cannot disagree.
+      expect(estimateExecutionContractSchema.safeParse({ ...input.contract, retryProblems: ["y".repeat(200)] }).success).toBe(true);
+      expect(estimateExecutionContractSchema.safeParse({ ...input.contract, retryProblems: ["y".repeat(201)] }).success).toBe(false);
       const tight = { ...input.contract, estimatorCapabilities: { ...input.contract.estimatorCapabilities, contextWindowTokens: 1 } };
       expect(decideEstimateRetry({ ...input, contract: tight })).toEqual({ kind: "skip", code: "input-too-large" });
     } finally { await x.h.dispose(); }

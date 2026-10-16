@@ -72,7 +72,11 @@ export function decideEstimateRetry(input: RetryInput): RetryDecision {
  */
 export function retryPromptFits(contract: EstimateExecutionContractV1, request: BudgetEstimateRequestV1, problems: readonly string[]): boolean {
   if (contract.tokenizer.kind !== "utf8-upper-bound") return false;
-  const prompt = buildEstimatePrompt(contract.instructionVersion, canonicalBytes(request).toString("utf8"), { taskIds: estimateTaskIds(request), retryProblems: problems });
+  // Final-review M4: estimateTaskIds parses the request's plan snapshot; a snapshot it cannot read must not throw inside
+  // the settlement's decision, so it counts as a prompt that does not fit (`input-too-large`).
+  let taskIds: string[];
+  try { taskIds = estimateTaskIds(request); } catch { return false; }
+  const prompt = buildEstimatePrompt(contract.instructionVersion, canonicalBytes(request).toString("utf8"), { taskIds, retryProblems: problems });
   const { numerator, denominator } = contract.tokenizer;
   const serialized = (BigInt(Buffer.byteLength(prompt, "utf8")) * BigInt(numerator) + BigInt(denominator) - 1n) / BigInt(denominator);
   const required = serialized + BigInt(contract.framingTokenOverhead) + BigInt(contract.maxOutputTokens);
