@@ -16,6 +16,11 @@ import { ccloopWorlds, g, noBlocked, raw, realBinary, startGroup, until, workRun
  * estimator whose estimate is blocked-capability because contextWindowTokens is null, Web dispatch runs
  * from confirm to settle and lands on orca/<groupId>. Not "Web dispatch works".
  *
+ * *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) *** "blocked-capability because
+ * contextWindowTokens is null" no longer names the cause: under spec 2026-10-15 §6.3 (R7) a declared null takes ccloop's
+ * observed window. Measured with ccloop codex/every-agent-chain efcd5b3 built: the import-time estimate in these worlds is
+ * blocked-capability with reasonCode `agent-selection-rejected:estimator:agent-unselected`. Text above kept verbatim.
+ *
  * The world, its boot/die/teardown and the command helpers live in fixtures/ccloopWorld.ts (moved there
  * unchanged for handoffE2E.test.ts, handoff delivery preflight I11).
  */

@@ -153,9 +153,11 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
     // shape to the v2 eight-field shape ccloop main now answers.
     // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): capabilities protocol 3
     // answers the same view inside the codex selection's resolution, untagged.
+    // Rewritten for the every-agent requirement chain (spec 2026-10-15 §6.1; human named E6 on 2026-10-15): ccloop now reads codex's window from its catalog (the build's fake codex answers 272000 for gpt-6-sol).
+    // Ruling: human named E6 in Orca session a852f96a, 2026-10-15
     expect(capabilities).toEqual({
       usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable",
-      handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null,
+      handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: 272000, requestBoundProof: null,
     });
 
     // Human authorization 2026-09-24, G1 seam A Task 5: the adapter's own probe answer feeds the
@@ -174,6 +176,16 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
       expect((await deliverScheduledStart(soft.deps, "g")).kind).toBe("claimed");
       expect(soft.f.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g' AND active=1").get()!.n).toBe(1);
     } finally { await soft.f.dispose(); }
+  });
+
+  // Every-agent requirement chain (spec 2026-10-15 §6.2, controller ruling P17 moving the enum into Task 10): the real
+  // ccloop build answers codex's single call as "v1-soft", and Orca's resolution schema accepts it rather than refusing
+  // the whole resolution as control-response-invalid. Additive: no existing criterion changed.
+  it.skipIf(!realBinary)("accepts the real codex resolution's singleCallExecution v1-soft through Orca's schema", async () => {
+    const root = await tempRoot("orca-web-real-v1-soft-");
+    const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), agentsTablePath: await realTable(root), timeoutMs: 15_000 });
+    const resolution = await port.resolveAgent({ agent: "codex" });
+    expect([resolution.selection.agent, resolution.singleCallExecution]).toEqual(["codex", "v1-soft"]);
   });
 
   // Controller ruling (G1 seam A Task 5 fix round 1, 2026-09-24; only-add, no existing criterion

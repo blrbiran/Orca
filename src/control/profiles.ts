@@ -116,10 +116,12 @@ export function intersectCapabilities(declared: DeclaredCapabilities, observed: 
     contextObservation: minimum(declared.contextObservation, observed.contextObservation, usageOrder),
     handoffControl: minimum(declared.handoffControl, observed.handoffControl, handoffOrder),
     handoffExecution: observed.handoffExecution === declared.handoffExecution ? declared.handoffExecution : null,
+    // Spec 2026-10-15 §6.3, human ruling R7: a declared null is "not declared", so the observed window is taken; an observed
+    // null stays null (Orca never invents a window ccloop did not state); two numbers take the smaller.
     contextWindowTokens:
-      declared.contextWindowTokens !== null && observed.contextWindowTokens !== null
-        ? Math.min(declared.contextWindowTokens, observed.contextWindowTokens)
-        : null,
+      observed.contextWindowTokens === null ? null
+        : declared.contextWindowTokens === null ? observed.contextWindowTokens
+          : Math.min(declared.contextWindowTokens, observed.contextWindowTokens),
     requestBoundProof: proofMatches(declared.requestBoundProof, observed.requestBoundProof)
       ? declared.requestBoundProof
       : null,

@@ -10,6 +10,9 @@ import { webFixture } from "./fixtures/web.js";
 // through the service, as the panel and the driver reach them, and the estimator's context window stays a known number
 // throughout -- so `contextWindowTokens: null`, which blocks an estimate on its own, is not what these observe.
 // Additive only: no existing criterion changed.
+// *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) ***: under spec 2026-10-15 §6.3
+// (R7) a DECLARED `contextWindowTokens: null` no longer blocks an estimate on its own (the observed window is taken); an
+// OBSERVED null still does (tests/control/declaredNullWindow.test.ts). Text above kept verbatim.
 
 /** Answer every later probe as ccloop answers for an agent without single calls: the same view, `singleCallExecution: null`. */
 function answerNull(h: Awaited<ReturnType<typeof webFixture>>): void {
