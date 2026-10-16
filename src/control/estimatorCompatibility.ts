@@ -13,7 +13,9 @@ export function estimatorCompatibility(
 ): { compatible: boolean; reasonCodes: EstimatorCompatibilityReason[] } {
   const reasons: EstimatorCompatibilityReason[] = [];
   if (resolution.probeFailureCode !== null || resolution.resolution === null) reasons.push("selection-unavailable");
-  if (resolution.resolution?.singleCallExecution !== "v1") reasons.push("single-call-unavailable");
+  // Spec 2026-10-15 §6.2 (R2): strict requires "v1"; soft also accepts "v1-soft", whose output bound is checked after the fact.
+  const execution = resolution.resolution?.singleCallExecution;
+  if (!(execution === "v1" || (mode === "soft" && execution === "v1-soft"))) reasons.push("single-call-unavailable");
   const preflight = resolution.profile.snapshot.profile.estimatorPreflight;
   if (!preflight) reasons.push("preflight-unavailable");
   else if (!Object.hasOwn(ESTIMATE_INSTRUCTIONS, preflight.instructionVersion)) reasons.push("instruction-unknown");

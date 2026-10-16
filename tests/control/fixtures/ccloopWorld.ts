@@ -81,7 +81,8 @@ export interface SingleCallScriptEntry { output: unknown; delayMs?: { "single-ca
 const optionalPolicyWorlds=new WeakSet<ControlRuntime>();
 export interface WorldOptions { tokenPolicy?:"optional-v1"; claudeScript?: Record<string, ScriptEntry | SingleCallScriptEntry>; /** Single-call estimate: the profile's declared context window (null otherwise, so the estimate stays blocked-capability). */ declaredContextWindowTokens?: number;
   /** Syncskill integration plan Task 6: more variables for the assembled runtime's env (ORCA_SYNCSKILL_BIN and what the fake syncskill reads). */
-  env?: NodeJS.ProcessEnv }
+  env?: NodeJS.ProcessEnv;
+  /** Spec 2026-10-15 criterion 4: the panel's estimate mode (soft when absent). */ estimateMode?: "strict" | "soft" }
 // *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) *** on `declaredContextWindowTokens`
 // above ("null otherwise, so the estimate stays blocked-capability"): measured on 06f15c53 (ccloop codex/every-agent-chain
 // efcd5b3 built), a codex world's import-time estimate is blocked first by
@@ -164,7 +165,7 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     const repoId = controlRepoKey("e2e");
     const repos = [{ projectKey: "e2e", path: repo }];
     const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CCLOOP_BIN: realBinary!, ORCA_AGENTS_TABLE: table, ...worldOptions.env };
-    const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", "soft", "--control-wake-ms", "50"], env, repos);
+    const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", worldOptions.estimateMode ?? "soft", "--control-wake-ms", "50"], env, repos);
     if (rejection !== null) throw new Error(rejection);
     let epoch = 0;
     // Every runtime this world booted and has not closed; `teardown` shuts each down and closes it, so a
