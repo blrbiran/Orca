@@ -1,0 +1,47 @@
+{
+  "v": 1,
+  "runId": "orca-dev-4de777f4",
+  "runtime": "claude-code",
+  "sessionRef": "4de777f4-471a-472c-aaa1-bdea9f0d9876",
+  "writtenAt": "2026-10-16T17:13:13.369Z",
+  "head": "c56b17e930b4c77f2f2a9a4ef66616904fd89762",
+  "level": {
+    "kind": "reading",
+    "level": 334286,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Execute plan docs/superpowers/plans/2026-10-17-estimate-usable-answer.md (7 tasks) subagent-driven in Orca-wt/round-20261017; ledger .superpowers/sdd/2026-10-17-estimate-usable-answer/progress.md",
+    "Final gate in a fresh clone (ORCA_CCLOOP_BIN=/private/tmp/ccb6-qswQ/ccloop/dist/cli.js, fake agents table for verify:control) when the live panel is idle",
+    "Paid acceptance (human approved this round): omp alias x5+, codex gpt-6-luna x1, claude 1M x1 under instruction v2"
+  ],
+  "open": [
+    "Gate3 (pre-estimate work): 3851/3889 pass, 0 timeouts; 2 real reds fixed in 336ef834; ~50 file-level Rule-17 reds from the live panel writing ~/.orca/control/panel during the gate"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "ff-merge+push Orca codex/round-20261017 and ccloop codex/handoff-20261017; then delete both branches/worktrees"
+    },
+    {
+      "kind": "irreversible",
+      "what": "delete /private/tmp/mutp-swWu, /private/tmp/ccb6-qswQ, /private/tmp/cc-r-*, /private/tmp/org6-*, /private/tmp/cc-gate3-*"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "switch ~/.orca/profile.json estimatorPreflight.instructionVersion to \"2\" after the round, when no estimate is queued/running"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca-wt/round-20261017 log --oneline main..HEAD",
+      "exitCode": 0,
+      "commit": "c56b17e930b4c77f2f2a9a4ef66616904fd89762",
+      "observedAt": "2026-10-16T17:13:13.312Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-4de777f4-VMmB73/1.txt"
+    }
+  ]
+}
