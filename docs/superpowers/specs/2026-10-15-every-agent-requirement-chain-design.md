@@ -275,3 +275,135 @@ comment at `claude.ts:67` is kept and an ERRATUM line appended (ccloop Rule 16) 
 - The codex multi-agent instructions (3.4 KB) survive every switch tried in §2.5; they stay in the framing overhead.
 - The codex phase adapter's exposure to the user's skills and AGENTS.md (§2.5) is registered, not fixed here.
 - Codex subagents, OMP skills real-provider acceptance, and everything else in Orca handoff §4.2 not named here.
+
+## 11. Corrections and registrations after implementation (session a852f96a, 2026-10-16)
+
+Appended by the final-fix agent of Orca session `a852f96a` (Claude Opus 5.5), 2026-10-16 Asia/Shanghai, on Orca branch
+`codex/every-agent-chain` (after `docs(readme): codex runs clarify, split and estimate as a soft single call`) with
+ccloop branch `codex/every-agent-chain` at `fix(agents): codex single call also turns off the other on-by-default tool
+flags and notify`. The text above is unchanged; where this section differs from it, this section wins. Evidence: the
+SDD ledger `.superpowers/sdd/2026-10-15-every-agent-requirement-chain/progress.md` (cited as "ledger") and the ccloop
+commit subjects named per item. Values are tool-reported or measured; nothing here is estimated.
+
+### 11.1 Rule 17 registration: the codex private homes (supersedes §6.1 "under the run directory")
+
+§6.1 put the single call's private `HOME` and `CODEX_HOME` under the run directory. The human asked during Task 8
+whether the directory has to be rebuilt every time and could be reused; the controller ruled to reuse it (ledger,
+"Ruling (Task 8, answering the human)"), because a fresh `CODEX_HOME` makes codex write about 2.4 MB of its own state
+and fetch the remote model list on every call (Task 0, ledger). This is a second out-of-repo write next to §4.2's
+catalog files:
+
+- **Path**: `<catalog cache dir>/codex-home/<sha256 of realpath(codex executable) NUL source CODEX_HOME>/{home,codex-home}`,
+  where the catalog cache dir is §4.2's (`$CCLOOP_CACHE_DIR`, else `$XDG_CACHE_HOME/ccloop/agent-catalog/`, else
+  `<HOME>/.cache/ccloop/agent-catalog/`). One pair per installation key, reused by every later probe and call.
+- **Writers** (ccloop `docs(agents): register both writers of the codex private homes (catalog-miss probe and single
+  call)`): (1) any ccloop process whose codex catalog read misses the cache (`control capabilities`, `control models`,
+  `ccloop agents models`, codex resolution for loop phases and accept), through the isolated `codex mcp list --json`
+  probe of §11.2 (ccloop `fix(agents): list codex MCP servers under the single call's own isolation; a failed list
+  keeps the catalog`); agents updates read the catalog for omp only and never write here; (2) the control worker on
+  every codex single call.
+- **What ccloop writes**: the missing directories, mode 0700 set explicitly (an existing directory's mode is left
+  alone); each must then be a real directory owned by this user, not a symlink, or the call is refused unspawned as
+  `codex-single-call-home-invalid`. In `codex-home`, two symlinks, `auth.json` and `config.toml`, to the installation's
+  effective CODEX_HOME files (its `configDir`, else an inherited absolute `CODEX_HOME`, else `<HOME>/.codex`), never
+  copies, re-checked on every call. A regular file found where a link belongs is moved aside to
+  `<name>.displaced-<epoch ms>` (mode kept) and logged, never deleted (ccloop `fix(runtime): codex single-call home
+  refuses symlinked dirs, never deletes a regular credential`).
+- **What codex writes** (its own modes), measured in Task 0 and P1c: `models_cache.json` (about 400 KB), sqlite
+  state and logs, `installation_id`, `cache/`, `skills/.system`, `shell_snapshots/`, `tmp/`, `mcp-oauth-locks/`.
+  `home` stays empty unless codex writes there.
+- **Residue**: the directories are never removed. On a failure: at most one `.<uuid>.link` temp link, any displaced
+  file, and whatever codex wrote before it failed.
+- **No cache dir** (no `CCLOOP_CACHE_DIR`, `XDG_CACHE_HOME` or absolute `HOME`): the single call makes a pair per
+  call under its run directory (`<runDir>/codex/1/single-call/home-*`); the catalog probe makes one under
+  `mkdtemp(<tmpdir>/ccloop-codex-mcp-*)` and removes it in `finally`, so a crash before that leaves the temp
+  directory (its links and codex's state) behind.
+- Criteria set `CCLOOP_CACHE_DIR` and an empty `CODEX_HOME` per test file in both repositories (ccloop
+  `test(agents): every test file gets an empty CODEX_HOME; agents models --refresh re-probes`); ccloop's
+  relocated-HOME criterion counts catalog entries apart from `codex-home` (`test(agents): count catalog entries apart
+  from codex-home in the relocated-HOME criterion`).
+
+### 11.2 §2.5 re-rendered: the single call's final `-c` list (codex-cli 0.160.0)
+
+§6.1 requires §2.5 to be re-rendered when an override is added. The single call (and the isolated MCP-list probe,
+which uses the same isolation keys) now sends, in this order:
+
+1. Isolation keys, always: `include_permissions_instructions=false`, `include_apps_instructions=false`,
+   `include_collaboration_mode_instructions=false`, `include_environment_context=false`, `project_doc_max_bytes=0`,
+   `features.plugins=false`, `notify=[]`. `features.plugins=false` is here because Task 0 measured that it removes the
+   `<recommended_plugins>` block (16 curated remote plugins) a linked `config.toml` injects: linked total 6967 B, with
+   it 6010 B, empty `CODEX_HOME` 6017 B (`features.recommended_plugins=false` left 6967 B). `notify=[]` keeps a
+   `notify` program in the linked `config.toml` from running (final review I4; the person's `config.toml` has one line
+   starting `notify =`, counted without printing it).
+2. Tool flags, each only when the installed `codex features list` names it: `features.<name>=false` for `apps`,
+   `browser_use`, `browser_use_external`, `code_mode_host`, `computer_use`, `goals`, `hooks`, `image_generation`,
+   `in_app_browser`, `multi_agent`, `realtime_conversation`, `remote_plugin`, `shell_tool`, `skill_search`,
+   `sleep_tool`, `tool_suggest`, `unified_exec`, `view_image`, and `features.skip_host_skill_discovery=true`. The names
+   after §2.4's list are the stable, on-by-default tool-like flags Task 0 recorded (ccloop `fix(agents): codex single
+   call also turns off the other on-by-default tool flags and notify`). `browser_use_full_cdp_access` is listed by
+   codex but not sent (moot with `browser_use` off). Web search is not a feature flag in 0.160.0 and is not turned off
+   by this list.
+3. `mcp_servers.<name>.enabled=false` for each server named by `codex mcp list --json`, run under the call's own
+   isolation (private homes with the links and the keys of item 1), read with the catalog and cached in its entry
+   (ccloop `fix(runtime): codex single call allows codex's error items and turns off the linked MCP servers` and the
+   fix-round-3 commit above). A name `-c` cannot address (anything but `[A-Za-z0-9_-]+`) or an unreadable list
+   refuses the call as `codex-single-call-unavailable`; an unreadable list keeps the catalog's rows and features.
+
+Zero-cost check of the full list (I4, real codex-cli 0.160.0 at the nvm path, private `HOME` and private
+`CODEX_HOME` linking `~/.codex/auth.json` and `config.toml`, no model call): `codex features list` RC 0 named all 12
+added flags "stable true"; isolated `codex mcp list --json` named `computer-use`, `figma`, `node_repl`;
+`codex debug prompt-input <items 1-3> "<one-line prompt>"` RC 0, stderr 0 bytes, 6381 B of rendered items, identical
+except message ids and timestamps to the same render with the earlier list (the added flags change no prompt text;
+`prompt-input` does not show tool definitions). `~/.codex/auth.json` and `config.toml` `ls -l` plus `shasum` were
+identical before and after. Observed in passing: `prompt-input` also accepted an unknown `-c features.<x>=false`
+(RC 0); §6.1's "Codex refuses an unknown flag" was not re-measured on `exec`, and the features-list filter stays.
+
+Tokens (tool-reported `input_tokens` of a real call, `gpt-6-luna`, the same 20-word prompt asking for a JSON object
+whose answer is the capital of France, schema `{answer: string}`): P1 11590 (ccloop `efcd5b3`: before the MCP
+overrides; the linked config's MCP servers started), P1c 10811 (ccloop `34a14a3`: item 1 without `notify=[]`, §2.4's
+tool flags, item 3; no MCP server started), output 15 each. §2.5's "~1.5k tokens" was inferred from bytes;
+the measured framing is far above it. The I4 flags were added after P1c, and no paid call measured them. The codex
+profile's `framingTokenOverhead` (§6.1 "Framing") is a value in the human-owned `~/.orca/profile.json` (§8.3); it
+is the human's to set, with these numbers.
+
+### 11.3 Live-probe findings
+
+- **codex `error` items are diagnostics** (P1, ledger): codex emits `item.completed` items of type `error` for config
+  warnings (twice "`features.rmcp_client` is ignored" from the person's `config.toml`, once "Under-development
+  features enabled: skip_host_skill_discovery"). The decoder allows them and logs each on stderr; every other item
+  type that is not `agent_message` or `reasoning`, known or not, still fails closed as
+  `codex-single-call-not-single:tool`.
+- **Disabling an MCP server the call's config does not define breaks codex's config load** (P1b, ledger): listed
+  against the person's own `~/.codex`, `codex mcp list` also named the `~/.codex/plugins` servers (6 names, 3 of them
+  undefined in the isolated config); the call failed with RC 1 in 245 ms, "invalid transport in
+  `mcp_servers.code-review`", and no model request was shown. Offline repro: the 6 overrides RC 1, the 3 defined RC 0.
+  Also measured: a whole-table `-c mcp_servers={}` leaves the servers on; a quoted segment
+  (`mcp_servers."figma".enabled`) breaks the config. Hence item 3's listing under the call's own isolation.
+
+### 11.4 Reads that stay live, and the cached version
+
+- **Cached** (§4.1): every catalog read through `readAgentCatalog`, including the `--version` answer stored in the
+  entry. The human decided plan issue 8 on 2026-10-15: cache the version (a shim upgrade can be unseen for up to 30
+  minutes).
+- **Live by design** (ledger, Task 4 ruling): the version probes of `updates.ts` (observe, preview, Apply),
+  `agents validate`'s `probeVersion`, and detection's `readOmpModels` (`detect.ts`). Detection, validation and
+  drift/upgrade checks exist to see the binary as it is now. Apply's re-check of the omp catalog reads with
+  `refresh: true`. §4.1's "`updates.ts`" is read as its omp catalog read, which is cached. P2 measured one uncached
+  `omp --version` per runtime start from `updates.ts`.
+
+### 11.5 Residuals
+
+- **Refresh-token rotation through the `auth.json` symlink is unverified** (final review I3, ruled a residual for the
+  human). P1c showed the private `auth.json` still a symlink and `~/.codex` unchanged, but no token refresh happened
+  during it. If codex saves a refreshed token by temp file and rename, the new token lands in the private dir; the next
+  call displaces it (kept, never deleted) and re-links to the older file in `~/.codex`. Recovery: `codex login`.
+- **Keyring-stored codex credentials** (`cli_auth_credentials_store`) leave no `auth.json` to link: the call fails
+  closed as an auth error.
+- **The control worker's `ccloop-agent-catalog:` log line has no production sink**: `workerLauncher` starts the
+  worker with stdio `ignore` (ledger, Task 4 ruling); only the criteria see it.
+- **The codex phase adapter still carries the person's skills and AGENTS.md** (unchanged; §2.5, §10).
+- The omp legacy `config.yaml` and `PI_CONFIG_DIR` are not stamped in the cache key; the 30-minute lifetime bounds a
+  change there (ledger, Task 2).
+- A catalog entry written by an older ccloop carries that build's shorter feature list for up to its 30-minute
+  lifetime (the key has no ccloop version).
+- `notify=[]` and the I4 flags were checked at render time only; no paid call has run with them.
