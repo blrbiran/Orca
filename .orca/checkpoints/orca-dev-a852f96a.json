@@ -1,0 +1,45 @@
+{
+  "v": 1,
+  "runId": "orca-dev-a852f96a",
+  "runtime": "claude-code",
+  "sessionRef": "a852f96a-f3c8-4721-9df4-b10c19154451",
+  "writtenAt": "2026-10-16T02:28:12.180Z",
+  "head": "948ef6947163b33c9a3afe7947d58c6af396b7a2",
+  "level": {
+    "kind": "reading",
+    "level": 332087,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Task 8 fix round 1 re-review (efcd5b3), then Task 9 ccloop full gate",
+    "Orca Tasks 10-14 against a built ccloop clone; Task 15 repin after the human pushes ccloop",
+    "P1/P2 paid checks (authorized, re-runs too)",
+    "Task 16 gate, spec erratum section, three handoffs, executive summary"
+  ],
+  "open": [
+    "ledger: .superpowers/sdd/2026-10-15-every-agent-requirement-chain/progress.md (all rulings)",
+    "ccloop branch codex/every-agent-chain in ccloop-wt/every-agent-chain, Tasks 1-7 complete"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push ccloop branch codex/every-agent-chain / ff main after Task 9 gate (H1)"
+    },
+    {
+      "kind": "irreversible",
+      "what": "remove mutation clones /private/tmp/mut-* listed in the ledger"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/ccloop-wt/every-agent-chain log --oneline 1e05627..HEAD",
+      "exitCode": 0,
+      "commit": "948ef6947163b33c9a3afe7947d58c6af396b7a2",
+      "observedAt": "2026-10-16T02:28:12.123Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-a852f96a-5Gy4ln/1.txt"
+    }
+  ]
+}
