@@ -83,11 +83,10 @@ export interface WorldOptions { tokenPolicy?:"optional-v1"; claudeScript?: Recor
   /** Syncskill integration plan Task 6: more variables for the assembled runtime's env (ORCA_SYNCSKILL_BIN and what the fake syncskill reads). */
   env?: NodeJS.ProcessEnv }
 // *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) *** on `declaredContextWindowTokens`
-// above ("null otherwise, so the estimate stays blocked-capability"): under spec 2026-10-15 §6.3 (R7) a declared null no
-// longer blocks on its own -- the intersection takes ccloop's observed window. Measured on branch codex/every-agent-chain
-// with ccloop codex/every-agent-chain efcd5b3 built: a codex world's import-time estimate is blocked-capability with
-// reasonCode `agent-selection-rejected:estimator:agent-unselected` (no estimator agent is selected yet), not by a window.
-// Text above kept verbatim.
+// above ("null otherwise, so the estimate stays blocked-capability"): measured on 06f15c53 (ccloop codex/every-agent-chain
+// efcd5b3 built), a codex world's import-time estimate is blocked first by
+// `agent-selection-rejected:estimator:agent-unselected` (planImport's layer resolution, which predates R7); the window is
+// not reached in these worlds. Text above kept verbatim.
 
 /** The codex installation's killGraceMs in every world; handoffE2E's G scenario tells it apart from HANDOFF_EXTRA_GRACE_MS alone. */
 export const KILL_GRACE_MS = 5_000;

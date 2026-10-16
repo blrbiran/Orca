@@ -15,9 +15,10 @@ describe("a declared-null window (R7)", () => {
     expect([
       intersectCapabilities(declared(null), observed(272000)).contextWindowTokens,
       intersectCapabilities(declared(200000), observed(272000)).contextWindowTokens,
+      intersectCapabilities(declared(300000), observed(272000)).contextWindowTokens,
       intersectCapabilities(declared(null), observed(null)).contextWindowTokens,
       intersectCapabilities(declared(300000), observed(null)).contextWindowTokens,
-    ]).toEqual([272000, 200000, null, null]);
+    ]).toEqual([272000, 200000, 272000, null, null]);
   });
 
   it("has no context-unavailable when ccloop reports a window under a null-declaring profile, and has it when ccloop reports none", () => {
