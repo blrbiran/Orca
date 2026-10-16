@@ -568,8 +568,8 @@ Point these variables at a scratch directory when you are trying Orca out.
 
 ## Cost
 
-Real agent runs spend money on your agent accounts: clarifying a requirement, splitting it, estimating (unless the
-profile's context window is `null`), and every task run. Budgets in `soft` mode are settled after the fact, not
+Real agent runs spend money on your agent accounts: clarifying a requirement, splitting it, estimating (unless neither the
+profile nor ccloop reports a context window for the selected agent), and every task run. Budgets in `soft` mode are settled after the fact, not
 prevented. Verifying saved results skips execution but may still spend model usage on validation and verification.
 Chains have a soft cost limit checked after each session.
 
