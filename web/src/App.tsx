@@ -264,6 +264,10 @@ export function App(): JSX.Element {
   const [agentPreferences, setAgentPreferences] = useState<AgentPreferencesViewV1 | null>(null);
   /** Spec 2026-10-15 §5 (R3): each omp or codex installation's model list as last read, by installation id. */
   const [agentModels, setAgentModels] = useState<Record<string, ModelListState>>({});
+  /** Numbers the model reads of one installation (as workspaceSeq does), so a late answer never replaces a newer one. */
+  const modelsSeq = useRef<Record<string, number>>({});
+  /** The installations whose newest model read has not answered yet; a background read does not start another. */
+  const modelsInFlight = useRef<Record<string, boolean>>({});
   const [agentInstallations, setAgentInstallations] = useState<AgentInstallationStateV1 | null>(null);
   const [localPendingUpdate, setLocalPendingUpdate] = useState(() => readPendingAgentUpdate(browserSession()));
   const [agentUpdateNotice, setAgentUpdateNotice] = useState<string | null>(null);
@@ -540,17 +544,29 @@ export function App(): JSX.Element {
     }
   };
 
-  /** Spec 2026-10-15 §5 (R3, R4): one installation's models; ccloop's own cache serves a read, `refresh` (owner) re-probes. */
+  /**
+   * Spec 2026-10-15 §5 (R3, R4): one installation's models; ccloop's own cache serves a read, `refresh` (owner) re-probes.
+   * Each read spawns ccloop and the page re-reads the agents table whenever it comes back into view, so a background read
+   * (`refresh` false) is skipped while one is in flight, and a list already on screen stays there until its answer lands.
+   * An owner's Refresh always reads. Only the newest read of an installation is applied.
+   */
   const loadModels = async (id: string, refresh: boolean): Promise<void> => {
-    setAgentModels((all) => ({ ...all, [id]: { state: "loading" } }));
+    if (!refresh && modelsInFlight.current[id] === true) return;
+    const seq = (modelsSeq.current[id] ?? 0) + 1;
+    modelsSeq.current[id] = seq;
+    modelsInFlight.current[id] = true;
+    setAgentModels((all) => (all[id]?.state === "ready" ? all : { ...all, [id]: { state: "loading" } }));
+    let next: ModelListState;
     try {
-      const view = await fetchAgentModels(id, refresh);
-      setAgentModels((all) => ({ ...all, [id]: { state: "ready", view } }));
+      next = { state: "ready", view: await fetchAgentModels(id, refresh) };
     } catch (err) {
       const refusal = controlFailureFrom(err);
       const parsed = refusal.code === "ccloop-failed" ? codeAndDetail(refusalDetail(refusal)) : { code: refusal.code, detail: "" };
-      setAgentModels((all) => ({ ...all, [id]: { state: "unavailable", ...parsed } }));
+      next = { state: "unavailable", ...parsed };
     }
+    if (modelsSeq.current[id] !== seq) return;
+    modelsInFlight.current[id] = false;
+    setAgentModels((all) => ({ ...all, [id]: next }));
   };
   /**
    * Read the installation table and this operator's defaults. Wave 4 review I-1, ruling review R17: a read that

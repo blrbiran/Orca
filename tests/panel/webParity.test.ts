@@ -17,6 +17,7 @@ import { CUSTOM_LABEL_PREFIX, SYSTEM_LABELS } from "../../src/control/labels.js"
 import { CUSTOM_LABEL_PREFIX as WEB_CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS, WEB_WORK_ITEM_CATEGORIES } from "../../web/src/controlTypes.js";
 import { WORK_ITEM_CATEGORIES } from "../../src/control/workItemCategory.js";
 import type {
+  AgentModelsViewV1 as ServerAgentModelsViewV1,
   AgentPreferencesViewV1 as ServerAgentPreferencesViewV1,
   AgentSelectionPreviewV1 as ServerAgentSelectionPreviewV1,
   AgentsViewV1 as ServerAgentsViewV1,
@@ -53,6 +54,7 @@ import type {
   UsageViewV1 as ServerUsageViewV1,
 } from "../../src/control/webProtocol.js";
 import type {
+  AgentModelsViewV1 as WebAgentModelsViewV1,
   AgentPreferencesViewV1 as WebAgentPreferencesViewV1,
   AgentSelectionPreviewV1 as WebAgentSelectionPreviewV1,
   AgentsViewV1 as WebAgentsViewV1,
@@ -241,6 +243,9 @@ function proposalSetAgentWebToServer(x: WebProposalSetAgentPayloadV1): ServerPro
 // Agent selection plan T14 (spec §6.8): the agent UI's three reads and the operator preferences command.
 function agentsViewServerToWeb(x: ServerAgentsViewV1): WebAgentsViewV1 { return x; }
 function agentsViewWebToServer(x: WebAgentsViewV1): ServerAgentsViewV1 { return x; }
+// Spec 2026-10-15 §5 (Task 14 fix round 1): an installation's model list.
+function agentModelsServerToWeb(x: ServerAgentModelsViewV1): WebAgentModelsViewV1 { return x; }
+function agentModelsWebToServer(x: WebAgentModelsViewV1): ServerAgentModelsViewV1 { return x; }
 function agentPreferencesServerToWeb(x: ServerAgentPreferencesViewV1): WebAgentPreferencesViewV1 { return x; }
 function agentPreferencesWebToServer(x: WebAgentPreferencesViewV1): ServerAgentPreferencesViewV1 { return x; }
 function agentPreviewServerToWeb(x: ServerAgentSelectionPreviewV1): WebAgentSelectionPreviewV1 { return x; }
@@ -324,6 +329,8 @@ export const __webParityAssignabilityChecks__ = [
   proposalSetAgentWebToServer,
   agentsViewServerToWeb,
   agentsViewWebToServer,
+  agentModelsServerToWeb,
+  agentModelsWebToServer,
   agentPreferencesServerToWeb,
   agentPreferencesWebToServer,
   agentPreviewServerToWeb,
