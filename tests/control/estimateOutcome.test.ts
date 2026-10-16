@@ -24,8 +24,11 @@ describe("classifying an estimate's raw output (single-call estimate spec §6.4)
     ["a call that returned nothing", () => null, "estimate-call-failed"],
     ["an answer that is not budget-estimate-v1", () => ({ schema: "budget-estimate-v1" }), "estimate-output-invalid"],
     ["a schema-valid answer that is not canonical JSON", (planHash: string) => output(planHash, { tasks: [{ ...task, work: { ...amount, tokens: -0 } }] }), "estimate-output-invalid"],
-    ["an answer for another plan", () => output("f".repeat(64)), "estimate-output-plan-mismatch"],
-    ["an answer about other tasks", (planHash: string) => output(planHash, { tasks: [{ ...task, taskId: "b" }] }), "estimate-output-plan-mismatch"],
+    // Ruling (session 4de777f4, 2026-10-17): repair (estimate usable-answer spec §4.2) runs before the classifier in the
+    // settlement. It copies a wrong planHash, so "an answer for another plan" now settles ready and moved to
+    // estimateRepairSettle.test.ts; an answer about other tasks fails repair (task-missing) and so is invalid. The
+    // classifier's own plan-mismatch verdict is still pinned by the first test of this file.
+    ["an answer about other tasks", (planHash: string) => output(planHash, { tasks: [{ ...task, taskId: "b" }] }), "estimate-output-invalid"],
   ] as const)("fails the estimate with its reason: %s", async (_label, raw, reasonCode) => {
     const h = await webFixture(); try {
       const service = new WebControlService(h.deps), run = await service.claimEstimate("g", h.estimateId);

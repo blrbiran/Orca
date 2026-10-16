@@ -137,7 +137,10 @@ describe("the estimate chain (single-call estimate spec §6.1-§6.3)", () => {
   it.each([
     // Rewritten for the ccloop error codes spec (2026-10-15; §5): a failed call's reason now carries ccloop's code.
     ["a call that failed", { outcome: "failed" as const }, "estimate-call-failed:single-call-output-invalid"],
-    ["an answer for another plan", { output: () => estimateOutput("f".repeat(64)) }, "estimate-output-plan-mismatch"],
+    // Ruling (session 4de777f4, 2026-10-17): repair (estimate usable-answer spec §4.2) now copies a wrong planHash, so an
+    // answer for another plan settles ready (estimateRepairSettle.test.ts); an answer about another task still fails, as
+    // invalid, because repair drops the unknown task and then misses the plan's own -- it never reaches the plan check.
+    ["an answer about another task", { output: (planHash: string) => ({ ...estimateOutput(planHash), tasks: [{ ...estimateOutput(planHash).tasks[0], taskId: "b" }] }) }, "estimate-output-invalid"],
     ["an answer that is not an estimate", { output: () => ({ schema: "budget-estimate-v1" }) }, "estimate-output-invalid"],
   ])("fails the estimate with its reason through the driver: %s", async (_label, options, reasonCode) => {
     const x = await estimateHarness(options); try {

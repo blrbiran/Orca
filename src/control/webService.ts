@@ -11,7 +11,7 @@ import { applyWebCommand, lookupWebCommandReplay, preflightWebCommand, type WebC
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
-import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegradationReasons, classifyEstimateOutput, singleCallOutputBound } from "./estimator.js";
+import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegradationReasons, classifyEstimateOutput, readEstimateContract, singleCallOutputBound } from "./estimator.js";
 import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
@@ -22,7 +22,8 @@ import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
 import { effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
 import { agentSelectionSchema, amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
-import { estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
+import { budgetEstimateSchema, estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
+import { problemsFromRefusal, repairEstimateOutput } from "./estimateRepair.js";
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, readStopIntent, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
@@ -1134,6 +1135,21 @@ function keptExpansion(taskId: string, repoPath: string, current: LoopRecipe, in
   return expanded.ok ? { ...expanded, recipe } : expanded;
 }
 
+/** Estimate usable-answer spec §4.3: a failed settlement's reason and the problems a retry would carry. */
+export interface EstimateFailure { reasonCode: string; problems: string[] }
+
+/**
+ * The problems for a failed estimate: repair's own, the classifier's refusal of a repaired answer (never empty), or
+ * `no-json-object` for a call ccloop could read no JSON object from. Every other call failure is not retryable: `[]`.
+ */
+function estimateFailureProblems(reasonCode: string, callFailure: string | null, repairProblems: string[] | null, judged: unknown, notCanonical: boolean): string[] {
+  if (repairProblems !== null) return repairProblems;
+  if (reasonCode.startsWith("estimate-call-failed")) return callFailure === "single-call-output-invalid" ? ["no-json-object"] : [];
+  const parsed = budgetEstimateSchema.safeParse(judged);
+  const problems = problemsFromRefusal(parsed.success ? [] : parsed.error.issues, notCanonical);
+  return problems.length > 0 ? problems : ["output-not-canonical"];
+}
+
 /**
  * The estimate's terminal settlement (formerly WebControlService.completeEstimate's body, moved unchanged so the
  * execution driver can call it -- single-call estimate spec §6.3, drafter finding F13). `commitTerminal` runs first, in
@@ -1169,15 +1185,26 @@ export function completeEstimateInStore(
       if (!same(currentBalance.reserve, proposal.explicitUnallocatedReserve) || !same(currentBalance.deficit, group.ledger.budgetDeficit)) throw new ControlError("recovery-blocked");
       // Single-call estimate spec §6.4: a failed estimate carries its own reason. A schema-valid answer that is not
       // canonical JSON (a lone surrogate, a negative zero) cannot be hashed, so it is an invalid answer too.
-      const classified = classify(rawOutput, plan.planHash, plan.plan.tasks.map(t => t.taskId));
-      let output: BudgetEstimateV1 | null = null, outputHash: string | null = null;
+      // Estimate usable-answer spec §4.2: repair runs on every non-null answer before the classifier, which then judges
+      // the repaired value and stays the single judge. A null answer is a failed call and never reaches repair.
+      const taskIds = plan.plan.tasks.map(t => t.taskId);
+      let repairs: string[] = [], repairProblems: string[] | null = null, judged: unknown = rawOutput;
+      if (rawOutput !== null) {
+        const repaired = repairEstimateOutput(rawOutput, { planHash: plan.planHash, taskIds, instructionVersion: readEstimateContract(deps.store, id, estimateId).instructionVersion });
+        if (repaired.ok) { repairs = repaired.repairs; judged = repaired.output; } else repairProblems = repaired.problems;
+      }
+      const classified = repairProblems !== null ? { ok: false as const, reasonCode: "estimate-output-invalid" } : classify(judged, plan.planHash, taskIds);
+      let output: BudgetEstimateV1 | null = null, outputHash: string | null = null, notCanonical = false;
       let reasonCode: string | null = classified.ok ? null
         : classified.reasonCode === "estimate-call-failed" && callFailure !== null ? `estimate-call-failed:${callFailure}` : classified.reasonCode;
       if (classified.ok) {
         try { outputHash = sha256Canonical(classified.output); output = classified.output; }
-        catch (error) { if (!(error instanceof ControlError)) throw error; reasonCode = "estimate-output-invalid"; }
+        catch (error) { if (!(error instanceof ControlError)) throw error; reasonCode = "estimate-output-invalid"; notCanonical = true; }
       }
-      estimate.state = output ? "ready" : "failed"; estimate.output = output; estimate.outputHash = outputHash; estimate.reasonCode = reasonCode;
+      // Spec §4.3: why the estimate failed and the problems a retry would carry; empty problems = not retryable.
+      const failure: EstimateFailure | null = reasonCode === null ? null : { reasonCode, problems: estimateFailureProblems(reasonCode, callFailure, repairProblems, judged, notCanonical) };
+      estimate.state = output ? "ready" : "failed"; estimate.output = output; estimate.outputHash = outputHash; estimate.reasonCode = failure?.reasonCode ?? null;
+      estimate.repairs = repairs;
       if (rawCanonicalJson !== null) writeCanonicalRecord(deps.store, id, rawHash, rawCanonicalJson);
       if (output) writeCanonicalRecord(deps.store, id, estimate.outputHash!, canonicalBytes(output).toString("utf8"));
       group.ledger.committedRemaining = residual(group.reserved, zero(), run.remaining.work);
