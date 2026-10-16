@@ -11,7 +11,9 @@
 // which kills every codex process group ccloop registered.
 //
 // Rule 17: Orca's own writes all go under --output (ORCA_CONTROL_DIR, ORCA_CORRECTIONS_DIR); ~/.orca is
-// snapshotted and must not change. Existing real Codex/Claude modes retain their historical HOME behavior.
+// snapshotted and must not change. ccloop's cache (CCLOOP_CACHE_DIR: agent catalog, codex private home) defaults to
+// <output>/ccloop-cache in every mode when the caller has not set it. Existing real Codex/Claude modes retain their
+// historical HOME behavior.
 // For --omp, the caller must redirect HOME/XDG and pass a private copied --omp-config-dir; this script checks
 // the absolute path but does not create or copy the operator's OMP credentials.
 //
@@ -204,6 +206,10 @@ function findAll(dir: string, name: string): string[] {
 }
 
 const root = await realpath(await mkdir(output, { recursive: true, mode: 0o700 }).then(() => output));
+// Rule 17 (Task 7 fix round 1): ccloop's agent-catalog cache and codex private home stay under --output unless the
+// caller chose a cache dir; set before any ccloop process starts, and handed to ccloop in `env` below.
+const ccloopCacheDir = process.env.CCLOOP_CACHE_DIR || join(root, "ccloop-cache");
+process.env.CCLOOP_CACHE_DIR = ccloopCacheDir;
 const repo = join(root, "target");
 await mkdir(repo);
 g(repo, "init", "-q", "-b", "main");
@@ -311,7 +317,7 @@ const humanBefore = human();
 
 const repoId = controlRepoKey("live");
 const repos = [{ projectKey: "live", path: repo }];
-const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CORRECTIONS_DIR: join(root, "corrections"), ORCA_CCLOOP_BIN: ccloopBin, ORCA_AGENTS_TABLE: tablePath };
+const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CORRECTIONS_DIR: join(root, "corrections"), ORCA_CCLOOP_BIN: ccloopBin, ORCA_AGENTS_TABLE: tablePath, CCLOOP_CACHE_DIR: ccloopCacheDir };
 process.env.ORCA_CORRECTIONS_DIR = env.ORCA_CORRECTIONS_DIR;
 const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", "soft", "--control-wake-ms", "200"], env, repos);
 if (rejection !== null) throw new Error(rejection);
