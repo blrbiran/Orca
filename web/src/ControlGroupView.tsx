@@ -401,7 +401,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <h3>{t("detail.problem")}</h3>
       {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
       {view.runs.filter(run => hasFailureOutcome(run) || run.state === "blocked" || run.unknownUsageSettlement !== undefined || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
-        <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /> <RunOutputBound run={run} /></p>
+        <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
+        <RunOutputBound run={run} />
         {remedies(run, props.active !== false && region === "problem")}
         <button type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>
       </div>)}

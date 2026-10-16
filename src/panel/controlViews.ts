@@ -830,14 +830,18 @@ function continuableRun(store: ControlStore, run: z.infer<typeof persistedRunSch
 /** Spec 2026-10-15 §6.2 and plan issue 11: every estimate or requirement single call; computed from the stored usage event. */
 function outputBoundView(store: ControlStore, groupId: string, run: { runId: string; phase: string; estimateId: string | null }): { outputBound?: number; outputBoundExceededBy?: number } {
   if (run.phase !== "estimate" && run.phase !== "single-call") return {};
+  // Task 12 review fix 1 (Rule 12): every dispatched estimate run has a contract, so one that cannot be read is missing or
+  // corrupt evidence and the view refuses, like the sibling identity checks. A requirement's group was already read above.
   let bound: number;
-  try {
-    bound = run.phase === "estimate" ? readEstimateContract(store, groupId, run.estimateId!).maxOutputTokens : readRequirementGroup(store, groupId).requirement.maxOutputTokens;
-  } catch { return {}; }
+  if (run.phase === "estimate") {
+    try { bound = readEstimateContract(store, groupId, run.estimateId!).maxOutputTokens; } catch { return blocked(`run-estimate-contract:${run.runId}`); }
+  } else bound = readRequirementGroup(store, groupId).requirement.maxOutputTokens;
+  // Task 12 review fix 2: byModel is cumulative, so only the newest work event counts; without a breakdown there is no
+  // observed output to compare (never an older event's breakdown).
   const event = store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq DESC").all(run.runId)
     .map((row) => JSON.parse(String(row.body)) as { bucket: string; byModel?: Array<{ output: number }> | null })
-    .find((candidate) => candidate.bucket === "work" && Array.isArray(candidate.byModel));
-  const output = event?.byModel?.reduce((sum, entry) => sum + entry.output, 0) ?? 0;
+    .find((candidate) => candidate.bucket === "work");
+  const output = Array.isArray(event?.byModel) ? event.byModel.reduce((sum, entry) => sum + entry.output, 0) : 0;
   return output > bound ? { outputBound: bound, outputBoundExceededBy: output - bound } : { outputBound: bound };
 }
 

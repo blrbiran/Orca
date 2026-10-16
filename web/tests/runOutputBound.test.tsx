@@ -12,8 +12,9 @@ import { ControlGroupView } from "../src/ControlGroupView.js";
 import { RunOutputBound } from "../src/RunOutputBound.js";
 import type { Amount, ControlConfigV1, GroupViewV1, RunViewV1 } from "../src/controlTypes.js";
 
-const EN = "This agent cannot cap a call's output; this call went 100 tokens over its declared bound.";
-const ZH = "该 agent 无法限制单次调用的输出；这次调用比声明的上限多用了 100 个 token。";
+// Task 12 review fix 3: the count is written as the rest of the row writes tokens (formatTokens, grouped).
+const EN = "This agent cannot cap a call's output; this call went 12,345 tokens over its declared bound.";
+const ZH = "该 agent 无法限制单次调用的输出；这次调用比声明的上限多用了 12,345 个 token。";
 const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
 const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
 const config: ControlConfigV1 = {
@@ -25,8 +26,8 @@ const config: ControlConfigV1 = {
 // A completed estimate call: settled, no failure, no block -- so it is not in the problem-runs list.
 const run = (over: Partial<RunViewV1>): RunViewV1 => ({
   runId: "run-e", taskId: null, estimateId: "e1", generation: 1, state: "settled-restartable", phase: "estimate", claimOrdinal: null, providerAttemptOrdinal: 1,
-  profile: { profileId: "all", profileHash: "b".repeat(64) }, used: amount(64_200), remaining: amount(0), failureCode: null, blockedReason: null, evidenceIds: [],
-  outputBound: 64000, outputBoundExceededBy: 100, ...over,
+  profile: { profileId: "all", profileHash: "b".repeat(64) }, used: amount(76_445), remaining: amount(0), failureCode: null, blockedReason: null, evidenceIds: [],
+  outputBound: 64000, outputBoundExceededBy: 12_345, ...over,
 });
 const view = (runs: RunViewV1[]): GroupViewV1 => ({
   schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 4,
@@ -67,5 +68,8 @@ describe("a single call's output overrun (spec §6.2)", () => {
     const { container } = render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "problem", taskId: null, runId: null }} view={view([run({ state: "blocked", blockedReason: "terminal:failed" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     const problem = container.querySelector<HTMLElement>('[data-problem-run-id="run-e"]')!;
     expect(within(problem).queryAllByText(EN).length).toBe(1);
+    // Task 12 review fix 4: a block note like the panel's other notes, never nested inside the run's <p> line, and toneless.
+    const note = within(problem).getByRole("note");
+    expect([note.tagName, note.parentElement === problem, note.hasAttribute("data-tone")]).toEqual(["P", true, false]);
   });
 });
