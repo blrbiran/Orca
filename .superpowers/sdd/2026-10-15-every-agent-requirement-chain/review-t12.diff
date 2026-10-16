@@ -1,0 +1,467 @@
+ce956d09 feat(control): show a single call's output overrun beside its booked usage
+ src/control/webProtocol.ts                  |  4 ++
+ src/panel/controlViews.ts                   | 16 +++++++
+ tests/control/fixtures/estimateHarness.ts   |  5 +-
+ tests/control/singleCallOutputBound.test.ts | 42 +++++++++++++++++
+ web/src/ControlGroupView.tsx                |  4 +-
+ web/src/RunOutputBound.tsx                  | 10 ++++
+ web/src/controlTypes.ts                     |  3 ++
+ web/src/locales/en.ts                       |  1 +
+ web/src/locales/zh.ts                       |  1 +
+ web/tests/runOutputBound.test.tsx           | 71 +++++++++++++++++++++++++++++
+ 10 files changed, 155 insertions(+), 2 deletions(-)
+diff --git a/src/control/webProtocol.ts b/src/control/webProtocol.ts
+index 3cbf03bb..b013ae2c 100644
+--- a/src/control/webProtocol.ts
++++ b/src/control/webProtocol.ts
+@@ -1302,20 +1302,24 @@ export const runViewSchema = z
+         }).strict()),
+       })
+       .strict()
+       .optional(),
+     // Issue-fixes spec §5.2: wall-clock times (ms) -- started when A1 reserved the first attempt, ended when it first
+     // landed or settled, and the time of its newest activity row. null for a run written before schema 9. Optional on
+     // the wire so older fixtures still parse; the server always gives them.
+     startedAt: safeInteger.nullable().optional(),
+     endedAt: safeInteger.nullable().optional(),
+     lastActivityAt: safeInteger.nullable().optional(),
++    // Spec 2026-10-15 §6.2 (R2): a single call's (estimate or requirement) output bound and, when the observed output (the sum
++    // of its usage event's byModel[].output) went over it, by how much. Optional on the wire; read-time only.
++    outputBound: positiveSafeInteger.optional(),
++    outputBoundExceededBy: positiveSafeInteger.optional(),
+     // Feedback #59: the run's creation position in its group (1-based, rowid order); `runs` itself stays in id order.
+     // Optional on the wire so older fixtures still parse; the server always gives it.
+     createdOrdinal: positiveSafeInteger.optional(),
+   })
+   .strict();
+ 
+ export const estimateViewSchema = z
+   .object({
+     estimateId: idSchema,
+     estimateVersion: positiveSafeInteger,
+diff --git a/src/panel/controlViews.ts b/src/panel/controlViews.ts
+index 95750f25..84454b15 100644
+--- a/src/panel/controlViews.ts
++++ b/src/panel/controlViews.ts
+@@ -21,20 +21,21 @@ import { dimensions } from "../control/commands.js";
+ import { driveRecordSchema } from "../control/driveRecord.js";
+ import { ControlError, nonDurableControlErrorClassifications } from "../control/errors.js";
+ import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
+ import { effectiveTaskLabels, readTaskLabelState } from "../control/labels.js";
+ import { choosePlanByLabels, loopPlanDefinition } from "../control/loopPlans.js";
+ import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
+ import { decodeEstimateRecord, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
+ import { readCanonicalRecord } from "../control/snapshot.js";
+ import { hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
+ import { renderRequirementDocument } from "../control/requirementDocument.js";
++import { readEstimateContract } from "../control/estimator.js";
+ import { effectivePlanTask } from "../control/taskAmendments.js";
+ import type { ControlStore } from "../control/store.js";
+ import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, runProgressSchema, safeInteger, type RunProgress } from "../control/schema.js";
+ import { taskContractSchema } from "../scheduler/planFile.js";
+ import { exportReasonOf } from "../control/requirementExport.js";
+ import { readSpendCapBlock } from "../control/spendCaps.js";
+ import { latestGroupActivityAt, readGroupActivity, readRunActivity, readLatestRunActivityByGroup } from "../control/activity.js";
+ import { readRunDiagnosis, savedFormatFailureEvidence } from "./runDiagnosis.js";
+ import { readGroupIntegration } from "../control/integrationScheme.js";
+ import { archivedMarkOf } from "../control/archivedMark.js";
+@@ -819,20 +820,34 @@ function continuableRun(store: ControlStore, run: z.infer<typeof persistedRunSch
+   if (run.state !== "settled-recoverable") return false;
+   const workRow = snapshot.workById.get(run.workItemId);
+   if (workRow === undefined) return false;
+   const work = parseSnapshot(workBodySchema, snapshot.decodeWork(run.workItemId), `run-work-invalid:${run.runId}`);
+   if (work.currentRunId !== run.runId || work.status !== "held") return false;
+   if (dimensions.some((dimension) => run.remaining.work[dimension] !== null && run.remaining.work[dimension]! <= 0)) return false;
+   const row = store.db.prepare("SELECT body FROM checkpoints WHERE id=? AND run_id=?").get(run.checkpointId, run.runId);
+   return row !== undefined && (parseJson(row.body, `checkpoint-invalid:${run.checkpointId}`) as { result?: unknown }).result === "partial";
+ }
+ 
++/** Spec 2026-10-15 §6.2 and plan issue 11: every estimate or requirement single call; computed from the stored usage event. */
++function outputBoundView(store: ControlStore, groupId: string, run: { runId: string; phase: string; estimateId: string | null }): { outputBound?: number; outputBoundExceededBy?: number } {
++  if (run.phase !== "estimate" && run.phase !== "single-call") return {};
++  let bound: number;
++  try {
++    bound = run.phase === "estimate" ? readEstimateContract(store, groupId, run.estimateId!).maxOutputTokens : readRequirementGroup(store, groupId).requirement.maxOutputTokens;
++  } catch { return {}; }
++  const event = store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq DESC").all(run.runId)
++    .map((row) => JSON.parse(String(row.body)) as { bucket: string; byModel?: Array<{ output: number }> | null })
++    .find((candidate) => candidate.bucket === "work" && Array.isArray(candidate.byModel));
++  const output = event?.byModel?.reduce((sum, entry) => sum + entry.output, 0) ?? 0;
++  return output > bound ? { outputBound: bound, outputBoundExceededBy: output - bound } : { outputBound: bound };
++}
++
+ function runViews(store: ControlStore, groupId: string, graphVersion: number, proposal: ReturnType<typeof readBudgetProposal>, snapshot: GroupReadSnapshot): RunViewV1[] {
+   const activity = readLatestRunActivityByGroup(store, groupId);
+   // Feedback #59: the set stays in id order (the wire's canonical order); each run also carries its creation position,
+   // the 1-based place of its row in the snapshot's rowid order -- total, and stable because runs are never deleted.
+   const createdOrdinal = new Map(snapshot.runsByRowid.map((row, index) => [String(row.id), index + 1]));
+   return [...snapshot.runsByRowid].sort((left, right) => compareText(left.id, right.id)).map(row => {
+     const runId = String(row.id);
+     const run = parseSnapshot(persistedRunSchema, snapshot.decodeRun(runId), `run-invalid:${runId}`);
+     if (run.runId !== runId || run.groupId !== groupId || String(row.group_id) !== groupId
+       || run.workItemId !== String(row.work_item_id) || run.generation !== Number(row.generation)
+@@ -914,20 +929,21 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
+       continuable: continuableRun(store, run, snapshot),
+       evidenceIds: artifactIdsForRun(store, runId, run),
+       git: run.drive === undefined ? null : { workspaceMode: run.drive.workspaceMode, base: run.drive.base, landedCommit: run.drive.landedCommit },
+       // §4.6: the lock A2 recorded. `dir` is a local path of this machine and stays out of the view; omitted for a run without skills.
+       ...(run.drive?.skills == null ? {} : { skills: { profile: run.drive.skills.profile, lock: run.drive.skills.lock } }),
+       // Issue-fixes spec §5.2: the run's times; null for a run written before schema 9.
+       startedAt: run.startedAt ?? null,
+       endedAt: run.endedAt ?? null,
+       lastActivityAt: activity.get(runId)?.at ?? null,
+       createdOrdinal: createdOrdinal.get(runId)!,
++      ...outputBoundView(store, groupId, run),
+     };
+   });
+ }
+ 
+ function checkpointViews(store: ControlStore, groupId: string, readSnapshot: GroupReadSnapshot): CheckpointViewV1[] {
+   return store.db.prepare("SELECT checkpoints.id,checkpoints.run_id,checkpoints.body FROM checkpoints JOIN runs ON runs.id=checkpoints.run_id WHERE runs.group_id=? ORDER BY checkpoints.id").all(groupId).map(row => {
+     const raw = parseJson(row.body, `checkpoint-invalid:${String(row.id)}`) as Record<string, unknown>;
+     if (raw.checkpointId !== String(row.id) || raw.runId !== String(row.run_id) || typeof raw.taskId !== "string") return blocked("checkpoint-identity");
+     const snapshot = artifactSchema.safeParse(raw.snapshot).success ? artifactSchema.parse(raw.snapshot) : null;
+     const missing = Array.isArray(raw.missing) ? raw.missing : [];
+diff --git a/tests/control/fixtures/estimateHarness.ts b/tests/control/fixtures/estimateHarness.ts
+index 3309d896..8130adcf 100644
+--- a/tests/control/fixtures/estimateHarness.ts
++++ b/tests/control/fixtures/estimateHarness.ts
+@@ -19,20 +19,22 @@ type Outcome = "complete" | "failed" | "aborted";
+ interface SingleCallOptions {
+   outcome?: Outcome; tokens?: number | null; output?: (planHash: string) => unknown;
+   /** "prompt": the record names another prompt; "record": the record is not a ccloop single-call record at all. */
+   tamper?: "prompt" | "record";
+   /** Until a handoff request arrives, collect reports usage but no candidate (the call is still running). */
+   stoppable?: boolean;
+   /** Runs inside the first collect that has a candidate to give, before it answers. */
+   duringCollect?: () => Promise<void>;
+   /** ccloop error codes spec §4.5: the failed call's record errorCode (absent: single-call-output-invalid, as before). */
+   errorCode?: string | null;
++  /** Spec 2026-10-15 §6.2: the event's per-model breakdown (absent: none, as before). */
++  byModel?: Array<{ model: string; input: number; output: number; cacheRead: number; cacheWrite: number }>;
+ }
+ const AMOUNT = { tokens: 100, activeMs: 100, attempts: 1, sessions: 1 };
+ export const estimateOutput = (planHash: string) => ({ schema: "budget-estimate-v1", planHash,
+   tasks: [{ taskId: "a", complexity: "M", confidence: "high", work: AMOUNT, handoff: { tokens: 0, activeMs: 100, attempts: 0, sessions: 0 }, rationale: "small", assumptions: ["clean tree"] }],
+   goalReviewReserve: AMOUNT, groupRationale: "small" });
+ 
+ function singleCallPort(options: SingleCallOptions, planHash: () => string) {
+   const evidence = new Map<string, Buffer>();
+   const calls = { accept: [] as StartEnvelope[], collect: 0, handoff: 0 };
+   let requested = false, hookRan = false;
+@@ -44,21 +46,22 @@ function singleCallPort(options: SingleCallOptions, planHash: () => string) {
+     async accept(envelope) { calls.accept.push(structuredClone(envelope)); return accepted(envelope); },
+     async inspect(envelope) { return accepted(envelope); },
+     async requestHandoff(_envelope, request) { calls.handoff += 1; requested = true; return { kind: "latched", requestId: request.requestId }; },
+     async collect(envelope): Promise<ExecutionReport> {
+       calls.collect += 1;
+       const { claim, work } = envelope;
+       if (work.kind !== "single-call") throw new Error("singleCallPort: single calls only");
+       const outcome: Outcome = options.stoppable && requested ? "aborted" : options.outcome ?? "complete";
+       const tokens = options.tokens === undefined ? 777 : options.tokens;
+       const events = [{ runId: claim.runId, generation: claim.generation, eventSeq: 1, bucket: "work" as const,
+-        cumulative: tokens === null ? null : { tokens, activeMs: 5, attempts: 1, sessions: 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`usage ${claim.runId}`)) }];
++        cumulative: tokens === null ? null : { tokens, activeMs: 5, attempts: 1, sessions: 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`usage ${claim.runId}`)),
++        ...(options.byModel === undefined ? {} : { byModel: options.byModel }) }];
+       if (options.stoppable && !requested) return { events, candidate: null, terminal: null };
+       if (!hookRan && options.duringCollect) { hookRan = true; await options.duringCollect(); }
+       const outputRef = outcome === "complete" ? put(`output-${claim.runId}`, canonicalBytes((options.output ?? estimateOutput)(planHash()))) : null;
+       const record = {
+         schema: "ccloop-single-call-record-v1",
+         promptSha256: sha(Buffer.from(options.tamper === "prompt" ? `${work.prompt} ` : work.prompt, "utf8")),
+         responseSchemaSha256: sha256Canonical(work.responseSchema),
+         outcome, outputRef, errorCode: outcome === "failed" ? (options.errorCode === undefined ? "single-call-output-invalid" : options.errorCode) : null,
+       };
+       const executionId = `exec-${claim.runId}`;
+diff --git a/tests/control/singleCallOutputBound.test.ts b/tests/control/singleCallOutputBound.test.ts
+new file mode 100644
+index 00000000..dd51a92e
+--- /dev/null
++++ b/tests/control/singleCallOutputBound.test.ts
+@@ -0,0 +1,42 @@
++import { describe, expect, it } from "vitest";
++import { readDraft } from "../../src/control/requirementRecords.js";
++import { readControlGroup } from "../../src/panel/controlViews.js";
++import { estimateHarness } from "./fixtures/estimateHarness.js";
++import { requirementHarness } from "./fixtures/requirementHarness.js";
++import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
++
++// Spec 2026-10-15 §6.2, criterion 5 (R2): a single call is booked at its observed usage; its run view carries the bound it
++// was sent with (64000 here: the fixture profile's estimatorPreflight.maxOutputTokens, no agent cap) and, when the observed
++// output (sum of byModel[].output) is over it, by how much. Computed at read time from the stored usage event: no schema
++// change. The event's tokens are input 100 + output, so it reconciles with its byModel; 100 + 64_100 = 64_200 is under
++// ESTIMATE_GRANT.tokens (250_000), so the settlement books it as observed.
++const run = async (output: number) => {
++  const x = await estimateHarness({ tokens: 100 + output, byModel: [{ model: "gpt-6-sol", input: 100, output, cacheRead: 0, cacheWrite: 0 }] });
++  try {
++    await x.rounds(() => x.estimate().state !== "running");
++    return readControlGroup(x.h.store, "epoch", "g").runs.find((view) => view.runId === x.runId)!;
++  } finally { await x.h.dispose(); }
++};
++
++describe("output bound on a single call's run view (spec §6.2)", () => {
++  it("over the bound: booked as observed, overrun shown", async () => {
++    expect(await run(64_100)).toMatchObject({ outputBound: 64000, outputBoundExceededBy: 100, used: { tokens: 64_200 } });
++  });
++  it("at the bound and under it: no overrun", async () => {
++    const at = await run(64_000), under = await run(10);
++    expect([at.outputBound, Object.hasOwn(at, "outputBoundExceededBy"), under.outputBound, Object.hasOwn(under, "outputBoundExceededBy")]).toEqual([64000, false, 64000, false]);
++  });
++
++  // Plan issue 11: a requirement's single call (here the split call, whose group is then accepted into a plan group so the
++  // group view lists it) carries the requirement's frozen bound (64000: requirementHarness's maxOutputTokens). Its usage
++  // event has no byModel, so there is no observed output to compare and no overrun.
++  it("a requirement's single call carries the requirement's bound", async () => {
++    const x = await requirementHarness({ answers: [{ purpose: "split", output: VALID_SPLIT }], startAt: "split" });
++    try {
++      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
++      await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: readDraft(x.store, "r", 1).draftHash! }));
++      const calls = readControlGroup(x.store, "epoch", "r").runs.filter((view) => view.phase === "single-call");
++      expect(calls.map((view) => [view.outputBound, Object.hasOwn(view, "outputBoundExceededBy")])).toEqual([[64000, false]]);
++    } finally { await x.dispose(); }
++  });
++});
+diff --git a/web/src/ControlGroupView.tsx b/web/src/ControlGroupView.tsx
+index 07ad73a6..ed0c1c3d 100644
+--- a/web/src/ControlGroupView.tsx
++++ b/web/src/ControlGroupView.tsx
+@@ -12,20 +12,21 @@ import { useLayoutEffect, useState } from "react";
+ import { useTranslation } from "react-i18next";
+ import type { ControlAction } from "./controlApi.js";
+ import { AgentSelectionEditor, selectionsHashFor } from "./AgentSelectionEditor.js";
+ import { BudgetEditor } from "./BudgetEditor.js";
+ import { DependencyGraph } from "./DependencyGraph.js";
+ import { EvidenceLink } from "./EvidenceLink.js";
+ import { GitScheme } from "./GitScheme.js";
+ import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
+ import { RefusalNotice } from "./RefusalNotice.js";
+ import { RunReason } from "./RunReason.js";
++import { RunOutputBound } from "./RunOutputBound.js";
+ import { explainEstimateReason } from "./ccloopCodes.js";
+ import { archiveOpen, hasFailureOutcome, retryRunOpen, runNumberOf } from "./runFacts.js";
+ import { UsageSettlement } from "./UsageSettlement.js";
+ import { SkillsGiven } from "./SkillsGiven.js";
+ import type {
+   AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
+   RunViewV1,
+ } from "./controlTypes.js";
+ import type { ControlRefusal, UncertainCommand } from "./controlState.js";
+ import { LabelChips, SavedResultEntry, TaskDetail, progressText } from "./TaskDetail.js";
+@@ -393,21 +394,21 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+           archived={archived}
+           drafts={drafts} onDraft={onDraft} onCommand={onCommand}
+         />
+       )}
+ 
+ {dispatchRegion === "preparation" && dispatchControls}</>,
+         problem: <>
+       <h3>{t("detail.problem")}</h3>
+       {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
+       {view.runs.filter(run => hasFailureOutcome(run) || run.state === "blocked" || run.unknownUsageSettlement !== undefined || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
+-        <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
++        <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /> <RunOutputBound run={run} /></p>
+         {remedies(run, props.active !== false && region === "problem")}
+         <button type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>
+       </div>)}
+ {dispatchRegion === "problem" && dispatchControls}</>,
+         results: <>
+       <GroupResults view={view} active={props.active !== false && region === "results"} scope={props.resultsScope ?? ""} />
+       <p>{t("detail.resultsEvidence")}</p>
+       {view.runs.map(run => <button key={run.runId} type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>)}
+       <div id={overviewRegionId("group", groupId, "integration")} tabIndex={-1} data-overview-region="integration">
+       <GitScheme view={view} workspace={workspace} onCommand={onCommand} archived={archived} />
+@@ -429,20 +430,21 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+           </tr>
+         </thead>
+         <tbody>
+           {runsInCreationOrder(view.runs).map((run, index, orderedRuns) => (
+             <tr key={run.runId} id={runRegionId(groupId, run.runId)} tabIndex={-1} data-run-id={run.runId}>
+               <td>{run.taskId ?? run.estimateId ?? <details><summary>{t("control.group.runLabel", { n: index + 1 })}</summary><code>{run.runId}</code></details>}</td>
+               <td>{enumText("runPhase", run.phase)}</td>
+               <td className="run-state">
+                 <div>{enumText("runState", run.state)}</div>
+                 <div><RunReason run={run} /></div>
++                <RunOutputBound run={run} />
+                 <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
+                 {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}
+                 <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}{runNumberOf(view, run, orderedRuns.slice(0, index + 1)) > 0 ? t("control.group.taskRun", { n: runNumberOf(view, run, orderedRuns.slice(0, index + 1)) }) : ""}</div>
+                 <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
+               </td>
+               <td><details><summary>{run.profile.profileId}</summary><code>{run.profile.profileHash}</code></details></td>
+               <td><span title={formatTokens(run.used.tokens, currentLanguage())}>{shortTokens(run.used.tokens, "en")}</span></td>
+               <td>{run.remaining.tokens===null ? t(run.tokenRemainingStatus==="unknown"?"control.progress.tokensUnknown":"budget.unlimited") : <span title={formatTokens(run.remaining.tokens, currentLanguage())}>{shortTokens(run.remaining.tokens, "en")}</span>}</td>
+               <td>
+                 <EvidenceLink runId={run.runId} />
+diff --git a/web/src/RunOutputBound.tsx b/web/src/RunOutputBound.tsx
+new file mode 100644
+index 00000000..314cf24c
+--- /dev/null
++++ b/web/src/RunOutputBound.tsx
+@@ -0,0 +1,10 @@
++import type { JSX } from "react";
++import { useTranslation } from "react-i18next";
++import type { RunViewV1 } from "./controlTypes.js";
++
++/** Spec 2026-10-15 §6.2: the result is used as normal; this only says the call went over its declared bound. */
++export function RunOutputBound(props: { run: RunViewV1 }): JSX.Element | null {
++  const { t } = useTranslation();
++  if (props.run.outputBoundExceededBy === undefined) return null;
++  return <small role="note">{t("control.outputBound.exceeded", { tokens: props.run.outputBoundExceededBy })}</small>;
++}
+diff --git a/web/src/controlTypes.ts b/web/src/controlTypes.ts
+index 98937e2d..5e0a8594 100644
+--- a/web/src/controlTypes.ts
++++ b/web/src/controlTypes.ts
+@@ -256,20 +256,23 @@ export type RunViewV1 = {
+   /** Board spec 2026-10-03 D4: optional here so literal fixtures need no edit; the server always sends it. */
+   git?: { workspaceMode: "worktree" | "clone"; base: string | null; landedCommit: string | null } | null;
+   /** Syncskill integration spec §4.6: the skills the run was given (syncskill's lock); absent for a run without skills. */
+   skills?: { profile: string | null; lock: RunSkillLockV1[] };
+   /** Issue-fixes spec §5.2: wall-clock times (ms); null for a run written before schema 9. Optional so literal fixtures need no edit; the server always sends them. */
+   startedAt?: number | null;
+   endedAt?: number | null;
+   lastActivityAt?: number | null;
+   /** Feedback #59: creation position in the group (1-based); `runs` stays in id order. Optional so literal fixtures need no edit; the server always sends it. */
+   createdOrdinal?: number;
++  /** Spec 2026-10-15 §6.2: a single call's output bound and, when its observed output went over it, by how much. Read-time only. */
++  outputBound?: number;
++  outputBoundExceededBy?: number;
+ };
+ export type BudgetEstimateV1 = {
+   schema: "budget-estimate-v1";
+   planHash: string;
+   tasks: Array<{
+     taskId: string;
+     complexity: "S" | "M" | "L" | "XL";
+     confidence: "low" | "medium" | "high";
+     work: Amount;
+     handoff: Amount;
+diff --git a/web/src/locales/en.ts b/web/src/locales/en.ts
+index 21dc3d8c..383bfa81 100644
+--- a/web/src/locales/en.ts
++++ b/web/src/locales/en.ts
+@@ -315,20 +315,21 @@ export const en = {
+     gotIt: "Got it",
+     stateStopped: "stopped: {{reason}} ({{category}})",
+     stateRunning: "running",
+     stateOrphaned: "running (supervisor is gone)",
+     costUnreadable: "cost unreadable",
+     cost: "USD {{amount}}",
+     sessionProgress: "session {{n}}; {{cost}}",
+     banner: chainBanner,
+   },
+   control: {
++    outputBound: { exceeded: "This agent cannot cap a call's output; this call went {{tokens}} tokens over its declared bound." },
+     preparation: { reviewTitle: "Review task plan", goal: "Goal: {{goal}}", agentReview: "Review the effective Agent and role selections below before confirming.", workspace: "Workspace: {{mode}}", integrationReview: "Review the integration target below.", tokenPolicy: "Review the optional token policy and allocations below.", sequence: "Confirm the task plan first; Start is a separate action after confirmation." },
+     savedResult:{notDispatched:"Verification was not started. Ordinary retry creates a new plan and execution on the current target.",verify:"Verify saved results",cost:"Execution is skipped; validation and verification may consume model usage.",unavailable:"Saved results are unavailable for verification.",lineage:"Verification source: {{runId}} · attempt {{attempt}}"},
+     unavailable: "The task control plane is not available on this panel.",
+     title: "Task control",
+     summaryLine: "epoch {{epoch}} · projection {{seq}} · {{dispatch}}",
+     noPort: "no execution port configured · this panel serves recovery and evidence, and refuses to start work · set ORCA_CCLOOP_BIN and ORCA_AGENTS_TABLE and restart it",
+     resetRequired: "server reset required · this page must re-read before it trusts any cached view",
+     refetchRequired: "projection refetch required · re-reading the open groups",
+     dispatchBlockedRecovery: "dispatch blocked · recovery must be observed",
+     groupsNav: "Control groups",
+diff --git a/web/src/locales/zh.ts b/web/src/locales/zh.ts
+index de922269..ceb4f3a2 100644
+--- a/web/src/locales/zh.ts
++++ b/web/src/locales/zh.ts
+@@ -201,20 +201,21 @@ export const zh: Translation<typeof en> = {
+     gotIt: "知道了",
+     stateStopped: "已停止：{{reason}}（{{category}}）",
+     stateRunning: "运行中",
+     stateOrphaned: "运行中（监督进程已不在）",
+     costUnreadable: "费用读不出",
+     cost: "USD {{amount}}",
+     sessionProgress: "第 {{n}} 个会话；{{cost}}",
+     banner: { done: "链已完成", blocked: "链在等你", limit: "链因触达上限而停止", anomaly: "链因异常而停止" },
+   },
+   control: {
++    outputBound: { exceeded: "该 agent 无法限制单次调用的输出；这次调用比声明的上限多用了 {{tokens}} 个 token。" },
+     preparation: { reviewTitle: "检查任务方案", goal: "目标：{{goal}}", agentReview: "确认前请检查下方实际生效的 Agent 和角色选择。", workspace: "工作区：{{mode}}", integrationReview: "请检查下方的集成目标。", tokenPolicy: "请检查下方可选的 token 策略和分配。", sequence: "先确认任务方案；开始执行是确认后的单独操作。" },
+     savedResult:{notDispatched:"验证尚未启动。普通重试会从当前目标创建新的计划与执行。",verify:"验证已保存成果",cost:"跳过执行；校验和验证可能消耗模型用量。",unavailable:"已保存成果暂不可验证。",lineage:"验证来源：{{runId}} · 尝试 {{attempt}}"},
+     unavailable: "这个面板上没有任务控制面。",
+     title: "任务控制",
+     summaryLine: "服务会话 {{epoch}} · 状态序号 {{seq}} · {{dispatch}}",
+     noPort: "未配置执行端口 · 这个面板提供恢复和证据，但拒绝开始工作 · 设置 ORCA_CCLOOP_BIN 和 ORCA_AGENTS_TABLE 后重启它",
+     resetRequired: "服务端要求重置 · 本页必须重新读取，才能信任任何缓存的视图",
+     refetchRequired: "需要重新拉取状态序号 · 正在重新读取打开的组",
+     dispatchBlockedRecovery: "调度已阻断 · 必须先观察到恢复",
+     groupsNav: "控制组",
+diff --git a/web/tests/runOutputBound.test.tsx b/web/tests/runOutputBound.test.tsx
+new file mode 100644
+index 00000000..b6437bcb
+--- /dev/null
++++ b/web/tests/runOutputBound.test.tsx
+@@ -0,0 +1,71 @@
++// @vitest-environment jsdom
++/**
++ * Spec 2026-10-15 §6.2, criterion 5 (R2): an agent that cannot cap a call's output may go over the bound it was sent; the
++ * result is used as normal and the call row says by how much. The sentence is kind-neutral (plan issue 11) and never calls
++ * the call bounded or capped (the wording rule). Controller ruling (Task 12): it shows wherever single-call runs are
++ * listed -- the runs table too, so a call that COMPLETED over its bound (never a problem run) still shows the line.
++ */
++import { cleanup, render, screen, within } from "@testing-library/react";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import i18n from "../src/i18n.js";
++import { ControlGroupView } from "../src/ControlGroupView.js";
++import { RunOutputBound } from "../src/RunOutputBound.js";
++import type { Amount, ControlConfigV1, GroupViewV1, RunViewV1 } from "../src/controlTypes.js";
++
++const EN = "This agent cannot cap a call's output; this call went 100 tokens over its declared bound.";
++const ZH = "该 agent 无法限制单次调用的输出；这次调用比声明的上限多用了 100 个 token。";
++const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
++const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
++const config: ControlConfigV1 = {
++  schema: "orca-control-config-v1", epoch: "epoch-a", repositories: [{ repoId: "orca", displayName: "Orca" }],
++  plans: [{ planId: "plan-demo", repoId: "orca", displayName: "Demo plan" }],
++  profiles: [{ profileId: "all", profileHash: "b".repeat(64), allowedWorkKinds: ["task", "budget-estimate", "handoff", "goal-review"], contextTokenizer: null, workMaxOutputTokens: 1000, declared: capability, observed: capability, observedAt: "2026-10-16T00:00:00.000Z", probeFailureCode: null }],
++  defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
++};
++// A completed estimate call: settled, no failure, no block -- so it is not in the problem-runs list.
++const run = (over: Partial<RunViewV1>): RunViewV1 => ({
++  runId: "run-e", taskId: null, estimateId: "e1", generation: 1, state: "settled-restartable", phase: "estimate", claimOrdinal: null, providerAttemptOrdinal: 1,
++  profile: { profileId: "all", profileHash: "b".repeat(64) }, used: amount(64_200), remaining: amount(0), failureCode: null, blockedReason: null, evidenceIds: [],
++  outputBound: 64000, outputBoundExceededBy: 100, ...over,
++});
++const view = (runs: RunViewV1[]): GroupViewV1 => ({
++  schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 4,
++  summary: { groupId: "g", repoId: "orca", state: "running", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
++  graphVersion: 1, plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "Ship", successConditions: ["done"] },
++  proposal: { state: "confirmed", proposalVersion: 2, planHash: "a".repeat(64), budgetMode: "soft", contextPolicy: { handoffAtContextTokens: null }, profiles: {
++    estimator: { profileId: "all", profileHash: "b".repeat(64) }, worker: { profileId: "all", profileHash: "b".repeat(64) },
++    handoff: { profileId: "all", profileHash: "b".repeat(64) }, goalReview: { profileId: "all", profileHash: "b".repeat(64) } }, executionSnapshotHash: "c".repeat(64) },
++  ledger: { groupLimit: amount(9_000_000), used: amount(64_200), committedRemaining: amount(0), explicitUnallocatedReserve: amount(0), budgetDeficit: amount(0), usageUnknown: false, unmeteredRuns: 0 },
++  allocations: [], workItems: [], estimates: [], runs, checkpoints: [], handoffRequests: [], stop: null, recoveryBlockers: [], recentCommandIds: [],
++});
++
++afterEach(async () => { cleanup(); await i18n.changeLanguage("en"); });
++
++describe("a single call's output overrun (spec §6.2)", () => {
++  it("says by how much the call went over, in English and in Chinese", async () => {
++    await i18n.changeLanguage("en");
++    const { unmount } = render(<RunOutputBound run={run({})} />);
++    expect(screen.getByRole("note").textContent).toBe(EN);
++    unmount();
++    await i18n.changeLanguage("zh");
++    render(<RunOutputBound run={run({})} />);
++    expect(screen.getByRole("note").textContent).toBe(ZH);
++  });
++
++  it("renders nothing for a call that stayed within its bound", () => {
++    const { container } = render(<RunOutputBound run={run({ outputBoundExceededBy: undefined })} />);
++    expect(container.innerHTML).toBe("");
++  });
++
++  it("shows on a completed call's row in the runs table, and only there for that call", () => {
++    const { container } = render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([run({}), run({ runId: "run-f", estimateId: "e2", outputBoundExceededBy: undefined })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
++    const over = container.querySelector<HTMLElement>('tr[data-run-id="run-e"]')!, within_ = container.querySelector<HTMLElement>('tr[data-run-id="run-f"]')!;
++    expect([within(over).queryAllByText(EN).length, within(within_).queryAllByText(EN).length, container.querySelector('[data-problem-run-id="run-e"]')]).toEqual([1, 0, null]);
++  });
++
++  it("shows on the call's line in the problem-runs list too", () => {
++    const { container } = render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "problem", taskId: null, runId: null }} view={view([run({ state: "blocked", blockedReason: "terminal:failed" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
++    const problem = container.querySelector<HTMLElement>('[data-problem-run-id="run-e"]')!;
++    expect(within(problem).queryAllByText(EN).length).toBe(1);
++  });
++});

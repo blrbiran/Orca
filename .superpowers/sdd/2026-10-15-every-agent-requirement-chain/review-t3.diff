@@ -1,0 +1,495 @@
+da714cd feat(agents): catalog probes honour the caller's deadline and abort and name their stage
+ src/agents/catalogProbe.ts        |  69 ++++++++++++++++
+ src/agents/codexCatalog.ts        |  56 +++++++++++++
+ src/agents/materialize.ts         |   6 +-
+ src/agents/ompModels.ts           |  75 ++---------------
+ tests/agents/catalogProbe.test.ts | 165 ++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 302 insertions(+), 69 deletions(-)
+diff --git a/src/agents/catalogProbe.ts b/src/agents/catalogProbe.ts
+new file mode 100644
+index 0000000..e75d061
+--- /dev/null
++++ b/src/agents/catalogProbe.ts
+@@ -0,0 +1,69 @@
++import { spawn } from "node:child_process";
++
++const OUTPUT_LIMIT = 1024 * 1024;
++const STDERR_KEEP = 4096;
++const STDERR_TAIL_BYTES = 400;
++
++/**
++ * Feedback #58: the last <= 400 bytes of a probe's stderr for its error message -- decoded as UTF-8 from a character
++ * boundary, control characters as spaces, whitespace collapsed, cut on whole characters. Empty when nothing is left.
++ */
++export function stderrTail(kept: Buffer): string {
++  let start = 0;
++  while (start < kept.length && (kept[start]! & 0xc0) === 0x80) start += 1;
++  const text = kept.subarray(start).toString("utf8").replace(/\p{Cc}/gu, " ").replace(/\s+/gu, " ").trim();
++  const chars = Array.from(text);
++  let bytes = 0;
++  let from = chars.length;
++  while (from > 0 && bytes + Buffer.byteLength(chars[from - 1]!) <= STDERR_TAIL_BYTES) { from -= 1; bytes += Buffer.byteLength(chars[from]!); }
++  return chars.slice(from).join("").trim();
++}
++
++/** Every-agent requirement chain (Orca spec 2026-10-15 §4.3, R6): the old fixed 10 s became min(caller deadline, 30 s). */
++export const PROBE_CAP_MS = 30_000;
++export type ProbeStage = "spawn" | "timeout" | "abort" | "exit" | "decode";
++export class CatalogProbeError extends Error {
++  constructor(readonly stage: ProbeStage, readonly elapsedMs: number, message: string) { super(message); this.name = "CatalogProbeError"; }
++}
++export function probeTimeoutMs(deadline: number | undefined, now = Date.now()): number {
++  return deadline === undefined ? PROBE_CAP_MS : Math.max(0, Math.min(deadline - now, PROBE_CAP_MS));
++}
++export function probeFailure(code: string, reason: string, stage: ProbeStage, startedAt: number, tail = ""): CatalogProbeError {
++  const elapsedMs = Date.now() - startedAt;
++  return new CatalogProbeError(stage, elapsedMs, `${code}: ${reason} · stage ${stage} · elapsedMs ${elapsedMs}${tail === "" ? "" : ` · stderr: ${tail}`}`);
++}
++
++/** One catalog/feature probe in a private process group; resolves with stdout, or rejects naming why, the stage and the time. */
++export function runProbe(code: string, command: string, args: string[], env: NodeJS.ProcessEnv, options: { timeoutMs: number; signal?: AbortSignal }): Promise<string> {
++  const startedAt = Date.now();
++  if (options.timeoutMs <= 0) return Promise.reject(probeFailure(code, "timeout 0ms", "timeout", startedAt));
++  if (options.signal?.aborted) return Promise.reject(probeFailure(code, "aborted", "abort", startedAt));
++  return new Promise<string>((resolve, reject) => {
++    const child = spawn(command, args, { detached: true, env, stdio: ["ignore", "pipe", "pipe"] });
++    const chunks: Buffer[] = []; let bytes = 0; let stderr: Buffer = Buffer.alloc(0);
++    let stopped: { reason: string; stage: ProbeStage } | null = null; let spawnError: NodeJS.ErrnoException | null = null;
++    const kill = (reason: string, stage: ProbeStage): void => {
++      if (stopped !== null) return; stopped = { reason, stage };
++      if (child.pid !== undefined) { try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); } }
++    };
++    const timer = setTimeout(() => kill(`timeout ${options.timeoutMs}ms`, "timeout"), options.timeoutMs);
++    const onAbort = (): void => kill("aborted", "abort");
++    options.signal?.addEventListener("abort", onAbort, { once: true });
++    child.stdout.on("data", (chunk: Buffer) => { bytes += chunk.length; if (bytes > OUTPUT_LIMIT) { kill("output-limit", "decode"); return; } chunks.push(chunk); });
++    child.stderr.on("data", (chunk: Buffer) => {
++      if (chunk.length > OUTPUT_LIMIT) kill("output-limit", "decode");
++      stderr = Buffer.concat([stderr, chunk.subarray(Math.max(0, chunk.length - STDERR_KEEP))]);
++      if (stderr.length > STDERR_KEEP) stderr = stderr.subarray(stderr.length - STDERR_KEEP);
++    });
++    child.on("error", (error: NodeJS.ErrnoException) => { spawnError = error; });
++    child.on("close", (exit, signal) => {
++      clearTimeout(timer); options.signal?.removeEventListener("abort", onAbort);
++      // Feedback #58: the code stays the message's prefix (callers match it); the detail names why, never stdout or env.
++      // Spec §4.3: stage and elapsed time follow the reason, and the stderr tail stays last.
++      const failed = stopped ?? (spawnError !== null ? { reason: `spawn ${spawnError.code ?? spawnError.message}`, stage: "spawn" as const }
++        : exit === null ? { reason: `signal ${signal ?? "unknown"}`, stage: "exit" as const } : exit !== 0 ? { reason: `exit ${exit}`, stage: "exit" as const } : null);
++      if (failed !== null) { reject(probeFailure(code, failed.reason, failed.stage, startedAt, stderrTail(stderr))); return; }
++      resolve(Buffer.concat(chunks).toString("utf8"));
++    });
++  });
++}
+diff --git a/src/agents/codexCatalog.ts b/src/agents/codexCatalog.ts
+new file mode 100644
+index 0000000..7ca757b
+--- /dev/null
++++ b/src/agents/codexCatalog.ts
+@@ -0,0 +1,56 @@
++import { readFile } from "node:fs/promises";
++import { join } from "node:path";
++import { probeFailure, probeTimeoutMs, runProbe } from "./catalogProbe.js";
++import type { CatalogRowV1, InstallationV1 } from "./types.js";
++
++/** Spec 2026-10-15 §2.4/§6.1: the tool flags a codex single call turns off, plus skip_host_skill_discovery (turned on). */
++export const CODEX_SINGLE_CALL_FEATURES = ["apps", "image_generation", "multi_agent", "plugins", "shell_tool", "skip_host_skill_discovery", "unified_exec", "view_image"] as const;
++const CODE = "agent-catalog-unavailable";
++const positiveSafe = (value: unknown): number | null => (typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null);
++
++/** §6.1 "Window": a top-level `model_context_window = <n>` before the first `[table]` wins over the catalog. */
++function configuredWindow(toml: string): number | null {
++  const head = toml.split(/^\s*\[/m, 1)[0]!;
++  const match = /^\s*model_context_window\s*=\s*(\d+)\s*(?:#.*)?$/m.exec(head);
++  return match === null ? null : positiveSafe(Number(match[1]));
++}
++
++/**
++ * The flag names `codex features list` prints. codex-cli 0.160.0 prints `name<pad>stage<pad>enabled` and a stage can be
++ * two words ("under development"), so the name is the first word and the line must end in true/false -- never a fixed
++ * column count.
++ */
++export function codexFeatureNames(listed: string): Set<string> {
++  const names = new Set<string>();
++  for (const line of listed.split("\n")) {
++    const words = line.trim().split(/\s+/);
++    if (words.length >= 3 && (words.at(-1) === "true" || words.at(-1) === "false")) names.add(words[0]!);
++  }
++  return names;
++}
++
++/** The codex catalog (`codex debug models`) and its installed feature flags (`codex features list`), under one deadline. */
++export async function readCodexCatalog(installation: InstallationV1, options: { deadline?: number; signal?: AbortSignal }): Promise<{ rows: CatalogRowV1[]; features: string[] }> {
++  const env: NodeJS.ProcessEnv = { ...process.env, ...(installation.configDir === null ? {} : { CODEX_HOME: installation.configDir }) };
++  const deadline = options.deadline ?? Date.now() + 30_000;
++  const startedAt = Date.now();
++  const models = await runProbe(CODE, installation.command[0], [...installation.command.slice(1), "debug", "models"], env, { timeoutMs: probeTimeoutMs(deadline), signal: options.signal });
++  let rows: CatalogRowV1[];
++  try {
++    const parsed = JSON.parse(models) as { models?: unknown };
++    if (!Array.isArray(parsed.models)) throw new Error();
++    rows = parsed.models.map((row) => {
++      const value = row as Record<string, unknown>;
++      if (typeof value.slug !== "string" || value.slug.length === 0 || value.slug.length > 200 || (value.visibility !== "list" && value.visibility !== "hide")) throw new Error();
++      return { selector: value.slug, provider: "codex", contextWindow: positiveSafe(value.context_window), maxTokens: null, listed: value.visibility === "list" };
++    });
++    if (new Set(rows.map((row) => row.selector)).size !== rows.length) throw new Error();
++  } catch { throw probeFailure(CODE, "decode", "decode", startedAt); }
++  // An empty CODEX_HOME/HOME is treated as unset: joining "" would read a config.toml from the working directory.
++  const codexHome = installation.configDir ?? (env.CODEX_HOME || (env.HOME ? join(env.HOME, ".codex") : null));
++  const window = codexHome === null ? null : await readFile(join(codexHome, "config.toml"), "utf8").then(configuredWindow, () => null);
++  if (window !== null) rows = rows.map((row) => ({ ...row, contextWindow: window }));
++  const listed = await runProbe(CODE, installation.command[0], [...installation.command.slice(1), "features", "list"], env, { timeoutMs: probeTimeoutMs(deadline), signal: options.signal });
++  const names = codexFeatureNames(listed);
++  return { rows, features: CODEX_SINGLE_CALL_FEATURES.filter((name) => names.has(name)) };
++}
+diff --git a/src/agents/materialize.ts b/src/agents/materialize.ts
+index 0e32496..8545802 100644
+--- a/src/agents/materialize.ts
++++ b/src/agents/materialize.ts
+@@ -14,44 +14,48 @@ import {
+   type PartialSelectionV1,
+ } from "./types.js";
+ 
+ const VERSION_PATTERN = /\d+\.\d+\.\d+(?:-[\w.]+)?/;
+ const VERSION_OUTPUT_LIMIT = 64 * 1024;
+ const VERSION_TIMEOUT_MS = 10_000;
+ 
+ /**
+  * Runs `<command> --version` once (spec §4.2 / §12 C6) and answers the first `x.y.z[-tag]` in its stdout, or
+  * null when it cannot be run, exits non-zero, prints no version, prints too much, or outlives the timeout.
++ * Every-agent requirement chain (Orca spec 2026-10-15 §4.3): also null when the caller's `signal` aborts it.
+  */
+-export function probeVersion(command: string[], options: { timeoutMs?: number } = {}): Promise<string | null> {
++export function probeVersion(command: string[], options: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<string | null> {
+   return new Promise((resolve) => {
+     let settled = false;
+     let aborted = false;
+     let output = "";
+     // A private process group lets timeout/overflow reap descendants that a CLI leaves behind.
+     const child = spawn(command[0]!, [...command.slice(1), "--version"], { stdio: ["ignore", "pipe", "ignore"], env: process.env, detached: true });
+     const finish = (value: string | null): void => {
+       if (settled) return;
+       settled = true;
+       clearTimeout(timer);
++      options.signal?.removeEventListener("abort", abortTree);
+       resolve(value);
+     };
+     const abortTree = (): void => {
+       if (aborted) return;
+       aborted = true;
+       if (child.pid !== undefined) {
+         try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
+       }
+     };
+     const timer = setTimeout(() => {
+       abortTree();
+     }, options.timeoutMs ?? VERSION_TIMEOUT_MS);
++    options.signal?.addEventListener("abort", abortTree, { once: true });
++    if (options.signal?.aborted) abortTree();
+     child.stdout.on("data", (chunk: Buffer) => {
+       output += chunk.toString("utf8");
+       if (output.length > VERSION_OUTPUT_LIMIT) {
+         abortTree();
+       }
+     });
+     child.on("error", () => finish(null));
+     child.on("close", (code) => finish(!aborted && code === 0 ? (VERSION_PATTERN.exec(output)?.[0] ?? null) : null));
+   });
+ }
+diff --git a/src/agents/ompModels.ts b/src/agents/ompModels.ts
+index e44a02f..4ce8a85 100644
+--- a/src/agents/ompModels.ts
++++ b/src/agents/ompModels.ts
+@@ -1,96 +1,35 @@
+-import { spawn } from "node:child_process";
++import { PROBE_CAP_MS, probeTimeoutMs, runProbe } from "./catalogProbe.js";
+ import type { CatalogRowV1, InstallationV1 } from "./types.js";
+ 
+-const OUTPUT_LIMIT = 1024 * 1024;
+-const PROBE_TIMEOUT_MS = 10_000;
+-const STDERR_KEEP = 4096;
+-const STDERR_TAIL_BYTES = 400;
+-
+-/**
+- * Feedback #58: the last <= 400 bytes of a probe's stderr for its error message -- decoded as UTF-8 from a character
+- * boundary, control characters as spaces, whitespace collapsed, cut on whole characters. Empty when nothing is left.
+- */
+-function stderrTail(kept: Buffer): string {
+-  let start = 0;
+-  while (start < kept.length && (kept[start]! & 0xc0) === 0x80) start += 1;
+-  const text = kept.subarray(start).toString("utf8").replace(/\p{Cc}/gu, " ").replace(/\s+/gu, " ").trim();
+-  const chars = Array.from(text);
+-  let bytes = 0;
+-  let from = chars.length;
+-  while (from > 0 && bytes + Buffer.byteLength(chars[from - 1]!) <= STDERR_TAIL_BYTES) { from -= 1; bytes += Buffer.byteLength(chars[from]!); }
+-  return chars.slice(from).join("").trim();
+-}
+-
+ export function canonicalOmpSelector(input: string, selectors: readonly string[]): string | null {
+   if (selectors.includes(input)) return input;
+   const matches = selectors.filter((selector) => selector.slice(selector.indexOf("/") + 1) === input);
+   return matches.length === 1 ? matches[0]! : null;
+ }
+ 
+-async function runOmpJson(installation: InstallationV1, args: string[], timeoutMs = PROBE_TIMEOUT_MS): Promise<unknown> {
++async function runOmpJson(installation: InstallationV1, args: string[], options: { timeoutMs: number; signal?: AbortSignal }): Promise<unknown> {
+   const profile = installation.profile as string | null;
+   const env: NodeJS.ProcessEnv = { ...process.env, OMP_PROFILE: profile ?? "default" };
+   if (installation.configDir !== null) env.PI_CODING_AGENT_DIR = installation.configDir;
+-  return await new Promise<unknown>((resolve, reject) => {
+-    const child = spawn(installation.command[0], ["--no-extensions", "--profile", profile ?? "default", ...args], {
+-      detached: true, env, stdio: ["ignore", "pipe", "pipe"],
+-    });
+-    const stdoutChunks: Buffer[] = [];
+-    let bytes = 0;
+-    let aborted: string | null = null;
+-    let spawnError: NodeJS.ErrnoException | null = null;
+-    let stderr: Buffer = Buffer.alloc(0);
+-    const kill = (reason: string): void => {
+-      if (aborted !== null) return;
+-      aborted = reason;
+-      if (child.pid !== undefined) {
+-        try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
+-      }
+-    };
+-    const timer = setTimeout(() => kill(`timeout ${timeoutMs}ms`), timeoutMs);
+-    child.stdout.on("data", (chunk: Buffer) => {
+-      bytes += chunk.length;
+-      if (bytes > OUTPUT_LIMIT) { kill("output-limit"); return; }
+-      stdoutChunks.push(chunk);
+-    });
+-    child.stderr.on("data", (chunk: Buffer) => {
+-      if (chunk.length > OUTPUT_LIMIT) kill("output-limit");
+-      stderr = Buffer.concat([stderr, chunk.subarray(Math.max(0, chunk.length - STDERR_KEEP))]);
+-      if (stderr.length > STDERR_KEEP) stderr = stderr.subarray(stderr.length - STDERR_KEEP);
+-    });
+-    child.on("error", (error: NodeJS.ErrnoException) => { spawnError = error; });
+-    child.on("close", (code, signal) => {
+-      clearTimeout(timer);
+-      // Feedback #58: the code stays the message's prefix (callers match it); the detail names why, never stdout or env.
+-      const reason = aborted ?? (spawnError !== null ? `spawn ${spawnError.code ?? spawnError.message}`
+-        : code === null ? `signal ${signal ?? "unknown"}` : code !== 0 ? `exit ${code}` : null);
+-      if (reason !== null) {
+-        const tail = stderrTail(stderr);
+-        reject(new Error(`omp-model-catalog-unavailable: ${reason}${tail === "" ? "" : ` · stderr: ${tail}`}`));
+-        return;
+-      }
+-      try {
+-        resolve(JSON.parse(Buffer.concat(stdoutChunks).toString("utf8")) as unknown);
+-      } catch { reject(new Error("omp-model-catalog-invalid")); }
+-    });
+-  });
++  const stdout = await runProbe("omp-model-catalog-unavailable", installation.command[0], ["--no-extensions", "--profile", profile ?? "default", ...args], env, options);
++  try { return JSON.parse(stdout) as unknown; } catch { throw new Error("omp-model-catalog-invalid"); }
+ }
+ 
+ const positiveSafe = (value: unknown): number | null => (typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null);
+ 
+ /**
+  * OMP single call (Orca spec 2026-10-14 §3.1): the catalog's rows from its one spawn, read under the same structured
+  * profile/configuration as a phase. A number is kept only when it is a positive safe integer. This never sends a model prompt.
+  */
+-export async function readOmpCatalog(installation: InstallationV1, options: { timeoutMs?: number } = {}): Promise<CatalogRowV1[]> {
+-  const parsed = await runOmpJson(installation, ["models", "--json"], options.timeoutMs);
++export async function readOmpCatalog(installation: InstallationV1, options: { timeoutMs?: number; deadline?: number; signal?: AbortSignal } = {}): Promise<CatalogRowV1[]> {
++  const parsed = await runOmpJson(installation, ["models", "--json"], { timeoutMs: options.timeoutMs ?? probeTimeoutMs(options.deadline), signal: options.signal });
+   if (parsed === null || typeof parsed !== "object" || !Array.isArray((parsed as { models?: unknown }).models)) throw new Error("omp-model-catalog-invalid");
+   const rows = (parsed as { models: unknown[] }).models.map((row): CatalogRowV1 => {
+     if (row === null || typeof row !== "object") throw new Error("omp-model-catalog-invalid");
+     const value = row as Record<string, unknown>;
+     if (typeof value.provider !== "string" || typeof value.id !== "string" || typeof value.selector !== "string"
+       || value.selector !== `${value.provider}/${value.id}` || value.selector.length > 200) throw new Error("omp-model-catalog-invalid");
+     return { selector: value.selector, provider: value.provider, contextWindow: positiveSafe(value.contextWindow), maxTokens: positiveSafe(value.maxTokens) };
+   });
+   if (new Set(rows.map((row) => row.selector)).size !== rows.length) throw new Error("omp-model-catalog-invalid");
+   return rows;
+@@ -103,17 +42,17 @@ export async function readOmpModels(installation: InstallationV1): Promise<strin
+ 
+ /**
+  * OMP single call (Orca spec 2026-10-14 §2, §3.2): "v1" only when the row declares the cap pi-ai sends (maxTokens) and its
+  * provider is not openrouter, for which pi-ai sends no cap unless one is given explicitly.
+  */
+ export function ompSingleCallExecution(row: CatalogRowV1 | undefined): "v1" | null {
+   return row !== undefined && row.maxTokens !== null && row.provider !== "openrouter" ? "v1" : null;
+ }
+ 
+ export async function readOmpConfiguredDefault(installation: InstallationV1): Promise<string | null> {
+-  const parsed = await runOmpJson(installation, ["config", "get", "modelRoles", "--json"]);
++  const parsed = await runOmpJson(installation, ["config", "get", "modelRoles", "--json"], { timeoutMs: PROBE_CAP_MS });
+   if (parsed === null || typeof parsed !== "object") return null;
+   const value = (parsed as { value?: unknown }).value;
+   if (value === null || typeof value !== "object") return null;
+   const model = (value as { default?: unknown }).default;
+   return typeof model === "string" && model.length > 0 ? model : null;
+ }
+diff --git a/tests/agents/catalogProbe.test.ts b/tests/agents/catalogProbe.test.ts
+new file mode 100644
+index 0000000..163b7b8
+--- /dev/null
++++ b/tests/agents/catalogProbe.test.ts
+@@ -0,0 +1,165 @@
++import { spawnSync } from "node:child_process";
++import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join, resolve } from "node:path";
++import { describe, expect, it, vi } from "vitest";
++import { codexFeatureNames, readCodexCatalog } from "../../src/agents/codexCatalog.js";
++import { probeTimeoutMs } from "../../src/agents/catalogProbe.js";
++import { probeVersion } from "../../src/agents/materialize.js";
++import { readOmpCatalog } from "../../src/agents/ompModels.js";
++import type { InstallationV1 } from "../../src/agents/types.js";
++
++// Every-agent requirement chain (Orca spec 2026-10-15 §4.3, R6; criterion 2): a probe that outlives the caller's deadline
++// or abort is killed (its process is gone) and the refusal names the elapsed time and the stage. The old fixed limit was
++// 10 s; every deadline here is far below it.
++const FAKE_OMP = resolve("tests/fixtures/fake-omp.mjs"), FAKE_CODEX = resolve("tests/fixtures/fake-codex.mjs");
++async function omp(models?: Record<string, unknown>) {
++  const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-probe-")));
++  const marker = join(dir, "omp-marker");
++  if (models) await writeFile(`${marker}.models.json`, JSON.stringify(models));
++  const binary = join(dir, "omp");
++  await writeFile(binary, `#!/bin/sh\nexec '${process.execPath}' '${FAKE_OMP}' '${marker}' "$@"\n`, { mode: 0o700 });
++  const installation: InstallationV1 = { kind: "omp", command: [binary], version: "18.10.1", configDir: null, timeoutMs: 60_000, killGraceMs: 50, defaultModel: "gateway/model-a", profile: null };
++  return { marker, installation };
++}
++async function codex(catalog?: Record<string, unknown>, toml?: string) {
++  const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-probe-codex-")));
++  const marker = join(dir, "codex-marker");
++  if (catalog) await writeFile(`${marker}.catalog.json`, JSON.stringify(catalog));
++  if (toml !== undefined) await writeFile(join(dir, "config.toml"), toml);
++  const installation: InstallationV1 = { kind: "codex", command: [process.execPath, FAKE_CODEX, "integration", marker], version: "9.9.9-fake", configDir: dir, timeoutMs: 60_000, killGraceMs: 50, sandbox: "read-only", budgetMode: "soft" };
++  return { marker, installation };
++}
++const gone = async (pid: number) => { for (const until = Date.now() + 3_000; Date.now() < until; await new Promise((r) => setTimeout(r, 25))) { try { process.kill(pid, 0); } catch { return true; } } return false; };
++// "Without spawning" is counted, not inferred from the fake's call file: a kill at 0 ms lands before the fake writes it.
++const spawned = vi.hoisted(() => ({ count: 0 }));
++vi.mock("node:child_process", async (importOriginal) => {
++  const actual = await importOriginal<typeof import("node:child_process")>();
++  return { ...actual, spawn: (...args: Parameters<typeof actual.spawn>) => { spawned.count += 1; return actual.spawn(...args); } };
++});
++const failure = (promise: Promise<unknown>) => promise.then(() => { throw new Error("expected a rejection"); }, (error: Error) => error);
++// The fake writes its pid only once node has started (the abort test that waits for it took 2.5 s in one loaded parallel
++// run); a kill that lands earlier leaves no pid to check, so the abort waits for it.
++const pidWritten = async (marker: string) => { for (const until = Date.now() + 10_000; Date.now() < until; await new Promise((r) => setTimeout(r, 10))) { try { return Number(await readFile(`${marker}.models.pid`, "utf8")); } catch { /* not yet */ } } throw new Error("fake never wrote its pid"); };
++
++describe("criterion 2: deadline and abort (spec §4.3)", () => {
++  it("kills a hanging omp catalog probe at the caller's deadline and names stage and elapsed time", async () => {
++    // A shell `omp` that leaves its hanging child in the background, so only a kill of the probe's whole process group
++    // reaches that child. A freshly written executable's first start was measured past 1 s in a loaded parallel run
++    // (the pid file was not there yet at a 1 s deadline), so it is started once (`warm`) before the timed probe.
++    const w = await omp();
++    await writeFile(w.installation.command[0], `#!/bin/sh\n[ "$1" = warm ] && exit 0\nsleep 30 &\necho $! > '${w.marker}.models.pid'\nwait\n`);
++    spawnSync(w.installation.command[0], ["warm"]);
++    const started = Date.now();
++    const error = await failure(readOmpCatalog(w.installation, { deadline: started + 1_000 }));
++    expect(Date.now() - started).toBeLessThan(3_000);
++    expect(error.message).toMatch(/^omp-model-catalog-unavailable: timeout \d+ms · stage timeout · elapsedMs \d+$/);
++    expect(Number(/elapsedMs (\d+)/.exec(error.message)![1])).toBeGreaterThanOrEqual(900);
++    expect(await gone(Number(await readFile(`${w.marker}.models.pid`, "utf8")))).toBe(true);
++  }, 20_000);
++
++  it("kills it when the caller aborts, as stage abort", async () => {
++    const w = await omp({ hang: true });
++    const controller = new AbortController(); void pidWritten(w.marker).then(() => controller.abort());
++    const error = await failure(readOmpCatalog(w.installation, { signal: controller.signal }));
++    expect(error.message).toMatch(/^omp-model-catalog-unavailable: aborted · stage abort · elapsedMs \d+$/);
++    expect(await gone(Number(await readFile(`${w.marker}.models.pid`, "utf8")))).toBe(true);
++  }, 20_000);
++
++  it("refuses without spawning when the deadline has already passed", async () => {
++    const w = await omp();
++    const before = spawned.count;
++    const error = await failure(readOmpCatalog(w.installation, { deadline: Date.now() - 1 }));
++    expect(error.message).toMatch(/^omp-model-catalog-unavailable: timeout 0ms · stage timeout · elapsedMs \d+$/);
++    expect(spawned.count).toBe(before);
++    await expect(readFile(`${w.marker}.catalog-calls`, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
++  });
++
++  it("refuses without spawning when the caller has already aborted", async () => {
++    const w = await omp();
++    const before = spawned.count;
++    const error = await failure(readOmpCatalog(w.installation, { signal: AbortSignal.abort() }));
++    expect(error.message).toMatch(/^omp-model-catalog-unavailable: aborted · stage abort · elapsedMs \d+$/);
++    expect(spawned.count).toBe(before);
++    await expect(readFile(`${w.marker}.catalog-calls`, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
++  });
++
++  it("names a binary that cannot be started as stage spawn", async () => {
++    const w = await codex();
++    const error = await failure(readCodexCatalog({ ...w.installation, command: [join(w.installation.configDir!, "no-such-codex")] }, {}));
++    expect(error.message).toMatch(/^agent-catalog-unavailable: spawn ENOENT · stage spawn · elapsedMs \d+$/);
++  });
++
++  it("stops output past 1 MiB as stage decode", async () => {
++    const w = await omp();
++    await writeFile(w.installation.command[0], `#!/bin/sh\n[ "$1" = warm ] && exit 0\nhead -c 2000000 /dev/zero\n`);
++    spawnSync(w.installation.command[0], ["warm"]);
++    const error = await failure(readOmpCatalog(w.installation));
++    expect(error.message).toMatch(/^omp-model-catalog-unavailable: output-limit · stage decode · elapsedMs \d+$/);
++  }, 20_000);
++
++  it("caps the timeout at 30 s and follows a nearer deadline", () => {
++    expect(probeTimeoutMs(undefined, 1_000)).toBe(30_000);
++    expect(probeTimeoutMs(1_000 + 90_000, 1_000)).toBe(30_000);
++    expect(probeTimeoutMs(1_000 + 1_234, 1_000)).toBe(1_234);
++    expect(probeTimeoutMs(500, 1_000)).toBe(0);
++  });
++
++  it("names exit, stage and the stderr tail last for codex (agent-catalog-unavailable)", async () => {
++    const w = await codex({ exitCode: 4, stderr: "no catalog\n" });
++    const error = await failure(readCodexCatalog(w.installation, {}));
++    expect(error.message).toMatch(/^agent-catalog-unavailable: exit 4 · stage exit · elapsedMs \d+ · stderr: no catalog$/);
++  });
++
++  it("names a codex probe past its deadline as stage timeout", async () => {
++    const w = await codex({ sleepMs: 5_000 });
++    const error = await failure(readCodexCatalog(w.installation, { deadline: Date.now() + 400 }));
++    expect(error.message).toMatch(/^agent-catalog-unavailable: timeout \d+ms · stage timeout · elapsedMs \d+$/);
++  });
++
++  // The version probe runs beside the catalog probe under the same caller (spec §4.3): an abort must stop it too, not
++  // leave it running to its own 10 s limit. A hanging `--version` answers null well before that limit.
++  it("stops the version probe when the caller aborts, before or during the run", async () => {
++    const script = join(await realpath(await mkdtemp(join(tmpdir(), "ccloop-probe-version-"))), "hang.mjs");
++    await writeFile(script, "setInterval(() => {}, 1000);\n");
++    const hang = [process.execPath, script];
++    const controller = new AbortController(); setTimeout(() => controller.abort(), 200);
++    const started = Date.now();
++    expect(await probeVersion(hang, { signal: controller.signal })).toBeNull();
++    expect(Date.now() - started).toBeLessThan(3_000);
++    const before = Date.now();
++    expect(await probeVersion(hang, { signal: AbortSignal.abort() })).toBeNull();
++    expect(Date.now() - before).toBeLessThan(3_000);
++  });
++});
++
++describe("codex catalog decode (spec §3, §6.1)", () => {
++  it("reads every row with its window and visibility, and the installed tool flags in order", async () => {
++    const w = await codex();
++    expect(await readCodexCatalog(w.installation, {})).toEqual({
++      rows: [
++        { selector: "gpt-6-sol", provider: "codex", contextWindow: 272000, maxTokens: null, listed: true },
++        { selector: "gpt-6-luna", provider: "codex", contextWindow: 272000, maxTokens: null, listed: true },
++        { selector: "gpt-reserve", provider: "codex", contextWindow: 272000, maxTokens: null, listed: false },
++      ],
++      features: ["apps", "image_generation", "multi_agent", "plugins", "shell_tool", "skip_host_skill_discovery", "unified_exec", "view_image"],
++    });
++  });
++
++  it("lets config.toml's top-level model_context_window win over the catalog, and ignores one inside a table", async () => {
++    expect((await readCodexCatalog((await codex(undefined, "model = \"x\"\nmodel_context_window = 100000\n[profiles.a]\n")).installation, {})).rows[0]!.contextWindow).toBe(100000);
++    expect((await readCodexCatalog((await codex(undefined, "[profiles.a]\nmodel_context_window = 100000\n")).installation, {})).rows[0]!.contextWindow).toBe(272000);
++  });
++
++  // codex-cli 0.160.0 prints `name<pad>stage<pad>enabled`, and a stage can be two words ("under development"); the name is
++  // the first word and the enabled flag the last, never a fixed column count. A line without a true/false end is not a flag.
++  it("takes each flag's name from the first word even when the stage is two words", () => {
++    const listed = "apps                     stable              true\nskip_host_skill_discovery    under development    false\nWARNING: something odd\n\n";
++    expect([...codexFeatureNames(listed)]).toEqual(["apps", "skip_host_skill_discovery"]);
++  });
++
++  it("refuses malformed rows as stage decode", async () => {
++    const w = await codex({ rows: [{ slug: 3 }] });
++    expect((await failure(readCodexCatalog(w.installation, {}))).message).toMatch(/^agent-catalog-unavailable: decode · stage decode · elapsedMs \d+$/);
++  });
++});

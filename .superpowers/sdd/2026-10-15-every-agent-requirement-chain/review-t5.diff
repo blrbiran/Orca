@@ -1,0 +1,436 @@
+db69eff feat(control): list an installation's models (control models, agents models)
+ src/agents/command.ts               |   7 +++
+ src/agents/models.ts                |  29 +++++++++
+ src/control/command.ts              |  13 ++++
+ src/control/protocol.ts             |   5 ++
+ tests/control/modelsControl.test.ts | 116 ++++++++++++++++++++++++++++++++++++
+ 5 files changed, 170 insertions(+)
+diff --git a/src/agents/command.ts b/src/agents/command.ts
+index 0387e34..5f01d5f 100644
+--- a/src/agents/command.ts
++++ b/src/agents/command.ts
+@@ -1,13 +1,14 @@
+ import { homedir } from "node:os";
+ import { detectAgents } from "./detect.js";
+ import { probeVersion } from "./materialize.js";
++import { listAgentModels } from "./models.js";
+ import { readAgentsTable } from "./table.js";
+ import { AgentError } from "./types.js";
+ 
+ export interface AgentsCommandResult {
+   code: number;
+   stdout: string;
+   stderr: string;
+ }
+ 
+ function detectFlags(argv: string[]): { home?: string; path?: string } {
+@@ -15,20 +16,21 @@ function detectFlags(argv: string[]): { home?: string; path?: string } {
+   for (let index = 0; index < argv.length; index += 2) {
+     const name = argv[index];
+     const value = argv[index + 1];
+     if ((name !== "--home" && name !== "--path") || value === undefined) throw new AgentError("agents-command-invalid");
+     flags[name === "--home" ? "home" : "path"] = value;
+   }
+   return flags;
+ }
+ 
+ /** `ccloop agents detect [--home <dir>] [--path <PATH>]` and `ccloop agents validate <table>` (spec §4.3, §4.4). */
++// Every-agent requirement chain (Orca spec 2026-10-15 §3): also `ccloop agents models --agents <table> --installation <id> [--refresh]`.
+ export async function runAgentsCommand(
+   argv: string[],
+   deps: { probe?: typeof probeVersion } = {},
+ ): Promise<AgentsCommandResult> {
+   try {
+     if (argv[0] === "detect") {
+       const flags = detectFlags(argv.slice(1));
+       const result = await detectAgents({
+         home: flags.home ?? homedir(),
+         path: flags.path ?? process.env.PATH ?? "",
+@@ -44,17 +46,22 @@ export async function runAgentsCommand(
+       for (const [id, installation] of Object.entries(table.installations)) {
+         const observed = await probe(installation.command);
+         installations.push(observed === installation.version ? { id, ok: true } : { id, ok: false, error: "agent-version-drift" });
+       }
+       return {
+         code: installations.every((row) => row.ok) ? 0 : 1,
+         stdout: `${JSON.stringify({ installations })}\n`,
+         stderr: "",
+       };
+     }
++    if (argv[0] === "models" && (argv.length === 5 || (argv.length === 6 && argv[5] === "--refresh")) && argv[1] === "--agents" && argv[3] === "--installation") {
++      // The `ccloop-agent-catalog: miss|probe-failed ...` lines go to stderr here (plan issue 3); `control models` prints none.
++      const answer = await listAgentModels(argv[2]!, argv[4]!, { refresh: argv.length === 6, log: (line) => process.stderr.write(`${line}\n`) });
++      return { code: 0, stdout: `${JSON.stringify(answer)}\n`, stderr: "" };
++    }
+     throw new AgentError("agents-command-invalid");
+   } catch (error) {
+     // An AgentError's message starts with its code, so the first stderr token is always the code.
+     const message = error instanceof Error ? error.message : String(error);
+     return { code: 1, stdout: "", stderr: `${message}\n` };
+   }
+ }
+diff --git a/src/agents/models.ts b/src/agents/models.ts
+new file mode 100644
+index 0000000..0b6ebcc
+--- /dev/null
++++ b/src/agents/models.ts
+@@ -0,0 +1,29 @@
++import { readAgentCatalog } from "./agentCatalog.js";
++import { ompSingleCallExecution } from "./ompModels.js";
++import { readAgentsTable } from "./table.js";
++import { AgentError } from "./types.js";
++
++/** Every-agent requirement chain (Orca spec 2026-10-15 §3, part A): one installation's models, for Orca's drop-down. */
++export interface AgentModelV1 { model: string; contextWindowTokens: number | null; maxOutputTokens: number | null; singleCallExecution: "v1" | "v1-soft" | null }
++export interface AgentModelsV1 { schema: "ccloop-models-v1"; installation: string; kind: string; source: "cache" | "probe" | "none"; observedAt: string | null; models: AgentModelV1[] }
++
++/**
++ * Sorted by model in code-unit order; codex lists only its `visibility: "list"` rows; a kind with no catalog command
++ * (claude) answers no models and spawns nothing. A catalog failure throws the kind's own message (omp-model-catalog-*,
++ * agent-catalog-unavailable), which names the stage and the elapsed time.
++ */
++export async function listAgentModels(tablePath: string, id: string, options: { refresh?: boolean; log?: (line: string) => void } = {}): Promise<AgentModelsV1> {
++  const table = await readAgentsTable(tablePath);
++  const installation = Object.hasOwn(table.installations, id) ? table.installations[id] : undefined;
++  if (installation === undefined) throw new AgentError("agent-installation-missing", id);
++  const empty: AgentModelsV1 = { schema: "ccloop-models-v1", installation: id, kind: installation.kind, source: "none", observedAt: null, models: [] };
++  if (installation.kind !== "omp" && installation.kind !== "codex") return empty;
++  const catalog = await readAgentCatalog(installation, { refresh: options.refresh, log: options.log });
++  if (catalog.catalogError !== null || catalog.rows === null) throw new Error(catalog.catalogError ?? "agent-catalog-unavailable: no rows");
++  const codex = installation.kind === "codex";
++  const models = catalog.rows.filter((row) => !codex || row.listed === true).map((row): AgentModelV1 => ({
++    model: row.selector, contextWindowTokens: row.contextWindow, maxOutputTokens: codex ? null : row.maxTokens,
++    singleCallExecution: codex ? "v1-soft" : ompSingleCallExecution(row),
++  })).sort((left, right) => (left.model < right.model ? -1 : left.model > right.model ? 1 : 0));
++  return { ...empty, source: catalog.source, observedAt: catalog.observedAt, models };
++}
+diff --git a/src/control/command.ts b/src/control/command.ts
+index 3d7ae7d..eeca4be 100644
+--- a/src/control/command.ts
++++ b/src/control/command.ts
+@@ -1,16 +1,17 @@
+ import {settleSavedResult,readSavedResultSettlement,savedResultSettlementSchema} from "./settleSavedResult.js";
+ import {readSavedResultSourceEligibility,readSavedResultEligibility,savedResultEligibilitySchema,savedResultSourceEligibilitySchema} from "./savedResultRecovery.js";
+ import { collectSavedResultEvidence, readSavedResultEvidence, savedResultCollectionSchema } from "./savedResultEvidence.js";
+ import { z } from "zod";
+ import { applyAgentInstallations, observeAgentInstallations, previewAgentInstallations } from "../agents/updates.js";
+ import { resolveAgent } from "../agents/materialize.js";
++import { listAgentModels } from "../agents/models.js";
+ import { descriptorDefaults, getDescriptor } from "../agents/registry.js";
+ import { assertAgentsTablePath, readAgentsTable } from "../agents/table.js";
+ import { AgentError, type CapabilityViewV1 } from "../agents/types.js";
+ import {
+   agentSelectionSchema,
+   artifactRefSchema,
+   contextWindowSchema,
+   attachControlMethod,
+   ControlProtocolError,
+   parseControlRequest,
+@@ -93,20 +94,27 @@ const capabilitiesSchema = z.union([
+       configHash: z.string().regex(/^[a-f0-9]{64}$/),
+       timeoutMs: z.number().int().positive().max(2_147_483_647),
+       killGraceMs: z.number().int().nonnegative().max(60_000),
+       capabilities: capabilityViewSchema,
+       singleCallExecution: z.enum(["v1"]).nullable(),
+       // OMP single call (Orca spec 2026-10-14 §3.2). Optional, so an answer without it (a handler stand-in) still parses.
+       singleCallOutputCap: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable().optional(),
+     })
+     .strict(),
+ ]);
++// Every-agent requirement chain (Orca spec 2026-10-15 §3): refused here rather than printed for Orca to refuse whole.
++const modelsSchema = z.object({
++  schema: z.literal("ccloop-models-v1"), installation: z.string().min(1), kind: z.string().min(1), source: z.enum(["cache", "probe", "none"]),
++  observedAt: z.string().datetime().nullable(),
++  models: z.array(z.object({ model: z.string().min(1).max(200), contextWindowTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable(),
++    maxOutputTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable(), singleCallExecution: z.enum(["v1", "v1-soft"]).nullable() }).strict()),
++}).strict();
+ const executionStatusSchema = z.discriminatedUnion("kind", [
+   z.object({ kind: z.literal("absent") }).strict(),
+   z.object({ kind: z.literal("accepted"), executionId: z.string().min(1), configHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+   z.object({ kind: z.literal("unknown") }).strict(),
+   z.object({
+     kind: z.literal("stopped"),
+     proof: z.object({
+       executionId: z.string().min(1),
+       generation: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+       isolated: z.literal(true),
+@@ -191,20 +199,21 @@ const collectionSchema = z.object({
+     lastTransitionAt: z.string().min(1),
+   }).strict().nullable(),
+ }).strict();
+ 
+ const METHODS = new Set<ControlMethodV1>([
+   "features",
+   "agent-installation-observe",
+   "agent-installation-preview",
+   "agent-installation-apply",
+   "capabilities",
++  "models",
+   "accept",
+   "inspect",
+   "handoff",
+   "collect",
+   "read-evidence",
+   "task-results",
+   "read-task-result-evidence",
+   "settle-saved-result",
+   "read-saved-result-settlement",
+   "saved-result-source-eligibility",
+@@ -250,20 +259,23 @@ async function defaultHandler(request: ControlRequestV1, context: ControlContext
+   if (request.method === "agent-installation-preview") return previewAgentInstallations(context.agentsTablePath);
+   if (request.method === "agent-installation-apply") return applyAgentInstallations(context.agentsTablePath, request);
+   if (request.method === "capabilities") {
+     if (request.agent === null) return await tableView(context.agentsTablePath);
+     const { resolution } = await resolveAgent(await readAgentsTable(context.agentsTablePath), request.agent);
+     // Orca single-call estimate (2026-09-27), spec §4.4: a sibling of `capabilities`, like timeoutMs and killGraceMs,
+     // so the seven-key view (frozen into Orca profiles and task records) stays exactly as it is.
+     // OMP single call (Orca spec 2026-10-14 §3.2): singleCallExecution and singleCallOutputCap now come with the resolution.
+     return { protocol: 3, ...resolution };
+   }
++  // Every-agent requirement chain (Orca spec 2026-10-15 §3): no `log` here -- the wire path prints nothing on stderr on
++  // success, since Orca reads ccloop's code from the start of stderr.
++  if (request.method === "models") return await listAgentModels(context.agentsTablePath, request.installation, { refresh: request.refresh });
+   if (request.method === "accept") {
+     return await acceptStart(request.input, { agentsTablePath: context.agentsTablePath });
+   }
+   if (request.method === "inspect") {
+     return await inspectExecution(request.input);
+   }
+   if (request.method === "handoff") {
+     return await requestHandoff(request.input, request.request);
+   }
+   if (request.method === "collect") {
+@@ -290,20 +302,21 @@ async function defaultHandler(request: ControlRequestV1, context: ControlContext
+   throw new ControlProtocolError("control-method-unavailable");
+ }
+ 
+ function validateResponse(method: ControlMethodV1, value: unknown, protocol = 3): unknown {
+   try {
+     if (method === "features") return z.object({ protocol: z.literal(1), tokenPolicy: z.literal("optional-v1"), savedResultRecovery: z.literal("v1"), agentInstallationUpdate: z.literal("v1") }).strict().parse(value);
+     if (method === "agent-installation-observe") return observationSchema.parse(value);
+     if (method === "agent-installation-preview") return previewSchema.parse(value);
+     if (method === "agent-installation-apply") return receiptSchema.parse(value);
+     if (method === "capabilities") return capabilitiesSchema.parse(value);
++    if (method === "models") return modelsSchema.parse(value);
+     if (method === "accept" || method === "inspect") return executionStatusSchema.parse(value);
+     if (method === "handoff") return handoffAckSchema.parse(value);
+     if (method === "collect") return (protocol === 4 ? collectionSchema.extend({
+       terminal: terminalSchema.extend({ waitingCause: z.literal("token-allowance").optional(), allowanceNextPhase: z.enum(["plan", "execute", "verify"]).optional(), budgetSnapshot: z.object({
+         attemptsRemaining: safeInteger, timeRemainingMs: safeInteger, tokenBudgetRemaining: safeInteger.nullable(),
+         tokenRemainingStatus: z.enum(["known", "unlimited", "unknown"]),
+       }).strict() }).nullable(),
+     }) : collectionSchema).parse(value);
+     if (method === "settle-saved-result")return z.object({ref:artifactRefSchema,settlement:savedResultSettlementSchema}).strict().parse(value);
+     if (method === "saved-result-source-eligibility") return savedResultSourceEligibilitySchema.parse(value);
+diff --git a/src/control/protocol.ts b/src/control/protocol.ts
+index 23e2876..b15480b 100644
+--- a/src/control/protocol.ts
++++ b/src/control/protocol.ts
+@@ -5,20 +5,21 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
+ import { z } from "zod";
+ import type { AgentSelectionV1, PartialSelectionV1 } from "../agents/types.js";
+ import { loopContractSchema, type LoopContract } from "../contract/schema.js";
+ 
+ export type ControlMethodV1 =
+   | "features"
+   | "agent-installation-observe"
+   | "agent-installation-preview"
+   | "agent-installation-apply"
+   | "capabilities"
++  | "models"
+   | "accept"
+   | "inspect"
+   | "handoff"
+   | "collect"
+   | "read-evidence"
+   | "task-results"
+   | "read-task-result-evidence"
+   | "settle-saved-result"
+   | "read-saved-result-settlement"
+   | "saved-result-source-eligibility"
+@@ -128,38 +129,40 @@ export interface CapabilitiesRequestV3 {
+ }
+ 
+ export interface SavedResultSourceInput { source: LoopStartEnvelope; sourceAttempt: number; packagePath: string; packageHash: string }
+ 
+ export type ControlRequestV1 =
+   | { method: "features" }
+   | { method: "agent-installation-observe" }
+   | { method: "agent-installation-preview" }
+   | { method: "agent-installation-apply"; opId: string; requestDigest: string; previewId: string; baseTableHash: string; acceptedChangeIds: string[] }
+   | { method: "capabilities"; agent: PartialSelectionV1 | null }
++  | { method: "models"; installation: string; refresh: boolean }
+   | { method: "accept"; input: StartEnvelopeV3 }
+   | { method: "inspect"; input: StartEnvelopeV3 }
+   | { method: "handoff"; input: StartEnvelopeV3; request: HandoffRequestV1 }
+   | { method: "collect"; input: StartEnvelopeV3; afterSeq: number }
+   | { method: "read-evidence"; input: StartEnvelopeV3; ref: ArtifactRefV1 }
+   | { method: "task-results"; input: StartEnvelopeV3; afterRevision: number }
+   | { method: "read-task-result-evidence"; input: StartEnvelopeV3; manifestRef: ArtifactRefV1; ref: ArtifactRefV1 }
+   | { method: "settle-saved-result"; input: LoopStartEnvelope }
+   | { method: "read-saved-result-settlement"; input: LoopStartEnvelope; settlementRef: ArtifactRefV1; ref: ArtifactRefV1 }
+   | { method: "saved-result-source-eligibility"; input: SavedResultSourceInput }
+   | { method: "saved-result-eligibility"; input: LoopStartEnvelope }
+   | { method: "saved-result-evidence"; input: StartEnvelopeV3 }
+   | { method: "read-saved-result-evidence"; input: StartEnvelopeV3; capsuleRef: ArtifactRefV1; ref: ArtifactRefV1 };
+ 
+ export type ControlPayloadV1 =
+   | { opId: string; requestDigest: string; previewId: string; baseTableHash: string; acceptedChangeIds: string[] }
+   | { input: SavedResultSourceInput }
+   | CapabilitiesRequestV3
++  | { installation: string; refresh: boolean }
+   | StartEnvelopeV3
+   | { input: StartEnvelopeV3; request: HandoffRequestV1 }
+   | { input: StartEnvelopeV3; afterSeq: number }
+   | { input: StartEnvelopeV3; ref: ArtifactRefV1 }
+   | { input: StartEnvelopeV3; afterRevision: number }
+   | { input: StartEnvelopeV3; manifestRef: ArtifactRefV1; ref: ArtifactRefV1 }
+   | { input: StartEnvelopeV3; capsuleRef: ArtifactRefV1; ref: ArtifactRefV1 };
+ 
+ export class ControlProtocolError extends Error {
+   constructor(readonly code: string) {
+@@ -287,20 +290,22 @@ export const handoffRequestSchema = z
+     deadlineAt: z.string().datetime({ offset: true }),
+   })
+   .strict();
+ 
+ const payloadSchemas = {
+   features: z.object({}).strict(),
+   "agent-installation-observe": z.object({}).strict(),
+   "agent-installation-preview": z.object({}).strict(),
+   "agent-installation-apply": z.object({ opId: idSchema, requestDigest: hashSchema, previewId: idSchema, baseTableHash: hashSchema, acceptedChangeIds: z.array(idSchema).min(1) }).strict(),
+   capabilities: z.object({ agent: partialSelectionSchema.nullable() }).strict(),
++  // Every-agent requirement chain (Orca spec 2026-10-15 §3): one installation's models; refresh skips the cache.
++  models: z.object({ installation: idSchema, refresh: z.boolean() }).strict(),
+   accept: startEnvelopeSchema,
+   inspect: startEnvelopeSchema,
+   handoff: z.object({ input: startEnvelopeSchema, request: handoffRequestSchema }).strict(),
+   collect: z.object({ input: startEnvelopeSchema, afterSeq: safeInteger }).strict(),
+   "settle-saved-result": z.object({input:v4StartEnvelopeSchema.refine(e=>e.mode==="verify-saved-result")}).strict(),
+   "read-saved-result-settlement": z.object({input:v4StartEnvelopeSchema.refine(e=>e.mode==="verify-saved-result"),settlementRef:artifactRefSchema,ref:artifactRefSchema}).strict(),
+   "saved-result-source-eligibility": z.object({input:z.object({source:startEnvelopeSchema.refine(e=>e.work.kind==="loop"&&(!("mode" in e)||e.mode===undefined)),sourceAttempt:positiveSafeInteger,packagePath:z.string().min(1),packageHash:hashSchema}).strict()}).strict(),
+   "saved-result-eligibility": z.object({input:v4StartEnvelopeSchema.refine(e=>e.mode==="verify-saved-result")}).strict(),
+   "saved-result-evidence": z.object({ input: startEnvelopeSchema }).strict(),
+   "read-saved-result-evidence": z.object({ input: startEnvelopeSchema, capsuleRef: artifactRefSchema, ref: artifactRefSchema }).strict(),
+diff --git a/tests/control/modelsControl.test.ts b/tests/control/modelsControl.test.ts
+new file mode 100644
+index 0000000..ad6be67
+--- /dev/null
++++ b/tests/control/modelsControl.test.ts
+@@ -0,0 +1,116 @@
++import { existsSync, readFileSync } from "node:fs";
++import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join, resolve } from "node:path";
++import { describe, expect, it, vi } from "vitest";
++import { runAgentsCommand } from "../../src/agents/command.js";
++import { runControlCommand } from "../../src/control/command.js";
++import { claudeInstallation, codexInstallation, FAKE_CLAUDE_CLI, writeAgentsTable } from "./agentsFixture.js";
++
++// Every-agent requirement chain (Orca spec 2026-10-15 §3, part A): one installation's models, sorted by model in code-unit
++// order; codex lists only `list` rows; claude has no catalog command and answers none.
++const FAKE_OMP = resolve("tests/fixtures/fake-omp.mjs"), FAKE_CODEX = resolve("tests/fixtures/fake-codex.mjs");
++async function world() {
++  const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-models-")));
++  const ompMarker = join(dir, "omp-marker"), codexMarker = join(dir, "codex-marker");
++  await writeFile(`${ompMarker}.catalog.json`, JSON.stringify([
++    { provider: "openrouter", kind: "chat", id: "z", selector: "openrouter/z", contextWindow: 64000, maxTokens: 4096 },
++    { provider: "gateway", kind: "chat", id: "model-a", selector: "gateway/model-a", contextWindow: 200000, maxTokens: 8192 },
++    { provider: "gateway", kind: "chat", id: "B", selector: "gateway/B", contextWindow: 128000 },
++  ]));
++  const omp = join(dir, "omp");
++  await writeFile(omp, `#!/bin/sh\nexec '${process.execPath}' '${FAKE_OMP}' '${ompMarker}' "$@"\n`, { mode: 0o700 });
++  const script = join(dir, "script.json"); await writeFile(script, "{}\n", { mode: 0o600 });
++  // Every spawn of the claude command, `--version` included, appends a line to `claudeSpawns`.
++  const claude = join(dir, "claude"), claudeSpawns = join(dir, "claude-spawns");
++  await writeFile(claude, `#!/bin/sh\necho spawn >> '${claudeSpawns}'\nexec '${process.execPath}' '${FAKE_CLAUDE_CLI}' script '${join(dir, "claude-marker")}' '${script}' "$@"\n`, { mode: 0o700 });
++  // An empty configDir of its own: with none, codex's window would come from the person's ~/.codex/config.toml.
++  const codexHome = join(dir, "codex-home"); await mkdir(codexHome, { mode: 0o700 });
++  const t = await writeAgentsTable({
++    omp: { kind: "omp", command: [omp], version: "18.10.1", configDir: null, timeoutMs: 60_000, killGraceMs: 50, defaultModel: "gateway/model-a", profile: null },
++    codex: { ...await codexInstallation({ command: [process.execPath, FAKE_CODEX, "integration", codexMarker], sandbox: "read-only", budgetMode: "soft", timeoutMs: 60_000, killGraceMs: 100 }), configDir: codexHome },
++    claude: await claudeInstallation([claude]),
++  }, dir);
++  return { dir, ...t, ompMarker, codexMarker, claudeSpawns };
++}
++const models = (path: string, installation: string, refresh = false) => runControlCommand(["models", "--agents", path], JSON.stringify({ installation, refresh }));
++
++describe("control models (spec §3)", { timeout: 30_000 }, () => {
++  it("answers omp's rows sorted in code-unit order with window, cap and single-call answer", async () => {
++    const w = await world();
++    // Orca reads ccloop's code from the start of stderr, so the wire path prints nothing there on success -- neither in
++    // its answer nor on the process's own stderr, although this first read is a cache miss.
++    const written: string[] = [];
++    const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { written.push(String(chunk)); return true; });
++    let answer: Awaited<ReturnType<typeof models>>;
++    try { answer = await models(w.path, "omp"); } finally { spy.mockRestore(); }
++    expect(written).toEqual([]);
++    expect(answer.code, answer.stderr).toBe(0);
++    expect(answer.stderr).toBe("");
++    expect(JSON.parse(answer.stdout)).toMatchObject({ schema: "ccloop-models-v1", installation: "omp", kind: "omp", source: "probe", models: [
++      { model: "gateway/B", contextWindowTokens: 128000, maxOutputTokens: null, singleCallExecution: null },
++      { model: "gateway/model-a", contextWindowTokens: 200000, maxOutputTokens: 8192, singleCallExecution: "v1" },
++      { model: "openrouter/z", contextWindowTokens: 64000, maxOutputTokens: 4096, singleCallExecution: null },
++    ] });
++    const again = await models(w.path, "omp");
++    expect(again.stderr).toBe("");
++    expect(JSON.parse(again.stdout).source).toBe("cache");
++  });
++
++  it("answers codex's listed rows only, each v1-soft with no output cap", async () => {
++    const w = await world();
++    const answer = await models(w.path, "codex");
++    expect(answer.stderr).toBe("");
++    expect(JSON.parse(answer.stdout).models).toEqual([
++      { model: "gpt-6-luna", contextWindowTokens: 272000, maxOutputTokens: null, singleCallExecution: "v1-soft" },
++      { model: "gpt-6-sol", contextWindowTokens: 272000, maxOutputTokens: null, singleCallExecution: "v1-soft" },
++    ]);
++  });
++
++  it("answers claude with no models and source none, spawning nothing", async () => {
++    const w = await world();
++    const before = readFileSync(w.claudeSpawns, "utf8");
++    expect(JSON.parse((await models(w.path, "claude")).stdout)).toEqual({ schema: "ccloop-models-v1", installation: "claude", kind: "claude", source: "none", observedAt: null, models: [] });
++    expect(readFileSync(w.claudeSpawns, "utf8")).toBe(before);
++  });
++
++  it("refresh probes again", async () => {
++    const w = await world();
++    await models(w.path, "omp"); await models(w.path, "omp", true);
++    expect(readFileSync(`${w.ompMarker}.catalog-calls`, "utf8").trim().split("\n")).toEqual(["models", "models"]);
++  });
++
++  it("names a missing installation with exit 2 (RF5) and a catalog failure with exit 1 and the kind's code", async () => {
++    const w = await world();
++    expect(await models(w.path, "gone")).toEqual({ code: 2, stdout: "", stderr: "agent-installation-missing: gone\n" });
++    await writeFile(join(w.dir, "codex-marker.catalog.json"), JSON.stringify({ exitCode: 5 }));
++    const failed = await models(w.path, "codex");
++    expect(failed.code).toBe(1);
++    expect(failed.stderr).toMatch(/^agent-catalog-unavailable: exit 5 · stage exit · elapsedMs \d+\n$/);
++  });
++
++  it("refuses a request without a boolean refresh", async () => {
++    const w = await world();
++    expect(await runControlCommand(["models", "--agents", w.path], JSON.stringify({ installation: "omp" }))).toMatchObject({ code: 2, stderr: "control-request-invalid\n" });
++  });
++
++  it("prints the same answer from `ccloop agents models`, and logs a miss on stderr", async () => {
++    const w = await world();
++    const written: string[] = [];
++    const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { written.push(String(chunk)); return true; });
++    let cli: Awaited<ReturnType<typeof runAgentsCommand>>;
++    try { cli = await runAgentsCommand(["models", "--agents", w.path, "--installation", "codex"]); } finally { spy.mockRestore(); }
++    expect(cli.code, cli.stderr).toBe(0);
++    expect(JSON.parse(cli.stdout).models.map((row: { model: string }) => row.model)).toEqual(["gpt-6-luna", "gpt-6-sol"]);
++    expect(existsSync(`${w.codexMarker}.catalog-calls`)).toBe(true);
++    expect(written).toHaveLength(1);
++    expect(written[0]).toMatch(/^ccloop-agent-catalog: miss codex [0-9a-f]{12}\n$/);
++  });
++
++  it("refuses any other `ccloop agents models` shape", async () => {
++    const w = await world();
++    for (const argv of [["models", "--agents", w.path], ["models", "--installation", "codex", "--agents", w.path, "--refresh", "--refresh"], ["models", "--agents", w.path, "--installation", "codex", "--fresh"]]) {
++      expect(await runAgentsCommand(argv)).toEqual({ code: 1, stdout: "", stderr: "agents-command-invalid\n" });
++    }
++  });
++});

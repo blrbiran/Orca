@@ -1,0 +1,154 @@
+8b6b4fc9 feat(control): accept codex's soft single call in soft estimate mode only
+ src/control/estimatorCompatibility.ts        |  4 +++-
+ tests/control/codexRequirementOpen.test.ts   | 29 ++++++++++++++++++++++++++++
+ tests/control/estimatorSoftExecution.test.ts | 27 ++++++++++++++++++++++++++
+ tests/control/fixtures/ccloopWorld.ts        |  5 +++--
+ 4 files changed, 62 insertions(+), 3 deletions(-)
+diff --git a/src/control/estimatorCompatibility.ts b/src/control/estimatorCompatibility.ts
+index 1c3ddedd..71be8621 100644
+--- a/src/control/estimatorCompatibility.ts
++++ b/src/control/estimatorCompatibility.ts
+@@ -6,21 +6,23 @@ export type EstimatorCompatibilityReason =
+   | "selection-unavailable" | "single-call-unavailable" | "preflight-unavailable" | "instruction-unknown"
+   | "context-unavailable" | "usage-unavailable" | "budget-unavailable" | "handoff-unavailable" | "request-bound-unavailable";
+ 
+ /** One predicate for every required single-call action, evaluated against the chosen resolution only. */
+ export function estimatorCompatibility(
+   resolution: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">,
+   mode: EstimatorMode,
+ ): { compatible: boolean; reasonCodes: EstimatorCompatibilityReason[] } {
+   const reasons: EstimatorCompatibilityReason[] = [];
+   if (resolution.probeFailureCode !== null || resolution.resolution === null) reasons.push("selection-unavailable");
+-  if (resolution.resolution?.singleCallExecution !== "v1") reasons.push("single-call-unavailable");
++  // Spec 2026-10-15 §6.2 (R2): strict requires "v1"; soft also accepts "v1-soft", whose output bound is checked after the fact.
++  const execution = resolution.resolution?.singleCallExecution;
++  if (!(execution === "v1" || (mode === "soft" && execution === "v1-soft"))) reasons.push("single-call-unavailable");
+   const preflight = resolution.profile.snapshot.profile.estimatorPreflight;
+   if (!preflight) reasons.push("preflight-unavailable");
+   else if (!Object.hasOwn(ESTIMATE_INSTRUCTIONS, preflight.instructionVersion)) reasons.push("instruction-unknown");
+   const capabilities = intersectCapabilities(resolution.profile.snapshot.profile.capabilities, resolution.observed);
+   if (capabilities.contextWindowTokens === null) reasons.push("context-unavailable");
+   if (capabilities.usageObservation === "unavailable") reasons.push("usage-unavailable");
+   if (capabilities.budgetEnforcement === "unavailable" || (mode === "strict" && capabilities.budgetEnforcement !== "bounded")) reasons.push("budget-unavailable");
+   if (capabilities.handoffControl !== "durable" || capabilities.handoffExecution === null) reasons.push("handoff-unavailable");
+   if (mode === "strict" && !capabilities.requestBoundProof?.workDimensions.includes("tokens")) reasons.push("request-bound-unavailable");
+   return { compatible: reasons.length === 0, reasonCodes: reasons };
+diff --git a/tests/control/codexRequirementOpen.test.ts b/tests/control/codexRequirementOpen.test.ts
+new file mode 100644
+index 00000000..1b886c01
+--- /dev/null
++++ b/tests/control/codexRequirementOpen.test.ts
+@@ -0,0 +1,29 @@
++import { afterAll, beforeEach, describe, expect, it } from "vitest";
++import { ccloopWorlds, raw, realBinary } from "./fixtures/ccloopWorld.js";
++
++// Spec 2026-10-15 criterion 4 (R1, R2, R7) against the real ccloop build and its fake codex: a codex estimator opens a
++// requirement in soft mode under a profile that declares no window; strict mode still refuses it by name.
++const { world, removeRoots, relocateHome } = ccloopWorlds({ rootPrefix: "orca-codex-req-", epochPrefix: "epoch-codex-req-" });
++afterAll(removeRoots);
++
++describe("requirement-open with a codex estimator (spec 2026-10-15 criterion 4)", { timeout: 120_000 }, () => {
++  relocateHome("orca-codex-req-home-");
++  beforeEach((ctx) => { if (!realBinary) ctx.skip(); });
++  const open = async (estimateMode: "strict" | "soft") => {
++    const w = await world([], {}, { estimateMode });
++    const runtime = await w.boot();
++    try {
++      const prefs = await runtime.service.setAgentPreferences(raw(runtime, "prefs", "set-agent-preferences",
++        { preferences: { defaultAgent: "codex", perAgent: {}, estimator: { agent: "codex" } } }, { kind: "operator", operatorId: "human" }));
++      expect("error" in prefs ? prefs.error : "set").toBe("set");
++      return await runtime.service.openRequirement({ schema: "orca-raw-command-v1", commandId: "open", actorId: "human", expectedRevision: 0, verb: "requirement-open",
++        target: { kind: "group", groupId: "g" }, payload: { groupId: "g", repoId: w.repoId, idea: "Let people export notes.", contentLanguage: "en" } } as never);
++    } finally { await w.teardown(); }
++  };
++  it("opens in soft mode", async () => {
++    expect(await open("soft")).toMatchObject({ result: { kind: "requirement-opened" } });
++  });
++  it("refuses in strict mode with single-call-unavailable among the reasons", async () => {
++    expect(await open("strict")).toMatchObject({ error: { code: "agent-selection-rejected", message: expect.stringContaining("single-call-unavailable") } });
++  });
++});
+diff --git a/tests/control/estimatorSoftExecution.test.ts b/tests/control/estimatorSoftExecution.test.ts
+new file mode 100644
+index 00000000..690f30a0
+--- /dev/null
++++ b/tests/control/estimatorSoftExecution.test.ts
+@@ -0,0 +1,27 @@
++import { describe, expect, it } from "vitest";
++import { ccloopResolutionSchema } from "../../src/control/ccloopPort.js";
++import { estimatorCompatibility } from "../../src/control/estimatorCompatibility.js";
++import { resolveProfile } from "../../src/control/profiles.js";
++import { fixtureResolutionFor } from "./fixtures/agents.js";
++import { profileSnapshot } from "./fixtures/web.js";
++
++// Spec 2026-10-15 §6.2 (R2): strict requires "v1"; soft accepts "v1" or "v1-soft". The fixture profile is strict-capable
++// (bounded, with a request-bound proof), so single-call-unavailable is the only reason either way.
++const profile = resolveProfile(profileSnapshot());
++const at = (execution: "v1" | "v1-soft" | null, mode: "strict" | "soft") => estimatorCompatibility({ profile, observed: profile.snapshot.profile.capabilities, probeFailureCode: null,
++  resolution: { ...fixtureResolutionFor(profile.snapshot.profile.capabilities), singleCallExecution: execution } }, mode).reasonCodes;
++
++describe("strict and soft single-call execution (spec §6.2)", () => {
++  it.each([
++    ["v1", "strict", []], ["v1-soft", "strict", ["single-call-unavailable"]], [null, "strict", ["single-call-unavailable"]],
++    ["v1", "soft", []], ["v1-soft", "soft", []], [null, "soft", ["single-call-unavailable"]],
++  ] as const)("%s in %s mode", (execution, mode, reasons) => {
++    expect(at(execution, mode)).toEqual(reasons);
++  });
++
++  it("parses v1-soft from ccloop and refuses any other new value", () => {
++    const answer = { protocol: 3, selection: { agent: "codex", model: "gpt-6-sol", contextWindow: "agent-default" }, configHash: "a".repeat(64), timeoutMs: 1000, killGraceMs: 0,
++      capabilities: profile.snapshot.profile.capabilities, singleCallExecution: "v1-soft", singleCallOutputCap: null };
++    expect([ccloopResolutionSchema.safeParse(answer).success, ccloopResolutionSchema.safeParse({ ...answer, singleCallExecution: "v2" }).success]).toEqual([true, false]);
++  });
++});
+diff --git a/tests/control/fixtures/ccloopWorld.ts b/tests/control/fixtures/ccloopWorld.ts
+index ec59241b..cae55462 100644
+--- a/tests/control/fixtures/ccloopWorld.ts
++++ b/tests/control/fixtures/ccloopWorld.ts
+@@ -74,21 +74,22 @@ export interface Task {
+ export interface ScriptEntry { files: Record<string, string>; delayMs?: { plan?: number; execute?: number; verify?: number }; usageBeforeDelay?: boolean }
+ /**
+  * Agent selection (plan T16): a world may also carry ccloop's CLI-level fake claude (tests/fixtures/fake-claude-cli.mjs) as a
+  * `claude` installation beside the fake codex, with its own marker and script.
+  */
+ /** Single-call estimate (F15, ccloop's fake claude): the answer to one single call, optionally after a delay, optionally streaming one closed message first. */
+ export interface SingleCallScriptEntry { output: unknown; delayMs?: { "single-call": number }; usageBeforeDelay?: boolean }
+ const optionalPolicyWorlds=new WeakSet<ControlRuntime>();
+ export interface WorldOptions { tokenPolicy?:"optional-v1"; claudeScript?: Record<string, ScriptEntry | SingleCallScriptEntry>; /** Single-call estimate: the profile's declared context window (null otherwise, so the estimate stays blocked-capability). */ declaredContextWindowTokens?: number;
+   /** Syncskill integration plan Task 6: more variables for the assembled runtime's env (ORCA_SYNCSKILL_BIN and what the fake syncskill reads). */
+-  env?: NodeJS.ProcessEnv }
++  env?: NodeJS.ProcessEnv;
++  /** Spec 2026-10-15 criterion 4: the panel's estimate mode (soft when absent). */ estimateMode?: "strict" | "soft" }
+ // *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) *** on `declaredContextWindowTokens`
+ // above ("null otherwise, so the estimate stays blocked-capability"): measured on 06f15c53 (ccloop codex/every-agent-chain
+ // efcd5b3 built), a codex world's import-time estimate is blocked first by
+ // `agent-selection-rejected:estimator:agent-unselected` (planImport's layer resolution, which predates R7); the window is
+ // not reached in these worlds. Text above kept verbatim.
+ 
+ /** The codex installation's killGraceMs in every world; handoffE2E's G scenario tells it apart from HANDOFF_EXTRA_GRACE_MS alone. */
+ export const KILL_GRACE_MS = 5_000;
+ 
+ export type World = Awaited<ReturnType<ReturnType<typeof ccloopWorlds>["world"]>>;
+@@ -157,21 +158,21 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string
+     }
+     const planPath = join(repo, "plan.json");
+     await writeFile(planPath, JSON.stringify({ targetRepo: repo, ccloopBin: realBinary, runsDir: join(root, "unused-runs"), workBranch: "orca/unused", policy: "local-merge", ledgerMode: "out-of-repo", goal: "ship", successConditions: ["the files hold the scripted text"], tasks: planTasks }));
+     const snapshot = profileSnapshot();
+     snapshot.profile.capabilities = { ...CCLOOP_CAPABILITIES, contextWindowTokens: worldOptions.declaredContextWindowTokens ?? null };
+     const profilePath = join(root, "profile.json");
+     await writeFile(profilePath, JSON.stringify(snapshot));
+     const repoId = controlRepoKey("e2e");
+     const repos = [{ projectKey: "e2e", path: repo }];
+     const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CCLOOP_BIN: realBinary!, ORCA_AGENTS_TABLE: table, ...worldOptions.env };
+-    const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", "soft", "--control-wake-ms", "50"], env, repos);
++    const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", worldOptions.estimateMode ?? "soft", "--control-wake-ms", "50"], env, repos);
+     if (rejection !== null) throw new Error(rejection);
+     let epoch = 0;
+     // Every runtime this world booted and has not closed; `teardown` shuts each down and closes it, so a
+     // failing scenario leaves no pump or driver running into the next one.
+     const live = new Set<ControlRuntime>();
+     const boot = async (driverCrash?: (point: CrashPoint) => void, wrapPort?: (port: ExecutionPort) => ExecutionPort): Promise<ControlRuntime> => {
+       const runtime = await assembleControlRuntime({ control, repos, epoch: `${options.epochPrefix}${++epoch}`, env, driverCrash, wrapPort });
+       if (runtime === null) throw new Error("the control plane did not assemble");
+       live.add(runtime);
+       if(worldOptions.tokenPolicy==="optional-v1")optionalPolicyWorlds.add(runtime);

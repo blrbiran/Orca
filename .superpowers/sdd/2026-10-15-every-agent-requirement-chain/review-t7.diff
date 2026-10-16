@@ -1,0 +1,162 @@
+f93e37e feat(agents): report claude's 200000 default window (ERRATUM on the unknown-window note)
+ src/agents/claude.ts                       |  7 ++++++-
+ tests/agents/claudeDefaultWindow.test.ts   | 15 +++++++++++++++
+ tests/agents/registry.test.ts              |  6 ++++--
+ tests/control/agentsControl.test.ts        |  4 +++-
+ tests/control/singleCallCapability.test.ts |  4 +++-
+ 5 files changed, 31 insertions(+), 5 deletions(-)
+diff --git a/src/agents/claude.ts b/src/agents/claude.ts
+index ef8eec2..be6a5a3 100644
+--- a/src/agents/claude.ts
++++ b/src/agents/claude.ts
+@@ -46,33 +46,38 @@ export const claudeDescriptor: AgentDescriptor = {
+     // Human ruling 2026-09-27 ("放，默认填100USD"): claude's own spending cap for each call.
+     "--max-budget-usd", "100",
+   ],
+   validateSelection(selection) {
+     assertModel(selection.model);
+     assertContextOption(CONTEXT_OPTIONS, selection);
+     // Orca backlog #13(a) (2026-09-29; Orca agent selection spec §12 m-5): the CLI reads a `[1m]` model suffix as the
+     // 1M window (claudeModelArgument above), so a model that already carries one would get 1M under "agent-default"
+     // -- with capabilities answering contextWindowTokens null -- or be sent as `[1m][1m]`. Refused, never rewritten:
+     // the window is chosen by contextWindow alone.
++    // *** ERRATUM (Orca spec 2026-10-15 §2.3, §7, ruling R5) -- the "contextWindowTokens null" above is superseded:
++    // "agent-default" is now reported as 200000 (see the capabilities note below); the refusal itself is unchanged. ***
+     if (/\[1m\]$/i.test(selection.model)) {
+       throw new AgentError("agent-context-unsupported", `model ${JSON.stringify(selection.model)} carries the [1m] suffix; choose contextWindow ${ONE_MILLION} instead`);
+     }
+   },
+   capabilities(config) {
+     return {
+       usageObservation: "phase-end",
+       budgetEnforcement: "soft",
+       contextObservation: "unavailable",
+       handoffControl: "durable",
+       handoffExecution: "mechanical-in-run-v1",
+       // Spec §12 I6: only a mapping Task 0 verified is reported; "agent-default" stays unknown (null).
+-      contextWindowTokens: config.selection.contextWindow === ONE_MILLION ? ONE_MILLION : null,
++      // *** ERRATUM (Orca spec 2026-10-15 §2.3, §7, ruling R5) -- "agent-default" is now reported as 200000: every model in
++      // claude-code 2.1.300's built-in model table has a window of at least 200000 (read from the binary, no model called);
++      // a native-1M model is under-reported, which only makes input-too-large trip earlier. ***
++      contextWindowTokens: config.selection.contextWindow === ONE_MILLION ? ONE_MILLION : 200_000,
+       requestBoundProof: null,
+     };
+   },
+   // Orca single-call estimate (2026-09-27), Task 0 item 1 (claude 2.1.283, static only): `--tools ""` turns every tool
+   // off (claude --help: 'Use "" to disable all tools') and CLAUDE_CODE_MAX_OUTPUT_TOKENS sets max_tokens.
+   singleCallExecution() {
+     return "v1";
+   },
+   // OMP single call (Orca spec 2026-10-14 §3.2): CLAUDE_CODE_MAX_OUTPUT_TOKENS takes the request's own cap.
+   singleCallOutputCap() {
+diff --git a/tests/agents/claudeDefaultWindow.test.ts b/tests/agents/claudeDefaultWindow.test.ts
+new file mode 100644
+index 0000000..943dd94
+--- /dev/null
++++ b/tests/agents/claudeDefaultWindow.test.ts
+@@ -0,0 +1,15 @@
++import { describe, expect, it } from "vitest";
++import { claudeDescriptor } from "../../src/agents/claude.js";
++import type { MaterializedAgentConfigV1 } from "../../src/agents/types.js";
++
++// Every-agent requirement chain (Orca spec 2026-10-15 §2.3, §7, R5): every model in claude-code 2.1.300's built-in table
++// has a window of at least 200000, so agent-default reports that lower bound; the verified 1M mapping is unchanged.
++const config = (contextWindow: "agent-default" | 1_000_000): MaterializedAgentConfigV1 => ({ schema: "ccloop-agent-config-v1", kind: "claude",
++  installation: { kind: "claude", command: ["/opt/claude"], version: "2.1.300", configDir: null, timeoutMs: 1, killGraceMs: 1 },
++  selection: { agent: "claude", model: "claude-opus-5-5", contextWindow } });
++
++describe("claude windows (spec §7)", () => {
++  it("reports 200000 for agent-default and 1000000 for the 1M selection", () => {
++    expect([claudeDescriptor.capabilities(config("agent-default")).contextWindowTokens, claudeDescriptor.capabilities(config(1_000_000)).contextWindowTokens]).toEqual([200000, 1000000]);
++  });
++});
+diff --git a/tests/agents/registry.test.ts b/tests/agents/registry.test.ts
+index 57da244..7cd86b4 100644
+--- a/tests/agents/registry.test.ts
++++ b/tests/agents/registry.test.ts
+@@ -71,23 +71,25 @@ describe("agent descriptors", () => {
+   it("accepts a context window only when the kind can express it", () => {
+     expect(() => claudeDescriptor.validateSelection({ agent: "claude", model: "opus", contextWindow: 1_000_000 })).not.toThrow();
+     expect(() => claudeDescriptor.validateSelection({ agent: "claude", model: "opus", contextWindow: 200_000 }))
+       .toThrow(expect.objectContaining({ code: "agent-context-unsupported" }));
+     expect(() => codexDescriptor.validateSelection({ agent: "codex", model: "gpt-6-sol", contextWindow: 1_000_000 }))
+       .toThrow(expect.objectContaining({ code: "agent-context-unsupported" }));
+   });
+ 
+   // Spec §12 I6: a requested window is not an observation; only claude's verified 1M mapping is reported.
+   // Human ruling (2026-10-15, Orca session 026d10e3): title renamed only -- omp reports its catalog row's contextWindow (src/agents/omp.ts capabilities), which this criterion does not assert; its assertions are unchanged.
+-  it("reports claude's contextWindowTokens only for its verified 1M mapping and codex's as null (omp reads its own from its catalog row)", () => {
++  // Rewritten for the every-agent requirement chain (Orca spec 2026-10-15 §2.3, §7, ruling R5; human named E4 on 2026-10-15):
++  // claude's agent-default window is the 200000 lower bound. Ruling: human named E4 in Orca session a852f96a, 2026-10-15.
++  it("reports claude's contextWindowTokens as 200000 for agent-default and 1M for its verified mapping, and codex's as null without a catalog row (omp reads its own from its catalog row)", () => {
+     expect(claudeDescriptor.capabilities(config("claude", { contextWindow: 1_000_000 })).contextWindowTokens).toBe(1_000_000);
+-    expect(claudeDescriptor.capabilities(config("claude")).contextWindowTokens).toBeNull();
++    expect(claudeDescriptor.capabilities(config("claude")).contextWindowTokens).toBe(200_000);
+     expect(codexDescriptor.capabilities(config("codex"))).toEqual({
+       usageObservation: "phase-end",
+       budgetEnforcement: "soft",
+       contextObservation: "unavailable",
+       handoffControl: "durable",
+       handoffExecution: "mechanical-in-run-v1",
+       contextWindowTokens: null,
+       requestBoundProof: null,
+     });
+   });
+diff --git a/tests/control/agentsControl.test.ts b/tests/control/agentsControl.test.ts
+index 36e3b58..ebaae5f 100644
+--- a/tests/control/agentsControl.test.ts
++++ b/tests/control/agentsControl.test.ts
+@@ -100,21 +100,23 @@ describe("control over the installation table (agent selection)", { timeout: 30_
+     const claude = await runControlCommand(["capabilities", "--agents", path], JSON.stringify({ agent: { agent: "claude", model: "opus" } }));
+     expect(claude.code, claude.stderr).toBe(0);
+     const claudeAnswer = JSON.parse(claude.stdout);
+     const claudeSelection = { agent: "claude", model: "opus", contextWindow: "agent-default" };
+     expect(claudeAnswer.selection).toEqual(claudeSelection);
+     expect(claudeAnswer).toMatchObject({
+       protocol: 3,
+       configHash: canonicalHash({ schema: "ccloop-agent-config-v1", kind: "claude", installation: hashed(table.installations.claude!), selection: claudeSelection }),
+       timeoutMs: table.installations.claude!.timeoutMs,
+       killGraceMs: table.installations.claude!.killGraceMs,
+-      capabilities: { contextWindowTokens: null },
++      // Rewritten for the every-agent requirement chain (Orca spec 2026-10-15 §2.3, §7, ruling R5; human named E5 on 2026-10-15):
++      // claude's agent-default window is the 200000 lower bound. Ruling: human named E5 in Orca session a852f96a, 2026-10-15.
++      capabilities: { contextWindowTokens: 200_000 },
+     });
+ 
+     const codex = await runControlCommand(["capabilities", "--agents", path], JSON.stringify({ agent: { agent: "codex" } }));
+     expect(codex.code, codex.stderr).toBe(0);
+     const codexAnswer = JSON.parse(codex.stdout);
+     const codexSelection = { agent: "codex", model: "gpt-6-sol", contextWindow: "agent-default" };
+     expect(codexAnswer.selection).toEqual(codexSelection);
+     expect(codexAnswer).toMatchObject({
+       protocol: 3,
+       configHash: canonicalHash({ schema: "ccloop-agent-config-v1", kind: "codex", installation: hashed(table.installations.codex!), selection: codexSelection }),
+diff --git a/tests/control/singleCallCapability.test.ts b/tests/control/singleCallCapability.test.ts
+index e5f67f8..4238f94 100644
+--- a/tests/control/singleCallCapability.test.ts
++++ b/tests/control/singleCallCapability.test.ts
+@@ -45,21 +45,23 @@ async function twoAgentTable() {
+ }
+ 
+ describe("single-call capability and its accept gate (Orca single-call estimate)", { timeout: 30_000 }, () => {
+   // Rewritten for the every-agent requirement chain (Orca spec 2026-10-15 §6.1, ruling R2; human named E2 on 2026-10-15):
+   // codex now answers "v1-soft" beside the view. Ruling: human named E2 in Orca session a852f96a, 2026-10-15.
+   it("C1: answers singleCallExecution beside the seven-key view: v1 for claude, v1-soft for codex", async () => {
+     const { path, table } = await twoAgentTable();
+     const claude = await runControlCommand(["capabilities", "--agents", path], JSON.stringify({ agent: { agent: "claude" } }));
+     expect(claude.code, claude.stderr).toBe(0);
+     const claudeResolution = (await resolveAgent(table, { agent: "claude" })).resolution;
+-    expect(claudeResolution.capabilities).toEqual(SEVEN);
++    // Rewritten for the every-agent requirement chain (Orca spec 2026-10-15 §2.3, §7, ruling R5; human named E1 on 2026-10-15):
++    // claude's agent-default window is the 200000 lower bound. Ruling: human named E1 in Orca session a852f96a, 2026-10-15.
++    expect(claudeResolution.capabilities).toEqual({ ...SEVEN, contextWindowTokens: 200000 });
+     expect(JSON.parse(claude.stdout)).toEqual({ protocol: 3, ...claudeResolution, singleCallExecution: "v1" });
+ 
+     const codex = await runControlCommand(["capabilities", "--agents", path], JSON.stringify({ agent: { agent: "codex" } }));
+     expect(codex.code, codex.stderr).toBe(0);
+     const codexResolution = (await resolveAgent(table, { agent: "codex" })).resolution;
+     // Rewritten for the every-agent requirement chain (Orca spec 2026-10-15 §6.1, ruling R2; human named E1 on 2026-10-15):
+     // codex's window is its fake catalog row's context_window (gpt-6-sol: 272000); the claude half is Task 7.
+     // Ruling: human named E1 in Orca session a852f96a, 2026-10-15.
+     expect(codexResolution.capabilities).toEqual({ ...SEVEN, contextWindowTokens: 272000 });
+     // Ruling: human named E2 in Orca session a852f96a, 2026-10-15.

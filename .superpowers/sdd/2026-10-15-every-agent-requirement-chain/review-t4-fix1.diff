@@ -1,0 +1,146 @@
+b4bf908 fix(omp): the spawn-time re-check and the single call share one deadline
+ src/runtime/omp/ompSingleCall.ts        |  6 ++++--
+ tests/runtime/omp/ompSingleCall.test.ts | 35 ++++++++++++++++++++++++++++++++-
+ 2 files changed, 38 insertions(+), 3 deletions(-)
+diff --git a/src/runtime/omp/ompSingleCall.ts b/src/runtime/omp/ompSingleCall.ts
+index 32c7e13..ceb9e88 100644
+--- a/src/runtime/omp/ompSingleCall.ts
++++ b/src/runtime/omp/ompSingleCall.ts
+@@ -34,22 +34,24 @@ export class OmpSingleCallRefused extends Error {
+  * §3.3.1-§3.3.4: re-reads the selected catalog row immediately before spawning and runs only when it still answers "v1"
+  * and its cap is at most the request's maxOutputTokens; then one `omp -p` with tools, rules and LSP off under the overlay.
+  *
+  * *** ERRATUM (Orca spec 2026-10-15 §4.1, R8) -- "re-reads" now reads through the catalog cache (30-minute lifetime,
+  * config-stamped key); a cap raised on the provider side without a config change is not seen until the entry expires. ***
+  */
+ export async function runOmpSingleCall(config: MaterializedAgentConfigV1, request: SingleCallRequest): Promise<OmpPhaseOutcome> {
+   // Every-agent requirement chain (Orca spec 2026-10-15 §4.1, §4.3, R6, R8): the re-check reads through the same cache key
+   // and the call's own deadline and signal; a provider-side cap change without a config change is the accepted risk.
+   // The worker's stderr is not the control wire, so it says whether the cache missed or the probe failed (plan issue 3).
++  // Spec R6: the re-check lives inside the call's deadline, computed once; the spawn gets only what the re-check left.
++  const deadline = Date.now() + Math.min(request.timeoutMs, config.installation.timeoutMs);
+   const catalog = await readAgentCatalog(config.installation, {
+-    deadline: Date.now() + Math.min(request.timeoutMs, config.installation.timeoutMs), signal: request.signal,
++    deadline, signal: request.signal,
+     log: (line) => { process.stderr.write(`${line}\n`); },
+   });
+   if (catalog.catalogError !== null || catalog.rows === null) throw new OmpSingleCallRefused("omp-single-call-unavailable", `catalog ${catalog.catalogError ?? "absent"}`);
+   const rows: CatalogRowV1[] = catalog.rows;
+   const row = rows.find((candidate) => candidate.selector === config.selection.model);
+   if (row === undefined || row.maxTokens === null || ompSingleCallExecution(row) !== "v1") throw new OmpSingleCallRefused("omp-single-call-unavailable", config.selection.model);
+   if (row.maxTokens > request.maxOutputTokens) throw new OmpSingleCallRefused("omp-single-call-cap-exceeded", `catalog maxTokens ${row.maxTokens} > maxOutputTokens ${request.maxOutputTokens}`);
+   const root = join(request.runDir, "omp", "1", "single-call");
+   await mkdir(root, { recursive: true, mode: 0o700 });
+   const evidenceDir = await mkdtemp(join(root, "call-"));
+@@ -58,21 +60,21 @@ export async function runOmpSingleCall(config: MaterializedAgentConfigV1, reques
+   await Promise.all([
+     writeFile(systemPath, singleCallSystemPrompt(request.responseSchema), { mode: 0o600 }),
+     writeFile(overlayPath, `${JSON.stringify(OMP_SINGLE_CALL_OVERLAY)}\n`, { mode: 0o600 }),
+   ]);
+   const profile = config.installation.profile as string | null;
+   const args = ["--profile", profile ?? "default", "--no-extensions", "--no-skills", "--no-rules", "--no-lsp", "--no-tools",
+     "--no-session", "--no-title", "--no-prewalk", "--model", config.selection.model, "--mode", "json", "-p",
+     "--system-prompt", systemPath, "--cwd", request.cwd, "--config", overlayPath];
+   return runOmpProcess(config, {
+     args, prompt: request.prompt, cwd: request.cwd, evidenceDir, phase: "single-call",
+-    timeoutMs: Math.min(request.timeoutMs, config.installation.timeoutMs),
++    timeoutMs: Math.max(1, deadline - Date.now()),
+     abortSignal: request.signal, onProcessRegistered: request.onProcessRegistered,
+   });
+ }
+ 
+ const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+ 
+ /** §3.3.6: the trimmed text, with at most one surrounding fenced block removed, must parse to a plain non-array object. */
+ export function parseSingleCallObject(text: string): Record<string, unknown> | undefined {
+   let body = text.trim();
+   const fenced = /^```[A-Za-z0-9_-]*\n([\s\S]*)\n```$/.exec(body);
+diff --git a/tests/runtime/omp/ompSingleCall.test.ts b/tests/runtime/omp/ompSingleCall.test.ts
+index 689481e..54109bf 100644
+--- a/tests/runtime/omp/ompSingleCall.test.ts
++++ b/tests/runtime/omp/ompSingleCall.test.ts
+@@ -1,29 +1,42 @@
+ import { existsSync } from "node:fs";
+ import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+ import { tmpdir } from "node:os";
+ import { dirname, join, resolve } from "node:path";
+-import { afterEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import { readAgentCatalog } from "../../../src/agents/agentCatalog.js";
+ import type { MaterializedAgentConfigV1 } from "../../../src/agents/types.js";
+ import { OmpAdapter } from "../../../src/runtime/omp/ompAdapter.js";
+ import { OMP_SINGLE_CALL_OVERLAY, decodeOmpSingleCall, parseSingleCallObject, runOmpSingleCall } from "../../../src/runtime/omp/ompSingleCall.js";
+ import { observedTokensOf, SingleCallOutputInvalid, type SingleCallRequest } from "../../../src/runtime/types.js";
+ 
+ // OMP single call (Orca spec 2026-10-14-omp-single-call-design.md §3.3). Orca books the catalog cap as the call's output
+ // bound; omp cannot take a per-call cap, so a cap that rose above the request's must refuse the call before anything is
+ // sent (criterion 3), and the call must run with every tool, rule and LSP off, under the overlay that switches omp's own
+ // retries and model switches off (criterion 4) -- otherwise one booked request could become several, or a tool run.
+ const FAKE_OMP = resolve("tests/fixtures/fake-omp.mjs");
+ const SCHEMA = { type: "object", properties: { answer: { type: "string" } }, required: ["answer"], additionalProperties: false };
+ const dirs: string[] = [];
+ afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true }); });
++// Every-agent requirement chain (Task 4 fix round 1): the spawn-time re-check prints `ccloop-agent-catalog:` lines on the
++// worker's stderr (plan issue 3); in-process calls here would print them into the test output, so each test captures them
++// in `catalogLines` and passes every other write through.
++let catalogLines: string[] = [];
++beforeEach(() => {
++  catalogLines = [];
++  const write = process.stderr.write.bind(process.stderr) as (...args: unknown[]) => boolean;
++  vi.spyOn(process.stderr, "write").mockImplementation(((chunk: unknown, ...rest: unknown[]) => {
++    if (String(chunk).startsWith("ccloop-agent-catalog:")) { catalogLines.push(String(chunk)); return true; }
++    return write(chunk, ...rest);
++  }) as typeof process.stderr.write);
++});
++afterEach(() => { vi.restoreAllMocks(); });
+ 
+ async function ompWorld(options: { catalog?: unknown; single?: unknown; installationTimeoutMs?: number } = {}) {
+   const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-omp-single-")));
+   dirs.push(dir);
+   const marker = join(dir, "omp-marker");
+   if (options.catalog !== undefined) await writeFile(`${marker}.catalog.json`, JSON.stringify(options.catalog));
+   if (options.single !== undefined) await writeFile(`${marker}.single.json`, JSON.stringify(options.single));
+   const binary = join(dir, "omp");
+   await writeFile(binary, `#!/bin/sh\nexec '${process.execPath}' '${FAKE_OMP}' '${marker}' "$@"\n`, { mode: 0o700 });
+   const runDir = join(dir, "run");
+@@ -242,20 +255,40 @@ describe("OmpAdapter.singleCall (§3.3, §3.3.7)", () => {
+   it("refuses before spawning, naming stage and elapsed time, when a cold re-check outlives the call's deadline", async () => {
+     const w = await ompWorld({ installationTimeoutMs: 30_000 });
+     await writeFile(`${w.marker}.models.json`, JSON.stringify({ sleepMs: 10_000 }));
+     const started = Date.now();
+     const failure = await failureOf(runOmpSingleCall(w.config, w.request({ timeoutMs: 1_000 })));
+     expect(failure).toMatchObject({ code: "omp-single-call-unavailable", neverStarted: true });
+     expect((failure as Error).message).toMatch(/^omp-single-call-unavailable: catalog omp-model-catalog-unavailable: timeout \d+ms · stage timeout · elapsedMs \d+$/);
+     expect(Date.now() - started).toBeLessThan(5_000);
+     expect(observedTokensOf(failure)).toBe(0);
+     expect(existsSync(`${w.marker}.calls`)).toBe(false);
++    expect(catalogLines).toEqual([
++      expect.stringMatching(/^ccloop-agent-catalog: miss omp [0-9a-f]{12}\n$/),
++      expect.stringMatching(/^ccloop-agent-catalog: probe-failed omp omp-model-catalog-unavailable: timeout \d+ms · stage timeout · elapsedMs \d+\n$/),
++    ]);
++  }, 20_000);
++
++  // Task 4 fix round 1 (spec R6): the re-check and the call share ONE deadline. A cold re-check that takes over 2 s of a 6 s
++  // limit leaves the hanging call the rest, so the whole call ends near 6 s -- not 2 s + another full 6 s (~8.5 s).
++  it("stops a call after a slow cold re-check at the original deadline, not a fresh full limit", async () => {
++    const w = await ompWorld({ single: { hang: true }, installationTimeoutMs: 30_000 });
++    await writeFile(`${w.marker}.models.json`, JSON.stringify({ sleepMs: 2_000 }));
++    const started = Date.now();
++    const failure = await failureOf(new OmpAdapter(w.config).singleCall(w.request({ timeoutMs: 6_000 })));
++    const elapsed = Date.now() - started;
++    expect((failure as Error).message).toMatch(/^omp-timeout: /);
++    expect(observedTokensOf(failure)).toBeNull();
++    expect(await readFile(`${w.marker}.calls`, "utf8")).toBe("single-call\n");
++    expect(elapsed).toBeGreaterThanOrEqual(5_900);
++    expect(elapsed).toBeLessThan(7_500);
++    expect(catalogLines).toEqual([expect.stringMatching(/^ccloop-agent-catalog: miss omp [0-9a-f]{12}\n$/)]);
+   }, 20_000);
+ });
+ 
+ // Fix round 1 (Orca session 02f047f6, 2026-10-14). Real omp 18.10.1 (measured in Task 0) prints the assistant message
+ // three times -- message_start, message_end and turn_end all carry it with the same usage. Only message_end is the
+ // request; counting every event that carries an assistant message would book one call two or three times over (and
+ // refuse it as "multiple requests").
+ describe("decode, real omp event shape (§3.3.5, §3.3.7)", () => {
+   it("decodes the real stream's one assistant message once, with its usage not doubled", () => {
+     const user = { role: "user", content: [{ type: "text", text: "Estimate the plan below." }] };

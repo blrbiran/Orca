@@ -1,0 +1,568 @@
+dcec51e fix(runtime): codex single call allows codex's error items and turns off the linked MCP servers
+ src/agents/agentCatalog.ts                  | 18 ++++----
+ src/agents/catalogCache.ts                  |  2 +
+ src/agents/codexCatalog.ts                  | 30 +++++++++++--
+ src/runtime/codex/codexAdapter.ts           | 15 ++++---
+ src/runtime/codex/codexSingleCall.ts        | 24 +++++++++--
+ tests/agents/agentCatalog.test.ts           |  4 +-
+ tests/agents/catalogProbe.test.ts           |  3 ++
+ tests/fixtures/fake-codex.mjs               | 22 +++++++---
+ tests/runtime/codex/codexSingleCall.test.ts | 65 ++++++++++++++++++++++++++++-
+ 9 files changed, 158 insertions(+), 25 deletions(-)
+diff --git a/src/agents/agentCatalog.ts b/src/agents/agentCatalog.ts
+index ae09e18..e829f7f 100644
+--- a/src/agents/agentCatalog.ts
++++ b/src/agents/agentCatalog.ts
+@@ -6,54 +6,58 @@ import type { CatalogRowV1, InstallationV1 } from "./types.js";
+ import { probeVersion } from "./versionProbe.js";
+ 
+ /**
+  * Every-agent requirement chain (Orca spec 2026-10-15 §4.1, R4/R6/R8): every catalog and version read goes through here.
+  * A hit within 30 minutes answers without spawning; a miss probes `--version` and, for omp and codex, the catalog, under
+  * one deadline (the caller's, else 30 s from now; plan issue 4), and writes an entry only when every probe answered.
+  * `log` gets the `ccloop-agent-catalog: miss|probe-failed ...` lines; `control` passes none (plan issue 3).
+  */
+ export interface AgentCatalogV1 {
+   source: "cache" | "probe"; observedAt: string; version: string | null;
+-  rows: CatalogRowV1[] | null; codexFeatures: string[] | null; catalogError: string | null;
++  rows: CatalogRowV1[] | null; codexFeatures: string[] | null; codexMcpServers: string[] | null; catalogError: string | null;
+ }
+ export interface ReadAgentCatalogOptions {
+   deadline?: number; signal?: AbortSignal; refresh?: boolean; env?: NodeJS.ProcessEnv; log?: (line: string) => void; now?: () => number;
+ }
+ 
+ const numberOrNull = (value: unknown): boolean => value === null || typeof value === "number";
+ /** Task 2 deferred item: readCatalogEntry checks only that the lists are arrays; an element of the wrong shape is a miss. */
+ function wellFormed(entry: CatalogEntryV1): boolean {
+   const rows = entry.rows === null || entry.rows.every((row: unknown) => {
+     if (row === null || typeof row !== "object" || Array.isArray(row)) return false;
+     const value = row as Record<string, unknown>;
+     return typeof value.selector === "string" && typeof value.provider === "string" && numberOrNull(value.contextWindow)
+       && numberOrNull(value.maxTokens) && (value.listed === undefined || typeof value.listed === "boolean");
+   });
+-  return rows && (entry.codexFeatures === null || entry.codexFeatures.every((name: unknown) => typeof name === "string"));
++  const strings = (list: unknown[]) => list.every((name: unknown) => typeof name === "string");
++  // Task 8 fix round 2: a codex entry written before the MCP server names were cached (or without them) is a miss.
++  const mcp = entry.codexMcpServers;
++  const mcpOk = entry.key.kind === "codex" ? Array.isArray(mcp) && strings(mcp) : mcp === undefined || mcp === null;
++  return rows && mcpOk && (entry.codexFeatures === null || strings(entry.codexFeatures));
+ }
+ 
+ export async function readAgentCatalog(installation: InstallationV1, options: ReadAgentCatalogOptions = {}): Promise<AgentCatalogV1> {
+   const env = options.env ?? process.env, now = options.now ?? Date.now, log = options.log ?? (() => undefined);
+   const deadline = options.deadline ?? now() + PROBE_CAP_MS;
+   const dir = catalogCacheDir(env);
+   const key = await catalogKey(installation, env);
+   if (dir !== null && options.refresh !== true) {
+     const hit = await readCatalogEntry(dir, key, now());
+-    if (hit !== null && wellFormed(hit)) return { source: "cache", observedAt: hit.observedAt, version: hit.version, rows: hit.rows, codexFeatures: hit.codexFeatures, catalogError: null };
++    if (hit !== null && wellFormed(hit)) return { source: "cache", observedAt: hit.observedAt, version: hit.version, rows: hit.rows, codexFeatures: hit.codexFeatures, codexMcpServers: hit.codexMcpServers ?? null, catalogError: null };
+     log(`ccloop-agent-catalog: miss ${installation.kind} ${entryFileName(key).slice(0, 12)}`);
+   }
+   // The probes measure the deadline on the real clock, as runProbe does; `now` only dates the entry and its age.
+   const version = await probeVersion(installation.command, { timeoutMs: Math.min(10_000, probeTimeoutMs(deadline)), signal: options.signal });
+-  let rows: CatalogRowV1[] | null = null, codexFeatures: string[] | null = null, catalogError: string | null = null;
++  let rows: CatalogRowV1[] | null = null, codexFeatures: string[] | null = null, codexMcpServers: string[] | null = null, catalogError: string | null = null;
+   try {
+     if (installation.kind === "omp") rows = await readOmpCatalog(installation, { deadline, signal: options.signal });
+-    else if (installation.kind === "codex") ({ rows, features: codexFeatures } = await readCodexCatalog(installation, { deadline, signal: options.signal }));
++    else if (installation.kind === "codex") ({ rows, features: codexFeatures, mcpServers: codexMcpServers } = await readCodexCatalog(installation, { deadline, signal: options.signal }));
+   } catch (error) {
+     catalogError = error instanceof Error ? error.message : String(error);
+     log(`ccloop-agent-catalog: probe-failed ${installation.kind} ${catalogError}`);
+   }
+   const observedAt = new Date(now()).toISOString();
+   if (dir !== null && version !== null && catalogError === null) {
+-    await writeCatalogEntry(dir, { schema: "ccloop-agent-catalog-v1", key, observedAt, version, rows, codexFeatures });
++    await writeCatalogEntry(dir, { schema: "ccloop-agent-catalog-v1", key, observedAt, version, rows, codexFeatures, codexMcpServers });
+   }
+-  return { source: "probe", observedAt, version, rows, codexFeatures, catalogError };
++  return { source: "probe", observedAt, version, rows, codexFeatures, codexMcpServers, catalogError };
+ }
+diff --git a/src/agents/catalogCache.ts b/src/agents/catalogCache.ts
+index 9dd05c4..75ac8b4 100644
+--- a/src/agents/catalogCache.ts
++++ b/src/agents/catalogCache.ts
+@@ -11,20 +11,22 @@ import type { CatalogRowV1, InstallationV1 } from "./types.js";
+  */
+ export const CATALOG_LIFETIME_MS = 1_800_000;
+ export interface CatalogStampV1 { path: string; mtimeMs: number | null; size: number | null }
+ export interface CatalogKeyV1 {
+   schema: "ccloop-agent-catalog-key-v1"; kind: string; command: string[]; files: CatalogStampV1[];
+   profile: string | null; configDir: string | null; inheritedConfigDir: string | null; configFiles: CatalogStampV1[];
+ }
+ export interface CatalogEntryV1 {
+   schema: "ccloop-agent-catalog-v1"; key: CatalogKeyV1; observedAt: string; version: string;
+   rows: CatalogRowV1[] | null; codexFeatures: string[] | null;
++  /** Task 8 fix round 2: codex's configured MCP server names; an entry without them is a miss for codex (agentCatalog.ts). */
++  codexMcpServers?: string[] | null;
+ }
+ 
+ export function catalogCacheDir(env: NodeJS.ProcessEnv): string | null {
+   if (env.CCLOOP_CACHE_DIR !== undefined && env.CCLOOP_CACHE_DIR !== "") return isAbsolute(env.CCLOOP_CACHE_DIR) ? env.CCLOOP_CACHE_DIR : null;
+   if (env.XDG_CACHE_HOME && isAbsolute(env.XDG_CACHE_HOME)) return join(env.XDG_CACHE_HOME, "ccloop", "agent-catalog");
+   if (env.HOME && isAbsolute(env.HOME)) return join(env.HOME, ".cache", "ccloop", "agent-catalog");
+   return null;
+ }
+ 
+ async function stamp(path: string): Promise<CatalogStampV1> {
+diff --git a/src/agents/codexCatalog.ts b/src/agents/codexCatalog.ts
+index 7ca757b..880c971 100644
+--- a/src/agents/codexCatalog.ts
++++ b/src/agents/codexCatalog.ts
+@@ -22,22 +22,42 @@ function configuredWindow(toml: string): number | null {
+  */
+ export function codexFeatureNames(listed: string): Set<string> {
+   const names = new Set<string>();
+   for (const line of listed.split("\n")) {
+     const words = line.trim().split(/\s+/);
+     if (words.length >= 3 && (words.at(-1) === "true" || words.at(-1) === "false")) names.add(words[0]!);
+   }
+   return names;
+ }
+ 
+-/** The codex catalog (`codex debug models`) and its installed feature flags (`codex features list`), under one deadline. */
+-export async function readCodexCatalog(installation: InstallationV1, options: { deadline?: number; signal?: AbortSignal }): Promise<{ rows: CatalogRowV1[]; features: string[] }> {
++/**
++ * Task 8 fix round 2 (P1, codex-cli 0.160.0): the MCP server names `codex mcp list --json` prints (a JSON array of
++ * `{name, enabled, ...}`), so a single call can turn each one off by name -- a whole-table `-c mcp_servers={}` is merged,
++ * not replaced, and a name codex does not know breaks its config ("invalid transport"). Anything else is stage decode.
++ */
++export function codexMcpServerNames(listed: string): string[] {
++  const parsed = JSON.parse(listed) as unknown;
++  if (!Array.isArray(parsed)) throw new Error("not a list");
++  const names = parsed.map((server) => {
++    const name = server !== null && typeof server === "object" ? (server as { name?: unknown }).name : undefined;
++    if (typeof name !== "string" || name.length === 0 || name.length > 200) throw new Error("bad name");
++    return name;
++  });
++  if (new Set(names).size !== names.length) throw new Error("duplicate name");
++  return names;
++}
++
++/**
++ * The codex catalog (`codex debug models`), its installed feature flags (`codex features list`) and its configured MCP
++ * servers (`codex mcp list --json`, Task 8 fix round 2), under one deadline.
++ */
++export async function readCodexCatalog(installation: InstallationV1, options: { deadline?: number; signal?: AbortSignal }): Promise<{ rows: CatalogRowV1[]; features: string[]; mcpServers: string[] }> {
+   const env: NodeJS.ProcessEnv = { ...process.env, ...(installation.configDir === null ? {} : { CODEX_HOME: installation.configDir }) };
+   const deadline = options.deadline ?? Date.now() + 30_000;
+   const startedAt = Date.now();
+   const models = await runProbe(CODE, installation.command[0], [...installation.command.slice(1), "debug", "models"], env, { timeoutMs: probeTimeoutMs(deadline), signal: options.signal });
+   let rows: CatalogRowV1[];
+   try {
+     const parsed = JSON.parse(models) as { models?: unknown };
+     if (!Array.isArray(parsed.models)) throw new Error();
+     rows = parsed.models.map((row) => {
+       const value = row as Record<string, unknown>;
+@@ -45,12 +65,16 @@ export async function readCodexCatalog(installation: InstallationV1, options: {
+       return { selector: value.slug, provider: "codex", contextWindow: positiveSafe(value.context_window), maxTokens: null, listed: value.visibility === "list" };
+     });
+     if (new Set(rows.map((row) => row.selector)).size !== rows.length) throw new Error();
+   } catch { throw probeFailure(CODE, "decode", "decode", startedAt); }
+   // An empty CODEX_HOME/HOME is treated as unset: joining "" would read a config.toml from the working directory.
+   const codexHome = installation.configDir ?? (env.CODEX_HOME || (env.HOME ? join(env.HOME, ".codex") : null));
+   const window = codexHome === null ? null : await readFile(join(codexHome, "config.toml"), "utf8").then(configuredWindow, () => null);
+   if (window !== null) rows = rows.map((row) => ({ ...row, contextWindow: window }));
+   const listed = await runProbe(CODE, installation.command[0], [...installation.command.slice(1), "features", "list"], env, { timeoutMs: probeTimeoutMs(deadline), signal: options.signal });
+   const names = codexFeatureNames(listed);
+-  return { rows, features: CODEX_SINGLE_CALL_FEATURES.filter((name) => names.has(name)) };
++  const mcpStartedAt = Date.now();
++  const mcp = await runProbe(CODE, installation.command[0], [...installation.command.slice(1), "mcp", "list", "--json"], env, { timeoutMs: probeTimeoutMs(deadline), signal: options.signal });
++  let mcpServers: string[];
++  try { mcpServers = codexMcpServerNames(mcp); } catch { throw probeFailure(CODE, "decode", "decode", mcpStartedAt); }
++  return { rows, features: CODEX_SINGLE_CALL_FEATURES.filter((name) => names.has(name)), mcpServers };
+ }
+diff --git a/src/runtime/codex/codexAdapter.ts b/src/runtime/codex/codexAdapter.ts
+index fad5f88..0cb3e25 100644
+--- a/src/runtime/codex/codexAdapter.ts
++++ b/src/runtime/codex/codexAdapter.ts
+@@ -1,18 +1,18 @@
+ import { normalizeExecutionFinal, ExecutionFormatFailure } from "../executionNormalizer.js";
+ import { access, writeFile } from "node:fs/promises";
+ import { isAbsolute, join } from "node:path";
+ import { readAgentCatalog } from "../../agents/agentCatalog.js";
+ import type { InstallationV1 } from "../../agents/types.js";
+ import { buildExecutorPrompt, buildPlannerPrompt, buildVerifierPrompt } from "../claude/prompts.js";
+ import type { AttemptContext, RuntimeAdapter, SingleCallRequest, SingleCallResult } from "../types.js";
+-import { codexSingleCallArgs, codexSingleCallHome, decodeCodexSingleCall } from "./codexSingleCall.js";
++import { addressableMcpServer, codexSingleCallArgs, codexSingleCallHome, decodeCodexSingleCall } from "./codexSingleCall.js";
+ import { codexModelUsage, decodeCodexUsage, decodeCodexResult, parseCodexConfig, phaseFinalAccepts, scanFinalMessage, type CodexConfig, type CodexPhase, type PhaseResults } from "./protocol.js";
+ import { runCodexPhase, type PhaseOutcome } from "./runCodexPhase.js";
+ import { classifyRateLimit } from "./rateLimit.js";
+ 
+ /** Codex rate-limit spec §3.2: waits before each retry of a phase rejected by 429 before any work (three retries). */
+ export const RATE_LIMIT_DELAYS_MS: readonly number[] = [30_000, 60_000, 120_000];
+ export interface CodexAdapterOptions {
+   rateLimitDelaysMs?: readonly number[];
+   /** Every-agent requirement chain (Orca spec 2026-10-15 §6.1): the installation a single call re-reads its catalog for. */
+   installation?: InstallationV1;
+@@ -143,33 +143,38 @@ export class CodexAdapter implements RuntimeAdapter {
+   /**
+    * Every-agent requirement chain (Orca spec 2026-10-15 §6.1, R2, R9): one structured call, tools off, in a private HOME and
+    * CODEX_HOME. Codex cannot cap the output; the bound is checked by Orca after the fact. Refused before spawning when the
+    * installed feature list is unknown, since the tool flags could not be turned off (plan spec issue 9). As omp's (R6), the
+    * re-check lives inside the call's deadline, computed once; the spawn gets only what the re-check left.
+    */
+   async singleCall(request: SingleCallRequest): Promise<SingleCallResult> {
+     if (this.installation === undefined) throw new Error("single-call-unsupported");
+     const deadline = Date.now() + Math.min(request.timeoutMs, this.config.timeoutMs);
+     const catalog = await readAgentCatalog(this.installation, { deadline, signal: request.signal, log: (line) => { process.stderr.write(`${line}\n`); } });
+-    if (catalog.codexFeatures === null) {
+-      throw Object.assign(new Error(`codex-single-call-unavailable: ${catalog.catalogError ?? "no feature list"}`), { code: "codex-single-call-unavailable", neverStarted: true });
++    // Task 8 fix round 2: the MCP server names are needed as much as the feature list (their servers would start otherwise).
++    if (catalog.codexFeatures === null || catalog.codexMcpServers === null) {
++      throw Object.assign(new Error(`codex-single-call-unavailable: ${catalog.catalogError ?? "no feature or MCP server list"}`), { code: "codex-single-call-unavailable", neverStarted: true });
++    }
++    const features = catalog.codexFeatures, mcpServers = catalog.codexMcpServers;
++    const unaddressable = mcpServers.find((name) => !addressableMcpServer(name));
++    if (unaddressable !== undefined) {
++      throw Object.assign(new Error(`codex-single-call-unavailable: MCP server ${JSON.stringify(unaddressable)} cannot be turned off by -c`), { code: "codex-single-call-unavailable", neverStarted: true });
+     }
+-    const features = catalog.codexFeatures;
+     // The installation's effective CODEX_HOME: its configDir, else an inherited absolute CODEX_HOME, else <HOME>/.codex.
+     const inherited = process.env.CODEX_HOME, home = process.env.HOME;
+     const source = this.installation.configDir ?? (inherited && isAbsolute(inherited) ? inherited : home && isAbsolute(home) ? join(home, ".codex") : null);
+     const isolated = await codexSingleCallHome({ runDir: request.runDir, sourceCodexHome: source, executable: this.config.command[0], env: process.env });
+     const context = { runDir: request.runDir, attempt: 1, worktreePath: request.cwd, abortSignal: request.signal, onProcessRegistered: request.onProcessRegistered,
+       state: { budgetSnapshot: { timeRemainingMs: Math.max(1, deadline - Date.now()) } } } as unknown as AttemptContext;
+     const outcome = await runCodexPhase(this.config, { phase: "single-call", prompt: request.prompt, context, spawn: {
+       schema: request.responseSchema, env: { ...process.env, HOME: isolated.home, CODEX_HOME: isolated.codexHome },
+-      args: ({ schemaPath, finalPath }) => codexSingleCallArgs({ model: this.config.model, cwd: request.cwd, schemaPath, finalPath, features }),
++      args: ({ schemaPath, finalPath }) => codexSingleCallArgs({ model: this.config.model, cwd: request.cwd, schemaPath, finalPath, features, mcpServers }),
+     } });
+     if (outcome.reason !== "completed") {
+       // Fix round 1 (repo convention, omp "Ruling m4", claude): runCodexPhase writes the prompt only after process.json is
+       // saved, so a call that ended without it -- aborted before or at spawn, a spawn error, a deadline hit first -- never
+       // sent anything: neverStarted, booked 0. The codex phase path is unchanged.
+       const neverStarted = !(await access(join(outcome.evidenceDir, "process.json")).then(() => true, () => false));
+       const error = outcome.reason === "aborted" ? new CodexPhaseAborted(outcome.evidenceDir, outcome.observedTokens)
+         : Object.assign(new Error(`codex-${outcome.reason}: ${outcome.evidenceDir}`), { observedTokens: outcome.observedTokens });
+       throw neverStarted ? Object.assign(error, { neverStarted: true }) : error;
+     }
+diff --git a/src/runtime/codex/codexSingleCall.ts b/src/runtime/codex/codexSingleCall.ts
+index 632c1b6..0f190dd 100644
+--- a/src/runtime/codex/codexSingleCall.ts
++++ b/src/runtime/codex/codexSingleCall.ts
+@@ -11,26 +11,39 @@ import { codexModelUsage, decodeCodexUsage, observedTurnUsage } from "./protocol
+  * `features.plugins=false` is here, not only among the tool flags: Task 0 measured that it removes the
+  * <recommended_plugins> block a linked config.toml injects (`features.recommended_plugins=false` does not).
+  */
+ export const CODEX_SINGLE_CALL_CONFIG: readonly string[] = [
+   "include_permissions_instructions=false", "include_apps_instructions=false", "include_collaboration_mode_instructions=false",
+   "include_environment_context=false", "project_doc_max_bytes=0", "features.plugins=false",
+ ];
+ const TURNED_ON = new Set(["skip_host_skill_discovery"]);
+ const ALREADY_SET = new Set(CODEX_SINGLE_CALL_CONFIG.filter((value) => value.startsWith("features.")).map((value) => value.slice(9, value.indexOf("="))));
+ 
+-/** `features` = the tool flags the installed codex lists (codex refuses an unknown flag); each is sent once. */
+-export function codexSingleCallArgs(input: { model: string; cwd: string; schemaPath: string; finalPath: string; features: readonly string[] }): string[] {
++/**
++ * A server name `-c mcp_servers.<name>.enabled=false` can address. Measured on codex-cli 0.160.0: a quoted segment
++ * (`mcp_servers."figma".enabled`) is taken literally and breaks the config ("invalid transport"), so only bare names are
++ * addressable; the adapter refuses a call whose installation lists any other (codex-single-call-unavailable).
++ */
++export const addressableMcpServer = (name: string): boolean => /^[A-Za-z0-9_-]+$/.test(name);
++
++/**
++ * `features` = the tool flags the installed codex lists (codex refuses an unknown flag); each is sent once.
++ * `mcpServers` = the MCP servers the installation's config defines (Task 8 fix round 2, spec §6.1 "the matching -c
++ * override"): each is turned off by name -- measured on codex-cli 0.160.0 with `codex mcp list --json`, a whole-table
++ * `-c mcp_servers={}` leaves them on.
++ */
++export function codexSingleCallArgs(input: { model: string; cwd: string; schemaPath: string; finalPath: string; features: readonly string[]; mcpServers: readonly string[] }): string[] {
+   return ["exec", "--json", "--ephemeral", "--color", "never", "--skip-git-repo-check", "--model", input.model, "--sandbox", "read-only",
+     "-C", input.cwd, "--output-schema", input.schemaPath, "-o", input.finalPath,
+     ...CODEX_SINGLE_CALL_CONFIG.flatMap((value) => ["-c", value]),
+     ...input.features.filter((name) => !ALREADY_SET.has(name)).flatMap((name) => ["-c", `features.${name}=${TURNED_ON.has(name) ? "true" : "false"}`]),
++    ...input.mcpServers.flatMap((name) => ["-c", `mcp_servers.${name}.enabled=false`]),
+     "-"];
+ }
+ 
+ /** A private dir that is not a real directory of this user (a symlink, a file, someone else's) refuses the call unspawned. */
+ const homeInvalid = (path: string) => Object.assign(new Error(`codex-single-call-home-invalid:${path}`), { code: "codex-single-call-home-invalid", neverStarted: true });
+ 
+ /**
+  * Creates `dir` with 0700 set explicitly when it is missing; an existing one (also one a concurrent call made) keeps its
+  * mode. Either way it must then be a real directory, not a symlink, owned by this user (fix round 1: a symlinked
+  * codex-home would make ensureLink rename a link over the installation's own auth.json). Precedent: control/paths.ts
+@@ -104,31 +117,36 @@ export async function codexSingleCallHome(input: { runDir: string; sourceCodexHo
+   }
+   return { home, codexHome };
+ }
+ 
+ const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+ const observed = (error: Error, events: string) => Object.assign(error, { observedTokens: observedTurnUsage(events) });
+ const notSingle = (what: string, events: string) => Object.assign(observed(new Error(`codex-single-call-not-single:${what}`), events), { code: `codex-single-call-not-single:${what}` });
+ 
+ /**
+  * §6.1, fail closed: no tool or command item, at most one completed agent message, exactly one completed turn, one object.
++ * Task 8 fix round 2 (P1, codex-cli 0.160.0): an `error` item is a diagnostic codex emits for config warnings (an
++ * unrecognized key in the linked config.toml, an under-development feature) -- allowed and logged on stderr; it stays in
++ * events.jsonl. Every other item type that is not agent_message or reasoning, known or not, is a tool.
+  * Every refusal books the turn usage observed so far (null when none), never 0; "no object" is single-call-output-invalid
+  * (plan issue 10).
+  */
+ export function decodeCodexSingleCall(events: string, final: string | null, model: string, evidenceDir: string): SingleCallResult {
+   let messages = 0, turns = 0, tool = false;
+   for (const line of events.split("\n")) {
+     if (!line.trim()) continue;
+     let row: unknown;
+     try { row = JSON.parse(line); } catch { throw observed(new Error("codex-events-invalid"), events); }
+     if (!record(row) || typeof row.type !== "string") throw observed(new Error("codex-events-invalid"), events);
+-    if (row.type.startsWith("item.") && record(row.item) && row.item.type !== "agent_message" && row.item.type !== "reasoning") tool = true;
++    if (row.type.startsWith("item.") && record(row.item) && row.item.type === "error") {
++      process.stderr.write(`ccloop-codex-single-call: codex error item ${JSON.stringify(typeof row.item.message === "string" ? row.item.message : null)}\n`);
++    } else if (row.type.startsWith("item.") && record(row.item) && row.item.type !== "agent_message" && row.item.type !== "reasoning") tool = true;
+     if (row.type === "item.completed" && record(row.item) && row.item.type === "agent_message") messages += 1;
+     if (row.type === "turn.completed") turns += 1;
+   }
+   if (tool) throw notSingle("tool", events);
+   if (messages > 1) throw notSingle("messages", events);
+   if (turns > 1) throw notSingle("turns", events);
+   let usage: ReturnType<typeof decodeCodexUsage>;
+   try { usage = decodeCodexUsage(events, true); } catch (error) { throw observed(error as Error, events); }
+   const modelUsage = codexModelUsage(events, model);
+   const output = final === null ? undefined : parseSingleCallObject(final);
+diff --git a/tests/agents/agentCatalog.test.ts b/tests/agents/agentCatalog.test.ts
+index 4d2aae5..e08b3f7 100644
+--- a/tests/agents/agentCatalog.test.ts
++++ b/tests/agents/agentCatalog.test.ts
+@@ -32,21 +32,23 @@ async function table() {
+ const spawns = (marker: string) => count(`${marker}.catalog-calls`) + count(`${marker}.version-calls`);
+ 
+ describe("criterion 1: a warm cache spawns nothing (spec §4.1)", { timeout: 30_000 }, () => {
+   it("capabilities for omp and codex probe once, then never again", async () => {
+     const t = await table();
+     for (const agent of ["omp", "codex"]) {
+       expect((await runControlCommand(["capabilities", "--agents", t.path], JSON.stringify({ agent: { agent } }))).code).toBe(0);
+     }
+     const warm = [spawns(t.ompMarker), spawns(t.codexMarker)];
+     // omp 2 = 1 version + 1 models; codex 4 = 1 version by codexInstallation (agentsFixture.ts:28-41) + 1 version + debug-models + features-list.
+-    expect(warm).toEqual([2, 4]);
++    // Ruling: rewritten under the human's blanket naming (Orca session a852f96a, 2026-10-16) -- Task 8 fix round 2 adds the
++    // catalog probe `mcp list --json` (spec §6.1 MCP override), so codex is 5 = the four above + mcp-list. Not loosened: exact.
++    expect(warm).toEqual([2, 5]);
+     for (const agent of ["omp", "codex", "omp", "codex"]) {
+       expect((await runControlCommand(["capabilities", "--agents", t.path], JSON.stringify({ agent: { agent } }))).code).toBe(0);
+     }
+     expect([spawns(t.ompMarker), spawns(t.codexMarker)]).toEqual(warm);
+   });
+ 
+   // codex joins this loop in Task 6 (only-add), once codex answers v1-soft and accept admits its single-call work.
+   it("accept for omp probes nothing on a warm key", async () => {
+     const t = await table();
+     for (const agent of ["omp"] as const) {
+diff --git a/tests/agents/catalogProbe.test.ts b/tests/agents/catalogProbe.test.ts
+index 163b7b8..c916f8c 100644
+--- a/tests/agents/catalogProbe.test.ts
++++ b/tests/agents/catalogProbe.test.ts
+@@ -136,20 +136,23 @@ describe("criterion 2: deadline and abort (spec §4.3)", () => {
+ describe("codex catalog decode (spec §3, §6.1)", () => {
+   it("reads every row with its window and visibility, and the installed tool flags in order", async () => {
+     const w = await codex();
+     expect(await readCodexCatalog(w.installation, {})).toEqual({
+       rows: [
+         { selector: "gpt-6-sol", provider: "codex", contextWindow: 272000, maxTokens: null, listed: true },
+         { selector: "gpt-6-luna", provider: "codex", contextWindow: 272000, maxTokens: null, listed: true },
+         { selector: "gpt-reserve", provider: "codex", contextWindow: 272000, maxTokens: null, listed: false },
+       ],
+       features: ["apps", "image_generation", "multi_agent", "plugins", "shell_tool", "skip_host_skill_discovery", "unified_exec", "view_image"],
++      // Ruling: rewritten under the human's blanket naming (Orca session a852f96a, 2026-10-16) -- Task 8 fix round 2 adds the
++      // MCP server names (`codex mcp list --json`; the fake lists none by default) to the codex catalog read. Still exact.
++      mcpServers: [],
+     });
+   });
+ 
+   it("lets config.toml's top-level model_context_window win over the catalog, and ignores one inside a table", async () => {
+     expect((await readCodexCatalog((await codex(undefined, "model = \"x\"\nmodel_context_window = 100000\n[profiles.a]\n")).installation, {})).rows[0]!.contextWindow).toBe(100000);
+     expect((await readCodexCatalog((await codex(undefined, "[profiles.a]\nmodel_context_window = 100000\n")).installation, {})).rows[0]!.contextWindow).toBe(272000);
+   });
+ 
+   // codex-cli 0.160.0 prints `name<pad>stage<pad>enabled`, and a stage can be two words ("under development"); the name is
+   // the first word and the enabled flag the last, never a fixed column count. A line without a true/false end is not a flag.
+diff --git a/tests/fixtures/fake-codex.mjs b/tests/fixtures/fake-codex.mjs
+index 7cea152..e694bc4 100644
+--- a/tests/fixtures/fake-codex.mjs
++++ b/tests/fixtures/fake-codex.mjs
+@@ -4,57 +4,69 @@ const mode=process.argv[2], marker=process.argv[3];
+ // Orca agent selection (2026-09-26), spec §4.8: `--version` with no `exec` answers a fixed version and
+ // writes nothing; every other call appends what the real codex would receive (from `exec` on) as one
+ // JSON array line to `<marker>.argv`. Every mode below is otherwise unchanged.
+ // Orca retire-legacy-orca-run (2026-10-01), spec §3.4: mode `frames`, argv `frames <marker> <framesFile>`, plays
+ // the frame of the attempt number (the working directory's `attempt-<n>`, minus one) from the framesFile list of
+ // the task named in the prompt (else the `"*"` list); no frame ⇒ stderr `no frame for <task> attempt <n>`, exit 3.
+ // Every-agent requirement chain (Orca spec 2026-10-15 §9): `--version` appends `version` to `<marker>.version-calls`;
+ // `debug models` and `features list` answer the catalog and the feature list and append `debug-models` / `features-list`
+ // to `<marker>.catalog-calls`, before anything below runs, so `<marker>.argv` and `<marker>.calls` never see them.
+ // `<marker>.catalog.json` ({rows?, sleepMs?, exitCode?, stderr?}) overrides the rows, sleeps first, or fails.
+-// Task 8 of that plan: its `features?` (a list of flag names) overrides the flags `features list` prints.
++// Task 8 of that plan: its `features?` (a list of flag names) overrides the flags `features list` prints. Task 8 fix
++// round 2: `mcp list --json` appends `mcp-list` and prints `mcp?` (default []) as codex-cli 0.160.0's JSON array of
++// `{name, enabled, ...}` objects; `mcpExitCode?` fails that call alone.
+ if(process.argv.at(-1)==="--version"&&!process.argv.includes("exec")) {appendFileSync(marker+".version-calls","version\n");await new Promise(resolve=>process.stdout.write("9.9.9-fake\n",resolve));process.exit(0);}
+-const catalogCall=process.argv.includes("debug")&&process.argv.includes("models")?"debug-models":process.argv.includes("features")&&process.argv.includes("list")?"features-list":null;
++const catalogCall=process.argv.includes("debug")&&process.argv.includes("models")?"debug-models":process.argv.includes("features")&&process.argv.includes("list")?"features-list":process.argv.includes("mcp")&&process.argv.includes("list")?"mcp-list":null;
+ if(catalogCall!==null&&!process.argv.includes("exec")) {
+   appendFileSync(marker+".catalog-calls",catalogCall+"\n");
+   const script=existsSync(marker+".catalog.json")?JSON.parse(readFileSync(marker+".catalog.json","utf8")):{};
+   if(script.sleepMs!==undefined) await new Promise(resolve=>setTimeout(resolve,script.sleepMs));
+   if(script.stderr!==undefined) await new Promise(resolve=>process.stderr.write(script.stderr,resolve));
+   if(script.exitCode!==undefined) process.exit(script.exitCode);
+-  if(catalogCall==="debug-models") {
++  if(catalogCall==="mcp-list") {
++    if(script.mcpExitCode!==undefined) process.exit(script.mcpExitCode);
++    await new Promise(resolve=>process.stdout.write(JSON.stringify(script.mcp??[])+"\n",resolve));
++  } else if(catalogCall==="debug-models") {
+     const rows=script.rows??[{slug:"gpt-6-sol",context_window:272000,visibility:"list"},{slug:"gpt-6-luna",context_window:272000,visibility:"list"},{slug:"gpt-reserve",context_window:272000,visibility:"hide"}];
+     await new Promise(resolve=>process.stdout.write(JSON.stringify({models:rows})+"\n",resolve));
+   } else {
+     const flags=script.features??["apps","browser_use","image_generation","multi_agent","plugins","shell_tool","skip_host_skill_discovery","unified_exec","view_image"];
+     await new Promise(resolve=>process.stdout.write(flags.map(flag=>`${flag.padEnd(40)} stable             true`).join("\n")+"\n",resolve));
+   }
+   process.exit(0);
+ }
+ appendFileSync(marker+".argv",JSON.stringify(process.argv.slice(process.argv.indexOf("exec")))+"\n");
++const P1_ERROR_ITEMS=[
++  {"type":"item.completed","item":{"id":"item_0","type":"error","message":"Codex is ignoring 1 unrecognized configuration setting. Check for typos or deprecated settings.\n  user (/private/tmp/p1-pJnD/cache/codex-home/6c50abddd3e7b8e015da354e559a9f48f1b2d2bac85d91aaee0a9509b61ec74c/codex-home/config.toml): `features.rmcp_client` is ignored."}},
++  {"type":"item.completed","item":{"id":"item_1","type":"error","message":"Codex is ignoring 1 unrecognized configuration setting. Check for typos or deprecated settings.\n  user (/private/tmp/p1-pJnD/cache/codex-home/6c50abddd3e7b8e015da354e559a9f48f1b2d2bac85d91aaee0a9509b61ec74c/codex-home/config.toml): `features.rmcp_client` is ignored."}},
++  {"type":"item.completed","item":{"id":"item_2","type":"error","message":"Under-development features enabled: skip_host_skill_discovery. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /private/tmp/p1-pJnD/cache/codex-home/6c50abddd3e7b8e015da354e559a9f48f1b2d2bac85d91aaee0a9509b61ec74c/codex-home/config.toml."}},
++];
+ const CONTINUATION="Treat continuation input fields unfinished, pendingDecisions, and awaitingHuman as required planning inputs.";
+ const args=process.argv.slice(process.argv.indexOf("exec")+1);
+ const value=flag=>args[args.indexOf(flag)+1];
+ let prompt="";
+ process.stdin.setEncoding("utf8");
+ process.stdin.on("data",c=>{prompt+=c;});
+ process.stdin.on("end",()=>{
+   // Every-agent requirement chain (Orca spec 2026-10-15 §6.1, §9): a single call is the only codex call with
+   // --skip-git-repo-check. It records HOME, CODEX_HOME and whether auth.json there is a symlink in <marker>.single-env.json,
+   // appends `single-call` to <marker>.calls, then plays <marker>.single.json ({rows?, final?, exitCode?, hang?}) or one
+-  // complete {"answer":"42"} with usage input 20 (5 cached) and output 4.
++  // complete {"answer":"42"} with usage input 20 (5 cached) and output 4. Task 8 fix round 2: the default rows carry the
++// three `error` items the real codex-cli 0.160.0 printed in paid check P1 (Orca session a852f96a, 2026-10-16;
++// /private/tmp/p1-pJnD events.jsonl, item lines copied verbatim), as a real single call does.
+   if(args.includes("--skip-git-repo-check")) {
+     appendFileSync(marker+".calls","single-call\n");
+     let authIsLink=null; try{authIsLink=lstatSync(`${process.env.CODEX_HOME}/auth.json`).isSymbolicLink();}catch{}
+     writeFileSync(marker+".single-env.json",JSON.stringify({HOME:process.env.HOME,CODEX_HOME:process.env.CODEX_HOME,authIsLink}));
+     const script=existsSync(marker+".single.json")?JSON.parse(readFileSync(marker+".single.json","utf8")):{};
+     if(script.hang===true){setInterval(()=>{},1000);return;}
+-    const rows=script.rows??[{type:"thread.started",thread_id:"t"},{type:"turn.started"},{type:"item.completed",item:{id:"item_0",type:"agent_message",text:"{\"answer\":\"42\"}"}},{type:"turn.completed",usage:{input_tokens:20,cached_input_tokens:5,output_tokens:4}}];
++    const rows=script.rows??[{type:"thread.started",thread_id:"t"},...P1_ERROR_ITEMS,{type:"turn.started"},{type:"item.completed",item:{id:"item_0",type:"agent_message",text:"{\"answer\":\"42\"}"}},{type:"turn.completed",usage:{input_tokens:20,cached_input_tokens:5,output_tokens:4}}];
+     writeFileSync(value("-o"),script.final??"{\"answer\":\"42\"}");
+     process.stdout.write(rows.map(row=>JSON.stringify(row)).join("\n")+"\n",()=>{process.exitCode=script.exitCode??0;});
+     return;
+   }
+   writeFileSync(marker,JSON.stringify({args,cwd:process.cwd(),prompt,pid:process.pid}));
+   // Orca session 7f37d261 (2026-10-13), codex rate-limit spec §4: modes `rate-limit-1` (the first call of this marker is
+   // rejected, later calls behave as `integration`), `rate-limit-all`, `rate-limit-all-exit0` and `rate-limit-after-item`
+   // replay the tester's real 429 stdout (Orca orca_archived_files/recommendations-1-events.jsonl), exit 1 unless exit0.
+   // `rate-limit-hang` prints the same rows and then hangs (a phase that times out); `rate-limit-1-hang` rejects the first
+   // call and hangs on every later one.
+diff --git a/tests/runtime/codex/codexSingleCall.test.ts b/tests/runtime/codex/codexSingleCall.test.ts
+index 7346d1d..7a0860f 100644
+--- a/tests/runtime/codex/codexSingleCall.test.ts
++++ b/tests/runtime/codex/codexSingleCall.test.ts
+@@ -1,16 +1,18 @@
+ import { createHash } from "node:crypto";
+ import { existsSync, readFileSync } from "node:fs";
+ import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, symlink, unlink, writeFile } from "node:fs/promises";
+ import { tmpdir } from "node:os";
+ import { dirname, join, resolve } from "node:path";
+-import { describe, expect, it } from "vitest";
++import { describe, expect, it, vi } from "vitest";
++import { readAgentCatalog } from "../../../src/agents/agentCatalog.js";
++import { catalogKey, entryFileName } from "../../../src/agents/catalogCache.js";
+ import { codexDescriptor } from "../../../src/agents/codex.js";
+ import type { MaterializedAgentConfigV1 } from "../../../src/agents/types.js";
+ import { codexSingleCallHome } from "../../../src/runtime/codex/codexSingleCall.js";
+ import { observedTokensOf, SingleCallOutputInvalid } from "../../../src/runtime/types.js";
+ 
+ // Every-agent requirement chain (Orca spec 2026-10-15 §6.1, R2, R9): one structured codex call with tools off, in a
+ // private HOME and CODEX_HOME whose auth.json and config.toml are symlinks; decoding fails closed and books what it saw.
+ const FAKE_CODEX = resolve("tests/fixtures/fake-codex.mjs");
+ const SCHEMA = { type: "object", properties: { answer: { type: "string" } }, required: ["answer"], additionalProperties: false };
+ async function world(single?: unknown) {
+@@ -260,20 +262,81 @@ describe("codex single call (spec §6.1)", { timeout: 30_000 }, () => {
+ 
+   it("C8.9b: a process that could not be spawned (its working directory is gone) books 0 as neverStarted", async () => {
+     const w = await world();
+     const error = await failure(w.adapter.singleCall!({ ...w.request, cwd: join(w.request.runDir, "gone") }));
+     expect(error).toMatchObject({ neverStarted: true });
+     expect((error as Error).message).toMatch(/^codex-spawn-error: /);
+     expect(observedTokensOf(error)).toBe(0);
+     expect(existsSync(`${w.marker}.calls`)).toBe(false);
+   });
+ 
++  // Task 8 fix round 2 (paid check P1, codex-cli 0.160.0): codex printed three `error` items -- config warnings -- and one
++  // answer in one turn; they are diagnostics, logged and kept in events.jsonl, never a reason to refuse. The fake's
++  // default stream carries those three items verbatim.
++  it("C8.11: decodes a single call whose stream carries codex's error items, logging each on stderr", async () => {
++    const w = await world();
++    const written: string[] = [];
++    const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { written.push(String(chunk)); return true; });
++    let result: unknown;
++    try { result = await w.adapter.singleCall!(w.request); } finally { spy.mockRestore(); }
++    expect(result).toMatchObject({ output: { answer: "42" }, tokenUsage: 24 });
++    const items = written.filter((line) => line.startsWith("ccloop-codex-single-call: codex error item "));
++    expect(items).toHaveLength(3);
++    expect(items[2]).toMatch(/Under-development features enabled: skip_host_skill_discovery/);
++  });
++
++  it("C8.11b: still refuses an item type it does not know, as a tool", async () => {
++    const w = await world({ rows: [{ type: "item.completed", item: { id: "i", type: "some_future_tool_call", status: "completed" } }, { type: "item.completed", item: { type: "agent_message", text: "{\"answer\":\"42\"}" } }, { type: "turn.completed", usage: { input_tokens: 30, output_tokens: 6 } }] });
++    const error = await failure(w.adapter.singleCall!(w.request));
++    expect(error).toMatchObject({ code: "codex-single-call-not-single:tool" });
++    expect(observedTokensOf(error)).toBe(36);
++  });
++
++  // Task 8 fix round 2, spec §6.1 ("the matching -c override"): the MCP servers the linked config.toml defines would start
++  // inside the call (P1: figma's auth error on stderr). Each listed server is turned off by name; measured on codex-cli
++  // 0.160.0 that `-c mcp_servers={}` leaves them on and an unknown name breaks the config, so the names come from the
++  // installation's own `codex mcp list --json`, read with the catalog and cached with it.
++  it("C8.10: turns off every MCP server the installation lists, by name", async () => {
++    const w = await world();
++    await writeFile(`${w.marker}.catalog.json`, JSON.stringify({ mcp: [{ name: "figma", enabled: true }, { name: "node_repl", enabled: true }, { name: "computer-use", enabled: false }] }));
++    await w.adapter.singleCall!(w.request);
++    expect(configValues(lastArgv(w.marker)).slice(-4)).toEqual([
++      "features.view_image=false", "mcp_servers.figma.enabled=false", "mcp_servers.node_repl.enabled=false", "mcp_servers.computer-use.enabled=false",
++    ]);
++  });
++
++  it.each([
++    ["the list fails", { mcpExitCode: 4 }],
++    ["a server has no name", { mcp: [{ enabled: true }] }],
++    // Measured on codex-cli 0.160.0: `-c mcp_servers."figma".enabled=false` breaks the config, so a dotted name cannot be turned off.
++    ["a server name -c cannot address", { mcp: [{ name: "figma", enabled: true }, { name: "a.b", enabled: true }] }],
++  ])("C8.10b: refuses before spawning, booking 0, when the MCP server list cannot be read (%s)", async (_label, catalog) => {
++    const w = await world();
++    await writeFile(`${w.marker}.catalog.json`, JSON.stringify(catalog));
++    const error = await failure(w.adapter.singleCall!(w.request));
++    expect(error).toMatchObject({ code: "codex-single-call-unavailable", neverStarted: true });
++    expect(observedTokensOf(error)).toBe(0);
++    expect(existsSync(`${w.marker}.calls`)).toBe(false);
++  });
++
++  // A codex cache entry written before the names were cached cannot answer them, so it is a miss, not a hit with none.
++  it("C8.10c: a cached codex entry without MCP server names is a miss", async () => {
++    const w = await world();
++    expect((await readAgentCatalog(w.config.installation)).codexMcpServers).toEqual([]);
++    const file = join(process.env.CCLOOP_CACHE_DIR!, entryFileName(await catalogKey(w.config.installation, process.env)));
++    const entry = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
++    expect(entry.codexMcpServers).toEqual([]);
++    delete entry.codexMcpServers;
++    await writeFile(file, JSON.stringify(entry));
++    expect((await readAgentCatalog(w.config.installation)).source).toBe("probe");
++  });
++
+   it("C8.6: an answer that is not one object is single-call-output-invalid with its usage", async () => {
+     const w = await world({ final: "not json" });
+     const error = await failure(w.adapter.singleCall!(w.request));
+     expect(error).toBeInstanceOf(SingleCallOutputInvalid);
+     expect((error as SingleCallOutputInvalid).tokenUsage).toBe(24);
+   });
+ 
+   it("C8.7: an answer over the request's maxOutputTokens is still the answer (R2: the bound is checked after the fact by Orca)", async () => {
+     const w = await world({ rows: [{ type: "item.completed", item: { type: "agent_message", text: "{\"answer\":\"42\"}" } }, { type: "turn.completed", usage: { input_tokens: 20, output_tokens: 9000 } }] });
+     expect(await w.adapter.singleCall!(w.request)).toMatchObject({ output: { answer: "42" }, tokenUsage: 9020, modelUsage: [{ output: 9000 }] });

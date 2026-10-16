@@ -1,0 +1,442 @@
+3b811679 feat(panel): serve an installation's models from ccloop
+ src/control/ccloopPort.ts            | 10 ++++++-
+ src/control/executionPort.ts         |  4 +++
+ src/control/webProtocol.ts           | 22 ++++++++++++++
+ src/panel/controlApi.ts              | 17 +++++++++--
+ tests/control/ccloopModels.test.ts   | 42 ++++++++++++++++++++++++++
+ tests/panel/agentModelsApi.test.ts   | 58 ++++++++++++++++++++++++++++++++++++
+ tests/panel/fixtures/controlPanel.ts |  3 ++
+ 7 files changed, 153 insertions(+), 3 deletions(-)
+diff --git a/src/control/ccloopPort.ts b/src/control/ccloopPort.ts
+index 8b702b26..e12476d3 100644
+--- a/src/control/ccloopPort.ts
++++ b/src/control/ccloopPort.ts
+@@ -1,18 +1,18 @@
+ import { savedResultCollectionSchema,savedResultSourceEligibilitySchema,savedResultEligibilitySchema,savedResultSettlementSchema } from "./savedResultProtocol.js";
+ import { taskResultCollectionSchema,TaskResultUnsupportedError,TASK_RESULT_RPC_TIMEOUT_MS,MAX_TASK_RESULT_EVIDENCE_BYTES } from './taskResultProtocol.js';
+ import { execFile } from "node:child_process";
+ import { createHash } from "node:crypto";
+ import { lstatSync, realpathSync } from "node:fs";
+ import { isAbsolute, join } from "node:path";
+ import { z } from "zod";
+-import type { ControlFeatures, AgentsView, ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
++import type { ControlFeatures, AgentsView, AgentModelsView, ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
+ import type { ArtifactRef, HandoffAck, HandoffRequest } from "./types.js";
+ import type { AgentResolution, PartialSelection } from "./agentSelection.js";
+ import { ControlError, type NonDurableControlErrorCode } from "./errors.js";
+ import { agentSelectionSchema, artifactSchema, candidateSchema, contextWindowSchema, idSchema, runProgressSchema, safeInteger } from "./schema.js";
+ import { capabilityViewSchema } from "./webProtocol.js";
+ import { byModelSchema } from "./usageLedger.js";
+ import { boundStopReason } from "./driveRecord.js";
+ import { agentObservationSchema, agentPreviewSchema, agentReceiptSchema } from "./agentInstallationProtocol.js";
+ 
+ const MAX_OUTPUT=24*1024*1024;
+@@ -39,20 +39,23 @@ const collectionV4Schema=collectionSchema.extend({terminal:terminalSchema.extend
+ const evidenceSchema=z.object({artifactId:z.string().min(1),hash:z.string().regex(/^[a-f0-9]{64}$/),base64:z.string()}).strict();
+ // Agent selection spec §4.6: capabilities protocol 3. Two shapes, chosen by the request: `agent: null` answers the
+ // table view, a partial selection answers that selection's resolution (its seven-key capability view carries no protocol tag).
+ const agentsViewSchema=z.object({protocol:z.literal(3),installations:z.array(z.object({id:idSchema,kind:z.string().min(1),defaults:z.object({model:z.string().min(1),contextWindow:contextWindowSchema}).strict(),contextOptions:z.array(contextWindowSchema).min(1),version:z.string().min(1)}).strict())}).strict();
+ // Single-call estimate spec §4.4: a selection's resolution also answers singleCallExecution, beside the view, never in it.
+ // Accounts D8: `usageBreakdown` is accepted beside it when ccloop states it; Orca consumes no behavior from it.
+ // OMP single call (spec 2026-10-14 §4): `singleCallOutputCap`, when ccloop states it, is the cap the agent's call runs
+ // under; optional (an older ccloop omits it), nullable, never frozen (frozenSlotOf copies field by field).
+ // Spec 2026-10-15 §6.2: "v1-soft" (codex) -- a single call whose output bound is checked after the fact.
+ const agentResolutionSchema=z.object({protocol:z.literal(3),selection:agentSelectionSchema,configHash:z.string().regex(/^[a-f0-9]{64}$/),timeoutMs:safeInteger.positive().max(2_147_483_647),killGraceMs:safeInteger.max(60_000),capabilities:capabilityViewSchema,singleCallExecution:z.enum(["v1","v1-soft"]).nullable(),singleCallOutputCap:safeInteger.positive().nullable().optional(),usageBreakdown:z.enum(["per-model","unavailable"]).optional()}).strict();
++// Spec 2026-10-15 §3, §5: ccloop's `control models` answer (ccloop-models-v1), strict, so a wrong one refuses the answer.
++const agentModelsSchema=z.object({schema:z.literal("ccloop-models-v1"),installation:idSchema,kind:z.string().min(1),source:z.enum(["cache","probe","none"]),observedAt:z.string().datetime().nullable(),
++ models:z.array(z.object({model:z.string().min(1).max(200),contextWindowTokens:safeInteger.positive().nullable(),maxOutputTokens:safeInteger.positive().nullable(),singleCallExecution:z.enum(["v1","v1-soft"]).nullable()}).strict())}).strict();
+ export const ccloopCollectionSchema=collectionSchema;
+ export const ccloopResolutionSchema=agentResolutionSchema;
+ 
+ /** Spec 2026-10-15 ccloop error codes §4.1: the most of a peer's stderr Orca keeps or shows, in UTF-16 code units. */
+ export const PEER_DETAIL_MAX = 512;
+ /**
+  * ccloop's leading code: `<exit>:<code>` followed by the end, whitespace, `: ` or a final `:` -- so `1:file:///x` names
+  * no code (plan correction K1: a bare `:` after the code is a URL's, not ccloop's `<code>: <detail>`).
+  */
+ const PEER_CODE = /^[^:]*:([a-z][a-z0-9-]{0,63})(?=$|\s|:\s|:$)/;
+@@ -218,20 +221,25 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
+    for(const key of ["agent","model","contextWindow"] as const){
+     if(partial[key]!==undefined&&resolution.selection[key]!==partial[key])throw new ControlError("control-response-invalid",`selection-not-echoed:${key}`);
+    }
+    return resolution;
+   },
+   async listAgents():Promise<AgentsView>{
+    let answer:unknown;
+    try{answer=await raw("capabilities",{agent:null});}catch(error){throw named(error);}
+    const {protocol:_protocol,...view}=parse(agentsViewSchema,answer);return view;
+   },
++  async listModels(installation:string,refresh:boolean):Promise<AgentModelsView>{
++   let answer:unknown;
++   try{answer=await raw("models",{installation,refresh});}catch(error){throw named(error);}
++   const {schema:_schema,...view}=parse(agentModelsSchema,answer);return view;
++  },
+   async accept(input){await requireFeatures(input);return parse(executionStatusSchema,await raw("accept",input)) as ExecutionStatus;},
+   async inspect(input){await requireFeatures(input);return parse(executionStatusSchema,await raw("inspect",input)) as ExecutionStatus;},
+   async requestHandoff(input,request){await requireFeatures(input);return parse(handoffAckSchema,await raw("handoff",{input,request})) as HandoffAck;},
+   async collect(input,afterSeq){await requireFeatures(input);const response=parse(input.protocol===4?collectionV4Schema:collectionSchema,await raw("collect",{input,afterSeq}));for(const ref of [...response.events.map(event=>event.source),...(response.candidate?.artifacts??[]),...(response.candidate?[response.candidate.handoff]:[]),...(response.candidate?.stopProof?[response.candidate.stopProof.source]:[])])evidenceContext.set(key(ref),input);return {events:response.events,candidate:response.candidate,terminal:response.terminal?{outcome:response.terminal.status,...(input.protocol===4?{tokenRemainingStatus:(response.terminal.budgetSnapshot as {tokenRemainingStatus?:string}).tokenRemainingStatus,...("waitingCause" in response.terminal?{waitingCause:response.terminal.waitingCause,allowanceNextPhase:(response.terminal as {allowanceNextPhase?:string}).allowanceNextPhase}:{})}:{}),attemptSha:null,sourceDir:input.work.sourceDir,repoDir:join(input.work.sourceDir,"repo"),...(response.terminal.stopReason?{stopReason:boundStopReason(response.terminal.stopReason)}:{})}:null,progress:response.progress??null} as ExecutionReport;},
+   async readEvidence(ref:ArtifactRef){
+    const input=evidenceContext.get(key(ref));if(!input)throw new ControlError("control-evidence-context-missing");const value=parse(evidenceSchema,await raw("read-evidence",{input,ref}));
+    if(value.artifactId!==ref.artifactId||value.hash!==ref.hash)throw new ControlError("artifact-hash-mismatch");
+    const bytes=Buffer.from(value.base64,"base64");if(bytes.toString("base64").replace(/=+$/,"")!==value.base64.replace(/=+$/,"")||createHash("sha256").update(bytes).digest("hex")!==ref.hash)throw new ControlError("artifact-hash-mismatch");return bytes;
+   },
+  };
+diff --git a/src/control/executionPort.ts b/src/control/executionPort.ts
+index 394c012f..085a4784 100644
+--- a/src/control/executionPort.ts
++++ b/src/control/executionPort.ts
+@@ -15,20 +15,22 @@ export interface SingleCallWork { kind:"single-call";prompt:string;responseSchem
+ export interface StartEnvelope { protocol:3|4;mode?:"verify-saved-result";savedResultRecovery?:{packagePath:string;packageHash:string;admissionHash:string;recoveryOf:RecoveryOf};tokenPolicy?:TokenPolicy;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:LoopWork|SingleCallWork }
+ export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown"}|{kind:"stopped";proof:StopProof};
+ export interface ExecutionReport {
+  events:UsageEvent[];candidate:Candidate|null;
+  terminal:{tokenRemainingStatus?:"known"|"unlimited"|"unknown";waitingCause?:"token-allowance";allowanceNextPhase?:"plan"|"execute"|"verify";outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string;stopReason?:string|null}|null;
+  /** Labels and progress spec §3.2 (§8 R5): optional so the synthetic ports need no edit; absent reads as null. */
+  progress?:RunProgress|null;
+ }
+ /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
+ export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }
++/** Spec 2026-10-15 §5 (part C): `control models` -- one installation's models, as ccloop's catalog cache or probe answers them. */
++export interface AgentModelsView { installation: string; kind: string; source: "cache" | "probe" | "none"; observedAt: string | null; models: Array<{ model: string; contextWindowTokens: number | null; maxOutputTokens: number | null; singleCallExecution: "v1" | "v1-soft" | null }> }
+ export interface ControlFeatures { protocol:1;tokenPolicy?:"optional-v1";savedResultRecovery?:"v1";agentInstallationUpdate?:"v1" }
+ export interface ExecutionPort {
+   readFeatures?():Promise<ControlFeatures>;
+   observeAgentInstallations?():Promise<AgentObservation>;
+   previewAgentInstallations?():Promise<AgentPreview>;
+   applyAgentInstallations?(request:AgentApplyRequest):Promise<AgentReceipt>;
+   savedResultSourceEligibility?(input:{source:StartEnvelope;sourceAttempt:number;packagePath:string;packageHash:string}):Promise<SavedResultSourceEligibility>;
+   savedResultEligibility?(input:StartEnvelope):Promise<{status:"eligible";authorityKind:SavedResultSourcePackage["authorityKind"];normalizedExecutionHash:string}|{status:"unavailable";reason:string}>;
+   collectSavedResultEvidence?(input:StartEnvelope):Promise<{schema:"ccloop-saved-result-evidence-v1";identity:unknown;attempt:number;capsule:ArtifactRef|null;reason:string|null}>;
+   readSavedResultEvidence?(input:StartEnvelope,capsule:ArtifactRef,ref:ArtifactRef):Promise<Buffer>;
+@@ -37,20 +39,22 @@ export interface ExecutionPort {
+   /**
+    * Agent selection spec §4.6 (capabilities protocol 3 with a selection). ccloop fills the descriptor's
+    * defaults, validates, materializes and answers the configHash: Orca never computes one (spec I3).
+    * There is no capability probe without a selection -- a gate asks about the selection it will dispatch.
+    */
+   collectTaskResults?(input:StartEnvelope,afterRevision:number):Promise<TaskResultCollectionV1>;
+   readTaskResultEvidence?(input:StartEnvelope,manifestRef:ArtifactRef,ref:ArtifactRef):Promise<Buffer>;
+   resolveAgent(partial:PartialSelection):Promise<AgentResolution>;
+   /** Capabilities protocol 3 with `agent: null`: the installations the panel may offer. */
+   listAgents():Promise<AgentsView>;
++  /** Spec 2026-10-15 §5: one installation's models; `refresh` skips ccloop's catalog cache. Optional: older ports lack it. */
++  listModels?(installation:string,refresh:boolean):Promise<AgentModelsView>;
+   readEvidence(ref:ArtifactRef):Promise<Buffer>;
+   accept(input:StartEnvelope):Promise<ExecutionStatus>;
+   inspect(input:StartEnvelope):Promise<ExecutionStatus>;
+   requestHandoff(input:StartEnvelope,request:HandoffRequest):Promise<HandoffAck>;
+   collect(input:StartEnvelope,afterSeq:number):Promise<ExecutionReport>;
+ }
+ /** No legacy runner fallback: production is enabled only by explicit immutable options. */
+ export function productionExecutionPort(options?:{binary:string;agentsTablePath:string;timeoutMs:number}):ExecutionPort {
+  if(!options)throw new ControlError("control-protocol-unavailable");return createCcloopExecutionPort(options);
+ }
+diff --git a/src/control/webProtocol.ts b/src/control/webProtocol.ts
+index b013ae2c..a931b30b 100644
+--- a/src/control/webProtocol.ts
++++ b/src/control/webProtocol.ts
+@@ -1775,20 +1775,41 @@ export const agentsViewSchema = z
+           defaults: z.object({ model: nonemptyString, contextWindow: contextWindowSchema }).strict(),
+           contextOptions: z.array(contextWindowSchema).min(1),
+           version: nonemptyString,
+         })
+         .strict(),
+     ),
+   })
+   .strict()
+   .superRefine((value, ctx) => requireSortedUnique(value.installations, (entry) => entry.id, ctx, ["installations"]));
+ 
++// Spec 2026-10-15 §5 (part C): one installation's models for the selection editor, as ccloop answered them.
++export const agentModelsViewSchema = z
++  .object({
++    schema: z.literal("orca-agent-models-v1"),
++    installation: idSchema,
++    kind: nonemptyString,
++    source: z.enum(["cache", "probe", "none"]),
++    observedAt: z.string().nullable(),
++    models: z.array(
++      z
++        .object({
++          model: nonemptyString,
++          contextWindowTokens: positiveSafeInteger.nullable(),
++          maxOutputTokens: positiveSafeInteger.nullable(),
++          singleCallExecution: z.enum(["v1", "v1-soft"]).nullable(),
++        })
++        .strict(),
++    ),
++  })
++  .strict();
++
+ export const agentPreferencesViewSchema = z
+   .object({ schema: z.literal("orca-agent-preferences-v1"), operatorId: nonemptyString, revision: safeInteger, preferences: operatorPreferencesSchema })
+   .strict();
+ 
+ const slotOutcomeSchema = z.discriminatedUnion("kind", [
+   z.object({ kind: z.literal("resolved"), frozen: frozenSlotSchema }).strict(),
+   z.object({ kind: z.literal("rejected"), code: nonemptyString }).strict(),
+   // Wave 3 ruling I-1: ccloop could not be asked about this slot just now (a transient failure); not confirmable.
+   z.object({ kind: z.literal("unavailable"), code: nonemptyString }).strict(),
+ ]);
+@@ -1821,20 +1842,21 @@ export const agentSelectionPreviewSchema = z
+     requireSortedUnique(value.slots, (entry) => entry.key, ctx, ["slots"]);
+     value.slots.forEach((entry, index) => {
+       if ((entry.slot === "worker") !== (entry.taskId !== null)) issue(ctx, ["slots", index, "taskId"], "slot-task-mismatch");
+       if (entry.key !== (entry.taskId === null ? "reconcile" : `task:${entry.taskId}`)) issue(ctx, ["slots", index, "key"], "slot-key-mismatch");
+     });
+     const unresolved = value.slots.some((entry) => entry.outcome.kind !== "resolved");
+     if (unresolved !== (value.selectionsHash === null)) issue(ctx, ["selectionsHash"], "selections-hash-rejection-mismatch");
+   });
+ 
+ export type AgentsViewV1 = z.infer<typeof agentsViewSchema>;
++export type AgentModelsViewV1 = z.infer<typeof agentModelsViewSchema>;
+ export type AgentPreferencesViewV1 = z.infer<typeof agentPreferencesViewSchema>;
+ export type AgentSelectionPreviewV1 = z.infer<typeof agentSelectionPreviewSchema>;
+ 
+ // Accounts spec §5: GET /api/control/usage. Spec §6.2: each cap that applies to the view's scope, with what it leaves.
+ const capStatusSchema = z
+   .object({
+     scope: z.string().regex(/^(?:all|repo:[a-zA-Z0-9][a-zA-Z0-9_.-]*)$/), period: spendPeriodSchema, tokens: spendTokensSchema,
+     updatedAt: safeInteger, updatedBy: nonemptyString, used: safeInteger, committed: safeInteger,
+     // Not clamped: a cap lowered below what was used or promised shows how far over it is.
+     headroom: z.number().int().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+diff --git a/src/panel/controlApi.ts b/src/panel/controlApi.ts
+index 882b5b06..a6eff406 100644
+--- a/src/panel/controlApi.ts
++++ b/src/panel/controlApi.ts
+@@ -8,39 +8,39 @@ import { readArtifact } from "../control/archive.js";
+ import { ZodError } from "zod";
+ import { lookupCommandResult } from "../control/commandLedger.js";
+ import { ControlError } from "../control/errors.js";
+ import { withCommandContext } from "../control/commandClient.js";
+ import { may, permissionRefusal, principalLabel, type Principal } from "./permissions.js";
+ import { readVersions } from "../control/queries.js";
+ import { readAgentPreferences } from "../control/agentPreferences.js";
+ import { agentUpdateStateSchema } from "../control/agentInstallationProtocol.js";
+ import { resolveSelection, slotLayers, type PartialSelection } from "../control/agentSelection.js";
+ import { idSchema } from "../control/schema.js";
+-import { savedResultEligibilityViewSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
++import { savedResultEligibilityViewSchema, agentModelsViewSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+ import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
+ import { readWorkspaceSetting } from "../control/workspaceSettings.js";
+ import { readIntegrationDefault } from "../control/integrationScheme.js";
+ import { AgentCeilingRefusal } from "../control/spendCaps.js";
+ import type { WebControlService } from "../control/webService.js";
+ import type { ExecutionPort } from "../control/executionPort.js";
+ import type { ControlStore } from "../control/store.js";
+ import type { TrustedControlConfig } from "./controlConfig.js";
+ import { controlErrorCatalog, sendControlError, sendMappedControlError } from "./controlErrors.js";
+ import { readControlGroup, readControlRecovery, readControlSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview } from "./controlViews.js";
+ 
+ export interface ControlReadApiDeps {
+   store: ControlStore;
+   epoch: string;
+   config: Pick<TrustedControlConfig, "readView">;
+   service?: WebControlService;
+   /** Agent selection spec §6.8 (W6-10): the reads that ask ccloop about agents. Absent, those routes 404. */
+-  port?: Pick<ExecutionPort, "listAgents" | "resolveAgent">;
++  port?: Pick<ExecutionPort, "listAgents" | "resolveAgent" | "listModels">;
+ }
+ 
+ function asyncRoute(handler: (req: Request, res: Response) => Promise<void> | void) {
+   return (req: Request, res: Response, next: NextFunction): void => { void Promise.resolve(handler(req, res)).catch(next); };
+ }
+ 
+ /** Validate control JSON before the parser discards duplicate object keys. */
+ export function verifyControlJsonBody(req: { url?: string; method?: string }, _res: unknown, bytes: Buffer): void {
+   if (req.method !== "POST" || !req.url?.startsWith("/api/control/")) return;
+   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+@@ -288,20 +288,33 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
+     });
+     if (deps.port) {
+       const port = deps.port;
+       app.get("/api/control/agents", asyncRoute(async (_req, res) => {
+         try {
+           const listed = await port.listAgents();
+           const installations = [...listed.installations].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+           res.json(agentsViewSchema.parse({ schema: "orca-agents-view-v1", installations }));
+         } catch (error) { sendMappedControlError(res, error); }
+       }));
++      // Spec 2026-10-15 §5 (R3, R4): the installation's models for the selection editor; ccloop's file cache serves it.
++      app.get("/api/control/agents/:installation/models", asyncRoute(async (req, res) => {
++        const installation = String(req.params.installation);
++        const refreshText = req.query.refresh;
++        if (!idSchema.safeParse(installation).success || Object.keys(req.query).some((key) => key !== "refresh") || (refreshText !== undefined && refreshText !== "1")) {
++          sendMappedControlError(res, new ControlError("query-invalid")); return;
++        }
++        const refresh = refreshText === "1";
++        if (refresh && !owner(res)) return;
++        if (port.listModels === undefined) { sendMappedControlError(res, new ControlError("control-protocol-unavailable")); return; }
++        try { res.json(agentModelsViewSchema.parse({ schema: "orca-agent-models-v1", ...(await port.listModels(installation, refresh)) })); }
++        catch (error) { sendMappedControlError(res, error); }
++      }));
+       app.get("/api/control/groups/:groupId/agent-preview", asyncRoute(async (req, res) => {
+         const groupId = String(req.params.groupId);
+         try { res.json(await readSelectionPreview(deps.store, port, operatorId, groupId)); }
+         catch (error) {
+           if (error instanceof ControlError && error.code === "group-not-found") {
+             sendControlError(res, 404, error.code, "No control group was found.");
+             return;
+           }
+           sendMappedControlError(res, error, readErrorContext(deps.store, groupId));
+         }
+diff --git a/tests/control/ccloopModels.test.ts b/tests/control/ccloopModels.test.ts
+new file mode 100644
+index 00000000..4e38a9be
+--- /dev/null
++++ b/tests/control/ccloopModels.test.ts
+@@ -0,0 +1,42 @@
++/**
++ * Spec 2026-10-15 §5 (part C, R3, R4): the port's `listModels` asks the shipped ccloop's `control models` and passes
++ * its answer through Orca's strict schema. The table's one installation is the build's fake codex, whose catalog lists
++ * two models; the second read is served by ccloop's own file cache (CCLOOP_CACHE_DIR, relocated by the vitest setup),
++ * so Orca keeps no cache of its own. RF5: an installation the table does not hold is ccloop's named refusal.
++ */
++import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { dirname, join, resolve } from "node:path";
++import { afterAll, describe, expect, it } from "vitest";
++import { createCcloopExecutionPort } from "../../src/control/ccloopPort.js";
++import { versionOf } from "./fixtures/ccloopWorld.js";
++
++const realBinary = process.env.ORCA_CCLOOP_BIN;
++const roots: string[] = [];
++afterAll(async () => { for (const root of roots) await rm(root, { recursive: true, force: true }); });
++
++async function realTable(): Promise<string> {
++  const root = await realpath(await mkdtemp(join(tmpdir(), "orca-models-")));
++  roots.push(root);
++  const command = [process.execPath, resolve(dirname(realBinary!), "..", "tests", "fixtures", "fake-codex.mjs"), "integration", join(root, "codex-marker.json")];
++  const table = join(root, "agents.json");
++  await writeFile(table, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: {
++    codex: { kind: "codex", command, version: versionOf(command), configDir: null, timeoutMs: 120_000, killGraceMs: 5_000, sandbox: "workspace-write", budgetMode: "soft" },
++  } }), { mode: 0o600 });
++  return table;
++}
++
++describe("the port lists an installation's models through the shipped ccloop (spec 2026-10-15 §5)", () => {
++  it.skipIf(!realBinary)("answers the fake codex's listed models, then ccloop's cache, and names a missing installation", async () => {
++    const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), agentsTablePath: await realTable(), timeoutMs: 15_000 });
++    const models = [
++      { model: "gpt-6-luna", contextWindowTokens: 272000, maxOutputTokens: null, singleCallExecution: "v1-soft" },
++      { model: "gpt-6-sol", contextWindowTokens: 272000, maxOutputTokens: null, singleCallExecution: "v1-soft" },
++    ];
++    expect(await port.listModels!("codex", false)).toEqual({ installation: "codex", kind: "codex", source: "probe", observedAt: expect.any(String), models });
++    // R4: no Orca-side cache -- the second answer is ccloop's file cache, which says so.
++    expect(await port.listModels!("codex", false)).toEqual({ installation: "codex", kind: "codex", source: "cache", observedAt: expect.any(String), models });
++    // RF5: ccloop's refusal arrives under its own name (named()), not as an anonymous peer exit.
++    await expect(port.listModels!("gone", false)).rejects.toMatchObject({ code: "agent-installation-missing" });
++  }, 60_000);
++});
+diff --git a/tests/panel/agentModelsApi.test.ts b/tests/panel/agentModelsApi.test.ts
+new file mode 100644
+index 00000000..16a4f14a
+--- /dev/null
++++ b/tests/panel/agentModelsApi.test.ts
+@@ -0,0 +1,58 @@
++/**
++ * Spec 2026-10-15 §5 (part C, R3, R4): `GET /api/control/agents/:installation/models[?refresh=1]` over a real Panel.
++ * Owner and member read; refresh=1 spawns the agent's CLI, so it is owner-only; Orca keeps no cache, so every read
++ * reaches the port with the refresh flag the caller sent. RF5: an installation removed from the table is a named,
++ * determinate refusal the selection editor can explain.
++ */
++import { join } from "node:path";
++import { afterAll, describe, expect, it } from "vitest";
++import { ControlError } from "../../src/control/errors.js";
++import { createHarness, get, json, type BootOptions } from "./fixtures/controlPanel.js";
++import { login, seedUser } from "./fixtures/auth.js";
++
++const h = createHarness();
++afterAll(async () => { await h.dispose(); });
++
++const boot = async (epoch: string, options: BootOptions) => h.boot(epoch, await h.workspace(), options);
++const errorOf = async (response: Response) => ((await json(response)) as { error: { code: string; message: string } }).error;
++
++describe("the model list route (spec 2026-10-15 §5)", () => {
++  // Spec 2026-10-15 §5 (R3, R4): owner and member read; refresh=1 is owner-only (it spawns the CLI); no Orca-side cache.
++  it("serves the view to a session, refuses refresh to a member, and passes refresh to the port", async () => {
++    const seen: Array<[string, boolean]> = [];
++    const panel = await boot("epoch-models", { listModels: async (installation, refresh) => { seen.push([installation, refresh]);
++      return { installation, kind: "codex", source: "cache", observedAt: "2026-10-15T00:00:00.000Z", models: [{ model: "gpt-6-sol", contextWindowTokens: 272000, maxOutputTokens: null, singleCallExecution: "v1-soft" }] }; } });
++    expect(await json(await get(panel, "/api/control/agents/codex/models"))).toEqual({ schema: "orca-agent-models-v1", installation: "codex", kind: "codex", source: "cache",
++      observedAt: "2026-10-15T00:00:00.000Z", models: [{ model: "gpt-6-sol", contextWindowTokens: 272000, maxOutputTokens: null, singleCallExecution: "v1-soft" }] });
++    expect((await get(panel, "/api/control/agents/codex/models?refresh=1")).status).toBe(200);
++    expect((await get(panel, "/api/control/agents/codex/models", "none")).status).toBe(401);
++    expect((await get(panel, "/api/control/agents/codex/models?refresh=yes")).status).toBe(400);
++    expect((await get(panel, "/api/control/agents/codex/models?other=1")).status).toBe(400);
++    // An installation id the table could never hold is refused before ccloop is asked (`seen` below stays three reads).
++    expect((await get(panel, "/api/control/agents/-codex/models")).status).toBe(400);
++    seedUser(join(panel.root, "accounts"), "member", "member");
++    const member = await login(panel.url, "member");
++    expect((await member.fetch("/api/control/agents/codex/models")).status).toBe(200);
++    const denied = await member.fetch("/api/control/agents/codex/models?refresh=1");
++    expect([denied.status, (await errorOf(denied)).code]).toEqual([403, "owner-required"]);
++    expect(seen).toEqual([["codex", false], ["codex", true], ["codex", false]]);
++  });
++
++  it("names ccloop's failure (424 ccloop-failed) and a missing installation (RF5)", async () => {
++    const panel = await boot("epoch-models-fail", { listModels: async (installation) => {
++      if (installation === "gone") throw new ControlError("agent-installation-missing", "gone");
++      throw new ControlError("control-peer-exit", "1:agent-catalog-unavailable: exit 5 · stage exit · elapsedMs 12"); } });
++    const failed = await get(panel, "/api/control/agents/codex/models");
++    expect([failed.status, await errorOf(failed)]).toEqual([424, expect.objectContaining({ code: "ccloop-failed", message: "ccloop-failed:agent-catalog-unavailable: exit 5 · stage exit · elapsedMs 12" })]);
++    // RF5: ccloop's named refusal keeps its own code (not ccloop-failed) and a determinate status (< 500, not "uncertain").
++    const gone = await get(panel, "/api/control/agents/gone/models");
++    expect([gone.status, (await errorOf(gone)).code]).toEqual([422, "agent-installation-missing"]);
++  });
++
++  // listModels is optional on the port (an older port lacks it): the route names that, rather than failing as a 500.
++  it("refuses with control-protocol-unavailable when the port cannot list models", async () => {
++    const panel = await boot("epoch-models-none", {});
++    const refused = await get(panel, "/api/control/agents/codex/models");
++    expect([refused.status, (await errorOf(refused)).code]).toEqual([422, "control-protocol-unavailable"]);
++  });
++});
+diff --git a/tests/panel/fixtures/controlPanel.ts b/tests/panel/fixtures/controlPanel.ts
+index 3ed41a57..a48ce204 100644
+--- a/tests/panel/fixtures/controlPanel.ts
++++ b/tests/panel/fixtures/controlPanel.ts
+@@ -67,20 +67,22 @@ export interface Panel {
+ export interface BootOptions {
+   /** What the adapter reports about the worker and handoff profiles; the dispatcher re-probes on every claim. */
+   capabilities?: () => Record<string, unknown>;
+   /** Agent selection spec §6.8 (plan T14, P8): the installation table the port lists; the T10 single-codex table when absent. */
+   agents?: AgentsView;
+   /** What the port answers for one partial selection; the T10 echo-the-fixture-agent answer when absent. */
+   resolveAgent?: (partial: PartialSelection) => Promise<AgentResolution>;
+   /** `false`: the panel operator is neither fixed nor given preferences, so the mutation routes mint it with none. */
+   seedPreferences?: false;
+   agentUpdatePort?: Pick<ExecutionPort, "observeAgentInstallations" | "previewAgentInstallations" | "applyAgentInstallations" | "readFeatures">;
++  /** Spec 2026-10-15 §5: what the port answers for one installation's models; absent, the port has no listModels. */
++  listModels?: ExecutionPort["listModels"];
+ }
+ 
+ export interface Harness {
+   /** A fresh temporary workspace: repository, plan, contract, adapter config and stateDir root. */
+   workspace(): Promise<Paths>;
+   /** Boot a Panel over that workspace; reopening the same stateDir under a new epoch is a restart. */
+   boot(epoch: string, paths: Paths, options?: BootOptions): Promise<Panel>;
+   dispose(): Promise<void>;
+ }
+ 
+@@ -140,20 +142,21 @@ export function createHarness(): Harness {
+         // Fixture completion (not S6: this default mock's return literal, cast `as never`, predates the single-call
+         // estimate gate and was missed when O1 added AgentResolution.singleCallExecution -- unlike its sibling
+         // claudeCodexResolveAgent below, which O1 did update). Without this the real router's probe answers no
+         // resolution, and every real-panel import here degrades to blocked-capability under O2's gate.
+         resolveAgent: options.resolveAgent ?? (async (partial: PartialSelection) => ({ selection: { ...FIXTURE_AGENT, ...partial }, configHash: "c".repeat(64), timeoutMs: 120_000, killGraceMs: 5_000, capabilities: capabilities(), singleCallExecution: "v1" }) as never),
+         listAgents: async () => options.agents ?? ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
+         readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" }), inspect: async () => ({ kind: "unknown" }),
+         requestHandoff: async (_input: unknown, request: { requestId: string }) => ({ kind: "unknown", requestId: request.requestId }),
+         collect: async () => ({ events: [], candidate: null, terminal: null }),
+         ...options.agentUpdatePort,
++        ...(options.listModels === undefined ? {} : { listModels: options.listModels }),
+       } as unknown as ExecutionPort;
+       const frozen = resolveProfile(snapshot, port);
+       const router = createExecutionProfileRouter([frozen], { now: () => new Date("2030-01-01T00:00:00.000Z") });
+       const trustedConfig = createTrustedControlConfig({
+         epoch, stateDir: store.stateDir, executablePath: paths.binary, agentsTablePath: paths.agentsTable,
+       executionPort: "configured" as const,  // Task 4b: these fixtures configure a real agents table, so the pair says "configured".
+         archiveRoot: root, exportRoot: root, evidenceRoot: root, shutdownGraceMs: 1_000,
+         repositories: [{ repoId: "repo", displayName: "Repo", path: paths.repo }],
+         plans: [{ planId: "plan", repoId: "repo", displayName: "Plan", path: paths.planPath }],
+         defaultEstimatorProfileId: "all", defaultEstimateMode: "soft",

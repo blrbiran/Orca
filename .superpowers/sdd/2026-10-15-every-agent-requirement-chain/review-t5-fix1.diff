@@ -1,0 +1,80 @@
+0085309 test(agents): every test file gets an empty CODEX_HOME; agents models --refresh re-probes
+ tests/control/modelsControl.test.ts | 34 ++++++++++++++++++++++++++++++++++
+ tests/setup/relocateCatalogCache.ts |  6 ++++++
+ 2 files changed, 40 insertions(+)
+diff --git a/tests/control/modelsControl.test.ts b/tests/control/modelsControl.test.ts
+index ad6be67..439dbcf 100644
+--- a/tests/control/modelsControl.test.ts
++++ b/tests/control/modelsControl.test.ts
+@@ -100,17 +100,51 @@ describe("control models (spec §3)", { timeout: 30_000 }, () => {
+     const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { written.push(String(chunk)); return true; });
+     let cli: Awaited<ReturnType<typeof runAgentsCommand>>;
+     try { cli = await runAgentsCommand(["models", "--agents", w.path, "--installation", "codex"]); } finally { spy.mockRestore(); }
+     expect(cli.code, cli.stderr).toBe(0);
+     expect(JSON.parse(cli.stdout).models.map((row: { model: string }) => row.model)).toEqual(["gpt-6-luna", "gpt-6-sol"]);
+     expect(existsSync(`${w.codexMarker}.catalog-calls`)).toBe(true);
+     expect(written).toHaveLength(1);
+     expect(written[0]).toMatch(/^ccloop-agent-catalog: miss codex [0-9a-f]{12}\n$/);
+   });
+ 
++  it("`ccloop agents models --refresh` probes again over a warm cache", async () => {
++    const w = await world();
++    const probes = () => readFileSync(`${w.codexMarker}.catalog-calls`, "utf8").split("\n").filter((line) => line === "debug-models").length;
++    const spy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
++    try {
++      expect((await runAgentsCommand(["models", "--agents", w.path, "--installation", "codex"])).code).toBe(0);
++      expect(probes()).toBe(1);
++      expect((await runAgentsCommand(["models", "--agents", w.path, "--installation", "codex"])).code).toBe(0);
++      expect(probes()).toBe(1);
++      const refreshed = await runAgentsCommand(["models", "--agents", w.path, "--installation", "codex", "--refresh"]);
++      expect(refreshed.code).toBe(0);
++      expect(JSON.parse(refreshed.stdout).source).toBe("probe");
++      expect(probes()).toBe(2);
++    } finally { spy.mockRestore(); }
++  });
++
++  // Fix round 1 (controller ruling, 2026-10-16): the vitest setup points CODEX_HOME at an empty temp dir, so a codex
++  // installation with no configDir answers the fake catalog's window, never a config.toml under HOME/.codex.
++  it("a codex installation with no configDir never reads a window from HOME/.codex", async () => {
++    const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-models-home-")));
++    await mkdir(join(dir, "home", ".codex"), { recursive: true, mode: 0o700 });
++    await writeFile(join(dir, "home", ".codex", "config.toml"), "model_context_window = 999999\n", { mode: 0o600 });
++    const t = await writeAgentsTable({
++      codex: await codexInstallation({ command: [process.execPath, FAKE_CODEX, "integration", join(dir, "codex-marker")], sandbox: "read-only", budgetMode: "soft", timeoutMs: 60_000, killGraceMs: 100 }),
++    }, dir);
++    expect(t.table.installations.codex!.configDir).toBeNull();
++    const home = process.env.HOME;
++    process.env.HOME = join(dir, "home");
++    let answer: Awaited<ReturnType<typeof models>>;
++    try { answer = await models(t.path, "codex"); } finally { process.env.HOME = home; }
++    expect(answer.code, answer.stderr).toBe(0);
++    expect(JSON.parse(answer.stdout).models.map((row: { contextWindowTokens: number }) => row.contextWindowTokens)).toEqual([272000, 272000]);
++  });
++
+   it("refuses any other `ccloop agents models` shape", async () => {
+     const w = await world();
+     for (const argv of [["models", "--agents", w.path], ["models", "--installation", "codex", "--agents", w.path, "--refresh", "--refresh"], ["models", "--agents", w.path, "--installation", "codex", "--fresh"]]) {
+       expect(await runAgentsCommand(argv)).toEqual({ code: 1, stdout: "", stderr: "agents-command-invalid\n" });
+     }
+   });
+ });
+diff --git a/tests/setup/relocateCatalogCache.ts b/tests/setup/relocateCatalogCache.ts
+index 5e039d6..4c95621 100644
+--- a/tests/setup/relocateCatalogCache.ts
++++ b/tests/setup/relocateCatalogCache.ts
+@@ -1,9 +1,15 @@
+ import { mkdtempSync } from "node:fs";
+ import { tmpdir } from "node:os";
+ import { join } from "node:path";
+ 
+ /**
+  * Every-agent requirement chain (Orca spec 2026-10-15 §4.2): every test file, and every process it spawns, caches agent
+  * catalogs under this file's scoped TMPDIR (scopeTmpdir.ts removes it), never in the person's ~/.cache.
++ *
++ * It also points CODEX_HOME at an empty dir under the same TMPDIR: a codex installation with no configDir reads
++ * `$CODEX_HOME/config.toml` (else `$HOME/.codex/config.toml`) for `model_context_window`, so without this a criterion
++ * would read the person's real ~/.codex and answer that window instead of the fake catalog's (measured 2026-10-16:
++ * 1000000 instead of 272000). Orca Rule 17: no criterion reads or writes the person's own data.
+  */
+ process.env.CCLOOP_CACHE_DIR = mkdtempSync(join(tmpdir(), "ccache-"));
++process.env.CODEX_HOME = mkdtempSync(join(tmpdir(), "chome-"));

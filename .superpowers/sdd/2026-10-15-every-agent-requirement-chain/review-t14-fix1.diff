@@ -1,0 +1,271 @@
+e2bfdc0e fix(web): number model-list reads, skip a background read in flight, keep a read list on screen
+diff --git a/tests/panel/webParity.test.ts b/tests/panel/webParity.test.ts
+index ac78bfd8..0887a42f 100644
+--- a/tests/panel/webParity.test.ts
++++ b/tests/panel/webParity.test.ts
+@@ -12,16 +12,17 @@ import type {
+   PanelCoverage as WebPanelCoverage,
+ } from "../../web/src/types.js";
+ import { WEB_CORRECTION_KINDS, WEB_LIST_FIELDS, WEB_REPORT_FIELDS } from "../../web/src/types.js";
+ import { CORRECTION_KINDS } from "../../src/corrections/schema.js";
+ import { CUSTOM_LABEL_PREFIX, SYSTEM_LABELS } from "../../src/control/labels.js";
+ import { CUSTOM_LABEL_PREFIX as WEB_CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS, WEB_WORK_ITEM_CATEGORIES } from "../../web/src/controlTypes.js";
+ import { WORK_ITEM_CATEGORIES } from "../../src/control/workItemCategory.js";
+ import type {
++  AgentModelsViewV1 as ServerAgentModelsViewV1,
+   AgentPreferencesViewV1 as ServerAgentPreferencesViewV1,
+   AgentSelectionPreviewV1 as ServerAgentSelectionPreviewV1,
+   AgentsViewV1 as ServerAgentsViewV1,
+   CommandEnvelopeV1 as ServerCommandEnvelopeV1,
+   CommandErrorV1 as ServerCommandErrorV1,
+   CommandLookupV1 as ServerCommandLookupV1,
+   CommandSuccessV1 as ServerCommandSuccessV1,
+   ConfirmPayload as ServerConfirmPayload,
+@@ -48,16 +49,17 @@ import type {
+   ResumeFromHandoffPayload as ServerResumeFromHandoffPayload,
+   SetAgentPreferencesPayload as ServerSetAgentPreferencesPayload,
+   SetLimitPayload as ServerSetLimitPayload,
+   SetTaskLabelsPayload as ServerSetTaskLabelsPayload,
+   SetTaskLoopPayload as ServerSetTaskLoopPayload,
+   UsageViewV1 as ServerUsageViewV1,
+ } from "../../src/control/webProtocol.js";
+ import type {
++  AgentModelsViewV1 as WebAgentModelsViewV1,
+   AgentPreferencesViewV1 as WebAgentPreferencesViewV1,
+   AgentSelectionPreviewV1 as WebAgentSelectionPreviewV1,
+   AgentsViewV1 as WebAgentsViewV1,
+   CommandEnvelopeV1 as WebCommandEnvelopeV1,
+   CommandErrorV1 as WebCommandErrorV1,
+   CommandLookupV1 as WebCommandLookupV1,
+   CommandSuccessV1 as WebCommandSuccessV1,
+   ConfirmPayloadV1 as WebConfirmPayloadV1,
+@@ -236,16 +238,19 @@ function recoveryRetryWebToServer(x: WebRecoveryRetryPayloadV1): ServerRecoveryR
+ function retryTaskServerToWeb(x: ServerRetryTaskPayload): WebRetryTaskPayloadV1 { return x; }
+ function retryTaskWebToServer(x: WebRetryTaskPayloadV1): ServerRetryTaskPayload { return x; }
+ // Agent selection plan T10: the proposal's selection layer command (spec §6.2).
+ function proposalSetAgentServerToWeb(x: ServerProposalSetAgentPayload): WebProposalSetAgentPayloadV1 { return x; }
+ function proposalSetAgentWebToServer(x: WebProposalSetAgentPayloadV1): ServerProposalSetAgentPayload { return x; }
+ // Agent selection plan T14 (spec §6.8): the agent UI's three reads and the operator preferences command.
+ function agentsViewServerToWeb(x: ServerAgentsViewV1): WebAgentsViewV1 { return x; }
+ function agentsViewWebToServer(x: WebAgentsViewV1): ServerAgentsViewV1 { return x; }
++// Spec 2026-10-15 §5 (Task 14 fix round 1): an installation's model list.
++function agentModelsServerToWeb(x: ServerAgentModelsViewV1): WebAgentModelsViewV1 { return x; }
++function agentModelsWebToServer(x: WebAgentModelsViewV1): ServerAgentModelsViewV1 { return x; }
+ function agentPreferencesServerToWeb(x: ServerAgentPreferencesViewV1): WebAgentPreferencesViewV1 { return x; }
+ function agentPreferencesWebToServer(x: WebAgentPreferencesViewV1): ServerAgentPreferencesViewV1 { return x; }
+ function agentPreviewServerToWeb(x: ServerAgentSelectionPreviewV1): WebAgentSelectionPreviewV1 { return x; }
+ function agentPreviewWebToServer(x: WebAgentSelectionPreviewV1): ServerAgentSelectionPreviewV1 { return x; }
+ function setAgentPreferencesServerToWeb(x: ServerSetAgentPreferencesPayload): WebSetAgentPreferencesPayloadV1 { return x; }
+ function setAgentPreferencesWebToServer(x: WebSetAgentPreferencesPayloadV1): ServerSetAgentPreferencesPayload { return x; }
+ // Labels and progress spec §3.1: the set-task-labels command's payload.
+ function setTaskLabelsServerToWeb(x: ServerSetTaskLabelsPayload): WebSetTaskLabelsPayloadV1 { return x; }
+@@ -319,16 +324,18 @@ export const __webParityAssignabilityChecks__ = [
+   continueTaskWebToServer,
+   recoveryRetryServerToWeb,
+   recoveryRetryWebToServer,
+   retryTaskServerToWeb, retryTaskWebToServer,
+   proposalSetAgentServerToWeb,
+   proposalSetAgentWebToServer,
+   agentsViewServerToWeb,
+   agentsViewWebToServer,
++  agentModelsServerToWeb,
++  agentModelsWebToServer,
+   agentPreferencesServerToWeb,
+   agentPreferencesWebToServer,
+   agentPreviewServerToWeb,
+   agentPreviewWebToServer,
+   setAgentPreferencesServerToWeb,
+   setAgentPreferencesWebToServer,
+   setTaskLabelsServerToWeb,
+   setTaskLabelsWebToServer,
+diff --git a/web/src/App.tsx b/web/src/App.tsx
+index 9fdb4606..03b05501 100644
+--- a/web/src/App.tsx
++++ b/web/src/App.tsx
+@@ -259,16 +259,20 @@ export function App(): JSX.Element {
+   /** Integration spec §9.1: each repository's integration default as last read, by repoId; numbered like the workspace reads. */
+   const [integrations, setIntegrations] = useState<Record<string, RepositoryIntegrationV1>>({});
+   const integrationSeq = useRef<Record<string, number>>({});
+   /** Agent selection spec §6.8: the installation table and this operator's defaults; null until read, or when the port refuses. */
+   const [agents, setAgents] = useState<AgentsViewV1 | null>(null);
+   const [agentPreferences, setAgentPreferences] = useState<AgentPreferencesViewV1 | null>(null);
+   /** Spec 2026-10-15 §5 (R3): each omp or codex installation's model list as last read, by installation id. */
+   const [agentModels, setAgentModels] = useState<Record<string, ModelListState>>({});
++  /** Numbers the model reads of one installation (as workspaceSeq does), so a late answer never replaces a newer one. */
++  const modelsSeq = useRef<Record<string, number>>({});
++  /** The installations whose newest model read has not answered yet; a background read does not start another. */
++  const modelsInFlight = useRef<Record<string, boolean>>({});
+   const [agentInstallations, setAgentInstallations] = useState<AgentInstallationStateV1 | null>(null);
+   const [localPendingUpdate, setLocalPendingUpdate] = useState(() => readPendingAgentUpdate(browserSession()));
+   const [agentUpdateNotice, setAgentUpdateNotice] = useState<string | null>(null);
+   const [agentUpdateBusy, setAgentUpdateBusy] = useState(false);
+   /**
+    * Wave 4 review I-1: the code the server gave when the installation table or the preferences could not be
+    * read (e.g. control-port-unconfigured), so the proposal view says why instead of resolving forever.
+    */
+@@ -535,27 +539,39 @@ export function App(): JSX.Element {
+       if (fresh.schema === "orca-requirement-view-v1") setRequirementViews((all) => ({ ...all, [groupId]: fresh }));
+       else dispatchControl({ type: "group", value: fresh });
+       await sendControl({ verb, groupId, expectedRevision: fresh.summary.commandRevision, payload: {} });
+     } catch (err) {
+       dispatchControl({ type: "refusal", place: "group", groupId, value: controlFailureFrom(err) });
+     }
+   };
+ 
+-  /** Spec 2026-10-15 §5 (R3, R4): one installation's models; ccloop's own cache serves a read, `refresh` (owner) re-probes. */
++  /**
++   * Spec 2026-10-15 §5 (R3, R4): one installation's models; ccloop's own cache serves a read, `refresh` (owner) re-probes.
++   * Each read spawns ccloop and the page re-reads the agents table whenever it comes back into view, so a background read
++   * (`refresh` false) is skipped while one is in flight, and a list already on screen stays there until its answer lands.
++   * An owner's Refresh always reads. Only the newest read of an installation is applied.
++   */
+   const loadModels = async (id: string, refresh: boolean): Promise<void> => {
+-    setAgentModels((all) => ({ ...all, [id]: { state: "loading" } }));
++    if (!refresh && modelsInFlight.current[id] === true) return;
++    const seq = (modelsSeq.current[id] ?? 0) + 1;
++    modelsSeq.current[id] = seq;
++    modelsInFlight.current[id] = true;
++    setAgentModels((all) => (all[id]?.state === "ready" ? all : { ...all, [id]: { state: "loading" } }));
++    let next: ModelListState;
+     try {
+-      const view = await fetchAgentModels(id, refresh);
+-      setAgentModels((all) => ({ ...all, [id]: { state: "ready", view } }));
++      next = { state: "ready", view: await fetchAgentModels(id, refresh) };
+     } catch (err) {
+       const refusal = controlFailureFrom(err);
+       const parsed = refusal.code === "ccloop-failed" ? codeAndDetail(refusalDetail(refusal)) : { code: refusal.code, detail: "" };
+-      setAgentModels((all) => ({ ...all, [id]: { state: "unavailable", ...parsed } }));
++      next = { state: "unavailable", ...parsed };
+     }
++    if (modelsSeq.current[id] !== seq) return;
++    modelsInFlight.current[id] = false;
++    setAgentModels((all) => ({ ...all, [id]: next }));
+   };
+   /**
+    * Read the installation table and this operator's defaults. Wave 4 review I-1, ruling review R17: a read that
+    * failed is retried on AGENT_RETRY_DELAYS_MS while the page is visible (when `retry`), then by the operator.
+    */
+   const loadAgents = async (retry: boolean): Promise<void> => {
+     try {
+       const table = await fetchAgentsView();
+diff --git a/web/tests/agentModelsApp.test.tsx b/web/tests/agentModelsApp.test.tsx
+new file mode 100644
+index 00000000..139f93f5
+--- /dev/null
++++ b/web/tests/agentModelsApp.test.tsx
+@@ -0,0 +1,115 @@
++// @vitest-environment jsdom
++/**
++ * Spec 2026-10-15 §5 (R3, R4), Task 14 fix round 1 (review minors promoted, Orca session a852f96a, 2026-10-16): App owns
++ * the model-list reads. Each read spawns ccloop, and the page re-reads the agents table whenever it comes back into view,
++ * so (a) only the newest read of an installation may land -- an older answer arriving late never replaces a newer one;
++ * (b) a background re-read never doubles a read already in flight, and never takes a list off the screen while it runs.
++ * An owner's Refresh still forces a read. Driven against a fake panel whose model answers the test releases by hand.
++ */
++import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
++import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { App } from "../src/App.js";
++import { AccountContext } from "../src/AuthGate.js";
++import type { Me } from "../src/auth.js";
++import type { AgentModelsViewV1, AgentPreferencesViewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, RecoveryViewV1 } from "../src/controlTypes.js";
++
++const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
++const config: ControlConfigV1 = {
++  schema: "orca-control-config-v1", epoch: "epoch-a", repositories: [{ repoId: "orca", displayName: "Orca" }], plans: [],
++  profiles: [{ profileId: "all", profileHash: "b".repeat(64), allowedWorkKinds: ["task", "budget-estimate", "handoff", "goal-review"], contextTokenizer: null, workMaxOutputTokens: 1000, declared: capability, observed: capability, observedAt: "2026-09-26T00:00:00.000Z", probeFailureCode: null }],
++  defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
++};
++const summary: ControlSummaryV1 = { schema: "orca-control-summary-v1", epoch: "epoch-a", changeSeq: 0, resetRequired: false, dispatchBlocked: false, groups: [] };
++const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] };
++const agents: AgentsViewV1 = {
++  schema: "orca-agents-view-v1",
++  installations: [{ id: "codex", kind: "codex", defaults: { model: "gpt-6-sol", contextWindow: "agent-default" }, contextOptions: ["agent-default"], version: "0.155.1" }],
++};
++const preferences: AgentPreferencesViewV1 = { schema: "orca-agent-preferences-v1", operatorId: "operator-1", revision: 1, preferences: { defaultAgent: "codex", perAgent: {} } };
++const owner: Me = { user: { id: "u1", name: "olga", roles: ["owner"], mustChangePassword: false }, expiresAt: 0, sessionDays: 15 };
++const modelsView = (...names: string[]): AgentModelsViewV1 => ({
++  schema: "orca-agent-models-v1", installation: "codex", kind: "codex", source: "probe", observedAt: "2026-10-16T00:00:00.000Z",
++  models: names.map((model) => ({ model, contextWindowTokens: 272000, maxOutputTokens: null, singleCallExecution: "v1-soft" })),
++});
++const REPORT = { as_of: "2026-09-26T00:00:00.000Z", as_of_mode: "wall_clock", repos: [], correction_rate: { numerator_corrections_excluding_stale: 0, denominator_decisions: 0, rate_excluding_stale: null, corrections_total_including_stale: 0, by_decision_kind: [], buckets: [], caveats: [] }, repair_rate: { numerator_overturned: 0, denominator_corrections_including_stale: 0, rate: null, stale_only: { numerator_overturned: 0, denominator_corrections: 0, rate: null, known_bias: "" }, buckets: [], caveats: [] }, backlog: { open_corrections: 0, oldest_age_ms: null, oldest_correction_id: null, by_correction_kind: [] }, breakdown_by_correction_kind_including_stale: [], review_coverage: { available: false, reason: "none" }, unresolved_decisions: [], unkeyable_repos: [], malformed_lines: [] };
++const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
++
++/** Each models request, in the order the page sent it, held until the test answers it. */
++let modelReads: Array<{ url: string; answer: (view: AgentModelsViewV1) => void }>;
++let agentsReads: number;
++
++beforeEach(() => {
++  modelReads = [];
++  agentsReads = 0;
++  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
++  globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
++    const url = String(input);
++    if (url === "/api/todo") return json({ rows: [] });
++    if (url === "/api/projects") return json({ projects: [{ projectKey: "orca", controlRepoId: "orca" }] });
++    if (url === "/api/metrics") return json({ report: REPORT, panel_review_coverage: { reviewed_high_tier: 0, high_tier_total: 0, rate: 0, caveat: "" } });
++    if (url === "/api/chains") return json({ repos: [] });
++    if (url === "/api/control/config") return json(config);
++    if (url.startsWith("/api/control/summary")) return json(summary);
++    if (url === "/api/control/recovery") return json(recovery);
++    if (url === "/api/control/repositories/orca/workspace") return json({ schema: "orca-repository-workspace-v1", repoId: "orca", workspaceMode: "worktree", revision: 0 });
++    if (url === "/api/control/agents") { agentsReads += 1; return json(agents); }
++    if (url === "/api/control/operator/agent-preferences") return json(preferences);
++    if (url.startsWith("/api/control/agents/codex/models")) {
++      return new Promise<Response>((resolve) => { modelReads.push({ url, answer: (view) => resolve(json(view)) }); });
++    }
++    return json({ error: { code: "not-found", message: url } }, 404);
++  }) as typeof fetch;
++});
++
++afterEach(() => { cleanup(); window.sessionStorage.clear(); });
++
++/** The model names the codex default's datalist offers now; null when no list is on screen. */
++const listed = (): string[] | null => {
++  const list = document.getElementById("agents:per:codex:models");
++  return list === null ? null : [...list.querySelectorAll("option")].map((option) => option.value);
++};
++/** Real time for released answers (and the renders they cause) to reach the page. */
++const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 100));
++
++describe("App's model-list reads (spec 2026-10-15 §5, Task 14 fix round 1)", () => {
++  it("keeps the newest read's list when an older read answers after it", async () => {
++    render(<AccountContext.Provider value={owner}><App /></AccountContext.Provider>);
++    await waitFor(() => expect(modelReads).toHaveLength(1));
++    // An owner's Refresh forces a read although the first is still in flight. (Every codex fieldset on the page -- the
++    // default and the role slots that inherit it -- offers the button; they all refresh the same installation.)
++    fireEvent.click((await screen.findAllByRole("button", { name: "Refresh models" }))[0]!);
++    await waitFor(() => expect(modelReads.map((read) => read.url)).toEqual(["/api/control/agents/codex/models", "/api/control/agents/codex/models?refresh=1"]));
++    modelReads[1]!.answer(modelsView("gpt-6-new"));
++    await waitFor(() => expect(listed()).toEqual(["gpt-6-new"]));
++    modelReads[0]!.answer(modelsView("gpt-6-old"));
++    await settle();
++    expect(listed()).toEqual(["gpt-6-new"]);
++  });
++
++  it("starts one background read per installation for two returns in a row", async () => {
++    render(<App />);
++    await waitFor(() => expect(modelReads).toHaveLength(1));
++    modelReads[0]!.answer(modelsView("gpt-6-sol"));
++    await waitFor(() => expect(listed()).toEqual(["gpt-6-sol"]));
++    const before = agentsReads;
++    fireEvent.focus(window);
++    fireEvent.focus(window);
++    await waitFor(() => expect(agentsReads).toBe(before + 2));
++    await settle();
++    expect(modelReads).toHaveLength(2);
++  });
++
++  it("keeps a read list on screen while a background re-read is pending", async () => {
++    render(<App />);
++    await waitFor(() => expect(modelReads).toHaveLength(1));
++    modelReads[0]!.answer(modelsView("gpt-6-sol"));
++    await waitFor(() => expect(listed()).toEqual(["gpt-6-sol"]));
++    fireEvent.focus(window);
++    await waitFor(() => expect(modelReads).toHaveLength(2));
++    await settle();
++    expect(listed()).toEqual(["gpt-6-sol"]);
++    expect(screen.queryByText("Reading the model list…")).toBe(null);
++    modelReads[1]!.answer(modelsView("gpt-6-sol", "gpt-6-luna"));
++    await waitFor(() => expect(listed()).toEqual(["gpt-6-sol", "gpt-6-luna"]));
++  });
++});

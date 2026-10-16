@@ -1,0 +1,608 @@
+34a14a3 fix(agents): list codex MCP servers under the single call's own isolation; a failed list keeps the catalog
+ src/agents/agentCatalog.ts                  |  10 ++-
+ src/agents/codexCatalog.ts                  |  40 ++++++++---
+ src/agents/codexIsolation.ts                | 107 ++++++++++++++++++++++++++++
+ src/runtime/codex/codexAdapter.ts           |  22 +++---
+ src/runtime/codex/codexSingleCall.ts        |  96 ++-----------------------
+ tests/agents/catalogProbe.test.ts           |   3 +
+ tests/fixtures/fake-codex.mjs               |  16 ++++-
+ tests/runtime/codex/codexSingleCall.test.ts |  27 +++++++
+ 8 files changed, 209 insertions(+), 112 deletions(-)
+diff --git a/src/agents/agentCatalog.ts b/src/agents/agentCatalog.ts
+index e829f7f..9227516 100644
+--- a/src/agents/agentCatalog.ts
++++ b/src/agents/agentCatalog.ts
+@@ -43,21 +43,27 @@ export async function readAgentCatalog(installation: InstallationV1, options: Re
+   if (dir !== null && options.refresh !== true) {
+     const hit = await readCatalogEntry(dir, key, now());
+     if (hit !== null && wellFormed(hit)) return { source: "cache", observedAt: hit.observedAt, version: hit.version, rows: hit.rows, codexFeatures: hit.codexFeatures, codexMcpServers: hit.codexMcpServers ?? null, catalogError: null };
+     log(`ccloop-agent-catalog: miss ${installation.kind} ${entryFileName(key).slice(0, 12)}`);
+   }
+   // The probes measure the deadline on the real clock, as runProbe does; `now` only dates the entry and its age.
+   const version = await probeVersion(installation.command, { timeoutMs: Math.min(10_000, probeTimeoutMs(deadline)), signal: options.signal });
+   let rows: CatalogRowV1[] | null = null, codexFeatures: string[] | null = null, codexMcpServers: string[] | null = null, catalogError: string | null = null;
+   try {
+     if (installation.kind === "omp") rows = await readOmpCatalog(installation, { deadline, signal: options.signal });
+-    else if (installation.kind === "codex") ({ rows, features: codexFeatures, mcpServers: codexMcpServers } = await readCodexCatalog(installation, { deadline, signal: options.signal }));
++    else if (installation.kind === "codex") {
++      let mcpError: string | null;
++      ({ rows, features: codexFeatures, mcpServers: codexMcpServers, mcpError } = await readCodexCatalog(installation, { deadline, signal: options.signal }));
++      // Task 8 fix round 3: rows and features stand; the missing MCP list is logged and keeps the entry unwritten (a codex
++      // entry without the list would be a miss anyway), so the next read tries the list again.
++      if (mcpError !== null) log(`ccloop-agent-catalog: probe-failed codex mcp ${mcpError}`);
++    }
+   } catch (error) {
+     catalogError = error instanceof Error ? error.message : String(error);
+     log(`ccloop-agent-catalog: probe-failed ${installation.kind} ${catalogError}`);
+   }
+   const observedAt = new Date(now()).toISOString();
+-  if (dir !== null && version !== null && catalogError === null) {
++  if (dir !== null && version !== null && catalogError === null && !(installation.kind === "codex" && codexMcpServers === null)) {
+     await writeCatalogEntry(dir, { schema: "ccloop-agent-catalog-v1", key, observedAt, version, rows, codexFeatures, codexMcpServers });
+   }
+   return { source: "probe", observedAt, version, rows, codexFeatures, codexMcpServers, catalogError };
+ }
+diff --git a/src/agents/codexCatalog.ts b/src/agents/codexCatalog.ts
+index 880c971..51b714e 100644
+--- a/src/agents/codexCatalog.ts
++++ b/src/agents/codexCatalog.ts
+@@ -1,13 +1,16 @@
+-import { readFile } from "node:fs/promises";
++import { mkdtemp, readFile, rm } from "node:fs/promises";
++import { tmpdir } from "node:os";
+ import { join } from "node:path";
++import { catalogCacheDir } from "./catalogCache.js";
+ import { probeFailure, probeTimeoutMs, runProbe } from "./catalogProbe.js";
++import { CODEX_SINGLE_CALL_CONFIG, codexSingleCallHome, effectiveCodexHome } from "./codexIsolation.js";
+ import type { CatalogRowV1, InstallationV1 } from "./types.js";
+ 
+ /** Spec 2026-10-15 §2.4/§6.1: the tool flags a codex single call turns off, plus skip_host_skill_discovery (turned on). */
+ export const CODEX_SINGLE_CALL_FEATURES = ["apps", "image_generation", "multi_agent", "plugins", "shell_tool", "skip_host_skill_discovery", "unified_exec", "view_image"] as const;
+ const CODE = "agent-catalog-unavailable";
+ const positiveSafe = (value: unknown): number | null => (typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null);
+ 
+ /** §6.1 "Window": a top-level `model_context_window = <n>` before the first `[table]` wins over the catalog. */
+ function configuredWindow(toml: string): number | null {
+   const head = toml.split(/^\s*\[/m, 1)[0]!;
+@@ -39,25 +42,47 @@ export function codexMcpServerNames(listed: string): string[] {
+   if (!Array.isArray(parsed)) throw new Error("not a list");
+   const names = parsed.map((server) => {
+     const name = server !== null && typeof server === "object" ? (server as { name?: unknown }).name : undefined;
+     if (typeof name !== "string" || name.length === 0 || name.length > 200) throw new Error("bad name");
+     return name;
+   });
+   if (new Set(names).size !== names.length) throw new Error("duplicate name");
+   return names;
+ }
+ 
++/**
++ * Task 8 fix round 3 (paid check P1b, codex-cli 0.160.0): the MCP servers are listed under the SAME isolation as the
++ * single call -- its private HOME and CODEX_HOME (the reused dirs with the auth.json/config.toml links) and its -c list
++ * (incl. features.plugins=false) -- so the list holds exactly what the call's config defines. Run against the person's own
++ * CODEX_HOME it also listed ~/.codex/plugins servers, and turning off a server the call's config does not define breaks
++ * codex's config load ("invalid transport"). With no cache dir the private dirs are made under a temp dir, removed after.
++ */
++async function readIsolatedMcpServers(installation: InstallationV1, deadline: number, signal?: AbortSignal): Promise<string[]> {
++  const scratch = catalogCacheDir(process.env) === null ? await mkdtemp(join(tmpdir(), "ccloop-codex-mcp-")) : null;
++  try {
++    const isolated = await codexSingleCallHome({ runDir: scratch ?? "", sourceCodexHome: effectiveCodexHome(installation, process.env), executable: installation.command[0], env: process.env });
++    const startedAt = Date.now();
++    const listed = await runProbe(CODE, installation.command[0], [...installation.command.slice(1), ...CODEX_SINGLE_CALL_CONFIG.flatMap((value) => ["-c", value]), "mcp", "list", "--json"],
++      { ...process.env, HOME: isolated.home, CODEX_HOME: isolated.codexHome }, { timeoutMs: probeTimeoutMs(deadline), signal });
++    try { return codexMcpServerNames(listed); } catch { throw probeFailure(CODE, "decode", "decode", startedAt); }
++  } finally {
++    if (scratch !== null) await rm(scratch, { recursive: true, force: true });
++  }
++}
++
+ /**
+  * The codex catalog (`codex debug models`), its installed feature flags (`codex features list`) and its configured MCP
+- * servers (`codex mcp list --json`, Task 8 fix round 2), under one deadline.
++ * servers (`codex mcp list --json`, Task 8 fix rounds 2-3), under one deadline. Fix round 3 (promoted minor): an MCP list
++ * that cannot be read leaves `mcpServers` null with its reason in `mcpError` -- the rows and the features stand, since
++ * only a single call needs the list.
+  */
+-export async function readCodexCatalog(installation: InstallationV1, options: { deadline?: number; signal?: AbortSignal }): Promise<{ rows: CatalogRowV1[]; features: string[]; mcpServers: string[] }> {
++export async function readCodexCatalog(installation: InstallationV1, options: { deadline?: number; signal?: AbortSignal }): Promise<{ rows: CatalogRowV1[]; features: string[]; mcpServers: string[] | null; mcpError: string | null }> {
+   const env: NodeJS.ProcessEnv = { ...process.env, ...(installation.configDir === null ? {} : { CODEX_HOME: installation.configDir }) };
+   const deadline = options.deadline ?? Date.now() + 30_000;
+   const startedAt = Date.now();
+   const models = await runProbe(CODE, installation.command[0], [...installation.command.slice(1), "debug", "models"], env, { timeoutMs: probeTimeoutMs(deadline), signal: options.signal });
+   let rows: CatalogRowV1[];
+   try {
+     const parsed = JSON.parse(models) as { models?: unknown };
+     if (!Array.isArray(parsed.models)) throw new Error();
+     rows = parsed.models.map((row) => {
+       const value = row as Record<string, unknown>;
+@@ -65,16 +90,15 @@ export async function readCodexCatalog(installation: InstallationV1, options: {
+       return { selector: value.slug, provider: "codex", contextWindow: positiveSafe(value.context_window), maxTokens: null, listed: value.visibility === "list" };
+     });
+     if (new Set(rows.map((row) => row.selector)).size !== rows.length) throw new Error();
+   } catch { throw probeFailure(CODE, "decode", "decode", startedAt); }
+   // An empty CODEX_HOME/HOME is treated as unset: joining "" would read a config.toml from the working directory.
+   const codexHome = installation.configDir ?? (env.CODEX_HOME || (env.HOME ? join(env.HOME, ".codex") : null));
+   const window = codexHome === null ? null : await readFile(join(codexHome, "config.toml"), "utf8").then(configuredWindow, () => null);
+   if (window !== null) rows = rows.map((row) => ({ ...row, contextWindow: window }));
+   const listed = await runProbe(CODE, installation.command[0], [...installation.command.slice(1), "features", "list"], env, { timeoutMs: probeTimeoutMs(deadline), signal: options.signal });
+   const names = codexFeatureNames(listed);
+-  const mcpStartedAt = Date.now();
+-  const mcp = await runProbe(CODE, installation.command[0], [...installation.command.slice(1), "mcp", "list", "--json"], env, { timeoutMs: probeTimeoutMs(deadline), signal: options.signal });
+-  let mcpServers: string[];
+-  try { mcpServers = codexMcpServerNames(mcp); } catch { throw probeFailure(CODE, "decode", "decode", mcpStartedAt); }
+-  return { rows, features: CODEX_SINGLE_CALL_FEATURES.filter((name) => names.has(name)), mcpServers };
++  let mcpServers: string[] | null = null, mcpError: string | null = null;
++  try { mcpServers = await readIsolatedMcpServers(installation, deadline, options.signal); }
++  catch (error) { mcpError = error instanceof Error ? error.message : String(error); }
++  return { rows, features: CODEX_SINGLE_CALL_FEATURES.filter((name) => names.has(name)), mcpServers, mcpError };
+ }
+diff --git a/src/agents/codexIsolation.ts b/src/agents/codexIsolation.ts
+new file mode 100644
+index 0000000..a7a342d
+--- /dev/null
++++ b/src/agents/codexIsolation.ts
+@@ -0,0 +1,107 @@
++import { createHash, randomUUID } from "node:crypto";
++import { chmod, lstat, mkdir, mkdtemp, readlink, realpath, rename, rm, symlink } from "node:fs/promises";
++import { dirname, isAbsolute, join } from "node:path";
++import { catalogCacheDir } from "./catalogCache.js";
++import type { InstallationV1 } from "./types.js";
++
++// Every-agent requirement chain Task 8 (Orca spec 2026-10-15 §2.5, §6.1, R9). Moved here from
++// src/runtime/codex/codexSingleCall.ts unchanged in fix round 3, so the codex catalog read can list MCP servers under the
++// same isolation as the call (a leaf: imports only catalogCache, no registry).
++
++/**
++ * Every-agent requirement chain (Orca spec 2026-10-15 §2.5 last row, §6.1; values from plan Task 0 on codex-cli 0.160.0).
++ * `features.plugins=false` is here, not only among the tool flags: Task 0 measured that it removes the
++ * <recommended_plugins> block a linked config.toml injects (`features.recommended_plugins=false` does not).
++ */
++export const CODEX_SINGLE_CALL_CONFIG: readonly string[] = [
++  "include_permissions_instructions=false", "include_apps_instructions=false", "include_collaboration_mode_instructions=false",
++  "include_environment_context=false", "project_doc_max_bytes=0", "features.plugins=false",
++];
++
++/**
++ * The installation's effective CODEX_HOME (Task 8 ruling 2): its configDir, else an inherited absolute non-empty
++ * CODEX_HOME, else <HOME>/.codex (HOME absolute), else none.
++ */
++export function effectiveCodexHome(installation: InstallationV1, env: NodeJS.ProcessEnv): string | null {
++  const inherited = env.CODEX_HOME, home = env.HOME;
++  return installation.configDir ?? (inherited && isAbsolute(inherited) ? inherited : home && isAbsolute(home) ? join(home, ".codex") : null);
++}
++
++/** A private dir that is not a real directory of this user (a symlink, a file, someone else's) refuses the call unspawned. */
++const homeInvalid = (path: string) => Object.assign(new Error(`codex-single-call-home-invalid:${path}`), { code: "codex-single-call-home-invalid", neverStarted: true });
++
++/**
++ * Creates `dir` with 0700 set explicitly when it is missing; an existing one (also one a concurrent call made) keeps its
++ * mode. Either way it must then be a real directory, not a symlink, owned by this user (fix round 1: a symlinked
++ * codex-home would make ensureLink rename a link over the installation's own auth.json). Precedent: control/paths.ts
++ * ensurePrivateDirectory, which needs an existing canonical root this path does not have.
++ */
++async function privateDir(dir: string): Promise<void> {
++  let created = true;
++  try { await mkdir(dir, { mode: 0o700 }); }
++  catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; created = false; }
++  if (created) await chmod(dir, 0o700);
++  const info = await lstat(dir);
++  if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.()) throw homeInvalid(dir);
++}
++
++/**
++ * Controller ruling (fix round 1): a regular file where a link belongs is never deleted -- codex may have rotated a token
++ * into it by temp+rename -- but moved aside to `<name>.displaced-<epoch ms>` in the same private dir, mode unchanged.
++ */
++async function displace(path: string): Promise<void> {
++  const aside = `${path}.displaced-${Date.now()}`;
++  await rename(path, aside);
++  process.stderr.write(`ccloop-codex-single-call: displaced ${path} to ${aside}\n`);
++}
++
++/** `path` becomes a symlink to `target` (replaced atomically when it is anything else), or absent when target is null. */
++async function ensureLink(path: string, target: string | null): Promise<void> {
++  const current = await lstat(path).then((info) => info, () => null);
++  if (current !== null && !current.isSymbolicLink()) await displace(path);
++  else if (current !== null && target === null) await rm(path, { force: true });
++  if (target === null) return;
++  if (current?.isSymbolicLink() === true && await readlink(path) === target) return;
++  const temporary = join(dirname(path), `.${randomUUID()}.link`);
++  await symlink(target, temporary);
++  try { await rename(temporary, path); } catch (error) { await rm(temporary, { force: true }); throw error; }
++}
++
++/**
++ * R9: a private, empty HOME and a private CODEX_HOME whose auth.json and config.toml are symlinks to the installation's
++ * (never copies). Ruling (Task 8, Orca session a852f96a, 2026-10-16, answering the human): ONE pair per installation,
++ * reused, under `<catalog cache dir>/codex-home/<sha256 of realpath(executable) NUL sourceCodexHome>/` -- codex writes
++ * ~2.4 MB of its own state plus a remote models fetch into a fresh CODEX_HOME (Task 0). The links are re-checked on every
++ * call. Out-of-repo write: that path; writer = a ccloop control worker running a codex single call; residue on failure =
++ * at most one `.<uuid>.link` temp link, plus any `<name>.displaced-<ms>` file moved aside. With no cache dir, a pair per
++ * call under the run directory.
++ */
++export async function codexSingleCallHome(input: { runDir: string; sourceCodexHome: string | null; executable: string; env: NodeJS.ProcessEnv }): Promise<{ home: string; codexHome: string }> {
++  const cache = catalogCacheDir(input.env);
++  let base: string;
++  if (cache === null) {
++    let root = input.runDir;
++    for (const part of ["codex", "1", "single-call"]) { root = join(root, part); await privateDir(root); }
++    base = await mkdtemp(join(root, "home-"));
++    await chmod(base, 0o700);
++    await privateDir(base);
++  } else {
++    const executable = await realpath(input.executable).catch(() => input.executable);
++    base = join(cache, "codex-home", createHash("sha256").update(`${executable}\0${input.sourceCodexHome ?? ""}`).digest("hex"));
++    const missing: string[] = [];
++    for (let at = cache; at !== dirname(at); at = dirname(at)) {
++      if (await lstat(at).then(() => true, () => false)) break;
++      missing.unshift(at);
++    }
++    for (const dir of missing) await privateDir(dir);
++    for (const dir of [join(cache, "codex-home"), base]) await privateDir(dir);
++  }
++  const home = join(base, "home"), codexHome = join(base, "codex-home");
++  for (const dir of [home, codexHome]) await privateDir(dir);
++  for (const name of ["auth.json", "config.toml"]) {
++    const source = input.sourceCodexHome === null ? null : join(input.sourceCodexHome, name);
++    await ensureLink(join(codexHome, name), source !== null && await lstat(source).then(() => true, () => false) ? source : null);
++  }
++  return { home, codexHome };
++}
++
+diff --git a/src/runtime/codex/codexAdapter.ts b/src/runtime/codex/codexAdapter.ts
+index 0cb3e25..9d42f0a 100644
+--- a/src/runtime/codex/codexAdapter.ts
++++ b/src/runtime/codex/codexAdapter.ts
+@@ -1,18 +1,18 @@
+ import { normalizeExecutionFinal, ExecutionFormatFailure } from "../executionNormalizer.js";
+ import { access, writeFile } from "node:fs/promises";
+-import { isAbsolute, join } from "node:path";
++import { join } from "node:path";
+ import { readAgentCatalog } from "../../agents/agentCatalog.js";
+ import type { InstallationV1 } from "../../agents/types.js";
+ import { buildExecutorPrompt, buildPlannerPrompt, buildVerifierPrompt } from "../claude/prompts.js";
+ import type { AttemptContext, RuntimeAdapter, SingleCallRequest, SingleCallResult } from "../types.js";
+-import { addressableMcpServer, codexSingleCallArgs, codexSingleCallHome, decodeCodexSingleCall } from "./codexSingleCall.js";
++import { addressableMcpServer, codexSingleCallArgs, codexSingleCallHome, decodeCodexSingleCall, effectiveCodexHome } from "./codexSingleCall.js";
+ import { codexModelUsage, decodeCodexUsage, decodeCodexResult, parseCodexConfig, phaseFinalAccepts, scanFinalMessage, type CodexConfig, type CodexPhase, type PhaseResults } from "./protocol.js";
+ import { runCodexPhase, type PhaseOutcome } from "./runCodexPhase.js";
+ import { classifyRateLimit } from "./rateLimit.js";
+ 
+ /** Codex rate-limit spec §3.2: waits before each retry of a phase rejected by 429 before any work (three retries). */
+ export const RATE_LIMIT_DELAYS_MS: readonly number[] = [30_000, 60_000, 120_000];
+ export interface CodexAdapterOptions {
+   rateLimitDelaysMs?: readonly number[];
+   /** Every-agent requirement chain (Orca spec 2026-10-15 §6.1): the installation a single call re-reads its catalog for. */
+   installation?: InstallationV1;
+@@ -143,33 +143,37 @@ export class CodexAdapter implements RuntimeAdapter {
+   /**
+    * Every-agent requirement chain (Orca spec 2026-10-15 §6.1, R2, R9): one structured call, tools off, in a private HOME and
+    * CODEX_HOME. Codex cannot cap the output; the bound is checked by Orca after the fact. Refused before spawning when the
+    * installed feature list is unknown, since the tool flags could not be turned off (plan spec issue 9). As omp's (R6), the
+    * re-check lives inside the call's deadline, computed once; the spawn gets only what the re-check left.
+    */
+   async singleCall(request: SingleCallRequest): Promise<SingleCallResult> {
+     if (this.installation === undefined) throw new Error("single-call-unsupported");
+     const deadline = Date.now() + Math.min(request.timeoutMs, this.config.timeoutMs);
+     const catalog = await readAgentCatalog(this.installation, { deadline, signal: request.signal, log: (line) => { process.stderr.write(`${line}\n`); } });
++    if (catalog.codexFeatures === null) {
++      throw Object.assign(new Error(`codex-single-call-unavailable: ${catalog.catalogError ?? "no feature list"}`), { code: "codex-single-call-unavailable", neverStarted: true });
++    }
++    const features = catalog.codexFeatures;
++    // Fix round 3: the private homes are checked before the MCP list's absence is reported, so a symlinked private dir (which
++    // also made the isolated MCP probe fail) is named as such, not as a missing list.
++    const source = effectiveCodexHome(this.installation, process.env);
++    const isolated = await codexSingleCallHome({ runDir: request.runDir, sourceCodexHome: source, executable: this.config.command[0], env: process.env });
+     // Task 8 fix round 2: the MCP server names are needed as much as the feature list (their servers would start otherwise).
+-    if (catalog.codexFeatures === null || catalog.codexMcpServers === null) {
+-      throw Object.assign(new Error(`codex-single-call-unavailable: ${catalog.catalogError ?? "no feature or MCP server list"}`), { code: "codex-single-call-unavailable", neverStarted: true });
++    if (catalog.codexMcpServers === null) {
++      throw Object.assign(new Error("codex-single-call-unavailable: no MCP server list"), { code: "codex-single-call-unavailable", neverStarted: true });
+     }
+-    const features = catalog.codexFeatures, mcpServers = catalog.codexMcpServers;
++    const mcpServers = catalog.codexMcpServers;
+     const unaddressable = mcpServers.find((name) => !addressableMcpServer(name));
+     if (unaddressable !== undefined) {
+       throw Object.assign(new Error(`codex-single-call-unavailable: MCP server ${JSON.stringify(unaddressable)} cannot be turned off by -c`), { code: "codex-single-call-unavailable", neverStarted: true });
+     }
+-    // The installation's effective CODEX_HOME: its configDir, else an inherited absolute CODEX_HOME, else <HOME>/.codex.
+-    const inherited = process.env.CODEX_HOME, home = process.env.HOME;
+-    const source = this.installation.configDir ?? (inherited && isAbsolute(inherited) ? inherited : home && isAbsolute(home) ? join(home, ".codex") : null);
+-    const isolated = await codexSingleCallHome({ runDir: request.runDir, sourceCodexHome: source, executable: this.config.command[0], env: process.env });
+     const context = { runDir: request.runDir, attempt: 1, worktreePath: request.cwd, abortSignal: request.signal, onProcessRegistered: request.onProcessRegistered,
+       state: { budgetSnapshot: { timeRemainingMs: Math.max(1, deadline - Date.now()) } } } as unknown as AttemptContext;
+     const outcome = await runCodexPhase(this.config, { phase: "single-call", prompt: request.prompt, context, spawn: {
+       schema: request.responseSchema, env: { ...process.env, HOME: isolated.home, CODEX_HOME: isolated.codexHome },
+       args: ({ schemaPath, finalPath }) => codexSingleCallArgs({ model: this.config.model, cwd: request.cwd, schemaPath, finalPath, features, mcpServers }),
+     } });
+     if (outcome.reason !== "completed") {
+       // Fix round 1 (repo convention, omp "Ruling m4", claude): runCodexPhase writes the prompt only after process.json is
+       // saved, so a call that ended without it -- aborted before or at spawn, a spawn error, a deadline hit first -- never
+       // sent anything: neverStarted, booked 0. The codex phase path is unchanged.
+diff --git a/src/runtime/codex/codexSingleCall.ts b/src/runtime/codex/codexSingleCall.ts
+index 0f190dd..0af7ed2 100644
+--- a/src/runtime/codex/codexSingleCall.ts
++++ b/src/runtime/codex/codexSingleCall.ts
+@@ -1,27 +1,19 @@
+-import { createHash, randomUUID } from "node:crypto";
+-import { chmod, lstat, mkdir, mkdtemp, readlink, realpath, rename, rm, symlink } from "node:fs/promises";
+-import { dirname, join } from "node:path";
+-import { catalogCacheDir } from "../../agents/catalogCache.js";
++import { CODEX_SINGLE_CALL_CONFIG } from "../../agents/codexIsolation.js";
+ import { parseSingleCallObject } from "../omp/ompSingleCall.js";
+ import { SingleCallOutputInvalid, type SingleCallResult } from "../types.js";
+ import { codexModelUsage, decodeCodexUsage, observedTurnUsage } from "./protocol.js";
+ 
+-/**
+- * Every-agent requirement chain (Orca spec 2026-10-15 §2.5 last row, §6.1; values from plan Task 0 on codex-cli 0.160.0).
+- * `features.plugins=false` is here, not only among the tool flags: Task 0 measured that it removes the
+- * <recommended_plugins> block a linked config.toml injects (`features.recommended_plugins=false` does not).
+- */
+-export const CODEX_SINGLE_CALL_CONFIG: readonly string[] = [
+-  "include_permissions_instructions=false", "include_apps_instructions=false", "include_collaboration_mode_instructions=false",
+-  "include_environment_context=false", "project_doc_max_bytes=0", "features.plugins=false",
+-];
++// Task 8 fix round 3: the isolation (the -c list and the private homes) lives in a leaf module so the catalog read can run
++// its MCP probe under it without an import cycle through registry; re-exported here for the adapter and the criteria.
++export { CODEX_SINGLE_CALL_CONFIG, codexSingleCallHome, effectiveCodexHome } from "../../agents/codexIsolation.js";
++
+ const TURNED_ON = new Set(["skip_host_skill_discovery"]);
+ const ALREADY_SET = new Set(CODEX_SINGLE_CALL_CONFIG.filter((value) => value.startsWith("features.")).map((value) => value.slice(9, value.indexOf("="))));
+ 
+ /**
+  * A server name `-c mcp_servers.<name>.enabled=false` can address. Measured on codex-cli 0.160.0: a quoted segment
+  * (`mcp_servers."figma".enabled`) is taken literally and breaks the config ("invalid transport"), so only bare names are
+  * addressable; the adapter refuses a call whose installation lists any other (codex-single-call-unavailable).
+  */
+ export const addressableMcpServer = (name: string): boolean => /^[A-Za-z0-9_-]+$/.test(name);
+ 
+@@ -33,98 +25,20 @@ export const addressableMcpServer = (name: string): boolean => /^[A-Za-z0-9_-]+$
+  */
+ export function codexSingleCallArgs(input: { model: string; cwd: string; schemaPath: string; finalPath: string; features: readonly string[]; mcpServers: readonly string[] }): string[] {
+   return ["exec", "--json", "--ephemeral", "--color", "never", "--skip-git-repo-check", "--model", input.model, "--sandbox", "read-only",
+     "-C", input.cwd, "--output-schema", input.schemaPath, "-o", input.finalPath,
+     ...CODEX_SINGLE_CALL_CONFIG.flatMap((value) => ["-c", value]),
+     ...input.features.filter((name) => !ALREADY_SET.has(name)).flatMap((name) => ["-c", `features.${name}=${TURNED_ON.has(name) ? "true" : "false"}`]),
+     ...input.mcpServers.flatMap((name) => ["-c", `mcp_servers.${name}.enabled=false`]),
+     "-"];
+ }
+ 
+-/** A private dir that is not a real directory of this user (a symlink, a file, someone else's) refuses the call unspawned. */
+-const homeInvalid = (path: string) => Object.assign(new Error(`codex-single-call-home-invalid:${path}`), { code: "codex-single-call-home-invalid", neverStarted: true });
+-
+-/**
+- * Creates `dir` with 0700 set explicitly when it is missing; an existing one (also one a concurrent call made) keeps its
+- * mode. Either way it must then be a real directory, not a symlink, owned by this user (fix round 1: a symlinked
+- * codex-home would make ensureLink rename a link over the installation's own auth.json). Precedent: control/paths.ts
+- * ensurePrivateDirectory, which needs an existing canonical root this path does not have.
+- */
+-async function privateDir(dir: string): Promise<void> {
+-  let created = true;
+-  try { await mkdir(dir, { mode: 0o700 }); }
+-  catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; created = false; }
+-  if (created) await chmod(dir, 0o700);
+-  const info = await lstat(dir);
+-  if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.()) throw homeInvalid(dir);
+-}
+-
+-/**
+- * Controller ruling (fix round 1): a regular file where a link belongs is never deleted -- codex may have rotated a token
+- * into it by temp+rename -- but moved aside to `<name>.displaced-<epoch ms>` in the same private dir, mode unchanged.
+- */
+-async function displace(path: string): Promise<void> {
+-  const aside = `${path}.displaced-${Date.now()}`;
+-  await rename(path, aside);
+-  process.stderr.write(`ccloop-codex-single-call: displaced ${path} to ${aside}\n`);
+-}
+-
+-/** `path` becomes a symlink to `target` (replaced atomically when it is anything else), or absent when target is null. */
+-async function ensureLink(path: string, target: string | null): Promise<void> {
+-  const current = await lstat(path).then((info) => info, () => null);
+-  if (current !== null && !current.isSymbolicLink()) await displace(path);
+-  else if (current !== null && target === null) await rm(path, { force: true });
+-  if (target === null) return;
+-  if (current?.isSymbolicLink() === true && await readlink(path) === target) return;
+-  const temporary = join(dirname(path), `.${randomUUID()}.link`);
+-  await symlink(target, temporary);
+-  try { await rename(temporary, path); } catch (error) { await rm(temporary, { force: true }); throw error; }
+-}
+-
+-/**
+- * R9: a private, empty HOME and a private CODEX_HOME whose auth.json and config.toml are symlinks to the installation's
+- * (never copies). Ruling (Task 8, Orca session a852f96a, 2026-10-16, answering the human): ONE pair per installation,
+- * reused, under `<catalog cache dir>/codex-home/<sha256 of realpath(executable) NUL sourceCodexHome>/` -- codex writes
+- * ~2.4 MB of its own state plus a remote models fetch into a fresh CODEX_HOME (Task 0). The links are re-checked on every
+- * call. Out-of-repo write: that path; writer = a ccloop control worker running a codex single call; residue on failure =
+- * at most one `.<uuid>.link` temp link, plus any `<name>.displaced-<ms>` file moved aside. With no cache dir, a pair per
+- * call under the run directory.
+- */
+-export async function codexSingleCallHome(input: { runDir: string; sourceCodexHome: string | null; executable: string; env: NodeJS.ProcessEnv }): Promise<{ home: string; codexHome: string }> {
+-  const cache = catalogCacheDir(input.env);
+-  let base: string;
+-  if (cache === null) {
+-    let root = input.runDir;
+-    for (const part of ["codex", "1", "single-call"]) { root = join(root, part); await privateDir(root); }
+-    base = await mkdtemp(join(root, "home-"));
+-    await chmod(base, 0o700);
+-    await privateDir(base);
+-  } else {
+-    const executable = await realpath(input.executable).catch(() => input.executable);
+-    base = join(cache, "codex-home", createHash("sha256").update(`${executable}\0${input.sourceCodexHome ?? ""}`).digest("hex"));
+-    const missing: string[] = [];
+-    for (let at = cache; at !== dirname(at); at = dirname(at)) {
+-      if (await lstat(at).then(() => true, () => false)) break;
+-      missing.unshift(at);
+-    }
+-    for (const dir of missing) await privateDir(dir);
+-    for (const dir of [join(cache, "codex-home"), base]) await privateDir(dir);
+-  }
+-  const home = join(base, "home"), codexHome = join(base, "codex-home");
+-  for (const dir of [home, codexHome]) await privateDir(dir);
+-  for (const name of ["auth.json", "config.toml"]) {
+-    const source = input.sourceCodexHome === null ? null : join(input.sourceCodexHome, name);
+-    await ensureLink(join(codexHome, name), source !== null && await lstat(source).then(() => true, () => false) ? source : null);
+-  }
+-  return { home, codexHome };
+-}
+-
+ const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+ const observed = (error: Error, events: string) => Object.assign(error, { observedTokens: observedTurnUsage(events) });
+ const notSingle = (what: string, events: string) => Object.assign(observed(new Error(`codex-single-call-not-single:${what}`), events), { code: `codex-single-call-not-single:${what}` });
+ 
+ /**
+  * §6.1, fail closed: no tool or command item, at most one completed agent message, exactly one completed turn, one object.
+  * Task 8 fix round 2 (P1, codex-cli 0.160.0): an `error` item is a diagnostic codex emits for config warnings (an
+  * unrecognized key in the linked config.toml, an under-development feature) -- allowed and logged on stderr; it stays in
+  * events.jsonl. Every other item type that is not agent_message or reasoning, known or not, is a tool.
+  * Every refusal books the turn usage observed so far (null when none), never 0; "no object" is single-call-output-invalid
+diff --git a/tests/agents/catalogProbe.test.ts b/tests/agents/catalogProbe.test.ts
+index c916f8c..f33aff2 100644
+--- a/tests/agents/catalogProbe.test.ts
++++ b/tests/agents/catalogProbe.test.ts
+@@ -139,20 +139,23 @@ describe("codex catalog decode (spec §3, §6.1)", () => {
+     expect(await readCodexCatalog(w.installation, {})).toEqual({
+       rows: [
+         { selector: "gpt-6-sol", provider: "codex", contextWindow: 272000, maxTokens: null, listed: true },
+         { selector: "gpt-6-luna", provider: "codex", contextWindow: 272000, maxTokens: null, listed: true },
+         { selector: "gpt-reserve", provider: "codex", contextWindow: 272000, maxTokens: null, listed: false },
+       ],
+       features: ["apps", "image_generation", "multi_agent", "plugins", "shell_tool", "skip_host_skill_discovery", "unified_exec", "view_image"],
+       // Ruling: rewritten under the human's blanket naming (Orca session a852f96a, 2026-10-16) -- Task 8 fix round 2 adds the
+       // MCP server names (`codex mcp list --json`; the fake lists none by default) to the codex catalog read. Still exact.
+       mcpServers: [],
++      // Ruling: rewritten under the human's blanket naming (Orca session a852f96a, 2026-10-16) -- Task 8 fix round 3: an MCP
++      // list failure no longer fails the catalog, so the answer also carries its reason, null here. Still exact.
++      mcpError: null,
+     });
+   });
+ 
+   it("lets config.toml's top-level model_context_window win over the catalog, and ignores one inside a table", async () => {
+     expect((await readCodexCatalog((await codex(undefined, "model = \"x\"\nmodel_context_window = 100000\n[profiles.a]\n")).installation, {})).rows[0]!.contextWindow).toBe(100000);
+     expect((await readCodexCatalog((await codex(undefined, "[profiles.a]\nmodel_context_window = 100000\n")).installation, {})).rows[0]!.contextWindow).toBe(272000);
+   });
+ 
+   // codex-cli 0.160.0 prints `name<pad>stage<pad>enabled`, and a stage can be two words ("under development"); the name is
+   // the first word and the enabled flag the last, never a fixed column count. A line without a true/false end is not a flag.
+diff --git a/tests/fixtures/fake-codex.mjs b/tests/fixtures/fake-codex.mjs
+index e694bc4..f32d310 100644
+--- a/tests/fixtures/fake-codex.mjs
++++ b/tests/fixtures/fake-codex.mjs
+@@ -6,32 +6,40 @@ const mode=process.argv[2], marker=process.argv[3];
+ // JSON array line to `<marker>.argv`. Every mode below is otherwise unchanged.
+ // Orca retire-legacy-orca-run (2026-10-01), spec §3.4: mode `frames`, argv `frames <marker> <framesFile>`, plays
+ // the frame of the attempt number (the working directory's `attempt-<n>`, minus one) from the framesFile list of
+ // the task named in the prompt (else the `"*"` list); no frame ⇒ stderr `no frame for <task> attempt <n>`, exit 3.
+ // Every-agent requirement chain (Orca spec 2026-10-15 §9): `--version` appends `version` to `<marker>.version-calls`;
+ // `debug models` and `features list` answer the catalog and the feature list and append `debug-models` / `features-list`
+ // to `<marker>.catalog-calls`, before anything below runs, so `<marker>.argv` and `<marker>.calls` never see them.
+ // `<marker>.catalog.json` ({rows?, sleepMs?, exitCode?, stderr?}) overrides the rows, sleeps first, or fails.
+ // Task 8 of that plan: its `features?` (a list of flag names) overrides the flags `features list` prints. Task 8 fix
+ // round 2: `mcp list --json` appends `mcp-list` and prints `mcp?` (default []) as codex-cli 0.160.0's JSON array of
+-// `{name, enabled, ...}` objects; `mcpExitCode?` fails that call alone.
++// `{name, enabled, ...}` objects; `mcpExitCode?` fails that call alone. Fix round 3 (paid check P1b): `mcp` are the
++// servers the linked config.toml defines; `mcpPlugins?` are servers the person's own CODEX_HOME adds (~/.codex/plugins),
++// listed only when the call is NOT isolated (its CODEX_HOME/config.toml is not a symlink or `-c features.plugins=false`
++// is absent). `mcp list` records {HOME, CODEX_HOME, c} in <marker>.mcp-env.json. A single call that turns off a server
++// `mcp` does not define fails as the real codex-cli 0.160.0 does: stderr "invalid transport in `mcp_servers.<name>`", exit 1.
+ if(process.argv.at(-1)==="--version"&&!process.argv.includes("exec")) {appendFileSync(marker+".version-calls","version\n");await new Promise(resolve=>process.stdout.write("9.9.9-fake\n",resolve));process.exit(0);}
+ const catalogCall=process.argv.includes("debug")&&process.argv.includes("models")?"debug-models":process.argv.includes("features")&&process.argv.includes("list")?"features-list":process.argv.includes("mcp")&&process.argv.includes("list")?"mcp-list":null;
+ if(catalogCall!==null&&!process.argv.includes("exec")) {
+   appendFileSync(marker+".catalog-calls",catalogCall+"\n");
+   const script=existsSync(marker+".catalog.json")?JSON.parse(readFileSync(marker+".catalog.json","utf8")):{};
+   if(script.sleepMs!==undefined) await new Promise(resolve=>setTimeout(resolve,script.sleepMs));
+   if(script.stderr!==undefined) await new Promise(resolve=>process.stderr.write(script.stderr,resolve));
+   if(script.exitCode!==undefined) process.exit(script.exitCode);
+   if(catalogCall==="mcp-list") {
+     if(script.mcpExitCode!==undefined) process.exit(script.mcpExitCode);
+-    await new Promise(resolve=>process.stdout.write(JSON.stringify(script.mcp??[])+"\n",resolve));
++    const c=process.argv.flatMap((arg,i)=>arg==="-c"?[process.argv[i+1]]:[]);
++    let linked=false; try{linked=lstatSync(`${process.env.CODEX_HOME}/config.toml`).isSymbolicLink();}catch{}
++    const isolated=linked&&c.includes("features.plugins=false");
++    writeFileSync(marker+".mcp-env.json",JSON.stringify({HOME:process.env.HOME,CODEX_HOME:process.env.CODEX_HOME,c}));
++    await new Promise(resolve=>process.stdout.write(JSON.stringify([...(script.mcp??[]),...(isolated?[]:script.mcpPlugins??[])])+"\n",resolve));
+   } else if(catalogCall==="debug-models") {
+     const rows=script.rows??[{slug:"gpt-6-sol",context_window:272000,visibility:"list"},{slug:"gpt-6-luna",context_window:272000,visibility:"list"},{slug:"gpt-reserve",context_window:272000,visibility:"hide"}];
+     await new Promise(resolve=>process.stdout.write(JSON.stringify({models:rows})+"\n",resolve));
+   } else {
+     const flags=script.features??["apps","browser_use","image_generation","multi_agent","plugins","shell_tool","skip_host_skill_discovery","unified_exec","view_image"];
+     await new Promise(resolve=>process.stdout.write(flags.map(flag=>`${flag.padEnd(40)} stable             true`).join("\n")+"\n",resolve));
+   }
+   process.exit(0);
+ }
+ appendFileSync(marker+".argv",JSON.stringify(process.argv.slice(process.argv.indexOf("exec")))+"\n");
+@@ -48,20 +56,24 @@ process.stdin.setEncoding("utf8");
+ process.stdin.on("data",c=>{prompt+=c;});
+ process.stdin.on("end",()=>{
+   // Every-agent requirement chain (Orca spec 2026-10-15 §6.1, §9): a single call is the only codex call with
+   // --skip-git-repo-check. It records HOME, CODEX_HOME and whether auth.json there is a symlink in <marker>.single-env.json,
+   // appends `single-call` to <marker>.calls, then plays <marker>.single.json ({rows?, final?, exitCode?, hang?}) or one
+   // complete {"answer":"42"} with usage input 20 (5 cached) and output 4. Task 8 fix round 2: the default rows carry the
+ // three `error` items the real codex-cli 0.160.0 printed in paid check P1 (Orca session a852f96a, 2026-10-16;
+ // /private/tmp/p1-pJnD events.jsonl, item lines copied verbatim), as a real single call does.
+   if(args.includes("--skip-git-repo-check")) {
+     appendFileSync(marker+".calls","single-call\n");
++    const catalogScript=existsSync(marker+".catalog.json")?JSON.parse(readFileSync(marker+".catalog.json","utf8")):{};
++    const defined=new Set((catalogScript.mcp??[]).map(server=>server.name));
++    const undefinedServer=args.flatMap((arg,i)=>arg==="-c"?[args[i+1]]:[]).map(value=>/^mcp_servers\.(.+)\.enabled=false$/.exec(value)?.[1]).find(name=>name!==undefined&&!defined.has(name));
++    if(undefinedServer!==undefined){process.stderr.write(`Error: failed to load bootstrap configuration\n\nCaused by:\n    invalid transport\n    in \`mcp_servers.${undefinedServer}\`\n`,()=>{process.exitCode=1;});return;}
+     let authIsLink=null; try{authIsLink=lstatSync(`${process.env.CODEX_HOME}/auth.json`).isSymbolicLink();}catch{}
+     writeFileSync(marker+".single-env.json",JSON.stringify({HOME:process.env.HOME,CODEX_HOME:process.env.CODEX_HOME,authIsLink}));
+     const script=existsSync(marker+".single.json")?JSON.parse(readFileSync(marker+".single.json","utf8")):{};
+     if(script.hang===true){setInterval(()=>{},1000);return;}
+     const rows=script.rows??[{type:"thread.started",thread_id:"t"},...P1_ERROR_ITEMS,{type:"turn.started"},{type:"item.completed",item:{id:"item_0",type:"agent_message",text:"{\"answer\":\"42\"}"}},{type:"turn.completed",usage:{input_tokens:20,cached_input_tokens:5,output_tokens:4}}];
+     writeFileSync(value("-o"),script.final??"{\"answer\":\"42\"}");
+     process.stdout.write(rows.map(row=>JSON.stringify(row)).join("\n")+"\n",()=>{process.exitCode=script.exitCode??0;});
+     return;
+   }
+   writeFileSync(marker,JSON.stringify({args,cwd:process.cwd(),prompt,pid:process.pid}));
+diff --git a/tests/runtime/codex/codexSingleCall.test.ts b/tests/runtime/codex/codexSingleCall.test.ts
+index 7a0860f..d867f98 100644
+--- a/tests/runtime/codex/codexSingleCall.test.ts
++++ b/tests/runtime/codex/codexSingleCall.test.ts
+@@ -311,20 +311,47 @@ describe("codex single call (spec §6.1)", { timeout: 30_000 }, () => {
+     ["a server name -c cannot address", { mcp: [{ name: "figma", enabled: true }, { name: "a.b", enabled: true }] }],
+   ])("C8.10b: refuses before spawning, booking 0, when the MCP server list cannot be read (%s)", async (_label, catalog) => {
+     const w = await world();
+     await writeFile(`${w.marker}.catalog.json`, JSON.stringify(catalog));
+     const error = await failure(w.adapter.singleCall!(w.request));
+     expect(error).toMatchObject({ code: "codex-single-call-unavailable", neverStarted: true });
+     expect(observedTokensOf(error)).toBe(0);
+     expect(existsSync(`${w.marker}.calls`)).toBe(false);
+   });
+ 
++  // Fix round 3 (paid check P1b, codex-cli 0.160.0): listed against the person's own CODEX_HOME, codex also named the
++  // ~/.codex/plugins servers, which the call's isolated config does not define -- and turning one of those off broke the
++  // call's config load ("invalid transport"). The list is taken under the call's own isolation; the fake models both.
++  it("C8.10d: lists the MCP servers under the call's own isolation, so it never turns off one the call's config lacks", async () => {
++    const w = await world();
++    await writeFile(`${w.marker}.catalog.json`, JSON.stringify({ mcp: [{ name: "figma", enabled: true }], mcpPlugins: [{ name: "code-review", enabled: true }] }));
++    expect(await w.adapter.singleCall!(w.request)).toMatchObject({ output: { answer: "42" } });
++    expect(configValues(lastArgv(w.marker)).slice(-2)).toEqual(["features.view_image=false", "mcp_servers.figma.enabled=false"]);
++    const probe = JSON.parse(readFileSync(`${w.marker}.mcp-env.json`, "utf8")) as { HOME: string; CODEX_HOME: string; c: string[] };
++    const call = singleEnv(w.marker);
++    expect([probe.HOME, probe.CODEX_HOME]).toEqual([call.HOME, call.CODEX_HOME]);
++    expect(probe.c).toEqual(["include_permissions_instructions=false", "include_apps_instructions=false", "include_collaboration_mode_instructions=false",
++      "include_environment_context=false", "project_doc_max_bytes=0", "features.plugins=false"]);
++  });
++
++  // Fix round 3 (promoted minor, plan issue 5): only a single call needs the MCP list, so a list that cannot be read keeps
++  // the rows (the model drop-down, the window) and the features; nothing is cached, so the next read tries again.
++  it("C8.10e: an MCP list that cannot be read keeps the catalog's rows and features and is not cached", async () => {
++    const w = await world();
++    await writeFile(`${w.marker}.catalog.json`, JSON.stringify({ mcpExitCode: 4 }));
++    const catalog = await readAgentCatalog(w.config.installation);
++    expect(catalog).toMatchObject({ source: "probe", catalogError: null, codexMcpServers: null });
++    expect(catalog.rows?.map((row) => [row.selector, row.contextWindow])).toEqual([["gpt-6-sol", 272000], ["gpt-6-luna", 272000], ["gpt-reserve", 272000]]);
++    expect(catalog.codexFeatures).toHaveLength(8);
++    expect(existsSync(join(process.env.CCLOOP_CACHE_DIR!, entryFileName(await catalogKey(w.config.installation, process.env))))).toBe(false);
++  });
++
+   // A codex cache entry written before the names were cached cannot answer them, so it is a miss, not a hit with none.
+   it("C8.10c: a cached codex entry without MCP server names is a miss", async () => {
+     const w = await world();
+     expect((await readAgentCatalog(w.config.installation)).codexMcpServers).toEqual([]);
+     const file = join(process.env.CCLOOP_CACHE_DIR!, entryFileName(await catalogKey(w.config.installation, process.env)));
+     const entry = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+     expect(entry.codexMcpServers).toEqual([]);
+     delete entry.codexMcpServers;
+     await writeFile(file, JSON.stringify(entry));
+     expect((await readAgentCatalog(w.config.installation)).source).toBe("probe");

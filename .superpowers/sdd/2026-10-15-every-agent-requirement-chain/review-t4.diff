@@ -1,0 +1,762 @@
+573ecfa feat(agents): read every catalog and version through the file cache
+ src/agents/agentCatalog.ts              |  59 ++++++++
+ src/agents/materialize.ts               |  71 +++------
+ src/agents/updates.ts                   |  13 +-
+ src/agents/versionProbe.ts              |  47 ++++++
+ src/runtime/omp/ompSingleCall.ts        |  18 ++-
+ tests/agents/agentCatalog.test.ts       | 253 ++++++++++++++++++++++++++++++++
+ tests/runtime/omp/ompSingleCall.test.ts |  20 +++
+ tests/setup/relocateCatalogCache.ts     |   9 ++
+ vitest.config.ts                        |   2 +-
+ 9 files changed, 432 insertions(+), 60 deletions(-)
+diff --git a/src/agents/agentCatalog.ts b/src/agents/agentCatalog.ts
+new file mode 100644
+index 0000000..ae09e18
+--- /dev/null
++++ b/src/agents/agentCatalog.ts
+@@ -0,0 +1,59 @@
++import { catalogCacheDir, catalogKey, entryFileName, readCatalogEntry, writeCatalogEntry, type CatalogEntryV1 } from "./catalogCache.js";
++import { PROBE_CAP_MS, probeTimeoutMs } from "./catalogProbe.js";
++import { readCodexCatalog } from "./codexCatalog.js";
++import { readOmpCatalog } from "./ompModels.js";
++import type { CatalogRowV1, InstallationV1 } from "./types.js";
++import { probeVersion } from "./versionProbe.js";
++
++/**
++ * Every-agent requirement chain (Orca spec 2026-10-15 §4.1, R4/R6/R8): every catalog and version read goes through here.
++ * A hit within 30 minutes answers without spawning; a miss probes `--version` and, for omp and codex, the catalog, under
++ * one deadline (the caller's, else 30 s from now; plan issue 4), and writes an entry only when every probe answered.
++ * `log` gets the `ccloop-agent-catalog: miss|probe-failed ...` lines; `control` passes none (plan issue 3).
++ */
++export interface AgentCatalogV1 {
++  source: "cache" | "probe"; observedAt: string; version: string | null;
++  rows: CatalogRowV1[] | null; codexFeatures: string[] | null; catalogError: string | null;
++}
++export interface ReadAgentCatalogOptions {
++  deadline?: number; signal?: AbortSignal; refresh?: boolean; env?: NodeJS.ProcessEnv; log?: (line: string) => void; now?: () => number;
++}
++
++const numberOrNull = (value: unknown): boolean => value === null || typeof value === "number";
++/** Task 2 deferred item: readCatalogEntry checks only that the lists are arrays; an element of the wrong shape is a miss. */
++function wellFormed(entry: CatalogEntryV1): boolean {
++  const rows = entry.rows === null || entry.rows.every((row: unknown) => {
++    if (row === null || typeof row !== "object" || Array.isArray(row)) return false;
++    const value = row as Record<string, unknown>;
++    return typeof value.selector === "string" && typeof value.provider === "string" && numberOrNull(value.contextWindow)
++      && numberOrNull(value.maxTokens) && (value.listed === undefined || typeof value.listed === "boolean");
++  });
++  return rows && (entry.codexFeatures === null || entry.codexFeatures.every((name: unknown) => typeof name === "string"));
++}
++
++export async function readAgentCatalog(installation: InstallationV1, options: ReadAgentCatalogOptions = {}): Promise<AgentCatalogV1> {
++  const env = options.env ?? process.env, now = options.now ?? Date.now, log = options.log ?? (() => undefined);
++  const deadline = options.deadline ?? now() + PROBE_CAP_MS;
++  const dir = catalogCacheDir(env);
++  const key = await catalogKey(installation, env);
++  if (dir !== null && options.refresh !== true) {
++    const hit = await readCatalogEntry(dir, key, now());
++    if (hit !== null && wellFormed(hit)) return { source: "cache", observedAt: hit.observedAt, version: hit.version, rows: hit.rows, codexFeatures: hit.codexFeatures, catalogError: null };
++    log(`ccloop-agent-catalog: miss ${installation.kind} ${entryFileName(key).slice(0, 12)}`);
++  }
++  // The probes measure the deadline on the real clock, as runProbe does; `now` only dates the entry and its age.
++  const version = await probeVersion(installation.command, { timeoutMs: Math.min(10_000, probeTimeoutMs(deadline)), signal: options.signal });
++  let rows: CatalogRowV1[] | null = null, codexFeatures: string[] | null = null, catalogError: string | null = null;
++  try {
++    if (installation.kind === "omp") rows = await readOmpCatalog(installation, { deadline, signal: options.signal });
++    else if (installation.kind === "codex") ({ rows, features: codexFeatures } = await readCodexCatalog(installation, { deadline, signal: options.signal }));
++  } catch (error) {
++    catalogError = error instanceof Error ? error.message : String(error);
++    log(`ccloop-agent-catalog: probe-failed ${installation.kind} ${catalogError}`);
++  }
++  const observedAt = new Date(now()).toISOString();
++  if (dir !== null && version !== null && catalogError === null) {
++    await writeCatalogEntry(dir, { schema: "ccloop-agent-catalog-v1", key, observedAt, version, rows, codexFeatures });
++  }
++  return { source: "probe", observedAt, version, rows, codexFeatures, catalogError };
++}
+diff --git a/src/agents/materialize.ts b/src/agents/materialize.ts
+index 8545802..9d1647a 100644
+--- a/src/agents/materialize.ts
++++ b/src/agents/materialize.ts
+@@ -1,71 +1,30 @@
+-import { spawn } from "node:child_process";
+ import { z } from "zod";
+ import { canonicalHash } from "../control/protocol.js";
++import { readAgentCatalog } from "./agentCatalog.js";
+ import { descriptorDefaults, getDescriptor } from "./registry.js";
+ import { readOmpCatalog, readOmpModels } from "./ompModels.js";
+ import { parseInstallation } from "./table.js";
++import { probeVersion } from "./versionProbe.js";
+ import {
+   AgentError,
+   agentSelectionSchema,
+   type AgentResolutionV1,
+   type AgentsTableV1,
+   type CatalogRowV1,
+   type MaterializedAgentConfigV1,
+   type PartialSelectionV1,
+ } from "./types.js";
+ 
+-const VERSION_PATTERN = /\d+\.\d+\.\d+(?:-[\w.]+)?/;
+-const VERSION_OUTPUT_LIMIT = 64 * 1024;
+-const VERSION_TIMEOUT_MS = 10_000;
+-
+-/**
+- * Runs `<command> --version` once (spec §4.2 / §12 C6) and answers the first `x.y.z[-tag]` in its stdout, or
+- * null when it cannot be run, exits non-zero, prints no version, prints too much, or outlives the timeout.
+- * Every-agent requirement chain (Orca spec 2026-10-15 §4.3): also null when the caller's `signal` aborts it.
+- */
+-export function probeVersion(command: string[], options: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<string | null> {
+-  return new Promise((resolve) => {
+-    let settled = false;
+-    let aborted = false;
+-    let output = "";
+-    // A private process group lets timeout/overflow reap descendants that a CLI leaves behind.
+-    const child = spawn(command[0]!, [...command.slice(1), "--version"], { stdio: ["ignore", "pipe", "ignore"], env: process.env, detached: true });
+-    const finish = (value: string | null): void => {
+-      if (settled) return;
+-      settled = true;
+-      clearTimeout(timer);
+-      options.signal?.removeEventListener("abort", abortTree);
+-      resolve(value);
+-    };
+-    const abortTree = (): void => {
+-      if (aborted) return;
+-      aborted = true;
+-      if (child.pid !== undefined) {
+-        try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
+-      }
+-    };
+-    const timer = setTimeout(() => {
+-      abortTree();
+-    }, options.timeoutMs ?? VERSION_TIMEOUT_MS);
+-    options.signal?.addEventListener("abort", abortTree, { once: true });
+-    if (options.signal?.aborted) abortTree();
+-    child.stdout.on("data", (chunk: Buffer) => {
+-      output += chunk.toString("utf8");
+-      if (output.length > VERSION_OUTPUT_LIMIT) {
+-        abortTree();
+-      }
+-    });
+-    child.on("error", () => finish(null));
+-    child.on("close", (code) => finish(!aborted && code === 0 ? (VERSION_PATTERN.exec(output)?.[0] ?? null) : null));
+-  });
+-}
++// Every-agent requirement chain (Orca plan ruling P12): probeVersion lives in a leaf module so agentCatalog.ts can use it
++// without importing this file (and through it registry.ts's top-level DESCRIPTORS); re-exported for existing importers.
++export { probeVersion };
+ 
+ /**
+  * The canonical hash of the materialized config without the installation's `version` (Orca final review I-2, human
+  * ruling 2026-09-26: keep agent CLIs free to upgrade). The version stays in the sealed config.json and is still
+  * checked against `--version` at every resolution (agent-version-drift), so an in-place upgrade still stops new
+  * work until the table records the new version -- but once it does, a group frozen under the old version resolves
+  * to the same hash and can go on instead of being refused forever as control-config-hash-mismatch.
+  *
+  * *** ERRATUM (Orca ruling review R1, HUMAN RULING 2026-09-27: "command 等安装字段 => 同意移除hash") ***
+  * "without the installation's `version`" is no longer the whole list: `command`, `timeoutMs` and `killGraceMs` are
+@@ -89,53 +48,63 @@ export function agentConfigHash(config: MaterializedAgentConfigV1): string {
+  * Fills the partial selection from the installation's descriptor defaults, validates it, materializes the
+  * config and checks the installed version (spec §4.6). Fields the partial carries are echoed verbatim (M5).
+  */
+ export async function resolveAgent(
+   table: AgentsTableV1,
+   partial: PartialSelectionV1,
+   deps: {
+     probeVersion?: (command: string[]) => Promise<string | null>;
+     probeModels?: typeof readOmpModels;
+     probeCatalog?: typeof readOmpCatalog;
++    deadline?: number;
++    signal?: AbortSignal;
+   } = {},
+ ): Promise<{ config: MaterializedAgentConfigV1; resolution: AgentResolutionV1 }> {
+   if (partial.agent === undefined) throw new AgentError("agent-unselected");
+   const installation = Object.hasOwn(table.installations, partial.agent) ? table.installations[partial.agent] : undefined;
+   if (installation === undefined) throw new AgentError("agent-installation-missing", partial.agent);
+   const descriptor = getDescriptor(installation.kind);
+   const defaults = descriptorDefaults(descriptor, installation);
+   const selection = {
+     agent: partial.agent,
+     model: partial.model ?? defaults.model,
+     contextWindow: partial.contextWindow ?? defaults.contextWindow,
+   };
+   descriptor.validateSelection(selection);
+   const config: MaterializedAgentConfigV1 = { schema: "ccloop-agent-config-v1", kind: installation.kind, installation, selection };
+-  const observed = await (deps.probeVersion ?? probeVersion)(installation.command);
++  // Every-agent requirement chain (Orca spec 2026-10-15 §4.1): without injected probes, the version and the catalog come
++  // through the file cache under one deadline (plan issue 4); injected probes keep the uncached path older criteria use.
++  // A codex catalog that cannot be read is not a refusal here (plan issue 5): loop phases do not need it.
++  const injected = deps.probeVersion !== undefined || deps.probeModels !== undefined || deps.probeCatalog !== undefined;
++  const catalog = injected ? null : await readAgentCatalog(installation, { deadline: deps.deadline, signal: deps.signal });
++  const observed = catalog !== null ? catalog.version : await (deps.probeVersion ?? probeVersion)(installation.command);
+   // Orca wave-2 review I-3 (2026-09-26): a probe that observed no version at all (spawn failure, non-zero exit, no
+   // x.y.z, oversized output, timeout) may be transient, so it is NOT the named refusal agent-version-drift. It is a
+   // plain Error: `control` exits 1 (Orca treats it as unknown and retries) and `run --agents` exits 1 with a message
+   // that is not a code (Orca: reconcile-spawn). Only an observed version that differs from the table is a drift.
+   if (observed === null) {
+     throw new Error(`Could not observe the version of installation ${JSON.stringify(partial.agent)}: \`--version\` answered no x.y.z (table ${installation.version})`);
+   }
+   if (observed !== installation.version) {
+     throw new AgentError("agent-version-drift", `${partial.agent}: table ${installation.version}, observed ${observed}`);
+   }
+   // OMP single call (Orca spec 2026-10-14 §3.2): the selected catalog row decides the window, the single-call answer and
+   // its cap. `probeModels` is the selector-only injection older criteria use; its rows declare no numbers.
+   let row: CatalogRowV1 | undefined;
+   if (installation.kind === "omp") {
+-    const rows: CatalogRowV1[] = deps.probeCatalog !== undefined ? await deps.probeCatalog(installation)
+-      : deps.probeModels !== undefined
+-        ? (await deps.probeModels(installation)).map((selector) => ({ selector, provider: selector.slice(0, selector.indexOf("/")), contextWindow: null, maxTokens: null }))
+-        : await readOmpCatalog(installation);
++    let rows: CatalogRowV1[];
++    if (catalog !== null) {
++      if (catalog.catalogError !== null) throw new Error(catalog.catalogError);
++      rows = catalog.rows!;
++    } else if (deps.probeCatalog !== undefined) rows = await deps.probeCatalog(installation);
++    else if (deps.probeModels !== undefined) rows = (await deps.probeModels(installation)).map((selector) => ({ selector, provider: selector.slice(0, selector.indexOf("/")), contextWindow: null, maxTokens: null }));
++    else rows = await readOmpCatalog(installation);
+     row = rows.find((candidate) => candidate.selector === selection.model);
+     if (row === undefined) throw new AgentError("agent-selection-invalid", `OMP model is not an exact catalog selector: ${selection.model}`);
+   }
+   return {
+     config,
+     resolution: {
+       selection,
+       configHash: agentConfigHash(config),
+       timeoutMs: installation.timeoutMs,
+       killGraceMs: installation.killGraceMs,
+diff --git a/src/agents/updates.ts b/src/agents/updates.ts
+index 77b10d6..06e1b79 100644
+--- a/src/agents/updates.ts
++++ b/src/agents/updates.ts
+@@ -1,16 +1,16 @@
+ import { randomUUID } from "node:crypto";
+ import { constants } from "node:fs";
+ import { access, realpath, stat } from "node:fs/promises";
+ import { draftCommandForCandidate, draftInstallationForCandidate, findAgentCandidatePaths } from "./detect.js";
+ import { probeVersion } from "./materialize.js";
+-import { readOmpModels } from "./ompModels.js";
++import { readAgentCatalog } from "./agentCatalog.js";
+ import { assertAgentsTableLocation, parseAgentsTable, readAgentsTableSnapshot } from "./table.js";
+ import { AgentError, type AgentsTableV1, type InstallationV1 } from "./types.js";
+ import { assertUpdatesRoot, cleanupOperationTemporary, readOwnedJson, replaceTableDurably, sha256, withTableUpdateLock, writeOwnedJson } from "./updateReceipt.js";
+ import { testCrashPoint } from "../control/testCrashPoint.js";
+ import { homedir } from "node:os";
+ 
+ const HASH = /^[a-f0-9]{64}$/;
+ const ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
+ function fail(detail: string): never { throw new AgentError("agent-installation-update-invalid", detail); }
+ function conflict(detail: string): never { throw new AgentError("agent-installation-update-conflict", detail); }
+@@ -129,36 +129,41 @@ export async function previewAgentInstallations(tablePath: string, input: { home
+   if (sha256((await readAgentsTableSnapshot(tablePath)).bytes) !== observation.baseTableHash) stale();
+   const root = await assertUpdatesRoot(tablePath, true);
+   await writeOwnedJson(root, `preview-${preview.previewId}.json`, preview);
+   return preview;
+ }
+ 
+ function sameRequest(a: ApplyAgentDetection, b: ApplyAgentDetection): boolean {
+   return a.opId === b.opId && a.requestDigest === b.requestDigest && a.previewId === b.previewId && a.baseTableHash === b.baseTableHash && JSON.stringify(a.acceptedChangeIds) === JSON.stringify(b.acceptedChangeIds);
+ }
+ 
+-async function ompUnavailable(installation: InstallationV1): Promise<DetectionChange["unavailableReason"]> {
++async function ompUnavailable(installation: InstallationV1, refresh = false): Promise<DetectionChange["unavailableReason"]> {
+   if (installation.kind !== "omp") return undefined;
+   try {
+-    return (await readOmpModels(installation)).includes(installation.defaultModel as string) ? undefined : "omp-frozen-model-unavailable";
++    // Every-agent requirement chain (Orca spec 2026-10-15 §4.1): read through the catalog cache like every other reader.
++    const answer = await readAgentCatalog(installation, { refresh });
++    if (answer.catalogError !== null) return "omp-frozen-model-unavailable";
++    return answer.rows!.some((row) => row.selector === installation.defaultModel) ? undefined : "omp-frozen-model-unavailable";
+   } catch { return "omp-frozen-model-unavailable"; }
+ }
+ 
+ async function recheck(change: DetectionChange, probe: typeof probeVersion, table: AgentsTableV1): Promise<void> {
+   if (change.unavailableReason !== undefined) fail(change.unavailableReason);
+   const real = await exactRealpath(change.command);
+   if (real !== change.realpath) stale();
+   const version = await probe(change.command);
+   if (version !== change.version) stale();
+   const old = table.installations[change.installationId];
+   const selected = change.kind === "addition" ? change.installation : old === undefined ? undefined : { ...old, command: change.command as [string, ...string[]], version: change.version };
+-  if (selected !== undefined && await ompUnavailable(selected)) fail("omp-frozen-model-unavailable");
++  // Every-agent requirement chain (Task 4 ruling, Orca session a852f96a): Apply is a deliberate owner action that must see the
++  // live catalog -- the cache key cannot see a provider-side or state change since preview -- so it re-probes.
++  if (selected !== undefined && await ompUnavailable(selected, true)) fail("omp-frozen-model-unavailable");
+ }
+ 
+ export async function applyAgentInstallations(tablePath: string, request: ApplyAgentDetection, deps: { probe?: typeof probeVersion } = {}): Promise<AgentDetectionReceipt> {
+   validateRequest(request);
+   await assertAgentsTableLocation(tablePath);
+   // The only caller-supplied location is the control command's configured --agents table, never a payload path.
+   return withTableUpdateLock(tablePath, request.opId, async (root, assertHeld) => {
+     assertHeld();
+     const receiptName = `receipt-${request.opId}.json`;
+     const intentName = `intent-${request.opId}.json`;
+diff --git a/src/agents/versionProbe.ts b/src/agents/versionProbe.ts
+new file mode 100644
+index 0000000..3d733a5
+--- /dev/null
++++ b/src/agents/versionProbe.ts
+@@ -0,0 +1,47 @@
++import { spawn } from "node:child_process";
++
++const VERSION_PATTERN = /\d+\.\d+\.\d+(?:-[\w.]+)?/;
++const VERSION_OUTPUT_LIMIT = 64 * 1024;
++const VERSION_TIMEOUT_MS = 10_000;
++
++/**
++ * Runs `<command> --version` once (spec §4.2 / §12 C6) and answers the first `x.y.z[-tag]` in its stdout, or
++ * null when it cannot be run, exits non-zero, prints no version, prints too much, or outlives the timeout.
++ * Every-agent requirement chain (Orca spec 2026-10-15 §4.3): also null when the caller's `signal` aborts it.
++ */
++export function probeVersion(command: string[], options: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<string | null> {
++  return new Promise((resolve) => {
++    let settled = false;
++    let aborted = false;
++    let output = "";
++    // A private process group lets timeout/overflow reap descendants that a CLI leaves behind.
++    const child = spawn(command[0]!, [...command.slice(1), "--version"], { stdio: ["ignore", "pipe", "ignore"], env: process.env, detached: true });
++    const finish = (value: string | null): void => {
++      if (settled) return;
++      settled = true;
++      clearTimeout(timer);
++      options.signal?.removeEventListener("abort", abortTree);
++      resolve(value);
++    };
++    const abortTree = (): void => {
++      if (aborted) return;
++      aborted = true;
++      if (child.pid !== undefined) {
++        try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
++      }
++    };
++    const timer = setTimeout(() => {
++      abortTree();
++    }, options.timeoutMs ?? VERSION_TIMEOUT_MS);
++    options.signal?.addEventListener("abort", abortTree, { once: true });
++    if (options.signal?.aborted) abortTree();
++    child.stdout.on("data", (chunk: Buffer) => {
++      output += chunk.toString("utf8");
++      if (output.length > VERSION_OUTPUT_LIMIT) {
++        abortTree();
++      }
++    });
++    child.on("error", () => finish(null));
++    child.on("close", (code) => finish(!aborted && code === 0 ? (VERSION_PATTERN.exec(output)?.[0] ?? null) : null));
++  });
++}
+diff --git a/src/runtime/omp/ompSingleCall.ts b/src/runtime/omp/ompSingleCall.ts
+index 8b1f28d..32c7e13 100644
+--- a/src/runtime/omp/ompSingleCall.ts
++++ b/src/runtime/omp/ompSingleCall.ts
+@@ -1,13 +1,14 @@
+ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+ import { join } from "node:path";
+-import { ompSingleCallExecution, readOmpCatalog } from "../../agents/ompModels.js";
++import { readAgentCatalog } from "../../agents/agentCatalog.js";
++import { ompSingleCallExecution } from "../../agents/ompModels.js";
+ import type { CatalogRowV1, MaterializedAgentConfigV1 } from "../../agents/types.js";
+ import type { ModelUsageV1 } from "../../control/usage.js";
+ import { SingleCallOutputInvalid, type SingleCallRequest, type SingleCallResult, type UsageEvidence } from "../types.js";
+ import { assistantUsage } from "./ompProtocol.js";
+ import { singleCallSystemPrompt } from "./phasePrompt.js";
+ import { runOmpProcess, type OmpPhaseOutcome } from "./runOmpPhase.js";
+ 
+ /**
+  * OMP single call (Orca spec 2026-10-14 §3.3.3): switches off session auto-retry, model fallback, the loop guard, the
+  * advisor and auto-compaction. Keys confirmed against omp 18.10.1 in plan Task 0 (spec §7), applied on top of the
+@@ -25,25 +26,34 @@ export class OmpSingleCallRefused extends Error {
+   readonly neverStarted = true;
+   constructor(readonly code: "omp-single-call-cap-exceeded" | "omp-single-call-unavailable", detail: string) {
+     super(`${code}: ${detail}`);
+     this.name = "OmpSingleCallRefused";
+   }
+ }
+ 
+ /**
+  * §3.3.1-§3.3.4: re-reads the selected catalog row immediately before spawning and runs only when it still answers "v1"
+  * and its cap is at most the request's maxOutputTokens; then one `omp -p` with tools, rules and LSP off under the overlay.
++ *
++ * *** ERRATUM (Orca spec 2026-10-15 §4.1, R8) -- "re-reads" now reads through the catalog cache (30-minute lifetime,
++ * config-stamped key); a cap raised on the provider side without a config change is not seen until the entry expires. ***
+  */
+ export async function runOmpSingleCall(config: MaterializedAgentConfigV1, request: SingleCallRequest): Promise<OmpPhaseOutcome> {
+-  let rows: CatalogRowV1[];
+-  try { rows = await readOmpCatalog(config.installation); }
+-  catch (error) { throw new OmpSingleCallRefused("omp-single-call-unavailable", `catalog ${error instanceof Error ? error.message : String(error)}`); }
++  // Every-agent requirement chain (Orca spec 2026-10-15 §4.1, §4.3, R6, R8): the re-check reads through the same cache key
++  // and the call's own deadline and signal; a provider-side cap change without a config change is the accepted risk.
++  // The worker's stderr is not the control wire, so it says whether the cache missed or the probe failed (plan issue 3).
++  const catalog = await readAgentCatalog(config.installation, {
++    deadline: Date.now() + Math.min(request.timeoutMs, config.installation.timeoutMs), signal: request.signal,
++    log: (line) => { process.stderr.write(`${line}\n`); },
++  });
++  if (catalog.catalogError !== null || catalog.rows === null) throw new OmpSingleCallRefused("omp-single-call-unavailable", `catalog ${catalog.catalogError ?? "absent"}`);
++  const rows: CatalogRowV1[] = catalog.rows;
+   const row = rows.find((candidate) => candidate.selector === config.selection.model);
+   if (row === undefined || row.maxTokens === null || ompSingleCallExecution(row) !== "v1") throw new OmpSingleCallRefused("omp-single-call-unavailable", config.selection.model);
+   if (row.maxTokens > request.maxOutputTokens) throw new OmpSingleCallRefused("omp-single-call-cap-exceeded", `catalog maxTokens ${row.maxTokens} > maxOutputTokens ${request.maxOutputTokens}`);
+   const root = join(request.runDir, "omp", "1", "single-call");
+   await mkdir(root, { recursive: true, mode: 0o700 });
+   const evidenceDir = await mkdtemp(join(root, "call-"));
+   const systemPath = join(evidenceDir, "system-prompt.md");
+   const overlayPath = join(evidenceDir, "config-overlay.yml");
+   await Promise.all([
+     writeFile(systemPath, singleCallSystemPrompt(request.responseSchema), { mode: 0o600 }),
+diff --git a/tests/agents/agentCatalog.test.ts b/tests/agents/agentCatalog.test.ts
+new file mode 100644
+index 0000000..7cf6ff6
+--- /dev/null
++++ b/tests/agents/agentCatalog.test.ts
+@@ -0,0 +1,253 @@
++import { spawnSync } from "node:child_process";
++import { existsSync, readFileSync } from "node:fs";
++import { mkdir, mkdtemp, readFile, readdir, realpath, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join, resolve } from "node:path";
++import { describe, expect, it, vi } from "vitest";
++import { readAgentCatalog } from "../../src/agents/agentCatalog.js";
++import { catalogKey, entryFileName } from "../../src/agents/catalogCache.js";
++import { runControlCommand } from "../../src/control/command.js";
++import { acceptStart } from "../../src/control/accept.js";
++import { resolveAgent } from "../../src/agents/materialize.js";
++import { applyAgentInstallations, previewAgentInstallations } from "../../src/agents/updates.js";
++import type { InstallationV1 } from "../../src/agents/types.js";
++import { codexInstallation, singleCallEnvelope, writeAgentsTable } from "../control/agentsFixture.js";
++
++// Every-agent requirement chain (Orca spec 2026-10-15 §4.1, R4; criterion 1): with a warm cache, capabilities and accept
++// for an omp or codex selection spawn no catalog and no version process -- read from the fakes' own counts.
++const FAKE_OMP = resolve("tests/fixtures/fake-omp.mjs"), FAKE_CODEX = resolve("tests/fixtures/fake-codex.mjs");
++const count = (path: string) => (existsSync(path) ? readFileSync(path, "utf8").trim().split("\n").length : 0);
++async function table() {
++  const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-agent-catalog-")));
++  const ompMarker = join(dir, "omp-marker"), codexMarker = join(dir, "codex-marker");
++  const omp = join(dir, "omp");
++  await writeFile(omp, `#!/bin/sh\nexec '${process.execPath}' '${FAKE_OMP}' '${ompMarker}' "$@"\n`, { mode: 0o700 });
++  const codex = await codexInstallation({ command: [process.execPath, FAKE_CODEX, "integration", codexMarker], sandbox: "read-only", budgetMode: "soft", timeoutMs: 60_000, killGraceMs: 100 });
++  const written = await writeAgentsTable({
++    omp: { kind: "omp", command: [omp], version: "18.10.1", configDir: null, timeoutMs: 60_000, killGraceMs: 50, defaultModel: "gateway/model-a", profile: null },
++    codex,
++  }, dir);
++  return { dir, ...written, ompMarker, codexMarker };
++}
++const spawns = (marker: string) => count(`${marker}.catalog-calls`) + count(`${marker}.version-calls`);
++
++describe("criterion 1: a warm cache spawns nothing (spec §4.1)", { timeout: 30_000 }, () => {
++  it("capabilities for omp and codex probe once, then never again", async () => {
++    const t = await table();
++    for (const agent of ["omp", "codex"]) {
++      expect((await runControlCommand(["capabilities", "--agents", t.path], JSON.stringify({ agent: { agent } }))).code).toBe(0);
++    }
++    const warm = [spawns(t.ompMarker), spawns(t.codexMarker)];
++    // omp 2 = 1 version + 1 models; codex 4 = 1 version by codexInstallation (agentsFixture.ts:28-41) + 1 version + debug-models + features-list.
++    expect(warm).toEqual([2, 4]);
++    for (const agent of ["omp", "codex", "omp", "codex"]) {
++      expect((await runControlCommand(["capabilities", "--agents", t.path], JSON.stringify({ agent: { agent } }))).code).toBe(0);
++    }
++    expect([spawns(t.ompMarker), spawns(t.codexMarker)]).toEqual(warm);
++  });
++
++  // codex joins this loop in Task 6 (only-add), once codex answers v1-soft and accept admits its single-call work.
++  it("accept for omp probes nothing on a warm key", async () => {
++    const t = await table();
++    for (const agent of ["omp"] as const) {
++      const { resolution } = await resolveAgent(t.table, { agent });
++      const before = spawns(agent === "omp" ? t.ompMarker : t.codexMarker);
++      const sourceDir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-agent-catalog-accept-")));
++      const status = await acceptStart(singleCallEnvelope({ sourceDir, agent: resolution.selection, configHash: resolution.configHash }), {
++        agentsTablePath: t.path, workerCommand: [resolve("node_modules/.bin/tsx"), resolve("tests/fixtures/control-worker.mjs")], receiptTimeoutMs: 2_000,
++      });
++      expect(status.kind).toBe("accepted");
++      expect(spawns(agent === "omp" ? t.ompMarker : t.codexMarker)).toBe(before);
++    }
++  });
++
++  it("refresh skips the read, probes, and rewrites", async () => {
++    const t = await table();
++    const installation = t.table.installations.omp!;
++    expect((await readAgentCatalog(installation)).source).toBe("probe");
++    expect((await readAgentCatalog(installation)).source).toBe("cache");
++    expect((await readAgentCatalog(installation, { refresh: true })).source).toBe("probe");
++    expect(count(`${t.ompMarker}.catalog-calls`)).toBe(2);
++  });
++
++  it("does not write an entry when a probe failed, and reports the omp failure as catalogError", async () => {
++    const t = await table();
++    await writeFile(`${t.ompMarker}.models.json`, JSON.stringify({ exitCode: 3, stderr: "boom\n" }));
++    const answer = await readAgentCatalog(t.table.installations.omp!, { env: { ...process.env, CCLOOP_CACHE_DIR: join(t.dir, "cache") } });
++    expect(answer.catalogError).toMatch(/^omp-model-catalog-unavailable: exit 3 · stage exit · elapsedMs \d+ · stderr: boom$/);
++    expect(existsSync(join(t.dir, "cache"))).toBe(false);
++  });
++
++  it("writes under a relocated HOME's default path only when CCLOOP_CACHE_DIR and XDG_CACHE_HOME are unset (§4.2)", async () => {
++    const t = await table();
++    const home = join(t.dir, "home");
++    const env = { PATH: process.env.PATH, HOME: home, TMPDIR: process.env.TMPDIR };
++    const run = spawnSync(process.execPath, [resolve("dist/cli.js"), "control", "capabilities", "--agents", t.path], { input: JSON.stringify({ agent: { agent: "omp" } }), env, encoding: "utf8" });
++    expect(run.status, run.stderr).toBe(0);
++    expect((await readdir(join(home, ".cache", "ccloop", "agent-catalog"))).length).toBe(1);
++    const redirected = join(t.dir, "redirected");
++    const again = spawnSync(process.execPath, [resolve("dist/cli.js"), "control", "capabilities", "--agents", t.path], { input: JSON.stringify({ agent: { agent: "codex" } }), env: { ...env, CCLOOP_CACHE_DIR: redirected }, encoding: "utf8" });
++    expect(again.status, again.stderr).toBe(0);
++    expect((await readdir(join(home, ".cache", "ccloop", "agent-catalog"))).length).toBe(1);
++    expect((await readdir(redirected)).length).toBe(1);
++  });
++
++  it("reads the omp spawn-time re-check through the cache (R8)", async () => {
++    const t = await table();
++    await readAgentCatalog(t.table.installations.omp!);
++    const before = count(`${t.ompMarker}.catalog-calls`);
++    const { runOmpSingleCall } = await import("../../src/runtime/omp/ompSingleCall.js");
++    const runDir = join(t.dir, "run"), cwd = join(runDir, "cwd");
++    await (await import("node:fs/promises")).mkdir(cwd, { recursive: true, mode: 0o700 });
++    const config = { schema: "ccloop-agent-config-v1" as const, kind: "omp", installation: t.table.installations.omp!, selection: { agent: "omp", model: "gateway/model-a", contextWindow: "agent-default" as const } };
++    await runOmpSingleCall(config, { prompt: "p", responseSchema: { type: "object" }, maxOutputTokens: 8192, cwd, runDir, timeoutMs: 30_000 });
++    expect(count(`${t.ompMarker}.catalog-calls`)).toBe(before);
++  });
++});
++
++// Task 4 rulings (Orca session a852f96a, SDD progress.md): what a person meets when the cache is damaged, absent or slow,
++// and which process may say so on stderr. Each test is the one its named mutation turns red.
++describe("readAgentCatalog under damage, no cache, a shared deadline, and logging (Task 4 rulings)", { timeout: 30_000 }, () => {
++  const cacheEnv = (dir: string): NodeJS.ProcessEnv => ({ ...process.env, CCLOOP_CACHE_DIR: join(dir, "cache") });
++  const entryPath = async (installation: InstallationV1, env: NodeJS.ProcessEnv) => join(env.CCLOOP_CACHE_DIR!, entryFileName(await catalogKey(installation, env)));
++  const capabilities = (t: { path: string }, agent: string, env: NodeJS.ProcessEnv, cwd?: string) =>
++    spawnSync(process.execPath, [resolve("dist/cli.js"), "control", "capabilities", "--agents", t.path], { input: JSON.stringify({ agent: { agent } }), env, cwd, encoding: "utf8" });
++
++  // Task 2 deferred item: readCatalogEntry checks only that rows/codexFeatures are arrays; a hit with a malformed element
++  // would hand resolution a row it cannot read, so the consumer treats it as a miss and the probe overwrites it.
++  it.each([
++    ["omp", "rows", [1]],
++    ["omp", "rows", [{ selector: 1, provider: "gateway", contextWindow: 200000, maxTokens: 8192 }]],
++    ["codex", "rows", [{ selector: "gpt-6-sol", provider: "codex", contextWindow: "272000", maxTokens: null, listed: true }]],
++    ["codex", "codexFeatures", [1]],
++  ] as const)("a %s entry whose %s elements have the wrong shape is a miss, overwritten by the probe", async (agent, field, bad) => {
++    const t = await table();
++    const installation = t.table.installations[agent]!, env = cacheEnv(t.dir);
++    expect((await readAgentCatalog(installation, { env })).source).toBe("probe");
++    const path = await entryPath(installation, env);
++    const good = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
++    await writeFile(path, JSON.stringify({ ...good, [field]: bad }));
++    expect((await readAgentCatalog(installation, { env })).source).toBe("probe");
++    expect((JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>)[field]).toEqual(good[field]);
++    expect((await readAgentCatalog(installation, { env })).source).toBe("cache");
++  });
++
++  // RF4 (plan Review Focus 4), consumer half: a clock moved back, or a file whose stored key is not its name's key.
++  it.each([
++    ["dated in the future", (entry: Record<string, unknown>) => ({ ...entry, observedAt: new Date(Date.now() + 3_600_000).toISOString() })],
++    ["whose stored key differs from its file name's key", (entry: Record<string, unknown>) => ({ ...entry, key: { ...(entry.key as object), command: ["/elsewhere/omp"] } })],
++  ] as const)("RF4: an entry %s is a miss and the next probe overwrites it", async (_label, tamper) => {
++    const t = await table();
++    const installation = t.table.installations.omp!, env = cacheEnv(t.dir);
++    await readAgentCatalog(installation, { env });
++    const path = await entryPath(installation, env);
++    const good = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
++    await writeFile(path, JSON.stringify(tamper(good)));
++    expect((await readAgentCatalog(installation, { env })).source).toBe("probe");
++    const rewritten = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
++    expect(rewritten.key).toEqual(good.key);
++    expect(Date.parse(rewritten.observedAt as string)).toBeLessThanOrEqual(Date.now());
++    expect(count(`${t.ompMarker}.catalog-calls`)).toBe(2);
++  });
++
++  // RF3 (plan Review Focus 3): launchd/systemd-like environments -- no HOME, no XDG_CACHE_HOME, a relative CCLOOP_CACHE_DIR.
++  it("RF3: with no usable cache dir it probes every time and writes nothing into the working directory", async () => {
++    const t = await table();
++    const cwd = join(t.dir, "cwd");
++    await mkdir(cwd);
++    const env = { PATH: process.env.PATH, TMPDIR: process.env.TMPDIR, CCLOOP_CACHE_DIR: "relative-cache" };
++    for (const _ of [1, 2]) {
++      const run = capabilities(t, "omp", env, cwd);
++      expect(run.status, run.stderr).toBe(0);
++    }
++    expect(count(`${t.ompMarker}.catalog-calls`)).toBe(2);
++    expect(await readdir(cwd)).toEqual([]);
++  });
++
++  // Plan issue 4: Orca's port gives ccloop 60 s; a cold resolution without a caller deadline must end inside one 30 s
++  // window, so the version probe and the catalog probes share it instead of each starting its own. `now` moves "30 s from
++  // now" to one second from the real clock; the wrapper's `--version` takes 3 s.
++  it("one deadline -- the caller's, else 30 s from now -- bounds the version probe and the catalog probe together (plan issue 4)", async () => {
++    const t = await table();
++    const slow = join(t.dir, "omp-slow");
++    await writeFile(slow, `#!/bin/sh\ncase " $* " in *" --version "*) sleep 3;; esac\nexec '${process.execPath}' '${FAKE_OMP}' '${t.ompMarker}' "$@"\n`, { mode: 0o700 });
++    const installation: InstallationV1 = { ...t.table.installations.omp!, command: [slow] };
++    const started = Date.now();
++    const answer = await readAgentCatalog(installation, { env: cacheEnv(t.dir), now: () => Date.now() - 29_000 });
++    expect(answer.version).toBeNull();
++    expect(answer.catalogError).toMatch(/^omp-model-catalog-unavailable: timeout \d+ms · stage timeout · elapsedMs \d+$/);
++    expect(Date.now() - started).toBeLessThan(2_900);
++    const { table: slowTable } = await writeAgentsTable({ omp: installation });
++    await expect(resolveAgent(slowTable, { agent: "omp" }, { deadline: Date.now() + 1_000 })).rejects.toThrow(/^Could not observe the version of installation "omp"/);
++  });
++
++  // Plan issue 5: loop phases do not need the codex catalog, so a transient `debug models` failure must not stop codex
++  // work; omp still refuses, since its model must be an exact catalog selector.
++  it("a codex catalog that cannot be read degrades the resolution; an omp one refuses it (plan issue 5)", async () => {
++    const t = await table();
++    await writeFile(`${t.codexMarker}.catalog.json`, JSON.stringify({ exitCode: 3 }));
++    await writeFile(`${t.ompMarker}.models.json`, JSON.stringify({ exitCode: 3 }));
++    const { resolution } = await resolveAgent(t.table, { agent: "codex" });
++    expect(count(`${t.codexMarker}.catalog-calls`)).toBe(1);
++    expect(resolution.capabilities.contextWindowTokens).toBeNull();
++    expect(resolution.singleCallExecution).toBeNull();
++    await expect(resolveAgent(t.table, { agent: "omp" })).rejects.toThrow(/^omp-model-catalog-unavailable: exit 3 · stage exit · elapsedMs \d+$/);
++  });
++
++  // Plan issue 3: Orca reads ccloop's code from the start of `control`'s stderr, so the wire path prints no cache line --
++  // cold, or with a failing probe (then stderr is the failure alone).
++  it("control prints no cache or probe line on its stderr, cold or failing (plan issue 3)", async () => {
++    const t = await table();
++    const cold = capabilities(t, "omp", cacheEnv(t.dir));
++    expect(cold.status, cold.stderr).toBe(0);
++    expect(cold.stderr).toBe("");
++    expect((await readdir(join(t.dir, "cache"))).length).toBe(1);
++    await writeFile(`${t.ompMarker}.models.json`, JSON.stringify({ exitCode: 3 }));
++    const failing = capabilities(t, "omp", { ...process.env, CCLOOP_CACHE_DIR: join(t.dir, "cold") });
++    expect(failing.status).not.toBe(0);
++    expect(failing.stderr).toMatch(/^omp-model-catalog-unavailable: exit 3 · stage exit · elapsedMs \d+\n?$/);
++  });
++
++  // Task 4 ruling (Orca session a852f96a): preview may answer from the cache, but Apply re-probes the omp catalog, since
++  // the key cannot see a catalog change since preview (ompUpdates.test.ts "refuses Apply if the model vanishes...").
++  it("Apply re-probes the omp catalog that preview cached", async () => {
++    const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-agent-catalog-apply-")));
++    const marker = join(dir, "omp-marker"), omp = join(dir, "omp"), tablePath = join(dir, "agents.json");
++    await writeFile(omp, `#!/bin/sh\nexec '${process.execPath}' '${FAKE_OMP}' '${marker}' "$@"\n`, { mode: 0o700 });
++    const work = { kind: "omp", command: [omp], version: "18.10.0", configDir: null, timeoutMs: 60_000, killGraceMs: 50, defaultModel: "gateway/model-a", profile: null };
++    await writeFile(tablePath, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: { work } }), { mode: 0o600 });
++    const preview = await previewAgentInstallations(tablePath, { home: dir, path: dir });
++    const change = preview.changes.find((row) => row.kind === "version" && row.installationId === "work");
++    expect(change?.unavailableReason).toBeUndefined();
++    const before = count(`${marker}.catalog-calls`);
++    await applyAgentInstallations(tablePath, { opId: "apply-reprobes", requestDigest: "a".repeat(64), previewId: preview.previewId, baseTableHash: preview.baseTableHash, acceptedChangeIds: [change!.changeId] });
++    expect(count(`${marker}.catalog-calls`)).toBe(before + 1);
++  });
++
++  // Plan issue 3 / Task 4 ruling: the control worker's spawn-time re-check (runOmpSingleCall, the code the worker runs for
++  // an omp single call) says on its own stderr whether it missed the cache or its probe failed, as `agents models` will.
++  it("the worker's spawn-time re-check logs a miss, and a failed probe, on its own stderr (plan issue 3)", async () => {
++    const { runOmpSingleCall, OmpSingleCallRefused } = await import("../../src/runtime/omp/ompSingleCall.js");
++    const call = async (t: Awaited<ReturnType<typeof table>>) => {
++      const runDir = join(t.dir, "run"), cwd = join(runDir, "cwd");
++      await mkdir(cwd, { recursive: true, mode: 0o700 });
++      const config = { schema: "ccloop-agent-config-v1" as const, kind: "omp", installation: t.table.installations.omp!, selection: { agent: "omp", model: "gateway/model-a", contextWindow: "agent-default" as const } };
++      return runOmpSingleCall(config, { prompt: "p", responseSchema: { type: "object" }, maxOutputTokens: 8192, cwd, runDir, timeoutMs: 30_000 });
++    };
++    const fine = await table(), failing = await table();
++    await writeFile(`${failing.ompMarker}.models.json`, JSON.stringify({ exitCode: 3 }));
++    const writes: string[] = [];
++    const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { writes.push(String(chunk)); return true; });
++    let refusal: unknown;
++    try {
++      await call(fine);
++      await call(failing).catch((error: unknown) => { refusal = error; });
++    } finally { spy.mockRestore(); }
++    expect(refusal).toBeInstanceOf(OmpSingleCallRefused);
++    expect(writes.filter((line) => line.startsWith("ccloop-agent-catalog:"))).toEqual([
++      expect.stringMatching(/^ccloop-agent-catalog: miss omp [0-9a-f]{12}\n$/),
++      expect.stringMatching(/^ccloop-agent-catalog: miss omp [0-9a-f]{12}\n$/),
++      expect.stringMatching(/^ccloop-agent-catalog: probe-failed omp omp-model-catalog-unavailable: exit 3 · stage exit · elapsedMs \d+\n$/),
++    ]);
++  });
++});
+diff --git a/tests/runtime/omp/ompSingleCall.test.ts b/tests/runtime/omp/ompSingleCall.test.ts
+index 7ff5321..689481e 100644
+--- a/tests/runtime/omp/ompSingleCall.test.ts
++++ b/tests/runtime/omp/ompSingleCall.test.ts
+@@ -1,15 +1,16 @@
+ import { existsSync } from "node:fs";
+ import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+ import { tmpdir } from "node:os";
+ import { dirname, join, resolve } from "node:path";
+ import { afterEach, describe, expect, it } from "vitest";
++import { readAgentCatalog } from "../../../src/agents/agentCatalog.js";
+ import type { MaterializedAgentConfigV1 } from "../../../src/agents/types.js";
+ import { OmpAdapter } from "../../../src/runtime/omp/ompAdapter.js";
+ import { OMP_SINGLE_CALL_OVERLAY, decodeOmpSingleCall, parseSingleCallObject, runOmpSingleCall } from "../../../src/runtime/omp/ompSingleCall.js";
+ import { observedTokensOf, SingleCallOutputInvalid, type SingleCallRequest } from "../../../src/runtime/types.js";
+ 
+ // OMP single call (Orca spec 2026-10-14-omp-single-call-design.md §3.3). Orca books the catalog cap as the call's output
+ // bound; omp cannot take a per-call cap, so a cap that rose above the request's must refuse the call before anything is
+ // sent (criterion 3), and the call must run with every tool, rule and LSP off, under the overlay that switches omp's own
+ // retries and model switches off (criterion 4) -- otherwise one booked request could become several, or a tool run.
+ const FAKE_OMP = resolve("tests/fixtures/fake-omp.mjs");
+@@ -215,28 +216,47 @@ describe("OmpAdapter.singleCall (§3.3, §3.3.7)", () => {
+     await expect(new OmpAdapter(w.config).singleCall(w.request())).resolves.toMatchObject({ output: { answer: "42" }, tokenUsage: 14 });
+   });
+ 
+   it("books null when omp exits non-zero after a complete message, and uses none of it", async () => {
+     const w = await ompWorld({ single: { exitCode: 3 } });
+     const failure = await failureOf(new OmpAdapter(w.config).singleCall(w.request()));
+     expect((failure as Error).message).toMatch(/^omp-exit-error: /);
+     expect(observedTokensOf(failure)).toBeNull();
+   });
+ 
++  // Ruling: human named this criterion in Orca session a852f96a, 2026-10-16 — the spawn-time re-check shares the call's
++  // deadline (spec 2026-10-15 §4.3, R6), so a cold cache spends it; the cold case is pinned by the next criterion.
++  // Rewritten whole: the cache is warmed first, so the 300 ms belong to the call itself, which must be spawned and stopped.
+   it("stops the call at the request's time limit when it is below the installation's", async () => {
+     const w = await ompWorld({ single: { hang: true }, installationTimeoutMs: 30_000 });
++    expect((await readAgentCatalog(w.config.installation)).catalogError).toBeNull();
+     const started = Date.now();
+     const failure = await failureOf(new OmpAdapter(w.config).singleCall(w.request({ timeoutMs: 300 })));
+     expect((failure as Error).message).toMatch(/^omp-timeout: /);
+     expect(Date.now() - started).toBeLessThan(10_000);
+     expect(observedTokensOf(failure)).toBeNull();
++    expect(await readFile(`${w.marker}.calls`, "utf8")).toBe("single-call\n");
+   });
++
++  // Every-agent requirement chain (Orca spec 2026-10-15 §4.3, R6): on a cold cache the re-check's probes share the call's
++  // own deadline; a probe that outlives it refuses the call before anything is sent, naming stage and elapsed time.
++  it("refuses before spawning, naming stage and elapsed time, when a cold re-check outlives the call's deadline", async () => {
++    const w = await ompWorld({ installationTimeoutMs: 30_000 });
++    await writeFile(`${w.marker}.models.json`, JSON.stringify({ sleepMs: 10_000 }));
++    const started = Date.now();
++    const failure = await failureOf(runOmpSingleCall(w.config, w.request({ timeoutMs: 1_000 })));
++    expect(failure).toMatchObject({ code: "omp-single-call-unavailable", neverStarted: true });
++    expect((failure as Error).message).toMatch(/^omp-single-call-unavailable: catalog omp-model-catalog-unavailable: timeout \d+ms · stage timeout · elapsedMs \d+$/);
++    expect(Date.now() - started).toBeLessThan(5_000);
++    expect(observedTokensOf(failure)).toBe(0);
++    expect(existsSync(`${w.marker}.calls`)).toBe(false);
++  }, 20_000);
+ });
+ 
+ // Fix round 1 (Orca session 02f047f6, 2026-10-14). Real omp 18.10.1 (measured in Task 0) prints the assistant message
+ // three times -- message_start, message_end and turn_end all carry it with the same usage. Only message_end is the
+ // request; counting every event that carries an assistant message would book one call two or three times over (and
+ // refuse it as "multiple requests").
+ describe("decode, real omp event shape (§3.3.5, §3.3.7)", () => {
+   it("decodes the real stream's one assistant message once, with its usage not doubled", () => {
+     const user = { role: "user", content: [{ type: "text", text: "Estimate the plan below." }] };
+     const answer = message();
+diff --git a/tests/setup/relocateCatalogCache.ts b/tests/setup/relocateCatalogCache.ts
+new file mode 100644
+index 0000000..5e039d6
+--- /dev/null
++++ b/tests/setup/relocateCatalogCache.ts
+@@ -0,0 +1,9 @@
++import { mkdtempSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++
++/**
++ * Every-agent requirement chain (Orca spec 2026-10-15 §4.2): every test file, and every process it spawns, caches agent
++ * catalogs under this file's scoped TMPDIR (scopeTmpdir.ts removes it), never in the person's ~/.cache.
++ */
++process.env.CCLOOP_CACHE_DIR = mkdtempSync(join(tmpdir(), "ccache-"));
+diff --git a/vitest.config.ts b/vitest.config.ts
+index 1ca481b..19d37ea 100644
+--- a/vitest.config.ts
++++ b/vitest.config.ts
+@@ -1,9 +1,9 @@
+ import { defineConfig } from "vitest/config";
+ 
+ export default defineConfig({
+   test: {
+     environment: "node",
+     include: ["tests/**/*.test.ts"],
+-    setupFiles: ["tests/setup/scopeTmpdir.ts"],
++    setupFiles: ["tests/setup/scopeTmpdir.ts", "tests/setup/relocateCatalogCache.ts"],
+   },
+ });

@@ -1,0 +1,207 @@
+36e00586 fix(control): refuse an unreadable estimate contract; newest usage event decides the overrun
+diff --git a/src/panel/controlViews.ts b/src/panel/controlViews.ts
+index 84454b15..2b887a8e 100644
+--- a/src/panel/controlViews.ts
++++ b/src/panel/controlViews.ts
+@@ -825,24 +825,28 @@ function continuableRun(store: ControlStore, run: z.infer<typeof persistedRunSch
+   if (dimensions.some((dimension) => run.remaining.work[dimension] !== null && run.remaining.work[dimension]! <= 0)) return false;
+   const row = store.db.prepare("SELECT body FROM checkpoints WHERE id=? AND run_id=?").get(run.checkpointId, run.runId);
+   return row !== undefined && (parseJson(row.body, `checkpoint-invalid:${run.checkpointId}`) as { result?: unknown }).result === "partial";
+ }
+ 
+ /** Spec 2026-10-15 §6.2 and plan issue 11: every estimate or requirement single call; computed from the stored usage event. */
+ function outputBoundView(store: ControlStore, groupId: string, run: { runId: string; phase: string; estimateId: string | null }): { outputBound?: number; outputBoundExceededBy?: number } {
+   if (run.phase !== "estimate" && run.phase !== "single-call") return {};
++  // Task 12 review fix 1 (Rule 12): every dispatched estimate run has a contract, so one that cannot be read is missing or
++  // corrupt evidence and the view refuses, like the sibling identity checks. A requirement's group was already read above.
+   let bound: number;
+-  try {
+-    bound = run.phase === "estimate" ? readEstimateContract(store, groupId, run.estimateId!).maxOutputTokens : readRequirementGroup(store, groupId).requirement.maxOutputTokens;
+-  } catch { return {}; }
++  if (run.phase === "estimate") {
++    try { bound = readEstimateContract(store, groupId, run.estimateId!).maxOutputTokens; } catch { return blocked(`run-estimate-contract:${run.runId}`); }
++  } else bound = readRequirementGroup(store, groupId).requirement.maxOutputTokens;
++  // Task 12 review fix 2: byModel is cumulative, so only the newest work event counts; without a breakdown there is no
++  // observed output to compare (never an older event's breakdown).
+   const event = store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq DESC").all(run.runId)
+     .map((row) => JSON.parse(String(row.body)) as { bucket: string; byModel?: Array<{ output: number }> | null })
+-    .find((candidate) => candidate.bucket === "work" && Array.isArray(candidate.byModel));
+-  const output = event?.byModel?.reduce((sum, entry) => sum + entry.output, 0) ?? 0;
++    .find((candidate) => candidate.bucket === "work");
++  const output = Array.isArray(event?.byModel) ? event.byModel.reduce((sum, entry) => sum + entry.output, 0) : 0;
+   return output > bound ? { outputBound: bound, outputBoundExceededBy: output - bound } : { outputBound: bound };
+ }
+ 
+ function runViews(store: ControlStore, groupId: string, graphVersion: number, proposal: ReturnType<typeof readBudgetProposal>, snapshot: GroupReadSnapshot): RunViewV1[] {
+   const activity = readLatestRunActivityByGroup(store, groupId);
+   // Feedback #59: the set stays in id order (the wire's canonical order); each run also carries its creation position,
+   // the 1-based place of its row in the snapshot's rowid order -- total, and stable because runs are never deleted.
+   const createdOrdinal = new Map(snapshot.runsByRowid.map((row, index) => [String(row.id), index + 1]));
+diff --git a/tests/control/singleCallOutputBound.test.ts b/tests/control/singleCallOutputBound.test.ts
+index dd51a92e..33213d90 100644
+--- a/tests/control/singleCallOutputBound.test.ts
++++ b/tests/control/singleCallOutputBound.test.ts
+@@ -1,37 +1,64 @@
++import { createHash } from "node:crypto";
+ import { describe, expect, it } from "vitest";
++import { ControlError } from "../../src/control/errors.js";
+ import { readDraft } from "../../src/control/requirementRecords.js";
+ import { readControlGroup } from "../../src/panel/controlViews.js";
+ import { estimateHarness } from "./fixtures/estimateHarness.js";
+ import { requirementHarness } from "./fixtures/requirementHarness.js";
+ import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
+ 
+ // Spec 2026-10-15 §6.2, criterion 5 (R2): a single call is booked at its observed usage; its run view carries the bound it
+ // was sent with (64000 here: the fixture profile's estimatorPreflight.maxOutputTokens, no agent cap) and, when the observed
+ // output (sum of byModel[].output) is over it, by how much. Computed at read time from the stored usage event: no schema
+ // change. The event's tokens are input 100 + output, so it reconciles with its byModel; 100 + 64_100 = 64_200 is under
+ // ESTIMATE_GRANT.tokens (250_000), so the settlement books it as observed.
+-const run = async (output: number) => {
++type Harness = Awaited<ReturnType<typeof estimateHarness>>;
++const run = async (output: number, after?: (x: Harness) => void) => {
+   const x = await estimateHarness({ tokens: 100 + output, byModel: [{ model: "gpt-6-sol", input: 100, output, cacheRead: 0, cacheWrite: 0 }] });
+   try {
+     await x.rounds(() => x.estimate().state !== "running");
++    after?.(x);
+     return readControlGroup(x.h.store, "epoch", "g").runs.find((view) => view.runId === x.runId)!;
+   } finally { await x.h.dispose(); }
+ };
+ 
+ describe("output bound on a single call's run view (spec §6.2)", () => {
+   it("over the bound: booked as observed, overrun shown", async () => {
+     expect(await run(64_100)).toMatchObject({ outputBound: 64000, outputBoundExceededBy: 100, used: { tokens: 64_200 } });
+   });
+   it("at the bound and under it: no overrun", async () => {
+     const at = await run(64_000), under = await run(10);
+     expect([at.outputBound, Object.hasOwn(at, "outputBoundExceededBy"), under.outputBound, Object.hasOwn(under, "outputBoundExceededBy")]).toEqual([64000, false, 64000, false]);
+   });
+ 
++  // Task 12 review fix 2: byModel is cumulative, so the newest work event decides. A later event with no breakdown (as a
++  // ccloop that stops reporting one would send; booked unattributed) leaves no observed output -- the older event's
++  // over-bound breakdown is not reused. The second event is written straight into usage_events, the table the view reads.
++  it("the newest work event decides: a later event without byModel shows no overrun", async () => {
++    const view = await run(64_100, (x) => {
++      const first = JSON.parse(String(x.h.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? AND seq=1").get(x.runId)!.body));
++      const body = JSON.stringify({ ...first, eventSeq: 2, cumulative: { ...first.cumulative, tokens: 64_300 }, byModel: null });
++      x.h.store.db.prepare("INSERT INTO usage_events(run_id,seq,payload_hash,body) VALUES (?,2,?,?)").run(x.runId, createHash("sha256").update(body).digest("hex"), body);
++    });
++    expect([view.outputBound, Object.hasOwn(view, "outputBoundExceededBy")]).toEqual([64000, false]);
++  });
++
++  // Task 12 review fix 1 (Rule 12): every dispatched estimate run has a contract; one that cannot be read is missing evidence,
++  // and the group read refuses naming the run -- it does not silently drop the overrun.
++  it("an estimate run whose contract is missing refuses the group read", async () => {
++    let runId = "";
++    const refusal = await run(64_100, (x) => {
++      runId = x.runId;
++      x.h.store.db.prepare("DELETE FROM outbox WHERE id=?").run(`estimate-contract:g:${x.h.estimateId}`);
++    }).then(() => null, (error: unknown) => error);
++    expect(refusal instanceof ControlError ? [refusal.code, refusal.detail] : refusal).toEqual(["recovery-blocked", `run-estimate-contract:${runId}`]);
++  });
++
+   // Plan issue 11: a requirement's single call (here the split call, whose group is then accepted into a plan group so the
+   // group view lists it) carries the requirement's frozen bound (64000: requirementHarness's maxOutputTokens). Its usage
+   // event has no byModel, so there is no observed output to compare and no overrun.
+   it("a requirement's single call carries the requirement's bound", async () => {
+     const x = await requirementHarness({ answers: [{ purpose: "split", output: VALID_SPLIT }], startAt: "split" });
+     try {
+       await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+       await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: readDraft(x.store, "r", 1).draftHash! }));
+diff --git a/web/src/ControlGroupView.tsx b/web/src/ControlGroupView.tsx
+index ed0c1c3d..155309d8 100644
+--- a/web/src/ControlGroupView.tsx
++++ b/web/src/ControlGroupView.tsx
+@@ -396,17 +396,18 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
+         />
+       )}
+ 
+ {dispatchRegion === "preparation" && dispatchControls}</>,
+         problem: <>
+       <h3>{t("detail.problem")}</h3>
+       {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
+       {view.runs.filter(run => hasFailureOutcome(run) || run.state === "blocked" || run.unknownUsageSettlement !== undefined || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
+-        <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /> <RunOutputBound run={run} /></p>
++        <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
++        <RunOutputBound run={run} />
+         {remedies(run, props.active !== false && region === "problem")}
+         <button type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>
+       </div>)}
+ {dispatchRegion === "problem" && dispatchControls}</>,
+         results: <>
+       <GroupResults view={view} active={props.active !== false && region === "results"} scope={props.resultsScope ?? ""} />
+       <p>{t("detail.resultsEvidence")}</p>
+       {view.runs.map(run => <button key={run.runId} type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>)}
+diff --git a/web/src/RunOutputBound.tsx b/web/src/RunOutputBound.tsx
+index 314cf24c..da7f5d31 100644
+--- a/web/src/RunOutputBound.tsx
++++ b/web/src/RunOutputBound.tsx
+@@ -1,10 +1,13 @@
+ import type { JSX } from "react";
+ import { useTranslation } from "react-i18next";
+ import type { RunViewV1 } from "./controlTypes.js";
++import { currentLanguage } from "./i18n.js";
++import { formatTokens } from "./TokenInput.js";
+ 
+ /** Spec 2026-10-15 §6.2: the result is used as normal; this only says the call went over its declared bound. */
+ export function RunOutputBound(props: { run: RunViewV1 }): JSX.Element | null {
+   const { t } = useTranslation();
+   if (props.run.outputBoundExceededBy === undefined) return null;
+-  return <small role="note">{t("control.outputBound.exceeded", { tokens: props.run.outputBoundExceededBy })}</small>;
++  // A neutral block note (DESIGN.md: no tone), the count written as the rest of the row writes tokens.
++  return <p role="note">{t("control.outputBound.exceeded", { tokens: formatTokens(props.run.outputBoundExceededBy, currentLanguage()) })}</p>;
+ }
+diff --git a/web/tests/runOutputBound.test.tsx b/web/tests/runOutputBound.test.tsx
+index b6437bcb..a6849616 100644
+--- a/web/tests/runOutputBound.test.tsx
++++ b/web/tests/runOutputBound.test.tsx
+@@ -7,31 +7,32 @@
+  */
+ import { cleanup, render, screen, within } from "@testing-library/react";
+ import { afterEach, describe, expect, it, vi } from "vitest";
+ import i18n from "../src/i18n.js";
+ import { ControlGroupView } from "../src/ControlGroupView.js";
+ import { RunOutputBound } from "../src/RunOutputBound.js";
+ import type { Amount, ControlConfigV1, GroupViewV1, RunViewV1 } from "../src/controlTypes.js";
+ 
+-const EN = "This agent cannot cap a call's output; this call went 100 tokens over its declared bound.";
+-const ZH = "该 agent 无法限制单次调用的输出；这次调用比声明的上限多用了 100 个 token。";
++// Task 12 review fix 3: the count is written as the rest of the row writes tokens (formatTokens, grouped).
++const EN = "This agent cannot cap a call's output; this call went 12,345 tokens over its declared bound.";
++const ZH = "该 agent 无法限制单次调用的输出；这次调用比声明的上限多用了 12,345 个 token。";
+ const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
+ const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
+ const config: ControlConfigV1 = {
+   schema: "orca-control-config-v1", epoch: "epoch-a", repositories: [{ repoId: "orca", displayName: "Orca" }],
+   plans: [{ planId: "plan-demo", repoId: "orca", displayName: "Demo plan" }],
+   profiles: [{ profileId: "all", profileHash: "b".repeat(64), allowedWorkKinds: ["task", "budget-estimate", "handoff", "goal-review"], contextTokenizer: null, workMaxOutputTokens: 1000, declared: capability, observed: capability, observedAt: "2026-10-16T00:00:00.000Z", probeFailureCode: null }],
+   defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" }, executionPort: "configured", errorCatalog: [],
+ };
+ // A completed estimate call: settled, no failure, no block -- so it is not in the problem-runs list.
+ const run = (over: Partial<RunViewV1>): RunViewV1 => ({
+   runId: "run-e", taskId: null, estimateId: "e1", generation: 1, state: "settled-restartable", phase: "estimate", claimOrdinal: null, providerAttemptOrdinal: 1,
+-  profile: { profileId: "all", profileHash: "b".repeat(64) }, used: amount(64_200), remaining: amount(0), failureCode: null, blockedReason: null, evidenceIds: [],
+-  outputBound: 64000, outputBoundExceededBy: 100, ...over,
++  profile: { profileId: "all", profileHash: "b".repeat(64) }, used: amount(76_445), remaining: amount(0), failureCode: null, blockedReason: null, evidenceIds: [],
++  outputBound: 64000, outputBoundExceededBy: 12_345, ...over,
+ });
+ const view = (runs: RunViewV1[]): GroupViewV1 => ({
+   schema: "orca-control-group-v1", epoch: "epoch-a", changeSeq: 4,
+   summary: { groupId: "g", repoId: "orca", state: "running", commandRevision: 6, projectionSeq: 4, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 },
+   graphVersion: 1, plan: { repoId: "orca", planId: "plan-demo", planHash: "a".repeat(64), goal: "Ship", successConditions: ["done"] },
+   proposal: { state: "confirmed", proposalVersion: 2, planHash: "a".repeat(64), budgetMode: "soft", contextPolicy: { handoffAtContextTokens: null }, profiles: {
+     estimator: { profileId: "all", profileHash: "b".repeat(64) }, worker: { profileId: "all", profileHash: "b".repeat(64) },
+     handoff: { profileId: "all", profileHash: "b".repeat(64) }, goalReview: { profileId: "all", profileHash: "b".repeat(64) } }, executionSnapshotHash: "c".repeat(64) },
+@@ -62,10 +63,13 @@ describe("a single call's output overrun (spec §6.2)", () => {
+     const over = container.querySelector<HTMLElement>('tr[data-run-id="run-e"]')!, within_ = container.querySelector<HTMLElement>('tr[data-run-id="run-f"]')!;
+     expect([within(over).queryAllByText(EN).length, within(within_).queryAllByText(EN).length, container.querySelector('[data-problem-run-id="run-e"]')]).toEqual([1, 0, null]);
+   });
+ 
+   it("shows on the call's line in the problem-runs list too", () => {
+     const { container } = render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "problem", taskId: null, runId: null }} view={view([run({ state: "blocked", blockedReason: "terminal:failed" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+     const problem = container.querySelector<HTMLElement>('[data-problem-run-id="run-e"]')!;
+     expect(within(problem).queryAllByText(EN).length).toBe(1);
++    // Task 12 review fix 4: a block note like the panel's other notes, never nested inside the run's <p> line, and toneless.
++    const note = within(problem).getByRole("note");
++    expect([note.tagName, note.parentElement === problem, note.hasAttribute("data-tone")]).toEqual(["P", true, false]);
+   });
+ });

@@ -1,0 +1,691 @@
+67c6e2e feat(runtime): codex single call, tools off in a private home, bound checked after the fact
+ src/agents/codex.ts                         |   2 +-
+ src/runtime/codex/codexAdapter.ts           |  44 ++++++-
+ src/runtime/codex/codexSingleCall.ts        | 110 ++++++++++++++++
+ src/runtime/codex/runCodexPhase.ts          |  10 +-
+ src/runtime/types.ts                        |   5 +-
+ tests/control/codexSingleCallWorker.test.ts |  71 ++++++++++
+ tests/fixtures/fake-codex.mjs               |  20 ++-
+ tests/runtime/codex/codexSingleCall.test.ts | 197 ++++++++++++++++++++++++++++
+ 8 files changed, 448 insertions(+), 11 deletions(-)
+diff --git a/src/agents/codex.ts b/src/agents/codex.ts
+index 99032e9..59d1266 100644
+--- a/src/agents/codex.ts
++++ b/src/agents/codex.ts
+@@ -58,13 +58,13 @@ export const codexDescriptor: AgentDescriptor = {
+   singleCallExecution(_config, row) {
+     return row !== undefined ? "v1-soft" : null;
+   },
+   // OMP single call (Orca spec 2026-10-14 §3.2): codex runs no single call; nothing to bound.
+   // *** ERRATUM (Orca spec 2026-10-15 §6.1) -- codex runs a soft single call; it still has no cap, so this stays null. ***
+   singleCallOutputCap() {
+     return null;
+   },
+   createAdapter(config, options) {
+     const { configDir } = config.installation;
+-    return new CodexAdapter(toCodexConfig(config), configDir === null ? undefined : { CODEX_HOME: configDir }, options?.codexSkillsDir);
++    return new CodexAdapter(toCodexConfig(config), configDir === null ? undefined : { CODEX_HOME: configDir }, options?.codexSkillsDir, { installation: config.installation });
+   },
+ };
+diff --git a/src/runtime/codex/codexAdapter.ts b/src/runtime/codex/codexAdapter.ts
+index a20dfc6..7a5293f 100644
+--- a/src/runtime/codex/codexAdapter.ts
++++ b/src/runtime/codex/codexAdapter.ts
+@@ -1,22 +1,29 @@
+ import { normalizeExecutionFinal, ExecutionFormatFailure } from "../executionNormalizer.js";
+ import { writeFile } from "node:fs/promises";
+-import { join } from "node:path";
++import { isAbsolute, join } from "node:path";
++import { readAgentCatalog } from "../../agents/agentCatalog.js";
++import type { InstallationV1 } from "../../agents/types.js";
+ import { buildExecutorPrompt, buildPlannerPrompt, buildVerifierPrompt } from "../claude/prompts.js";
+-import type { AttemptContext, RuntimeAdapter } from "../types.js";
++import type { AttemptContext, RuntimeAdapter, SingleCallRequest, SingleCallResult } from "../types.js";
++import { codexSingleCallArgs, codexSingleCallHome, decodeCodexSingleCall } from "./codexSingleCall.js";
+ import { codexModelUsage, decodeCodexUsage, decodeCodexResult, parseCodexConfig, phaseFinalAccepts, scanFinalMessage, type CodexConfig, type CodexPhase, type PhaseResults } from "./protocol.js";
+ import { runCodexPhase, type PhaseOutcome } from "./runCodexPhase.js";
+ import { classifyRateLimit } from "./rateLimit.js";
+ 
+ /** Codex rate-limit spec §3.2: waits before each retry of a phase rejected by 429 before any work (three retries). */
+ export const RATE_LIMIT_DELAYS_MS: readonly number[] = [30_000, 60_000, 120_000];
+-export interface CodexAdapterOptions { rateLimitDelaysMs?: readonly number[] }
++export interface CodexAdapterOptions {
++  rateLimitDelaysMs?: readonly number[];
++  /** Every-agent requirement chain (Orca spec 2026-10-15 §6.1): the installation a single call re-reads its catalog for. */
++  installation?: InstallationV1;
++}
+ 
+ /** Resolves after ms, or at once when the signal aborts (the next call then reports the abort through today's path). */
+ function wait(ms: number, signal?: AbortSignal): Promise<void> {
+   return new Promise(resolve => {
+     if (signal?.aborted) { resolve(); return; }
+     const done = () => { clearTimeout(timer); signal?.removeEventListener("abort", done); resolve(); };
+     const timer = setTimeout(done, ms);
+     signal?.addEventListener("abort", done, { once: true });
+   });
+ }
+@@ -26,23 +33,25 @@ export class CodexPhaseAborted extends Error {
+   constructor(readonly evidenceDir: string, readonly observedTokens: number | null) {
+     super(`codex-aborted: ${evidenceDir}`);
+     this.name = "CodexPhaseAborted";
+   }
+ }
+ 
+ export class CodexAdapter implements RuntimeAdapter {
+   private readonly config: CodexConfig;
+   // Agent selection (2026-09-26): extraEnv carries the installation's config directory (CODEX_HOME) to the CLI.
+   private readonly rateLimitDelaysMs: readonly number[];
++  private readonly installation: InstallationV1 | undefined;
+   constructor(rawConfig: unknown, private readonly extraEnv?: Record<string, string>, private readonly codexSkillsDir?: string, options: CodexAdapterOptions = {}) {
+     this.config = parseCodexConfig(rawConfig);
+     this.rateLimitDelaysMs = options.rateLimitDelaysMs ?? RATE_LIMIT_DELAYS_MS;
++    this.installation = options.installation;
+   }
+ 
+   /**
+    * Spec §3.2–3.3: a call rejected by 429 before any work is called again after a bounded, abortable wait, within the
+    * phase's time limit. Each call keeps its own evidence directory; a rejected one also records rate-limit.json.
+    */
+   private async callWithBackoff(phase: CodexPhase, prompt: string, context: AttemptContext): Promise<PhaseOutcome & { rateLimited: "before-work" | "after-work" | null }> {
+     const startedAt = Date.now(), limitMs = Math.min(this.config.timeoutMs, context.state.budgetSnapshot.timeRemainingMs);
+     for (let call = 1; ; call++) {
+       const elapsed = Date.now() - startedAt;
+@@ -123,11 +132,40 @@ export class CodexAdapter implements RuntimeAdapter {
+     try { return await this.phase("execute", buildExecutorPrompt(context) + "\nWrap the complete or partial result in a single object with the sole key result, as required by the output schema.", context); }
+     catch (error) {
+       // An aborted execute that was observed spending tokens throws, so runLoop can settle that usage;
+       // one that was not keeps answering null exactly as before.
+       if (error instanceof Error && error.message.startsWith("codex-skills-")) throw error;
+       if (context.abortSignal?.aborted && !(error instanceof CodexPhaseAborted && error.observedTokens !== null)) return null;
+       throw error;
+     }
+   }
+   verify(context: AttemptContext) { return this.phase("verify", buildVerifierPrompt(context), context); }
++
++  /**
++   * Every-agent requirement chain (Orca spec 2026-10-15 §6.1, R2, R9): one structured call, tools off, in a private HOME and
++   * CODEX_HOME. Codex cannot cap the output; the bound is checked by Orca after the fact. Refused before spawning when the
++   * installed feature list is unknown, since the tool flags could not be turned off (plan spec issue 9). As omp's (R6), the
++   * re-check lives inside the call's deadline, computed once; the spawn gets only what the re-check left.
++   */
++  async singleCall(request: SingleCallRequest): Promise<SingleCallResult> {
++    if (this.installation === undefined) throw new Error("single-call-unsupported");
++    const deadline = Date.now() + Math.min(request.timeoutMs, this.config.timeoutMs);
++    const catalog = await readAgentCatalog(this.installation, { deadline, signal: request.signal, log: (line) => { process.stderr.write(`${line}\n`); } });
++    if (catalog.codexFeatures === null) {
++      throw Object.assign(new Error(`codex-single-call-unavailable: ${catalog.catalogError ?? "no feature list"}`), { code: "codex-single-call-unavailable", neverStarted: true });
++    }
++    const features = catalog.codexFeatures;
++    // The installation's effective CODEX_HOME: its configDir, else an inherited absolute CODEX_HOME, else <HOME>/.codex.
++    const inherited = process.env.CODEX_HOME, home = process.env.HOME;
++    const source = this.installation.configDir ?? (inherited && isAbsolute(inherited) ? inherited : home && isAbsolute(home) ? join(home, ".codex") : null);
++    const isolated = await codexSingleCallHome({ runDir: request.runDir, sourceCodexHome: source, executable: this.config.command[0], env: process.env });
++    const context = { runDir: request.runDir, attempt: 1, worktreePath: request.cwd, abortSignal: request.signal, onProcessRegistered: request.onProcessRegistered,
++      state: { budgetSnapshot: { timeRemainingMs: Math.max(1, deadline - Date.now()) } } } as unknown as AttemptContext;
++    const outcome = await runCodexPhase(this.config, { phase: "single-call", prompt: request.prompt, context, spawn: {
++      schema: request.responseSchema, env: { ...process.env, HOME: isolated.home, CODEX_HOME: isolated.codexHome },
++      args: ({ schemaPath, finalPath }) => codexSingleCallArgs({ model: this.config.model, cwd: request.cwd, schemaPath, finalPath, features }),
++    } });
++    if (outcome.reason === "aborted") throw new CodexPhaseAborted(outcome.evidenceDir, outcome.observedTokens);
++    if (outcome.reason !== "completed") throw Object.assign(new Error(`codex-${outcome.reason}: ${outcome.evidenceDir}`), { observedTokens: outcome.observedTokens });
++    return decodeCodexSingleCall(outcome.events, outcome.final, this.config.model, outcome.evidenceDir);
++  }
+ }
+diff --git a/src/runtime/codex/codexSingleCall.ts b/src/runtime/codex/codexSingleCall.ts
+new file mode 100644
+index 0000000..c8afccd
+--- /dev/null
++++ b/src/runtime/codex/codexSingleCall.ts
+@@ -0,0 +1,110 @@
++import { createHash, randomUUID } from "node:crypto";
++import { chmod, lstat, mkdir, mkdtemp, readlink, realpath, rename, rm, symlink } from "node:fs/promises";
++import { dirname, join } from "node:path";
++import { catalogCacheDir } from "../../agents/catalogCache.js";
++import { parseSingleCallObject } from "../omp/ompSingleCall.js";
++import { SingleCallOutputInvalid, type SingleCallResult } from "../types.js";
++import { codexModelUsage, decodeCodexUsage, observedTurnUsage } from "./protocol.js";
++
++/**
++ * Every-agent requirement chain (Orca spec 2026-10-15 §2.5 last row, §6.1; values from plan Task 0 on codex-cli 0.160.0).
++ * `features.plugins=false` is here, not only among the tool flags: Task 0 measured that it removes the
++ * <recommended_plugins> block a linked config.toml injects (`features.recommended_plugins=false` does not).
++ */
++export const CODEX_SINGLE_CALL_CONFIG: readonly string[] = [
++  "include_permissions_instructions=false", "include_apps_instructions=false", "include_collaboration_mode_instructions=false",
++  "include_environment_context=false", "project_doc_max_bytes=0", "features.plugins=false",
++];
++const TURNED_ON = new Set(["skip_host_skill_discovery"]);
++const ALREADY_SET = new Set(CODEX_SINGLE_CALL_CONFIG.filter((value) => value.startsWith("features.")).map((value) => value.slice(9, value.indexOf("="))));
++
++/** `features` = the tool flags the installed codex lists (codex refuses an unknown flag); each is sent once. */
++export function codexSingleCallArgs(input: { model: string; cwd: string; schemaPath: string; finalPath: string; features: readonly string[] }): string[] {
++  return ["exec", "--json", "--ephemeral", "--color", "never", "--skip-git-repo-check", "--model", input.model, "--sandbox", "read-only",
++    "-C", input.cwd, "--output-schema", input.schemaPath, "-o", input.finalPath,
++    ...CODEX_SINGLE_CALL_CONFIG.flatMap((value) => ["-c", value]),
++    ...input.features.filter((name) => !ALREADY_SET.has(name)).flatMap((name) => ["-c", `features.${name}=${TURNED_ON.has(name) ? "true" : "false"}`]),
++    "-"];
++}
++
++/** Creates `dir` with 0700 set explicitly when it is missing; an existing one (also one a concurrent call made) is left alone. */
++async function privateDir(dir: string): Promise<void> {
++  try { await mkdir(dir, { mode: 0o700 }); }
++  catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") return; throw error; }
++  await chmod(dir, 0o700);
++}
++
++/** `path` becomes a symlink to `target` (replaced atomically when it is anything else), or absent when target is null. */
++async function ensureLink(path: string, target: string | null): Promise<void> {
++  const current = await lstat(path).then((info) => info, () => null);
++  if (target === null) { if (current !== null) await rm(path, { force: true }); return; }
++  if (current?.isSymbolicLink() === true && await readlink(path) === target) return;
++  const temporary = join(dirname(path), `.${randomUUID()}.link`);
++  await symlink(target, temporary);
++  try { await rename(temporary, path); } catch (error) { await rm(temporary, { force: true }); throw error; }
++}
++
++/**
++ * R9: a private, empty HOME and a private CODEX_HOME whose auth.json and config.toml are symlinks to the installation's
++ * (never copies). Ruling (Task 8, Orca session a852f96a, 2026-10-16, answering the human): ONE pair per installation,
++ * reused, under `<catalog cache dir>/codex-home/<sha256 of realpath(executable) NUL sourceCodexHome>/` -- codex writes
++ * ~2.4 MB of its own state plus a remote models fetch into a fresh CODEX_HOME (Task 0). The links are re-checked on every
++ * call. Out-of-repo write: that path; writer = a ccloop control worker running a codex single call; residue on failure =
++ * at most one `.<uuid>.link` temp link. With no cache dir, a pair per call under the run directory.
++ */
++export async function codexSingleCallHome(input: { runDir: string; sourceCodexHome: string | null; executable: string; env: NodeJS.ProcessEnv }): Promise<{ home: string; codexHome: string }> {
++  const cache = catalogCacheDir(input.env);
++  let base: string;
++  if (cache === null) {
++    const root = join(input.runDir, "codex", "1", "single-call");
++    await mkdir(root, { recursive: true, mode: 0o700 });
++    base = await mkdtemp(join(root, "home-"));
++  } else {
++    const executable = await realpath(input.executable).catch(() => input.executable);
++    base = join(cache, "codex-home", createHash("sha256").update(`${executable}\0${input.sourceCodexHome ?? ""}`).digest("hex"));
++    const missing: string[] = [];
++    for (let at = base; at !== dirname(at); at = dirname(at)) {
++      if (await lstat(at).then(() => true, () => false)) break;
++      missing.unshift(at);
++    }
++    for (const dir of missing) await privateDir(dir);
++  }
++  const home = join(base, "home"), codexHome = join(base, "codex-home");
++  for (const dir of [home, codexHome]) await privateDir(dir);
++  for (const name of ["auth.json", "config.toml"]) {
++    const source = input.sourceCodexHome === null ? null : join(input.sourceCodexHome, name);
++    await ensureLink(join(codexHome, name), source !== null && await lstat(source).then(() => true, () => false) ? source : null);
++  }
++  return { home, codexHome };
++}
++
++const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
++const observed = (error: Error, events: string) => Object.assign(error, { observedTokens: observedTurnUsage(events) });
++const notSingle = (what: string, events: string) => Object.assign(observed(new Error(`codex-single-call-not-single:${what}`), events), { code: `codex-single-call-not-single:${what}` });
++
++/**
++ * §6.1, fail closed: no tool or command item, at most one completed agent message, exactly one completed turn, one object.
++ * Every refusal books the turn usage observed so far (null when none), never 0; "no object" is single-call-output-invalid
++ * (plan issue 10).
++ */
++export function decodeCodexSingleCall(events: string, final: string | null, model: string, evidenceDir: string): SingleCallResult {
++  let messages = 0, turns = 0, tool = false;
++  for (const line of events.split("\n")) {
++    if (!line.trim()) continue;
++    let row: unknown;
++    try { row = JSON.parse(line); } catch { throw observed(new Error("codex-events-invalid"), events); }
++    if (!record(row) || typeof row.type !== "string") throw observed(new Error("codex-events-invalid"), events);
++    if (row.type.startsWith("item.") && record(row.item) && row.item.type !== "agent_message" && row.item.type !== "reasoning") tool = true;
++    if (row.type === "item.completed" && record(row.item) && row.item.type === "agent_message") messages += 1;
++    if (row.type === "turn.completed") turns += 1;
++  }
++  if (tool) throw notSingle("tool", events);
++  if (messages > 1) throw notSingle("messages", events);
++  if (turns > 1) throw notSingle("turns", events);
++  let usage: ReturnType<typeof decodeCodexUsage>;
++  try { usage = decodeCodexUsage(events, true); } catch (error) { throw observed(error as Error, events); }
++  const modelUsage = codexModelUsage(events, model);
++  const output = final === null ? undefined : parseSingleCallObject(final);
++  if (output === undefined) throw new SingleCallOutputInvalid(evidenceDir, usage.tokenUsage, usage.usageEvidence);
++  return { output, tokenUsage: usage.tokenUsage, usageEvidence: usage.usageEvidence, ...(modelUsage === null ? {} : { modelUsage }) };
++}
+diff --git a/src/runtime/codex/runCodexPhase.ts b/src/runtime/codex/runCodexPhase.ts
+index 0be6344..87bb921 100644
+--- a/src/runtime/codex/runCodexPhase.ts
++++ b/src/runtime/codex/runCodexPhase.ts
+@@ -1,58 +1,60 @@
+ import { execFile, spawn } from "node:child_process";
+ import { appendFileSync, constants } from "node:fs";
+ import { mkdir, mkdtemp, open, writeFile } from "node:fs/promises";
+ import { join } from "node:path";
+ import { StringDecoder } from "node:string_decoder";
+ import { promisify } from "node:util";
+ import { withCodexSkillLinks } from "./codexSkills.js";
+ import type { AttemptContext } from "../types.js";
+ import { executeWireJsonSchema, observedTurnUsage, phaseJsonSchema, type CodexConfig, type CodexPhase } from "./protocol.js";
+ 
+-export type PhaseRequest = {phase:CodexPhase;prompt:string;context:AttemptContext};
++// Every-agent requirement chain (Orca spec 2026-10-15 §6.1): a single call brings its own argv, environment and schema.
++export type PhaseRequest = {phase:CodexPhase|"single-call";prompt:string;context:AttemptContext;
++  spawn?:{args:(paths:{schemaPath:string;finalPath:string})=>string[];env:NodeJS.ProcessEnv;schema:Record<string,unknown>}};
+ export type PhaseOutcome = {
+   reason:"completed"|"aborted"|"timeout"|"spawn-error"|"exit-error"|"output-limit"|"io-error"|`codex-skills-${string}`;
+   code:number|null;signal:NodeJS.Signals|null;events:string;final:string|null;evidenceDir:string;
+   // Orca handoff delivery C-3: usage observed in the stdout of a phase that did not complete; null otherwise.
+   observedTokens:number|null;
+ };
+ const LIMIT=16*1024*1024;
+ const execFileAsync=promisify(execFile);
+ export async function runCodexPhase(config:CodexConfig, request:PhaseRequest, extraEnv?:Record<string,string>, codexSkillsDir?:string):Promise<PhaseOutcome> {
+   const {context,phase}=request;
+   const root=join(context.runDir,"codex",String(context.attempt),phase);
+   await mkdir(root,{recursive:true,mode:0o700});
+   const evidenceDir=await mkdtemp(join(root,"call-"));
+   const result:PhaseOutcome={reason:"completed",code:null,signal:null,events:"",final:null,evidenceDir,observedTokens:null};
+   const save=async(name:string,data:string)=>writeFile(join(evidenceDir,name),data,{mode:0o600});
+   const schemaPath=join(evidenceDir,"schema.json"),finalPath=join(evidenceDir,"final.json");
+-  const args=[...config.command.slice(1),"exec","--json","--ephemeral","--color","never","--model",config.model,
++  const args=request.spawn!==undefined?[...config.command.slice(1),...request.spawn.args({schemaPath,finalPath})]:[...config.command.slice(1),"exec","--json","--ephemeral","--color","never","--model",config.model,
+     "--sandbox",phase==="execute"?config.sandbox:"read-only","-C",context.worktreePath,
+     "--output-schema",schemaPath,"-o",finalPath,"-"];
+   let stderr="", logsCreated=false;
+   let ioError:string|undefined;
+   let stdoutTruncated=false,stderrTruncated=false,finalTruncated=false;
+   const persist=async()=>{
+     if(!logsCreated){await save("events.jsonl",result.events);await save("stderr.log",stderr);}
+     await save("outcome.json",JSON.stringify({...result,events:undefined,final:undefined,executable:config.command[0],args,ioError,stdoutTruncated,stderrTruncated,finalTruncated},null,2));
+     return result;
+   };
+   if(context.abortSignal?.aborted){result.reason="aborted";return persist();}
+   const timeout=Math.min(config.timeoutMs,context.state.budgetSnapshot.timeRemainingMs);
+   if(timeout<=0){result.reason="timeout";return persist();}
+-  const wireBusinessSchema=phase==="execute"?executeWireJsonSchema():phaseJsonSchema(phase);
++  const wireBusinessSchema=request.spawn?.schema??(phase==="execute"?executeWireJsonSchema():phaseJsonSchema(phase as CodexPhase));
+   const wireSchema=phase==="execute"?{type:"object",properties:{result:wireBusinessSchema},required:["result"],additionalProperties:false}:wireBusinessSchema;
+   await save("schema.json",JSON.stringify(wireSchema));
+   // Pre-create files with private permissions before handing paths to the CLI.
+   await save("final.json","");await save("events.jsonl","");await save("stderr.log","");logsCreated=true;
+   const runChild = async () => new Promise<void>(resolve=>{
+-    const child=spawn(config.command[0],args,{cwd:context.worktreePath,detached:true,stdio:["pipe","pipe","pipe"],env:{...process.env,...extraEnv}});
++    const child=spawn(config.command[0],args,{cwd:context.worktreePath,detached:true,stdio:["pipe","pipe","pipe"],env:request.spawn?.env??{...process.env,...extraEnv}});
+     const out=new StringDecoder("utf8"),err=new StringDecoder("utf8");
+     let outBytes=0,errBytes=0,done=false,exited=false;
+     let killTimer:NodeJS.Timeout|undefined,drainTimer:NodeJS.Timeout|undefined;
+     const kill=(signal:NodeJS.Signals)=>{if(child.pid!==undefined){try{process.kill(-child.pid,signal);}catch(e){if((e as NodeJS.ErrnoException).code!=="ESRCH"){ioError=String(e);result.reason="io-error";}}}};
+     const finish=()=>{
+       if(done)return;done=true;
+       kill("SIGKILL");
+       clearTimeout(timer);clearTimeout(killTimer);clearTimeout(drainTimer);
+       context.abortSignal?.removeEventListener("abort",abort);
+       result.events+=out.end();stderr+=err.end();
+diff --git a/src/runtime/types.ts b/src/runtime/types.ts
+index 3dcb48c..56a31c3 100644
+--- a/src/runtime/types.ts
++++ b/src/runtime/types.ts
+@@ -223,13 +223,16 @@ export type VerificationResult = {
+ 
+ export interface RuntimeAdapter {
+   /** H6: a phase owns filesystem cleanup that must finish before controller timeout cleanup. */
+   readonly awaitAbortedPhaseCleanup?: boolean;
+   plan(context: AttemptContext): Promise<AttemptPlan>;
+   execute(context: AttemptContext): Promise<ExecutePhaseResult>;
+   verify(context: AttemptContext): Promise<VerificationResult>;
+   /** Orca single-call estimate (2026-09-27): only a kind whose descriptor answers singleCallExecution "v1" has it.
+    * *** ERRATUM (OMP single call, Orca spec 2026-10-14 §3.2, Orca session 02f047f6, 2026-10-14) -- the omp adapter has it while its
+    * descriptor answers "v1" only for some catalog rows: for omp the answer is decided per selected catalog row (accept
+-   * refuses the rest by the resolution) and re-checked at spawn, where the adapter refuses again. *** */
++   * refuses the rest by the resolution) and re-checked at spawn, where the adapter refuses again. ***
++   * *** ERRATUM (Orca spec 2026-10-15 §6.1, every-agent requirement chain Task 8, Orca session a852f96a, 2026-10-16) -- codex
++   * has it too: its descriptor answers "v1-soft" (not "v1") per catalog row; the adapter refuses again at spawn when the
++   * installed feature list is unknown. *** */
+   singleCall?(request: SingleCallRequest): Promise<SingleCallResult>;
+ }
+diff --git a/tests/control/codexSingleCallWorker.test.ts b/tests/control/codexSingleCallWorker.test.ts
+new file mode 100644
+index 0000000..40fdf0f
+--- /dev/null
++++ b/tests/control/codexSingleCallWorker.test.ts
+@@ -0,0 +1,71 @@
++import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join, resolve } from "node:path";
++import { afterEach, describe, expect, it } from "vitest";
++import { resolveAgent } from "../../src/agents/materialize.js";
++import { parseAgentsTable } from "../../src/agents/table.js";
++import { collectExecution } from "../../src/control/collect.js";
++import { readEvidence } from "../../src/control/evidence.js";
++import { atomicReplacePrivateFile, ensurePrivateDirectory } from "../../src/control/paths.js";
++import { canonicalHash, canonicalJson } from "../../src/control/protocol.js";
++import { writeAccepted } from "../../src/control/store.js";
++import { runControlWorker } from "../../src/control/worker.js";
++import { singleCallEnvelope } from "./agentsFixture.js";
++
++// Every-agent requirement chain (Orca spec 2026-10-15 §6.1, R2) through the control worker, read back as Orca reads it: a
++// complete codex single call books its observed usage and answer; a call that ran a tool is refused by name and still
++// books the usage it was observed spending -- never 0 for a call that reached the model.
++const FAKE_CODEX = resolve("tests/fixtures/fake-codex.mjs");
++const dirs: string[] = [];
++afterEach(async () => {
++  for (const dir of dirs.splice(0)) {
++    try {
++      for (const registered of JSON.parse(await readFile(join(dir, "control", "processes.json"), "utf8")) as Array<{ pgid: number }>) {
++        try { process.kill(-registered.pgid, "SIGKILL"); } catch {}
++      }
++    } catch {}
++    await rm(dir, { recursive: true, force: true });
++  }
++});
++
++async function world(single?: unknown) {
++  const sourceDir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-codex-single-source-")));
++  const aux = await realpath(await mkdtemp(join(tmpdir(), "ccloop-codex-single-aux-")));
++  dirs.push(sourceDir, aux);
++  const marker = join(aux, "codex-marker"), codexHome = join(aux, "codex-home");
++  await mkdir(codexHome); await writeFile(join(codexHome, "auth.json"), "{}"); await writeFile(join(codexHome, "config.toml"), "");
++  if (single !== undefined) await writeFile(`${marker}.single.json`, JSON.stringify(single));
++  const table = parseAgentsTable({ schema: "ccloop-agents-table-v1", installations: {
++    codex: { kind: "codex", command: [process.execPath, FAKE_CODEX, "integration", marker], version: "9.9.9-fake", configDir: codexHome, timeoutMs: 60_000, killGraceMs: 300, sandbox: "read-only", budgetMode: "soft" },
++  } });
++  const { config, resolution } = await resolveAgent(table, { agent: "codex" });
++  const envelope = singleCallEnvelope({ sourceDir, agent: resolution.selection, configHash: resolution.configHash });
++  const controlDir = join(sourceDir, "control");
++  await ensurePrivateDirectory(sourceDir, controlDir);
++  await atomicReplacePrivateFile(sourceDir, join(controlDir, "config.json"), Buffer.from(canonicalJson(config)));
++  await atomicReplacePrivateFile(sourceDir, join(controlDir, "envelope.json"), Buffer.from(canonicalJson(envelope)));
++  await writeAccepted(sourceDir, {
++    protocol: 1, envelopeHash: canonicalHash(envelope), executionId: "execution-1", configHash: envelope.claim.configHash,
++    generation: 1, acceptedAt: new Date().toISOString(), launch: "intended", worker: null,
++  });
++  await runControlWorker(["--source-dir", sourceDir, "--execution-id", "execution-1", "--nonce", "nonce-1"]);
++  const collected = await collectExecution(envelope, 0);
++  const record = JSON.parse((await readEvidence(sourceDir, collected.candidate!.handoff)).toString("utf8")) as { outcome: string; errorCode: string | null };
++  return { sourceDir, marker, collected, record };
++}
++const booked = (events: Array<{ bucket: string; cumulative: { tokens: number } | null }>) => events.map((event) => [event.bucket, event.cumulative?.tokens ?? null]);
++
++describe("codex single calls through the control worker", { timeout: 30_000 }, () => {
++  it("books a complete call's observed usage and its answer", async () => {
++    const w = await world();
++    expect(booked(w.collected.events)).toEqual([["work", 24], ["handoff", 0]]);
++    expect(w.record).toMatchObject({ outcome: "complete", errorCode: null });
++    expect(JSON.parse((await readEvidence(w.sourceDir, w.collected.candidate!.artifacts[0]!)).toString("utf8"))).toEqual({ answer: "42" });
++  });
++
++  it("names a call that ran a tool and books the usage it saw", async () => {
++    const w = await world({ rows: [{ type: "item.started", item: { id: "i", type: "command_execution", command: "ls" } }, { type: "turn.completed", usage: { input_tokens: 30, output_tokens: 6 } }] });
++    expect(booked(w.collected.events)).toEqual([["work", 36], ["handoff", 0]]);
++    expect(w.record).toMatchObject({ outcome: "failed", errorCode: "codex-single-call-not-single:tool" });
++  });
++});
+diff --git a/tests/fixtures/fake-codex.mjs b/tests/fixtures/fake-codex.mjs
+index 11878f3..7cea152 100644
+--- a/tests/fixtures/fake-codex.mjs
++++ b/tests/fixtures/fake-codex.mjs
+@@ -1,48 +1,64 @@
+-import { appendFileSync, existsSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
++import { appendFileSync, existsSync, lstatSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+ import { spawn } from "node:child_process";
+ const mode=process.argv[2], marker=process.argv[3];
+ // Orca agent selection (2026-09-26), spec §4.8: `--version` with no `exec` answers a fixed version and
+ // writes nothing; every other call appends what the real codex would receive (from `exec` on) as one
+ // JSON array line to `<marker>.argv`. Every mode below is otherwise unchanged.
+ // Orca retire-legacy-orca-run (2026-10-01), spec §3.4: mode `frames`, argv `frames <marker> <framesFile>`, plays
+ // the frame of the attempt number (the working directory's `attempt-<n>`, minus one) from the framesFile list of
+ // the task named in the prompt (else the `"*"` list); no frame ⇒ stderr `no frame for <task> attempt <n>`, exit 3.
+ // Every-agent requirement chain (Orca spec 2026-10-15 §9): `--version` appends `version` to `<marker>.version-calls`;
+ // `debug models` and `features list` answer the catalog and the feature list and append `debug-models` / `features-list`
+ // to `<marker>.catalog-calls`, before anything below runs, so `<marker>.argv` and `<marker>.calls` never see them.
+ // `<marker>.catalog.json` ({rows?, sleepMs?, exitCode?, stderr?}) overrides the rows, sleeps first, or fails.
++// Task 8 of that plan: its `features?` (a list of flag names) overrides the flags `features list` prints.
+ if(process.argv.at(-1)==="--version"&&!process.argv.includes("exec")) {appendFileSync(marker+".version-calls","version\n");await new Promise(resolve=>process.stdout.write("9.9.9-fake\n",resolve));process.exit(0);}
+ const catalogCall=process.argv.includes("debug")&&process.argv.includes("models")?"debug-models":process.argv.includes("features")&&process.argv.includes("list")?"features-list":null;
+ if(catalogCall!==null&&!process.argv.includes("exec")) {
+   appendFileSync(marker+".catalog-calls",catalogCall+"\n");
+   const script=existsSync(marker+".catalog.json")?JSON.parse(readFileSync(marker+".catalog.json","utf8")):{};
+   if(script.sleepMs!==undefined) await new Promise(resolve=>setTimeout(resolve,script.sleepMs));
+   if(script.stderr!==undefined) await new Promise(resolve=>process.stderr.write(script.stderr,resolve));
+   if(script.exitCode!==undefined) process.exit(script.exitCode);
+   if(catalogCall==="debug-models") {
+     const rows=script.rows??[{slug:"gpt-6-sol",context_window:272000,visibility:"list"},{slug:"gpt-6-luna",context_window:272000,visibility:"list"},{slug:"gpt-reserve",context_window:272000,visibility:"hide"}];
+     await new Promise(resolve=>process.stdout.write(JSON.stringify({models:rows})+"\n",resolve));
+   } else {
+-    const flags=["apps","browser_use","image_generation","multi_agent","plugins","shell_tool","skip_host_skill_discovery","unified_exec","view_image"];
++    const flags=script.features??["apps","browser_use","image_generation","multi_agent","plugins","shell_tool","skip_host_skill_discovery","unified_exec","view_image"];
+     await new Promise(resolve=>process.stdout.write(flags.map(flag=>`${flag.padEnd(40)} stable             true`).join("\n")+"\n",resolve));
+   }
+   process.exit(0);
+ }
+ appendFileSync(marker+".argv",JSON.stringify(process.argv.slice(process.argv.indexOf("exec")))+"\n");
+ const CONTINUATION="Treat continuation input fields unfinished, pendingDecisions, and awaitingHuman as required planning inputs.";
+ const args=process.argv.slice(process.argv.indexOf("exec")+1);
+ const value=flag=>args[args.indexOf(flag)+1];
+ let prompt="";
+ process.stdin.setEncoding("utf8");
+ process.stdin.on("data",c=>{prompt+=c;});
+ process.stdin.on("end",()=>{
++  // Every-agent requirement chain (Orca spec 2026-10-15 §6.1, §9): a single call is the only codex call with
++  // --skip-git-repo-check. It records HOME, CODEX_HOME and whether auth.json there is a symlink in <marker>.single-env.json,
++  // appends `single-call` to <marker>.calls, then plays <marker>.single.json ({rows?, final?, exitCode?, hang?}) or one
++  // complete {"answer":"42"} with usage input 20 (5 cached) and output 4.
++  if(args.includes("--skip-git-repo-check")) {
++    appendFileSync(marker+".calls","single-call\n");
++    let authIsLink=null; try{authIsLink=lstatSync(`${process.env.CODEX_HOME}/auth.json`).isSymbolicLink();}catch{}
++    writeFileSync(marker+".single-env.json",JSON.stringify({HOME:process.env.HOME,CODEX_HOME:process.env.CODEX_HOME,authIsLink}));
++    const script=existsSync(marker+".single.json")?JSON.parse(readFileSync(marker+".single.json","utf8")):{};
++    if(script.hang===true){setInterval(()=>{},1000);return;}
++    const rows=script.rows??[{type:"thread.started",thread_id:"t"},{type:"turn.started"},{type:"item.completed",item:{id:"item_0",type:"agent_message",text:"{\"answer\":\"42\"}"}},{type:"turn.completed",usage:{input_tokens:20,cached_input_tokens:5,output_tokens:4}}];
++    writeFileSync(value("-o"),script.final??"{\"answer\":\"42\"}");
++    process.stdout.write(rows.map(row=>JSON.stringify(row)).join("\n")+"\n",()=>{process.exitCode=script.exitCode??0;});
++    return;
++  }
+   writeFileSync(marker,JSON.stringify({args,cwd:process.cwd(),prompt,pid:process.pid}));
+   // Orca session 7f37d261 (2026-10-13), codex rate-limit spec §4: modes `rate-limit-1` (the first call of this marker is
+   // rejected, later calls behave as `integration`), `rate-limit-all`, `rate-limit-all-exit0` and `rate-limit-after-item`
+   // replay the tester's real 429 stdout (Orca orca_archived_files/recommendations-1-events.jsonl), exit 1 unless exit0.
+   // `rate-limit-hang` prints the same rows and then hangs (a phase that times out); `rate-limit-1-hang` rejects the first
+   // call and hangs on every later one.
+   if(mode.startsWith("rate-limit")) {
+     const call=readFileSync(marker+".argv","utf8").trim().split("\n").length;
+     if(mode==="rate-limit-1-hang"&&call>1) {setInterval(()=>{},1000);return;}
+     if(!mode.startsWith("rate-limit-1")||call===1) {
+diff --git a/tests/runtime/codex/codexSingleCall.test.ts b/tests/runtime/codex/codexSingleCall.test.ts
+new file mode 100644
+index 0000000..48fc03b
+--- /dev/null
++++ b/tests/runtime/codex/codexSingleCall.test.ts
+@@ -0,0 +1,197 @@
++import { createHash } from "node:crypto";
++import { existsSync, readFileSync } from "node:fs";
++import { chmod, lstat, mkdir, mkdtemp, readlink, realpath, rm, symlink, unlink, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join, resolve } from "node:path";
++import { describe, expect, it } from "vitest";
++import { codexDescriptor } from "../../../src/agents/codex.js";
++import type { MaterializedAgentConfigV1 } from "../../../src/agents/types.js";
++import { codexSingleCallHome } from "../../../src/runtime/codex/codexSingleCall.js";
++import { observedTokensOf, SingleCallOutputInvalid } from "../../../src/runtime/types.js";
++
++// Every-agent requirement chain (Orca spec 2026-10-15 §6.1, R2, R9): one structured codex call with tools off, in a
++// private HOME and CODEX_HOME whose auth.json and config.toml are symlinks; decoding fails closed and books what it saw.
++const FAKE_CODEX = resolve("tests/fixtures/fake-codex.mjs");
++const SCHEMA = { type: "object", properties: { answer: { type: "string" } }, required: ["answer"], additionalProperties: false };
++async function world(single?: unknown) {
++  const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-codex-single-")));
++  const marker = join(dir, "codex-marker"), codexHome = join(dir, "codex-home");
++  await mkdir(codexHome); await writeFile(join(codexHome, "auth.json"), "{}"); await writeFile(join(codexHome, "config.toml"), "");
++  if (single !== undefined) await writeFile(`${marker}.single.json`, JSON.stringify(single));
++  const config: MaterializedAgentConfigV1 = { schema: "ccloop-agent-config-v1", kind: "codex",
++    installation: { kind: "codex", command: [process.execPath, FAKE_CODEX, "integration", marker], version: "9.9.9-fake", configDir: codexHome, timeoutMs: 60_000, killGraceMs: 100, sandbox: "read-only", budgetMode: "soft" },
++    selection: { agent: "codex", model: "gpt-6-sol", contextWindow: "agent-default" } };
++  const runDir = join(dir, "run"), cwd = join(runDir, "cwd"); await mkdir(cwd, { recursive: true, mode: 0o700 });
++  const adapter = codexDescriptor.createAdapter(config);
++  const request = { prompt: "Estimate.", responseSchema: SCHEMA, maxOutputTokens: 4096, cwd, runDir, timeoutMs: 30_000 };
++  return { dir, marker, codexHome, config, adapter, request };
++}
++const failure = (promise: Promise<unknown>) => promise.then(() => { throw new Error("expected a rejection"); }, (error: unknown) => error);
++const lastArgv = (marker: string): string[] => JSON.parse(readFileSync(`${marker}.argv`, "utf8").trim().split("\n").at(-1)!);
++const configValues = (argv: string[]) => argv.flatMap((arg, i) => (arg === "-c" ? [argv[i + 1]!] : []));
++type SingleEnv = { HOME: string; CODEX_HOME: string; authIsLink: boolean };
++const singleEnv = (marker: string): SingleEnv => JSON.parse(readFileSync(`${marker}.single-env.json`, "utf8")) as SingleEnv;
++const mode = async (path: string) => (await lstat(path)).mode & 0o777;
++const ISOLATION = [
++  "include_permissions_instructions=false", "include_apps_instructions=false", "include_collaboration_mode_instructions=false",
++  "include_environment_context=false", "project_doc_max_bytes=0", "features.plugins=false",
++];
++
++describe("codex single call (spec §6.1)", { timeout: 30_000 }, () => {
++  it("C8.1: answers the object with the observed usage per model", async () => {
++    const w = await world();
++    expect(await w.adapter.singleCall!(w.request)).toEqual({ output: { answer: "42" }, tokenUsage: 24, usageEvidence: expect.objectContaining({ normalizedTotal: 24 }),
++      modelUsage: [{ model: "gpt-6-sol", input: 15, output: 4, cacheRead: 5, cacheWrite: 0 }] });
++    expect(readFileSync(`${w.marker}.calls`, "utf8")).toBe("single-call\n");
++  });
++
++  // Task 0 (codex-cli 0.160.0) ruling: `features.plugins=false` belongs to the isolation keys -- it removes the
++  // <recommended_plugins> block a linked config.toml injects -- and is sent once, never again as a tool flag.
++  it("C8.2: runs read-only in the empty cwd with every isolation key and the installed tool flags off", async () => {
++    const w = await world();
++    await w.adapter.singleCall!(w.request);
++    const argv = lastArgv(w.marker);
++    expect(argv.slice(0, 7)).toEqual(["exec", "--json", "--ephemeral", "--color", "never", "--skip-git-repo-check", "--model"]);
++    expect(argv[argv.indexOf("--sandbox") + 1]).toBe("read-only");
++    expect(argv[argv.indexOf("-C") + 1]).toBe(w.request.cwd);
++    expect(configValues(argv)).toEqual([...ISOLATION,
++      "features.apps=false", "features.image_generation=false", "features.multi_agent=false",
++      "features.shell_tool=false", "features.skip_host_skill_discovery=true", "features.unified_exec=false", "features.view_image=false",
++    ]);
++    expect(argv.at(-1)).toBe("-");
++  });
++
++  // Ruling (Task 8, Orca session a852f96a, 2026-10-16, answering the human's "can the dir be reused?"): ONE private HOME and
++  // CODEX_HOME per installation under the ccloop cache dir, links re-checked every call; the run dir only without a cache dir.
++  it("C8.3: runs in a private HOME and CODEX_HOME, reused per installation under the cache dir, whose auth.json and config.toml are symlinks, never copies (R9)", async () => {
++    const w = await world();
++    await w.adapter.singleCall!(w.request);
++    const id = createHash("sha256").update(`${await realpath(process.execPath)}\0${w.codexHome}`).digest("hex");
++    const base = join(process.env.CCLOOP_CACHE_DIR!, "codex-home", id);
++    const env = singleEnv(w.marker);
++    expect(env).toEqual({ HOME: join(base, "home"), CODEX_HOME: join(base, "codex-home"), authIsLink: true });
++    expect(await readlink(join(env.CODEX_HOME, "auth.json"))).toBe(join(w.codexHome, "auth.json"));
++    expect(await readlink(join(env.CODEX_HOME, "config.toml"))).toBe(join(w.codexHome, "config.toml"));
++    expect([await mode(base), await mode(env.HOME), await mode(env.CODEX_HOME)]).toEqual([0o700, 0o700, 0o700]);
++
++    // A second call reuses the same dirs with the links intact; an existing dir's mode is left alone.
++    await chmod(env.HOME, 0o750);
++    await w.adapter.singleCall!(w.request);
++    expect(singleEnv(w.marker)).toEqual(env);
++    expect(await readlink(join(env.CODEX_HOME, "auth.json"))).toBe(join(w.codexHome, "auth.json"));
++    expect(await mode(env.HOME)).toBe(0o750);
++  });
++
++  it("C8.3b: repairs a link that points elsewhere, a regular file where a link belongs, and a link whose source is gone", async () => {
++    const w = await world();
++    await w.adapter.singleCall!(w.request);
++    const { CODEX_HOME } = singleEnv(w.marker);
++    await unlink(join(CODEX_HOME, "auth.json")); await writeFile(join(CODEX_HOME, "auth.json"), "{\"copied\":true}");
++    await unlink(join(CODEX_HOME, "config.toml")); await symlink(join(w.dir, "elsewhere.toml"), join(CODEX_HOME, "config.toml"));
++    await w.adapter.singleCall!(w.request);
++    expect(singleEnv(w.marker).authIsLink).toBe(true);
++    expect(await readlink(join(CODEX_HOME, "auth.json"))).toBe(join(w.codexHome, "auth.json"));
++    expect(await readlink(join(CODEX_HOME, "config.toml"))).toBe(join(w.codexHome, "config.toml"));
++    await rm(join(w.codexHome, "config.toml"));
++    await w.adapter.singleCall!(w.request);
++    expect(await lstat(join(CODEX_HOME, "config.toml")).then(() => "present", () => "absent")).toBe("absent");
++  });
++
++  // The installation is named by its real executable: a symlinked command (a shim, an nvm alias) shares the real one's dirs.
++  it("C8.3c: two first calls at once both get the same private dirs, named by the real executable", async () => {
++    const w = await world();
++    const env = { CCLOOP_CACHE_DIR: join(w.dir, "fresh-cache") };
++    const executable = join(w.dir, "codex-shim");
++    await symlink(process.execPath, executable);
++    const input = { runDir: w.request.runDir, sourceCodexHome: w.codexHome, executable, env };
++    const [a, b] = await Promise.all([codexSingleCallHome(input), codexSingleCallHome(input)]);
++    expect(a).toEqual(b);
++    const id = createHash("sha256").update(`${await realpath(process.execPath)}\0${w.codexHome}`).digest("hex");
++    expect(a.home).toBe(join(w.dir, "fresh-cache", "codex-home", id, "home"));
++    expect(await readlink(join(a.codexHome, "auth.json"))).toBe(join(w.codexHome, "auth.json"));
++  });
++
++  it("C8.3d: with no cache dir, each call gets its own private dirs under the run directory", async () => {
++    const w = await world();
++    const input = { runDir: w.request.runDir, sourceCodexHome: w.codexHome, executable: process.execPath, env: {} };
++    const first = await codexSingleCallHome(input), second = await codexSingleCallHome(input);
++    const root = join(w.request.runDir, "codex", "1", "single-call");
++    expect([first.home.startsWith(root), first.codexHome.startsWith(root)]).toEqual([true, true]);
++    expect(second.home).not.toBe(first.home);
++    expect([await mode(first.home), await mode(first.codexHome)]).toEqual([0o700, 0o700]);
++    expect((await lstat(join(first.codexHome, "auth.json"))).isSymbolicLink()).toBe(true);
++    expect(await readlink(join(first.codexHome, "config.toml"))).toBe(join(w.codexHome, "config.toml"));
++  });
++
++  // Ruling (Task 8): the links' source is the installation's effective CODEX_HOME -- its configDir, else an inherited
++  // absolute CODEX_HOME, else <HOME>/.codex (an empty or relative CODEX_HOME is unset, never joined cwd-relative).
++  it("C8.3e: with no configDir, links the inherited CODEX_HOME's files, else <HOME>/.codex's", async () => {
++    const saved = { CODEX_HOME: process.env.CODEX_HOME, HOME: process.env.HOME };
++    try {
++      const w = await world();
++      const inherited = join(w.dir, "inherited"), home = join(w.dir, "person");
++      for (const dir of [inherited, join(home, ".codex")]) { await mkdir(dir, { recursive: true }); await writeFile(join(dir, "auth.json"), "{}"); }
++      const adapter = codexDescriptor.createAdapter({ ...w.config, installation: { ...w.config.installation, configDir: null } });
++      const linkedAuth = async (codexHome: string) => {
++        process.env.CODEX_HOME = codexHome; process.env.HOME = home;
++        await adapter.singleCall!(w.request);
++        return readlink(join(singleEnv(w.marker).CODEX_HOME, "auth.json"));
++      };
++      expect(await linkedAuth(inherited)).toBe(join(inherited, "auth.json"));
++      expect(await linkedAuth("")).toBe(join(home, ".codex", "auth.json"));
++      expect(await linkedAuth("relative-codex-home")).toBe(join(home, ".codex", "auth.json"));
++    } finally {
++      for (const [name, value] of Object.entries(saved)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
++    }
++  });
++
++  it("C8.4: refuses before spawning, booking 0, when the feature list cannot be read", async () => {
++    const w = await world();
++    await writeFile(`${w.marker}.catalog.json`, JSON.stringify({ exitCode: 9 }));
++    const error = await failure(w.adapter.singleCall!(w.request));
++    expect(error).toMatchObject({ code: "codex-single-call-unavailable", neverStarted: true });
++    expect(observedTokensOf(error)).toBe(0);
++    expect(existsSync(`${w.marker}.calls`)).toBe(false);
++  });
++
++  // Codex refuses an unknown flag ("Unknown feature flag"), so only the flags the installed version lists are sent.
++  it("C8.4b: turns off only the tool flags the installed codex lists", async () => {
++    const w = await world();
++    await writeFile(`${w.marker}.catalog.json`, JSON.stringify({ features: ["apps", "browser_use", "shell_tool"] }));
++    await w.adapter.singleCall!(w.request);
++    expect(configValues(lastArgv(w.marker))).toEqual([...ISOLATION, "features.apps=false", "features.shell_tool=false"]);
++  });
++
++  it.each([
++    ["tool", [{ type: "item.started", item: { id: "i", type: "command_execution", command: "ls" } }, { type: "turn.completed", usage: { input_tokens: 30, output_tokens: 6 } }], 36],
++    ["messages", [{ type: "item.completed", item: { type: "agent_message", text: "{}" } }, { type: "item.completed", item: { type: "agent_message", text: "{\"answer\":\"42\"}" } }, { type: "turn.completed", usage: { input_tokens: 30, output_tokens: 6 } }], 36],
++    ["turns", [{ type: "turn.completed", usage: { input_tokens: 10, output_tokens: 1 } }, { type: "turn.completed", usage: { input_tokens: 30, output_tokens: 6 } }], 36],
++  ] as const)("C8.5: refuses a call that was not single (%s) and books the usage it saw", async (what, rows, booked) => {
++    const w = await world({ rows });
++    const error = await failure(w.adapter.singleCall!(w.request));
++    expect(error).toMatchObject({ code: `codex-single-call-not-single:${what}` });
++    expect(observedTokensOf(error)).toBe(booked);
++  });
++
++  it.each([
++    ["codex-event-error", [{ type: "item.completed", item: { type: "agent_message", text: "{\"answer\":\"42\"}" } }, { type: "error", message: "boom" }, { type: "turn.completed", usage: { input_tokens: 30, output_tokens: 6 } }]],
++    ["codex-events-invalid", [{ type: "item.completed", item: { type: "agent_message", text: "{\"answer\":\"42\"}" } }, "not an event", { type: "turn.completed", usage: { input_tokens: 30, output_tokens: 6 } }]],
++  ] as const)("C8.5b: refuses unreadable events (%s) and books the usage it saw, never 0", async (code, rows) => {
++    const w = await world({ rows });
++    const error = await failure(w.adapter.singleCall!(w.request));
++    expect((error as Error).message).toBe(code);
++    expect(observedTokensOf(error)).toBe(36);
++  });
++
++  it("C8.6: an answer that is not one object is single-call-output-invalid with its usage", async () => {
++    const w = await world({ final: "not json" });
++    const error = await failure(w.adapter.singleCall!(w.request));
++    expect(error).toBeInstanceOf(SingleCallOutputInvalid);
++    expect((error as SingleCallOutputInvalid).tokenUsage).toBe(24);
++  });
++
++  it("C8.7: an answer over the request's maxOutputTokens is still the answer (R2: the bound is checked after the fact by Orca)", async () => {
++    const w = await world({ rows: [{ type: "item.completed", item: { type: "agent_message", text: "{\"answer\":\"42\"}" } }, { type: "turn.completed", usage: { input_tokens: 20, output_tokens: 9000 } }] });
++    expect(await w.adapter.singleCall!(w.request)).toMatchObject({ output: { answer: "42" }, tokenUsage: 9020, modelUsage: [{ output: 9000 }] });
++  });
++});

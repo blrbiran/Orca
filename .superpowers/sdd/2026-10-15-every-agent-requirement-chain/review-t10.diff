@@ -1,0 +1,327 @@
+06f15c53 feat(control): a declared-null context window takes ccloop's observed window (R7)
+ src/control/agentSelection.ts                |  2 +-
+ src/control/ccloopPort.ts                    |  3 ++-
+ src/control/profiles.ts                      |  8 +++++---
+ tests/control/declaredNullWindow.test.ts     | 29 ++++++++++++++++++++++++++++
+ tests/control/estimateSingleCallGate.test.ts |  3 +++
+ tests/control/executionDriverE2E.test.ts     |  5 +++++
+ tests/control/fixtures/ccloopWorld.ts        |  6 ++++++
+ tests/control/webCcloopSmoke.test.ts         | 14 +++++++++++++-
+ tests/setup/relocateCcloopCache.ts           | 16 +++++++++++++++
+ vitest.config.ts                             |  3 ++-
+ 10 files changed, 82 insertions(+), 7 deletions(-)
+diff --git a/src/control/agentSelection.ts b/src/control/agentSelection.ts
+index f8f04372..e402cd79 100644
+--- a/src/control/agentSelection.ts
++++ b/src/control/agentSelection.ts
+@@ -26,21 +26,21 @@ export interface OperatorPreferences {
+ /** The panel's own layers of a group (ruling review R7: the plan's layers are no longer copied in). */
+ export interface GroupAgentOverrides { worker?: PanelPartialSelection; estimator?: PanelPartialSelection; reconcile?: PanelPartialSelection }
+ /** The plan file's layers of a group and of one task (spec §6.2 layers 2 and 3, plan half). */
+ export interface PlanAgentLayers { group?: PartialSelection; reconcile?: PartialSelection; task?: PartialSelection }
+ export type Slot = "worker" | "estimator" | "reconcile";
+ type Field = "agent" | "model" | "contextWindow";
+ type Provenance = Record<Field, ProvenanceSource | null>;
+ 
+ /** Single-call estimate spec §4.4: `singleCallExecution` sits beside the seven-key view, like timeoutMs/killGraceMs. */
+ // OMP single call (spec 2026-10-14 §4): so does `singleCallOutputCap` when ccloop states it; null or absent = the call honours the request's cap.
+-export interface AgentResolution { selection: AgentSelection; configHash: string; timeoutMs: number; killGraceMs: number; capabilities: CapabilityViewV1; singleCallExecution: "v1" | null; singleCallOutputCap?: number | null }
++export interface AgentResolution { selection: AgentSelection; configHash: string; timeoutMs: number; killGraceMs: number; capabilities: CapabilityViewV1; singleCallExecution: "v1" | "v1-soft" | null; singleCallOutputCap?: number | null }
+ /** What confirmation and import freeze; `singleCallExecution` is never frozen (spec §4.4: no persisted schema changes). */
+ // OMP single call (spec 2026-10-14 §4): nor is `singleCallOutputCap`.
+ export interface FrozenSlot extends Omit<AgentResolution, "singleCallExecution" | "singleCallOutputCap"> { partial: PartialSelection; provenance: Record<Field, ProvenanceSource> }
+ 
+ /**
+  * Single-call estimate spec §4.4 (drafter finding F3): a frozen slot is written field by field, so a field ccloop adds
+  * to its resolution never reaches frozenSlotSchema (strict), the estimate record or the execution snapshot.
+  */
+ export function frozenSlotOf(resolution: AgentResolution, partial: PartialSelection, provenance: Record<Field, ProvenanceSource>): FrozenSlot {
+   return {
+diff --git a/src/control/ccloopPort.ts b/src/control/ccloopPort.ts
+index ce6d00e8..8b702b26 100644
+--- a/src/control/ccloopPort.ts
++++ b/src/control/ccloopPort.ts
+@@ -37,21 +37,22 @@ const collectionSchema=z.object({events:z.array(eventSchema),candidate:candidate
+ const collectionV4Schema=collectionSchema.extend({terminal:terminalSchema.extend({waitingCause:z.literal("token-allowance").optional(),allowanceNextPhase:z.enum(["plan","execute","verify"]).optional(),budgetSnapshot:z.object({attemptsRemaining:safeInteger,timeRemainingMs:safeInteger,tokenBudgetRemaining:safeInteger.nullable(),tokenRemainingStatus:z.enum(["known","unlimited","unknown"])}).strict()}).nullable()});
+ 
+ const evidenceSchema=z.object({artifactId:z.string().min(1),hash:z.string().regex(/^[a-f0-9]{64}$/),base64:z.string()}).strict();
+ // Agent selection spec §4.6: capabilities protocol 3. Two shapes, chosen by the request: `agent: null` answers the
+ // table view, a partial selection answers that selection's resolution (its seven-key capability view carries no protocol tag).
+ const agentsViewSchema=z.object({protocol:z.literal(3),installations:z.array(z.object({id:idSchema,kind:z.string().min(1),defaults:z.object({model:z.string().min(1),contextWindow:contextWindowSchema}).strict(),contextOptions:z.array(contextWindowSchema).min(1),version:z.string().min(1)}).strict())}).strict();
+ // Single-call estimate spec §4.4: a selection's resolution also answers singleCallExecution, beside the view, never in it.
+ // Accounts D8: `usageBreakdown` is accepted beside it when ccloop states it; Orca consumes no behavior from it.
+ // OMP single call (spec 2026-10-14 §4): `singleCallOutputCap`, when ccloop states it, is the cap the agent's call runs
+ // under; optional (an older ccloop omits it), nullable, never frozen (frozenSlotOf copies field by field).
+-const agentResolutionSchema=z.object({protocol:z.literal(3),selection:agentSelectionSchema,configHash:z.string().regex(/^[a-f0-9]{64}$/),timeoutMs:safeInteger.positive().max(2_147_483_647),killGraceMs:safeInteger.max(60_000),capabilities:capabilityViewSchema,singleCallExecution:z.enum(["v1"]).nullable(),singleCallOutputCap:safeInteger.positive().nullable().optional(),usageBreakdown:z.enum(["per-model","unavailable"]).optional()}).strict();
++// Spec 2026-10-15 §6.2: "v1-soft" (codex) -- a single call whose output bound is checked after the fact.
++const agentResolutionSchema=z.object({protocol:z.literal(3),selection:agentSelectionSchema,configHash:z.string().regex(/^[a-f0-9]{64}$/),timeoutMs:safeInteger.positive().max(2_147_483_647),killGraceMs:safeInteger.max(60_000),capabilities:capabilityViewSchema,singleCallExecution:z.enum(["v1","v1-soft"]).nullable(),singleCallOutputCap:safeInteger.positive().nullable().optional(),usageBreakdown:z.enum(["per-model","unavailable"]).optional()}).strict();
+ export const ccloopCollectionSchema=collectionSchema;
+ export const ccloopResolutionSchema=agentResolutionSchema;
+ 
+ /** Spec 2026-10-15 ccloop error codes §4.1: the most of a peer's stderr Orca keeps or shows, in UTF-16 code units. */
+ export const PEER_DETAIL_MAX = 512;
+ /**
+  * ccloop's leading code: `<exit>:<code>` followed by the end, whitespace, `: ` or a final `:` -- so `1:file:///x` names
+  * no code (plan correction K1: a bare `:` after the code is a URL's, not ccloop's `<code>: <detail>`).
+  */
+ const PEER_CODE = /^[^:]*:([a-z][a-z0-9-]{0,63})(?=$|\s|:\s|:$)/;
+diff --git a/src/control/profiles.ts b/src/control/profiles.ts
+index 854ec6e0..41ade2f6 100644
+--- a/src/control/profiles.ts
++++ b/src/control/profiles.ts
+@@ -109,24 +109,26 @@ function proofMatches(left: CapabilityViewV1["requestBoundProof"], right: Capabi
+ export function intersectCapabilities(declared: DeclaredCapabilities, observed: CapabilityViewV1): CapabilityViewV1 {
+   const usageOrder = ["unavailable", "phase-end", "realtime"] as const;
+   const enforcementOrder = ["unavailable", "soft", "bounded"] as const;
+   const handoffOrder = ["unavailable", "phase-end", "durable"] as const;
+   return {
+     usageObservation: minimum(declared.usageObservation, observed.usageObservation, usageOrder),
+     budgetEnforcement: minimum(declared.budgetEnforcement, observed.budgetEnforcement, enforcementOrder),
+     contextObservation: minimum(declared.contextObservation, observed.contextObservation, usageOrder),
+     handoffControl: minimum(declared.handoffControl, observed.handoffControl, handoffOrder),
+     handoffExecution: observed.handoffExecution === declared.handoffExecution ? declared.handoffExecution : null,
++    // Spec 2026-10-15 §6.3, human ruling R7: a declared null is "not declared", so the observed window is taken; an observed
++    // null stays null (Orca never invents a window ccloop did not state); two numbers take the smaller.
+     contextWindowTokens:
+-      declared.contextWindowTokens !== null && observed.contextWindowTokens !== null
+-        ? Math.min(declared.contextWindowTokens, observed.contextWindowTokens)
+-        : null,
++      observed.contextWindowTokens === null ? null
++        : declared.contextWindowTokens === null ? observed.contextWindowTokens
++          : Math.min(declared.contextWindowTokens, observed.contextWindowTokens),
+     requestBoundProof: proofMatches(declared.requestBoundProof, observed.requestBoundProof)
+       ? declared.requestBoundProof
+       : null,
+   };
+ }
+ 
+ export function resolveProfile(snapshot: ExecutionProfileSnapshotV1, port: ExecutionPort = unboundPort): FrozenProfile {
+   const parsed = executionProfileSnapshotSchema.safeParse(snapshot);
+   if (!parsed.success) throw new ControlError("control-profile-invalid", parsed.error.issues[0]?.message);
+   const closedSnapshot = deepFreeze(structuredClone(parsed.data));
+diff --git a/tests/control/declaredNullWindow.test.ts b/tests/control/declaredNullWindow.test.ts
+new file mode 100644
+index 00000000..47aa888a
+--- /dev/null
++++ b/tests/control/declaredNullWindow.test.ts
+@@ -0,0 +1,29 @@
++import { describe, expect, it } from "vitest";
++import { estimatorCompatibility } from "../../src/control/estimatorCompatibility.js";
++import { intersectCapabilities, resolveProfile } from "../../src/control/profiles.js";
++import type { CapabilityViewV1 } from "../../src/control/webProtocol.js";
++import { fixtureResolutionFor } from "./fixtures/agents.js";
++import { profileSnapshot } from "./fixtures/web.js";
++
++// Spec 2026-10-15 §6.3, human ruling R7 (criterion 7): a profile's `contextWindowTokens: null` means "not declared", so the
++// intersection takes ccloop's observed window; two numbers still take the smaller; an observed null stays null.
++const declared = (window: number | null) => ({ ...profileSnapshot().profile.capabilities, contextWindowTokens: window });
++const observed = (window: number | null): CapabilityViewV1 => ({ ...profileSnapshot().profile.capabilities, contextWindowTokens: window });
++
++describe("a declared-null window (R7)", () => {
++  it("takes the observed window, the smaller of two, and keeps an observed null", () => {
++    expect([
++      intersectCapabilities(declared(null), observed(272000)).contextWindowTokens,
++      intersectCapabilities(declared(200000), observed(272000)).contextWindowTokens,
++      intersectCapabilities(declared(null), observed(null)).contextWindowTokens,
++      intersectCapabilities(declared(300000), observed(null)).contextWindowTokens,
++    ]).toEqual([272000, 200000, null, null]);
++  });
++
++  it("has no context-unavailable when ccloop reports a window under a null-declaring profile, and has it when ccloop reports none", () => {
++    const snapshot = profileSnapshot(); snapshot.profile.capabilities = declared(null);
++    const profile = resolveProfile(snapshot);
++    const at = (window: number | null) => estimatorCompatibility({ profile, observed: observed(window), probeFailureCode: null, resolution: fixtureResolutionFor(observed(window)) }, "soft").reasonCodes;
++    expect([at(272000).includes("context-unavailable"), at(null).includes("context-unavailable")]).toEqual([false, true]);
++  });
++});
+diff --git a/tests/control/estimateSingleCallGate.test.ts b/tests/control/estimateSingleCallGate.test.ts
+index 9ec7e1b2..c519be83 100644
+--- a/tests/control/estimateSingleCallGate.test.ts
++++ b/tests/control/estimateSingleCallGate.test.ts
+@@ -3,20 +3,23 @@ import { readEstimateRecord } from "../../src/control/queries.js";
+ import { readControlGroup } from "../../src/panel/controlViews.js";
+ import { WebControlService } from "../../src/control/webService.js";
+ import { fixtureResolveAgent } from "./fixtures/agents.js";
+ import { webFixture } from "./fixtures/web.js";
+ 
+ // Human ruling 24 (Orca ledger 2026-09-27-single-call-estimate §3.21; landed by session c85d2c4e, 2026-09-28): each of
+ // estimator.ts's two single-call gates gets a criterion of its own, beside estimatePrompt.test.ts's unit one. Both go
+ // through the service, as the panel and the driver reach them, and the estimator's context window stays a known number
+ // throughout -- so `contextWindowTokens: null`, which blocks an estimate on its own, is not what these observe.
+ // Additive only: no existing criterion changed.
++// *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) ***: under spec 2026-10-15 §6.3
++// (R7) a DECLARED `contextWindowTokens: null` no longer blocks an estimate on its own (the observed window is taken); an
++// OBSERVED null still does (tests/control/declaredNullWindow.test.ts). Text above kept verbatim.
+ 
+ /** Answer every later probe as ccloop answers for an agent without single calls: the same view, `singleCallExecution: null`. */
+ function answerNull(h: Awaited<ReturnType<typeof webFixture>>): void {
+   h.resolveAgent.mockImplementation(fixtureResolveAgent(() => structuredClone(h.frozen.snapshot.profile.capabilities), { singleCallExecution: null }));
+ }
+ 
+ describe("the estimator's single-call gates, each on its own (ruling 24)", () => {
+   it.each(["v1", null] as const)("createEstimate queues only when ccloop answers v1 (answer %s)", async answer => {
+     const h = await webFixture(); try {
+       if (answer === null) answerNull(h);
+diff --git a/tests/control/executionDriverE2E.test.ts b/tests/control/executionDriverE2E.test.ts
+index fe5e262f..b1f60307 100644
+--- a/tests/control/executionDriverE2E.test.ts
++++ b/tests/control/executionDriverE2E.test.ts
+@@ -9,20 +9,25 @@ import { readControlGroup } from "../../src/panel/controlViews.js";
+ import { taskRunNumber } from "../../web/src/runFacts.js";
+ import { ccloopWorlds, g, noBlocked, raw, realBinary, startGroup, until, workRuns } from "./fixtures/ccloopWorld.js";
+ 
+ /**
+  * Execution driver spec §7.2 E1, E2, W1, T1 and R1 against the real ccloop build (ORCA_CCLOOP_BIN, which
+  * must contain ccloop changes C1-C3) and its scripted fake codex. Everything is relocated under a
+  * temporary root. The honest claim these support (deviation D1): with fake codex, a soft group, and an
+  * estimator whose estimate is blocked-capability because contextWindowTokens is null, Web dispatch runs
+  * from confirm to settle and lands on orca/<groupId>. Not "Web dispatch works".
+  *
++ * *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) *** "blocked-capability because
++ * contextWindowTokens is null" no longer names the cause: under spec 2026-10-15 §6.3 (R7) a declared null takes ccloop's
++ * observed window. Measured with ccloop codex/every-agent-chain efcd5b3 built: the import-time estimate in these worlds is
++ * blocked-capability with reasonCode `agent-selection-rejected:estimator:agent-unselected`. Text above kept verbatim.
++ *
+  * The world, its boot/die/teardown and the command helpers live in fixtures/ccloopWorld.ts (moved there
+  * unchanged for handoffE2E.test.ts, handoff delivery preflight I11).
+  */
+ const { world, removeRoots, relocateHome } = ccloopWorlds({ rootPrefix: "orca-driver-e2e-", epochPrefix: "epoch-e2e-" });
+ // Retried: every scenario shuts its runtime down in a finally, but a shutdown does not wait for a
+ // background reconciliation `ccloop run` (the Task 6 deferral), so after a failed E1 that child can
+ // still be writing under the root when this runs. A passing scenario leaves no child behind.
+ afterAll(removeRoots);
+ 
+ const workStatus = (runtime: ControlRuntime, taskId: string): string =>
+diff --git a/tests/control/fixtures/ccloopWorld.ts b/tests/control/fixtures/ccloopWorld.ts
+index dc0bb72d..fddfc660 100644
+--- a/tests/control/fixtures/ccloopWorld.ts
++++ b/tests/control/fixtures/ccloopWorld.ts
+@@ -75,20 +75,26 @@ export interface ScriptEntry { files: Record<string, string>; delayMs?: { plan?:
+ /**
+  * Agent selection (plan T16): a world may also carry ccloop's CLI-level fake claude (tests/fixtures/fake-claude-cli.mjs) as a
+  * `claude` installation beside the fake codex, with its own marker and script.
+  */
+ /** Single-call estimate (F15, ccloop's fake claude): the answer to one single call, optionally after a delay, optionally streaming one closed message first. */
+ export interface SingleCallScriptEntry { output: unknown; delayMs?: { "single-call": number }; usageBeforeDelay?: boolean }
+ const optionalPolicyWorlds=new WeakSet<ControlRuntime>();
+ export interface WorldOptions { tokenPolicy?:"optional-v1"; claudeScript?: Record<string, ScriptEntry | SingleCallScriptEntry>; /** Single-call estimate: the profile's declared context window (null otherwise, so the estimate stays blocked-capability). */ declaredContextWindowTokens?: number;
+   /** Syncskill integration plan Task 6: more variables for the assembled runtime's env (ORCA_SYNCSKILL_BIN and what the fake syncskill reads). */
+   env?: NodeJS.ProcessEnv }
++// *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) *** on `declaredContextWindowTokens`
++// above ("null otherwise, so the estimate stays blocked-capability"): under spec 2026-10-15 §6.3 (R7) a declared null no
++// longer blocks on its own -- the intersection takes ccloop's observed window. Measured on branch codex/every-agent-chain
++// with ccloop codex/every-agent-chain efcd5b3 built: a codex world's import-time estimate is blocked-capability with
++// reasonCode `agent-selection-rejected:estimator:agent-unselected` (no estimator agent is selected yet), not by a window.
++// Text above kept verbatim.
+ 
+ /** The codex installation's killGraceMs in every world; handoffE2E's G scenario tells it apart from HANDOFF_EXTRA_GRACE_MS alone. */
+ export const KILL_GRACE_MS = 5_000;
+ 
+ export type World = Awaited<ReturnType<ReturnType<typeof ccloopWorlds>["world"]>>;
+ 
+ /**
+  * One file's worlds: `rootPrefix` names their temporary roots, `epochPrefix` the epochs `boot` assembles
+  * under. `removeRoots` is for the file's `afterAll`; `relocateHome` is called inside the file's describe.
+  */
+diff --git a/tests/control/webCcloopSmoke.test.ts b/tests/control/webCcloopSmoke.test.ts
+index c1bddca7..247c1659 100644
+--- a/tests/control/webCcloopSmoke.test.ts
++++ b/tests/control/webCcloopSmoke.test.ts
+@@ -146,43 +146,55 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
+     const root = await tempRoot("orca-web-real-cap-");
+     const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), agentsTablePath: await realTable(root), timeoutMs: 15_000 });
+     const { capabilities } = await port.resolveAgent({ agent: "codex" });
+ 
+     // Codex's own words, taken from the binary that would run the work: eight fields, no
+     // realtime usage, no bounded enforcement, no context observation, and no request-bound proof.
+     // Human authorization 2026-09-24, G1 seam A Task 5: this literal moved from the v1 seven-field
+     // shape to the v2 eight-field shape ccloop main now answers.
+     // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): capabilities protocol 3
+     // answers the same view inside the codex selection's resolution, untagged.
++    // Rewritten for the every-agent requirement chain (spec 2026-10-15 §6.1; human named E6 on 2026-10-15): ccloop now reads codex's window from its catalog (the build's fake codex answers 272000 for gpt-6-sol).
++    // Ruling: human named E6 in Orca session a852f96a, 2026-10-15
+     expect(capabilities).toEqual({
+       usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable",
+-      handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null,
++      handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: 272000, requestBoundProof: null,
+     });
+ 
+     // Human authorization 2026-09-24, G1 seam A Task 5: the adapter's own probe answer feeds the
+     // router as-is -- nothing here borrows from the declared profile.
+     const strict = await confirmedByAdapter("strict", capabilities);
+     try {
+       const refused = await strict.service.start(strict.f.command("start", {}));
+       expect("error" in refused ? refused.error.code : "applied").toBe("control-capability-unsupported");
+       expect(strict.f.store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE kind='start'").get()!.n).toBe(0);
+       expect(strict.f.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g'").get()!.n).toBe(0);
+     } finally { await strict.f.dispose(); }
+ 
+     const soft = await confirmedByAdapter("soft", capabilities);
+     try {
+       expect("error" in await soft.service.start(soft.f.command("start", {}))).toBe(false);
+       expect((await deliverScheduledStart(soft.deps, "g")).kind).toBe("claimed");
+       expect(soft.f.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g' AND active=1").get()!.n).toBe(1);
+     } finally { await soft.f.dispose(); }
+   });
+ 
++  // Every-agent requirement chain (spec 2026-10-15 §6.2, controller ruling P17 moving the enum into Task 10): the real
++  // ccloop build answers codex's single call as "v1-soft", and Orca's resolution schema accepts it rather than refusing
++  // the whole resolution as control-response-invalid. Additive: no existing criterion changed.
++  it.skipIf(!realBinary)("accepts the real codex resolution's singleCallExecution v1-soft through Orca's schema", async () => {
++    const root = await tempRoot("orca-web-real-v1-soft-");
++    const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), agentsTablePath: await realTable(root), timeoutMs: 15_000 });
++    const resolution = await port.resolveAgent({ agent: "codex" });
++    expect([resolution.selection.agent, resolution.singleCallExecution]).toEqual(["codex", "v1-soft"]);
++  });
++
+   // Controller ruling (G1 seam A Task 5 fix round 1, 2026-09-24; only-add, no existing criterion
+   // in this file changed): `probeBlocksDispatch` (src/control/webDispatch.ts) is called twice on
+   // the same observation -- once in `scheduleStart` (via `WebControlService.start()`, the
+   // "expect(... start...).toBe(false)" line above) and again in `deliverScheduledStart`. A real
+   // ccloop answer that degrades between those two calls is the only way to exercise the second
+   // call without the first one catching it first, so this isolates the delivery-time guard.
+   it.skipIf(!realBinary)("blocks only at delivery when the observation degrades after a clean schedule", async () => {
+     // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the real answer is the
+     // codex selection's resolution against a real agents table; the guard it isolates is unchanged.
+     const root = await tempRoot("orca-web-real-delivery-guard-");
+diff --git a/tests/setup/relocateCcloopCache.ts b/tests/setup/relocateCcloopCache.ts
+new file mode 100644
+index 00000000..ec36cdc0
+--- /dev/null
++++ b/tests/setup/relocateCcloopCache.ts
+@@ -0,0 +1,16 @@
++import { mkdtempSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++
++/**
++ * CLAUDE.md Rule 17 and spec 2026-10-15 §4.2: ccloop caches agent catalogs outside the repository. Every ccloop this
++ * suite spawns inherits this directory (execFile without `env` passes process.env), inside this file's scoped TMPDIR.
++ *
++ * It also points CODEX_HOME at an empty dir under the same TMPDIR: a codex installation with configDir null reads
++ * `$CODEX_HOME/config.toml` (else `$HOME/.codex/config.toml`) for `model_context_window`, so without this a criterion
++ * would read the person's real ~/.codex and answer that window instead of the fake catalog's (ccloop measured it on
++ * 2026-10-16: 1000000 instead of 272000; ccloop's tests/setup/relocateCatalogCache.ts does the same). Rule 17: no
++ * criterion reads or writes the person's own data.
++ */
++process.env.CCLOOP_CACHE_DIR = mkdtempSync(join(tmpdir(), "ccache-"));
++process.env.CODEX_HOME = mkdtempSync(join(tmpdir(), "chome-"));
+diff --git a/vitest.config.ts b/vitest.config.ts
+index 2fbdd276..3732f685 100644
+--- a/vitest.config.ts
++++ b/vitest.config.ts
+@@ -1,12 +1,13 @@
+ import { defineConfig } from "vitest/config";
+ 
+ export default defineConfig({
+   test: {
+     environment: "node",
+     include: ["tests/**/*.test.ts"],
+     // CLAUDE.md Rule 17, mechanically: no test process may run with ORCA_CONTROL_DIR unset, because
+     // the shipped default for it is a real home directory. See the file for what this prevents.
+     // relocateCcmem.ts does the same for ccmem's data root (memory tab spec §6.2).
+-    setupFiles: ["tests/setup/scopeTmpdir.ts", "tests/setup/relocateUserData.ts", "tests/setup/relocateCcmem.ts"],
++    // relocateCcloopCache.ts does the same for ccloop's agent-catalog cache and CODEX_HOME (spec 2026-10-15 §4.2).
++    setupFiles: ["tests/setup/scopeTmpdir.ts", "tests/setup/relocateCcloopCache.ts", "tests/setup/relocateUserData.ts", "tests/setup/relocateCcmem.ts"],
+   },
+ });

@@ -1,0 +1,297 @@
+efcd5b3 fix(runtime): codex single-call home refuses symlinked dirs, never deletes a regular credential
+ src/runtime/codex/codexAdapter.ts           | 13 ++++-
+ src/runtime/codex/codexSingleCall.ts        | 43 +++++++++++---
+ tests/runtime/codex/codexSingleCall.test.ts | 88 ++++++++++++++++++++++++++++-
+ 3 files changed, 131 insertions(+), 13 deletions(-)
+diff --git a/src/runtime/codex/codexAdapter.ts b/src/runtime/codex/codexAdapter.ts
+index 7a5293f..fad5f88 100644
+--- a/src/runtime/codex/codexAdapter.ts
++++ b/src/runtime/codex/codexAdapter.ts
+@@ -1,12 +1,12 @@
+ import { normalizeExecutionFinal, ExecutionFormatFailure } from "../executionNormalizer.js";
+-import { writeFile } from "node:fs/promises";
++import { access, writeFile } from "node:fs/promises";
+ import { isAbsolute, join } from "node:path";
+ import { readAgentCatalog } from "../../agents/agentCatalog.js";
+ import type { InstallationV1 } from "../../agents/types.js";
+ import { buildExecutorPrompt, buildPlannerPrompt, buildVerifierPrompt } from "../claude/prompts.js";
+ import type { AttemptContext, RuntimeAdapter, SingleCallRequest, SingleCallResult } from "../types.js";
+ import { codexSingleCallArgs, codexSingleCallHome, decodeCodexSingleCall } from "./codexSingleCall.js";
+ import { codexModelUsage, decodeCodexUsage, decodeCodexResult, parseCodexConfig, phaseFinalAccepts, scanFinalMessage, type CodexConfig, type CodexPhase, type PhaseResults } from "./protocol.js";
+ import { runCodexPhase, type PhaseOutcome } from "./runCodexPhase.js";
+ import { classifyRateLimit } from "./rateLimit.js";
+ 
+@@ -157,15 +157,22 @@ export class CodexAdapter implements RuntimeAdapter {
+     // The installation's effective CODEX_HOME: its configDir, else an inherited absolute CODEX_HOME, else <HOME>/.codex.
+     const inherited = process.env.CODEX_HOME, home = process.env.HOME;
+     const source = this.installation.configDir ?? (inherited && isAbsolute(inherited) ? inherited : home && isAbsolute(home) ? join(home, ".codex") : null);
+     const isolated = await codexSingleCallHome({ runDir: request.runDir, sourceCodexHome: source, executable: this.config.command[0], env: process.env });
+     const context = { runDir: request.runDir, attempt: 1, worktreePath: request.cwd, abortSignal: request.signal, onProcessRegistered: request.onProcessRegistered,
+       state: { budgetSnapshot: { timeRemainingMs: Math.max(1, deadline - Date.now()) } } } as unknown as AttemptContext;
+     const outcome = await runCodexPhase(this.config, { phase: "single-call", prompt: request.prompt, context, spawn: {
+       schema: request.responseSchema, env: { ...process.env, HOME: isolated.home, CODEX_HOME: isolated.codexHome },
+       args: ({ schemaPath, finalPath }) => codexSingleCallArgs({ model: this.config.model, cwd: request.cwd, schemaPath, finalPath, features }),
+     } });
+-    if (outcome.reason === "aborted") throw new CodexPhaseAborted(outcome.evidenceDir, outcome.observedTokens);
+-    if (outcome.reason !== "completed") throw Object.assign(new Error(`codex-${outcome.reason}: ${outcome.evidenceDir}`), { observedTokens: outcome.observedTokens });
++    if (outcome.reason !== "completed") {
++      // Fix round 1 (repo convention, omp "Ruling m4", claude): runCodexPhase writes the prompt only after process.json is
++      // saved, so a call that ended without it -- aborted before or at spawn, a spawn error, a deadline hit first -- never
++      // sent anything: neverStarted, booked 0. The codex phase path is unchanged.
++      const neverStarted = !(await access(join(outcome.evidenceDir, "process.json")).then(() => true, () => false));
++      const error = outcome.reason === "aborted" ? new CodexPhaseAborted(outcome.evidenceDir, outcome.observedTokens)
++        : Object.assign(new Error(`codex-${outcome.reason}: ${outcome.evidenceDir}`), { observedTokens: outcome.observedTokens });
++      throw neverStarted ? Object.assign(error, { neverStarted: true }) : error;
++    }
+     return decodeCodexSingleCall(outcome.events, outcome.final, this.config.model, outcome.evidenceDir);
+   }
+ }
+diff --git a/src/runtime/codex/codexSingleCall.ts b/src/runtime/codex/codexSingleCall.ts
+index c8afccd..632c1b6 100644
+--- a/src/runtime/codex/codexSingleCall.ts
++++ b/src/runtime/codex/codexSingleCall.ts
+@@ -20,61 +20,88 @@ const ALREADY_SET = new Set(CODEX_SINGLE_CALL_CONFIG.filter((value) => value.sta
+ 
+ /** `features` = the tool flags the installed codex lists (codex refuses an unknown flag); each is sent once. */
+ export function codexSingleCallArgs(input: { model: string; cwd: string; schemaPath: string; finalPath: string; features: readonly string[] }): string[] {
+   return ["exec", "--json", "--ephemeral", "--color", "never", "--skip-git-repo-check", "--model", input.model, "--sandbox", "read-only",
+     "-C", input.cwd, "--output-schema", input.schemaPath, "-o", input.finalPath,
+     ...CODEX_SINGLE_CALL_CONFIG.flatMap((value) => ["-c", value]),
+     ...input.features.filter((name) => !ALREADY_SET.has(name)).flatMap((name) => ["-c", `features.${name}=${TURNED_ON.has(name) ? "true" : "false"}`]),
+     "-"];
+ }
+ 
+-/** Creates `dir` with 0700 set explicitly when it is missing; an existing one (also one a concurrent call made) is left alone. */
++/** A private dir that is not a real directory of this user (a symlink, a file, someone else's) refuses the call unspawned. */
++const homeInvalid = (path: string) => Object.assign(new Error(`codex-single-call-home-invalid:${path}`), { code: "codex-single-call-home-invalid", neverStarted: true });
++
++/**
++ * Creates `dir` with 0700 set explicitly when it is missing; an existing one (also one a concurrent call made) keeps its
++ * mode. Either way it must then be a real directory, not a symlink, owned by this user (fix round 1: a symlinked
++ * codex-home would make ensureLink rename a link over the installation's own auth.json). Precedent: control/paths.ts
++ * ensurePrivateDirectory, which needs an existing canonical root this path does not have.
++ */
+ async function privateDir(dir: string): Promise<void> {
++  let created = true;
+   try { await mkdir(dir, { mode: 0o700 }); }
+-  catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") return; throw error; }
+-  await chmod(dir, 0o700);
++  catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; created = false; }
++  if (created) await chmod(dir, 0o700);
++  const info = await lstat(dir);
++  if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.()) throw homeInvalid(dir);
++}
++
++/**
++ * Controller ruling (fix round 1): a regular file where a link belongs is never deleted -- codex may have rotated a token
++ * into it by temp+rename -- but moved aside to `<name>.displaced-<epoch ms>` in the same private dir, mode unchanged.
++ */
++async function displace(path: string): Promise<void> {
++  const aside = `${path}.displaced-${Date.now()}`;
++  await rename(path, aside);
++  process.stderr.write(`ccloop-codex-single-call: displaced ${path} to ${aside}\n`);
+ }
+ 
+ /** `path` becomes a symlink to `target` (replaced atomically when it is anything else), or absent when target is null. */
+ async function ensureLink(path: string, target: string | null): Promise<void> {
+   const current = await lstat(path).then((info) => info, () => null);
+-  if (target === null) { if (current !== null) await rm(path, { force: true }); return; }
++  if (current !== null && !current.isSymbolicLink()) await displace(path);
++  else if (current !== null && target === null) await rm(path, { force: true });
++  if (target === null) return;
+   if (current?.isSymbolicLink() === true && await readlink(path) === target) return;
+   const temporary = join(dirname(path), `.${randomUUID()}.link`);
+   await symlink(target, temporary);
+   try { await rename(temporary, path); } catch (error) { await rm(temporary, { force: true }); throw error; }
+ }
+ 
+ /**
+  * R9: a private, empty HOME and a private CODEX_HOME whose auth.json and config.toml are symlinks to the installation's
+  * (never copies). Ruling (Task 8, Orca session a852f96a, 2026-10-16, answering the human): ONE pair per installation,
+  * reused, under `<catalog cache dir>/codex-home/<sha256 of realpath(executable) NUL sourceCodexHome>/` -- codex writes
+  * ~2.4 MB of its own state plus a remote models fetch into a fresh CODEX_HOME (Task 0). The links are re-checked on every
+  * call. Out-of-repo write: that path; writer = a ccloop control worker running a codex single call; residue on failure =
+- * at most one `.<uuid>.link` temp link. With no cache dir, a pair per call under the run directory.
++ * at most one `.<uuid>.link` temp link, plus any `<name>.displaced-<ms>` file moved aside. With no cache dir, a pair per
++ * call under the run directory.
+  */
+ export async function codexSingleCallHome(input: { runDir: string; sourceCodexHome: string | null; executable: string; env: NodeJS.ProcessEnv }): Promise<{ home: string; codexHome: string }> {
+   const cache = catalogCacheDir(input.env);
+   let base: string;
+   if (cache === null) {
+-    const root = join(input.runDir, "codex", "1", "single-call");
+-    await mkdir(root, { recursive: true, mode: 0o700 });
++    let root = input.runDir;
++    for (const part of ["codex", "1", "single-call"]) { root = join(root, part); await privateDir(root); }
+     base = await mkdtemp(join(root, "home-"));
++    await chmod(base, 0o700);
++    await privateDir(base);
+   } else {
+     const executable = await realpath(input.executable).catch(() => input.executable);
+     base = join(cache, "codex-home", createHash("sha256").update(`${executable}\0${input.sourceCodexHome ?? ""}`).digest("hex"));
+     const missing: string[] = [];
+-    for (let at = base; at !== dirname(at); at = dirname(at)) {
++    for (let at = cache; at !== dirname(at); at = dirname(at)) {
+       if (await lstat(at).then(() => true, () => false)) break;
+       missing.unshift(at);
+     }
+     for (const dir of missing) await privateDir(dir);
++    for (const dir of [join(cache, "codex-home"), base]) await privateDir(dir);
+   }
+   const home = join(base, "home"), codexHome = join(base, "codex-home");
+   for (const dir of [home, codexHome]) await privateDir(dir);
+   for (const name of ["auth.json", "config.toml"]) {
+     const source = input.sourceCodexHome === null ? null : join(input.sourceCodexHome, name);
+     await ensureLink(join(codexHome, name), source !== null && await lstat(source).then(() => true, () => false) ? source : null);
+   }
+   return { home, codexHome };
+ }
+ 
+diff --git a/tests/runtime/codex/codexSingleCall.test.ts b/tests/runtime/codex/codexSingleCall.test.ts
+index 48fc03b..7346d1d 100644
+--- a/tests/runtime/codex/codexSingleCall.test.ts
++++ b/tests/runtime/codex/codexSingleCall.test.ts
+@@ -1,15 +1,15 @@
+ import { createHash } from "node:crypto";
+ import { existsSync, readFileSync } from "node:fs";
+-import { chmod, lstat, mkdir, mkdtemp, readlink, realpath, rm, symlink, unlink, writeFile } from "node:fs/promises";
++import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, symlink, unlink, writeFile } from "node:fs/promises";
+ import { tmpdir } from "node:os";
+-import { join, resolve } from "node:path";
++import { dirname, join, resolve } from "node:path";
+ import { describe, expect, it } from "vitest";
+ import { codexDescriptor } from "../../../src/agents/codex.js";
+ import type { MaterializedAgentConfigV1 } from "../../../src/agents/types.js";
+ import { codexSingleCallHome } from "../../../src/runtime/codex/codexSingleCall.js";
+ import { observedTokensOf, SingleCallOutputInvalid } from "../../../src/runtime/types.js";
+ 
+ // Every-agent requirement chain (Orca spec 2026-10-15 §6.1, R2, R9): one structured codex call with tools off, in a
+ // private HOME and CODEX_HOME whose auth.json and config.toml are symlinks; decoding fails closed and books what it saw.
+ const FAKE_CODEX = resolve("tests/fixtures/fake-codex.mjs");
+ const SCHEMA = { type: "object", properties: { answer: { type: "string" } }, required: ["answer"], additionalProperties: false };
+@@ -138,20 +138,66 @@ describe("codex single call (spec §6.1)", { timeout: 30_000 }, () => {
+         return readlink(join(singleEnv(w.marker).CODEX_HOME, "auth.json"));
+       };
+       expect(await linkedAuth(inherited)).toBe(join(inherited, "auth.json"));
+       expect(await linkedAuth("")).toBe(join(home, ".codex", "auth.json"));
+       expect(await linkedAuth("relative-codex-home")).toBe(join(home, ".codex", "auth.json"));
+     } finally {
+       for (const [name, value] of Object.entries(saved)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
+     }
+   });
+ 
++  // Fix round 1 (credential safety): a private dir that is a symlink -- here to the installation's own CODEX_HOME -- would
++  // let the link repair rename a link over the real auth.json. It is refused before anything is linked or spawned.
++  it.each(["home", "codex-home"])("C8.3f: refuses, unspawned and booking 0, a private %s that is a symlink, and leaves the source auth.json alone", async (name) => {
++    const w = await world();
++    const id = createHash("sha256").update(`${await realpath(process.execPath)}\0${w.codexHome}`).digest("hex");
++    const base = join(process.env.CCLOOP_CACHE_DIR!, "codex-home", id);
++    await mkdir(base, { recursive: true });
++    const elsewhere = join(w.dir, "elsewhere-home"); await mkdir(elsewhere);
++    await symlink(name === "codex-home" ? w.codexHome : elsewhere, join(base, name));
++    const error = await failure(w.adapter.singleCall!(w.request));
++    expect(error).toMatchObject({ code: "codex-single-call-home-invalid", neverStarted: true, message: `codex-single-call-home-invalid:${join(base, name)}` });
++    expect(observedTokensOf(error)).toBe(0);
++    expect(existsSync(`${w.marker}.calls`)).toBe(false);
++    expect((await lstat(join(w.codexHome, "auth.json"))).isFile()).toBe(true);
++    expect(await readFile(join(w.codexHome, "auth.json"), "utf8")).toBe("{}");
++  });
++
++  // Controller ruling (fix round 1): a regular auth.json in the private CODEX_HOME may hold a token codex rotated into it;
++  // it is moved aside, never deleted, and the link to the installation's file is restored.
++  it("C8.3g: moves a regular private auth.json aside with its bytes, then links the source again", async () => {
++    const w = await world();
++    await w.adapter.singleCall!(w.request);
++    const { CODEX_HOME } = singleEnv(w.marker);
++    await unlink(join(CODEX_HOME, "auth.json")); await writeFile(join(CODEX_HOME, "auth.json"), "{\"rotated\":true}");
++    await w.adapter.singleCall!(w.request);
++    expect(await readlink(join(CODEX_HOME, "auth.json"))).toBe(join(w.codexHome, "auth.json"));
++    const displaced = (await readdir(CODEX_HOME)).filter((entry) => /^auth\.json\.displaced-\d+$/.test(entry));
++    expect(displaced).toHaveLength(1);
++    expect(await readFile(join(CODEX_HOME, displaced[0]!), "utf8")).toBe("{\"rotated\":true}");
++  });
++
++  // 0o000 would widen a mode left to the umask; 0o277 would narrow one below the owner's write bit (so the explicit chmod
++  // after mkdir is what keeps 0700). Precedent: tests/agents/catalogCache.test.ts.
++  it.each([["0o000", 0o000], ["0o277", 0o277]] as const)("C8.3h: creates the private dirs 0700 whatever the umask (umask %s), cached and per run", async (_label, umask) => {
++    const w = await world();
++    const input = { runDir: w.request.runDir, sourceCodexHome: w.codexHome, executable: process.execPath };
++    const old = process.umask(umask);
++    let homes: Array<{ home: string; codexHome: string }>;
++    try {
++      homes = [await codexSingleCallHome({ ...input, env: { CCLOOP_CACHE_DIR: join(w.dir, "umask-cache") } }), await codexSingleCallHome({ ...input, env: {} })];
++    } finally { process.umask(old); }
++    for (const { home, codexHome } of homes) {
++      expect([await mode(dirname(home)), await mode(home), await mode(codexHome)]).toEqual([0o700, 0o700, 0o700]);
++    }
++  });
++
+   it("C8.4: refuses before spawning, booking 0, when the feature list cannot be read", async () => {
+     const w = await world();
+     await writeFile(`${w.marker}.catalog.json`, JSON.stringify({ exitCode: 9 }));
+     const error = await failure(w.adapter.singleCall!(w.request));
+     expect(error).toMatchObject({ code: "codex-single-call-unavailable", neverStarted: true });
+     expect(observedTokensOf(error)).toBe(0);
+     expect(existsSync(`${w.marker}.calls`)).toBe(false);
+   });
+ 
+   // Codex refuses an unknown flag ("Unknown feature flag"), so only the flags the installed version lists are sent.
+@@ -176,20 +222,58 @@ describe("codex single call (spec §6.1)", { timeout: 30_000 }, () => {
+   it.each([
+     ["codex-event-error", [{ type: "item.completed", item: { type: "agent_message", text: "{\"answer\":\"42\"}" } }, { type: "error", message: "boom" }, { type: "turn.completed", usage: { input_tokens: 30, output_tokens: 6 } }]],
+     ["codex-events-invalid", [{ type: "item.completed", item: { type: "agent_message", text: "{\"answer\":\"42\"}" } }, "not an event", { type: "turn.completed", usage: { input_tokens: 30, output_tokens: 6 } }]],
+   ] as const)("C8.5b: refuses unreadable events (%s) and books the usage it saw, never 0", async (code, rows) => {
+     const w = await world({ rows });
+     const error = await failure(w.adapter.singleCall!(w.request));
+     expect((error as Error).message).toBe(code);
+     expect(observedTokensOf(error)).toBe(36);
+   });
+ 
++  // Spec R6 (as omp's Task 4 fix round 1): the re-check and the call share ONE deadline. A cold re-check of ~2 s (the fake
++  // sleeps 1 s in `debug models` and 1 s in `features list`) of a 6 s limit leaves the hanging call the rest, so the whole
++  // call ends near 6 s -- not 2 s + another full 6 s.
++  it("C8.8: stops a call after a slow cold re-check at the original deadline, not a fresh full limit", async () => {
++    const w = await world({ hang: true });
++    await writeFile(`${w.marker}.catalog.json`, JSON.stringify({ sleepMs: 1_000 }));
++    const started = Date.now();
++    const error = await failure(w.adapter.singleCall!({ ...w.request, timeoutMs: 6_000 }));
++    const elapsed = Date.now() - started;
++    expect((error as Error).message).toMatch(/^codex-timeout: /);
++    expect(observedTokensOf(error)).toBeNull();
++    expect(readFileSync(`${w.marker}.calls`, "utf8")).toBe("single-call\n");
++    expect(elapsed).toBeGreaterThanOrEqual(5_900);
++    expect(elapsed).toBeLessThan(7_500);
++  }, 20_000);
++
++  // Fix round 1 (repo convention, omp "Ruling m4"): the prompt is written only after the process is registered, so a call
++  // that never got that far sent nothing and books 0, not null.
++  it("C8.9: an abort before spawning books 0 as neverStarted", async () => {
++    const w = await world();
++    await w.adapter.singleCall!(w.request);
++    const controller = new AbortController(); controller.abort();
++    const error = await failure(w.adapter.singleCall!({ ...w.request, signal: controller.signal }));
++    expect(error).toMatchObject({ neverStarted: true });
++    expect((error as Error).message).toMatch(/^codex-aborted: /);
++    expect(observedTokensOf(error)).toBe(0);
++    expect(readFileSync(`${w.marker}.calls`, "utf8")).toBe("single-call\n");
++  });
++
++  it("C8.9b: a process that could not be spawned (its working directory is gone) books 0 as neverStarted", async () => {
++    const w = await world();
++    const error = await failure(w.adapter.singleCall!({ ...w.request, cwd: join(w.request.runDir, "gone") }));
++    expect(error).toMatchObject({ neverStarted: true });
++    expect((error as Error).message).toMatch(/^codex-spawn-error: /);
++    expect(observedTokensOf(error)).toBe(0);
++    expect(existsSync(`${w.marker}.calls`)).toBe(false);
++  });
++
+   it("C8.6: an answer that is not one object is single-call-output-invalid with its usage", async () => {
+     const w = await world({ final: "not json" });
+     const error = await failure(w.adapter.singleCall!(w.request));
+     expect(error).toBeInstanceOf(SingleCallOutputInvalid);
+     expect((error as SingleCallOutputInvalid).tokenUsage).toBe(24);
+   });
+ 
+   it("C8.7: an answer over the request's maxOutputTokens is still the answer (R2: the bound is checked after the fact by Orca)", async () => {
+     const w = await world({ rows: [{ type: "item.completed", item: { type: "agent_message", text: "{\"answer\":\"42\"}" } }, { type: "turn.completed", usage: { input_tokens: 20, output_tokens: 9000 } }] });
+     expect(await w.adapter.singleCall!(w.request)).toMatchObject({ output: { answer: "42" }, tokenUsage: 9020, modelUsage: [{ output: 9000 }] });

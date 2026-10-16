@@ -1,0 +1,451 @@
+15d3494 fix(agents): codex single call also turns off the other on-by-default tool flags and notify
+diff --git a/src/agents/codexCatalog.ts b/src/agents/codexCatalog.ts
+index 51b714e..fde64e7 100644
+--- a/src/agents/codexCatalog.ts
++++ b/src/agents/codexCatalog.ts
+@@ -3,14 +3,21 @@ import { tmpdir } from "node:os";
+ import { join } from "node:path";
+ import { catalogCacheDir } from "./catalogCache.js";
+ import { probeFailure, probeTimeoutMs, runProbe } from "./catalogProbe.js";
+ import { CODEX_SINGLE_CALL_CONFIG, codexSingleCallHome, effectiveCodexHome } from "./codexIsolation.js";
+ import type { CatalogRowV1, InstallationV1 } from "./types.js";
+ 
+-/** Spec 2026-10-15 §2.4/§6.1: the tool flags a codex single call turns off, plus skip_host_skill_discovery (turned on). */
+-export const CODEX_SINGLE_CALL_FEATURES = ["apps", "image_generation", "multi_agent", "plugins", "shell_tool", "skip_host_skill_discovery", "unified_exec", "view_image"] as const;
++/**
++ * Spec 2026-10-15 §2.4/§6.1: the tool flags a codex single call turns off, plus skip_host_skill_discovery (turned on).
++ * Final-review I4 (Orca session a852f96a, 2026-10-16): also the tool-like flags plan Task 0 found stable and on in
++ * codex-cli 0.160.0 outside the spec's list (browser_use .. tool_suggest; browser_use_full_cdp_access is moot once
++ * browser_use is off). Like the others, each is sent only when the installed `codex features list` names it.
++ */
++export const CODEX_SINGLE_CALL_FEATURES = ["apps", "browser_use", "browser_use_external", "code_mode_host", "computer_use", "goals", "hooks", "image_generation", "in_app_browser",
++  "multi_agent", "plugins", "realtime_conversation", "remote_plugin", "shell_tool", "skill_search", "skip_host_skill_discovery", "sleep_tool", "tool_suggest", "unified_exec",
++  "view_image"] as const;
+ const CODE = "agent-catalog-unavailable";
+ const positiveSafe = (value: unknown): number | null => (typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null);
+ 
+ /** §6.1 "Window": a top-level `model_context_window = <n>` before the first `[table]` wins over the catalog. */
+ function configuredWindow(toml: string): number | null {
+   const head = toml.split(/^\s*\[/m, 1)[0]!;
+diff --git a/src/agents/codexIsolation.ts b/src/agents/codexIsolation.ts
+index 4d916dd..5ca9737 100644
+--- a/src/agents/codexIsolation.ts
++++ b/src/agents/codexIsolation.ts
+@@ -9,16 +9,18 @@ import type { InstallationV1 } from "./types.js";
+ // same isolation as the call (a leaf: imports only catalogCache, no registry).
+ 
+ /**
+  * Every-agent requirement chain (Orca spec 2026-10-15 §2.5 last row, §6.1; values from plan Task 0 on codex-cli 0.160.0).
+  * `features.plugins=false` is here, not only among the tool flags: Task 0 measured that it removes the
+  * <recommended_plugins> block a linked config.toml injects (`features.recommended_plugins=false` does not).
++ * Final-review I4 (Orca session a852f96a, 2026-10-16): `notify=[]`, so a `notify` program in the linked config.toml is
++ * never run by a single call (zero-cost check on codex-cli 0.160.0: `debug prompt-input` with it RC 0, empty stderr).
+  */
+ export const CODEX_SINGLE_CALL_CONFIG: readonly string[] = [
+   "include_permissions_instructions=false", "include_apps_instructions=false", "include_collaboration_mode_instructions=false",
+-  "include_environment_context=false", "project_doc_max_bytes=0", "features.plugins=false",
++  "include_environment_context=false", "project_doc_max_bytes=0", "features.plugins=false", "notify=[]",
+ ];
+ 
+ /**
+  * The installation's effective CODEX_HOME (Task 8 ruling 2): its configDir, else an inherited absolute non-empty
+  * CODEX_HOME, else <HOME>/.codex (HOME absolute), else none.
+  */
+diff --git a/tests/agents/catalogProbe.test.ts b/tests/agents/catalogProbe.test.ts
+index f33aff2..0890f7d 100644
+--- a/tests/agents/catalogProbe.test.ts
++++ b/tests/agents/catalogProbe.test.ts
+@@ -139,13 +139,17 @@ describe("codex catalog decode (spec §3, §6.1)", () => {
+     expect(await readCodexCatalog(w.installation, {})).toEqual({
+       rows: [
+         { selector: "gpt-6-sol", provider: "codex", contextWindow: 272000, maxTokens: null, listed: true },
+         { selector: "gpt-6-luna", provider: "codex", contextWindow: 272000, maxTokens: null, listed: true },
+         { selector: "gpt-reserve", provider: "codex", contextWindow: 272000, maxTokens: null, listed: false },
+       ],
+-      features: ["apps", "image_generation", "multi_agent", "plugins", "shell_tool", "skip_host_skill_discovery", "unified_exec", "view_image"],
++      // Final-review I4 (Orca session a852f96a, 2026-10-16): the off-list grew by the tool-like flags Task 0 found on in
++      // codex-cli 0.160.0; the fake also lists browser_use_full_cdp_access, which is not ccloop's and is dropped. Still exact.
++      features: ["apps", "browser_use", "browser_use_external", "code_mode_host", "computer_use", "goals", "hooks", "image_generation", "in_app_browser",
++        "multi_agent", "plugins", "realtime_conversation", "remote_plugin", "shell_tool", "skill_search", "skip_host_skill_discovery", "sleep_tool", "tool_suggest",
++        "unified_exec", "view_image"],
+       // Ruling: rewritten under the human's blanket naming (Orca session a852f96a, 2026-10-16) -- Task 8 fix round 2 adds the
+       // MCP server names (`codex mcp list --json`; the fake lists none by default) to the codex catalog read. Still exact.
+       mcpServers: [],
+       // Ruling: rewritten under the human's blanket naming (Orca session a852f96a, 2026-10-16) -- Task 8 fix round 3: an MCP
+       // list failure no longer fails the catalog, so the answer also carries its reason, null here. Still exact.
+       mcpError: null,
+diff --git a/tests/agents/fakeCatalogFixtures.test.ts b/tests/agents/fakeCatalogFixtures.test.ts
+index 34d8ba3..88614ac 100644
+--- a/tests/agents/fakeCatalogFixtures.test.ts
++++ b/tests/agents/fakeCatalogFixtures.test.ts
+@@ -18,13 +18,16 @@ describe("fake catalog answers (spec 2026-10-15 §9)", () => {
+     expect(models.status).toBe(0);
+     expect(JSON.parse(models.stdout).models.map((row: { slug: string; context_window: number; visibility: string }) => [row.slug, row.context_window, row.visibility]))
+       .toEqual([["gpt-6-sol", 272000, "list"], ["gpt-6-luna", 272000, "list"], ["gpt-reserve", 272000, "hide"]]);
+     const features = spawnSync(process.execPath, [FAKE_CODEX, "integration", marker, "features", "list"], { encoding: "utf8" });
+     expect(features.status).toBe(0);
+     expect(features.stdout.split("\n").filter(Boolean).map((line) => line.split(/\s+/)[0]))
+-      .toEqual(["apps", "browser_use", "image_generation", "multi_agent", "plugins", "shell_tool", "skip_host_skill_discovery", "unified_exec", "view_image"]);
++      // Final-review I4 (Orca session a852f96a, 2026-10-16): the fake lists every flag ccloop turns off plus one it does not send.
++      .toEqual(["apps", "browser_use", "browser_use_external", "browser_use_full_cdp_access", "code_mode_host", "computer_use", "goals", "hooks", "image_generation",
++        "in_app_browser", "multi_agent", "plugins", "realtime_conversation", "remote_plugin", "shell_tool", "skill_search", "skip_host_skill_discovery", "sleep_tool",
++        "tool_suggest", "unified_exec", "view_image"]);
+     spawnSync(process.execPath, [FAKE_CODEX, "integration", marker, "--version"], { encoding: "utf8" });
+     expect(lines(`${marker}.catalog-calls`)).toEqual(["debug-models", "features-list"]);
+     expect(lines(`${marker}.version-calls`)).toEqual(["version"]);
+     expect(existsSync(`${marker}.argv`)).toBe(false);
+     expect(existsSync(`${marker}.calls`)).toBe(false);
+   });
+diff --git a/tests/fixtures/fake-codex.mjs b/tests/fixtures/fake-codex.mjs
+index f32d310..36a957d 100644
+--- a/tests/fixtures/fake-codex.mjs
++++ b/tests/fixtures/fake-codex.mjs
+@@ -8,13 +8,15 @@ const mode=process.argv[2], marker=process.argv[3];
+ // the frame of the attempt number (the working directory's `attempt-<n>`, minus one) from the framesFile list of
+ // the task named in the prompt (else the `"*"` list); no frame ⇒ stderr `no frame for <task> attempt <n>`, exit 3.
+ // Every-agent requirement chain (Orca spec 2026-10-15 §9): `--version` appends `version` to `<marker>.version-calls`;
+ // `debug models` and `features list` answer the catalog and the feature list and append `debug-models` / `features-list`
+ // to `<marker>.catalog-calls`, before anything below runs, so `<marker>.argv` and `<marker>.calls` never see them.
+ // `<marker>.catalog.json` ({rows?, sleepMs?, exitCode?, stderr?}) overrides the rows, sleeps first, or fails.
+-// Task 8 of that plan: its `features?` (a list of flag names) overrides the flags `features list` prints. Task 8 fix
++// Task 8 of that plan: its `features?` (a list of flag names) overrides the flags `features list` prints (final-review I4:
++// the default is every flag ccloop turns off, as codex-cli 0.160.0 lists them, plus browser_use_full_cdp_access, which
++// ccloop does not send). Task 8 fix
+ // round 2: `mcp list --json` appends `mcp-list` and prints `mcp?` (default []) as codex-cli 0.160.0's JSON array of
+ // `{name, enabled, ...}` objects; `mcpExitCode?` fails that call alone. Fix round 3 (paid check P1b): `mcp` are the
+ // servers the linked config.toml defines; `mcpPlugins?` are servers the person's own CODEX_HOME adds (~/.codex/plugins),
+ // listed only when the call is NOT isolated (its CODEX_HOME/config.toml is not a symlink or `-c features.plugins=false`
+ // is absent). `mcp list` records {HOME, CODEX_HOME, c} in <marker>.mcp-env.json. A single call that turns off a server
+ // `mcp` does not define fails as the real codex-cli 0.160.0 does: stderr "invalid transport in `mcp_servers.<name>`", exit 1.
+@@ -34,13 +36,13 @@ if(catalogCall!==null&&!process.argv.includes("exec")) {
+     writeFileSync(marker+".mcp-env.json",JSON.stringify({HOME:process.env.HOME,CODEX_HOME:process.env.CODEX_HOME,c}));
+     await new Promise(resolve=>process.stdout.write(JSON.stringify([...(script.mcp??[]),...(isolated?[]:script.mcpPlugins??[])])+"\n",resolve));
+   } else if(catalogCall==="debug-models") {
+     const rows=script.rows??[{slug:"gpt-6-sol",context_window:272000,visibility:"list"},{slug:"gpt-6-luna",context_window:272000,visibility:"list"},{slug:"gpt-reserve",context_window:272000,visibility:"hide"}];
+     await new Promise(resolve=>process.stdout.write(JSON.stringify({models:rows})+"\n",resolve));
+   } else {
+-    const flags=script.features??["apps","browser_use","image_generation","multi_agent","plugins","shell_tool","skip_host_skill_discovery","unified_exec","view_image"];
++    const flags=script.features??["apps","browser_use","browser_use_external","browser_use_full_cdp_access","code_mode_host","computer_use","goals","hooks","image_generation","in_app_browser","multi_agent","plugins","realtime_conversation","remote_plugin","shell_tool","skill_search","skip_host_skill_discovery","sleep_tool","tool_suggest","unified_exec","view_image"];
+     await new Promise(resolve=>process.stdout.write(flags.map(flag=>`${flag.padEnd(40)} stable             true`).join("\n")+"\n",resolve));
+   }
+   process.exit(0);
+ }
+ appendFileSync(marker+".argv",JSON.stringify(process.argv.slice(process.argv.indexOf("exec")))+"\n");
+ const P1_ERROR_ITEMS=[
+diff --git a/tests/runtime/codex/codexSingleCall.test.ts b/tests/runtime/codex/codexSingleCall.test.ts
+index d867f98..6147d7a 100644
+--- a/tests/runtime/codex/codexSingleCall.test.ts
++++ b/tests/runtime/codex/codexSingleCall.test.ts
+@@ -31,15 +31,17 @@ async function world(single?: unknown) {
+ const failure = (promise: Promise<unknown>) => promise.then(() => { throw new Error("expected a rejection"); }, (error: unknown) => error);
+ const lastArgv = (marker: string): string[] => JSON.parse(readFileSync(`${marker}.argv`, "utf8").trim().split("\n").at(-1)!);
+ const configValues = (argv: string[]) => argv.flatMap((arg, i) => (arg === "-c" ? [argv[i + 1]!] : []));
+ type SingleEnv = { HOME: string; CODEX_HOME: string; authIsLink: boolean };
+ const singleEnv = (marker: string): SingleEnv => JSON.parse(readFileSync(`${marker}.single-env.json`, "utf8")) as SingleEnv;
+ const mode = async (path: string) => (await lstat(path)).mode & 0o777;
++// Final-review I4 (Orca session a852f96a, 2026-10-16): `notify=[]` joins the isolation keys, so a linked config.toml's
++// notify program never runs.
+ const ISOLATION = [
+   "include_permissions_instructions=false", "include_apps_instructions=false", "include_collaboration_mode_instructions=false",
+-  "include_environment_context=false", "project_doc_max_bytes=0", "features.plugins=false",
++  "include_environment_context=false", "project_doc_max_bytes=0", "features.plugins=false", "notify=[]",
+ ];
+ 
+ describe("codex single call (spec §6.1)", { timeout: 30_000 }, () => {
+   it("C8.1: answers the object with the observed usage per model", async () => {
+     const w = await world();
+     expect(await w.adapter.singleCall!(w.request)).toEqual({ output: { answer: "42" }, tokenUsage: 24, usageEvidence: expect.objectContaining({ normalizedTotal: 24 }),
+@@ -53,15 +55,20 @@ describe("codex single call (spec §6.1)", { timeout: 30_000 }, () => {
+     const w = await world();
+     await w.adapter.singleCall!(w.request);
+     const argv = lastArgv(w.marker);
+     expect(argv.slice(0, 7)).toEqual(["exec", "--json", "--ephemeral", "--color", "never", "--skip-git-repo-check", "--model"]);
+     expect(argv[argv.indexOf("--sandbox") + 1]).toBe("read-only");
+     expect(argv[argv.indexOf("-C") + 1]).toBe(w.request.cwd);
++    // Final-review I4 (Orca session a852f96a, 2026-10-16): the remaining tool-like flags Task 0 found on in codex-cli 0.160.0
++    // are off too; the fake's browser_use_full_cdp_access is listed but not ccloop's, so it is never sent.
+     expect(configValues(argv)).toEqual([...ISOLATION,
+-      "features.apps=false", "features.image_generation=false", "features.multi_agent=false",
+-      "features.shell_tool=false", "features.skip_host_skill_discovery=true", "features.unified_exec=false", "features.view_image=false",
++      "features.apps=false", "features.browser_use=false", "features.browser_use_external=false", "features.code_mode_host=false",
++      "features.computer_use=false", "features.goals=false", "features.hooks=false", "features.image_generation=false", "features.in_app_browser=false",
++      "features.multi_agent=false", "features.realtime_conversation=false", "features.remote_plugin=false", "features.shell_tool=false",
++      "features.skill_search=false", "features.skip_host_skill_discovery=true", "features.sleep_tool=false", "features.tool_suggest=false",
++      "features.unified_exec=false", "features.view_image=false",
+     ]);
+     expect(argv.at(-1)).toBe("-");
+   });
+ 
+   // Ruling (Task 8, Orca session a852f96a, 2026-10-16, answering the human's "can the dir be reused?"): ONE private HOME and
+   // CODEX_HOME per installation under the ccloop cache dir, links re-checked every call; the run dir only without a cache dir.
+@@ -202,15 +209,17 @@ describe("codex single call (spec §6.1)", { timeout: 30_000 }, () => {
+     expect(existsSync(`${w.marker}.calls`)).toBe(false);
+   });
+ 
+   // Codex refuses an unknown flag ("Unknown feature flag"), so only the flags the installed version lists are sent.
+   it("C8.4b: turns off only the tool flags the installed codex lists", async () => {
+     const w = await world();
+-    await writeFile(`${w.marker}.catalog.json`, JSON.stringify({ features: ["apps", "browser_use", "shell_tool"] }));
++    // Final-review I4 (Orca session a852f96a, 2026-10-16): browser_use is ccloop's now, so the listed-but-not-ccloop's flag
++    // is browser_use_full_cdp_access; hooks stands for the I4 additions.
++    await writeFile(`${w.marker}.catalog.json`, JSON.stringify({ features: ["apps", "browser_use_full_cdp_access", "hooks", "shell_tool"] }));
+     await w.adapter.singleCall!(w.request);
+-    expect(configValues(lastArgv(w.marker))).toEqual([...ISOLATION, "features.apps=false", "features.shell_tool=false"]);
++    expect(configValues(lastArgv(w.marker))).toEqual([...ISOLATION, "features.apps=false", "features.hooks=false", "features.shell_tool=false"]);
+   });
+ 
+   it.each([
+     ["tool", [{ type: "item.started", item: { id: "i", type: "command_execution", command: "ls" } }, { type: "turn.completed", usage: { input_tokens: 30, output_tokens: 6 } }], 36],
+     ["messages", [{ type: "item.completed", item: { type: "agent_message", text: "{}" } }, { type: "item.completed", item: { type: "agent_message", text: "{\"answer\":\"42\"}" } }, { type: "turn.completed", usage: { input_tokens: 30, output_tokens: 6 } }], 36],
+     ["turns", [{ type: "turn.completed", usage: { input_tokens: 10, output_tokens: 1 } }, { type: "turn.completed", usage: { input_tokens: 30, output_tokens: 6 } }], 36],
+@@ -327,24 +336,25 @@ describe("codex single call (spec §6.1)", { timeout: 30_000 }, () => {
+     expect(await w.adapter.singleCall!(w.request)).toMatchObject({ output: { answer: "42" } });
+     expect(configValues(lastArgv(w.marker)).slice(-2)).toEqual(["features.view_image=false", "mcp_servers.figma.enabled=false"]);
+     const probe = JSON.parse(readFileSync(`${w.marker}.mcp-env.json`, "utf8")) as { HOME: string; CODEX_HOME: string; c: string[] };
+     const call = singleEnv(w.marker);
+     expect([probe.HOME, probe.CODEX_HOME]).toEqual([call.HOME, call.CODEX_HOME]);
+     expect(probe.c).toEqual(["include_permissions_instructions=false", "include_apps_instructions=false", "include_collaboration_mode_instructions=false",
+-      "include_environment_context=false", "project_doc_max_bytes=0", "features.plugins=false"]);
++      "include_environment_context=false", "project_doc_max_bytes=0", "features.plugins=false", "notify=[]"]);
+   });
+ 
+   // Fix round 3 (promoted minor, plan issue 5): only a single call needs the MCP list, so a list that cannot be read keeps
+   // the rows (the model drop-down, the window) and the features; nothing is cached, so the next read tries again.
+   it("C8.10e: an MCP list that cannot be read keeps the catalog's rows and features and is not cached", async () => {
+     const w = await world();
+     await writeFile(`${w.marker}.catalog.json`, JSON.stringify({ mcpExitCode: 4 }));
+     const catalog = await readAgentCatalog(w.config.installation);
+     expect(catalog).toMatchObject({ source: "probe", catalogError: null, codexMcpServers: null });
+     expect(catalog.rows?.map((row) => [row.selector, row.contextWindow])).toEqual([["gpt-6-sol", 272000], ["gpt-6-luna", 272000], ["gpt-reserve", 272000]]);
+-    expect(catalog.codexFeatures).toHaveLength(8);
++    // Final-review I4 (Orca session a852f96a, 2026-10-16): the fake lists 21 flags, 20 of them ccloop's.
++    expect(catalog.codexFeatures).toHaveLength(20);
+     expect(existsSync(join(process.env.CCLOOP_CACHE_DIR!, entryFileName(await catalogKey(w.config.installation, process.env))))).toBe(false);
+   });
+ 
+   // A codex cache entry written before the names were cached cannot answer them, so it is a miss, not a hit with none.
+   it("C8.10c: a cached codex entry without MCP server names is a miss", async () => {
+     const w = await world();
+83e78c9a docs(spec): append corrections and registrations after implementation to the every-agent spec
+5a5a24dc docs(readme): codex runs clarify, split and estimate as a soft single call
+diff --git a/README.md b/README.md
+index c261a1b8..10daf8d5 100644
+--- a/README.md
++++ b/README.md
+@@ -126,10 +126,13 @@ adds isolation arguments to `command` that these minimal examples leave out):
+ }
+ ```
+ 
+ What each kind can do in Orca today: loop work runs on all three. Frozen task skills work on all three (see
+-[Optional integrations](#6-optional-integrations)). Clarifying and splitting a requirement, and estimating, need a bounded
+-single call, which only `claude` provides; `codex` and `omp` do not provide it (**not yet** available for `omp`).
++[Optional integrations](#6-optional-integrations)). Clarifying and splitting a requirement, and estimating, run as one
++**single call** with tools off, on all three kinds. `claude`, and `omp` for a model whose catalog row carries an output
++cap, run it in either estimate mode. `codex` cannot cap a call's output, so its single call runs in soft estimate mode
++only (`--estimate-mode soft`): the output is checked after the call, and any overrun is booked and shown on the run.
++Strict estimate mode still refuses `codex` (`single-call-unavailable`).
+ 
+ ### 2. ccloop
+ 
+ | `ORCA_CCLOOP_BIN` | Meaning |
+@@ -188,10 +191,12 @@ today**; you write it by hand. A minimal one, the shape the live acceptance scri
+   }
+ }
+ ```
+ 
+-With `"contextWindowTokens": null` the budget estimate ends in state **`blocked-capability`**: no model is called to
+-estimate, and each task starts from default budget allocations that you edit by hand in Task control. Use it with
++With `"contextWindowTokens": null` the profile declares no window, and Orca uses the window ccloop reports for the
++selected agent (claude, omp and codex report one), so the budget estimate calls the model. Only when ccloop reports no
++window either does the estimate end in state **`blocked-capability`**: no model is called to estimate, and each task
++starts from default budget allocations that you edit by hand in Task control. Use it with
+ `--estimator-profile all --estimate-mode soft`. In `soft` mode an overrun is settled after the fact, not prevented.
+ 
+ ### 4. Repositories and where state lives
+ 
+@@ -283,9 +288,9 @@ The import form uses registered plans for the selected project; if several exist
+ 
+ | Variable | Effect |
+ |---|---|
+ | `ORCA_CCMEM_BIN` = absolute path to `ccmem` | turns on the read-only **Memory** section. Opening it starts ccmem, and ccmem may migrate its own data directory when it opens it. Unset: ccmem is never started. |
+-| `ORCA_SYNCSKILL_BIN` = absolute path to `syncskill` | lets a loop task declare `"skills": {"profile": "<name>"}` or `"skills": {"names": ["<skill>", ...]}`. Frozen task skills work with **Claude, Codex and OMP** installations. Other agent kinds are refused (`skills-unsupported-agent`); this does not give Codex or OMP single-call clarification/estimation capability. Unset: Orca never starts syncskill. |
++| `ORCA_SYNCSKILL_BIN` = absolute path to `syncskill` | lets a loop task declare `"skills": {"profile": "<name>"}` or `"skills": {"names": ["<skill>", ...]}`. Frozen task skills work with **Claude, Codex and OMP** installations. Other agent kinds are refused (`skills-unsupported-agent`); frozen task skills play no part in clarification or estimation. Unset: Orca never starts syncskill. |
+ 
+ ## Start the panel
+ 
+ An example launch script (every `<...>` is yours to fill in):
+@@ -377,13 +382,17 @@ the URL hash. Language and theme switches are in the sidebar.
+ | Continuous improvement (advanced) | Unattended Claude Code sessions that develop Orca itself; hidden by default in Global settings. An active chain still shows its status and stop control. A `#chains` link remains available. |
+ 
+ ### Requirements
+ 
+-Clarification and splitting need a bounded **single call**. The pinned Codex adapter does not provide that capability,
+-and neither does the OMP adapter (not yet); use Claude for this section. With only Codex or OMP installed, write a plan using the [Plans for Task control](#5-plans-for-task-control-optional) example and import it in
+-**Task control**, then review/set task budgets manually if no capable estimator is available. The form allows an
+-explicitly selected Codex or OMP installation to be submitted, but the server refuses it because it lacks the single-call
+-capability. A default selection is also resolved by the server, so ensure your default supports single calls.
++Clarification, splitting and estimation each run as one **single call** with tools off. Claude, and OMP for a model
++whose catalog row carries an output cap, run them in either estimate mode. Codex cannot cap a call's output, so it runs
++them only when the panel uses `--estimate-mode soft`: each call's output is checked after the call, and an overrun is
++booked at the observed usage and shown on the call's run row. With `--estimate-mode strict` the server refuses a Codex
++selection (`agent-selection-rejected`, reason `single-call-unavailable`), and it refuses an OMP model without an output
++cap in its catalog, or an OpenRouter one, in either mode. Then pick another agent, or write a plan using the
++[Plans for Task control](#5-plans-for-task-control-optional) example and import it in **Task control**, and set task
++budgets manually if no usable estimator is available. A default selection is also resolved by the server, so ensure
++your default can run single calls in the panel's estimate mode.
+ 
+ 1. Pick a repository, type the idea, set a token limit, the content language and the agent, and press
+    **Start clarifying**. This creates a group in state `clarifying`.
+ 2. The model asks questions in rounds; each comes with a recommended answer and why. Accept the recommendation or
+@@ -575,9 +584,9 @@ Chains have a soft cost limit checked after each session.
+ | Symptom | Check and next action |
+ |---|---|
+ | No task control plane | Check whether the panel was started with `--no-control`. A missing execution port is different: reads work, but work cannot start. Check `ORCA_AGENTS_TABLE` and ccloop configuration in the panel process. An expired login requires logging in; it does not mean the control plane is missing. |
+ | `agent-version-drift` | Review a newly detected agents draft after upgrading the CLI, preserve custom configuration and restart the panel; see the agents-table instructions above. |
+-| Codex or OMP cannot clarify or estimate | Single-call capability is unavailable on the pinned Codex and OMP adapters. Use a capable agent for clarification/estimation; a task worker may still use Codex or OMP. |
++| Codex or OMP cannot clarify or estimate | Codex runs single calls only in soft estimate mode: under `--estimate-mode strict` it is refused (`single-call-unavailable`); start the panel with `--estimate-mode soft` or pick another agent. OMP is refused for a model without an output cap in its catalog, or an OpenRouter one; pick another model. A task worker may still use Codex or OMP. |
+ | Start is missing or `stop-mode-conflict` | Read the stop banner. Resume a pause with **Resume dispatch**. After a completed handoff, use the resume dialog; select no continuations when you only want to clear the completed stop before retrying a failed task. Pending/unresolved handoffs need recovery first; a partial handoff can be archived. Do not edit `stop_intents` or group JSON in SQLite. |
+ | A task ended failed | Inspect its failure reason, recent activity and evidence. **Retry task** creates a new task attempt when allowed; **Retry recovery** is for recoverable blocked runs, not terminal task failures. Unknown usage or insufficient budget can still prevent a retry. |
+ | Activity says `null` or reports no history for an invalid body | A valid empty run answers `{ "schema": "orca-run-activity-v1", "runId": "…", "entries": [] }`. A missing run or damaged row is an error. Re-read the run and inspect the named refusal; do not treat `null` as an empty feed. |
+ | A command response was lost | Check its retained result with the original command id. If the group no longer exists, the outcome cannot be confirmed; use **Check again** for one lookup or **Dismiss** the attention item. A refresh does not resend the command. |
+diff --git a/docs/superpowers/specs/2026-10-15-every-agent-requirement-chain-design.md b/docs/superpowers/specs/2026-10-15-every-agent-requirement-chain-design.md
+index 731ee9f8..821f84c5 100644
+--- a/docs/superpowers/specs/2026-10-15-every-agent-requirement-chain-design.md
++++ b/docs/superpowers/specs/2026-10-15-every-agent-requirement-chain-design.md
+@@ -274,4 +274,136 @@ comment at `claude.ts:67` is kept and an ERRATUM line appended (ccloop Rule 16)
+   either way.
+ - The codex multi-agent instructions (3.4 KB) survive every switch tried in §2.5; they stay in the framing overhead.
+ - The codex phase adapter's exposure to the user's skills and AGENTS.md (§2.5) is registered, not fixed here.
+ - Codex subagents, OMP skills real-provider acceptance, and everything else in Orca handoff §4.2 not named here.
++
++## 11. Corrections and registrations after implementation (session a852f96a, 2026-10-16)
++
++Appended by the final-fix agent of Orca session `a852f96a` (Claude Opus 5.5), 2026-10-16 Asia/Shanghai, on Orca branch
++`codex/every-agent-chain` (after `docs(readme): codex runs clarify, split and estimate as a soft single call`) with
++ccloop branch `codex/every-agent-chain` at `fix(agents): codex single call also turns off the other on-by-default tool
++flags and notify`. The text above is unchanged; where this section differs from it, this section wins. Evidence: the
++SDD ledger `.superpowers/sdd/2026-10-15-every-agent-requirement-chain/progress.md` (cited as "ledger") and the ccloop
++commit subjects named per item. Values are tool-reported or measured; nothing here is estimated.
++
++### 11.1 Rule 17 registration: the codex private homes (supersedes §6.1 "under the run directory")
++
++§6.1 put the single call's private `HOME` and `CODEX_HOME` under the run directory. The human asked during Task 8
++whether the directory has to be rebuilt every time and could be reused; the controller ruled to reuse it (ledger,
++"Ruling (Task 8, answering the human)"), because a fresh `CODEX_HOME` makes codex write about 2.4 MB of its own state
++and fetch the remote model list on every call (Task 0, ledger). This is a second out-of-repo write next to §4.2's
++catalog files:
++
++- **Path**: `<catalog cache dir>/codex-home/<sha256 of realpath(codex executable) NUL source CODEX_HOME>/{home,codex-home}`,
++  where the catalog cache dir is §4.2's (`$CCLOOP_CACHE_DIR`, else `$XDG_CACHE_HOME/ccloop/agent-catalog/`, else
++  `<HOME>/.cache/ccloop/agent-catalog/`). One pair per installation key, reused by every later probe and call.
++- **Writers** (ccloop `docs(agents): register both writers of the codex private homes (catalog-miss probe and single
++  call)`): (1) any ccloop process whose codex catalog read misses the cache (`control capabilities`, `control models`,
++  `ccloop agents models`, codex resolution for loop phases and accept), through the isolated `codex mcp list --json`
++  probe of §11.2 (ccloop `fix(agents): list codex MCP servers under the single call's own isolation; a failed list
++  keeps the catalog`); agents updates read the catalog for omp only and never write here; (2) the control worker on
++  every codex single call.
++- **What ccloop writes**: the missing directories, mode 0700 set explicitly (an existing directory's mode is left
++  alone); each must then be a real directory owned by this user, not a symlink, or the call is refused unspawned as
++  `codex-single-call-home-invalid`. In `codex-home`, two symlinks, `auth.json` and `config.toml`, to the installation's
++  effective CODEX_HOME files (its `configDir`, else an inherited absolute `CODEX_HOME`, else `<HOME>/.codex`), never
++  copies, re-checked on every call. A regular file found where a link belongs is moved aside to
++  `<name>.displaced-<epoch ms>` (mode kept) and logged, never deleted (ccloop `fix(runtime): codex single-call home
++  refuses symlinked dirs, never deletes a regular credential`).
++- **What codex writes** (its own modes), measured in Task 0 and P1c: `models_cache.json` (about 400 KB), sqlite
++  state and logs, `installation_id`, `cache/`, `skills/.system`, `shell_snapshots/`, `tmp/`, `mcp-oauth-locks/`.
++  `home` stays empty unless codex writes there.
++- **Residue**: the directories are never removed. On a failure: at most one `.<uuid>.link` temp link, any displaced
++  file, and whatever codex wrote before it failed.
++- **No cache dir** (no `CCLOOP_CACHE_DIR`, `XDG_CACHE_HOME` or absolute `HOME`): the single call makes a pair per
++  call under its run directory (`<runDir>/codex/1/single-call/home-*`); the catalog probe makes one under
++  `mkdtemp(<tmpdir>/ccloop-codex-mcp-*)` and removes it in `finally`, so a crash before that leaves the temp
++  directory (its links and codex's state) behind.
++- Criteria set `CCLOOP_CACHE_DIR` and an empty `CODEX_HOME` per test file in both repositories (ccloop
++  `test(agents): every test file gets an empty CODEX_HOME; agents models --refresh re-probes`); ccloop's
++  relocated-HOME criterion counts catalog entries apart from `codex-home` (`test(agents): count catalog entries apart
++  from codex-home in the relocated-HOME criterion`).
++
++### 11.2 §2.5 re-rendered: the single call's final `-c` list (codex-cli 0.160.0)
++
++§6.1 requires §2.5 to be re-rendered when an override is added. The single call (and the isolated MCP-list probe,
++which uses the same isolation keys) now sends, in this order:
++
++1. Isolation keys, always: `include_permissions_instructions=false`, `include_apps_instructions=false`,
++   `include_collaboration_mode_instructions=false`, `include_environment_context=false`, `project_doc_max_bytes=0`,
++   `features.plugins=false`, `notify=[]`. `features.plugins=false` is here because Task 0 measured that it removes the
++   `<recommended_plugins>` block (16 curated remote plugins) a linked `config.toml` injects: linked total 6967 B, with
++   it 6010 B, empty `CODEX_HOME` 6017 B (`features.recommended_plugins=false` left 6967 B). `notify=[]` keeps a
++   `notify` program in the linked `config.toml` from running (final review I4; the person's `config.toml` has one line
++   starting `notify =`, counted without printing it).
++2. Tool flags, each only when the installed `codex features list` names it: `features.<name>=false` for `apps`,
++   `browser_use`, `browser_use_external`, `code_mode_host`, `computer_use`, `goals`, `hooks`, `image_generation`,
++   `in_app_browser`, `multi_agent`, `realtime_conversation`, `remote_plugin`, `shell_tool`, `skill_search`,
++   `sleep_tool`, `tool_suggest`, `unified_exec`, `view_image`, and `features.skip_host_skill_discovery=true`. The names
++   after §2.4's list are the stable, on-by-default tool-like flags Task 0 recorded (ccloop `fix(agents): codex single
++   call also turns off the other on-by-default tool flags and notify`). `browser_use_full_cdp_access` is listed by
++   codex but not sent (moot with `browser_use` off). Web search is not a feature flag in 0.160.0 and is not turned off
++   by this list.
++3. `mcp_servers.<name>.enabled=false` for each server named by `codex mcp list --json`, run under the call's own
++   isolation (private homes with the links and the keys of item 1), read with the catalog and cached in its entry
++   (ccloop `fix(runtime): codex single call allows codex's error items and turns off the linked MCP servers` and the
++   fix-round-3 commit above). A name `-c` cannot address (anything but `[A-Za-z0-9_-]+`) or an unreadable list
++   refuses the call as `codex-single-call-unavailable`; an unreadable list keeps the catalog's rows and features.
++
++Zero-cost check of the full list (I4, real codex-cli 0.160.0 at the nvm path, private `HOME` and private
++`CODEX_HOME` linking `~/.codex/auth.json` and `config.toml`, no model call): `codex features list` RC 0 named all 12
++added flags "stable true"; isolated `codex mcp list --json` named `computer-use`, `figma`, `node_repl`;
++`codex debug prompt-input <items 1-3> "<one-line prompt>"` RC 0, stderr 0 bytes, 6381 B of rendered items, identical
++except message ids and timestamps to the same render with the earlier list (the added flags change no prompt text;
++`prompt-input` does not show tool definitions). `~/.codex/auth.json` and `config.toml` `ls -l` plus `shasum` were
++identical before and after. Observed in passing: `prompt-input` also accepted an unknown `-c features.<x>=false`
++(RC 0); §6.1's "Codex refuses an unknown flag" was not re-measured on `exec`, and the features-list filter stays.
++
++Tokens (tool-reported `input_tokens` of a real call, `gpt-6-luna`, the same 20-word prompt asking for a JSON object
++whose answer is the capital of France, schema `{answer: string}`): P1 11590 (ccloop `efcd5b3`: before the MCP
++overrides; the linked config's MCP servers started), P1c 10811 (ccloop `34a14a3`: item 1 without `notify=[]`, §2.4's
++tool flags, item 3; no MCP server started), output 15 each. §2.5's "~1.5k tokens" was inferred from bytes;
++the measured framing is far above it. The I4 flags were added after P1c, and no paid call measured them. The codex
++profile's `framingTokenOverhead` (§6.1 "Framing") is a value in the human-owned `~/.orca/profile.json` (§8.3); it
++is the human's to set, with these numbers.
++
++### 11.3 Live-probe findings
++
++- **codex `error` items are diagnostics** (P1, ledger): codex emits `item.completed` items of type `error` for config
++  warnings (twice "`features.rmcp_client` is ignored" from the person's `config.toml`, once "Under-development
++  features enabled: skip_host_skill_discovery"). The decoder allows them and logs each on stderr; every other item
++  type that is not `agent_message` or `reasoning`, known or not, still fails closed as
++  `codex-single-call-not-single:tool`.
++- **Disabling an MCP server the call's config does not define breaks codex's config load** (P1b, ledger): listed
++  against the person's own `~/.codex`, `codex mcp list` also named the `~/.codex/plugins` servers (6 names, 3 of them
++  undefined in the isolated config); the call failed with RC 1 in 245 ms, "invalid transport in
++  `mcp_servers.code-review`", and no model request was shown. Offline repro: the 6 overrides RC 1, the 3 defined RC 0.
++  Also measured: a whole-table `-c mcp_servers={}` leaves the servers on; a quoted segment
++  (`mcp_servers."figma".enabled`) breaks the config. Hence item 3's listing under the call's own isolation.
++
++### 11.4 Reads that stay live, and the cached version
++
++- **Cached** (§4.1): every catalog read through `readAgentCatalog`, including the `--version` answer stored in the
++  entry. The human decided plan issue 8 on 2026-10-15: cache the version (a shim upgrade can be unseen for up to 30
++  minutes).
++- **Live by design** (ledger, Task 4 ruling): the version probes of `updates.ts` (observe, preview, Apply),
++  `agents validate`'s `probeVersion`, and detection's `readOmpModels` (`detect.ts`). Detection, validation and
++  drift/upgrade checks exist to see the binary as it is now. Apply's re-check of the omp catalog reads with
++  `refresh: true`. §4.1's "`updates.ts`" is read as its omp catalog read, which is cached. P2 measured one uncached
++  `omp --version` per runtime start from `updates.ts`.
++
++### 11.5 Residuals
++
++- **Refresh-token rotation through the `auth.json` symlink is unverified** (final review I3, ruled a residual for the
++  human). P1c showed the private `auth.json` still a symlink and `~/.codex` unchanged, but no token refresh happened
++  during it. If codex saves a refreshed token by temp file and rename, the new token lands in the private dir; the next
++  call displaces it (kept, never deleted) and re-links to the older file in `~/.codex`. Recovery: `codex login`.
++- **Keyring-stored codex credentials** (`cli_auth_credentials_store`) leave no `auth.json` to link: the call fails
++  closed as an auth error.
++- **The control worker's `ccloop-agent-catalog:` log line has no production sink**: `workerLauncher` starts the
++  worker with stdio `ignore` (ledger, Task 4 ruling); only the criteria see it.
++- **The codex phase adapter still carries the person's skills and AGENTS.md** (unchanged; §2.5, §10).
++- The omp legacy `config.yaml` and `PI_CONFIG_DIR` are not stamped in the cache key; the 30-minute lifetime bounds a
++  change there (ledger, Task 2).
++- A catalog entry written by an older ccloop carries that build's shorter feature list for up to its 30-minute
++  lifetime (the key has no ccloop version).
++- `notify=[]` and the I4 flags were checked at render time only; no paid call has run with them.

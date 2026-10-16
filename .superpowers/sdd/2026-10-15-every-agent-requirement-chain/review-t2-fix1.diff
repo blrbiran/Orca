@@ -1,0 +1,130 @@
+3204a47 fix(agents): stamp the config files omp actually reads for a named profile
+ src/agents/catalogCache.ts        | 22 ++++++++++++++++------
+ tests/agents/catalogCache.test.ts | 28 ++++++++++++++++++++++++++--
+ 2 files changed, 42 insertions(+), 8 deletions(-)
+diff --git a/src/agents/catalogCache.ts b/src/agents/catalogCache.ts
+index d367bbd..9dd05c4 100644
+--- a/src/agents/catalogCache.ts
++++ b/src/agents/catalogCache.ts
+@@ -30,41 +30,51 @@ export function catalogCacheDir(env: NodeJS.ProcessEnv): string | null {
+ async function stamp(path: string): Promise<CatalogStampV1> {
+   try {
+     const real = await realpath(path);
+     const info = await stat(real);
+     return { path: real, mtimeMs: info.mtimeMs, size: info.size };
+   } catch { return { path, mtimeMs: null, size: null }; }
+ }
+ 
+ const ENV_OF_KIND: Record<string, string> = { omp: "PI_CODING_AGENT_DIR", codex: "CODEX_HOME" };
+ 
+-/** Spec issue 7(d): omp 18.10.1 `pi-utils/src/dirs.ts:119-133`; codex: `$CODEX_HOME/config.toml` (default `~/.codex`). */
++/**
++ * Spec issue 7(d). omp 18.10.1 `pi-utils/src/dirs.ts`: `normalizeProfileName` maps a trimmed ""/"default" to the default
++ * profile; a NAMED profile always uses `<HOME>/.omp/profiles/<name>/agent` (the `DirResolver` constructor drops
++ * `agentDirOverride` and `resolveActiveAgentDirOverride` returns undefined when a profile is active); only the default
++ * profile honours `PI_CODING_AGENT_DIR` (ccloop's configDir, else the inherited one). codex: `$CODEX_HOME/config.toml`
++ * (default `~/.codex`). An inherited dir that is empty or relative is treated as unset, never joined cwd-relative.
++ */
+ function configFilesOf(installation: InstallationV1, env: NodeJS.ProcessEnv): string[] {
+-  const inherited = ENV_OF_KIND[installation.kind] === undefined ? undefined : env[ENV_OF_KIND[installation.kind]!];
++  const raw = ENV_OF_KIND[installation.kind] === undefined ? undefined : env[ENV_OF_KIND[installation.kind]!];
++  const inherited = raw && isAbsolute(raw) ? raw : null;
+   const home = env.HOME && isAbsolute(env.HOME) ? env.HOME : null;
+   if (installation.kind === "omp") {
+-    const profile = installation.profile as string | null;
+-    const agentDir = installation.configDir ?? inherited ?? (home === null ? null : profile ? join(home, ".omp", "profiles", profile, "agent") : join(home, ".omp", "agent"));
++    const profile = (installation.profile as string | null | undefined)?.trim();
++    const named = profile && profile !== "default" ? profile : null;
++    const agentDir = named !== null
++      ? (home === null ? null : join(home, ".omp", "profiles", named, "agent"))
++      : installation.configDir ?? inherited ?? (home === null ? null : join(home, ".omp", "agent"));
+     return agentDir === null ? [] : [join(agentDir, "config.yml"), join(agentDir, "models.yaml")];
+   }
+   if (installation.kind === "codex") {
+     const codexHome = installation.configDir ?? inherited ?? (home === null ? null : join(home, ".codex"));
+     return codexHome === null ? [] : [join(codexHome, "config.toml")];
+   }
+   return [];
+ }
+ 
+ export async function catalogKey(installation: InstallationV1, env: NodeJS.ProcessEnv): Promise<CatalogKeyV1> {
+   const argvFiles: CatalogStampV1[] = [];
+-  for (const [index, part] of installation.command.entries()) {
++  for (const part of installation.command) {
+     const s = await stamp(part);
+-    if (index === 0 || s.mtimeMs !== null) argvFiles.push(s);
++    if (s.mtimeMs !== null) argvFiles.push(s);
+   }
+   const variable = ENV_OF_KIND[installation.kind];
+   return {
+     schema: "ccloop-agent-catalog-key-v1", kind: installation.kind, command: [...installation.command], files: argvFiles,
+     profile: (installation.profile as string | null | undefined) ?? null, configDir: installation.configDir,
+     inheritedConfigDir: installation.configDir === null && variable !== undefined ? env[variable] ?? null : null,
+     configFiles: await Promise.all(configFilesOf(installation, env).map(stamp)),
+   };
+ }
+ 
+diff --git a/tests/agents/catalogCache.test.ts b/tests/agents/catalogCache.test.ts
+index d949d4c..b3ada34 100644
+--- a/tests/agents/catalogCache.test.ts
++++ b/tests/agents/catalogCache.test.ts
+@@ -124,22 +124,22 @@ describe("key fields (spec §4.1; each is a stale-hit guard)", () => {
+   });
+   it("an argv file's mtime (a wrapper's version file, spec issue 8)", async () => {
+     const w = await world(); const file = join(w.dir, "version.txt"); await writeFile(file, "1.0.0\n");
+     const installation: InstallationV1 = { ...w.installation, command: [w.binary, file] };
+     expect(await delta(w, installation, async () => { await utimes(file, new Date(T0 + 9_000), new Date(T0 + 9_000)); })).toEqual({ renamed: true, fields: ["files.1.mtimeMs"] });
+   });
+   it("an argv word that names no file", async () => {
+     const w = await world();
+     expect(await delta(w, w.installation, async () => ({ ...w.installation, command: [w.binary, "--no-such-file-word"] }))).toEqual({ renamed: true, fields: ["command.1"] });
+   });
+-  it("the profile, config dir held by the inherited variable", async () => {
+-    const w = await world(); w.env.PI_CODING_AGENT_DIR = join(w.home, ".omp", "agent");
++  it("the profile, with no HOME so neither profile has config files", async () => {
++    const w = await world(); delete w.env.HOME;
+     expect(await delta(w, w.installation, async () => ({ ...w.installation, profile: "work" }))).toEqual({ renamed: true, fields: ["profile"] });
+   });
+   it("the configDir, naming the default agent dir", async () => {
+     const w = await world();
+     expect(await delta(w, w.installation, async () => ({ ...w.installation, configDir: join(w.home, ".omp", "agent") }))).toEqual({ renamed: true, fields: ["configDir"] });
+   });
+   it("the inherited config dir variable, naming the default agent dir", async () => {
+     const w = await world();
+     expect(await delta(w, w.installation, async () => { w.env.PI_CODING_AGENT_DIR = join(w.home, ".omp", "agent"); })).toEqual({ renamed: true, fields: ["inheritedConfigDir"] });
+   });
+@@ -159,10 +159,34 @@ describe("key fields (spec §4.1; each is a stale-hit guard)", () => {
+   });
+   it("the kind, with no HOME so neither kind has config files", async () => {
+     const w = await world(); delete w.env.HOME;
+     expect(await delta(w, w.installation, async () => ({ ...w.installation, kind: "claude" }))).toEqual({ renamed: true, fields: ["kind"] });
+   });
+   it("not the cache dir or the clock", async () => {
+     const w = await world();
+     expect(await delta(w, w.installation, async () => { w.env.CCLOOP_CACHE_DIR = join(w.dir, "elsewhere"); })).toEqual({ renamed: false, fields: [] });
+   });
+ });
++
++// omp 18.10.1 `pi-utils/src/dirs.ts` (DirResolver constructor, resolveActiveAgentDirOverride, normalizeProfileName): the
++// files stamped must be the ones the CLI reads, or an edit to them is a stale hit.
++describe("which config files are stamped (spec issue 7(d))", () => {
++  const paths = async (installation: InstallationV1, env: NodeJS.ProcessEnv) => (await catalogKey(installation, env)).configFiles.map((file) => file.path);
++  it("a named omp profile reads its own agent dir, whatever configDir or PI_CODING_AGENT_DIR say; \"default\" honours them", async () => {
++    const w = await world(); const custom = join(w.dir, "custom");
++    const profileDir = join(w.home, ".omp", "profiles", "work", "agent");
++    expect(await paths({ ...w.installation, profile: "work", configDir: custom }, w.env)).toEqual([join(profileDir, "config.yml"), join(profileDir, "models.yaml")]);
++    expect(await paths({ ...w.installation, profile: "work" }, { ...w.env, PI_CODING_AGENT_DIR: custom })).toEqual([join(profileDir, "config.yml"), join(profileDir, "models.yaml")]);
++    expect(await paths({ ...w.installation, profile: "default", configDir: custom }, w.env)).toEqual([join(custom, "config.yml"), join(custom, "models.yaml")]);
++    expect(await paths({ ...w.installation, profile: "default" }, { ...w.env, PI_CODING_AGENT_DIR: custom })).toEqual([join(custom, "config.yml"), join(custom, "models.yaml")]);
++  });
++  it("an empty or relative inherited config dir is unset, never a cwd-relative path", async () => {
++    const omp = await world(); const agent = join(omp.home, ".omp", "agent");
++    for (const value of ["", "rel"]) {
++      expect(await paths(omp.installation, { ...omp.env, PI_CODING_AGENT_DIR: value })).toEqual([join(agent, "config.yml"), join(agent, "models.yaml")]);
++    }
++    const codex = await world("codex");
++    for (const value of ["", "rel"]) {
++      expect(await paths(codex.installation, { ...codex.env, CODEX_HOME: value })).toEqual([join(codex.home, ".codex", "config.toml")]);
++    }
++  });
++});

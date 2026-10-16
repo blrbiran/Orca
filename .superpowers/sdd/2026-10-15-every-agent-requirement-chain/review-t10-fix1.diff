@@ -1,0 +1,68 @@
+dfd76de5 fix(control): state the import-time estimate's measured gate; pin declared > observed (R7)
+diff --git a/tests/control/declaredNullWindow.test.ts b/tests/control/declaredNullWindow.test.ts
+index 47aa888a..231b0568 100644
+--- a/tests/control/declaredNullWindow.test.ts
++++ b/tests/control/declaredNullWindow.test.ts
+@@ -13,13 +13,14 @@ const observed = (window: number | null): CapabilityViewV1 => ({ ...profileSnaps
+ describe("a declared-null window (R7)", () => {
+   it("takes the observed window, the smaller of two, and keeps an observed null", () => {
+     expect([
+       intersectCapabilities(declared(null), observed(272000)).contextWindowTokens,
+       intersectCapabilities(declared(200000), observed(272000)).contextWindowTokens,
++      intersectCapabilities(declared(300000), observed(272000)).contextWindowTokens,
+       intersectCapabilities(declared(null), observed(null)).contextWindowTokens,
+       intersectCapabilities(declared(300000), observed(null)).contextWindowTokens,
+-    ]).toEqual([272000, 200000, null, null]);
++    ]).toEqual([272000, 200000, 272000, null, null]);
+   });
+ 
+   it("has no context-unavailable when ccloop reports a window under a null-declaring profile, and has it when ccloop reports none", () => {
+     const snapshot = profileSnapshot(); snapshot.profile.capabilities = declared(null);
+     const profile = resolveProfile(snapshot);
+diff --git a/tests/control/executionDriverE2E.test.ts b/tests/control/executionDriverE2E.test.ts
+index b1f60307..c69fbc1f 100644
+--- a/tests/control/executionDriverE2E.test.ts
++++ b/tests/control/executionDriverE2E.test.ts
+@@ -14,14 +14,14 @@ import { ccloopWorlds, g, noBlocked, raw, realBinary, startGroup, until, workRun
+  * must contain ccloop changes C1-C3) and its scripted fake codex. Everything is relocated under a
+  * temporary root. The honest claim these support (deviation D1): with fake codex, a soft group, and an
+  * estimator whose estimate is blocked-capability because contextWindowTokens is null, Web dispatch runs
+  * from confirm to settle and lands on orca/<groupId>. Not "Web dispatch works".
+  *
+- * *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) *** "blocked-capability because
+- * contextWindowTokens is null" no longer names the cause: under spec 2026-10-15 §6.3 (R7) a declared null takes ccloop's
+- * observed window. Measured with ccloop codex/every-agent-chain efcd5b3 built: the import-time estimate in these worlds is
+- * blocked-capability with reasonCode `agent-selection-rejected:estimator:agent-unselected`. Text above kept verbatim.
++ * *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) *** on "blocked-capability because
++ * contextWindowTokens is null": measured on 06f15c53 (ccloop codex/every-agent-chain efcd5b3 built), the import-time
++ * estimate is blocked first by `agent-selection-rejected:estimator:agent-unselected` (planImport's layer resolution, which
++ * predates R7); the window is not reached in these worlds. Text above kept verbatim.
+  *
+  * The world, its boot/die/teardown and the command helpers live in fixtures/ccloopWorld.ts (moved there
+  * unchanged for handoffE2E.test.ts, handoff delivery preflight I11).
+  */
+ const { world, removeRoots, relocateHome } = ccloopWorlds({ rootPrefix: "orca-driver-e2e-", epochPrefix: "epoch-e2e-" });
+diff --git a/tests/control/fixtures/ccloopWorld.ts b/tests/control/fixtures/ccloopWorld.ts
+index fddfc660..ec59241b 100644
+--- a/tests/control/fixtures/ccloopWorld.ts
++++ b/tests/control/fixtures/ccloopWorld.ts
+@@ -81,15 +81,14 @@ export interface SingleCallScriptEntry { output: unknown; delayMs?: { "single-ca
+ const optionalPolicyWorlds=new WeakSet<ControlRuntime>();
+ export interface WorldOptions { tokenPolicy?:"optional-v1"; claudeScript?: Record<string, ScriptEntry | SingleCallScriptEntry>; /** Single-call estimate: the profile's declared context window (null otherwise, so the estimate stays blocked-capability). */ declaredContextWindowTokens?: number;
+   /** Syncskill integration plan Task 6: more variables for the assembled runtime's env (ORCA_SYNCSKILL_BIN and what the fake syncskill reads). */
+   env?: NodeJS.ProcessEnv }
+ // *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) *** on `declaredContextWindowTokens`
+-// above ("null otherwise, so the estimate stays blocked-capability"): under spec 2026-10-15 §6.3 (R7) a declared null no
+-// longer blocks on its own -- the intersection takes ccloop's observed window. Measured on branch codex/every-agent-chain
+-// with ccloop codex/every-agent-chain efcd5b3 built: a codex world's import-time estimate is blocked-capability with
+-// reasonCode `agent-selection-rejected:estimator:agent-unselected` (no estimator agent is selected yet), not by a window.
+-// Text above kept verbatim.
++// above ("null otherwise, so the estimate stays blocked-capability"): measured on 06f15c53 (ccloop codex/every-agent-chain
++// efcd5b3 built), a codex world's import-time estimate is blocked first by
++// `agent-selection-rejected:estimator:agent-unselected` (planImport's layer resolution, which predates R7); the window is
++// not reached in these worlds. Text above kept verbatim.
+ 
+ /** The codex installation's killGraceMs in every world; handoffE2E's G scenario tells it apart from HANDOFF_EXTRA_GRACE_MS alone. */
+ export const KILL_GRACE_MS = 5_000;
+ 
+ export type World = Awaited<ReturnType<ReturnType<typeof ccloopWorlds>["world"]>>;

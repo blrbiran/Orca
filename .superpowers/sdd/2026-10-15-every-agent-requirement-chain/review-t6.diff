@@ -1,0 +1,368 @@
+0d57625 feat(agents): codex resolves a soft single call and its catalog window
+ src/agents/codex.ts                        | 13 +++++--
+ src/agents/materialize.ts                  |  3 ++
+ src/agents/registry.ts                     |  4 +-
+ src/agents/types.ts                        |  2 +-
+ src/control/command.ts                     |  2 +-
+ tests/agents/agentCatalog.test.ts          | 16 ++++++++
+ tests/agents/codexResolution.test.ts       | 61 ++++++++++++++++++++++++++++++
+ tests/control/singleCallCapability.test.ts | 37 +++++++++++++++---
+ 8 files changed, 126 insertions(+), 12 deletions(-)
+diff --git a/src/agents/codex.ts b/src/agents/codex.ts
+index 16de6c2..99032e9 100644
+--- a/src/agents/codex.ts
++++ b/src/agents/codex.ts
+@@ -31,35 +31,40 @@ export const codexDescriptor: AgentDescriptor = {
+   searchDirs: ({ home, platform }) => commonSearchDirs({ home, platform }),
+   configDirEnv: "CODEX_HOME",
+   defaults: { model: "gpt-6-sol", contextWindow: "agent-default" },
+   contextOptions: CONTEXT_OPTIONS,
+   installationExtras: { sandbox: z.enum(["read-only", "workspace-write"]), budgetMode: z.literal("soft") },
+   draftInstallationExtras: { sandbox: "workspace-write", budgetMode: "soft" },
+   validateSelection(selection) {
+     assertModel(selection.model);
+     assertContextOption(CONTEXT_OPTIONS, selection);
+   },
+-  capabilities() {
++  capabilities(_config, row) {
+     return {
+       usageObservation: "phase-end",
+       budgetEnforcement: "soft",
+       contextObservation: "unavailable",
+       handoffControl: "durable",
+       handoffExecution: "mechanical-in-run-v1",
+-      contextWindowTokens: null,
++      // Every-agent requirement chain (Orca spec 2026-10-15 §6.1): the catalog row's context_window (config.toml's
++      // model_context_window wins), not scaled by effective_context_window_percent; no row => unknown.
++      contextWindowTokens: row?.contextWindow ?? null,
+       requestBoundProof: null,
+     };
+   },
+   // Orca single-call estimate (2026-09-27), Task 0 item 1 (codex-cli 0.155.1): no config caps the model's output, so a
+   // single call cannot be bounded the way spec §4.4 asks.
+-  singleCallExecution() {
+-    return null;
++  // *** ERRATUM (Orca spec 2026-10-15 §6.1, ruling R2) -- the bound is now checked after the fact: codex answers "v1-soft"
++  // (one structured call, tools off, output bound not enforced by the CLI) when its catalog row is found. ***
++  singleCallExecution(_config, row) {
++    return row !== undefined ? "v1-soft" : null;
+   },
+   // OMP single call (Orca spec 2026-10-14 §3.2): codex runs no single call; nothing to bound.
++  // *** ERRATUM (Orca spec 2026-10-15 §6.1) -- codex runs a soft single call; it still has no cap, so this stays null. ***
+   singleCallOutputCap() {
+     return null;
+   },
+   createAdapter(config, options) {
+     const { configDir } = config.installation;
+     return new CodexAdapter(toCodexConfig(config), configDir === null ? undefined : { CODEX_HOME: configDir }, options?.codexSkillsDir);
+   },
+ };
+diff --git a/src/agents/materialize.ts b/src/agents/materialize.ts
+index 9d1647a..6754ad6 100644
+--- a/src/agents/materialize.ts
++++ b/src/agents/materialize.ts
+@@ -94,20 +94,23 @@ export async function resolveAgent(
+     let rows: CatalogRowV1[];
+     if (catalog !== null) {
+       if (catalog.catalogError !== null) throw new Error(catalog.catalogError);
+       rows = catalog.rows!;
+     } else if (deps.probeCatalog !== undefined) rows = await deps.probeCatalog(installation);
+     else if (deps.probeModels !== undefined) rows = (await deps.probeModels(installation)).map((selector) => ({ selector, provider: selector.slice(0, selector.indexOf("/")), contextWindow: null, maxTokens: null }));
+     else rows = await readOmpCatalog(installation);
+     row = rows.find((candidate) => candidate.selector === selection.model);
+     if (row === undefined) throw new AgentError("agent-selection-invalid", `OMP model is not an exact catalog selector: ${selection.model}`);
+   }
++  // Every-agent requirement chain (Orca spec 2026-10-15 §6.1, plan issue 5): a codex row (any visibility) decides the
++  // window and the soft single call; a catalog that could not be read leaves both unknown rather than refusing.
++  if (installation.kind === "codex" && catalog !== null && catalog.rows !== null) row = catalog.rows.find((candidate) => candidate.selector === selection.model);
+   return {
+     config,
+     resolution: {
+       selection,
+       configHash: agentConfigHash(config),
+       timeoutMs: installation.timeoutMs,
+       killGraceMs: installation.killGraceMs,
+       capabilities: descriptor.capabilities(config, row),
+       singleCallExecution: descriptor.singleCallExecution(config, row),
+       singleCallOutputCap: descriptor.singleCallOutputCap(config, row),
+diff --git a/src/agents/registry.ts b/src/agents/registry.ts
+index a071ee7..eec6ee7 100644
+--- a/src/agents/registry.ts
++++ b/src/agents/registry.ts
+@@ -35,22 +35,24 @@ export interface AgentDescriptor {
+   /** `row` is the selected catalog row for a kind that has a catalog (omp, OMP single call 2026-10-14 §3.2), else undefined. */
+   capabilities(config: MaterializedAgentConfigV1, row?: CatalogRowV1): CapabilityViewV1;
+   /**
+    * Orca single-call estimate (2026-09-27), spec §4.4: "v1" when this kind can run one read-only structured call with
+    * an output-token cap and every tool turned off; null when either cannot be done. A sibling of capabilities, not a
+    * key of it: Orca does not intersect it with a profile or freeze it into a task.
+    *
+    * *** ERRATUM (OMP single call, Orca spec 2026-10-14 §3.2, Orca session 02f047f6, 2026-10-14) *** "when this kind can run" no longer holds for omp: its
+    * answer is decided per selected catalog row (`row`, at resolution), not per kind -- "v1" only when that row declares
+    * a maxTokens and its provider is not openrouter. Claude and codex still answer per kind.
++   *
++   * *** ERRATUM (Orca spec 2026-10-15 §6.1, R2) -- a third answer, "v1-soft": one structured call with tools off whose output bound the CLI cannot enforce (codex); Orca accepts it only in soft estimate mode. Codex now also answers per selected catalog row: "v1-soft" when the row is found, null otherwise. ***
+    */
+-  singleCallExecution(config: MaterializedAgentConfigV1, row?: CatalogRowV1): "v1" | null;
++  singleCallExecution(config: MaterializedAgentConfigV1, row?: CatalogRowV1): "v1" | "v1-soft" | null;
+   /**
+    * OMP single call (Orca spec 2026-10-14 §3.2): the output cap the kind's single call actually runs under, from its catalog
+    * row; null means the call honours the request's maxOutputTokens. A sibling of singleCallExecution: never in the
+    * seven-key view, never frozen.
+    */
+   singleCallOutputCap(config: MaterializedAgentConfigV1, row?: CatalogRowV1): number | null;
+   /**
+    * Orca syncskill integration (2026-10-03), spec §10.7: each skill directory field is honoured by one kind only --
+    * `skillPluginDir` by claude, `codexSkillsDir` by codex (H6), `ompSkillsDir` by omp (2026-10-13); accept refuses the rest.
+    */
+diff --git a/src/agents/types.ts b/src/agents/types.ts
+index b8c287d..f75715f 100644
+--- a/src/agents/types.ts
++++ b/src/agents/types.ts
+@@ -45,21 +45,21 @@ export interface MaterializedAgentConfigV1 {
+   installation: InstallationV1;
+   selection: AgentSelectionV1;
+ }
+ export interface AgentResolutionV1 {
+   selection: AgentSelectionV1;
+   configHash: string;
+   timeoutMs: number;
+   killGraceMs: number;
+   capabilities: CapabilityViewV1;
+   /** Orca single-call estimate (2026-09-27) §4.4; decided at resolution since OMP single call (Orca spec 2026-10-14 §3.2). */
+-  singleCallExecution: "v1" | null;
++  singleCallExecution: "v1" | "v1-soft" | null;
+   /** OMP single call (Orca spec 2026-10-14 §3.2): the cap the call actually runs under; null = it honours the request's maxOutputTokens. Never frozen. */
+   singleCallOutputCap: number | null;
+ }
+ 
+ /** Every code an AgentError can carry (agent selection spec §7, plus the plan's additions). */
+ export const AGENT_ERROR_CODES = [
+   "agents-table-invalid",
+   "agent-installation-missing",
+   "agent-context-unsupported",
+   "agent-selection-invalid",
+diff --git a/src/control/command.ts b/src/control/command.ts
+index eeca4be..7bc121b 100644
+--- a/src/control/command.ts
++++ b/src/control/command.ts
+@@ -88,21 +88,21 @@ const capabilitiesSchema = z.union([
+     })
+     .strict(),
+   z
+     .object({
+       protocol: z.literal(3),
+       selection: agentSelectionSchema,
+       configHash: z.string().regex(/^[a-f0-9]{64}$/),
+       timeoutMs: z.number().int().positive().max(2_147_483_647),
+       killGraceMs: z.number().int().nonnegative().max(60_000),
+       capabilities: capabilityViewSchema,
+-      singleCallExecution: z.enum(["v1"]).nullable(),
++      singleCallExecution: z.enum(["v1", "v1-soft"]).nullable(),
+       // OMP single call (Orca spec 2026-10-14 §3.2). Optional, so an answer without it (a handler stand-in) still parses.
+       singleCallOutputCap: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable().optional(),
+     })
+     .strict(),
+ ]);
+ // Every-agent requirement chain (Orca spec 2026-10-15 §3): refused here rather than printed for Orca to refuse whole.
+ const modelsSchema = z.object({
+   schema: z.literal("ccloop-models-v1"), installation: z.string().min(1), kind: z.string().min(1), source: z.enum(["cache", "probe", "none"]),
+   observedAt: z.string().datetime().nullable(),
+   models: z.array(z.object({ model: z.string().min(1).max(200), contextWindowTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable(),
+diff --git a/tests/agents/agentCatalog.test.ts b/tests/agents/agentCatalog.test.ts
+index 7cf6ff6..4d2aae5 100644
+--- a/tests/agents/agentCatalog.test.ts
++++ b/tests/agents/agentCatalog.test.ts
+@@ -54,20 +54,36 @@ describe("criterion 1: a warm cache spawns nothing (spec §4.1)", { timeout: 30_
+       const before = spawns(agent === "omp" ? t.ompMarker : t.codexMarker);
+       const sourceDir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-agent-catalog-accept-")));
+       const status = await acceptStart(singleCallEnvelope({ sourceDir, agent: resolution.selection, configHash: resolution.configHash }), {
+         agentsTablePath: t.path, workerCommand: [resolve("node_modules/.bin/tsx"), resolve("tests/fixtures/control-worker.mjs")], receiptTimeoutMs: 2_000,
+       });
+       expect(status.kind).toBe("accepted");
+       expect(spawns(agent === "omp" ? t.ompMarker : t.codexMarker)).toBe(before);
+     }
+   });
+ 
++  // Task 6 (Orca spec 2026-10-15 §6.1, only-add): codex answers v1-soft, so accept admits its single-call work; on a warm
++  // key the re-resolution inside accept reads the cache and spawns nothing.
++  it("accept for codex probes nothing on a warm key", async () => {
++    const t = await table();
++    for (const agent of ["codex"] as const) {
++      const { resolution } = await resolveAgent(t.table, { agent });
++      const before = spawns(t.codexMarker);
++      const sourceDir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-agent-catalog-accept-")));
++      const status = await acceptStart(singleCallEnvelope({ sourceDir, agent: resolution.selection, configHash: resolution.configHash }), {
++        agentsTablePath: t.path, workerCommand: [resolve("node_modules/.bin/tsx"), resolve("tests/fixtures/control-worker.mjs")], receiptTimeoutMs: 2_000,
++      });
++      expect(status.kind).toBe("accepted");
++      expect(spawns(t.codexMarker)).toBe(before);
++    }
++  });
++
+   it("refresh skips the read, probes, and rewrites", async () => {
+     const t = await table();
+     const installation = t.table.installations.omp!;
+     expect((await readAgentCatalog(installation)).source).toBe("probe");
+     expect((await readAgentCatalog(installation)).source).toBe("cache");
+     expect((await readAgentCatalog(installation, { refresh: true })).source).toBe("probe");
+     expect(count(`${t.ompMarker}.catalog-calls`)).toBe(2);
+   });
+ 
+   it("does not write an entry when a probe failed, and reports the omp failure as catalogError", async () => {
+diff --git a/tests/agents/codexResolution.test.ts b/tests/agents/codexResolution.test.ts
+new file mode 100644
+index 0000000..b062e7c
+--- /dev/null
++++ b/tests/agents/codexResolution.test.ts
+@@ -0,0 +1,61 @@
++import { mkdtemp, realpath, writeFile } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join, resolve } from "node:path";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import { resolveAgent } from "../../src/agents/materialize.js";
++import { runControlCommand } from "../../src/control/command.js";
++import { codexInstallation, writeAgentsTable } from "../control/agentsFixture.js";
++
++// Every-agent requirement chain (Orca spec 2026-10-15 §6.1, R2; criterion 3): codex answers the soft single call and its
++// catalog row's window; a model the catalog does not have, or a catalog that cannot be read, answers neither (issue 5).
++const FAKE_CODEX = resolve("tests/fixtures/fake-codex.mjs");
++async function table(configDir: string | null = null) {
++  const dir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-codex-resolution-")));
++  const marker = join(dir, "codex-marker");
++  const codex = await codexInstallation({ command: [process.execPath, FAKE_CODEX, "integration", marker], sandbox: "read-only", budgetMode: "soft", timeoutMs: 60_000, killGraceMs: 100 });
++  return { dir, marker, ...(await writeAgentsTable({ codex: { ...codex, configDir } }, dir)) };
++}
++
++afterEach(() => {
++  vi.unstubAllEnvs();
++});
++
++describe("codex resolution (spec §6.1)", { timeout: 30_000 }, () => {
++  it("answers v1-soft, no output cap, and the catalog window for a listed model", async () => {
++    const t = await table();
++    const { resolution } = await resolveAgent(t.table, { agent: "codex" });
++    expect([resolution.selection.model, resolution.capabilities.contextWindowTokens, resolution.singleCallExecution, resolution.singleCallOutputCap]).toEqual(["gpt-6-sol", 272000, "v1-soft", null]);
++  });
++  it("answers the same for a hidden row", async () => {
++    const t = await table();
++    expect((await resolveAgent(t.table, { agent: "codex", model: "gpt-reserve" })).resolution.singleCallExecution).toBe("v1-soft");
++  });
++  it("answers null and null for a model with no row", async () => {
++    const t = await table();
++    const absent = (await resolveAgent(t.table, { agent: "codex", model: "not-in-catalog" })).resolution;
++    expect([absent.capabilities.contextWindowTokens, absent.singleCallExecution]).toEqual([null, null]);
++  });
++  // Pre-flight ruling P11: its own table and its own cache dir -- the cache key cannot see `<marker>.catalog.json`, so a
++  // warm entry from another case would answer the catalog this case breaks.
++  it("answers null and null for a catalog that cannot be read", async () => {
++    vi.stubEnv("CCLOOP_CACHE_DIR", await realpath(await mkdtemp(join(tmpdir(), "ccloop-codex-resolution-cache-"))));
++    const t = await table();
++    await writeFile(`${t.marker}.catalog.json`, JSON.stringify({ exitCode: 3 }));
++    const broken = (await resolveAgent(t.table, { agent: "codex", model: "gpt-6-luna" })).resolution;
++    expect([broken.capabilities.contextWindowTokens, broken.singleCallExecution]).toEqual([null, null]);
++  });
++  // Spec §6.1 "Window": the installation's config.toml model_context_window wins over the catalog's context_window.
++  it("answers the installation's config.toml model_context_window over the catalog's", async () => {
++    const configDir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-codex-resolution-home-")));
++    await writeFile(join(configDir, "config.toml"), "model_context_window = 400000\n\n[features]\nplugins = true\n", { mode: 0o600 });
++    const t = await table(configDir);
++    const { resolution } = await resolveAgent(t.table, { agent: "codex" });
++    expect([resolution.capabilities.contextWindowTokens, resolution.singleCallExecution]).toEqual([400000, "v1-soft"]);
++  });
++  it("prints v1-soft through control capabilities (the wire enum accepts it)", async () => {
++    const t = await table();
++    const answer = await runControlCommand(["capabilities", "--agents", t.path], JSON.stringify({ agent: { agent: "codex" } }));
++    expect(answer.code, answer.stderr).toBe(0);
++    expect(JSON.parse(answer.stdout)).toMatchObject({ singleCallExecution: "v1-soft", singleCallOutputCap: null, capabilities: { contextWindowTokens: 272000 } });
++  });
++});
+diff --git a/tests/control/singleCallCapability.test.ts b/tests/control/singleCallCapability.test.ts
+index c33833d..e5f67f8 100644
+--- a/tests/control/singleCallCapability.test.ts
++++ b/tests/control/singleCallCapability.test.ts
+@@ -38,52 +38,79 @@ async function twoAgentTable() {
+   dirs.push(dir);
+   const script = join(dir, "script.json");
+   await writeFile(script, "{}\n", { mode: 0o600 });
+   return await writeAgentsTable({
+     claude: await claudeInstallation([process.execPath, FAKE_CLAUDE_CLI, "script", join(dir, "claude-marker"), script]),
+     codex: await codexInstallation({ command: [process.execPath, FAKE_CODEX, "integration", join(dir, "codex-marker")], sandbox: "workspace-write", budgetMode: "soft", timeoutMs: 1_000, killGraceMs: 100 }),
+   }, dir);
+ }
+ 
+ describe("single-call capability and its accept gate (Orca single-call estimate)", { timeout: 30_000 }, () => {
+-  it("C1: answers singleCallExecution beside an unchanged seven-key view: v1 for claude, null for codex", async () => {
++  // Rewritten for the every-agent requirement chain (Orca spec 2026-10-15 §6.1, ruling R2; human named E2 on 2026-10-15):
++  // codex now answers "v1-soft" beside the view. Ruling: human named E2 in Orca session a852f96a, 2026-10-15.
++  it("C1: answers singleCallExecution beside the seven-key view: v1 for claude, v1-soft for codex", async () => {
+     const { path, table } = await twoAgentTable();
+     const claude = await runControlCommand(["capabilities", "--agents", path], JSON.stringify({ agent: { agent: "claude" } }));
+     expect(claude.code, claude.stderr).toBe(0);
+     const claudeResolution = (await resolveAgent(table, { agent: "claude" })).resolution;
+     expect(claudeResolution.capabilities).toEqual(SEVEN);
+     expect(JSON.parse(claude.stdout)).toEqual({ protocol: 3, ...claudeResolution, singleCallExecution: "v1" });
+ 
+     const codex = await runControlCommand(["capabilities", "--agents", path], JSON.stringify({ agent: { agent: "codex" } }));
+     expect(codex.code, codex.stderr).toBe(0);
+     const codexResolution = (await resolveAgent(table, { agent: "codex" })).resolution;
+-    expect(codexResolution.capabilities).toEqual(SEVEN);
+-    expect(JSON.parse(codex.stdout)).toEqual({ protocol: 3, ...codexResolution, singleCallExecution: null });
++    // Rewritten for the every-agent requirement chain (Orca spec 2026-10-15 §6.1, ruling R2; human named E1 on 2026-10-15):
++    // codex's window is its fake catalog row's context_window (gpt-6-sol: 272000); the claude half is Task 7.
++    // Ruling: human named E1 in Orca session a852f96a, 2026-10-15.
++    expect(codexResolution.capabilities).toEqual({ ...SEVEN, contextWindowTokens: 272000 });
++    // Ruling: human named E2 in Orca session a852f96a, 2026-10-15.
++    expect(JSON.parse(codex.stdout)).toEqual({ protocol: 3, ...codexResolution, singleCallExecution: "v1-soft" });
+   });
+ 
+   it("C2: leaves the table view without it", async () => {
+     const { path } = await twoAgentTable();
+     const view = await runControlCommand(["capabilities", "--agents", path], JSON.stringify({ agent: null }));
+     expect(view.code, view.stderr).toBe(0);
+     expect(Object.keys(JSON.parse(view.stdout)).sort()).toEqual(["installations", "protocol"]);
+   });
+ 
+-  it("C3: accept refuses single-call work for an agent that answers null, by name and before anything is persisted", async () => {
++  // Rewritten for the every-agent requirement chain (Orca spec 2026-10-15 §6.1, ruling R2; human named E3 on 2026-10-15):
++  // the refusal now holds for a codex model the catalog does not list ("fixture"), whose resolution answers null.
++  // Ruling: human named E3 in Orca session a852f96a, 2026-10-15.
++  it("C3: accept refuses single-call work for an agent that answers null (a codex model the catalog does not list), by name and before anything is persisted", async () => {
+     const { path, table } = await twoAgentTable();
+     const sourceDir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-single-call-refused-")));
+     dirs.push(sourceDir);
+-    const { resolution } = await resolveAgent(table, { agent: "codex" });
++    const { resolution } = await resolveAgent(table, { agent: "codex", model: "fixture" });
+     const envelope = singleCallEnvelope({ sourceDir, agent: resolution.selection, configHash: resolution.configHash });
+     expect(await runControlCommand(["accept", "--agents", path], JSON.stringify(envelope))).toEqual({ code: 2, stdout: "", stderr: "single-call-unsupported\n" });
+     expect(await readdir(sourceDir)).toEqual([]);
+   });
+ 
++  // Every-agent requirement chain (Orca spec 2026-10-15 §6.1, R2; only-add): a codex catalog model answers v1-soft, so
++  // accept admits its single-call work exactly as C4 admits claude's.
++  it("C3b: accept admits codex single-call work for a catalog model (v1-soft)", async () => {
++    const { path, table } = await twoAgentTable();
++    const sourceDir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-single-call-admitted-")));
++    dirs.push(sourceDir);
++    const { resolution } = await resolveAgent(table, { agent: "codex" });
++    expect(resolution.singleCallExecution).toBe("v1-soft");
++    const envelope = singleCallEnvelope({ sourceDir, agent: resolution.selection, configHash: resolution.configHash });
++    const status = await acceptStart(envelope, {
++      agentsTablePath: path,
++      workerCommand: [resolve("node_modules/.bin/tsx"), resolve("tests/fixtures/control-worker.mjs")],
++      receiptTimeoutMs: 2_000,
++    });
++    expect(status.kind).toBe("accepted");
++    expect(JSON.parse(await readFile(join(sourceDir, "control", "envelope.json"), "utf8"))).toEqual(envelope);
++  });
++
+   it("C4: accept admits single-call work for claude and seals its envelope", async () => {
+     const { path, table } = await twoAgentTable();
+     const sourceDir = await realpath(await mkdtemp(join(tmpdir(), "ccloop-single-call-admitted-")));
+     dirs.push(sourceDir);
+     const { resolution } = await resolveAgent(table, { agent: "claude" });
+     const envelope = singleCallEnvelope({ sourceDir, agent: resolution.selection, configHash: resolution.configHash });
+     const status = await acceptStart(envelope, {
+       agentsTablePath: path,
+       workerCommand: [resolve("node_modules/.bin/tsx"), resolve("tests/fixtures/control-worker.mjs")],
+       receiptTimeoutMs: 2_000,

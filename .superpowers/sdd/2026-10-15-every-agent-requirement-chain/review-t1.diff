@@ -1,0 +1,169 @@
+# Review package: 1e05627..6632dee
+
+## Commits
+6632dee test(fixtures): fake codex and omp answer and count catalog probes
+
+## Files changed
+ tests/agents/fakeCatalogFixtures.test.ts | 59 ++++++++++++++++++++++++++++++++
+ tests/fixtures/fake-codex.mjs            | 24 +++++++++++--
+ tests/fixtures/fake-omp.mjs              |  6 ++++
+ 3 files changed, 87 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/tests/agents/fakeCatalogFixtures.test.ts b/tests/agents/fakeCatalogFixtures.test.ts
+new file mode 100644
+index 0000000..34d8ba3
+--- /dev/null
++++ b/tests/agents/fakeCatalogFixtures.test.ts
+@@ -0,0 +1,59 @@
++import { spawnSync } from "node:child_process";
++import { existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join, resolve } from "node:path";
++import { describe, expect, it } from "vitest";
++
++// Every-agent requirement chain (Orca spec 2026-10-15 §9): the fakes answer the catalog commands, count every catalog and
++// version spawn in files of their own (criterion 1 reads the count), and never log a catalog call as a phase call.
++const FAKE_CODEX = resolve("tests/fixtures/fake-codex.mjs");
++const FAKE_OMP = resolve("tests/fixtures/fake-omp.mjs");
++const dir = () => realpathSync(mkdtempSync(join(tmpdir(), "ccloop-fake-catalog-")));
++const lines = (path: string) => (existsSync(path) ? readFileSync(path, "utf8").trim().split("\n") : []);
++
++describe("fake catalog answers (spec 2026-10-15 §9)", () => {
++  it("fake codex answers debug models and features list, counts them, and leaves argv and calls alone", () => {
++    const marker = join(dir(), "codex-marker");
++    const models = spawnSync(process.execPath, [FAKE_CODEX, "integration", marker, "debug", "models"], { encoding: "utf8" });
++    expect(models.status).toBe(0);
++    expect(JSON.parse(models.stdout).models.map((row: { slug: string; context_window: number; visibility: string }) => [row.slug, row.context_window, row.visibility]))
++      .toEqual([["gpt-6-sol", 272000, "list"], ["gpt-6-luna", 272000, "list"], ["gpt-reserve", 272000, "hide"]]);
++    const features = spawnSync(process.execPath, [FAKE_CODEX, "integration", marker, "features", "list"], { encoding: "utf8" });
++    expect(features.status).toBe(0);
++    expect(features.stdout.split("\n").filter(Boolean).map((line) => line.split(/\s+/)[0]))
++      .toEqual(["apps", "browser_use", "image_generation", "multi_agent", "plugins", "shell_tool", "skip_host_skill_discovery", "unified_exec", "view_image"]);
++    spawnSync(process.execPath, [FAKE_CODEX, "integration", marker, "--version"], { encoding: "utf8" });
++    expect(lines(`${marker}.catalog-calls`)).toEqual(["debug-models", "features-list"]);
++    expect(lines(`${marker}.version-calls`)).toEqual(["version"]);
++    expect(existsSync(`${marker}.argv`)).toBe(false);
++    expect(existsSync(`${marker}.calls`)).toBe(false);
++  });
++
++  it("fake codex obeys <marker>.catalog.json: rows, exit code with stderr, and a sleep", () => {
++    const marker = join(dir(), "codex-marker");
++    writeFileSync(`${marker}.catalog.json`, JSON.stringify({ rows: [{ slug: "only", context_window: 1000, visibility: "list" }] }));
++    expect(JSON.parse(spawnSync(process.execPath, [FAKE_CODEX, "integration", marker, "debug", "models"], { encoding: "utf8" }).stdout).models)
++      .toEqual([{ slug: "only", context_window: 1000, visibility: "list" }]);
++    writeFileSync(`${marker}.catalog.json`, JSON.stringify({ exitCode: 4, stderr: "no catalog\n" }));
++    const failed = spawnSync(process.execPath, [FAKE_CODEX, "integration", marker, "debug", "models"], { encoding: "utf8" });
++    expect([failed.status, failed.stderr]).toEqual([4, "no catalog\n"]);
++    writeFileSync(`${marker}.catalog.json`, JSON.stringify({ sleepMs: 400 }));
++    const started = Date.now();
++    spawnSync(process.execPath, [FAKE_CODEX, "integration", marker, "debug", "models"], { encoding: "utf8" });
++    expect(Date.now() - started).toBeGreaterThanOrEqual(400);
++  });
++
++  it("fake omp counts models and version calls, records the models pid, and sleeps on request", () => {
++    const marker = join(dir(), "omp-marker");
++    spawnSync(process.execPath, [FAKE_OMP, marker, "--no-extensions", "--profile", "default", "models", "--json"], { encoding: "utf8" });
++    spawnSync(process.execPath, [FAKE_OMP, marker, "--version"], { encoding: "utf8" });
++    expect(lines(`${marker}.catalog-calls`)).toEqual(["models"]);
++    expect(lines(`${marker}.version-calls`)).toEqual(["version"]);
++    expect(Number(readFileSync(`${marker}.models.pid`, "utf8"))).toBeGreaterThan(0);
++    writeFileSync(`${marker}.models.json`, JSON.stringify({ sleepMs: 400 }));
++    const started = Date.now();
++    const slow = spawnSync(process.execPath, [FAKE_OMP, marker, "models", "--json"], { encoding: "utf8" });
++    expect(Date.now() - started).toBeGreaterThanOrEqual(400);
++    expect(JSON.parse(slow.stdout).models[0].selector).toBe("gateway/model-a");
++  });
++});
+diff --git a/tests/fixtures/fake-codex.mjs b/tests/fixtures/fake-codex.mjs
+index ec56090..11878f3 100644
+--- a/tests/fixtures/fake-codex.mjs
++++ b/tests/fixtures/fake-codex.mjs
+@@ -1,20 +1,40 @@
+-import { appendFileSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
++import { appendFileSync, existsSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+ import { spawn } from "node:child_process";
+ const mode=process.argv[2], marker=process.argv[3];
+ // Orca agent selection (2026-09-26), spec §4.8: `--version` with no `exec` answers a fixed version and
+ // writes nothing; every other call appends what the real codex would receive (from `exec` on) as one
+ // JSON array line to `<marker>.argv`. Every mode below is otherwise unchanged.
+ // Orca retire-legacy-orca-run (2026-10-01), spec §3.4: mode `frames`, argv `frames <marker> <framesFile>`, plays
+ // the frame of the attempt number (the working directory's `attempt-<n>`, minus one) from the framesFile list of
+ // the task named in the prompt (else the `"*"` list); no frame ⇒ stderr `no frame for <task> attempt <n>`, exit 3.
+-if(process.argv.at(-1)==="--version"&&!process.argv.includes("exec")) {await new Promise(resolve=>process.stdout.write("9.9.9-fake\n",resolve));process.exit(0);}
++// Every-agent requirement chain (Orca spec 2026-10-15 §9): `--version` appends `version` to `<marker>.version-calls`;
++// `debug models` and `features list` answer the catalog and the feature list and append `debug-models` / `features-list`
++// to `<marker>.catalog-calls`, before anything below runs, so `<marker>.argv` and `<marker>.calls` never see them.
++// `<marker>.catalog.json` ({rows?, sleepMs?, exitCode?, stderr?}) overrides the rows, sleeps first, or fails.
++if(process.argv.at(-1)==="--version"&&!process.argv.includes("exec")) {appendFileSync(marker+".version-calls","version\n");await new Promise(resolve=>process.stdout.write("9.9.9-fake\n",resolve));process.exit(0);}
++const catalogCall=process.argv.includes("debug")&&process.argv.includes("models")?"debug-models":process.argv.includes("features")&&process.argv.includes("list")?"features-list":null;
++if(catalogCall!==null&&!process.argv.includes("exec")) {
++  appendFileSync(marker+".catalog-calls",catalogCall+"\n");
++  const script=existsSync(marker+".catalog.json")?JSON.parse(readFileSync(marker+".catalog.json","utf8")):{};
++  if(script.sleepMs!==undefined) await new Promise(resolve=>setTimeout(resolve,script.sleepMs));
++  if(script.stderr!==undefined) await new Promise(resolve=>process.stderr.write(script.stderr,resolve));
++  if(script.exitCode!==undefined) process.exit(script.exitCode);
++  if(catalogCall==="debug-models") {
++    const rows=script.rows??[{slug:"gpt-6-sol",context_window:272000,visibility:"list"},{slug:"gpt-6-luna",context_window:272000,visibility:"list"},{slug:"gpt-reserve",context_window:272000,visibility:"hide"}];
++    await new Promise(resolve=>process.stdout.write(JSON.stringify({models:rows})+"\n",resolve));
++  } else {
++    const flags=["apps","browser_use","image_generation","multi_agent","plugins","shell_tool","skip_host_skill_discovery","unified_exec","view_image"];
++    await new Promise(resolve=>process.stdout.write(flags.map(flag=>`${flag.padEnd(40)} stable             true`).join("\n")+"\n",resolve));
++  }
++  process.exit(0);
++}
+ appendFileSync(marker+".argv",JSON.stringify(process.argv.slice(process.argv.indexOf("exec")))+"\n");
+ const CONTINUATION="Treat continuation input fields unfinished, pendingDecisions, and awaitingHuman as required planning inputs.";
+ const args=process.argv.slice(process.argv.indexOf("exec")+1);
+ const value=flag=>args[args.indexOf(flag)+1];
+ let prompt="";
+ process.stdin.setEncoding("utf8");
+ process.stdin.on("data",c=>{prompt+=c;});
+ process.stdin.on("end",()=>{
+   writeFileSync(marker,JSON.stringify({args,cwd:process.cwd(),prompt,pid:process.pid}));
+   // Orca session 7f37d261 (2026-10-13), codex rate-limit spec §4: modes `rate-limit-1` (the first call of this marker is
+diff --git a/tests/fixtures/fake-omp.mjs b/tests/fixtures/fake-omp.mjs
+index 57a78d8..5746d9d 100644
+--- a/tests/fixtures/fake-omp.mjs
++++ b/tests/fixtures/fake-omp.mjs
+@@ -1,34 +1,40 @@
+ #!/usr/bin/env node
+ // A fake `omp` (oh-my-pi 18.10.1) for criteria and for Orca's real-ccloop worlds (OMP skill injection, 2026-10-13).
+ // Installations allow only the binary in `command`, so a test wraps this in a tiny shell script:
+ //   exec <node> <this file> <marker> "$@"
+ // ccloop puts --no-extensions/--profile before a subcommand, so subcommands are found anywhere in argv.
+ // It answers `--version`, the model catalog and the configured default, and runs a plan/execute/verify phase the way
+ // ccloop drives OMP (system prompt file, prompt on stdin, JSON events on stdout). Per phase it appends the phase name to
+ // `<marker>.calls`; when the system prompt lists frozen skills it reads every listed SKILL.md (as a model told to would)
+ // and appends each one's bytes to `<marker>.skills`. Execute sets answer.txt to 42.
++// Every-agent requirement chain (Orca spec 2026-10-15 §9): `--version` appends to `<marker>.version-calls`, `models` appends
++// to `<marker>.catalog-calls` and writes its pid to `<marker>.models.pid`; `<marker>.models.json` also takes `sleepMs`.
+ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+ import { dirname } from "node:path";
+ 
+ const [marker, ...args] = process.argv.slice(2);
+ if (args.includes("--version")) {
++  appendFileSync(`${marker}.version-calls`, "version\n");
+   process.stdout.write("18.10.1\n");
+   process.exit(0);
+ }
+ // OMP single call (Orca spec 2026-10-14 §5): `<marker>.catalog.json`, when present, is the catalog's rows; without it the
+ // one row below, as before.
+ if (args.includes("models")) {
++  appendFileSync(`${marker}.catalog-calls`, "models\n");
++  writeFileSync(`${marker}.models.pid`, String(process.pid));
+   // Feedback #58: `<marker>.models.json` ({exitCode?, stderr?, hang?}), when present, prints `stderr`, then hangs or exits
+   // with `exitCode`; without exitCode or hang it prints the catalog below. Without the file nothing changes.
+   if (existsSync(`${marker}.models.json`)) {
+     const script = JSON.parse(readFileSync(`${marker}.models.json`, "utf8"));
++    if (script.sleepMs !== undefined) await new Promise((done) => setTimeout(done, script.sleepMs));
+     if (script.stderr !== undefined) await new Promise((done) => process.stderr.write(script.stderr, done));
+     if (script.hang === true) { setInterval(() => {}, 1000); await new Promise(() => {}); }
+     if (script.exitCode !== undefined) process.exit(script.exitCode);
+   }
+   const rows = existsSync(`${marker}.catalog.json`) ? JSON.parse(readFileSync(`${marker}.catalog.json`, "utf8"))
+     : [{ provider: "gateway", kind: "chat", id: "model-a", selector: "gateway/model-a", contextWindow: 200000, maxTokens: 8192 }];
+   process.stdout.write(`${JSON.stringify({ models: rows })}\n`);
+   process.exit(0);
+ }
+ if (args.includes("config")) {
