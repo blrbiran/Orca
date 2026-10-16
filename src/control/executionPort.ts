@@ -22,6 +22,8 @@ export interface ExecutionReport {
 }
 /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
 export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }
+/** Spec 2026-10-15 §5 (part C): `control models` -- one installation's models, as ccloop's catalog cache or probe answers them. */
+export interface AgentModelsView { installation: string; kind: string; source: "cache" | "probe" | "none"; observedAt: string | null; models: Array<{ model: string; contextWindowTokens: number | null; maxOutputTokens: number | null; singleCallExecution: "v1" | "v1-soft" | null }> }
 export interface ControlFeatures { protocol:1;tokenPolicy?:"optional-v1";savedResultRecovery?:"v1";agentInstallationUpdate?:"v1" }
 export interface ExecutionPort {
   readFeatures?():Promise<ControlFeatures>;
@@ -44,6 +46,8 @@ export interface ExecutionPort {
   resolveAgent(partial:PartialSelection):Promise<AgentResolution>;
   /** Capabilities protocol 3 with `agent: null`: the installations the panel may offer. */
   listAgents():Promise<AgentsView>;
+  /** Spec 2026-10-15 §5: one installation's models; `refresh` skips ccloop's catalog cache. Optional: older ports lack it. */
+  listModels?(installation:string,refresh:boolean):Promise<AgentModelsView>;
   readEvidence(ref:ArtifactRef):Promise<Buffer>;
   accept(input:StartEnvelope):Promise<ExecutionStatus>;
   inspect(input:StartEnvelope):Promise<ExecutionStatus>;

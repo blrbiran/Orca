@@ -74,6 +74,8 @@ export interface BootOptions {
   /** `false`: the panel operator is neither fixed nor given preferences, so the mutation routes mint it with none. */
   seedPreferences?: false;
   agentUpdatePort?: Pick<ExecutionPort, "observeAgentInstallations" | "previewAgentInstallations" | "applyAgentInstallations" | "readFeatures">;
+  /** Spec 2026-10-15 §5: what the port answers for one installation's models; absent, the port has no listModels. */
+  listModels?: ExecutionPort["listModels"];
 }
 
 export interface Harness {
@@ -147,6 +149,7 @@ export function createHarness(): Harness {
         requestHandoff: async (_input: unknown, request: { requestId: string }) => ({ kind: "unknown", requestId: request.requestId }),
         collect: async () => ({ events: [], candidate: null, terminal: null }),
         ...options.agentUpdatePort,
+        ...(options.listModels === undefined ? {} : { listModels: options.listModels }),
       } as unknown as ExecutionPort;
       const frozen = resolveProfile(snapshot, port);
       const router = createExecutionProfileRouter([frozen], { now: () => new Date("2030-01-01T00:00:00.000Z") });

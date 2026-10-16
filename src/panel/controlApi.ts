@@ -15,7 +15,7 @@ import { readAgentPreferences } from "../control/agentPreferences.js";
 import { agentUpdateStateSchema } from "../control/agentInstallationProtocol.js";
 import { resolveSelection, slotLayers, type PartialSelection } from "../control/agentSelection.js";
 import { idSchema } from "../control/schema.js";
-import { savedResultEligibilityViewSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import { savedResultEligibilityViewSchema, agentModelsViewSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import { readIntegrationDefault } from "../control/integrationScheme.js";
@@ -33,7 +33,7 @@ export interface ControlReadApiDeps {
   config: Pick<TrustedControlConfig, "readView">;
   service?: WebControlService;
   /** Agent selection spec §6.8 (W6-10): the reads that ask ccloop about agents. Absent, those routes 404. */
-  port?: Pick<ExecutionPort, "listAgents" | "resolveAgent">;
+  port?: Pick<ExecutionPort, "listAgents" | "resolveAgent" | "listModels">;
 }
 
 function asyncRoute(handler: (req: Request, res: Response) => Promise<void> | void) {
@@ -294,6 +294,19 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
           const installations = [...listed.installations].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
           res.json(agentsViewSchema.parse({ schema: "orca-agents-view-v1", installations }));
         } catch (error) { sendMappedControlError(res, error); }
+      }));
+      // Spec 2026-10-15 §5 (R3, R4): the installation's models for the selection editor; ccloop's file cache serves it.
+      app.get("/api/control/agents/:installation/models", asyncRoute(async (req, res) => {
+        const installation = String(req.params.installation);
+        const refreshText = req.query.refresh;
+        if (!idSchema.safeParse(installation).success || Object.keys(req.query).some((key) => key !== "refresh") || (refreshText !== undefined && refreshText !== "1")) {
+          sendMappedControlError(res, new ControlError("query-invalid")); return;
+        }
+        const refresh = refreshText === "1";
+        if (refresh && !owner(res)) return;
+        if (port.listModels === undefined) { sendMappedControlError(res, new ControlError("control-protocol-unavailable")); return; }
+        try { res.json(agentModelsViewSchema.parse({ schema: "orca-agent-models-v1", ...(await port.listModels(installation, refresh)) })); }
+        catch (error) { sendMappedControlError(res, error); }
       }));
       app.get("/api/control/groups/:groupId/agent-preview", asyncRoute(async (req, res) => {
         const groupId = String(req.params.groupId);

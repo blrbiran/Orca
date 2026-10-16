@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { z } from "zod";
-import type { ControlFeatures, AgentsView, ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
+import type { ControlFeatures, AgentsView, AgentModelsView, ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { ArtifactRef, HandoffAck, HandoffRequest } from "./types.js";
 import type { AgentResolution, PartialSelection } from "./agentSelection.js";
 import { ControlError, type NonDurableControlErrorCode } from "./errors.js";
@@ -46,6 +46,9 @@ const agentsViewSchema=z.object({protocol:z.literal(3),installations:z.array(z.o
 // under; optional (an older ccloop omits it), nullable, never frozen (frozenSlotOf copies field by field).
 // Spec 2026-10-15 §6.2: "v1-soft" (codex) -- a single call whose output bound is checked after the fact.
 const agentResolutionSchema=z.object({protocol:z.literal(3),selection:agentSelectionSchema,configHash:z.string().regex(/^[a-f0-9]{64}$/),timeoutMs:safeInteger.positive().max(2_147_483_647),killGraceMs:safeInteger.max(60_000),capabilities:capabilityViewSchema,singleCallExecution:z.enum(["v1","v1-soft"]).nullable(),singleCallOutputCap:safeInteger.positive().nullable().optional(),usageBreakdown:z.enum(["per-model","unavailable"]).optional()}).strict();
+// Spec 2026-10-15 §3, §5: ccloop's `control models` answer (ccloop-models-v1), strict, so a wrong one refuses the answer.
+const agentModelsSchema=z.object({schema:z.literal("ccloop-models-v1"),installation:idSchema,kind:z.string().min(1),source:z.enum(["cache","probe","none"]),observedAt:z.string().datetime().nullable(),
+ models:z.array(z.object({model:z.string().min(1).max(200),contextWindowTokens:safeInteger.positive().nullable(),maxOutputTokens:safeInteger.positive().nullable(),singleCallExecution:z.enum(["v1","v1-soft"]).nullable()}).strict())}).strict();
 export const ccloopCollectionSchema=collectionSchema;
 export const ccloopResolutionSchema=agentResolutionSchema;
 
@@ -224,6 +227,11 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
    let answer:unknown;
    try{answer=await raw("capabilities",{agent:null});}catch(error){throw named(error);}
    const {protocol:_protocol,...view}=parse(agentsViewSchema,answer);return view;
+  },
+  async listModels(installation:string,refresh:boolean):Promise<AgentModelsView>{
+   let answer:unknown;
+   try{answer=await raw("models",{installation,refresh});}catch(error){throw named(error);}
+   const {schema:_schema,...view}=parse(agentModelsSchema,answer);return view;
   },
   async accept(input){await requireFeatures(input);return parse(executionStatusSchema,await raw("accept",input)) as ExecutionStatus;},
   async inspect(input){await requireFeatures(input);return parse(executionStatusSchema,await raw("inspect",input)) as ExecutionStatus;},

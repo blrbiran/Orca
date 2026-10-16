@@ -1782,6 +1782,27 @@ export const agentsViewSchema = z
   .strict()
   .superRefine((value, ctx) => requireSortedUnique(value.installations, (entry) => entry.id, ctx, ["installations"]));
 
+// Spec 2026-10-15 §5 (part C): one installation's models for the selection editor, as ccloop answered them.
+export const agentModelsViewSchema = z
+  .object({
+    schema: z.literal("orca-agent-models-v1"),
+    installation: idSchema,
+    kind: nonemptyString,
+    source: z.enum(["cache", "probe", "none"]),
+    observedAt: z.string().nullable(),
+    models: z.array(
+      z
+        .object({
+          model: nonemptyString,
+          contextWindowTokens: positiveSafeInteger.nullable(),
+          maxOutputTokens: positiveSafeInteger.nullable(),
+          singleCallExecution: z.enum(["v1", "v1-soft"]).nullable(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
 export const agentPreferencesViewSchema = z
   .object({ schema: z.literal("orca-agent-preferences-v1"), operatorId: nonemptyString, revision: safeInteger, preferences: operatorPreferencesSchema })
   .strict();
@@ -1828,6 +1849,7 @@ export const agentSelectionPreviewSchema = z
   });
 
 export type AgentsViewV1 = z.infer<typeof agentsViewSchema>;
+export type AgentModelsViewV1 = z.infer<typeof agentModelsViewSchema>;
 export type AgentPreferencesViewV1 = z.infer<typeof agentPreferencesViewSchema>;
 export type AgentSelectionPreviewV1 = z.infer<typeof agentSelectionPreviewSchema>;
 
