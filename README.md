@@ -127,8 +127,11 @@ adds isolation arguments to `command` that these minimal examples leave out):
 ```
 
 What each kind can do in Orca today: loop work runs on all three. Frozen task skills work on all three (see
-[Optional integrations](#6-optional-integrations)). Clarifying and splitting a requirement, and estimating, need a bounded
-single call, which only `claude` provides; `codex` and `omp` do not provide it (**not yet** available for `omp`).
+[Optional integrations](#6-optional-integrations)). Clarifying and splitting a requirement, and estimating, run as one
+**single call** with tools off, on all three kinds. `claude`, and `omp` for a model whose catalog row carries an output
+cap, run it in either estimate mode. `codex` cannot cap a call's output, so its single call runs in soft estimate mode
+only (`--estimate-mode soft`): the output is checked after the call, and any overrun is booked and shown on the run.
+Strict estimate mode still refuses `codex` (`single-call-unavailable`).
 
 ### 2. ccloop
 
@@ -189,8 +192,10 @@ today**; you write it by hand. A minimal one, the shape the live acceptance scri
 }
 ```
 
-With `"contextWindowTokens": null` the budget estimate ends in state **`blocked-capability`**: no model is called to
-estimate, and each task starts from default budget allocations that you edit by hand in Task control. Use it with
+With `"contextWindowTokens": null` the profile declares no window, and Orca uses the window ccloop reports for the
+selected agent (claude, omp and codex report one), so the budget estimate calls the model. Only when ccloop reports no
+window either does the estimate end in state **`blocked-capability`**: no model is called to estimate, and each task
+starts from default budget allocations that you edit by hand in Task control. Use it with
 `--estimator-profile all --estimate-mode soft`. In `soft` mode an overrun is settled after the fact, not prevented.
 
 ### 4. Repositories and where state lives
@@ -284,7 +289,7 @@ The import form uses registered plans for the selected project; if several exist
 | Variable | Effect |
 |---|---|
 | `ORCA_CCMEM_BIN` = absolute path to `ccmem` | turns on the read-only **Memory** section. Opening it starts ccmem, and ccmem may migrate its own data directory when it opens it. Unset: ccmem is never started. |
-| `ORCA_SYNCSKILL_BIN` = absolute path to `syncskill` | lets a loop task declare `"skills": {"profile": "<name>"}` or `"skills": {"names": ["<skill>", ...]}`. Frozen task skills work with **Claude, Codex and OMP** installations. Other agent kinds are refused (`skills-unsupported-agent`); this does not give Codex or OMP single-call clarification/estimation capability. Unset: Orca never starts syncskill. |
+| `ORCA_SYNCSKILL_BIN` = absolute path to `syncskill` | lets a loop task declare `"skills": {"profile": "<name>"}` or `"skills": {"names": ["<skill>", ...]}`. Frozen task skills work with **Claude, Codex and OMP** installations. Other agent kinds are refused (`skills-unsupported-agent`); frozen task skills play no part in clarification or estimation. Unset: Orca never starts syncskill. |
 
 ## Start the panel
 
@@ -378,11 +383,15 @@ the URL hash. Language and theme switches are in the sidebar.
 
 ### Requirements
 
-Clarification and splitting need a bounded **single call**. The pinned Codex adapter does not provide that capability,
-and neither does the OMP adapter (not yet); use Claude for this section. With only Codex or OMP installed, write a plan using the [Plans for Task control](#5-plans-for-task-control-optional) example and import it in
-**Task control**, then review/set task budgets manually if no capable estimator is available. The form allows an
-explicitly selected Codex or OMP installation to be submitted, but the server refuses it because it lacks the single-call
-capability. A default selection is also resolved by the server, so ensure your default supports single calls.
+Clarification, splitting and estimation each run as one **single call** with tools off. Claude, and OMP for a model
+whose catalog row carries an output cap, run them in either estimate mode. Codex cannot cap a call's output, so it runs
+them only when the panel uses `--estimate-mode soft`: each call's output is checked after the call, and an overrun is
+booked at the observed usage and shown on the call's run row. With `--estimate-mode strict` the server refuses a Codex
+selection (`agent-selection-rejected`, reason `single-call-unavailable`), and it refuses an OMP model without an output
+cap in its catalog, or an OpenRouter one, in either mode. Then pick another agent, or write a plan using the
+[Plans for Task control](#5-plans-for-task-control-optional) example and import it in **Task control**, and set task
+budgets manually if no usable estimator is available. A default selection is also resolved by the server, so ensure
+your default can run single calls in the panel's estimate mode.
 
 1. Pick a repository, type the idea, set a token limit, the content language and the agent, and press
    **Start clarifying**. This creates a group in state `clarifying`.
@@ -576,7 +585,7 @@ Chains have a soft cost limit checked after each session.
 |---|---|
 | No task control plane | Check whether the panel was started with `--no-control`. A missing execution port is different: reads work, but work cannot start. Check `ORCA_AGENTS_TABLE` and ccloop configuration in the panel process. An expired login requires logging in; it does not mean the control plane is missing. |
 | `agent-version-drift` | Review a newly detected agents draft after upgrading the CLI, preserve custom configuration and restart the panel; see the agents-table instructions above. |
-| Codex or OMP cannot clarify or estimate | Single-call capability is unavailable on the pinned Codex and OMP adapters. Use a capable agent for clarification/estimation; a task worker may still use Codex or OMP. |
+| Codex or OMP cannot clarify or estimate | Codex runs single calls only in soft estimate mode: under `--estimate-mode strict` it is refused (`single-call-unavailable`); start the panel with `--estimate-mode soft` or pick another agent. OMP is refused for a model without an output cap in its catalog, or an OpenRouter one; pick another model. A task worker may still use Codex or OMP. |
 | Start is missing or `stop-mode-conflict` | Read the stop banner. Resume a pause with **Resume dispatch**. After a completed handoff, use the resume dialog; select no continuations when you only want to clear the completed stop before retrying a failed task. Pending/unresolved handoffs need recovery first; a partial handoff can be archived. Do not edit `stop_intents` or group JSON in SQLite. |
 | A task ended failed | Inspect its failure reason, recent activity and evidence. **Retry task** creates a new task attempt when allowed; **Retry recovery** is for recoverable blocked runs, not terminal task failures. Unknown usage or insufficient budget can still prevent a retry. |
 | Activity says `null` or reports no history for an invalid body | A valid empty run answers `{ "schema": "orca-run-activity-v1", "runId": "…", "entries": [] }`. A missing run or damaged row is an error. Re-read the run and inspect the named refusal; do not treat `null` as an empty feed. |
