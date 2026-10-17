@@ -109,7 +109,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
   - `~/.orca`、`~/.cache/ccloop` 前后只差家目录自身的 mtime；`~/.codex` 凭据 `cmp` 0。
 - **终审修复之后的全量门已过**（会话 `d0843ec0`，全新 clone、观测提交同上）：全量 3958＝3922 过／36 跳过／**0 红**；`verify:control` 2050 过／0 红；`verify:chain`／panel／claude-md／tmpleak 0；`~/.orca` 哈希不变；`--ws check` 1140/1141，唯一红是登记过的 `taskLabelsDraftBase` `findByRole` 超时，单跑 3/3 ⇒ **门过（分类后）**。门脚本的 `~/.cache/ccloop` 比对 RC 1：真 codex 安装键的目录条目 11:17 被重写，键指真 `~/.codex/config.toml`，而判据全部改道了 `CCLOOP_CACHE_DIR`／`CODEX_HOME` ⇒ 是**正在跑的面板服务**写的（服务 env 没设 `CCLOOP_CACHE_DIR`，按设计用 `~/.cache/ccloop`），不是门。
 - **会话收尾**：会话 `4de777f4` 越过 Rule 6 的 T2（451599／450000，检查点已记这次越线）后交接。本地 main 上的两笔检查点（主题行 `chore(checkpoint): orca-dev-4de777f4, …`）已由 agent 合进本分支（主题行 `Merge branch 'main' into codex/round-20261017`），所以门过后人可以直接 `--ff-only`。**下一会话先做 §4.2 第 0 条，再在本分支 tip 上跑一次全量门**（上一次门没覆盖终审修复）——两件都已于会话 `d0843ec0` 做完（见上，codex 一项欠着）。
-- ⚠️ **已知缺口**（登记不修）：排队中的自动重试在组开跑、提案确认或被人的新估算取代之后**仍会被领取并真跑**（花钱但结果用不上；spec §4.3 保持既有排队估算行为）；空白 rationale 能过（占位名单是 spec 钉的，改要人裁）；fake codex／claude 不走 retryOutput，`readyAfterRetry` 只有 fake-omp 覆盖。
+- ⚠️ **已知缺口**（登记不修）：排队中的自动重试（会话 `a3b2a7a7` 2026-10-18 读码更正，**未跑测试**）：①**提案被确认**或②**被人的新估算取代**之后，`claimEstimate`（`src/control/webService.ts`）不复查 `decideEstimateRetry` 的那几条，**照样领取并真跑**（花钱但结果用不上）；③**组已开跑**时并不会真跑——`prestart(group)` 抛 `grant-amendment-unsupported`，`deliverSchedulerWakes` 吞掉异常、wake 每轮重投，估算**永远停在 `queued`、它的 grant 一直算在 `committedRemaining` 里**（人的排队估算同样如此）。修法要人裁：领取时复查并把这类估算落成终态、释放 grant——终态叫什么、只管自动重试还是连人的排队估算一起管；空白 rationale 能过（占位名单是 spec 钉的，改要人裁）；fake codex／claude 不走 retryOutput，`readyAfterRetry` 只有 fake-omp 覆盖。
 - ⚠️ **事故（Rule 17）**：Task 7 实施席有一次 fake codex 跑在改道缓存前，往**真** `~/.cache/ccloop/agent-catalog/` 写了 8 个路径（`769de7de….json` 与 `codex-home/bf533527…/`，内含指向 `~/.codex/auth.json`／`config.toml` 的软链；凭据本身未改）。清单 `/private/tmp/acc-xpI0/ccloop-cache-new.txt`。未删，归人（§4.1）。脚本已修成默认改道。
 - **人用真面板时跑门**：真面板写 `~/.orca/control/panel` 会让测试的 Rule 17 守卫在文件级报红（会话 `4de777f4` 上一轮门约 50 个文件），不是测试写的；跑门挑人不用面板的时段。
 
@@ -235,9 +235,12 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
    - 不确定归属、留给人：Codex 建的 `/Users/biran/.codex/worktrees/feedback-followup-20261011/Orca`（detached）；`ui/panel-taste` 是 UI 线的。
 2. **ccmem**：embedding 额度／换 key（`core.hooksPath` 已于会话 `ec9ce319` 经人授权 unset）。
 3. ~~本轮分支合推~~、~~profile 切 v2~~、~~`orca` 命令~~：**都已做完**（会话 `d0843ec0`，见 §3.2a）。
-4. ~~Orca／ccloop 的 handoff 分支合推~~ **人已做**（会话 `a3b2a7a7` 现核：两仓 main＝远端）。分支／工作树删除命令已交人（Orca `git branch -d codex/handoff-20261017-d0843ec0`；ccloop `git worktree remove ../ccloop-wt/handoff-20261017 && git branch -d codex/handoff-20261017`，两者都已 `merge-base --is-ancestor` 于 main、工作树 0 未跟踪）；做没做下一会话现核。
-5. ~~ccmem Codex／OMP 适配合并~~ **已合推、已安装**（会话 `a3b2a7a7`：迁移 017 由 CLI 跑、daemon 重启 schema 17、`install codex|omp` 写进真实 `~/.codex/hooks.json` 与 `~/.omp/agent/extensions/ccmem.ts`；细节 ccmem handoff §1.0）。剩人做：重启正在跑的 Claude 会话；在 codex 里 `/hooks` 批准三个 ccmem 钩子；合推 ccmem `codex/handoff-20261017-install` 与本仓 `codex/handoff-20261017-a3b2a7a7`（都只改 handoff）：`git merge --ff-only <分支> && git push origin main && git branch -d <分支>`。
-6. **删**（人做）：真 `~/.cache/ccloop/agent-catalog/` 下 Task 7 误写的 8 个路径（清单 `/private/tmp/acc-xpI0/ccloop-cache-new.txt`，`rm -rf` 软链目录只删链）；会话 `4de777f4` 的临时目录 `/private/tmp/{ccb6-qswQ,mutp-swWu,acc-*,mut-*,org6-*,org7-*,cc-r-*,cc-t-*,cc-gate3-*,cc-gate4-*}`（`ccb6-qswQ` 是 pin 的 ccloop build，**codex 补跑要用，补跑后再删**）；会话 `d0843ec0` 的 `/private/tmp/{est-sLx8,org8-*,cc-gate5-*}`（`est-sLx8/omp-config` 是 `~/.omp/agent` 凭据副本，`est-sLx8/run-codex/ccloop-cache/codex-home/…` 有指向 `~/.codex` 凭据的软链）。
+4. ~~Orca／ccloop／ccmem 的 handoff 分支合推、删分支与工作树~~ **人已做**（会话 `a3b2a7a7` 里人逐条回报「已执行」）。
+5. ~~ccmem Codex／OMP 适配合并与真实安装~~ **已做**（细节 ccmem handoff §1.0）；人已重启 Claude 会话、在 codex 里 `/hooks` 批准三个钩子。真 Codex 会话（10-17，ccloop 目录）实测：SessionStart ✅（注入 `## ccmem context`、写出 context 文件、`session_context` 记 `codex`）、UserPromptSubmit ✅（走 B-circuit）、**Stop 未触发**——那一轮因模型额度报错终止、模型没回答；「Codex 出错的轮次不触发 Stop」是推断，未验。要在一轮模型正常回答的会话里再看一次（10-22 额度恢复后，付费，人点头）。OMP 扩展的真加载仍未验。
+6. **删**（人做；会话 `a3b2a7a7` 2026-10-18 现核的清单，`du -sh`／`find` 实测）：
+   - `~/.cache/ccloop/agent-catalog/` **整个目录不能删**——Task 7 之后它已被正常使用（现有 `1fe8b83f…`、`1c7cfb0c…`、`811b06f8…`、`bb8da9aa….json` 与 `codex-home/6c50abdd…`）。原清单 8 条里该删的只剩两项：`agent-catalog/769de7de3225c97b1234142ba6835ab7aaecfd0d77e371c662ca57bf9607b532.json` 与目录 `agent-catalog/codex-home/bf5335273626c4675a00cca1a384456ab917ed8333815b54b89e45b57670b993`（内含指向 `~/.codex/auth.json`、`config.toml` 的软链；`rm -rf` 只删链不碰目标）。
+   - `/private/tmp`：`mutp-swWu`（121M）、`acc-xpI0`（32M）、`mut-*` ×10（各约 121M）、`org6-nP1k`／`org7-3oVo`／`org8-ulmF`（各约 367M）、空目录 `cc-r-*` ×2、`cc-t-*` ×25、`cc-gate3-iAXn`、`cc-gate4-hiS2`、`cc-gate5-c5er`。`est-sLx8`（含凭据副本那个）**已不在**。
+   - `ccb6-qswQ`（100M，pin 的 ccloop build）**留到 codex 估算补跑之后**。
 
 ### 4.2 agent 的活
 
