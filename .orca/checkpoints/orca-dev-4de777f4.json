@@ -1,0 +1,46 @@
+{
+  "v": 1,
+  "runId": "orca-dev-4de777f4",
+  "runtime": "claude-code",
+  "sessionRef": "4de777f4-471a-472c-aaa1-bdea9f0d9876",
+  "writtenAt": "2026-10-16T20:57:09.677Z",
+  "head": "15881105714e0a350c4d30abf64a788af060a4ff",
+  "level": {
+    "kind": "reading",
+    "level": 451599,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 2
+  },
+  "next": [
+    "Paid acceptance per Orca handoff §4.2 item 0 (human authorized this round): omp alias --repeat 5, codex gpt-6-luna x1, claude 1M x1 with --instruction-version 2",
+    "Full gate after the final fix commit (fix(control): keep model text in estimate codes canonical…)"
+  ],
+  "open": [
+    "Branch codex/round-20261017 implemented, reviewed, gate passed (classified) on the commit before the final fix; final fix verified on 9 files 94/94 only"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "ff-merge+push ccloop codex/handoff-20261017 now; Orca codex/round-20261017 after the paid acceptance; then delete both branches/worktrees"
+    },
+    {
+      "kind": "irreversible",
+      "what": "delete 8 paths under ~/.cache/ccloop/agent-catalog listed in /private/tmp/acc-xpI0/ccloop-cache-new.txt and the session's /private/tmp dirs (keep ccb6-qswQ until acceptance is done)"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "switch ~/.orca/profile.json instructionVersion to \"2\" after the acceptance, when no estimate is queued/running"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca-wt/round-20261017 log --oneline -3",
+      "exitCode": 0,
+      "commit": "15881105714e0a350c4d30abf64a788af060a4ff",
+      "observedAt": "2026-10-16T20:57:09.610Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-4de777f4-BnppqC/1.txt"
+    }
+  ]
+}
