@@ -235,9 +235,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
    - 不确定归属、留给人：Codex 建的 `/Users/biran/.codex/worktrees/feedback-followup-20261011/Orca`（detached）；`ui/panel-taste` 是 UI 线的。
 2. **ccmem**：embedding 额度／换 key（`core.hooksPath` 已于会话 `ec9ce319` 经人授权 unset）。
 3. ~~本轮分支合推~~、~~profile 切 v2~~、~~`orca` 命令~~：**都已做完**（会话 `d0843ec0`，见 §3.2a）。
-4. **Orca 本地 main 上有 agent 写的检查点与本 handoff 提交**（主题行 `chore(checkpoint): orca-dev-d0843ec0, …` 两笔，以及本 handoff 所在分支 `codex/handoff-20261017-d0843ec0`）：`git merge --ff-only codex/handoff-20261017-d0843ec0 && git push origin main`，再删该分支。
-   **ccloop 分支 `codex/handoff-20261017`**（工作树 `ccloop-wt/handoff-20261017`，只改 handoff，含会话 `d0843ec0` 的指针更新）：`cd /Users/biran/code/skills/orca/ccloop && git ls-remote origin main && git merge --ff-only codex/handoff-20261017 && git push origin main && git worktree remove ../ccloop-wt/handoff-20261017 && git branch -d codex/handoff-20261017`。
-5. **ccmem 的 Codex／OMP 适配分支 `codex/codex-omp-adaptation`**（工作树 `ccmem-wt/codex-omp-adaptation`）：**合并前三步人做、顺序不能乱**，全写在 ccmem handoff §1.0（先删误写的 `~/.omp/agent/extensions/ccmem.ts`；迁移 017 用 CLI 先跑、别让钩子跑；合后重启 Claude 会话）。
+4. ~~Orca／ccloop 的 handoff 分支合推~~ **人已做**（会话 `a3b2a7a7` 现核：两仓 main＝远端）。分支／工作树删除命令已交人（Orca `git branch -d codex/handoff-20261017-d0843ec0`；ccloop `git worktree remove ../ccloop-wt/handoff-20261017 && git branch -d codex/handoff-20261017`，两者都已 `merge-base --is-ancestor` 于 main、工作树 0 未跟踪）；做没做下一会话现核。
+5. ~~ccmem Codex／OMP 适配合并~~ **已合推、已安装**（会话 `a3b2a7a7`：迁移 017 由 CLI 跑、daemon 重启 schema 17、`install codex|omp` 写进真实 `~/.codex/hooks.json` 与 `~/.omp/agent/extensions/ccmem.ts`；细节 ccmem handoff §1.0）。剩人做：重启正在跑的 Claude 会话；在 codex 里 `/hooks` 批准三个 ccmem 钩子；合推 ccmem `codex/handoff-20261017-install` 与本仓 `codex/handoff-20261017-a3b2a7a7`（都只改 handoff）：`git merge --ff-only <分支> && git push origin main && git branch -d <分支>`。
 6. **删**（人做）：真 `~/.cache/ccloop/agent-catalog/` 下 Task 7 误写的 8 个路径（清单 `/private/tmp/acc-xpI0/ccloop-cache-new.txt`，`rm -rf` 软链目录只删链）；会话 `4de777f4` 的临时目录 `/private/tmp/{ccb6-qswQ,mutp-swWu,acc-*,mut-*,org6-*,org7-*,cc-r-*,cc-t-*,cc-gate3-*,cc-gate4-*}`（`ccb6-qswQ` 是 pin 的 ccloop build，**codex 补跑要用，补跑后再删**）；会话 `d0843ec0` 的 `/private/tmp/{est-sLx8,org8-*,cc-gate5-*}`（`est-sLx8/omp-config` 是 `~/.omp/agent` 凭据副本，`est-sLx8/run-codex/ccloop-cache/codex-home/…` 有指向 `~/.codex` 凭据的软链）。
 
 ### 4.2 agent 的活
