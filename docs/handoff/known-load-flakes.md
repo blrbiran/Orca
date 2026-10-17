@@ -72,6 +72,8 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 
 **`4de777f4`（2026-10-16 晚，repin 门；clone 观测提交＝主题行 `chore(deps): repin ccloop to 02cbacc for the every-agent requirement chain`，`ORCA_CCLOOP_BIN`＝ccloop `02cbacc` 的 build，负载 5.7→28）**：根级全量 14 红＝12 条 5 s 超时（`archivedWakePerformance`、`driverLanding` ×2、`driverRecovery`、`driverRequirementSplit` ×2、`driverRoundIsolation`「names a run whose failure it could not record…」、`integrationKeep`、`retryTask` ×2、`settleUnknownUsage` ×2）＋`taskResultPaired`×2；`verify:chain` 第二次全量与 `verify:control`（fake-only 表）**都只剩 paired×2**；9 个文件各单跑 3/3 绿（负载 10–18）。`driverRoundIsolation` 是**新名字、同形状**（5 s 超时）。`--ws check` 本次默认 workers 下 RC 0。
 
+**`d0843ec0`（2026-10-17，分支 `codex/round-20261017` tip 上终审修复之后的门；clone 观测提交＝主题行 `docs(handoff): hand off at T2 with the paid acceptance and the post-fix gate next`，`ORCA_CCLOOP_BIN`＝ccloop `02cbacc` 的 build，负载 7→42）**：根级全量 3958＝3922 过／36 跳过／**0 红**（20 s 默认 `testTimeout` 之后第一次全量零超时）；`verify:control`、`verify:chain` 也都 0 红。唯一的红在 `--ws check`（1140/1141，负载 23）：`web/tests/taskLabelsDraftBase.test.tsx` › keeps the draft's base after a poll read someone else's v1…，`findByRole("button", /^g · running/)` 找不到（2291 ms）——与上面 `a852f96a` 条同名同形；**这次在默认 workers 下单跑了** 3/3 绿（负载 12–13）⇒ 判负载。
+
 ### 已修、不再豁免的（再红就当新问题查）
 
 - `tests/control/driverSettle.test.ts` 真 git 场景：全量＋并发下撞 5 s，已给 30 s。再红要查。
