@@ -3,42 +3,47 @@
   "runId": "orca-dev-d0843ec0",
   "runtime": "claude-code",
   "sessionRef": "d0843ec0-336f-48af-9f44-7cd5d834d54e",
-  "writtenAt": "2026-10-17T10:11:41.012Z",
-  "head": "2c846027c0b06ab99a40e24be1d718388bd1d16c",
+  "writtenAt": "2026-10-17T12:35:50.089Z",
+  "head": "90099813d9f8e9f8d0d9900166e35c0d0666c19a",
   "level": {
     "kind": "reading",
-    "level": 333777,
+    "level": 456903,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
-    "band": 1
+    "band": 2
   },
   "next": [
-    "ccmem Codex/OMP adaptation: SDD execution in /Users/biran/code/skills/orca/ccmem-wt/codex-omp-adaptation (branch codex/codex-omp-adaptation); ledger .superpowers/sdd/2026-10-17-codex-omp-adaptation/progress.md; Tasks 0-6 complete, Task 7 under review, Tasks 8-12 remain",
-    "After all tasks: final whole-branch review, then update Orca/ccloop/ccmem docs/handoff/handoff.md (Chinese) and give the human a <=10-line executive summary"
+    "ccmem branch codex/codex-omp-adaptation (worktree ccmem-wt/codex-omp-adaptation): Tasks 0-12 complete; final review found C1/I1-I3 — one fix wave dispatched; then scoped re-review, then handoffs (Orca/ccloop/ccmem, Chinese) and the human's executive summary",
+    "Human explicitly said this session should ignore context size; T2 overrun is deliberate and recorded here"
   ],
   "open": [
-    "Task 2 incident: one real unmocked claude -p call during a RED run; cost unknown (not estimated) — report to human",
-    "Paid acceptance (spec §7 paid items) and real installs into ~/.codex / ~/.omp not run — need the human's per-call approval",
-    "daemon-stop-wait-budget.test.mjs load flake (passes alone 3/3)"
+    "Stray real file ~/.omp/agent/extensions/ccmem.ts (written 2026-10-17 18:16:30 by a Task 7 test run; imports a deleted clone) — human must delete",
+    "Task 2 incident: one unmocked real claude -p call, cost unknown",
+    "Migration 017 takes ~3.07 s on a real-size DB copy (> 2-3 s hook budgets) — apply via CLI before merge",
+    "Paid acceptance (spec §7) not run"
   ],
   "awaitingHuman": [
     {
       "kind": "irreversible",
-      "what": "merge + push ccmem branch codex/codex-omp-adaptation and remove worktree ccmem-wt/codex-omp-adaptation"
+      "what": "delete ~/.omp/agent/extensions/ccmem.ts (and the empty extensions/ dir)"
+    },
+    {
+      "kind": "irreversible",
+      "what": "pre-merge migration 017 via CLI with daemon stopped, then ff-merge + push ccmem branch, remove worktree"
     },
     {
       "kind": "named-authorization",
-      "what": "paid acceptance runs (quality comparison, real Codex/OMP injection-read, cache numbers) and codex gpt-6-luna estimate re-run after 2026-10-22"
+      "what": "paid acceptance runs for ccmem Codex/OMP; codex gpt-6-luna estimate re-run after 2026-10-22"
     }
   ],
   "measurements": [
     {
       "command": "cd /Users/biran/code/skills/orca/ccmem-wt/codex-omp-adaptation && npm test",
       "exitCode": 0,
-      "commit": "2c846027c0b06ab99a40e24be1d718388bd1d16c",
-      "observedAt": "2026-10-17T10:11:40.954Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-d0843ec0-fey8ji/1.txt"
+      "commit": "90099813d9f8e9f8d0d9900166e35c0d0666c19a",
+      "observedAt": "2026-10-17T12:35:50.003Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-d0843ec0-g3RG9l/1.txt"
     }
   ]
 }
