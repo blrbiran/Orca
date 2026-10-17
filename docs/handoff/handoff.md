@@ -103,6 +103,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **落了什么**：① 确定性修复（`src/control/estimateRepair.ts`：v2 换形、schema 名、planHash 照抄、assumptions 清洗、未知任务丢弃、重复任务取第一条可用的、重排；占位 rationale 名单钉死；模型文字一律过 `modelText` 去孤立代理对、按码点截 200 单元）；② 结算先修后判（`completeEstimateInStore`，记录 `repairs`）；③ 指令 v2＋按计划生成的、以 taskId 为键的响应 schema（v1 字节不变，哈希钉住）；④ **一次**自动重试（`src/control/estimateRetry.ts`：非抛出的判定、`retrySkipped` 码、新估算行＋带 `retryProblems` 的合同＋wake；不是命令台账条目）；⑤ 面板显示「已修复／第 N 版的重试／已重试为第 N 版／未重试：<码>」；⑥ 验收脚本 `--scenario estimate` 支持 `--codex`、`--instruction-version`、`--repeat`、tally，且默认把 `CCLOOP_CACHE_DIR` 放进 `--output`。同分支更早几笔：handoff、`taskResultPaired` 改写、默认 `testTimeout` 20 s、面板模型刷新改 owner-only POST＋75 s 读超时。
 - **门**（全新 clone，观测提交＝主题行 `fix(acceptance): keep ccloop's cache under --output unless the caller set one`，即终审修复**之前**一笔；`ORCA_CCLOOP_BIN`＝ccloop `02cbacc` build；负载 15→55）：ci／web build／typecheck／build／pin／scheduler 0；全量 3950：3912 过、36 跳过、2 红＝`schedulerBridge` 30 s 超时（登记形状）＋`loopPlanE2E` 在负载 42 下 `git worktree add` 失败（待单跑）。两条单跑 2×10/10 绿；`verify:control` 2042 过／30 跳过／0 红，`verify:chain` 第二次全量 3914 过／36 跳过／**0 红**，panel／`--ws check` 1141／claude-md／tmpleak 0，`~/.orca` 哈希不变 ⇒ **门过（分类后）**。**5 s 超时形状已不再出现**（20 s 默认生效）。终审修复（主题行 `fix(control): keep model text in estimate codes canonical so the settlement never throws`）之后只跑了 9 个受影响文件 94/94＋typecheck。
 - **付费验收未跑**（下一会话做，人已授权本轮，见 §4.2 第 0 条）。没有任何付费调用发生在本轮实现里。
+- **会话收尾**：会话 `4de777f4` 越过 Rule 6 的 T2（451599／450000，检查点已记这次越线）后交接。本地 main 上的两笔检查点（主题行 `chore(checkpoint): orca-dev-4de777f4, …`）已由 agent 合进本分支（主题行 `Merge branch 'main' into codex/round-20261017`），所以门过后人可以直接 `--ff-only`。**下一会话先做 §4.2 第 0 条，再在本分支 tip 上跑一次全量门**（上一次门没覆盖终审修复）。
 - ⚠️ **已知缺口**（登记不修）：排队中的自动重试在组开跑、提案确认或被人的新估算取代之后**仍会被领取并真跑**（花钱但结果用不上；spec §4.3 保持既有排队估算行为）；空白 rationale 能过（占位名单是 spec 钉的，改要人裁）；fake codex／claude 不走 retryOutput，`readyAfterRetry` 只有 fake-omp 覆盖。
 - ⚠️ **事故（Rule 17）**：Task 7 实施席有一次 fake codex 跑在改道缓存前，往**真** `~/.cache/ccloop/agent-catalog/` 写了 8 个路径（`769de7de….json` 与 `codex-home/bf533527…/`，内含指向 `~/.codex/auth.json`／`config.toml` 的软链；凭据本身未改）。清单 `/private/tmp/acc-xpI0/ccloop-cache-new.txt`。未删，归人（§4.1）。脚本已修成默认改道。
 - **人用真面板时跑门**：真面板写 `~/.orca/control/panel` 会让测试的 Rule 17 守卫在文件级报红（会话 `4de777f4` 上一轮门约 50 个文件），不是测试写的；跑门挑人不用面板的时段。
@@ -228,8 +229,23 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
    - 现核时控制库 `work_items`／`groups`／`requirement_drafts` 都是 0 行（Task 页空是真空，不是读不到）。
    - 不确定归属、留给人：Codex 建的 `/Users/biran/.codex/worktrees/feedback-followup-20261011/Orca`（detached）；`ui/panel-taste` 是 UI 线的。
 2. **ccmem**：embedding 额度／换 key（`core.hooksPath` 已于会话 `ec9ce319` 经人授权 unset）。
-3. **本轮（会话 `4de777f4` 续）的分支 `codex/round-20261017`**（工作树 `Orca-wt/round-20261017`）：门过后由人 `--ff-only` 合推，再删分支与工作树。
-4. **ccloop 分支 `codex/handoff-20261017`**（工作树 `ccloop-wt/handoff-20261017`，只改 handoff）：`--ff-only` 合推，再删。
+3. **本轮（会话 `4de777f4` 续）的分支 `codex/round-20261017`**（工作树 `Orca-wt/round-20261017`）：要等**付费验收和终审修复之后的全量门都过了**，再由人合推，然后删分支和工作树。本分支已经包含本地 main 的检查点提交，所以可以 `--ff-only`。命令如下：
+   ```sh
+   cd /Users/biran/code/skills/orca/Orca
+   /usr/bin/git ls-remote origin main            # 现核远端 main
+   /usr/bin/git merge --ff-only codex/round-20261017
+   /usr/bin/git push origin main
+   /usr/bin/git worktree remove ../Orca-wt/round-20261017
+   /usr/bin/git branch -d codex/round-20261017
+   ```
+4. **ccloop 分支 `codex/handoff-20261017`**（工作树 `ccloop-wt/handoff-20261017`，只改 handoff）：现在就可以合推，然后删分支和工作树。命令如下：
+   ```sh
+   cd /Users/biran/code/skills/orca/ccloop
+   /usr/bin/git ls-remote origin main
+   /usr/bin/git merge --ff-only codex/handoff-20261017 && /usr/bin/git push origin main
+   /usr/bin/git worktree remove ../ccloop-wt/handoff-20261017 && /usr/bin/git branch -d codex/handoff-20261017
+   ```
+   **ccmem** 的 main 上有一笔只改 handoff 的提交（主题行 `docs(handoff): roll the Orca pointer to the usable-estimate round`），推送命令：`/usr/bin/git -C /Users/biran/code/skills/orca/ccmem push origin main`。
 5. **profile 切到指令 v2**（付费验收通过后）：先只读核对没有 `queued`／`running` 的估算：`sqlite3 -readonly ~/.orca/control/panel/control.sqlite "select count(*) from estimates where state in ('queued','running','start-unknown')"` 为 0；再把 `~/.orca/profile.json` 的 `estimatorPreflight.instructionVersion` 由 `"1"` 改成 `"2"`（profileHash 会变，排队中的估算会 `profile-changed`）。
 6. **删**（人做）：真 `~/.cache/ccloop/agent-catalog/` 下 Task 7 误写的 8 个路径（清单 `/private/tmp/acc-xpI0/ccloop-cache-new.txt`，`rm -rf` 软链目录只删链）；会话 `4de777f4` 的临时目录 `/private/tmp/{ccb6-qswQ,mutp-swWu,acc-*,mut-*,org6-*,org7-*,cc-r-*,cc-t-*,cc-gate3-*,cc-gate4-*}`（`ccb6-qswQ` 是 pin 的 ccloop build，付费验收要用，**验收后再删**）。
 
