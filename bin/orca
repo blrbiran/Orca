@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  TARGET="$(readlink "$SOURCE")"
+  if [[ "$TARGET" != /* ]]; then SOURCE="$DIR/$TARGET"; else SOURCE="$TARGET"; fi
+done
+DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+# Prefer the system node: `orca panel install` records process.execPath into the service config
+# (src/service/config.ts), so a version-manager node first on PATH would tie the service to that version.
+NODE=node
+if [ -x /usr/local/bin/node ]; then NODE=/usr/local/bin/node; fi
+exec "$NODE" --no-warnings "$DIR/../dist/cli.js" "$@"

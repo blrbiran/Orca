@@ -48,15 +48,23 @@ npm install                       # also installs the pinned ccloop
 npm run build --workspace web     # builds the panel; without it the panel refuses to start (panel-dist-missing)
 ```
 
-`package.json` declares no `bin`, so there is no global `orca` command. Run every command from the Orca checkout as
+To get a global `orca` command, build once and link the checkout:
+
+```sh
+npm run build                     # compiles dist/cli.js, which bin/orca runs
+npm link                          # puts orca on PATH (in the active node's global bin); npm unlink -g orca removes it
+```
+
+`bin/orca` runs `dist/cli.js` with `/usr/local/bin/node` when that exists, else with `node` from PATH, because
+`orca panel install` records the node that ran it into the service config. Rebuild after pulling: `orca` runs the
+compiled `dist/`, not `src/`. Without the link, run every command from the Orca checkout as
 
 ```sh
 node_modules/.bin/tsx src/cli.ts <command> ...
 ```
 
-(`npm run ledger -- <command> ...` is the same thing through npm.) Below, `orca <command>` is short for that; if you
-want a real `orca` on your PATH, alias it yourself, because Orca ships none. `npm run build` (the root one, not only the
-`web` one) compiles `dist/cli.js`; `orca panel install` needs it (see [Run the panel as a service](#run-the-panel-as-a-service)).
+(`npm run ledger -- <command> ...` is the same thing through npm.) `npm run build` (the root one, not only the `web`
+one) compiles `dist/cli.js`; `orca panel install` needs it (see [Run the panel as a service](#run-the-panel-as-a-service)).
 
 ## Configure
 
