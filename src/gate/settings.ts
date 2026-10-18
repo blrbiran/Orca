@@ -6,12 +6,11 @@
 export const GATE_HOOK_COMMAND =
   'in=$(cat); printf \'%s\' "$in" | node "$CLAUDE_PROJECT_DIR"/scripts/gate-prefilter.mjs && exit 0; printf \'%s\' "$in" | "$CLAUDE_PROJECT_DIR"/node_modules/.bin/tsx "$CLAUDE_PROJECT_DIR"/src/cli.ts gate --hook claude-code || { rc=$?; [ "$rc" -eq 2 ] && exit 2; echo "orca gate: hook failed (exit $rc) — blocked" >&2; exit 2; }';
 export const GATE_HOOK_TIMEOUT_S = 10;
+// Human ruling 2026-10-18 (Orca session a3b2a7a7): `git branch -d`, `git branch --delete` and `git worktree remove`
+// left this list; their forced forms are blocked by the hook (src/gate/classify.ts), which a prefix rule cannot tell apart.
 export const GATE_DENY_BASE: string[] = [
   "git push*",
-  "git branch -d*",
   "git branch -D*",
-  "git branch --delete*",
-  "git worktree remove*",
   "git worktree prune*",
   "gh pr merge*",
   "gh repo sync*",

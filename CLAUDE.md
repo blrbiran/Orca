@@ -128,10 +128,13 @@ Default to surfacing uncertainty, not hiding it.
   否则读的人无从判断它过没过期。行号、字节数、测试条数**引用前必须现测**。
 
 ## Rule 15 — 不可逆动作需人单独授权
-**push**、**合并进 `main`**、**删分支或 worktree** —— 这四件**每一次都要人单独点头**，
-不因为上一次批准过就自动延续。**非门合并一律 `--ff-only`。**
-⚠️ **Tier 0 闸门（`docs/superpowers/specs/2026-09-18-tier0-gate-design.md`）落地后**：这四件事在本仓库的 agent 会话里被机械拦下，
+**push** 与**强制形式**（`push --force`、`branch -D`、`branch -d -f`、`worktree remove --force`、`worktree prune`、
+非 fast-forward 的合并进 `main`、`gh pr merge`）**每一次都要人单独点头**，不因为上一次批准过就自动延续。
+⚠️ **Tier 0 闸门（`docs/superpowers/specs/2026-09-18-tier0-gate-design.md`）**：上面这些在本仓库的 agent 会话里被机械拦下，
 **人点头了 agent 也做不成** —— 由人在自己的终端里做，agent 只把它列进检查点的 `awaitingHuman`。
+✅ **git 自己有保护的形式 agent 可以直接做**（人裁，2026-10-18，会话 `a3b2a7a7`，闸门 spec §11）：
+`git merge --ff-only` 合进 `main`、`git branch -d`（只删已合并的）、`git worktree remove`（不带 force）。
+**push 仍默认由人来做。** 合进 `main` 一律 `--ff-only`。
 
 变异 / 故障注入**只在 `git clone --local` 副本里做**，主工作树全程零触碰；
 还原证明看 `git diff` 与 `git diff --cached` 的**字节数**，不看肉眼。

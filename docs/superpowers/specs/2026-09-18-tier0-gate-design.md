@@ -271,3 +271,28 @@ Bash 工具进程里 `CLAUDECODE=1`。临时仓库的 `reference-transaction` �
 | M8 | 命令行层 `rc==2` 分支无判据 | 改：加一条只有一行 stderr 的判据 | §6.2 |
 | 控制器 | 头部「§3 经人确认」过度声称 | 改：头部分列「人确认的」与「控制器补的」 | 头部 |
 | 控制器 | 与 Rule 15 字面冲突 | 人裁补一句，已落 | §0、§8-1 |
+
+## 11. Correction (2026-10-18): the protected forms leave Tier 0
+
+Orca session `a3b2a7a7` (Claude Code interactive session), 2026-10-18. The original text above is kept verbatim
+(CLAUDE.md Rule 13); this section narrows it.
+
+The human found that every merge, branch deletion and worktree removal had to be typed by hand and asked for that to
+be fixed. The controller recommended opening the forms git itself protects and keeping the forced forms blocked. The
+human answered, verbatim: 「同意，但是默认由人来push。」 and, on whether to limit this to the three sibling repos,
+「其他目录也不拦」.
+
+What changed:
+
+| No longer Tier 0 | Still Tier 0 |
+|---|---|
+| `git merge --ff-only …` on any branch, `main` included (and not combined with `--ff`/`--no-ff`) | any other merge, `pull`, `rebase` or `reset` that moves `main` (§3 unchanged) |
+| `git branch -d <x>` / `--delete <x>` (git refuses an unmerged branch) | `-D`, `-d` with `-f`/`--force`, deleting `main` |
+| `git worktree remove <w>` without force (git refuses a dirty worktree) | `worktree remove -f`/`--force`, `worktree prune` |
+| | `git push` in every form (the human's ruling), `gh pr merge`, `gh repo sync`, `gh api` writes |
+
+Mechanically: `src/gate/classify.ts` allows the three forms; `GATE_DENY_BASE` (`src/gate/settings.ts`) and
+`.claude/settings.json` drop `git branch -d*`, `git branch --delete*` and `git worktree remove*`, because a prefix
+rule cannot tell `-d` from `-d -f`, so the forced forms are left to the hook. The pinned sha256 in
+`tests/gate/settings.test.ts` changes on purpose; the old literal is kept in a comment there. CLAUDE.md Rule 15 is
+rewritten to match.

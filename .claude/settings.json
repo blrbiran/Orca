@@ -2,10 +2,7 @@
   "permissions": {
     "deny": [
       "Bash(git push*)", "Bash(rtk git push*)", "Bash(rtk proxy git push*)",
-      "Bash(git branch -d*)", "Bash(rtk git branch -d*)", "Bash(rtk proxy git branch -d*)",
       "Bash(git branch -D*)", "Bash(rtk git branch -D*)", "Bash(rtk proxy git branch -D*)",
-      "Bash(git branch --delete*)", "Bash(rtk git branch --delete*)", "Bash(rtk proxy git branch --delete*)",
-      "Bash(git worktree remove*)", "Bash(rtk git worktree remove*)", "Bash(rtk proxy git worktree remove*)",
       "Bash(git worktree prune*)", "Bash(rtk git worktree prune*)", "Bash(rtk proxy git worktree prune*)",
       "Bash(gh pr merge*)", "Bash(rtk gh pr merge*)", "Bash(rtk proxy gh pr merge*)",
       "Bash(gh repo sync*)", "Bash(rtk gh repo sync*)", "Bash(rtk proxy gh repo sync*)"

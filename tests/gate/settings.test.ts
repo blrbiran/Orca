@@ -56,8 +56,11 @@ describe(".claude/settings.json wires the Tier 0 gate (spec 5, 6.2)", () => {
   it("the expected wiring left this file byte for byte (D-launch spec §1, review 2)", () => {
     // sha256 of JSON.stringify({ COMMAND, DENY }) computed from this file's own constants at 96cae2b, before the move
     // (plan Task 1 Step 1). A changed hook command or deny list must change this literal on purpose, in review.
+    // Changed on purpose 2026-10-18 (human ruling, Orca session a3b2a7a7): `git branch -d*`, `git branch --delete*` and
+    // `git worktree remove*` left the deny list. The previous literal was
+    // eb0dfc953e904ac96ad090e2470a43cf1630765b532ec165c1dfd1cefffba87b.
     expect(createHash("sha256").update(JSON.stringify({ COMMAND, DENY })).digest("hex")).toBe(
-      "eb0dfc953e904ac96ad090e2470a43cf1630765b532ec165c1dfd1cefffba87b",
+      "ed88ba55956978ea4b94cc32717f3f57e6864bf9807eac22fa61a18b42d89bcf",
     );
   });
 });

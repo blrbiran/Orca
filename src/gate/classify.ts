@@ -136,6 +136,11 @@ async function classifyGit(args: Word[], assignments: Set<string>, ctx: Context)
   const letters = shortLetters(beforeDashdash);
   const longs = new Set(beforeDashdash.filter((w) => w.text.startsWith("--")).map((w) => w.text.split("=")[0]));
 
+  // Human ruling 2026-10-18 (Orca session a3b2a7a7): the forms git itself protects (a fast-forward-only merge, -d,
+  // worktree remove without force) are not Tier 0; their forced forms still are. Push stays Tier 0.
+  const force = letters.has("f") || longs.has("--force");
+  const fastForwardOnly = longs.has("--ff-only") && !longs.has("--ff") && !longs.has("--no-ff");
+
   const byBranch = async (): Promise<Verdict> => {
     if (ctx.headChanged) return unclear("an earlier git call in this command may have switched branches");
     if (otherRepository) return unclear("--git-dir, --work-tree, GIT_DIR or GIT_WORK_TREE names another repository");
@@ -159,7 +164,8 @@ async function classifyGit(args: Word[], assignments: Set<string>, ctx: Context)
     case "push":
       return block("push");
     case "branch":
-      if (letters.has("d") || letters.has("D") || longs.has("--delete")) return block("delete a branch");
+      if (letters.has("D")) return block("delete a branch");
+      if (letters.has("d") || longs.has("--delete")) return force || positionals.includes("main") ? block("delete a branch") : ALLOW;
       if (["f", "M", "m", "C", "c"].some((l) => letters.has(l)) || longs.has("--force") || longs.has("--move") || longs.has("--copy")) {
         if (positionals.includes("main")) return block("merge into main");
       }
@@ -169,7 +175,8 @@ async function classifyGit(args: Word[], assignments: Set<string>, ctx: Context)
       if (positionals.some((p) => p === "refs/heads/main" || p === "main")) return block("merge into main");
       return ALLOW;
     case "worktree":
-      return positionals[0] === "remove" || positionals[0] === "prune" ? block("remove a worktree") : ALLOW;
+      if (positionals[0] === "prune" || (positionals[0] === "remove" && force)) return block("remove a worktree");
+      return ALLOW;
     case "checkout":
       if (letters.has("B") && positionals.includes("main")) return block("merge into main");
       ctx.headChanged = true;
@@ -187,6 +194,7 @@ async function classifyGit(args: Word[], assignments: Set<string>, ctx: Context)
       return v;
     }
     case "merge":
+      return fastForwardOnly ? ALLOW : byBranch();
     case "pull":
       return byBranch();
     case "reset": {
