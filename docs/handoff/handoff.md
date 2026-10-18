@@ -65,7 +65,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 3.00 会话 `1710772d`（2026-10-18 下午～晚）—— **先读这一节，再读 3.0**
 
-- **「控制 run 写决定」已实施并合进 main**（`--ff-only`，末笔 `fix(control): …` 系列之后 main 起点是检查点 `a0deaae5` 之上的 22 笔；**未 push**，人统一推）。SDD 台账（每条 `Ruling:`、每条延后 minor、已知缺口、门的数）：`.superpowers/sdd/2026-10-18-control-run-decisions/progress.md`（git-ignored，含全部 review package）。Task 1–11 每个都过了任务评审，整分支终审 + 一轮修复 + 复审；门在全新 clone、`ORCA_CCLOOP_BIN=/private/tmp/ccb6-qswQ/ccloop/dist/cli.js`（pin `02cbacc5`）、只指 fake 的 `ORCA_AGENTS_TABLE`（scratchpad，会话结束失效）下全过：全量 441 文件 4027 过／36 跳，verify:control 208/208，scheduler 57/57，chain 13/13，ccloop-pin、panel、web 1152/1152；ledger validate 退出 2 是 main 既有的 7 条 tier-0 降级（`orca-dev-09cc3ea1.jsonl`）。
+- **「控制 run 写决定」已实施并合进 main**（`--ff-only`，22 笔，首笔主题行 `feat(control): read reported decisions through one adapter`，用 `git log --oneline --grep=decision` 找；**未 push**，人统一推）。SDD 台账（每条 `Ruling:`、每条延后 minor、已知缺口、门的数）：`.superpowers/sdd/2026-10-18-control-run-decisions/progress.md`（git-ignored，含全部 review package）。Task 1–11 每个都过了任务评审，整分支终审 + 一轮修复 + 复审；门在全新 clone、`ORCA_CCLOOP_BIN=/private/tmp/ccb6-qswQ/ccloop/dist/cli.js`（pin `02cbacc5`）、只指 fake 的 `ORCA_AGENTS_TABLE`（scratchpad，会话结束失效）下全过：全量 441 文件 4027 过／36 跳，verify:control 208/208，scheduler 57/57，chain 13/13，ccloop-pin、panel、web 1152/1152；ledger validate 退出 2 是 main 既有的 7 条 tier-0 降级（`orca-dev-09cc3ea1.jsonl`）。
 - ⚠️ *** **控制库 schema 13 → 14（单向）**：面板服务下次重启会把真实 `~/.orca` 控制库迁到 14（新表 `pending_decisions`），旧版 Orca 将拒开。**重启前先备份控制库**（做法同 `2026-10-12-live-service-cutover.md`），agent 没有重启服务。 ***
 - **没做／未测（Rule 12）**：Task 12（读 ccloop 真输出的契约测试）阻塞在 ccloop 报 `decisions[]` ⇒ **spec §3.1「agent 自己的决定」还没接通**，今天只有 reconcile 模板与 fake 报告路径；`push-target`／`push-branch`／`github-pr` 合入未测；面板没在真浏览器看过；已知缺口：不同身份并发 reject 可各记一条、reject 输给 approve 时留孤儿 correction（交给 debug 计划的「未记录决定上的纠正」一行）、E/D 的 reconciling 检查与 CAS 之间有窗口（D 既有）、approve/reject 串行只在单进程内。
 - **人裁（本会话）**：`attemptSha` 进 evidence（台账 spec ERRATUM 8）；姊妹仓合并规则已对齐并合了 ccloop 计划分支与 ccmem handoff 分支；「这个 session 中的必要 test 都允许改」——本轮改过的既有判据逐条记在台账（schema pin 一批、commandClient、archiveGroup CALLS、fields／lenientRead／resolve／skill.test）。
@@ -146,6 +146,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ## 四、⛔ 下一件事（按顺序）
 
 ### 4.1 人做的（agent 不提醒、不代做）
+
+- ⚠️ **重启面板服务前先备份控制库**：本轮把控制库升到 schema 14（单向，见 §3.00），下次重启即迁移真实 `~/.orca`，旧版 Orca 将拒开。
 
 - **push**：人统一择时推三仓，agent **不提醒**、不给 push 命令。合入 main（`--ff-only`）、删已合并分支、删干净 worktree，agent 在 **Orca** 里自己做；ccloop／ccmem 已对齐（人 2026-10-18 会话 `1710772d`），agent 同样可做这三种形式。
 - **删**（人做；会话 `a3b2a7a7` 2026-10-18 现核的清单）：
@@ -350,13 +352,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
-- ✅ **会话 `1710772d`（2026-10-18）人已回复下面这批**：`attemptSha` 冲突按控制器建议（台账 spec ERRATUM 8）；其余控制器决定全部同意；姊妹仓合并规则已对齐（ccloop／ccmem `CLAUDE.md` 各加一行，`docs(rules): let agents do the merge forms git protects…`）；人原话「这个 session 中的必要 test 都允许改，过程中你可能不止需要改这一处」——**只对会话 `1710772d` 有效**，改了哪些既有判据要逐条记进台账。人另提：「agent 工作能被确定的代码逻辑替代的，尽量用代码实现」（要出候选清单）；Decisions 页「裁决好的 decision 无法查看，需要能查看并反悔」。下面原条目保留到本会话收尾再删。
-- **本会话 `a3b2a7a7` 请人审的控制器决定**（人授权「这一轮有问题先按你的建议执行、最后报我审」；都已写进文档、未实施，可逆）：
-  - 决定 spec §10（审后修订）与 debug spec §12 的全部条目；两份计划末尾「Cross-plan resolutions」六条（尤其：所有记录纠正的路径 `by` 用面板解析出的人的身份；CLI `--close` 仍只收决定、web `correction-close` 能关「被拒决定」类纠正）。
-  - 计划起草席自定、控制器采纳的：关闭判定改为「目标分支的树里有关闭行」（`squash` 合入下祖先判断永不成立）；复现检查的基准是 debug run 自己的 base；`undo.how` 人没填时由 **Orca 代码**生成 `git revert --no-edit <attemptSha>`（不是 agent 写）。
-  - 裸 run 目标（task 旁的「纠正」按钮）本轮延后。
-  - ccloop 计划：错误码家族 `codex-phase-isolation-*`；`HOME` 为空或不是绝对路径时拒绝阶段；`features.hooks=false` 每次都发。
-- **ccloop 计划 Task 4 Step 6**：预言变红的 `tests/control/codexSkillsFailureWorker.test.ts`（夹具 wrapper 要转发非 `exec` 调用）与语义已变的 `tests/runtime/codex/extraEnv.test.ts`「sets CODEX_HOME from the installation's configDir…」——改要人逐条点名。
+- **ccloop 计划 Task 4 Step 6**：预言变红的 `tests/control/codexSkillsFailureWorker.test.ts`（夹具 wrapper 要转发非 `exec` 调用）与语义已变的 `tests/runtime/codex/extraEnv.test.ts`「sets CODEX_HOME from the installation's configDir…」——改要人逐条点名（人在会话 `1710772d` 给过「本 session 中必要的 test 都允许改」，**只对那个会话有效**）。
 - **付费**（每一次先问）：§4.2 第 7 条。
 - **ccmem embedding 账号无额度**。
 - **`orca chain` 真钱活体验收**：要人提交 `.orca/chain.json` 选 model（不存在时开链被 `chain-config-missing` 拒）。
