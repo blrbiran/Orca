@@ -18,6 +18,9 @@ const BY_HAND = [
   "decision-not-found", "panel-bad-request", "panel-internal-error", "reviews-store-busy", "reviews-store-is-symlink",
   // src/corrections/* (POST /api/corrections)
   "correction-row-invalid", "correction-already-recorded", "duplicate-correction-id", "correction-not-found", "corrections-store-busy",
+  // src/panel/api.ts, src/corrections/withdrawals.ts (decisions review withdraw spec §4.4, §5.5: the two withdraw routes)
+  "review-not-active", "review-has-open-correction", "correction-not-yours", "correction-already-withdrawn", "correction-closed",
+  "correction-withdrawals-unreadable",
   // src/metrics/* (the E2 gate, 409 on every read)
   "unresolved-project-keys", "key-matches-multiple-paths", "repo-path-missing", "archive-name-ambiguous", "future-rows-without-as-of", "as-of-not-a-timestamp",
   // src/panel/chains.ts and the ChainRejection codes its "rejected:" log line relays

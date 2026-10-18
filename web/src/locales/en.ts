@@ -1288,6 +1288,13 @@ export const enErrors: Record<string, string> = {
   "duplicate-correction-id": "The correction id is already used: {{detail}}",
   "correction-not-found": "The correction was not found.",
   "corrections-store-busy": "Another writer holds the correction records. Try again shortly.",
+  // Decisions review withdraw spec §4.4, §5.5: the two withdraw routes (src/panel/api.ts, src/corrections/withdrawals.ts).
+  "review-not-active": "You have not reviewed this decision, so there is no review of yours to withdraw.",
+  "review-has-open-correction": "You have an open correction on this decision. Withdraw the correction first; your review is withdrawn with it.",
+  "correction-not-yours": "This correction was recorded by someone else; only they can withdraw it.",
+  "correction-already-withdrawn": "This correction has already been withdrawn.",
+  "correction-closed": "This correction is already closed: its fix is in the ledger. To change your mind, record a new correction instead.",
+  "correction-withdrawals-unreadable": "The correction withdrawals file has a line that cannot be read, so nothing was written. Fix or remove that line by hand: {{detail}}",
   "unresolved-project-keys": "The correction records have project keys the panel cannot resolve: {{detail}}",
   "key-matches-multiple-paths": "A project key matches more than one path: {{detail}}",
   "repo-path-missing": "The directory --repo points to does not exist: {{detail}}",

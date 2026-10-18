@@ -1223,6 +1223,13 @@ export const zhErrors: Record<string, string> = {
   "duplicate-correction-id": "纠正 id 重复：{{message}}",
   "correction-not-found": "找不到这条纠正。",
   "corrections-store-busy": "纠正记录正被另一个写入者占用，请稍后重试。",
+  // Decisions review withdraw spec §4.4, §5.5: the two withdraw routes (src/panel/api.ts, src/corrections/withdrawals.ts).
+  "review-not-active": "你没有审阅过这条决策，没有可撤回的审阅。",
+  "review-has-open-correction": "你在这条决策上还有未关闭的纠正。先撤回那条纠正，你的审阅会随它一起撤回。",
+  "correction-not-yours": "这条纠正是别人记录的，只有记录人能撤回。",
+  "correction-already-withdrawn": "这条纠正已经撤回过了。",
+  "correction-closed": "这条纠正已经关闭：它的修复已在台账里。如果改了主意，另记一条新的纠正。",
+  "correction-withdrawals-unreadable": "纠正撤回记录文件里有一行读不了，什么都没写入。请手工修好或删掉那一行：{{message}}",
   "unresolved-project-keys": "纠正记录里有面板解析不了的 projectKey：{{message}}",
   "key-matches-multiple-paths": "一个 projectKey 对应了多个路径：{{message}}",
   "repo-path-missing": "--repo 指向的目录不存在：{{message}}",

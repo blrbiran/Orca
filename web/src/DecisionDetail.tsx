@@ -72,6 +72,7 @@ export function DecisionDetail({
   draft,
   onDraft,
   review,
+  withdrawing,
   onWithdrawReview,
   onWithdrawCorrection,
 }: {
@@ -81,6 +82,8 @@ export function DecisionDetail({
   draft?: CorrectionForm;
   onDraft?: (form: CorrectionForm) => void;
   review?: DecisionReviewState;
+  /** What of this decision has a withdrawal pending: its button is disabled until the answer lands. */
+  withdrawing?: { review: boolean; corrections: ReadonlySet<string> };
   onWithdrawReview?: () => void;
   onWithdrawCorrection?: (id: string) => void;
 }): JSX.Element {
@@ -135,7 +138,7 @@ export function DecisionDetail({
             ))}
           </ul>
           {canWithdrawReview && (
-            <button type="button" onClick={onWithdrawReview}>
+            <button type="button" onClick={onWithdrawReview} disabled={withdrawing?.review === true}>
               {t("decisions.withdrawReview")}
             </button>
           )}
@@ -155,7 +158,7 @@ export function DecisionDetail({
                 {enumText("correctionKind", c.kind)} · {c.because} · {c.by} · <time dateTime={c.at}>{c.at}</time> ·{" "}
                 <span className="correction-state">{t(`decisions.correctionState.${c.state}`)}</span>
                 {c.withdrawable && (
-                  <button type="button" onClick={() => onWithdrawCorrection?.(c.id)}>
+                  <button type="button" onClick={() => onWithdrawCorrection?.(c.id)} disabled={withdrawing?.corrections.has(c.id) === true}>
                     {t("decisions.withdraw")}
                   </button>
                 )}

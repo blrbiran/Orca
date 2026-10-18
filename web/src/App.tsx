@@ -99,7 +99,7 @@ import type {
 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
 import { DecisionOperations } from "./DecisionOperations.js";
-import { EMPTY_REQUESTS, dismissRequest, inlineRequest, noticeRequests, retryPayload, settleRequest, startRequest } from "./decisionRequests.js";
+import { EMPTY_REQUESTS, dismissRequest, inlineRequest, noticeRequests, pendingWithdrawals, retryPayload, settleRequest, startRequest } from "./decisionRequests.js";
 import type { DecisionRequest, DecisionRequests } from "./decisionRequests.js";
 import { EMPTY_DRAFTS, clearIfUnchanged, correctionKey, setDraft } from "./detailDrafts.js";
 import type { DetailDrafts, DraftSlot } from "./detailDrafts.js";
@@ -1258,7 +1258,8 @@ export function App(): JSX.Element {
     withdrawal: { verb: "withdraw-review" } | { verb: "withdraw-correction"; correctionId: string },
   ): Promise<void> => {
     const requestId = nextCommandId();
-    setDecisionRequests((all) => startRequest(all, { requestId, owner, verb: withdrawal.verb, payload: null }));
+    const target = withdrawal.verb === "withdraw-correction" ? { correctionId: withdrawal.correctionId } : {};
+    setDecisionRequests((all) => startRequest(all, { requestId, owner, verb: withdrawal.verb, payload: null, ...target }));
     try {
       const result = withdrawal.verb === "withdraw-review"
         ? await withdrawReview(owner.projectKey, owner.decisionId)
@@ -1266,6 +1267,9 @@ export function App(): JSX.Element {
       if (!result.ok) {
         const { ok: _ok, ...refusal } = result;
         setDecisionRequests((all) => settleRequest(all, requestId, { kind: "refused", refusal }));
+        // A refusal can still follow a write: the correction route's 409 after the withdrawal landed but the review
+        // mark did not (final review Minor 3). Read the detail again so it shows what the files now hold.
+        setDetailRefresh((n) => n + 1);
         return;
       }
       const text = withdrawal.verb === "withdraw-review" ? "decisions.reviewWithdrawn" : "decisions.correctionWithdrawn";
@@ -1359,6 +1363,7 @@ export function App(): JSX.Element {
           void submitDecision(owner, "correct", correctionBody(owner, form), form);
         }}
         review={decisionReview}
+        withdrawing={pendingWithdrawals(decisionRequests, { projectKey: selected.projectKey, decisionId: selected.id })}
         onWithdrawReview={() => {
           void submitWithdraw({ projectKey: selected.projectKey, decisionId: selected.id }, { verb: "withdraw-review" });
         }}

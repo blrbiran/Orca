@@ -12,6 +12,8 @@ import { App } from "../src/App.js";
 import { DecisionDetail } from "../src/DecisionDetail.js";
 import type { Decision } from "../src/DecisionDetail.js";
 import i18n from "../src/i18n.js";
+import { enErrors } from "../src/locales/en.js";
+import { zhErrors } from "../src/locales/zh.js";
 import type { DecisionListRow, MetricsReport, PanelCoverage } from "../src/types.js";
 
 const DECISION: Decision = { id: "run/1", question: "q-1", chose: "c-1", because: "b-1", alternatives: [] };
@@ -295,8 +297,101 @@ describe("withdrawing in the page (spec §7, §10.1)", () => {
     await openReviewed("run/1");
     fireEvent.click(within(splitDetail()).getByRole("button", { name: "Withdraw review" }));
     expect((await within(splitDetail()).findByTestId("refusal-code")).textContent).toBe("review-has-open-correction");
-    expect(within(splitDetail()).getByTestId("refusal-message").textContent).toBe("distinct server message");
+    expect(within(splitDetail()).getByTestId("refusal-message").textContent).toBe(enErrors["review-has-open-correction"]);
     expect(within(splitDetail()).queryByTestId("record-another")).toBeNull();
+  });
+
+  it("a refused withdrawal reads in Chinese for a zh reader, not the server's English sentence (spec §7)", async () => {
+    await i18n.changeLanguage("zh");
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
+      String(input) === "/api/reviews/withdraw"
+        ? json({ code: "review-not-active", message: "You have not reviewed this decision, so there is no review of yours to withdraw." }, 409)
+        : real(input, init)) as typeof fetch;
+    render(<App />);
+    await waitFor(() => expect(document.querySelector('select[name="filter-status"]')).not.toBeNull());
+    fireEvent.change(document.querySelector('select[name="filter-status"]')!, { target: { value: "reviewed" } });
+    await waitFor(() => expect(listedIds()).toEqual(["run/1", "run/2"]));
+    fireEvent.click([...document.querySelectorAll<HTMLButtonElement>(".decision-list li button")].find((b) => b.textContent?.includes("run/1"))!);
+    await waitFor(() => expect(screen.getByTestId("decision-question").textContent).toBe("question of run/1"));
+    fireEvent.click(within(splitDetail()).getByRole("button", { name: "撤回审阅" }));
+    expect((await within(splitDetail()).findByTestId("refusal-code")).textContent).toBe("review-not-active");
+    expect(within(splitDetail()).getByTestId("refusal-message").textContent).toBe(zhErrors["review-not-active"]);
+  });
+
+  it("disables Withdraw review while its own request is pending, so a double click sends one withdrawal (final review Minor 4)", async () => {
+    let release: ((answer: Response) => void) | undefined;
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      if (String(input) !== "/api/reviews/withdraw") return real(input, init);
+      posted.push({ url: String(input), body: JSON.parse(String(init?.body)) });
+      return new Promise<Response>((resolve) => { release = resolve; });
+    }) as typeof fetch;
+    await openReviewed("run/1");
+    const button = (): HTMLButtonElement => within(splitDetail()).getByRole<HTMLButtonElement>("button", { name: "Withdraw review" });
+    expect(button().disabled).toBe(false);
+    fireEvent.click(button());
+    // mutation: no `disabled` on Withdraw review while its request is pending -> red here
+    await waitFor(() => expect(button().disabled).toBe(true));
+    fireEvent.click(button());
+    expect(posted).toHaveLength(1);
+    await act(async () => { mineOnFirst = false; release!(json({ result: "written" })); });
+    await within(splitDetail()).findByText("Review withdrawn.");
+    expect(posted).toHaveLength(1);
+  });
+
+  it("disables a correction's Withdraw while its own request is pending, and only that correction's", async () => {
+    let release: ((answer: Response) => void) | undefined;
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = String(input);
+      if (url.startsWith("/api/decision?") && url.includes("decisionId=run%2F2")) {
+        requested.push(`GET ${url}`);
+        return json({
+          decision: { id: "run/2", question: "question of run/2", chose: "c", because: "b", alternatives: [] },
+          review: { reviewers: [{ by: "me", at: "2026-10-18T01:00:00.000Z" }], mine: "reviewed", corrections: [correction("c-2", {}), correction("c-3", {})] },
+        });
+      }
+      if (url !== "/api/corrections/withdraw") return real(input, init);
+      posted.push({ url, body: JSON.parse(String(init?.body)) });
+      return new Promise<Response>((resolve) => { release = resolve; });
+    }) as typeof fetch;
+    await openReviewed("run/2");
+    const withdrawOf = (id: string): HTMLButtonElement => within(rowOf(splitDetail(), id)).getByRole<HTMLButtonElement>("button", { name: "Withdraw" });
+    fireEvent.click(withdrawOf("c-2"));
+    // mutation: no `disabled` on a correction's Withdraw while its request is pending -> red here
+    await waitFor(() => expect(withdrawOf("c-2").disabled).toBe(true));
+    // mutation: disable every correction's Withdraw while any withdrawal is pending -> red here
+    expect(withdrawOf("c-3").disabled).toBe(false);
+    fireEvent.click(withdrawOf("c-2"));
+    expect(posted).toEqual([{ url: "/api/corrections/withdraw", body: { correctionId: "c-2" } }]);
+    await act(async () => { release!(json({ withdrawal: { correctionId: "c-2" }, review: "skipped" })); });
+    await within(splitDetail()).findByText("Correction withdrawn.");
+  });
+
+  it("re-reads the open detail after the 409 that says the correction was withdrawn but the review was not (final review Minor 3)", async () => {
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      if (String(input) !== "/api/corrections/withdraw") return real(input, init);
+      posted.push({ url: String(input), body: JSON.parse(String(init?.body)) });
+      correctionWithdrawn = true;
+      return json({
+        code: "reviews-store-busy",
+        message: "the correction was withdrawn (id c-2), but your review of the decision could not be withdrawn with it: busy",
+        withdrawal: { correctionId: "c-2" },
+      }, 409);
+    }) as typeof fetch;
+    await openReviewed("run/2");
+    const mine = (): HTMLElement => rowOf(splitDetail(), "c-2");
+    const readsBefore = detailReads("run/2");
+    fireEvent.click(within(mine()).getByRole("button", { name: "Withdraw" }));
+    expect((await within(splitDetail()).findByTestId("refusal-code")).textContent).toBe("reviews-store-busy");
+    // mutation: no detail re-read after a refused withdrawal -> c-2 keeps showing open with its Withdraw, red here
+    await waitFor(() => expect(mine().classList.contains("correction-withdrawn")).toBe(true));
+    expect(within(mine()).queryByRole("button")).toBeNull();
+    expect(detailReads("run/2")).toBeGreaterThan(readsBefore);
+    // The refusal stays on screen beside the re-read detail.
+    expect(within(splitDetail()).getByTestId("refusal-code").textContent).toBe("reviews-store-busy");
   });
 
   it("the a key sends no second Agree once the open decision reads reviewed", async () => {

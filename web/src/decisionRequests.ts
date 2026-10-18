@@ -19,6 +19,8 @@ export interface DecisionRequest {
   // Decisions review withdraw spec §7: the two withdrawals are request records too, owned by the decision they act on.
   verb: "agree" | "correct" | "withdraw-review" | "withdraw-correction";
   payload: RecordCorrectionInput | null; // an independent copy; null for agree and both withdrawals (nothing to record again)
+  /** withdraw-correction only: the correction it withdraws, so only that correction's Withdraw waits on it. */
+  correctionId?: string;
   status: RequestStatus;
   dismissed: boolean;
 }
@@ -40,6 +42,7 @@ export function startRequest(all: DecisionRequests, record: Omit<DecisionRequest
     owner: { ...record.owner },
     verb: record.verb,
     payload: record.payload === null ? null : { ...record.payload },
+    ...(record.correctionId === undefined ? {} : { correctionId: record.correctionId }),
     status: { kind: "pending" },
     dismissed: false,
   };
@@ -100,4 +103,20 @@ export function noticeRequests(all: DecisionRequests, selected: { projectKey: st
 /** "Record another": a copy of THIS record's payload with again:true, or null when it has none. */
 export function retryPayload(record: DecisionRequest): RecordCorrectionInput | null {
   return record.payload === null ? null : { ...record.payload, again: true };
+}
+
+/**
+ * Final review Minor 4: what of this decision is being withdrawn right now -- its review, and which corrections -- so
+ * each Withdraw button waits on its OWN pending request (a double click would otherwise send a second withdrawal and
+ * show its refusal beside the first one's success).
+ */
+export function pendingWithdrawals(
+  all: DecisionRequests,
+  owner: DecisionRequest["owner"],
+): { review: boolean; corrections: ReadonlySet<string> } {
+  const pending = all.records.filter((entry) => entry.status.kind === "pending" && ownerKey(entry.owner) === ownerKey(owner));
+  return {
+    review: pending.some((entry) => entry.verb === "withdraw-review"),
+    corrections: new Set(pending.flatMap((entry) => (entry.verb === "withdraw-correction" && entry.correctionId !== undefined ? [entry.correctionId] : []))),
+  };
 }
