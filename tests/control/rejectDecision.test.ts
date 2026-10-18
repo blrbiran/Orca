@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { readCorrections } from "../../src/corrections/store.js";
 import { applyRejectPendingDecision, prepareApproval, prepareRejection } from "../../src/control/decisionCommands.js";
 import { recordNewCorrection } from "../../src/corrections/record.js";
+import { durableCommandErrorStatuses } from "../../src/control/errors.js";
 import { readPendingDecision } from "../../src/control/pendingDecisions.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { controlWorkspaceRoots } from "../../src/control/workspace.js";
@@ -140,6 +141,8 @@ describe("reject-pending-decision (control run decisions Task 10)", { timeout: 6
       expect(await t.reject({ pendingId: "pending-nope-0" })).toMatchObject({ error: { code: "pending-decision-not-found" } });
       expect(await t.reject({ pendingId: t.pendingId }, undefined, t.serviceAs(null))).toMatchObject({ error: { code: "corrections-store-unconfigured" } });
       expect(await t.reject({ pendingId: t.pendingId }, undefined, t.serviceAs(BY, null))).toMatchObject({ error: { code: "corrections-store-unconfigured" } });
+      // Review fix 3: understood, and not performable by this process -- 422 like control-port-unconfigured.
+      expect(durableCommandErrorStatuses["corrections-store-unconfigured"]).toBe(422);
       t.h.store.db.prepare("UPDATE pending_decisions SET state='approved' WHERE id=?").run(t.pendingId);
       expect(await t.reject({ pendingId: t.pendingId })).toMatchObject({ error: { code: "pending-decision-settled" } });
       expect(await readCorrections(t.dir)).toEqual([]);
