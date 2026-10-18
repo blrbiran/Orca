@@ -755,3 +755,16 @@ D 的对象已按人 2026-09-17 同意的顺序定为**开发会话优先**，cc
 不写 `.decisions/`、不直接 `git commit`。详见该 spec §6.3。
 
 *** **原文逐字保留（本文已发布），此处即为具名更正。** ***
+
+## ERRATUM 8（控制 run 写决定，人裁，2026-10-18，Orca `7357e443`；会话 `1710772d`）
+
+§3.2「不存 commit hash」**收窄**。人 2026-10-18 原话：「同意按你的建议」，所同意的建议是：
+
+- §3.2 的两条理由针对的是 **agent 自填**的 hash：①会移动的引用（`HEAD`、remote tip）；②决策常在提交存在之前写，字段会填错。
+- 控制路径下 agent 不写台账，**由 Orca 在落地时写**（`docs/superpowers/specs/2026-10-18-control-run-decisions-design.md` §7a、§10.6）。
+  那时 agent 的提交已经存在，写进去的是**不会移动的完整 sha**（`attemptSha`），两条理由都不适用。
+- 因此允许：`evidence` 带 `attempt <attemptSha>`；debug task 关闭时 Orca 生成的 `undo.how = git revert --no-edit <attemptSha>`。
+- 仍然禁止：agent 自填任何 hash；写会移动的引用；用 sha 代替 `git blame` 回答「哪一笔**落地**提交带进了这一行」（那仍由 blame 反查）。
+- **已知代价，不掩饰**：squash 合入且 group 分支被删后，`attemptSha` 的对象可能被 git 回收 ⇒ 读者必须把「对象不在」显式报出（debug 计划的 `missing: "attemptSha"`），不许静默。
+
+*** **原文逐字保留（本文已发布），此处即为具名更正。** ***

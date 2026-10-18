@@ -70,7 +70,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **三份 spec＋三份计划**（都按 brainstorming 走：人裁、builder check、独立审阅一轮、审后修订；修订是控制器在人的「这一轮有问题先按你的建议执行、最后报我审」授权下定的）：
   1. **控制 run 把决定写进账本**——spec `docs/superpowers/specs/2026-10-18-control-run-decisions-design.md`（**§10 审后修订优先于正文**）、计划 `docs/superpowers/plans/2026-10-18-control-run-decisions.md`（12 个任务，Task 12 等 ccloop）。**先实施这份。**
   2. **纠正 ⇒ 独立 debug task**——spec `…/2026-10-18-correction-debug-task-design.md`（**§12 审后修订优先**）、计划 `…/plans/2026-10-18-correction-debug-task.md`（15 个任务，依赖第 1 份的接口；两份计划末尾同一节「Cross-plan resolutions」裁了六处接缝）。
-  3. **ccloop：Codex 阶段隔离**（item 3）——spec 在 ccloop main（`docs/superpowers/specs/2026-10-18-codex-phase-isolation-design.md`）；计划在 ccloop 分支 `codex/codex-phase-isolation-plan`（工作树 `ccloop-wt-iso-plan`，**未合**：ccloop 自己的 Rule 13 仍要人逐次点头合并）。
+  3. **ccloop：Codex 阶段隔离**（item 3）——spec 在 ccloop main（`docs/superpowers/specs/2026-10-18-codex-phase-isolation-design.md`）；计划 `docs/superpowers/plans/2026-10-18-codex-phase-isolation.md`（会话 `1710772d` 已 `--ff-only` 合进 ccloop main，分支与工作树已删）。
 - **人的裁定**（原话都在各 spec §2，不复述）：纠正派给独立 debug agent（默认原 agent＋模型、必须新 session、人可换）；`undo.how` 人填可选、不填由机器写；合入才算关闭、**不加「等待合并」状态**；纠正也可指向 run（本轮只做 `decisionId` 与「被拒决定」两种，裸 run 目标延后——人说「当前基本无效」）；以 agent 报的决定为主、代码模板这轮只接「自动调和」；账本在目标仓 `.decisions/`、随落地提交走；过不了撤销检查的决定 task 照常完成、UI 显示「需要人确认」；Codex 阶段不带任何个人 skills／AGENTS.md／hooks／MCP，命令仍用真 HOME。
 - **`goal.md` 新增两条操作原则**：§1.1「agent 能做的尽量替人做、人少填、保留改默认值」；§1.2「所有动作在 Web UI 能完成、agent 通路能走完全流程、不依赖命令行」。新设计的完成判据要点名 UI 与 agent 通路。
 - **Tier 0 闸门放宽**（主题行 `feat(gate): let agents do the forms git protects; keep push and forced forms Tier 0`，闸门 spec §11）：agent 现在可以 `git merge --ff-only`（含进 main）、`git branch -d`、不带 force 的 `git worktree remove`；**push 仍由人做，且人统一择时推——不要提醒人 push**。
@@ -139,8 +139,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.1 人做的（agent 不提醒、不代做）
 
-- **push**：人统一择时推三仓，agent **不提醒**、不给 push 命令。合入 main（`--ff-only`）、删已合并分支、删干净 worktree，agent 在 **Orca** 里自己做；**ccloop／ccmem 的规则仍要人逐次点头合并**（要不要同步放宽，待人裁，§八）。
-- **ccloop 分支 `codex/codex-phase-isolation-plan`**（Codex 阶段隔离计划）待人合入。
+- **push**：人统一择时推三仓，agent **不提醒**、不给 push 命令。合入 main（`--ff-only`）、删已合并分支、删干净 worktree，agent 在 **Orca** 里自己做；ccloop／ccmem 已对齐（人 2026-10-18 会话 `1710772d`），agent 同样可做这三种形式。
 - **删**（人做；会话 `a3b2a7a7` 2026-10-18 现核的清单）：
   - `~/.cache/ccloop/agent-catalog/` **整个目录不能删**（在用）；只删两项：`agent-catalog/769de7de3225c97b1234142ba6835ab7aaecfd0d77e371c662ca57bf9607b532.json` 与目录 `agent-catalog/codex-home/bf5335273626c4675a00cca1a384456ab917ed8333815b54b89e45b57670b993`（内含指向 `~/.codex/{auth.json,config.toml}` 的软链，`rm -rf` 只删链）。
   - `/private/tmp`：`mutp-swWu`、`acc-xpI0`、`mut-*` ×10、`org6-nP1k`／`org7-3oVo`／`org8-ulmF`、空目录 `cc-r-*`、`cc-t-*`、`cc-gate3/4/5-*`。`ccb6-qswQ`（pin 的 ccloop build）留到 codex 估算补跑之后。
@@ -152,7 +151,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 1. **实施「控制 run 写决定」**：计划 `docs/superpowers/plans/2026-10-18-control-run-decisions.md`。先读 spec §10 与计划末尾「Cross-plan resolutions」。Task 4 会改约 9 个钉 schema 13 的既有测试（计划里列了，先现测）。Task 12 等 ccloop。只测 `local` 合入，`push-*` 要在报告里写明未测。
 2. **实施「纠正 ⇒ debug task」**：计划 `…/2026-10-18-correction-debug-task.md`，**第 1 份合进 main 之后**；Task 1 的前置脚本先跑（名字对不上就停）。付费端到端一次要人点头。
-3. **ccloop Codex 阶段隔离**（人合入 ccloop 计划分支后）：在 ccloop 里按它自己的规则做；**Task 4 Step 6 是停止点**——预言 `tests/control/codexSkillsFailureWorker.test.ts` 两条会红（夹具 wrapper 不答 `mcp list` 等），改夹具要人逐条点名（ccloop Rule 15）；Task 7 付费一次要人点头。
+3. **ccloop Codex 阶段隔离**（计划已在 ccloop main）：在 ccloop 里按它自己的规则做；**Task 4 Step 6 是停止点**——预言 `tests/control/codexSkillsFailureWorker.test.ts` 两条会红（夹具 wrapper 不答 `mcp list` 等），改夹具要人逐条点名（ccloop Rule 15）；Task 7 付费一次要人点头。
 4. **ccloop 那半：agent 在结果里报 `decisions[]` 与 `debug`**（`choseInstead`、`reproTests`、`reproCommand`、`reproduction`）——在 ccloop 仓走 brainstorming；做完才能解第 1 份计划的 Task 12（对真输出的契约测试）。
 5. **排队估算 `withdrawn` 终态**（§3.3，人已裁、未实施）。
 6. **设计轮**（先 brainstorming，按人定的顺序；有前提 spec 要先定时与人商量顺序）：
@@ -181,7 +180,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 1. **方向不重开**（人 2026-09-19）：Orca 控制 ccloop，agent 适配留在 ccloop；Web 是人的主要入口（Web > CLI）；ccmem 是决策记忆系统。长期 agent 优先级 Claude Code > Codex CLI > OpenCode > oh-my-pi > pi。G1–G6 全文在 `goal.md` §8（引用引编号）。
 2. **权限模型**：Tier 0 机制禁止／Tier 1 自决留痕／Tier 2 不记录；`undo.how` 说不清 ⇒ 降级 Tier 0。**人裁的触发条件是「两个事实打架且能摆出两边」**，不是「agent 不确定」。
-3. **台账**：git 为真相源＋DB 做索引；每个 agent 只写 `.decisions/<run-id>.jsonl`（⚠️ 2026-10-18 的决定 spec 改为 **agent 在结果里报、由 Orca 写**，agent 不直接写账本）；不存 commit hash（⚠️ 同一 spec §10.6 让 `evidence` 带 `attemptSha`，与这条冲突，**待人审**，§八）；按做决策那轮的 run id 署名。**`overturned` 不许 agent 写**（要 `correctionId`，correction 是人的日志）。对照样本由 decision＋correction 拼出。`projectKey`＋`decisionId` 联合键；⚠️ Orca 抄了一份 `normalizeRemoteUrl`，**改任一侧要双方核对**。
+3. **台账**：git 为真相源＋DB 做索引；每个 agent 只写 `.decisions/<run-id>.jsonl`（⚠️ 2026-10-18 的决定 spec 改为 **agent 在结果里报、由 Orca 写**，agent 不直接写账本）；不存 commit hash——**已收窄**（人 2026-10-18 会话 `1710772d` 同意：Orca 落地时写的不动 sha `attemptSha` 可进 `evidence` 与生成的 `undo.how`，agent 自填 hash 仍禁；台账 spec ERRATUM 8）；按做决策那轮的 run id 署名。**`overturned` 不许 agent 写**（要 `correctionId`，correction 是人的日志）。对照样本由 decision＋correction 拼出。`projectKey`＋`decisionId` 联合键；⚠️ Orca 抄了一份 `normalizeRemoteUrl`，**改任一侧要双方核对**。
 4. **依赖**：ccloop 走 npm GitHub 依赖（`github:blrbiran/ccloop#<commit>`，只用 `scripts/pin-ccloop.mjs` 重钉，**且只在人推了 ccloop 之后**——npm 装不到 GitHub 没有的东西）；`ORCA_CCLOOP_BIN` 只是本地覆盖。ccmem 不 vendor；都不用 submodule。`CLAUDE.md` ≤ 200 行（verify 断言）。
 5. **并行**：写集＝`targetPaths ∪ allowlistPaths`，相交 ⇒ 串行；但冲突检测／分类／解决／验证才是主干，写集判据只是优化。解冲突的不能是当事任务本身。合并进集成分支＝Tier 1，进 main／push＝Tier 0。
 6. **面板**：后端 express、前端 React；**六个分区始终挂载，非当前区只由 `styles.css` 的 `.section-pane:not([data-active="true"])` 隐藏**，不许条件渲染／`hidden` （改了会让 16 条既有判据红）；有副作用的分区按「第一次激活」才请求。`orca panel` 的 ready 行一个字节都不能改（`verify-panel.ts` 正则、`endToEnd`、`controlShutdown` 都钉着），给人看的提示写 stderr。深色 token 被 `web/tests/contrast.test.ts` 按 WCAG 比值钉着，**别往暗里调**。kind 重要性只是 UI 序（`web/src/kindRank.ts`）。**改 UI 先读 `web/DESIGN.md`**（2026-10-14 精修两轮的规则本）：颜色只由 `data-tone="info|ok|warn|danger"` 给（role 只管语义，无 tone 的 `role=alert` 仍红）；只有 `.btn-primary` 填色、每个视图一个主按钮；字号 14/18/22；浅色暖纸被 `lightTheme.test.ts` 钉、深色中性石墨被 `contrast.test.ts` 钉。导航红点只对真告警亮：「无执行端口」是琥珀 note，连它引出的 agents 读 422 也不算面板告警；info 色的 `refetchRequired` 也不点红点（提交 `fix(web): stop a projection refetch from lighting the red tasks dot`）；唯一已知例外：每次加载头 3–5 s 闪一下红色「server reset required」（首次 summary 读按规格就是 resetRequired；人在会话 fb98aa31 裁定保留规格行为）。
@@ -196,7 +195,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 5.3 边界
 
-- *** **push 由人做**（人统一择时推，agent 不提醒）。*** 自 `feat(gate): let agents do the forms git protects; …` 起，agent 在 Orca 里可以 `git merge --ff-only`（含进 main）、`git branch -d`、不带 force 的 `git worktree remove`；强制形式（`-D`、`-d -f`、`remove --force`、`prune`、非 ff 合入 main、`gh pr merge`）仍被闸门拦（CLAUDE.md Rule 15，闸门 spec §11）。ccloop／ccmem 自己的规则仍要人逐次点头合并。
+- *** **push 由人做**（人统一择时推，agent 不提醒）。*** 自 `feat(gate): let agents do the forms git protects; …` 起，agent 在 Orca 里可以 `git merge --ff-only`（含进 main）、`git branch -d`、不带 force 的 `git worktree remove`；强制形式（`-D`、`-d -f`、`remove --force`、`prune`、非 ff 合入 main、`gh pr merge`）仍被闸门拦（CLAUDE.md Rule 15，闸门 spec §11）。ccloop／ccmem 已对齐同一组形式（会话 `1710772d`）。
 - **操作原则**（`goal.md` §1.1、§1.2，人 2026-10-18）：agent 能做的替人做、人少填、保留改默认值；所有动作在 Web UI 能完成、agent 通路能走完，不依赖命令行。
 - **本仓库的规则不外溢**到 ccloop／ccmem／syncskill；对姊妹仓**先报再动、守它们自己的规则**（人 2026-09-03「需要时允许改」），push 仍每次单独授权。ccloop 改既有判据要人**逐条点名**（ccloop 人裁 88／Rule 15）——「按你的建议办」不是改判据的授权。
 - **Rule 17**：写仓库外（`~/.orca`）的判据必须改道；新建目录 0700、文件 0600 显式给；已存在的文件不改 mode。仓库外路径的缺省值一律从**传入的 env** 推，不用 `os.homedir()`。
@@ -343,13 +342,12 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
+- ✅ **会话 `1710772d`（2026-10-18）人已回复下面这批**：`attemptSha` 冲突按控制器建议（台账 spec ERRATUM 8）；其余控制器决定全部同意；姊妹仓合并规则已对齐（ccloop／ccmem `CLAUDE.md` 各加一行，`docs(rules): let agents do the merge forms git protects…`）；人原话「这个 session 中的必要 test 都允许改，过程中你可能不止需要改这一处」——**只对会话 `1710772d` 有效**，改了哪些既有判据要逐条记进台账。人另提：「agent 工作能被确定的代码逻辑替代的，尽量用代码实现」（要出候选清单）；Decisions 页「裁决好的 decision 无法查看，需要能查看并反悔」。下面原条目保留到本会话收尾再删。
 - **本会话 `a3b2a7a7` 请人审的控制器决定**（人授权「这一轮有问题先按你的建议执行、最后报我审」；都已写进文档、未实施，可逆）：
   - 决定 spec §10（审后修订）与 debug spec §12 的全部条目；两份计划末尾「Cross-plan resolutions」六条（尤其：所有记录纠正的路径 `by` 用面板解析出的人的身份；CLI `--close` 仍只收决定、web `correction-close` 能关「被拒决定」类纠正）。
   - 计划起草席自定、控制器采纳的：关闭判定改为「目标分支的树里有关闭行」（`squash` 合入下祖先判断永不成立）；复现检查的基准是 debug run 自己的 base；`undo.how` 人没填时由 **Orca 代码**生成 `git revert --no-edit <attemptSha>`（不是 agent 写）。
-  - ⚠️ **与既有裁定冲突**：决定 spec §10.6 让账本 `evidence` 带 `attemptSha`，§5.2 第 3 条是「不存 commit hash」。
   - 裸 run 目标（task 旁的「纠正」按钮）本轮延后。
   - ccloop 计划：错误码家族 `codex-phase-isolation-*`；`HOME` 为空或不是绝对路径时拒绝阶段；`features.hooks=false` 每次都发。
-- **ccloop／ccmem 的合并规则要不要与 Orca 新闸门对齐**（ccloop CLAUDE.md Rule 13 仍要人逐次点头合并；Orca Rule 16 不让 Orca 规则外溢）。
 - **ccloop 计划 Task 4 Step 6**：预言变红的 `tests/control/codexSkillsFailureWorker.test.ts`（夹具 wrapper 要转发非 `exec` 调用）与语义已变的 `tests/runtime/codex/extraEnv.test.ts`「sets CODEX_HOME from the installation's configDir…」——改要人逐条点名。
 - **付费**（每一次先问）：§4.2 第 7 条。
 - **ccmem embedding 账号无额度**。
