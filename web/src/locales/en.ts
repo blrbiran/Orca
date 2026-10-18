@@ -1199,6 +1199,7 @@ export const enErrors: Record<string, string> = {
   "correction-already-closed": "This correction is already closed: its fix is in the ledger of {{detail}}, so no debug group is opened.",
   "correction-repository-unknown": "No repository this panel holds belongs to this correction's project ({{detail}}).",
   "correction-decision-not-integrated": "The corrected decision is not in the ledger of the checked-out branch yet ({{detail}}); integrate its group first, then open the debug group.",
+  "debug-checks-unnamed": "This debug task's checks are still the placeholder, because no original contract was found. Name a real check before confirming or starting it.",
   "debug-group-not-reopenable": "This correction's newest debug group is still live. Stop or archive it before reopening.",
   "correction-withdrawn": "This correction was withdrawn, so no debug group is opened for it.",
   "original-decision-not-found": "The decision this correction names is in no ledger Orca can read: {{detail}}",

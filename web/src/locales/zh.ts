@@ -1134,6 +1134,7 @@ export const zhErrors: Record<string, string> = {
   "correction-already-closed": "这条纠正已经关闭：它的修正已在 {{detail}} 的台账里，不再开调试组。",
   "correction-repository-unknown": "这个面板管理的仓库里没有属于这条纠正所在项目（{{detail}}）的。",
   "correction-decision-not-integrated": "被纠正的决定还不在当前检出分支的台账里（{{detail}}）；请先把它所在的组集成，再开调试组。",
+  "debug-checks-unnamed": "这个调试任务的检查项还是占位符（没有找到原合同）。请先写明一个真实的检查，再确认或开始。",
   "debug-group-not-reopenable": "这条纠正最新的调试组还在进行中。请先停止或归档它，再重新打开。",
   "correction-withdrawn": "这条纠正已被撤回，不为它开调试组。",
   "original-decision-not-found": "Orca 能读到的台账里都没有这条纠正指向的决定：{{detail}}",

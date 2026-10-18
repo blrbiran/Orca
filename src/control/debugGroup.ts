@@ -16,12 +16,12 @@ import { withCommandContext } from "./commandClient.js";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { correctionClosedAtRef } from "./correctionState.js";
 import { collectDebugInput, PENDING_DECISION_NOT_FOUND, type DebugInputV1 } from "./debugInput.js";
-import { buildDebugPlanSource, DEBUG_TEST_DIRS, debugPlanId } from "./debugPlan.js";
+import { buildDebugPlanSource, DEBUG_DEFAULT_BUILD_TEST_COMMANDS, DEBUG_TEST_DIRS, debugPlanId } from "./debugPlan.js";
 import { ControlError } from "./errors.js";
 import { describeError, groupStopped } from "./executionDriver.js";
 import { findDecision, integrationTargetRef } from "./ledgerAtRef.js";
 import { normalizeControlPlan, writeImportedPlan } from "./planImport.js";
-import { readVersions } from "./queries.js";
+import { readArchivedPlan, readVersions } from "./queries.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import type { ControlStore } from "./store.js";
 import type { WebCommandResult, WebServiceDeps } from "./webService.js";
@@ -65,6 +65,20 @@ export function readDebugMark(group: unknown): DebugMark | null {
   const parsed = debugMarkSchema.safeParse((group as { debug: unknown }).debug);
   if (!parsed.success) throw new ControlError("recovery-blocked", "debug-mark-invalid");
   return parsed.data as DebugMark;
+}
+
+/**
+ * Controller ruling (Task 4): a debug group whose task still lists the placeholder check (no original contract was found)
+ * is neither confirmed nor started; the agent could not be held to a check nobody named. A group no correction opened is
+ * unaffected. Called inside the confirm and start transactions, so the refusal is booked like the others.
+ */
+export function refuseUnnamedDebugChecks(store: ControlStore, groupId: string, group: unknown): void {
+  if (readDebugMark(group) === null) return;
+  const placeholder = new Set<string>(DEBUG_DEFAULT_BUILD_TEST_COMMANDS);
+  for (const task of readArchivedPlan(store, groupId).plan.tasks) {
+    const contract = JSON.parse(task.originalContractCanonicalJson) as { verification: { requiredChecks: string[] } };
+    if (contract.verification.requiredChecks.some((check) => placeholder.has(check))) throw new ControlError("debug-checks-unnamed", task.taskId);
+  }
 }
 
 const baseId = (correctionId: string): string => `debug-${correctionId}`;

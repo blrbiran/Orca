@@ -8,7 +8,7 @@ import { applyArchiveGroup } from "../../src/control/archiveGroup.js";
 import { lookupCommandResult } from "../../src/control/commandLedger.js";
 import { collectDebugInput, DEBUG_INPUT_SCHEMA, type DebugInputV1 } from "../../src/control/debugInput.js";
 import { archiveUnstartedDebugGroups, debugGroupIdFor, debugGroupIds, liveDebugGroups, readDebugMark } from "../../src/control/debugGroup.js";
-import { ControlError } from "../../src/control/errors.js";
+import { ControlError, durableCommandErrorStatuses } from "../../src/control/errors.js";
 import { ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK } from "../../src/control/estimator.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
 import { newGroupIntegration } from "../../src/control/integrationScheme.js";
@@ -37,6 +37,7 @@ import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { controlWorkspaceRoots } from "../../src/control/workspace.js";
 import { FAKE_CCLOOP_RUN } from "./fixtures/driverHarness.js";
 import { fakeCcloopPort } from "./fixtures/driverPort.js";
+import { DEBUG_DEFAULT_BUILD_TEST_COMMANDS } from "../../src/control/debugPlan.js";
 import { FIXTURE_AGENT, profileSnapshot, webFixture } from "./fixtures/web.js";
 
 // Debug task plan Task 6: `correction-debug-open`. Every assertion reads the control store, a route's answer or git;
@@ -439,23 +440,23 @@ describe("the correction-debug-open route", () => {
   });
 });
 
+const confirmDebug = async (w: World, groupId: string) => {
+  const frozen = { profileId: "all", hash: w.frozen.profileHash };
+  const result = await w.service.confirm({ schema: "orca-raw-command-v1", commandId: `confirm-${groupId}`, actorId: "human", expectedRevision: w.revisionOf(groupId), verb: "confirm",
+    target: { kind: "group", groupId }, payload: { planHash: readArchivedPlan(w.store, groupId).planHash, proposalVersion: readBudgetProposal(w.store, groupId).proposalVersion, budgetMode: "soft",
+      profileIds: { estimator: null, worker: frozen.profileId, handoff: frozen.profileId, goalReview: frozen.profileId },
+      profileHashes: { estimator: null, worker: frozen.hash, handoff: frozen.hash, goalReview: frozen.hash }, contextPolicy: { handoffAtContextTokens: 800_000 },
+      selectionsHash: (await resolveGroupSelections({ store: w.store, port: w.deps.port }, groupId, "human")).selectionsHash ?? "0".repeat(64) } });
+  return result;
+};
+const startDebug = (w: World, groupId: string) => w.service.start({ schema: "orca-raw-command-v1", commandId: `start-${groupId}`, actorId: "human",
+  expectedRevision: w.revisionOf(groupId), verb: "start", target: { kind: "group", groupId }, payload: {} });
+
 /**
  * Debug task plan Task 7 (design §4.4): the debug run is a fresh session. Open, confirm and start a debug group, drive
  * its claimed run through a synthetic ccloop, and read what the claim and the start envelope carried.
  */
 describe("the debug run is a fresh session (debug task Task 7)", () => {
-  const confirmDebug = async (w: World, groupId: string) => {
-    const frozen = { profileId: "all", hash: w.frozen.profileHash };
-    const result = await w.service.confirm({ schema: "orca-raw-command-v1", commandId: `confirm-${groupId}`, actorId: "human", expectedRevision: w.revisionOf(groupId), verb: "confirm",
-      target: { kind: "group", groupId }, payload: { planHash: readArchivedPlan(w.store, groupId).planHash, proposalVersion: readBudgetProposal(w.store, groupId).proposalVersion, budgetMode: "soft",
-        profileIds: { estimator: null, worker: frozen.profileId, handoff: frozen.profileId, goalReview: frozen.profileId },
-        profileHashes: { estimator: null, worker: frozen.hash, handoff: frozen.hash, goalReview: frozen.hash }, contextPolicy: { handoffAtContextTokens: 800_000 },
-        selectionsHash: (await resolveGroupSelections({ store: w.store, port: w.deps.port }, groupId, "human")).selectionsHash ?? "0".repeat(64) } });
-    return result;
-  };
-  const startDebug = (w: World, groupId: string) => w.service.start({ schema: "orca-raw-command-v1", commandId: `start-${groupId}`, actorId: "human",
-    expectedRevision: w.revisionOf(groupId), verb: "start", target: { kind: "group", groupId }, payload: {} });
-
   it("claims its own run id and sends no input checkpoint; continuing from the original run is refused by identity", async () => {
     const w = await world(); try {
       const cid = w.correction.id, groupId = opened(await w.open(cid)).groupId;
@@ -488,5 +489,65 @@ describe("the debug run is a fresh session (debug task Task 7)", () => {
       expect(() => claimContinuation(w.store, { groupId, predecessorRunId: RUN, workItemId: "debug", taskId: "debug", graphVersion: run.graphVersion, targetVersion: run.targetVersion,
         commandId: "continue-original", expectedRevision: w.revisionOf(groupId), by: "human" })).toThrowError(expect.objectContaining({ code: "continuation-identity-conflict" }));
     } finally { await w.dispose(); }
+  });
+});
+
+describe("a debug group whose checks are still the placeholder is not confirmed or started (debug task Task 7, controller ruling)", () => {
+  const PLACEHOLDER = DEBUG_DEFAULT_BUILD_TEST_COMMANDS[0];
+  /** A debug group with no original contract: its correction names a pending item of a run the control store never saw. */
+  async function placeholderGroup(w: World): Promise<string> {
+    // A run with no task (an estimate's) is no original run: the input has no contract, so the plan keeps the placeholder.
+    w.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,?,?,0,?)").run("run-9", "g", "estimate", 1, JSON.stringify({ runId: "run-9", groupId: "g", workItemId: "estimate", taskId: null, generation: 1, state: "settled" }));
+    insertPendingDecisions(w.store, "g", "run-9", [{ pendingId: pendingIdOf("run-9", 0), ledgerRun: "run-9", entryIndex: 0, entry: { question: "q" }, reason: "refused", at: "2026-10-18T00:00:00.000Z", evidence: [] }]);
+    const pending = await w.record({ runId: "run-9", pendingId: pendingIdOf("run-9", 0) });
+    const groupId = opened(await w.open(pending.id)).groupId;
+    expect(readArchivedPlan(w.store, groupId).plan.tasks[0]!.originalContractCanonicalJson).toContain(PLACEHOLDER);
+    return groupId;
+  }
+  const proposalState = (w: World, groupId: string) => readBudgetProposal(w.store, groupId).state;
+
+  it("refuses confirm, booked with its 409 status, and leaves the proposal unconfirmed", async () => {
+    const w = await world(); try {
+      const groupId = await placeholderGroup(w);
+      const answer = await confirmDebug(w, groupId);
+      expect(refusal(answer)).toBe("debug-checks-unnamed");
+      expect(durableCommandErrorStatuses["debug-checks-unnamed"]).toBe(409);
+      expect(lookupCommandResult(w.store, groupId, `confirm-${groupId}`)!.body).toMatchObject({ error: { code: "debug-checks-unnamed" } });
+      expect(proposalState(w, groupId)).not.toBe("confirmed");
+    } finally { await w.dispose(); }
+  });
+
+  it("refuses start, booked, for a ready group whose plan is the placeholder", async () => {
+    const w = await world(); try {
+      const groupId = await placeholderGroup(w);
+      // Confirm refuses this group, so the mark is lifted for the confirmation and put back: start is the second line of defence.
+      const marked = w.body(groupId), { debug, ...unmarked } = marked;
+      w.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(unmarked), groupId);
+      expect(await confirmDebug(w, groupId)).toMatchObject({ result: { kind: "confirmed" } });
+      w.store.db.prepare("UPDATE groups SET body=json_set(body,'$.debug',json(?)) WHERE id=?").run(JSON.stringify(debug), groupId);
+      expect(readDebugMark(w.body(groupId))).not.toBeNull();
+      const answer = await startDebug(w, groupId);
+      expect(refusal(answer)).toBe("debug-checks-unnamed");
+      expect(lookupCommandResult(w.store, groupId, `start-${groupId}`)!.body).toMatchObject({ error: { code: "debug-checks-unnamed" } });
+    } finally { await w.dispose(); }
+  });
+
+  it("lets a debug group with a named check be confirmed and started", async () => {
+    const w = await world(); try {
+      const groupId = opened(await w.open(w.correction.id)).groupId;
+      expect(readArchivedPlan(w.store, groupId).plan.tasks[0]!.originalContractCanonicalJson).not.toContain(PLACEHOLDER);
+      expect(await confirmDebug(w, groupId)).toMatchObject({ result: { kind: "confirmed" } });
+      expect(await startDebug(w, groupId)).toMatchObject({ result: { kind: "scheduled" } });
+    } finally { await w.dispose(); }
+  });
+
+  it("does not touch a group no correction opened, whatever its checks say", async () => {
+    const h = await webFixture(undefined, [{ taskId: "a" }], { requiredChecks: [PLACEHOLDER] }); try {
+      const service = new WebControlService({ ...h.deps, knownRepository: (repoId: string) => repoId === "repo" });
+      expect(readArchivedPlan(h.store, "g").plan.tasks[0]!.originalContractCanonicalJson).toContain(PLACEHOLDER);
+      expect(readDebugMark(JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)))).toBeNull();
+      expect(await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), budgetMode: "soft" }))).toMatchObject({ result: { kind: "confirmed" } });
+      expect(await service.start(h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
+    } finally { await h.dispose(); }
   });
 });
