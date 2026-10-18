@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { deriveCorrectionId } from "../../src/corrections/fields.js";
 import { correctionsFile } from "../../src/corrections/paths.js";
 import { readCorrections } from "../../src/corrections/store.js";
+import { withdrawCorrection } from "../../src/corrections/withdrawals.js";
 import {
   captureStreams,
   closeArgs,
@@ -458,6 +459,42 @@ describe("orca correct --close / closing new — guards, lock, order, single wri
           const lines = await readFixFile(target.decisionsDir, [f]);
           expect(lines.some((l) => (l as { ev: unknown }).ev === "overturned")).toBe(true);
         }
+      });
+    } finally {
+      await target.cleanup();
+    }
+  });
+
+  // Decisions review spec §5.3: a withdrawn correction is not closed by --close. Without this refusal it would land an
+  // overturn the person took back, and the correction would count as both withdrawn and closed.
+  it("refuses --close on a withdrawn correction as correction-withdrawn, naming who withdrew it and when", async () => {
+    const target = await makeTargetRepo();
+    try {
+      await withCorrectionsDir(async (dir) => {
+        const rec = await captureStreams(() =>
+          runCli([
+            "correct", "--repo", target.path, "--by", "amy",
+            "--decision", "orca-dev-1/1", "--kind", "not_my_taste", "--because", "进程内互斥跨进程无效",
+            "--chose-instead", "改用文件租约", "--record-only",
+          ]),
+        );
+        expect(rec.result).toBe(0);
+        const id = (await readCorrections(dir))[0].id;
+        await withdrawCorrection(dir, { correctionId: id, by: "amy", at: "2026-10-18T03:04:05.000Z", isClosed: () => false });
+
+        const before = await ledgerFiles(target.decisionsDir);
+        const { result: rc, stderr } = await captureStreams(() =>
+          runCli([
+            "correct", "--repo", target.path, "--by", "amy", "--close", id,
+            "--undo-how", "删掉 src/scheduler/pool.ts 里的那处互斥",
+          ]),
+        );
+        expect(stderr).toContain("rejected: correction-withdrawn:");
+        expect(stderr).toContain("2026-10-18T03:04:05.000Z");
+        expect(stderr).toContain("record a new correction");
+        expect(rc).toBe(1);
+        expect(await ledgerFiles(target.decisionsDir)).toEqual(before);
+        expect(existsSync(join(target.path, ".git", "orca-lock"))).toBe(false);
       });
     } finally {
       await target.cleanup();

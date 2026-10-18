@@ -4,10 +4,20 @@ import { CorrectRejection } from "./rejection.js";
 import { withStoreLock } from "./storeLock.js";
 import { correctionSchema } from "./schema.js";
 import type { Correction } from "./schema.js";
+import { readWithdrawals, withdrawnIds } from "./withdrawals.js";
 
 export const CORRECTION_ALREADY_RECORDED = "correction-already-recorded";
 export const DUPLICATE_CORRECTION_ID = "duplicate-correction-id";
 export const CORRECTION_NOT_FOUND = "correction-not-found";
+/**
+ * Control run decisions plan Task 10 (debug-task design §12.3): a correction of a decision a landing refused names
+ * `{ runId, pendingId }`, and there is no ledger row for --close to overturn. Closing it is that design's own path.
+ *
+ * Decisions review spec §5.2: moved here from correct.ts (which re-exports it) because withdrawals.ts throws it too,
+ * and importing it from correct.ts would pull the ledger writer and the repo lock into every reader of the
+ * withdrawals store.
+ */
+export const CORRECTION_TARGET_NOT_A_DECISION = "correction-target-not-a-decision";
 
 export async function readCorrections(dir: string): Promise<Correction[]> {
   const text = await readFile(correctionsFile(dir), "utf8").catch((error) => {
@@ -81,8 +91,13 @@ export async function recordCorrection(
     }
 
     if (!opts.again) {
+      // Decisions review spec §5.3: a withdrawn correction no longer blocks a fresh one, so recording again after a
+      // withdrawal needs no --again. Read inside this same hold, so a withdrawal cannot land between the two reads.
+      // An unreadable withdrawals file refuses (correction-withdrawals-unreadable) rather than reading as "none".
+      const withdrawn = withdrawnIds(await readWithdrawals(dir));
       const existing = rows.find(
         (candidate) =>
+          !withdrawn.has(candidate.id) &&
           candidate.projectKey === row.projectKey &&
           candidate.decisionId === row.decisionId &&
           // Control run decisions plan Task 10: the target is decisionId or { runId, pendingId } (schema.ts).

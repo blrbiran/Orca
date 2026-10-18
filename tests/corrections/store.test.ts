@@ -2,7 +2,7 @@ import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CORRECTIONS_FILE_MODE, correctionsFile } from "../../src/corrections/paths.js";
+import { CORRECTIONS_FILE_MODE, correctionsFile, withdrawalsFile } from "../../src/corrections/paths.js";
 import { withStoreLock } from "../../src/corrections/storeLock.js";
 import { CorrectRejection } from "../../src/corrections/rejection.js";
 import {
@@ -13,6 +13,7 @@ import {
   recordCorrection,
 } from "../../src/corrections/store.js";
 import { deriveCorrectionId } from "../../src/corrections/fields.js";
+import { CORRECTION_WITHDRAWALS_UNREADABLE, withdrawCorrection } from "../../src/corrections/withdrawals.js";
 import type { Correction } from "../../src/corrections/schema.js";
 
 const tempDir = () => mkdtemp(join(tmpdir(), "orca-store-"));
@@ -128,6 +129,30 @@ describe("corrections store (spec §4, §4.1, §14.6, §14.7)", () => {
     } finally {
       process.umask(previousUmask);
     }
+  });
+
+  // Decisions review spec §5.3: a withdrawn correction no longer counts as "already corrected", so a fresh one on the
+  // same decision by the same person needs no --again. The withdrawn row itself stays (append-only).
+  it("records a fresh correction without --again once the earlier one is withdrawn", async () => {
+    const dir = await tempDir();
+    const first = correction();
+    await recordCorrection(dir, first, { again: false });
+    await withdrawCorrection(dir, { correctionId: first.id, by: "amy", at: "2026-09-07T00:00:01.000Z", isClosed: () => false });
+
+    const second = correction({ at: "2026-09-07T00:00:02.000Z", because: "换一种说法" });
+    await recordCorrection(dir, second, { again: false });
+    expect((await readCorrections(dir)).map((r) => r.id)).toEqual([first.id, second.id]);
+  });
+
+  // An unreadable withdrawals file must refuse, never read as "nothing is withdrawn": that reading would turn every
+  // withdrawn correction back into an "already corrected" block, and the person would be pushed to --again.
+  it("refuses to record while the withdrawals file is unreadable", async () => {
+    const dir = await tempDir();
+    await writeFile(withdrawalsFile(dir), "{not json\n", { mode: CORRECTIONS_FILE_MODE });
+    await expect(recordCorrection(dir, correction(), { again: false })).rejects.toMatchObject({
+      code: CORRECTION_WITHDRAWALS_UNREADABLE,
+    });
+    expect(await readCorrections(dir)).toEqual([]);
   });
 
   // 🔴 E10d — the read and the judgement are inside the SAME lock hold.

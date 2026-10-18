@@ -17,6 +17,12 @@ export function correctionsDir(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 export const correctionsFile = (dir: string): string => join(dir, "corrections.jsonl");
+/**
+ * Decisions review spec §5.1: correction withdrawals, beside corrections.jsonl and redirected with it by
+ * ORCA_CORRECTIONS_DIR. Registered out-of-repo write (Rule 17): written only by withdrawCorrection, under the same
+ * store lock, created 0600.
+ */
+export const withdrawalsFile = (dir: string): string => join(dir, "correction-withdrawals.jsonl");
 export const storeLockDir = (dir: string): string => join(dir, ".corrections-lock");
 
 /**

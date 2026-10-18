@@ -16,7 +16,9 @@ import { CorrectRejection } from "./rejection.js";
 import { namesDecision, type Correction } from "./schema.js";
 import { correctionRowFrom, recordNewCorrection } from "./record.js";
 import type { NewCorrectionInput } from "./record.js";
-import { loadCorrection } from "./store.js";
+import { CORRECTION_TARGET_NOT_A_DECISION, loadCorrection } from "./store.js";
+import { withStoreLock } from "./storeLock.js";
+import { CORRECTION_WITHDRAWN, readWithdrawals } from "./withdrawals.js";
 
 /**
  * Ruling 2 (task 9): these two are command-level refusals, so they are
@@ -28,8 +30,11 @@ export const MISSING_CHOSE_INSTEAD = "no-chose-instead";
 /**
  * Control run decisions plan Task 10 (debug-task design §12.3): a correction of a decision a landing refused names
  * `{ runId, pendingId }`, and there is no ledger row for --close to overturn. Closing it is that design's own path.
+ *
+ * Decisions review spec §5.2: now declared in store.ts, beside correction-not-found, because withdrawals.ts throws
+ * it too; re-exported here so this module's export surface is unchanged.
  */
-export const CORRECTION_TARGET_NOT_A_DECISION = "correction-target-not-a-decision";
+export { CORRECTION_TARGET_NOT_A_DECISION };
 
 /**
  * 記-2 / 闭-2: ONE read-only preflight, run by both modes (§14.3, third seat).
@@ -141,6 +146,20 @@ export async function correct(argv: string[], opts: { now?: () => Date } = {}): 
     let row: Correction;
     if (parsed.mode === "close-existing") {
       row = await loadCorrection(dir, parsed.correctionId);
+      // Decisions review spec §5.3: a withdrawn correction is not closed — the person took it back, and landing its
+      // overturn would make it count as both withdrawn and closed. The read takes the store lock for itself (a
+      // withdrawal's append must not be read half-written); it is a second hold, after loadCorrection's, and a
+      // withdrawal landing between the two is the same accepted window §5.2 records for the panel route.
+      const withdrawal = (await withStoreLock(dir, () => readWithdrawals(dir))).find(
+        (candidate) => candidate.correctionId === row.id,
+      );
+      if (withdrawal !== undefined) {
+        throw new CorrectRejection(
+          CORRECTION_WITHDRAWN,
+          `correction ${row.id} was withdrawn by ${withdrawal.by} at ${withdrawal.at}: --close refuses a ` +
+            `withdrawn correction. To overturn the decision after all, record a new correction`,
+        );
+      }
       if (!namesDecision(row)) {
         throw new CorrectRejection(
           CORRECTION_TARGET_NOT_A_DECISION,
