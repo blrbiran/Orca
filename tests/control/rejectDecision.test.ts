@@ -5,11 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readCorrections } from "../../src/corrections/store.js";
-import { prepareApproval } from "../../src/control/decisionCommands.js";
+import { applyRejectPendingDecision, prepareApproval, prepareRejection } from "../../src/control/decisionCommands.js";
+import { recordNewCorrection } from "../../src/corrections/record.js";
 import { readPendingDecision } from "../../src/control/pendingDecisions.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { controlWorkspaceRoots } from "../../src/control/workspace.js";
-import { controlRoot } from "../../src/panel/controlOptions.js";
+import { controlRepoKey, controlRoot } from "../../src/panel/controlOptions.js";
 import type { StartedPanel } from "../../src/panel/server.js";
 import { login, seedUser, sessionFor } from "../panel/fixtures/auth.js";
 import { boot, overSocket, useSocketPanels, workspace } from "../panel/fixtures/socketPanel.js";
@@ -84,6 +85,23 @@ describe("reject-pending-decision (control run decisions Task 10)", { timeout: 6
     } finally { await t.dispose(); }
   });
 
+  it("answers the same identity's double submit with its first correction, not a refusal", async () => {
+    // Review fix 2: two submits by one identity can both pass the existing-row lookup; the second's append is then
+    // refused by the store's "already corrected" check. The seam records the first submit's row in that window.
+    const t = await landedWithPending(); try {
+      const command = t.h.command("reject-pending-decision", { pendingId: t.pendingId });
+      let first = "";
+      const beforeRecord = async () => {
+        first = (await recordNewCorrection(t.dir, { projectKey: "example.invalid/o/r", runId: t.runId, pendingId: t.pendingId, kind: "wrong", because: "first", at: "2026-10-18T00:00:00.000Z", by: BY }, { again: false })).id;
+      };
+      const prepared = await prepareRejection(t.h.store, t.repo, { dir: t.dir, by: BY }, command, () => new Date("2026-10-18T00:00:01.000Z"), { beforeRecord });
+      // Mutation "drop the already-recorded branch": refused pending-decision-correction-failed:correction-already-recorded -> red.
+      expect({ prepared, rows: (await readCorrections(t.dir)).map((row) => row.id) }).toEqual({ prepared: { kind: "recorded", correctionId: first }, rows: [first] });
+      expect(applyRejectPendingDecision({ store: t.h.store }, command, prepared)).toMatchObject({ result: { kind: "pending-decision-rejected", correctionId: first } });
+      expect(readPendingDecision(t.h.store, t.pendingId)).toMatchObject({ state: "rejected", correctionId: first });
+    } finally { await t.dispose(); }
+  });
+
   it("rejects with no line of the human's", async () => {
     const t = await landedWithPending(); try {
       await t.reject({ pendingId: t.pendingId });
@@ -120,10 +138,8 @@ describe("reject-pending-decision (control run decisions Task 10)", { timeout: 6
   it("refuses an unknown item, an approved one, and a panel with no corrections store, by name", async () => {
     const t = await landedWithPending(); try {
       expect(await t.reject({ pendingId: "pending-nope-0" })).toMatchObject({ error: { code: "pending-decision-not-found" } });
-      expect(await t.reject({ pendingId: t.pendingId }, undefined, t.serviceAs(null))).toMatchObject({
-        error: { code: "pending-decision-correction-failed", message: "pending-decision-correction-failed:corrections-store-unconfigured" },
-      });
-      expect(await t.reject({ pendingId: t.pendingId }, undefined, t.serviceAs(BY, null))).toMatchObject({ error: { code: "pending-decision-correction-failed" } });
+      expect(await t.reject({ pendingId: t.pendingId }, undefined, t.serviceAs(null))).toMatchObject({ error: { code: "corrections-store-unconfigured" } });
+      expect(await t.reject({ pendingId: t.pendingId }, undefined, t.serviceAs(BY, null))).toMatchObject({ error: { code: "corrections-store-unconfigured" } });
       t.h.store.db.prepare("UPDATE pending_decisions SET state='approved' WHERE id=?").run(t.pendingId);
       expect(await t.reject({ pendingId: t.pendingId })).toMatchObject({ error: { code: "pending-decision-settled" } });
       expect(await readCorrections(t.dir)).toEqual([]);
@@ -161,5 +177,15 @@ describe("rejecting a pending decision is an owner's (control run decisions Task
     const routed = await owner.fetch("/api/control/groups/nogroup/decisions/reject", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "rd-o", expectedRevision: 0, payload }) });
     expect([routed.status, ((await routed.json()) as { error: { code: string } }).error.code]).toEqual([404, "group-not-found"]);
     expect(commandIds(w.state)).toContain("rd-o");
+    // Review fix 1: the panel hands its corrections store and identity to the service (server.ts -> assembly ->
+    // WebServiceDeps). A group with a plan repository reaches prepareRejection, which answers an unknown item by name;
+    // without the plumbing the answer is corrections-store-unconfigured.
+    const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
+    const db = new DatabaseSync(join(w.state, "control.sqlite"));
+    try {
+      db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES ('pg',0,1,?)").run(JSON.stringify({ groupId: "pg", plan: { repoId: controlRepoKey("proj") } }));
+    } finally { db.close(); }
+    const planned = await owner.fetch("/api/control/groups/pg/decisions/reject", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "rd-p", expectedRevision: 0, payload }) });
+    expect([planned.status, ((await planned.json()) as { error: { code: string } }).error.code]).toEqual([404, "pending-decision-not-found"]);
   });
 });

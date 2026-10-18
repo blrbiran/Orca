@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -83,15 +83,19 @@ describe("the corrections store's pending target (control run decisions Task 10)
     // no "unresolved decision" with an absent id is invented for them.
     await withCorrectionsDir(async (dir) => {
       const root = await mkdtemp(join(tmpdir(), "orca-metrics-root-"));
-      const repo = join(root, "a");
-      await mkdir(join(repo, ".decisions"), { recursive: true });
-      await git(repo, ["init", "-q"]);
-      await git(repo, ["remote", "add", "origin", "https://github.com/biran/a.git"]);
-      await recordNewCorrection(dir, { ...PENDING, projectKey: "github.com/biran/a" }, { again: false });
-      const obs = await collect({ root, repos: [], correctionsDir: dir, now: () => "2026-10-19T00:00:00.000Z" });
-      expect({ corrections: obs.corrections.length, unresolved: obs.unresolvedDecisions.length }).toEqual({ corrections: 0, unresolved: 0 });
-      const report = computeMetrics(obs);
-      expect([report.correction_rate.corrections_total_including_stale, report.backlog.open_corrections]).toEqual([0, 0]);
+      try {
+        const repo = join(root, "a");
+        await mkdir(join(repo, ".decisions"), { recursive: true });
+        await git(repo, ["init", "-q"]);
+        await git(repo, ["remote", "add", "origin", "https://github.com/biran/a.git"]);
+        await recordNewCorrection(dir, { ...PENDING, projectKey: "github.com/biran/a" }, { again: false });
+        const obs = await collect({ root, repos: [], correctionsDir: dir, now: () => "2026-10-19T00:00:00.000Z" });
+        expect({ corrections: obs.corrections.length, unresolved: obs.unresolvedDecisions.length }).toEqual({ corrections: 0, unresolved: 0 });
+        const report = computeMetrics(obs);
+        expect([report.correction_rate.corrections_total_including_stale, report.backlog.open_corrections]).toEqual([0, 0]);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
     });
   });
 });

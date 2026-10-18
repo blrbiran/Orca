@@ -1163,6 +1163,7 @@ export const enErrors: Record<string, string> = {
   "decision-approve-tip-moved": "The group's branch kept moving while the decision was being written. Try again.",
   // Control run decisions plan Task 10: rejecting a decision that did not land records a correction.
   "pending-decision-correction-failed": "The rejection could not be recorded as a correction, so the decision is still waiting: {{detail}}",
+  "corrections-store-unconfigured": "This panel was started without a corrections store or identity, so a rejection cannot be recorded. Restart it with --by.",
   "correction-target-not-a-decision": "This correction is about a decision that was never recorded, so there is no decision to overturn.",
   "labels-invalid": "The labels are not valid: {{detail}}",
   "labels-version-conflict": "The labels changed after you started your draft. Read them again, then save.",

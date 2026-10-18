@@ -1099,6 +1099,7 @@ export const zhErrors: Record<string, string> = {
   "decision-approve-tip-moved": "写入决定时组分支一直在变，请再试一次。",
   // Control run decisions plan Task 10: rejecting a decision that did not land records a correction.
   "pending-decision-correction-failed": "驳回没能记成一条纠正，这条决定仍在等待确认：{{detail}}",
+  "corrections-store-unconfigured": "这个面板启动时没有纠正存储或身份，无法记录驳回。请带上 --by 重启面板。",
   "correction-target-not-a-decision": "这条纠正针对的是一条从未记入台账的决定，没有可推翻的决定。",
   "labels-invalid": "标签不合法：{{message}}",
   "labels-version-conflict": "你开始草稿后标签已被改过，请重新读取后再保存。",

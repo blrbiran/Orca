@@ -80,7 +80,7 @@ export interface WebServiceDeps extends AsyncImportDeps {
   /**
    * Control run decisions plan Task 10: where reject-pending-decision records its correction (the panel's
    * correctionsDir, Rule 17), and as whom: the panel's resolved identity `/api/corrections` stamps (cross-plan
-   * resolution 1). Either absent, reject is refused pending-decision-correction-failed (corrections-store-unconfigured).
+   * resolution 1). Either absent, reject is refused corrections-store-unconfigured.
    */
   correctionsDir?: string;
   correctionsBy?: string;
@@ -706,7 +706,7 @@ export class WebControlService {
     const repoId = this.planRepository(command.target.groupId);
     const { correctionsDir: dir, correctionsBy: by } = this.deps;
     const prepared: RejectPrepared = repoId === null ? { kind: "refused", code: "pending-decision-not-found" }
-      : dir === undefined || by === undefined ? { kind: "refused", code: "pending-decision-correction-failed", detail: "corrections-store-unconfigured" }
+      : dir === undefined || by === undefined ? { kind: "refused", code: "corrections-store-unconfigured" }
       : await prepareRejection(this.store, this.repositoryPath(repoId), { dir, by }, command, this.deps.now ?? (() => new Date()));
     const release = this.deps.admissionGate?.enter();
     try {

@@ -1,7 +1,7 @@
 import { projectKeyOf } from "../corrections/projectKey.js";
 import { correctionRowFrom, recordNewCorrection } from "../corrections/record.js";
 import { CorrectRejection } from "../corrections/rejection.js";
-import { readCorrections } from "../corrections/store.js";
+import { CORRECTION_ALREADY_RECORDED, DUPLICATE_CORRECTION_ID, readCorrections } from "../corrections/store.js";
 import { appendEvents } from "../ledger/writer.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
@@ -161,6 +161,7 @@ const textOr = (value: unknown): string => (typeof value === "string" ? value : 
  */
 export async function prepareRejection(
   store: ControlStore, repo: string, corrections: { dir: string; by: string }, command: RejectPendingDecisionCommand, now: () => Date,
+  seams: { beforeRecord?: () => Promise<void> } = {},
 ): Promise<RejectPrepared> {
   const groupId = command.target.groupId;
   const { pendingId, because } = command.payload;
@@ -175,6 +176,7 @@ export async function prepareRejection(
     const projectKey = await projectKeyOf(repo);
     const existing = (await readCorrections(corrections.dir)).find((c) => c.projectKey === projectKey && c.pendingId === pendingId);
     if (existing !== undefined) return { kind: "recorded", correctionId: existing.id };
+    await seams.beforeRecord?.();
     const fields = (entry ?? {}) as { question?: unknown; chose?: unknown };
     const stored = await recordNewCorrection(corrections.dir, correctionRowFrom({
       projectKey, runId: row!.runId, pendingId, kind: "wrong",
@@ -183,6 +185,12 @@ export async function prepareRejection(
     }, now), { again: false });
     return { kind: "recorded", correctionId: stored.id };
   } catch (error) {
+    // The same identity's double submit raced past the lookup: the store already holds its correction, so answer it.
+    // (Two identities racing both record: the lookup and the append are not one store-lock hold; a named gap.)
+    if (error instanceof CorrectRejection && (error.code === CORRECTION_ALREADY_RECORDED || error.code === DUPLICATE_CORRECTION_ID)) {
+      const raced = (await readCorrections(corrections.dir)).find((c) => c.runId === row!.runId && c.pendingId === pendingId && c.by === corrections.by);
+      if (raced !== undefined) return { kind: "recorded", correctionId: raced.id };
+    }
     if (error instanceof CorrectRejection) return { kind: "refused", code: "pending-decision-correction-failed", detail: error.code };
     throw error;
   }
