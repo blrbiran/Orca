@@ -28,7 +28,16 @@ import type { DecisionEvent } from "../../src/ledger/schema.js";
 import { registerControlReadRoutes, verifyControlJsonBody } from "../../src/panel/controlApi.js";
 import { readGroupSummary } from "../../src/panel/controlViews.js";
 import type { Principal } from "../../src/panel/permissions.js";
-import { FIXTURE_AGENT, webFixture } from "./fixtures/web.js";
+import { resolveGroupSelections } from "../../src/control/agentFreeze.js";
+import { claimContinuation } from "../../src/control/continuation.js";
+import { createExecutionDriver } from "../../src/control/executionDriver.js";
+import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
+import { readBudgetProposal } from "../../src/control/queries.js";
+import { deliverScheduledStart } from "../../src/control/webDispatch.js";
+import { controlWorkspaceRoots } from "../../src/control/workspace.js";
+import { FAKE_CCLOOP_RUN } from "./fixtures/driverHarness.js";
+import { fakeCcloopPort } from "./fixtures/driverPort.js";
+import { FIXTURE_AGENT, profileSnapshot, webFixture } from "./fixtures/web.js";
 
 // Debug task plan Task 6: `correction-debug-open`. Every assertion reads the control store, a route's answer or git;
 // the corrections store is a directory under the fixture's temp root (ORCA_CORRECTIONS_DIR points there, Rule 17).
@@ -427,5 +436,57 @@ describe("the correction-debug-open route", () => {
       expect(await post(reopen)).toEqual(reopened);
       expect(w.groupCount(cid)).toBe(2);
     } finally { await close(); await w.dispose(); }
+  });
+});
+
+/**
+ * Debug task plan Task 7 (design §4.4): the debug run is a fresh session. Open, confirm and start a debug group, drive
+ * its claimed run through a synthetic ccloop, and read what the claim and the start envelope carried.
+ */
+describe("the debug run is a fresh session (debug task Task 7)", () => {
+  const confirmDebug = async (w: World, groupId: string) => {
+    const frozen = { profileId: "all", hash: w.frozen.profileHash };
+    const result = await w.service.confirm({ schema: "orca-raw-command-v1", commandId: `confirm-${groupId}`, actorId: "human", expectedRevision: w.revisionOf(groupId), verb: "confirm",
+      target: { kind: "group", groupId }, payload: { planHash: readArchivedPlan(w.store, groupId).planHash, proposalVersion: readBudgetProposal(w.store, groupId).proposalVersion, budgetMode: "soft",
+        profileIds: { estimator: null, worker: frozen.profileId, handoff: frozen.profileId, goalReview: frozen.profileId },
+        profileHashes: { estimator: null, worker: frozen.hash, handoff: frozen.hash, goalReview: frozen.hash }, contextPolicy: { handoffAtContextTokens: 800_000 },
+        selectionsHash: (await resolveGroupSelections({ store: w.store, port: w.deps.port }, groupId, "human")).selectionsHash ?? "0".repeat(64) } });
+    return result;
+  };
+  const startDebug = (w: World, groupId: string) => w.service.start({ schema: "orca-raw-command-v1", commandId: `start-${groupId}`, actorId: "human",
+    expectedRevision: w.revisionOf(groupId), verb: "start", target: { kind: "group", groupId }, payload: {} });
+
+  it("claims its own run id and sends no input checkpoint; continuing from the original run is refused by identity", async () => {
+    const w = await world(); try {
+      const cid = w.correction.id, groupId = opened(await w.open(cid)).groupId;
+      // The original run is a real recoverable, checkpointed predecessor, so only the identity check (continuation.ts) can refuse.
+      const original = JSON.parse(String(w.store.db.prepare("SELECT body FROM runs WHERE id=?").get(RUN)!.body)) as Record<string, unknown>;
+      w.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...original, recoverable: true, checkpointId: "checkpoint-1" }), RUN);
+
+      const confirmed = await confirmDebug(w, groupId);
+      expect(confirmed).toMatchObject({ result: { kind: "confirmed" } });
+      expect(await startDebug(w, groupId)).toMatchObject({ result: { kind: "scheduled" } });
+      const snapshot = profileSnapshot();
+      const fake = fakeCcloopPort({ capabilities: snapshot.profile.capabilities, behaviour: () => "succeed", files: () => ({}) });
+      fake.port.listAgents = w.deps.port.listAgents;
+      const dispatch = { store: w.store, profileRouter: w.deps.profileRouter, admissionGate: w.deps.admissionGate };
+      const delivered = await deliverScheduledStart(dispatch, groupId);
+      if (delivered.kind !== "claimed") throw new Error(`claim refused: ${JSON.stringify(delivered)}`);
+      const driver = createExecutionDriver({
+        store: w.store, router: createExecutionProfileRouter([resolveProfile(snapshot, fake.port)]), admissionGate: w.deps.admissionGate,
+        roots: controlWorkspaceRoots(w.store.stateDir), resolveRepository: () => w.repo, ccloopBin: FAKE_CCLOOP_RUN, agentsTablePath: join(w.root, "reconcile-agents.json"),
+      });
+      for (let i = 0; i < 60 && fake.calls.accept.length === 0; i += 1) await driver.round();
+
+      expect(delivered.runId).not.toBe(RUN);
+      expect(fake.calls.accept).toHaveLength(1);
+      const envelope = fake.calls.accept[0]!;
+      expect(envelope.claim).toMatchObject({ groupId, runId: delivered.runId, workItemId: "debug" });
+      expect(envelope.inputCheckpoint).toBeNull();
+      // continuation.ts: the predecessor passes the recoverability check, so the refusal is the group/work-item identity one.
+      const run = JSON.parse(String(w.store.db.prepare("SELECT body FROM runs WHERE id=?").get(delivered.runId)!.body)) as { graphVersion: number; targetVersion: number };
+      expect(() => claimContinuation(w.store, { groupId, predecessorRunId: RUN, workItemId: "debug", taskId: "debug", graphVersion: run.graphVersion, targetVersion: run.targetVersion,
+        commandId: "continue-original", expectedRevision: w.revisionOf(groupId), by: "human" })).toThrowError(expect.objectContaining({ code: "continuation-identity-conflict" }));
+    } finally { await w.dispose(); }
   });
 });
