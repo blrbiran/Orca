@@ -2,11 +2,28 @@ import type { Express, NextFunction, Request, Response } from "express";
 import { correctionRowFrom, recordNewCorrection } from "../corrections/record.js";
 import type { NewCorrectionInput } from "../corrections/record.js";
 import { CorrectRejection } from "../corrections/rejection.js";
-import type { Correction } from "../corrections/schema.js";
-import { CORRECTION_ALREADY_RECORDED } from "../corrections/store.js";
+import { correctionsFile, withdrawalsFile } from "../corrections/paths.js";
+import { namesDecision } from "../corrections/schema.js";
+import type { Correction, CorrectionKind } from "../corrections/schema.js";
+import {
+  CORRECTION_ALREADY_RECORDED,
+  CORRECTION_NOT_FOUND,
+  CORRECTION_TARGET_NOT_A_DECISION,
+  readCorrections,
+} from "../corrections/store.js";
 import { CORRECTIONS_STORE_BUSY } from "../corrections/storeLock.js";
+import {
+  CORRECTION_ALREADY_WITHDRAWN,
+  CORRECTION_CLOSED,
+  CORRECTION_NOT_YOURS,
+  CORRECTION_WITHDRAWALS_UNREADABLE,
+  readWithdrawals,
+  withdrawCorrection,
+  withdrawnIds,
+} from "../corrections/withdrawals.js";
 import { collect } from "../metrics/collect.js";
 import { computeMetrics } from "../metrics/compute.js";
+import { readCorrectionsLeniently, readWithdrawalsLeniently } from "../metrics/lenientRead.js";
 import { MetricsRejection } from "../metrics/rejection.js";
 import type { DecisionObservation } from "../metrics/types.js";
 import { registerChainRoutes } from "./chains.js";
@@ -21,6 +38,7 @@ import type { DecisionListRow } from "./listProjection.js";
 import { PANEL_BAD_REQUEST, PanelRejection } from "./rejection.js";
 import { readReviews } from "./reviewsStore.js";
 import type { ReviewsWriter } from "./reviewsStore.js";
+import { activeReviewers, keyOf, reviewStates } from "./reviewState.js";
 import type { PanelOptions } from "./server.js";
 import type { StaticFiles } from "./staticFiles.js";
 import type { PanelAuth } from "./auth.js";
@@ -162,6 +180,138 @@ function isBodyParserError(err: unknown): err is { message: string; status: numb
   return typeof e.type === "string" && typeof e.status === "number" && e.status >= 400 && e.status < 500;
 }
 
+/** Decisions review withdraw spec §4.4: the two refusals of POST /api/reviews/withdraw. */
+export const REVIEW_NOT_ACTIVE = "review-not-active";
+export const REVIEW_HAS_OPEN_CORRECTION = "review-has-open-correction";
+
+type CorrectionState = "open" | "withdrawn" | "closed";
+
+/** Decisions review withdraw spec §4.4 / §5.3 / §7: what GET /api/decision answers beside the decision. */
+export interface DecisionReviewState {
+  reviewers: Array<{ by: string; at: string }>;
+  mine: "reviewed" | "none";
+  corrections: Array<{
+    id: string;
+    kind: CorrectionKind;
+    because: string;
+    chose_instead?: string;
+    by: string;
+    at: string;
+    state: CorrectionState;
+    mine: boolean;
+    withdrawable: boolean;
+  }>;
+}
+
+/** The ids `currentMetrics` saw closed on THIS request: an overturned row in some ledger names them. */
+function closedIds(observations: { overturned: ReadonlyArray<{ correctionId: string }> }): Set<string> {
+  return new Set(observations.overturned.map((o) => o.correctionId));
+}
+
+/**
+ * Spec §5.2: withdrawn wins over closed. The accepted window between the ledger scan and the withdrawal append can
+ * leave a closed correction marked withdrawn, and readers treat it as withdrawn.
+ */
+function correctionState(id: string, withdrawn: ReadonlySet<string>, closed: ReadonlySet<string>): CorrectionState {
+  if (withdrawn.has(id)) return "withdrawn";
+  if (closed.has(id)) return "closed";
+  return "open";
+}
+
+/**
+ * Spec §4.4 / §5.4: does `by` still have an open (neither withdrawn nor closed) correction on this decision? Strict
+ * reads, because the answer gates a write: an unreadable store refuses rather than reading as "none open".
+ */
+async function hasOpenCorrection(
+  dir: string,
+  closed: ReadonlySet<string>,
+  by: string,
+  projectKey: string,
+  decisionId: string,
+): Promise<boolean> {
+  const withdrawn = withdrawnIds(await readWithdrawals(dir));
+  return (await readCorrections(dir)).some(
+    (c) =>
+      namesDecision(c) &&
+      c.projectKey === projectKey &&
+      c.decisionId === decisionId &&
+      c.by === by &&
+      correctionState(c.id, withdrawn, closed) === "open",
+  );
+}
+
+/**
+ * Spec §4.4 / §5.3 / §7: who has this decision reviewed now, whether the caller does, and every decision-target
+ * correction on it in file order. The two corrections files are read leniently, as `currentMetrics` read them on
+ * this same request: a read-only view must not lose the decision to one bad line. The withdraw route itself reads
+ * strictly and refuses on that line.
+ */
+async function decisionReviewState(
+  dir: string,
+  me: string,
+  closed: ReadonlySet<string>,
+  projectKey: string,
+  decisionId: string,
+): Promise<DecisionReviewState> {
+  const rows = await readReviews(dir);
+  const states = reviewStates(rows);
+  // File order: the last `reviewed` row of a person is the one their current state rests on.
+  const reviewedAt = new Map<string, string>();
+  for (const r of rows) {
+    if (r.action === "reviewed" && r.projectKey === projectKey && r.decisionId === decisionId) reviewedAt.set(r.by, r.at);
+  }
+  const reviewers = activeReviewers(states, projectKey, decisionId).map((by) => ({ by, at: reviewedAt.get(by) ?? "" }));
+  const mine = states.get(keyOf(projectKey, decisionId))?.get(me) === "reviewed" ? "reviewed" : "none";
+
+  const withdrawn = withdrawnIds((await readWithdrawalsLeniently(withdrawalsFile(dir))).rows);
+  const corrections = (await readCorrectionsLeniently(correctionsFile(dir))).rows
+    .filter((c) => namesDecision(c) && c.projectKey === projectKey && c.decisionId === decisionId)
+    .map((c) => {
+      const state = correctionState(c.id, withdrawn, closed);
+      const isMine = c.by === me;
+      return {
+        id: c.id,
+        kind: c.kind,
+        because: c.because,
+        ...(c.chose_instead === undefined ? {} : { chose_instead: c.chose_instead }),
+        by: c.by,
+        at: c.at,
+        state,
+        mine: isMine,
+        withdrawable: isMine && state === "open",
+      };
+    });
+  return { reviewers, mine, corrections };
+}
+
+/**
+ * Spec §5.5: the panel's own sentence for each withdrawal refusal (ruling J5's lesson: the CLI's text may name flags
+ * a web page does not have). Unknown codes keep the store's own message.
+ */
+function withdrawRefusalMessage(code: string, storeMessage: string): string {
+  switch (code) {
+    case CORRECTION_NOT_FOUND:
+      return "There is no correction with this id.";
+    case CORRECTION_TARGET_NOT_A_DECISION:
+      return "This correction names a pending decision of a run, not a recorded decision, and cannot be withdrawn here.";
+    case CORRECTION_NOT_YOURS:
+      return "This correction was recorded by someone else; only they can withdraw it.";
+    case CORRECTION_ALREADY_WITHDRAWN:
+      return "This correction has already been withdrawn.";
+    case CORRECTION_CLOSED:
+      return (
+        "This correction is already closed: its fix is in the ledger. To change your mind, record a new correction " +
+        "instead."
+      );
+    case CORRECTION_WITHDRAWALS_UNREADABLE:
+      return `The correction withdrawals file cannot be read, so nothing was withdrawn: ${storeMessage}`;
+    case CORRECTIONS_STORE_BUSY:
+      return "Someone else is writing the corrections store right now; nothing was withdrawn. Try again in a moment.";
+    default:
+      return storeMessage;
+  }
+}
+
 export function buildApi(app: Express, deps: ApiDeps): void {
   // 🔴 The static route. Registered BEFORE the /api session middleware, because
   // the browser's very first request -- for the HTML that shows the login form --
@@ -262,7 +412,15 @@ export function buildApi(app: Express, deps: ApiDeps): void {
         res.status(404).json({ code: DECISION_NOT_FOUND, message: `no decision ${decisionId}` });
         return;
       }
-      res.json({ decision });
+      // Decisions review withdraw spec §4.4 / §5.3: the review state rides on the same response.
+      const review = await decisionReviewState(
+        deps.opts.correctionsDir,
+        deps.opts.by,
+        closedIds(observations),
+        projectKey,
+        decisionId,
+      );
+      res.json({ decision, review });
 
       // 🔴 spec section 4.3.1: AFTER the response, never before. `opened` is a
       // noise signal; letting it sit on the read path means two browser tabs
@@ -421,6 +579,132 @@ export function buildApi(app: Express, deps: ApiDeps): void {
         at: nowIso(deps.opts),
       });
       res.json({ result });
+    })().catch(next);
+  });
+
+  /**
+   * Decisions review withdraw spec §4.4: withdraws the CALLER's review only. Refused while the caller's state is not
+   * `reviewed` (a withdrawn row with nothing behind it is never written, §4.3), and while the caller still has an
+   * open correction on the decision: that decision stays reviewed until the correction is withdrawn, which takes the
+   * review with it (§5.4).
+   */
+  app.post("/api/reviews/withdraw", (req, res, next) => {
+    void (async () => {
+      const body = objectBody(req, res);
+      if (body === undefined) return;
+      const projectKey = String(body.projectKey ?? "");
+      const decisionId = String(body.decisionId ?? "");
+
+      const { observations } = await currentMetrics(deps.opts);
+      if (!isListedDecision(observations, projectKey, decisionId)) {
+        res.status(404).json({ code: DECISION_NOT_FOUND, message: `no decision ${decisionId} in ${projectKey}` });
+        return;
+      }
+
+      if (deps.reviews.stateOf(projectKey, decisionId, deps.opts.by) !== "reviewed") {
+        res.status(409).json({
+          code: REVIEW_NOT_ACTIVE,
+          message: "You have not reviewed this decision, so there is no review of yours to withdraw.",
+        });
+        return;
+      }
+      const closed = closedIds(observations);
+      if (await hasOpenCorrection(deps.opts.correctionsDir, closed, deps.opts.by, projectKey, decisionId)) {
+        res.status(409).json({
+          code: REVIEW_HAS_OPEN_CORRECTION,
+          message:
+            "You have an open correction on this decision. Withdraw the correction first; your review is withdrawn " +
+            "with it.",
+        });
+        return;
+      }
+
+      const result = await deps.reviews.append({
+        decisionId,
+        projectKey,
+        action: "withdrawn",
+        by: deps.opts.by,
+        at: nowIso(deps.opts),
+      });
+      res.json({ result });
+    })().catch(next);
+  });
+
+  /**
+   * Decisions review withdraw spec §5.2 / §5.4 / §5.5. The body names only the correction; its decision must be one
+   * this request's discovery lists (ruling J1's membership rule), checked before the store lock -- withdrawCorrection
+   * re-reads the store under the lock and judges there. A pending-target correction has no decision to check and is
+   * left to withdrawCorrection's own refusal.
+   *
+   * Closed-ness comes from the `currentMetrics` scan taken BEFORE the lock (§5.2's accepted window).
+   */
+  app.post("/api/corrections/withdraw", (req, res, next) => {
+    void (async () => {
+      const body = objectBody(req, res);
+      if (body === undefined) return;
+      const correctionId = String(body.correctionId ?? "");
+      const dir = deps.opts.correctionsDir;
+      const by = deps.opts.by;
+
+      const { observations } = await currentMetrics(deps.opts);
+      const target = (await readCorrections(dir)).find((c) => c.id === correctionId);
+      if (
+        target !== undefined &&
+        namesDecision(target) &&
+        !isListedDecision(observations, target.projectKey, target.decisionId)
+      ) {
+        res.status(404).json({
+          code: DECISION_NOT_FOUND,
+          message: `no decision ${target.decisionId} in ${target.projectKey}`,
+        });
+        return;
+      }
+
+      const closed = closedIds(observations);
+      let withdrawn: Awaited<ReturnType<typeof withdrawCorrection>>;
+      try {
+        withdrawn = await withdrawCorrection(dir, {
+          correctionId,
+          by,
+          at: nowIso(deps.opts),
+          isClosed: (c) => closed.has(c.id),
+        });
+      } catch (err) {
+        if (err instanceof CorrectRejection) {
+          res
+            .status(err.code === CORRECTION_NOT_FOUND ? 404 : 409)
+            .json({ code: err.code, message: withdrawRefusalMessage(err.code, err.message) });
+          return;
+        }
+        next(err);
+        return;
+      }
+
+      // §5.4: the reviewed mark that came with the correction goes too -- only while the caller's state is still
+      // `reviewed` and no other open correction of theirs remains on the decision. Written AFTER the withdrawal, so
+      // a failure here is reported beside it (like the corrections route's "recorded but reviewed mark not written").
+      const { projectKey, decisionId } = withdrawn.correction;
+      let review: "written" | "duplicate" | "skipped";
+      try {
+        review =
+          deps.reviews.stateOf(projectKey, decisionId, by) === "reviewed" &&
+          !(await hasOpenCorrection(dir, closed, by, projectKey, decisionId))
+            ? await deps.reviews.append({ decisionId, projectKey, action: "withdrawn", by, at: nowIso(deps.opts) })
+            : "skipped";
+      } catch (err) {
+        const code =
+          err instanceof PanelRejection || err instanceof CorrectRejection ? err.code : "panel-internal-error";
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(409).json({
+          code,
+          message:
+            `the correction was withdrawn (id ${withdrawn.correction.id}), but your review of the decision could ` +
+            `not be withdrawn with it: ${message}`,
+          withdrawal: withdrawn.withdrawal,
+        });
+        return;
+      }
+      res.json({ withdrawal: withdrawn.withdrawal, review });
     })().catch(next);
   });
 
