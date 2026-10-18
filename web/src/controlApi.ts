@@ -29,6 +29,7 @@ import type {
   ControlSummaryV1,
   EstimatePayloadV1,
   EvidenceManifestV1,
+  GroupDecisionsViewV1,
   GroupViewV1,
   HandoffStopPayloadV1,
   ImportPlanPayloadV1,
@@ -112,6 +113,9 @@ export const fetchControlGroup = (groupId: string): Promise<GroupViewV1> =>
 /** GET /api/control/groups/:groupId/requirement -- one requirement in full (N1 spec §11.2). */
 export const fetchRequirement = (groupId: string): Promise<RequirementViewV1> =>
   controlGet<RequirementViewV1>(`/api/control/groups/${segment(groupId)}/requirement`);
+/** GET /api/control/groups/:groupId/decisions -- control run decisions plan Task 8: the group's decisions, read from refs. */
+export const fetchGroupDecisions = (groupId: string): Promise<GroupDecisionsViewV1> =>
+  controlGet<GroupDecisionsViewV1>(`/api/control/groups/${segment(groupId)}/decisions`);
 /** GET /api/control/recovery -- every blocker the panel can see, across groups. */
 export const fetchControlRecovery = (): Promise<RecoveryViewV1> => controlGet<RecoveryViewV1>("/api/control/recovery");
 /** GET /api/control/runs/:runId/evidence -- the manifest of raw evidence retained for one run. */
@@ -347,7 +351,11 @@ export type ControlAction =
   | { verb: "requirement-answer"; groupId: string; expectedRevision: number; payload: RequirementAnswerPayloadV1 }
   | { verb: "requirement-consensus"; groupId: string; expectedRevision: number; payload: RequirementConsensusPayloadV1 }
   | { verb: "requirement-draft-feedback"; groupId: string; expectedRevision: number; payload: RequirementDraftFeedbackPayloadV1 }
-  | { verb: "requirement-draft-accept"; groupId: string; expectedRevision: number; payload: RequirementDraftAcceptPayloadV1 };
+  | { verb: "requirement-draft-accept"; groupId: string; expectedRevision: number; payload: RequirementDraftAcceptPayloadV1 }
+  // Control run decisions plan Tasks 9-11: an owner approves a refused decision with an undo.how, or rejects it (no
+  // `because` key when the person wrote no line -- the server's schema refuses an empty one).
+  | { verb: "approve-pending-decision"; groupId: string; expectedRevision: number; payload: { pendingId: string; undoHow: string } }
+  | { verb: "reject-pending-decision"; groupId: string; expectedRevision: number; payload: { pendingId: string; because?: string } };
 
 /** The route a verb is served on -- src/panel/controlApi.ts's mutation table. */
 export function controlCommandPath(action: ControlAction): string {
@@ -408,6 +416,10 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/requirement/feedback`;
     case "requirement-draft-accept":
       return `${group}/requirement/accept`;
+    case "approve-pending-decision":
+      return `${group}/decisions/approve`;
+    case "reject-pending-decision":
+      return `${group}/decisions/reject`;
   }
 }
 

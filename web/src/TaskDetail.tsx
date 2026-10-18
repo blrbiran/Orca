@@ -13,8 +13,9 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { controlFailureFrom, fetchSavedResultEligibility, downloadEvidenceArtifact, fetchRunActivity, fetchRunEvidence, type ControlAction } from "./controlApi.js";
 import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
-import type { SavedResultEligibilityV1, ActivityEntryV1, EvidenceManifestV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
+import type { SavedResultEligibilityV1, ActivityEntryV1, EvidenceManifestV1, GroupDecisionsViewV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
 import { TaskResults } from "./TaskResults.js";
+import { RunDecisions } from "./RunDecisions.js";
 import { LoopPlanCard } from "./LoopPlanCard.js";
 import { RunReason } from "./RunReason.js";
 import { explainRunReason } from "./refusalExplain.js";
@@ -195,6 +196,9 @@ export interface TaskDetailProps {
   archived?: boolean;
   /** Spec 2026-10-13-unmetered-usage-settlement §B.1: who may settle the unknown usage that hides Retry here. */
   roles?: readonly Role[];
+  /** Control run decisions plan Task 11: the group's decisions as last read; absent or null shows no decisions section. */
+  decisions?: GroupDecisionsViewV1 | null;
+  onCorrectDecision?: (projectKey: string, decisionId: string) => void;
 }
 
 export function TaskDetail(props: TaskDetailProps): JSX.Element {
@@ -231,6 +235,10 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         {draft !== null ? t("control.task.unsavedDraft") : ""}
       </p>
       <TaskResults view={view} item={item} active={props.resultsActive === true} scope={props.resultsScope ?? ""} />
+      {props.decisions?.tasks.find((task) => task.taskId === item.taskId)?.runs.map((run) => (
+        <RunDecisions key={run.runId} groupId={groupId} revision={view.summary.commandRevision} run={run} projectKey={props.decisions?.projectKey ?? null}
+          onCommand={onCommand} onCorrect={props.onCorrectDecision} archived={archived} />
+      ))}
       {draft !== null && draft.base !== current && (
         <p role="status">
           {t("control.task.labelsChanged", { base: draft.base, current })}<LabelChips labels={item.labels} />

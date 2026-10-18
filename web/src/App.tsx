@@ -72,6 +72,7 @@ import {
   fetchAgentPreview,
   fetchAgentModels,
   fetchAgentsView,
+  fetchGroupDecisions,
   fetchRepositoryIntegration,
   fetchRepositoryWorkspace,
   nextCommandId,
@@ -91,7 +92,7 @@ import type { ControlAnswer } from "./controlApi.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import { UncertainOperations } from "./UncertainOperations.js";
 import type {
-  AgentPreferencesViewV1, AgentInstallationStateV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, IntegrationSchemeV1, ModelListState, OperatorPreferencesV1, RepositoryIntegrationV1,
+  AgentPreferencesViewV1, AgentInstallationStateV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, GroupDecisionsViewV1, IntegrationSchemeV1, ModelListState, OperatorPreferencesV1, RepositoryIntegrationV1,
   RepositoryWorkspaceV1, RequirementViewV1, OverviewV1, RecoveryViewV1,
 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
@@ -137,7 +138,7 @@ import { applyTheme, readTheme, writeTheme } from "./theme.js";
 import type { ThemePref } from "./theme.js";
 import { acceptArrival } from "./selection.js";
 import { recoveryRetryAction } from "./recoveryTarget.js";
-import type { ChainRepoView, DecisionListRow, DecisionStatusRow, MetricsReport, PanelCoverage } from "./types.js";
+import type { ChainRepoView, DecisionKind, DecisionListRow, DecisionScope, DecisionStatusRow, MetricsReport, PanelCoverage } from "./types.js";
 
 /** localStorage, or undefined where touching it throws. */
 function browserStorage(): Storage | undefined {
@@ -259,6 +260,9 @@ export function App(): JSX.Element {
   /** Integration spec §9.1: each repository's integration default as last read, by repoId; numbered like the workspace reads. */
   const [integrations, setIntegrations] = useState<Record<string, RepositoryIntegrationV1>>({});
   const integrationSeq = useRef<Record<string, number>>({});
+  /** Control run decisions plan Task 11: each group's decisions as last read, by groupId; only the newest read is applied. */
+  const [groupDecisions, setGroupDecisions] = useState<Record<string, GroupDecisionsViewV1>>({});
+  const decisionsSeq = useRef(0);
   /** Agent selection spec §6.8: the installation table and this operator's defaults; null until read, or when the port refuses. */
   const [agents, setAgents] = useState<AgentsViewV1 | null>(null);
   const [agentPreferences, setAgentPreferences] = useState<AgentPreferencesViewV1 | null>(null);
@@ -888,6 +892,17 @@ export function App(): JSX.Element {
   const openDecisionRow = (row: DecisionListRow): void => {
     navigationSeq.current++; setOverviewFocus(null); setOverviewDecisionRead(null); setSelected(row);
   };
+  /**
+   * Control run decisions plan Task 11: a group's 纠正 opens that decision's detail in Decisions, as a list row does. A
+   * decision no list row carries yet is opened by its identity (the detail is read by projectKey and id, and the pane
+   * says it is not in the list); its other row fields are the decisions read's, and `at` is unknown.
+   */
+  const openDecisionById = (projectKey: string, decisionId: string): void => {
+    const listed = [...(todo.data ?? []), ...(allRows ?? [])].find((row) => row.projectKey === projectKey && row.id === decisionId);
+    const read = Object.values(groupDecisions).flatMap((v) => v.tasks.flatMap((task) => task.runs.flatMap((r) => r.decisions))).find((d) => d.id === decisionId);
+    openDecisionRow(listed ?? { projectKey, id: decisionId, at: "", kind: (read?.kind ?? "") as DecisionKind, scope: (read?.scope ?? "") as DecisionScope, verdict: "ok", question: read?.question ?? null });
+    setSection("decisions"); window.location.hash = "decisions";
+  };
   const overviewModel = deriveOverview({ projection: overview, todo, recovery: overviewRecovery, uncertain: control.uncertainCommandIds,
     scope, projectKey: project, projects, roles: account?.user.roles ?? [] });
   const overviewModelNow = useRef(overviewModel); overviewModelNow.current = overviewModel;
@@ -1011,6 +1026,17 @@ export function App(): JSX.Element {
     void readWorkspace(panelRepoId);
     void readIntegration(panelRepoId);
   }, [controlConfig, panelRepoId]);
+  // Control run decisions plan Task 11: the open group's decisions, read again whenever its projection or revision moves.
+  const openGroupView = selectedGroup === null ? undefined : control.canonical[selectedGroup];
+  useEffect(() => {
+    if (selectedGroup === null || openGroupView === undefined) return;
+    const seq = ++decisionsSeq.current, groupId = selectedGroup;
+    fetchGroupDecisions(groupId).then(
+      (value) => { if (seq === decisionsSeq.current) setGroupDecisions((all) => ({ ...all, [groupId]: value })); },
+      // An unread group shows no badge and no decisions section, rather than a stale read as current.
+      () => { if (seq === decisionsSeq.current) setGroupDecisions(({ [groupId]: _gone, ...rest }) => rest); },
+    );
+  }, [selectedGroup, openGroupView?.changeSeq, openGroupView?.summary.commandRevision]);
   // Spec §5: an open group's detail always uses its own repository's workspace, whatever the scope.
   useEffect(() => {
     if (controlConfig === null || openRepoId === null) return;
@@ -1466,6 +1492,8 @@ export function App(): JSX.Element {
           workspaceFor={(repoId) => workspaces[repoId] ?? null}
           integration={panelRepoId === null ? null : integrations[panelRepoId] ?? null}
           integrationFor={(repoId) => integrations[repoId] ?? null}
+          decisionsFor={(groupId) => groupDecisions[groupId] ?? null}
+          onCorrectDecision={openDecisionById}
           agents={agents}
           preferences={agentPreferences}
           previews={previews}

@@ -20,7 +20,7 @@ import { GroupList } from "./GroupList.js";
 import { ALL_PROJECTS } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
 import type {
-  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1, ModelListState,
+  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupDecisionsViewV1, GroupViewV1, ModelListState,
   RecoveryViewV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
 } from "./controlTypes.js";
 import { initialControlState } from "./controlState.js";
@@ -71,6 +71,9 @@ export interface ControlPanelProps {
   integration?: RepositoryIntegrationV1 | null;
   /** A repository's integration read, for the target an open group's confirm step suggests. */
   integrationFor?: (repoId: string) => RepositoryIntegrationV1 | null;
+  /** Control run decisions plan Task 11: a group's decisions as last read, and opening one in Decisions to correct it. */
+  decisionsFor?: (groupId: string) => GroupDecisionsViewV1 | null;
+  onCorrectDecision?: (projectKey: string, decisionId: string) => void;
   /** Agent selection spec §6.8: the installation table and this operator's defaults, once read. */
   agents?: AgentsViewV1 | null;
   preferences?: AgentPreferencesViewV1 | null;
@@ -287,6 +290,8 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           workspace={props.workspace}
           workspaceFor={props.workspaceFor}
           integrationFor={props.integrationFor}
+          decisions={props.decisionsFor?.(view.summary.groupId) ?? null}
+          onCorrectDecision={props.onCorrectDecision}
           refusal={props.groupRefusals?.[view.summary.groupId] ?? null}
         />
       )}
