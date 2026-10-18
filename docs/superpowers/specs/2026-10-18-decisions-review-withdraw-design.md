@@ -226,3 +226,13 @@ Written by the plan as tests; the shapes the plan must cover:
 
 Names of functions, components and i18n keys; how the detail fetch carries review/correction state (extend
 `GET /api/decision`'s answer or a sibling route); task order in the plan.
+
+## 10. Corrections found while planning (session `b304f167`, 2026-10-18; text above kept verbatim)
+
+1. §7 "After agree or withdraw, the selected decision stays open": wrong for **agree**. Agree already advances to the
+   next row once the list is re-read (`web/src/App.tsx` `pendingAdvance`, taste refinement P1-3, pinned by existing
+   tests). That stays. Only a **withdraw** keeps the selected decision open and refreshes its detail.
+2. §5.3's metrics count is a top-level report field `withdrawn_corrections: number`, added to `MetricsReport` and to
+   `METRICS_FIELDS` (`src/metrics/types.ts`), so the byte-exact report goldens change on purpose.
+3. "Mine" in the panel is `deps.opts.by` (the panel's recording identity), the same `by` the agree and correct routes
+   already write.
