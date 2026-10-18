@@ -710,6 +710,25 @@ export function buildApi(app: Express, deps: ApiDeps): void {
         return;
       }
 
+      // Debug task plan Task 6 (withdraw Amendment 2): a live debug group of the withdrawn correction that has not started
+      // a task run is archived (archive deletes nothing); a started one is left running and named in the answer. Right
+      // after the withdrawal, before the review step can answer: a retry is refused as already withdrawn, so this is the
+      // one chance. A refused or failed archive leaves the correction withdrawn and is answered beside it (§5.4's shape).
+      const principal = res.locals.orcaPrincipal as Principal | undefined;
+      let settled: ReturnType<typeof archiveUnstartedDebugGroups> = { debugGroups: [], failure: null };
+      if (deps.control?.service !== undefined) {
+        try {
+          settled = archiveUnstartedDebugGroups({ store: deps.control.store, service: deps.control.service }, withdrawn.correction.id, {
+            actorId: ensurePanelOperatorId(deps.control.store), principal: principal === undefined ? "web" : principalLabel(principal),
+          });
+        } catch (err) {
+          settled = { debugGroups: [], failure: { groupId: null, code: "panel-internal-error", message: err instanceof Error ? err.message : String(err) } };
+        }
+      }
+      const { debugGroups, failure } = settled;
+      const debugFields = { ...(debugGroups.length === 0 ? {} : { debugGroups }), ...(failure === null ? {} : { debugGroupFailure: failure }) };
+      const archiveSentence = failure === null ? "" : `; its debug group ${failure.groupId ?? "(unknown)"} could not be archived: ${failure.message}`;
+
       // §5.4: the reviewed mark that came with the correction goes too -- only while the caller's state is still
       // `reviewed` and no other open correction of theirs remains on the decision. Written AFTER the withdrawal, so
       // a failure here is reported beside it (like the corrections route's "recorded but reviewed mark not written").
@@ -729,29 +748,21 @@ export function buildApi(app: Express, deps: ApiDeps): void {
           code,
           message:
             `the correction was withdrawn (id ${withdrawn.correction.id}), but your review of the decision could ` +
-            `not be withdrawn with it: ${message}`,
+            `not be withdrawn with it: ${message}${archiveSentence}`,
           withdrawal: withdrawn.withdrawal,
+          ...debugFields,
         });
         return;
       }
-      // Debug task plan Task 6 (withdraw Amendment 2): a live debug group of the withdrawn correction that has not started
-      // a task run is archived (archive deletes nothing); a started one is left running and named in the answer. After
-      // the withdrawal and its review, so a failed archive leaves the correction withdrawn, answered beside it (§5.4).
-      const principal = res.locals.orcaPrincipal as Principal | undefined;
-      const settled = deps.control?.service === undefined ? { debugGroups: [], failure: null }
-        : archiveUnstartedDebugGroups({ store: deps.control.store, service: deps.control.service }, withdrawn.correction.id, {
-          actorId: ensurePanelOperatorId(deps.control.store), principal: principal === undefined ? "web" : principalLabel(principal),
-        });
-      const { debugGroups, failure } = settled;
       if (failure !== null) {
         res.status(409).json({
           code: failure.code,
-          message: `the correction was withdrawn (id ${withdrawn.correction.id}), but its debug group ${failure.groupId} could not be archived: ${failure.message}`,
-          withdrawal: withdrawn.withdrawal, review, debugGroups,
+          message: `the correction was withdrawn (id ${withdrawn.correction.id})${archiveSentence}`,
+          withdrawal: withdrawn.withdrawal, review, ...debugFields,
         });
         return;
       }
-      res.json({ withdrawal: withdrawn.withdrawal, review, ...(debugGroups.length === 0 ? {} : { debugGroups }) });
+      res.json({ withdrawal: withdrawn.withdrawal, review, ...debugFields });
     })().catch(next);
   });
 

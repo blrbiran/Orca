@@ -119,11 +119,11 @@ export type WithdrawnDebugGroup = { groupId: string; state: "archived" | "starte
 export function archiveUnstartedDebugGroups(
   deps: { store: ControlStore; service: { archiveGroup(command: ArchiveGroupCommand): WebCommandResult } },
   correctionId: string, actor: { actorId: string; principal: string },
-): { debugGroups: WithdrawnDebugGroup[]; failure: { groupId: string; code: string; message: string } | null } {
+): { debugGroups: WithdrawnDebugGroup[]; failure: { groupId: string | null; code: string; message: string } | null } {
   const debugGroups: WithdrawnDebugGroup[] = [];
   for (const { groupId, started } of liveDebugGroups(deps.store, correctionId)) {
     if (started) { debugGroups.push({ groupId, state: "started: left running" }); continue; }
-    // A correction is withdrawn once, so one command id per correction and group is enough.
+    // A correction is withdrawn once, and the ledger key is the group's, so one command id per correction is unique per group.
     const command: ArchiveGroupCommand = {
       schema: "orca-raw-command-v1", commandId: `withdraw-${correctionId}-archive`, actorId: actor.actorId,
       expectedRevision: readVersions(deps.store, groupId).commandRevision, verb: "archive-group", target: { kind: "group", groupId }, payload: {},
@@ -149,9 +149,18 @@ function asControlError(error: unknown): unknown {
   return error;
 }
 
-/** The configured repository whose projectKey is the correction's; one without a keyable remote cannot be it. */
+/**
+ * The configured repository a correction's projectKey names. First the panel's own key: the panel records a correction
+ * under its `--repo` key or registry slug (api.ts POST /api/corrections), and the repository's repoId is that key's
+ * `repoIdOfProjectKey` (controlRepoKey). Then the key derived from each repository's remote, which the CLI and
+ * reject-pending-decision record (decisionCommands.ts); a repository without a keyable remote cannot be that one.
+ */
 async function repositoryOf(deps: DebugOpenDeps, projectKey: string): Promise<{ repoId: string; path: string } | null> {
-  for (const repository of deps.listRepositories()) {
+  const repositories = deps.listRepositories();
+  const panelRepoId = deps.repoIdOfProjectKey?.(projectKey);
+  const byPanelKey = repositories.find((repository) => repository.repoId === panelRepoId);
+  if (byPanelKey !== undefined) return byPanelKey;
+  for (const repository of repositories) {
     let key: string;
     try { key = await projectKeyOf(repository.path); }
     catch (error) { if (error instanceof CorrectRejection) continue; throw error; }

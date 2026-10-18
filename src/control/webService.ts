@@ -90,6 +90,8 @@ export interface WebServiceDeps extends AsyncImportDeps {
    * repository whose projectKey a correction names. Absent, no repository matches (correction-repository-unknown).
    */
   listRepositories?: () => Array<{ repoId: string; path: string }>;
+  /** Debug task plan Task 6 (fix round 1): the repoId the panel gives a project key (controlRepoKey); absent, only remote-derived keys match. */
+  repoIdOfProjectKey?: (projectKey: string) => string;
   /** Test seams into approve's and reject's git/store steps (decisionCommands.ts), passed through unchanged. */
   decisionSeams?: { beforeCas?: () => Promise<void>; beforeRecord?: () => Promise<void> };
 }

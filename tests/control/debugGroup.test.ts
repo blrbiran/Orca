@@ -69,7 +69,7 @@ afterEach(() => { vi.unstubAllEnvs(); });
  * Group `g` (task `a`) ran `run-1` (agent codex) over a real repo with a remote; its attempt added a.txt and the
  * decision's ledger line. The operator's default agent is claude, so the original agent differs from it.
  */
-async function world(options: { ledgerAt?: LedgerAt; port?: (base: ExecutionPort) => ExecutionPort; listRepositories?: boolean; correctionsDir?: boolean } = {}) {
+async function world(options: { ledgerAt?: LedgerAt; port?: (base: ExecutionPort) => ExecutionPort; listRepositories?: boolean; correctionsDir?: boolean; before?: Array<{ repoId: string; path: string }> } = {}) {
   const h = await webFixture(undefined, [{ taskId: "a" }], { preferences: { defaultAgent: "claude", perAgent: {} } });
   const repo = join(h.root, "repo");
   g(repo, ["init", "-q", "-b", "main"]);
@@ -104,7 +104,7 @@ async function world(options: { ledgerAt?: LedgerAt; port?: (base: ExecutionPort
   const service = new WebControlService({
     ...h.deps, ...(options.port === undefined ? {} : { port: options.port(h.deps.port) }),
     ...(options.correctionsDir === false ? {} : { correctionsDir: dir }), correctionsBy: BY,
-    ...(options.listRepositories === false ? {} : { listRepositories: () => [{ repoId: "repo", path: repo }] }),
+    ...(options.listRepositories === false ? {} : { listRepositories: () => [...(options.before ?? []), { repoId: "repo", path: repo }] }),
   });
   let sequence = 0;
   const revisionOf = (groupId: string) => Number(h.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)?.revision ?? 0);
@@ -207,8 +207,11 @@ describe("correction-debug-open's refusals leave the corrections store and the c
   async function refused(w: World, code: string, correctionId = w.correction.id): Promise<void> {
     const before = await w.storeBytes();
     const command = w.openCommand(correctionId);
-    expect(refusal(await w.service.openCorrectionDebugGroup(command))).toBe(code);
+    const answer = await w.service.openCorrectionDebugGroup(command);
+    expect(refusal(answer)).toBe(code);
     expect(lookupCommandResult(w.store, command.target.groupId, command.commandId)!.body).toMatchObject({ error: { code } });
+    // Booked: the same command replays the same answer.
+    expect(await w.service.openCorrectionDebugGroup(command)).toEqual(answer);
     expect(w.groupCount(correctionId)).toBe(0);
     expect(await w.storeBytes()).toBe(before);
   }
@@ -246,6 +249,32 @@ describe("correction-debug-open's refusals leave the corrections store and the c
     const w = await world(); try {
       await withdrawCorrection(w.dir, { correctionId: w.correction.id, by: BY, at: "2026-10-18T02:00:00.000Z", isClosed: () => false });
       await refused(w, "correction-withdrawn");
+    } finally { await w.dispose(); }
+  });
+
+  it("refuses, booked, when the withdrawals file has a line that does not parse", async () => {
+    const w = await world(); try {
+      await writeFile(join(w.dir, "correction-withdrawals.jsonl"), "not json\n", { mode: 0o600 });
+      await refused(w, "correction-withdrawals-unreadable");
+    } finally { await w.dispose(); }
+  });
+
+  it("skips a configured repository with no keyable remote listed before the right one", async () => {
+    const w0 = await webFixture(); const bare = join(w0.root, "bare"); await mkdir(bare); g(bare, ["init", "-q"]);
+    const w = await world({ before: [{ repoId: "bare", path: bare }] }); try {
+      expect(opened(await w.open(w.correction.id))).toMatchObject({ created: true });
+      expect(readArchivedPlan(w.store, `debug-${w.correction.id}`).plan.repoId).toBe("repo");
+    } finally { await w.dispose(); await w0.dispose(); }
+  });
+
+  it("matches the repository by the panel's own key first", async () => {
+    const w = await world(); try {
+      const panelKeyed = new WebControlService({ ...w.deps, correctionsDir: w.dir, correctionsBy: BY,
+        listRepositories: () => [{ repoId: "other", path: w.repo }, { repoId: "repo", path: w.repo }], repoIdOfProjectKey: (key) => (key === "mykey" ? "repo" : `x-${key}`) });
+      const mine = await recordNewCorrection(w.dir, correctionRowFrom({ projectKey: "mykey", decisionId: DECISION_ID, kind: "stale", because: "panel-recorded", by: BY }, () => new Date("2026-10-18T03:00:00.000Z")), { again: false });
+      const command = { ...w.openCommand(mine.id) };
+      expect(opened(await panelKeyed.openCorrectionDebugGroup(command))).toMatchObject({ created: true });
+      expect(readArchivedPlan(w.store, `debug-${mine.id}`).plan.repoId).toBe("repo");
     } finally { await w.dispose(); }
   });
 

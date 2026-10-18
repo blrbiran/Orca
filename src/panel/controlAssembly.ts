@@ -222,6 +222,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     resolveRepository: (repoId: string) => config.resolveRepository(repoId),
     // Debug task plan Task 6: correction-debug-open finds the repository a correction's projectKey names among these.
     listRepositories: () => config.listRepositories(),
+    // A correction recorded on the panel names the panel's project key; its repository's repoId is that key's.
+    repoIdOfProjectKey: controlRepoKey,
     // Ruling R7: the commands that need an estimate refuse by name. Nothing is substituted, and in
     // particular no mode is guessed -- a guessed mode is how a soft adapter comes to be driven as
     // a strict one, which is the whole reason these are operator arguments.
