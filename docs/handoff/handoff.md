@@ -63,6 +63,14 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
+### 3.00 会话 `1710772d`（2026-10-18 下午～晚）—— **先读这一节，再读 3.0**
+
+- **「控制 run 写决定」已实施并合进 main**（`--ff-only`，末笔 `fix(control): …` 系列之后 main 起点是检查点 `a0deaae5` 之上的 22 笔；**未 push**，人统一推）。SDD 台账（每条 `Ruling:`、每条延后 minor、已知缺口、门的数）：`.superpowers/sdd/2026-10-18-control-run-decisions/progress.md`（git-ignored，含全部 review package）。Task 1–11 每个都过了任务评审，整分支终审 + 一轮修复 + 复审；门在全新 clone、`ORCA_CCLOOP_BIN=/private/tmp/ccb6-qswQ/ccloop/dist/cli.js`（pin `02cbacc5`）、只指 fake 的 `ORCA_AGENTS_TABLE`（scratchpad，会话结束失效）下全过：全量 441 文件 4027 过／36 跳，verify:control 208/208，scheduler 57/57，chain 13/13，ccloop-pin、panel、web 1152/1152；ledger validate 退出 2 是 main 既有的 7 条 tier-0 降级（`orca-dev-09cc3ea1.jsonl`）。
+- ⚠️ *** **控制库 schema 13 → 14（单向）**：面板服务下次重启会把真实 `~/.orca` 控制库迁到 14（新表 `pending_decisions`），旧版 Orca 将拒开。**重启前先备份控制库**（做法同 `2026-10-12-live-service-cutover.md`），agent 没有重启服务。 ***
+- **没做／未测（Rule 12）**：Task 12（读 ccloop 真输出的契约测试）阻塞在 ccloop 报 `decisions[]` ⇒ **spec §3.1「agent 自己的决定」还没接通**，今天只有 reconcile 模板与 fake 报告路径；`push-target`／`push-branch`／`github-pr` 合入未测；面板没在真浏览器看过；已知缺口：不同身份并发 reject 可各记一条、reject 输给 approve 时留孤儿 correction（交给 debug 计划的「未记录决定上的纠正」一行）、E/D 的 reconciling 检查与 CAS 之间有窗口（D 既有）、approve/reject 串行只在单进程内。
+- **人裁（本会话）**：`attemptSha` 进 evidence（台账 spec ERRATUM 8）；姊妹仓合并规则已对齐并合了 ccloop 计划分支与 ccmem handoff 分支；「这个 session 中的必要 test 都允许改」——本轮改过的既有判据逐条记在台账（schema pin 一批、commandClient、archiveGroup CALLS、fields／lenientRead／resolve／skill.test）。
+- **人另提、已调查未动手**：①Decisions 页「裁决过的看不到、不能反悔」——诊断 `.superpowers/sdd/2026-10-18-decisions-review-withdraw/diagnosis.md`（列表默认「未审」、详情不显示审阅状态、无撤回；要追加 withdrawn 事件）；②「能用代码替代 agent 的尽量用代码」——候选清单同目录 `code-over-agent-survey.md`（最值：clarify 的 `frontierEmpty`、criterion／question id、split 的 taskId）。
+
 ### 3.0 本会话 `a3b2a7a7`（2026-10-18）—— **先读这一节**
 
 **这一轮只做了设计与计划，产品代码一行没动。下一轮先实现**（人：「下一轮先实现再写后续的 spec」）。
@@ -149,7 +157,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.2 agent 的活（**下一轮先实现，再写后续 spec**）
 
-1. **实施「控制 run 写决定」**：计划 `docs/superpowers/plans/2026-10-18-control-run-decisions.md`。先读 spec §10 与计划末尾「Cross-plan resolutions」。Task 4 会改约 9 个钉 schema 13 的既有测试（计划里列了，先现测）。Task 12 等 ccloop。只测 `local` 合入，`push-*` 要在报告里写明未测。
+1. ~~实施「控制 run 写决定」~~ **已合进 main（会话 `1710772d`，见 §3.00）**；剩 Task 12（等 ccloop）。**下一步先做 Decisions 页的查看＋撤回**（人提，诊断见 §3.00），再做第 2 条。
 2. **实施「纠正 ⇒ debug task」**：计划 `…/2026-10-18-correction-debug-task.md`，**第 1 份合进 main 之后**；Task 1 的前置脚本先跑（名字对不上就停）。付费端到端一次要人点头。
 3. **ccloop Codex 阶段隔离**（计划已在 ccloop main）：在 ccloop 里按它自己的规则做；**Task 4 Step 6 是停止点**——预言 `tests/control/codexSkillsFailureWorker.test.ts` 两条会红（夹具 wrapper 不答 `mcp list` 等），改夹具要人逐条点名（ccloop Rule 15）；Task 7 付费一次要人点头。
 4. **ccloop 那半：agent 在结果里报 `decisions[]` 与 `debug`**（`choseInstead`、`reproTests`、`reproCommand`、`reproduction`）——在 ccloop 仓走 brainstorming；做完才能解第 1 份计划的 Task 12（对真输出的契约测试）。
