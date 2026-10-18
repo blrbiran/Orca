@@ -1,0 +1,169 @@
+import { execFileSync } from "node:child_process";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import express from "express";
+import { describe, expect, it } from "vitest";
+import { integratePendingGroups } from "../../src/control/integrationPass.js";
+import { newGroupIntegration, readGroupIntegration, type IntegrationScheme } from "../../src/control/integrationScheme.js";
+import { WebControlService } from "../../src/control/webService.js";
+import { unsetInheritedGitEnv } from "../../src/control/workspace.js";
+import { registerControlReadRoutes, verifyControlJsonBody, type ControlReadApiDeps } from "../../src/panel/controlApi.js";
+import { bindControlSocket, buildControlSocketApp } from "../../src/panel/controlSocket.js";
+import type { Principal } from "../../src/panel/permissions.js";
+import { driverHarness, type HarnessOptions } from "../control/fixtures/driverHarness.js";
+import { overSocket } from "./fixtures/socketPanel.js";
+
+// Control run decisions plan Task 8: GET /api/control/groups/:groupId/decisions, the group's decisions read from refs.
+// Every run here is driven by the driver harness; every assertion reads the route's answer (or git), never a value the
+// test wrote itself.
+const g = (cwd: string, args: string[]): string =>
+  execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args],
+    { cwd, encoding: "utf8", stdio: "pipe", env: { ...process.env, ...unsetInheritedGitEnv() } }).trim();
+
+const LOCAL_MERGE: IntegrationScheme = { delivery: "local", trigger: "task", method: "merge", target: "main" };
+const UNDO = `git revert --no-edit ${"b".repeat(40)}`;
+const good = (over: Record<string, unknown> = {}) => ({
+  question: "q", chose: "c", alternatives: [{ option: "o", why_not: "w" }], because: "b",
+  undo: { how: UNDO, cost: "c", blast_radius: "r" }, scope: "task", kind: "interface", ...over,
+});
+const SETTLED = ["landed", "settled"];
+
+type View = {
+  schema: string; groupId: string; projectKey: string | null; pendingCount: number;
+  tasks: Array<{ taskId: string; runs: Array<{
+    runId: string; reported: string;
+    decisions: Array<{ id: string; where: string; question: string; chose: string; kind: string; scope: string }>;
+    pending: Array<{ pendingId: string; reason: string; question: string | null; chose: string | null; undoHow: string | null; state: string }>;
+    unlanded: Array<{ entryIndex: number; question: string | null; chose: string | null }>;
+  }> }>;
+};
+
+/**
+ * The harness's group with LOCAL_MERGE recorded but not yet frozen (so the driver's own pass integrates nothing until the
+ * test says so), the target repository on another branch (so a local integration moves `main` without a checkout), and
+ * a GitHub-shaped origin so the project key resolves.
+ */
+async function world(options: HarnessOptions = {}) {
+  const t = await driverHarness([{ taskId: "a" }], options);
+  g(t.repo, ["checkout", "-q", "-b", "other"]);
+  g(t.repo, ["remote", "add", "origin", "https://github.com/example/decisions.git"]);
+  const groupBody = () => JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as Record<string, unknown>;
+  const setGroupBody = (body: Record<string, unknown>) => t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(body));
+  setGroupBody({ ...groupBody(), integration: { ...newGroupIntegration(LOCAL_MERGE)!, frozen: false } });
+  const service = new WebControlService({ ...t.h.deps, knownRepository: (id: string) => id === "repo", resolveRepository: () => t.repo });
+  const deps: ControlReadApiDeps = { store: t.h.store, epoch: "epoch", config: { readView: async () => ({}) } as never, service };
+  const app = express();
+  app.use((_req, res, next) => { res.locals.orcaPrincipal = { kind: "user", userId: "u", name: "u", roles: ["member"] } satisfies Principal; next(); });
+  app.use(express.json({ verify: verifyControlJsonBody }));
+  registerControlReadRoutes(app, deps, "web");
+  const server = createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("address");
+  const get = async (path = "/api/control/groups/g/decisions"): Promise<{ status: number; body: unknown }> => {
+    const res = await fetch(`http://127.0.0.1:${address.port}${path}`);
+    return { status: res.status, body: await res.json() };
+  };
+  const view = async (): Promise<View> => {
+    const answer = await get();
+    if (answer.status !== 200) throw new Error(`decisions view ${answer.status}: ${JSON.stringify(answer.body)}`);
+    return answer.body as View;
+  };
+  const integrate = async () => {
+    setGroupBody({ ...groupBody(), integration: { ...readGroupIntegration(groupBody())!, frozen: true } });
+    return integratePendingGroups({
+      store: t.h.store, roots: t.deps.roots, admissionGate: t.h.deps.admissionGate, repoPathOf: () => t.repo,
+      now: () => Date.now(), ghBin: "/nonexistent/gh", stopped: () => false,
+    });
+  };
+  return {
+    ...t, deps, get, view, integrate,
+    dispose: async () => { await new Promise((resolve) => server.close(resolve)); await t.h.dispose(); },
+  };
+}
+
+const runOf = (view: View, runId: string) => view.tasks.flatMap((task) => task.runs).find((run) => run.runId === runId)!;
+
+describe("the group decisions view (control run decisions Task 8)", { timeout: 60_000 }, () => {
+  it("shows a landed decision as group-branch before integration and as target after", async () => {
+    const w = await world({ decisions: () => [good()] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => SETTLED.includes(w.body(runId).state));
+      const before = await w.view();
+      expect(before).toMatchObject({ schema: "orca-group-decisions-v1", groupId: "g", projectKey: "github.com/example/decisions", pendingCount: 0 });
+      expect(before.tasks.map((task) => task.taskId)).toEqual(["a"]);
+      expect(runOf(before, runId)).toEqual({
+        runId, reported: "array",
+        decisions: [{ id: `${runId}/agent-0`, where: "group-branch", question: "q", chose: "c", kind: "interface", scope: "task" }],
+        pending: [], unlanded: [],
+      });
+      expect(await w.integrate()).toBe(true);
+      // §7 integration criterion: the target branch itself now holds the run's ledger line.
+      const onMain = g(w.repo, ["show", `main:.decisions/${runId}.jsonl`]).split("\n").map((l) => JSON.parse(l).id);
+      expect(onMain).toEqual([`${runId}/agent-0`]);
+      // mutation: swap the target and group-branch sources -> "group-branch", red
+      expect(runOf(await w.view(), runId).decisions.map((d) => [d.id, d.where])).toEqual([[`${runId}/agent-0`, "target"]]);
+    } finally { await w.dispose(); }
+  });
+
+  it("lists pending items with their reason and counts them", async () => {
+    const w = await world({ decisions: () => [good({ kind: "opinion", question: "which" }), good()] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => SETTLED.includes(w.body(runId).state));
+      const view = await w.view();
+      expect(view.pendingCount).toBe(1);
+      expect(runOf(view, runId)).toEqual({
+        runId, reported: "array",
+        decisions: [{ id: `${runId}/agent-1`, where: "group-branch", question: "q", chose: "c", kind: "interface", scope: "task" }],
+        pending: [{ pendingId: `pending-${runId}-0`, reason: 'kind-unknown:"opinion"', question: "which", chose: "c", undoHow: UNDO, state: "pending" }],
+        unlanded: [],
+      });
+    } finally { await w.dispose(); }
+  });
+
+  it("says a run reported no decisions", async () => {
+    const w = await world(); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => SETTLED.includes(w.body(runId).state));
+      expect(runOf(await w.view(), runId)).toEqual({ runId, reported: "absent", decisions: [], pending: [], unlanded: [] });
+    } finally { await w.dispose(); }
+  });
+
+  it("lists a blocked run's reported entries as unlanded", async () => {
+    const w = await world({ behaviour: () => "failed", decisions: () => [good({ question: "first" }), good({ kind: "opinion", chose: "second" })] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => w.body(runId).state === "blocked");
+      const drive = w.body(runId).drive;
+      expect([drive.landedCommit, drive.ledgerCommit]).toEqual([null, null]);
+      const view = await w.view();
+      expect(view.pendingCount).toBe(0);
+      expect(runOf(view, runId)).toEqual({
+        runId, reported: "array", decisions: [], pending: [],
+        unlanded: [{ entryIndex: 0, question: "first", chose: "c" }, { entryIndex: 1, question: "q", chose: "second" }],
+      });
+    } finally { await w.dispose(); }
+  });
+
+  it("answers on the socket channel too", async () => {
+    const w = await world({ decisions: () => [good()] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => SETTLED.includes(w.body(runId).state));
+      const dir = await realpath(await mkdtemp(join(tmpdir(), "gd-")));
+      const path = join(dir, "control.sock");
+      const bound = await bindControlSocket(buildControlSocketApp(w.deps), path);
+      if (!("close" in bound)) throw new Error(`socket not bound: ${bound.code}: ${bound.detail}`);
+      try {
+        // The agent read path (goal.md §1.2): the socket's principal is the agent, and the route answers it.
+        const socket = await overSocket(path, "GET", "/api/control/groups/g/decisions", { "x-orca-client": "mcp:reader" });
+        expect(socket.status).toBe(200);
+        const body = JSON.parse(socket.text) as View;
+        expect(runOf(body, runId).decisions.map((d) => [d.id, d.where])).toEqual([[`${runId}/agent-0`, "group-branch"]]);
+        expect(body).toEqual(await w.view());
+        const missing = await overSocket(path, "GET", "/api/control/groups/nope/decisions", { "x-orca-client": "mcp:reader" });
+        expect([missing.status, JSON.parse(missing.text).error.code]).toEqual([404, "group-not-found"]);
+      } finally { await bound.close(); await rm(dir, { recursive: true, force: true }); }
+    } finally { await w.dispose(); }
+  });
+});

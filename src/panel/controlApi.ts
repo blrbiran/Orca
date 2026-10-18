@@ -1,6 +1,8 @@
 import { readRunResults, readGroupResults } from './taskResults.js';
 import { readResultOutputBytes } from './taskResultOutputs.js';
 import { readControlOverview } from "./controlOverview.js";
+import { readGroupDecisionsView } from "./groupDecisions.js";
+import { groupRepoId } from "../control/executionDriver.js";
 import type { Express, NextFunction, Request, Response } from "express";
 import { randomUUID } from "node:crypto";
 import { canonicalBytes } from "../control/canonicalJson.js";
@@ -205,6 +207,20 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       sendMappedControlError(res, error, readErrorContext(deps.store, groupId));
     }
   });
+
+  // Control run decisions plan Task 8: the group's decisions, read from refs. Here, so the socket (agents) reads it too.
+  app.get("/api/control/groups/:groupId/decisions", asyncRoute(async (req, res) => {
+    const groupId = String(req.params.groupId);
+    try {
+      const repoId = groupRepoId(deps.store, groupId);
+      const repo = deps.service?.repositoryKnown(repoId) ? deps.service.repositoryPathOf(repoId) : null;
+      if (repo === null) { sendControlError(res, 404, "control-target-not-allowed", "No trusted repository has this id."); return; }
+      res.json(await readGroupDecisionsView(deps.store, repo, groupId));
+    } catch (error) {
+      if (error instanceof ControlError && error.code === "group-not-found") { sendControlError(res, 404, error.code, "No control group was found."); return; }
+      sendMappedControlError(res, error, readErrorContext(deps.store, groupId));
+    }
+  }));
 
   app.get("/api/control/groups/:groupId/commands/:commandId", (req, res, next) => {
     try {

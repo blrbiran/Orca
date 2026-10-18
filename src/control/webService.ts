@@ -675,6 +675,10 @@ export class WebControlService {
     try { path = this.repositoryPath(repoId); } catch { return null; }
     return suggestedTarget(path);
   }
+  /** Control run decisions plan Task 8: a repository's trusted path for the group decisions read; null when it does not resolve. */
+  repositoryPathOf(repoId: string): string | null {
+    try { return this.repositoryPath(repoId); } catch { return null; }
+  }
   /** The setters' check against a repository's trusted path; a path that does not resolve is its own named check. */
   private async schemeCheck(repoId: string, scheme: IntegrationScheme): Promise<string | null> {
     let path: string;

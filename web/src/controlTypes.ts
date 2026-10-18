@@ -547,6 +547,20 @@ export type GroupIntegrationViewV1 = {
 };
 /** `suggestedTarget` (controller ruling, Task 7): origin's HEAD branch, else the current branch, else null; never stored. */
 export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number; suggestedTarget: string | null };
+/** Control run decisions plan Task 8: GET /api/control/groups/:groupId/decisions, a group's decisions read from refs. */
+export type DecisionWhereV1 = "working-tree" | "target" | "group-branch";
+export type GroupDecisionsViewV1 = {
+  schema: "orca-group-decisions-v1"; groupId: string; projectKey: string | null; pendingCount: number;
+  tasks: Array<{
+    taskId: string;
+    runs: Array<{
+      runId: string; reported: "absent" | "array" | "malformed";
+      decisions: Array<{ id: string; where: DecisionWhereV1; question: string; chose: string; kind: string; scope: string }>;
+      pending: Array<{ pendingId: string; reason: string; question: string | null; chose: string | null; undoHow: string | null; state: "pending" | "approved" | "rejected" }>;
+      unlanded: Array<{ entryIndex: number; question: string | null; chose: string | null }>;
+    }>;
+  }>;
+};
 /** Integration spec §3.1: set-group-integration's payload, the same body shape as the repository default's. */
 export type SetGroupIntegrationPayloadV1 = { integration: IntegrationSchemeV1 };
 

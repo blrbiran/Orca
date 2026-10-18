@@ -1756,6 +1756,27 @@ export const repositoryIntegrationSchema = z
   .object({ schema: z.literal("orca-repository-integration-v1"), repoId: idSchema, integration: integrationSchemeSchema, revision: safeInteger, suggestedTarget: z.string().nullable() })
   .strict();
 export type RepositoryIntegrationV1 = z.infer<typeof repositoryIntegrationSchema>;
+// Control run decisions plan Task 8: a group's decisions, read from the refs they live on (src/panel/groupDecisions.ts).
+const decisionWhereSchema = z.enum(["working-tree", "target", "group-branch"]);
+export const groupDecisionsViewSchema = z
+  .object({
+    schema: z.literal("orca-group-decisions-v1"), groupId: idSchema, projectKey: z.string().nullable(), pendingCount: safeInteger,
+    tasks: z.array(z.object({
+      taskId: idSchema,
+      runs: z.array(z.object({
+        runId: idSchema,
+        reported: z.enum(["absent", "array", "malformed"]),
+        decisions: z.array(z.object({ id: z.string(), where: decisionWhereSchema, question: z.string(), chose: z.string(), kind: z.string(), scope: z.string() }).strict()),
+        pending: z.array(z.object({
+          pendingId: z.string(), reason: z.string(), question: z.string().nullable(), chose: z.string().nullable(), undoHow: z.string().nullable(),
+          state: z.enum(["pending", "approved", "rejected"]),
+        }).strict()),
+        unlanded: z.array(z.object({ entryIndex: safeInteger, question: z.string().nullable(), chose: z.string().nullable() }).strict()),
+      }).strict()),
+    }).strict()),
+  })
+  .strict();
+export type GroupDecisionsViewV1 = z.infer<typeof groupDecisionsViewSchema>;
 export type SetIntegrationSchemePayload = z.infer<typeof setIntegrationSchemePayloadSchema>;
 export type SetGroupIntegrationPayload = z.infer<typeof setGroupIntegrationPayloadSchema>;
 export type SetWorkspaceModePayload = z.infer<typeof setWorkspaceModePayloadSchema>;

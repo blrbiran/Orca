@@ -30,6 +30,7 @@ import type {
   ControlConfigV1 as ServerControlConfigV1,
   ControlSummaryV1 as ServerControlSummaryV1,
   EvidenceManifestV1 as ServerEvidenceManifestV1,
+  GroupDecisionsViewV1 as ServerGroupDecisionsViewV1,
   GroupViewV1 as ServerGroupViewV1,
   HandoffStopPayload as ServerHandoffStopPayload,
   ImportPlanPayload as ServerImportPlanPayload,
@@ -68,6 +69,7 @@ import type {
   ControlSummaryV1 as WebControlSummaryV1,
   EstimatePayloadV1 as WebEstimatePayloadV1,
   EvidenceManifestV1 as WebEvidenceManifestV1,
+  GroupDecisionsViewV1 as WebGroupDecisionsViewV1,
   GroupViewV1 as WebGroupViewV1,
   HandoffStopPayloadV1 as WebHandoffStopPayloadV1,
   ImportPlanPayloadV1 as WebImportPlanPayloadV1,
@@ -208,6 +210,9 @@ function commandErrorWebToServer(x: WebCommandErrorV1): ServerCommandErrorV1 { r
 // Accounts Task 11 (add-only): the Usage panel's read, checked both ways like the other views.
 function usageServerToWeb(x: ServerUsageViewV1): WebUsageViewV1 { return x; }
 function usageWebToServer(x: WebUsageViewV1): ServerUsageViewV1 { return x; }
+// Control run decisions plan Task 8: the group decisions read, checked both ways like the other views.
+function groupDecisionsServerToWeb(x: ServerGroupDecisionsViewV1): WebGroupDecisionsViewV1 { return x; }
+function groupDecisionsWebToServer(x: WebGroupDecisionsViewV1): ServerGroupDecisionsViewV1 { return x; }
 
 // Task 9: the commands the browser may send. A payload mirror that drifts from the
 // server's schema is a command the ledger will refuse (or, worse, one it will
@@ -355,6 +360,8 @@ export const __webParityAssignabilityChecks__ = [
   requirementAcceptWebToServer,
   usageServerToWeb,
   usageWebToServer,
+  groupDecisionsServerToWeb,
+  groupDecisionsWebToServer,
 ] as const;
 
 // Overview schema mirrors must remain mutually assignable in the root typecheck.
