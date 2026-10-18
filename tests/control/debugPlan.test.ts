@@ -258,6 +258,14 @@ describe("buildDebugPlanSource", () => {
     expect(contract.safetyPolicy.allowlistPaths).toEqual([]);
   });
 
+  it("named checks replace both the placeholder and the original's checks", () => {
+    for (const given of [input({ contract: null, missing: ["contract"] }), input()]) {
+      const contract = contractOf(buildDebugPlanSource(given, { ...OPTS, checks: ["npm test", "npm run lint"] }));
+      expect(contract.context.buildTestCommands).toEqual(["npm test", "npm run lint"]);
+      expect(contract.verification.requiredChecks).toEqual(["npm test", "npm run lint"]);
+    }
+  });
+
   it("the plan's goal is the goal text's first line; the task keeps the whole text", () => {
     const source = buildDebugPlanSource(input(), OPTS);
     expect(source.goal).toBe("Debug task for correction c_1 (wrong, by owner@example.invalid at 2026-10-18T01:00:00.000Z).");

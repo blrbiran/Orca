@@ -16,6 +16,7 @@ import { insertPendingDecisions } from "../../src/control/pendingDecisions.js";
 import { readArchivedPlan } from "../../src/control/queries.js";
 import { pendingIdOf } from "../../src/control/runLedger.js";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
+import { correctionDebugOpenPayloadSchema } from "../../src/control/webProtocol.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { unsetInheritedGitEnv } from "../../src/control/workspace.js";
 import { deriveFixRunId } from "../../src/corrections/fields.js";
@@ -119,12 +120,12 @@ async function world(options: { ledgerAt?: LedgerAt; port?: (base: ExecutionPort
   let sequence = 0;
   const revisionOf = (groupId: string) => Number(h.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)?.revision ?? 0);
   /** The open as the route sends it: the target its resolver names, at that group's current revision. */
-  const openCommand = (correctionId: string, payload: { reopen?: boolean; undoHow?: string } = {}, commandId = `open-${++sequence}`) => {
+  const openCommand = (correctionId: string, payload: { reopen?: boolean; undoHow?: string; checks?: string[] } = {}, commandId = `open-${++sequence}`) => {
     const groupId = debugGroupIdFor(h.store, correctionId, payload.reopen === true);
     return { schema: "orca-raw-command-v1" as const, commandId, actorId: "human", expectedRevision: revisionOf(groupId), verb: "correction-debug-open" as const,
       target: { kind: "group" as const, groupId }, payload: { correctionId, ...payload } };
   };
-  const open = (correctionId: string, payload: { reopen?: boolean; undoHow?: string } = {}) => service.openCorrectionDebugGroup(openCommand(correctionId, payload));
+  const open = (correctionId: string, payload: { reopen?: boolean; undoHow?: string; checks?: string[] } = {}) => service.openCorrectionDebugGroup(openCommand(correctionId, payload));
   const storeBytes = () => readFile(correctionsFile(dir), "utf8");
   const body = (groupId: string) => JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)) as Record<string, unknown>;
   const groupCount = (correctionId: string) => Number(h.store.db.prepare("SELECT COUNT(*) AS n FROM groups WHERE substr(id,1,?)=?").get(`debug-${correctionId}`.length, `debug-${correctionId}`)!.n);
@@ -494,13 +495,16 @@ describe("the debug run is a fresh session (debug task Task 7)", () => {
 
 describe("a debug group whose checks are still the placeholder is not confirmed or started (debug task Task 7, controller ruling)", () => {
   const PLACEHOLDER = DEBUG_DEFAULT_BUILD_TEST_COMMANDS[0];
-  /** A debug group with no original contract: its correction names a pending item of a run the control store never saw. */
+  /**
+   * A debug group whose task lists the placeholder. Open refuses to produce one by omission (debug-checks-required), so
+   * the placeholder is named as a check, which is the only way left to reach the confirm and start guards.
+   */
   async function placeholderGroup(w: World): Promise<string> {
-    // A run with no task (an estimate's) is no original run: the input has no contract, so the plan keeps the placeholder.
+    // A run with no task (an estimate's) is no original run: the input has no contract.
     w.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,?,?,0,?)").run("run-9", "g", "estimate", 1, JSON.stringify({ runId: "run-9", groupId: "g", workItemId: "estimate", taskId: null, generation: 1, state: "settled" }));
     insertPendingDecisions(w.store, "g", "run-9", [{ pendingId: pendingIdOf("run-9", 0), ledgerRun: "run-9", entryIndex: 0, entry: { question: "q" }, reason: "refused", at: "2026-10-18T00:00:00.000Z", evidence: [] }]);
     const pending = await w.record({ runId: "run-9", pendingId: pendingIdOf("run-9", 0) });
-    const groupId = opened(await w.open(pending.id)).groupId;
+    const groupId = opened(await w.open(pending.id, { checks: [PLACEHOLDER] })).groupId;
     expect(readArchivedPlan(w.store, groupId).plan.tasks[0]!.originalContractCanonicalJson).toContain(PLACEHOLDER);
     return groupId;
   }
@@ -549,5 +553,62 @@ describe("a debug group whose checks are still the placeholder is not confirmed 
       expect(await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), budgetMode: "soft" }))).toMatchObject({ result: { kind: "confirmed" } });
       expect(await service.start(h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
     } finally { await h.dispose(); }
+  });
+});
+
+describe("correction-debug-open `checks` (debug task Task 7, controller ruling)", () => {
+  /** A pending-target correction on a run with no task: the frozen input has no contract. */
+  async function noContract(w: World): Promise<string> {
+    w.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,?,?,0,?)").run("run-9", "g", "estimate", 1, JSON.stringify({ runId: "run-9", groupId: "g", workItemId: "estimate", taskId: null, generation: 1, state: "settled" }));
+    insertPendingDecisions(w.store, "g", "run-9", [{ pendingId: pendingIdOf("run-9", 0), ledgerRun: "run-9", entryIndex: 0, entry: { question: "q" }, reason: "refused", at: "2026-10-18T00:00:00.000Z", evidence: [] }]);
+    return (await w.record({ runId: "run-9", pendingId: pendingIdOf("run-9", 0) })).id;
+  }
+  const requiredChecks = (w: World, groupId: string) => (JSON.parse(readArchivedPlan(w.store, groupId).plan.tasks[0]!.originalContractCanonicalJson) as
+    { verification: { requiredChecks: string[] }; context: { buildTestCommands: string[] } });
+
+  it("refuses, booked, an open with no contract and no checks, writing nothing", async () => {
+    const w = await world(); try {
+      const cid = await noContract(w);
+      const before = await w.storeBytes();
+      const command = w.openCommand(cid);
+      const answer = await w.service.openCorrectionDebugGroup(command);
+      expect(refusal(answer)).toBe("debug-checks-required");
+      expect(durableCommandErrorStatuses["debug-checks-required"]).toBe(409);
+      expect(lookupCommandResult(w.store, command.target.groupId, command.commandId)!.body).toMatchObject({ error: { code: "debug-checks-required" } });
+      expect(w.groupCount(cid)).toBe(0);
+      expect(await w.storeBytes()).toBe(before);
+    } finally { await w.dispose(); }
+  });
+
+  it("opens with checks: the frozen plan holds them (deduped) and confirm then succeeds", async () => {
+    const w = await world(); try {
+      const cid = await noContract(w);
+      const groupId = opened(await w.open(cid, { checks: ["npm test", "npm run lint", "npm test"] })).groupId;
+      const contract = requiredChecks(w, groupId);
+      expect(contract.verification.requiredChecks).toEqual(["npm test", "npm run lint"]);
+      expect(contract.context.buildTestCommands).toEqual(["npm test", "npm run lint"]);
+      expect(await confirmDebug(w, groupId)).toMatchObject({ result: { kind: "confirmed" } });
+    } finally { await w.dispose(); }
+  });
+
+  it("with an original contract, absent checks keep its checks", async () => {
+    const w = await world(); try {
+      const inherited = opened(await w.open(w.correction.id)).groupId;
+      expect(requiredChecks(w, inherited).verification.requiredChecks).toEqual(["true"]);
+    } finally { await w.dispose(); }
+  });
+
+  it("with an original contract, given checks replace its checks", async () => {
+    const w = await world(); try {
+      const replaced = opened(await w.open(w.correction.id, { checks: ["npm test"] })).groupId;
+      expect(requiredChecks(w, replaced).verification.requiredChecks).toEqual(["npm test"]);
+      expect(requiredChecks(w, replaced).context.buildTestCommands).toEqual(["npm test"]);
+    } finally { await w.dispose(); }
+  });
+
+  it("rejects an empty checks list and an empty check at the schema", () => {
+    expect(correctionDebugOpenPayloadSchema.safeParse({ correctionId: "c_0123456789abcdef", checks: [] }).success).toBe(false);
+    expect(correctionDebugOpenPayloadSchema.safeParse({ correctionId: "c_0123456789abcdef", checks: [""] }).success).toBe(false);
+    expect(correctionDebugOpenPayloadSchema.safeParse({ correctionId: "c_0123456789abcdef", checks: ["npm test"] }).success).toBe(true);
   });
 });

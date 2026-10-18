@@ -101,6 +101,8 @@ export const durableCommandErrorStatuses = {
   "debug-group-not-reopenable": 409,
   // Controller ruling (debug plan Task 4/7): a debug group whose task's checks are still the placeholder is not confirmed or started.
   "debug-checks-unnamed": 409,
+  // Controller ruling (Task 7): no original contract and no `checks` in the open; refused before anything is written.
+  "debug-checks-required": 409,
   "correction-withdrawn": 409,
   "correction-withdrawals-unreadable": 409,
   "plan-version-conflict": 409,

@@ -11,7 +11,7 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { readBudgetProposal, readGroup, saveGroup, allWork, readWork, saveWork } from "./queries.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { ControlError } from "./errors.js";
-import { refuseUnnamedDebugChecks } from "./debugGroup.js";
+import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { zero } from "./commands.js";
 import { dispatchEnvelopeSchema, executionSnapshotSchema, type CapabilityViewV1, type CommandErrorBodyV1, type CommandSuccessV1, type DispatchEnvelopeV1, type ExecutionSnapshotV1, type NoProviderStartProofV1, type ProfileBindingV1, type ProviderStartMarkerV1, type ProofAcceptedRecordV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
 import type { ExecutionProfileRouter, FrozenProfile, ObservedProfile } from "./profiles.js";

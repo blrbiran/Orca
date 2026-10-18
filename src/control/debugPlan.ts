@@ -144,14 +144,15 @@ const sortedUnique = (values: readonly string[]): string[] => [...new Set(values
 const unique = (values: readonly string[]): string[] => [...new Set(values)];
 
 /** Design §4.3: the debug contract. Budgets and checks come from the original when there is one. */
-function debugContract(input: DebugInputV1, opts: { repoPath: string; existingTestDirs: string[] }): TaskContract {
+function debugContract(input: DebugInputV1, opts: { repoPath: string; existingTestDirs: string[]; checks?: readonly string[] }): TaskContract {
   const original = input.contract;
   const targetPaths = sortedUnique([
     ...(original?.context.targetPaths ?? DEBUG_DEFAULT_TARGET_PATHS),
     ...(original?.safetyPolicy.allowlistPaths ?? []),
     ...opts.existingTestDirs.map((dir) => `${dir}/**`),
   ]);
-  const buildTestCommands = [...(original?.context.buildTestCommands ?? DEBUG_DEFAULT_BUILD_TEST_COMMANDS)];
+  // Named checks (the open verb's `checks`) replace both the original's and the placeholder.
+  const buildTestCommands = [...(opts.checks ?? original?.context.buildTestCommands ?? DEBUG_DEFAULT_BUILD_TEST_COMMANDS)];
   return taskContractSchema.parse({
     objective: { taskId: DEBUG_TASK_ID, goal: debugGoalText(input), successCondition: DEBUG_REPRODUCTION_CONDITION, nonGoals: [] },
     context: { repoPath: opts.repoPath, targetPaths, relevantDocs: [...(original?.context.relevantDocs ?? [])], buildTestCommands, constraints: [] },
@@ -171,7 +172,7 @@ function debugContract(input: DebugInputV1, opts: { repoPath: string; existingTe
 /** The source normalizeControlPlan takes (with repoId and planId); the contract inline, canonical, as parseContract keeps it. */
 export function buildDebugPlanSource(
   input: DebugInputV1,
-  opts: { repoPath: string; existingTestDirs: string[]; agent: PartialSelection | undefined },
+  opts: { repoPath: string; existingTestDirs: string[]; agent: PartialSelection | undefined; checks?: readonly string[] },
 ): SchedulerControlPlanSource {
   const contract = debugContract(input, opts);
   return {

@@ -1,6 +1,5 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { z } from "zod";
 import { deriveFixRunId } from "../corrections/fields.js";
 import { DECISION_NOT_FOUND } from "../corrections/originalDecision.js";
 import { projectKeyOf } from "../corrections/projectKey.js";
@@ -16,12 +15,13 @@ import { withCommandContext } from "./commandClient.js";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { correctionClosedAtRef } from "./correctionState.js";
 import { collectDebugInput, PENDING_DECISION_NOT_FOUND, type DebugInputV1 } from "./debugInput.js";
-import { buildDebugPlanSource, DEBUG_DEFAULT_BUILD_TEST_COMMANDS, DEBUG_TEST_DIRS, debugPlanId } from "./debugPlan.js";
+import { readDebugMark, type DebugMark } from "./debugChecks.js";
+import { buildDebugPlanSource, DEBUG_TEST_DIRS, debugPlanId } from "./debugPlan.js";
 import { ControlError } from "./errors.js";
 import { describeError, groupStopped } from "./executionDriver.js";
 import { findDecision, integrationTargetRef } from "./ledgerAtRef.js";
 import { normalizeControlPlan, writeImportedPlan } from "./planImport.js";
-import { readArchivedPlan, readVersions } from "./queries.js";
+import { readVersions } from "./queries.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import type { ControlStore } from "./store.js";
 import type { WebCommandResult, WebServiceDeps } from "./webService.js";
@@ -34,52 +34,8 @@ import type { CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
  */
 export type CorrectionDebugOpenCommand = Extract<RawAuthorityCommandV1, { verb: "correction-debug-open" }>;
 
-/** Declared here (null at open); Task 9 fills it when the debug run's landing closes the correction. */
-export type ClosingRecord = { state: "written"; relPath: string; fixRunId: string } | { state: "refused"; reason: string }
-  | { state: "chose-instead-missing" } | { state: "closed-by-human-first"; commit: string };
-
-export interface DebugMark {
-  correctionId: string; ordinal: number; inputHash: string; missing: DebugInputV1["missing"];
-  agentFallback: { original: PartialSelection; reason: string } | null; undoHow: string | null; closing: ClosingRecord | null;
-}
-
-const closingSchema = z.discriminatedUnion("state", [
-  z.object({ state: z.literal("written"), relPath: z.string().min(1), fixRunId: z.string().min(1) }).strict(),
-  z.object({ state: z.literal("refused"), reason: z.string().min(1) }).strict(),
-  z.object({ state: z.literal("chose-instead-missing") }).strict(),
-  z.object({ state: z.literal("closed-by-human-first"), commit: z.string().min(1) }).strict(),
-]);
-const debugMarkSchema = z.object({
-  correctionId: z.string().min(1), ordinal: z.number().int().positive(), inputHash: z.string().regex(/^[a-f0-9]{64}$/),
-  missing: z.array(z.enum(["run", "base", "attemptSha", "objects", "contract"])),
-  agentFallback: z.object({
-    original: z.object({ agent: z.string().optional(), model: z.string().optional(), contextWindow: z.string().optional() }).strict(),
-    reason: z.string().min(1),
-  }).strict().nullable(),
-  undoHow: z.string().min(1).nullable(), closing: closingSchema.nullable(),
-}).strict();
-
-/** A group body's debug mark; null on a group no correction opened. A mark that does not parse blocks by name, as the archive mark does. */
-export function readDebugMark(group: unknown): DebugMark | null {
-  if (typeof group !== "object" || group === null || !Object.hasOwn(group, "debug")) return null;
-  const parsed = debugMarkSchema.safeParse((group as { debug: unknown }).debug);
-  if (!parsed.success) throw new ControlError("recovery-blocked", "debug-mark-invalid");
-  return parsed.data as DebugMark;
-}
-
-/**
- * Controller ruling (Task 4): a debug group whose task still lists the placeholder check (no original contract was found)
- * is neither confirmed nor started; the agent could not be held to a check nobody named. A group no correction opened is
- * unaffected. Called inside the confirm and start transactions, so the refusal is booked like the others.
- */
-export function refuseUnnamedDebugChecks(store: ControlStore, groupId: string, group: unknown): void {
-  if (readDebugMark(group) === null) return;
-  const placeholder = new Set<string>(DEBUG_DEFAULT_BUILD_TEST_COMMANDS);
-  for (const task of readArchivedPlan(store, groupId).plan.tasks) {
-    const contract = JSON.parse(task.originalContractCanonicalJson) as { verification: { requiredChecks: string[] } };
-    if (contract.verification.requiredChecks.some((check) => placeholder.has(check))) throw new ControlError("debug-checks-unnamed", task.taskId);
-  }
-}
+// The mark and the checks guard live in a leaf module (webDispatch.ts needs the guard); re-exported for this module's users.
+export { readDebugMark, type ClosingRecord, type DebugMark } from "./debugChecks.js";
 
 const baseId = (correctionId: string): string => `debug-${correctionId}`;
 const idOf = (correctionId: string, ordinal: number): string => (ordinal === 1 ? baseId(correctionId) : `${baseId(correctionId)}-${ordinal}`);
@@ -152,7 +108,7 @@ export function archiveUnstartedDebugGroups(
 export interface DebugOpenDeps extends WebServiceDeps { listRepositories: () => Array<{ repoId: string; path: string }> }
 
 /** Everything read before the transaction: the frozen input, where it came from, and the agent the plan names. */
-interface Prepared { input: DebugInputV1; repoId: string; repoPath: string; existingTestDirs: string[]; agent: PartialSelection | undefined; agentFallback: DebugMark["agentFallback"] }
+interface Prepared { input: DebugInputV1; repoId: string; repoPath: string; existingTestDirs: string[]; agent: PartialSelection | undefined; agentFallback: DebugMark["agentFallback"]; checks: string[] | undefined }
 
 /** Task 3's refusals (CorrectRejection) and the withdrawals reader's, as the durable codes they are booked under. */
 function asControlError(error: unknown): unknown {
@@ -202,6 +158,9 @@ async function prepare(deps: DebugOpenDeps, command: CorrectionDebugOpenCommand)
   const repository = await repositoryOf(deps, correction.projectKey);
   if (repository === null) throw new ControlError("correction-repository-unknown", correction.projectKey);
   const input = await collectDebugInput({ store: deps.store, repoPath: repository.path }, correction);
+  // No original contract means no check to inherit; the placeholder would leave the group unconfirmable, so the caller names them.
+  const checks = command.payload.checks === undefined ? undefined : [...new Set(command.payload.checks)];
+  if (input.contract === null && checks === undefined) throw new ControlError("debug-checks-required");
   // Ruling C1: closed means the integration target of the original run's group (HEAD without one) holds the closing row.
   const { id: _id, ...row } = correction;
   const ref = (input.originalRun === null ? null : await integrationTargetRef(deps.store, input.originalRun.groupId)) ?? "HEAD";
@@ -221,7 +180,7 @@ async function prepare(deps: DebugOpenDeps, command: CorrectionDebugOpenCommand)
     try { await deps.port.resolveAgent(original); agent = original; }
     catch (error) { agentFallback = { original, reason: describeError(error) }; }
   }
-  return { input, repoId: repository.repoId, repoPath: repository.path, existingTestDirs: await existingTestDirs(repository.path), agent, agentFallback };
+  return { input, repoId: repository.repoId, repoPath: repository.path, existingTestDirs: await existingTestDirs(repository.path), agent, agentFallback, checks };
 }
 
 function success(context: WebCommandContext, groupId: string, correctionId: string, created: boolean): { status: number; body: CommandSuccessV1 } {
@@ -268,7 +227,7 @@ export async function applyCorrectionDebugOpen(deps: DebugOpenDeps, command: Cor
       const { input, repoId, repoPath } = prepared;
       const inputJson = canonicalBytes(input).toString("utf8"), inputHash = sha256Canonical(input);
       const planId = debugPlanId(groupId);
-      const plan = normalizeControlPlan({ ...buildDebugPlanSource(input, { repoPath, existingTestDirs: prepared.existingTestDirs, agent: prepared.agent }), repoId, planId });
+      const plan = normalizeControlPlan({ ...buildDebugPlanSource(input, { repoPath, existingTestDirs: prepared.existingTestDirs, agent: prepared.agent, checks: prepared.checks }), repoId, planId });
       const defaults = deps.defaults();
       writeImportedPlan({
         ...deps, estimatorSlot: { kind: "rejected", partial: null, code: "control-estimator-unconfigured" },

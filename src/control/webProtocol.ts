@@ -888,6 +888,8 @@ export const rejectPendingDecisionPayloadSchema = z.object({ pendingId: idSchema
 // ordinal once the newest debug group is stopped or archived; `undoHow` is the owner's, recorded for the closing row.
 export const correctionDebugOpenPayloadSchema = z.object({
   correctionId: z.string().regex(/^c_[a-f0-9]{16}$/), reopen: z.boolean().optional(), undoHow: nonemptyString.optional(),
+  // The checks the debug task is held to; required when the original run has no contract to inherit them from.
+  checks: z.array(nonemptyString).min(1).optional(),
 }).strict();
 export const verifySavedResultPayloadSchema=z.object({sourceRunId:idSchema,sourceAttempt:positiveSafeInteger,capsuleHash:hashSchema}).strict();
 export const savedResultEligibilityViewSchema=savedResultSourceEligibilitySchema;
