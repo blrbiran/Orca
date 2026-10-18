@@ -1,0 +1,40 @@
+{
+  "v": 1,
+  "runId": "orca-dev-1710772d",
+  "runtime": "claude-code",
+  "sessionRef": "1710772d-f1a6-4c0f-9be2-e65e23cd72ec",
+  "writtenAt": "2026-10-18T05:16:35.222Z",
+  "head": "e559c23a4a85048ba1d71b24df9e53479f46d781",
+  "level": {
+    "kind": "reading",
+    "level": 332455,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Control-run-decisions plan: SDD in Orca-wt/control-run-decisions (branch codex/control-run-decisions). Tasks 1-8 complete per ledger .superpowers/sdd/2026-10-18-control-run-decisions/progress.md; Task 9 dispatched (BASE 9cdaae32); then Tasks 10, 11, final review + one fix wave (deferred minors listed in the ledger), full gate with ORCA_CCLOOP_BIN=/private/tmp/ccb6-qswQ/ccloop/dist/cli.js, ff-only merge into main.",
+    "Then: Decisions-page fix (view reviewed + withdraw review/correction) — diagnosis in .superpowers/sdd/2026-10-18-decisions-review-withdraw/diagnosis.md.",
+    "Then: correction-debug-task plan (run its Task 1 pre-script first; stop on a name mismatch); then ccloop codex phase isolation plan (stop at Task 4 Step 6 only if a fixture change beyond the session grant is needed; Task 7 paid run asks the human)."
+  ],
+  "open": [
+    "Task 12 of the decisions plan is blocked on ccloop emitting decisions[] (spec §3.1 not done).",
+    "Code-over-agent survey saved at .superpowers/sdd/2026-10-18-decisions-review-withdraw/code-over-agent-survey.md, not acted on."
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "Any paid run (codex gpt-6-luna after 10-22, debug-task end-to-end, ccloop Task 7) needs a fresh yes each time."
+    }
+  ],
+  "measurements": [
+    {
+      "command": "git -C /Users/biran/code/skills/orca/Orca-wt/control-run-decisions log --oneline e559c23a..HEAD",
+      "exitCode": 0,
+      "commit": "e559c23a4a85048ba1d71b24df9e53479f46d781",
+      "observedAt": "2026-10-18T05:16:35.169Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-1710772d-hwdtWf/1.txt"
+    }
+  ]
+}
