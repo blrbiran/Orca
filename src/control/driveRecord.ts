@@ -2,6 +2,7 @@ import { z } from "zod";
 import { idSchema, safeInteger } from "./schema.js";
 import { lockSkillSchema } from "../skills/syncskill.js";
 import { recordProjectionChange } from "./projectionJournal.js";
+import { pendingEntrySchema } from "./runLedger.js";
 import type { ControlStore } from "./store.js";
 
 /**
@@ -86,6 +87,12 @@ export const driveRecordSchema = z.object({
   // units), stored when the run blocks on a terminal other than `succeeded`. Optional: absent when ccloop stated none and
   // in every drive record written before it existed; the v9 store keeps an older Orca from reading one.
   stopReason: z.string().min(1).optional(),
+  // Control run decisions: the run's refused decisions, staged by D before its compare-and-swap and inserted into
+  // pending_decisions by markLanded (then cleared). Defaulted so a drive record from before this field still parses.
+  stagedPending: z.array(pendingEntrySchema).default([]),
+  // Control run decisions: the `orca: decisions <runId>` commit that carried this run's ledger lines when the run landed
+  // nothing (`landedCommit` null); a later step writes it. Defaulted for the same reason.
+  ledgerCommit: commitSchema.nullable().default(null),
 }).strict();
 export type DriveRecord = z.infer<typeof driveRecordSchema>;
 

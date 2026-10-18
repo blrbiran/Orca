@@ -9,11 +9,14 @@ import { readConfirmedReconcileSlot, readConfirmedTaskExecution } from "./execut
 import { privateDirectory } from "./paths.js";
 import { readGroup, saveGroup } from "./queries.js";
 import { bookReconcileUsage } from "./usageLedger.js";
+import { insertPendingDecisions } from "./pendingDecisions.js";
+import { reportedDecisionsOf, type ReportedDecisions } from "./reportedDecisions.js";
+import { ccloopEvidenceString, runEvidence, writeRunLedger, type PendingEntry } from "./runLedger.js";
 import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
 import { AgentsRunRefused, TERMINAL_OUTCOMES, cloneDirOf, latestAttemptSha, loopDirOf, runTask } from "../scheduler/ccloopRunner.js";
 import { netChangeSet } from "../scheduler/harvest.js";
 import { markersRemaining, materialiseConflict, pinConflictCommit, rebuildMergeCommit, synthesizeReconcileContractOf } from "../scheduler/reconcile.js";
-import { blockRun, describeError, groupRepoId, readDriverRun, saveDriverRun, write, type DriverContext, type DriverRun, type ExecutionDriverDeps } from "./executionDriver.js";
+import { blockRun, describeError, groupRepoId, readDriverRun, savedReport, saveDriverRun, write, type DriverContext, type DriverRun, type ExecutionDriverDeps } from "./executionDriver.js";
 import { QUIET_GIT, compareAndSwap, conflictPathOf, incomingRefOf, landingPathOf, reconcileRunsDirOf, removeOwnPath, revParse, workBranchRef } from "./workspace.js";
 import type { ReconcileRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
@@ -45,7 +48,28 @@ export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommi
     const run = readDriverRun(deps.store, runId);
     if (run.state !== "collected" && run.state !== "reconciling") return;
     run.state = "landed";
-    run.drive = { ...run.drive!, landedCommit };
+    // Control run decisions: the refused decisions staged before the swap become pending only now, in the same
+    // transaction that records the landing, so a run whose landing never completed leaves none behind.
+    insertPendingDecisions(deps.store, run.groupId, runId, (run.drive!.stagedPending ?? []) as PendingEntry[]);
+    run.drive = { ...run.drive!, landedCommit, stagedPending: [] };
+    saveDriverRun(deps.store, run);
+  });
+}
+
+/** Control run decisions: what a run's ledger is written from -- the decisions it reported, its evidence and the time. */
+export async function runLedgerInputs(deps: ExecutionDriverDeps, runId: string): Promise<{ reported: ReportedDecisions; evidence: string[]; at: string }> {
+  const run = readDriverRun(deps.store, runId);
+  const reported = reportedDecisionsOf(await savedReport(deps.store, runId));
+  // Ledger spec ERRATUM 8 (human ruling 2026-10-18): the attempt sha, never the landing commit.
+  const evidence = runEvidence(runId, run.drive!.attemptSha!, await ccloopEvidenceString(deps.ccloopBin));
+  return { reported, evidence, at: (deps.now?.() ?? new Date()).toISOString() };
+}
+
+/** Control run decisions: the run's refused decisions, replacing whatever an earlier landing attempt staged. */
+export function stagePending(deps: ExecutionDriverDeps, runId: string, pending: PendingEntry[]): void {
+  write(deps, () => {
+    const run = readDriverRun(deps.store, runId);
+    run.drive = { ...run.drive!, stagedPending: pending };
     saveDriverRun(deps.store, run);
   });
 }
@@ -99,11 +123,19 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string): Promise<b
     // Into the target's shared refs: the incoming ref is how the attempt stays reachable until settle.
     await git(landing, [...QUIET_GIT, "fetch", "--no-tags", join(drive.sourceDir, "repo"), `+${drive.attemptSha}:${incomingRefOf(runId)}`]);
     try {
-      await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "merge", "--no-ff", "-m", `orca: land ${runId}`, incomingRefOf(runId)]);
+      await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "merge", "--no-ff", "--no-commit", incomingRefOf(runId)]);
     } catch {
       await git(landing, [...QUIET_GIT, "merge", "--abort"]).catch(() => undefined);
       return null;
     }
+    // Control run decisions: the run's ledger lands inside its own merge commit. MERGE_HEAD keeps the commit below the
+    // same two-parent merge, so findLanding still names it. `-f`: a target that ignores .decisions/ still gets it.
+    const { reported, evidence, at } = await runLedgerInputs(deps, runId);
+    const { writtenIds, pending } = await writeRunLedger(join(landing, ".decisions"), { ledgerRun: runId, reported, codeAuthored: [], at, evidence });
+    if (writtenIds.length > 0) await git(landing, [...QUIET_GIT, "add", "-f", join(".decisions", `${runId}.jsonl`)]);
+    await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "commit", "--no-edit", "-m", `orca: land ${runId}`]);
+    // Before the swap: a death after it finds the landing, skips this produce and still has these for markLanded.
+    stagePending(deps, runId, pending);
     return revParse(landing, "HEAD");
   });
   if (landed.kind === "not-produced") return beginReconcile(deps, runId, targetRepo, old);
