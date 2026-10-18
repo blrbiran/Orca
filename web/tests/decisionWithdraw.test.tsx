@@ -248,6 +248,31 @@ describe("withdrawing in the page (spec §7, §10.1)", () => {
     expect(screen.getByTestId("decision-question").textContent).toBe("question of run/2");
   });
 
+  it("a recorded correction re-reads the open detail too, so the new correction is listed with its Withdraw (spec §7)", async () => {
+    let recorded = false;
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = String(input);
+      if (url === "/api/corrections") { recorded = true; return json({ recorded: true }); }
+      if (recorded && url.startsWith("/api/decision?") && url.includes("decisionId=run%2F1")) {
+        requested.push(`GET ${url}`);
+        return json({
+          decision: { id: "run/1", question: "question of run/1", chose: "c", because: "b", alternatives: [] },
+          review: { reviewers: [{ by: "me", at: "2026-10-18T01:00:00.000Z" }], mine: "reviewed", corrections: [correction("c-new", {})] },
+        });
+      }
+      return real(input, init);
+    }) as typeof fetch;
+    await openReviewed("run/1");
+    expect(rowOf(splitDetail(), "c-new")).toBeNull();
+    fireEvent.change(splitDetail().querySelector('textarea[name="because"]')!, { target: { value: "a reason" } });
+    fireEvent.submit(splitDetail().querySelector("form.correction-form")!);
+    await within(splitDetail()).findByText("Correction recorded.");
+    // mutation: no detail re-read after a recorded Agree / Correct -> the new correction never shows, red
+    await waitFor(() => expect(rowOf(splitDetail(), "c-new")).not.toBeNull());
+    expect(within(rowOf(splitDetail(), "c-new")).getByRole("button", { name: "Withdraw" })).not.toBeNull();
+  });
+
   it("a refused withdrawal shows the server's refusal under the decision", async () => {
     const real = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
