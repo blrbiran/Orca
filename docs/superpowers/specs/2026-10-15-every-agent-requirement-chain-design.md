@@ -407,3 +407,17 @@ is the human's to set, with these numbers.
 - A catalog entry written by an older ccloop carries that build's shorter feature list for up to its 30-minute
   lifetime (the key has no ccloop version).
 - `notify=[]` and the I4 flags were checked at render time only; no paid call has run with them.
+
+## 12. Registration (Orca session a3b2a7a7, 2026-10-18): codex loop phases become a third writer of the private homes
+
+Appended by Orca session `a3b2a7a7` (Claude Code interactive session), 2026-10-18. The text above is unchanged.
+
+ccloop spec `docs/superpowers/specs/2026-10-18-codex-phase-isolation-design.md` (ccloop `main`, commit subject
+`docs(spec): codex phase isolation design`) makes every codex loop phase (plan, execute, verify) run in the same
+per-installation private `HOME`/`CODEX_HOME` pair that §11.1 registered for the single call. When it is implemented
+(plan `docs/superpowers/plans/2026-10-18-codex-phase-isolation.md` in ccloop, not yet built), §11.1's out-of-repo
+writers gain a third: **every codex loop phase run with an installation, on every call**, creates missing dirs under
+`<cache root>/codex-home/<sha256(installation key)>/{home,codex-home}` (0700, files 0600), re-checks the two links, and
+codex writes its own state there. Without a cache root the pair falls back to
+`<runDir>/codex/<attempt>/phase-isolation/home-*`. Residue is unchanged from §11.1. A phase whose isolation cannot be
+set up is refused before spawn, final, and books usage 0 (`neverStarted`).
