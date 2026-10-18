@@ -149,6 +149,7 @@ The socket refuses these before anything runs (nothing is ledgered, the commandI
 - `proposal-edit` with a `proposedGroupLimit` field → 403 `control-field-human-only`
 - the spend-cap verbs are owner-only: `set-spend-cap`, `clear-spend-cap`, `set-usage-calendar` → 403 `control-verb-human-only`
 - `set-integration-scheme`, `set-group-integration`, `retry-integration` and `resolve-integration-conflict` (where a repository's or a group's finished work is carried: a local branch, a push, a GitHub PR; retrying a blocked integration; approving an agent to resolve an integration conflict) are owner-only → 403 `control-verb-human-only`. Confirming a group whose integration is not `keep` is owner-only (the `integrationHash` field is human-only).
+- `approve-pending-decision` (giving a decision a landing refused an executable `undo.how` and writing it into the ledger) is owner-only → 403 `control-verb-human-only`.
 
 Do not look for a way around them. Ask the human. To spend less, use `pause-dispatch` or `handoff-stop`.
 
@@ -171,7 +172,7 @@ stdout is exactly one JSON line:
 
 ## 8. Route table
 
-`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration`, `groups/<groupId>/integration`, `groups/<groupId>/integration/retry`, `groups/<groupId>/integration/resolve` and the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows are listed for completeness and are owner-only (section 6).
+`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration`, `groups/<groupId>/integration`, `groups/<groupId>/integration/retry`, `groups/<groupId>/integration/resolve`, `groups/<groupId>/decisions/approve` and the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows are listed for completeness and are owner-only (section 6).
 
 | Route | Verb | Payload example |
 | --- | --- | --- |
@@ -202,6 +203,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/integration/resolve` | resolve-integration-conflict | `{}` |
 | `POST groups/<groupId>/archive` | archive-group | `{}` |
 | `POST groups/<groupId>/unarchive` | unarchive-group | `{}` |
+| `POST groups/<groupId>/decisions/approve` | approve-pending-decision | `{"pendingId":"pending-run-x-0","undoHow":"git revert --no-edit <sha>"}` |
 | `POST recovery/retry` | recovery-retry | `{"scope":"run","runId":"run1"}` |
 | `POST repositories/<repoId>/workspace-mode` | set-workspace-mode | `{"workspaceMode":"worktree"}` |
 | `POST repositories/<repoId>/integration` | set-integration-scheme | `{"integration":{"delivery":"keep"}}` |

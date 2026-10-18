@@ -1154,6 +1154,13 @@ export const enErrors: Record<string, string> = {
   "integration-not-blocked": "This group's integration is not stuck; there is nothing to resolve.",
   "integration-preflight-failed": "The integration check before confirming failed: {{detail}}",
   "integration-unapproved": "This group's integration settings differ from the ones seen at confirmation. Read the group again, then confirm.",
+  // Control run decisions plan Task 9: approving a decision that did not land.
+  "pending-decision-not-found": "This group has no such decision waiting for confirmation.",
+  "pending-decision-settled": "This decision was already rejected, so it cannot be approved.",
+  "decision-undo-not-executable": "The undo command still cannot be run as written; give a command such as `git revert --no-edit <commit>`: {{detail}}",
+  "pending-decision-entry-invalid": "This decision is invalid for a reason a new undo command cannot fix: {{detail}}",
+  "decision-approve-reconciling": "Another task of this group is being reconciled right now. Approve again when it has landed.",
+  "decision-approve-tip-moved": "The group's branch kept moving while the decision was being written. Try again.",
   "labels-invalid": "The labels are not valid: {{detail}}",
   "labels-version-conflict": "The labels changed after you started your draft. Read them again, then save.",
   "landing-branch-conflict": "The repository is not on the branch the work lands on.",

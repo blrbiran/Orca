@@ -15,6 +15,10 @@ export const durableCommandErrorStatuses = {
   // Integration spec §8: a branch or remote name, the remote's existence or its GitHub identity failed the setter's check;
   // the detail names the check.
   "integration-invalid": 400,
+  // Control run decisions plan Task 9: the approved undo.how still fails the tier-0 gate (detail: the reason), or the
+  // refused entry is invalid for another reason no undo.how can fix (detail: the reason).
+  "decision-undo-not-executable": 400,
+  "pending-decision-entry-invalid": 400,
 
   // Resource lookup.
   "artifact-not-found": 404,
@@ -30,6 +34,8 @@ export const durableCommandErrorStatuses = {
   "route-not-found": 404,
   // Accounts final review: a `repo:<id>` spend cap for a repository the panel does not hold; the detail names the id.
   "spend-cap-repository-unknown": 404,
+  // Control run decisions plan Task 9: no pending decision of this group has the id.
+  "pending-decision-not-found": 404,
 
   // Optimistic concurrency, immutable identity, and ownership conflicts.
   // Agent selection spec §6.4 step 3 (W6-12): the selections a confirmation resolves are no longer the ones the
@@ -47,6 +53,10 @@ export const durableCommandErrorStatuses = {
   "checkpoint-run-settled": 409,
   "checkpoint-usage-high-water": 409,
   "continuation-identity-conflict": 409,
+  // Control run decisions plan Task 9: approve while a run of the group reconciles (the commit would move the tip under
+  // it, Review Focus 3); the group branch kept moving past three tries.
+  "decision-approve-reconciling": 409,
+  "decision-approve-tip-moved": 409,
   // W6 (loop plans spec §5.1): the estimate was built from contracts a set-task-loop change has since replaced.
   "estimate-stale": 409,
   "execution-identity-conflict": 409,
@@ -67,6 +77,8 @@ export const durableCommandErrorStatuses = {
   // Labels and progress spec §3.1 (§8 R7): the task's labels moved since the person read them (plan finding F17).
   "labels-version-conflict": 409,
   "landing-branch-conflict": 409,
+  // Control run decisions plan Task 9: the pending decision was rejected; it cannot be approved now.
+  "pending-decision-settled": 409,
   "plan-version-conflict": 409,
   "profile-changed": 409,
   "proposal-version-conflict": 409,
@@ -320,6 +332,9 @@ export const v1WebErrorCodes = [
   "context-observation-invalid",
   "control-capability-unsupported",
   "control-writer-active",
+  "decision-approve-reconciling",
+  "decision-approve-tip-moved",
+  "decision-undo-not-executable",
   "duplicate-proposal-target",
   "estimate-blocked-capability",
   "estimate-capability-degraded",
@@ -335,6 +350,9 @@ export const v1WebErrorCodes = [
   "no-op-command",
   "numeric-overflow",
   "panel-draining",
+  "pending-decision-entry-invalid",
+  "pending-decision-not-found",
+  "pending-decision-settled",
   "plan-version-conflict",
   "profile-changed",
   "proposal-version-conflict",

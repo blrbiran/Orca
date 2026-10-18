@@ -35,6 +35,7 @@ import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
+import { applyApprovePendingDecision, prepareApproval, type ApprovePendingDecisionCommand, type ApprovePrepared } from "./decisionCommands.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
@@ -667,6 +668,24 @@ export class WebControlService {
     try {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
       return applyResolveIntegrationConflict({ store: this.store }, command, prepared) as WebCommandResult;
+    } finally { release?.(); }
+  }
+  /**
+   * Control run decisions plan Task 9: an owner approves a refused decision. A replay, a stale revision or an archived
+   * group answers before any git runs (§10.5: an archived group's item stays pending); the line is committed before the
+   * gate (git, as resolveIntegrationConflict's read), and the transaction marks the item approved.
+   */
+  async approvePendingDecision(command: ApprovePendingDecisionCommand): Promise<WebCommandResult> {
+    const early = this.mutate(() => preflightWebCommand<WebCommandResult>(this.store, command));
+    if (early) return early.body;
+    const repoId = this.planRepository(command.target.groupId);
+    // A group with no plan has no runs, so no pending decision; a missing group is refused by name in the transaction.
+    const prepared: ApprovePrepared = repoId === null ? { kind: "refused", code: "pending-decision-not-found" }
+      : await prepareApproval(this.store, controlWorkspaceRoots(this.store.stateDir), this.repositoryPath(repoId), command);
+    const release = this.deps.admissionGate?.enter();
+    try {
+      const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
+      return applyApprovePendingDecision({ store: this.store }, command, prepared) as WebCommandResult;
     } finally { release?.(); }
   }
   /** Controller ruling (Task 7): the target the panel offers for this repository; null when its path does not resolve. */

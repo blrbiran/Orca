@@ -472,6 +472,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     // Issue-fixes spec §6.3: archive and unarchive; the ledger key is the group's.
     { path: "/api/control/groups/:groupId/archive", verb: "archive-group", target: fromParams },
     { path: "/api/control/groups/:groupId/unarchive", verb: "unarchive-group", target: fromParams },
+    // Control run decisions plan Task 9: an owner approves a refused decision with an executable undo.how.
+    { path: "/api/control/groups/:groupId/decisions/approve", verb: "approve-pending-decision", target: fromParams },
     {
       path: "/api/control/operator/agent-preferences",
       verb: "set-agent-preferences",
@@ -559,6 +561,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "resolve-integration-conflict": await service.resolveIntegrationConflict(command); break;
           case "archive-group": service.archiveGroup(command); break;
           case "unarchive-group": service.unarchiveGroup(command); break;
+          case "approve-pending-decision": await service.approvePendingDecision(command); break;
           case "set-agent-preferences": await service.setAgentPreferences(command); break;
           case "apply-agent-update": await service.applyAgentUpdate(command, { client, principal: principalLabel(principal) }); break;
           case "proposal-set-agent": await service.proposalSetAgent(command); break;

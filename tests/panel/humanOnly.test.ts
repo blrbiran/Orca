@@ -1,5 +1,12 @@
+import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { controlRoot } from "../../src/panel/controlOptions.js";
+import type { StartedPanel } from "../../src/panel/server.js";
+import { login, seedUser, sessionFor } from "./fixtures/auth.js";
+import { boot, overSocket, useSocketPanels, workspace } from "./fixtures/socketPanel.js";
 import { amountSchema, budgetAmountSchema } from "../../src/control/schema.js";
 import { rawAuthorityCommandSchema, spendTokensSchema } from "../../src/control/webProtocol.js";
 import { AGENT_AMOUNT_FIELDS, HUMAN_ONLY_FIELDS, HUMAN_ONLY_VERBS, humanOnlyRefusal } from "../../src/panel/humanOnly.js";
@@ -58,5 +65,36 @@ describe("the human-only surface (spec §5)", () => {
     expect(humanOnlyRefusal("requirement-open", "not an object")).toBe(null);
     // An inherited property is not the payload's own field.
     expect(humanOnlyRefusal("requirement-open", Object.create({ limit: {} }))).toBe(null);
+  });
+});
+
+useSocketPanels();
+
+const commandIds = (state: string): string[] => {
+  const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
+  const db = new DatabaseSync(join(state, "control.sqlite"), { readOnly: true });
+  try { return (db.prepare("SELECT id FROM commands ORDER BY id").all() as Array<{ id: string }>).map((row) => row.id); } finally { db.close(); }
+};
+
+// Control run decisions plan Task 9: approving a refused decision writes a line into the ledger in the owner's name.
+describe("approving a pending decision is an owner's (control run decisions Task 9)", () => {
+  it("refuses approve-pending-decision from an agent on the socket and a member over the Web", async () => {
+    const w = await workspace();
+    execFileSync("git", ["init", "-q", "-b", "trunk", w.repo], { env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))), GIT_CONFIG_NOSYSTEM: "1" } });
+    const panel = await boot(w, [], { port: true });
+    seedUser(controlRoot(w.env), "amy", "member");
+    const amy = await login(panel.url, "amy");
+    const route = "/api/control/groups/g/decisions/approve";
+    const payload = { pendingId: "pending-run-x-0", undoHow: `git revert --no-edit ${"e".repeat(40)}` };
+    const socket = await overSocket((panel as StartedPanel).socketPath!, "POST", route, { "x-orca-client": "cli:test" }, { commandId: "ad-a", expectedRevision: 0, payload });
+    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-verb-human-only"]);
+    const member = await amy.fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "ad-m", expectedRevision: 0, payload }) });
+    expect([member.status, ((await member.json()) as { error: { code: string } }).error.code]).toEqual([403, "control-verb-human-only"]);
+    expect(commandIds(w.state).filter((id) => id.startsWith("ad-"))).toEqual([]);
+    // The route is the verb's: an owner's is routed to the service, refused there by name and booked.
+    const owner = await sessionFor(panel, w.env);
+    const routed = await owner.fetch("/api/control/groups/nogroup/decisions/approve", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "ad-o", expectedRevision: 0, payload }) });
+    expect([routed.status, ((await routed.json()) as { error: { code: string } }).error.code]).toEqual([404, "group-not-found"]);
+    expect(commandIds(w.state)).toContain("ad-o");
   });
 });

@@ -3,7 +3,7 @@ import { applyWebCommand } from "./commandLedger.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
 import { approveResolution, type ResolutionPrepared } from "./integrationResolve.js";
-import { ENVIRONMENT_CHECKS, newGroupIntegration, readGroupIntegration, readIntegrationDefault, schemeHash, type IntegrationScheme } from "./integrationScheme.js";
+import { ENVIRONMENT_CHECKS, newGroupIntegration, readGroupIntegration, readIntegrationDefault, schemeHash, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { readRepositorySettingsBody, writeRepositorySettingsBody, type RepositorySettingsBody } from "./workspaceSettings.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
@@ -113,6 +113,14 @@ export function applySetGroupIntegration(
 }
 
 /**
+ * Integration spec §6.5: what a retry changes in a blocked or conflicted integration -- back to idle, tried again at the
+ * next round. The conflict record is kept: it numbers the next attempt (§7). Also used by approve-pending-decision.
+ */
+export function resetIntegrationForRetry(current: GroupIntegration): GroupIntegration {
+  return { ...current, state: "idle", reason: null, retryAfter: null, transient: 0 };
+}
+
+/**
  * Integration spec §6.5: a blocked or conflicted integration goes back to idle and is tried again at the next round
  * (refused integration-not-blocked otherwise). The conflict record is kept: it numbers the next attempt (§7).
  */
@@ -127,7 +135,7 @@ export function applyRetryIntegration(deps: { store: ControlStore }, command: Re
       const group = JSON.parse(String(row.body)) as Record<string, unknown>;
       const current = readGroupIntegration(group);
       if (current === null || (current.state !== "blocked" && current.state !== "conflict")) throw new ControlError("integration-not-blocked");
-      group.integration = { ...current, state: "idle", reason: null, retryAfter: null, transient: 0 };
+      group.integration = resetIntegrationForRetry(current);
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
       return { status: 200, body: {
         schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,

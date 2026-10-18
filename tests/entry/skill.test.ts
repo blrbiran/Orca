@@ -8,7 +8,7 @@ import {
   requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementOpenPayloadSchema, resumeFromHandoffPayloadSchema,
   setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema,
-  verifySavedResultPayloadSchema,
+  verifySavedResultPayloadSchema, approvePendingDecisionPayloadSchema,
 } from "../../src/control/webProtocol.js";
 
 const skill = readFileSync("skills/orca-control/SKILL.md", "utf8");
@@ -35,6 +35,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "resolve-integration-conflict": emptyPayloadSchema,
   "archive-group": emptyPayloadSchema, "unarchive-group": emptyPayloadSchema,
   "verify-saved-result": verifySavedResultPayloadSchema,
+  "approve-pending-decision": approvePendingDecisionPayloadSchema,
 };
 
 describe("the orca-control skill (spec §7, C18)", () => {
