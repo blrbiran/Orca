@@ -3,7 +3,7 @@ import { applyWebCommand } from "./commandLedger.js";
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
 import { resetIntegrationForRetry } from "./integrationCommands.js";
 import { readGroupIntegration } from "./integrationScheme.js";
-import { findDecision, ledgerSources } from "./ledgerAtRef.js";
+import { findDecision, ledgerSources, type DecisionWhere } from "./ledgerAtRef.js";
 import { commitLedgerOnGroupBranch } from "./ledgerTree.js";
 import { readPendingDecision, settlePendingDecision, type PendingDecisionRow } from "./pendingDecisions.js";
 import { readGroup } from "./queries.js";
@@ -20,7 +20,7 @@ import type { WorkspaceRoots } from "./workspace.js";
 export type ApprovePendingDecisionCommand = Extract<RawAuthorityCommandV1, { verb: "approve-pending-decision" }>;
 
 export type ApprovePrepared =
-  | { kind: "already-present"; id: string }
+  | { kind: "already-present"; id: string; where: DecisionWhere }
   | { kind: "committed"; id: string; commit: string }
   | { kind: "refused"; code: KnownControlErrorCode; detail?: string };
 
@@ -53,7 +53,10 @@ function busyRefusal(store: ControlStore, groupId: string): ApprovePrepared | nu
  * line with its id is already somewhere the group's decisions are read from (§10.5: a crash between the commit and the
  * transaction leaves the line; a second approve only marks the item).
  */
-export async function prepareApproval(store: ControlStore, roots: WorkspaceRoots, repo: string, command: ApprovePendingDecisionCommand): Promise<ApprovePrepared> {
+export async function prepareApproval(
+  store: ControlStore, roots: WorkspaceRoots, repo: string, command: ApprovePendingDecisionCommand,
+  seams: { beforeCas?: () => Promise<void> } = {},
+): Promise<ApprovePrepared> {
   const groupId = command.target.groupId;
   const { pendingId, undoHow } = command.payload;
   const row = readPendingDecision(store, pendingId);
@@ -70,11 +73,13 @@ export async function prepareApproval(store: ControlStore, roots: WorkspaceRoots
   }
   const { event } = normalized;
   for (let attempt = 0; attempt <= MOVED_RETRIES; attempt += 1) {
-    if (await findDecision(repo, await ledgerSources(store, repo, groupId), event.id) !== null) return { kind: "already-present", id: event.id };
+    const found = await findDecision(repo, await ledgerSources(store, repo, groupId), event.id);
+    if (found !== null) return { kind: "already-present", id: event.id, where: found.where };
     const busy = busyRefusal(store, groupId);
     if (busy !== null) return busy;
     const result = await commitLedgerOnGroupBranch({
-      repo, roots, groupId, worktreeName: `approve-${pendingId}`, message: `orca: approve ${pendingId}`,
+      // One worktree per command: two approvals of the same item must not remove each other's live worktree.
+      repo, roots, groupId, worktreeName: `approve-${pendingId}-${command.commandId}`, message: `orca: approve ${pendingId}`, beforeCas: seams.beforeCas,
       write: async (decisionsDir) => {
         await appendEvents(decisionsDir, ledgerRun, [event]);
         return [`${ledgerRun}.jsonl`];
@@ -88,7 +93,7 @@ export async function prepareApproval(store: ControlStore, roots: WorkspaceRoots
 
 /**
  * The transaction: a refusal `prepared` found is thrown here so it is booked; otherwise the row (read again) is marked
- * approved. A committed line re-arms a blocked or conflicted integration, so the line reaches the target.
+ * approved. A line only on the group branch re-arms a blocked or conflicted integration, so it reaches the target.
  */
 export function applyApprovePendingDecision(deps: { store: ControlStore }, command: ApprovePendingDecisionCommand, prepared: ApprovePrepared): CommandSuccessV1 | CommandErrorBodyV1 {
   return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
@@ -102,7 +107,9 @@ export function applyApprovePendingDecision(deps: { store: ControlStore }, comma
       const decided = prepared.kind === "refused" ? prepared : rowRefusal(readPendingDecision(deps.store, pendingId), groupId);
       if (decided !== null && decided.kind === "refused") throw new ControlError(decided.code, decided.detail);
       const { id } = prepared as Exclude<ApprovePrepared, { kind: "refused" }>;
-      if (prepared.kind === "committed") {
+      // §4: a decision is on the target exactly when its work is. A fresh commit, or a recovered one still only on the
+      // group branch (a crash between the commit and this transaction), re-arms a stuck integration.
+      if (prepared.kind === "committed" || (prepared.kind === "already-present" && prepared.where === "group-branch")) {
         const group = JSON.parse(String(row.body)) as Record<string, unknown>;
         const current = readGroupIntegration(group);
         if (current !== null && (current.state === "blocked" || current.state === "conflict")) {

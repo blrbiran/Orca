@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { integratePendingGroups } from "../../src/control/integrationPass.js";
 import { newGroupIntegration, readGroupIntegration } from "../../src/control/integrationScheme.js";
+import { applyApprovePendingDecision, prepareApproval } from "../../src/control/decisionCommands.js";
 import { readPendingDecision } from "../../src/control/pendingDecisions.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { controlWorkspaceRoots } from "../../src/control/workspace.js";
@@ -29,7 +30,14 @@ async function landedWithPending(count = 1) {
   const commits = () => git(t.repo, "rev-list", "--count", "refs/heads/orca/g");
   const groupBody = () => JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as Record<string, unknown>;
   const writeGroupBody = (body: Record<string, unknown>) => t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(body));
-  return { ...t, runId, service, approve, branchLines, commits, groupBody, writeGroupBody, pendingId: (i = 0) => `pending-${runId}-${i}` };
+  /** Someone else's commit on orca/g (same tree), as a moved tip; its id. */
+  const moveBranch = (): string => {
+    const old = git(t.repo, "rev-parse", "refs/heads/orca/g");
+    const next = git(t.repo, "commit-tree", `${old}^{tree}`, "-p", old, "-m", "someone else");
+    git(t.repo, "update-ref", "refs/heads/orca/g", next, old);
+    return next;
+  };
+  return { ...t, runId, service, approve, branchLines, commits, groupBody, writeGroupBody, moveBranch, pendingId: (i = 0) => `pending-${runId}-${i}` };
 }
 
 describe("approve-pending-decision (control run decisions Task 9)", { timeout: 60_000 }, () => {
@@ -77,11 +85,48 @@ describe("approve-pending-decision (control run decisions Task 9)", { timeout: 6
       await t.approve({ pendingId, undoHow: `git revert --no-edit ${SHA_E}` });
       const commits = t.commits();
       t.h.store.db.prepare("UPDATE pending_decisions SET state='pending' WHERE id=?").run(pendingId);
+      // The integration got stuck before the crash: the line is only on the group branch, so recovery re-arms it (§4).
+      const scheme = { delivery: "local", trigger: "task", method: "merge", target: "main" } as const;
+      t.writeGroupBody({ ...t.groupBody(), integration: { ...newGroupIntegration(scheme)!, frozen: true, state: "blocked", reason: "integration-worktree-dirty" } });
       const again = await t.approve({ pendingId, undoHow: `git revert --no-edit ${"f".repeat(40)}` });
       expect(again).toMatchObject({ result: { kind: "pending-decision-approved", pendingId, decisionId: `${t.runId}/agent-0` } });
-      expect(t.commits()).toBe(commits); // mutation: skip the findDecision check -> red
+      // Mutation "skip the findDecision check" is red here: the call throws appendEvents' duplicate-id guard
+      // ("refusing to append: duplicate decision id"), since the line is already in the file it appends to.
+      expect(t.commits()).toBe(commits);
+      expect(readGroupIntegration(t.groupBody())).toMatchObject({ state: "idle", reason: null }); // mutation: drop the already-present clause -> red
       expect(t.branchLines().map((l) => l.id)).toEqual([`${t.runId}/agent-0`]);
       expect(readPendingDecision(t.h.store, pendingId)!.state).toBe("approved");
+    } finally { await t.h.dispose(); }
+  });
+
+  it("refuses decision-approve-tip-moved after three retries of a branch that keeps moving, keeping the item pending", async () => {
+    const t = await landedWithPending(); try {
+      const pendingId = t.pendingId();
+      const command = t.h.command("approve-pending-decision", { pendingId, undoHow: `git revert --no-edit ${SHA_E}` });
+      let calls = 0;
+      const beforeCas = async () => { calls += 1; t.moveBranch(); };
+      const prepared = await prepareApproval(t.h.store, controlWorkspaceRoots(t.h.store.stateDir), t.repo, command, { beforeCas });
+      expect(prepared).toEqual({ kind: "refused", code: "decision-approve-tip-moved" });
+      expect(calls).toBe(4); // one try and three retries; mutation: retries = 0 -> 1, red
+      expect(applyApprovePendingDecision({ store: t.h.store }, command, prepared)).toMatchObject({ error: { code: "decision-approve-tip-moved" } });
+      expect(readPendingDecision(t.h.store, pendingId)!.state).toBe("pending");
+      expect(git(t.repo, "log", "--format=%s", "refs/heads/orca/g")).not.toContain("orca: approve");
+    } finally { await t.h.dispose(); }
+  });
+
+  it("commits on the retry after the branch moved once", async () => {
+    const t = await landedWithPending(); try {
+      const pendingId = t.pendingId();
+      const command = t.h.command("approve-pending-decision", { pendingId, undoHow: `git revert --no-edit ${SHA_E}` });
+      let calls = 0;
+      let moved = "";
+      const beforeCas = async () => { calls += 1; if (calls === 1) moved = t.moveBranch(); };
+      const prepared = await prepareApproval(t.h.store, controlWorkspaceRoots(t.h.store.stateDir), t.repo, command, { beforeCas });
+      const tip = git(t.repo, "rev-parse", "refs/heads/orca/g");
+      expect(prepared).toEqual({ kind: "committed", id: `${t.runId}/agent-0`, commit: tip }); // mutation: return committed on moved -> red
+      expect(calls).toBe(2);
+      expect(git(t.repo, "rev-parse", `${tip}^`)).toBe(moved);
+      expect(t.branchLines().map((l) => l.id)).toEqual([`${t.runId}/agent-0`]);
     } finally { await t.h.dispose(); }
   });
 
