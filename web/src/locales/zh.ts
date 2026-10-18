@@ -156,7 +156,7 @@ export const zh: Translation<typeof en> = {
     noMatch: "没有符合这些筛选条件的决策。",
     selectOne: "选择一条决策来阅读。",
     hiddenByFilter: "这条决策被当前筛选条件隐藏了。",
-    notInList: "这条决策已不在列表里：它已被评审。",
+    notInList: "这条决策已不在当前状态筛选的列表里。",
     noQuestion: "（没有记录问题）",
     chose: "选择了",
     because: "理由",

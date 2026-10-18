@@ -5,7 +5,7 @@
  * keeps the decision open and reads its detail again -- it never advances to the next row the way Agree does.
  * Fake fetch only (Rule 17).
  */
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DecisionReviewState } from "../src/api.js";
 import { App } from "../src/App.js";
@@ -207,6 +207,19 @@ describe("withdrawing in the page (spec §7, §10.1)", () => {
     expect(screen.getByTestId("decision-question").textContent).toBe("question of run/1");
     expect(within(splitDetail()).queryByRole("button", { name: "Withdraw review" })).toBeNull();
     expect(detailReads("run/2")).toBe(0);
+  });
+
+  it("says the withdrawn decision left the list for the status filter, never that it has been reviewed (fix round 1)", async () => {
+    await openReviewed("run/1");
+    fireEvent.click(within(splitDetail()).getByRole("button", { name: "Withdraw review" }));
+    await waitFor(() => expect(listedIds()).toEqual(["run/2"]));
+    const note = splitDetail().querySelector('[role="note"]');
+    // mutation: restore the old en notInList ("…: it has been reviewed.") -> red here
+    expect(note?.textContent).toBe("This decision is no longer in the list under the current status filter.");
+    expect(splitDetail().textContent).not.toContain("has been reviewed");
+    await act(async () => { await i18n.changeLanguage("zh"); });
+    expect(splitDetail().querySelector('[role="note"]')?.textContent).toBe("这条决策已不在当前状态筛选的列表里。");
+    expect(splitDetail().textContent).not.toContain("已被评审");
   });
 
   it("never moves on to the next row, even when the re-read list has dropped the open one (spec §10.1)", async () => {

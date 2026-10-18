@@ -64,9 +64,9 @@ describe("the decisions area in Chinese", () => {
   it("says in Chinese why an open decision is not in the list", async () => {
     await i18n.changeLanguage("zh");
     const reviewed = render(<DecisionsView rows={[]} filter={NO_FILTER} selected={ROW} detail={<p>detail</p>} />).container;
-    expect(reviewed.textContent ?? "").toContain("这条决策已不在列表里：它已被评审。");
+    expect(reviewed.textContent ?? "").toContain("这条决策已不在当前状态筛选的列表里。");
     expect(reviewed.textContent ?? "").toContain("没有要评审的。每条高层级决策都已评审。");
-    expect(reviewed.querySelector('[role="note"]')?.textContent).toBe("这条决策已不在列表里：它已被评审。");
+    expect(reviewed.querySelector('[role="note"]')?.textContent).toBe("这条决策已不在当前状态筛选的列表里。");
     expect(reviewed.querySelector(".split-list .empty")?.textContent).toBe("没有要评审的。每条高层级决策都已评审。");
     cleanup();
     const hidden = render(<DecisionsView rows={[ROW]} filter={{ ...NO_FILTER, scope: "repo" }} selected={ROW} detail={<p>detail</p>} />).container;

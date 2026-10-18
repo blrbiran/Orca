@@ -270,7 +270,7 @@ export const en = {
     noMatch: "No decision matches these filters.",
     selectOne: "Select a decision to read it.",
     hiddenByFilter: "This decision is hidden by the current filters.",
-    notInList: "This decision is no longer in the list: it has been reviewed.",
+    notInList: "This decision is no longer in the list under the current status filter.",
     noQuestion: "(no question recorded)",
     chose: "Chose",
     because: "Because",
