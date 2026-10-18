@@ -19,6 +19,7 @@ import { appendEvent } from "../../src/ledger/writer.js";
 import { REVIEW_HAS_OPEN_CORRECTION, REVIEW_NOT_ACTIVE } from "../../src/panel/api.js";
 import { DECISION_NOT_FOUND } from "../../src/panel/listProjection.js";
 import { reviewsFile } from "../../src/panel/paths.js";
+import { REVIEWS_STORE_BUSY, acquireReviewsLock } from "../../src/panel/reviewsLock.js";
 import { createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
 import type { StartedPanel } from "../../src/panel/server.js";
 import { ORIGINAL, git, makeTargetRepo, withCorrectionsDir } from "../corrections/harness.js";
@@ -383,6 +384,29 @@ describe("POST /api/corrections/withdraw (spec §5.2, §5.4, §5.5)", () => {
         seeded = await seedCorrection(dir, clock, {});
       },
     );
+  });
+
+  it("answers 409 naming both when the withdrawal landed but the review could not be withdrawn with it", async () => {
+    await withPanel(async ({ started, dir }) => {
+      const c = await correct(started);
+      const reviewsBefore = await readFile(reviewsFile(dir), "utf8");
+      const held = await acquireReviewsLock(dir);
+      let res: Response;
+      try {
+        res = await post(started, "/api/corrections/withdraw", { correctionId: c.id });
+      } finally {
+        await held.release();
+      }
+      expect(res.status).toBe(409);
+      const body = (await res.json()) as { code: string; message: string; withdrawal?: { correctionId: string } };
+      expect(body.code).toBe(REVIEWS_STORE_BUSY);
+      expect(body.message).toContain(c.id);
+      expect(body.withdrawal?.correctionId).toBe(c.id);
+      // The withdrawal is on disk; the review is not withdrawn.
+      expect(await readFile(withdrawalsFile(dir), "utf8")).toContain(c.id);
+      expect(await readFile(reviewsFile(dir), "utf8")).toBe(reviewsBefore);
+      expect((await detail(started)).mine).toBe("reviewed");
+    });
   });
 
   it("answers each Task 3 refusal with its code over HTTP, and writes no withdrawal", async () => {
