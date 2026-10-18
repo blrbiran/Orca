@@ -49,6 +49,8 @@ export function fakeCcloopPort(input: {
   acceptedConfigHash?: (envelope: StartEnvelope) => string;
   /** Issue fixes spec §4.4: ccloop's terminal `stopReason` for this work item's run; null or absent = none stated. */
   stopReason?: (workItemId: string) => string | null;
+  /** Control run decisions: what the run reports as `decisions` on its terminal report; undefined = the field is absent. */
+  decisions?: (workItemId: string) => unknown;
 }): FakeCcloop {
   const calls = { accept: [] as StartEnvelope[], inspect: 0, collect: 0, handoff: [] as HandoffRequest[] };
   const handoffs = new Map<string, HandoffRequest>();
@@ -108,7 +110,8 @@ export function fakeCcloopPort(input: {
       stopProof: { executionId, generation: claim.generation, isolated: true, source: stopSource(claim.runId, executionId, claim.generation) },
       terminalOutcome: stop.terminal ? outcome : "executing", handoff: put(`handoff-${claim.runId}`, Buffer.from(JSON.stringify(handoffPacket))),
     };
-    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }) } : null };
+    const decisions = stop.terminal ? input.decisions?.(claim.workItemId) : undefined;
+    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }) } : null, ...(decisions === undefined ? {} : { decisions }) };
   };
 
   const port: ExecutionPort = {

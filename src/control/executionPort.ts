@@ -19,6 +19,8 @@ export interface ExecutionReport {
  terminal:{tokenRemainingStatus?:"known"|"unlimited"|"unknown";waitingCause?:"token-allowance";allowanceNextPhase?:"plan"|"execute"|"verify";outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string;stopReason?:string|null}|null;
  /** Labels and progress spec §3.2 (§8 R5): optional so the synthetic ports need no edit; absent reads as null. */
  progress?:RunProgress|null;
+ /** Decisions the agent reported: optional like `progress`; read only through reportedDecisions.ts. */
+ decisions?:unknown;
 }
 /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
 export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }

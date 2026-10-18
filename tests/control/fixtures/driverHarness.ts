@@ -44,6 +44,8 @@ export interface HarnessOptions {
   stopReason?: (workItemId: string) => string | null;
   /** Issue-fixes spec §5.2: the control store's clock (ms); absent, Date.now. */
   storeNow?: () => number;
+  /** Control run decisions: the `decisions` the synthetic ccloop reports with a terminal (driverPort.ts); absent or undefined = not reported. */
+  decisions?: (workItemId: string) => unknown;
 }
 
 /**
@@ -67,6 +69,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     workTokens: options.workTokens, duringCollect: options.duringCollect,
     ...(options.acceptedConfigHash ? { acceptedConfigHash: options.acceptedConfigHash } : {}),
     ...(options.stopReason ? { stopReason: options.stopReason } : {}),
+    ...(options.decisions ? { decisions: options.decisions } : {}),
   });
   fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;
   const deps: ExecutionDriverDeps = {
