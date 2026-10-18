@@ -1,9 +1,9 @@
+import { z } from "zod";
 import { DECISION_NOT_FOUND } from "../corrections/originalDecision.js";
 import { CorrectRejection } from "../corrections/rejection.js";
 import type { Correction } from "../corrections/schema.js";
 import { correctionTargetOf, type CorrectionTarget } from "../corrections/target.js";
 import { decisionEventSchema, type DecisionEvent } from "../ledger/schema.js";
-import { z } from "zod";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import type { AgentSelection } from "./agentSelection.js";
 import { readRun } from "./budget.js";
@@ -43,7 +43,7 @@ export interface DebugInputV1 {
  * The one place the attempt's diff is spelled: git arguments (for the reader below) and the display form (for goal
  * text that names the command). `.decisions/` is excluded: the ledger is not the code under debate.
  */
-export const DEBUG_DIFF_PATHSPEC = [".", ":(exclude).decisions"] as const;
+const DEBUG_DIFF_PATHSPEC = [".", ":(exclude).decisions"] as const;
 export function debugDiffArgs(base: string, attemptSha: string): string[] {
   return ["diff", "--no-color", base, attemptSha, "--", ...DEBUG_DIFF_PATHSPEC];
 }
@@ -117,7 +117,13 @@ export async function collectDebugInput(deps: { store: ControlStore; repoPath: s
       const task = readArchivedPlan(store, originalRun.groupId).plan.tasks.find((candidate) => candidate.taskId === originalRun.taskId);
       if (task === undefined) missing.push("contract");
       else contract = taskContractSchema.parse(JSON.parse(task.originalContractCanonicalJson));
-    } catch { missing.push("contract"); }
+    } catch (error) {
+      // Only an unreadable archived plan or contract means "no contract"; any other failure is a real error.
+      const unreadable = error instanceof SyntaxError || error instanceof z.ZodError
+        || (error instanceof ControlError && error.code === "recovery-blocked");
+      if (!unreadable) throw error;
+      missing.push("contract");
+    }
   }
 
   return { schema: DEBUG_INPUT_SCHEMA, correction, decision, decisionWhere, pending, originalRun, commits, contract, missing };

@@ -50,7 +50,7 @@ const correctionOf = (target: { decisionId: string } | { runId: string; pendingI
  * working tree sits on branch `work` at `base`, which does not, so a decision found there is found at the target.
  */
 async function world(options: { attemptSha?: string } = {}) {
-  const h = await webFixture(); 
+  const h = await webFixture();
   const repo = join(h.root, "repo");
   g(repo, ["init", "-q", "-b", "main"]);
   await writeFile(join(repo, "base.txt"), "base\n");
@@ -175,12 +175,72 @@ describe("collectDebugInput (debug task Task 3)", () => {
     } finally { await w.dispose(); }
   });
 
+  const editRun = (w: Awaited<ReturnType<typeof world>>, edit: (body: Record<string, any>) => void) => {
+    const body = JSON.parse(String(w.store.db.prepare("SELECT body FROM runs WHERE id=?").get(RUN)!.body)) as Record<string, any>;
+    edit(body);
+    w.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), RUN);
+  };
+  const editGroup = (w: Awaited<ReturnType<typeof world>>, edit: (body: Record<string, any>) => void) => {
+    const body = JSON.parse(String(w.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as Record<string, any>;
+    edit(body);
+    w.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(body));
+  };
+
+  it("a missing base object is named even when the attempt exists", async () => {
+    const w = await world(); try {
+      editRun(w, (b) => { b.drive.base = "e".repeat(40); });
+      const input = await collectDebugInput(w.deps, correctionOf({ decisionId: `${RUN}/agent-0` }));
+      expect(input.commits).toBeNull();
+      expect(input.missing).toEqual(["objects"]);
+    } finally { await w.dispose(); }
+  });
+
+  it("a run with no task id is no run", async () => {
+    const w = await world(); try {
+      editRun(w, (b) => { b.taskId = null; });
+      await mkdir(join(w.repo, ".decisions"));
+      await writeFile(join(w.repo, ".decisions", "run-1.jsonl"), ledger(`${RUN}/agent-0`));
+      const input = await collectDebugInput(w.deps, correctionOf({ decisionId: `${RUN}/agent-0` }));
+      expect(input.originalRun).toBeNull();
+      expect(input.commits).toBeNull();
+      expect(input.contract).toBeNull();
+      expect(input.missing).toEqual(["run"]);
+    } finally { await w.dispose(); }
+  });
+
+  it("names the contract when the task is not in the archived plan", async () => {
+    const w = await world(); try {
+      editRun(w, (b) => { b.taskId = "not-in-plan"; });
+      const input = await collectDebugInput(w.deps, correctionOf({ decisionId: `${RUN}/agent-0` }));
+      expect(input.contract).toBeNull();
+      expect(input.missing).toEqual(["contract"]);
+      expect(input.commits).not.toBeNull();
+    } finally { await w.dispose(); }
+  });
+
+  it("names the contract when the archived plan is unreadable", async () => {
+    const w = await world(); try {
+      editGroup(w, (b) => { b.planHash = "0".repeat(64); });
+      const input = await collectDebugInput(w.deps, correctionOf({ decisionId: `${RUN}/agent-0` }));
+      expect(input.contract).toBeNull();
+      expect(input.missing).toEqual(["contract"]);
+    } finally { await w.dispose(); }
+  });
+
+  it("lets an unexpected plan-read error propagate", async () => {
+    const w = await world(); try {
+      editGroup(w, (b) => { b.status = "clarifying"; });
+      await expect(collectDebugInput(w.deps, correctionOf({ decisionId: `${RUN}/agent-0` }))).rejects.toMatchObject({ code: "requirement-not-split" });
+    } finally { await w.dispose(); }
+  });
+
   it("a pending target carries the pending entry", async () => {
     const w = await world(); try {
-      w.store.transaction(() => insertPendingDecisions(w.store, "g", RUN, [pendingEntry(RUN, 0)]));
+      const entry = pendingEntry(RUN, 0);
+      w.store.transaction(() => insertPendingDecisions(w.store, "g", RUN, [entry]));
       const input = await collectDebugInput(w.deps, correctionOf({ runId: RUN, pendingId: `pending-${RUN}-0` }));
+      expect(input.pending).toEqual(entry);
       expect(input.pending).toEqual(readPendingDecision(w.store, `pending-${RUN}-0`)!.entry);
-      expect(input.pending).not.toBeNull();
       expect(input.decision).toBeNull();
       expect(input.decisionWhere).toBeNull();
       expect(input.originalRun!.runId).toBe(RUN);
