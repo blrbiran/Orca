@@ -19,6 +19,12 @@ export interface DebugMark {
   agentFallback: { original: PartialSelection; reason: string } | null; undoHow: string | null; closing: ClosingRecord | null;
   /** Where the task's checks came from (the owner or an agent named them); `namedBy` is null when only the original's are used. */
   checks: { from: "original" | "original+named" | "named"; namedBy: "human" | "agent" | null };
+  /**
+   * Debug task plan Task 10 (ruling C22, fix round 1): when the integration pass recorded this group's `correction-closed`
+   * activity row (store clock, ms), written in that row's transaction; null until then. Durable where the activity row
+   * is not (retention keeps 500 rows a group), so a later settle writes no second row. A mark written before it is null.
+   */
+  closedNotedAt: number | null;
 }
 
 const debugMarkSchema = z.object({
@@ -31,6 +37,7 @@ const debugMarkSchema = z.object({
   undoHow: z.string().min(1).nullable(), closing: closingSchema.nullable(),
   checks: z.object({ from: z.enum(["original", "original+named", "named"]), namedBy: z.enum(["human", "agent"]).nullable() }).strict()
     .default({ from: "original", namedBy: null }),
+  closedNotedAt: z.number().int().nonnegative().nullable().default(null),
 }).strict();
 
 /** A group body's debug mark; null on a group no correction opened. A mark that does not parse blocks by name, as the archive mark does. */
@@ -39,6 +46,13 @@ export function readDebugMark(group: unknown): DebugMark | null {
   const parsed = debugMarkSchema.safeParse((group as { debug: unknown }).debug);
   if (!parsed.success) throw new ControlError("recovery-blocked", "debug-mark-invalid");
   return parsed.data as DebugMark;
+}
+
+/** A debug group's mark, where the caller knows the group is one (debugGroupIds): a group without one blocks by name. */
+export function requireDebugMark(group: unknown): DebugMark {
+  const mark = readDebugMark(group);
+  if (mark === null) throw new ControlError("recovery-blocked", "debug-mark-missing");
+  return mark;
 }
 
 /**

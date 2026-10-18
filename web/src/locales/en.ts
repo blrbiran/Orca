@@ -1316,6 +1316,7 @@ export const enErrors: Record<string, string> = {
   "correction-already-withdrawn": "This correction has already been withdrawn.",
   "correction-closed": "This correction is already closed: its fix is in the ledger. To change your mind, record a new correction instead.",
   "correction-withdrawals-unreadable": "The correction withdrawals file has a line that cannot be read, so nothing was written. Fix or remove that line by hand: {{detail}}",
+  "corrections-store-unreadable": "The corrections file has a line that cannot be read, so the corrections are not listed. Fix or remove that line by hand: {{detail}}",
   "unresolved-project-keys": "The correction records have project keys the panel cannot resolve: {{detail}}",
   "key-matches-multiple-paths": "A project key matches more than one path: {{detail}}",
   "repo-path-missing": "The directory --repo points to does not exist: {{detail}}",

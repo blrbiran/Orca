@@ -10,7 +10,7 @@ import {
 import { advanceIntegrationResolution, copyOwner, materialiseIntegrationConflict, nextAttempt } from "./integrationResolve.js";
 import { syncGroupPr } from "./integrationPr.js";
 import { archivedMarkOf } from "./archivedMark.js";
-import { correctionClosedAtRef, fixRunIdOf } from "./correctionState.js";
+import { closedVia, correctionClosedAtRef, fixRunIdOf } from "./correctionState.js";
 import { readDebugMark } from "./debugChecks.js";
 import type { DebugInputV1 } from "./debugInput.js";
 import { integrationTargetRef } from "./ledgerAtRef.js";
@@ -130,9 +130,10 @@ export async function integratePendingGroups(deps: IntegrationDeps): Promise<boo
 /**
  * Debug task plan Task 10 (ruling C22): once a debug group's integration has settled, its correction's closed state is
  * computed again (correctionState.ts: the target ref's tree holds the closing row) and the move to closed is recorded as
- * one `correction-closed` row -- one per correction: a later pass that finds it closed again writes none. A read or
- * write that fails is logged and leaves the integration as it settled (the list still computes the state); it never
- * fails the pass.
+ * one `correction-closed` row, with the mark's `closedNotedAt` in the same transaction: a later settle of the group finds
+ * the flag and writes none (the flag outlives activity retention). `via` is the list's rule (closedVia). A read or write
+ * that fails is logged and leaves the integration as it settled (the list still computes the state); it never fails the
+ * pass.
  */
 async function noteCorrectionClosed(deps: IntegrationDeps, groupId: string): Promise<void> {
   try {
@@ -144,8 +145,11 @@ async function noteCorrectionClosed(deps: IntegrationDeps, groupId: string): Pro
     const { correction } = JSON.parse(readCanonicalRecord(deps.store, mark.inputHash)) as DebugInputV1;
     if (!(await correctionClosedAtRef(deps.repoPathOf(groupRepoId(deps.store, groupId)), ref, correction.id, fixRunIdOf(correction)))) return;
     write(deps, () => {
-      const recorded = deps.store.db.prepare("SELECT 1 FROM activity WHERE kind='correction-closed' AND json_extract(body,'$.correctionId')=? LIMIT 1").get(correction.id);
-      if (recorded === undefined) recordActivity(deps.store, { groupId, runId: null, kind: "correction-closed", body: { correctionId: correction.id, ref, via: "debug-group" } });
+      const group = readGroup(deps.store, groupId);
+      const current = readDebugMark(group);
+      if (current === null || current.closedNotedAt !== null) return;
+      saveGroup(deps.store, { ...group, debug: { ...current, closedNotedAt: deps.store.now() } } as typeof group);
+      recordActivity(deps.store, { groupId, runId: null, kind: "correction-closed", body: { correctionId: correction.id, ref, via: closedVia(current) } });
     });
   } catch (error) { process.stderr.write(`orca-driver: integration ${groupId}: correction-closed: ${describe(error)}\n`); }
 }

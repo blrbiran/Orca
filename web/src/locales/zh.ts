@@ -1250,6 +1250,7 @@ export const zhErrors: Record<string, string> = {
   "correction-already-withdrawn": "这条纠正已经撤回过了。",
   "correction-closed": "这条纠正已经关闭：它的修复已在台账里。如果改了主意，另记一条新的纠正。",
   "correction-withdrawals-unreadable": "纠正撤回记录文件里有一行读不了，什么都没写入。请手工修好或删掉那一行：{{message}}",
+  "corrections-store-unreadable": "纠正记录文件里有一行读不了，纠正列表无法列出。请手工修好或删掉那一行：{{message}}",
   "unresolved-project-keys": "纠正记录里有面板解析不了的 projectKey：{{message}}",
   "key-matches-multiple-paths": "一个 projectKey 对应了多个路径：{{message}}",
   "repo-path-missing": "--repo 指向的目录不存在：{{message}}",

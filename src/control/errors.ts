@@ -105,6 +105,9 @@ export const durableCommandErrorStatuses = {
   "debug-checks-required": 409,
   "correction-withdrawn": 409,
   "correction-withdrawals-unreadable": 409,
+  // Debug task plan Task 10 (fix round 1): GET /api/control/corrections over a corrections.jsonl with a line that does not
+  // parse; the list is not answered as if that row were absent.
+  "corrections-store-unreadable": 409,
   "plan-version-conflict": 409,
   "profile-changed": 409,
   "proposal-version-conflict": 409,

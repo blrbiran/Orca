@@ -248,7 +248,7 @@ export async function applyCorrectionDebugOpen(deps: DebugOpenDeps, command: Cor
       writeCanonicalRecord(deps.store, groupId, inputHash, inputJson);
       const mark: DebugMark = {
         correctionId, ordinal: groupId === baseId(correctionId) ? 1 : Number(groupId.slice(baseId(correctionId).length + 1)),
-        inputHash, missing: [...input.missing], agentFallback: prepared.agentFallback, undoHow: undoHow ?? null, closing: null,
+        inputHash, missing: [...input.missing], agentFallback: prepared.agentFallback, undoHow: undoHow ?? null, closing: null, closedNotedAt: null,
         checks: checksProvenance(input.contract !== null, prepared.checks !== undefined, commandPrincipalFor(context.rawCommand.commandId)),
       };
       const body = JSON.parse(String(deps.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)) as Record<string, unknown>;

@@ -5,15 +5,17 @@ import { join } from "node:path";
 import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readGroupActivity } from "../../src/control/activity.js";
-import { correctionClosedState, readCorrectionList } from "../../src/control/correctionState.js";
+import { correctionClosedState, currentBranchRef, readCorrectionList } from "../../src/control/correctionState.js";
+import { readDebugMark, requireDebugMark } from "../../src/control/debugChecks.js";
+import { ControlError } from "../../src/control/errors.js";
 import { debugGroupIdFor } from "../../src/control/debugGroup.js";
-import { integratePendingGroups } from "../../src/control/integrationPass.js";
-import { newGroupIntegration, type IntegrationScheme } from "../../src/control/integrationScheme.js";
+import { finishResolvedIntegration, integratePendingGroups, type IntegrationDeps } from "../../src/control/integrationPass.js";
+import { newGroupIntegration, readGroupIntegration, type IntegrationScheme } from "../../src/control/integrationScheme.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { controlWorkspaceRoots, unsetInheritedGitEnv } from "../../src/control/workspace.js";
 import { deriveRows } from "../../src/corrections/derive.js";
 import { deriveFixRunId } from "../../src/corrections/fields.js";
-import { withdrawalsFile } from "../../src/corrections/paths.js";
+import { correctionsFile, withdrawalsFile } from "../../src/corrections/paths.js";
 import { projectKeyOf } from "../../src/corrections/projectKey.js";
 import { correctionRowFrom, recordNewCorrection } from "../../src/corrections/record.js";
 import type { Correction } from "../../src/corrections/schema.js";
@@ -112,14 +114,21 @@ async function world() {
     return groupId;
   };
   const land = (groupId: string, files: Record<string, string>) => commitOn(repo, `refs/heads/orca/${groupId}`, files, "land");
-  const pass = () => integratePendingGroups({
+  /** What Task 9's landing leaves on the mark when it wrote the closing rows (the driver is not run here). */
+  const wroteClosing = (groupId: string) => {
+    const fixRunId = fixRunIdOf(correction), current = body(groupId);
+    h.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...current,
+      debug: { ...(current.debug as object), closing: { state: "written", relPath: `.decisions/${fixRunId}.jsonl`, fixRunId } } }), groupId);
+  };
+  const integrationDeps = (): IntegrationDeps => ({
     store: h.store, roots: controlWorkspaceRoots(h.store.stateDir), admissionGate: h.deps.admissionGate, repoPathOf: () => repo,
     now: () => Date.now(), ghBin: "/nonexistent/gh", stopped: () => false,
   });
+  const pass = () => integratePendingGroups(integrationDeps());
   const list = () => readCorrectionList({ store: h.store, correctionsDir: dir, listRepositories });
   const item = async (id = correction.id) => (await list()).find((entry) => entry.correction.id === id)!;
   const closedRows = (groupId: string) => readGroupActivity(h.store, groupId, 50).filter((entry) => entry.kind === "correction-closed");
-  return { ...h, repo, dir, correction, record, service, open, land, pass, list, item, closedRows };
+  return { ...h, repo, dir, correction, record, service, open, land, wroteClosing, integrationDeps, pass, list, item, closedRows, body };
 }
 
 describe("a correction's closed state is computed from the integration target (plan Task 10)", { timeout: 60_000 }, () => {
@@ -139,6 +148,7 @@ describe("a correction's closed state is computed from the integration target (p
     const w = await world(); try {
       const groupId = await w.open(LOCAL_MERGE);
       w.land(groupId, closingFile(w.correction));
+      w.wroteClosing(groupId);
       expect(w.closedRows(groupId)).toEqual([]);
       expect(await w.pass()).toBe(true);
       expect(g(w.repo, ["cat-file", "-e", `refs/heads/main:.decisions/${fixRunIdOf(w.correction)}.jsonl`])).toBe("");
@@ -146,10 +156,13 @@ describe("a correction's closed state is computed from the integration target (p
       expect(item.closed).toEqual({ state: "closed", ref: "refs/heads/main", via: "debug-group" });
       expect(item.debugGroups).toEqual([{ groupId, ordinal: 1, live: true, state: expect.any(String) }]);
       expect(w.closedRows(groupId).map((row) => [row.runId, row.body])).toEqual([[null, { correctionId: w.correction.id, ref: "refs/heads/main", via: "debug-group" }]]);
-      // A second landing settles a second integration; the correction was already closed, so no second row (M-10.5).
+      expect(readDebugMark(w.body(groupId))!.closedNotedAt).toEqual(expect.any(Number));
+      // A second landing settles a second integration. With the first row gone (retention keeps 500 rows a group), the
+      // mark's flag alone keeps a second row from being written (M-10.5).
+      w.store.db.prepare("DELETE FROM activity WHERE kind='correction-closed'").run();
       w.land(groupId, { "b.txt": "b\n" });
       expect(await w.pass()).toBe(true);
-      expect(w.closedRows(groupId)).toHaveLength(1);
+      expect(w.closedRows(groupId)).toEqual([]);
     } finally { await w.dispose(); }
   });
 
@@ -157,11 +170,52 @@ describe("a correction's closed state is computed from the integration target (p
     const w = await world(); try {
       const groupId = await w.open(LOCAL_SQUASH);
       const landed = w.land(groupId, closingFile(w.correction));
+      w.wroteClosing(groupId);
       expect(await w.pass()).toBe(true);
       // Under squash the landing commit is not an ancestor of the target: M-10.2 (merge-base --is-ancestor) -> red.
       expect(() => g(w.repo, ["merge-base", "--is-ancestor", landed, "refs/heads/main"])).toThrow();
       expect((await w.item()).closed).toEqual({ state: "closed", ref: "refs/heads/main", via: "debug-group" });
       expect(w.closedRows(groupId)).toHaveLength(1);
+    } finally { await w.dispose(); }
+  });
+
+  it("rows a person put on the debug group's target, not its landing, are closed by-hand", async () => {
+    const w = await world(); try {
+      const groupId = await w.open(LOCAL_MERGE);
+      // The group's landing never wrote them (its mark has no `written` closing): a `--close` on the target did.
+      commitOn(w.repo, "refs/heads/main", closingFile(w.correction), "orca correct --close");
+      g(w.repo, ["reset", "-q", "--hard", "main"]);
+      w.land(groupId, { "b.txt": "b\n" });
+      expect(await w.pass()).toBe(true);
+      // M-10.13: via always debug-group on the group's target -> red.
+      expect((await w.item()).closed).toEqual({ state: "closed", ref: "refs/heads/main", via: "by-hand" });
+      expect(w.closedRows(groupId).map((row) => row.body.via)).toEqual(["by-hand"]);
+    } finally { await w.dispose(); }
+  });
+
+  it("an integration that conflicts, is resolved and finished closes it, recorded once", async () => {
+    const w = await world(); try {
+      const groupId = await w.open(LOCAL_MERGE);
+      w.land(groupId, { ...closingFile(w.correction), "base.txt": "A\n" });
+      w.wroteClosing(groupId);
+      const main = commitOn(w.repo, "refs/heads/main", { "base.txt": "B\n" }, "person");
+      g(w.repo, ["reset", "-q", "--hard", "main"]);
+      expect(await w.pass()).toBe(true);
+      const integration = readGroupIntegration(w.body(groupId))!;
+      expect(integration).toMatchObject({ state: "conflict", conflict: { base: main } });
+      expect(w.closedRows(groupId)).toEqual([]);
+      // The resolution's result: the conflicted path resolved, the closing file as the landing had it.
+      const env = { GIT_INDEX_FILE: join(w.repo, ".git", `orca-test-resolved-${process.pid}`) };
+      g(w.repo, ["read-tree", main], { env });
+      for (const [path, text] of Object.entries({ ...closingFile(w.correction), "base.txt": "AB\n" })) {
+        g(w.repo, ["update-index", "--add", "--cacheinfo", `100644,${g(w.repo, ["hash-object", "-w", "--stdin"], { input: text })},${path}`], { env });
+      }
+      const tree = g(w.repo, ["write-tree"], { env });
+      expect(await finishResolvedIntegration(w.integrationDeps(), w.repo, groupId, integration, tree)).toBe(true);
+      expect(g(w.repo, ["show", "refs/heads/main:base.txt"])).toBe("AB");
+      // M-10.14: finishResolvedIntegration settling without settleAndNote -> red.
+      expect(w.closedRows(groupId).map((row) => row.body)).toEqual([{ correctionId: w.correction.id, ref: "refs/heads/main", via: "debug-group" }]);
+      expect((await w.item()).closed).toEqual({ state: "closed", ref: "refs/heads/main", via: "debug-group" });
     } finally { await w.dispose(); }
   });
 
@@ -215,6 +269,24 @@ describe("a correction's closed state is computed from the integration target (p
       expect((await w.item(other.id)).withdrawn).toBeNull();
     } finally { await w.dispose(); }
   });
+
+  it("a current-branch read that fails for any reason but a detached HEAD is thrown, not read as HEAD", async () => {
+    const w = await world(); try {
+      // M-10.16: every failure read as detached -> red.
+      await expect(currentBranchRef(join(w.root, "not-a-repository"))).rejects.toThrow();
+      expect(await currentBranchRef(w.repo)).toBe("refs/heads/main");
+    } finally { await w.dispose(); }
+  });
+
+  it("a group taken for a debug group but carrying no mark blocks by name", async () => {
+    const w = await world(); try {
+      // M-10.17: the mark taken on trust (`!`) -> no named refusal -> red.
+      let thrown: unknown = null;
+      try { requireDebugMark(w.body("g")); } catch (error) { thrown = error; }
+      expect(thrown).toBeInstanceOf(ControlError);
+      expect([(thrown as ControlError).code, (thrown as ControlError).detail]).toEqual(["recovery-blocked", "debug-mark-missing"]);
+    } finally { await w.dispose(); }
+  });
 });
 
 describe("GET /api/control/corrections (plan Task 10)", { timeout: 60_000 }, () => {
@@ -241,6 +313,12 @@ describe("GET /api/control/corrections (plan Task 10)", { timeout: 60_000 }, () 
       expect(answer.status).toBe(200);
       expect(answer.body.schema).toBe("orca-correction-list-v1");
       expect(answer.body.corrections.map((entry: any) => [entry.correction.id, entry.repoId, entry.closed, entry.withdrawn])).toEqual([[w.correction.id, "repo", { state: "open" }, null]]);
+      // M-10.15: a damaged corrections.jsonl answered as a 500 -> red.
+      const stored = await readFile(correctionsFile(w.dir), "utf8");
+      await appendFile(correctionsFile(w.dir), "{\"id\":\n");
+      const unreadable = await api.get();
+      expect([unreadable.status, unreadable.body.error.code]).toEqual([409, "corrections-store-unreadable"]);
+      await writeFile(correctionsFile(w.dir), stored);
       await appendFile(withdrawalsFile(w.dir), "not json\n");
       const damaged = await api.get();
       expect([damaged.status, damaged.body.error.code]).toEqual([409, "correction-withdrawals-unreadable"]);
