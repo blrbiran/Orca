@@ -63,7 +63,7 @@ async function recordAndOpen(ctx: Ctx): Promise<string> {
   expect(recorded.status).toBe(200);
   const cid = (recorded.body.correction as { id: string; projectKey: string }).id;
   expect((recorded.body.correction as { projectKey: string }).projectKey).toBe(PANEL_KEY);
-  const opened = await ctx.post(`/api/control/corrections/${cid}/debug-group`, { commandId: "open-1", expectedRevision: 0, payload: { correctionId: cid } });
+  const opened = await ctx.post(`/api/control/corrections/${cid}/debug-group`, { commandId: "open-1", expectedRevision: 0, payload: { correctionId: cid, checks: ["npm test"] } });
   expect([opened.status, opened.body.result]).toEqual([201, { kind: "debug-group-opened", groupId: `debug-${cid}`, correctionId: cid, created: true }]);
   return cid;
 }

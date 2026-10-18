@@ -7,7 +7,7 @@ import { correctionRowFrom, recordNewCorrection } from "../corrections/record.js
 import { CorrectRejection } from "../corrections/rejection.js";
 import { namesDecision, type Correction } from "../corrections/schema.js";
 import { readCorrections } from "../corrections/store.js";
-import { withdrawCorrection } from "../corrections/withdrawals.js";
+import { readWithdrawals, withdrawCorrection, withdrawnIds } from "../corrections/withdrawals.js";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { debugGroupIds, debugGroupLive, repositoryOf, type WithdrawnDebugGroup } from "./debugGroup.js";
 import { ControlError, durableCommandErrorStatus, type KnownControlErrorCode } from "./errors.js";
@@ -37,10 +37,11 @@ export interface PanelCorrections {
   projectKeyOf(repoId: string): string | null;
   now(): Date;
   /**
-   * The ids the panel's own scan sees closed (an `overturned` row in a discovered ledger names them): POST
-   * /api/corrections/withdraw's closed rule (decisions review withdraw spec §5.2), one function for the route and the verb.
+   * POST /api/corrections/withdraw's precondition, one function for the route and the verb (decisions review withdraw
+   * spec §5.2): the correction's decision must be one the panel's discovery lists, and then the ids that same scan sees
+   * closed (an `overturned` row in a discovered ledger names them). The closed set is only sound for a listed decision.
    */
-  closedIds(): Promise<ReadonlySet<string>>;
+  withdrawPrecondition(correctionId: string): Promise<{ kind: "not-listed"; projectKey: string; decisionId: string } | { kind: "ok"; closed: ReadonlySet<string> }>;
   /** POST /api/corrections's `reviewed` mark, written after the correction (decisions review withdraw §5.4 rests on it). */
   markReviewed(row: { projectKey: string; decisionId: string; by: string }): Promise<void>;
   /** POST /api/corrections/withdraw's §5.4 step: the review goes with the correction unless another open one of `by`'s remains. */
@@ -55,8 +56,9 @@ function asControlError(error: unknown): unknown {
   if (error instanceof CorrectRejection && durableCommandErrorStatus(error.code) !== null) {
     return new ControlError(error.code as KnownControlErrorCode, error.message);
   }
-  // The ledger writer refuses a line with a plain Error (src/ledger/writer.ts); an undo.how the tier-0 gate refuses is
-  // the human's to fix, not a 500.
+  // The ledger writer refuses a line with a plain Error (src/ledger/writer.ts) whose message starts "refusing to append"
+  // in every refusal it makes; it exports no code, and giving it one would touch every throw there, so the prefix is
+  // matched. An undo.how the tier-0 gate refuses is the human's to fix, not a 500.
   if (error instanceof Error && !(error instanceof ControlError) && error.message.startsWith("refusing to append")) {
     return new ControlError("closing-row-refused", error.message);
   }
@@ -120,6 +122,8 @@ export function applyCorrectionRecord(deps: WebServiceDeps, command: CorrectionR
     const repository = (deps.listRepositories?.() ?? []).find((candidate) => candidate.repoId === repoId);
     if (projectKey === null || repository === undefined) throw new ControlError("correction-repository-unknown", repoId);
     await readOriginalDecision(join(repository.path, ".decisions"), decisionId);
+    // recordNewCorrection reads the store too; a line that does not parse is refused by name, not a 500.
+    await readCorrectionsOrRefuse(dir);
     const stored = await recordNewCorrection(dir, correctionRowFrom({
       projectKey, decisionId, kind, ...(chose_instead === undefined ? {} : { chose_instead }), because, by,
     }, () => panel.now()), { again: again === true });
@@ -160,6 +164,12 @@ export function applyCorrectionClose(deps: WebServiceDeps, command: CorrectionCl
     if (correction === undefined) throw new ControlError("correction-not-found");
     const repository = await repositoryOf({ listRepositories: deps.listRepositories ?? (() => []), repoIdOfProjectKey: deps.repoIdOfProjectKey }, correction.projectKey);
     if (repository === null) throw new ControlError("correction-repository-unknown", correction.projectKey);
+    // A withdrawn correction is refused as withdrawn even while a started debug group of it is still live: that is the
+    // truer answer (closeStoredCorrection checks it again under the lock).
+    if (withdrawnIds(await readWithdrawals(dir)).has(correctionId)) throw new ControlError("correction-withdrawn");
+    // Accepted window (as prepareRejection's, decisionCommands.ts): a debug group opened between this read and the
+    // commit below is not seen; and two concurrent closes under one command id both prepare, the repo lock and
+    // alreadyCommitted keep them to one landing, and the ledger books the first answer.
     const live = debugGroupIds(deps.store, correctionId).filter((groupId) => debugGroupLive(deps.store, groupId));
     if (live.length > 0) throw new ControlError("debug-group-active", live.join(","));
     await requireGitRoot(repository.path);
@@ -177,20 +187,24 @@ export type ArchiveDebugGroups = (correctionId: string) => { debugGroups: Withdr
 /**
  * Withdraw Amendment 7: the author's withdraw as a verb, in POST /api/corrections/withdraw's order: withdrawCorrection
  * (the same store function), then each unstarted live debug group archived (Amendment 2, here where the control store
- * is at hand), then the review taken with it (§5.4). Closed-ness is the panel route's own rule (panel.closedIds), taken
- * before the store lock as the route takes it. A step after the withdrawal that fails is answered beside it, never as
+ * is at hand), then the review taken with it (§5.4). The membership guard and closed-ness are the panel route's own
+ * (panel.withdrawPrecondition), taken before the store lock as the route takes them. A step after the withdrawal that fails is answered beside it, never as
  * nothing written.
  */
 export function applyCorrectionWithdraw(deps: WebServiceDeps, command: CorrectionWithdrawCommand, archive: ArchiveDebugGroups): Promise<WebCommandResult> {
   return run(deps.store, command, async () => {
     const { dir, by, panel } = configured(deps);
-    let closed: ReadonlySet<string>;
+    // The helper reads the store too; a line that does not parse is refused by name here first.
+    await readCorrectionsOrRefuse(dir);
+    let precondition: Awaited<ReturnType<PanelCorrections["withdrawPrecondition"]>>;
     // The route answers its scan's gate refusal 409 by name (a MetricsRejection); the verb books it the same way.
-    try { closed = await panel.closedIds(); }
+    try { precondition = await panel.withdrawPrecondition(command.payload.correctionId); }
     catch (error) {
       if (typeof (error as { code?: unknown })?.code !== "string") throw error;
       throw new ControlError("correction-closed-state-unknown", codeOf(error));
     }
+    if (precondition.kind === "not-listed") throw new ControlError("decision-not-found", `${precondition.decisionId} in ${precondition.projectKey}`);
+    const { closed } = precondition;
     const { correction } = await withdrawCorrection(dir, { correctionId: command.payload.correctionId, by, at: panel.now().toISOString(), isClosed: (c) => closed.has(c.id) });
     let settled: ReturnType<ArchiveDebugGroups>;
     try { settled = archive(correction.id); }

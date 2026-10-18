@@ -261,15 +261,33 @@ async function hasOpenCorrection(
 }
 
 /**
+ * POST /api/corrections/withdraw's precondition (decisions review withdraw spec §5.2): the correction's decision must be
+ * one this request's discovery lists (ruling J1's membership rule), and closed-ness is that same scan's (`closedIds`),
+ * taken BEFORE the store lock (§5.2's accepted window). A pending-target correction has no decision to check and is
+ * left to withdrawCorrection's own refusal. One function for the route and the correction-withdraw verb.
+ */
+async function withdrawPrecondition(
+  opts: PanelOptions,
+  correctionId: string,
+): Promise<{ kind: "not-listed"; projectKey: string; decisionId: string } | { kind: "ok"; closed: ReadonlySet<string> }> {
+  const { observations } = await currentMetrics(opts);
+  const target = (await readCorrections(opts.correctionsDir)).find((c) => c.id === correctionId);
+  if (target !== undefined && namesDecision(target) && !isListedDecision(observations, target.projectKey, target.decisionId)) {
+    return { kind: "not-listed", projectKey: target.projectKey, decisionId: target.decisionId };
+  }
+  return { kind: "ok", closed: closedIds(observations) };
+}
+
+/**
  * Debug task plan Task 11: what the control service's correction verbs take from the panel. The routes below call these
  * same functions, so a correction recorded or withdrawn through a verb leaves the rows these routes leave: the panel's
- * project key, its clock, its closed rule and its review marks.
+ * project key, its clock, its withdraw precondition (membership and closed rule) and its review marks.
  */
 export function panelCorrections(opts: PanelOptions, reviews: ReviewsWriter): PanelCorrections {
   return {
     projectKeyOf: (repoId) => opts.repos.find((repo) => controlRepoKey(repo.projectKey) === repoId)?.projectKey ?? null,
     now: () => panelClock(opts)(),
-    closedIds: async () => closedIds((await currentMetrics(opts)).observations),
+    withdrawPrecondition: (correctionId) => withdrawPrecondition(opts, correctionId),
     markReviewed: async ({ projectKey, decisionId, by }) => {
       await reviews.append({ decisionId, projectKey, action: "reviewed", by, at: nowIso(opts) });
     },
@@ -692,21 +710,18 @@ export function buildApi(app: Express, deps: ApiDeps): void {
       const dir = deps.opts.correctionsDir;
       const by = deps.opts.by;
 
-      const { observations } = await currentMetrics(deps.opts);
-      const target = (await readCorrections(dir)).find((c) => c.id === correctionId);
-      if (
-        target !== undefined &&
-        namesDecision(target) &&
-        !isListedDecision(observations, target.projectKey, target.decisionId)
-      ) {
+      // Debug task plan Task 11 (fix round 1): the membership guard and the closed set are one helper, shared with the
+      // correction-withdraw verb (panelCorrections below), because the closed set is only sound for a listed decision.
+      const precondition = await withdrawPrecondition(deps.opts, correctionId);
+      if (precondition.kind === "not-listed") {
         res.status(404).json({
           code: DECISION_NOT_FOUND,
-          message: `no decision ${target.decisionId} in ${target.projectKey}`,
+          message: `no decision ${precondition.decisionId} in ${precondition.projectKey}`,
         });
         return;
       }
 
-      const closed = closedIds(observations);
+      const { closed } = precondition;
       let withdrawn: Awaited<ReturnType<typeof withdrawCorrection>>;
       try {
         withdrawn = await withdrawCorrection(dir, {

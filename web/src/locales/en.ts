@@ -1219,8 +1219,6 @@ export const enErrors: Record<string, string> = {
   "no-chose-instead": "This correction does not say what was chosen instead. Give what the code should do instead to close it.",
   "close-argument-conflict": "This correction already says what was chosen instead; only a missing one can be supplied when closing it.",
   "target-not-a-git-repo": "The correction's repository is not the root of a git repository, so its ledger cannot be written: {{detail}}",
-  "target-has-no-remote": "The repository has no remote, so its project key cannot be derived: {{detail}}",
-  "target-remote-not-keyable": "The repository's remote cannot be turned into a project key: {{detail}}",
   "closing-row-refused": "The ledger refused the closing row, so the correction stays open (often an undo command that cannot be run as written): {{detail}}",
   "target-mid-git-operation": "The repository is in the middle of a git operation (or on a detached HEAD). Finish it, then close the correction: {{detail}}",
   "ledger-commit-refused": "The closing rows were written, but git refused to commit them. Fix that and close the correction again; it finishes the step: {{detail}}",

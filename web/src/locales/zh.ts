@@ -1153,8 +1153,6 @@ export const zhErrors: Record<string, string> = {
   "no-chose-instead": "这条纠正没有写明改成了什么。要关闭它，请填写代码应当改成怎样。",
   "close-argument-conflict": "这条纠正已经写明了改成什么；关闭时只能补上缺的那一项。",
   "target-not-a-git-repo": "这条纠正所在的仓库不是 git 仓库的根目录，写不了它的台账：{{detail}}",
-  "target-has-no-remote": "这个仓库没有 remote，推不出它的项目键：{{detail}}",
-  "target-remote-not-keyable": "这个仓库的 remote 转不成项目键：{{detail}}",
   "closing-row-refused": "台账拒绝了关闭用的那一行，纠正仍未关闭（常见原因：撤销命令无法照原样执行）：{{detail}}",
   "target-mid-git-operation": "这个仓库正处在一次 git 操作中（或 HEAD 处于分离状态）。先完成它，再关闭纠正：{{detail}}",
   "ledger-commit-refused": "关闭用的行已写入，但 git 拒绝提交。修好之后再关闭一次这条纠正，它会补完这一步：{{detail}}",

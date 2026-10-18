@@ -26,8 +26,6 @@ export const durableCommandErrorStatuses = {
   "no-chose-instead": 400,
   "close-argument-conflict": 400,
   "target-not-a-git-repo": 400,
-  "target-has-no-remote": 400,
-  "target-remote-not-keyable": 400,
   "closing-row-refused": 400,
 
   // Resource lookup.
@@ -53,6 +51,8 @@ export const durableCommandErrorStatuses = {
   "correction-repository-unknown": 404,
   "original-decision-not-found": 404,
   "original-pending-decision-not-found": 404,
+  // Debug task plan Task 11 (fix round 1): correction-withdraw's membership guard, the panel withdraw route's own 404.
+  "decision-not-found": 404,
 
   // Optimistic concurrency, immutable identity, and ownership conflicts.
   // Agent selection spec §6.4 step 3 (W6-12): the selections a confirmation resolves are no longer the ones the

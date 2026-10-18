@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { fixRunIdOf } from "../../src/control/correctionState.js";
+import { applyCorrectionRecord, applyCorrectionWithdraw, type ArchiveDebugGroups, type PanelCorrections } from "../../src/control/correctionCommands.js";
+import type { WebServiceDeps } from "../../src/control/webService.js";
 import { closeExistingCorrection } from "../../src/corrections/correct.js";
+import { writeFile } from "node:fs/promises";
+import { openTestStore } from "./fixtures/store.js";
 import { correctionsFile, withdrawalsFile } from "../../src/corrections/paths.js";
 import { correctionRowFrom, recordNewCorrection } from "../../src/corrections/record.js";
 import { readCorrections } from "../../src/corrections/store.js";
@@ -116,6 +120,15 @@ describe("correction-record (debug task plan Task 11)", { timeout: 60_000 }, () 
       expect(await read(correctionsFile(ctx.corrections))).toBeNull();
     });
   });
+
+  it("refuses a corrections store with a line that does not parse, by name", async () => {
+    await withPanel(async (ctx) => {
+      await writeFile(correctionsFile(ctx.corrections), "not json\n", { mode: 0o600 });
+      const refused = await ctx.command("/api/control/corrections", RECORD, "rec-x");
+      // Mutation "drop readCorrectionsOrRefuse in record": recordNewCorrection's SyntaxError is a 500 -> red.
+      expect([refused.status, errorCode(refused.body), await read(correctionsFile(ctx.corrections))]).toEqual([409, "corrections-store-unreadable", "not json\n"]);
+    });
+  });
 });
 
 describe("correction-close (debug task plan Task 11)", { timeout: 60_000 }, () => {
@@ -166,11 +179,13 @@ describe("correction-close (debug task plan Task 11)", { timeout: 60_000 }, () =
       const cli = await closeExistingCorrection({ repo: ctx.repo.path, correctionId: correction.id, choseInstead: "file lease", undo: { how: `git revert --no-edit ${SHA}` }, dir: ctx.corrections })
         .then(() => "closed", (error: { code?: string }) => error.code);
       expect(cli).toBe("correction-target-not-a-decision");
-      const closed = await ctx.command(`/api/control/corrections/${correction.id}/close`, closePayload(correction.id, { choseInstead: "file lease" }), "close-1");
+      const closed = await ctx.command(`/api/control/corrections/${correction.id}/close`, closePayload(correction.id, { choseInstead: "file lease", undoCost: "one ledger line", undoBlastRadius: "this repository" }), "close-1");
       expect([closed.status, closed.body.result]).toEqual([200, { kind: "correction-closed", correctionId: correction.id, relPath, alreadyClosed: false }]);
-      const lines = gitShow(ctx.repo.path, relPath)!.trim().split("\n").map((line) => JSON.parse(line) as { ev: string; chose: string; evidence: string[] });
-      // Mutation "close a pending target through closeExistingCorrection": refused target-not-a-decision -> red.
-      expect(lines.map((line) => [line.ev, line.chose, line.evidence])).toEqual([["decision", "file lease", [`correction ${correction.id}`, `pending ${pendingId}`]]]);
+      const lines = gitShow(ctx.repo.path, relPath)!.trim().split("\n").map((line) => JSON.parse(line) as { ev: string; chose: string; evidence: string[]; undo: unknown });
+      // Mutation "close a pending target through closeExistingCorrection": refused target-not-a-decision -> red. Mutation
+      // "drop derivePendingRows' cost/blast-radius overrides": the inherited values are written instead -> red.
+      expect(lines.map((line) => [line.ev, line.chose, line.evidence, line.undo])).toEqual([["decision", "file lease", [`correction ${correction.id}`, `pending ${pendingId}`],
+        { how: `git revert --no-edit ${SHA}`, cost: "one ledger line", blast_radius: "this repository" }]]);
     });
   });
 
@@ -187,6 +202,29 @@ describe("correction-close (debug task plan Task 11)", { timeout: 60_000 }, () =
     });
   });
 
+  it("refuses a withdrawn correction as withdrawn even while a started debug group of it is live", async () => {
+    await withPanel(async (ctx) => {
+      const correction = await recordByVerb(ctx);
+      const groupId = await openDebugGroup(ctx, correction.id);
+      ctx.db("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,?,?,0,?)", "run-d", groupId, "debug", 1, JSON.stringify({ runId: "run-d", groupId, taskId: "debug", state: "running" }));
+      const withdrawn = await ctx.command(`/api/control/corrections/${correction.id}/withdraw`, { correctionId: correction.id }, "wd-1");
+      expect((withdrawn.body.result as { debugGroups?: unknown } | undefined)?.debugGroups).toEqual([{ groupId, state: "started: left running" }]);
+      const refused = await ctx.command(`/api/control/corrections/${correction.id}/close`, closePayload(correction.id), "close-1");
+      // Mutation "check the live group before the withdrawal": debug-group-active -> red.
+      expect([refused.status, errorCode(refused.body)]).toEqual([409, "correction-withdrawn"]);
+    });
+  });
+
+  it("refuses a path that names another correction than the payload, booking nothing", async () => {
+    await withPanel(async (ctx) => {
+      const other = "c_0123456789abcdef";
+      const refused = await ctx.command(`/api/control/corrections/${other}/close`, closePayload("c_fedcba9876543210"), "close-x");
+      // Mutation "drop the path/payload id check": the close is routed and refused correction-not-found (404) -> red.
+      expect([refused.status, errorCode(refused.body)]).toEqual([400, "control-non-json-payload"]);
+      expect(ctx.db("SELECT id FROM commands WHERE id='close-x'")).toBeUndefined();
+    });
+  });
+
   it("answers an undo.how the ledger refuses by name, not a 500", async () => {
     await withPanel(async (ctx) => {
       const correction = await recordByVerb(ctx);
@@ -197,6 +235,18 @@ describe("correction-close (debug task plan Task 11)", { timeout: 60_000 }, () =
 });
 
 describe("correction-withdraw (debug task plan Task 11, withdraw Amendment 7)", { timeout: 60_000 }, () => {
+  it("refuses, as the panel route does, a correction whose decision the panel's discovery no longer lists", async () => {
+    await withPanel(async (ctx) => {
+      const correction = await recordByVerb(ctx);
+      await rm(join(ctx.repo.path, ".decisions"), { recursive: true, force: true });
+      const viaRoute = await ctx.post("/api/corrections/withdraw", { correctionId: correction.id });
+      const viaVerb = await ctx.command(`/api/control/corrections/${correction.id}/withdraw`, { correctionId: correction.id }, "wd-1");
+      // Mutation "drop the verb's not-listed refusal": the verb withdraws it -> red.
+      expect([viaRoute.status, viaRoute.body.code, viaVerb.status, errorCode(viaVerb.body), await read(withdrawalsFile(ctx.corrections))])
+        .toEqual([404, "decision-not-found", 404, "decision-not-found", null]);
+    });
+  });
+
   it("withdraws, archives the unstarted debug group, and takes the review with it", async () => {
     await withPanel(async (ctx) => {
       const correction = await recordByVerb(ctx);
@@ -241,5 +291,84 @@ describe("the three correction verbs are an owner's", { timeout: 60_000 }, () =>
     expect(answers).toEqual(routes.map(([route]) => ({ route, socketAgent: [403, "control-verb-human-only"], webMember: [403, "control-verb-human-only"] })));
     expect(commandIds(w.state).filter((id) => id.startsWith("cc-"))).toEqual([]);
     expect(await read(correctionsFile(join(w.root, "corrections")))).toBeNull();
+  });
+});
+
+/**
+ * The verbs' partial outcomes and their configuration refusal, through the exported handlers with a one-off fake of the
+ * panel's side (a real control store under a temp root; the corrections store a temp dir).
+ */
+describe("the correction verbs' partial outcomes (fake panel side)", { timeout: 60_000 }, () => {
+  const coded = (code: string) => Object.assign(new Error(code), { code });
+  async function direct(panel: Partial<PanelCorrections> | null) {
+    const h = await openTestStore();
+    const repo = await makeTargetRepo({ remote: "https://example.invalid/o/r.git" });
+    const dir = join(h.root, "corrections");
+    await mkdir(dir, { mode: 0o700 });
+    const fake: PanelCorrections = {
+      projectKeyOf: () => PANEL_KEY, now: () => NOW, markReviewed: async () => undefined,
+      withdrawPrecondition: async () => ({ kind: "ok", closed: new Set<string>() }), withdrawReview: async () => "written", ...panel,
+    };
+    const deps = { store: h.store, correctionsDir: dir, correctionsBy: "tester", listRepositories: () => [{ repoId: REPO_ID, path: repo.path }],
+      ...(panel === null ? {} : { panelCorrections: fake }) } as unknown as WebServiceDeps;
+    const command = <V extends "correction-record" | "correction-withdraw">(verb: V, payload: unknown, commandId: string) =>
+      ({ schema: "orca-raw-command-v1", commandId, actorId: "human", expectedRevision: 0, verb, target: { kind: "corrections" }, payload }) as never;
+    const recorded = async () => recordNewCorrection(dir, correctionRowFrom({ projectKey: PANEL_KEY, decisionId: ORIGINAL.id, kind: "wrong", because: "no", by: "tester" }, () => NOW), { again: false });
+    const noArchive: ArchiveDebugGroups = () => ({ debugGroups: [], failure: null });
+    const dispose = async () => { await repo.cleanup(); await h.dispose(); };
+    return { deps, dir, command, recorded, noArchive, dispose };
+  }
+  const errorOf = (body: unknown) => (body as { error?: { code: string; message: string } }).error;
+
+  it("answers a reviewed mark that fails after the correction is recorded beside it", async () => {
+    const t = await direct({ markReviewed: async () => { throw coded("reviews-store-busy"); } }); try {
+      const body = await applyCorrectionRecord(t.deps, t.command("correction-record", RECORD, "rec-1"));
+      const rows = await readCorrections(t.dir);
+      // Mutation "drop the reviewed-mark catch": the PanelRejection-like error escapes (a 500) -> red.
+      expect([errorOf(body)?.code, errorOf(body)?.message, rows.length]).toEqual(["correction-recorded-unreviewed", `correction-recorded-unreviewed:${rows[0]?.id}:reviewed-mark:reviews-store-busy`, 1]);
+    } finally { await t.dispose(); }
+  });
+
+  it("books the panel scan's gate refusal and withdraws nothing", async () => {
+    const t = await direct({ withdrawPrecondition: async () => { throw coded("unresolved-project-keys"); } }); try {
+      const correction = await t.recorded();
+      const body = await applyCorrectionWithdraw(t.deps, t.command("correction-withdraw", { correctionId: correction.id }, "wd-1"), t.noArchive);
+      // Mutation "rethrow the scan's refusal": a 500 -> red.
+      expect([errorOf(body)?.code, await read(withdrawalsFile(t.dir))]).toEqual(["correction-closed-state-unknown", null]);
+    } finally { await t.dispose(); }
+  });
+
+  it("answers a failed review withdrawal beside the withdrawal", async () => {
+    const t = await direct({ withdrawReview: async () => { throw coded("reviews-store-busy"); } }); try {
+      const correction = await t.recorded();
+      const body = await applyCorrectionWithdraw(t.deps, t.command("correction-withdraw", { correctionId: correction.id }, "wd-1"), t.noArchive);
+      // Mutation "read a failed review withdrawal as skipped": success -> red.
+      expect([errorOf(body)?.message, (await read(withdrawalsFile(t.dir)))?.includes(correction.id)])
+        .toEqual([`correction-withdrawn-incomplete:${correction.id}:review-withdrawal:reviews-store-busy`, true]);
+    } finally { await t.dispose(); }
+  });
+
+  it("answers an archive that fails, or throws, beside the withdrawal", async () => {
+    const t = await direct({}); try {
+      const first = await t.recorded();
+      const refused = await applyCorrectionWithdraw(t.deps, t.command("correction-withdraw", { correctionId: first.id }, "wd-1"),
+        () => ({ debugGroups: [], failure: { groupId: "debug-x", code: "archive-run-active", message: "busy" } }));
+      const second = await recordNewCorrection(t.dir, correctionRowFrom({ projectKey: PANEL_KEY, decisionId: ORIGINAL.id, kind: "wrong", because: "again", by: "tester" }, () => NOW), { again: true });
+      const thrown = await applyCorrectionWithdraw(t.deps, t.command("correction-withdraw", { correctionId: second.id }, "wd-2"), () => { throw coded("panel-draining"); });
+      // Mutation "drop the archive-failure answer": both succeed -> red.
+      expect([errorOf(refused)?.message, errorOf(thrown)?.message]).toEqual([
+        `correction-withdrawn-incomplete:${first.id}:debug-group-archive:debug-x:archive-run-active`,
+        `correction-withdrawn-incomplete:${second.id}:debug-group-archive:(unknown):panel-draining`,
+      ]);
+    } finally { await t.dispose(); }
+  });
+
+  it("refuses record and withdraw by name on a service the panel gave no corrections side", async () => {
+    const t = await direct(null); try {
+      const record = await applyCorrectionRecord(t.deps, t.command("correction-record", RECORD, "rec-1"));
+      const withdraw = await applyCorrectionWithdraw(t.deps, t.command("correction-withdraw", { correctionId: "c_0123456789abcdef" }, "wd-1"), t.noArchive);
+      // Mutation "drop the panel check in configured()": a TypeError escapes -> red.
+      expect([errorOf(record)?.code, errorOf(withdraw)?.code, await read(correctionsFile(t.dir))]).toEqual(["corrections-store-unconfigured", "corrections-store-unconfigured", null]);
+    } finally { await t.dispose(); }
   });
 });
