@@ -140,4 +140,24 @@ describe("the reviews writer's state dedupe (decisions review withdraw spec sect
     expect(await writer.append(row("withdrawn"))).toBe("written");
     expect((await readReviews(dir)).map((r) => r.action)).toEqual(["reviewed", "withdrawn"]);
   });
+
+  it("after two opposite clicks both fail, the state is the file's again, whichever failure lands last", async () => {
+    // The final review's Task 1 race: each failed call gave back the state it saw when it CLAIMED, so the call that
+    // failed last won. withdraw (saw reviewed) then reviewed (saw the withdrawn claim) both failing left memory at
+    // `withdrawn` over a file that still says `reviewed`: the route then refused Withdraw review while the detail
+    // (disk) offered it and disabled Agree. Which failure lands last is the lock's polling order, not ours, so the
+    // criterion asserts the outcome that must hold for either order.
+    const writer = new ReviewsWriter(dir);
+    await writer.load();
+    expect(await writer.append(row("reviewed"))).toBe("written");
+    const held = await acquireReviewsLock(dir);
+    try {
+      const results = await Promise.allSettled([writer.append(row("withdrawn")), writer.append(row("reviewed"))]);
+      expect(results.map((r) => r.status)).toEqual(["rejected", "rejected"]);
+    } finally {
+      await held.release();
+    }
+    expect((await readReviews(dir)).map((r) => r.action)).toEqual(["reviewed"]);
+    expect(writer.stateOf(PK, ID, "amy")).toBe("reviewed");
+  });
 });

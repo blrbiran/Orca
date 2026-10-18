@@ -1,5 +1,5 @@
 import { appendFile, readFile } from "node:fs/promises";
-import { z } from "zod";
+import { ZodError, z } from "zod";
 import { CORRECTIONS_FILE_MODE, withdrawalsFile } from "./paths.js";
 import { CorrectRejection } from "./rejection.js";
 import { namesDecision } from "./schema.js";
@@ -66,9 +66,11 @@ export async function readWithdrawals(dir: string): Promise<CorrectionWithdrawal
     try {
       rows.push(withdrawalSchema.parse(JSON.parse(raw)));
     } catch (error) {
+      // A ZodError's message is the issue array pretty-printed as JSON, whose first line is a lone "[".
+      const reason = error instanceof ZodError ? error.issues[0]?.message : (error as Error).message;
       throw new CorrectRejection(
         CORRECTION_WITHDRAWALS_UNREADABLE,
-        `line ${index + 1} of ${file} is not a correction withdrawal (${(error as Error).message.split("\n")[0]}); ` +
+        `line ${index + 1} of ${file} is not a correction withdrawal (${reason}); ` +
           `fix or remove that line by hand — nothing reads the file as "no withdrawals" while it is there`,
       );
     }

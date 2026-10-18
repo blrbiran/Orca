@@ -180,6 +180,10 @@ describe("correction withdrawals (decisions review spec §5.1–§5.3)", () => {
       // A row that parses as JSON but is not the strict shape is the same refusal.
       await writeFile(withdrawalsFile(dir), `${JSON.stringify({ correctionId: row.id, projectKey: row.projectKey, by: "amy", at: AT, extra: 1 })}\n`);
       await expect(readWithdrawals(dir)).rejects.toMatchObject({ code: CORRECTION_WITHDRAWALS_UNREADABLE });
+      // The person repairs the file from this sentence (CLI and panel 409): it names what is wrong with the line,
+      // not the first line of zod's pretty-printed issue array, which is a lone "[".
+      const shapeError = await refusal(readWithdrawals(dir));
+      expect(shapeError.message).toContain("is not a correction withdrawal (Unrecognized key(s) in object: 'extra');");
     });
   });
 });

@@ -20,6 +20,7 @@ import { REVIEW_HAS_OPEN_CORRECTION, REVIEW_NOT_ACTIVE } from "../../src/panel/a
 import { DECISION_NOT_FOUND } from "../../src/panel/listProjection.js";
 import { reviewsFile } from "../../src/panel/paths.js";
 import { REVIEWS_STORE_BUSY, acquireReviewsLock } from "../../src/panel/reviewsLock.js";
+import { ReviewsWriter } from "../../src/panel/reviewsStore.js";
 import { createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
 import type { StartedPanel } from "../../src/panel/server.js";
 import { ORIGINAL, git, makeTargetRepo, withCorrectionsDir } from "../corrections/harness.js";
@@ -323,6 +324,38 @@ describe("POST /api/reviews/withdraw (spec §4.4)", () => {
     );
   });
 
+  it("withdraws a review a second panel process (same --by) wrote after this one loaded: the refusal re-reads the file first", async () => {
+    await withPanel(async ({ started, dir, clock }) => {
+      // Another process's writer: appends never change the file's identity, so this server's writer is not told.
+      const other = new ReviewsWriter(dir);
+      await other.load();
+      expect(await other.append({ decisionId: D1, projectKey: PK, action: "reviewed", by: ME, at: clock.tick() })).toBe("written");
+      // The detail reads the disk: it says reviewed, so the web disables Agree and offers Withdraw review.
+      expect((await detail(started)).mine).toBe("reviewed");
+
+      const res = await post(started, "/api/reviews/withdraw", { projectKey: PK, decisionId: D1 });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toStrictEqual({ result: "written" });
+      expect((await detail(started)).mine).toBe("none");
+    });
+  });
+
+  it("answers 409 correction-withdrawals-unreadable (not 500) when the withdrawals file has a bad line, writing nothing", async () => {
+    await withPanel(async ({ started, dir }) => {
+      expect((await post(started, "/api/reviews", { projectKey: PK, decisionId: D1 })).status).toBe(200);
+      await appendFile(withdrawalsFile(dir), "{not json\n");
+      const before = await readOr(reviewsFile(dir));
+
+      const res = await post(started, "/api/reviews/withdraw", { projectKey: PK, decisionId: D1 });
+      expect(res.status).toBe(409);
+      const body = (await res.json()) as { code: string; message: string };
+      expect(body.code).toBe(CORRECTION_WITHDRAWALS_UNREADABLE);
+      expect(body.message).toMatch(/^The correction withdrawals file cannot be read/);
+      expect(await readOr(reviewsFile(dir))).toBe(before);
+      expect((await detail(started)).mine).toBe("reviewed");
+    });
+  });
+
   it("answers 404 decision-not-found for a decision the panel does not list, writing nothing", async () => {
     await withPanel(async ({ started, dir }) => {
       const res = await post(started, "/api/reviews/withdraw", { projectKey: PK, decisionId: "orca-dev-1/99" });
@@ -381,6 +414,25 @@ describe("POST /api/corrections/withdraw (spec §5.2, §5.4, §5.5)", () => {
       },
       async ({ dir, clock }) => {
         // Recorded straight into the store: no reviewed row came with it.
+        seeded = await seedCorrection(dir, clock, {});
+      },
+    );
+  });
+
+  it("withdraws the review with the correction when a second panel process (same --by) wrote that review", async () => {
+    let seeded: Correction;
+    await withPanel(
+      async ({ started, dir, clock }) => {
+        const other = new ReviewsWriter(dir);
+        await other.load();
+        expect(await other.append({ decisionId: D1, projectKey: PK, action: "reviewed", by: ME, at: clock.tick() })).toBe("written");
+
+        const res = await post(started, "/api/corrections/withdraw", { correctionId: seeded.id });
+        expect(res.status).toBe(200);
+        expect(((await res.json()) as { review: string }).review).toBe("written");
+        expect((await detail(started)).mine).toBe("none");
+      },
+      async ({ dir, clock }) => {
         seeded = await seedCorrection(dir, clock, {});
       },
     );

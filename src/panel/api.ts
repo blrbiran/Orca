@@ -219,6 +219,23 @@ function correctionState(id: string, withdrawn: ReadonlySet<string>, closed: Rea
 }
 
 /**
+ * Spec §4.4 / §5.4: is `by`'s state on the decision `reviewed`? The writer's memory answers; only a "no" re-reads the
+ * reviews file first. GET /api/decision reads the disk, and a second panel process with the same --by appends without
+ * changing the file's identity, so memory alone can say "not reviewed" while the detail offers Withdraw review and
+ * disables Agree -- a decision nobody could move until a restart. The success path gains no I/O.
+ */
+async function isReviewedNow(
+  reviews: ReviewsWriter,
+  projectKey: string,
+  decisionId: string,
+  by: string,
+): Promise<boolean> {
+  if (reviews.stateOf(projectKey, decisionId, by) === "reviewed") return true;
+  await reviews.load();
+  return reviews.stateOf(projectKey, decisionId, by) === "reviewed";
+}
+
+/**
  * Spec §4.4 / §5.4: does `by` still have an open (neither withdrawn nor closed) correction on this decision? Strict
  * reads, because the answer gates a write: an unreadable store refuses rather than reading as "none open".
  */
@@ -601,7 +618,7 @@ export function buildApi(app: Express, deps: ApiDeps): void {
         return;
       }
 
-      if (deps.reviews.stateOf(projectKey, decisionId, deps.opts.by) !== "reviewed") {
+      if (!(await isReviewedNow(deps.reviews, projectKey, decisionId, deps.opts.by))) {
         res.status(409).json({
           code: REVIEW_NOT_ACTIVE,
           message: "You have not reviewed this decision, so there is no review of yours to withdraw.",
@@ -609,7 +626,18 @@ export function buildApi(app: Express, deps: ApiDeps): void {
         return;
       }
       const closed = closedIds(observations);
-      if (await hasOpenCorrection(deps.opts.correctionsDir, closed, deps.opts.by, projectKey, decisionId)) {
+      let open: boolean;
+      try {
+        open = await hasOpenCorrection(deps.opts.correctionsDir, closed, deps.opts.by, projectKey, decisionId);
+      } catch (err) {
+        // An unreadable withdrawals file is a refusal the person can act on, not a 500.
+        if (err instanceof CorrectRejection && err.code === CORRECTION_WITHDRAWALS_UNREADABLE) {
+          res.status(409).json({ code: err.code, message: withdrawRefusalMessage(err.code, err.message) });
+          return;
+        }
+        throw err;
+      }
+      if (open) {
         res.status(409).json({
           code: REVIEW_HAS_OPEN_CORRECTION,
           message:
@@ -687,7 +715,7 @@ export function buildApi(app: Express, deps: ApiDeps): void {
       let review: "written" | "duplicate" | "skipped";
       try {
         review =
-          deps.reviews.stateOf(projectKey, decisionId, by) === "reviewed" &&
+          (await isReviewedNow(deps.reviews, projectKey, decisionId, by)) &&
           !(await hasOpenCorrection(dir, closed, by, projectKey, decisionId))
             ? await deps.reviews.append({ decisionId, projectKey, action: "withdrawn", by, at: nowIso(deps.opts) })
             : "skipped";

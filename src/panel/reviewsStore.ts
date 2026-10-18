@@ -124,8 +124,13 @@ export class ReviewsWriter {
   private states = new Map<string, ReviewStateAction>();
   /** Keys claimed and not yet written (or failed). A reload keeps them. */
   private readonly inFlight = new Set<string>();
-  /** State claims not yet written (or failed). A reload lets them override the disk state. */
-  private readonly inFlightStates = new Map<string, ReviewStateAction>();
+  /**
+   * The LATEST state claim not yet written (or failed), per person. A reload lets it override the disk state. The
+   * value is the claim object itself, so a call can tell whether a newer call has claimed since it did.
+   */
+  private readonly inFlightStates = new Map<string, { action: ReviewStateAction }>();
+  /** Per-person state as last read from disk or appended by this writer: what a failed claim falls back to. */
+  private persisted = new Map<string, ReviewStateAction>();
   private identity: string | undefined;
   private loaded = false;
 
@@ -139,22 +144,24 @@ export class ReviewsWriter {
     // seen as a change on the next duplicate check, never missed.
     const identity = await this.identityOf(reviewsFile(this.dir));
     const next = new Set<string>();
-    const nextStates = new Map<string, ReviewStateAction>();
+    const nextPersisted = new Map<string, ReviewStateAction>();
     for (const row of await readReviews(this.dir)) {
       // File order: a later state row overwrites an earlier one.
-      if (isStateAction(row.action)) nextStates.set(stateKey(row.projectKey, row.decisionId, row.by), row.action);
+      if (isStateAction(row.action)) nextPersisted.set(stateKey(row.projectKey, row.decisionId, row.by), row.action);
       else next.add(key(row));
     }
+    const nextStates = new Map(nextPersisted);
     // A claim still being written is not on disk yet; dropping it here would
     // let a concurrent append of the same row write it twice.
     for (const claimed of this.inFlight) next.add(claimed);
-    for (const [claimed, action] of this.inFlightStates) nextStates.set(claimed, action);
+    for (const [claimed, claim] of this.inFlightStates) nextStates.set(claimed, claim.action);
     // Assigned together, after the read succeeded: a read that throws must not
     // leave the new identity beside the old set, or the next duplicate hit would
     // trust a set it never rebuilt.
     this.identity = identity;
     this.seen = next;
     this.states = nextStates;
+    this.persisted = nextPersisted;
     this.loaded = true;
   }
 
@@ -194,18 +201,35 @@ export class ReviewsWriter {
     // row as already-written.
     //
     // (decisions review withdraw spec section 4.3) A state row claims the same
-    // way: the person's state is set to the new action now, and the previous
-    // state is remembered so a failed write can give it back.
+    // way: the person's state is set to the new action now.
+    //
+    // *** ERRATUM (2026-10-18, session b304f167, final review of decisions review withdraw, Important 1) ***
+    // A failed write used to give back the state this call saw when it claimed,
+    // and every call deleted the in-flight entry on the way out. The lock is not
+    // FIFO, so with two opposite clicks in flight that left memory at whichever
+    // call FINISHED last -- e.g. `withdrawn` over a file that says `reviewed`,
+    // and the withdraw route refused what the detail (read from disk) offered.
+    // Now the state is settled from what the file holds: after a successful
+    // append (under the lock) memory takes the row just written, after a
+    // failure it takes `persisted`; either only while no NEWER claim is in
+    // flight, whose own settle comes later. The in-flight entry is deleted only
+    // while it is still this call's claim.
     const rowKey = key(row);
     const state = isStateAction(row.action) ? row.action : undefined;
     const rowStateKey = stateKey(row.projectKey, row.decisionId, row.by);
-    const previousState = this.states.get(rowStateKey);
-    if (state === undefined) {
+    const claim = state === undefined ? undefined : { action: state };
+    const settle = (action: ReviewStateAction | undefined): void => {
+      const pending = this.inFlightStates.get(rowStateKey);
+      if (pending !== undefined && pending !== claim) return;
+      if (action === undefined) this.states.delete(rowStateKey);
+      else this.states.set(rowStateKey, action);
+    };
+    if (claim === undefined) {
       this.seen.add(rowKey);
       this.inFlight.add(rowKey);
     } else {
-      this.states.set(rowStateKey, state);
-      this.inFlightStates.set(rowStateKey, state);
+      this.states.set(rowStateKey, claim.action);
+      this.inFlightStates.set(rowStateKey, claim);
     }
     try {
       // `mode` here is masked by the umask, which is why the criterion pins the
@@ -228,17 +252,20 @@ export class ReviewsWriter {
         }
         if (created) await chmod(file, REVIEWS_FILE_MODE);
         await appendFile(file, `${JSON.stringify(row)}\n`, "utf8");
+        if (claim !== undefined) {
+          this.persisted.set(rowStateKey, claim.action);
+          settle(claim.action);
+        }
       } finally {
         await lock.release();
       }
     } catch (err) {
-      if (state === undefined) this.seen.delete(rowKey);
-      else if (previousState === undefined) this.states.delete(rowStateKey);
-      else this.states.set(rowStateKey, previousState);
+      if (claim === undefined) this.seen.delete(rowKey);
+      else settle(this.persisted.get(rowStateKey));
       throw err;
     } finally {
-      if (state === undefined) this.inFlight.delete(rowKey);
-      else this.inFlightStates.delete(rowStateKey);
+      if (claim === undefined) this.inFlight.delete(rowKey);
+      else if (this.inFlightStates.get(rowStateKey) === claim) this.inFlightStates.delete(rowStateKey);
     }
     return "written";
   }

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -190,18 +190,26 @@ describe("collect + withdrawals (withdraw spec §5.3)", () => {
   it("drops a withdrawn correction from the rate numerator, backlog, breakdown and unresolved list", async () => {
     await withCorrectionsDir(async (store) => {
       const { root, kept, gone } = await fixture(store);
-      await writeFile(withdrawalsFile(store), `${withdrawal(gone.id, "2026-03-01T00:00:00.000Z")}\n`);
+      // A withdrawn correction on a decision no scanned ledger has: unwithdrawn, it would be an unresolved decision.
+      const unscanned = correction("orca-dev-1/9", "2026-02-03T00:00:00.000Z");
+      await appendFile(correctionsFile(store), `${JSON.stringify(unscanned)}\n`);
+      await writeFile(
+        withdrawalsFile(store),
+        `${withdrawal(gone.id, "2026-03-01T00:00:00.000Z")}\n${withdrawal(unscanned.id, "2026-03-02T00:00:00.000Z")}\n`,
+      );
 
       const obs = await collect({ root, repos: [], correctionsDir: store, now: NOW });
       expect(obs.corrections.map((x) => x.row.id)).toEqual([kept.id]);
-      expect(obs.withdrawnCorrections).toBe(1);
+      expect(obs.withdrawnCorrections).toBe(2);
 
       const report = computeMetrics(obs, { bucket: "month" });
       expect(report.correction_rate.numerator_corrections_excluding_stale).toBe(1);
       expect(report.backlog.open_corrections).toBe(1);
       expect(report.backlog.oldest_correction_id).toBe(kept.id);
       expect(report.breakdown_by_correction_kind_including_stale.find((k) => k.kind === "wrong")?.corrections).toBe(1);
-      expect(report.withdrawn_corrections).toBe(1);
+      expect(report.withdrawn_corrections).toBe(2);
+      // mutation: drop the withdrawn skip in collect.ts -> orca-dev-1/9 is listed here, red
+      expect(report.unresolved_decisions).toEqual([]);
     });
   });
 
