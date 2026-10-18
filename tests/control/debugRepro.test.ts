@@ -4,11 +4,14 @@ import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
+import { DEBUG_INPUT_SCHEMA } from "../../src/control/debugInput.js";
 import { DEBUG_DEFAULT_BUILD_TEST_COMMANDS } from "../../src/control/debugPlan.js";
 import { checkReproduction, restoreWorkspace, type ReproVerdict } from "../../src/control/debugRepro.js";
 import { driveRecordSchema } from "../../src/control/driveRecord.js";
 import { createExecutionDriver, type ExecutionDriver } from "../../src/control/executionDriver.js";
 import type { DebugResult } from "../../src/control/reportedDecisions.js";
+import { writeCanonicalRecord } from "../../src/control/snapshot.js";
 import { driverHarness, git as hgit } from "./fixtures/driverHarness.js";
 
 // Debug-task design §4.3, §12.8 / plan Task 8: Orca checks that a debug run's added test fails at its base and passes at
@@ -203,8 +206,14 @@ describe("drive.debugRepro (driveRecordSchema)", () => {
   });
 });
 
+// Task 9: a landing debug run reads its frozen input back, so the mark names a stored one. Its correction has no
+// chose_instead and these runs report none, so the landing closes nothing (chose-instead-missing) and the tree is as before.
+const FROZEN = {
+  schema: DEBUG_INPUT_SCHEMA, correction: { id: "c1", projectKey: "k", decisionId: "x/1", kind: "wrong", because: "b", at: "2026-10-01T00:00:00.000Z", by: "amy" },
+  decision: null, decisionWhere: null, pending: null, originalRun: null, commits: null, contract: null, missing: ["run"],
+};
 const MARK = {
-  correctionId: "c1", ordinal: 1, inputHash: "a".repeat(64), missing: [], agentFallback: null, undoHow: null, closing: null,
+  correctionId: "c1", ordinal: 1, inputHash: sha256Canonical(FROZEN), missing: [], agentFallback: null, undoHow: null, closing: null,
   checks: { from: "original", namedBy: null },
 };
 
@@ -216,6 +225,7 @@ describe("stepC runs the check only for a debug group's run (plan Task 8)", () =
     const t = await driverHarness((over.tasks ?? ["a"]).map(task), { files: over.files ?? files, debug, ...(over.duringCollect ? { duringCollect: over.duringCollect } : {}) });
     const row = t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!;
     t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...JSON.parse(String(row.body)), debug: MARK }));
+    writeCanonicalRecord(t.h.store, "g", MARK.inputHash, canonicalBytes(FROZEN).toString("utf8"));
     return t;
   }
   /** Fix round 1 (R1): the check runs off the round, so a criterion waits on the clock as well as on rounds. */

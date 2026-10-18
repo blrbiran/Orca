@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { appendEvent, appendEvents } from "../../src/ledger/writer.js";
-import { deriveRows } from "../../src/corrections/derive.js";
+import { AGENT_WRITTEN, ORCA_GENERATED, derivePendingRows, deriveRows } from "../../src/corrections/derive.js";
 import type { DecisionEvent } from "../../src/ledger/schema.js";
 import type { Correction } from "../../src/corrections/schema.js";
 
@@ -131,5 +131,55 @@ describe("derived rows (spec §5 as revised by §14.2 / §14.5 / §14.22)", () =
     // The "rather than writing a downgraded row" half: nothing pinned this
     // before. A rejected append must leave no ledger file for the run behind.
     expect(existsSync(join(dir, "orca-fix-abcd1234.jsonl"))).toBe(false);
+  });
+});
+
+// Debug-task design §5, §12.5 / plan Task 9 (ruling C21): the suffix is added in exactly one place, here. Every input
+// below is a bare value, so a suffix seen on the output was added by deriveRows / derivePendingRows itself.
+describe("authored values on a debug closing (debug-task design §5, §12.5)", () => {
+  it("human values pass through untouched", () => {
+    expect(deriveRows({ ...input, authored: { choseInstead: "human", undoHow: "human" } })).toEqual(deriveRows(input));
+    expect(deriveRows(input).decision.chose).toBe("改用文件租约");
+    expect(deriveRows(input).decision.undo.how).toBe("删掉 src/scheduler/pool.ts 里的进程内互斥");
+  });
+
+  it("agent and Orca values carry their suffixes", () => {
+    const how = `git revert --no-edit ${"e".repeat(40)}`;
+    const { decision, overturned } = deriveRows({ ...input, undo: { how }, authored: { choseInstead: "agent", undoHow: "orca" } });
+    expect(decision.chose).toBe(`改用文件租约${AGENT_WRITTEN}`);
+    expect(decision.chose.endsWith(AGENT_WRITTEN)).toBe(true);
+    expect(decision.undo.how).toBe(`${how}${ORCA_GENERATED}`);
+    expect(decision.undo.how.endsWith(ORCA_GENERATED)).toBe(true);
+    // Only the two authored fields move: the rest is the golden row's.
+    expect({ ...decision, chose: "改用文件租约", undo: { ...decision.undo, how: "删掉 src/scheduler/pool.ts 里的进程内互斥" } }).toEqual(deriveRows(input).decision);
+    expect(overturned).toEqual(deriveRows(input).overturned);
+  });
+
+  it("the agent's chose_instead with the human's undo.how suffixes only the first", () => {
+    const { decision } = deriveRows({ ...input, authored: { choseInstead: "agent", undoHow: "human" } });
+    expect(decision.chose).toBe(`改用文件租约${AGENT_WRITTEN}`);
+    expect(decision.undo.how).toBe("删掉 src/scheduler/pool.ts 里的进程内互斥");
+  });
+
+  it("a pending target derives one decision row from the raw entry", () => {
+    const pending = {
+      pendingId: "pending-orca-dev-1-0", ledgerRun: "orca-dev-1", entryIndex: 0, reason: "tier-0: undo.how", at: "2026-09-01T00:00:00.000Z", evidence: [],
+      entry: { question: "用哪种锁", chose: "进程内互斥", undo: { how: "改一下", cost: "一个文件", blast_radius: "本仓库" }, scope: "repo", kind: "interface" },
+    };
+    const pendingCorrection: Correction = { ...correction, decisionId: undefined, runId: "orca-dev-1", pendingId: pending.pendingId };
+    delete (pendingCorrection as { decisionId?: string }).decisionId;
+    const how = `git revert --no-edit ${"e".repeat(40)}`;
+    expect(derivePendingRows({
+      correction: pendingCorrection, pending, choseInstead: "改用文件租约", undo: { how }, at: "2026-09-07T12:00:00.000Z", runId: "orca-fix-abcd1234",
+      authored: { choseInstead: "human", undoHow: "orca" },
+    })).toEqual({ decision: {
+      ev: "decision", id: "orca-fix-abcd1234/1", at: "2026-09-07T12:00:00.000Z", run: "orca-fix-abcd1234",
+      question: "用哪种锁", chose: "改用文件租约",
+      alternatives: [{ option: "进程内互斥", why_not: "人在 correction c_1111111111111111 里推翻了它：进程内互斥跨进程无效" }],
+      because: "进程内互斥跨进程无效",
+      undo: { how: `${how}${ORCA_GENERATED}`, cost: "一个文件（继承自 pending-orca-dev-1-0）", blast_radius: "本仓库（继承自 pending-orca-dev-1-0）" },
+      scope: "repo", kind: "interface",
+      evidence: ["correction c_1111111111111111", "pending pending-orca-dev-1-0"],
+    } });
   });
 });

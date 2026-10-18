@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { PartialSelection } from "./agentSelection.js";
 import type { DebugInputV1 } from "./debugInput.js";
 import { DEBUG_DEFAULT_BUILD_TEST_COMMANDS } from "./debugPlan.js";
+import { closingSchema } from "./driveRecord.js";
 import { ControlError } from "./errors.js";
 import { readArchivedPlan } from "./queries.js";
 import type { ControlStore } from "./store.js";
@@ -20,12 +21,6 @@ export interface DebugMark {
   checks: { from: "original" | "original+named" | "named"; namedBy: "human" | "agent" | null };
 }
 
-const closingSchema = z.discriminatedUnion("state", [
-  z.object({ state: z.literal("written"), relPath: z.string().min(1), fixRunId: z.string().min(1) }).strict(),
-  z.object({ state: z.literal("refused"), reason: z.string().min(1) }).strict(),
-  z.object({ state: z.literal("chose-instead-missing") }).strict(),
-  z.object({ state: z.literal("closed-by-human-first"), commit: z.string().min(1) }).strict(),
-]);
 const debugMarkSchema = z.object({
   correctionId: z.string().min(1), ordinal: z.number().int().positive(), inputHash: z.string().regex(/^[a-f0-9]{64}$/),
   missing: z.array(z.enum(["run", "base", "attemptSha", "objects", "contract"])),

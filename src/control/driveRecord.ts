@@ -56,6 +56,17 @@ export const reconcileRecordSchema = z.object({
 }).strict();
 export type ReconcileRecord = z.infer<typeof reconcileRecordSchema>;
 
+/**
+ * Debug task plan Task 9: what a debug run's landing did about its correction (debugChecks.ts's ClosingRecord). Kept here,
+ * not beside the mark, so this module's schema needs no import from the debug modules (a cycle through queries.ts).
+ */
+export const closingSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("written"), relPath: z.string().min(1), fixRunId: z.string().min(1) }).strict(),
+  z.object({ state: z.literal("refused"), reason: z.string().min(1) }).strict(),
+  z.object({ state: z.literal("chose-instead-missing") }).strict(),
+  z.object({ state: z.literal("closed-by-human-first"), commit: z.string().min(1) }).strict(),
+]);
+
 /** Everything the driver writes into a run body, in one closed record (spec §7.4). */
 export const driveRecordSchema = z.object({
   workspaceMode: z.enum(["worktree", "clone"]),
@@ -108,6 +119,10 @@ export const driveRecordSchema = z.object({
     }).strict(),
     z.object({ state: z.literal("skipped"), reason: z.string().min(1) }).strict(),
   ]).nullable().default(null),
+  // Debug task plan Task 9 (design §12.6): what a debug run's landing did about its correction, staged before the swap
+  // beside `stagedPending` and copied into the group's `debug.closing` by the landing's write (then cleared). Null for
+  // every other run; defaulted so a drive record from before this field still parses.
+  stagedDebugClosing: closingSchema.nullable().default(null),
 }).strict();
 export type DriveRecord = z.infer<typeof driveRecordSchema>;
 

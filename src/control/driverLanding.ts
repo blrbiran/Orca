@@ -13,6 +13,8 @@ import { insertPendingDecisions } from "./pendingDecisions.js";
 import { reportedDecisionsOf, type ReportedDecisions } from "./reportedDecisions.js";
 import { ccloopEvidenceString, runEvidence, writeRunLedger, type PendingEntry } from "./runLedger.js";
 import { commitLedgerOnGroupBranch, exportLedgerDir, treeWithLedgerFiles } from "./ledgerTree.js";
+import { readDebugMark, type ClosingRecord } from "./debugChecks.js";
+import { writeDebugClosing } from "./debugClosing.js";
 import { reconcileDecision } from "../scheduler/ledgerWiring.js";
 import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
 import { AgentsRunRefused, TERMINAL_OUTCOMES, cloneDirOf, latestAttemptSha, loopDirOf, runTask } from "../scheduler/ccloopRunner.js";
@@ -61,11 +63,21 @@ export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommi
  * recorded, inside that same write transaction, so a run whose landing never completed leaves none behind. D
  * (markLanded) and R (finishReconcile) both land through here so the two cannot diverge; whatever else a landing
  * must move out of the drive record in that transaction belongs here too. The caller saves the run.
+ *
+ * Cross-plan resolution 3 (debug task plan Task 9): a debug run's staged closing record goes into its group's
+ * `debug.closing` in the same write, so a moved-tip retry or a findLanding recovery neither repeats nor loses it.
  */
 function landedWithPending(store: ControlStore, run: DriverRun): void {
   insertPendingDecisions(store, run.groupId, run.runId, (run.drive!.stagedPending ?? []) as PendingEntry[]);
-  run.drive = { ...run.drive!, stagedPending: [] };
+  const closing = run.drive!.stagedDebugClosing ?? null;
+  if (closing !== null) {
+    const group = readGroup(store, run.groupId) as GroupWithMark;
+    if (readDebugMark(group) !== null) saveGroup(store, { ...group, debug: { ...group.debug, closing } } as typeof group);
+  }
+  run.drive = { ...run.drive!, stagedPending: [], stagedDebugClosing: null };
 }
+
+type GroupWithMark = ReturnType<typeof readGroup> & { debug: Record<string, unknown> };
 
 /**
  * Control run decisions plan Task 7: E's first act for an empty result (deviation D14: no landing merge). The run's
@@ -137,12 +149,25 @@ export async function runLedgerInputs(deps: ExecutionDriverDeps, runId: string):
   return { reported, evidence, at: (deps.now?.() ?? new Date()).toISOString() };
 }
 
-/** Control run decisions: the run's refused decisions, replacing whatever an earlier landing attempt staged. */
-export function stagePending(deps: ExecutionDriverDeps, runId: string, pending: PendingEntry[]): void {
+/**
+ * Control run decisions: the run's refused decisions, replacing whatever an earlier landing attempt staged. Debug task
+ * plan Task 9: a debug run's closing record is staged (and replaced) with them; every other landing stages none.
+ */
+export function stagePending(deps: ExecutionDriverDeps, runId: string, pending: PendingEntry[], closing: ClosingRecord | null = null): void {
   write(deps, () => {
     const run = readDriverRun(deps.store, runId);
-    run.drive = { ...run.drive!, stagedPending: pending };
+    run.drive = { ...run.drive!, stagedPending: pending, stagedDebugClosing: closing };
     saveDriverRun(deps.store, run);
+  });
+}
+
+/** Debug task plan Task 9: the closing rows of a debug group's run, written beside its ledger; null for any other group. */
+async function debugClosingOf(
+  deps: ExecutionDriverDeps, run: DriverRun, repo: string, decisionsDir: string, base: string,
+): Promise<{ written: string | null; record: ClosingRecord } | null> {
+  if (readDebugMark(readGroup(deps.store, run.groupId)) === null) return null;
+  return writeDebugClosing({
+    store: deps.store, run, repo, decisionsDir, base, attemptSha: run.drive!.attemptSha!, now: () => deps.now?.() ?? new Date(),
   });
 }
 
@@ -203,9 +228,12 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string): Promise<b
     const { reported, evidence, at } = await runLedgerInputs(deps, runId);
     const { writtenIds, pending } = await writeRunLedger(join(landing, ".decisions"), { ledgerRun: runId, reported, codeAuthored: [], at, evidence });
     if (writtenIds.length > 0) await git(landing, [...QUIET_GIT, "add", "-f", join(".decisions", `${runId}.jsonl`)]);
+    // Debug task plan Task 9: a debug run's closing rows ride the same commit (same -f).
+    const closing = await debugClosingOf(deps, run, targetRepo, join(landing, ".decisions"), old);
+    if (closing?.written != null) await git(landing, [...QUIET_GIT, "add", "-f", join(".decisions", closing.written)]);
     await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "commit", "--no-edit", "-m", `orca: land ${runId}`]);
     // Before the swap: a death after it finds the landing, skips this produce and still has these for markLanded.
-    stagePending(deps, runId, pending);
+    stagePending(deps, runId, pending, closing?.record ?? null);
     return revParse(landing, "HEAD");
   });
   if (landed.kind === "not-produced") return beginReconcile(deps, runId, targetRepo, old);
@@ -478,13 +506,16 @@ async function finishReconcile(
       ledgerRun: record.reconcileRunId, reported: reportedDecisionsOf(readLoopStateRaw(loopDirOf(workdir, record.reconcileRunId))),
       codeAuthored, at, evidence: reconcileEvidence,
     });
+    // Debug task plan Task 9: a debug run's closing rows join the same tree (its integration target is read in targetRepo).
+    const closing = await debugClosingOf(deps, run, targetRepo, ledgerDir, record.old);
     const names = [
       ...(own.writtenIds.length > 0 ? [`${runId}.jsonl`] : []),
       ...(reconciler.writtenIds.length > 0 ? [`${record.reconcileRunId}.jsonl`] : []),
+      ...(closing?.written != null ? [closing.written] : []),
     ];
     if (names.length > 0) tree = await treeWithLedgerFiles(record.copyPath, tree, ledgerDir, names);
     // By replacement, before the swap: a D attempt that staged items and then conflicted left them stale on the run.
-    stagePending(deps, runId, [...own.pending, ...reconciler.pending]);
+    stagePending(deps, runId, [...own.pending, ...reconciler.pending], closing?.record ?? null);
   } finally {
     await rm(ledgerDir, { recursive: true, force: true });
   }
