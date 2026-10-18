@@ -33,7 +33,7 @@ const SETTLED = ["landed", "settled"];
 type View = {
   schema: string; groupId: string; projectKey: string | null; pendingCount: number;
   tasks: Array<{ taskId: string; runs: Array<{
-    runId: string; reported: string;
+    runId: string; settled: boolean; reported: string;
     decisions: Array<{ id: string; where: string; question: string; chose: string; kind: string; scope: string }>;
     pending: Array<{ pendingId: string; reason: string; question: string | null; chose: string | null; undoHow: string | null; state: string }>;
     unlanded: Array<{ entryIndex: number; question: string | null; chose: string | null }>;
@@ -95,7 +95,7 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
       expect(before).toMatchObject({ schema: "orca-group-decisions-v1", groupId: "g", projectKey: "github.com/example/decisions", pendingCount: 0 });
       expect(before.tasks.map((task) => task.taskId)).toEqual(["a"]);
       expect(runOf(before, runId)).toEqual({
-        runId, reported: "array",
+        runId, settled: true, reported: "array",
         decisions: [{ id: `${runId}/agent-0`, where: "group-branch", question: "q", chose: "c", kind: "interface", scope: "task" }],
         pending: [], unlanded: [],
       });
@@ -115,7 +115,7 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
       const view = await w.view();
       expect(view.pendingCount).toBe(1);
       expect(runOf(view, runId)).toEqual({
-        runId, reported: "array",
+        runId, settled: true, reported: "array",
         decisions: [{ id: `${runId}/agent-1`, where: "group-branch", question: "q", chose: "c", kind: "interface", scope: "task" }],
         pending: [{ pendingId: `pending-${runId}-0`, reason: 'kind-unknown:"opinion"', question: "which", chose: "c", undoHow: UNDO, state: "pending" }],
         unlanded: [],
@@ -127,7 +127,7 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
     const w = await world(); try {
       const runId = await w.claim();
       await w.until(w.driver(), () => SETTLED.includes(w.body(runId).state));
-      expect(runOf(await w.view(), runId)).toEqual({ runId, reported: "absent", decisions: [], pending: [], unlanded: [] });
+      expect(runOf(await w.view(), runId)).toEqual({ runId, settled: true, reported: "absent", decisions: [], pending: [], unlanded: [] });
     } finally { await w.dispose(); }
   });
 
@@ -140,9 +140,43 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
       const view = await w.view();
       expect(view.pendingCount).toBe(0);
       expect(runOf(view, runId)).toEqual({
-        runId, reported: "array", decisions: [], pending: [],
+        runId, settled: true, reported: "array", decisions: [], pending: [],
         unlanded: [{ entryIndex: 0, question: "first", chose: "c" }, { entryIndex: 1, question: "q", chose: "second" }],
       });
+    } finally { await w.dispose(); }
+  });
+
+  it("lists nothing as unlanded for a run whose decisions may still land, and says it is not settled", async () => {
+    const w = await world({ decisions: () => [good()] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => w.body(runId).state === "collected");
+      expect(w.body(runId).drive.landedCommit ?? null).toBeNull();
+      // mutation: drop the not-yet-settled gate -> the collected run lists its entry as unlanded, red
+      expect(runOf(await w.view(), runId)).toEqual({ runId, settled: false, reported: "array", decisions: [], pending: [], unlanded: [] });
+    } finally { await w.dispose(); }
+  });
+
+  it("names a blocked run's non-array decisions malformed and lists the value as one unlanded entry", async () => {
+    const w = await world({ behaviour: () => "failed", decisions: () => ({ question: "lone" }) }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => w.body(runId).state === "blocked");
+      // mutation: list nothing for a malformed value -> unlanded [], red
+      expect(runOf(await w.view(), runId)).toEqual({
+        runId, settled: true, reported: "malformed", decisions: [], pending: [], unlanded: [{ entryIndex: 0, question: "lone", chose: null }],
+      });
+    } finally { await w.dispose(); }
+  });
+
+  it("keeps answering when one run's saved report cannot be read, and says so for that run", async () => {
+    const w = await world({ behaviour: () => "failed", decisions: () => [good()] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => w.body(runId).state === "blocked");
+      const outbox = JSON.parse(String(w.h.store.db.prepare("SELECT body FROM outbox WHERE id=?").get(`report:${runId}`)!.body));
+      w.h.store.db.prepare("UPDATE artifacts SET hash=? WHERE id=?").run("0".repeat(64), outbox.source.artifactId);
+      // mutation: rethrow an unreadable report -> the whole view answers 500, red
+      const answer = await w.get();
+      expect(answer.status).toBe(200);
+      expect(runOf(answer.body as View, runId)).toEqual({ runId, settled: true, reported: "unreadable", decisions: [], pending: [], unlanded: [] });
     } finally { await w.dispose(); }
   });
 

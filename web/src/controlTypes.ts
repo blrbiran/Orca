@@ -554,7 +554,7 @@ export type GroupDecisionsViewV1 = {
   tasks: Array<{
     taskId: string;
     runs: Array<{
-      runId: string; reported: "absent" | "array" | "malformed";
+      runId: string; settled: boolean; reported: "absent" | "array" | "malformed" | "unreadable";
       decisions: Array<{ id: string; where: DecisionWhereV1; question: string; chose: string; kind: string; scope: string }>;
       pending: Array<{ pendingId: string; reason: string; question: string | null; chose: string | null; undoHow: string | null; state: "pending" | "approved" | "rejected" }>;
       unlanded: Array<{ entryIndex: number; question: string | null; chose: string | null }>;

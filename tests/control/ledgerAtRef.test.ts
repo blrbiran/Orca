@@ -48,6 +48,7 @@ describe("readLedgerAtRef (control run decisions Task 8)", () => {
         ".decisions/r1.jsonl": `${line("r1/agent-0")}\nnot json\n${line("r1/agent-1")}\n`,
         ".decisions/archive/2026/old.jsonl": `${line("old/1")}\n`,
         ".decisions/notes.txt": "not a ledger\n",
+        ".decisions/tab\there.jsonl": `${line("tab/1")}\n`,
         "elsewhere.jsonl": `${line("x/1")}\n`,
       }, "side", "main");
       expect(g(r.repo, ["symbolic-ref", "HEAD"])).toBe("refs/heads/main");
@@ -56,6 +57,8 @@ describe("readLedgerAtRef (control run decisions Task 8)", () => {
         { path: ".decisions/archive/2026/old.jsonl", value: { ev: "decision", id: "old/1" } },
         { path: ".decisions/r1.jsonl", value: { ev: "decision", id: "r1/agent-0" } },
         { path: ".decisions/r1.jsonl", value: { ev: "decision", id: "r1/agent-1" } },
+        // mutation: split the ls-tree entry on every tab -> the path is cut at its tab and the file is lost, red
+        { path: ".decisions/tab\there.jsonl", value: { ev: "decision", id: "tab/1" } },
       ]);
     } finally { await r.dispose(); }
   });

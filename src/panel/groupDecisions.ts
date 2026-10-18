@@ -21,12 +21,16 @@ const textOrNull = (value: unknown): string | null => (typeof value === "string"
 /** A ledger line's field as text: Orca wrote it as a string; anything else is shown as its JSON, never dropped. */
 const text = (value: unknown): string => (typeof value === "string" ? value : JSON.stringify(value) ?? "");
 
-/** What the run reported, from the report already in the control DB (spec §10.4); a run with no saved report reported nothing. */
-async function reportedOf(store: ControlStore, runId: string): Promise<ReportedDecisions> {
+/**
+ * What the run reported, from the report already in the control DB (spec §10.4); a run with no saved report reported
+ * nothing. A saved report that cannot be read (Task 8 fix round 1, M3) is named as such for that run only: one bad
+ * artifact must not take the whole group's view away.
+ */
+async function reportedOf(store: ControlStore, runId: string): Promise<ReportedDecisions | { kind: "unreadable" }> {
   try { return reportedDecisionsOf(await savedReport(store, runId)); }
   catch (error) {
     if (error instanceof ControlError && error.code === "control-terminal-pending") return { kind: "absent" };
-    throw error;
+    return { kind: "unreadable" };
   }
 }
 
@@ -49,6 +53,8 @@ export async function readGroupDecisionsView(store: ControlStore, repo: string, 
     if (typeof body.taskId !== "string") continue;
     const reported = await reportedOf(store, runId);
     const landed = (body.drive?.landedCommit ?? null) !== null || (body.drive?.ledgerCommit ?? null) !== null;
+    // Controller ruling (fix round 1): a run whose decisions may still land is not settled, so `reported` on it is not final.
+    const settled = landed || !NOT_YET_SETTLED.has(String(body.state));
 
     const decisions: RunView["decisions"] = [];
     if (landed) {
@@ -69,14 +75,14 @@ export async function readGroupDecisionsView(store: ControlStore, repo: string, 
     }));
 
     const unlanded: RunView["unlanded"] = [];
-    if (!landed && !NOT_YET_SETTLED.has(String(body.state))) {
+    if (!landed && settled) {
       // A non-array value is one entry, at index 0, as the landing records it as one pending item.
       const entries = reported.kind === "array" ? reported.entries : reported.kind === "malformed" ? [reported.value] : [];
       entries.forEach((entry, entryIndex) => unlanded.push({ entryIndex, question: textOrNull(field(entry, "question")), chose: textOrNull(field(entry, "chose")) }));
     }
 
     const runs = tasks.get(body.taskId) ?? [];
-    runs.push({ runId, reported: reported.kind, decisions, pending, unlanded });
+    runs.push({ runId, settled, reported: reported.kind, decisions, pending, unlanded });
     tasks.set(body.taskId, runs);
   }
 

@@ -34,8 +34,9 @@ export async function readLedgerAtRef(repo: string, ref: string): Promise<Ledger
   const lines: LedgerLine[] = [];
   for (const entry of listing.split("\0").filter(Boolean)) {
     // `<mode> <type> <object>\t<path>`
-    const [meta, path] = entry.split("\t") as [string, string];
-    const [, type, object] = meta.split(" ");
+    const tab = entry.indexOf("\t");
+    const path = entry.slice(tab + 1);
+    const [, type, object] = entry.slice(0, tab).split(" ");
     if (type !== "blob" || !path.endsWith(".jsonl")) continue;
     lines.push(...parseLines(path, (await gitBytes(repo, [...QUIET_GIT, "cat-file", "blob", object!])).toString("utf8")));
   }

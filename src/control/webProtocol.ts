@@ -1765,7 +1765,10 @@ export const groupDecisionsViewSchema = z
       taskId: idSchema,
       runs: z.array(z.object({
         runId: idSchema,
-        reported: z.enum(["absent", "array", "malformed"]),
+        // Fix round 1: false while the run's decisions may still land (its `reported` is not final yet).
+        settled: z.boolean(),
+        // "unreadable": the saved report exists but could not be read; that run lists nothing as unlanded.
+        reported: z.enum(["absent", "array", "malformed", "unreadable"]),
         decisions: z.array(z.object({ id: z.string(), where: decisionWhereSchema, question: z.string(), chose: z.string(), kind: z.string(), scope: z.string() }).strict()),
         pending: z.array(z.object({
           pendingId: z.string(), reason: z.string(), question: z.string().nullable(), chose: z.string().nullable(), undoHow: z.string().nullable(),
