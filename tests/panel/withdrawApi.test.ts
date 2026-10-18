@@ -383,7 +383,8 @@ describe("POST /api/corrections/withdraw (spec §5.2, §5.4, §5.5)", () => {
       // Append-only: corrections.jsonl is byte-identical across the withdrawal.
       expect((await readFile(join(dir, "corrections.jsonl"))).equals(correctionsBefore)).toBe(true);
       const reviewRows = (await readFile(reviewsFile(dir), "utf8")).trim().split("\n").map((l) => JSON.parse(l) as { action: string });
-      expect(reviewRows.at(-1)?.action).toBe("withdrawn");
+      // detail() appends an "opened" row after answering, un-awaited, so it may land last: read the last review-state row.
+      expect(reviewRows.filter((r) => r.action !== "opened").at(-1)?.action).toBe("withdrawn");
     });
   });
 
