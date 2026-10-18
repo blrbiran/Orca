@@ -35,7 +35,7 @@ import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
-import { applyApprovePendingDecision, prepareApproval, type ApprovePendingDecisionCommand, type ApprovePrepared } from "./decisionCommands.js";
+import { applyApprovePendingDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
@@ -77,6 +77,13 @@ export interface WebServiceDeps extends AsyncImportDeps {
   port: Pick<ExecutionPort, "resolveAgent" | "listAgents" | "readFeatures" | "observeAgentInstallations" | "previewAgentInstallations" | "applyAgentInstallations">;
   /** Syncskill integration spec §10.5: confirm looks up each declared profile through it. Absent means not configured. */
   syncskill?: SyncskillOptions;
+  /**
+   * Control run decisions plan Task 10: where reject-pending-decision records its correction (the panel's
+   * correctionsDir, Rule 17), and as whom: the panel's resolved identity `/api/corrections` stamps (cross-plan
+   * resolution 1). Either absent, reject is refused pending-decision-correction-failed (corrections-store-unconfigured).
+   */
+  correctionsDir?: string;
+  correctionsBy?: string;
 }
 interface EstimateRun { runId: string; groupId: string; workItemId: string; phase: string; state: string; claimOrdinal: null; providerAttemptOrdinal: number; remaining: { work: Amount; handoff: Amount }; cumulative: { work: Amount; handoff: Amount }; unknown: { work: boolean; handoff: boolean }; [key: string]: unknown }
 
@@ -686,6 +693,25 @@ export class WebControlService {
     try {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
       return applyApprovePendingDecision({ store: this.store }, command, prepared) as WebCommandResult;
+    } finally { release?.(); }
+  }
+  /**
+   * Control run decisions plan Task 10: an owner rejects a refused decision. As approve: a replay, a stale revision or an
+   * archived group answers before anything is written; the correction is recorded before the gate, and the transaction
+   * marks the item rejected.
+   */
+  async rejectPendingDecision(command: RejectPendingDecisionCommand): Promise<WebCommandResult> {
+    const early = this.mutate(() => preflightWebCommand<WebCommandResult>(this.store, command));
+    if (early) return early.body;
+    const repoId = this.planRepository(command.target.groupId);
+    const { correctionsDir: dir, correctionsBy: by } = this.deps;
+    const prepared: RejectPrepared = repoId === null ? { kind: "refused", code: "pending-decision-not-found" }
+      : dir === undefined || by === undefined ? { kind: "refused", code: "pending-decision-correction-failed", detail: "corrections-store-unconfigured" }
+      : await prepareRejection(this.store, this.repositoryPath(repoId), { dir, by }, command, this.deps.now ?? (() => new Date()));
+    const release = this.deps.admissionGate?.enter();
+    try {
+      const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
+      return applyRejectPendingDecision({ store: this.store }, command, prepared) as WebCommandResult;
     } finally { release?.(); }
   }
   /** Controller ruling (Task 7): the target the panel offers for this repository; null when its path does not resolve. */

@@ -1,4 +1,4 @@
-import { CORRECTION_KINDS } from "../corrections/schema.js";
+import { CORRECTION_KINDS, namesDecision } from "../corrections/schema.js";
 import type { CorrectionKind } from "../corrections/schema.js";
 import { KIND_ORDER, KIND_TIER } from "./highTier.js";
 import type { Observations } from "./collect.js";
@@ -96,7 +96,8 @@ export function computeMetrics(
     // one would be fabrication (spec §3.4.1). That is expressed by the lookup
     // simply missing — there is no fallback bucket, deliberately.
     const numer = scoring.filter(
-      (c) => kindOfDecisionFor(c.row.projectKey, c.row.decisionId) === kind,
+      // debug-task design §12.3: a pending-target row names no decision (collect.ts already leaves it out).
+      (c) => namesDecision(c.row) && kindOfDecisionFor(c.row.projectKey, c.row.decisionId) === kind,
     ).length;
     return {
       kind,
@@ -114,7 +115,8 @@ export function computeMetrics(
     // nothing to do with quality (spec §3.3).
     const inBucket = obs.decisions.filter((d) => bucketOf(d.at) === bucket);
     const ids = new Set(inBucket.map((d) => d.id));
-    const numer = scoring.filter((c) => ids.has(c.row.decisionId)).length;
+    // debug-task design §12.3: a pending-target row names no decision (collect.ts already leaves it out).
+    const numer = scoring.filter((c) => namesDecision(c.row) && ids.has(c.row.decisionId)).length;
     return {
       bucket,
       numerator_corrections_excluding_stale: numer,

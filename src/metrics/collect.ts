@@ -15,7 +15,7 @@ import type {
   OverturnedObservation,
   UnresolvedDecision,
 } from "./types.js";
-import type { Correction } from "../corrections/schema.js";
+import { namesDecision, type Correction } from "../corrections/schema.js";
 
 // Re-exported so a caller that already imports collect does not need a second
 // import path for the refusal type it has to catch.
@@ -130,6 +130,8 @@ export async function collect(opts: CollectOptions): Promise<Observations> {
 
   const corrections: CorrectionObservation[] = [];
   for (const row of storeRead.rows) {
+    // debug-task design §12.3: a pending-target row names no decision; that plan reports it on its own line.
+    if (!namesDecision(row)) continue;
     if (!keep(row.at, row.id)) continue;
     corrections.push({ row });
   }

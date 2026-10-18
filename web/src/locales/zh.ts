@@ -1092,11 +1092,14 @@ export const zhErrors: Record<string, string> = {
   "integration-unapproved": "这个组的集成方式和确认时看到的不一致，请重新读取后再确认。",
   // Control run decisions plan Task 9: approving a decision that did not land.
   "pending-decision-not-found": "这个组没有这条待确认的决定。",
-  "pending-decision-settled": "这条决定已被驳回，不能再批准。",
+  "pending-decision-settled": "这条决定已经处理过，现在不能再改：{{detail}}",
   "decision-undo-not-executable": "撤销命令仍然无法照原样执行，请给出类似 `git revert --no-edit <commit>` 的命令：{{message}}",
   "pending-decision-entry-invalid": "这条决定有别的问题，换一条撤销命令也修不好：{{message}}",
   "decision-approve-reconciling": "这个组的另一个任务正在合并冲突，等它落地后再批准。",
   "decision-approve-tip-moved": "写入决定时组分支一直在变，请再试一次。",
+  // Control run decisions plan Task 10: rejecting a decision that did not land records a correction.
+  "pending-decision-correction-failed": "驳回没能记成一条纠正，这条决定仍在等待确认：{{detail}}",
+  "correction-target-not-a-decision": "这条纠正针对的是一条从未记入台账的决定，没有可推翻的决定。",
   "labels-invalid": "标签不合法：{{message}}",
   "labels-version-conflict": "你开始草稿后标签已被改过，请重新读取后再保存。",
   "landing-branch-conflict": "合入分支冲突。",

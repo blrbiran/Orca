@@ -56,7 +56,9 @@ describe("lenient read (E2 spec §5.2, §5.3)", () => {
     expect(read.rows).toHaveLength(1);
     expect(read.malformed).toHaveLength(1);
     expect(read.malformed[0].line).toBe(1);
-    expect(read.malformed[0].reason).toContain("decisionId");
+    // Control run decisions Task 10: decisionId is optional now (a row may name a pending item); the reason still names
+    // a missing required field.
+    expect(read.malformed[0].reason).toContain("kind: Required");
   });
 
   // 🔴 变异 21 的【正向对照】。「store.ts 没被改」是「什么都没发生」,不可能直接红。

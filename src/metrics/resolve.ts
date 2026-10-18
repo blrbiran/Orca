@@ -1,6 +1,6 @@
 import { deriveFixRunId } from "../corrections/fields.js";
 import type { CorrectionRow } from "../corrections/fields.js";
-import type { Correction } from "../corrections/schema.js";
+import { namesDecision, type Correction } from "../corrections/schema.js";
 import { MetricsRejection } from "./rejection.js";
 import type { OverturnedObservation, UnresolvedDecision } from "./types.js";
 
@@ -74,6 +74,8 @@ export async function resolveOverturned(
   let yearDirs: string[] | undefined;
 
   for (const { row } of input.corrections) {
+    // debug-task design §12.3: a pending-target row names no decision; that plan reports it on its own line.
+    if (!namesDecision(row)) continue;
     if (!input.scanned.decisionIds.has(row.decisionId)) {
       unresolvedDecisions.push({
         correctionId: row.id,

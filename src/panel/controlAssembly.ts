@@ -112,6 +112,11 @@ export interface ControlAssemblyInput {
    * is built on it, so a criterion can record which selection each gate asked ccloop about. Never set by the CLI.
    */
   wrapPort?: (port: ExecutionPort) => ExecutionPort;
+  /**
+   * Control run decisions plan Task 10: the panel's corrections store and resolved identity, the very values
+   * `/api/corrections` records with (cross-plan resolution 1). Absent, reject-pending-decision is refused by name.
+   */
+  corrections?: { dir: string; by: string };
 }
 
 /**
@@ -218,6 +223,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     // Ruling R7: the commands that need an estimate refuse by name. Nothing is substituted, and in
     // particular no mode is guessed -- a guessed mode is how a soft adapter comes to be driven as
     // a strict one, which is the whole reason these are operator arguments.
+    ...(input.corrections === undefined ? {} : { correctionsDir: input.corrections.dir, correctionsBy: input.corrections.by }),
     defaults: () => {
       if (estimator === null || control.estimateMode === null) return null;
       return { estimatorProfileId: estimator.snapshot.profile.profileId, estimatorProfileHash: estimator.profileHash, estimateMode: control.estimateMode };

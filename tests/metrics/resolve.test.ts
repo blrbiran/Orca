@@ -1,12 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { deriveCorrectionId, deriveFixRunId } from "../../src/corrections/fields.js";
-import type { Correction } from "../../src/corrections/schema.js";
+import type { Correction, DecisionCorrection } from "../../src/corrections/schema.js";
 import { MetricsRejection } from "../../src/metrics/rejection.js";
 import { ARCHIVE_NAME_AMBIGUOUS, resolveOverturned } from "../../src/metrics/resolve.js";
 import type { ArchiveIo } from "../../src/metrics/resolve.js";
 
-function correction(overrides: Partial<Omit<Correction, "id">> = {}): Correction {
+// Control run decisions Task 10: decisionId is optional on a stored row now; every row here names a decision.
+function correction(overrides: Partial<Omit<Correction, "id">> = {}): DecisionCorrection {
   const base = {
     projectKey: "github.com/biran/orca",
     decisionId: "orca-dev-1/1",

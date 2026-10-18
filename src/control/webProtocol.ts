@@ -634,6 +634,7 @@ export const commandVerbSchema = z.enum([
   "archive-group",
   "unarchive-group",
   "approve-pending-decision",
+  "reject-pending-decision",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -880,6 +881,8 @@ const effectiveCommandFields = {
 
 // Control run decisions plan Task 9: an owner's executable undo.how for a refused decision.
 export const approvePendingDecisionPayloadSchema = z.object({ pendingId: idSchema, undoHow: nonemptyString }).strict();
+// Control run decisions plan Task 10: an owner rejects a refused decision, with an optional line of their own.
+export const rejectPendingDecisionPayloadSchema = z.object({ pendingId: idSchema, because: nonemptyString.optional() }).strict();
 export const verifySavedResultPayloadSchema=z.object({sourceRunId:idSchema,sourceAttempt:positiveSafeInteger,capsuleHash:hashSchema}).strict();
 export const savedResultEligibilityViewSchema=savedResultSourceEligibilitySchema;
 const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
@@ -911,6 +914,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("approve-pending-decision"), target: groupCommandTargetSchema, payload: approvePendingDecisionPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("apply-agent-update"), target: operatorCommandTargetSchema, payload: applyAgentUpdatePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
@@ -969,6 +973,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("approve-pending-decision"), target: groupCommandTargetSchema, payload: approvePendingDecisionPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("apply-agent-update"), target: operatorCommandTargetSchema, payload: applyAgentUpdatePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
@@ -1593,6 +1598,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("archived"), groupId: idSchema, at: safeInteger }).strict(),
   z.object({ kind: z.literal("unarchived"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("pending-decision-approved"), pendingId: idSchema, decisionId: nonemptyString }).strict(),
+  z.object({ kind: z.literal("pending-decision-rejected"), pendingId: idSchema, correctionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("agent-preferences-set"), operatorId: nonemptyString, revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("agent-installations-updated"), operatorId: nonemptyString, revision: positiveSafeInteger, beforeHash: hashSchema, afterHash: hashSchema }).strict(),
   z.object({ kind: z.literal("spend-cap-set"), revision: positiveSafeInteger }).strict(),

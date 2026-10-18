@@ -13,7 +13,7 @@ import { readOriginalDecision } from "./originalDecision.js";
 import { correctionsDir } from "./paths.js";
 import { projectKeyOf } from "./projectKey.js";
 import { CorrectRejection } from "./rejection.js";
-import type { Correction } from "./schema.js";
+import { namesDecision, type Correction } from "./schema.js";
 import { correctionRowFrom, recordNewCorrection } from "./record.js";
 import type { NewCorrectionInput } from "./record.js";
 import { loadCorrection } from "./store.js";
@@ -25,6 +25,11 @@ import { loadCorrection } from "./store.js";
  */
 export const REPO_LOCKED = "repo-locked";
 export const MISSING_CHOSE_INSTEAD = "no-chose-instead";
+/**
+ * Control run decisions plan Task 10 (debug-task design §12.3): a correction of a decision a landing refused names
+ * `{ runId, pendingId }`, and there is no ledger row for --close to overturn. Closing it is that design's own path.
+ */
+export const CORRECTION_TARGET_NOT_A_DECISION = "correction-target-not-a-decision";
 
 /**
  * 記-2 / 闭-2: ONE read-only preflight, run by both modes (§14.3, third seat).
@@ -136,6 +141,13 @@ export async function correct(argv: string[], opts: { now?: () => Date } = {}): 
     let row: Correction;
     if (parsed.mode === "close-existing") {
       row = await loadCorrection(dir, parsed.correctionId);
+      if (!namesDecision(row)) {
+        throw new CorrectRejection(
+          CORRECTION_TARGET_NOT_A_DECISION,
+          `correction ${row.id} names pending decision ${row.pendingId} of run ${row.runId}, which was never ` +
+            `recorded in the ledger: --close has no decision to overturn`,
+        );
+      }
       if (row.chose_instead !== undefined && parsed.choseInstead !== undefined) {
         throw new CorrectRejection(
           CLOSE_ARG_CONFLICT,

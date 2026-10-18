@@ -246,7 +246,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   const epoch = randomUUID();
   let control: ControlRuntime | null = null;
   if (opts.control.enabled) {
-    try { control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env }); }
+    try { control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env, corrections: { dir: opts.correctionsDir, by: opts.by } }); }
     catch (error) { auth.close(); throw error; }
   }
   // Project registry spec §5: built after the control plane, which it tells about every project it adds or renames.

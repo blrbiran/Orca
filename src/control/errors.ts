@@ -79,6 +79,12 @@ export const durableCommandErrorStatuses = {
   "landing-branch-conflict": 409,
   // Control run decisions plan Task 9: the pending decision was rejected; it cannot be approved now.
   "pending-decision-settled": 409,
+  // Control run decisions plan Task 10: rejecting could not record its correction (detail: the CorrectRejection code, or
+  // corrections-store-unconfigured for a panel given no corrections store or identity); the item stays pending.
+  "pending-decision-correction-failed": 409,
+  // Control run decisions plan Task 10 (cross-plan resolution 5): the correction names a pending item, not a recorded
+  // decision, so there is no ledger row to overturn. `orca correct --close` refuses it by the same name.
+  "correction-target-not-a-decision": 409,
   "plan-version-conflict": 409,
   "profile-changed": 409,
   "proposal-version-conflict": 409,
@@ -332,6 +338,7 @@ export const v1WebErrorCodes = [
   "context-observation-invalid",
   "control-capability-unsupported",
   "control-writer-active",
+  "correction-target-not-a-decision",
   "decision-approve-reconciling",
   "decision-approve-tip-moved",
   "decision-undo-not-executable",
@@ -350,6 +357,7 @@ export const v1WebErrorCodes = [
   "no-op-command",
   "numeric-overflow",
   "panel-draining",
+  "pending-decision-correction-failed",
   "pending-decision-entry-invalid",
   "pending-decision-not-found",
   "pending-decision-settled",

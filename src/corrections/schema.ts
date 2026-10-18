@@ -42,7 +42,13 @@ const correctionShape = z
      * resolution happens at read time.
      */
     projectKey: z.string().min(1),
-    decisionId: z.string().min(1),
+    decisionId: z.string().min(1).optional(),
+    /**
+     * Control run decisions plan Task 10 (debug-task design §12.3): a decision a landing refused has no ledger id, so
+     * reject-pending-decision names the run and the pending item instead. Exactly one target per row (below).
+     */
+    runId: z.string().min(1).optional(),
+    pendingId: z.string().min(1).optional(),
     kind: z.enum(CORRECTION_KINDS),
     chose_instead: z.string().min(1).optional(),
     /**
@@ -68,6 +74,12 @@ const correctionShape = z
  * is a migration; coerced content is permanent.
  */
 export const correctionSchema = correctionShape.superRefine((value, ctx) => {
+  const decision = value.decisionId !== undefined;
+  const pending = value.runId !== undefined && value.pendingId !== undefined;
+  const partial = (value.runId !== undefined) !== (value.pendingId !== undefined);
+  if (decision === pending || partial) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [], message: "exactly one target: decisionId, or both runId and pendingId" });
+  }
   if (value.kind === "not_my_taste" && value.chose_instead === undefined) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -78,3 +90,12 @@ export const correctionSchema = correctionShape.superRefine((value, ctx) => {
 });
 
 export type Correction = z.infer<typeof correctionShape>;
+
+/** A correction of a recorded decision: the rows every decision-keyed reader (metrics, coverage, --close) works on. */
+export type DecisionCorrection = Correction & { decisionId: string };
+
+/**
+ * debug-task design §12.3: readers keyed by decision id skip pending-target rows; that plan adds their own line
+ * ("N corrections on unrecorded decisions").
+ */
+export const namesDecision = (row: Correction): row is DecisionCorrection => row.decisionId !== undefined;

@@ -40,6 +40,10 @@ export const CORRECTION_FIELDS = [
   "because",
   "at",
   "by",
+  // Control run decisions plan Task 10 (debug-task design §12.3): appended, never inserted. An absent field is omitted
+  // from the canonical JSON, so every existing correction id and fix-run id is unchanged.
+  "runId",
+  "pendingId",
 ] as const satisfies readonly (keyof CorrectionRow)[];
 
 /**

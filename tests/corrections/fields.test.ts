@@ -81,6 +81,7 @@ describe("correction id and fix run id (spec §14.11)", () => {
     const withoutAlternative = row({ kind: "wrong", chose_instead: undefined });
     const parsed = Object.keys(JSON.parse(canonicalCorrectionJson(withoutAlternative)));
     expect(parsed).not.toContain("chose_instead");
-    expect(parsed).toEqual(CORRECTION_FIELDS.filter((f) => f !== "chose_instead"));
+    // Control run decisions Task 10: runId and pendingId (a pending target) are absent optionals on this row too.
+    expect(parsed).toEqual(CORRECTION_FIELDS.filter((f) => !["chose_instead", "runId", "pendingId"].includes(f)));
   });
 });

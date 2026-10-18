@@ -474,6 +474,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/unarchive", verb: "unarchive-group", target: fromParams },
     // Control run decisions plan Task 9: an owner approves a refused decision with an executable undo.how.
     { path: "/api/control/groups/:groupId/decisions/approve", verb: "approve-pending-decision", target: fromParams },
+    // Control run decisions plan Task 10: an owner rejects a refused decision, recording a correction.
+    { path: "/api/control/groups/:groupId/decisions/reject", verb: "reject-pending-decision", target: fromParams },
     {
       path: "/api/control/operator/agent-preferences",
       verb: "set-agent-preferences",
@@ -562,6 +564,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "archive-group": service.archiveGroup(command); break;
           case "unarchive-group": service.unarchiveGroup(command); break;
           case "approve-pending-decision": await service.approvePendingDecision(command); break;
+          case "reject-pending-decision": await service.rejectPendingDecision(command); break;
           case "set-agent-preferences": await service.setAgentPreferences(command); break;
           case "apply-agent-update": await service.applyAgentUpdate(command, { client, principal: principalLabel(principal) }); break;
           case "proposal-set-agent": await service.proposalSetAgent(command); break;

@@ -48,6 +48,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "unarchive-group": "any",
   // Control run decisions plan Task 9: approving a refused decision writes a ledger line in an owner's name.
   "approve-pending-decision": "human-only",
+  // Control run decisions plan Task 10: rejecting one records a correction in an owner's name.
+  "reject-pending-decision": "human-only",
 };
 export const HUMAN_ONLY_VERBS: readonly CommandVerbV1[] =
   (Object.keys(VERB_ACCESS) as CommandVerbV1[]).filter((verb) => VERB_ACCESS[verb] === "human-only");

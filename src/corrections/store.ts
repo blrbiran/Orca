@@ -85,12 +85,15 @@ export async function recordCorrection(
         (candidate) =>
           candidate.projectKey === row.projectKey &&
           candidate.decisionId === row.decisionId &&
+          // Control run decisions plan Task 10: the target is decisionId or { runId, pendingId } (schema.ts).
+          candidate.runId === row.runId &&
+          candidate.pendingId === row.pendingId &&
           candidate.by === row.by,
       );
       if (existing !== undefined) {
         throw new CorrectRejection(
           CORRECTION_ALREADY_RECORDED,
-          `${row.by} has already corrected ${row.decisionId} in ${row.projectKey}: correction ${existing.id} ` +
+          `${row.by} has already corrected ${row.decisionId ?? `pending decision ${row.pendingId} of run ${row.runId}`} in ${row.projectKey}: correction ${existing.id} ` +
             `(recorded ${existing.at}). Pass --again to record another one on purpose.`,
         );
       }

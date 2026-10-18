@@ -1,3 +1,7 @@
+import { projectKeyOf } from "../corrections/projectKey.js";
+import { correctionRowFrom, recordNewCorrection } from "../corrections/record.js";
+import { CorrectRejection } from "../corrections/rejection.js";
+import { readCorrections } from "../corrections/store.js";
 import { appendEvents } from "../ledger/writer.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
@@ -7,7 +11,7 @@ import { findDecision, ledgerSources, type DecisionWhere } from "./ledgerAtRef.j
 import { commitLedgerOnGroupBranch } from "./ledgerTree.js";
 import { readPendingDecision, settlePendingDecision, type PendingDecisionRow } from "./pendingDecisions.js";
 import { readGroup } from "./queries.js";
-import { normalizeAgentEntry } from "./runLedger.js";
+import { agentDecisionId, normalizeAgentEntry } from "./runLedger.js";
 import type { ControlStore } from "./store.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 import type { WorkspaceRoots } from "./workspace.js";
@@ -123,6 +127,87 @@ export function applyApprovePendingDecision(deps: { store: ControlStore }, comma
         verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,
         effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash,
         result: { kind: "pending-decision-approved", pendingId, decisionId: id },
+      } };
+    },
+  }).body;
+}
+
+/**
+ * Control run decisions plan Task 10: an owner rejects a decision the landing refused. The rejection is a `wrong`-kind
+ * correction naming `{ runId, pendingId }` (debug-task design §12.3), recorded in the corrections store before the
+ * transaction; the transaction marks the item rejected with the correction's id.
+ */
+export type RejectPendingDecisionCommand = Extract<RawAuthorityCommandV1, { verb: "reject-pending-decision" }>;
+
+export type RejectPrepared =
+  | { kind: "recorded"; correctionId: string }
+  | { kind: "refused"; code: KnownControlErrorCode; detail?: string };
+
+/** Why a pending row cannot be rejected (null: it can); read again inside the transaction. A rejected row answers its correction. */
+function rejectRefusal(row: PendingDecisionRow | null, groupId: string): RejectPrepared | null {
+  if (row === null || row.groupId !== groupId) return { kind: "refused", code: "pending-decision-not-found" };
+  if (row.state === "approved") return { kind: "refused", code: "pending-decision-settled" };
+  if (row.state === "rejected") return { kind: "recorded", correctionId: row.correctionId! };
+  return null;
+}
+
+const textOr = (value: unknown): string => (typeof value === "string" ? value : "(missing)");
+
+/**
+ * Everything outside the transaction: check the row, refuse a decision whose line is already readable (an approve whose
+ * commit landed but whose transaction did not), and record the correction unless one for this item is already in the
+ * store (§10.5: a crash between the store write and the transaction leaves it; a second reject finds it).
+ * `corrections.by` is the panel's own identity (cross-plan resolution 1), never the command's actorId.
+ */
+export async function prepareRejection(
+  store: ControlStore, repo: string, corrections: { dir: string; by: string }, command: RejectPendingDecisionCommand, now: () => Date,
+): Promise<RejectPrepared> {
+  const groupId = command.target.groupId;
+  const { pendingId, because } = command.payload;
+  const row = readPendingDecision(store, pendingId);
+  const decided = rejectRefusal(row, groupId);
+  if (decided !== null) return decided;
+  const { ledgerRun, entryIndex, entry } = row!.entry;
+  const id = agentDecisionId(ledgerRun, entryIndex);
+  const found = await findDecision(repo, await ledgerSources(store, repo, groupId), id);
+  if (found !== null) return { kind: "refused", code: "pending-decision-settled", detail: `decision-recorded:${id}@${found.where}` };
+  try {
+    const projectKey = await projectKeyOf(repo);
+    const existing = (await readCorrections(corrections.dir)).find((c) => c.projectKey === projectKey && c.pendingId === pendingId);
+    if (existing !== undefined) return { kind: "recorded", correctionId: existing.id };
+    const fields = (entry ?? {}) as { question?: unknown; chose?: unknown };
+    const stored = await recordNewCorrection(corrections.dir, correctionRowFrom({
+      projectKey, runId: row!.runId, pendingId, kind: "wrong",
+      because: `${because === undefined ? "" : `${because}\n`}question: ${textOr(fields.question)}\nchose: ${textOr(fields.chose)}`,
+      by: corrections.by,
+    }, now), { again: false });
+    return { kind: "recorded", correctionId: stored.id };
+  } catch (error) {
+    if (error instanceof CorrectRejection) return { kind: "refused", code: "pending-decision-correction-failed", detail: error.code };
+    throw error;
+  }
+}
+
+/** The transaction: a refusal `prepared` found is thrown here so it is booked; otherwise the row (read again) is marked rejected. */
+export function applyRejectPendingDecision(deps: { store: ControlStore }, command: RejectPendingDecisionCommand, prepared: RejectPrepared): CommandSuccessV1 | CommandErrorBodyV1 {
+  return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
+    rawCommand: command,
+    expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+    apply: (context) => {
+      const groupId = command.target.groupId;
+      const { pendingId } = command.payload;
+      if (!deps.store.db.prepare("SELECT 1 FROM groups WHERE id=?").get(groupId)) throw new ControlError("group-not-found");
+      if (prepared.kind === "refused") throw new ControlError(prepared.code, prepared.detail);
+      const now = rejectRefusal(readPendingDecision(deps.store, pendingId), groupId);
+      if (now !== null && now.kind === "refused") throw new ControlError(now.code, now.detail);
+      // A row rejected meanwhile keeps its own correction.
+      const correctionId = now === null ? prepared.correctionId : now.correctionId;
+      if (now === null) settlePendingDecision(deps.store, pendingId, { state: "rejected", correctionId });
+      return { status: 200, body: {
+        schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,
+        verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,
+        effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash,
+        result: { kind: "pending-decision-rejected", pendingId, correctionId },
       } };
     },
   }).body;

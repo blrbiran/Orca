@@ -29,6 +29,8 @@ export function correctionRowFrom(input: NewCorrectionInput, now: () => Date): C
   return {
     projectKey: input.projectKey,
     decisionId: input.decisionId,
+    runId: input.runId,
+    pendingId: input.pendingId,
     kind: input.kind,
     chose_instead: input.chose_instead,
     because: input.because,
