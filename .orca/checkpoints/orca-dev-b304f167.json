@@ -1,0 +1,44 @@
+{
+  "v": 1,
+  "runId": "orca-dev-b304f167",
+  "runtime": "claude-code",
+  "sessionRef": "b304f167-c5a5-4a0f-9a83-baedb9d1ed24",
+  "writtenAt": "2026-10-18T11:28:39.077Z",
+  "head": "37a755669e133895c9b8d7f47a29332ae437382d",
+  "level": {
+    "kind": "reading",
+    "level": 343902,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Read gate log /private/tmp/orca-gate-b304/logs/verify2.log; if green, git merge --ff-only codex/decisions-review-withdraw into main",
+    "Update handoffs (Orca §3.00/§4.2, ccloop and ccmem Orca single sections)",
+    "Then: correction ⇒ debug task plan (run its Task 1 precondition first; amendment section at its end)"
+  ],
+  "open": [
+    "Decisions review/withdraw branch codex/decisions-review-withdraw (worktree /Users/biran/code/skills/orca/Orca-wt/decisions-review-withdraw) awaiting gate",
+    "SDD ledger .superpowers/sdd/2026-10-18-decisions-review-withdraw/progress.md"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push of Orca main (human batches pushes)"
+    },
+    {
+      "kind": "irreversible",
+      "what": "panel service restart migrates ~/.orca control DB to schema 14 — back up first"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca log --oneline -3",
+      "exitCode": 0,
+      "commit": "37a755669e133895c9b8d7f47a29332ae437382d",
+      "observedAt": "2026-10-18T11:28:38.987Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-b304f167-5WfE8F/1.txt"
+    }
+  ]
+}
