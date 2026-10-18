@@ -123,6 +123,28 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
     } finally { await w.dispose(); }
   });
 
+  it("lists an empty result's all-refused entry once, as pending, and shows its decision once approved", async () => {
+    // Final review I2: such a run makes no ledger commit, so neither landedCommit nor ledgerCommit is set; its pending
+    // rows say it landed (spec §10.4) -- the entry is pending, not also unlanded.
+    const w = await world({ files: () => ({}), decisions: () => [good({ question: "which", undo: { how: "revert it", cost: "c", blast_radius: "r" } })] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => w.body(runId).drive?.cleanedUp === true);
+      expect([w.body(runId).state, w.body(runId).drive.landedCommit, w.body(runId).drive.ledgerCommit]).toEqual(["settled", null, null]);
+      const pendingId = `pending-${runId}-0`;
+      // mutation I2: drop the pending-rows clause -> the entry is listed as unlanded too, red
+      expect(runOf(await w.view(), runId)).toEqual({
+        runId, settled: true, reported: "array", decisions: [],
+        pending: [{ pendingId, reason: 'tier-0: undo.how is not executable: "revert it"', question: "which", chose: "c", undoHow: "revert it", state: "pending" }],
+        unlanded: [],
+      });
+      const approved = await w.deps.service!.approvePendingDecision(w.h.command("approve-pending-decision", { pendingId, undoHow: UNDO }));
+      expect(approved).toMatchObject({ result: { kind: "pending-decision-approved" } });
+      const after = runOf(await w.view(), runId);
+      expect(after.decisions).toEqual([{ id: `${runId}/agent-0`, where: "group-branch", question: "which", chose: "c", kind: "interface", scope: "task" }]);
+      expect([after.pending.map((p) => p.state), after.unlanded]).toEqual([["approved"], []]);
+    } finally { await w.dispose(); }
+  });
+
   it("says a run reported no decisions", async () => {
     const w = await world(); try {
       const runId = await w.claim();
@@ -177,6 +199,18 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
       const answer = await w.get();
       expect(answer.status).toBe(200);
       expect(runOf(answer.body as View, runId)).toEqual({ runId, settled: true, reported: "unreadable", decisions: [], pending: [], unlanded: [] });
+    } finally { await w.dispose(); }
+  });
+
+  it("does not name a store failure an unreadable report", async () => {
+    // Final review T8: only an artifact that cannot be read is "unreadable"; a database or programming error is not hidden.
+    const w = await world({ behaviour: () => "failed", decisions: () => [good()] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => w.body(runId).state === "blocked");
+      w.h.store.db.exec("ALTER TABLE artifacts RENAME TO artifacts_gone");
+      // mutation T8: catch every error as unreadable again -> 200 with reported "unreadable", red
+      expect((await w.get()).status).toBe(500);
+      w.h.store.db.exec("ALTER TABLE artifacts_gone RENAME TO artifacts");
     } finally { await w.dispose(); }
   });
 
