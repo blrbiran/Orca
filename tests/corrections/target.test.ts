@@ -24,7 +24,8 @@ describe("correctionTargetOf (debug task Task 1)", () => {
 
   it("refuses a row with both targets and a row with neither", () => {
     const both = { ...pendingRow, decisionId: `${RUN}/agent-0` };
-    for (const row of [both, BASE, { ...BASE, runId: RUN }, { ...BASE, pendingId: `pending-${RUN}-0` }] as CorrectionRow[]) {
+    for (const row of [both, BASE, { ...BASE, runId: RUN }, { ...BASE, pendingId: `pending-${RUN}-0` },
+      { ...decisionRow, runId: RUN }, { ...decisionRow, pendingId: `pending-${RUN}-0` }] as CorrectionRow[]) {
       expect(() => correctionTargetOf(row)).toThrowError(expect.objectContaining({ name: "CorrectRejection", code: CORRECTION_ROW_INVALID }));
     }
   });
