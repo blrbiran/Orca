@@ -1,0 +1,48 @@
+{
+  "v": 1,
+  "runId": "orca-dev-a3b2a7a7",
+  "runtime": "claude-code",
+  "sessionRef": "a3b2a7a7-fc30-4a71-8a6d-f89b666d217f",
+  "writtenAt": "2026-10-18T03:36:19.335Z",
+  "head": "3df0c417f74e0faea62cb67a9218564e8cd909c6",
+  "level": {
+    "kind": "reading",
+    "level": 363653,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Update Orca/ccloop/ccmem docs/handoff/handoff.md with this session's state, then compress them (keep lessons, drop narrative)",
+    "Register the codex phase isolation writer in Orca spec 2026-10-15 §11 (appended section)",
+    "Report the round to the human for review, with the executive summary"
+  ],
+  "open": [
+    "Orca specs 2026-10-18 control-run-decisions and correction-debug-task revised after review; plans committed; implementation not started",
+    "ccloop plan 2026-10-18-codex-phase-isolation on branch codex/codex-phase-isolation-plan, not merged (ccloop Rule 13 needs the human)"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push Orca main (several commits ahead) and ccloop/ccmem when the human chooses"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "ccloop: whether to align ccloop/ccmem Rule 13 with Orca's new gate so the controller may ff-merge there"
+    },
+    {
+      "kind": "ccloop-change",
+      "what": "ccloop plan Task 4 Step 6 stop point: codexSkillsFailureWorker.test.ts fixture wrapper change needs the human to name the test"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca status --short --branch",
+      "exitCode": 0,
+      "commit": "3df0c417f74e0faea62cb67a9218564e8cd909c6",
+      "observedAt": "2026-10-18T03:36:19.286Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-a3b2a7a7-pQztxi/1.txt"
+    }
+  ]
+}
