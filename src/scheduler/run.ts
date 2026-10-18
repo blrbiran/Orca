@@ -545,7 +545,7 @@ async function reconcileAndLand(
     ctx.roundId,
     ctx.nextDecisionSeq(),
     taskId,
-    other.taskId,
+    [other.taskId],
     conflict,
     plan.workBranch,
     new Date().toISOString(),

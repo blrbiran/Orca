@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import type { DecisionEvent } from "../ledger/schema.js";
 import { appendEvent } from "../ledger/writer.js";
 import { git } from "./gitExec.js";
-import type { MaterialisedConflict } from "./reconcile.js";
+import type { ConflictBlock, MaterialisedConflict } from "./reconcile.js";
 
 /**
  * A' section 3.3 puts the bound line in the commit that implements the
@@ -57,8 +57,13 @@ export function reconcileDecision(
   roundId: string,
   seq: number,
   taskId: string,
-  otherTaskId: string,
-  conflict: MaterialisedConflict,
+  otherTaskIds: string[],
+  // Narrowed to what the text reads, so a caller holding the full
+  // MaterialisedConflict stays assignable and one built from a record need not
+  // fabricate the rest.
+  conflict: Pick<MaterialisedConflict, "conflictedPaths" | "conflictCommit" | "copyPath" | "wTip"> & {
+    blocks: Array<Pick<ConflictBlock, "path" | "startLine" | "endLine">>;
+  },
   workBranch: string,
   at: string,
 ): DecisionEvent {
@@ -69,7 +74,7 @@ export function reconcileDecision(
     at,
     run: roundId,
     question:
-      `landing ${taskId} on ${workBranch} conflicted with ${otherTaskId} in ` +
+      `landing ${taskId} on ${workBranch} conflicted with ${otherTaskIds.join(", ")} in ` +
       `${conflict.conflictedPaths.join(", ")} (${conflict.blocks.length} block(s): ${where}), even though ` +
       `the two tasks declared write sets that do not intersect`,
     chose:
