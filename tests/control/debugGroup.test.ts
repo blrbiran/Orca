@@ -283,6 +283,8 @@ describe("a stopped group is returned with its state; Reopen makes -2", () => {
       const pause = { schema: "orca-raw-command-v1" as const, commandId: "pause-1", actorId: "human", expectedRevision: w.revisionOf(first), verb: "pause-dispatch" as const, target: { kind: "group" as const, groupId: first }, payload: {} };
       expect(await w.service.pauseDispatch(pause)).toMatchObject({ result: { kind: "paused" } });
       expect(opened(await w.open(cid))).toMatchObject({ groupId: first, created: false });
+      // A paused group is stopped, so not live: a reopen would name the next ordinal.
+      expect(debugGroupIdFor(w.store, cid, true)).toBe(`${first}-2`);
       // A paused (stopped) newest is not live, so a reopen makes the next one; first the archived case.
       const resume = { ...pause, commandId: "resume-1", expectedRevision: w.revisionOf(first), verb: "resume-dispatch" as const };
       await w.service.resumeDispatch(resume);
