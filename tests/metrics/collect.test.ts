@@ -252,3 +252,58 @@ describe("collect + withdrawals (withdraw spec §5.3)", () => {
     });
   });
 });
+
+describe("collect + pending-target corrections (debug-task design §12.3)", () => {
+  const KEY = "github.com/biran/a";
+  const row = (extra: Record<string, string>, at: string) => {
+    const base = { projectKey: KEY, kind: "wrong", because: "r", at, by: "amy", ...extra };
+    return { id: deriveCorrectionId(base as never), ...base };
+  };
+  const PENDING = { runId: "orca-dev-1", pendingId: "pending-orca-dev-1-0" };
+
+  async function scene(store: string, withPending: boolean) {
+    const root = await mkdtemp(join(tmpdir(), "orca-metrics-root-"));
+    const repo = await repoWithRemote(root, "a", "https://github.com/biran/a.git");
+    await writeFile(join(repo, ".decisions", "orca-dev-1.jsonl"), `${decision("orca-dev-1/1", "2026-01-01T00:00:00.000Z")}\n`);
+    const kept = row({ decisionId: "orca-dev-1/1" }, "2026-02-01T00:00:00.000Z");
+    const pending = [
+      row(PENDING, "2026-02-02T00:00:00.000Z"),
+      row({ runId: "orca-dev-1", pendingId: "pending-orca-dev-1-1" }, "2026-02-03T00:00:00.000Z"),
+    ];
+    await writeFile(correctionsFile(store), [kept, ...(withPending ? pending : [])].map((r) => `${JSON.stringify(r)}\n`).join(""));
+    return { root, pending };
+  }
+
+  it("counts pending-target corrections on their own line and leaves every rate as without them", async () => {
+    await withCorrectionsDir(async (store) => {
+      const without = await scene(store, false);
+      const base = computeMetrics(await collect({ root: without.root, repos: [], correctionsDir: store, now: NOW }), { bucket: "month" });
+      const withRows = await scene(store, true);
+      const report = computeMetrics(await collect({ root: withRows.root, repos: [], correctionsDir: store, now: NOW }), { bucket: "month" });
+
+      // mutation M-2.2: drop the count in collect.ts -> 0 here, red
+      expect(base.corrections_on_unrecorded_decisions).toBe(0);
+      expect(report.corrections_on_unrecorded_decisions).toBe(2);
+      // mutation M-2.1: let a pending row through to computeMetrics -> the numerator moves, red
+      expect(report.correction_rate).toEqual(base.correction_rate);
+      expect(report.repair_rate).toEqual(base.repair_rate);
+      expect(report.backlog).toEqual(base.backlog);
+      expect(report.breakdown_by_correction_kind_including_stale).toEqual(base.breakdown_by_correction_kind_including_stale);
+      expect(report.unresolved_decisions).toEqual([]);
+    });
+  });
+
+  it("does not count a withdrawn pending-target correction, nor one dated after --as-of", async () => {
+    await withCorrectionsDir(async (store) => {
+      const { root, pending } = await scene(store, true);
+      await writeFile(withdrawalsFile(store), `${JSON.stringify({ correctionId: pending[0].id, projectKey: KEY, by: "amy", at: "2026-03-01T00:00:00.000Z" })}\n`);
+      const obs = await collect({ root, repos: [], correctionsDir: store, now: NOW });
+      expect(obs.pendingTargetCorrections).toBe(1);
+      expect(obs.withdrawnCorrections).toBe(1);
+
+      const early = await collect({ root, repos: [], correctionsDir: store, asOf: "2026-02-02T12:00:00.000Z" });
+      expect(early.pendingTargetCorrections).toBe(1);
+      expect(early.excludedAsFuture).toBe(2); // the later pending row and the 03-01 withdrawal
+    });
+  });
+});

@@ -50,6 +50,12 @@ export interface Observations {
   excludedAsFuture: number;
   /** Withdraw spec §5.3: corrections whose withdrawal is in effect at asOf; they are absent from `corrections`. */
   withdrawnCorrections: number;
+  /**
+   * debug-task design §12.3: live corrections that name a refused (pending) decision, not a recorded one. They are
+   * counted here only, in none of the rates; counted in collect because the readers below never see them.
+   * Optional: absent reads as 0.
+   */
+  pendingTargetCorrections?: number;
   unresolvedDecisions: UnresolvedDecision[];
   unkeyableRepos: UnkeyableRepo[];
   malformed: MalformedLine[];
@@ -140,9 +146,14 @@ export async function collect(opts: CollectOptions): Promise<Observations> {
 
   const corrections: CorrectionObservation[] = [];
   let withdrawnCorrections = 0;
+  let pendingTargetCorrections = 0;
   for (const row of storeRead.rows) {
-    // debug-task design §12.3: a pending-target row names no decision; that plan reports it on its own line.
-    if (!namesDecision(row)) continue;
+    // debug-task design §12.3: a pending-target row names no decision, so it reaches no rate; it has its own line.
+    if (!namesDecision(row)) {
+      if (withdrawn.has(row.id)) withdrawnCorrections += 1;
+      else if (keep(row.at, row.id)) pendingTargetCorrections += 1;
+      continue;
+    }
     if (withdrawn.has(row.id)) {
       withdrawnCorrections += 1;
       continue;
@@ -234,6 +245,7 @@ export async function collect(opts: CollectOptions): Promise<Observations> {
     overturned,
     excludedAsFuture: future.length,
     withdrawnCorrections,
+    pendingTargetCorrections,
     unresolvedDecisions,
     unkeyableRepos: unkeyable,
     malformed,

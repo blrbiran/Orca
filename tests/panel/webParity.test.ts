@@ -146,6 +146,7 @@ function reportServerToWeb(x: ServerMetricsReport): WebMetricsReport {
 function reportWebToServer(x: WebMetricsReport): ServerMetricsReport {
   return {
     ...x,
+    corrections_on_unrecorded_decisions: x.corrections_on_unrecorded_decisions ?? 0,
     correction_rate: { ...x.correction_rate, caveatCodes: x.correction_rate.caveatCodes ?? [] },
     repair_rate: {
       ...x.repair_rate,

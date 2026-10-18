@@ -240,6 +240,7 @@ export function computeMetrics(
     review_coverage: { available: false, reason: NO_REVIEW_COVERAGE, reasonCode: "no-review-coverage" },
     excluded_as_future: obs.excludedAsFuture,
     withdrawn_corrections: obs.withdrawnCorrections,
+    corrections_on_unrecorded_decisions: obs.pendingTargetCorrections ?? 0,
     unresolved_decisions: [...obs.unresolvedDecisions].sort((a, b) =>
       a.correctionId < b.correctionId ? -1 : a.correctionId > b.correctionId ? 1 : 0,
     ),

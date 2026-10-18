@@ -98,4 +98,5 @@ export type DecisionCorrection = Correction & { decisionId: string };
  * debug-task design §12.3: readers keyed by decision id skip pending-target rows; that plan adds their own line
  * ("N corrections on unrecorded decisions").
  */
-export const namesDecision = (row: Correction): row is DecisionCorrection => row.decisionId !== undefined;
+// Generic so a row without its id (CorrectionRow) is read by the same guard (target.ts).
+export const namesDecision = <R extends { decisionId?: string }>(row: R): row is R & { decisionId: string } => row.decisionId !== undefined;

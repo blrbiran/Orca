@@ -156,6 +156,8 @@ export interface MetricsReport {
   review_coverage: ReviewCoverage;
   excluded_as_future: number;
   withdrawn_corrections: number;
+  /** Optional: reports served before debug-task design §12.3 lack it. */
+  corrections_on_unrecorded_decisions?: number;
   unresolved_decisions: UnresolvedDecision[];
   unkeyable_repos: Array<{ path: string; reason: string }>;
   malformed_lines: MalformedLine[];
@@ -173,6 +175,7 @@ export const WEB_REPORT_FIELDS = [
   "review_coverage",
   "excluded_as_future",
   "withdrawn_corrections",
+  "corrections_on_unrecorded_decisions",
   "unresolved_decisions",
   "unkeyable_repos",
   "malformed_lines",

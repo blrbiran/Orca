@@ -205,6 +205,8 @@ export interface MetricsReport {
   excluded_as_future: number;
   /** Withdraw spec §5.3, §10.2: corrections withdrawn as of as_of; they are in none of the numbers above. */
   withdrawn_corrections: number;
+  /** Debug-task design §12.3: live corrections on a decision a landing refused; they are in none of the rates. */
+  corrections_on_unrecorded_decisions: number;
   /** correctionId ascending */
   unresolved_decisions: UnresolvedDecision[];
   /** path ascending */
@@ -235,6 +237,7 @@ export const METRICS_FIELDS = [
   "review_coverage",
   "excluded_as_future",
   "withdrawn_corrections",
+  "corrections_on_unrecorded_decisions",
   "unresolved_decisions",
   "unkeyable_repos",
   "malformed_lines",

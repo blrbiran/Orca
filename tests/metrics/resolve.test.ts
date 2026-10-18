@@ -111,6 +111,18 @@ describe("resolveOverturned (E2 spec §3.4.1, §3.4.2; A' §3.7.1 pins archive/<
     expect(out.overturned).toEqual([]);
   });
 
+  // M-2.1: drop the namesDecision skip in resolveOverturned -> the row reads as an unresolved decision (or throws), red.
+  it("a pending-target correction is not reported as an unresolved decision", async () => {
+    const { decisionId: _d, ...rest } = correction();
+    const pending = { ...rest, runId: "orca-dev-1", pendingId: "pending-orca-dev-1-0" } as unknown as Correction;
+    const out = await resolveOverturned(
+      { repoPath: "/repo", projectKey: pending.projectKey, corrections: [{ row: pending }], scanned: scanned([]) },
+      io({}, ["2026"]),
+    );
+    expect(out.unresolvedDecisions).toEqual([]);
+    expect(out.overturned).toEqual([]);
+  });
+
   it("does not go to the archive at all for a correction the default scan already closed", async () => {
     const c = correction();
     const theIo = io({}, ["2026"]);

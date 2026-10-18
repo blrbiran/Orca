@@ -69,6 +69,9 @@ export function renderTable(report: MetricsReport): string {
   if (report.withdrawn_corrections > 0) {
     lines.push(`withdrawn corrections (in none of the numbers above): ${report.withdrawn_corrections}`);
   }
+  if (report.corrections_on_unrecorded_decisions > 0) {
+    lines.push(`corrections on unrecorded decisions (in none of the rates): ${report.corrections_on_unrecorded_decisions}`);
+  }
   if (report.unresolved_decisions.length > 0) {
     lines.push(
       `corrections whose decision was not scanned: ${report.unresolved_decisions.length} ` +

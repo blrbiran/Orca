@@ -1,4 +1,4 @@
-import type { Correction } from "./schema.js";
+import { namesDecision, type Correction } from "./schema.js";
 import type { CorrectionRow } from "./fields.js";
 import { CorrectRejection } from "./rejection.js";
 import { CORRECTION_ROW_INVALID } from "./record.js";
@@ -13,11 +13,11 @@ export type CorrectionTarget =
   | { kind: "pending"; runId: string; pendingId: string };
 
 export function correctionTargetOf(row: Correction | CorrectionRow): CorrectionTarget {
-  const { decisionId, runId, pendingId } = row;
+  const { runId, pendingId } = row;
   const pending = runId !== undefined && pendingId !== undefined;
   const partial = (runId !== undefined) !== (pendingId !== undefined);
-  if ((decisionId !== undefined) === pending || partial) {
+  if (namesDecision(row) === pending || partial) {
     throw new CorrectRejection(CORRECTION_ROW_INVALID, "a correction names exactly one target: decisionId, or both runId and pendingId");
   }
-  return decisionId !== undefined ? { kind: "decision", decisionId } : { kind: "pending", runId: runId as string, pendingId: pendingId as string };
+  return namesDecision(row) ? { kind: "decision", decisionId: row.decisionId } : { kind: "pending", runId: runId as string, pendingId: pendingId as string };
 }
