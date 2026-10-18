@@ -39,6 +39,7 @@ import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
 import { applyCorrectionClose, applyCorrectionRecord, applyCorrectionWithdraw, type CorrectionCloseCommand, type CorrectionRecordCommand, type CorrectionWithdrawCommand, type PanelCorrections } from "./correctionCommands.js";
+import { recordActivity } from "./activity.js";
 import { commandClientFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
 import { applyApprovePendingDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { isGroupArchived } from "./archivedMark.js";
@@ -763,7 +764,19 @@ export class WebControlService {
       const client = commandClientFor(command.commandId), principal = commandPrincipalFor(command.commandId);
       const send = () => this.openCorrectionDebugGroup(open);
       await (client === null || principal === null ? send() : withCommandContext(commandId, { client, principal }, send));
-    } catch { /* The reject stands; no open row means the list offers the Open button. */ }
+    } catch (error) {
+      // The reject stands and no refusal is booked (a replay retries the open); the failure is kept as one activity row.
+      this.noteDebugOpenFailed(command, success.correctionId, commandId, error);
+    }
+  }
+  /** Never throws: the reject must stand even if the note cannot be written. */
+  private noteDebugOpenFailed(command: RejectPendingDecisionCommand, correctionId: string, commandId: string, error: unknown): void {
+    try {
+      const message = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, " ").trim().slice(0, 200);
+      this.mutate(() => this.store.transaction(() => recordActivity(this.store, {
+        groupId: command.target.groupId, runId: null, kind: "debug-open-failed", body: { correctionId, commandId, error: message },
+      })));
+    } catch (noteError) { process.stderr.write(`orca-control: debug-open-failed note for ${commandId}: ${String(noteError)}\n`); }
   }
   private async rejectAndRecord(command: RejectPendingDecisionCommand): Promise<WebCommandResult> {
     const early = this.mutate(() => preflightWebCommand<WebCommandResult>(this.store, command));

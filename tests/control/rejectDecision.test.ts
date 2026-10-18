@@ -9,6 +9,7 @@ import { applyRejectPendingDecision, prepareApproval, prepareRejection } from ".
 import { recordNewCorrection } from "../../src/corrections/record.js";
 import { durableCommandErrorStatuses } from "../../src/control/errors.js";
 import { readPendingDecision } from "../../src/control/pendingDecisions.js";
+import { withCommandContext } from "../../src/control/commandClient.js";
 import { lookupCommandResult } from "../../src/control/commandLedger.js";
 import { debugGroupIds, readDebugMark } from "../../src/control/debugGroup.js";
 import { readArchivedPlan } from "../../src/control/queries.js";
@@ -59,8 +60,12 @@ const openCommandCount = (t: { h: { store: { db: { prepare(sql: string): { get()
 describe("reject-pending-decision opens the debug group (debug task Task 12)", { timeout: 60_000 }, () => {
   it("reject records the correction and opens debug-<cid>", async () => {
     const t = await landedWithPending(); try {
-      const r = await t.reject({ pendingId: t.pendingId }, "rej-1") as { result: { correctionId: string } };
+      const r = await withCommandContext("rej-1", { client: "web", principal: "owner:amy" }, () => t.reject({ pendingId: t.pendingId }, "rej-1")) as { result: { correctionId: string } };
       const cid = r.result.correctionId, gid = `debug-${cid}`;
+      // The open is booked as the same principal as the reject that caused it.
+      const principalOf = (id: string) => t.h.store.db.prepare("SELECT client,principal FROM commands WHERE id=?").get(id);
+      expect({ ...principalOf("rej-1.debug-open") }).toEqual({ client: "web", principal: "owner:amy" });
+      expect({ ...principalOf("rej-1") }).toEqual({ client: "web", principal: "owner:amy" });
       expect(debugGroupIds(t.h.store, cid)).toEqual([gid]);
       const group = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(gid)!.body));
       expect(readDebugMark(group)!.correctionId).toBe(cid);
@@ -129,7 +134,14 @@ describe("reject-pending-decision opens the debug group (debug task Task 12)", {
     const t = await landedWithPending(); try {
       const seamed = t.serviceAs(BY, t.dir, { beforeOpen: async () => { throw new Error("boom"); } });
       const r = await t.reject({ pendingId: t.pendingId }, "rej-1", seamed);
-      expect({ r, state: t.state(), opens: openCommandCount(t) }).toEqual({ r: expect.objectContaining({ result: expect.objectContaining({ kind: "pending-decision-rejected" }) }), state: "rejected", opens: 0 });
+      const cid = (r as { result: { correctionId: string } }).result.correctionId;
+      const notes = (t.h.store.db.prepare("SELECT run_id,body FROM activity WHERE group_id='g' AND kind='debug-open-failed'").all() as Array<{ run_id: unknown; body: string }>)
+        .map((row) => ({ runId: row.run_id, body: JSON.parse(row.body) }));
+      // The reject stands, no open row is booked (a replay retries it), and one note names the correction and the error.
+      expect({ r, state: t.state(), opens: openCommandCount(t), notes }).toEqual({
+        r: expect.objectContaining({ result: expect.objectContaining({ kind: "pending-decision-rejected" }) }), state: "rejected", opens: 0,
+        notes: [{ runId: null, body: { correctionId: cid, commandId: "rej-1.debug-open", error: "boom" } }],
+      });
     } finally { await t.dispose(); }
   });
 

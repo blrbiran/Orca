@@ -357,7 +357,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // And the activityKind family (13): issue fixes spec §6.5, Task E11, the same named rewrite: 165 + 13 (34 families).
     // D9/M3: usage-settled activity, settled-failed request and retrying allocation add three values.
     // Debug task plan Task 10 (ruling C22): the activityKind `correction-closed` adds one: 182 + 1.
-    expect(ENUM_VALUES.length).toBe(183);
+    // Debug task plan Task 12 fix round 1: the activityKind `debug-open-failed` adds one: 183 + 1.
+    expect(ENUM_VALUES.length).toBe(184);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {
