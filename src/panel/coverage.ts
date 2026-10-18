@@ -1,5 +1,6 @@
 import { isHighTier } from "../metrics/highTier.js";
 import type { DecisionObservation } from "../metrics/types.js";
+import { keyOf, reviewStates } from "./reviewState.js";
 import type { ReviewRow } from "./reviewsStore.js";
 
 export interface PanelCoverage {
@@ -12,12 +13,9 @@ export interface PanelCoverage {
   caveatCode: "reviewed-is-deliberate";
 }
 
-// A NUL (U+0000) join, not a space: spec section 4.2 keys by (projectKey, id) because a
-// decision id repeats across clones and forks (compute.ts's decisionByKey
-// carries the same lesson). A space-joined key would collide whenever either
-// half itself contains a space; neither projectKey nor a decision id is
-// guaranteed free of one.
-const keyOf = (projectKey: string, id: string): string => `${projectKey}\x00${id}`;
+// `keyOf` -- the (projectKey, id) key and the reason it is NUL-joined -- now
+// lives in reviewState.ts (decisions review withdraw spec section 4.2), beside
+// the review state that is keyed by it.
 
 /**
  * spec section 4.2. The numerator is distinct decisions carrying a `reviewed`
@@ -32,6 +30,11 @@ const keyOf = (projectKey: string, id: string): string => `${projectKey}\x00${id
  *
  * `reviewed` is a deliberate act: a recorded correction, or an explicit "agreed
  * / nothing to change". An arrow key cannot produce either.
+ *
+ * *** ERRATUM (2026-10-18, session b304f167, decisions review withdraw spec section 4.2) ***
+ * "carrying a `reviewed` row" now reads "with at least one person whose
+ * latest reviewed/withdrawn row is `reviewed`": a review can be withdrawn. The
+ * numerator is `reviewedKeys`, so there is one definition of reviewed.
  */
 export function computePanelCoverage(
   decisions: readonly DecisionObservation[],
@@ -41,16 +44,13 @@ export function computePanelCoverage(
   for (const d of decisions) {
     if (isHighTier(d.scope, d.kind)) highTier.add(keyOf(d.projectKey, d.id));
   }
-  const reviewed = new Set<string>();
-  for (const r of reviews) {
-    if (r.action !== "reviewed") continue;
-    const key = keyOf(r.projectKey, r.decisionId);
-    if (highTier.has(key)) reviewed.add(key);
-  }
+  const reviewedAll = reviewedKeys(reviews);
+  let reviewed = 0;
+  for (const key of highTier) if (reviewedAll.has(key)) reviewed += 1;
   return {
-    reviewed_high_tier: reviewed.size,
+    reviewed_high_tier: reviewed,
     high_tier_total: highTier.size,
-    rate: highTier.size === 0 ? null : reviewed.size / highTier.size,
+    rate: highTier.size === 0 ? null : reviewed / highTier.size,
     caveat:
       "`reviewed` is a deliberate act, so this number can sit near zero for a long time -- and " +
       "a long-zero coverage is not distinguishable from nobody looking. Read it with the backlog, " +
@@ -83,12 +83,21 @@ export function unreviewedHighTier(
  * Integration-and-panel-fixes spec §9.2(1): the set of decisions carrying a `reviewed` row, by the same
  * `keyOf` key `unreviewedHighTier` uses, and the per-decision answer built on it -- so the full list can say
  * `reviewed` / `highTier` without a second definition of either.
+ *
+ * *** ERRATUM (2026-10-18, session b304f167, decisions review withdraw spec section 4.2) ***
+ * "carrying a `reviewed` row" becomes "with at least one active reviewer"
+ * (`reviewStates`): a person's latest reviewed/withdrawn row decides, so a
+ * withdrawn review no longer counts.
  */
 export function reviewedKeys(reviews: readonly ReviewRow[]): Set<string> {
   const reviewed = new Set<string>();
-  for (const r of reviews) {
-    if (r.action !== "reviewed") continue;
-    reviewed.add(keyOf(r.projectKey, r.decisionId));
+  for (const [key, byPerson] of reviewStates(reviews)) {
+    for (const action of byPerson.values()) {
+      if (action === "reviewed") {
+        reviewed.add(key);
+        break;
+      }
+    }
   }
   return reviewed;
 }

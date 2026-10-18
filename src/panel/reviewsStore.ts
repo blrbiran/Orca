@@ -2,8 +2,11 @@ import { appendFile, chmod, mkdir, readFile, stat, writeFile } from "node:fs/pro
 import { parseRow } from "./compactClassify.js";
 import { REVIEWS_DIR_MODE, REVIEWS_FILE_MODE, reviewsFile } from "./paths.js";
 import { acquireReviewsLock } from "./reviewsLock.js";
+import { isDuplicateStateRow, isStateAction } from "./reviewState.js";
+import type { ReviewStateAction } from "./reviewState.js";
 
-export type ReviewAction = "opened" | "reviewed";
+/** decisions review withdraw spec section 4.1: `withdrawn` ends the same person's `reviewed`. */
+export type ReviewAction = "opened" | "reviewed" | "withdrawn";
 
 export interface ReviewRow {
   decisionId: string;
@@ -27,8 +30,15 @@ const UNIT_SEPARATOR = "\x1f";
 // on a same-id decision was answered `duplicate` and never written (measured
 // by the final review's probe). The bound in the class comment below becomes
 // two rows per distinct (projectKey, decisionId).
+//
+// (decisions review withdraw spec section 4.3) This key now dedupes only rows
+// that carry no review state (`opened`). A reviewed/withdrawn row is keyed by
+// `stateKey` -- the person on the decision, without the action -- and is a
+// duplicate only when it equals that person's current state.
 const key = (row: ReviewRow): string =>
   [row.projectKey, row.decisionId, row.by, row.action].join(UNIT_SEPARATOR);
+const stateKey = (projectKey: string, decisionId: string, by: string): string =>
+  [projectKey, decisionId, by].join(UNIT_SEPARATOR);
 
 export async function readReviews(dir: string): Promise<ReviewRow[]> {
   let text: string;
@@ -97,11 +107,25 @@ export const statIdentity: IdentityOf = async (path) => {
  * compares the file's identity (dev:ino:birthtimeMs) with the one it loaded;
  * if it changed, it rebuilds the set from disk plus the claims still being
  * written. The non-duplicate path is unchanged.
+ *
+ * *** ERRATUM (2026-10-18, session b304f167, decisions review withdraw spec section 4.3) ***
+ * The bound above is no longer two rows per decision. `opened` keeps its
+ * one-per-(projectKey, decisionId, by) set, but reviewed/withdrawn rows are now
+ * a per-person STATE (`states`, the latest of the two), and a state row is
+ * written whenever it differs from that state -- so reviewed -> withdrawn ->
+ * reviewed is three rows. The memory stays one entry per person per decision;
+ * the FILE grows with real withdraw and re-review acts only, never with
+ * repeated clicks. `stateOf` exposes the in-memory state to the routes.
  */
 export class ReviewsWriter {
+  /** Rows without review state (`opened`), by `key`. */
   private seen = new Set<string>();
+  /** Per-person review state, by `stateKey`: the latest reviewed/withdrawn row. */
+  private states = new Map<string, ReviewStateAction>();
   /** Keys claimed and not yet written (or failed). A reload keeps them. */
   private readonly inFlight = new Set<string>();
+  /** State claims not yet written (or failed). A reload lets them override the disk state. */
+  private readonly inFlightStates = new Map<string, ReviewStateAction>();
   private identity: string | undefined;
   private loaded = false;
 
@@ -115,28 +139,47 @@ export class ReviewsWriter {
     // seen as a change on the next duplicate check, never missed.
     const identity = await this.identityOf(reviewsFile(this.dir));
     const next = new Set<string>();
-    for (const row of await readReviews(this.dir)) next.add(key(row));
+    const nextStates = new Map<string, ReviewStateAction>();
+    for (const row of await readReviews(this.dir)) {
+      // File order: a later state row overwrites an earlier one.
+      if (isStateAction(row.action)) nextStates.set(stateKey(row.projectKey, row.decisionId, row.by), row.action);
+      else next.add(key(row));
+    }
     // A claim still being written is not on disk yet; dropping it here would
     // let a concurrent append of the same row write it twice.
     for (const claimed of this.inFlight) next.add(claimed);
+    for (const [claimed, action] of this.inFlightStates) nextStates.set(claimed, action);
     // Assigned together, after the read succeeded: a read that throws must not
     // leave the new identity beside the old set, or the next duplicate hit would
     // trust a set it never rebuilt.
     this.identity = identity;
     this.seen = next;
+    this.states = nextStates;
     this.loaded = true;
+  }
+
+  /** In memory, after `load()`: the person's current review state on the decision, if any. */
+  stateOf(projectKey: string, decisionId: string, by: string): ReviewStateAction | undefined {
+    if (!this.loaded) throw new Error("orca panel: ReviewsWriter.stateOf called before load()");
+    return this.states.get(stateKey(projectKey, decisionId, by));
+  }
+
+  private isDuplicate(row: ReviewRow): boolean {
+    if (isStateAction(row.action)) {
+      return isDuplicateStateRow(this.states.get(stateKey(row.projectKey, row.decisionId, row.by)), row.action);
+    }
+    return this.seen.has(key(row));
   }
 
   async append(row: ReviewRow): Promise<"written" | "duplicate"> {
     if (!this.loaded) throw new Error("orca panel: ReviewsWriter.append called before load()");
-    const rowKey = key(row);
-    if (this.seen.has(rowKey)) {
+    if (this.isDuplicate(row)) {
       // reviews compaction spec section 5.2: only on this path, so the read
       // path and the non-duplicate write path gain no I/O.
       const current = await this.identityOf(reviewsFile(this.dir));
       if (current === this.identity) return "duplicate";
       await this.load();
-      if (this.seen.has(rowKey)) return "duplicate";
+      if (this.isDuplicate(row)) return "duplicate";
     }
 
     // Claimed HERE, synchronously, before the first `await` -- not after the
@@ -149,8 +192,21 @@ export class ReviewsWriter {
     // production, not just in theory. Removed again in the `catch` below if
     // the write itself fails, so a failed write does not permanently brand a
     // row as already-written.
-    this.seen.add(rowKey);
-    this.inFlight.add(rowKey);
+    //
+    // (decisions review withdraw spec section 4.3) A state row claims the same
+    // way: the person's state is set to the new action now, and the previous
+    // state is remembered so a failed write can give it back.
+    const rowKey = key(row);
+    const state = isStateAction(row.action) ? row.action : undefined;
+    const rowStateKey = stateKey(row.projectKey, row.decisionId, row.by);
+    const previousState = this.states.get(rowStateKey);
+    if (state === undefined) {
+      this.seen.add(rowKey);
+      this.inFlight.add(rowKey);
+    } else {
+      this.states.set(rowStateKey, state);
+      this.inFlightStates.set(rowStateKey, state);
+    }
     try {
       // `mode` here is masked by the umask, which is why the criterion pins the
       // umask explicitly rather than trusting the developer's. An
@@ -176,10 +232,13 @@ export class ReviewsWriter {
         await lock.release();
       }
     } catch (err) {
-      this.seen.delete(rowKey);
+      if (state === undefined) this.seen.delete(rowKey);
+      else if (previousState === undefined) this.states.delete(rowStateKey);
+      else this.states.set(rowStateKey, previousState);
       throw err;
     } finally {
-      this.inFlight.delete(rowKey);
+      if (state === undefined) this.inFlight.delete(rowKey);
+      else this.inFlightStates.delete(rowStateKey);
     }
     return "written";
   }
