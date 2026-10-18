@@ -1,3 +1,6 @@
+import { isDuplicateStateRow, isStateAction } from "./reviewState.js";
+import type { ReviewStateAction } from "./reviewState.js";
+
 export type NotJudgedReason = "repo-not-discovered" | "ledger-has-malformed-lines" | "decision-not-found";
 export type LedgerView =
   | { judged: true; topLevelIds: ReadonlySet<string>; archivedIds: ReadonlySet<string> }
@@ -59,7 +62,12 @@ const notJudged = (reason: NotJudgedReason, row: RowKeyFields): LineClass => ({
  * orphan, kept. A not-judged row takes no part in dedupe (ruling R-B: a
  * repository that is not here is not touched at all).
  */
-function classifyLine(part: string, views: ReadonlyMap<string, LedgerView>, seen: Set<string>): LineClass {
+function classifyLine(
+  part: string,
+  views: ReadonlyMap<string, LedgerView>,
+  seen: Set<string>,
+  states: Map<string, ReviewStateAction>,
+): LineClass {
   const row = parseRow(part);
   if (row === undefined) return { kind: "unreadable" };
   const view = views.get(row.projectKey);
@@ -69,9 +77,20 @@ function classifyLine(part: string, views: ReadonlyMap<string, LedgerView>, seen
   // ruling R-E: absence from the top level is not evidence -- a branch switch
   // produces it too. Only the archive says the decision really left.
   if (!atTopLevel && !view.archivedIds.has(row.decisionId)) return notJudged("decision-not-found", row);
-  const rowKey = [row.projectKey, row.decisionId, row.by, row.action].join(UNIT_SEPARATOR);
-  if (seen.has(rowKey)) return { kind: "duplicate" };
-  seen.add(rowKey);
+  if (isStateAction(row.action)) {
+    // decisions review withdraw spec section 4.3: a reviewed/withdrawn row is a
+    // duplicate only when it equals the person's running state, so
+    // reviewed, withdrawn, reviewed keeps all three. Orphan rows count toward
+    // the state like kept ones: both are real acts, and one decision's rows
+    // are all on the same side of the top level.
+    const stateKey = [row.projectKey, row.decisionId, row.by].join(UNIT_SEPARATOR);
+    if (isDuplicateStateRow(states.get(stateKey), row.action)) return { kind: "duplicate" };
+    states.set(stateKey, row.action);
+  } else {
+    const rowKey = [row.projectKey, row.decisionId, row.by, row.action].join(UNIT_SEPARATOR);
+    if (seen.has(rowKey)) return { kind: "duplicate" };
+    seen.add(rowKey);
+  }
   return atTopLevel ? { kind: "kept" } : { kind: "orphan" };
 }
 
@@ -81,9 +100,10 @@ export function classifyReviews(text: string, views: ReadonlyMap<string, LedgerV
   if (endsWithNewline) parts.pop();
 
   const seen = new Set<string>();
+  const states = new Map<string, ReviewStateAction>();
   const counts: Record<LineKind, number> = { kept: 0, duplicate: 0, orphan: 0, unreadable: 0, "not-judged": 0 };
   const lines: ClassifiedLine[] = parts.map((part) => {
-    const cls = classifyLine(part, views, seen);
+    const cls = classifyLine(part, views, seen, states);
     counts[cls.kind] += 1;
     return { text: part, cls };
   });

@@ -35,6 +35,39 @@ describe("classifyReviews (reviews compaction spec section 3.1)", () => {
     expect(c.liveText).toBe(`${first}\n`);
   });
 
+  it("a withdraw and a re-review are real acts: reviewed, withdrawn, reviewed keeps all three", () => {
+    // decisions review withdraw spec section 4.3. Keyed by (pk, id, by, action) the third row
+    // would be a duplicate of the first and the compacted file would read as withdrawn.
+    const t = [line(), line({ action: "withdrawn" }), line({ at: "2026-09-12T00:00:00.000Z" })].join("\n") + "\n";
+    const c = classifyReviews(t, judged(["orca-dev-1/1"]));
+    expect(c.lines.map((l) => l.cls.kind)).toEqual(["kept", "kept", "kept"]);
+    expect(c.counts.duplicate).toBe(0);
+  });
+
+  it("a state row equal to the running state is a duplicate, for reviewed and for withdrawn", () => {
+    const rr = [line(), line({ at: "2026-09-11T00:00:00.000Z" })].join("\n") + "\n";
+    expect(kinds(rr, judged(["orca-dev-1/1"]))).toEqual(["kept", "duplicate"]);
+    const ww = [line(), line({ action: "withdrawn" }), line({ action: "withdrawn", at: "2026-09-12T00:00:00.000Z" })].join("\n") + "\n";
+    expect(kinds(ww, judged(["orca-dev-1/1"]))).toEqual(["kept", "kept", "duplicate"]);
+  });
+
+  it("running state is per person and per decision", () => {
+    const t =
+      [
+        line(),
+        line({ by: "bob" }),
+        line({ action: "withdrawn" }),
+        line({ decisionId: "orca-dev-1/2" }),
+        line({ by: "bob", at: "2026-09-12T00:00:00.000Z" }),
+      ].join("\n") + "\n";
+    expect(kinds(t, judged(["orca-dev-1/1", "orca-dev-1/2"]))).toEqual(["kept", "kept", "kept", "kept", "duplicate"]);
+  });
+
+  it("an opened row keeps the old (pk, id, by, action) rule and does not disturb state", () => {
+    const t = [line(), line({ action: "opened" }), line({ action: "opened", at: "2026-09-12T00:00:00.000Z" }), line({ at: "2026-09-13T00:00:00.000Z" })].join("\n") + "\n";
+    expect(kinds(t, judged(["orca-dev-1/1"]))).toEqual(["kept", "kept", "duplicate", "duplicate"]);
+  });
+
   it("C5 leaves an unreadable line where it was, byte for byte, never deduped or moved", () => {
     const a = line();
     const junk = '{"decisionId": "orca-dev-1/1", "proj';

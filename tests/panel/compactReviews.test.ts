@@ -11,6 +11,8 @@ import {
   reviewsFile,
   reviewsLockDir,
 } from "../../src/panel/paths.js";
+import { reviewedKeys } from "../../src/panel/coverage.js";
+import { keyOf } from "../../src/panel/reviewState.js";
 import { acquireReviewsLock } from "../../src/panel/reviewsLock.js";
 import { ReviewsWriter } from "../../src/panel/reviewsStore.js";
 import type { ReviewRow } from "../../src/panel/reviewsStore.js";
@@ -103,6 +105,18 @@ describe("applying and dry-running compaction (reviews compaction spec section 4
     const liveBefore = await sha(reviewsFile(dir));
     await applyCompaction(dir, VIEWS);
     expect(await sha(reviewsFile(dir))).not.toBe(liveBefore);
+  });
+
+  it("a withdraw and a re-review survive --apply: the decision is still reviewed afterwards", async () => {
+    const mk = (action: string, at: string): string =>
+      JSON.stringify({ decisionId: "orca-dev-1/1", projectKey: PK, action, by: "amy", at });
+    const cycle = `${mk("reviewed", "2026-09-10T00:00:00.000Z")}\n${mk("withdrawn", "2026-09-11T00:00:00.000Z")}\n${mk("reviewed", "2026-09-12T00:00:00.000Z")}\n`;
+    await seed(cycle);
+    const outcome = await applyCompaction(dir, VIEWS);
+    expect(outcome.wrote).toBe(false);
+    const after = (await readFile(reviewsFile(dir), "utf8")).split("\n").filter((l) => l.length > 0).map((l) => JSON.parse(l) as ReviewRow);
+    expect(after).toHaveLength(3);
+    expect(reviewedKeys(after).has(keyOf(PK, "orca-dev-1/1"))).toBe(true);
   });
 
   it("C8 an apply with nothing to remove writes nothing and creates no backup", async () => {
