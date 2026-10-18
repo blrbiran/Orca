@@ -37,7 +37,7 @@ import { singleCallHandler } from "./singleCallPurposes.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
 import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, makeReadOnly, removeSkillsSnapshot, skillsPathOf, sourceDirOf, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
-import { stepD, stepR } from "./driverLanding.js";
+import { recordEmptyResultDecisions, stepD, stepR } from "./driverLanding.js";
 import { openRequestOf, stepH, visitOrder } from "./driverHandoff.js";
 import { harvest } from "../scheduler/harvest.js";
 import { writeSetOf } from "../scheduler/writeSet.js";
@@ -57,6 +57,8 @@ import type { AgentSelection } from "./agentSelection.js";
  */
 
 export type CrashPoint = "A2-after-workspace" | "B-after-accept" | "C-after-terminal" | "D-after-cas" | "E-after-acceptance"
+  // Control run decisions plan Task 7: after an empty result's ledger-only commit swapped, before it is recorded.
+  | "E-after-ledger-cas"
   // Handoff delivery spec §9.2 R-H, §11 I5, §13.2 I-1.
   | "H-after-deliver" | "H-after-candidate" | "H-between-commit-and-settle" | "A2-after-bundle"
   // Integration spec §6.1: the integration pass's outward actions (integrationPass.ts).
@@ -766,6 +768,11 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     const report = await savedReport(store, runId);
     const raw = report.candidate;
     if (raw === null || report.terminal === null) throw new ControlError("control-terminal-pending");
+    // Control run decisions plan Task 7: an empty result's decisions go onto the group branch in a ledger-only commit.
+    if (drive.landedCommit === null && drive.ledgerCommit === null) {
+      const recorded = await recordEmptyResultDecisions(deps, runId);
+      if (recorded !== "settle") return recorded === "blocked";
+    }
     const archive = await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: raw.stopProof }, archiveAdmission(deps));
     if (drive.landedCommit !== null) {
       // Same evidence shape `confirmLanding` writes (schedulerBridge.ts). checksPassed: ccloop's verifier

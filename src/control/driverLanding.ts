@@ -12,7 +12,7 @@ import { bookReconcileUsage } from "./usageLedger.js";
 import { insertPendingDecisions } from "./pendingDecisions.js";
 import { reportedDecisionsOf, type ReportedDecisions } from "./reportedDecisions.js";
 import { ccloopEvidenceString, runEvidence, writeRunLedger, type PendingEntry } from "./runLedger.js";
-import { exportLedgerDir, treeWithLedgerFiles } from "./ledgerTree.js";
+import { commitLedgerOnGroupBranch, exportLedgerDir, treeWithLedgerFiles } from "./ledgerTree.js";
 import { reconcileDecision } from "../scheduler/ledgerWiring.js";
 import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
 import { AgentsRunRefused, TERMINAL_OUTCOMES, cloneDirOf, latestAttemptSha, loopDirOf, runTask } from "../scheduler/ccloopRunner.js";
@@ -65,6 +65,65 @@ export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommi
 function landedWithPending(store: ControlStore, run: DriverRun): void {
   insertPendingDecisions(store, run.groupId, run.runId, (run.drive!.stagedPending ?? []) as PendingEntry[]);
   run.drive = { ...run.drive!, stagedPending: [] };
+}
+
+/**
+ * Control run decisions plan Task 7: E's first act for an empty result (deviation D14: no landing merge). The run's
+ * ledger goes onto `orca/<groupId>` in a ledger-only commit `orca: decisions <runId>`; its refused entries are staged
+ * before the swap and become pending in the same write that records `ledgerCommit`, through landedWithPending like D
+ * and R. Nothing to write is no commit, and the pending entries are still inserted. A moved tip answers `moved`: the
+ * next round writes again on the new tip.
+ *
+ * Crash recovery: a tip that already holds `.decisions/<runId>.jsonl` was moved by this run (only it writes that
+ * file) before it could record so -- its newest first-parent `orca: decisions <runId>` commit is adopted, never a second.
+ */
+export async function recordEmptyResultDecisions(deps: ExecutionDriverDeps, runId: string): Promise<"settle" | "moved" | "blocked"> {
+  const { store } = deps;
+  const run = readDriverRun(store, runId);
+  let targetRepo: string;
+  try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
+  catch { blockRun(deps, runId, "E", "repository-path"); return "blocked"; }
+  const name = `${runId}.jsonl`;
+  const subject = `orca: decisions ${runId}`;
+  const tip = await revParse(targetRepo, workBranchRef(run.groupId));
+  let ledgerCommit: string | null;
+  if (await hasPath(targetRepo, tip, `.decisions/${name}`)) {
+    ledgerCommit = await findLedgerCommit(targetRepo, tip, subject);
+  } else {
+    const result = await commitLedgerOnGroupBranch({
+      repo: targetRepo, roots: deps.roots, groupId: run.groupId, worktreeName: `ledger-${runId}`, message: subject, beforeCas: deps.beforeCas,
+      write: async (decisionsDir) => {
+        const { reported, evidence, at } = await runLedgerInputs(deps, runId);
+        const { writtenIds, pending } = await writeRunLedger(decisionsDir, { ledgerRun: runId, reported, codeAuthored: [], at, evidence });
+        // Before the swap: a death after it adopts the commit and still has these to insert.
+        stagePending(deps, runId, pending);
+        return writtenIds.length > 0 ? [name] : [];
+      },
+    });
+    if (result.kind === "moved") return "moved";
+    ledgerCommit = result.kind === "swapped" ? result.commit : null;
+    if (ledgerCommit !== null) deps.crash?.("E-after-ledger-cas");
+  }
+  write(deps, () => {
+    const current = readDriverRun(store, runId);
+    if (current.state !== "landed") return;
+    landedWithPending(store, current);
+    current.drive = { ...current.drive!, ledgerCommit };
+    saveDriverRun(store, current);
+  });
+  return "settle";
+}
+
+async function hasPath(repo: string, commit: string, path: string): Promise<boolean> {
+  try { await git(repo, [...QUIET_GIT, "cat-file", "-e", `${commit}:${path}`]); return true; }
+  catch { return false; }
+}
+
+async function findLedgerCommit(repo: string, tip: string, subject: string): Promise<string> {
+  const lines = (await git(repo, [...QUIET_GIT, "log", "--first-parent", "--format=%H %s", tip])).split("\n");
+  const hit = lines.find((line) => line.slice(41) === subject);
+  if (hit === undefined) throw new ControlError("recovery-blocked", "ledger-commit-unknown");
+  return hit.slice(0, 40);
 }
 
 /** Control run decisions: what a run's ledger is written from -- the decisions it reported, its evidence and the time. */
