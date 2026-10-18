@@ -670,6 +670,9 @@ function debugChecksOf(context: DriverContext | undefined): Map<string, DebugChe
 function startDebugCheck(deps: ExecutionDriverDeps, runId: string, context: DriverContext | undefined, input: {
   workdir: string; base: string; attemptSha: string; contract: ReturnType<typeof readConfirmedTaskExecution>["contract"]; report: ExecutionReport; snapshot: WorkspaceSnapshot;
 }): void {
+  // Fix round 2: a round still running when stop() was called (parked at an await in stepC or in the resume branch) starts
+  // no check that stop() could no longer abort. The marker is already persisted, so the next driver restores and checks.
+  if (context?.stopped) return;
   const reported = reportedDebugOf(input.report);
   const entry: DebugCheck = { controller: new AbortController(), settled: null };
   debugChecksOf(context).set(runId, entry);
@@ -1189,6 +1192,8 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       for (const check of context.debugChecks?.values() ?? []) check.controller.abort();
       const stopping=taskResults.stop();
       if (inFlight !== null) await inFlight;
+      // Belt and braces for the guard in startDebugCheck: anything started while the last round finished is aborted too.
+      for (const check of context.debugChecks?.values() ?? []) check.controller.abort();
       await stopping;
     },
     get crashed() { return crashed; },

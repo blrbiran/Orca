@@ -166,6 +166,18 @@ describe("checkReproduction (design §12.8)", () => {
   });
 });
 
+describe("checkReproduction keeps its own error (fix round 2, optional minor)", () => {
+  it("rethrows the check's error, not the restore's, when both fail", async () => {
+    const w = await workspace();
+    const aborted = new AbortController();
+    aborted.abort();
+    // The restore's checkout fails on a leftover index lock; the check itself fails first, on its aborted signal.
+    writeFileSync(join(w.repo, ".git", "index.lock"), "");
+    await expect(checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result: { reproTests: ["tests/repro.test.txt"], reproCommand: REPRO }, contract: contract("true"), timeoutMs: 10_000, signal: aborted.signal }))
+      .rejects.toThrow(/^sh: aborted$/);
+  });
+});
+
 describe("restoreWorkspace (fix round 1, minor b)", () => {
   it("still removes what was left untracked when the checkout fails, and answers the checkout's failure", async () => {
     const w = await workspace();
@@ -200,8 +212,8 @@ describe("stepC runs the check only for a debug group's run (plan Task 8)", () =
   // The fixture contract's only check is `true`, so a reported reproCommand is what makes base and head differ.
   const task = (taskId: string) => ({ taskId, targetPaths: [taskId, "tests"] });
   const files = (id: string) => ({ [id]: `${id}\n`, [`tests/${id}.test.txt`]: "t\n" });
-  async function debugHarness(debug: (id: string) => unknown, over: { files?: (id: string) => Record<string, string>; tasks?: string[] } = {}) {
-    const t = await driverHarness((over.tasks ?? ["a"]).map(task), { files: over.files ?? files, debug });
+  async function debugHarness(debug: (id: string) => unknown, over: { files?: (id: string) => Record<string, string>; tasks?: string[]; duringCollect?: () => Promise<void> } = {}) {
+    const t = await driverHarness((over.tasks ?? ["a"]).map(task), { files: over.files ?? files, debug, ...(over.duringCollect ? { duringCollect: over.duringCollect } : {}) });
     const row = t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!;
     t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...JSON.parse(String(row.body)), debug: MARK }));
     return t;
@@ -325,6 +337,28 @@ describe("stepC runs the check only for a debug group's run (plan Task 8)", () =
       while (!(await gone()) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
       expect(await gone()).toBe(true);
     } finally { await driver.stop(); await t.h.dispose(); }
+  });
+
+  // Fix round 2: a round parked inside stepC when stop() is called must not start a check stop() can no longer abort.
+  it("a round still inside stepC when stop() is called starts no check and leaves the marker", async () => {
+    let gate: Promise<void> | null = null, release = (): void => undefined, parked = (): void => undefined;
+    const isParked = new Promise<void>((resolve) => { parked = resolve; });
+    const t = await debugHarness(() => ({ reproCommand: "test -f a" }), { duringCollect: async () => { if (gate !== null) { parked(); await gate; } } });
+    let calls = 0;
+    const driver = createExecutionDriver({ ...t.deps, checkReproduction: async () => { calls += 1; return { kind: "passed", tests: [], command: "test -f a" }; } });
+    try {
+      const runId = await t.claim();
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      gate = new Promise<void>((resolve) => { release = resolve; });
+      const round = driver.round();
+      await isParked;
+      const stopped = driver.stop();
+      release();
+      await round; await stopped;
+      expect(calls).toBe(0);
+      expect(t.body(runId).state).toBe("accepted");
+      expect(t.body(runId).drive.debugRepro).toMatchObject({ state: "checking", attemptSha: expect.stringMatching(/^[a-f0-9]{40}$/) });
+    } finally { release(); await driver.stop(); await t.h.dispose(); }
   });
 
   it("persists the marker before the check starts touching the workspace", async () => {
