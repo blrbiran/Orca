@@ -204,9 +204,36 @@ describe("withdrawing in the page (spec §7, §10.1)", () => {
     await waitFor(() => expect(agree().disabled).toBe(false));
     expect(agree().textContent).toBe("Agree");
     expect(detailReads("run/1")).toBeGreaterThan(readsBefore);
-    // mutation: the withdraw path sets pendingAdvance as Agree does -> run/2 opens here, red
     expect(screen.getByTestId("decision-question").textContent).toBe("question of run/1");
     expect(within(splitDetail()).queryByRole("button", { name: "Withdraw review" })).toBeNull();
+    expect(detailReads("run/2")).toBe(0);
+  });
+
+  it("never moves on to the next row, even when the re-read list has dropped the open one (spec §10.1)", async () => {
+    // A stale Unreviewed list still shows run/1, which this viewer has since reviewed (the detail says so); while the
+    // withdrawal is in flight someone else reviews it, so the re-read list no longer has it. That is exactly when
+    // Agree's advance would open run/2 -- a withdrawal must not.
+    let othersReviewed = false;
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = String(input);
+      if (url.startsWith("/api/todo")) {
+        requested.push(`GET ${url}`);
+        return json({ rows: othersReviewed ? [row("run/2", false)] : [row("run/1", false), row("run/2", false)] });
+      }
+      if (url === "/api/reviews/withdraw") othersReviewed = true;
+      return real(input, init);
+    }) as typeof fetch;
+    render(<App />);
+    await waitFor(() => expect(listedIds()).toEqual(["run/1", "run/2"]));
+    fireEvent.click([...document.querySelectorAll<HTMLButtonElement>(".decision-list li button")].find((b) => b.textContent?.includes("run/1"))!);
+    await waitFor(() => expect(screen.getByTestId("decision-question").textContent).toBe("question of run/1"));
+    fireEvent.click(within(splitDetail()).getByRole("button", { name: "Withdraw review" }));
+    await within(splitDetail()).findByText("Review withdrawn.");
+    await waitFor(() => expect(listedIds()).toEqual(["run/2"]));
+    await waitFor(() => expect(splitDetail().querySelector<HTMLButtonElement>(".actions > button.btn-primary")!.disabled).toBe(false));
+    // mutation: the withdraw path sets pendingAdvance after the re-read, as Agree does -> run/2 opens here, red
+    expect(screen.getByTestId("decision-question").textContent).toBe("question of run/1");
     expect(detailReads("run/2")).toBe(0);
   });
 
