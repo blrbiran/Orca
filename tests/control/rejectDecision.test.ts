@@ -75,16 +75,19 @@ describe("reject-pending-decision opens the debug group (debug task Task 12)", {
 
   it("a second reject returns the same correction and the same group, and a replay books no second open", async () => {
     const t = await landedWithPending(); try {
+      // The seam runs exactly when an open is about to be sent, so it also counts opens a stale revision would swallow.
+      let sent = 0;
+      const counting = t.serviceAs(BY, t.dir, { beforeOpen: async () => { sent++; } });
       const firstCommand = t.h.command("reject-pending-decision", { pendingId: t.pendingId }, "rej-1");
-      const first = await t.service.rejectPendingDecision(firstCommand) as { result: { correctionId: string } };
+      const first = await counting.rejectPendingDecision(firstCommand) as { result: { correctionId: string } };
       const cid = first.result.correctionId;
       t.h.store.db.prepare("UPDATE pending_decisions SET state='pending' WHERE id=?").run(t.pendingId);
-      const second = await t.reject({ pendingId: t.pendingId }, "rej-2") as { result: { correctionId: string } };
+      const second = await t.reject({ pendingId: t.pendingId }, "rej-2", counting) as { result: { correctionId: string } };
       // The debug group moves (C23): the open must not be re-sent at the new revision.
       t.h.store.db.prepare("UPDATE groups SET revision=revision+1 WHERE id=?").run(`debug-${cid}`);
-      const replayed = await t.service.rejectPendingDecision(firstCommand);
-      expect({ same: second.result.correctionId, groups: debugGroupIds(t.h.store, cid), replayed, opens: openCommandCount(t) }).toEqual({
-        same: cid, groups: [`debug-${cid}`], replayed: first, opens: 2,
+      const replayed = await counting.rejectPendingDecision(firstCommand);
+      expect({ same: second.result.correctionId, groups: debugGroupIds(t.h.store, cid), replayed, opens: openCommandCount(t), sent }).toEqual({
+        same: cid, groups: [`debug-${cid}`], replayed: first, opens: 2, sent: 2,
       });
       expect(Number(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM groups WHERE id LIKE ?").get(`debug-${cid}%`)!.n)).toBe(1);
       expect(lookupCommandResult(t.h.store, `debug-${cid}`, "rej-2.debug-open")!.body).toMatchObject({ result: { created: false } });
