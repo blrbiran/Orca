@@ -9,6 +9,9 @@ import { applyRejectPendingDecision, prepareApproval, prepareRejection } from ".
 import { recordNewCorrection } from "../../src/corrections/record.js";
 import { durableCommandErrorStatuses } from "../../src/control/errors.js";
 import { readPendingDecision } from "../../src/control/pendingDecisions.js";
+import { lookupCommandResult } from "../../src/control/commandLedger.js";
+import { debugGroupIds, readDebugMark } from "../../src/control/debugGroup.js";
+import { readArchivedPlan } from "../../src/control/queries.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { controlWorkspaceRoots } from "../../src/control/workspace.js";
 import { controlRepoKey, controlRoot } from "../../src/panel/controlOptions.js";
@@ -35,8 +38,10 @@ async function landedWithPending(options: { remote?: boolean } = {}) {
   if (options.remote !== false) git(t.repo, "remote", "add", "origin", "https://example.invalid/o/r.git");
   const dir = await mkdtemp(join(tmpdir(), "orca-corrections-"));
   /** null leaves the field out, as a panel built without it would. */
-  const serviceAs = (by: string | null, correctionsDir: string | null = dir) => new WebControlService({
+  const repositories: Array<{ repoId: string; path: string }> = [{ repoId: "repo", path: t.repo }];
+  const serviceAs = (by: string | null, correctionsDir: string | null = dir, seams: { beforeOpen?: () => Promise<void> } = {}) => new WebControlService({
     ...t.h.deps, knownRepository: (repoId: string) => repoId === "repo", resolveRepository: () => t.repo,
+    listRepositories: () => repositories, ...(seams.beforeOpen === undefined ? {} : { decisionSeams: seams }),
     ...(correctionsDir === null ? {} : { correctionsDir }), ...(by === null ? {} : { correctionsBy: by }),
   });
   const service = serviceAs(BY);
@@ -45,8 +50,89 @@ async function landedWithPending(options: { remote?: boolean } = {}) {
   const pendingId = `pending-${runId}-0`;
   const state = () => readPendingDecision(t.h.store, pendingId)!.state;
   const dispose = async () => { await rm(dir, { recursive: true, force: true }); await t.h.dispose(); };
-  return { ...t, runId, dir, service, serviceAs, reject, pendingId, state, dispose };
+  return { ...t, repositories, runId, dir, service, serviceAs, reject, pendingId, state, dispose };
 }
+
+const openCommandCount = (t: { h: { store: { db: { prepare(sql: string): { get(): unknown } } } } }) =>
+  Number((t.h.store.db.prepare("SELECT COUNT(*) AS n FROM commands WHERE id LIKE '%.debug-open'").get() as { n: number }).n);
+
+describe("reject-pending-decision opens the debug group (debug task Task 12)", { timeout: 60_000 }, () => {
+  it("reject records the correction and opens debug-<cid>", async () => {
+    const t = await landedWithPending(); try {
+      const r = await t.reject({ pendingId: t.pendingId }, "rej-1") as { result: { correctionId: string } };
+      const cid = r.result.correctionId, gid = `debug-${cid}`;
+      expect(debugGroupIds(t.h.store, cid)).toEqual([gid]);
+      const group = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(gid)!.body));
+      expect(readDebugMark(group)!.correctionId).toBe(cid);
+      const contract = JSON.parse(readArchivedPlan(t.h.store, gid).plan.tasks[0]!.originalContractCanonicalJson) as { objective: { goal: string } };
+      expect(contract.objective.goal).toContain("question: q0");
+      expect(Number(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM estimates WHERE group_id=?").get(gid)!.n)).toBe(0);
+      // The open's outcome is its own booked row, in the debug group's scope.
+      expect(lookupCommandResult(t.h.store, gid, "rej-1.debug-open")!.body).toMatchObject({ result: { kind: "debug-group-opened", groupId: gid, created: true } });
+      expect(lookupCommandResult(t.h.store, "g", "rej-1")!.body).toMatchObject({ result: { kind: "pending-decision-rejected" } });
+    } finally { await t.dispose(); }
+  });
+
+  it("a second reject returns the same correction and the same group, and a replay books no second open", async () => {
+    const t = await landedWithPending(); try {
+      const firstCommand = t.h.command("reject-pending-decision", { pendingId: t.pendingId }, "rej-1");
+      const first = await t.service.rejectPendingDecision(firstCommand) as { result: { correctionId: string } };
+      const cid = first.result.correctionId;
+      t.h.store.db.prepare("UPDATE pending_decisions SET state='pending' WHERE id=?").run(t.pendingId);
+      const second = await t.reject({ pendingId: t.pendingId }, "rej-2") as { result: { correctionId: string } };
+      // The debug group moves (C23): the open must not be re-sent at the new revision.
+      t.h.store.db.prepare("UPDATE groups SET revision=revision+1 WHERE id=?").run(`debug-${cid}`);
+      const replayed = await t.service.rejectPendingDecision(firstCommand);
+      expect({ same: second.result.correctionId, groups: debugGroupIds(t.h.store, cid), replayed, opens: openCommandCount(t) }).toEqual({
+        same: cid, groups: [`debug-${cid}`], replayed: first, opens: 2,
+      });
+      expect(Number(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM groups WHERE id LIKE ?").get(`debug-${cid}%`)!.n)).toBe(1);
+      expect(lookupCommandResult(t.h.store, `debug-${cid}`, "rej-2.debug-open")!.body).toMatchObject({ result: { created: false } });
+    } finally { await t.dispose(); }
+  });
+
+  it("a replay whose open was never booked sends it", async () => {
+    // A crash between the reject's booking and the open leaves no open row; the replay completes it.
+    const t = await landedWithPending(); try {
+      const command = t.h.command("reject-pending-decision", { pendingId: t.pendingId }, "rej-1");
+      const first = await t.service.rejectPendingDecision(command) as { result: { correctionId: string } };
+      const gid = `debug-${first.result.correctionId}`;
+      expect(lookupCommandResult(t.h.store, gid, "rej-1.debug-open")).not.toBeNull();
+      t.h.store.db.prepare("DELETE FROM commands WHERE id='rej-1.debug-open'").run();
+      await t.service.rejectPendingDecision(command);
+      expect(lookupCommandResult(t.h.store, gid, "rej-1.debug-open")!.body).toMatchObject({ result: { kind: "debug-group-opened", created: false } });
+    } finally { await t.dispose(); }
+  });
+
+  it("a failed open leaves the reject succeeded and the correction recorded", async () => {
+    // The seam drops the configured repository between the reject and the open (the repository match is panel-key
+    // first, so removing the remote would not refuse).
+    let t!: Awaited<ReturnType<typeof landedWithPending>>;
+    t = await landedWithPending(); try {
+      const seamed = t.serviceAs(BY, t.dir, { beforeOpen: async () => { t.repositories.length = 0; } });
+      const r = await t.reject({ pendingId: t.pendingId }, "rej-1", seamed) as { result: { correctionId: string } };
+      const gid = debugGroupIds(t.h.store, r.result.correctionId);
+      expect({
+        rejected: lookupCommandResult(t.h.store, "g", "rej-1")!.body, rows: (await readCorrections(t.dir)).length, groups: gid,
+        open: lookupCommandResult(t.h.store, `debug-${r.result.correctionId}`, "rej-1.debug-open")!.body,
+      }).toEqual({
+        rejected: expect.objectContaining({ result: expect.objectContaining({ kind: "pending-decision-rejected" }) }), rows: 1, groups: [],
+        open: expect.objectContaining({ error: expect.objectContaining({ code: "correction-repository-unknown" }) }),
+      });
+    } finally { await t.dispose(); }
+  });
+
+  it("a run with no contract: the reject stands and the open books debug-checks-required", async () => {
+    const t = await landedWithPending(); try {
+      t.h.store.db.prepare("UPDATE runs SET body=json_set(body,'$.taskId','no-such-task') WHERE id=?").run(t.runId);
+      const r = await t.reject({ pendingId: t.pendingId }, "rej-1") as { result: { correctionId: string } };
+      expect({ groups: debugGroupIds(t.h.store, r.result.correctionId), state: t.state(),
+        open: lookupCommandResult(t.h.store, `debug-${r.result.correctionId}`, "rej-1.debug-open")!.body }).toEqual({
+        groups: [], state: "rejected", open: expect.objectContaining({ error: expect.objectContaining({ code: "debug-checks-required" }) }),
+      });
+    } finally { await t.dispose(); }
+  });
+});
 
 describe("reject-pending-decision (control run decisions Task 10)", { timeout: 60_000 }, () => {
   it("reject records a wrong-kind correction naming the run and the pending item", async () => {

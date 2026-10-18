@@ -37,9 +37,9 @@ import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIn
 import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
-import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, type CorrectionDebugOpenCommand } from "./debugGroup.js";
+import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
 import { applyCorrectionClose, applyCorrectionRecord, applyCorrectionWithdraw, type CorrectionCloseCommand, type CorrectionRecordCommand, type CorrectionWithdrawCommand, type PanelCorrections } from "./correctionCommands.js";
-import { commandPrincipalFor } from "./commandClient.js";
+import { commandClientFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
 import { applyApprovePendingDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
@@ -99,7 +99,7 @@ export interface WebServiceDeps extends AsyncImportDeps {
   /** Debug task plan Task 6 (fix round 1): the repoId the panel gives a project key (controlRepoKey); absent, only remote-derived keys match. */
   repoIdOfProjectKey?: (projectKey: string) => string;
   /** Test seams into approve's and reject's git/store steps (decisionCommands.ts), passed through unchanged. */
-  decisionSeams?: { beforeCas?: () => Promise<void>; beforeRecord?: () => Promise<void> };
+  decisionSeams?: { beforeCas?: () => Promise<void>; beforeRecord?: () => Promise<void>; beforeOpen?: () => Promise<void> };
 }
 interface EstimateRun { runId: string; groupId: string; workItemId: string; phase: string; state: string; claimOrdinal: null; providerAttemptOrdinal: number; remaining: { work: Amount; handoff: Amount }; cumulative: { work: Amount; handoff: Amount }; unknown: { work: boolean; handoff: boolean }; [key: string]: unknown }
 
@@ -737,6 +737,35 @@ export class WebControlService {
     return this.serializeDecision(command.target.groupId, () => this.rejectPendingDecisionNow(command));
   }
   private async rejectPendingDecisionNow(command: RejectPendingDecisionCommand): Promise<WebCommandResult> {
+    const result = await this.rejectAndRecord(command);
+    await this.openDebugGroupAfterReject(command, result);
+    return result;
+  }
+  /**
+   * Debug task plan Task 12: a booked reject (first or replayed) opens the correction's debug group as its own command
+   * `<rejectCommandId>.debug-open`. The reject's outcome is never changed by it (anti-goal 1): a refused or failed open
+   * leaves its own booked row, or none, and the corrections list shows the Open button. A replay first looks the
+   * open's row up (controller ruling C23): once the group has moved, re-sending it at a new revision would conflict.
+   */
+  private async openDebugGroupAfterReject(command: RejectPendingDecisionCommand, result: WebCommandResult): Promise<void> {
+    const success = (result as { result?: { kind?: string; correctionId?: string } }).result;
+    if (success?.kind !== "pending-decision-rejected" || success.correctionId === undefined) return;
+    const commandId = `${command.commandId}.debug-open`;
+    if (this.store.db.prepare("SELECT 1 FROM commands WHERE id=? AND original_status IS NOT NULL").get(commandId) !== undefined) return;
+    try {
+      await this.deps.decisionSeams?.beforeOpen?.();
+      const groupId = debugGroupIdFor(this.store, success.correctionId, false);
+      const revision = this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId);
+      const open: CorrectionDebugOpenCommand = {
+        schema: "orca-raw-command-v1", commandId, actorId: command.actorId, expectedRevision: revision === undefined ? 0 : Number(revision.revision),
+        verb: "correction-debug-open", target: { kind: "group", groupId }, payload: { correctionId: success.correctionId },
+      };
+      const client = commandClientFor(command.commandId), principal = commandPrincipalFor(command.commandId);
+      const send = () => this.openCorrectionDebugGroup(open);
+      await (client === null || principal === null ? send() : withCommandContext(commandId, { client, principal }, send));
+    } catch { /* The reject stands; no open row means the list offers the Open button. */ }
+  }
+  private async rejectAndRecord(command: RejectPendingDecisionCommand): Promise<WebCommandResult> {
     const early = this.mutate(() => preflightWebCommand<WebCommandResult>(this.store, command));
     if (early) return early.body;
     const repoId = this.planRepository(command.target.groupId);
