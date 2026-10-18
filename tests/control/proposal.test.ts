@@ -7,6 +7,17 @@ import { createServer } from "node:http";
 import { registerControlReadRoutes, verifyControlJsonBody } from "../../src/panel/controlApi.js";
 
 describe("proposal commands", () => {
+  it("the first estimate of a deferred group is version 1", async () => {
+    const h = await webFixture(); try {
+      h.importDeferred("d");
+      const service = new WebControlService(h.deps);
+      expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM estimates WHERE group_id='d'").get()!.n).toBe(0);
+      const result = await service.createEstimate(h.rawCommand("estimate-d", 1, "estimate", { kind: "group", groupId: "d" },
+        { proposalVersion: 1, estimatorProfileId: "all", estimatorProfileHash: h.frozen.profileHash, estimateMode: "soft" }) as never);
+      expect(result).toMatchObject({ result: { kind: "estimate-created", estimateVersion: 1, estimateState: "queued" } });
+      expect(h.store.db.prepare("SELECT estimate_version AS v FROM estimates WHERE group_id='d'").all().map(row => row.v)).toEqual([1]);
+    } finally { await h.dispose(); }
+  });
   it("applies atomic field deltas, refunds reserve, and replays the original result", async () => {
     const h = await webFixture(); try {
       const service = new WebControlService(h.deps), before = readBudgetProposal(h.store, "g");

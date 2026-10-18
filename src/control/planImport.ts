@@ -255,11 +255,20 @@ export interface RequirementCarryOver { existingBody: Record<string, unknown>; u
  * same group, its clarifying spend carried over -- `used` unchanged and the limit raised by exactly that much, so the
  * reserve, `limit - used - committed`, is what a fresh import would have).
  */
-export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, carry: RequirementCarryOver | null): { estimateId: string; preflight: FrozenEstimateRequest } {
+export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, carry: RequirementCarryOver | null, opts?: { estimate: "preflight" }): { estimateId: string; preflight: FrozenEstimateRequest };
+/**
+ * `estimate: "deferred"` (debug-task spec: opening spends nothing): the group is imported with no estimate row, no estimate
+ * artifacts and no wake -- the estimator slot is not resolved or frozen either, as no estimate would use it. The reserve
+ * follows the non-queued branch, so a later estimate's grant is still available to the first re-estimate.
+ */
+export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, carry: RequirementCarryOver | null, opts: { estimate: "deferred" }): { estimateId: null; preflight: null };
+export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, carry: RequirementCarryOver | null, opts?: { estimate: "preflight" | "deferred" }): { estimateId: string | null; preflight: FrozenEstimateRequest | null };
+export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, carry: RequirementCarryOver | null, opts: { estimate: "preflight" | "deferred" } = { estimate: "preflight" }): { estimateId: string | null; preflight: FrozenEstimateRequest | null } {
+  const deferred = opts.estimate === "deferred";
   const plan = input.plan;
   const planCanonicalJson = canonicalBytes(plan).toString("utf8");
   const planHash = sha256Canonical(plan);
-  const estimatorProfile = input.estimatorProfileId !== null && input.estimatorProfileHash !== null
+  const estimatorProfile = !deferred && input.estimatorProfileId !== null && input.estimatorProfileHash !== null
     ? deps.profileRouter.resolve("budget-estimate", input.estimatorProfileId, input.estimatorProfileHash) : null;
   // Spec §6.4 (frozen = seen): the operator layers the estimator slot was resolved from must be the layers now.
   const partialNow = currentEstimatorPartial(deps.store, input.actorId, carry === null ? {} : readGroupAgentOverrides(carry.existingBody), plan.agent);
@@ -270,10 +279,11 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
     if (estimatorLayerAuthority(prefs, group, plan.agent) !== deps.estimatorLayerAuthority) throw new ControlError("plan-version-conflict", "estimator-layer-changed");
   }
   const estimatorSlot = estimatorProfile === null ? null : deps.estimatorSlot.kind === "frozen" ? deps.estimatorSlot.slot : null;
-  const preflight = estimatorProfile === null ? rejectedEstimatorRequest("control-estimator-unconfigured") : deps.estimatorSlot.kind === "rejected"
+  const preflight = deferred ? null : estimatorProfile === null ? rejectedEstimatorRequest("control-estimator-unconfigured") : deps.estimatorSlot.kind === "rejected"
     ? rejectedEstimatorRequest(deps.estimatorSlot.code)
     : preflightEstimate(deps, planHash, planCanonicalJson, estimatorProfile, input.estimateMode);
-  const estimateId = `estimate-${sha256Canonical({ groupId: input.groupId, planHash, version: 1 }).slice(0, 24)}`;
+  const estimateId = deferred ? null : `estimate-${sha256Canonical({ groupId: input.groupId, planHash, version: 1 }).slice(0, 24)}`;
+  const queued = preflight?.state === "queued";
   const legacyCarry=carry!==null&&!hasTokenPolicy(deps.store,input.groupId);
   const authoredTokens=(task:ControlPlanV1["tasks"][number]):number|null=>legacyCarry?TASK_WORK.tokens:JSON.parse(task.originalContractCanonicalJson).executionPolicy.tokenBudget;
   const taskAllocations = plan.tasks.flatMap(task => [
@@ -283,7 +293,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   let base = checkedAdd(ESTIMATE_GRANT, GOAL_REVIEW);
   for (const _task of plan.tasks) base = checkedAdd(base, checkedAdd(TASK_WORK, TASK_HANDOFF));
   const initialReserve = reserve20(base);
-  const explicitUnallocatedReserve:BudgetAmount = preflight.state === "queued" ? initialReserve : checkedAdd(initialReserve, ESTIMATE_GRANT);
+  const explicitUnallocatedReserve:BudgetAmount = queued ? initialReserve : checkedAdd(initialReserve, ESTIMATE_GRANT);
   const groupLimit = checkedAdd(base, initialReserve);
   // Spec §6.3.2 (H10), D4, D10: an agent's import may not promise more than the caps leave -- its fresh limit (no carried
   // clarifying spend) against the headroom without this group's own runs. Not a ControlError: the command transaction
@@ -296,8 +306,8 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   const limit:BudgetAmount = {...checkedAdd(groupLimit, used),tokens:carry===null?null:legacyCarry?checkedAdd(groupLimit,used).tokens:(carry.existingBody.limit as BudgetAmount).tokens};
   let committedRemaining = checkedAdd(GOAL_REVIEW, zero());
   for (const _task of plan.tasks) committedRemaining = checkedAdd(committedRemaining, checkedAdd(TASK_WORK, TASK_HANDOFF));
-  if (preflight.state === "queued") committedRemaining = checkedAdd(committedRemaining, ESTIMATE_GRANT);
-  if(!legacyCarry)committedRemaining.tokens=GOAL_REVIEW.tokens+(preflight.state==="queued"?ESTIMATE_GRANT.tokens:0);
+  if (queued) committedRemaining = checkedAdd(committedRemaining, ESTIMATE_GRANT);
+  if(!legacyCarry)committedRemaining.tokens=GOAL_REVIEW.tokens+(queued?ESTIMATE_GRANT.tokens:0);
   explicitUnallocatedReserve.tokens=limit.tokens===null?null:limit.tokens-used.tokens-committedRemaining.tokens;
   if(explicitUnallocatedReserve.tokens!==null&&explicitUnallocatedReserve.tokens<0)throw new ControlError("group-budget-unavailable");
   const allocations = [
@@ -357,6 +367,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   };
   deps.store.db.prepare("INSERT INTO budget_proposals(group_id,proposal_version,body) VALUES (?,?,?)")
     .run(input.groupId, 1, canonicalBytes(proposal).toString("utf8"));
+  if (preflight === null || estimateId === null) return { estimateId: null, preflight: null };
   const estimate = {
     estimateId, estimateVersion: 1, state: preflight.state,
     profile: estimatorProfile === null ? null : { profileId: input.estimatorProfileId, profileHash: input.estimatorProfileHash }, mode: input.estimateMode,
@@ -367,7 +378,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   deps.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)")
     .run(input.groupId, estimateId, 1, preflight.state, canonicalBytes(estimate).toString("utf8"));
   persistEstimateArtifacts(deps.store, input.groupId, estimateId, preflight);
-  if (preflight.state === "queued") {
+  if (queued) {
     const wakeId = `scheduler-wake:${input.groupId}:estimate:${estimateId}`;
     deps.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?, 'budget-estimate', ?, 0)")
       .run(wakeId, input.groupId, JSON.stringify({ groupId: input.groupId, estimateId, planHash }));

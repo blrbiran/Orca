@@ -55,6 +55,20 @@ describe("archive-group and unarchive-group (issue-fixes spec §6.3)", () => {
     } finally { await h.dispose(); }
   });
 
+  it("a never-estimated draft archives", async () => {
+    const h = await webFixture();
+    try {
+      h.importDeferred("d");
+      const service = new WebControlService(h.deps);
+      expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM estimates WHERE group_id='d'").get()!.n).toBe(0);
+      const result = service.archiveGroup(h.rawCommand("archive-d", 1, "archive-group", { kind: "group", groupId: "d" }, {}) as never);
+      if ("error" in result || result.result.kind !== "archived") throw new Error(JSON.stringify(result));
+      expect(result.result.groupId).toBe("d");
+      expect(body(h, "d").archived).toEqual({ at: result.result.at, actor: "human" });
+      expect(readGroupSummary(h.store, "d").archived).toBe(true);
+    } finally { await h.dispose(); }
+  });
+
   it("unarchive removes the mark and writes an unarchived row; unarchiving a group that is not archived is a no-op refusal", async () => {
     const { h, service } = await confirmed();
     try {

@@ -8,14 +8,15 @@ import { writeArtifact } from "../../src/control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { recordActivity } from "../../src/control/activity.js";
 import { persistRecoveryArtifact } from "../../src/control/savedResultRecoveryPackage.js";
-import { lookupCommandResult } from "../../src/control/commandLedger.js";
+import { lookupCommandResult, updateRevision } from "../../src/control/commandLedger.js";
 import { createGroup } from "../../src/control/commands.js";
 import { prepareExecutionSnapshot, type PreparedExecutionSnapshot } from "../../src/control/executionSnapshot.js";
-import { importControlPlan, prepareEstimatorSlot, type ImportCommand } from "../../src/control/planImport.js";
+import { importControlPlan, normalizeControlPlan, prepareEstimatorSlot, writeImportedPlan, type ImportCommand } from "../../src/control/planImport.js";
 import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
 import { recordProjectionChange, readProjectionState } from "../../src/control/projectionJournal.js";
 import { writeCanonicalRecord } from "../../src/control/snapshot.js";
+import { readSchedulerControlPlanSource } from "../../src/scheduler/planFile.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
 import type {
   BudgetEstimateV1,
@@ -77,6 +78,8 @@ interface Harness {
   session: Session;
   server: Server;
   disposeStore(): Promise<void>;
+  /** Task 5: imports the plan as a group with no estimate queued (a debug group's import). */
+  importDeferred(groupId: string): void;
 }
 
 async function setup(): Promise<Harness> {
@@ -153,7 +156,9 @@ async function setup(): Promise<Harness> {
   if (!address || typeof address === "string") throw new Error("test server has no port");
   const url = `http://127.0.0.1:${address.port}`;
   seedUser(join(h.root, "accounts"), "tester");
-  return { root: h.root, store: h.store, trustedConfig, profileHash: frozen.profileHash, url, session: await login(url), server, disposeStore: async () => { auth.close(); await h.dispose(); } };
+  return { root: h.root, store: h.store, trustedConfig, profileHash: frozen.profileHash, url, session: await login(url), server,
+    importDeferred: (groupId) => { writeImportedPlan(deps, { groupId, repoId: "repo", planId: "plan", plan: normalizeControlPlan({ ...readSchedulerControlPlanSource(trustedConfig.resolveTarget({ repoId: "repo", planId: "plan" })), repoId: "repo", planId: "plan" }), actorId: "operator", commandId: `import-${groupId}`, estimatorProfileId: "estimator", estimatorProfileHash: frozen.profileHash, estimateMode: "strict" }, null, { estimate: "deferred" }); updateRevision(h.store, groupId, 1); recordProjectionChange(h.store, [groupId]); },
+    disposeStore: async () => { auth.close(); await h.dispose(); } };
 }
 
 async function request(h: Harness, path: string, authenticated = true, init: RequestInit = {}) {
@@ -362,6 +367,18 @@ describe("canonical control read API", () => {
     for (let index = 0; index < 66; index += 1) recordProjectionChange(h.store, ["group-a"]);
     const gap = await request(h, "/api/control/summary?sinceChangeSeq=0");
     expect(await gap.json()).toMatchObject({ resetRequired: true, groups: [{ groupId: "group-a" }, { groupId: "group-b" }] });
+  });
+
+  it("a never-estimated group renders", async () => {
+    h.importDeferred("group-debug");
+    const response = await request(h, "/api/control/groups/group-debug");
+    expect(response.status).toBe(200);
+    const view = await response.json() as GroupViewV1;
+    expect(view.estimates).toEqual([]);
+    expect(view.summary).toMatchObject({ groupId: "group-debug", state: "draft" });
+    expect(view.workItems.map(item => item.taskId)).toEqual(["a", "b"]);
+    const summary = await request(h, "/api/control/summary");
+    expect((await summary.json() as ControlSummaryV1).groups.map(group => group.groupId)).toContain("group-debug");
   });
 
   it("reloads confirmed profiles, snapshot hashes, estimate output, and paused state without exposing trusted paths", async () => {

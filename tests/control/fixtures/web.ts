@@ -5,7 +5,10 @@ import { vi } from "vitest";
 import { openTestStore } from "./store.js";
 import { createAdmissionGate } from "../../../src/control/admissionGate.js";
 import { resolveProfile, createExecutionProfileRouter } from "../../../src/control/profiles.js";
-import { importControlPlan, prepareEstimatorSlot, type ImportCommand } from "../../../src/control/planImport.js";
+import { recordProjectionChange } from "../../../src/control/projectionJournal.js";
+import { updateRevision } from "../../../src/control/commandLedger.js";
+import { importControlPlan, normalizeControlPlan, prepareEstimatorSlot, writeImportedPlan, type ImportCommand } from "../../../src/control/planImport.js";
+import { readSchedulerControlPlanSource } from "../../../src/scheduler/planFile.js";
 import { canonicalBytes } from "../../../src/control/canonicalJson.js";
 import { resolveGroupSelections } from "../../../src/control/agentFreeze.js";
 import { readArchivedPlan, readBudgetProposal } from "../../../src/control/queries.js";
@@ -132,7 +135,15 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   const confirmPayload = async (): Promise<ConfirmPayload> => ({ planHash: readArchivedPlan(h.store, "g").planHash, proposalVersion: readBudgetProposal(h.store, "g").proposalVersion, budgetMode: "strict",
     profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: frozen.profileHash, worker: frozen.profileHash, handoff: frozen.profileHash, goalReview: frozen.profileHash }, contextPolicy: { handoffAtContextTokens: 800_000 },
     selectionsHash: (await resolveGroupSelections({ store: h.store, port }, "g", "human")).selectionsHash ?? "0".repeat(64) });
-  return { ...h, deps, frozen, accept, imported, command, taskCommand, runCommand, rawCommand: raw, confirmPayload, estimateId: imported.result.estimateId, setObserved: (value: typeof observed) => { observed = value; }, asked, resolveAgent };
+  /** Task 5: imports the same plan as a second group with no estimate queued (a debug group's import), outside any command ledger row (its revision is set as a command would). */
+  const importDeferred = (groupId: string) => {
+    const plan = normalizeControlPlan({ ...readSchedulerControlPlanSource(trustedConfig.resolveTarget()), repoId: "repo", planId: "plan" });
+    const written = writeImportedPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null, resolution: prepared.observation.resolution }) },
+      { groupId, repoId: "repo", planId: "plan", plan, actorId: "human", commandId: `import-${groupId}`, estimatorProfileId: "all", estimatorProfileHash: frozen.profileHash, estimateMode: "soft" }, null, { estimate: "deferred" });
+    updateRevision(h.store, groupId, 1); recordProjectionChange(h.store, [groupId]); // what applyWebCommand does after a command's apply: a group row is never read at revision 0
+    return written;
+  };
+  return { ...h, deps, frozen, accept, imported, importDeferred, command, taskCommand, runCommand, rawCommand: raw, confirmPayload, estimateId: imported.result.estimateId, setObserved: (value: typeof observed) => { observed = value; }, asked, resolveAgent };
 }
 
 /** Controller-approved historical mutable rows: old finite ceilings, reservations and policy tags; frozen source bytes stay exact. */

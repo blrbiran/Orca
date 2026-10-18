@@ -4,9 +4,11 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
-import { estimatorSlotFor, importControlPlan, importControlPlanAsync, type ImportCommand } from "../../src/control/planImport.js";
+import { estimatorSlotFor, importControlPlan, importControlPlanAsync, normalizeControlPlan, writeImportedPlan, type ImportCommand } from "../../src/control/planImport.js";
 import { readArchivedContract, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
+import { readSchedulerControlPlanSource } from "../../src/scheduler/planFile.js";
+import { ESTIMATE_GRANT } from "../../src/control/estimator.js";
 import { createTrustedControlConfig } from "../../src/panel/controlConfig.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
 import type { ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.js";
@@ -702,7 +704,7 @@ describe("plan task labels through the import (labels and progress spec §2.3, c
       const h = await setup();
       try {
         const imported = run(h);
-        if (!("result" in imported as object)) throw new Error(`${name}: import refused`);
+        if (!("result" in (imported as object))) throw new Error(`${name}: import refused`);
         const dump: Record<string, unknown[]> = {};
         for (const table of tables) {
           const rows = h.store.db.prepare(`SELECT * FROM ${table}`).all().map(row => JSON.parse(JSON.stringify(row, (_k, v) => typeof v === "string" ? v.split(h.root).join("<root>") : v)) as unknown);
@@ -713,5 +715,36 @@ describe("plan task labels through the import (labels and progress spec §2.3, c
     }
     if (process.env.ORCA_WRITE_IMPORT_GOLDEN === "1") await writeFile(goldenPath, `${JSON.stringify(actual, null, 2)}\n`);
     expect(actual).toEqual(JSON.parse(await readFile(goldenPath, "utf8")));
+  });
+
+  it("a deferred import writes no estimate and reserves nothing anywhere else", async () => {
+    const h = await setup();
+    try {
+      const body = (id: string) => JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(id)!.body)) as { ledger: { committedRemaining: { tokens: number; activeMs: number }; explicitUnallocatedReserve: { tokens: number | null; activeMs: number } }; estimatorSlot: unknown };
+      const count = (sql: string, ...args: string[]) => Number(h.store.db.prepare(sql).get(...args)!.n);
+      // The comparison imports: one blocked (never queued, so its reserve holds ESTIMATE_GRANT back as unallocated) and one queued.
+      importControlPlan({ ...h.deps, estimatorObservation: (selected) => {
+        const observation = h.deps.estimatorObservation(selected);
+        return { ...observation, resolution: { ...observation.resolution, singleCallExecution: null } };
+      } }, command("blocked", "import-blocked"));
+      importControlPlan(h.deps, command("queued", "import-queued"));
+      const wakesBefore = count("SELECT COUNT(*) AS n FROM scheduler_wakes");
+      const outboxBefore = count("SELECT COUNT(*) AS n FROM outbox");
+      const plan = normalizeControlPlan({ ...readSchedulerControlPlanSource(h.trustedConfig.resolveTarget({ repoId: "repo", planId: "plan" })), repoId: "repo", planId: "plan" });
+      const written = writeImportedPlan(h.deps, { groupId: "deferred", repoId: "repo", planId: "plan", plan, actorId: "operator", commandId: "import-deferred",
+        estimatorProfileId: "estimator", estimatorProfileHash: h.frozen.profileHash, estimateMode: "strict" }, null, { estimate: "deferred" });
+      expect(written).toEqual({ estimateId: null, preflight: null });
+      expect(count("SELECT COUNT(*) AS n FROM estimates WHERE group_id=?", "deferred")).toBe(0);
+      expect(count("SELECT COUNT(*) AS n FROM scheduler_wakes")).toBe(wakesBefore);
+      expect(count("SELECT COUNT(*) AS n FROM outbox")).toBe(outboxBefore);
+      const deferred = body("deferred"), blocked = body("blocked"), queued = body("queued");
+      expect(deferred.estimatorSlot).toBeNull();
+      expect(deferred.ledger.explicitUnallocatedReserve).toEqual(blocked.ledger.explicitUnallocatedReserve);
+      expect(deferred.ledger.committedRemaining).toEqual(blocked.ledger.committedRemaining);
+      // committedRemaining excludes ESTIMATE_GRANT: the queued import holds exactly one more grant of tokens there.
+      expect(queued.ledger.committedRemaining.tokens - deferred.ledger.committedRemaining.tokens).toBe(ESTIMATE_GRANT.tokens);
+      // The token ceiling is optional in this store (null), so the reserve is compared on a dimension that is finite.
+      expect(deferred.ledger.explicitUnallocatedReserve.activeMs - queued.ledger.explicitUnallocatedReserve.activeMs).toBe(ESTIMATE_GRANT.activeMs);
+    } finally { await h.dispose(); }
   });
 });
