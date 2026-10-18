@@ -905,8 +905,12 @@ consumer below must filter itself. Panel routes: `POST /api/reviews/withdraw`, `
 (`src/panel/api.ts`).
 
 1. **Task 6 (`correction-debug-open`): refuse a withdrawn correction.** Read the withdrawals in the verb's guard
-   order, beside `readCorrections`, and refuse with `correction-withdrawn` (code already defined by the withdraw
-   plan; register its en/zh copy here only if it is not yet in `src/control/errors.ts` and the locales). Task 3
+   order, beside `readCorrections`, and refuse with `correction-withdrawn`. The constant exists
+   (`CORRECTION_WITHDRAWN` in `src/corrections/withdrawals.ts`), but the code is NOT registered in
+   `src/control/errors.ts` and has no en/zh copy (measured on this branch: `grep -c correction-withdrawn` gives 0 for
+   `src/control/errors.ts`, `web/src/locales/en.ts` and `web/src/locales/zh.ts`). Task 6 must register it in
+   `src/control/errors.ts` and add its en and zh entries to the locales' error tables; this is required, not
+   conditional. Task 3
    (`debugInput.ts`) takes `correctionsDir` already; it must not freeze the input of a withdrawn correction, so the
    refusal belongs in Task 6 before Task 3's freeze is called.
 2. **Task 6 + the withdraw route: archive an unstarted debug group.** On withdraw, if `debugGroupIds(store, id)` has a
