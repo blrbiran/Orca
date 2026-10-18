@@ -135,10 +135,30 @@ export const fetchDecisions = (): Promise<{ rows: DecisionStatusRow[] }> =>
  * `detailUrl` (web cannot import it, so it is repeated here verbatim rather
  * than through a shared constant).
  */
-export const fetchDecision = (projectKey: string, decisionId: string): Promise<{ decision: unknown }> =>
-  getJson<{ decision: unknown }>(
+export const fetchDecision = (projectKey: string, decisionId: string): Promise<{ decision: unknown; review?: DecisionReviewState }> =>
+  getJson<{ decision: unknown; review?: DecisionReviewState }>(
     `/api/decision?projectKey=${encodeURIComponent(projectKey)}&decisionId=${encodeURIComponent(decisionId)}`,
   );
+
+/**
+ * Decisions review withdraw spec §4.4 / §5.3 / §7: what GET /api/decision answers beside the decision (src/panel/api.ts's
+ * `DecisionReviewState`, repeated here because web cannot import it). "Mine" is the panel's recording identity (§10.3).
+ */
+export interface DecisionReviewState {
+  reviewers: Array<{ by: string; at: string }>;
+  mine: "reviewed" | "none";
+  corrections: Array<{
+    id: string;
+    kind: CorrectionKind;
+    because: string;
+    chose_instead?: string;
+    by: string;
+    at: string;
+    state: "open" | "withdrawn" | "closed";
+    mine: boolean;
+    withdrawable: boolean;
+  }>;
+}
 
 export interface RecordCorrectionInput {
   projectKey: string;
@@ -181,6 +201,14 @@ export const recordCorrection = (input: RecordCorrectionInput): Promise<PostResu
 /** POST /api/reviews -- src/panel/api.ts. The explicit "I reviewed this" act. */
 export const recordReview = (projectKey: string, decisionId: string): Promise<PostResult<unknown>> =>
   postJson("/api/reviews", { projectKey, decisionId });
+
+/** POST /api/reviews/withdraw -- src/panel/api.ts, spec §4.4. Appends a `withdrawn` row; never edits a review. */
+export const withdrawReview = (projectKey: string, decisionId: string): Promise<PostResult<{ result: "written" | "duplicate" }>> =>
+  postJson("/api/reviews/withdraw", { projectKey, decisionId });
+
+/** POST /api/corrections/withdraw -- src/panel/api.ts, spec §5.5. Appends a withdrawal; corrections.jsonl is untouched. */
+export const withdrawCorrection = (correctionId: string): Promise<PostResult<unknown>> =>
+  postJson("/api/corrections/withdraw", { correctionId });
 
 /** GET /api/chains -- src/panel/chains.ts. */
 export const fetchChains = (): Promise<{ repos: ChainRepoView[] }> => getJson<{ repos: ChainRepoView[] }>("/api/chains");

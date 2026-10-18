@@ -10,13 +10,15 @@
 import type { PanelRefusal, RecordCorrectionInput } from "./api.js";
 import { correctionKey } from "./detailDrafts.js";
 
-export type RecordedKey = "decisions.recordedReviewed" | "decisions.correctionRecorded";
+export type RecordedKey =
+  | "decisions.recordedReviewed" | "decisions.correctionRecorded" | "decisions.reviewWithdrawn" | "decisions.correctionWithdrawn";
 export type RequestStatus = { kind: "pending" } | { kind: "recorded"; text: RecordedKey } | { kind: "refused"; refusal: PanelRefusal };
 export interface DecisionRequest {
   requestId: string; // browser correlation token only (spec §11 R3)
   owner: { projectKey: string; decisionId: string };
-  verb: "agree" | "correct";
-  payload: RecordCorrectionInput | null; // an independent copy; null for agree
+  // Decisions review withdraw spec §7: the two withdrawals are request records too, owned by the decision they act on.
+  verb: "agree" | "correct" | "withdraw-review" | "withdraw-correction";
+  payload: RecordCorrectionInput | null; // an independent copy; null for agree and both withdrawals (nothing to record again)
   status: RequestStatus;
   dismissed: boolean;
 }

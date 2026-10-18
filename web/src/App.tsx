@@ -47,8 +47,10 @@ import {
   requestChainStart,
   requestChainStop,
   startChainBody,
+  withdrawCorrection,
+  withdrawReview,
 } from "./api.js";
-import type { CorrectionForm, PanelRefusal, RecordCorrectionInput } from "./api.js";
+import type { CorrectionForm, DecisionReviewState, PanelRefusal, RecordCorrectionInput } from "./api.js";
 import { bannersFor, readDismissed, writeDismissed } from "./chainBanner.js";
 import { ChainBanners, ChainPanel } from "./ChainPanel.js";
 import { readShowAdvanced, writeShowAdvanced } from "./advancedPreference.js";
@@ -212,7 +214,10 @@ export function App(): JSX.Element {
   /** A body belongs to the read that accepted it, never merely to a reused detail wrapper. */
   const [acceptedDecision, setAcceptedDecision] = useState<{
     owner: Pick<DecisionListRow, "projectKey" | "id">; body: Decision; identity: string; request: number | null;
+    review?: DecisionReviewState;
   } | null>(null);
+  /** Decisions review withdraw spec §7: bumped after a recorded Agree / Correct / withdrawal to read the open detail again. */
+  const [detailRefresh, setDetailRefresh] = useState(0);
   const [overviewDecisionRead, setOverviewDecisionRead] = useState<{
     owner: DecisionListRow; identity: string; request: number;
   } | null>(null);
@@ -892,6 +897,7 @@ export function App(): JSX.Element {
     && acceptedDecision.identity === sourceIdentity && acceptArrival(selected, acceptedDecision.owner)
     && (overviewDecisionRead === null || acceptedDecision.request === overviewDecisionRead.request)
     ? acceptedDecision.body : null;
+  const decisionReview = decision !== null ? acceptedDecision?.review : undefined;
   const openDecisionRow = (row: DecisionIdentity): void => {
     navigationSeq.current++; setOverviewFocus(null); setOverviewDecisionRead(null); setSelected(row);
   };
@@ -929,7 +935,7 @@ export function App(): JSX.Element {
         (body) => {
           if (!current()) return;
           setStatus("unreviewed"); setFilter(NO_FILTER); setSelected(row);
-          setAcceptedDecision({ owner: row, body: body.decision as Decision, identity, request });
+          setAcceptedDecision({ owner: row, body: body.decision as Decision, identity, request, review: body.review });
           finish("decisions");
         },
         () => {
@@ -1176,7 +1182,7 @@ export function App(): JSX.Element {
       try {
         const body = await fetchDecision(selected.projectKey, selected.id);
         if (!live || identity !== sourceIdentityNow.current || !acceptArrival(wanted.current, selected)) return;
-        setAcceptedDecision({ owner: selected, body: body.decision as Decision, identity, request: null });
+        setAcceptedDecision({ owner: selected, body: body.decision as Decision, identity, request: null, review: body.review });
       } catch (err) {
         if (!live || identity !== sourceIdentityNow.current || !acceptArrival(wanted.current, selected)) return;
         setError(failureFrom(err));
@@ -1184,6 +1190,30 @@ export function App(): JSX.Element {
     })();
     return () => { live = false; };
   }, [selected, sourceIdentity, overviewDecisionRead]);
+
+  /**
+   * Decisions review withdraw spec §7: after a recorded request the open detail is read again IN PLACE -- the body on
+   * screen stays until the new one lands, so the inline result under it never blinks -- and the new answer is kept
+   * only while the same decision is still the wanted one (the rule above). The read that opened it keeps its
+   * `request`, so an Overview-opened detail stays shown.
+   */
+  useEffect(() => {
+    if (detailRefresh === 0 || selected === null) return;
+    const owner = selected, identity = sourceIdentityNow.current;
+    let live = true;
+    void (async () => {
+      try {
+        const body = await fetchDecision(owner.projectKey, owner.id);
+        if (!live || identity !== sourceIdentityNow.current || !acceptArrival(wanted.current, owner)) return;
+        setAcceptedDecision((prior) => prior === null || prior.identity !== identity || !acceptArrival(prior.owner, owner)
+          ? prior : { ...prior, body: body.decision as Decision, review: body.review });
+      } catch (err) {
+        if (!live || identity !== sourceIdentityNow.current || !acceptArrival(wanted.current, owner)) return;
+        setError(failureFrom(err));
+      }
+    })();
+    return () => { live = false; };
+  }, [detailRefresh]);
 
   /**
    * Spec §11 R3: send one Agree or Correct as its own request record (owner, verb, a copy of the exact payload) and
@@ -1213,6 +1243,35 @@ export function App(): JSX.Element {
       setReviewedThisSession((n) => n + 1);
       await Promise.all([readTodo(), loadHome()]);
       if (verb === "agree" && advanceFrom !== undefined) setPendingAdvance(advanceFrom);
+      setDetailRefresh((n) => n + 1);
+    } catch (err) {
+      setDecisionRequests((all) => settleRequest(all, requestId, { kind: "refused", refusal: failureFrom(err) }));
+    }
+  };
+  /**
+   * Decisions review withdraw spec §7 / §10.1: a withdrawal is a request record like Agree / Correct, but it never
+   * advances -- the decision stays open, the lists and coverage are re-read, and its detail is read again so the
+   * withdrawal shows. It is not a review, so the session count does not move.
+   */
+  const submitWithdraw = async (
+    owner: { projectKey: string; decisionId: string },
+    withdrawal: { verb: "withdraw-review" } | { verb: "withdraw-correction"; correctionId: string },
+  ): Promise<void> => {
+    const requestId = nextCommandId();
+    setDecisionRequests((all) => startRequest(all, { requestId, owner, verb: withdrawal.verb, payload: null }));
+    try {
+      const result = withdrawal.verb === "withdraw-review"
+        ? await withdrawReview(owner.projectKey, owner.decisionId)
+        : await withdrawCorrection(withdrawal.correctionId);
+      if (!result.ok) {
+        const { ok: _ok, ...refusal } = result;
+        setDecisionRequests((all) => settleRequest(all, requestId, { kind: "refused", refusal }));
+        return;
+      }
+      const text = withdrawal.verb === "withdraw-review" ? "decisions.reviewWithdrawn" : "decisions.correctionWithdrawn";
+      setDecisionRequests((all) => settleRequest(all, requestId, { kind: "recorded", text }));
+      await Promise.all([readTodo(), loadHome()]);
+      setDetailRefresh((n) => n + 1);
     } catch (err) {
       setDecisionRequests((all) => settleRequest(all, requestId, { kind: "refused", refusal: failureFrom(err) }));
     }
@@ -1260,6 +1319,8 @@ export function App(): JSX.Element {
         // keep a duplicate review, and the session count would count it twice).
         const record = inlineRequest(decisionRequests, selected);
         if (record?.status.kind === "pending" || (record?.status.kind === "recorded" && record.verb === "agree")) return;
+        // Spec §7: nor while the open detail reads reviewed -- the Agree button is disabled then, and so is its key.
+        if (decisionReview?.mine === "reviewed") return;
         event.preventDefault();
         void submitDecision({ projectKey: selected.projectKey, decisionId: selected.id }, "agree", null, undefined, { reviewed: selected, before: visibleDecisionRows });
       } else if (action === "correct") {
@@ -1296,6 +1357,13 @@ export function App(): JSX.Element {
         onCorrect={(form) => {
           const owner = { projectKey: selected.projectKey, decisionId: selected.id };
           void submitDecision(owner, "correct", correctionBody(owner, form), form);
+        }}
+        review={decisionReview}
+        onWithdrawReview={() => {
+          void submitWithdraw({ projectKey: selected.projectKey, decisionId: selected.id }, { verb: "withdraw-review" });
+        }}
+        onWithdrawCorrection={(correctionId) => {
+          void submitWithdraw({ projectKey: selected.projectKey, decisionId: selected.id }, { verb: "withdraw-correction", correctionId });
         }}
       />
       </div>

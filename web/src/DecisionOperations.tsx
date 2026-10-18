@@ -10,6 +10,14 @@ import { useTranslation } from "react-i18next";
 import type { DecisionRequest } from "./decisionRequests.js";
 import { refusalText } from "./i18n.js";
 
+/** Each verb's line names it by the button that sent it. */
+const VERB_LABEL = {
+  agree: "decisions.agree",
+  correct: "decisions.correct",
+  "withdraw-review": "decisions.withdrawReview",
+  "withdraw-correction": "decisions.withdraw",
+} as const satisfies Record<DecisionRequest["verb"], string>;
+
 export function DecisionOperations({
   requests,
   projectName,
@@ -31,7 +39,7 @@ export function DecisionOperations({
           const status = record.status.kind === "pending"
             ? t("decisions.operationPending")
             : record.status.kind === "recorded" ? t(record.status.text) : t("decisions.operationRefused");
-          const verb = t(record.verb === "agree" ? "decisions.agree" : "decisions.correct");
+          const verb = t(VERB_LABEL[record.verb]);
           return (
             <li key={record.requestId}>
               <p data-testid="operation-line">{t("decisions.operationLine", { ...names, verb, status })}</p>

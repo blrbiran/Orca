@@ -20,11 +20,16 @@
  * The first paragraph is no longer true of `question`: the list row now carries it
  * (panel UI redesign spec §2). `chose`, `because` and the alternatives are still
  * withheld from the list and appear only here. Text above kept verbatim.
+ *
+ * *** ERRATUM (2026-10-18, session b304f167, decisions review withdraw spec §7) ***
+ * `onAgree` / `onCorrect` are no longer the only interaction: with `review` (GET /api/decision's review state) the
+ * detail lists who has it reviewed and every correction on it, and offers `onWithdrawReview` / `onWithdrawCorrection`
+ * exactly where the server would accept them. Agree stays the one primary, disabled once the viewer has it reviewed.
  */
 import { useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
-import type { CorrectionForm } from "./api.js";
+import type { CorrectionForm, DecisionReviewState } from "./api.js";
 import { enumText } from "./i18n.js";
 import { en } from "./locales/en.js";
 import { WEB_CORRECTION_KINDS } from "./types.js";
@@ -66,17 +71,26 @@ export function DecisionDetail({
   onCorrect,
   draft,
   onDraft,
+  review,
+  onWithdrawReview,
+  onWithdrawCorrection,
 }: {
   decision: Decision;
   onAgree?: () => void;
   onCorrect?: (form: CorrectionForm) => void;
   draft?: CorrectionForm;
   onDraft?: (form: CorrectionForm) => void;
+  review?: DecisionReviewState;
+  onWithdrawReview?: () => void;
+  onWithdrawCorrection?: (id: string) => void;
 }): JSX.Element {
   const { t } = useTranslation();
   const [own, setOwn] = useState<CorrectionForm>(EMPTY_CORRECTION);
   const form = onDraft === undefined ? own : draft ?? EMPTY_CORRECTION;
   const edit = (change: Partial<CorrectionForm>): void => (onDraft ?? setOwn)({ ...form, ...change });
+  const reviewed = review?.mine === "reviewed";
+  // Spec §4.4: an own open correction holds the review, so the server would refuse its withdrawal; do not offer it.
+  const canWithdrawReview = reviewed && !review.corrections.some((c) => c.mine && c.state === "open");
   return (
     <article className="decision-detail">
       <p className="row-id">{decision.id}</p>
@@ -110,9 +124,49 @@ export function DecisionDetail({
           </ul>
         </div>
       )}
+      {review !== undefined && review.reviewers.length > 0 && (
+        <div className="detail-block" data-tone="ok" data-testid="decision-reviewers">
+          <h3>{t("decisions.reviewersTitle")}</h3>
+          <ul className="reviewers">
+            {review.reviewers.map((r) => (
+              <li key={r.by}>
+                {r.by} · <time dateTime={r.at}>{r.at}</time>
+              </li>
+            ))}
+          </ul>
+          {canWithdrawReview && (
+            <button type="button" onClick={onWithdrawReview}>
+              {t("decisions.withdrawReview")}
+            </button>
+          )}
+        </div>
+      )}
+      {review !== undefined && review.corrections.length > 0 && (
+        <div className="detail-block" data-testid="decision-corrections">
+          <h3>{t("decisions.correctionsTitle")}</h3>
+          <ul className="corrections">
+            {review.corrections.map((c) => (
+              <li
+                key={c.id}
+                data-correction-id={c.id}
+                className={c.state === "withdrawn" ? "correction-withdrawn" : undefined}
+                data-tone={c.state === "closed" ? "ok" : undefined}
+              >
+                {enumText("correctionKind", c.kind)} · {c.because} · {c.by} · <time dateTime={c.at}>{c.at}</time> ·{" "}
+                <span className="correction-state">{t(`decisions.correctionState.${c.state}`)}</span>
+                {c.withdrawable && (
+                  <button type="button" onClick={() => onWithdrawCorrection?.(c.id)}>
+                    {t("decisions.withdraw")}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="actions">
-        <button type="button" className="btn-primary" onClick={onAgree}>
-          {t("decisions.agree")}
+        <button type="button" className="btn-primary" onClick={onAgree} disabled={reviewed}>
+          {reviewed ? t("decisions.agreeDone") : t("decisions.agree")}
         </button>
         <p className="detail-help">{t("decisions.agreeHelp")}</p>
         <form

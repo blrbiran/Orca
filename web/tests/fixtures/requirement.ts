@@ -17,7 +17,9 @@ const amount = (tokens: number): Amount => ({ tokens, activeMs: 0, attempts: 0, 
 const ROUND_ONE: ClarifyResultV1 = {
   slug: "markdown-export",
   statement: "People can export a note as Markdown.",
-  acceptanceCriteria: [{ id: "AC1", text: "An exported note opens as Markdown." }],
+  // Not "opens": requirementsI18n's pseudo-locale check reads any English value as a substring, and the decisions
+  // detail's correction state "open" (decisions review withdraw spec §7) would then match this data, not a leftover.
+  acceptanceCriteria: [{ id: "AC1", text: "An exported note reads as Markdown." }],
   questions: [
     { id: "R1.Q1", key: "format", question: "Which Markdown flavour?", recommendedAnswer: "CommonMark", why: "Most readers accept it.", dependsOn: [] },
     { id: "R1.Q2", key: "images", question: "Are images exported?", recommendedAnswer: "As links", why: "It keeps one output per note.", dependsOn: ["R1.Q1"] },

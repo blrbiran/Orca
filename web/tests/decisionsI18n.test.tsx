@@ -11,6 +11,9 @@ import { App } from "../src/App.js";
 import { DecisionDetail } from "../src/DecisionDetail.js";
 import type { Decision } from "../src/DecisionDetail.js";
 import { DecisionsView, NO_FILTER } from "../src/DecisionsView.js";
+import { DecisionOperations } from "../src/DecisionOperations.js";
+import type { DecisionReviewState } from "../src/api.js";
+import type { DecisionRequest, RecordedKey } from "../src/decisionRequests.js";
 import type { DecisionListRow, MetricsReport, PanelCoverage } from "../src/types.js";
 
 const ROW: DecisionListRow = { projectKey: "github.com/x/y", id: "run/1", at: "2026-09-16T00:00:00.000Z", kind: "reconcile", scope: "cross-repo", verdict: "downgraded", question: null };
@@ -75,6 +78,55 @@ describe("the decisions area in Chinese", () => {
     const unopened = render(<DecisionsView rows={[ROW]} filter={NO_FILTER} />).container;
     expect(unopened.querySelector(".split-detail .empty")?.textContent).toBe("选择一条决策来阅读。");
   });
+});
+
+// ---- Decisions review withdraw spec §7: the review state, the corrections and the withdraw outcomes in both languages. ----
+
+const REVIEW_STATE: DecisionReviewState = {
+  reviewers: [{ by: "me", at: "2026-10-18T01:00:00.000Z" }],
+  mine: "reviewed",
+  corrections: [
+    { id: "c-open", kind: "wrong", because: "b-open", by: "me", at: "2026-10-18T02:00:00.000Z", state: "open", mine: true, withdrawable: true },
+    { id: "c-withdrawn", kind: "stale", because: "b-w", by: "me", at: "2026-10-18T02:00:00.000Z", state: "withdrawn", mine: true, withdrawable: false },
+    { id: "c-closed", kind: "stale", because: "b-c", by: "me", at: "2026-10-18T02:00:00.000Z", state: "closed", mine: true, withdrawable: false },
+  ],
+};
+const NO_OPEN_OF_MINE: DecisionReviewState = { ...REVIEW_STATE, corrections: REVIEW_STATE.corrections.slice(1) };
+const withdrawRecord = (verb: DecisionRequest["verb"], text: RecordedKey): DecisionRequest => ({
+  requestId: verb, owner: { projectKey: "p", decisionId: "d" }, verb, payload: null, status: { kind: "recorded", text }, dismissed: false,
+});
+
+describe("the review state and withdraw words in each language", () => {
+  const cases = [
+    { lang: "zh", reviewedBy: "已审", corrections: "纠正", states: ["未关闭", "已撤回", "已关闭"], withdrawReview: "撤回审阅", withdraw: "撤回", agreeDone: "已审",
+      lines: ["p / d · 撤回审阅：已撤回审阅。", "p / d · 撤回：已撤回纠正。"] },
+    { lang: "en", reviewedBy: "Reviewed by", corrections: "Corrections", states: ["open", "withdrawn", "closed"], withdrawReview: "Withdraw review", withdraw: "Withdraw", agreeDone: "Reviewed",
+      lines: ["p / d · Withdraw review: Review withdrawn.", "p / d · Withdraw: Correction withdrawn."] },
+  ] as const;
+  for (const c of cases) {
+    it(`says them in ${c.lang}`, async () => {
+      await i18n.changeLanguage(c.lang);
+      const own = render(<DecisionDetail decision={DECISION} review={REVIEW_STATE} />).container;
+      // The two new blocks are reading blocks too, so they are h3s after the decision's own three.
+      expect(texts(own, ".decision-detail h3").slice(3)).toEqual([c.reviewedBy, c.corrections]);
+      expect(texts(own, ".correction-state")).toEqual([...c.states]);
+      expect(texts(own, "[data-correction-id] button")).toEqual([c.withdraw]);
+      expect(own.querySelector(".actions > button.btn-primary")?.textContent).toBe(c.agreeDone);
+      cleanup();
+      const none = render(<DecisionDetail decision={DECISION} review={NO_OPEN_OF_MINE} />).container;
+      expect(texts(none, '[data-testid="decision-reviewers"] button')).toEqual([c.withdrawReview]);
+      cleanup();
+      const notices = render(
+        <DecisionOperations
+          requests={[withdrawRecord("withdraw-review", "decisions.reviewWithdrawn"), withdrawRecord("withdraw-correction", "decisions.correctionWithdrawn")]}
+          projectName={(key) => key}
+          onDismiss={() => undefined}
+          onRecordAnother={() => undefined}
+        />,
+      ).container;
+      expect(texts(notices, '[data-testid="operation-line"]')).toEqual([...c.lines]);
+    });
+  }
 });
 
 // ---- The recorded outcome (App): it keeps its key, so the words follow a language switch (spec §3.3). ----
