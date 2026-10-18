@@ -87,9 +87,12 @@ describe("approving a pending decision is an owner's (control run decisions Task
     const route = "/api/control/groups/g/decisions/approve";
     const payload = { pendingId: "pending-run-x-0", undoHow: `git revert --no-edit ${"e".repeat(40)}` };
     const socket = await overSocket((panel as StartedPanel).socketPath!, "POST", route, { "x-orca-client": "cli:test" }, { commandId: "ad-a", expectedRevision: 0, payload });
-    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-verb-human-only"]);
     const member = await amy.fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "ad-m", expectedRevision: 0, payload }) });
-    expect([member.status, ((await member.json()) as { error: { code: string } }).error.code]).toEqual([403, "control-verb-human-only"]);
+    // One assertion over both principals, so a mutation shows each of them answered (mutation A1: VERB_ACCESS "any" -> both red).
+    expect({
+      socketAgent: [socket.status, JSON.parse(socket.text).error.code],
+      webMember: [member.status, ((await member.json()) as { error: { code: string } }).error.code],
+    }).toEqual({ socketAgent: [403, "control-verb-human-only"], webMember: [403, "control-verb-human-only"] });
     expect(commandIds(w.state).filter((id) => id.startsWith("ad-"))).toEqual([]);
     // The route is the verb's: an owner's is routed to the service, refused there by name and booked.
     const owner = await sessionFor(panel, w.env);
