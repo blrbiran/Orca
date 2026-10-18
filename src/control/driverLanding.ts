@@ -72,6 +72,8 @@ function landedWithPending(store: ControlStore, run: DriverRun): void {
   const closing = run.drive!.stagedDebugClosing ?? null;
   if (closing !== null) {
     const group = readGroup(store, run.groupId) as GroupWithMark;
+    // A staged record with no mark is unreachable: only debugClosingOf stages one, and only for a marked group (the mark
+    // is written once at open and never removed). The guard keeps a group body from gaining a bare `debug` field.
     if (readDebugMark(group) !== null) saveGroup(store, { ...group, debug: { ...group.debug, closing } } as typeof group);
   }
   run.drive = { ...run.drive!, stagedPending: [], stagedDebugClosing: null };

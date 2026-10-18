@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -6,6 +6,7 @@ import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson
 import { DEBUG_INPUT_SCHEMA, type DebugInputV1 } from "../../src/control/debugInput.js";
 import { driveRecordSchema } from "../../src/control/driveRecord.js";
 import { DriverCrash, createExecutionDriver, type ExecutionDriver } from "../../src/control/executionDriver.js";
+import { newGroupIntegration } from "../../src/control/integrationScheme.js";
 import type { PendingEntry } from "../../src/control/runLedger.js";
 import { writeCanonicalRecord } from "../../src/control/snapshot.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
@@ -202,6 +203,63 @@ describe("a debug run's landing commit closes its correction (plan Task 9)", () 
     } finally { await t.h.dispose(); }
   });
 
+  // Ruling C1 (b) with a real target ref (fix round 1): the group's `local` integration names refs/heads/main, the
+  // person's checkout is on another branch lacking the rows, and only main holds them. HEAD would say "not closed".
+  it("already closed by hand on the integration target ref writes nothing", async () => {
+    const correction = decisionCorrection({ chose_instead: "a file lease" });
+    let closedAt: string | null = null;
+    const t = await debugHarness({ correction }, { duringCollect: async () => {
+      if (closedAt !== null) return;
+      closedAt = commitFiles(t.repo, { [`.decisions/${fixRunIdOf(correction)}.jsonl`]: jsonl(...humanClosingRows(correction)) }, "orca correct --close");
+      git(t.repo, "checkout", "-q", "side");
+      // After A2, so the integration pass has had nothing to integrate; trigger `group`, so a landed task starts none.
+      const row = t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!;
+      const integration = newGroupIntegration({ delivery: "local", trigger: "group", method: "merge", target: "main" });
+      t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...JSON.parse(String(row.body)), integration }));
+    } }); try {
+      git(t.repo, "branch", "side");
+      const runId = await t.claim();
+      await t.until(t.driver(), () => t.body(runId).state === "landed");
+      expect(git(t.repo, "symbolic-ref", "HEAD")).toBe("refs/heads/side");
+      expect(inTree(t.repo, "HEAD", `.decisions/${fixRunIdOf(correction)}.jsonl`)).toBe(false);
+      // M-9.14: `ref = "HEAD"` hard-coded -> the rows are written, red.
+      expect(inTree(t.repo, t.body(runId).drive.landedCommit, `.decisions/${fixRunIdOf(correction)}.jsonl`)).toBe(false);
+      expect(closingOf(t)).toEqual({ state: "closed-by-human-first", commit: closedAt });
+      expect(git(t.repo, "rev-parse", "refs/heads/main")).toBe(closedAt);
+    } finally { await t.h.dispose(); }
+  });
+
+  // Fix round 1 (controller accepted call 3): a mark naming no stored frozen input is store damage, not a refusal.
+  it("a missing frozen input record blocks the run at D", async () => {
+    const correction = decisionCorrection({ chose_instead: "a file lease" });
+    const t = await debugHarness({ correction }); try {
+      const hash = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)).debug.inputHash;
+      expect(t.h.store.db.prepare("DELETE FROM execution_snapshots WHERE hash=?").run(hash).changes).toBe(1);
+      const runId = await t.claim();
+      await t.until(t.driver(), () => t.body(runId).state === "blocked");
+      const drive = t.body(runId).drive;
+      expect(drive.blockedAt).toBe("D");
+      expect(drive.landedCommit).toBe(null);
+      expect(drive.stagedDebugClosing).toBe(null);
+      expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(drive.base);
+      expect(closingOf(t)).toBe(null);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a frozen input naming neither a decision nor a pending entry blocks the run at D", async () => {
+    const correction = decisionCorrection({ chose_instead: "a file lease" });
+    const t = await debugHarness({ correction, decision: null, pending: null }); try {
+      const runId = await t.claim();
+      await t.until(t.driver(), () => t.body(runId).state === "blocked");
+      const drive = t.body(runId).drive;
+      expect(drive.blockedAt).toBe("D");
+      expect(drive.blockedReason).toContain("names neither a decision nor a pending entry");
+      expect(drive.landedCommit).toBe(null);
+      expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(drive.base);
+      expect(closingOf(t)).toBe(null);
+    } finally { await t.h.dispose(); }
+  });
+
   // Ruling C1 (a): the landing's own tree already holds the rows; named by the landing base, and nothing is appended.
   it("already closed in the landing tree writes nothing and names the landing base", async () => {
     const correction = decisionCorrection({ chose_instead: "a file lease" });
@@ -344,6 +402,41 @@ describe("the same through finishReconcile (plan Task 9)", { timeout: 60_000 }, 
       expect(git(t.repo, "show", `${drive.landedCommit}:shared.txt`)).toBe("A\nB");
       expect(closingOf(t).state).toBe("written");
       expect(existsSync(join(t.repo, ".decisions", `${fixRunIdOf(correction)}.jsonl`))).toBe(false);
+    } finally { await t.h.dispose(); }
+  });
+
+  // Fix round 1: a moved tip at R's swap sends the run back to collected and it reconciles again on the new tip; the
+  // first attempt's closing rows lived only in a merge that never landed.
+  it("a moved-tip retry of a reconciled landing writes the closing file once", async () => {
+    const correction = decisionCorrection({ chose_instead: "a file lease" });
+    const conflicting = [{ taskId: "a", targetPaths: ["shared.txt"] }, { taskId: "b", targetPaths: ["shared.txt"] }];
+    let moved: string | null = null;
+    const t = await driverHarness(conflicting, { files: (id) => ({ "shared.txt": id === "a" ? "A\n" : "B\n" }) }); try {
+      commitFiles(t.repo, { ".decisions/orig-run.jsonl": jsonl(ORIGINAL) }, "the original decision");
+      await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, files: { "shared.txt": "A\nB\n" } }));
+      const limit = readControlGroup(t.h.store, "epoch-test", "g").ledger.groupLimit;
+      const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: limit.tokens! + 10_000_000 } }));
+      if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
+      const ids = [await t.claim(), await t.claim()];
+      const reconciled = () => ids.find((id) => t.body(id).drive?.reconcile != null);
+      const driver = createExecutionDriver({ ...t.deps, beforeCas: async () => {
+        if (moved !== null || !ids.some((id) => t.body(id).state === "reconciling")) return;
+        const old = git(t.repo, "rev-parse", "refs/heads/orca/g");
+        moved = git(t.repo, "commit-tree", `${old}^{tree}`, "-p", old, "-m", "someone else");
+        git(t.repo, "update-ref", "refs/heads/orca/g", moved, old);
+      } });
+      await untilDeadline(driver, () => reconciled() !== undefined);
+      markGroup(t, { correction });
+      await untilDeadline(driver, () => ids.every((id) => [...LANDED, "blocked"].includes(t.body(id).state)));
+      const runId = reconciled()!;
+      const landed = t.body(runId).drive.landedCommit;
+      expect(moved).not.toBeNull();
+      // Two reconciliation spawns: the second finishReconcile is the one that landed.
+      expect(readFileSync(`${t.deps.agentsTablePath}.runs`, "utf8").trim().split("\n")).toHaveLength(2);
+      expect(git(t.repo, "rev-parse", `${landed}^1`)).toBe(moved);
+      expect(lines(t.repo, landed, `.decisions/${fixRunIdOf(correction)}.jsonl`).map((row) => row.ev)).toEqual(["decision", "overturned"]);
+      expect(closingOf(t).state).toBe("written");
+      expect(t.body(runId).drive.stagedDebugClosing).toBe(null);
     } finally { await t.h.dispose(); }
   });
 });
