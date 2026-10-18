@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { hasPath } from "../../src/control/driverLanding.js";
 import { DriverCrash, createExecutionDriver } from "../../src/control/executionDriver.js";
 import { listPendingDecisions } from "../../src/control/pendingDecisions.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
@@ -108,6 +109,34 @@ describe("E: an empty result's decisions land in a ledger-only commit (control r
       expect(git(t.repo, "rev-parse", BRANCH)).toBe(ledger); // mutation E4: treat a moved tip as swapped -> red
       expect(git(t.repo, "rev-parse", `${ledger}^1`)).toBe(moved);
       expect(ledgerIds(t.repo, ledger, runId)).toEqual([`${runId}/agent-0`]);
+    } finally { await t.h.dispose(); }
+  }, 30000);
+
+  it("waits without committing while a sibling run of the group is reconciling, then commits", async () => {
+    // Final review I1: a ledger-only commit now would move orca/<g> under the paid reconciliation, as a D landing would.
+    const t = await driverHarness([{ taskId: "a" }], { files: () => ({}), decisions: () => [good()] }); try {
+      const runId = await t.claim();
+      t.h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('run-sibling','g','sibling',1,1,?)").run(JSON.stringify({ state: "reconciling" }));
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "landed");
+      for (let i = 0; i < 3; i += 1) await driver.round();
+      // mutation I1-E: drop the reconciling guard in E -> the ledger-only commit moves the branch, red
+      expect(git(t.repo, "rev-parse", BRANCH)).toBe(t.body(runId).drive.base);
+      expect([t.body(runId).state, t.body(runId).drive.ledgerCommit]).toEqual(["landed", null]);
+      t.h.store.db.prepare("UPDATE runs SET active=0 WHERE id='run-sibling'").run();
+      await t.until(driver, () => t.body(runId).drive?.cleanedUp === true);
+      expect(t.body(runId).drive.ledgerCommit).toBe(git(t.repo, "rev-parse", BRANCH));
+      expect(ledgerIds(t.repo, BRANCH, runId)).toEqual([`${runId}/agent-0`]);
+    } finally { await t.h.dispose(); }
+  }, 30000);
+
+  it("reads whether the tip holds the run's ledger from the tree, and a git failure is an error, not absence", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const head = git(t.repo, "rev-parse", "HEAD");
+      expect(await hasPath(t.repo, head, "base.txt")).toBe(true);
+      expect(await hasPath(t.repo, head, ".decisions/run-x.jsonl")).toBe(false);
+      // Final review T7: a missing tip object read as "absent" would make E commit again instead of stopping.
+      await expect(hasPath(t.repo, "0".repeat(40), ".decisions/run-x.jsonl")).rejects.toThrow();
     } finally { await t.h.dispose(); }
   }, 30000);
 

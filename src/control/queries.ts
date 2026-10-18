@@ -30,6 +30,15 @@ export function readGroup(store:ControlStore,id:string):GroupRecord {
   if (!row) throw new ControlError("group-not-found");
   return JSON.parse(String(row.body));
 }
+/**
+ * Handoff delivery spec §5.2 N2 (controller decision), extended by the control run decisions final review (I1): while a
+ * landing of the group is reconciling, nothing else moves `orca/<groupId>` -- not a sibling's landing (D), not an empty
+ * result's ledger-only commit (E), not an approve's ledger commit -- or the paid reconciliation lands, and maybe pays, again.
+ */
+export function groupHasReconcilingRun(store:ControlStore,groupId:string):boolean {
+  return store.db.prepare("SELECT body FROM runs WHERE group_id=? AND active=1").all(groupId)
+    .some((row) => (JSON.parse(String(row.body)) as { state?: unknown }).state === "reconciling");
+}
 export function saveGroup(store:ControlStore,group:GroupRecord):void {
   store.db.prepare("UPDATE groups SET revision=?,graph_version=?,body=? WHERE id=?").run(group.revision,group.graphVersion,JSON.stringify(group),group.groupId);
   recordProjectionChange(store,[group.groupId]);

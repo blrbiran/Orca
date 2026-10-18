@@ -7,7 +7,7 @@ import { canonicalBytes } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
 import { readConfirmedReconcileSlot, readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { privateDirectory } from "./paths.js";
-import { readGroup, saveGroup } from "./queries.js";
+import { groupHasReconcilingRun, readGroup, saveGroup } from "./queries.js";
 import { bookReconcileUsage } from "./usageLedger.js";
 import { insertPendingDecisions } from "./pendingDecisions.js";
 import { reportedDecisionsOf, type ReportedDecisions } from "./reportedDecisions.js";
@@ -90,6 +90,8 @@ export async function recordEmptyResultDecisions(deps: ExecutionDriverDeps, runI
   if (await hasPath(targetRepo, tip, `.decisions/${name}`)) {
     ledgerCommit = await findLedgerCommit(targetRepo, tip, subject);
   } else {
+    // Final review I1: as D, no commit on the group branch while a sibling reconciles; the next round writes again.
+    if (groupHasReconcilingRun(store, run.groupId)) return "moved";
     const result = await commitLedgerOnGroupBranch({
       repo: targetRepo, roots: deps.roots, groupId: run.groupId, worktreeName: `ledger-${runId}`, message: subject, beforeCas: deps.beforeCas,
       write: async (decisionsDir) => {
@@ -114,9 +116,9 @@ export async function recordEmptyResultDecisions(deps: ExecutionDriverDeps, runI
   return "settle";
 }
 
-async function hasPath(repo: string, commit: string, path: string): Promise<boolean> {
-  try { await git(repo, [...QUIET_GIT, "cat-file", "-e", `${commit}:${path}`]); return true; }
-  catch { return false; }
+/** Final review T7: no entry is absent; a git failure (a missing tip, a broken repository) throws, never reads as absent. */
+export async function hasPath(repo: string, commit: string, path: string): Promise<boolean> {
+  return (await git(repo, [...QUIET_GIT, "ls-tree", commit, "--", path])).trim() !== "";
 }
 
 async function findLedgerCommit(repo: string, tip: string, subject: string): Promise<string> {
@@ -179,9 +181,7 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string): Promise<b
   if (run.state !== "collected" || run.drive?.attemptSha == null || run.drive.base === null) return false;
   // Handoff delivery spec §5.2 N2 (controller decision): at most one landing of a group is reconciling. A
   // sibling landing now would move the tip under it and make it land, and maybe pay, again.
-  for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=? AND active=1").all(run.groupId)) {
-    if ((JSON.parse(String(row.body)) as DriverRun).state === "reconciling") return false;
-  }
+  if (groupHasReconcilingRun(store, run.groupId)) return false;
   const drive = run.drive;
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }

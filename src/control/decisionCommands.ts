@@ -10,7 +10,7 @@ import { readGroupIntegration } from "./integrationScheme.js";
 import { findDecision, ledgerSources, type DecisionWhere } from "./ledgerAtRef.js";
 import { commitLedgerOnGroupBranch } from "./ledgerTree.js";
 import { readPendingDecision, settlePendingDecision, type PendingDecisionRow } from "./pendingDecisions.js";
-import { readGroup } from "./queries.js";
+import { groupHasReconcilingRun, readGroup } from "./queries.js";
 import { agentDecisionId, normalizeAgentEntry } from "./runLedger.js";
 import type { ControlStore } from "./store.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
@@ -47,8 +47,7 @@ function rowRefusal(row: PendingDecisionRow | null, groupId: string): ApprovePre
  */
 function busyRefusal(store: ControlStore, groupId: string): ApprovePrepared | null {
   if (readGroupIntegration(readGroup(store, groupId))?.state === "resolving") return refused("integration-busy");
-  const active = store.db.prepare("SELECT body FROM runs WHERE group_id=? AND active=1").all(groupId);
-  if (active.some((row) => (JSON.parse(String(row.body)) as { state?: unknown }).state === "reconciling")) return refused("decision-approve-reconciling");
+  if (groupHasReconcilingRun(store, groupId)) return refused("decision-approve-reconciling");
   return null;
 }
 
