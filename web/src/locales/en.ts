@@ -93,7 +93,7 @@ const activityKind = {
   "usage-settled": "usage settled",
   command: "command", "run-claimed": "claimed", "run-started": "started", phase: "phase", "run-blocked": "blocked", "run-resumed": "resumed",
   "run-settled": "settled", "task-retried": "task retried", integration: "integration", stop: "stopped", "stop-cleared": "stop cleared",
-  archived: "archived", unarchived: "unarchived",
+  archived: "archived", unarchived: "unarchived", "correction-closed": "correction closed",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;

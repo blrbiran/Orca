@@ -125,7 +125,7 @@ export const fetchRunEvidence = (runId: string): Promise<EvidenceManifestV1> =>
 export const fetchSavedResultEligibility=(runId:string):Promise<SavedResultEligibilityV1>=>controlGet(`/api/control/runs/${segment(runId)}/saved-result-eligibility`);
 
 /** GET /api/control/runs/:runId/activity -- issue-fixes spec §5.2: the run's newest 200 activity rows. */
-const activityKinds = new Set(["usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "integration", "stop", "stop-cleared", "archived", "unarchived"]);
+const activityKinds = new Set(["usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed"]);
 function activityResponse(runId: string, value: unknown): RunActivityV1 {
   const invalid = (): never => { throw new ControlRequestError({ status: 200, code: "activity-response-invalid", message: i18n.t("control.activity.responseInvalid"), commandRevision: null }); };
   if (typeof value !== "object" || value === null || Array.isArray(value)) return invalid();

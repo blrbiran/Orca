@@ -124,9 +124,10 @@ function asControlError(error: unknown): unknown {
  * The configured repository a correction's projectKey names. First the panel's own key: the panel records a correction
  * under its `--repo` key or registry slug (api.ts POST /api/corrections), and the repository's repoId is that key's
  * `repoIdOfProjectKey` (controlRepoKey). Then the key derived from each repository's remote, which the CLI and
- * reject-pending-decision record (decisionCommands.ts); a repository without a keyable remote cannot be that one.
+ * reject-pending-decision record (decisionCommands.ts); a repository without a keyable remote cannot be that one. The
+ * corrections list (correctionState.ts, Task 10) matches with this same rule.
  */
-async function repositoryOf(deps: DebugOpenDeps, projectKey: string): Promise<{ repoId: string; path: string } | null> {
+export async function repositoryOf(deps: Pick<DebugOpenDeps, "listRepositories" | "repoIdOfProjectKey">, projectKey: string): Promise<{ repoId: string; path: string } | null> {
   const repositories = deps.listRepositories();
   const panelRepoId = deps.repoIdOfProjectKey?.(projectKey);
   const byPanelKey = repositories.find((repository) => repository.repoId === panelRepoId);

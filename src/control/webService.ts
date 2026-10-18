@@ -36,6 +36,7 @@ import { controlWorkspaceRoots } from "./workspace.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
+import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
 import { applyCorrectionDebugOpen, type CorrectionDebugOpenCommand } from "./debugGroup.js";
 import { applyApprovePendingDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { isGroupArchived } from "./archivedMark.js";
@@ -750,6 +751,12 @@ export class WebControlService {
     const release = this.deps.admissionGate?.enter();
     try { return await applyCorrectionDebugOpen({ ...this.deps, listRepositories: this.deps.listRepositories ?? (() => []) }, command); }
     finally { release?.(); }
+  }
+  /** Debug task plan Task 10: every correction with its debug groups and computed closed state; reads only. */
+  async correctionList(): Promise<CorrectionListItemV1[]> {
+    const dir = this.deps.correctionsDir;
+    if (dir === undefined) throw new ControlError("corrections-store-unconfigured");
+    return readCorrectionList({ store: this.store, correctionsDir: dir, listRepositories: this.deps.listRepositories ?? (() => []), repoIdOfProjectKey: this.deps.repoIdOfProjectKey });
   }
   /** Controller ruling (Task 7): the target the panel offers for this repository; null when its path does not resolve. */
   async suggestedTarget(repoId: string): Promise<string | null> {

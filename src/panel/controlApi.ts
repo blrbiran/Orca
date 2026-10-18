@@ -223,6 +223,15 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     }
   }));
 
+  // Debug task plan Task 10: every correction, its debug groups and its closed state, computed from refs (never fetched).
+  // Here, so the socket (agents) reads it too. A panel with no corrections store answers corrections-store-unconfigured.
+  app.get("/api/control/corrections", asyncRoute(async (_req, res) => {
+    try {
+      if (deps.service === undefined) throw new ControlError("corrections-store-unconfigured");
+      res.json({ schema: "orca-correction-list-v1", corrections: await deps.service.correctionList() });
+    } catch (error) { sendMappedControlError(res, error); }
+  }));
+
   app.get("/api/control/groups/:groupId/commands/:commandId", (req, res, next) => {
     try {
       const groupId = String(req.params.groupId), commandId = String(req.params.commandId);

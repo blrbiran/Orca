@@ -10,6 +10,11 @@ import {
 import { advanceIntegrationResolution, copyOwner, materialiseIntegrationConflict, nextAttempt } from "./integrationResolve.js";
 import { syncGroupPr } from "./integrationPr.js";
 import { archivedMarkOf } from "./archivedMark.js";
+import { correctionClosedAtRef, fixRunIdOf } from "./correctionState.js";
+import { readDebugMark } from "./debugChecks.js";
+import type { DebugInputV1 } from "./debugInput.js";
+import { integrationTargetRef } from "./ledgerAtRef.js";
+import { readCanonicalRecord } from "./snapshot.js";
 import { githubRepoOf, readGroupIntegration, remoteUrl, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { readGroup, saveGroup } from "./queries.js";
 import { removeOwnPath, workBranchRef, type WorkspaceRoots } from "./workspace.js";
@@ -117,9 +122,32 @@ export async function integratePendingGroups(deps: IntegrationDeps): Promise<boo
       process.stderr.write(`orca-driver: integration ${groupId}: ${describe(error)}\n`);
       outcome = { kind: "transient", message: describe(error) };
     }
-    if (outcome !== null && settle(deps, groupId, integration.schemeHash, outcome)) moved = true;
+    if (outcome !== null && await settleAndNote(deps, groupId, integration.schemeHash, outcome)) moved = true;
   }
   return moved;
+}
+
+/**
+ * Debug task plan Task 10 (ruling C22): once a debug group's integration has settled, its correction's closed state is
+ * computed again (correctionState.ts: the target ref's tree holds the closing row) and the move to closed is recorded as
+ * one `correction-closed` row -- one per correction: a later pass that finds it closed again writes none. A read or
+ * write that fails is logged and leaves the integration as it settled (the list still computes the state); it never
+ * fails the pass.
+ */
+async function noteCorrectionClosed(deps: IntegrationDeps, groupId: string): Promise<void> {
+  try {
+    const mark = readDebugMark(readGroup(deps.store, groupId));
+    if (mark === null) return;
+    const ref = await integrationTargetRef(deps.store, groupId);
+    if (ref === null) return;
+    // The correction as frozen at open (Task 9 ruling 3): the one whose closing rows the landing wrote.
+    const { correction } = JSON.parse(readCanonicalRecord(deps.store, mark.inputHash)) as DebugInputV1;
+    if (!(await correctionClosedAtRef(deps.repoPathOf(groupRepoId(deps.store, groupId)), ref, correction.id, fixRunIdOf(correction)))) return;
+    write(deps, () => {
+      const recorded = deps.store.db.prepare("SELECT 1 FROM activity WHERE kind='correction-closed' AND json_extract(body,'$.correctionId')=? LIMIT 1").get(correction.id);
+      if (recorded === undefined) recordActivity(deps.store, { groupId, runId: null, kind: "correction-closed", body: { correctionId: correction.id, ref, via: "debug-group" } });
+    });
+  } catch (error) { process.stderr.write(`orca-driver: integration ${groupId}: correction-closed: ${describe(error)}\n`); }
 }
 
 /** spec §7: the conflict copies in the workspaces root, by the group that owns them. */
@@ -434,7 +462,14 @@ export async function finishResolvedIntegration(deps: IntegrationDeps, repo: str
     // A crash (Crashed) is rethrown by failureOutcome like anything else it does not name.
     outcome = failureOutcome(error, scheme, null, new Set());
   }
-  return settle(deps, groupId, integration.schemeHash, outcome);
+  return settleAndNote(deps, groupId, integration.schemeHash, outcome);
+}
+
+/** settle, then (ruling C22) a debug group's correction closed by what a success carried. Both settling paths use it. */
+async function settleAndNote(deps: IntegrationDeps, groupId: string, hash: string, outcome: Outcome): Promise<boolean> {
+  if (!settle(deps, groupId, hash, outcome)) return false;
+  if (outcome.kind === "done") await noteCorrectionClosed(deps, groupId);
+  return true;
 }
 
 /** The write-ahead record (null clears it), only while the group still has this scheme. */
