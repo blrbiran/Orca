@@ -136,6 +136,36 @@ describe("reject-pending-decision (control run decisions Task 10)", { timeout: 6
     } finally { await t.dispose(); }
   });
 
+  it("serializes an approve and a reject of one item, so a rejected decision's line never reaches the group branch", async () => {
+    // Final review I3: approve checks for the line, then commits it before its transaction. A reject that runs in that
+    // window finds no line, records a correction and marks the item rejected; approve's commit still lands and integrates.
+    const t = await landedWithPending(); try {
+      let reject: Promise<unknown> | null = null;
+      let rejectRecording = false;
+      const service: WebControlService = new WebControlService({
+        ...t.h.deps, knownRepository: (repoId: string) => repoId === "repo", resolveRepository: () => t.repo, correctionsDir: t.dir, correctionsBy: BY,
+        decisionSeams: {
+          beforeRecord: async () => { rejectRecording = true; },
+          // The approve has found no line and is about to swap its commit in: a reject sent now waits for it.
+          beforeCas: async () => {
+            if (reject !== null) return;
+            reject = service.rejectPendingDecision(t.h.command("reject-pending-decision", { pendingId: t.pendingId }));
+            const deadline = Date.now() + 2000;
+            while (!rejectRecording && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+            if (rejectRecording) await reject;
+          },
+        },
+      });
+      const approved = await service.approvePendingDecision(t.h.command("approve-pending-decision", { pendingId: t.pendingId, undoHow: `git revert --no-edit ${"e".repeat(40)}` }));
+      const rejected = await reject!;
+      const lineIds = git(t.repo, "show", `refs/heads/orca/g:.decisions/${t.runId}.jsonl`).split("\n").filter((l) => l.trim() !== "").map((l) => JSON.parse(l).id);
+      // mutation I3: drop the per-group chain -> the item is rejected, a correction recorded, and the line is on orca/g; red
+      expect({ state: t.state(), corrections: (await readCorrections(t.dir)).length, lineIds }).toEqual({ state: "approved", corrections: 0, lineIds: [`${t.runId}/agent-0`] });
+      expect(approved).toMatchObject({ result: { kind: "pending-decision-approved" } });
+      expect(rejected).toHaveProperty("error");
+    } finally { await t.dispose(); }
+  });
+
   it("refuses an unknown item, an approved one, and a panel with no corrections store, by name", async () => {
     const t = await landedWithPending(); try {
       expect(await t.reject({ pendingId: "pending-nope-0" })).toMatchObject({ error: { code: "pending-decision-not-found" } });

@@ -84,6 +84,8 @@ export interface WebServiceDeps extends AsyncImportDeps {
    */
   correctionsDir?: string;
   correctionsBy?: string;
+  /** Test seams into approve's and reject's git/store steps (decisionCommands.ts), passed through unchanged. */
+  decisionSeams?: { beforeCas?: () => Promise<void>; beforeRecord?: () => Promise<void> };
 }
 interface EstimateRun { runId: string; groupId: string; workItemId: string; phase: string; state: string; claimOrdinal: null; providerAttemptOrdinal: number; remaining: { work: Amount; handoff: Amount }; cumulative: { work: Amount; handoff: Amount }; unknown: { work: boolean; handoff: boolean }; [key: string]: unknown }
 
@@ -366,8 +368,22 @@ export class WebControlService {
   private installationPreview: AgentPreview | null = null;
   private installationFailure: string | null = null;
   readonly store: ControlStore;
+  /** Final review I3: per group, the tail of the approve/reject chain (see serializeDecision). */
+  private readonly decisionChains = new Map<string, Promise<unknown>>();
   constructor(readonly deps: WebServiceDeps) { this.store = deps.store; }
   private mutate<T>(action: () => T): T { const release = this.deps.admissionGate?.enter(); try { return action(); } finally { release?.(); } }
+  /**
+   * Final review I3: approve and reject of a group's pending decisions run one at a time, prepare and apply together.
+   * Unserialized, a reject could find no line while an approve is between its check and its commit, mark the item
+   * rejected, and leave the approve's commit on orca/<groupId> to integrate. One panel process holds the service.
+   */
+  private serializeDecision<T>(groupId: string, action: () => Promise<T>): Promise<T> {
+    const next = (this.decisionChains.get(groupId) ?? Promise.resolve()).then(action);
+    const tail = next.catch(() => undefined);
+    this.decisionChains.set(groupId, tail);
+    void tail.then(() => { if (this.decisionChains.get(groupId) === tail) this.decisionChains.delete(groupId); });
+    return next;
+  }
   async importPlan(command: ImportCommand): Promise<WebCommandResult> {
     const release = this.deps.admissionGate?.enter(); try { return await importControlPlanAsync(this.deps, command); } finally { release?.(); }
   }
@@ -682,13 +698,16 @@ export class WebControlService {
    * group answers before any git runs (§10.5: an archived group's item stays pending); the line is committed before the
    * gate (git, as resolveIntegrationConflict's read), and the transaction marks the item approved.
    */
-  async approvePendingDecision(command: ApprovePendingDecisionCommand): Promise<WebCommandResult> {
+  approvePendingDecision(command: ApprovePendingDecisionCommand): Promise<WebCommandResult> {
+    return this.serializeDecision(command.target.groupId, () => this.approvePendingDecisionNow(command));
+  }
+  private async approvePendingDecisionNow(command: ApprovePendingDecisionCommand): Promise<WebCommandResult> {
     const early = this.mutate(() => preflightWebCommand<WebCommandResult>(this.store, command));
     if (early) return early.body;
     const repoId = this.planRepository(command.target.groupId);
     // A group with no plan has no runs, so no pending decision; a missing group is refused by name in the transaction.
     const prepared: ApprovePrepared = repoId === null ? { kind: "refused", code: "pending-decision-not-found" }
-      : await prepareApproval(this.store, controlWorkspaceRoots(this.store.stateDir), this.repositoryPath(repoId), command);
+      : await prepareApproval(this.store, controlWorkspaceRoots(this.store.stateDir), this.repositoryPath(repoId), command, { beforeCas: this.deps.decisionSeams?.beforeCas });
     const release = this.deps.admissionGate?.enter();
     try {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
@@ -700,14 +719,17 @@ export class WebControlService {
    * archived group answers before anything is written; the correction is recorded before the gate, and the transaction
    * marks the item rejected.
    */
-  async rejectPendingDecision(command: RejectPendingDecisionCommand): Promise<WebCommandResult> {
+  rejectPendingDecision(command: RejectPendingDecisionCommand): Promise<WebCommandResult> {
+    return this.serializeDecision(command.target.groupId, () => this.rejectPendingDecisionNow(command));
+  }
+  private async rejectPendingDecisionNow(command: RejectPendingDecisionCommand): Promise<WebCommandResult> {
     const early = this.mutate(() => preflightWebCommand<WebCommandResult>(this.store, command));
     if (early) return early.body;
     const repoId = this.planRepository(command.target.groupId);
     const { correctionsDir: dir, correctionsBy: by } = this.deps;
     const prepared: RejectPrepared = repoId === null ? { kind: "refused", code: "pending-decision-not-found" }
       : dir === undefined || by === undefined ? { kind: "refused", code: "corrections-store-unconfigured" }
-      : await prepareRejection(this.store, this.repositoryPath(repoId), { dir, by }, command, this.deps.now ?? (() => new Date()));
+      : await prepareRejection(this.store, this.repositoryPath(repoId), { dir, by }, command, this.deps.now ?? (() => new Date()), { beforeRecord: this.deps.decisionSeams?.beforeRecord });
     const release = this.deps.admissionGate?.enter();
     try {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
