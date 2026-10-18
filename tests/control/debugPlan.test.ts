@@ -136,8 +136,12 @@ describe("debugGoalText", () => {
   });
 
   it("a fence longer than the diff's own backtick runs keeps the diff whole", () => {
-    const diff = "+ a fenced block in a doc:\n+````js\n+x\n+````\n+```";
-    expect(inlinedDiff(debugGoalText(input({ commits: { base: BASE, attemptSha: ATTEMPT, diff } })))).toBe(diff);
+    // A context line " ````" would close a 3-backtick fence in CommonMark (up to 3 spaces of indent are allowed).
+    const diff = "+ a fenced block in a doc:\n ````js\n+x\n ````\n+```";
+    const text = debugGoalText(input({ commits: { base: BASE, attemptSha: ATTEMPT, diff } }));
+    expect(inlinedDiff(text)).toBe(diff);
+    const fence = /\n(`{3,})diff\n/.exec(text)![1]!;
+    expect(fence.length).toBeGreaterThan(4);
   });
 
   it("names the original run and the original task's goal", () => {
