@@ -149,6 +149,17 @@ describe("checkReproduction (design §12.8)", () => {
     expect(await checked(w, { reproTests: ["tests/repro.test.txt"], reproCommand: command }, "true", undefined, 500)).toEqual({ kind: "passed", tests: ["tests/repro.test.txt"], command });
   });
 
+  // Fix round 1 (R3): ccloop runs a contract's required checks with its environment inherited unchanged (runLoop.js
+  // runRequiredChecks), GIT_* included; Orca's own git children drop those (childEnv), the check's command does not.
+  it("runs the command with the environment inherited as ccloop's required checks are", async () => {
+    const w = await workspace();
+    process.env.GIT_ORCA_REPRO_PROBE = "inherited";
+    try {
+      const command = `test "$GIT_ORCA_REPRO_PROBE" = inherited && ${REPRO}`;
+      expect(await checked(w, { reproTests: ["tests/repro.test.txt"], reproCommand: command })).toEqual({ kind: "passed", tests: ["tests/repro.test.txt"], command });
+    } finally { delete process.env.GIT_ORCA_REPRO_PROBE; }
+  });
+
   it("refuses a named test the attempt does not contain before touching the workspace", async () => {
     const w = await workspace();
     expect(await checked(w, { reproTests: ["tests/repro.test.txt", "tests/missing.test.txt"], reproCommand: REPRO })).toEqual({ kind: "failed", reason: "result-invalid" });
