@@ -76,4 +76,12 @@ describe("explaining a blocked run's reason (spec §2.2(a))", () => {
     expect(explainRunReason("Error: socket hang up")).toBeNull();
     expect(explainRunReason("toString")).toBeNull();
   });
+
+  // Debug task plan Task 8: the reproduce-first check's reason is put in words, in both languages; an unknown one as sent.
+  it("explains a failed reproduce-first check by its reason", async () => {
+    expect(explainRunReason("debug-repro:green-at-base")).toBe("Orca's reproduce-first check did not pass: the reproduction test already passes at the run's base, so it does not reproduce the correction. Retry the task.");
+    expect(explainRunReason("debug-repro:later-reason")).toBe("Orca's reproduce-first check did not pass: later-reason. Retry the task.");
+    await i18n.changeLanguage("zh");
+    expect(explainRunReason("debug-repro:no-tests")).toBe("Orca 的先复现检查没有通过：运行没有加上复现这条更正的测试。请重试任务。");
+  });
 });

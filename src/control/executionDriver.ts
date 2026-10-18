@@ -38,6 +38,9 @@ import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js
 import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, makeReadOnly, removeSkillsSnapshot, skillsPathOf, sourceDirOf, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { recordEmptyResultDecisions, stepD, stepR } from "./driverLanding.js";
+import { readDebugMark } from "./debugChecks.js";
+import { checkReproduction, type ReproVerdict } from "./debugRepro.js";
+import { reportedDebugOf } from "./reportedDecisions.js";
 import { openRequestOf, stepH, visitOrder } from "./driverHandoff.js";
 import { harvest } from "../scheduler/harvest.js";
 import { writeSetOf } from "../scheduler/writeSet.js";
@@ -98,6 +101,8 @@ export interface ExecutionDriverDeps {
   handoffGraceMs?: number;
   /** Syncskill integration spec §10.6: the syncskill A2 injects a run's skills with (ORCA_SYNCSKILL_BIN); absent = unconfigured. */
   syncskill?: SyncskillOptions;
+  /** Test seam only (debug task plan Task 8): replaces checkReproduction, so a criterion can see it is never called. */
+  checkReproduction?: typeof checkReproduction;
 }
 
 export interface DriverRun {
@@ -226,7 +231,7 @@ export function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: Wo
     workspaceMode, sourceDir: sourceDirOf(roots, runId), workspacePath: workspace ? workspacePathOf(roots, runId) : null, targetRepo: null,
     prepared: false, base: null, envelopeHash: null, inspectUnknown: 0, outcome: null, attemptSha: null, landedCommit: null,
     reconcile: null, blockedAt: null, blockedReason: null, cleanedUp: false, cleanupError: null, publishError: null, skills: null,
-    stagedPending: [], ledgerCommit: null,
+    stagedPending: [], ledgerCommit: null, debugRepro: null,
   };
 }
 
@@ -616,13 +621,29 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<b
     blockRun(deps, runId, "C", `out-of-bounds:${measured.outOfBounds.join(",")}`, { outcome, attemptSha });
     return true;
   }
+  // Debug-task design §12.8 (plan Task 8): a debug group's run is checked before it moves on, an empty attempt included
+  // (it added no test, so it fails `no-tests`). A failed check fails the attempt like a failed verification
+  // (isTerminallyFailedRun: blocked at C with an outcome other than `succeeded`).
+  let repro: ReproVerdict | null = null;
+  if (readDebugMark(readGroup(store, run.groupId)) !== null) {
+    const reported = reportedDebugOf(report);
+    repro = await (deps.checkReproduction ?? checkReproduction)({
+      workdir: join(drive.sourceDir, "repo"), base: drive.base!, attemptSha, contract, timeoutMs: contract.executionPolicy.perAttemptTimeoutMs,
+      result: reported.kind === "object" ? reported.value : {}, resultMalformed: reported.kind === "malformed",
+    });
+    if (repro.kind === "failed") {
+      blockRun(deps, runId, "C", `debug-repro:${repro.reason}`, { outcome: "repro-failed", attemptSha });
+      return true;
+    }
+  }
+  const debugRepro = repro?.kind === "skipped" ? { debugRepro: { state: "skipped" as const, reason: repro.reason } } : {};
   return write(deps, () => {
     const current = readDriverRun(store, runId);
     if (current.state !== "accepted") return false;
     // Deviation D14: an empty result is not landed; `landedCommit` stays null and the settle step
     // (Task 7) applies D14 and decides E from there.
     current.state = measured.empty ? "landed" : "collected";
-    current.drive = { ...current.drive!, outcome, attemptSha, landedCommit: null };
+    current.drive = { ...current.drive!, outcome, attemptSha, landedCommit: null, ...debugRepro };
     saveDriverRun(store, current);
     return true;
   });

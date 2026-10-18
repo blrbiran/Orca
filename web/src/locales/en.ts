@@ -120,6 +120,15 @@ const selectionSource = {
   "group-estimator": "group-estimator", "group-reconcile": "group-reconcile", task: "task", "operator-agent": "operator-agent", descriptor: "descriptor",
   "group-plan": "group-plan", "group-primary": "group primary", "group-reconcile-plan": "group-reconcile-plan", "task-plan": "task-plan",
 } as const satisfies Record<ProvenanceSourceV1, string>;
+// Debug task plan Task 8 (design §12.8): Orca's reproduce-first check on a debug run -- why it failed, and its skipped label.
+const debugRepro = {
+  "no-tests": "the run added no test to reproduce the correction",
+  "no-command": "no command was named to run the reproduction test (the contract's check is still the placeholder)",
+  "green-at-base": "the reproduction test already passes at the run's base, so it does not reproduce the correction",
+  "red-at-head": "the reproduction test fails at the run's attempt, so the fix does not make it pass",
+  "result-invalid": "the run's debug result could not be read, and no added test was found to check instead",
+  skipped: "not reproduced",
+} as const;
 
 export const en = {
   results: {
@@ -1069,6 +1078,7 @@ export const en = {
   },
   // ccloop error codes spec (2026-10-15) §4.6: a ccloop code with no entry in either table.
   ccloop: { generic: "{{code}}: {{detail}}", genericNoDetail: "{{code}}" },
+  debugRepro,
   enums: {
     theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,
     groupState, roundState, draftState, exportState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep, activityKind,
@@ -1414,6 +1424,8 @@ export const enErrors: Record<string, string> = {
   "requirement-usage-unknown": "This requirement call's usage is unknown, so its budget cannot be settled.",
   "estimate-usage-unknown": "This estimate call's usage is unknown, so its budget cannot be settled.",
   "repository-path": "The group's repository path could not be resolved. Check that the repository is still registered and exists, then choose \"Retry run\".",
+  // Debug task plan Task 8: the detail is the check's reason, explained through debugRepro (web/src/refusalExplain.ts).
+  "debug-repro": "Orca's reproduce-first check did not pass: {{detail}}. Retry the task.",
 };
 
 /** ccloop error codes spec (2026-10-15) §4.7: ccloop's own codes an operator can act on; each may interpolate only {{detail}}. */

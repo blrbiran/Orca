@@ -21,6 +21,8 @@ export interface ExecutionReport {
  progress?:RunProgress|null;
  /** Decisions the agent reported: optional like `progress`; read only through reportedDecisions.ts. */
  decisions?:unknown;
+ /** A debug run's reproduction and closing values: optional like `decisions`; read only through reportedDecisions.ts. */
+ debug?:unknown;
 }
 /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
 export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }

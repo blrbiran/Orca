@@ -52,5 +52,10 @@ export function explainRunReason(reason: string): string | null {
     const words = explainBesideCode(rest), base = fillEntry(entry, { message: reason, status: "", detail: "" }); // the reason (with its code) is shown beside this
     return words === null ? base : `${base} ${words}`;
   }
+  // Debug task plan Task 8: the reproduce-first check's reason in words (a reason this panel has no words for is shown as sent).
+  if (prefix === "debug-repro") {
+    const key = `debugRepro.${rest}`;
+    return fillEntry(entry, { message: reason, status: "", detail: i18n.exists(key) ? String((i18n.t as (k: string) => unknown)(key)) : rest });
+  }
   return fillEntry(entry, { message: reason, status: "", detail: rest });
 }

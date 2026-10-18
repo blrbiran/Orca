@@ -49,6 +49,8 @@ const VIEW_REASONS = [
   "agent-unfrozen", "repository-path", "continuation-registration", "skills-unsupported-agent", "skills-inject-failed",
   "config-hash-mismatch", "stop-proof-generation", "inspect-unknown", "accept-refused", "candidate-without-terminal", "terminal",
   "out-of-bounds", "single-call-record-invalid", "single-call-prompt-mismatch", "settle-incomplete",
+  // Debug task plan Task 8: the reproduce-first check (debug-repro:<reason>).
+  "debug-repro",
   // ccloop error codes spec (2026-10-15) §4.4, §4.7: a peer exit's stored run reason.
   "control-peer-exit",
   // src/control/requirementCalls.ts, src/control/singleCallPurposes.ts (prepare's `blocked`, `usageUnknownReason`)

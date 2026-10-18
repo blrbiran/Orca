@@ -51,6 +51,8 @@ export function fakeCcloopPort(input: {
   stopReason?: (workItemId: string) => string | null;
   /** Control run decisions: what the run reports as `decisions` on its terminal report; undefined = the field is absent. */
   decisions?: (workItemId: string) => unknown;
+  /** Debug task plan Task 8: what the run reports as `debug` on its terminal report; undefined = the field is absent. */
+  debug?: (workItemId: string) => unknown;
 }): FakeCcloop {
   const calls = { accept: [] as StartEnvelope[], inspect: 0, collect: 0, handoff: [] as HandoffRequest[] };
   const handoffs = new Map<string, HandoffRequest>();
@@ -111,7 +113,8 @@ export function fakeCcloopPort(input: {
       terminalOutcome: stop.terminal ? outcome : "executing", handoff: put(`handoff-${claim.runId}`, Buffer.from(JSON.stringify(handoffPacket))),
     };
     const decisions = stop.terminal ? input.decisions?.(claim.workItemId) : undefined;
-    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }) } : null, ...(decisions === undefined ? {} : { decisions }) };
+    const debug = stop.terminal ? input.debug?.(claim.workItemId) : undefined;
+    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }) };
   };
 
   const port: ExecutionPort = {

@@ -96,6 +96,9 @@ export const driveRecordSchema = z.object({
   // Control run decisions: the `orca: decisions <runId>` commit that carried this run's ledger lines when the run landed
   // nothing (`landedCommit` null); a later step writes it. Defaulted for the same reason.
   ledgerCommit: commitSchema.nullable().default(null),
+  // Debug task plan Task 8 (design §12.8(3)): a debug run whose agent declared the reproduction not expressible, with its
+  // reason, so the panel shows 未复现; null for every other run. Defaulted so a drive record from before this field still parses.
+  debugRepro: z.object({ state: z.literal("skipped"), reason: z.string().min(1) }).strict().nullable().default(null),
 }).strict();
 export type DriveRecord = z.infer<typeof driveRecordSchema>;
 

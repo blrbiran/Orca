@@ -967,6 +967,15 @@ export const zh: Translation<typeof en> = {
   },
   // ccloop error codes spec (2026-10-15) §4.6: a ccloop code with no entry in either table.
   ccloop: { generic: "{{code}}：{{detail}}", genericNoDetail: "{{code}}" },
+  // Debug task plan Task 8 (design §12.8).
+  debugRepro: {
+    "no-tests": "运行没有加上复现这条更正的测试",
+    "no-command": "没有指定运行复现测试的命令（合约里的检查仍是占位）",
+    "green-at-base": "复现测试在运行的 base 上已经通过，没有复现这条更正",
+    "red-at-head": "复现测试在运行的尝试上失败，修复没有让它通过",
+    "result-invalid": "读不了运行的 debug 结果，也找不到可以代替检查的新增测试",
+    skipped: "未复现",
+  },
   enums: {
     theme: { system: "跟随系统", light: "浅色", dark: "深色" },
     decisionKind: { dependency: "依赖", interface: "接口", scheduling: "调度", abandon: "放弃", criteria: "判据", boundary: "边界", reconcile: "协调" },
@@ -1349,6 +1358,7 @@ export const zhErrors: Record<string, string> = {
   "requirement-usage-unknown": "这次需求调用的用量未知，所以它的预算无法结算。",
   "estimate-usage-unknown": "这次估算调用的用量未知，所以它的预算无法结算。",
   "repository-path": "解析不到这个组的仓库路径；确认仓库仍已登记并且存在，然后重试运行。",
+  "debug-repro": "Orca 的先复现检查没有通过：{{detail}}。请重试任务。",
 };
 
 /** ccloop error codes spec (2026-10-15) §4.7: ccloop's own codes an operator can act on; each may interpolate only {{detail}}. */

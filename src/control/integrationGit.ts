@@ -16,6 +16,8 @@ export interface ChildOptions {
   quiet?: boolean;
   /** Variables set for this child over the runner's own environment (childEnv). */
   env?: Record<string, string>;
+  /** The deadline for this child instead of integrationTimeoutMs() (the debug reproduction check passes the contract's). */
+  timeoutMs?: number;
 }
 export type RunChild = (bin: string, args: string[], opts: ChildOptions) => Promise<ChildResult>;
 
@@ -79,7 +81,7 @@ async function sshEnv(bin: string, args: string[], cwd: string): Promise<Record<
  */
 export const spawnRunChild: RunChild = (bin, args, opts) => new Promise((resolve, reject) => {
   const argv = opts.quiet ? [...QUIET_GIT, ...args] : args;
-  const ms = integrationTimeoutMs();
+  const ms = opts.timeoutMs ?? integrationTimeoutMs();
   let child;
   try {
     child = spawn(bin, argv, { cwd: opts.cwd, env: { ...childEnv(), ...opts.env }, detached: true, stdio: ["pipe", "pipe", "pipe"] });
