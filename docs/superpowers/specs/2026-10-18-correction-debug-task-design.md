@@ -385,3 +385,14 @@ Orca's code, not the agent, checks it after the debug run's attempt:
   (handoff §4.2 item 16).
 
 - Citation fix: `writeImportedPlan` starts at `src/control/planImport.ts:258`; §4.1's `243-258` is imprecise.
+
+## Correction (decisions review withdraw, session b304f167, 2026-10-18)
+
+Appended; no earlier line is changed. §7's "None new" still holds for writes, but its sentence that the corrections
+store is "read, not written" names one file and now has a sibling: `<correctionsDir>/correction-withdrawals.jsonl`
+(`ORCA_CORRECTIONS_DIR` redirects it too). The debug design must READ it, because a withdrawn correction is not open
+work: the open verb refuses a withdrawn correction (`correction-withdrawn`), and the Corrections view lists it as
+withdrawn, not as "without a debug group". It is written only by the panel withdraw route
+(`POST /api/corrections/withdraw`), registered as an out-of-repo write in the withdraw design
+(`2026-10-18-decisions-review-withdraw-design.md` §5.1). This design adds no writer of it. The follow-up items are in
+the amendment at the end of `docs/superpowers/plans/2026-10-18-correction-debug-task.md`.

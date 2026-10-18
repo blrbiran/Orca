@@ -890,3 +890,55 @@ They are the controller's calls under the human's standing instruction for this 
 6. **Result fields from ccloop.** `ExecutionReport.debug` (debug plan Task 8) travels with `ExecutionReport.decisions`:
    the decisions plan's blocked Task 12 (ccloop contract) covers both keys, and the ccloop design that emits
    `decisions` also emits `debug` (`choseInstead`, `reproTests`, `reproCommand`, `reproduction`).
+
+## Amendment (decisions review withdraw, session b304f167)
+
+Appended by the decisions review withdraw plan (its spec §6); every line above is unchanged. A correction can now be
+withdrawn by its author (decisions review withdraw spec §5). The spec left six items for this plan, plus one decision.
+What is on the branch `codex/decisions-review-withdraw` (read, not assumed): `src/corrections/withdrawals.ts` exports
+`readWithdrawals(dir)` (throws `correction-withdrawals-unreadable` on a damaged file), `withdrawnIds(rows)` (a
+`Set<string>` of correction ids), `withdrawCorrection(...)` and the codes `CORRECTION_WITHDRAWN`
+(`correction-withdrawn`), `CORRECTION_ALREADY_WITHDRAWN`, `CORRECTION_CLOSED`. The spec's name `isCorrectionWithdrawn`
+is not exported; use `withdrawnIds(await readWithdrawals(dir))`. `readCorrections` still returns withdrawn rows
+(the withdrawals live in `<correctionsDir>/correction-withdrawals.jsonl`, not in `corrections.jsonl`), so every
+consumer below must filter itself. Panel routes: `POST /api/reviews/withdraw`, `POST /api/corrections/withdraw`
+(`src/panel/api.ts`).
+
+1. **Task 6 (`correction-debug-open`): refuse a withdrawn correction.** Read the withdrawals in the verb's guard
+   order, beside `readCorrections`, and refuse with `correction-withdrawn` (code already defined by the withdraw
+   plan; register its en/zh copy here only if it is not yet in `src/control/errors.ts` and the locales). Task 3
+   (`debugInput.ts`) takes `correctionsDir` already; it must not freeze the input of a withdrawn correction, so the
+   refusal belongs in Task 6 before Task 3's freeze is called.
+2. **Task 6 + the withdraw route: archive an unstarted debug group.** On withdraw, if `debugGroupIds(store, id)` has a
+   group that is `debugGroupLive` and has not started a run, archive it (`archive-group`; archive deletes nothing).
+   A started group is left alone and the withdraw answer says so (a field on the route's answer naming the group id and
+   "started: left running"). The withdraw route lives in `src/panel/api.ts`, which has no control store today: this
+   needs either the panel's control dependencies on that route or the archive done through the control service by the
+   web client after the withdraw answer. Choose when implementing Task 6; either way the withdrawal row is written
+   first and a failed archive leaves the correction withdrawn (the same partial-failure shape as §5.4's 409).
+3. **Task 13 (Corrections view) + Task 10 (`GET /api/control/corrections`): list withdrawn corrections out of
+   "corrections without a debug group".** Task 10's list route returns each correction's `withdrawn` state (from
+   `withdrawnIds`); Task 13's "lists corrections without a debug group with an Open button" test must add a withdrawn
+   correction and assert it has no Open button.
+4. **Task 11 (`closeExistingCorrection`, `correction-close`): refuse `correction-withdrawn`.** `correct.ts`
+   close-existing already refuses it (`CORRECTION_WITHDRAWN`, checked under the store lock before the
+   target-not-a-decision refusal). Task 11 extracts that code into `closeExistingCorrection`, so the extraction must
+   keep this guard in place and in the same order. Task 11's verb criterion must exercise it through
+   `correction-close` as well (withdrawn correction, verb refused with `correction-withdrawn`, ledger and corrections
+   file unchanged), not only through the CLI.
+5. **Task 13: show the withdrawn state in the Corrections view.** A withdrawn correction renders as withdrawn (who and
+   when come from the withdrawal row), with no Open and no Close action. Task 10's list route must carry that data.
+6. **Task 11: `correction-record` keeps writing the `reviewed` row, or moves decisions review withdraw §5.4 with it.**
+   The `reviewed` row is written by `/api/corrections` today; §5.4's withdrawal of it is done by
+   `POST /api/corrections/withdraw`. If `correction-record` stops writing the `reviewed` row, then the withdraw must
+   stop writing the matching review withdrawal for a correction recorded that way (it already does so only when the
+   caller's state is still `reviewed`). Default: `correction-record` also appends the `reviewed` row, so §5.4 holds
+   unchanged.
+7. **Task 11 (decision): withdraw becomes a human-only control verb when recording does.** It should: one pattern, the
+   same `VERB_ACCESS` entry `"human-only"`, target `{ kind: "corrections" }`, `by` = `deps.opts.by` (Cross-plan
+   resolution 1). Until Task 11 lands, the panel route stays the only entry. If Task 11 adds `correction-withdraw`, the
+   panel route and the verb share `withdrawCorrection(...)`, and item 2 (archive of the unstarted group) moves into the
+   verb's handler, where the control store is at hand.
+
+The out-of-repo write of `correction-withdrawals.jsonl` is registered in the withdraw spec §5.1 (path, the panel
+withdraw route as the writer, `0600`). The debug design only reads it.
