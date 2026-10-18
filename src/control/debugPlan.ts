@@ -60,7 +60,7 @@ function missingSentence(piece: DebugInputV1["missing"][number], input: DebugInp
     case "base": return "The original run recorded no base commit: its diff is unavailable.";
     case "attemptSha": return "The original run recorded no attempt commit: its diff is unavailable.";
     case "objects": return "The original run's commits are no longer in the repository: its diff is unavailable.";
-    case "contract": return "The original task's contract could not be read: the write set, checks and budgets below are Orca's defaults.";
+    case "contract": return "The original task's contract could not be read: this task's write set, checks and budgets are Orca's defaults.";
   }
 }
 
@@ -80,7 +80,9 @@ function diffSection(commits: NonNullable<DebugInputV1["commits"]>): string[] {
   if (inlined !== commits.diff) {
     lines.push(`It is ${Buffer.byteLength(commits.diff, "utf8")} bytes; the first ${Buffer.byteLength(inlined, "utf8")} are below. Read the whole of it with: ${debugDiffCommand(commits.base, commits.attemptSha)}`);
   }
-  lines.push("```diff", inlined, "```");
+  // A fence longer than any backtick run in the diff, so the diff cannot close it early.
+  const fence = "`".repeat(Math.max(3, ...[...inlined.matchAll(/`+/g)].map((run) => run[0].length + 1)));
+  lines.push(`${fence}diff`, inlined, fence);
   return lines;
 }
 
@@ -107,8 +109,13 @@ export function debugGoalText(input: DebugInputV1): string {
   if (pending !== null) {
     lines.push(
       `The corrected decision was pending: entry ${pending.pendingId} of run ${pending.ledgerRun}, refused at landing (${pending.reason}). The entry as the agent wrote it:`,
-      JSON.stringify(pending.entry ?? null, null, 2),
     );
+    // Verbatim, so a question with quotes or backslashes reads as written (the JSON below escapes them).
+    const entry = pending.entry;
+    if (typeof entry === "object" && entry !== null && typeof (entry as { question?: unknown }).question === "string") {
+      lines.push(`question: ${(entry as { question: string }).question}`);
+    }
+    lines.push(JSON.stringify(entry ?? null, null, 2));
   }
   lines.push(
     "",
@@ -116,11 +123,18 @@ export function debugGoalText(input: DebugInputV1): string {
     "1. add a test that fails on the current code and expresses the correction;",
     "2. declare `reproTests` (the paths of the tests you added) and `reproCommand` (the command that runs them) in your result;",
     "3. then change the code until that test and the existing checks pass.",
-    "Orca runs `reproCommand` with only your tests applied at the original base (it must fail) and at your attempt (it must pass).",
+    "Orca runs `reproCommand` with only your tests applied at the code you started from (it must fail) and at your attempt (it must pass).",
     "",
   );
   if (originalRun !== null) lines.push(`The original run: ${originalRun.runId} (group ${originalRun.groupId}, task ${originalRun.taskId}).`);
-  if (contract !== null) lines.push(`The original task's goal: ${contract.objective.goal}`);
+  if (contract !== null) {
+    lines.push(`The original task's goal: ${contract.objective.goal}`);
+    // Context only: the debug contract carries neither list (they could forbid the reproduction test itself).
+    if (contract.objective.nonGoals.length > 0) lines.push(`The original task's non-goals (context; not binding on this task): ${contract.objective.nonGoals.join("; ")}`);
+    if (contract.context.constraints.length > 0) lines.push(`The original task's constraints (context; not binding on this task): ${contract.context.constraints.join("; ")}`);
+    // The denylist is inherited unchanged; the agent is told, so a refused test path is not a surprise.
+    if (contract.safetyPolicy.denylistPaths.length > 0) lines.push(`Paths this task may not write (inherited from the original task): ${contract.safetyPolicy.denylistPaths.join(", ")}`);
+  }
   lines.push(...input.missing.map((piece) => missingSentence(piece, input)));
   if (commits !== null) lines.push("", ...diffSection(commits));
   return lines.join("\n") + "\n";
@@ -161,7 +175,8 @@ export function buildDebugPlanSource(
 ): SchedulerControlPlanSource {
   const contract = debugContract(input, opts);
   return {
-    goal: contract.objective.goal,
+    // A short label for the group; the whole text stays in the task's objective.goal.
+    goal: contract.objective.goal.split("\n", 1)[0]!,
     // normalizeControlPlan refuses a repeated condition (planImport.ts:90).
     successConditions: unique([DEBUG_REPRODUCTION_CONDITION, ...contract.context.buildTestCommands]),
     ...(opts.agent ? { agent: opts.agent } : {}),

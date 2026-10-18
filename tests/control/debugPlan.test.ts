@@ -55,9 +55,9 @@ const OPTS = { repoPath: "/repo", existingTestDirs: [] as string[], agent: undef
 const contractOf = (source: ReturnType<typeof buildDebugPlanSource>) => taskContractSchema.parse(source.tasks[0]!.originalContract);
 /** The inlined diff: what stands between the goal's diff fence lines. */
 const inlinedDiff = (goal: string): string => {
-  const match = /\n```diff\n([\s\S]*?)\n```\n/.exec(goal);
+  const match = /\n(`{3,})diff\n([\s\S]*?)\n\1\n/.exec(goal);
   expect(match).not.toBeNull();
-  return match![1]!;
+  return match![2]!;
 };
 
 describe("debugGoalText", () => {
@@ -133,6 +133,42 @@ describe("debugGoalText", () => {
     expect(Buffer.byteLength(inlined)).toBeLessThanOrEqual(DEBUG_DIFF_INLINE_MAX_BYTES);
     expect(inlined).not.toContain("�");
     expect(diff.startsWith(inlined)).toBe(true);
+  });
+
+  it("a fence longer than the diff's own backtick runs keeps the diff whole", () => {
+    const diff = "+ a fenced block in a doc:\n+````js\n+x\n+````\n+```";
+    expect(inlinedDiff(debugGoalText(input({ commits: { base: BASE, attemptSha: ATTEMPT, diff } })))).toBe(diff);
+  });
+
+  it("names the original run and the original task's goal", () => {
+    const text = debugGoalText(input());
+    expect(text).toContain("The original run: run-1 (group g, task a).");
+    expect(text).toContain("The original task's goal: guard the store");
+  });
+
+  it("quotes the original non-goals, constraints and denylist as context, and omits empty ones", () => {
+    const fuller = taskContractSchema.parse({
+      ...original, objective: { ...original.objective, nonGoals: ["do not touch the API"] },
+      context: { ...original.context, constraints: ["keep the change small"] },
+      safetyPolicy: { ...original.safetyPolicy, denylistPaths: ["vendor/**"] },
+    });
+    const text = debugGoalText(input({ contract: fuller }));
+    expect(text).toContain("The original task's non-goals (context; not binding on this task): do not touch the API");
+    expect(text).toContain("The original task's constraints (context; not binding on this task): keep the change small");
+    expect(text).toContain("Paths this task may not write (inherited from the original task): vendor/**");
+    const contract = contractOf(buildDebugPlanSource(input({ contract: fuller }), OPTS));
+    expect([contract.objective.nonGoals, contract.context.constraints, contract.safetyPolicy.denylistPaths]).toEqual([[], [], ["vendor/**"]]);
+    const plain = debugGoalText(input());
+    for (const label of ["non-goals (context", "constraints (context", "may not write"]) expect(plain).not.toContain(label);
+  });
+
+  it("a pending question with quotes and backslashes appears verbatim", () => {
+    const question = 'use "retry" from C:\\tools\\net';
+    const pending = { pendingId: "pending-run-1-0", ledgerRun: "run-1", entryIndex: 0, reason: "r", at: "2026-10-18T00:30:00.000Z", evidence: [], entry: { question } };
+    const text = debugGoalText(input({
+      correction: correction("wrong", { decisionId: undefined, runId: "run-1", pendingId: pending.pendingId }), decision: null, decisionWhere: null, pending,
+    }));
+    expect(text).toContain(`question: ${question}`);
   });
 
   it("a pending target's goal carries the pending entry's question, its refusal and the human's reason", () => {
@@ -216,6 +252,12 @@ describe("buildDebugPlanSource", () => {
     expect(contract.context.buildTestCommands).toEqual([...DEBUG_DEFAULT_BUILD_TEST_COMMANDS]);
     expect(contract.context.buildTestCommands).toEqual(["<to be named by the agent as reproCommand>"]);
     expect(contract.safetyPolicy.allowlistPaths).toEqual([]);
+  });
+
+  it("the plan's goal is the goal text's first line; the task keeps the whole text", () => {
+    const source = buildDebugPlanSource(input(), OPTS);
+    expect(source.goal).toBe("Debug task for correction c_1 (wrong, by owner@example.invalid at 2026-10-18T01:00:00.000Z).");
+    expect(contractOf(source).objective.goal).toBe(debugGoalText(input()));
   });
 
   it("the agent layer is the plan's group `agent`", () => {
