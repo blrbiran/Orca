@@ -51,7 +51,7 @@ const report: MetricsReport = {
   backlog: { open_corrections: 3, oldest_age_ms: 1_000, oldest_correction_id: "c_1", by_correction_kind: [] },
   breakdown_by_correction_kind_including_stale: [{ kind: "stale", corrections: 2 }],
   review_coverage: { available: false, reason: "no producer has run yet" },
-  excluded_as_future: 7,
+  excluded_as_future: 7, withdrawn_corrections: 0,
   unresolved_decisions: [
     { correctionId: "c_1", projectKey: "k", decisionId: "run/9" },
     { correctionId: "c_2", projectKey: "k", decisionId: "run/10" },

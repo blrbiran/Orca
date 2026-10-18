@@ -5,6 +5,9 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { withCorrectionsDir } from "../corrections/harness.js";
+import { deriveCorrectionId } from "../../src/corrections/fields.js";
+import { correctionsFile, withdrawalsFile } from "../../src/corrections/paths.js";
+import { computeMetrics } from "../../src/metrics/compute.js";
 import { FUTURE_ROWS_WITHOUT_AS_OF, MetricsRejection, collect, fsArchiveIo } from "../../src/metrics/collect.js";
 
 const execFileAsync = promisify(execFile);
@@ -157,6 +160,87 @@ describe("collect + --as-of (E2 spec §4.2, §5.1)", () => {
       expect(obs.malformed).toHaveLength(1);
       expect(obs.malformed[0].line).toBe(1);
       expect(obs.malformed[0].torn).toBe(false);
+    });
+  });
+});
+
+// Decisions review and correction withdraw spec §5.3: a withdrawn correction leaves every reader of obs.corrections.
+describe("collect + withdrawals (withdraw spec §5.3)", () => {
+  const KEY = "github.com/biran/a";
+  function correction(decisionId: string, at: string) {
+    const base = { projectKey: KEY, decisionId, kind: "wrong", because: "r", at, by: "amy" };
+    return { id: deriveCorrectionId(base as never), ...base };
+  }
+  const withdrawal = (correctionId: string, at: string) =>
+    JSON.stringify({ correctionId, projectKey: KEY, by: "amy", at });
+
+  async function fixture(store: string) {
+    const root = await mkdtemp(join(tmpdir(), "orca-metrics-root-"));
+    const repo = await repoWithRemote(root, "a", "https://github.com/biran/a.git");
+    await writeFile(
+      join(repo, ".decisions", "orca-dev-1.jsonl"),
+      `${decision("orca-dev-1/1", "2026-01-01T00:00:00.000Z")}\n${decision("orca-dev-1/2", "2026-01-02T00:00:00.000Z")}\n`,
+    );
+    const kept = correction("orca-dev-1/1", "2026-02-01T00:00:00.000Z");
+    const gone = correction("orca-dev-1/2", "2026-02-02T00:00:00.000Z");
+    await writeFile(correctionsFile(store), `${JSON.stringify(kept)}\n${JSON.stringify(gone)}\n`);
+    return { root, kept, gone };
+  }
+
+  it("drops a withdrawn correction from the rate numerator, backlog, breakdown and unresolved list", async () => {
+    await withCorrectionsDir(async (store) => {
+      const { root, kept, gone } = await fixture(store);
+      await writeFile(withdrawalsFile(store), `${withdrawal(gone.id, "2026-03-01T00:00:00.000Z")}\n`);
+
+      const obs = await collect({ root, repos: [], correctionsDir: store, now: NOW });
+      expect(obs.corrections.map((x) => x.row.id)).toEqual([kept.id]);
+      expect(obs.withdrawnCorrections).toBe(1);
+
+      const report = computeMetrics(obs, { bucket: "month" });
+      expect(report.correction_rate.numerator_corrections_excluding_stale).toBe(1);
+      expect(report.backlog.open_corrections).toBe(1);
+      expect(report.backlog.oldest_correction_id).toBe(kept.id);
+      expect(report.breakdown_by_correction_kind_including_stale.find((k) => k.kind === "wrong")?.corrections).toBe(1);
+      expect(report.withdrawn_corrections).toBe(1);
+    });
+  });
+
+  it("with --as-of before the withdrawal, the correction still counts and nothing is withdrawn", async () => {
+    await withCorrectionsDir(async (store) => {
+      const { root, gone } = await fixture(store);
+      await writeFile(withdrawalsFile(store), `${withdrawal(gone.id, "2026-03-01T00:00:00.000Z")}\n`);
+
+      const obs = await collect({ root, repos: [], correctionsDir: store, asOf: "2026-02-15T00:00:00.000Z" });
+      expect(obs.corrections).toHaveLength(2);
+      expect(obs.withdrawnCorrections).toBe(0);
+      expect(obs.excludedAsFuture).toBe(1);
+    });
+  });
+
+  it("without --as-of, a future withdrawal is refused and named '<id> (withdrawn)'", async () => {
+    await withCorrectionsDir(async (store) => {
+      const { root, gone } = await fixture(store);
+      await writeFile(withdrawalsFile(store), `${withdrawal(gone.id, "2099-01-01T00:00:00.000Z")}\n`);
+
+      const error = await collect({ root, repos: [], correctionsDir: store, now: NOW }).then(
+        () => {
+          throw new Error("a withdrawal dated 2099 was accepted with no --as-of");
+        },
+        (e: unknown) => e,
+      );
+      expect((error as MetricsRejection).code).toBe(FUTURE_ROWS_WITHOUT_AS_OF);
+      expect((error as Error).message).toContain(`${gone.id} (withdrawn)`);
+    });
+  });
+
+  it("a garbage line in the withdrawals file is a malformed line and the command still answers", async () => {
+    await withCorrectionsDir(async (store) => {
+      const { root, gone } = await fixture(store);
+      await writeFile(withdrawalsFile(store), `{ not json\n${withdrawal(gone.id, "2026-03-01T00:00:00.000Z")}\n`);
+
+      const obs = await collect({ root, repos: [], correctionsDir: store, now: NOW });
+      expect(obs.malformed.map((m) => [m.file, m.line])).toEqual([[withdrawalsFile(store), 1]]);
+      expect(obs.withdrawnCorrections).toBe(1);
     });
   });
 });

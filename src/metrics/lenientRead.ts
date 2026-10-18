@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import type { z } from "zod";
 import { correctionSchema } from "../corrections/schema.js";
 import type { Correction } from "../corrections/schema.js";
+import { withdrawalSchema } from "../corrections/withdrawals.js";
+import type { CorrectionWithdrawal } from "../corrections/withdrawals.js";
 import { overturnedEventSchema } from "../ledger/schema.js";
 import type { OverturnedEvent } from "../ledger/schema.js";
 import type { LenientRead, MalformedLine } from "./types.js";
@@ -81,6 +83,19 @@ function issuesOf(error: z.ZodError): string {
 export async function readCorrectionsLeniently(file: string): Promise<LenientRead<Correction>> {
   return readLeniently<Correction>(file, await readLines(file), (value) => {
     const result = correctionSchema.safeParse(value);
+    return result.success
+      ? { ok: true, row: result.data }
+      : { ok: false, reason: issuesOf(result.error) };
+  });
+}
+
+/**
+ * Withdraw spec §5.3: read leniently like corrections. withdrawals.ts's readWithdrawals stays strict (it runs inside
+ * the store lock); a read-only report must not die of one bad line.
+ */
+export async function readWithdrawalsLeniently(file: string): Promise<LenientRead<CorrectionWithdrawal>> {
+  return readLeniently<CorrectionWithdrawal>(file, await readLines(file), (value) => {
+    const result = withdrawalSchema.safeParse(value);
     return result.success
       ? { ok: true, row: result.data }
       : { ok: false, reason: issuesOf(result.error) };

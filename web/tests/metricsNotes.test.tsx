@@ -29,7 +29,7 @@ const report: MetricsReport = {
   backlog: { open_corrections: 0, oldest_age_ms: null, oldest_correction_id: null, by_correction_kind: [] },
   breakdown_by_correction_kind_including_stale: [],
   review_coverage: { available: false, reason: "the server's reason sentence", reasonCode: "no-review-coverage" },
-  excluded_as_future: 0, unresolved_decisions: [], unkeyable_repos: [], malformed_lines: [],
+  excluded_as_future: 0, withdrawn_corrections: 0, unresolved_decisions: [], unkeyable_repos: [], malformed_lines: [],
 };
 const coverage: PanelCoverage = { reviewed_high_tier: 1, high_tier_total: 4, rate: 0.25, caveat: "the server's coverage sentence", caveatCode: "reviewed-is-deliberate" };
 

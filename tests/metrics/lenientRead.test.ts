@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readCorrections } from "../../src/corrections/store.js";
-import { readCorrectionsLeniently, readLedgerLeniently } from "../../src/metrics/lenientRead.js";
+import { readCorrectionsLeniently, readLedgerLeniently, readWithdrawalsLeniently } from "../../src/metrics/lenientRead.js";
 
 const tempDir = () => mkdtemp(join(tmpdir(), "orca-metrics-lenient-"));
 
@@ -116,5 +116,21 @@ describe("lenient read (E2 spec §5.2, §5.3)", () => {
     expect(read.rows).toEqual([]);
     expect(read.malformed).toHaveLength(1);
     expect(read.malformed[0].reason).toContain("not a JSON object");
+  });
+});
+
+describe("readWithdrawalsLeniently (withdraw spec §5.3)", () => {
+  const W = JSON.stringify({ correctionId: "c_1", projectKey: "k", by: "amy", at: "2026-09-01T00:00:00.000Z" });
+
+  it("names a bad line, keeps the good rows, and reads a missing file as empty", async () => {
+    const dir = await tempDir();
+    const file = join(dir, "correction-withdrawals.jsonl");
+    await writeFile(file, `${W}\n{ not json\n${JSON.stringify({ correctionId: "c_2" })}\n`);
+
+    const read = await readWithdrawalsLeniently(file);
+    expect(read.rows.map((r) => r.correctionId)).toEqual(["c_1"]);
+    expect(read.malformed.map((m) => m.line)).toEqual([2, 3]);
+
+    expect(await readWithdrawalsLeniently(join(dir, "absent.jsonl"))).toEqual({ rows: [], malformed: [] });
   });
 });

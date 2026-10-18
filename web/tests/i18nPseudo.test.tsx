@@ -168,7 +168,7 @@ const metricsReport: MetricsReport = {
   correction_rate: { numerator_corrections_excluding_stale: 1, denominator_decisions: 2, rate_excluding_stale: 0.5, corrections_total_including_stale: 1, by_decision_kind: [], buckets: [], caveats: ["x-1", "x-2"], caveatCodes: ["no-review-coverage", "unresolved-decisions"] },
   repair_rate: { numerator_overturned: 0, denominator_corrections_including_stale: 1, rate: null, stale_only: { numerator_overturned: 0, denominator_corrections: 0, rate: null, known_bias: "x-3", knownBiasCode: "stale-bias" }, buckets: [], caveats: ["x-4"], caveatCodes: ["no-review-coverage"] },
   backlog: { open_corrections: 0, oldest_age_ms: null, oldest_correction_id: null, by_correction_kind: [] }, breakdown_by_correction_kind_including_stale: [],
-  review_coverage: { available: false, reason: "x-5", reasonCode: "no-review-coverage" }, excluded_as_future: 1, unresolved_decisions: [], unkeyable_repos: [], malformed_lines: [],
+  review_coverage: { available: false, reason: "x-5", reasonCode: "no-review-coverage" }, excluded_as_future: 1, withdrawn_corrections: 0, unresolved_decisions: [], unkeyable_repos: [], malformed_lines: [],
 };
 const coverage: PanelCoverage = { reviewed_high_tier: 0, high_tier_total: 0, rate: null, caveat: "x-6", caveatCode: "reviewed-is-deliberate" };
 const loopDraft = JSON.stringify({ base: 0, plan: "bugfix", text: { goal: "g-1", successCondition: "s-1", targetPaths: "src/a/**", checks: "npm test", nonGoals: "", relevantDocs: "", protectedPaths: "", maxFilesTouched: "", tokens: "3000500", activeMs: "14400000", attempts: "3" } });

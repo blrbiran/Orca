@@ -203,6 +203,8 @@ export interface MetricsReport {
   breakdown_by_correction_kind_including_stale: CorrectionKindCount[];
   review_coverage: ReviewCoverage;
   excluded_as_future: number;
+  /** Withdraw spec §5.3, §10.2: corrections withdrawn as of as_of; they are in none of the numbers above. */
+  withdrawn_corrections: number;
   /** correctionId ascending */
   unresolved_decisions: UnresolvedDecision[];
   /** path ascending */
@@ -232,6 +234,7 @@ export const METRICS_FIELDS = [
   "breakdown_by_correction_kind_including_stale",
   "review_coverage",
   "excluded_as_future",
+  "withdrawn_corrections",
   "unresolved_decisions",
   "unkeyable_repos",
   "malformed_lines",

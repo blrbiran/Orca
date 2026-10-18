@@ -66,6 +66,9 @@ export function renderTable(report: MetricsReport): string {
     lines.push(`skipped, could not derive a projectKey: ${report.unkeyable_repos.length}`);
     for (const r of report.unkeyable_repos) lines.push(`  ${r.path}`);
   }
+  if (report.withdrawn_corrections > 0) {
+    lines.push(`withdrawn corrections (in none of the numbers above): ${report.withdrawn_corrections}`);
+  }
   if (report.unresolved_decisions.length > 0) {
     lines.push(
       `corrections whose decision was not scanned: ${report.unresolved_decisions.length} ` +

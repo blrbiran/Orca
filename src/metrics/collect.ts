@@ -1,11 +1,11 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { correctionsFile } from "../corrections/paths.js";
+import { correctionsFile, withdrawalsFile } from "../corrections/paths.js";
 import { validateLine } from "../ledger/validateLine.js";
 import type { DecisionEvent } from "../ledger/schema.js";
 import { discoverRepos, enforceIntegrityGate } from "./discover.js";
 import type { DiscoverOptions, DiscoveredRepo, UnkeyableRepo } from "./discover.js";
-import { readCorrectionsLeniently, readLedgerLeniently } from "./lenientRead.js";
+import { readCorrectionsLeniently, readLedgerLeniently, readWithdrawalsLeniently } from "./lenientRead.js";
 import { MetricsRejection } from "./rejection.js";
 import { resolveOverturned } from "./resolve.js";
 import type { ArchiveIo } from "./resolve.js";
@@ -15,6 +15,7 @@ import type {
   OverturnedObservation,
   UnresolvedDecision,
 } from "./types.js";
+import { withdrawnIds } from "../corrections/withdrawals.js";
 import { namesDecision, type Correction } from "../corrections/schema.js";
 
 // Re-exported so a caller that already imports collect does not need a second
@@ -47,6 +48,8 @@ export interface Observations {
   corrections: CorrectionObservation[];
   overturned: OverturnedObservation[];
   excludedAsFuture: number;
+  /** Withdraw spec §5.3: corrections whose withdrawal is in effect at asOf; they are absent from `corrections`. */
+  withdrawnCorrections: number;
   unresolvedDecisions: UnresolvedDecision[];
   unkeyableRepos: UnkeyableRepo[];
   malformed: MalformedLine[];
@@ -128,10 +131,22 @@ export async function collect(opts: CollectOptions): Promise<Observations> {
   const storeRead = await readCorrectionsLeniently(correctionsFile(opts.correctionsDir));
   malformed.push(...storeRead.malformed);
 
+  // Withdraw spec §5.3: a withdrawal counts iff it existed at asOf, like every other row.
+  const withdrawalRead = await readWithdrawalsLeniently(withdrawalsFile(opts.correctionsDir));
+  malformed.push(...withdrawalRead.malformed);
+  const withdrawn = withdrawnIds(
+    withdrawalRead.rows.filter((w) => keep(w.at, `${w.correctionId} (withdrawn)`)),
+  );
+
   const corrections: CorrectionObservation[] = [];
+  let withdrawnCorrections = 0;
   for (const row of storeRead.rows) {
     // debug-task design §12.3: a pending-target row names no decision; that plan reports it on its own line.
     if (!namesDecision(row)) continue;
+    if (withdrawn.has(row.id)) {
+      withdrawnCorrections += 1;
+      continue;
+    }
     if (!keep(row.at, row.id)) continue;
     corrections.push({ row });
   }
@@ -218,6 +233,7 @@ export async function collect(opts: CollectOptions): Promise<Observations> {
     corrections,
     overturned,
     excludedAsFuture: future.length,
+    withdrawnCorrections,
     unresolvedDecisions,
     unkeyableRepos: unkeyable,
     malformed,

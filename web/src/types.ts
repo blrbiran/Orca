@@ -155,6 +155,7 @@ export interface MetricsReport {
   breakdown_by_correction_kind_including_stale: CorrectionKindCount[];
   review_coverage: ReviewCoverage;
   excluded_as_future: number;
+  withdrawn_corrections: number;
   unresolved_decisions: UnresolvedDecision[];
   unkeyable_repos: Array<{ path: string; reason: string }>;
   malformed_lines: MalformedLine[];
@@ -171,6 +172,7 @@ export const WEB_REPORT_FIELDS = [
   "breakdown_by_correction_kind_including_stale",
   "review_coverage",
   "excluded_as_future",
+  "withdrawn_corrections",
   "unresolved_decisions",
   "unkeyable_repos",
   "malformed_lines",

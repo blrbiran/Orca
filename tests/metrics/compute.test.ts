@@ -6,6 +6,11 @@ import { GHOST, OBS, c, d } from "./fixture.js";
 const M = () => computeMetrics(OBS, { bucket: "month" });
 
 describe("computeMetrics (E2 spec §3, §4.3)", () => {
+  it("carries obs.withdrawnCorrections into withdrawn_corrections (withdraw spec §10.2)", () => {
+    expect(M().withdrawn_corrections).toBe(0);
+    expect(computeMetrics({ ...OBS, withdrawnCorrections: 3 }, { bucket: "month" }).withdrawn_corrections).toBe(3);
+  });
+
   it("keeps stale OUT of the correction rate's numerator, and reports the total separately", () => {
     const r = M();
     expect(r.correction_rate.numerator_corrections_excluding_stale).toBe(3); // wrong + not_my_taste + GHOST

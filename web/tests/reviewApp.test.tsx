@@ -47,7 +47,7 @@ const REPORT: MetricsReport = {
   backlog: { open_corrections: 0, oldest_age_ms: null, oldest_correction_id: null, by_correction_kind: [] },
   breakdown_by_correction_kind_including_stale: [],
   review_coverage: { available: false, reason: "no producer has run yet" },
-  excluded_as_future: 0,
+  excluded_as_future: 0, withdrawn_corrections: 0,
   unresolved_decisions: [],
   unkeyable_repos: [],
   malformed_lines: [],

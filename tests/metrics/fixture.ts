@@ -63,6 +63,7 @@ export const OBS: Observations = {
   ],
   overturned: [],
   excludedAsFuture: 0,
+  withdrawnCorrections: 0,
   unresolvedDecisions: [
     { correctionId: GHOST.row.id, projectKey: "github.com/biran/a", decisionId: "orca-dev-archived/7" },
   ],

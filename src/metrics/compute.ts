@@ -239,6 +239,7 @@ export function computeMetrics(
     breakdown_by_correction_kind_including_stale: breakdown,
     review_coverage: { available: false, reason: NO_REVIEW_COVERAGE, reasonCode: "no-review-coverage" },
     excluded_as_future: obs.excludedAsFuture,
+    withdrawn_corrections: obs.withdrawnCorrections,
     unresolved_decisions: [...obs.unresolvedDecisions].sort((a, b) =>
       a.correctionId < b.correctionId ? -1 : a.correctionId > b.correctionId ? 1 : 0,
     ),
