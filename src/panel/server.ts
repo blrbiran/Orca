@@ -3,7 +3,7 @@ import type { Server } from "node:http";
 import express from "express";
 import { correctionsDir } from "../corrections/paths.js";
 import type { CcmemAdapterOptions } from "../memory/ccmem.js";
-import { buildApi } from "./api.js";
+import { buildApi, panelCorrections } from "./api.js";
 import { createPanelAuth } from "./auth.js";
 import { PANEL_HOST_NOT_ALLOWED, assertBindAllowed, isHostAllowed } from "./bindGuard.js";
 import { controlErrorBody } from "./controlErrors.js";
@@ -246,7 +246,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   const epoch = randomUUID();
   let control: ControlRuntime | null = null;
   if (opts.control.enabled) {
-    try { control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env, corrections: { dir: opts.correctionsDir, by: opts.by } }); }
+    try { control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env, corrections: { dir: opts.correctionsDir, by: opts.by, panel: panelCorrections(opts, reviews) } }); }
     catch (error) { auth.close(); throw error; }
   }
   // Project registry spec §5: built after the control plane, which it tells about every project it adds or renames.

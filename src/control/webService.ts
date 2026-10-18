@@ -37,7 +37,9 @@ import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIn
 import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
-import { applyCorrectionDebugOpen, type CorrectionDebugOpenCommand } from "./debugGroup.js";
+import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, type CorrectionDebugOpenCommand } from "./debugGroup.js";
+import { applyCorrectionClose, applyCorrectionRecord, applyCorrectionWithdraw, type CorrectionCloseCommand, type CorrectionRecordCommand, type CorrectionWithdrawCommand, type PanelCorrections } from "./correctionCommands.js";
+import { commandPrincipalFor } from "./commandClient.js";
 import { applyApprovePendingDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
@@ -87,6 +89,8 @@ export interface WebServiceDeps extends AsyncImportDeps {
    */
   correctionsDir?: string;
   correctionsBy?: string;
+  /** Debug task plan Task 11: what correction-record/-withdraw need from the panel (correctionCommands.ts). Absent, both refuse corrections-store-unconfigured. */
+  panelCorrections?: PanelCorrections;
   /**
    * Debug task plan Task 6: every configured repository with its trusted path, for correction-debug-open's lookup of the
    * repository whose projectKey a correction names. Absent, no repository matches (correction-repository-unknown).
@@ -750,6 +754,22 @@ export class WebControlService {
   async openCorrectionDebugGroup(command: CorrectionDebugOpenCommand): Promise<WebCommandResult> {
     const release = this.deps.admissionGate?.enter();
     try { return await applyCorrectionDebugOpen({ ...this.deps, listRepositories: this.deps.listRepositories ?? (() => []) }, command); }
+    finally { release?.(); }
+  }
+  /** Debug task plan Task 11: the human-only correction verbs (correctionCommands.ts). */
+  async recordCorrection(command: CorrectionRecordCommand): Promise<WebCommandResult> {
+    const release = this.deps.admissionGate?.enter();
+    try { return await applyCorrectionRecord(this.deps, command); } finally { release?.(); }
+  }
+  async closeCorrection(command: CorrectionCloseCommand): Promise<WebCommandResult> {
+    const release = this.deps.admissionGate?.enter();
+    try { return await applyCorrectionClose(this.deps, command); } finally { release?.(); }
+  }
+  async withdrawCorrection(command: CorrectionWithdrawCommand): Promise<WebCommandResult> {
+    const release = this.deps.admissionGate?.enter();
+    // Withdraw Amendment 2, as the panel route does it: archived as the command's actor and principal.
+    const actor = { actorId: command.actorId, principal: commandPrincipalFor(command.commandId) ?? "web" };
+    try { return await applyCorrectionWithdraw(this.deps, command, (id) => archiveUnstartedDebugGroups({ store: this.store, service: this }, id, actor)); }
     finally { release?.(); }
   }
   /** Debug task plan Task 10: every correction with its debug groups and computed closed state; reads only. */

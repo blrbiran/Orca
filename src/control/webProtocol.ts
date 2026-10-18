@@ -8,6 +8,7 @@ import { DRAFT_STATES, IDEA_MAX_BYTES, REQUIREMENT_WAITING, ROUND_STATES, draftB
 import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema, loopSkillsSchema } from "./loopPlans.js";
 import { isTimeZone } from "./usageCalendar.js";
 import { WORK_ITEM_CATEGORIES } from "./workItemCategory.js";
+import { CORRECTION_KINDS } from "../corrections/schema.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
 export { agentSelectionSchema, contextWindowSchema, panelPartialSelectionSchema, partialSelectionSchema } from "./schema.js";
@@ -636,6 +637,9 @@ export const commandVerbSchema = z.enum([
   "approve-pending-decision",
   "reject-pending-decision",
   "correction-debug-open",
+  "correction-record",
+  "correction-close",
+  "correction-withdraw",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -643,6 +647,9 @@ const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), 
 const operatorCommandTargetSchema = z.object({ kind: z.literal("operator"), operatorId: nonemptyString }).strict();
 // Accounts spec §6.1, D5: the spend settings (caps and the usage calendar) are one scope with one revision.
 const spendCommandTargetSchema = z.object({ kind: z.literal("spend") }).strict();
+// Debug task plan Task 11 (controller's call 6): the corrections store is one scope with constant revision 0 (no CAS);
+// a duplicate is the store's own `again` check.
+const correctionsCommandTargetSchema = z.object({ kind: z.literal("corrections") }).strict();
 
 export const commandTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group"), groupId: idSchema }).strict(),
@@ -652,6 +659,7 @@ export const commandTargetSchema = z.discriminatedUnion("kind", [
   repositoryCommandTargetSchema,
   operatorCommandTargetSchema,
   spendCommandTargetSchema,
+  correctionsCommandTargetSchema,
 ]);
 
 export const emptyPayloadSchema = z.object({}).strict();
@@ -891,6 +899,18 @@ export const correctionDebugOpenPayloadSchema = z.object({
   // The checks the debug task is held to; required when the original run has no contract to inherit them from.
   checks: z.array(nonemptyString).min(1).optional(),
 }).strict();
+// Debug task plan Task 11 (design §12.4): the panel form's record, the UI's manual close (`orca correct --close`'s
+// arguments) and the author's withdraw, as human-only verbs on the `@corrections` scope.
+const correctionIdSchema = z.string().regex(/^c_[a-f0-9]{16}$/);
+export const correctionRecordPayloadSchema = z.object({
+  repoId: idSchema, decisionId: nonemptyString, kind: z.enum(CORRECTION_KINDS), because: nonemptyString,
+  chose_instead: z.string().optional(), again: z.boolean().optional(),
+}).strict();
+export const correctionClosePayloadSchema = z.object({
+  correctionId: correctionIdSchema, choseInstead: nonemptyString.optional(), undoHow: nonemptyString,
+  undoCost: nonemptyString.optional(), undoBlastRadius: nonemptyString.optional(),
+}).strict();
+export const correctionWithdrawPayloadSchema = z.object({ correctionId: correctionIdSchema }).strict();
 export const verifySavedResultPayloadSchema=z.object({sourceRunId:idSchema,sourceAttempt:positiveSafeInteger,capsuleHash:hashSchema}).strict();
 export const savedResultEligibilityViewSchema=savedResultSourceEligibilitySchema;
 const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
@@ -924,6 +944,9 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("approve-pending-decision"), target: groupCommandTargetSchema, payload: approvePendingDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("correction-record"), target: correctionsCommandTargetSchema, payload: correctionRecordPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("correction-close"), target: correctionsCommandTargetSchema, payload: correctionClosePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("correction-withdraw"), target: correctionsCommandTargetSchema, payload: correctionWithdrawPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("apply-agent-update"), target: operatorCommandTargetSchema, payload: applyAgentUpdatePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
@@ -984,6 +1007,9 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("approve-pending-decision"), target: groupCommandTargetSchema, payload: approvePendingDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("correction-record"), target: correctionsCommandTargetSchema, payload: correctionRecordPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("correction-close"), target: correctionsCommandTargetSchema, payload: correctionClosePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("correction-withdraw"), target: correctionsCommandTargetSchema, payload: correctionWithdrawPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("apply-agent-update"), target: operatorCommandTargetSchema, payload: applyAgentUpdatePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
@@ -1612,6 +1638,12 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("pending-decision-approved"), pendingId: idSchema, decisionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("pending-decision-rejected"), pendingId: idSchema, correctionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("debug-group-opened"), groupId: idSchema, correctionId: nonemptyString, created: z.boolean() }).strict(),
+  z.object({ kind: z.literal("correction-recorded"), correctionId: nonemptyString }).strict(),
+  z.object({ kind: z.literal("correction-closed"), correctionId: nonemptyString, relPath: nonemptyString, alreadyClosed: z.boolean() }).strict(),
+  z.object({
+    kind: z.literal("correction-withdrawn"), correctionId: nonemptyString, review: z.enum(["written", "duplicate", "skipped"]),
+    debugGroups: z.array(z.object({ groupId: idSchema, state: z.enum(["archived", "started: left running"]) }).strict()),
+  }).strict(),
   z.object({ kind: z.literal("agent-preferences-set"), operatorId: nonemptyString, revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("agent-installations-updated"), operatorId: nonemptyString, revision: positiveSafeInteger, beforeHash: hashSchema, afterHash: hashSchema }).strict(),
   z.object({ kind: z.literal("spend-cap-set"), revision: positiveSafeInteger }).strict(),
@@ -1704,7 +1736,9 @@ export const commandSuccessSchema = z
     // Execution driver spec §3.2: a repository-scoped command has its setting's revision and no group
     // projection.
     const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-integration-scheme" || value.verb === "set-agent-preferences" || value.verb === "apply-agent-update"
-      || value.verb === "set-spend-cap" || value.verb === "clear-spend-cap" || value.verb === "set-usage-calendar";
+      || value.verb === "set-spend-cap" || value.verb === "clear-spend-cap" || value.verb === "set-usage-calendar"
+      // Debug task plan Task 11: the `@corrections` scope has revision 0 and no group projection.
+      || value.verb === "correction-record" || value.verb === "correction-close" || value.verb === "correction-withdraw";
     if (isShutdown ? value.commandRevision !== null : value.commandRevision === null) {
       issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");
     }

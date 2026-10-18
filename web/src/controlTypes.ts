@@ -405,7 +405,8 @@ export type CommandTargetV1 =
   | { kind: "global"; epoch: string }
   | { kind: "repository"; repoId: string }
   | { kind: "operator"; operatorId: string }
-  | { kind: "spend" };
+  | { kind: "spend" }
+  | { kind: "corrections" };
 
 /** What a mutation POST carries: an id the ledger dedupes on, the revision it expects, and the verb's payload. */
 export type CommandEnvelopeV1 = { commandId: string; expectedRevision: number; payload?: unknown };
@@ -492,7 +493,8 @@ export type CommandSuccessV1 = {
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
-    | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "correction-debug-open";
+    | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "correction-debug-open"
+    | "correction-record" | "correction-close" | "correction-withdraw";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -521,6 +523,9 @@ export type CommandSuccessV1 = {
     | { kind: "pending-decision-approved"; pendingId: string; decisionId: string }
     | { kind: "pending-decision-rejected"; pendingId: string; correctionId: string }
     | { kind: "debug-group-opened"; groupId: string; correctionId: string; created: boolean }
+    | { kind: "correction-recorded"; correctionId: string }
+    | { kind: "correction-closed"; correctionId: string; relPath: string; alreadyClosed: boolean }
+    | { kind: "correction-withdrawn"; correctionId: string; review: "written" | "duplicate" | "skipped"; debugGroups: Array<{ groupId: string; state: "archived" | "started: left running" }> }
     | { kind: "agent-preferences-set"; operatorId: string; revision: number }
     | { kind: "agent-installations-updated"; operatorId: string; revision: number; beforeHash: string; afterHash: string }
     | { kind: "spend-cap-set"; revision: number }

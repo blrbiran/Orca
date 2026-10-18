@@ -46,6 +46,7 @@ import { authMiddleware, registerAuthRoutes } from "./authRoutes.js";
 import { ensurePanelOperatorId, registerControlReadRoutes, type ControlReadApiDeps } from "./controlApi.js";
 import { archiveUnstartedDebugGroups } from "../control/debugGroup.js";
 import { principalLabel, type Principal } from "./permissions.js";
+import type { PanelCorrections } from "../control/correctionCommands.js";
 
 /**
  * Panel UI redesign spec §4 (ruling U1): one ledger read per repository per request; a
@@ -257,6 +258,27 @@ async function hasOpenCorrection(
       c.by === by &&
       correctionState(c.id, withdrawn, closed) === "open",
   );
+}
+
+/**
+ * Debug task plan Task 11: what the control service's correction verbs take from the panel. The routes below call these
+ * same functions, so a correction recorded or withdrawn through a verb leaves the rows these routes leave: the panel's
+ * project key, its clock, its closed rule and its review marks.
+ */
+export function panelCorrections(opts: PanelOptions, reviews: ReviewsWriter): PanelCorrections {
+  return {
+    projectKeyOf: (repoId) => opts.repos.find((repo) => controlRepoKey(repo.projectKey) === repoId)?.projectKey ?? null,
+    now: () => panelClock(opts)(),
+    closedIds: async () => closedIds((await currentMetrics(opts)).observations),
+    markReviewed: async ({ projectKey, decisionId, by }) => {
+      await reviews.append({ decisionId, projectKey, action: "reviewed", by, at: nowIso(opts) });
+    },
+    withdrawReview: async ({ projectKey, decisionId, by }, closed) =>
+      (await isReviewedNow(reviews, projectKey, decisionId, by)) &&
+      !(await hasOpenCorrection(opts.correctionsDir, closed, by, projectKey, decisionId))
+        ? await reviews.append({ decisionId, projectKey, action: "withdrawn", by, at: nowIso(opts) })
+        : "skipped",
+  };
 }
 
 /**
@@ -546,13 +568,7 @@ export function buildApi(app: Express, deps: ApiDeps): void {
       // something the ledger never heard about. A refused correction (above)
       // never reaches this line, so it never writes `reviewed`.
       try {
-        await deps.reviews.append({
-          decisionId,
-          projectKey,
-          action: "reviewed",
-          by: deps.opts.by,
-          at: nowIso(deps.opts),
-        });
+        await panelCorrections(deps.opts, deps.reviews).markReviewed({ projectKey, decisionId, by: deps.opts.by });
       } catch (err) {
         const code = err instanceof PanelRejection ? err.code : "panel-internal-error";
         const message = err instanceof Error ? err.message : String(err);
@@ -735,11 +751,7 @@ export function buildApi(app: Express, deps: ApiDeps): void {
       const { projectKey, decisionId } = withdrawn.correction;
       let review: "written" | "duplicate" | "skipped";
       try {
-        review =
-          (await isReviewedNow(deps.reviews, projectKey, decisionId, by)) &&
-          !(await hasOpenCorrection(dir, closed, by, projectKey, decisionId))
-            ? await deps.reviews.append({ decisionId, projectKey, action: "withdrawn", by, at: nowIso(deps.opts) })
-            : "skipped";
+        review = await panelCorrections(deps.opts, deps.reviews).withdrawReview({ projectKey, decisionId, by }, closed);
       } catch (err) {
         const code =
           err instanceof PanelRejection || err instanceof CorrectRejection ? err.code : "panel-internal-error";

@@ -19,6 +19,16 @@ export const durableCommandErrorStatuses = {
   // refused entry is invalid for another reason no undo.how can fix (detail: the reason).
   "decision-undo-not-executable": 400,
   "pending-decision-entry-invalid": 400,
+  // Debug task plan Task 11 (correction-record / correction-close): the corrections store's and `orca correct --close`'s
+  // own refusals, booked under their own names (CorrectRejection codes, 1:1). closing-row-refused: the ledger writer
+  // refused the closing row (the detail is its reason; an undo.how the tier-0 gate refuses is the usual one).
+  "correction-row-invalid": 400,
+  "no-chose-instead": 400,
+  "close-argument-conflict": 400,
+  "target-not-a-git-repo": 400,
+  "target-has-no-remote": 400,
+  "target-remote-not-keyable": 400,
+  "closing-row-refused": 400,
 
   // Resource lookup.
   "artifact-not-found": 404,
@@ -108,6 +118,24 @@ export const durableCommandErrorStatuses = {
   // Debug task plan Task 10 (fix round 1): GET /api/control/corrections over a corrections.jsonl with a line that does not
   // parse; the list is not answered as if that row were absent.
   "corrections-store-unreadable": 409,
+  // Debug task plan Task 11: the remaining CorrectRejection codes of correction-record, correction-close and
+  // correction-withdraw (the store's and --close's, 1:1); a manual close while a debug group of the correction is live
+  // (design §12.1: archive or stop it first); the withdrawal refusals of decisions review withdraw spec §5.2; and the two
+  // partial outcomes, as the panel routes answer them 409: the correction was recorded but its reviewed mark was not
+  // written, or it was withdrawn but a step after the withdrawal failed (detail: `<correctionId>:<step>:<code>`).
+  "correction-already-recorded": 409,
+  "duplicate-correction-id": 409,
+  "corrections-store-busy": 409,
+  "target-mid-git-operation": 409,
+  "ledger-commit-refused": 409,
+  "debug-group-active": 409,
+  "correction-not-yours": 409,
+  "correction-already-withdrawn": 409,
+  "correction-closed": 409,
+  "correction-recorded-unreviewed": 409,
+  "correction-withdrawn-incomplete": 409,
+  // correction-withdraw: the panel's ledger scan (the withdraw route's closed rule) refused; the detail names its gate code.
+  "correction-closed-state-unknown": 409,
   "plan-version-conflict": 409,
   "profile-changed": 409,
   "proposal-version-conflict": 409,
@@ -251,6 +279,8 @@ export const durableCommandErrorStatuses = {
 
   // A durable recovery lock is immutable for this command ID.
   "control-recovery-required": 423,
+  // Debug task plan Task 11: another orca process holds the repository's lock, so correction-close cannot close now.
+  "repo-locked": 423,
   "agent-installation-update-stale": 409,
   "agent-installation-update-conflict": 409,
   "agent-installation-update-invalid": 422,

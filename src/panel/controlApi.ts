@@ -421,6 +421,13 @@ const payloadFields = (payload: unknown): Record<string, unknown> =>
 const scoped = (groupId: string) => ({ groupId, target: { kind: "group" as const, groupId } });
 const fromParams: RouteTarget = (params) => scoped(idSchema.parse(params.groupId));
 const spendScoped: RouteTarget = () => ({ groupId: "@spend", target: { kind: "spend" } });
+/** Debug task plan Task 11: the `@corrections` scope; a path naming a correction must name the payload's. */
+const correctionsScoped: RouteTarget = (params, payload) => {
+  if (params.correctionId !== undefined && String(params.correctionId) !== payloadFields(payload).correctionId) {
+    throw new ControlError("control-non-json-payload", "correction-id-mismatch");
+  }
+  return { groupId: "@corrections", target: { kind: "corrections" } };
+};
 /**
  * Debug task plan Task 6: the group a correction's open is booked on, read from the store (debugGroupIdFor). A command id
  * already booked on one of the correction's debug groups is that group's, so a retry replays even after the newest has
@@ -499,6 +506,10 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/decisions/reject", verb: "reject-pending-decision", target: fromParams },
     // Debug task plan Task 6: a recorded correction opens its debug group; the ledger key is that group's.
     { path: "/api/control/corrections/:correctionId/debug-group", verb: "correction-debug-open", target: debugOpenScoped },
+    // Debug task plan Task 11: an owner records, closes by hand, or withdraws a correction; the ledger key is `@corrections`.
+    { path: "/api/control/corrections", verb: "correction-record", target: correctionsScoped },
+    { path: "/api/control/corrections/:correctionId/close", verb: "correction-close", target: correctionsScoped },
+    { path: "/api/control/corrections/:correctionId/withdraw", verb: "correction-withdraw", target: correctionsScoped },
     {
       path: "/api/control/operator/agent-preferences",
       verb: "set-agent-preferences",
@@ -589,6 +600,9 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "approve-pending-decision": await service.approvePendingDecision(command); break;
           case "reject-pending-decision": await service.rejectPendingDecision(command); break;
           case "correction-debug-open": await service.openCorrectionDebugGroup(command); break;
+          case "correction-record": await service.recordCorrection(command); break;
+          case "correction-close": await service.closeCorrection(command); break;
+          case "correction-withdraw": await service.withdrawCorrection(command); break;
           case "set-agent-preferences": await service.setAgentPreferences(command); break;
           case "apply-agent-update": await service.applyAgentUpdate(command, { client, principal: principalLabel(principal) }); break;
           case "proposal-set-agent": await service.proposalSetAgent(command); break;

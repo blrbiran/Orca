@@ -42,7 +42,7 @@ type CommandRow = { raw_request_hash: unknown; original_status: unknown; body_js
 type CommandBody = CommandLookupV1["body"];
 
 type CommandScope = {
-  key: string; kind: "group" | "global" | "repository" | "operator" | "spend"; id: string;
+  key: string; kind: "group" | "global" | "repository" | "operator" | "spend" | "corrections"; id: string;
   groupId: string | null; repoId: string | null; operatorId: string | null;
 };
 
@@ -52,6 +52,8 @@ function scope(command: RawAuthorityCommandV1): CommandScope {
     return { key: `@repository:${command.target.repoId}`, kind: "repository", id: command.target.repoId, groupId: null, repoId: command.target.repoId, operatorId: null };
   }
   if (command.target.kind === "spend") return { key: "@spend", kind: "spend", id: "spend", groupId: null, repoId: null, operatorId: null };
+  // Debug task plan Task 11 (controller's call 6): correction-record/-close/-withdraw share one scope with no revision.
+  if (command.target.kind === "corrections") return { key: "@corrections", kind: "corrections", id: "corrections", groupId: null, repoId: null, operatorId: null };
   if (command.target.kind === "operator") {
     return { key: `@operator:${command.target.operatorId}`, kind: "operator", id: command.target.operatorId, groupId: null, repoId: null, operatorId: command.target.operatorId };
   }
@@ -92,6 +94,8 @@ export function spendRevision(store: ControlStore): number {
 /** A settings scope carries its own revision; null means the scope is a group or global one. */
 function settingRevision(store: ControlStore, commandScope: CommandScope, verb?: RawAuthorityCommandV1["verb"]): number | null {
   if (commandScope.kind === "spend") return spendRevision(store);
+  // Constant: the corrections store has no revision; a duplicate is its own `again` check (controller's call 6).
+  if (commandScope.kind === "corrections") return 0;
   if (commandScope.repoId !== null) return repositoryRevision(store, commandScope.repoId);
   if (commandScope.operatorId !== null) {
     if (verb === "apply-agent-update") {

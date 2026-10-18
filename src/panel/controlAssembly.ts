@@ -1,3 +1,4 @@
+import type { PanelCorrections } from "../control/correctionCommands.js";
 import { mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { createAdmissionGate, type AdmissionGate } from "../control/admissionGate.js";
@@ -116,7 +117,7 @@ export interface ControlAssemblyInput {
    * Control run decisions plan Task 10: the panel's corrections store and resolved identity, the very values
    * `/api/corrections` records with (cross-plan resolution 1). Absent, reject-pending-decision is refused by name.
    */
-  corrections?: { dir: string; by: string };
+  corrections?: { dir: string; by: string; panel?: PanelCorrections };
 }
 
 /**
@@ -228,6 +229,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     // particular no mode is guessed -- a guessed mode is how a soft adapter comes to be driven as
     // a strict one, which is the whole reason these are operator arguments.
     ...(input.corrections === undefined ? {} : { correctionsDir: input.corrections.dir, correctionsBy: input.corrections.by }),
+    // Debug task plan Task 11: the panel's key, clock, closed rule and review marks, for correction-record/-withdraw.
+    ...(input.corrections?.panel === undefined ? {} : { panelCorrections: input.corrections.panel }),
     defaults: () => {
       if (estimator === null || control.estimateMode === null) return null;
       return { estimatorProfileId: estimator.snapshot.profile.profileId, estimatorProfileHash: estimator.profileHash, estimateMode: control.estimateMode };

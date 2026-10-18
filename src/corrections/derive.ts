@@ -117,7 +117,7 @@ const objectOf = (value: unknown): Record<string, unknown> =>
  * (ruling C17); a field it lacks stays absent, and appendEvents refuses the row rather than this guessing one.
  */
 export function derivePendingRows(input: {
-  correction: Correction; pending: PendingEntry; choseInstead: string; undo: { how: string }; at: string; runId: string;
+  correction: Correction; pending: PendingEntry; choseInstead: string; undo: { how: string; cost?: string; blastRadius?: string }; at: string; runId: string;
   authored: DeriveInput["authored"];
 }): { decision: DecisionEvent } {
   const { correction, pending, at, runId } = input;
@@ -137,7 +137,8 @@ export function derivePendingRows(input: {
     chose,
     alternatives: [{ option: textOf(entry.chose), why_not: `人在 correction ${correction.id} 里推翻了它：${correction.because}` }],
     because: correction.because,
-    undo: { how, cost: inheritedOf(entryUndo.cost), blast_radius: inheritedOf(entryUndo.blast_radius) },
+    // Debug task plan Task 11: a human closing by hand (correction-close) may give the cost and blast radius, as --close does.
+    undo: { how, cost: input.undo.cost ?? inheritedOf(entryUndo.cost), blast_radius: input.undo.blastRadius ?? inheritedOf(entryUndo.blast_radius) },
     scope: entry.scope,
     kind: entry.kind,
     evidence: [`correction ${correction.id}`, `pending ${pending.pendingId}`],

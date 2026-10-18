@@ -52,6 +52,10 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "reject-pending-decision": "human-only",
   // Debug task design §12.4: opening a correction's debug group spends nothing, so the agent path may do it.
   "correction-debug-open": "any",
+  // Debug task plan Task 11 (design §12.4, withdraw Amendment 7): recording, closing and withdrawing a correction are an owner's acts.
+  "correction-record": "human-only",
+  "correction-close": "human-only",
+  "correction-withdraw": "human-only",
 };
 export const HUMAN_ONLY_VERBS: readonly CommandVerbV1[] =
   (Object.keys(VERB_ACCESS) as CommandVerbV1[]).filter((verb) => VERB_ACCESS[verb] === "human-only");

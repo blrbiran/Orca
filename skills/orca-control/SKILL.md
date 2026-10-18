@@ -156,6 +156,8 @@ The socket refuses these before anything runs (nothing is ledgered, the commandI
 - `reject-pending-decision` (rejecting a decision a landing refused, which records a correction in the owner's name) is owner-only → 403 `control-verb-human-only`.
 - `correction-debug-open` (opening a recorded correction's debug group; it spends nothing, and its group is `debug-<correctionId>`, or the next `-2`, `-3`, … with `"reopen":true` once the newest is stopped or archived) is open to an agent, but its `undoHow` field is human-only → 403 `control-field-human-only`. Send `expectedRevision` 0 for a new group, or the group's current revision. Add `"checks":["npm test"]` to name the checks the debug task is held to; they replace the original contract's, and they are required (409 `debug-checks-required`) when the corrected run has no contract to inherit them from.
 
+- `correction-record`, `correction-close` and `correction-withdraw` (recording a correction, closing one by hand with the owner's `undo.how`, withdrawing one) are owner-only → 403 `control-verb-human-only`. A close while a debug group of the correction is live is refused 409 `debug-group-active`.
+
 Do not look for a way around them. Ask the human. To spend less, use `pause-dispatch` or `handoff-stop`.
 
 The panel enforces this at every interface: the socket's agent can never do a human-only action, and the Web UI requires a logged-in owner. It is a boundary at the panel's interfaces, not against a process that edits Orca's files (accounts spec §2).
@@ -211,6 +213,9 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/decisions/approve` | approve-pending-decision | `{"pendingId":"pending-run-x-0","undoHow":"git revert --no-edit <sha>"}` |
 | `POST groups/<groupId>/decisions/reject` | reject-pending-decision | `{"pendingId":"pending-run-x-0","because":"the premise was false"}` |
 | `POST corrections/<correctionId>/debug-group` | correction-debug-open | `{"correctionId":"c_0123456789abcdef"}` |
+| `POST corrections` | correction-record | `{"repoId":"repo-1","decisionId":"run-1/1","kind":"wrong","because":"the premise was false"}` |
+| `POST corrections/<correctionId>/close` | correction-close | `{"correctionId":"c_0123456789abcdef","choseInstead":"a file lease","undoHow":"git revert --no-edit <sha>"}` |
+| `POST corrections/<correctionId>/withdraw` | correction-withdraw | `{"correctionId":"c_0123456789abcdef"}` |
 | `POST recovery/retry` | recovery-retry | `{"scope":"run","runId":"run1"}` |
 | `POST repositories/<repoId>/workspace-mode` | set-workspace-mode | `{"workspaceMode":"worktree"}` |
 | `POST repositories/<repoId>/integration` | set-integration-scheme | `{"integration":{"delivery":"keep"}}` |
