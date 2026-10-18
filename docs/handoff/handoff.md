@@ -68,7 +68,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **「Decisions 页：查看已审＋撤回审阅／撤回纠正」已实施并合进 main**（`--ff-only`，未 push；首笔主题行 `feat(panel): reviews gain a withdrawn action and a latest-row review state`，用 `git log --oneline --grep=withdraw` 找）。spec `docs/superpowers/specs/2026-10-18-decisions-review-withdraw-design.md`（**§10 优先于正文**），计划 `docs/superpowers/plans/2026-10-18-decisions-review-withdraw.md`；SDD 台账 `.superpowers/sdd/2026-10-18-decisions-review-withdraw/progress.md`（git-ignored；每条 `Ruling:`、延后 minor、门的数、评审包都在里面）。
 - **做成了什么**：审阅行只追加 `withdrawn`，每人以文件顺序最新一行为状态，写入方、覆盖率／待办、`orca compact-reviews` 共用一条规则（旧规则会把「同意→撤回→再同意」压成未审）；纠正的撤回写进**新文件** `~/.orca/correction-withdrawals.jsonl`（0600，`ORCA_CORRECTIONS_DIR` 改道；`corrections.jsonl` 一字节不动，因为它的读取方是严格的）；指标把撤回的纠正从所有数里去掉，报告多一个 `withdrawn_corrections`；面板 `POST /api/reviews/withdraw`、`POST /api/corrections/withdraw`，`GET /api/decision` 多返回 `review`；详情页显示谁审过、每条纠正及其状态，只对自己的有效项给「撤回」按钮；中英文案齐。
 - **人裁（本会话）**：撤回同意是主要场景；纠正可在「刚记下」时撤回（debug group 没开始就归档——要等 debug 计划实施）；**已关闭的纠正不能撤回**，再记一条新纠正开新 debug group；「本 spec 必需的既有测试都允许改」（**只对本会话有效**），改过的既有断言逐条记在台账 `Ruling:`。
-- **控制器替人定的、要人审的**（都在台账 `Ruling:` 与 spec §4.4／§5.2–5.4／§10）：按钮叫「撤回审阅」；自己还有未撤回纠正时不能单独撤回审阅；撤回纠正顺带撤回自己的「已审」（若无别的未撤回纠正）；被拒待定决定那种纠正这轮不能撤回；撤回只在 Web 面板、不给 CLI／agent；「不在列表里」的提示改成中性句。
+- **控制器替人定的——人已审、同意**（会话 `3d44b2fb`，原话「同意」；记在台账末节「Human review of the controller's calls」；都在台账 `Ruling:` 与 spec §4.4／§5.2–5.4／§10）：按钮叫「撤回审阅」；自己还有未撤回纠正时不能单独撤回审阅；撤回纠正顺带撤回自己的「已审」（若无别的未撤回纠正）；被拒待定决定那种纠正这轮不能撤回；撤回只在 Web 面板、不给 CLI／agent；「不在列表里」的提示改成中性句。
 - **门**（全新 clone，`ORCA_CCLOOP_BIN=/private/tmp/ccb6-qswQ/ccloop/dist/cli.js`，只指 fake 的 `ORCA_AGENTS_TABLE`）：`npm run verify` exit 0；`~/.orca` 哈希 0 差。门的 fake 表要点：每个 `command` 是单元素数组、包一层 shell 脚本；**codex 要 `integration` 模式并带 marker**、`version` 填 fake 自己答的 `--version`（codex `9.9.9-fake`、omp `18.10.1`）；**不要 export `GIT_AUTHOR_*`**（两条「本机身份不外泄」判据会红）。
 - **没做／未测（Rule 12）**：真浏览器里没看过；debug 计划那半（撤回时归档未开跑的 debug group、`correction-close` 拒撤回的纠正等）只写进了该计划末尾的修订节 `## Amendment (decisions review withdraw, session b304f167)`，**未实施**；台账里延后的 minor（写入方三处并发守卫的变异 M4b/c/d 没有确定性判据、一条判据 `withdrawApi.test.ts:386` 自身的红没单独看见等）。
 - 已调查未动手：「能用代码替代 agent 的尽量用代码」候选清单 `.superpowers/sdd/2026-10-18-decisions-review-withdraw/code-over-agent-survey.md`。
@@ -364,7 +364,6 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 - **ccloop 计划 Task 4 Step 6**：预言变红的 `tests/control/codexSkillsFailureWorker.test.ts`（夹具 wrapper 要转发非 `exec` 调用）与语义已变的 `tests/runtime/codex/extraEnv.test.ts`「sets CODEX_HOME from the installation's configDir…」——改要人逐条点名（人在会话 `1710772d` 给过「本 session 中必要的 test 都允许改」，**只对那个会话有效**）。
 - **付费**（每一次先问）：§4.2 第 7 条。
-- **会话 `b304f167` 的控制器裁定待审**：§3.00「控制器替人定的」与台账 `.superpowers/sdd/2026-10-18-decisions-review-withdraw/progress.md` 的全部 `Ruling:` 行（人审后删本条）。
 - **ccmem embedding 账号无额度**。
 - **`orca chain` 真钱活体验收**：要人提交 `.orca/chain.json` 选 model（不存在时开链被 `chain-config-missing` 拒）。
 - **面板的真浏览器视觉验收**（深浅主题、几何、依赖图 SVG）——人没看过第二批以后。
