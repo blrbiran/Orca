@@ -39,7 +39,7 @@ import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, 
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { recordEmptyResultDecisions, stepD, stepR } from "./driverLanding.js";
 import { readDebugMark } from "./debugChecks.js";
-import { checkReproduction, type ReproVerdict } from "./debugRepro.js";
+import { checkReproduction, restoreWorkspace, snapshotWorkspace, type ReproVerdict, type WorkspaceSnapshot } from "./debugRepro.js";
 import { reportedDebugOf } from "./reportedDecisions.js";
 import { openRequestOf, stepH, visitOrder } from "./driverHandoff.js";
 import { harvest } from "../scheduler/harvest.js";
@@ -116,7 +116,16 @@ export interface DriverRun {
 }
 
 /** Per-driver process state: reconciliation runs in flight (spec §5.3(6)), and whether the driver was stopped. */
-export interface DriverContext { reconciling: Map<string, Promise<void>>; stopped: boolean }
+export interface DriverContext {
+  reconciling: Map<string, Promise<void>>; stopped: boolean;
+  /** Debug task plan Task 8 (fix round 1, R1): reproduce-first checks in flight, by run; absent, a process-wide map is used. */
+  debugChecks?: Map<string, DebugCheck>;
+}
+
+/** One reproduce-first check running off the driver round: aborted by stop(), its outcome read by a later round. */
+export interface DebugCheck { controller: AbortController; settled: { verdict: ReproVerdict } | { error: unknown } | null }
+/** For a step called outside a driver (a criterion calling stepC itself); a driver owns its own map. */
+const unownedDebugChecks = new Map<string, DebugCheck>();
 
 export interface ExecutionDriver {
   /** One pass over every run the driver owns; a re-entrant call joins the pass in flight. Answers whether any run moved. */
@@ -580,11 +589,14 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
   return report;
 }
 
-export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: DriverContext): Promise<boolean> {
   const { store } = deps;
   const run = readDriverRun(store, runId);
   if (run.state !== "accepted" || run.drive === undefined || run.taskId === null) return false;
   const drive = run.drive;
+  // Debug task plan Task 8 (fix round 1, R1): a run whose reproduce-first check started is never collected or committed
+  // again; the check owns its workspace until its verdict is applied.
+  if (drive.debugRepro?.state === "checking") return stepDebugCheck(deps, run, context);
   let report = await collectInto(deps, run);
   if((run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&(!report.terminal||!report.candidate?.stopProof)){
     const status=await portFor(deps,run).inspect(readStartEnvelope(store,run));
@@ -622,28 +634,88 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string): Promise<b
     return true;
   }
   // Debug-task design §12.8 (plan Task 8): a debug group's run is checked before it moves on, an empty attempt included
-  // (it added no test, so it fails `no-tests`). A failed check fails the attempt like a failed verification
-  // (isTerminallyFailedRun: blocked at C with an outcome other than `succeeded`).
-  let repro: ReproVerdict | null = null;
+  // (it added no test, so it fails `no-tests`). Fix round 1 (R1): the check runs off the driver round. The marker that
+  // lets a restart restore the workspace is persisted first; a later round applies the verdict (stepDebugCheck).
   if (readDebugMark(readGroup(store, run.groupId)) !== null) {
-    const reported = reportedDebugOf(report);
-    repro = await (deps.checkReproduction ?? checkReproduction)({
-      workdir: join(drive.sourceDir, "repo"), base: drive.base!, attemptSha, contract, timeoutMs: contract.executionPolicy.perAttemptTimeoutMs,
-      result: reported.kind === "object" ? reported.value : {}, resultMalformed: reported.kind === "malformed",
-    });
-    if (repro.kind === "failed") {
-      blockRun(deps, runId, "C", `debug-repro:${repro.reason}`, { outcome: "repro-failed", attemptSha });
+    const workdir = join(drive.sourceDir, "repo");
+    const snapshot = await snapshotWorkspace(workdir);
+    const marked = write(deps, () => {
+      const current = readDriverRun(store, runId);
+      if (current.state !== "accepted" || current.drive === undefined) return false;
+      current.drive = { ...current.drive, debugRepro: { state: "checking", startedAt: (deps.now?.() ?? new Date()).toISOString(), attemptSha, ...snapshot, empty: measured.empty } };
+      saveDriverRun(store, current);
       return true;
-    }
+    });
+    if (!marked) return false;
+    startDebugCheck(deps, runId, context, { workdir, base: drive.base!, attemptSha, contract, report, snapshot });
+    return true;
   }
-  const debugRepro = repro?.kind === "skipped" ? { debugRepro: { state: "skipped" as const, reason: repro.reason } } : {};
   return write(deps, () => {
     const current = readDriverRun(store, runId);
     if (current.state !== "accepted") return false;
     // Deviation D14: an empty result is not landed; `landedCommit` stays null and the settle step
     // (Task 7) applies D14 and decides E from there.
     current.state = measured.empty ? "landed" : "collected";
-    current.drive = { ...current.drive!, outcome, attemptSha, landedCommit: null, ...debugRepro };
+    current.drive = { ...current.drive!, outcome, attemptSha, landedCommit: null };
+    saveDriverRun(store, current);
+    return true;
+  });
+}
+
+function debugChecksOf(context: DriverContext | undefined): Map<string, DebugCheck> {
+  return context?.debugChecks ?? unownedDebugChecks;
+}
+
+/** Starts the check as a promise the driver does not await; its outcome is kept on the entry for a later round. */
+function startDebugCheck(deps: ExecutionDriverDeps, runId: string, context: DriverContext | undefined, input: {
+  workdir: string; base: string; attemptSha: string; contract: ReturnType<typeof readConfirmedTaskExecution>["contract"]; report: ExecutionReport; snapshot: WorkspaceSnapshot;
+}): void {
+  const reported = reportedDebugOf(input.report);
+  const entry: DebugCheck = { controller: new AbortController(), settled: null };
+  debugChecksOf(context).set(runId, entry);
+  void (deps.checkReproduction ?? checkReproduction)({
+    workdir: input.workdir, base: input.base, attemptSha: input.attemptSha, contract: input.contract, timeoutMs: input.contract.executionPolicy.perAttemptTimeoutMs,
+    result: reported.kind === "object" ? reported.value : {}, resultMalformed: reported.kind === "malformed", snapshot: input.snapshot, signal: entry.controller.signal,
+  }).then((verdict) => { entry.settled = { verdict }; }, (error: unknown) => { entry.settled = { error }; });
+}
+
+/**
+ * A debug run whose check started. With no check in flight here (a restart, a crash, another driver), the workspace is
+ * restored to the marker first and the check is run again; while it runs nothing moves. A failed check fails the attempt
+ * like a failed verification (isTerminallyFailedRun: blocked at C with an outcome other than `succeeded`); a check that
+ * threw is blocked by the round with its error and keeps the marker, so a retry restores and checks again.
+ */
+async function stepDebugCheck(deps: ExecutionDriverDeps, run: DriverRun, context: DriverContext | undefined): Promise<boolean> {
+  const { store } = deps;
+  const runId = run.runId, drive = run.drive!, marker = drive.debugRepro;
+  if (marker?.state !== "checking") return false;
+  const checks = debugChecksOf(context);
+  const entry = checks.get(runId);
+  if (entry === undefined) {
+    const workdir = join(drive.sourceDir, "repo");
+    const restoreFailure = await restoreWorkspace(workdir, marker.attemptSha, marker);
+    if (restoreFailure !== null) throw restoreFailure;
+    const contract = readConfirmedTaskExecution(store, run.groupId, run.taskId!).contract;
+    startDebugCheck(deps, runId, context, { workdir, base: drive.base!, attemptSha: marker.attemptSha, contract, report: await savedReport(store, runId), snapshot: marker });
+    return true;
+  }
+  if (entry.settled === null) return false;
+  checks.delete(runId);
+  if ("error" in entry.settled) throw entry.settled.error;
+  const verdict = entry.settled.verdict;
+  if (verdict.kind === "failed") {
+    blockRun(deps, runId, "C", `debug-repro:${verdict.reason}`, { outcome: "repro-failed", attemptSha: marker.attemptSha, debugRepro: null });
+    return true;
+  }
+  return write(deps, () => {
+    const current = readDriverRun(store, runId);
+    if (current.state !== "accepted" || current.drive?.debugRepro?.state !== "checking") return false;
+    // Deviation D14, as in stepC: an empty result is not landed.
+    current.state = marker.empty ? "landed" : "collected";
+    current.drive = {
+      ...current.drive, outcome: "succeeded", attemptSha: marker.attemptSha, landedCommit: null,
+      debugRepro: verdict.kind === "skipped" ? { state: "skipped", reason: verdict.reason } : null,
+    };
     saveDriverRun(store, current);
     return true;
   });
@@ -988,7 +1060,7 @@ export async function advance(deps: ExecutionDriverDeps, runId: string, context:
     case "starting": return stepA1(deps, runId);
     case "start-pending": return run.drive?.prepared ? stepB(deps, runId) : stepA2(deps, runId);
     case "unknown": return stepBPrime(deps, runId);
-    case "accepted": return stepC(deps, runId);
+    case "accepted": return stepC(deps, runId, context);
     case "collected": return stepD(deps, runId);
     case "reconciling": return stepR(deps, runId, context);
     case "landed": case "settled": return stepE(deps, runId);
@@ -1007,7 +1079,7 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
   if(key==='taskResults')return taskResults;
   const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
  }});
-  const context: DriverContext = { reconciling: new Map(), stopped: false };
+  const context: DriverContext = { reconciling: new Map(), stopped: false, debugChecks: new Map() };
   let inFlight: Promise<boolean> | null = null;
   let timer: NodeJS.Timeout | null = null;
   let crashed: CrashPoint | null = null;
@@ -1112,6 +1184,9 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
     async stop(): Promise<void> {
       context.stopped = true;
       stopTimer();
+      // Debug task plan Task 8 (fix round 1, R1): a reproduce-first check is not awaited. Its process group is killed and its
+      // persisted marker stays, so the next driver restores the workspace and checks again.
+      for (const check of context.debugChecks?.values() ?? []) check.controller.abort();
       const stopping=taskResults.stop();
       if (inFlight !== null) await inFlight;
       await stopping;

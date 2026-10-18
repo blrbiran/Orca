@@ -973,7 +973,7 @@ export const zh: Translation<typeof en> = {
     "no-command": "没有指定运行复现测试的命令（合约里的检查仍是占位）",
     "green-at-base": "复现测试在运行的 base 上已经通过，没有复现这条更正",
     "red-at-head": "复现测试在运行的尝试上失败，修复没有让它通过",
-    "result-invalid": "读不了运行的 debug 结果，也找不到可以代替检查的新增测试",
+    "result-invalid": "运行的 debug 结果无法检查：要么读不了它、也找不到可以代替的新增测试，要么它声明无法复现却没给理由，要么它点名的测试文件不在这次尝试里",
     skipped: "未复现",
   },
   enums: {

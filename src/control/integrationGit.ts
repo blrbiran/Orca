@@ -18,6 +18,13 @@ export interface ChildOptions {
   env?: Record<string, string>;
   /** The deadline for this child instead of integrationTimeoutMs() (the debug reproduction check passes the contract's). */
   timeoutMs?: number;
+  /** Aborting kills the child's process group and rejects with ChildAborted (the driver's stop, for the debug check). */
+  signal?: AbortSignal;
+  /**
+   * The runner's own environment as it is, instead of childEnv(): the debug reproduction check runs its command with the
+   * environment ccloop gives a contract's required checks (ccloop runLoop.js runRequiredChecks: inherited, unchanged).
+   */
+  inheritEnv?: boolean;
 }
 export type RunChild = (bin: string, args: string[], opts: ChildOptions) => Promise<ChildResult>;
 
@@ -27,6 +34,10 @@ export class ChildTimeout extends Error {
     super(`${bin} ${args.join(" ")}: no answer within ${ms} ms`);
     this.name = "ChildTimeout";
   }
+}
+/** The child was stopped by its caller's signal; it and every process it started were killed. */
+export class ChildAborted extends Error {
+  constructor(readonly bin: string) { super(`${bin}: aborted`); this.name = "ChildAborted"; }
 }
 /** The child could not be started at all (a missing binary, a missing directory). */
 export class ChildSpawnFailed extends Error {
@@ -84,26 +95,29 @@ export const spawnRunChild: RunChild = (bin, args, opts) => new Promise((resolve
   const ms = opts.timeoutMs ?? integrationTimeoutMs();
   let child;
   try {
-    child = spawn(bin, argv, { cwd: opts.cwd, env: { ...childEnv(), ...opts.env }, detached: true, stdio: ["pipe", "pipe", "pipe"] });
+    child = spawn(bin, argv, { cwd: opts.cwd, env: { ...(opts.inheritEnv ? process.env : childEnv()), ...opts.env }, detached: true, stdio: ["pipe", "pipe", "pipe"] });
   } catch (error) { reject(new ChildSpawnFailed(bin, error)); return; }
   const stdout: Buffer[] = [], stderr: Buffer[] = [];
   let settled = false;
-  const timer = setTimeout(() => {
+  const killWith = (error: Error): void => {
     if (settled) return;
-    settled = true;
+    settled = true; clearTimeout(timer); opts.signal?.removeEventListener("abort", onAbort);
     try { if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL"); } catch { /* already gone */ }
-    reject(new ChildTimeout(bin, argv, ms));
-  }, ms);
+    reject(error);
+  };
+  const timer = setTimeout(() => killWith(new ChildTimeout(bin, argv, ms)), ms);
+  const onAbort = (): void => killWith(new ChildAborted(bin));
+  if (opts.signal?.aborted) onAbort(); else opts.signal?.addEventListener("abort", onAbort, { once: true });
   child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
   child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
   child.on("error", (error) => {
     if (settled) return;
-    settled = true; clearTimeout(timer);
+    settled = true; clearTimeout(timer); opts.signal?.removeEventListener("abort", onAbort);
     reject(new ChildSpawnFailed(bin, error));
   });
   child.on("close", (code, signal) => {
     if (settled) return;
-    settled = true; clearTimeout(timer);
+    settled = true; clearTimeout(timer); opts.signal?.removeEventListener("abort", onAbort);
     resolve({ code: code ?? (signal === null ? 1 : 128), stdout: Buffer.concat(stdout).toString("utf8"), stderr: Buffer.concat(stderr).toString("utf8") });
   });
   // A child that exits before reading all of it fails through `close`; the pipe's EPIPE is that same failure.

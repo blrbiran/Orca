@@ -87,7 +87,8 @@ export async function stepH(deps: ExecutionDriverDeps, runId: string, context: D
     // spec §11 C4: no executionId is not "never accepted"; a prepared envelope may have reached ccloop.
     case "start-pending": return run.drive?.prepared ? inspectUnderStop(deps, run, request) : restartRun(deps, runId, request.requestId);
     case "unknown": return inspectUnderStop(deps, run, request);
-    case "accepted": return deliverAndCollect(deps, run, request);
+    // Debug task plan Task 8 (fix round 1, R1): a run in its reproduce-first check already ended in ccloop; C applies the check.
+    case "accepted": return run.drive?.debugRepro?.state === "checking" ? advance(deps, runId, context) : deliverAndCollect(deps, run, request, context);
     // spec §3: a landing is a short local operation and a reconciliation run cannot be reached by the control
     // protocol, so neither is interrupted; the request settles once the run does (spec §11 C1).
     case "collected": case "landed": case "reconciling": return advance(deps, runId, context);
@@ -181,7 +182,7 @@ function countUnknownUnderStop(deps: ExecutionDriverDeps, run: DriverRun, reques
  * and no terminal is H-settled; nothing at all past the grace is outcome-unknown -- which keeps collecting
  * and never kills ccloop (spec §11 I3).
  */
-async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, request: HandoffRequestBody): Promise<boolean> {
+async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, request: HandoffRequestBody, context?: DriverContext): Promise<boolean> {
   const { store } = deps;
   if (request.state === "request-pending") {
     if (deps.admissionGate?.draining) return false;
@@ -205,7 +206,7 @@ async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, requ
   // its unused commitment returned (terminaliseRun) -- even when the call had already finished; the output stays as
   // evidence and a person can re-estimate. Never a checkpoint: there is no work to continue.
   if (singleCallPurposeOf(run) !== null && report.candidate?.stopProof) return settleSingleCallUnderStop(deps, run, request);
-  if (report.terminal !== null && report.candidate?.stopProof && run.state === "accepted") return stepC(deps, run.runId);
+  if (report.terminal !== null && report.candidate?.stopProof && run.state === "accepted") return stepC(deps, run.runId, context);
   if (report.candidate?.stopProof) {
     deps.crash?.("H-after-candidate");
     return settleHandoffCheckpoint(deps, run.runId, request.requestId, report);

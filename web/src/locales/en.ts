@@ -126,7 +126,7 @@ const debugRepro = {
   "no-command": "no command was named to run the reproduction test (the contract's check is still the placeholder)",
   "green-at-base": "the reproduction test already passes at the run's base, so it does not reproduce the correction",
   "red-at-head": "the reproduction test fails at the run's attempt, so the fix does not make it pass",
-  "result-invalid": "the run's debug result could not be read, and no added test was found to check instead",
+  "result-invalid": "the run's debug result cannot be checked: it could not be read and no added test was found instead, it declared the reproduction not expressible without giving a reason, or it named a test file its attempt does not contain",
   skipped: "not reproduced",
 } as const;
 

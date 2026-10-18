@@ -96,9 +96,18 @@ export const driveRecordSchema = z.object({
   // Control run decisions: the `orca: decisions <runId>` commit that carried this run's ledger lines when the run landed
   // nothing (`landedCommit` null); a later step writes it. Defaulted for the same reason.
   ledgerCommit: commitSchema.nullable().default(null),
-  // Debug task plan Task 8 (design §12.8(3)): a debug run whose agent declared the reproduction not expressible, with its
-  // reason, so the panel shows 未复现; null for every other run. Defaulted so a drive record from before this field still parses.
-  debugRepro: z.object({ state: z.literal("skipped"), reason: z.string().min(1) }).strict().nullable().default(null),
+  // Debug task plan Task 8 (design §12.8): the reproduce-first check of a debug run. `checking` is written before the check
+  // touches the workspace and holds what a restart needs to restore it (fix round 1, R1): the attempt, the symbolic ref and
+  // the untracked paths that were there, and whether the attempt was empty. `skipped` keeps the agent's reason for a
+  // reproduction it declared not expressible, so the panel shows 未复现. Null for every other run; defaulted so a drive
+  // record from before this field still parses.
+  debugRepro: z.discriminatedUnion("state", [
+    z.object({
+      state: z.literal("checking"), startedAt: z.string().min(1), attemptSha: commitSchema, headRef: z.string().min(1).nullable(),
+      untrackedBefore: z.array(z.string().min(1)), empty: z.boolean(),
+    }).strict(),
+    z.object({ state: z.literal("skipped"), reason: z.string().min(1) }).strict(),
+  ]).nullable().default(null),
 }).strict();
 export type DriveRecord = z.infer<typeof driveRecordSchema>;
 
