@@ -266,3 +266,122 @@ Two questions went to the human; the answers are in §2 and applied in §3.0 and
 - The debug agent continuing the original session or reading its transcript.
 - A gate that an agent-written `undo.how` can pass where a human-written one would be refused.
 - Spending money (estimate or run) without the human's click.
+
+## 12. Revision after the independent review (2026-10-18)
+
+An independent reviewer read this document against `0c8daaed`. The human had said, for this round,
+「这一轮执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核」, so every point below is the
+**controller's call**, to be reported to the human for review. Where this section and an earlier one disagree, this
+section wins; the earlier text is kept verbatim (CLAUDE.md Rule 13). It is built on the decisions design's §10
+(same day), which it shares mechanisms with.
+
+### 12.1 When a correction is closed (blocker 1)
+
+`alreadyCommitted` (`src/corrections/gitState.ts:209`) searches `git log --all`, so it matches the debug group's own
+branch; it is **not** the closing predicate. Closed-ness is computed, not stored:
+
+- `correctionIntegrated(correction)`: the commit that holds its closing rows is an ancestor of the integration target
+  ref (`git merge-base --is-ancestor <commit> <ref>`). The ref per scheme: `local` → `refs/heads/<target>`;
+  `push-target`, `push-branch`, `github-pr` → `refs/remotes/<remote>/<target>` after a fetch; `keep` → never true by
+  itself (the correction stays open until the human closes it, §12.4).
+- Evaluated when the group's integration step completes, and whenever the corrections list or a correction is read
+  (panel and agent path). No new state.
+- **Manual close while a debug group is live** (not stopped, not archived) is refused with
+  `debug-group-active`, and the UI offers "stop the debug group, then close by hand". This replaces §9a's "the human's
+  close wins without stopping the group": two closings of one correction would put two `overturned` rows for one
+  decision on the target. The human still wins, by stopping the group.
+
+### 12.2 Opening spends nothing (blocker 2)
+
+`writeImportedPlan` always inserts an `estimates` row and the reserve logic branches on `queued`
+(`src/control/planImport.ts:286, 299, 367`). The open verb therefore adds an import mode with **no estimate row**:
+the reserve is computed as for a non-queued estimate, and the group's first `estimate` verb (`webService.ts:437`)
+creates the row. It is built on the new-group path (`importControlPlan`), not `applyRequirementDraftAccept` (which
+updates an existing group), and does not need an estimator slot. Criterion: the reserve totals before and after an
+open are equal.
+
+Idempotency is structural: `groupId = debug-<correctionId>`. A stopped or archived debug group is returned with its
+state; the panel offers **Reopen**, which creates `debug-<correctionId>-2` (then `-3`, …).
+
+### 12.3 What a correction can name, this round (blocker 3; human said run targets are 「当前基本无效」)
+
+- `decisionId` (as today), and
+- `{ runId, pendingId }`, from rejecting a pending decision (decisions design §10.5).
+
+The bare `runId` target (a 纠正 button on a finished task, §3.0) is **deferred** to after the decisions wiring is in use,
+by the human's own remark that it is of little use now and Rule 2. Readers of the new target:
+
+- `CORRECTION_FIELDS` (`src/corrections/fields.ts:35`) gains `runId` and `pendingId`; an absent optional field is
+  omitted from the canonical JSON, so every existing correction id and fix-run id is unchanged (criterion with a
+  stored fixture).
+- Closing a pending-target correction writes one `decision` row and no `overturned` row (there is no ledger row to
+  overturn); its closed-ness is §12.1's predicate.
+- Metrics (`src/metrics/resolve.ts:77`, `compute.ts:80`, `collect.ts:176`): pending-target corrections are excluded from
+  the decision correction and repair rates and reported on their own line ("N corrections on unrecorded decisions").
+- `projectKey` stays required: the open and reject verbs take it from the group repo (`projectKeyOf`). §3.0's
+  "no projectKey lookup is needed" is withdrawn.
+- `/api/corrections` (`src/panel/api.ts:308`) is unchanged; pending-target corrections come only from the reject verb.
+
+### 12.4 Web UI and agent path (blocker 4, goal.md §1.2)
+
+- New human-only control verbs: `correction-close` (the UI's manual close, same semantics as `orca correct --close`,
+  including the human's `undo.how`), and `correction-record` (what the panel form already does, as a verb so it is
+  reachable by the same envelope). Recording and closing are the human's acts, so both are human-only; the agent path
+  can list corrections, open a debug group, estimate and start it.
+- The panel lists **corrections without a debug group** with an Open button. §3.1's CLI `controlSend` branch is
+  **dropped**: `orca correct` keeps recording, and the panel/agent path opens. No step needs a terminal.
+- `estimate` and `start` keep their existing access (`"any"`) for debug groups, consistent with §1.2 and spend caps.
+  Anti-goal 4 is reworded: **opening** never spends; estimating and starting follow the same rules as any group.
+
+### 12.5 `undo.how` and the gate (should-fix 5, 6)
+
+- When the human gave none, Orca's code writes `undo.how = "git revert --no-edit <attemptSha>"` with the debug run's
+  real sha (passes the gate, decisions design §10.3), suffixed `（Orca 生成，人未填）`. The agent is not asked for it
+  (it does not know the landed commit; Rule 5: code can answer). `chose_instead` stays the agent's when the human gave
+  none, suffixed `（agent 写，人未填）`.
+- §6's "the gate still holds" is narrowed: the predicate is lexical for every author. Ruling 4's concern was copied
+  values; agent or Orca values are not copies, but the gate checks their shape, not their truth.
+- Corrections spec A′ §4.1 ("a web app holding commit rights on every repository is refused", `panel/api.ts:290-295`)
+  is also narrowed: the control service commits closing rows on group branches. Recorded here; the corrections spec gets
+  a dated correction section in the plan.
+
+### 12.6 Where the closing rows land (consistency with the decisions design)
+
+The closing rows go **into the debug run's landing commit** (decisions design §10.1's shared mechanism), not a separate
+commit afterwards, so `trigger: task` integration cannot run between them.
+
+### 12.7 Failure cases
+
+- The original run's data is partly missing (no `runs` row, `base` or `landedCommit` null, objects unreachable after a
+  squash or branch deletion): each missing piece is omitted and named in the goal text; the correction row and the
+  decision (or pending entry) are always present.
+- Diff range is `base..attemptSha` of the original run (not `base..landedCommit`, which includes other landings), with
+  `.decisions/` excluded.
+- The frozen input includes the pending entry for a pending-target correction.
+- A human manual close while the debug group is still a draft is refused per §12.1 until the group is stopped.
+
+### 12.8 The reproduce-first check, decided (should-fix 11)
+
+Orca's code, not the agent, checks it after the debug run's attempt:
+
+1. The agent's result names `reproTests: string[]` (paths it added) and `reproCommand: string` (defaults to the
+   original contract's first `buildTestCommands` entry; required when there is none).
+2. In a scratch worktree at the original `base`, Orca applies only the `reproTests` files from `attemptSha` and runs
+   `reproCommand`: it must exit **non-zero**. At `attemptSha` it must exit **zero**.
+3. If the agent declares `reproduction: "not-expressible"` with a reason (a `not_my_taste` on style, say), the check is
+   skipped and the group shows 未复现 with the reason; it does not block landing.
+4. A failed check fails the attempt like any failed verification (`rejectOn`).
+
+### 12.9 Verification additions
+
+- Rows on the group branch but not on the target leave the correction open; after `local` integration it is closed.
+- Manual close with a live debug group → `debug-group-active`; after stopping → closes.
+- Pending-target correction: open, land, close; metrics line; ids of existing corrections unchanged.
+- Open on a stopped group returns it; Reopen makes `-2`.
+- Agent default: fixture whose original agent differs from the operator default.
+- Reproduce check: red at base and green at head passes; green at base fails the attempt; `not-expressible` skips.
+- Rule 17: the open, reject, record and close verbs write the corrections store or the ledger only under
+  `ORCA_CORRECTIONS_DIR` / temp repos in tests. Integration is tested with `local` only; the push schemes are untested
+  (handoff §4.2 item 16).
+
+- Citation fix: `writeImportedPlan` starts at `src/control/planImport.ts:258`; §4.1's `243-258` is imprecise.

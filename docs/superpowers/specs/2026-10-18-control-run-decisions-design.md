@@ -184,3 +184,94 @@ Controller's calls:
 - A refused decision silently dropped, or a task failed because one decision was refused.
 - A decision on the target branch before the work it explains is, or the reverse.
 - Any step that needs a terminal.
+
+## 10. Revision after the independent review (2026-10-18)
+
+An independent reviewer read this document and the debug-task design against `0c8daaed` and found three blockers and
+several gaps. The human had said, for this round, 「这一轮执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核」,
+so every point below is the **controller's call**, to be reported to the human for review. Where this section and an
+earlier one disagree, this section wins; the earlier text is kept verbatim (CLAUDE.md Rule 13).
+
+### 10.1 Both landing paths write the decisions (blocker B1)
+
+A run lands either through `stepD` (`merge --no-ff` in the copy, `src/control/driverLanding.ts:98-108`) or, after a
+conflict, through `finishReconcile`, whose produce step only fetches a prebuilt merge commit whose tree is the
+reconciler's attempt (`driverLanding.ts:348-355`). Both must carry the ledger lines:
+
+- `stepD`: write `.decisions/<runId>.jsonl` into the copy's working tree and stage it before the merge commit is made.
+- `finishReconcile`: build the tree with a temporary index (`GIT_INDEX_FILE=<tmp> git read-tree <reconciled tree>`,
+  `git hash-object -w` for the ledger file(s), `git update-index --add --cacheinfo`, `git write-tree`) and hand that
+  tree to `rebuildMergeCommit`. The commit then holds the original run's file **and** the reconcile run's file
+  (`reconcile-run-<uuid>`): the reconcile decision of §3.2 and the reconciling agent's own `decisions`.
+- One shared function computes the lines for a run (agent entries after filtering, plus code-authored ones); both paths
+  call it; one criterion per path.
+
+### 10.2 One ref-based reader (blocker B2)
+
+`local` integration into a branch that is not checked out only moves a ref (`src/control/integrationPass.ts:361-363`),
+and the push schemes never touch the local tree, so working-tree readers miss integrated decisions. A new reader
+`readLedgerAtRef(repo, ref)` (`git ls-tree` + `git show` of `.decisions/**`, archives included) serves the panel's group
+and task views, the debug-task open verb, and `readOriginalDecision` when it is given a ref. Refs consulted, in order:
+the working tree (unchanged behaviour), the integration target ref (`refs/heads/<target>` for `local`;
+`refs/remotes/<remote>/<target>` for the push schemes, after the fetch the panel already does), then the group branch
+`refs/heads/orca/<groupId>` (labelled "not yet integrated"). The first ref holding the id wins.
+
+### 10.3 Executable `undo.how` strings (blocker B3)
+
+Measured (`npx tsx -e` calling `undoHowIsExecutable`, `src/ledger/undoExecutable.ts:45`, at `0c8daaed`):
+`git revert 3f9c2a1b7e` → false; `git revert <sha>` → true (only because of the placeholder);
+`git revert --no-edit 3f9c2a1b7e4d` → true. The predicate is lexical: it needs an argument-shaped token (`-…`, a path,
+`=`, a placeholder, a file name) after a program word. The execute-phase instructions tell the agent this rule and give
+`git revert --no-edit <sha>` as the form for "revert my commit". Criteria use a real 40-hex sha in that form. Widening the
+predicate is out of scope.
+
+### 10.4 Runs that do not land, and pending items
+
+- A run that **lands with no commit** (an empty result marked `landed`, `src/control/executionDriver.ts:619-621`):
+  Orca makes a ledger-only commit on the group branch holding its file, so an `abandon` decision is recorded.
+- A run that is **blocked, abandoned or continued from** never lands: its reported entries are stored on the run in the
+  control DB and shown in the run view as 未落地的决定. They are not written to the ledger (there is no work on the
+  branch for them to explain) and not pending.
+- **Pending items are created at landing**, by the same shared function as §10.1, keyed on `(runId, entryIndex)`
+  (insert-if-absent), so `findLanding` recovery, `finishReconcile` and a moved-tip retry never duplicate them.
+- **Any** failure of the batch (per-entry schema/`kind`/`scope`/tier-0 refusals, or a batch-level throw from
+  `appendEvents`: duplicate id, `validateFile`, sibling read errors, `src/ledger/writer.ts:116-184`) turns the affected
+  entries — the whole batch for a batch-level throw — into pending items with the reason, and the landing proceeds.
+  Entries are filtered before `appendEvents`.
+
+### 10.5 Approve and reject
+
+- Pending ids are `pending-<runId>-<entryIndex>`.
+- **Approve** (human-only): first checks whether a line with the would-be id is already on the group branch or the
+  target (crash between git and DB); if so it only marks the item approved. Otherwise it makes a ledger-only commit on
+  the group branch. If the group has already integrated, it re-runs the group's integration through the existing
+  `retry-integration` verb path; under `keep` the commit stays on the group branch like the work does; for an archived
+  group whose integration refuses, approve is refused with that reason and the item stays pending.
+- **Reject** (human-only): records a correction whose target is `{ runId, pendingId }` (debug-task revision §12.3), keyed
+  on `pendingId` (a second reject finds the first correction), then opens the debug group.
+- **Rule 17**: reject makes the control service a new writer of the corrections store (`~/.orca/corrections.jsonl`,
+  `ORCA_CORRECTIONS_DIR`). §7's "none new" is wrong; tests run with `ORCA_CORRECTIONS_DIR` in a temp dir.
+
+### 10.6 Cuts and fixes
+
+- The integration-conflict reconcile (`integrationResolve.ts`) is **cut** from this round: the template's text is false
+  for a group-versus-target conflict, the resolution has no run (`runId: null`, `:214`), and its commit is built with
+  `commit-tree` (`integrationPass.ts:428-429`).
+- The reconcile template takes `otherTaskIds: string[]` (the control path carries an array, `driverLanding.ts:183`);
+  with one id its text is byte-identical to today's (criterion on the old scheduler's existing fixture).
+- `evidence` holds the run id, the `attemptSha` and the ccloop version (§3.1's "landed commit" is superseded by §7a).
+- The `group-<groupId>` file of §4 is dropped (nothing uses it after §3.2's narrowing).
+
+### 10.7 Verification, replacing §7 where they differ
+
+- Per path (`stepD`, `finishReconcile`, empty landing): the landed commit's tree holds the run's file with the
+  expected lines (assert on `git show <landed>:.decisions/<runId>.jsonl`, not on a function's return value).
+- Mutations, each seen red: kind/scope refusal by name removed; filter-before-batch removed (good entry lost);
+  pending insert skipped; approve set to `"any"` in `VERB_ACCESS`; duplicate append on `findLanding` recovery and on a
+  moved-tip retry; the `finishReconcile` path not writing the file.
+- Panel (goal.md §1.2): the 需要人确认 badge on task and group, Approve and Reject buttons, the 纠正 action on each
+  decision row, the 未落地的决定 list; agent path: approve and reject refused with the human-only code.
+- Integration tested with `local` only; `push-target`, `push-branch`, `github-pr` are **untested** here (Rule 12) and
+  depend on handoff §4.2 item 16.
+- §3.1 is **not done** until a contract test reads ccloop's real output; until then the fake-result criteria pin only
+  Orca's side.
