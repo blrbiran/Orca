@@ -51,13 +51,17 @@ describe("metrics notes in the reader's language (spec §6.10)", () => {
     // also match inside the no-review-coverage note, so a heading left in English could not turn this red.
     expect([...view.container.querySelectorAll("h2")].map((h) => h.textContent)).toEqual([
       zh.metrics.correctionRate, zh.metrics.repairRate, zh.metrics.reviewCoverage,
-      zh.metrics.unresolvedTitle, zh.metrics.malformedTitle, zh.metrics.futureTitle,
+      zh.metrics.unresolvedTitle, zh.metrics.malformedTitle, zh.metrics.futureTitle, zh.metrics.unrecordedDecisionCorrections,
     ]);
     expect(view.getByTestId("correction-rate").textContent).toBe(zh.metrics.unknownRate);
     // REWRITTEN (human authorisation, session 1f3cceb2): the h2 above names the count in the reader's language (pinned a few lines up), so the line repeats only the number.
     expect(view.getByTestId("unresolved-count").textContent).toBe("0");
     expect(view.getByTestId("malformed-count").textContent).toBe("0");
     expect(view.getByTestId("excluded-as-future").textContent).toBe("0");
+    // The field is optional on the web type: absent reads as 0, present shows its number.
+    expect(view.getByTestId("unrecorded-decision-corrections").textContent).toBe("0");
+    view.rerender(<MetricsView report={{ ...report, corrections_on_unrecorded_decisions: 3 }} coverage={coverage} />);
+    expect(view.getByTestId("unrecorded-decision-corrections").textContent).toBe("3");
     // Each note site read where it is shown: the zh no-review-coverage note is also the correction caveat's, so a
     // toContain on the whole text could not see the review-coverage reason or a repair caveat left as sent.
     expect(view.getByTestId("review-coverage-reason").textContent).toBe(zh.metrics.note["no-review-coverage"]);

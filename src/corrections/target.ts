@@ -16,8 +16,9 @@ export function correctionTargetOf(row: Correction | CorrectionRow): CorrectionT
   const { runId, pendingId } = row;
   const pending = runId !== undefined && pendingId !== undefined;
   const partial = (runId !== undefined) !== (pendingId !== undefined);
-  if (namesDecision(row) === pending || partial) {
+  const names = namesDecision(row);
+  if (names === pending || partial) {
     throw new CorrectRejection(CORRECTION_ROW_INVALID, "a correction names exactly one target: decisionId, or both runId and pendingId");
   }
-  return namesDecision(row) ? { kind: "decision", decisionId: row.decisionId } : { kind: "pending", runId: runId as string, pendingId: pendingId as string };
+  return names ? { kind: "decision", decisionId: row.decisionId } : { kind: "pending", runId: runId as string, pendingId: pendingId as string };
 }

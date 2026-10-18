@@ -1064,6 +1064,7 @@ export const en = {
     unresolvedTitle: "Unresolved decisions",
     malformedTitle: "Malformed lines",
     futureTitle: "Excluded as future",
+    unrecordedDecisionCorrections: "Corrections on unrecorded decisions",
     note: metricsNote,
   },
   // ccloop error codes spec (2026-10-15) §4.6: a ccloop code with no entry in either table.

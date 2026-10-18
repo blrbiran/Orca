@@ -54,6 +54,13 @@ describe("report rendering (E2 spec §6)", () => {
     expect(renderTable(M())).toContain("review coverage");
   });
 
+  // M-2.5: drop the `> 0` branch in report.ts -> the count-0 report prints the line too, red; drop the line -> count 3 red.
+  it("the human table names corrections on unrecorded decisions only when there are some", () => {
+    const line = "corrections on unrecorded decisions (in none of the rates): 3";
+    expect(renderTable({ ...M(), corrections_on_unrecorded_decisions: 3 })).toContain(line);
+    expect(renderTable({ ...M(), corrections_on_unrecorded_decisions: 0 })).not.toContain("corrections on unrecorded decisions");
+  });
+
   it("ends the JSON with exactly one newline, so a golden diff is stable", () => {
     const json = renderJson(M());
     expect(json.endsWith("\n")).toBe(true);

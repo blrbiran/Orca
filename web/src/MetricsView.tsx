@@ -81,6 +81,7 @@ export function MetricsView({ report, coverage }: { report: MetricsReport; cover
         <div><h2>{t("metrics.unresolvedTitle")}</h2><p data-testid="unresolved-count">{report.unresolved_decisions.length}</p></div>
         <div><h2>{t("metrics.malformedTitle")}</h2><p data-testid="malformed-count">{report.malformed_lines.length}</p></div>
         <div><h2>{t("metrics.futureTitle")}</h2><p data-testid="excluded-as-future">{report.excluded_as_future}</p></div>
+        <div><h2>{t("metrics.unrecordedDecisionCorrections")}</h2><p data-testid="unrecorded-decision-corrections">{report.corrections_on_unrecorded_decisions ?? 0}</p></div>
       </div>
     </section>
   );

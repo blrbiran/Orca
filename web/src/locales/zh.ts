@@ -957,6 +957,7 @@ export const zh: Translation<typeof en> = {
     unresolvedTitle: "未解析的决策",
     malformedTitle: "格式错误的行",
     futureTitle: "因日期在未来而排除",
+    unrecordedDecisionCorrections: "指向未记录决策的纠正",
     note: {
       "no-review-coverage": "评审覆盖率还没有数据：只有在面板上做的评审会产生它。纠正率要和覆盖率一起看，不能单独解读。",
       "unresolved-decisions": "有些纠正指向的决策不在扫描到的台账里；它们计入总数，但不属于任何决策类型分组。",
