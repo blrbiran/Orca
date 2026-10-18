@@ -223,6 +223,8 @@ describe("GET /api/decision's review state (spec §4.4, §5.3, §7)", () => {
         const res = await post(started, "/api/corrections/withdraw", { correctionId: toWithdraw.id });
         expect(res.status).toBe(200);
         await closeInLedger(repo, closedMine, clock.tick());
+        // Spec §5.2's accepted window: a close landing after the withdrawal leaves both marks; withdrawn wins.
+        await closeInLedger(repo, toWithdraw, clock.tick());
 
         const row = (c: Correction, state: string, mine: boolean, withdrawable: boolean) => ({
           id: c.id,
