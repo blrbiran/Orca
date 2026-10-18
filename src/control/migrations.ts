@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const schemaVersion = "13";
+export const schemaVersion = "14";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -120,8 +120,17 @@ CREATE TABLE IF NOT EXISTS agent_update_outbox(operator_id TEXT NOT NULL, comman
 CREATE UNIQUE INDEX IF NOT EXISTS one_pending_agent_update ON agent_update_outbox(operator_id) WHERE state='pending';
 `;
 
+// Decisions an agent proposed that Orca held back for a human. run_id is the control run that landed the work;
+// ledger_run is the ledger file's run id (run_id or reconcile-<run_id>). body is the PendingEntry JSON, plus the
+// settled outcome (approvedId or correctionId). Existing rows are untouched; the table starts empty.
+export const schema13To14 = `CREATE TABLE IF NOT EXISTS pending_decisions(id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES groups(id),
+  run_id TEXT NOT NULL REFERENCES runs(id), ledger_run TEXT NOT NULL, entry_index INTEGER NOT NULL CHECK(entry_index >= 0),
+  state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected')), body TEXT NOT NULL, UNIQUE(ledger_run, entry_index)) STRICT;
+CREATE INDEX IF NOT EXISTS pending_decisions_group ON pending_decisions(group_id, state);
+`;
+
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
-export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13;
+export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14;
 
 /**
  * Accounts spec §9: idempotent on a store a criterion downgraded by dropping only its own column or table (the 6-to-7 and
@@ -139,13 +148,18 @@ function migrate7To8(store: DatabaseSync): void {
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   // Saved recovery's 11→12 marker fenced older owners. The current 11/12→13 upgrade also
   // adds installation-update revision/outbox tables; it leaves old policy and accounting rows intact.
+  if (fromVersion === "13") {
+    store.exec(schema13To14);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "12") {
-    store.exec(schema12To13);
+    store.exec(schema12To13 + schema13To14);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "11") {
-    store.exec(schema12To13);
+    store.exec(schema12To13 + schema13To14);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -158,6 +172,6 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   else if (fromVersion !== "7" && fromVersion !== "8" && fromVersion !== "9" && fromVersion !== "10") throw new Error("control-schema-unsupported");
   // Every version before 8 goes through 7 to 8 first; 8 itself only gains the activity table (spec §5.2).
   if (fromVersion !== "8" && fromVersion !== "9" && fromVersion !== "10") migrate7To8(store);
-  store.exec(schema8To9 + schema10To11 + schema12To13);
+  store.exec(schema8To9 + schema10To11 + schema12To13 + schema13To14);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }
