@@ -50,6 +50,9 @@ export const reconcileRecordSchema = z.object({
   // each spawn. The spend is booked under it (never under a pid, which a retry clears). Defaulted so a
   // record from before this field existed still parses.
   spawnSeq: safeInteger.default(0),
+  // Control run decisions plan Task 6: where the conflict's blocks are, for the reconcile decision's text. Optional: a
+  // record from before this field still parses, and its reconciliation lands without that decision (stderr says so).
+  conflictBlocks: z.array(z.object({ path: z.string().min(1), startLine: safeInteger, endLine: safeInteger }).strict()).optional(),
 }).strict();
 export type ReconcileRecord = z.infer<typeof reconcileRecordSchema>;
 

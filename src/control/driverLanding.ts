@@ -1,6 +1,6 @@
 import { claimCapBlocking } from "./spendCaps.js";
 import { existsSync, readFileSync } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { add, budgetBalance, readRun, syncWebBudget } from "./budget.js";
 import { canonicalBytes } from "./canonicalJson.js";
@@ -12,6 +12,8 @@ import { bookReconcileUsage } from "./usageLedger.js";
 import { insertPendingDecisions } from "./pendingDecisions.js";
 import { reportedDecisionsOf, type ReportedDecisions } from "./reportedDecisions.js";
 import { ccloopEvidenceString, runEvidence, writeRunLedger, type PendingEntry } from "./runLedger.js";
+import { exportLedgerDir, treeWithLedgerFiles } from "./ledgerTree.js";
+import { reconcileDecision } from "../scheduler/ledgerWiring.js";
 import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
 import { AgentsRunRefused, TERMINAL_OUTCOMES, cloneDirOf, latestAttemptSha, loopDirOf, runTask } from "../scheduler/ccloopRunner.js";
 import { netChangeSet } from "../scheduler/harvest.js";
@@ -48,12 +50,21 @@ export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommi
     const run = readDriverRun(deps.store, runId);
     if (run.state !== "collected" && run.state !== "reconciling") return;
     run.state = "landed";
-    // Control run decisions: the refused decisions staged before the swap become pending only now, in the same
-    // transaction that records the landing, so a run whose landing never completed leaves none behind.
-    insertPendingDecisions(deps.store, run.groupId, runId, (run.drive!.stagedPending ?? []) as PendingEntry[]);
-    run.drive = { ...run.drive!, landedCommit, stagedPending: [] };
+    landedWithPending(deps.store, run);
+    run.drive = { ...run.drive!, landedCommit };
     saveDriverRun(deps.store, run);
   });
+}
+
+/**
+ * Control run decisions: the refused decisions staged before the swap become pending only when the landing is
+ * recorded, inside that same write transaction, so a run whose landing never completed leaves none behind. D
+ * (markLanded) and R (finishReconcile) both land through here so the two cannot diverge; whatever else a landing
+ * must move out of the drive record in that transaction belongs here too. The caller saves the run.
+ */
+function landedWithPending(store: ControlStore, run: DriverRun): void {
+  insertPendingDecisions(store, run.groupId, run.runId, (run.drive!.stagedPending ?? []) as PendingEntry[]);
+  run.drive = { ...run.drive!, stagedPending: [] };
 }
 
 /** Control run decisions: what a run's ledger is written from -- the decisions it reported, its evidence and the time. */
@@ -220,6 +231,8 @@ async function beginReconcile(deps: ExecutionDriverDeps, runId: string, targetRe
     // whose process died unbooked would make a count collide with a booked key.
     spawnSeq: Number(store.db.prepare("SELECT COALESCE(MAX(CAST(substr(id, ?) AS INTEGER)), 0) AS n FROM outbox WHERE id LIKE ?")
       .get(`reconcile-usage:${runId}:spawn-`.length + 1, `reconcile-usage:${runId}:spawn-%`)!.n),
+    // Control run decisions plan Task 6: the reconcile decision names the blocks; only where they are is kept.
+    conflictBlocks: conflict.blocks.map(({ path, startLine, endLine }) => ({ path, startLine, endLine })),
   };
   return write(deps, () => {
     const current = readDriverRun(store, runId);
@@ -264,6 +277,12 @@ export function readLoopState(loopDir: string): { status: string | null; tokenBu
     const remaining = state.budgetSnapshot?.tokenBudgetRemaining;
     return { status: typeof state.status === "string" ? state.status : null, tokenBudgetRemaining: typeof remaining === "number" ? remaining : null };
   } catch { return { status: null, tokenBudgetRemaining: null }; }
+}
+
+/** Control run decisions plan Task 6: the whole loop state, for what the reconciling agent reported; null if unreadable. */
+export function readLoopStateRaw(loopDir: string): unknown {
+  try { return JSON.parse(readFileSync(join(loopDir, "loop-state.json"), "utf8")) as unknown; }
+  catch { return null; }
 }
 
 /**
@@ -377,7 +396,39 @@ async function finishReconcile(
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
   catch { blockRun(deps, runId, "R", "repository-path"); return true; }
-  const tree = (await git(record.copyPath, [...QUIET_GIT, "rev-parse", `${attemptSha}^{tree}`])).trim();
+  let tree = (await git(record.copyPath, [...QUIET_GIT, "rev-parse", `${attemptSha}^{tree}`])).trim();
+  // Control run decisions plan Task 6: the merge holds the run's own ledger and the reconciliation's, written onto the
+  // reconciled tree's `.decisions/` through a temporary index (ledgerTree.ts); the refused entries of both are staged.
+  const ledgerDir = await mkdtemp(join(record.runsDir, "ledger-"));
+  try {
+    await exportLedgerDir(record.copyPath, tree, ledgerDir);
+    const { reported, evidence, at } = await runLedgerInputs(deps, runId);
+    const own = await writeRunLedger(ledgerDir, { ledgerRun: runId, reported, codeAuthored: [], at, evidence });
+    const reconcileEvidence = runEvidence(record.reconcileRunId, attemptSha, await ccloopEvidenceString(deps.ccloopBin));
+    const otherTaskIds = record.otherTaskIds ?? [record.otherTaskId];
+    const blocks = record.conflictBlocks;
+    // A record written before conflictBlocks existed: no template rather than a false "0 block(s)" line.
+    if (blocks === undefined) process.stderr.write(`orca-driver: ${runId}: reconcile decision skipped: record predates conflictBlocks\n`);
+    const codeAuthored = blocks === undefined ? [] : [{
+      ...reconcileDecision(record.reconcileRunId, 1, run.taskId!, otherTaskIds, {
+        conflictedPaths: record.conflictedPaths, conflictCommit: record.conflictCommit, copyPath: record.copyPath, wTip: record.old, blocks,
+      }, `orca/${run.groupId}`, at),
+      evidence: reconcileEvidence,
+    }];
+    const reconciler = await writeRunLedger(ledgerDir, {
+      ledgerRun: record.reconcileRunId, reported: reportedDecisionsOf(readLoopStateRaw(loopDirOf(workdir, record.reconcileRunId))),
+      codeAuthored, at, evidence: reconcileEvidence,
+    });
+    const names = [
+      ...(own.writtenIds.length > 0 ? [`${runId}.jsonl`] : []),
+      ...(reconciler.writtenIds.length > 0 ? [`${record.reconcileRunId}.jsonl`] : []),
+    ];
+    if (names.length > 0) tree = await treeWithLedgerFiles(record.copyPath, tree, ledgerDir, names);
+    // By replacement, before the swap: a D attempt that staged items and then conflicted left them stale on the run.
+    stagePending(deps, runId, [...own.pending, ...reconciler.pending]);
+  } finally {
+    await rm(ledgerDir, { recursive: true, force: true });
+  }
   const merged = await rebuildMergeCommit(record.copyPath, record.old, incomingRefOf(runId), tree, `orca: land ${runId} (reconciled with ${(record.otherTaskIds ?? [record.otherTaskId]).join(", ")})`);
   await git(record.copyPath, [...QUIET_GIT, "update-ref", `refs/orca/merged/${runId}`, merged]);
   const landed = await landOnTip(deps, targetRepo, runId, run.groupId, record.old, async (landing) => {
@@ -396,6 +447,7 @@ async function finishReconcile(
       current.drive = { ...current.drive!, reconcile: null };
     } else {
       current.state = "landed";
+      landedWithPending(store, current);
       current.drive = { ...current.drive!, landedCommit: merged, reconcile: { ...current.drive!.reconcile!, outcome: loop.status, attemptSha } };
     }
     saveDriverRun(store, current);

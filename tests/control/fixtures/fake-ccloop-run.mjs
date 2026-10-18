@@ -47,6 +47,8 @@ function finish() {
   writeFileSync(join(runDir, "loop-state.json"), JSON.stringify({
     status: config.status,
     budgetSnapshot: { attemptsRemaining: 0, timeRemainingMs: 0, tokenBudgetRemaining: contract.executionPolicy.tokenBudget - config.spent },
+    // Control run decisions plan Task 6: a `decisions` knob is what the reconciling agent reports, in its loop state.
+    ...(config.decisions === undefined ? {} : { decisions: config.decisions }),
   }));
   process.exitCode = config.status === "succeeded" ? 0 : 2;
 }
