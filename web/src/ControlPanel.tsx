@@ -13,6 +13,7 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { nextCommandId, type ControlAction } from "./controlApi.js";
 import { ControlGroupView } from "./ControlGroupView.js";
+import type { GroupDecisionsRead } from "./RunDecisions.js";
 import { RecoveryView } from "./RecoveryView.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import { enumText, refusalText } from "./i18n.js";
@@ -20,7 +21,7 @@ import { GroupList } from "./GroupList.js";
 import { ALL_PROJECTS } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
 import type {
-  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupDecisionsViewV1, GroupViewV1, ModelListState,
+  AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1, ModelListState,
   RecoveryViewV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
 } from "./controlTypes.js";
 import { initialControlState } from "./controlState.js";
@@ -72,7 +73,7 @@ export interface ControlPanelProps {
   /** A repository's integration read, for the target an open group's confirm step suggests. */
   integrationFor?: (repoId: string) => RepositoryIntegrationV1 | null;
   /** Control run decisions plan Task 11: a group's decisions as last read, and opening one in Decisions to correct it. */
-  decisionsFor?: (groupId: string) => GroupDecisionsViewV1 | null;
+  decisionsFor?: (groupId: string) => GroupDecisionsRead | null;
   onCorrectDecision?: (projectKey: string, decisionId: string) => void;
   /** Agent selection spec §6.8: the installation table and this operator's defaults, once read. */
   agents?: AgentsViewV1 | null;

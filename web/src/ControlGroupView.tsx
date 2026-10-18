@@ -24,9 +24,9 @@ import { explainEstimateReason } from "./ccloopCodes.js";
 import { archiveOpen, hasFailureOutcome, retryRunOpen, runNumberOf } from "./runFacts.js";
 import { UsageSettlement } from "./UsageSettlement.js";
 import { SkillsGiven } from "./SkillsGiven.js";
-import { NeedsHumanBadge, runNeedsHuman } from "./RunDecisions.js";
+import { NeedsHumanBadge, runNeedsHuman, type GroupDecisionsRead } from "./RunDecisions.js";
 import type {
-  AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupDecisionsViewV1, GroupViewV1, ModelListState, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
+  AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, ModelListState, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
   RunViewV1,
 } from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
@@ -136,8 +136,8 @@ workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
   integrationFor?: (repoId: string) => RepositoryIntegrationV1 | null;
   /** Spec 2026-10-08 §2.2(d): this group's last refusal, shown at the top until a later success of this group. */
   refusal?: ControlRefusal | null;
-  /** Control run decisions plan Task 11: this group's decisions as last read; absent or null shows no badge and no section. */
-  decisions?: GroupDecisionsViewV1 | null;
+  /** Control run decisions plan Task 11: this group's decisions as last read (or its failed read); absent or null shows no badge and no section. */
+  decisions?: GroupDecisionsRead | null;
   /** Open a decision's detail, where it is corrected (App.tsx). */
   onCorrectDecision?: (projectKey: string, decisionId: string) => void;
 }
@@ -194,7 +194,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const openItem = view.workItems.find((item) => item.taskId === openTask);
   const workspace = props.workspaceFor?.(view.plan.repoId) ?? props.workspace;
   // A read of another group (the page's last one, while this group's is on its way) is no read of this one.
-  const decisions = props.decisions?.groupId === groupId ? props.decisions : null;
+  const read = props.decisions ?? null;
+  const decisions = read !== null && !("failed" in read) && read.groupId === groupId ? read : null;
+  const decisionsFailed = read !== null && "failed" in read ? read.failed : null;
   const taskNeedsHuman = (taskId: string): boolean => decisions?.tasks.some((task) => task.taskId === taskId && task.runs.some(runNeedsHuman)) === true;
   const workspaceMode = workspace === undefined ? undefined
     : workspace !== null && workspace.repoId === view.plan.repoId ? workspace.workspaceMode : null;
@@ -528,7 +530,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 
 </>,
       }} />
-      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} roles={props.roles} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} decisions={decisions} onCorrectDecision={props.onCorrectDecision} resultsActive={props.active !== false && region === "results"} resultsScope={props.resultsScope ?? ""} />}
+      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} roles={props.roles} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} decisions={decisions} decisionsFailed={decisionsFailed} onCorrectDecision={props.onCorrectDecision} resultsActive={props.active !== false && region === "results"} resultsScope={props.resultsScope ?? ""} />}
     </section>
   );
 }

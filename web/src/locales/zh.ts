@@ -369,7 +369,7 @@ export const zh: Translation<typeof en> = {
       needsHuman: "需要人确认",
       approve: "批准",
       reject: "驳回",
-      undoHowLabel: "undo.how",
+      undoHowLabel: "撤销方法（undo.how）",
       rejectBecauseLabel: "理由（可选）",
       reason: "被拒原因：{{reason}}",
       approved: "已批准",
@@ -382,6 +382,7 @@ export const zh: Translation<typeof en> = {
       notSettled: "这次运行的决定还没有定下来。",
       malformed: "这次运行报告的决定不是列表，所以一条也没有落地。",
       unreadable: "这次运行保存的报告读不出来。",
+      readFailed: "这个组的决定读取失败（{{code}}），所以这里不显示任何决定，也不标出需要人确认的项。",
     },
     settlement: {
       activityCharge: "{{bucket}}：{{tokens}} token，{{activeMs}} 毫秒，{{attempts}} 次尝试，{{sessions}} 个会话",

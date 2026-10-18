@@ -15,6 +15,8 @@ import type { ControlAction } from "./controlApi.js";
 import type { GroupDecisionsViewV1 } from "./controlTypes.js";
 
 type DecisionRun = GroupDecisionsViewV1["tasks"][number]["runs"][number];
+/** A group's decisions as the page last read them, or the code its read failed with (fix round 1, Rule 12). */
+export type GroupDecisionsRead = GroupDecisionsViewV1 | { failed: string };
 type PendingItem = DecisionRun["pending"][number];
 
 export interface RunDecisionsProps {

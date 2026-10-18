@@ -198,6 +198,8 @@ export interface TaskDetailProps {
   roles?: readonly Role[];
   /** Control run decisions plan Task 11: the group's decisions as last read; absent or null shows no decisions section. */
   decisions?: GroupDecisionsViewV1 | null;
+  /** Fix round 1 (Rule 12): the code the group's decisions read failed with; said in place of its decisions. */
+  decisionsFailed?: string | null;
   onCorrectDecision?: (projectKey: string, decisionId: string) => void;
 }
 
@@ -235,6 +237,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         {draft !== null ? t("control.task.unsavedDraft") : ""}
       </p>
       <TaskResults view={view} item={item} active={props.resultsActive === true} scope={props.resultsScope ?? ""} />
+      {props.decisionsFailed != null && <p data-testid="decisions-read-failed">{t("control.decisions.readFailed", { code: props.decisionsFailed })}</p>}
       {props.decisions?.tasks.find((task) => task.taskId === item.taskId)?.runs.map((run) => (
         <RunDecisions key={run.runId} groupId={groupId} revision={view.summary.commandRevision} run={run} projectKey={props.decisions?.projectKey ?? null}
           onCommand={onCommand} onCorrect={props.onCorrectDecision} archived={archived} />

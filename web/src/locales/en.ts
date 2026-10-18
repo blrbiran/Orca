@@ -484,6 +484,7 @@ export const en = {
       notSettled: "This run's decisions are not final yet.",
       malformed: "This run's decisions were not a list, so none of them landed.",
       unreadable: "This run's saved report could not be read.",
+      readFailed: "This group's decisions could not be read ({{code}}), so none are shown and none is marked as needing confirmation.",
     },
     settlement: {
       activityCharge: "{{bucket}}: {{tokens}} tokens, {{activeMs}} ms, {{attempts}} attempts, {{sessions}} sessions",

@@ -138,7 +138,9 @@ import { applyTheme, readTheme, writeTheme } from "./theme.js";
 import type { ThemePref } from "./theme.js";
 import { acceptArrival } from "./selection.js";
 import { recoveryRetryAction } from "./recoveryTarget.js";
-import type { ChainRepoView, DecisionKind, DecisionListRow, DecisionScope, DecisionStatusRow, MetricsReport, PanelCoverage } from "./types.js";
+import type { ChainRepoView, DecisionListRow, DecisionStatusRow, MetricsReport, PanelCoverage } from "./types.js";
+
+type DecisionIdentity = Pick<DecisionListRow, "projectKey" | "id">;
 
 /** localStorage, or undefined where touching it throws. */
 function browserStorage(): Storage | undefined {
@@ -205,7 +207,8 @@ export function App(): JSX.Element {
   const authNow = useRef(account); authNow.current = account;
   const [home, setHome] = useState<HomeState | null>(null);
   const [error, setError] = useState<PanelRefusal | null>(null);
-  const [selected, setSelected] = useState<DecisionListRow | null>(null);
+  // Only a row's identity is read off the open decision (Task 11: 纠正 opens one no list row carries yet).
+  const [selected, setSelected] = useState<DecisionIdentity | null>(null);
   /** A body belongs to the read that accepted it, never merely to a reused detail wrapper. */
   const [acceptedDecision, setAcceptedDecision] = useState<{
     owner: Pick<DecisionListRow, "projectKey" | "id">; body: Decision; identity: string; request: number | null;
@@ -219,7 +222,7 @@ export function App(): JSX.Element {
    */
   const [decisionRequests, setDecisionRequests] = useState<DecisionRequests>(EMPTY_REQUESTS);
   /** The row whose answer may still be applied; read by `acceptArrival` when one arrives. */
-  const wanted = useRef<DecisionListRow | null>(null);
+  const wanted = useRef<DecisionIdentity | null>(null);
 
   const [chains, setChains] = useState<ChainRepoView[] | null>(null);
   const [chainOutcome, setChainOutcome] = useState<ChainOutcome | null>(null);
@@ -234,7 +237,7 @@ export function App(): JSX.Element {
   const [allRows, setAllRows] = useState<DecisionStatusRow[] | null>(null);
   /** Taste refinement P1-3: reviews this browser recorded since it opened the panel, and a pending move to the next row. */
   const [reviewedThisSession, setReviewedThisSession] = useState(0);
-  const [pendingAdvance, setPendingAdvance] = useState<{ reviewed: DecisionListRow; before: DecisionListRow[] } | null>(null);
+  const [pendingAdvance, setPendingAdvance] = useState<{ reviewed: DecisionIdentity; before: DecisionListRow[] } | null>(null);
   const [theme, setTheme] = useState<ThemePref>(() => readTheme(browserStorage()));
   const [showAdvanced, setShowAdvanced] = useState(() => readShowAdvanced(browserStorage()));
   useEffect(() => {
@@ -261,7 +264,7 @@ export function App(): JSX.Element {
   const [integrations, setIntegrations] = useState<Record<string, RepositoryIntegrationV1>>({});
   const integrationSeq = useRef<Record<string, number>>({});
   /** Control run decisions plan Task 11: each group's decisions as last read, by groupId; only the newest read is applied. */
-  const [groupDecisions, setGroupDecisions] = useState<Record<string, GroupDecisionsViewV1>>({});
+  const [groupDecisions, setGroupDecisions] = useState<Record<string, GroupDecisionsViewV1 | { failed: string }>>({});
   const decisionsSeq = useRef(0);
   /** Agent selection spec §6.8: the installation table and this operator's defaults; null until read, or when the port refuses. */
   const [agents, setAgents] = useState<AgentsViewV1 | null>(null);
@@ -889,18 +892,16 @@ export function App(): JSX.Element {
     && acceptedDecision.identity === sourceIdentity && acceptArrival(selected, acceptedDecision.owner)
     && (overviewDecisionRead === null || acceptedDecision.request === overviewDecisionRead.request)
     ? acceptedDecision.body : null;
-  const openDecisionRow = (row: DecisionListRow): void => {
+  const openDecisionRow = (row: DecisionIdentity): void => {
     navigationSeq.current++; setOverviewFocus(null); setOverviewDecisionRead(null); setSelected(row);
   };
   /**
-   * Control run decisions plan Task 11: a group's 纠正 opens that decision's detail in Decisions, as a list row does. A
-   * decision no list row carries yet is opened by its identity (the detail is read by projectKey and id, and the pane
-   * says it is not in the list); its other row fields are the decisions read's, and `at` is unknown.
+   * Control run decisions plan Task 11: a group's 纠正 opens that decision's detail in Decisions, as a list row does. The
+   * detail is read by projectKey and id; a decision no list row carries yet is opened by that identity alone, and the
+   * pane says it is not in the list.
    */
   const openDecisionById = (projectKey: string, decisionId: string): void => {
-    const listed = [...(todo.data ?? []), ...(allRows ?? [])].find((row) => row.projectKey === projectKey && row.id === decisionId);
-    const read = Object.values(groupDecisions).flatMap((v) => v.tasks.flatMap((task) => task.runs.flatMap((r) => r.decisions))).find((d) => d.id === decisionId);
-    openDecisionRow(listed ?? { projectKey, id: decisionId, at: "", kind: (read?.kind ?? "") as DecisionKind, scope: (read?.scope ?? "") as DecisionScope, verdict: "ok", question: read?.question ?? null });
+    openDecisionRow({ projectKey, id: decisionId });
     setSection("decisions"); window.location.hash = "decisions";
   };
   const overviewModel = deriveOverview({ projection: overview, todo, recovery: overviewRecovery, uncertain: control.uncertainCommandIds,
@@ -1033,8 +1034,9 @@ export function App(): JSX.Element {
     const seq = ++decisionsSeq.current, groupId = selectedGroup;
     fetchGroupDecisions(groupId).then(
       (value) => { if (seq === decisionsSeq.current) setGroupDecisions((all) => ({ ...all, [groupId]: value })); },
-      // An unread group shows no badge and no decisions section, rather than a stale read as current.
-      () => { if (seq === decisionsSeq.current) setGroupDecisions(({ [groupId]: _gone, ...rest }) => rest); },
+      // A failed read is kept as failed (Rule 12): the group says its decisions could not be read, rather than showing a
+      // stale read as current or silently dropping its badge.
+      (err: unknown) => { if (seq === decisionsSeq.current) setGroupDecisions((all) => ({ ...all, [groupId]: { failed: controlFailureFrom(err).code } })); },
     );
   }, [selectedGroup, openGroupView?.changeSeq, openGroupView?.summary.commandRevision]);
   // Spec §5: an open group's detail always uses its own repository's workspace, whatever the scope.
@@ -1194,7 +1196,7 @@ export function App(): JSX.Element {
     verb: "agree" | "correct",
     payload: RecordCorrectionInput | null,
     submittedForm?: CorrectionForm,
-    advanceFrom?: { reviewed: DecisionListRow; before: DecisionListRow[] },
+    advanceFrom?: { reviewed: DecisionIdentity; before: DecisionListRow[] },
   ): Promise<void> => {
     const requestId = nextCommandId();
     const sent = payload === null ? null : { ...payload };
