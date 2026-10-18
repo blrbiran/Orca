@@ -261,7 +261,9 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 10. **路线图未落地**：memory 自动 correction 写回（Orca memory adapter 仍只读、`recordCorrection:false`；需要 ccmem 外部引用＋按 `projectKey+correctionId` 幂等的导入契约＋失败重试语义）；LiteLLM 接入（模型别名／实际成本来源、未知成本阻断口径、per-run 预算边界）；A2A 运行时（远期，只做只读状态外壳）。**不能宣称记忆写回已闭环。**
 11. **挂在姊妹仓的**：ccloop B4 与 `ClaudePhaseAborted` 历史交错（未证成）；ccmem T13；ccmem `describePlistDrift` 疑似缺陷（3.3a）。按各仓规则，先报再动。
 12. **延后的反馈（设计轮）**：`2026-10-10-feedback-status.md` 的设计轮条目＋分诊的 #32／#34／#35／#55／#65／#66、#50（见分诊文件）。
-13. **纠正 ⇒ 独立 debug task（设计中，会话 `a3b2a7a7`，2026-10-18）**：`orca correct` 记下纠正后，Orca 自动生成一个 debug group 草稿（先复现再修），估算后人点开始。人已裁：`undo.how` 人填是可选的，人不填由 agent 写；调试 agent 默认沿用原来的 agent 和模型，人可以换，但必须是新的 session；「把纠正塞进后续所有任务输入」不做，被 debug task 取代。写回 ccmem 给人自己的会话看排在后面另做（上面第 10 条的记忆写回仍未落地）。设计文档写好后在本条补路径。
+13. **纠正 ⇒ 独立 debug task（设计中，会话 `a3b2a7a7`，2026-10-18）**：`orca correct` 记下纠正后，Orca 自动生成一个 debug group 草稿（先复现再修），估算后人点开始。人已裁：`undo.how` 人填是可选的，人不填由 agent 写；调试 agent 默认沿用原来的 agent 和模型，人可以换，但必须是新的 session；「把纠正塞进后续所有任务输入」不做，被 debug task 取代。写回 ccmem 给人自己的会话看排在后面另做（上面第 10 条的记忆写回仍未落地）。另裁：纠正也可以指向一个已完成 task 的 run（面板上加「纠正」按钮），指向账本决定的老方式保留；合入才算关闭，合入方法按人给这个 group 选的方案，**不加「等待合并」状态**（人：「这个不能接受」）。设计文档：`docs/superpowers/specs/2026-10-18-correction-debug-task-design.md`（分支 `codex/correction-debug-spec`）。
+15. **控制服务的 run 要把 group/task 的决定写进账本（高优先，人：「也要尽快接好」）**。实测：今天唯一写账本决定的是调度器的 `src/scheduler/ledgerWiring.ts`；控制服务的计划都是 `ledgerMode: "out-of-repo"`，`src/scheduler/run.ts:649` 把它当「未实现」拒掉。所以 Orca 派出去的活不产生可纠正的决定，第 13 条指向决定的那条路没有东西可指。另需确认 `src/control/service.ts:49` 那条 `runPreparedRound` 路径在 `in-repo` 计划下会不会写。下一个设计轮。
+16. **合入路径端到端未验**：`push-branch`／`github-pr` 的私有 GitHub 验收还没做（上面第 8 条）。人裁：「如果当前agent 合入有问题，那就需要解决这个问题」——第 13 条的关闭依赖合入，合入坏了就修合入。
 14. **下一会话课题：group 之间的串并联图**。人的原话：「当前orca 的具体 group 中可以看到 task 之间的串并联关系图。但是 group 也应该有这样一个图去看并且可以人为调整/ai agent 动态调整group（包括普通group和 debug group）之间的串并联、先后关系。这个可以作为下一个session的课题」。先 brainstorming。
 
 ---
