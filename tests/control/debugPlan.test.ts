@@ -258,12 +258,13 @@ describe("buildDebugPlanSource", () => {
     expect(contract.safetyPolicy.allowlistPaths).toEqual([]);
   });
 
-  it("named checks replace both the placeholder and the original's checks", () => {
-    for (const given of [input({ contract: null, missing: ["contract"] }), input()]) {
-      const contract = contractOf(buildDebugPlanSource(given, { ...OPTS, checks: ["npm test", "npm run lint"] }));
-      expect(contract.context.buildTestCommands).toEqual(["npm test", "npm run lint"]);
-      expect(contract.verification.requiredChecks).toEqual(["npm test", "npm run lint"]);
-    }
+  it("named checks are the checks without a contract, and follow the original's with one", () => {
+    const named = contractOf(buildDebugPlanSource(input({ contract: null, missing: ["contract"] }), { ...OPTS, checks: ["npm test", "npm run lint"] }));
+    expect(named.context.buildTestCommands).toEqual(["npm test", "npm run lint"]);
+    expect(named.verification.requiredChecks).toEqual(["npm test", "npm run lint"]);
+    const united = contractOf(buildDebugPlanSource(input(), { ...OPTS, checks: ["npm run lint", "npm test"] }));
+    expect(united.context.buildTestCommands).toEqual(["npm test", "npm run typecheck", "npm run lint"]);
+    expect(united.verification.requiredChecks).toEqual(["npm test", "npm run typecheck", "npm run lint"]);
   });
 
   it("the plan's goal is the goal text's first line; the task keeps the whole text", () => {

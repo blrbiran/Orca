@@ -15,6 +15,7 @@ import { withCommandContext } from "./commandClient.js";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { correctionClosedAtRef } from "./correctionState.js";
 import { collectDebugInput, PENDING_DECISION_NOT_FOUND, type DebugInputV1 } from "./debugInput.js";
+import { commandPrincipalFor } from "./commandClient.js";
 import { readDebugMark, type DebugMark } from "./debugChecks.js";
 import { buildDebugPlanSource, DEBUG_TEST_DIRS, debugPlanId } from "./debugPlan.js";
 import { ControlError } from "./errors.js";
@@ -158,9 +159,7 @@ async function prepare(deps: DebugOpenDeps, command: CorrectionDebugOpenCommand)
   const repository = await repositoryOf(deps, correction.projectKey);
   if (repository === null) throw new ControlError("correction-repository-unknown", correction.projectKey);
   const input = await collectDebugInput({ store: deps.store, repoPath: repository.path }, correction);
-  // No original contract means no check to inherit; the placeholder would leave the group unconfirmable, so the caller names them.
   const checks = command.payload.checks === undefined ? undefined : [...new Set(command.payload.checks)];
-  if (input.contract === null && checks === undefined) throw new ControlError("debug-checks-required");
   // Ruling C1: closed means the integration target of the original run's group (HEAD without one) holds the closing row.
   const { id: _id, ...row } = correction;
   const ref = (input.originalRun === null ? null : await integrationTargetRef(deps.store, input.originalRun.groupId)) ?? "HEAD";
@@ -171,6 +170,9 @@ async function prepare(deps: DebugOpenDeps, command: CorrectionDebugOpenCommand)
   if (input.decision !== null && await findDecision(repository.path, [{ where: "target", ref: "HEAD" }], input.decision.id) === null) {
     throw new ControlError("correction-decision-not-integrated", `${input.decision.id}@${input.decisionWhere}`);
   }
+  // No original contract means no check to inherit; the placeholder would leave the group unconfirmable, so the caller
+  // names them. After the closed and integrated refusals, which are the truer answer for a correction that cannot open anyway.
+  if (input.contract === null && checks === undefined) throw new ControlError("debug-checks-required");
   // Design §4.4: the original claim's agent and model, re-resolved now; a selection ccloop refuses falls back to the
   // operator's layers (no plan layer) and the mark says why.
   let agent: PartialSelection | undefined;
@@ -181,6 +183,12 @@ async function prepare(deps: DebugOpenDeps, command: CorrectionDebugOpenCommand)
     catch (error) { agentFallback = { original, reason: describeError(error) }; }
   }
   return { input, repoId: repository.repoId, repoPath: repository.path, existingTestDirs: await existingTestDirs(repository.path), agent, agentFallback, checks };
+}
+
+/** Where the debug task's checks came from; named by the command's actor (an agent principal is `agent:<client>`, commandClient.ts). */
+function checksProvenance(hasContract: boolean, named: boolean, principal: string | null): DebugMark["checks"] {
+  if (hasContract && !named) return { from: "original", namedBy: null };
+  return { from: hasContract ? "original+named" : "named", namedBy: principal?.startsWith("agent:") ? "agent" : "human" };
 }
 
 function success(context: WebCommandContext, groupId: string, correctionId: string, created: boolean): { status: number; body: CommandSuccessV1 } {
@@ -240,6 +248,7 @@ export async function applyCorrectionDebugOpen(deps: DebugOpenDeps, command: Cor
       const mark: DebugMark = {
         correctionId, ordinal: groupId === baseId(correctionId) ? 1 : Number(groupId.slice(baseId(correctionId).length + 1)),
         inputHash, missing: [...input.missing], agentFallback: prepared.agentFallback, undoHow: undoHow ?? null, closing: null,
+        checks: checksProvenance(input.contract !== null, prepared.checks !== undefined, commandPrincipalFor(context.rawCommand.commandId)),
       };
       const body = JSON.parse(String(deps.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)) as Record<string, unknown>;
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, debug: mark }), groupId);

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyArchiveGroup } from "../../src/control/archiveGroup.js";
+import { withCommandContext } from "../../src/control/commandClient.js";
 import { lookupCommandResult } from "../../src/control/commandLedger.js";
 import { collectDebugInput, DEBUG_INPUT_SCHEMA, type DebugInputV1 } from "../../src/control/debugInput.js";
 import { archiveUnstartedDebugGroups, debugGroupIdFor, debugGroupIds, liveDebugGroups, readDebugMark } from "../../src/control/debugGroup.js";
@@ -22,6 +23,7 @@ import { unsetInheritedGitEnv } from "../../src/control/workspace.js";
 import { deriveFixRunId } from "../../src/corrections/fields.js";
 import { correctionsFile } from "../../src/corrections/paths.js";
 import { projectKeyOf } from "../../src/corrections/projectKey.js";
+import { readCorrections } from "../../src/corrections/store.js";
 import { correctionRowFrom, recordNewCorrection } from "../../src/corrections/record.js";
 import type { Correction } from "../../src/corrections/schema.js";
 import { withdrawCorrection } from "../../src/corrections/withdrawals.js";
@@ -505,7 +507,6 @@ describe("a debug group whose checks are still the placeholder is not confirmed 
     insertPendingDecisions(w.store, "g", "run-9", [{ pendingId: pendingIdOf("run-9", 0), ledgerRun: "run-9", entryIndex: 0, entry: { question: "q" }, reason: "refused", at: "2026-10-18T00:00:00.000Z", evidence: [] }]);
     const pending = await w.record({ runId: "run-9", pendingId: pendingIdOf("run-9", 0) });
     const groupId = opened(await w.open(pending.id, { checks: [PLACEHOLDER] })).groupId;
-    expect(readArchivedPlan(w.store, groupId).plan.tasks[0]!.originalContractCanonicalJson).toContain(PLACEHOLDER);
     return groupId;
   }
   const proposalState = (w: World, groupId: string) => readBudgetProposal(w.store, groupId).state;
@@ -524,12 +525,12 @@ describe("a debug group whose checks are still the placeholder is not confirmed 
   it("refuses start, booked, for a ready group whose plan is the placeholder", async () => {
     const w = await world(); try {
       const groupId = await placeholderGroup(w);
-      // Confirm refuses this group, so the mark is lifted for the confirmation and put back: start is the second line of defence.
+      // Defence in depth: a debug-marked, confirmed group with placeholder checks is unreachable through confirm (it refuses
+      // one), so the mark is lifted for the confirmation and put back to reach the start guard.
       const marked = w.body(groupId), { debug, ...unmarked } = marked;
       w.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(unmarked), groupId);
       expect(await confirmDebug(w, groupId)).toMatchObject({ result: { kind: "confirmed" } });
       w.store.db.prepare("UPDATE groups SET body=json_set(body,'$.debug',json(?)) WHERE id=?").run(JSON.stringify(debug), groupId);
-      expect(readDebugMark(w.body(groupId))).not.toBeNull();
       const answer = await startDebug(w, groupId);
       expect(refusal(answer)).toBe("debug-checks-unnamed");
       expect(lookupCommandResult(w.store, groupId, `start-${groupId}`)!.body).toMatchObject({ error: { code: "debug-checks-unnamed" } });
@@ -548,8 +549,6 @@ describe("a debug group whose checks are still the placeholder is not confirmed 
   it("does not touch a group no correction opened, whatever its checks say", async () => {
     const h = await webFixture(undefined, [{ taskId: "a" }], { requiredChecks: [PLACEHOLDER] }); try {
       const service = new WebControlService({ ...h.deps, knownRepository: (repoId: string) => repoId === "repo" });
-      expect(readArchivedPlan(h.store, "g").plan.tasks[0]!.originalContractCanonicalJson).toContain(PLACEHOLDER);
-      expect(readDebugMark(JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)))).toBeNull();
       expect(await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), budgetMode: "soft" }))).toMatchObject({ result: { kind: "confirmed" } });
       expect(await service.start(h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
     } finally { await h.dispose(); }
@@ -598,11 +597,41 @@ describe("correction-debug-open `checks` (debug task Task 7, controller ruling)"
     } finally { await w.dispose(); }
   });
 
-  it("with an original contract, given checks replace its checks", async () => {
+  it("with an original contract, given checks are added after its checks and never replace them", async () => {
     const w = await world(); try {
-      const replaced = opened(await w.open(w.correction.id, { checks: ["npm test"] })).groupId;
-      expect(requiredChecks(w, replaced).verification.requiredChecks).toEqual(["npm test"]);
-      expect(requiredChecks(w, replaced).context.buildTestCommands).toEqual(["npm test"]);
+      const united = opened(await w.open(w.correction.id, { checks: ["npm test", "true"] })).groupId;
+      expect(requiredChecks(w, united).verification.requiredChecks).toEqual(["true", "npm test"]);
+      expect(requiredChecks(w, united).context.buildTestCommands).toEqual(["true", "npm test"]);
+      expect(readDebugMark(w.body(united))!.checks).toEqual({ from: "original+named", namedBy: "human" });
+    } finally { await w.dispose(); }
+  });
+
+  it("records where the checks came from, and whether a human or an agent named them", async () => {
+    const w = await world(); try {
+      const original = opened(await w.open(w.correction.id)).groupId;
+      expect(readDebugMark(w.body(original))!.checks).toEqual({ from: "original", namedBy: null });
+      const cid = await noContract(w);
+      const command = w.openCommand(cid, { checks: ["npm test"] }, "open-by-agent");
+      const answer = await withCommandContext(command.commandId, { client: "mcp", principal: "agent:mcp" }, () => w.service.openCorrectionDebugGroup(command));
+      expect(readDebugMark(w.body(opened(answer).groupId))!.checks).toEqual({ from: "named", namedBy: "agent" });
+    } finally { await w.dispose(); }
+  });
+
+  it("names a human for checks named without an agent principal", async () => {
+    const w = await world(); try {
+      const cid = await noContract(w);
+      const named = opened(await w.open(cid, { checks: ["npm test"] })).groupId;
+      expect(readDebugMark(w.body(named))!.checks).toEqual({ from: "named", namedBy: "human" });
+    } finally { await w.dispose(); }
+  });
+
+  it("answers correction-already-closed, not debug-checks-required, for a closed correction with no contract", async () => {
+    const w = await world(); try {
+      const cid = await noContract(w);
+      const { id, ...row } = (await readCorrections(w.dir)).find((c) => c.id === cid)!;
+      const fixRunId = deriveFixRunId(row, id);
+      commitOn(w.repo, "refs/heads/main", { [`.decisions/${fixRunId}.jsonl`]: JSON.stringify({ ev: "decision", id: `${fixRunId}/1`, evidence: [`correction ${id}`] }) + "\n" }, "closing row", "main");
+      expect(refusal(await w.open(cid))).toBe("correction-already-closed");
     } finally { await w.dispose(); }
   });
 

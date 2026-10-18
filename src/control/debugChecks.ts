@@ -16,6 +16,8 @@ export type ClosingRecord = { state: "written"; relPath: string; fixRunId: strin
 export interface DebugMark {
   correctionId: string; ordinal: number; inputHash: string; missing: DebugInputV1["missing"];
   agentFallback: { original: PartialSelection; reason: string } | null; undoHow: string | null; closing: ClosingRecord | null;
+  /** Where the task's checks came from (the owner or an agent named them); `namedBy` is null when only the original's are used. */
+  checks: { from: "original" | "original+named" | "named"; namedBy: "human" | "agent" | null };
 }
 
 const closingSchema = z.discriminatedUnion("state", [
@@ -32,6 +34,8 @@ const debugMarkSchema = z.object({
     reason: z.string().min(1),
   }).strict().nullable(),
   undoHow: z.string().min(1).nullable(), closing: closingSchema.nullable(),
+  checks: z.object({ from: z.enum(["original", "original+named", "named"]), namedBy: z.enum(["human", "agent"]).nullable() }).strict()
+    .default({ from: "original", namedBy: null }),
 }).strict();
 
 /** A group body's debug mark; null on a group no correction opened. A mark that does not parse blocks by name, as the archive mark does. */

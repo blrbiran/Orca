@@ -151,8 +151,9 @@ function debugContract(input: DebugInputV1, opts: { repoPath: string; existingTe
     ...(original?.safetyPolicy.allowlistPaths ?? []),
     ...opts.existingTestDirs.map((dir) => `${dir}/**`),
   ]);
-  // Named checks (the open verb's `checks`) replace both the original's and the placeholder.
-  const buildTestCommands = [...(opts.checks ?? original?.context.buildTestCommands ?? DEBUG_DEFAULT_BUILD_TEST_COMMANDS)];
+  // Named checks (the open verb's `checks`) are added after the original's, never in place of them; with neither, the placeholder.
+  const inherited = unique([...(original?.context.buildTestCommands ?? []), ...(opts.checks ?? [])]);
+  const buildTestCommands = inherited.length > 0 || original !== null ? inherited : [...DEBUG_DEFAULT_BUILD_TEST_COMMANDS];
   return taskContractSchema.parse({
     objective: { taskId: DEBUG_TASK_ID, goal: debugGoalText(input), successCondition: DEBUG_REPRODUCTION_CONDITION, nonGoals: [] },
     context: { repoPath: opts.repoPath, targetPaths, relevantDocs: [...(original?.context.relevantDocs ?? [])], buildTestCommands, constraints: [] },
