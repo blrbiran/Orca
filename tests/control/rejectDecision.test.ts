@@ -122,6 +122,14 @@ describe("reject-pending-decision opens the debug group (debug task Task 12)", {
     } finally { await t.dispose(); }
   });
 
+  it("an open that throws leaves the reject succeeded", async () => {
+    const t = await landedWithPending(); try {
+      const seamed = t.serviceAs(BY, t.dir, { beforeOpen: async () => { throw new Error("boom"); } });
+      const r = await t.reject({ pendingId: t.pendingId }, "rej-1", seamed);
+      expect({ r, state: t.state(), opens: openCommandCount(t) }).toEqual({ r: expect.objectContaining({ result: expect.objectContaining({ kind: "pending-decision-rejected" }) }), state: "rejected", opens: 0 });
+    } finally { await t.dispose(); }
+  });
+
   it("a run with no contract: the reject stands and the open books debug-checks-required", async () => {
     const t = await landedWithPending(); try {
       t.h.store.db.prepare("UPDATE runs SET body=json_set(body,'$.taskId','no-such-task') WHERE id=?").run(t.runId);
