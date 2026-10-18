@@ -635,6 +635,7 @@ export const commandVerbSchema = z.enum([
   "unarchive-group",
   "approve-pending-decision",
   "reject-pending-decision",
+  "correction-debug-open",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -883,6 +884,11 @@ const effectiveCommandFields = {
 export const approvePendingDecisionPayloadSchema = z.object({ pendingId: idSchema, undoHow: nonemptyString }).strict();
 // Control run decisions plan Task 10: an owner rejects a refused decision, with an optional line of their own.
 export const rejectPendingDecisionPayloadSchema = z.object({ pendingId: idSchema, because: nonemptyString.optional() }).strict();
+// Debug task plan Task 6: one recorded correction opens one debug group (spending nothing). `reopen` asks for the next
+// ordinal once the newest debug group is stopped or archived; `undoHow` is the owner's, recorded for the closing row.
+export const correctionDebugOpenPayloadSchema = z.object({
+  correctionId: z.string().regex(/^c_[a-f0-9]{16}$/), reopen: z.boolean().optional(), undoHow: nonemptyString.optional(),
+}).strict();
 export const verifySavedResultPayloadSchema=z.object({sourceRunId:idSchema,sourceAttempt:positiveSafeInteger,capsuleHash:hashSchema}).strict();
 export const savedResultEligibilityViewSchema=savedResultSourceEligibilitySchema;
 const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
@@ -915,6 +921,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("approve-pending-decision"), target: groupCommandTargetSchema, payload: approvePendingDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("apply-agent-update"), target: operatorCommandTargetSchema, payload: applyAgentUpdatePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
@@ -974,6 +981,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("approve-pending-decision"), target: groupCommandTargetSchema, payload: approvePendingDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-agent-preferences"), target: operatorCommandTargetSchema, payload: setAgentPreferencesPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("apply-agent-update"), target: operatorCommandTargetSchema, payload: applyAgentUpdatePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-task-labels"), target: taskCommandTargetSchema, payload: setTaskLabelsPayloadSchema }).strict(),
@@ -1096,6 +1104,8 @@ export const groupSummarySchema = z
     // Web-started group stays `ready` through its first run, so this, not `state`, says it is not startable.
     // Given for every group with a plan; optional on the wire so older fixtures still parse.
     executionPending: z.boolean().optional(),
+    // Debug task plan Task 6: present only on a group a correction opened (its debug mark), so the panel labels it.
+    debug: z.object({ correctionId: nonemptyString, ordinal: positiveSafeInteger }).strict().optional(),
   })
   .strict();
 
@@ -1599,6 +1609,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("unarchived"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("pending-decision-approved"), pendingId: idSchema, decisionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("pending-decision-rejected"), pendingId: idSchema, correctionId: nonemptyString }).strict(),
+  z.object({ kind: z.literal("debug-group-opened"), groupId: idSchema, correctionId: nonemptyString, created: z.boolean() }).strict(),
   z.object({ kind: z.literal("agent-preferences-set"), operatorId: nonemptyString, revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("agent-installations-updated"), operatorId: nonemptyString, revision: positiveSafeInteger, beforeHash: hashSchema, afterHash: hashSchema }).strict(),
   z.object({ kind: z.literal("spend-cap-set"), revision: positiveSafeInteger }).strict(),

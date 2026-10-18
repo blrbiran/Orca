@@ -43,7 +43,9 @@ import type { PanelOptions } from "./server.js";
 import type { StaticFiles } from "./staticFiles.js";
 import type { PanelAuth } from "./auth.js";
 import { authMiddleware, registerAuthRoutes } from "./authRoutes.js";
-import { registerControlReadRoutes, type ControlReadApiDeps } from "./controlApi.js";
+import { ensurePanelOperatorId, registerControlReadRoutes, type ControlReadApiDeps } from "./controlApi.js";
+import { archiveUnstartedDebugGroups } from "../control/debugGroup.js";
+import { principalLabel, type Principal } from "./permissions.js";
 
 /**
  * Panel UI redesign spec §4 (ruling U1): one ledger read per repository per request; a
@@ -732,7 +734,24 @@ export function buildApi(app: Express, deps: ApiDeps): void {
         });
         return;
       }
-      res.json({ withdrawal: withdrawn.withdrawal, review });
+      // Debug task plan Task 6 (withdraw Amendment 2): a live debug group of the withdrawn correction that has not started
+      // a task run is archived (archive deletes nothing); a started one is left running and named in the answer. After
+      // the withdrawal and its review, so a failed archive leaves the correction withdrawn, answered beside it (§5.4).
+      const principal = res.locals.orcaPrincipal as Principal | undefined;
+      const settled = deps.control?.service === undefined ? { debugGroups: [], failure: null }
+        : archiveUnstartedDebugGroups({ store: deps.control.store, service: deps.control.service }, withdrawn.correction.id, {
+          actorId: ensurePanelOperatorId(deps.control.store), principal: principal === undefined ? "web" : principalLabel(principal),
+        });
+      const { debugGroups, failure } = settled;
+      if (failure !== null) {
+        res.status(409).json({
+          code: failure.code,
+          message: `the correction was withdrawn (id ${withdrawn.correction.id}), but its debug group ${failure.groupId} could not be archived: ${failure.message}`,
+          withdrawal: withdrawn.withdrawal, review, debugGroups,
+        });
+        return;
+      }
+      res.json({ withdrawal: withdrawn.withdrawal, review, ...(debugGroups.length === 0 ? {} : { debugGroups }) });
     })().catch(next);
   });
 

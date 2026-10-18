@@ -35,6 +35,7 @@ import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
+import { applyCorrectionDebugOpen, type CorrectionDebugOpenCommand } from "./debugGroup.js";
 import { applyApprovePendingDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
@@ -84,6 +85,11 @@ export interface WebServiceDeps extends AsyncImportDeps {
    */
   correctionsDir?: string;
   correctionsBy?: string;
+  /**
+   * Debug task plan Task 6: every configured repository with its trusted path, for correction-debug-open's lookup of the
+   * repository whose projectKey a correction names. Absent, no repository matches (correction-repository-unknown).
+   */
+  listRepositories?: () => Array<{ repoId: string; path: string }>;
   /** Test seams into approve's and reject's git/store steps (decisionCommands.ts), passed through unchanged. */
   decisionSeams?: { beforeCas?: () => Promise<void>; beforeRecord?: () => Promise<void> };
 }
@@ -735,6 +741,12 @@ export class WebControlService {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
       return applyRejectPendingDecision({ store: this.store }, command, prepared) as WebCommandResult;
     } finally { release?.(); }
+  }
+  /** Debug task plan Task 6: one recorded correction opens (or returns) its debug group; nothing is spent. */
+  async openCorrectionDebugGroup(command: CorrectionDebugOpenCommand): Promise<WebCommandResult> {
+    const release = this.deps.admissionGate?.enter();
+    try { return await applyCorrectionDebugOpen({ ...this.deps, listRepositories: this.deps.listRepositories ?? (() => []) }, command); }
+    finally { release?.(); }
   }
   /** Controller ruling (Task 7): the target the panel offers for this repository; null when its path does not resolve. */
   async suggestedTarget(repoId: string): Promise<string | null> {

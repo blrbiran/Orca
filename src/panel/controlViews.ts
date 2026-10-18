@@ -11,6 +11,7 @@ import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from
 import { readAgentPreferences } from "../control/agentPreferences.js";
 import { peerCode } from "../control/ccloopPort.js";
 import { groupExecutionPending } from "../control/executionPending.js";
+import { readDebugMark } from "../control/debugGroup.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
 import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint } from "../control/usageSettlement.js";
@@ -423,6 +424,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   const repoId = archived !== null ? archived.plan.repoId : readRequirementGroup(store, groupId).requirement.repoId;
   const readSnapshot = snapshot ?? (archived === null ? undefined : readGroupSnapshot(store, groupId));
   const tally = archived === null ? null : taskCompletion(readSnapshot!, archived.plan);
+  const debugMark = readDebugMark(body);
   const summary = {
     groupId,
     repoId,
@@ -440,6 +442,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     archived: archivedMarkOf(body) !== null,
     ...(archived === null ? {} : { executionPending: groupExecutionPending(store, groupId, archived.plan.tasks.map((task) => task.taskId), readSnapshot!) }),
     ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),
+    ...(debugMark === null ? {} : { debug: { correctionId: debugMark.correctionId, ordinal: debugMark.ordinal } }),
   };
   const parsed = groupSummarySchema.safeParse(summary);
   if (!parsed.success) return blocked(`group-summary:${parsed.error.issues[0]?.message ?? "invalid"}`);

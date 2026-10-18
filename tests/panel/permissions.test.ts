@@ -30,6 +30,15 @@ describe("the permission table (spec §3.5)", () => {
     ]);
   });
 
+  // Debug task plan Task 6: opening a correction's debug group spends nothing, so every principal may; the undo.how the
+  // closing row records as the human's is an owner's field.
+  it("lets an agent open a debug group but not send undoHow", () => {
+    const payload = { correctionId: "c_0123456789abcdef" };
+    for (const p of [owner, member, agent]) expect(permissionRefusal(p, "correction-debug-open", payload)).toBe(null);
+    for (const p of [member, agent]) expect(permissionRefusal(p, "correction-debug-open", { ...payload, undoHow: "git revert --no-edit HEAD" })?.code).toBe("control-field-human-only");
+    expect(permissionRefusal(owner, "correction-debug-open", { ...payload, undoHow: "git revert --no-edit HEAD" })).toBe(null);
+  });
+
   it("is one row per role and one for the agent; only an owner manages accounts; several roles take the widest", () => {
     // Spec §3.1: a role is a row; the decisions above read these rows, not a role name.
     expect(Object.keys(PERMISSIONS).sort()).toEqual(["agent", "member", "owner"]);

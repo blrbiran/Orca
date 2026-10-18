@@ -56,6 +56,8 @@ export interface TrustedControlConfig {
   addRepository(entry: TrustedRepositoryConfig): void;
   /** The display name only; `repoId` and the path witness never change. */
   renameRepository(repoId: string, displayName: string): void;
+  /** Debug task plan Task 6: every held repository with its trusted path (each witness re-validated), in repoId order. */
+  listRepositories(): Array<{ repoId: string; path: string }>;
   /** Agent selection spec §6.4 last paragraph (W5-M14): the profiles as observed for `selection`, the operator's default. */
   readView(selection: PartialSelection): Promise<ControlConfigV1>;
   readonly shutdownGraceMs: number;
@@ -230,6 +232,10 @@ export function createTrustedControlConfig(
       if (!repository) throw new ControlError("control-target-not-allowed");
       if (!displayName) invalid("repository");
       repositories.set(repoId, { ...repository, displayName });
+    },
+    listRepositories() {
+      return [...repositories.values()].sort((left, right) => compareText(left.repoId, right.repoId))
+        .map(({ repoId, witness }) => ({ repoId, path: revalidatePath(witness) }));
     },
     /** Execution driver spec §3.1: the trusted path by repoId, its witness re-validated on every use. */
     resolveRepository(repoId: string): string {

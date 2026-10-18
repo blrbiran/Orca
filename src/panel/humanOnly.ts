@@ -50,6 +50,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "approve-pending-decision": "human-only",
   // Control run decisions plan Task 10: rejecting one records a correction in an owner's name.
   "reject-pending-decision": "human-only",
+  // Debug task design §12.4: opening a correction's debug group spends nothing, so the agent path may do it.
+  "correction-debug-open": "any",
 };
 export const HUMAN_ONLY_VERBS: readonly CommandVerbV1[] =
   (Object.keys(VERB_ACCESS) as CommandVerbV1[]).filter((verb) => VERB_ACCESS[verb] === "human-only");
@@ -58,6 +60,9 @@ export const HUMAN_ONLY_FIELDS: Readonly<Partial<Record<CommandVerbV1, readonly 
   "proposal-edit": ["proposedGroupLimit"],
   // Integration spec §3.2, ruling R2: approving where a group's work is carried is an owner's confirm.
   "confirm": ["integrationHash"],
+  // Debug task plan Task 6 (controller's call 5): the undo.how the closing row records as the human's; an agent's value
+  // would be recorded as the human's.
+  "correction-debug-open": ["undoHow"],
 };
 /** Spec §5 / C19: an amount field an agent may send, with the reason. Empty until a reviewed exception exists. */
 export const AGENT_AMOUNT_FIELDS: Readonly<Record<string, string>> = {};

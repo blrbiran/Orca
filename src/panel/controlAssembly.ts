@@ -220,6 +220,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       : undefined,
     // Integration spec §3.3: the path the integration setters' git checks run in (only a known repository is checked).
     resolveRepository: (repoId: string) => config.resolveRepository(repoId),
+    // Debug task plan Task 6: correction-debug-open finds the repository a correction's projectKey names among these.
+    listRepositories: () => config.listRepositories(),
     // Ruling R7: the commands that need an estimate refuse by name. Nothing is substituted, and in
     // particular no mode is guessed -- a guessed mode is how a soft adapter comes to be driven as
     // a strict one, which is the whole reason these are operator arguments.

@@ -17,7 +17,8 @@ import { readAgentPreferences } from "../control/agentPreferences.js";
 import { agentUpdateStateSchema } from "../control/agentInstallationProtocol.js";
 import { resolveSelection, slotLayers, type PartialSelection } from "../control/agentSelection.js";
 import { idSchema } from "../control/schema.js";
-import { savedResultEligibilityViewSchema, agentModelsViewSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import { debugGroupIdFor, debugGroupIds } from "../control/debugGroup.js";
+import { correctionDebugOpenPayloadSchema, savedResultEligibilityViewSchema, agentModelsViewSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import { readIntegrationDefault } from "../control/integrationScheme.js";
@@ -405,12 +406,23 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
 }
 
 /** Resolve the command target and the ledger scope a route names; `recovery-retry` carries no group in its path. */
-type RouteTarget = (params: Request["params"], payload: unknown, store: ControlStore) => { groupId: string; target: CommandTargetV1 };
+type RouteTarget = (params: Request["params"], payload: unknown, store: ControlStore, commandId: string) => { groupId: string; target: CommandTargetV1 };
 const payloadFields = (payload: unknown): Record<string, unknown> =>
   typeof payload === "object" && payload !== null && !Array.isArray(payload) ? payload as Record<string, unknown> : {};
 const scoped = (groupId: string) => ({ groupId, target: { kind: "group" as const, groupId } });
 const fromParams: RouteTarget = (params) => scoped(idSchema.parse(params.groupId));
 const spendScoped: RouteTarget = () => ({ groupId: "@spend", target: { kind: "spend" } });
+/**
+ * Debug task plan Task 6: the group a correction's open is booked on, read from the store (debugGroupIdFor). A command id
+ * already booked on one of the correction's debug groups is that group's, so a retry replays even after the newest has
+ * since stopped and a reopen would now name the next one.
+ */
+const debugOpenScoped: RouteTarget = (params, payload, store, commandId) => {
+  const open = correctionDebugOpenPayloadSchema.parse(payload);
+  if (String(params.correctionId) !== open.correctionId) throw new ControlError("control-non-json-payload", "correction-id-mismatch");
+  const booked = debugGroupIds(store, open.correctionId).find((groupId) => store.db.prepare("SELECT 1 FROM commands WHERE group_id=? AND id=?").get(groupId, commandId) !== undefined);
+  return scoped(booked ?? debugGroupIdFor(store, open.correctionId, open.reopen === true));
+};
 
 /** Every command route and its verb; exported so the permission criterion can walk them against VERB_ACCESS (accounts spec §3.5). */
 export function controlCommandRoutes(actorId: string): Array<{ path: string; verb: CommandVerbV1; target: RouteTarget }> {
@@ -476,6 +488,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/decisions/approve", verb: "approve-pending-decision", target: fromParams },
     // Control run decisions plan Task 10: an owner rejects a refused decision, recording a correction.
     { path: "/api/control/groups/:groupId/decisions/reject", verb: "reject-pending-decision", target: fromParams },
+    // Debug task plan Task 6: a recorded correction opens its debug group; the ledger key is that group's.
+    { path: "/api/control/corrections/:correctionId/debug-group", verb: "correction-debug-open", target: debugOpenScoped },
     {
       path: "/api/control/operator/agent-preferences",
       verb: "set-agent-preferences",
@@ -536,7 +550,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
       const refusal = permissionRefusal(principal, route.verb, (req.body as { payload?: unknown } | undefined)?.payload);
       if (refusal !== null) { sendControlError(res, 403, refusal.code, refusal.message); return; }
       const envelope = commandEnvelopeSchema.parse(req.body);
-      const resolved = route.target(req.params, envelope.payload, store);
+      const resolved = route.target(req.params, envelope.payload, store, envelope.commandId);
       id = resolved.groupId;
       const command = rawAuthorityCommandSchema.parse({ schema: "orca-raw-command-v1", ...envelope, actorId, verb: route.verb, target: resolved.target }) as RawAuthorityCommandV1;
       await withCommandContext(command.commandId, { client, principal: principalLabel(principal) }, async () => {
@@ -565,6 +579,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "unarchive-group": service.unarchiveGroup(command); break;
           case "approve-pending-decision": await service.approvePendingDecision(command); break;
           case "reject-pending-decision": await service.rejectPendingDecision(command); break;
+          case "correction-debug-open": await service.openCorrectionDebugGroup(command); break;
           case "set-agent-preferences": await service.setAgentPreferences(command); break;
           case "apply-agent-update": await service.applyAgentUpdate(command, { client, principal: principalLabel(principal) }); break;
           case "proposal-set-agent": await service.proposalSetAgent(command); break;

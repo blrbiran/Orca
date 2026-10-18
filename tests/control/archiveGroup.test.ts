@@ -206,6 +206,7 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "archive-group": { call: (s, c) => s.archiveGroup(c), target: "group", payload: {} },
   "approve-pending-decision": { call: (s, c) => s.approvePendingDecision(c), target: "group", payload: { pendingId: "pending-run-a-0", undoHow: `git revert --no-edit ${"e".repeat(40)}` } },
   "reject-pending-decision": { call: (s, c) => s.rejectPendingDecision(c), target: "group", payload: { pendingId: "pending-run-a-0" } },
+  "correction-debug-open": { call: (s, c) => s.openCorrectionDebugGroup(c), target: "group", payload: { correctionId: "c_0123456789abcdef" } },
 };
 
 describe("an archived group refuses every group-targeted command but unarchive-group (spec §6.3)", () => {

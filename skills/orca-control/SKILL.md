@@ -153,6 +153,7 @@ The socket refuses these before anything runs (nothing is ledgered, the commandI
 - `set-integration-scheme`, `set-group-integration`, `retry-integration` and `resolve-integration-conflict` (where a repository's or a group's finished work is carried: a local branch, a push, a GitHub PR; retrying a blocked integration; approving an agent to resolve an integration conflict) are owner-only → 403 `control-verb-human-only`. Confirming a group whose integration is not `keep` is owner-only (the `integrationHash` field is human-only).
 - `approve-pending-decision` (giving a decision a landing refused an executable `undo.how` and writing it into the ledger) is owner-only → 403 `control-verb-human-only`.
 - `reject-pending-decision` (rejecting a decision a landing refused, which records a correction in the owner's name) is owner-only → 403 `control-verb-human-only`.
+- `correction-debug-open` (opening a recorded correction's debug group; it spends nothing, and its group is `debug-<correctionId>`, or the next `-2`, `-3`, … with `"reopen":true` once the newest is stopped or archived) is open to an agent, but its `undoHow` field is human-only → 403 `control-field-human-only`. Send `expectedRevision` 0 for a new group, or the group's current revision.
 
 Do not look for a way around them. Ask the human. To spend less, use `pause-dispatch` or `handoff-stop`.
 
@@ -208,6 +209,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/unarchive` | unarchive-group | `{}` |
 | `POST groups/<groupId>/decisions/approve` | approve-pending-decision | `{"pendingId":"pending-run-x-0","undoHow":"git revert --no-edit <sha>"}` |
 | `POST groups/<groupId>/decisions/reject` | reject-pending-decision | `{"pendingId":"pending-run-x-0","because":"the premise was false"}` |
+| `POST corrections/<correctionId>/debug-group` | correction-debug-open | `{"correctionId":"c_0123456789abcdef"}` |
 | `POST recovery/retry` | recovery-retry | `{"scope":"run","runId":"run1"}` |
 | `POST repositories/<repoId>/workspace-mode` | set-workspace-mode | `{"workspaceMode":"worktree"}` |
 | `POST repositories/<repoId>/integration` | set-integration-scheme | `{"integration":{"delivery":"keep"}}` |

@@ -83,6 +83,8 @@ export type GroupSummaryV1 = {
   archived?: boolean;
   /** Feedback #53: a start wake is undelivered or a task is executing; a Web-started group stays `ready` meanwhile. */
   executionPending?: boolean;
+  /** Debug task plan Task 6: present only on a group a correction opened. */
+  debug?: { correctionId: string; ordinal: number };
 };
 
 /** N1 spec §4.2 and §7: a round's records (src/control/requirementSchemas.ts roundBodySchema, field for field). */
@@ -490,7 +492,7 @@ export type CommandSuccessV1 = {
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
-    | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision";
+    | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "correction-debug-open";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -518,6 +520,7 @@ export type CommandSuccessV1 = {
     | { kind: "unarchived"; groupId: string }
     | { kind: "pending-decision-approved"; pendingId: string; decisionId: string }
     | { kind: "pending-decision-rejected"; pendingId: string; correctionId: string }
+    | { kind: "debug-group-opened"; groupId: string; correctionId: string; created: boolean }
     | { kind: "agent-preferences-set"; operatorId: string; revision: number }
     | { kind: "agent-installations-updated"; operatorId: string; revision: number; beforeHash: string; afterHash: string }
     | { kind: "spend-cap-set"; revision: number }

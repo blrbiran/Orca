@@ -36,6 +36,13 @@ export const durableCommandErrorStatuses = {
   "spend-cap-repository-unknown": 404,
   // Control run decisions plan Task 9: no pending decision of this group has the id.
   "pending-decision-not-found": 404,
+  // Debug task plan Task 6 (correction-debug-open): no stored correction has the id; no configured repository has the
+  // correction's projectKey; the decision a correction names is in no ledger source (Task 3's DECISION_NOT_FOUND), or the
+  // pending item it names has no control-DB row (Task 3's PENDING_DECISION_NOT_FOUND).
+  "correction-not-found": 404,
+  "correction-repository-unknown": 404,
+  "original-decision-not-found": 404,
+  "original-pending-decision-not-found": 404,
 
   // Optimistic concurrency, immutable identity, and ownership conflicts.
   // Agent selection spec §6.4 step 3 (W6-12): the selections a confirmation resolves are no longer the ones the
@@ -85,6 +92,15 @@ export const durableCommandErrorStatuses = {
   // Control run decisions plan Task 10 (cross-plan resolution 5): the correction names a pending item, not a recorded
   // decision, so there is no ledger row to overturn. `orca correct --close` refuses it by the same name.
   "correction-target-not-a-decision": 409,
+  // Debug task plan Task 6: the integration target (or HEAD) already holds the correction's closing row; the decision is
+  // not in HEAD's ledger, where the debug branch starts (it is only on a group branch, in the working tree, or on a
+  // target HEAD does not contain); a reopen while the newest debug group is live; the correction was withdrawn
+  // (decisions review withdraw spec §5.3); the withdrawals file has a line that does not parse (nothing is opened).
+  "correction-already-closed": 409,
+  "correction-decision-not-integrated": 409,
+  "debug-group-not-reopenable": 409,
+  "correction-withdrawn": 409,
+  "correction-withdrawals-unreadable": 409,
   "plan-version-conflict": 409,
   "profile-changed": 409,
   "proposal-version-conflict": 409,
