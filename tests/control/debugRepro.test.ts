@@ -362,9 +362,11 @@ describe("stepC runs the check only for a debug group's run (plan Task 8)", () =
       hgit(workdir, "checkout", "-q", "--force", "--detach", t.body(runId).drive.base);
       hgit(workdir, "checkout", "-q", marker.attemptSha, "--", "tests/a.test.txt");
       writeFileSync(join(workdir, "stray.txt"), "s\n");
+      await settle(second, () => t.body(runId).state !== "accepted" || t.body(runId).drive.attemptSha !== null);
+      // Read before the state: a new attempt commit is the failure this criterion exists for.
+      expect(t.body(runId).drive.attemptSha).toBe(marker.attemptSha);
       await settle(second, () => t.body(runId).state === "landed");
       const drive = t.body(runId).drive;
-      expect(drive.attemptSha).toBe(marker.attemptSha);
       expect(hgit(t.repo, "rev-parse", `${drive.landedCommit}^2`)).toBe(marker.attemptSha);
       expect(hgit(t.repo, "show", `${drive.landedCommit}:a`)).toBe("a");
     } finally { await first.stop(); await second.stop(); await t.h.dispose(); }
