@@ -1,0 +1,50 @@
+{
+  "v": 1,
+  "runId": "orca-dev-3d44b2fb",
+  "runtime": "claude-code",
+  "sessionRef": "3d44b2fb-8129-42c3-8918-56787483315e",
+  "writtenAt": "2026-10-18T15:24:57.005Z",
+  "head": "317172f0a6e2f106b20c3db42f0af3a68667c1e9",
+  "level": {
+    "kind": "reading",
+    "level": 331810,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Finish Task 6 re-review (fix a57b446a) then Tasks 7-15 of docs/superpowers/plans/2026-10-18-correction-debug-task.md in worktree Orca-wt/correction-debug-task (branch codex/correction-debug-task); ledger .superpowers/sdd/2026-10-18-correction-debug-task/progress.md is the recovery map"
+  ],
+  "open": [
+    "Tasks 7-15 not started; T7 must refuse confirm while DEBUG_DEFAULT_BUILD_TEST_COMMANDS placeholder present (debug-checks-unnamed)",
+    "Task 15 gate in a fresh clone not yet run",
+    "Handoff updates for Orca/ccloop/ccmem pending at session end"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "Paid end-to-end debug run (spec §8): ask before running"
+    },
+    {
+      "kind": "irreversible",
+      "what": "push of main (human pushes; do not remind)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "cd /Users/biran/code/skills/orca/Orca-wt/correction-debug-task && npx tsx scripts/check-debug-task-preconditions.ts; echo exit=$?",
+      "exitCode": 0,
+      "commit": "317172f0a6e2f106b20c3db42f0af3a68667c1e9",
+      "observedAt": "2026-10-18T15:24:56.926Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-3d44b2fb-T0HMXs/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca-wt/correction-debug-task log --oneline main..HEAD",
+      "exitCode": 0,
+      "commit": "317172f0a6e2f106b20c3db42f0af3a68667c1e9",
+      "observedAt": "2026-10-18T15:24:56.958Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-3d44b2fb-T0HMXs/2.txt"
+    }
+  ]
+}
