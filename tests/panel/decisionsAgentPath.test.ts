@@ -74,8 +74,8 @@ describe("the agent path to pending decisions (control run decisions Task 11, §
       const agentReject = await overSocket(socketPath, "POST", "/api/control/groups/g/decisions/reject", { "x-orca-client": "mcp:reader" },
         { commandId: "dap-agent-reject", expectedRevision: await revision(), payload: { pendingId: pending[1]!.pendingId } });
       expect({
-        approve: [agentApprove.status, JSON.parse(agentApprove.text).error.code],
-        reject: [agentReject.status, JSON.parse(agentReject.text).error.code],
+        approve: [agentApprove.status, JSON.parse(agentApprove.text).error?.code],
+        reject: [agentReject.status, JSON.parse(agentReject.text).error?.code],
       }).toEqual({ approve: [403, "control-verb-human-only"], reject: [403, "control-verb-human-only"] });
 
       // The owner's Web posts, as the panel sends them (Approve with an edited undo.how, Reject with no line).
