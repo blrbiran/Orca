@@ -1104,7 +1104,7 @@ export const zhErrors: Record<string, string> = {
   "handoff-work-not-found": "找不到要交接的工作。",
   "identity-space-exhausted": "身份编号已用尽：{{message}}",
   // Integration spec §3.2-§3.4, §8: the integration refusals.
-  "integration-busy": "这个组的集成冲突正在由 agent 解决，现在不能改它的集成方式。",
+  "integration-busy": "这个组的集成冲突正在由 agent 解决，等它完成后再试。",
   "integration-invalid": "集成方式没通过检查（分支名、远端名、远端是否存在、是否 GitHub 仓库）：{{message}}",
   "integration-no-checks": "这个任务没有可跑的检查，不能交给 agent 解决集成冲突。",
   "integration-not-blocked": "这个组的集成没有卡住，不需要处理。",

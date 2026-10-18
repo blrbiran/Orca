@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { integratePendingGroups } from "../../src/control/integrationPass.js";
 import { newGroupIntegration, readGroupIntegration } from "../../src/control/integrationScheme.js";
@@ -66,6 +67,26 @@ describe("approve-pending-decision (control run decisions Task 9)", { timeout: 6
       expect((r as { error: { message: string } }).error.message).toMatch(/^decision-undo-not-executable:tier-0: /);
       expect(readPendingDecision(t.h.store, t.pendingId())!.state).toBe("pending");
       expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(before);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("refuses, by name and not as a server error, a run ledger on the branch that cannot be appended to", async () => {
+    // Final review m2: appendEvents validates the file it appends to; a line it rejects is a refusal of this approve.
+    const t = await landedWithPending(); try {
+      const run = (args: string[], input?: string) =>
+        execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: t.repo, encoding: "utf8", input }).trim();
+      const old = run(["rev-parse", "refs/heads/orca/g"]);
+      const blob = run(["hash-object", "-w", "--stdin"], "not json\n");
+      const sub = run(["mktree"], `100644 blob ${blob}\t${t.runId}.jsonl\n`);
+      const tree = run(["mktree"], `${run(["ls-tree", old])}\n040000 tree ${sub}\t.decisions\n`);
+      const seeded = run(["commit-tree", tree, "-p", old, "-m", "seed"]);
+      run(["update-ref", "refs/heads/orca/g", seeded, old]);
+      // mutation m2: let appendEvents' throw escape prepareApproval -> the call rejects (a raw 500), red
+      const r = await t.approve({ pendingId: t.pendingId(), undoHow: `git revert --no-edit ${SHA_E}` });
+      expect(r).toMatchObject({ error: { code: "pending-decision-entry-invalid" } });
+      expect((r as { error: { message: string } }).error.message).toMatch(/^pending-decision-entry-invalid:refusing to append/);
+      expect(readPendingDecision(t.h.store, t.pendingId())!.state).toBe("pending");
+      expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(seeded);
     } finally { await t.h.dispose(); }
   });
 

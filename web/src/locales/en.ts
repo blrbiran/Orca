@@ -1169,7 +1169,7 @@ export const enErrors: Record<string, string> = {
   "handoff-work-not-found": "The work to hand off was not found.",
   "identity-space-exhausted": "No identity numbers are left: {{detail}}",
   // Integration spec §3.2-§3.4, §8: the integration refusals.
-  "integration-busy": "An agent is resolving this group's integration conflict, so its integration settings cannot change now. Wait for it to finish.",
+  "integration-busy": "An agent is resolving this group's integration conflict right now. Try again when it has finished.",
   "integration-invalid": "The integration settings failed a check (branch name, remote name, whether the remote exists, whether it is a GitHub repository): {{detail}}",
   "integration-no-checks": "This task has no checks to run, so its integration conflict cannot be given to an agent.",
   "integration-not-blocked": "This group's integration is not stuck; there is nothing to resolve.",

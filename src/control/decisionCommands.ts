@@ -80,14 +80,18 @@ export async function prepareApproval(
     if (found !== null) return { kind: "already-present", id: event.id, where: found.where };
     const busy = busyRefusal(store, groupId);
     if (busy !== null) return busy;
+    // Final review m2: a run ledger on the branch that appendEvents refuses to extend is this approve's refusal, by name.
+    let appendRefused: string | null = null;
     const result = await commitLedgerOnGroupBranch({
       // One worktree per command: two approvals of the same item must not remove each other's live worktree.
       repo, roots, groupId, worktreeName: `approve-${pendingId}-${command.commandId}`, message: `orca: approve ${pendingId}`, beforeCas: seams.beforeCas,
       write: async (decisionsDir) => {
-        await appendEvents(decisionsDir, ledgerRun, [event]);
+        try { await appendEvents(decisionsDir, ledgerRun, [event]); }
+        catch (error) { appendRefused = error instanceof Error ? error.message : String(error); return []; }
         return [`${ledgerRun}.jsonl`];
       },
     });
+    if (appendRefused !== null) return refused("pending-decision-entry-invalid", appendRefused);
     if (result.kind === "swapped") return { kind: "committed", id: event.id, commit: result.commit };
     if (result.kind === "nothing") throw new Error(`approve ${pendingId}: the ledger write named no file`);
   }

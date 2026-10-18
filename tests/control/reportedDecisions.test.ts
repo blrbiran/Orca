@@ -5,6 +5,10 @@ describe("reportedDecisionsOf", () => {
   it("reads an absent decisions field as not reported", () => {
     expect(reportedDecisionsOf({ events: [] })).toEqual({ kind: "absent" });
     expect(reportedDecisionsOf(null)).toEqual({ kind: "absent" });
+    // Final review T1: a present-but-undefined field is not reported (mutation: drop `value === undefined` -> malformed,
+    // red), and a result that is not an object reports nothing.
+    expect(reportedDecisionsOf({ decisions: undefined })).toEqual({ kind: "absent" });
+    expect(reportedDecisionsOf("x")).toEqual({ kind: "absent" });
   });
   it("passes an array through unchanged, empty included", () => {
     expect(reportedDecisionsOf({ decisions: [] })).toEqual({ kind: "array", entries: [] });

@@ -43,6 +43,7 @@ orca control get groups/<groupId>
 orca control get runs/<runId>/activity
 orca control get runs/<runId>/evidence
 orca control get runs/<runId>/saved-result-eligibility
+orca control get groups/<groupId>/decisions
 ```
 
 ### Recovery decisions
@@ -83,6 +84,7 @@ fields; a package version alone does not establish that another running panel su
 - `recovery`, `config`, `agents`, `operator/agent-preferences`, `repositories/<id>/workspace`, `repositories/<id>/integration`, `runs/<id>/evidence` (manifest only; artifact downloads are refused with `control-cli-binary-route`), `runs/<id>/activity` (the newest 200 activity rows, newest first), `runs/<id>/saved-result-eligibility`
 - Web owner-only read: `GET /api/control/operator/agent-installations`. The socket acts as Agent and returns `owner-required` for this route; it is not an `orca control get` path.
 - `usage?scope=all|repo:<id>[&from=<ms>&to=<ms>][&groupBy=model|repo|day|week|month]`: `get usage?scope=all` reads tokens used per model and the caps (`orca-usage-view-v1`: `.headline` total/week/month, `.range.byModel`, `.caps[]` with `used`, `committed`, `headroom`, and `.spendRevision`)
+- `groups/<id>/decisions` (`orca-group-decisions-v1`): per task and run, the decisions that landed and the first ref holding each (`where`), the items a landing refused (`pending`, with their `reason` and `state`), and, for a run that ended without landing, the entries it reported (`unlanded`). Approving or rejecting a pending item is owner-only (section 6).
 - saved results: `groups/<id>/results`, `runs/<id>/results`, and `runs/<id>/results/outputs/<outputId>` (preview JSON). Binary `?download=1` is Web-only and refused by the CLI with `control-cli-binary-route`.
 - a past command's retained result: see section 4
 

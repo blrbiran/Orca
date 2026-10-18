@@ -302,6 +302,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         {t("control.group.heading", { groupId, state: enumText("groupState", view.summary.state), revision, projection: view.summary.projectionSeq })}
       </h2>
       {decisions !== null && decisions.pendingCount > 0 && <p><NeedsHumanBadge testId="group-needs-human" /></p>}
+      {/* Final review T11 (Rule 12): a failed decisions read is said for the group too, not only inside an open task. */}
+      {decisionsFailed !== null && <p data-testid="group-decisions-read-failed">{t("control.decisions.readFailed", { code: decisionsFailed })}</p>}
       {view.summary.claimBlocked && <p role="alert">{t("control.group.claimBlocked")}</p>}
       {/* Spec 2026-10-08 §2.2(d), §6.5: the group's refusal is among the alerts at the top, above every action. */}
       {props.refusal ? <RefusalNotice refusal={props.refusal} testId="group-refusal" /> : null}

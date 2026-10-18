@@ -96,4 +96,16 @@ describe("a group's decisions in the page (control run decisions Task 11, fix ro
     expect((await within(detail).findByTestId("decisions-read-failed")).textContent).toContain("panel-unavailable");
     expect(within(detail).queryByTestId("group-needs-human")).toBeNull();
   });
+
+  it("says a failed decisions read under the group heading with no task open", async () => {
+    // Final review T11 (Rule 12): the failure is visible without opening a task.
+    decisions = () => json({ error: { code: "panel-unavailable", message: "down" } }, 503);
+    render(<App />);
+    const nav = await screen.findByRole("navigation", { name: "Control groups" });
+    fireEvent.click(await within(nav).findByRole("button", { name: /^g · / }));
+    const detail = await screen.findByRole("region", { name: "Control group g" });
+    // mutation T11: drop the group-level line -> nothing names the failure until a task is opened, red
+    expect((await within(detail).findByTestId("group-decisions-read-failed")).textContent).toContain("panel-unavailable");
+    expect(within(detail).queryByTestId("decisions-read-failed")).toBeNull();
+  });
 });
