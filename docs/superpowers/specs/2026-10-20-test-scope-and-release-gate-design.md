@@ -188,3 +188,12 @@ The full gate itself is not run this round (§2: release only).
 
 File layout inside `scripts/`, the node-API calls used for `related`, the exact selection-table format, and the stub
 technique in the criteria.
+
+## 7. Correction (as built, session `3831d12f`, 2026-10-20) — §4.1 step 2's base default
+
+§4.1 step 2 above is kept verbatim. As built, the default base depends on the current branch: on a branch other than
+`main` it is local `main` (what the branch adds), and on `main` itself it is `origin/main` when that ref exists, else
+`main`. Reason (implementer concern, measured): with `origin/main` as the base everywhere, an unpushed commit on local
+`main` that touches `package-lock.json` (a repin) made every branch cut from it select the whole root suite until the
+human pushed. Push and installing the panel service happen from `main`, so they still see the commits they ship.
+Commit: `fix(scripts): on a branch, test-affected compares against local main`.
