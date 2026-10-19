@@ -37,6 +37,39 @@ describe("the requirement's own idea (#74)", () => {
   });
 });
 
+/** The list alone: one requirement group, its summary changed by `over`. */
+function listWith(over: Partial<GroupSummaryV1>, requirement: Partial<NonNullable<GroupSummaryV1["requirement"]>> = {}): HTMLElement {
+  const view = requirementView("awaiting-answers");
+  const group: GroupSummaryV1 = { ...view.summary, groupId: "requirement-1e36e0a6", ...over, requirement: { ...view.summary.requirement!, ...requirement } };
+  render(<RequirementsPanel config={config} summary={{ ...summaryWith(view), groups: [group] }} views={{}} selected={null} agents={null} language="en" onSelect={() => {}} onCommand={() => {}} />);
+  return within(screen.getByRole("navigation", { name: "Requirement list" })).getAllByRole("button").find((b) => b.getAttribute("title") !== null || b.textContent!.includes("·"))!;
+}
+
+describe("the requirement list's names (#75, #78)", () => {
+  it("names a requirement by its slug, with the group id only as the secondary title", () => {
+    const button = listWith({ goal: "Let people take a note out as Markdown." }, { slug: "markdown-export" });
+    expect(button.textContent).toBe("markdown-export · clarifying");
+    expect(button.getAttribute("title")).toBe("requirement-1e36e0a6");
+  });
+
+  it("names a requirement without a slug by the first 60 characters of its idea on one line", () => {
+    const idea = "Let people take a note out as Markdown,\nwith every image kept as a relative link beside it.";
+    const button = listWith({ goal: idea }, { slug: null });
+    const shown = button.textContent!.split(" · ")[0]!;
+    expect(shown).toBe(`${Array.from(idea.replace(/\s+/g, " ")).slice(0, 60).join("")}…`);
+    expect(button.textContent).not.toContain("requirement-1e36e0a6");
+    expect(button.getAttribute("title")).toBe("requirement-1e36e0a6");
+  });
+
+  it("keeps a short idea whole, and the group id when neither slug nor idea is known (no title then)", () => {
+    expect(listWith({ goal: "Print a page." }, { slug: null }).textContent).toBe("Print a page. · clarifying");
+    cleanup();
+    const bare = listWith({ goal: undefined }, { slug: undefined });
+    expect(bare.textContent).toBe("requirement-1e36e0a6 · clarifying");
+    expect(bare.getAttribute("title")).toBeNull();
+  });
+});
+
 describe("the requirement document (#77)", () => {
   const documentRegion = () => screen.getByRole("region", { name: "Requirement document" });
   it("is split into sections at its ## headings, each heading and body as text", () => {

@@ -100,4 +100,21 @@ describe("the group summary's new fields (spec §6.2)", () => {
       expect(summary.counts).toBeUndefined();
     } finally { await h.dispose(); }
   });
+
+  // Issue #75 (W1, 2026-10-19): the requirement line carries the slug a round named, so the list can name a requirement
+  // without reading its view; null until a round names one.
+  it("carries the requirement's slug in its summary line, null before a round names one", async () => {
+    const h = await webFixture();
+    try {
+      h.store.transaction(() => {
+        insertClarifyingGroup(h.store, clarifyingInput("r"));
+        updateRevision(h.store, "r", 1);
+        h.store.db.prepare("UPDATE groups SET projection_seq=1 WHERE id='r'").run();
+      });
+      expect(readGroupSummary(h.store, "r").requirement?.slug).toBeNull();
+      const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='r'").get()!.body)) as { requirement: Record<string, unknown> };
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id='r'").run(JSON.stringify({ ...body, requirement: { ...body.requirement, slug: "markdown-export" } }));
+      expect(readGroupSummary(h.store, "r").requirement?.slug).toBe("markdown-export");
+    } finally { await h.dispose(); }
+  });
 });

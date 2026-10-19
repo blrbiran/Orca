@@ -397,6 +397,7 @@ function requirementSummaryFromSnapshot(store: ControlStore, groupId: string, sn
     exportState: group.requirement.export.state,
     used: group.used, reserved: group.reserved, limit: group.limit, usageUnknown: group.ledger.usageUnknown,
     blockedRun: blockedRequirementRun(store, groupId, snapshot),
+    slug: group.requirement.slug,
   };
 }
 

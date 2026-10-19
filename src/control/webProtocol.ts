@@ -1100,6 +1100,9 @@ export const requirementSummarySchema = z.object({
   // Final review finding 4: the requirement's call blocked by the driver, and why; the group view refuses a clarifying
   // group (DR25), so this is where its reason and its run-scoped recovery-retry are shown.
   blockedRun: z.object({ runId: idSchema, reason: nonemptyString.nullable() }).strict().nullable(),
+  // Issue #75: the slug a round named (null before), so the requirement list can name a requirement without its view.
+  // Optional on the wire so older fixtures still parse; the server always gives it.
+  slug: nonemptyString.nullable().optional(),
 }).strict();
 export type RequirementSummaryV1 = z.infer<typeof requirementSummarySchema>;
 

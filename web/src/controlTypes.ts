@@ -58,6 +58,8 @@ export type RequirementSummaryV1 = {
   usageUnknown: boolean;
   /** Final review finding 4: the requirement's call the driver blocked, and why (webProtocol.ts). */
   blockedRun: { runId: string; reason: string | null } | null;
+  /** Issue #75: the requirement's slug once a round named one. Optional so literal fixtures need no edit; the server always sends it. */
+  slug?: string | null;
 };
 
 export type GroupSummaryV1 = {

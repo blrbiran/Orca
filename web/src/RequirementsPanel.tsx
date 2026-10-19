@@ -370,6 +370,20 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
   );
 }
 
+const LIST_NAME_MAX = 60;
+/**
+ * Issues #75, #78: a listed requirement is named by its slug, else by the start of its idea on one line (the summary's
+ * goal is a clarifying group's idea); null when neither is known, and the group id names it as before.
+ */
+function listName(group: ControlSummaryV1["groups"][number]): string | null {
+  const slug = group.requirement?.slug ?? null;
+  if (slug !== null) return slug;
+  if (group.goal === undefined) return null;
+  const chars = Array.from(group.goal.replace(/\s+/g, " ").trim());
+  if (chars.length === 0) return null;
+  return chars.length > LIST_NAME_MAX ? `${chars.slice(0, LIST_NAME_MAX).join("")}…` : chars.join("");
+}
+
 export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kind: "requirement" }> | null; config: ControlConfigV1; summary: ControlSummaryV1; views: Record<string, RequirementViewV1>; selected: string | null;
   agents: AgentsViewV1 | null; language: PanelLanguage; onSelect: (groupId: string) => void;
   onPrepare?: (groupId: string) => void;
@@ -412,8 +426,8 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
           {listed.map((group) => (
             <GroupActionsMenu key={group.groupId} group={group} onOpen={() => props.onSelect(group.groupId)} onAction={props.onGroupAction}
               refusal={group.groupId === props.selected ? null : props.groupRefusals?.[group.groupId]}>{(onContextMenu) => (
-            <button type="button" aria-current={group.groupId === props.selected} onClick={() => props.onSelect(group.groupId)} onContextMenu={onContextMenu}>
-              {group.groupId} · {enumText("groupState", group.state)}
+            <button type="button" title={listName(group) === null ? undefined : group.groupId} aria-current={group.groupId === props.selected} onClick={() => props.onSelect(group.groupId)} onContextMenu={onContextMenu}>
+              {listName(group) ?? group.groupId} · {enumText("groupState", group.state)}
               {scope?.kind === "all" ? ` · ${props.repoLabel?.(group.repoId) ?? group.repoId}` : ""}
             </button>
             )}</GroupActionsMenu>
