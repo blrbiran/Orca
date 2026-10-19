@@ -1133,7 +1133,21 @@ export const groupSummarySchema = z
     // Given for every group with a plan; optional on the wire so older fixtures still parse.
     executionPending: z.boolean().optional(),
     // Debug task plan Task 6: present only on a group a correction opened (its debug mark), so the panel labels it.
-    debug: z.object({ correctionId: nonemptyString, ordinal: positiveSafeInteger }).strict().optional(),
+    // Task 13: the mark's facts the group view shows -- the frozen input's missing pieces, why the agent fell back, where
+    // the checks came from and what the landing did about the correction. Optional so a Task 6 summary still parses.
+    debug: z.object({
+      correctionId: nonemptyString, ordinal: positiveSafeInteger,
+      missing: z.array(z.enum(["run", "base", "attemptSha", "objects", "contract"])).optional(),
+      agentFallback: z.object({ reason: nonemptyString }).strict().nullable().optional(),
+      checks: z.object({ from: z.enum(["original", "original+named", "named"]), namedBy: z.enum(["human", "agent"]).nullable() }).strict().optional(),
+      // As driveRecord.ts's closingSchema (not imported: that module reaches the store).
+      closing: z.discriminatedUnion("state", [
+        z.object({ state: z.literal("written"), relPath: nonemptyString, fixRunId: nonemptyString }).strict(),
+        z.object({ state: z.literal("refused"), reason: nonemptyString }).strict(),
+        z.object({ state: z.literal("chose-instead-missing") }).strict(),
+        z.object({ state: z.literal("closed-by-human-first"), commit: nonemptyString }).strict(),
+      ]).nullable().optional(),
+    }).strict().optional(),
   })
   .strict();
 
@@ -1367,6 +1381,12 @@ export const runViewSchema = z
     // Feedback #59: the run's creation position in its group (1-based, rowid order); `runs` itself stays in id order.
     // Optional on the wire so older fixtures still parse; the server always gives it.
     createdOrdinal: positiveSafeInteger.optional(),
+    // Debug task plan Task 13 (Task 8's drive.debugRepro): the reproduce-first check of a debug run -- in progress, or
+    // skipped with the agent's reason (未复现). Absent on every other run.
+    debugRepro: z.discriminatedUnion("state", [
+      z.object({ state: z.literal("checking") }).strict(),
+      z.object({ state: z.literal("skipped"), reason: nonemptyString }).strict(),
+    ]).optional(),
   })
   .strict();
 

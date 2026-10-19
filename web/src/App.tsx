@@ -98,6 +98,9 @@ import type {
   RepositoryWorkspaceV1, RequirementViewV1, OverviewV1, RecoveryViewV1,
 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
+import { AttemptNotice, CorrectionsView, debugOpenAction, sendCorrectionCommand } from "./CorrectionsView.js";
+import type { CorrectionAttempt } from "./CorrectionsView.js";
+import { RefusalNotice } from "./RefusalNotice.js";
 import { DecisionOperations } from "./DecisionOperations.js";
 import { EMPTY_REQUESTS, dismissRequest, inlineRequest, noticeRequests, pendingWithdrawals, retryPayload, settleRequest, startRequest } from "./decisionRequests.js";
 import type { DecisionRequest, DecisionRequests } from "./decisionRequests.js";
@@ -226,6 +229,14 @@ export function App(): JSX.Element {
    * updates only its own record; the detail shows only its owner's active request, the global notice every other one.
    */
   const [decisionRequests, setDecisionRequests] = useState<DecisionRequests>(EMPTY_REQUESTS);
+  /**
+   * Debug task plan Task 13 (§3.1, ruling C11): the debug-group open sent right after a correction is recorded, by its
+   * decision (correctionKey). A failed open leaves the correction recorded and shows here with its Retry; an answer that
+   * named no correction could not be followed by an open at all, and says so.
+   */
+  const [debugOpens, setDebugOpens] = useState<Record<string, CorrectionAttempt | { refusal: ControlRefusal }>>({});
+  /** Ruling C12: the Decisions page's two tabs; the Corrections list lives here, not in a section of its own. */
+  const [decisionsTab, setDecisionsTab] = useState<"decisions" | "corrections">("decisions");
   /** The row whose answer may still be applied; read by `acceptArrival` when one arrives. */
   const wanted = useRef<DecisionIdentity | null>(null);
 
@@ -1239,6 +1250,7 @@ export function App(): JSX.Element {
         return;
       }
       setDecisionRequests((all) => settleRequest(all, requestId, { kind: "recorded", text: verb === "agree" ? "decisions.recordedReviewed" : "decisions.correctionRecorded" }));
+      if (verb === "correct") void openDebugGroup(owner, result.body);
       if (submittedForm !== undefined) setDetailDrafts((all) => clearIfUnchanged(all, "correction", correctionKey(owner.projectKey, owner.decisionId), submittedForm));
       setReviewedThisSession((n) => n + 1);
       await Promise.all([readTodo(), loadHome()]);
@@ -1247,6 +1259,24 @@ export function App(): JSX.Element {
     } catch (err) {
       setDecisionRequests((all) => settleRequest(all, requestId, { kind: "refused", refusal: failureFrom(err) }));
     }
+  };
+  /**
+   * Debug task plan Task 13 (§3.1 panel bullet, ruling C11): the panel form keeps POST /api/corrections, and once the row is
+   * stored it opens the correction's debug group at once (expected revision 0). The record's outcome never depends on it.
+   */
+  const openDebugGroup = async (owner: { projectKey: string; decisionId: string }, answer: unknown): Promise<void> => {
+    const key = correctionKey(owner.projectKey, owner.decisionId);
+    const id = (answer as { correction?: { id?: unknown } } | null)?.correction?.id;
+    if (typeof id !== "string") {
+      setDebugOpens((all) => ({ ...all, [key]: { refusal: { status: 200, code: "command-result-invalid", message: "command-result-invalid", commandRevision: null } } }));
+      return;
+    }
+    await sendDebugOpen(key, debugOpenAction(id), nextCommandId());
+  };
+  const sendDebugOpen = async (key: string, action: CorrectionAttempt["action"], commandId: string): Promise<void> => {
+    setDebugOpens((all) => ({ ...all, [key]: { action, commandId, outcome: { kind: "pending" } } }));
+    const attempt = await sendCorrectionCommand(action, commandId);
+    setDebugOpens((all) => ({ ...all, [key]: attempt }));
   };
   /**
    * Decisions review withdraw spec §7 / §10.1: a withdrawal is a request record like Agree / Correct, but it never
@@ -1300,7 +1330,7 @@ export function App(): JSX.Element {
   // typing (reviewKeyAction), and never a second Agree while this decision's first is in flight (Review Focus 2).
   // No dependency array: rebound every render, so the handler always reads the current state.
   useEffect(() => {
-    if (section !== "decisions") return;
+    if (section !== "decisions" || decisionsTab !== "decisions") return;
     const onKey = (event: KeyboardEvent): void => {
       const action = reviewKeyAction(event);
       if (action === null) return;
@@ -1347,6 +1377,7 @@ export function App(): JSX.Element {
   };
   const summary = controlConfig !== null && control.recovery !== null ? summaryView(control) : null;
   const inline = inlineRequest(decisionRequests, selected);
+  const debugOpen = selected === null ? undefined : debugOpens[correctionKey(selected.projectKey, selected.id)];
   const detail =
     selected !== null && decision !== null ? (
       <>
@@ -1379,6 +1410,9 @@ export function App(): JSX.Element {
           onRecordAnother={() => recordAnother(inline)}
         />
       )}
+      {debugOpen !== undefined && ("refusal" in debugOpen
+        ? <RefusalNotice refusal={debugOpen.refusal} testId="debug-open-refusal" />
+        : <AttemptNotice attempt={debugOpen} onResend={(action, commandId) => { void sendDebugOpen(correctionKey(selected!.projectKey, selected!.id), action, commandId); }} />)}
       </>
     ) : null;
   const modelsFor = (id: string): ModelListState | undefined => agentModels[id];
@@ -1600,6 +1634,15 @@ export function App(): JSX.Element {
         )}
       </SectionPane>
       <SectionPane section="decisions" active={section}>
+        {/* Toggle buttons, not ARIA tabs: the group view's region tabs are the page's one tablist. */}
+        <div role="group" aria-label={t("corrections.tabs")} className="detail-region-tabs">
+          {(["decisions", "corrections"] as const).map((tab) => (
+            <button key={tab} type="button" aria-pressed={decisionsTab === tab} onClick={() => setDecisionsTab(tab)}>
+              {t(tab === "decisions" ? "corrections.tabDecisions" : "corrections.tabCorrections")}
+            </button>
+          ))}
+        </div>
+        {decisionsTab === "corrections" ? <CorrectionsView active={section === "decisions"} /> : <>
         {todo.status !== "available" && <p role="status">{t("overview.source.decisions")} · {t(`overview.status.${todo.status}`)}{todo.error ? ` · ${todo.error}` : ""}</p>}
         {projects === null ? (
           // Plan decision P2: without a project list the rows keep today's repository filter.
@@ -1625,6 +1668,7 @@ export function App(): JSX.Element {
             }}
           />
         )}
+        </>}
       </SectionPane>
       <SectionPane section="memory" active={section}>
         <MemoryView active={section === "memory"} project={project} onProject={chooseProject} />

@@ -27,6 +27,9 @@ import type {
   ContinueTaskPayloadV1,
   ControlConfigV1,
   ControlSummaryV1,
+  CorrectionClosePayloadV1,
+  CorrectionDebugOpenPayloadV1,
+  CorrectionListV1,
   EstimatePayloadV1,
   EvidenceManifestV1,
   GroupDecisionsViewV1,
@@ -116,6 +119,8 @@ export const fetchRequirement = (groupId: string): Promise<RequirementViewV1> =>
 /** GET /api/control/groups/:groupId/decisions -- control run decisions plan Task 8: the group's decisions, read from refs. */
 export const fetchGroupDecisions = (groupId: string): Promise<GroupDecisionsViewV1> =>
   controlGet<GroupDecisionsViewV1>(`/api/control/groups/${segment(groupId)}/decisions`);
+/** GET /api/control/corrections -- debug task plan Task 10: every correction, its debug groups and its closed state. */
+export const readCorrections = (): Promise<CorrectionListV1> => controlGet<CorrectionListV1>("/api/control/corrections");
 /** GET /api/control/recovery -- every blocker the panel can see, across groups. */
 export const fetchControlRecovery = (): Promise<RecoveryViewV1> => controlGet<RecoveryViewV1>("/api/control/recovery");
 /** GET /api/control/runs/:runId/evidence -- the manifest of raw evidence retained for one run. */
@@ -355,7 +360,13 @@ export type ControlAction =
   // Control run decisions plan Tasks 9-11: an owner approves a refused decision with an undo.how, or rejects it (no
   // `because` key when the person wrote no line -- the server's schema refuses an empty one).
   | { verb: "approve-pending-decision"; groupId: string; expectedRevision: number; payload: { pendingId: string; undoHow: string } }
-  | { verb: "reject-pending-decision"; groupId: string; expectedRevision: number; payload: { pendingId: string; because?: string } };
+  | { verb: "reject-pending-decision"; groupId: string; expectedRevision: number; payload: { pendingId: string; because?: string } }
+  // Debug task plan Tasks 6, 11: a correction's debug group is opened (expected revision 0 for a new one), and a correction
+  // is recorded or closed by hand on the `@corrections` scope (constant revision 0). `groupId` is "@corrections" for all
+  // three: the open's ledger key is the debug group the server picks (src/panel/controlApi.ts debugOpenScoped).
+  | { verb: "correction-debug-open"; groupId: string; expectedRevision: number; payload: CorrectionDebugOpenPayloadV1 }
+  | { verb: "correction-record"; groupId: string; expectedRevision: number; payload: { repoId: string; decisionId: string; kind: "wrong" | "not_my_taste" | "stale"; because: string; chose_instead?: string; again?: boolean } }
+  | { verb: "correction-close"; groupId: string; expectedRevision: number; payload: CorrectionClosePayloadV1 };
 
 /** The route a verb is served on -- src/panel/controlApi.ts's mutation table. */
 export function controlCommandPath(action: ControlAction): string {
@@ -420,6 +431,12 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/decisions/approve`;
     case "reject-pending-decision":
       return `${group}/decisions/reject`;
+    case "correction-debug-open":
+      return `/api/control/corrections/${segment(action.payload.correctionId)}/debug-group`;
+    case "correction-record":
+      return "/api/control/corrections";
+    case "correction-close":
+      return `/api/control/corrections/${segment(action.payload.correctionId)}/close`;
   }
 }
 

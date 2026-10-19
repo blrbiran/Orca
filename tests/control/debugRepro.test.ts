@@ -12,6 +12,7 @@ import { driveRecordSchema } from "../../src/control/driveRecord.js";
 import { createExecutionDriver, type ExecutionDriver } from "../../src/control/executionDriver.js";
 import type { DebugResult } from "../../src/control/reportedDecisions.js";
 import { writeCanonicalRecord } from "../../src/control/snapshot.js";
+import { readControlGroup } from "../../src/panel/controlViews.js";
 import { driverHarness, git as hgit } from "./fixtures/driverHarness.js";
 
 // Debug-task design §4.3, §12.8 / plan Task 8: Orca checks that a debug run's added test fails at its base and passes at
@@ -238,6 +239,9 @@ describe("stepC runs the check only for a debug group's run (plan Task 8)", () =
     }
   }
   const workdirOf = (drive: { sourceDir: string }) => join(drive.sourceDir, "repo");
+  /** Task 13: one run as the panel's group view gives it. */
+  const runView = (t: { h: { store: Parameters<typeof readControlGroup>[0] } }, runId: string) =>
+    readControlGroup(t.h.store, "epoch", "g").runs.find((run) => run.runId === runId)!;
 
   it("a failed check blocks the debug run at C and does not land", async () => {
     const t = await debugHarness(() => ({}));
@@ -287,6 +291,8 @@ describe("stepC runs the check only for a debug group's run (plan Task 8)", () =
       const runId = await t.claim();
       await settle(driver, () => t.body(runId).state === "landed");
       expect(t.body(runId).drive.debugRepro).toEqual({ state: "skipped", reason: "a naming taste" });
+      // Task 13: the run view carries the skip and its reason, so the panel shows 未复现.
+      expect(runView(t, runId).debugRepro).toEqual({ state: "skipped", reason: "a naming taste" });
     } finally { await driver.stop(); await t.h.dispose(); }
   });
 
@@ -323,6 +329,9 @@ describe("stepC runs the check only for a debug group's run (plan Task 8)", () =
       await settle(driver, () => t.body(b).state === "landed", 10_000);
       expect(t.body(a).state).toBe("accepted");
       expect(t.body(a).drive.debugRepro.state).toBe("checking");
+      // Task 13: the view says the check is in progress, without the restore facts; a run never checked has no field.
+      expect(runView(t, a).debugRepro).toEqual({ state: "checking" });
+      expect(runView(t, b)).not.toHaveProperty("debugRepro");
       writeFileSync(release, "");
       await settle(driver, () => t.body(a).state === "landed");
     } finally { writeFileSync(release, ""); await driver.stop(); await t.h.dispose(); }

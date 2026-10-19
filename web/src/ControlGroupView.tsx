@@ -35,8 +35,47 @@ import { planText } from "./LoopPlanCard.js";
 import { currentLanguage, enumText } from "./i18n.js";
 import { formatTokens, shortTokens } from "./TokenInput.js";
 import { capScopeText } from "./UsagePanel.js";
+import { closingText } from "./CorrectionsView.js";
 
 const short = (hash: string): string => hash.slice(0, 12);
+
+/**
+ * Debug task plan Task 13: a group a correction opened says so, with its frozen input's missing pieces, why the original
+ * agent was not used, where its checks came from and what its landing did about the correction.
+ */
+function DebugMark({ debug }: { debug: NonNullable<GroupViewV1["summary"]["debug"]> }): JSX.Element {
+  const { t } = useTranslation();
+  const missing = debug.missing ?? [];
+  return (
+    <div className="detail-block" data-testid="debug-mark">
+      <p>
+        <span className="badge" data-tone="info" data-testid="debug-badge">{t("debugGroup.badge", { ordinal: debug.ordinal })}</span>{" "}
+        {t("debugGroup.correction", { correctionId: debug.correctionId })}
+      </p>
+      {debug.missing !== undefined && (
+        <p data-testid="debug-input" data-tone={missing.length > 0 ? "warn" : undefined}>
+          {missing.length === 0 ? t("debugGroup.inputComplete") : t("debugGroup.inputMissing", { pieces: missing.map((piece) => t(`debugGroup.piece.${piece}`)).join(", ") })}
+        </p>
+      )}
+      {debug.agentFallback != null && <p data-testid="debug-fallback" data-tone="warn">{t("debugGroup.agentFallback", { reason: debug.agentFallback.reason })}</p>}
+      {debug.checks !== undefined && (
+        <p data-testid="debug-checks">{t(`debugGroup.checks.${debug.checks.from}`, { by: t(`debugGroup.namedBy.${debug.checks.namedBy ?? "none"}`) })}</p>
+      )}
+      {debug.closing != null && <p data-testid="debug-closing">{closingText(debug.closing)}</p>}
+    </div>
+  );
+}
+
+/** Task 8's reproduce-first check of a debug run: in progress, or skipped (未复现) with the agent's reason. */
+function DebugRepro({ run }: { run: RunViewV1 }): JSX.Element | null {
+  const { t } = useTranslation();
+  if (run.debugRepro === undefined) return null;
+  return (
+    <div data-testid="debug-repro" data-tone={run.debugRepro.state === "skipped" ? "warn" : "info"}>
+      {run.debugRepro.state === "checking" ? t("debugGroup.reproChecking") : t("debugGroup.reproSkipped", { label: t("debugRepro.skipped"), reason: run.debugRepro.reason })}
+    </div>
+  );
+}
 
 /**
  * Feedback #59: the Runs table's display order. The view sends runs in id order (UUIDs); when every run carries its
@@ -340,6 +379,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <p>
         {t("control.group.planLine", { goal: view.plan.goal, hash: short(view.plan.planHash), graphVersion: view.graphVersion })}
       </p>
+      {view.summary.debug !== undefined && <DebugMark debug={view.summary.debug} />}
       {view.summary.requirement !== undefined && <a href="#requirements" onClick={() => props.onSourceRequirement?.(groupId)}>{t("control.group.sourceRequirement")}</a>}
       {archived && (
         <p role="status" aria-label={t("control.group.archivedRegion")}>
@@ -462,6 +502,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               <td className="run-state">
                 <div>{enumText("runState", run.state)}</div>
                 <div><RunReason run={run} /></div>
+                <DebugRepro run={run} />
                 <RunOutputBound run={run} />
                 <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
                 {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}

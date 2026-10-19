@@ -418,5 +418,5 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 
 /* Region composition uses the existing controls and palette. */
 .detail-region-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: 1rem; }
-.detail-region-tabs [aria-selected="true"] { font-weight: 700; border-bottom: 2px solid currentColor; }
+.detail-region-tabs [aria-selected="true"], .detail-region-tabs [aria-pressed="true"] { font-weight: 700; border-bottom: 2px solid currentColor; }
 [role="tabpanel"][hidden] { display: none; }

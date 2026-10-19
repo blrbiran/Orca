@@ -83,9 +83,38 @@ export type GroupSummaryV1 = {
   archived?: boolean;
   /** Feedback #53: a start wake is undelivered or a task is executing; a Web-started group stays `ready` meanwhile. */
   executionPending?: boolean;
-  /** Debug task plan Task 6: present only on a group a correction opened. */
-  debug?: { correctionId: string; ordinal: number };
+  /** Debug task plan Task 6: present only on a group a correction opened. Task 13: the mark's facts the group view shows. */
+  debug?: {
+    correctionId: string; ordinal: number;
+    missing?: DebugInputPieceV1[];
+    agentFallback?: { reason: string } | null;
+    checks?: { from: "original" | "original+named" | "named"; namedBy: "human" | "agent" | null };
+    closing?: DebugClosingV1 | null;
+  };
 };
+
+/** Debug task plan Task 3: a piece of the frozen input that could not be read (src/control/debugInput.ts). */
+export type DebugInputPieceV1 = "run" | "base" | "attemptSha" | "objects" | "contract";
+/** Debug task plan Task 9: what a debug run's landing did about its correction (src/control/driveRecord.ts closingSchema). */
+export type DebugClosingV1 = { state: "written"; relPath: string; fixRunId: string } | { state: "refused"; reason: string }
+  | { state: "chose-instead-missing" } | { state: "closed-by-human-first"; commit: string };
+
+/** Debug task plan Task 10: one item of GET /api/control/corrections (src/control/correctionState.ts CorrectionListItemV1). */
+export type CorrectionListItemV1 = {
+  correction: {
+    id: string; projectKey: string; decisionId?: string; runId?: string; pendingId?: string;
+    kind: "wrong" | "not_my_taste" | "stale"; chose_instead?: string; because: string; at: string; by: string;
+  };
+  repoId: string | null;
+  debugGroups: Array<{ groupId: string; ordinal: number; live: boolean; state: string }>;
+  closed: { state: "open" } | { state: "closed"; ref: string; via: "debug-group" | "by-hand" };
+  closing: DebugClosingV1 | null;
+  withdrawn: { by: string; at: string } | null;
+};
+export type CorrectionListV1 = { schema: "orca-correction-list-v1"; corrections: CorrectionListItemV1[] };
+/** Debug task plan Tasks 6, 11 (src/control/webProtocol.ts): the open and the manual close. */
+export type CorrectionDebugOpenPayloadV1 = { correctionId: string; reopen?: boolean; undoHow?: string; checks?: string[] };
+export type CorrectionClosePayloadV1 = { correctionId: string; choseInstead?: string; undoHow: string; undoCost?: string; undoBlastRadius?: string };
 
 /** N1 spec §4.2 and §7: a round's records (src/control/requirementSchemas.ts roundBodySchema, field for field). */
 export type RequirementCallRecordV1 = {
@@ -265,6 +294,8 @@ export type RunViewV1 = {
   lastActivityAt?: number | null;
   /** Feedback #59: creation position in the group (1-based); `runs` stays in id order. Optional so literal fixtures need no edit; the server always sends it. */
   createdOrdinal?: number;
+  /** Debug task plan Task 13: a debug run's reproduce-first check, in progress or skipped with the agent's reason. */
+  debugRepro?: { state: "checking" } | { state: "skipped"; reason: string };
   /** Spec 2026-10-15 §6.2: a single call's output bound and, when its observed output went over it, by how much. Read-time only. */
   outputBound?: number;
   outputBoundExceededBy?: number;

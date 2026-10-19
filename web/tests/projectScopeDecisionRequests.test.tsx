@@ -31,15 +31,25 @@ import type { FakePanel } from "./fixtures/twoProjects.js";
 interface Held { url: string; body: unknown; resolve: (answer: Response) => void; reject: (err: Error) => void }
 let panel: FakePanel;
 let held: Held[];
+/**
+ * Holds every decision POST until the test answers it. Task 13: the debug-group open a recorded correction sends at once
+ * (a control route) is answered here and never held, so `held` stays the decision requests these criteria count.
+ */
+const holdPosts = (fake: FakePanel): void => {
+  fake.onPost = (url, body) => url.startsWith("/api/control/corrections/")
+    ? Promise.resolve(json({ schema: "orca-command-success-v1", commandRevision: 1, result: { kind: "debug-group-opened", groupId: "debug-c_00000000000000a1", correctionId: "c_00000000000000a1", created: true } }))
+    : new Promise<Response>((resolve, reject) => { held.push({ url, body, resolve, reject }); });
+};
 beforeEach(() => {
   panel = installFakePanel();
   held = [];
-  panel.onPost = (url, body) => new Promise<Response>((resolve, reject) => { held.push({ url, body, resolve, reject }); });
+  holdPosts(panel);
 });
 afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); window.location.hash = ""; });
 
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-const recorded = (): Response => json({ recorded: true });
+// The route's answer names the stored correction (src/panel/api.ts), which the page then opens a debug group for (Task 13).
+const recorded = (): Response => json({ correction: { id: "c_00000000000000a1" } });
 const exists = (): Response => json({ code: "correction-exists", message: "a correction of this decision exists", retry_field: "again" }, 409);
 
 /** alpha/d1 and beta/d1 share their id, so anything keyed by id alone shows one under the other. */
@@ -108,7 +118,7 @@ describe("decision requests keep their owner (spec §11 R3)", () => {
       cleanup();
       held = [];
       panel = installFakePanel();
-      panel.onPost = (url, body) => new Promise<Response>((resolve, reject) => { held.push({ url, body, resolve, reject }); });
+      holdPosts(panel);
       window.localStorage.clear();
     }
   });

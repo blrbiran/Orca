@@ -442,7 +442,11 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     archived: archivedMarkOf(body) !== null,
     ...(archived === null ? {} : { executionPending: groupExecutionPending(store, groupId, archived.plan.tasks.map((task) => task.taskId), readSnapshot!) }),
     ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),
-    ...(debugMark === null ? {} : { debug: { correctionId: debugMark.correctionId, ordinal: debugMark.ordinal } }),
+    ...(debugMark === null ? {} : { debug: {
+      correctionId: debugMark.correctionId, ordinal: debugMark.ordinal, missing: debugMark.missing,
+      agentFallback: debugMark.agentFallback === null ? null : { reason: debugMark.agentFallback.reason },
+      checks: debugMark.checks, closing: debugMark.closing,
+    } }),
   };
   const parsed = groupSummarySchema.safeParse(summary);
   if (!parsed.success) return blocked(`group-summary:${parsed.error.issues[0]?.message ?? "invalid"}`);
@@ -949,6 +953,10 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       lastActivityAt: activity.get(runId)?.at ?? null,
       createdOrdinal: createdOrdinal.get(runId)!,
       ...outputBoundView(store, groupId, run),
+      // Debug task plan Task 13: what the panel shows of the reproduce-first check; the restore facts stay in the body.
+      ...(run.drive?.debugRepro == null ? {} : {
+        debugRepro: run.drive.debugRepro.state === "checking" ? { state: "checking" as const } : { state: "skipped" as const, reason: run.drive.debugRepro.reason },
+      }),
     };
   });
 }

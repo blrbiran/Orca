@@ -163,6 +163,23 @@ describe("correction-debug-open (debug task Task 6)", () => {
     } finally { await w.dispose(); }
   });
 
+  // Task 13: the group view shows the mark's missing pieces, the agent's fallback reason, the checks' provenance and the
+  // closing; the summary carries them as the mark holds them (values set here are distinct from the open's defaults).
+  it("gives the summary the mark's missing pieces, fallback reason, checks provenance and closing (Task 13)", async () => {
+    const w = await world(); try {
+      const groupId = opened(await w.open(w.correction.id)).groupId;
+      const facts = {
+        missing: ["objects", "contract"], agentFallback: { original: { agent: "gone" }, reason: "agent gone is not installed" },
+        checks: { from: "original+named", namedBy: "agent" }, closing: { state: "refused", reason: "ledger-conflict" },
+      };
+      w.store.db.prepare("UPDATE groups SET body=json_set(body,'$.debug',json(?)) WHERE id=?").run(JSON.stringify({ ...w.body(groupId).debug as object, ...facts }), groupId);
+      expect(readGroupSummary(w.store, groupId).debug).toEqual({
+        correctionId: w.correction.id, ordinal: 1, missing: ["objects", "contract"], agentFallback: { reason: "agent gone is not installed" },
+        checks: { from: "original+named", namedBy: "agent" }, closing: { state: "refused", reason: "ledger-conflict" },
+      });
+    } finally { await w.dispose(); }
+  });
+
   it("opening again returns the same group", async () => {
     const w = await world(); try {
       const cid = w.correction.id;
