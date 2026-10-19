@@ -261,3 +261,23 @@ it("distinguishes v4 unlimited and unknown snapshots and preserves allowance wai
  const old=await fixture("ok",{terminal:{...FAILED_TERMINAL,budgetSnapshot:{attemptsRemaining:1,timeRemainingMs:100,tokenBudgetRemaining:null}}});
  expect((await old.port.collect(old.envelope,0)).terminal?.outcome).toBe("failed");
 });
+
+// Reported-decisions spec 2026-10-20 §6 (criterion 12): ccloop answers what the candidate's execute phase reported beside
+// the four keys; Orca's strict parser accepts both, the mapper hands them on as given, and validation stays downstream.
+describe("collect's reported decisions and debug through the real port",()=>{
+  const decisions=[{question:"q",chose:"c",importance:"minor"},"not-an-object"];
+  const debug={choseInstead:"x",reproTests:["tests/a.test.ts"]};
+  it("passes both values through as ccloop answered them, on protocol 3 and 4",async()=>{
+    const v3=await fixture("ok",{decisions,debug});
+    const r3=await v3.port.collect(v3.envelope,0);
+    expect([r3.decisions,r3.debug]).toEqual([decisions,debug]);
+    const v4=await fixture("ok",{decisions:"x",debug:null,features:{protocol:1,tokenPolicy:"optional-v1"}});
+    const r4=await v4.port.collect({...v4.envelope,protocol:4},0);
+    expect([r4.decisions,r4.debug]).toEqual(["x",null]);
+  });
+  it("leaves both keys absent for an answer without them",async()=>{
+    const h=await fixture();
+    const report=await h.port.collect(h.envelope,0);
+    expect(["decisions" in report,"debug" in report]).toEqual([false,false]);
+  });
+});

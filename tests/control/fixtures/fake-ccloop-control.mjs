@@ -55,7 +55,8 @@ else if (method === "accept" || method === "inspect") {
 else if (["handoff", "collect", "read-evidence"].includes(method) && !envelopeOk(payload.input)) throw new Error("unreachable");
 else if (method === "handoff") value = { kind:"latched",requestId:payload.request.requestId };
 // Labels and progress plan Task 5 (finding F3): an optional `progress` knob; absent, the answer is byte for byte what it was.
-else if (method === "collect") value = { events:config.collectRef?[{runId:payload.input.claim.runId,generation:payload.input.claim.generation,eventSeq:1,bucket:"work",cumulative:null,source:config.collectRef}]:[],candidate:config.candidate??null,terminal:config.terminal??null,...(config.progress !== undefined ? { progress:config.progress } : {}) };
+// Reported-decisions spec 2026-10-20 §6: optional `decisions` and `debug` knobs, the same way.
+else if (method === "collect") value = { events:config.collectRef?[{runId:payload.input.claim.runId,generation:payload.input.claim.generation,eventSeq:1,bucket:"work",cumulative:null,source:config.collectRef}]:[],candidate:config.candidate??null,terminal:config.terminal??null,...(config.progress !== undefined ? { progress:config.progress } : {}),...(config.decisions !== undefined ? { decisions:config.decisions } : {}),...(config.debug !== undefined ? { debug:config.debug } : {}) };
 else if (method === "read-evidence") {
   const bytes = Buffer.from(config.evidence ?? "evidence");
   value = { artifactId:payload.ref.artifactId,hash:config.badHash ? "0".repeat(64) : createHash("sha256").update(bytes).digest("hex"),base64:bytes.toString("base64") };
