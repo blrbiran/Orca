@@ -8,7 +8,7 @@
  * execution is still alive.
  */
 import type { JSX } from "react";
-import { useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import { AgentSelectionEditor, selectionsHashFor } from "./AgentSelectionEditor.js";
@@ -36,6 +36,7 @@ import { currentLanguage, enumText } from "./i18n.js";
 import { formatTokens, shortTokens } from "./TokenInput.js";
 import { capScopeText } from "./UsagePanel.js";
 import { closingText } from "./CorrectionsView.js";
+import { isRetryKey } from "./reviewKeys.js";
 
 const short = (hash: string): string => hash.slice(0, 12);
 
@@ -99,6 +100,11 @@ export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; chec
   });
 }
 
+/** The retry-task the Runs table's Retry task button sends; the `r` key sends this same one (issue #57). */
+function retryTaskAction(view: GroupViewV1, run: RunViewV1): ControlAction {
+  return { verb: "retry-task", groupId: view.summary.groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: String(run.taskId) } };
+}
+
 /** A run's retry, as the Runs table offers it; the Problems row and the work item row offer this same one (feedback #56/#57). */
 function RunRetry({ view, run, archived, onCommand, active = true }: { view: GroupViewV1; run: RunViewV1; archived: boolean; onCommand: (action: ControlAction) => void; active?: boolean }): JSX.Element | null {
   const { t } = useTranslation();
@@ -114,7 +120,7 @@ function RunRetry({ view, run, archived, onCommand, active = true }: { view: Gro
   const button = hasFailureOutcome(run) ? (retryRunOpen(view, run) ? (
     <button
       type="button"
-      onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: revision, payload: { taskId: String(run.taskId) } })}
+      onClick={() => onCommand(retryTaskAction(view, run))}
     >
       {t("control.group.retryTask", { taskId: String(run.taskId) })}
     </button>
@@ -230,6 +236,23 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const toggleFilter = (label: string): void =>
     setLabelFilter((current) => (current.includes(label) ? current.filter((other) => other !== label) : [...current, label]));
   const openItem = view.workItems.find((item) => item.taskId === openTask);
+  // Issue #57: `r` retries the open task's current run where its Retry task button is offered (failed, and retryRunOpen),
+  // like Decisions' keys only from the page body or inside this group, and never from a hidden pane.
+  const sectionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (props.active === false) return;
+    const onKey = (event: KeyboardEvent): void => {
+      if (!isRetryKey(event)) return;
+      const target = event.target as Node | null;
+      if (target !== document.body && (target === null || sectionRef.current?.contains(target) !== true)) return;
+      const run = openItem?.currentRunId == null ? undefined : view.runs.find((candidate) => candidate.runId === openItem.currentRunId);
+      if (run === undefined || archived || !hasFailureOutcome(run) || !retryRunOpen(view, run)) return;
+      event.preventDefault();
+      onCommand(retryTaskAction(view, run));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   const workspace = props.workspaceFor?.(view.plan.repoId) ?? props.workspace;
   // A read of another group (the page's last one, while this group's is on its way) is no read of this one.
   const read = props.decisions ?? null;
@@ -335,7 +358,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   </>);
 
   return (
-    <section aria-label={t("control.group.region", { groupId })}>
+    <section ref={sectionRef} aria-label={t("control.group.region", { groupId })}>
       <h2>
         {t("control.group.heading", { groupId, state: enumText("groupState", view.summary.state), revision, projection: view.summary.projectionSeq })}
       </h2>
