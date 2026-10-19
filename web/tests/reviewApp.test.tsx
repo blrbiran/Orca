@@ -290,4 +290,20 @@ describe("Overview's view-all link (final review M4)", () => {
     // The row opened before the detour is no longer open.
     expect(question()).not.toBe(QUESTION_A);
   });
+
+  // Reported-decisions spec 2026-10-20 §6: j / k walks the rows on screen, so a hidden minor row is skipped until the
+  // person shows the minor ones, and then it is reachable like any other.
+  it("skips a hidden minor row with 'j', and reaches it with 'k' once minor rows are shown", async () => {
+    rows = [A, { ...B, importance: "minor" }, C];
+    render(<App />);
+    await waitFor(() => expect(document.querySelectorAll(".decision-list li button")).toHaveLength(2));
+    openRow(QUESTION_A);
+    await waitFor(() => expect(question()).toBe(QUESTION_A));
+    fireEvent.keyDown(document.body, { key: "j" });
+    await waitFor(() => expect(question()).toBe(QUESTION_C));
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 minor" }));
+    await waitFor(() => expect(document.querySelectorAll(".decision-list li button")).toHaveLength(3));
+    fireEvent.keyDown(document.body, { key: "k" });
+    await waitFor(() => expect(question()).toBe(QUESTION_B));
+  });
 });
