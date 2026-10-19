@@ -84,8 +84,13 @@ if (namesPathOrFilter(vitestArgs)) {
 
 // --- changed paths ----------------------------------------------------------------------------------------------
 const hasRef = (ref) => spawnSync("git", ["rev-parse", "--verify", "--quiet", ref], { cwd: root }).status === 0;
+// On a branch other than main the work is what the branch adds to local main, so an unpushed main commit (a repin's
+// lockfile) does not select the whole suite on every branch cut from it; on main itself the base is origin/main, so
+// push and installing the panel service still see the commits they are about to ship.
+const branch = spawnSync("git", ["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
 if (base === undefined) {
-  if (hasRef("refs/remotes/origin/main")) base = "origin/main";
+  if (branch !== "main" && hasRef("refs/heads/main")) base = "main";
+  else if (hasRef("refs/remotes/origin/main")) base = "origin/main";
   else if (hasRef("refs/heads/main")) base = "main";
   else fail("neither origin/main nor main exists; pass --base <ref>");
 }

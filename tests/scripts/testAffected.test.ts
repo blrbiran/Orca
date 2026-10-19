@@ -247,6 +247,20 @@ describe("base default", () => {
     expect(r.out).toContain("against origin/main");
     expect(r.files).toEqual(["root tests/c/late.test.ts"]);
   });
+
+  it("on a branch compares against local main, so an unpushed main commit is not the branch's change", () => {
+    const repo = join(tempRoot(), "repo");
+    cpSync(template, repo, { recursive: true, verbatimSymlinks: true });
+    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD");
+    write(repo, "tests/c/onMain.test.ts", T(""));
+    commit(repo); // on local main, ahead of origin/main
+    git(repo, "checkout", "-q", "-b", "work");
+    write(repo, "tests/c/onBranch.test.ts", T(""));
+    commit(repo);
+    const r = dry(repo, []);
+    expect(r.out).toContain("against main ");
+    expect(r.files).toEqual(["root tests/c/onBranch.test.ts"]);
+  });
 });
 
 // Records argv and cwd, writes the JSON result FAKE_VITEST_JSON describes (or none), exits FAKE_VITEST_EXIT.
