@@ -86,6 +86,12 @@ export function deriveRows(input: DeriveInput): DerivedRows {
     undo: {
       // The human's, always (ruling 4): this is the field the Tier 0 gate
       // reads, and a derived one would make that gate unable to ever fire.
+      // *** ERRATUM (2026-10-18, debug-task plan; recorded 2026-10-19 by Orca session f3a75a90) ***
+      // Not always: on the debug-task path, when the human gave none, `how` is
+      // Orca's `git revert --no-edit <attemptSha>` suffixed ORCA_GENERATED
+      // (authored.undoHow "orca", src/control/debugClosing.ts). And the gate is
+      // lexical for every author: it checks shape, not truth. --close still
+      // requires the human's. See 2026-09-06 spec §16.
       how,
       cost: undo.cost ?? inherited(original.undo.cost, original.id),
       blast_radius: undo.blastRadius ?? inherited(original.undo.blast_radius, original.id),

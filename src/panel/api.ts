@@ -511,6 +511,13 @@ export function buildApi(app: Express, deps: ApiDeps): void {
    * repository. That closing act stays exclusively `orca correct --close`
    * (A' §4.1: a web application holding commit rights on every repository is
    * the thing being refused).
+   *
+   * *** ERRATUM (2026-10-18, debug-task plan; recorded 2026-10-19 by Orca session f3a75a90) ***
+   * This route still never commits, but "exclusively `orca correct --close`"
+   * no longer holds: the control service commits closing rows in a debug run's
+   * landing commit on its group branch, and the human-only `correction-close`
+   * verb commits on the repository's current branch, as --close does. A'
+   * §4.1 is narrowed accordingly. See 2026-09-06 spec §16.
    */
   app.post("/api/corrections", (req, res, next) => {
     void (async () => {

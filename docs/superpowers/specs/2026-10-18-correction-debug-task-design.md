@@ -396,3 +396,101 @@ withdrawn, not as "without a debug group". It is written only by the panel withd
 (`POST /api/corrections/withdraw`), registered as an out-of-repo write in the withdraw design
 (`2026-10-18-decisions-review-withdraw-design.md` §5.1). This design adds no writer of it. The follow-up items are in
 the amendment at the end of `docs/superpowers/plans/2026-10-18-correction-debug-task.md`.
+
+## Correction (as built, Orca sessions 3d44b2fb and f3a75a90, 2026-10-19)
+
+Appended; no earlier line is changed (CLAUDE.md Rule 13). Recorded by Orca session f3a75a90 (controller, Task 14 of
+`docs/superpowers/plans/2026-10-18-correction-debug-task.md`) on branch `codex/correction-debug-task` at `e704195f`.
+Each point names who ruled it and the commit subjects that built it. Where a point below and an earlier section
+disagree, the point below describes the code. The 2026-09-06 corrections spec gets its own §16 for ruling 4 and A′ §4.1
+(this design's §6 and §12.5).
+
+### C15 — where the reproduce-first check runs (supersedes §12.8 item 2's "scratch worktree")
+
+Ruled by the human (session 3d44b2fb, 2026-10-18); built by Orca session 3d44b2fb (controller, Tasks 1–12).
+§12.8 item 2 says the check runs "in a scratch worktree at the original `base`". It runs instead **in the debug run's
+own workspace, at the debug run's own base** (the code before the fix), with only the `reproTests` files taken from
+`attemptSha`; `reproCommand` must exit non-zero there and zero at `attemptSha`. It runs **off the driver round**: the
+round persists `drive.debugRepro = { state: "checking", startedAt, attemptSha, … }` before the first checkout and
+returns; a later round reads the verdict. `stop()` aborts the check; a round that finds `checking` with no check in
+memory (restart, crash) first restores the workspace (`checkout --force attemptSha`, untracked paths new since the
+snapshot removed) and runs the check again. The workspace is always restored to `attemptSha` afterwards. Every named
+`reproTests` path must exist at `attemptSha` before any checkout, else `failed: result-invalid`. The command runs as
+ccloop runs required checks (`sh -lc`, environment inherited).
+Commits: `feat(control): Orca checks a debug fix was reproduced before it lands`;
+`fix(control): the reproduce-first check runs off the driver round and survives a restart`;
+`test(control): pin that the reproduction command inherits the environment as ccloop's checks do`;
+`test(control): a resumed check is seen not to make a new attempt commit before the run lands`;
+`fix(control): a round still running at stop() starts no reproduce-first check`.
+
+### C16 — when a correction is closed (supersedes §12.1's `merge-base --is-ancestor`)
+
+Ruled by the human (session 3d44b2fb, 2026-10-18); built by Orca session 3d44b2fb.
+§12.1 says closed ⇔ the commit holding the closing rows is an ancestor of the target ref. Built instead: closed ⇔
+**the target ref's tree holds the closing `decision` row** (`<fixRunId>/1`, evidence naming the correction;
+`correctionClosedAtRef`, `src/control/correctionState.ts`), so a `squash` integration closes it too (under `squash` the
+landing commit is never an ancestor). **Reads never fetch**: a push scheme is judged on its local
+`refs/remotes/<remote>/<target>` as last fetched. A group under `keep` names no target; the list then judges the
+repository's current branch, as a by-hand close. The group's own branch never counts.
+Commits: `feat(control): a correction is closed when its rows are on the target`;
+`fix(control): a correction's closing is noted once on its mark, and the list refuses by name`.
+
+### Further rulings that change this design's behaviour
+
+By Orca session 3d44b2fb (controller, Tasks 1–12), 2026-10-18; under the human's instruction to follow the controller's
+call and report for review (§12's preamble). One line each:
+
+- `correction-debug-open` takes optional `checks: string[]`. With no original contract and no checks it refuses
+  `debug-checks-required` before writing anything; given checks are UNIONED with the original contract's (never
+  replace them); the debug mark records provenance `checks: { from: "original" | "original+named" | "named", namedBy }`.
+  Commits: `feat(control): correction-debug-open names its checks; the checks guard moves to a leaf module`;
+  `fix(control): named debug checks are added to the original's; the mark records who named them`.
+- Confirming or starting a debug group whose checks still hold the placeholder is refused `debug-checks-unnamed`.
+  Commit: `feat(control): a debug group with unnamed checks is neither confirmed nor started`.
+- A pending-target correction can be closed by hand through the `correction-close` verb (one `decision` row, no
+  `overturned`); the CLI `orca correct --close` still refuses it. Commit:
+  `feat(control): record and close corrections from the web UI`.
+- `correction-withdraw` is a human-only verb that shares `POST /api/corrections/withdraw`'s membership and closed-ness
+  precondition (one helper, `withdrawPrecondition`). Commits: `feat(control): record and close corrections from the web
+  UI`; `fix(control): correction-withdraw shares the withdraw route's membership guard, and every new branch has its
+  criterion`.
+- Rejecting a pending decision opens its debug group; when that follow-up open throws unexpectedly, the reject still
+  succeeds and one `debug-open-failed` activity row is recorded on the rejected group (not a booked refusal, so a
+  replay retries the open). Commits: `feat(control): rejecting a pending decision opens a debug group`;
+  `fix(control): a failed auto-open after reject leaves one debug-open-failed activity row`.
+- A correction's repository is matched by the panel's project key first (`--repo` key or registry slug, the key
+  `/api/corrections` records under), then by `projectKeyOf(path)`. Commit: `fix(control): a panel-recorded correction
+  finds its repository; withdraw archives before the review step`.
+
+By Orca session f3a75a90 (controller, Task 13), 2026-10-19, the web UI (§12.4):
+
+- The Corrections list lives **inside the Decisions page** (a toggle there), not a new top-level section (C12, ruled by
+  the human in session 3d44b2fb). Commits: `feat(web): corrections list, debug groups, close by hand`;
+  `fix(web): the Corrections toggle, the no-id answer and the key gate have criteria`.
+- The panel's record form keeps `POST /api/corrections` (it also writes the `reviewed` mark) and then sends
+  `correction-debug-open`; `correction-record` is the agent/envelope path (C11). Commit:
+  `feat(web): corrections list, debug groups, close by hand`.
+- Retry reuses the command id only when the outcome is unknown (a transport failure, no answer); after a booked refusal
+  it sends a new id, since a booked refusal replays forever under its id (C10). Commit:
+  `feat(web): corrections list, debug groups, close by hand`.
+- Deferred, registered: when `POST /api/corrections` answers 409 with the row already stored, the form does not
+  auto-open the debug group; the human opens it from the Corrections list.
+
+### C24 / Rule 17 — new out-of-repo writers (supersedes §7's "None new")
+
+§7 says "None new" and the store is "read, not written". The branch adds the **control service** as a writer, through
+human-only verbs (`<dir>` = `ORCA_CORRECTIONS_DIR`, else `~/.orca`):
+
+| Path | Trigger | Failure residue |
+|---|---|---|
+| `<dir>/corrections.jsonl` | `correction-record` (same row and functions as `POST /api/corrections`: `correctionRowFrom`, `recordNewCorrection`) | none from the verb itself; a failed `reviewed` mark after the row is stored answers 409 `correction-recorded-unreviewed` (the row stays) |
+| `<dir>/correction-withdrawals.jsonl` | `correction-withdraw` (`withdrawCorrection`, as the panel route) | the withdrawal stays; a failed review step or debug-group archive answers 409 `correction-withdrawn-incomplete` |
+| `<dir>/reviews.jsonl` | the same two verbs, through the panel's shared `reviewed` / review-withdraw helpers | as the two rows above |
+| `<dir>/.corrections-lock` (transient) | `correction-close` (the same store lock `orca correct --close` takes); it appends nothing to the store | removed in `finally`, as for `--close` |
+
+`correction-debug-open` writes nothing out of the repository (it reads the store and the withdrawals file). The reject
+verb's write of `corrections.jsonl` is the decisions design's, registered there
+(`2026-10-18-control-run-decisions-design.md`, Rule 17 bullet). Tests point every one of these at temp directories.
+Commits: `feat(control): record and close corrections from the web UI`;
+`fix(control): correction-withdraw shares the withdraw route's membership guard, and every new branch has its
+criterion`.

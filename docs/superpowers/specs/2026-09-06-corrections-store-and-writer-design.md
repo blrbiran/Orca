@@ -1261,3 +1261,63 @@ M-e 提交落在 W 上（登记 15）；M-f 锁跨越钩子（登记 16）。
 ⇒ **凡是把测量结果写进 spec 的地方，都要能被一次重测推翻，且重测的第一手材料必须进仓库** ——
 否则下一位拿不到证据，就只能照着一张已知为假的表实施。
 （本轮为此把 `task-9-report.md` 与 `progress.md` 一并 `git add -f` 归档；见 handoff 七.1 节。）
+
+## 16. ERRATUM (2026-10-18, Orca session a3b2a7a7) — undo.how on the debug-task path; the web app's commit rights
+
+> **Attribution**: written by Orca session f3a75a90 (controller, Task 14 of
+> `docs/superpowers/plans/2026-10-18-correction-debug-task.md`, plan authored in session a3b2a7a7), 2026-10-19, on
+> branch `codex/correction-debug-task` at `e704195f` (`fix(web): the Corrections toggle, the no-id answer and the key
+> gate have criteria`). The behaviour recorded here was built by Orca session 3d44b2fb (controller, Tasks 1–12) and
+> Orca session f3a75a90 (controller, Task 13), 2026-10-18/19.
+> ⚠️ **This section is appended. §0–§15 are unchanged, byte for byte** (published text, CLAUDE.md Rule 13).
+> The authority for every point below is `docs/superpowers/specs/2026-10-18-correction-debug-task-design.md` §6 and
+> §12 (the debug spec); this section only records, beside the text it narrows, that it is narrowed.
+> Line numbers below were measured at `e704195f` with `grep -n`.
+
+### 16.1 Ruling 4 (§1 row 4; §5 table, `undo.how` row) is narrowed for the debug-task path
+
+§1 row 4 and the §5 row say `undo.how` is the human's (`--undo-how`, ruling 4). On the debug-task path only (a debug
+run's landing commit closes its correction, debug spec §5, §12.5, §12.6):
+
+- the human's value is used when the human gave one (the `undoHow` of `correction-debug-open`, kept on the debug mark);
+- otherwise Orca's code writes `git revert --no-edit <attemptSha>`, with the debug run's real attempt sha, suffixed
+  `（Orca 生成，人未填）` (`ORCA_GENERATED`, `src/corrections/derive.ts:10`; built at `src/control/debugClosing.ts:76`).
+  The agent is not asked for it. `chose_instead` written by the agent is suffixed `（agent 写，人未填）`.
+- The manual close is unchanged: `orca correct --close` still requires `--undo-how`, and so does the web UI's
+  `correction-close` verb (`undoHow` is a required non-empty string, `src/control/webProtocol.ts:910`).
+
+Commits: `feat(control): a debug run's landing commit closes its correction` (Task 9, session 3d44b2fb);
+`feat(control): record and close corrections from the web UI` (Task 11, session 3d44b2fb).
+
+### 16.2 The gate is lexical for every author
+
+Ruling 4's reason ("a derived one would make that gate unable to ever fire") was about a value **copied** from the
+decision being overturned. An Orca-generated or agent-written value is not a copy, but the Tier 0 gate
+(`undoHowIsExecutable`, `src/ledger/undoExecutable.ts:45`) checks its **shape, not its truth**, for every author,
+the human included. Debug spec §12.5 narrows its own §6 sentence "the gate still holds" to exactly this. A value the
+gate refuses is still refused: on the landing path no closing file is written, the debug mark records
+`closing: { state: "refused", reason }` (`src/control/debugClosing.ts:92`), the landing goes on and the correction
+stays open; the manual `correction-close` verb answers `closing-row-refused`. Known risk, registered in the SDD ledger (Task 9 ruling): after a
+reconcile, the generated `git revert --no-edit <attemptSha>` may not apply cleanly to the reconciled merge.
+
+Commits: `feat(control): a debug run's landing commit closes its correction`;
+`fix(control): correction-withdraw shares the withdraw route's membership guard, and every new branch has its
+criterion` (the `closing-row-refused` mapping's criterion).
+
+### 16.3 A′ §4.1 is narrowed: two commit paths that are not `orca correct --close`
+
+A′ §4.1 (`docs/superpowers/specs/2026-08-29-decision-ledger-design.md:354`, quoted at `src/panel/api.ts:512-513`:
+"a web application holding commit rights on every repository is the thing being refused") is narrowed, as debug spec
+§12.5 says, in two places:
+
+- **The control service commits closing rows on group branches**: the closing rows go into the debug run's own landing
+  commit (debug spec §12.6), and reach the target only through that group's integration. Commits:
+  `feat(control): a debug run's landing commit closes its correction`;
+  `test(control): a debug closing reads the group's integration target ref, and a broken frozen input blocks at D`.
+- **The `correction-close` verb (human-only) commits on the repository's current branch, as `--close` does**: it runs
+  `orca correct --close`'s own functions (`closeExistingCorrection` / `closeStoredCorrection`, same guards, same repo
+  lock, same commit) in the repository the correction's `projectKey` names, and is refused `debug-group-active` while a
+  debug group of that correction is live. Commit: `feat(control): record and close corrections from the web UI`.
+
+`POST /api/corrections` itself is unchanged: it records and never commits. A′ §4.1 had already been narrowed once, for
+opening a chain (`docs/superpowers/specs/2026-09-18-d-launch-design.md` §6.3, ruling R13); this is the second time.
