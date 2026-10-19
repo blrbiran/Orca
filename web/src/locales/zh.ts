@@ -728,7 +728,7 @@ export const zh: Translation<typeof en> = {
     updates: {
       title: "安装更新", detect: "重新检测", observedAt: "检测时间 {{time}}",
       unavailable: "检测不可用 · {{code}}", pending: "安装更新正在核对结果。请先查看结果，再尝试下一次更新。", checkPending: "核对已保留的结果",
-      noObservation: "不可用", current: "当前版本", changed: "版本有变化", noChanges: "没有可选的更新。",
+      noObservation: "不可用", notDetected: "未检测到", current: "当前版本", changed: "版本有变化", noChanges: "没有可选的更新。",
       review: "逐项检查候选变化，只选择要应用的项目。",
       version: "版本", path: "命令路径", addition: "新增安装", apply: "应用选中的变化",
       resolvedPath: "实际可执行文件", installationConfiguration: "安装配置", configurationUnavailable: "配置不可用，不能选择这项新增安装。", changeUnavailable: "此项更新不可选择：",

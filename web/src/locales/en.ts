@@ -842,7 +842,7 @@ export const en = {
     updates: {
       title: "Installation updates", detect: "Detect again", observedAt: "Observed {{time}}",
       unavailable: "Detection unavailable · {{code}}", pending: "An installation update is being reconciled. Review its result before trying another.", checkPending: "Check retained result",
-      noObservation: "unavailable", current: "current", changed: "changed", noChanges: "No changes were offered.",
+      noObservation: "unavailable", notDetected: "not detected", current: "current", changed: "changed", noChanges: "No changes were offered.",
       review: "Review each offered change and select only the ones to apply.",
       version: "Version", path: "Command path", addition: "New installation", apply: "Apply selected changes",
       resolvedPath: "Resolved executable", installationConfiguration: "Installation configuration", configurationUnavailable: "Configuration unavailable; this addition cannot be selected.", changeUnavailable: "This update cannot be selected:",

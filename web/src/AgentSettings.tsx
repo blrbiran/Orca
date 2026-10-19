@@ -123,10 +123,11 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
         {pendingUpdate && <div role="status"><p>{t("agents.updates.pending")}</p>
           {pendingId && <><code>{pendingId}</code> <button type="button" disabled={props.updateBusy} onClick={props.onRetryPendingUpdate}>{t("agents.updates.checkPending")}</button></>}
         </div>}
+        {/* Issue #72: a row carries no failure code, so its unavailable status is not the panel-level "unavailable · {{code}}". */}
         {installation.observation && <>
           <p>{t("agents.updates.observedAt", { time: installation.observation.observedAt })}</p>
           <ul>{installation.observation.installed.map((row) => <li key={row.id}>
-            {row.id}: {row.recordedVersion} → {row.observedVersion ?? t("agents.updates.noObservation")} ({t(`agents.updates.${row.status}`)})
+            {row.id}: {row.recordedVersion} → {row.observedVersion ?? t("agents.updates.noObservation")} ({t(row.status === "unavailable" ? "agents.updates.notDetected" : `agents.updates.${row.status}`)})
           </li>)}</ul>
         </>}
         <button type="button" disabled={props.updateBusy || pendingUpdate || installation.failureCode === "control-agent-update-unsupported"} onClick={props.onDetectUpdates}>{t("agents.updates.detect")}</button>
