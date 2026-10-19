@@ -275,6 +275,13 @@ describe("collect's reported decisions and debug through the real port",()=>{
     const r4=await v4.port.collect({...v4.envelope,protocol:4},0);
     expect([r4.decisions,r4.debug]).toEqual(["x",null]);
   });
+  // The two keys are opaque, but the answer around them stays strict: an unknown top-level key refuses it on both protocols.
+  it("refuses an answer with an unknown top-level key, on protocol 3 and 4",async()=>{
+    const v3=await fixture("ok",{decisions,collectExtra:{extra:1}});
+    await expect(v3.port.collect(v3.envelope,0)).rejects.toThrow("control-response-invalid");
+    const v4=await fixture("ok",{decisions,collectExtra:{extra:1},features:{protocol:1,tokenPolicy:"optional-v1"}});
+    await expect(v4.port.collect({...v4.envelope,protocol:4},0)).rejects.toThrow("control-response-invalid");
+  });
   it("leaves both keys absent for an answer without them",async()=>{
     const h=await fixture();
     const report=await h.port.collect(h.envelope,0);
