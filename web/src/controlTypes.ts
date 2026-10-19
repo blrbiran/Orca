@@ -594,7 +594,7 @@ export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"
 export type DecisionWhereV1 = "working-tree" | "target" | "group-branch";
 /**
  * Reported-decisions spec 2026-10-20 §6: each entry's grade. The server always sends it; optional here so the literal
- * fixtures need no edit, and an absent value reads as major (importance.ts).
+ * fixtures need no edit, and an absent value reads as major (web/src/MinorToggle.tsx).
  */
 export type DecisionImportanceV1 = "major" | "minor";
 export type GroupDecisionsViewV1 = {

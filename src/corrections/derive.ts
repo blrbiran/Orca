@@ -98,6 +98,8 @@ export function deriveRows(input: DeriveInput): DerivedRows {
     },
     scope: original.scope,
     kind: original.kind,
+    // No `importance`, on purpose: the human made this replacement, so it reads as major (reported-decisions spec
+    // 2026-10-20 §6, absent means major) even when the decision it overturns was graded minor.
     evidence: [`correction ${correction.id}`, `overturns ${original.id}`],
   };
 
@@ -147,6 +149,8 @@ export function derivePendingRows(input: {
     undo: { how, cost: input.undo.cost ?? inheritedOf(entryUndo.cost), blast_radius: input.undo.blastRadius ?? inheritedOf(entryUndo.blast_radius) },
     scope: entry.scope,
     kind: entry.kind,
+    // No `importance`, on purpose, as in deriveRows: the human made this decision, so it reads as major whatever grade
+    // the agent's raw entry carried.
     evidence: [`correction ${correction.id}`, `pending ${pending.pendingId}`],
   } as DecisionEvent;
   return { decision };

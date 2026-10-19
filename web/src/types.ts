@@ -64,7 +64,7 @@ export interface DecisionObservation {
   verdict: "ok" | "downgraded";
   /**
    * Reported-decisions spec 2026-10-20 §6: the server always sends it (absent on the line reads as major there); optional
-   * here so literal fixtures need no edit, and an absent value reads as major (importance.ts).
+   * here so literal fixtures need no edit, and an absent value reads as major (web/src/MinorToggle.tsx).
    */
   importance?: DecisionImportance;
 }
