@@ -14,10 +14,13 @@ describe("kind importance (human ruling, session f8281a60)", () => {
     ]);
   });
 
+  // Rewritten under the session grant (human, session 3831d12f, 2026-10-20: 「这次批准改写所有必要的判据」):
+  // reported-decisions spec §6 adds the kind `implementation` at { order: 7, level: 3 }; the seven ruled levels are unchanged.
   it("puts each kind in the level the human ruled, and marks it with that level's colour", () => {
     expect(Object.fromEntries(Object.entries(KIND_RANK).map(([k, r]) => [k, r.level]))).toEqual({
-      reconcile: 1, abandon: 1, interface: 2, dependency: 2, boundary: 2, criteria: 3, scheduling: 3,
+      reconcile: 1, abandon: 1, interface: 2, dependency: 2, boundary: 2, criteria: 3, scheduling: 3, implementation: 3,
     });
+    expect(sortKinds(["implementation", "scheduling"])).toEqual(["scheduling", "implementation"]);
     expect(kindLabel("reconcile")).toBe("🔴 reconcile");
     expect(kindLabel("boundary")).toBe("🟠 boundary");
     expect(kindLabel("scheduling")).toBe("🟡 scheduling");

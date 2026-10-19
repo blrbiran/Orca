@@ -4,12 +4,14 @@
  * It takes over PanelHome's job (task 8 ruling K5): the Decisions pane is the default
  * section, so the first screen is still the work a person owes.
  */
+import { useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { DecisionList } from "./DecisionList.js";
 import { enumText } from "./i18n.js";
 import { kindLabel, sortKinds } from "./kindRank.js";
 import { en } from "./locales/en.js";
+import { MinorToggle, visibleByImportance } from "./MinorToggle.js";
 import { useProjectName } from "./projectNames.js";
 import { ALL_PROJECTS } from "./projectScope.js";
 import type { ProjectV1 } from "./project.js";
@@ -103,10 +105,19 @@ export function DecisionsView(props: {
   detail?: ReactNode;
   /** Taste refinement P1-3: reviews recorded in this browser since the panel opened; shown once there is one. */
   reviewedCount?: number;
+  /**
+   * Reported-decisions spec 2026-10-20 §6: whether minor decisions are listed. App owns it so j / k walks the rows on
+   * screen; absent, the view keeps its own (major only until the person asks).
+   */
+  showMinor?: boolean;
+  onShowMinor?: (next: boolean) => void;
 }): JSX.Element {
   const { t } = useTranslation();
   const name = useProjectName();
-  const shown = filterRows(props.rows, props.filter);
+  const [ownShowMinor, setOwnShowMinor] = useState(false);
+  const showMinor = props.showMinor ?? ownShowMinor;
+  const filtered = filterRows(props.rows, props.filter);
+  const shown = visibleByImportance(filtered, showMinor).shown;
   // Final review M-T8: the heading says which decisions are listed; Unreviewed (and no status select) keeps today's.
   const heading = props.status === "reviewed" ? { title: "decisions.titleReviewed", lede: "decisions.ledeReviewed" } as const
     : props.status === "all" ? { title: "decisions.titleAll", lede: "decisions.ledeAll" } as const
@@ -161,10 +172,13 @@ export function DecisionsView(props: {
             <p className="empty">{t("decisions.loading")}</p>
           ) : props.rows.length === 0 ? (
             <p className="empty">{t(props.status === undefined || props.status === "unreviewed" ? "decisions.nothingToReview" : "decisions.nothingInStatus")}</p>
-          ) : shown.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <p className="empty">{t("decisions.noMatch")}</p>
           ) : (
-            <DecisionList rows={shown} selected={props.selected} onOpen={props.onOpen} />
+            <>
+              {shown.length === 0 ? <p className="empty">{t("decisions.onlyMinor")}</p> : <DecisionList rows={shown} selected={props.selected} onOpen={props.onOpen} />}
+              <MinorToggle entries={filtered} showMinor={showMinor} onToggle={props.onShowMinor ?? setOwnShowMinor} copy="decisions" />
+            </>
           )}
         </div>
         <div className="split-detail">

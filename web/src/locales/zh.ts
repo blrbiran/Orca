@@ -158,6 +158,9 @@ export const zh: Translation<typeof en> = {
     hiddenByFilter: "这条决策被当前筛选条件隐藏了。",
     notInList: "这条决策已不在当前状态筛选的列表里。",
     noQuestion: "（没有记录问题）",
+    showMinor: "显示 {{n}} 条次要决策",
+    hideMinor: "收起次要决策",
+    onlyMinor: "符合条件的只有次要决策。",
     chose: "选择了",
     because: "理由",
     rejected: "被否决的备选",
@@ -390,6 +393,8 @@ export const zh: Translation<typeof en> = {
       notSettled: "这次运行的决定还没有定下来。",
       malformed: "这次运行报告的决定不是列表，所以一条也没有落地。",
       unreadable: "这次运行保存的报告读不出来。",
+      showMinor: "显示 {{n}} 条次要决定",
+      hideMinor: "收起次要决定",
       readFailed: "这个组的决定读取失败（{{code}}），所以这里不显示任何决定，也不标出需要人确认的项。",
     },
     settlement: {

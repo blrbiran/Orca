@@ -204,6 +204,8 @@ th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .split-detail { padding: 20px; position: sticky; top: 24px; max-height: calc(100vh - 48px); overflow-y: auto; }
 .decision-list { list-style: none; margin: 0; padding: 0; }
 .decision-list li + li { border-top: 1px solid var(--border); }
+/* Reported-decisions spec 2026-10-20 §6: the "show N minor" control under a decision list; a secondary button. */
+.minor-toggle { margin: 8px 14px; }
 .decision-row { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; border: 0; border-radius: 0; background: transparent; padding: 12px 14px; color: var(--text); }
 .decision-row:hover { background: var(--bg-hover); }
 .decision-row[aria-current="true"] { background: var(--accent-subtle); box-shadow: inset 3px 0 0 var(--accent); }

@@ -117,6 +117,7 @@ import { ErrorPage } from "./ErrorPage.js";
 import i18n, { currentLanguage, refusalDetail, writeLanguage } from "./i18n.js";
 import { codeAndDetail } from "./ccloopCodes.js";
 import { DecisionsView, NO_FILTER, filterRows, rowsForStatus } from "./DecisionsView.js";
+import { visibleByImportance } from "./MinorToggle.js";
 import { rowKey } from "./DecisionList.js";
 import { nextAfterReview } from "./reviewFlow.js";
 import { reviewKeyAction } from "./reviewKeys.js";
@@ -248,6 +249,8 @@ export function App(): JSX.Element {
     typeof window === "undefined" ? DEFAULT_SECTION : sectionFromHash(window.location.hash),
   );
   const [filter, setFilter] = useState<DecisionFilter>(NO_FILTER);
+  // Reported-decisions spec 2026-10-20 §6: minor decisions are listed only once asked for; j / k walks what is listed.
+  const [showMinor, setShowMinor] = useState(false);
   // Spec §9.2(1): Unreviewed reads /api/todo (home.todo, also the sidebar badge); the other two read /api/decisions.
   const [status, setStatus] = useState<DecisionStatus>("unreviewed");
   const [allRows, setAllRows] = useState<DecisionStatusRow[] | null>(null);
@@ -1166,7 +1169,7 @@ export function App(): JSX.Element {
   // The Decisions pane's rows and filter, shared by both of its branches and by the review loop (taste refinement P1-3).
   const scopedDecisionRows = projects === null || scope.kind === "all" ? statusRows : statusRows.filter((row) => row.projectKey === project);
   const effectiveDecisionFilter = projects === null ? filter : { ...filter, projectKey: "" };
-  const visibleDecisionRows = filterRows(scopedDecisionRows, effectiveDecisionFilter);
+  const visibleDecisionRows = visibleByImportance(filterRows(scopedDecisionRows, effectiveDecisionFilter), showMinor).shown;
 
   /**
    * Parked finding N-1 / ruling R71. Opening another row takes the previous
@@ -1646,7 +1649,7 @@ export function App(): JSX.Element {
         {todo.status !== "available" && <p role="status">{t("overview.source.decisions")} · {t(`overview.status.${todo.status}`)}{todo.error ? ` · ${todo.error}` : ""}</p>}
         {projects === null ? (
           // Plan decision P2: without a project list the rows keep today's repository filter.
-          <DecisionsView rows={scopedDecisionRows} status={status} onStatus={setStatus} loading={statusLoading} sourceStatus={status === "unreviewed" ? todo.status : undefined} filter={effectiveDecisionFilter} onFilter={setFilter} selected={selected} onOpen={openDecisionRow} detail={detail} reviewedCount={reviewedThisSession} />
+          <DecisionsView rows={scopedDecisionRows} status={status} onStatus={setStatus} loading={statusLoading} sourceStatus={status === "unreviewed" ? todo.status : undefined} filter={effectiveDecisionFilter} onFilter={setFilter} selected={selected} onOpen={openDecisionRow} detail={detail} reviewedCount={reviewedThisSession} showMinor={showMinor} onShowMinor={setShowMinor} />
         ) : (
           // With one, the pane follows the global scope: rows are restricted here, and its repository select is the sidebar's.
           <DecisionsView
@@ -1660,6 +1663,8 @@ export function App(): JSX.Element {
             onOpen={openDecisionRow}
             detail={detail}
             reviewedCount={reviewedThisSession}
+            showMinor={showMinor}
+            onShowMinor={setShowMinor}
             scope={{
               projects,
               value: scope.kind === "all" ? ALL_PROJECTS : project ?? "",

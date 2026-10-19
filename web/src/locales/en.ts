@@ -281,6 +281,9 @@ export const en = {
     hiddenByFilter: "This decision is hidden by the current filters.",
     notInList: "This decision is no longer in the list under the current status filter.",
     noQuestion: "(no question recorded)",
+    showMinor: "Show {{n}} minor",
+    hideMinor: "Hide minor",
+    onlyMinor: "Only minor decisions match.",
     chose: "Chose",
     because: "Because",
     rejected: "Rejected alternatives",
@@ -501,6 +504,8 @@ export const en = {
       notSettled: "This run's decisions are not final yet.",
       malformed: "This run's decisions were not a list, so none of them landed.",
       unreadable: "This run's saved report could not be read.",
+      showMinor: "Show {{n}} minor",
+      hideMinor: "Hide minor",
       readFailed: "This group's decisions could not be read ({{code}}), so none are shown and none is marked as needing confirmation.",
     },
     settlement: {

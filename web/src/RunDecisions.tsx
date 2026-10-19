@@ -13,6 +13,7 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import type { GroupDecisionsViewV1 } from "./controlTypes.js";
+import { MinorToggle, isMinor, visibleByImportance } from "./MinorToggle.js";
 
 type DecisionRun = GroupDecisionsViewV1["tasks"][number]["runs"][number];
 /** A group's decisions as the page last read them, or the code its read failed with (fix round 1, Rule 12). */
@@ -31,8 +32,11 @@ export interface RunDecisionsProps {
 
 const pair = (question: string | null, chose: string | null): string => `${question ?? "—"} → ${chose ?? "—"}`;
 
-/** Whether one of the run's refused decisions still waits for a person. */
-export const runNeedsHuman = (run: DecisionRun): boolean => run.pending.some((item) => item.state === "pending");
+/**
+ * Whether one of the run's refused decisions still waits for a person. Reported-decisions spec 2026-10-20 §6
+ * (goal.md §1.3): a minor one does not demand attention -- like the group's pendingCount -- but stays confirmable.
+ */
+export const runNeedsHuman = (run: DecisionRun): boolean => run.pending.some((item) => item.state === "pending" && !isMinor(item));
 
 /** The badge a pending item, its task and its group carry (DESIGN.md: needs-action is warn). */
 export function NeedsHumanBadge(props: { testId?: string }): JSX.Element {
@@ -80,6 +84,12 @@ function PendingRow(props: { item: PendingItem; groupId: string; revision: numbe
 export function RunDecisions(props: RunDecisionsProps): JSX.Element {
   const { run, projectKey } = props;
   const { t } = useTranslation();
+  // Reported-decisions spec 2026-10-20 §6: each list shows its major entries and holds the minor ones behind its own control.
+  const [showMinor, setShowMinor] = useState({ pending: false, decisions: false, unlanded: false });
+  const toggle = (list: keyof typeof showMinor) => (next: boolean) => setShowMinor((current) => ({ ...current, [list]: next }));
+  const pending = visibleByImportance(run.pending, showMinor.pending).shown;
+  const decisions = visibleByImportance(run.decisions, showMinor.decisions).shown;
+  const unlanded = visibleByImportance(run.unlanded, showMinor.unlanded).shown;
   const reportedLine = !run.settled ? "control.decisions.notSettled"
     : run.reported === "absent" ? "control.decisions.notReported"
     : run.reported === "malformed" ? "control.decisions.malformed"
@@ -89,16 +99,17 @@ export function RunDecisions(props: RunDecisionsProps): JSX.Element {
     <section aria-label={t("control.decisions.region", { runId: run.runId })}>
       <h5>{t("control.decisions.region", { runId: run.runId })}</h5>
       {reportedLine !== null && <p>{t(reportedLine)}</p>}
-      {run.pending.length > 0 && (
+      {pending.length > 0 && (
         <ul>
-          {run.pending.map((item) => (
+          {pending.map((item) => (
             <PendingRow key={item.pendingId} item={item} groupId={props.groupId} revision={props.revision} onCommand={props.onCommand} archived={props.archived} />
           ))}
         </ul>
       )}
-      {run.decisions.length > 0 && (
+      <MinorToggle entries={run.pending} showMinor={showMinor.pending} onToggle={toggle("pending")} copy="control.decisions" />
+      {decisions.length > 0 && (
         <ul>
-          {run.decisions.map((decision) => {
+          {decisions.map((decision) => {
             const correctable = decision.where === "working-tree" && projectKey !== null;
             return (
               <li key={decision.id} aria-label={decision.id}>
@@ -114,12 +125,16 @@ export function RunDecisions(props: RunDecisionsProps): JSX.Element {
           })}
         </ul>
       )}
+      <MinorToggle entries={run.decisions} showMinor={showMinor.decisions} onToggle={toggle("decisions")} copy="control.decisions" />
       {run.unlanded.length > 0 && (
         <>
           <h5>{t("control.decisions.unlanded")}</h5>
-          <ul aria-label={t("control.decisions.unlanded")}>
-            {run.unlanded.map((entry) => <li key={entry.entryIndex}>{pair(entry.question, entry.chose)}</li>)}
-          </ul>
+          {unlanded.length > 0 && (
+            <ul aria-label={t("control.decisions.unlanded")}>
+              {unlanded.map((entry) => <li key={entry.entryIndex}>{pair(entry.question, entry.chose)}</li>)}
+            </ul>
+          )}
+          <MinorToggle entries={run.unlanded} showMinor={showMinor.unlanded} onToggle={toggle("unlanded")} copy="control.decisions" />
         </>
       )}
     </section>
