@@ -169,9 +169,9 @@ describe("the recorded outcome in Chinese", () => {
   it("says each recorded outcome in Chinese, and in English after a switch", async () => {
     /** Answers for POST /api/corrections, in order. */
     const corrections: Response[] = [
-      json(200, { recorded: true }),
+      json(200, { correction: { id: "c_00000000000000a1" } }),
       json(409, { code: "correction-already-recorded", message: "distinct refusal message", retry_field: "again" }),
-      json(200, { recorded: true }),
+      json(200, { correction: { id: "c_00000000000000a1" } }),
     ];
     globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
       const url = String(input);
@@ -179,6 +179,8 @@ describe("the recorded outcome in Chinese", () => {
       if (url.startsWith("/api/metrics")) return json(200, { report: REPORT, panel_review_coverage: COVERAGE });
       if (url.startsWith("/api/decision")) return json(200, { decision: DECISION });
       if (url.startsWith("/api/reviews")) return json(200, { recorded: true });
+      // Task 13: the debug-group open the page sends once a correction is stored.
+      if (url === "/api/control/corrections/c_00000000000000a1/debug-group") return json(200, { schema: "orca-command-success-v1", commandRevision: 1, result: { kind: "debug-group-opened", groupId: "debug-c_00000000000000a1", correctionId: "c_00000000000000a1", created: true } });
       if (url.startsWith("/api/corrections")) return corrections.shift() ?? json(500, { code: "no-more", message: "no more answers" });
       throw new Error(`unexpected request: ${url}`);
     }) as typeof fetch;

@@ -17,7 +17,7 @@ import { commandEnvelope, controlCommandPath, controlFailureFrom, nextCommandId,
 import type { ControlAction } from "./controlApi.js";
 import type { CommandSuccessV1, CorrectionListItemV1, DebugClosingV1 } from "./controlTypes.js";
 import type { ControlRefusal } from "./controlState.js";
-import i18n, { enumText } from "./i18n.js";
+import i18n, { enumText, refusalDetail } from "./i18n.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 
 type CorrectionAction = Extract<ControlAction, { verb: "correction-debug-open" | "correction-close" }>;
@@ -219,8 +219,10 @@ function CorrectionRow(props: {
         <AttemptNotice
           attempt={props.attempt}
           onResend={props.onSend}
+          // The live groups as this list last read them; when it read none live (it is older than the server's view), the
+          // groups the refusal names.
           hint={(refusal) => refusal.code === "debug-group-active"
-            ? <p role="note" data-tone="warn" data-testid="stop-first-hint">{t("corrections.stopFirst", { groups: liveGroups.join(", ") || refusal.message })}</p>
+            ? <p role="note" data-tone="warn" data-testid="stop-first-hint">{t("corrections.stopFirst", { groups: liveGroups.join(", ") || refusalDetail(refusal) })}</p>
             : null}
         />
       )}

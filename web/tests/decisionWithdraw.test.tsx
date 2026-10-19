@@ -268,7 +268,9 @@ describe("withdrawing in the page (spec §7, §10.1)", () => {
     const real = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = String(input);
-      if (url === "/api/corrections") { recorded = true; return json({ recorded: true }); }
+      if (url === "/api/corrections") { recorded = true; return json({ correction: { id: "c_00000000000000a1" } }); }
+      // Task 13: the debug-group open the page sends once the correction is stored.
+      if (url === "/api/control/corrections/c_00000000000000a1/debug-group") return json({ schema: "orca-command-success-v1", commandRevision: 1, result: { kind: "debug-group-opened", groupId: "debug-c_00000000000000a1", correctionId: "c_00000000000000a1", created: true } });
       if (recorded && url.startsWith("/api/decision?") && url.includes("decisionId=run%2F1")) {
         requested.push(`GET ${url}`);
         return json({

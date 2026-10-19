@@ -1142,6 +1142,7 @@ export const en = {
     namedBy: { human: "a human", agent: "an agent", none: "nobody on record" },
     reproChecking: "Reproduce-first check in progress.",
     reproSkipped: "{{label}}: {{reason}}",
+    pieceSeparator: ", ",
   },
   enums: {
     theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { App } from "../src/App.js";
@@ -99,5 +99,72 @@ describe("recording from the decision detail (Task 13)", () => {
     expect(posts.map((post) => post.url)).toEqual(["/api/corrections", `/api/control/corrections/${CID}/debug-group`, `/api/control/corrections/${CID}/debug-group`]);
     expect(posts[2]!.body.commandId).not.toBe(posts[1]!.body.commandId);
     expect(within(detail()).getByRole("status").textContent).toBe("Correction recorded.");
+  });
+});
+
+/** Fix round 1: an App on #decisions with one decision; every POST is logged; `answers` overrides a URL's answer. */
+async function openedApp(answers: Record<string, () => Response> = {}): Promise<{ posts: string[]; detail: () => HTMLElement }> {
+  await i18n.changeLanguage("en");
+  window.location.hash = "#decisions";
+  const posts: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url = String(input);
+    if (init?.method === "POST") posts.push(url);
+    if (answers[url] !== undefined) return answers[url]!();
+    if (url.startsWith("/api/todo")) return reply({ rows: [ROW] });
+    if (url.startsWith("/api/metrics")) return reply({ report: REPORT, panel_review_coverage: COVERAGE });
+    if (url.startsWith("/api/decision?")) return reply({ decision: { id: "run/1", question: "question of run/1", chose: "c", because: "b", alternatives: [] } });
+    if (url === "/api/reviews") return reply({ recorded: true });
+    if (url === "/api/control/corrections") return reply({ schema: "orca-correction-list-v1", corrections: [] });
+    throw new Error(`unexpected request: ${url}`);
+  }) as typeof fetch;
+  render(<App />);
+  await waitFor(() => expect(document.querySelector(".decision-list li button")).not.toBeNull());
+  fireEvent.click(document.querySelector<HTMLButtonElement>(".decision-list li button")!);
+  await waitFor(() => expect(screen.getByTestId("decision-question").textContent).toBe("question of run/1"));
+  return { posts, detail: () => document.querySelector<HTMLElement>(".split-detail")! };
+}
+const toggle = (name: string): HTMLButtonElement =>
+  within(document.querySelector<HTMLElement>('[data-section="decisions"]')!).getByRole("button", { name }) as HTMLButtonElement;
+
+describe("the Decisions page's Corrections toggle and the record's open (Task 13 fix round 1)", () => {
+  afterEach(() => { cleanup(); window.location.hash = ""; });
+
+  it("an answer that names no correction sends no open and says so beside the recorded state", async () => {
+    const { posts, detail } = await openedApp({ "/api/corrections": () => reply({ recorded: true }) });
+    fireEvent.change(detail().querySelector('textarea[name="because"]')!, { target: { value: "a reason" } });
+    fireEvent.submit(detail().querySelector("form.correction-form")!);
+    // mutation M-13.11: drop the no-id branch -> nothing (or an open of "undefined") here, red
+    const notice = await within(detail()).findByTestId("debug-open-refusal");
+    expect(notice.querySelector("code")?.textContent).toBe("command-result-invalid");
+    expect(within(detail()).getByRole("status").textContent).toBe("Correction recorded.");
+    expect(posts).toEqual(["/api/corrections"]);
+  });
+
+  it("the Corrections toggle shows the list inside the Decisions page, pressed", async () => {
+    await openedApp();
+    expect(toggle("Decisions").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(toggle("Corrections"));
+    // mutation M-13.13: the toggle changes nothing -> red here
+    const view = await screen.findByTestId("corrections-view");
+    expect(view.closest('[data-section="decisions"]')).not.toBeNull();
+    expect(toggle("Corrections").getAttribute("aria-pressed")).toBe("true");
+    expect(toggle("Decisions").getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByTestId("decision-question")).toBeNull();
+    expect(await within(view).findByText("No correction has been recorded.")).toBeTruthy();
+  });
+
+  it("the review keys are off while the Corrections list is shown, and back on with the Decisions toggle", async () => {
+    const { posts } = await openedApp();
+    fireEvent.click(toggle("Corrections"));
+    await screen.findByText("No correction has been recorded.");
+    fireEvent.keyDown(document.body, { key: "a" });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    // mutation M-13.12: no tab gate on the key handler -> an Agree is posted here, red
+    expect(posts).toEqual([]);
+    fireEvent.click(toggle("Decisions"));
+    await waitFor(() => expect(screen.getByTestId("decision-question").textContent).toBe("question of run/1"));
+    fireEvent.keyDown(document.body, { key: "a" });
+    await waitFor(() => expect(posts).toEqual(["/api/reviews"]));
   });
 });

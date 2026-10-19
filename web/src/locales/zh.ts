@@ -1039,6 +1039,7 @@ export const zh: Translation<typeof en> = {
     namedBy: { human: "人", agent: "agent", none: "无记录" },
     reproChecking: "正在进行先复现检查。",
     reproSkipped: "{{label}}：{{reason}}",
+    pieceSeparator: "、",
   },
   enums: {
     theme: { system: "跟随系统", light: "浅色", dark: "深色" },

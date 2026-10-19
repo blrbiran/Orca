@@ -188,6 +188,20 @@ describe("the Corrections list (Task 13)", () => {
     expect(hint.textContent).toBe(`A live debug group holds this correction (debug-${LIVE}). Archive it if it is still a draft, or stop it; then close by hand.`);
     expect(within(rowOf(LIVE)).getByTestId("correction-refusal").querySelector("code")?.textContent).toBe("debug-group-active");
   });
+
+  it("names the groups the refusal gives when the list it read shows none live (the stop-first hint's fallback)", async () => {
+    list = [item(STOPPED, { debugGroups: [{ groupId: `debug-${STOPPED}`, ordinal: 1, live: false, state: "ready" }] })];
+    render(<CorrectionsView active />);
+    const row = await shown(STOPPED);
+    fireEvent.click(within(row).getByRole("button", { name: "Close by hand" }));
+    const form = rowOf(STOPPED).querySelector<HTMLFormElement>("form.close-form")!;
+    fireEvent.change(form.querySelector('input[name="undoHow"]')!, { target: { value: "git revert --no-edit abc" } });
+    answers.push(() => refused(409, "debug-group-active", `debug-group-active:debug-${STOPPED}-2`));
+    fireEvent.submit(form);
+    // mutation M-13.14: no fallback to the refusal's groups -> "()" here, red
+    const hint = await within(rowOf(STOPPED)).findByTestId("stop-first-hint");
+    expect(hint.textContent).toBe(`A live debug group holds this correction (debug-${STOPPED}-2). Archive it if it is still a draft, or stop it; then close by hand.`);
+  });
 });
 
 const debugView = (): GroupViewV1 => {
@@ -214,7 +228,7 @@ describe("a debug group in its group view (Task 13)", () => {
     expect(screen.getByTestId("debug-badge").textContent).toBe("调试 #2");
     expect(screen.getByTestId("debug-badge").getAttribute("data-tone")).toBe("info");
     expect(screen.getByTestId("debug-mark").textContent).toContain(`为纠正 ${OPEN} 开启。`);
-    expect(screen.getByTestId("debug-input").textContent).toBe("冻结的输入缺少：git 对象, 原合同。");
+    expect(screen.getByTestId("debug-input").textContent).toBe("冻结的输入缺少：git 对象、原合同。");
     expect(screen.getByTestId("debug-fallback").textContent).toBe("没有使用原来的 agent：gone is not installed");
     expect(screen.getByTestId("debug-checks").textContent).toBe("检查：原合同的，加上人指定的。");
     expect(screen.getByTestId("debug-closing").textContent).toBe("调试运行落地时没能关闭它：ledger-conflict。");

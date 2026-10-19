@@ -54,7 +54,7 @@ function DebugMark({ debug }: { debug: NonNullable<GroupViewV1["summary"]["debug
       </p>
       {debug.missing !== undefined && (
         <p data-testid="debug-input" data-tone={missing.length > 0 ? "warn" : undefined}>
-          {missing.length === 0 ? t("debugGroup.inputComplete") : t("debugGroup.inputMissing", { pieces: missing.map((piece) => t(`debugGroup.piece.${piece}`)).join(", ") })}
+          {missing.length === 0 ? t("debugGroup.inputComplete") : t("debugGroup.inputMissing", { pieces: missing.map((piece) => t(`debugGroup.piece.${piece}`)).join(t("debugGroup.pieceSeparator")) })}
         </p>
       )}
       {debug.agentFallback != null && <p data-testid="debug-fallback" data-tone="warn">{t("debugGroup.agentFallback", { reason: debug.agentFallback.reason })}</p>}

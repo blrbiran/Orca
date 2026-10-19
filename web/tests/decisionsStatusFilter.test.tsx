@@ -56,6 +56,8 @@ beforeEach(async () => {
     if (url.startsWith("/api/todo")) return json({ rows: TODO });
     if (url.startsWith("/api/decisions")) return json({ rows: FULL });
     if (url.startsWith("/api/metrics")) return json({ report: REPORT, panel_review_coverage: COVERAGE });
+    // Task 13: the debug-group open the page sends once a correction is stored (every record here is refused, so unreached).
+    if (url.startsWith("/api/control/corrections/")) return json({ schema: "orca-command-success-v1", commandRevision: 1, result: { kind: "debug-group-opened", groupId: "debug-c_00000000000000a1", correctionId: "c_00000000000000a1", created: true } });
     if (url.startsWith("/api/corrections")) {
       posted.push(JSON.parse(String(init?.body ?? "null")));
       return json(ALREADY, 409);

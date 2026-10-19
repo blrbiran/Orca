@@ -135,9 +135,11 @@ beforeEach(() => {
     const url = String(input);
     if (url.startsWith("/api/todo")) return jsonResponse({ rows: [ROW_A, ROW_B] });
     if (url.startsWith("/api/metrics")) return jsonResponse({ report: REPORT, panel_review_coverage: COVERAGE });
+    // Task 13: the debug-group open the page sends once a correction is stored.
+    if (url === "/api/control/corrections/c_00000000000000a1/debug-group") return jsonResponse({ schema: "orca-command-success-v1", commandRevision: 1, result: { kind: "debug-group-opened", groupId: "debug-c_00000000000000a1", correctionId: "c_00000000000000a1", created: true } });
     if (url.startsWith("/api/corrections")) {
       posted.push(JSON.parse(String(init?.body ?? "null")));
-      return jsonResponse({ recorded: true });
+      return jsonResponse({ correction: { id: "c_00000000000000a1" } });
     }
     if (url.startsWith("/api/decision")) {
       const id = new URLSearchParams(url.slice(url.indexOf("?") + 1)).get("decisionId") ?? "";
