@@ -135,6 +135,13 @@ describe("selection rows (dry run against the real module graph)", () => {
     expect(dry(repo).files).toEqual(["root tests/c/usesHelper.test.ts"]);
   });
 
+  it("a non-test file under tests/<dir>/ that nothing imports selects its mirror directory", () => {
+    const repo = graphRepo();
+    write(repo, "tests/c/worker.mjs", "export const w = 1;\n");
+    commit(repo);
+    expect(dry(repo).files).toEqual(["root tests/c/plain.test.ts", "root tests/c/usesHelper.test.ts"]);
+  });
+
   it("a deleted module selects its mirror directory, which still holds the tests that imported it", () => {
     const repo = graphRepo();
     unlinkSync(join(repo, "src/b/user.ts"));
