@@ -132,7 +132,7 @@ function RunRetry({ view, run, archived, onCommand, active = true }: { view: Gro
 import { overviewRegionId } from "./overviewNavigation.js";
 import { GroupResults } from "./GroupResults.js";
 import { GroupDetailRegions } from "./GroupDetailRegions.js";
-import { defaultDetailRegion, dispatchDetailRegion, focusedDetailRegion, runRegionId, type DetailRegion } from "./detailRegion.js";
+import { defaultDetailRegion, focusedDetailRegion, runRegionId, type DetailRegion } from "./detailRegion.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
 
 export interface ControlGroupViewProps {
@@ -220,7 +220,6 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const [requestedRun, setRequestedRun] = useState<string | null>(null);
   useLayoutEffect(() => { if (region === "runs" && requestedRun !== null) document.getElementById(runRegionId(groupId, requestedRun))?.focus(); }, [region, requestedRun]);
   const openRun = (runId: string): void => { setRequestedRun(runId); setRegion("runs"); };
-  const dispatchRegion = dispatchDetailRegion(view);
   const allLabels = [...new Set(view.workItems.flatMap((item) => item.labels ?? []))].sort();
   // A checked label no task carries any more (removed in the detail editor, or by another read) has no checkbox left to
   // uncheck, so it must stop filtering -- otherwise the table stays empty with no way out.
@@ -390,6 +389,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         </p>
       )}
       <p>{t(view.summary.state === "review" ? "detail.goalReview" : "detail.nextAction")}</p>
+      {/* Issue #47: the execution controls are one bar above the region tabs, shown whatever tab is open. */}
+      {dispatchControls}
       <GroupDetailRegions groupId={groupId} selected={region} onSelect={setRegion} regions={{
         progress: <>
       <DependencyGraph items={view.workItems} runs={view.runs} now={props.now} openTask={openTask} onOpen={(taskId) => setOpenTask(openTask === taskId ? null : taskId)} />
@@ -459,8 +460,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           drafts={drafts} onDraft={onDraft} onCommand={onCommand}
         />
       )}
-
-{dispatchRegion === "preparation" && dispatchControls}</>,
+</>,
         problem: <>
       <h3>{t("detail.problem")}</h3>
       {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
@@ -470,7 +470,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         {remedies(run, props.active !== false && region === "problem")}
         <button type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>
       </div>)}
-{dispatchRegion === "problem" && dispatchControls}</>,
+</>,
         results: <>
       <GroupResults view={view} active={props.active !== false && region === "results"} scope={props.resultsScope ?? ""} />
       <p>{t("detail.resultsEvidence")}</p>

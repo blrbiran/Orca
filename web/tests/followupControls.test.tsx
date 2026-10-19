@@ -125,7 +125,8 @@ it("execution controls name pause and safe stop without implying completion", ()
   expect(screen.getByRole("heading", { name: "Execution controls" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "Pause new tasks" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "Save progress and stop" })).toBeTruthy();
-  const region = screen.getByRole("tabpanel", { name: "Preparation" });
+  // Issue #47: the execution controls are a bar above the tabs, no longer inside the Preparation tab.
+  const region = screen.getByRole("heading", { name: "Execution controls" }).closest<HTMLElement>('[data-overview-region="dispatch"]')!;
   expect(within(region).getByText("Continuable work")).toBeTruthy();
   expect(within(region).getByText("Retryable work")).toBeTruthy();
   expect(within(region).getByText("Unresolved work")).toBeTruthy();
