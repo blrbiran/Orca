@@ -1,6 +1,8 @@
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { enumText } from "./i18n.js";
+import { explainRunReason } from "./refusalExplain.js";
+import { reasonCode } from "./runFacts.js";
 import type { WorkItemCategoryV1 } from "./controlTypes.js";
 import type { OverviewModel, OverviewQueueRow } from "./overviewModel.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
@@ -11,6 +13,14 @@ export function visibleQueue(queue: OverviewQueueRow[]): { rows: OverviewQueueRo
   const decisions = queue.filter((row) => row.target.kind === "decision").length;
   const rows = queue.filter((row) => row.target.kind !== "decision" || shown++ < OVERVIEW_DECISION_LIMIT);
   return { rows, hiddenDecisions: decisions - Math.min(decisions, OVERVIEW_DECISION_LIMIT), decisions };
+}
+/**
+ * Issue #56: a step's reason code in words, as the group view's RunReason explains it, with the raw code kept as small
+ * secondary text; a code this panel has no words for is shown as sent. A decision's question and a command id are not codes.
+ */
+function QueueReason({ row }: { row: OverviewQueueRow }): JSX.Element {
+  const words = row.kind === "decision-review" || row.kind === "command-unknown" ? null : explainRunReason(reasonCode(row.reason));
+  return words === null ? <>{row.reason}</> : <>{words} <small><code>{row.reason}</code></small></>;
 }
 /** Progress first in DOM and narrow layouts; each queue row only opens its owner. */
 export function Overview(props: { model: OverviewModel; onOpen: (target: OverviewTarget) => void; onImport: () => void; onRequirement: () => void; onViewDecisions?: () => void }): JSX.Element {
@@ -34,7 +44,7 @@ export function Overview(props: { model: OverviewModel; onOpen: (target: Overvie
     {model.sources.filter((s) => s.kind !== "progress" && s.status !== "available").map((s) => <p role="status" key={s.kind}>{t(`overview.source.${s.kind}`)} · {t(`overview.status.${s.status}`)}{s.error ? ` · ${s.error}` : ""}</p>)}
     <ul className="overview-queue">{queue.rows.map((row) => <li key={row.key}>
      <button type="button" onClick={() => props.onOpen(row.target)}>{t(`overview.step.${row.kind}`)} · {row.target.kind === "group" || row.target.kind === "requirement" ? row.target.groupId : row.target.kind === "decision" ? row.target.id : t("overview.global")}</button>
-     <p>{row.owner || t("overview.global")}{row.ownerUnknown ? ` · ${t("overview.ownerUnknown")}` : ""} · {row.reason}</p>
+     <p>{row.owner || t("overview.global")}{row.ownerUnknown ? ` · ${t("overview.ownerUnknown")}` : ""} · <QueueReason row={row} /></p>
      {row.ownerRequired && <p>{t("overview.ownerRequired")}</p>}
     </li>)}</ul>
     {queue.hiddenDecisions > 0 && <p><a href="#decisions" onClick={() => props.onViewDecisions?.()}>{t("overview.viewAllDecisions", { n: queue.decisions })}</a></p>}
