@@ -120,9 +120,11 @@ describe("agent directories on the service PATH (issue #72)", () => {
     const root = await mkdtemp(join(tmpdir(), "sp-"));
     roots.push(root);
     const dir = (name: string) => join(root, name);
-    for (const name of ["bun-bin", "node-bin", "unrelated-bin", "missing-bin"]) await mkdir(dir(name));
+    for (const name of ["omp-bin", "bun-bin", "node-bin", "unrelated-bin", "missing-bin"]) await mkdir(dir(name));
     const exe = async (path: string, text: string) => { await writeFile(path, text); await chmod(path, 0o755); };
-    await exe(join(dir("bun-bin"), "omp"), "#!/usr/bin/env bun\nconsole.log('omp')\n");
+    // omp and its bun live apart here (on the human's machine both are ~/.bun/bin) so that the command's own directory
+    // cannot stand in for the interpreter's: mutation A1 (drop the interpreter directory) survived when they shared one.
+    await exe(join(dir("omp-bin"), "omp"), "#!/usr/bin/env bun\nconsole.log('omp')\n");
     await exe(join(dir("bun-bin"), "bun"), "\0binary");
     await exe(join(dir("node-bin"), "claude"), "#!/usr/bin/env node\n");
     await exe(join(dir("node-bin"), "node"), "\0binary");
@@ -140,18 +142,19 @@ describe("agent directories on the service PATH (issue #72)", () => {
     const m = await machine();
     const t = m.table({
       claude: { kind: "claude", command: [join(m.dir("node-bin"), "claude"), "--permission-mode", "acceptEdits"] },
-      omp: { kind: "omp", command: [join(m.dir("bun-bin"), "omp")] },
+      omp: { kind: "omp", command: [join(m.dir("omp-bin"), "omp")] },
     });
     await writeFile(t.path, t.text);
-    const shellPath = ["/no/such/dir", m.dir("bun-bin"), m.dir("node-bin"), m.dir("unrelated-bin"), "/usr/bin"].join(":");
+    const shellPath = ["/no/such/dir", m.dir("omp-bin"), m.dir("bun-bin"), m.dir("node-bin"), m.dir("unrelated-bin"), "/usr/bin"].join(":");
     const { config, warnings } = buildServiceConfig(await input({
       execPath: join(m.dir("node-bin"), "node"),
       env: { ...PANEL_SH_ENV, ORCA_AGENTS_TABLE: t.path, PATH: shellPath },
       readTable: undefined, // the real reader, over the mkdtemp table
     }));
-    // node-bin once (node's own dir, claude's dir, and claude's `env node` all name it); bun-bin once (omp and its bun).
-    // unrelated-bin and /no/such/dir are on the shell's PATH but nothing resolves through them: they stay out.
-    expect(config.env.PATH).toBe(`${m.dir("node-bin")}:${m.dir("bun-bin")}:${SYSTEM}`);
+    // node-bin once (node's own dir, claude's dir, and claude's `env node` all name it), then omp's dir, then the dir
+    // its `env bun` resolves to. unrelated-bin (a later bun) and /no/such/dir are on the shell's PATH but nothing
+    // resolves through them: they stay out.
+    expect(config.env.PATH).toBe(`${m.dir("node-bin")}:${m.dir("omp-bin")}:${m.dir("bun-bin")}:${SYSTEM}`);
     expect(warnings).toEqual([]);
   });
 
