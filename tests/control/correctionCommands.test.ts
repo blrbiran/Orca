@@ -161,6 +161,35 @@ describe("correction-close (debug task plan Task 11)", { timeout: 60_000 }, () =
     });
   });
 
+  it("closes on the current branch when only a stopped group's work refs carry a closing row", async () => {
+    await withPanel(async (ctx) => {
+      const correction = await recordByVerb(ctx);
+      const groupId = await openDebugGroup(ctx, correction.id);
+      const relPath = `.decisions/${fixRunIdOf(correction)}.jsonl`;
+      // Task 9's landing commit: the closing row on orca/<groupId>, never integrated. The same commit is also held by the
+      // pinned integration-conflict ref and a ccloop attempt ref, the other work namespaces a stopped group leaves behind.
+      const run = (args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@invalid", ...args], { cwd: ctx.repo.path, encoding: "utf8", stdio: "pipe" });
+      const main = run(["symbolic-ref", "--short", "HEAD"]).trim();
+      run(["checkout", "-q", "-B", `orca/${groupId}`]);
+      await mkdir(join(ctx.repo.path, ".decisions"), { recursive: true });
+      await writeFile(join(ctx.repo.path, relPath), `${JSON.stringify({ ev: "overturned", evidence: [`correction ${correction.id}`] })}\n`);
+      run(["add", "--", relPath]);
+      run(["commit", "-q", "-m", "orca: debug landing", "--", relPath]);
+      const landing = run(["rev-parse", "HEAD"]).trim();
+      run(["update-ref", `refs/orca/integration-conflict/${groupId}/1`, landing]);
+      run(["update-ref", "refs/ccloop/run-d/attempts/1", landing]);
+      run(["checkout", "-q", main]);
+      ctx.db("UPDATE groups SET body=json_set(body,'$.stopped',json('true')) WHERE id=?", groupId);
+      const closed = await ctx.command(`/api/control/corrections/${correction.id}/close`, closePayload(correction.id), "close-1");
+      // M-F.1 (drop the work-ref excludes from alreadyCommitted): the landing commit answers alreadyClosed true and nothing
+      // lands on the current branch -> red. Read back from git: HEAD is still `main` and holds the rows the verb wrote.
+      expect([closed.status, closed.body.result]).toEqual([200, { kind: "correction-closed", correctionId: correction.id, relPath, alreadyClosed: false }]);
+      expect(run(["symbolic-ref", "--short", "HEAD"]).trim()).toBe(main);
+      const lines = gitShow(ctx.repo.path, relPath)!.trim().split("\n").map((line) => JSON.parse(line) as { ev: string });
+      expect(lines.map((line) => line.ev)).toEqual(["decision", "overturned"]);
+    });
+  });
+
   it("closes a pending-target correction with one decision row and no overturned row; the CLI still refuses it", async () => {
     await withPanel(async (ctx) => {
       const pendingId = "pending-run-1-0";

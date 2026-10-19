@@ -186,6 +186,13 @@ export async function commitLedgerFile(
 }
 
 /**
+ * Orca's and ccloop's work ref namespaces, each an `--exclude` for the `--all`
+ * that follows it. Measured on git 2.50.1: the glob's `*` crosses `/`, so
+ * `refs/orca/*` also drops `refs/orca/integration/<g>/work`.
+ */
+const WORK_REF_EXCLUDES = ["--exclude=refs/heads/orca/*", "--exclude=refs/orca/*", "--exclude=refs/ccloop/*"];
+
+/**
  * 🔴 The idempotence question, asked of the REPOSITORY rather than of this
  * worktree (§14.1, third seat). A closing commit lands on whatever branch the
  * person is standing on — after a round that is usually W — so asking only
@@ -200,15 +207,25 @@ export async function commitLedgerFile(
  * exactly why midOperationRejection above refuses a detached HEAD: a close
  * made there would be invisible to `--all`, and this question would wrongly
  * answer "not yet closed" for a correction that already is.
+ *
+ * *** ERRATUM (final review I-1 of the debug-task branch; recorded 2026-10-19 by Orca session f3a75a90) ***
+ * "Over every ref" is no longer right. A debug run's landing commit carries
+ * closing rows on `refs/heads/orca/<groupId>`; if that group stops before it
+ * integrates, the pickaxe found that commit and answered "already closed"
+ * forever, while the correction list (correctionState.ts, which reads the
+ * integration target) says open. Orca's and ccloop's work namespaces —
+ * `refs/heads/orca/*` (group branches), `refs/orca/*` (incoming, conflict,
+ * integration refs) and `refs/ccloop/*` (attempt refs) — are excluded; a
+ * person's own branches, W included, are still asked.
  */
 export async function alreadyCommitted(
   repo: string,
   relPath: string,
   correctionId: string,
 ): Promise<{ commit: string; refs: string } | undefined> {
-  const log = await git(repo, ["log", "--all", `-S${correctionId}`, "--format=%H", "--", relPath]).catch(
-    () => "",
-  );
+  const log = await git(repo, [
+    "log", ...WORK_REF_EXCLUDES, "--all", `-S${correctionId}`, "--format=%H", "--", relPath,
+  ]).catch(() => "");
   const commit = log.trim().split("\n")[0];
   if (commit === undefined || commit.length === 0) return undefined;
 
