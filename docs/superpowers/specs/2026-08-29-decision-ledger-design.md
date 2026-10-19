@@ -768,3 +768,19 @@ D 的对象已按人 2026-09-17 同意的顺序定为**开发会话优先**，cc
 - **已知代价，不掩饰**：squash 合入且 group 分支被删后，`attemptSha` 的对象可能被 git 回收 ⇒ 读者必须把「对象不在」显式报出（debug 计划的 `missing: "attemptSha"`），不许静默。
 
 *** **原文逐字保留（本文已发布），此处即为具名更正。** ***
+
+## ERRATUM 9（报告决定分级，人裁，2026-10-20，Orca 分支 `orca-dev/decisions-importance` `7e3794ef`；会话 `3831d12f`）
+
+**被更正的是 §3.4 的字段表、§3.6 的 `kind` 白名单及其「永不上报」一句。**
+
+**人 2026-10-20 原话**（`docs/handoff/goal.md` §1.3，会话 `3831d12f`）：「这些也可以算决定。其实决定可以分级。可以默认只显示高优先级或者说重要的决定。其他次要的决定如果人愿意看可以有机会看、有机会改就行。」——「这些」指命名、局部实现取舍。
+
+- **`kind` 新增 `implementation`**：命名、局部实现取舍的归处。⇒ §3.6「永不上报」对**命名与局部实现取舍**不再成立：它们可以报，记为 minor。
+  `implementation` **不进** §3.6 白名单（低位，`src/metrics/highTier.ts` 的 `KIND_TIER.implementation = "low"`），高位指标不动。
+  「格式、注释措辞」本条不涉及，不扩大。
+- **`decision` 事件新增可选字段 `importance: "major" | "minor"`；缺省 ⇒ `major`。** 本字段出现前写下的每一行都没有它；台账只追加，旧行不改。
+  分级管的是**默认显示**，不管记不记 —— 与 §3.6「分级只管排序，不管记不记」同向：minor 默认收起，人愿意看时能看到、能纠正，且不计入要人注意的计数。
+- Orca 代码写的 `reconcile` 行显式写 `importance: "major"`；其余代码写的行（含 §4 纠正闭环派生的替换决定）不写，按缺省读作 `major` —— 人做的决定不因被它推翻的那条是 minor 而降级。
+- 依据：上引 goal.md §1.3；ccloop `docs/superpowers/specs/2026-10-20-reported-decisions-and-debug-design.md` §6（Orca 侧设计）。
+
+*** **原文逐字保留（本文已发布），此处即为具名更正。** ***
