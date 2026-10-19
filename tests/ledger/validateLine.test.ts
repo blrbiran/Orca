@@ -92,13 +92,16 @@ describe("validateLine — check 4: kind and scope whitelists", () => {
     });
   }
 
-  it("DECISION_KINDS has exactly the seven kinds the ledger recognises", () => {
+  // Rewritten under the session grant (human, session 3831d12f, 2026-10-20: 「这次批准改写所有必要的判据」):
+  // reported-decisions spec 2026-10-20 §6 adds `implementation` (naming and local implementation choices), so the
+  // pinned list grows to eight; still an exact, ordered list, so a dropped kind is still red.
+  it("DECISION_KINDS has exactly the eight kinds the ledger recognises", () => {
     // Counting is the only way this task's mutations are visible: dropping a
     // kind, or reverting the loop above to a hard-coded list, makes the derived
     // loop run one fewer case — and a suite that runs one fewer case is green,
     // not red. vitest has no opinion about a test that stopped existing.
     expect([...DECISION_KINDS]).toEqual([
-      "dependency", "interface", "scheduling", "abandon", "criteria", "boundary", "reconcile",
+      "dependency", "interface", "scheduling", "abandon", "criteria", "boundary", "reconcile", "implementation",
     ]);
   });
 
@@ -338,5 +341,20 @@ describe("bound events must name the task and run that implemented them", () => 
     // P1's. Ruling orca-dev-c1c3c2ec/5 crossed it, but for overturned only;
     // superseded was not touched this round, so this half stands unchanged.
     expect(validateLine(JSON.stringify({ ev: "superseded", id: "run-7c/3" })).verdict).toBe("ok");
+  });
+});
+
+// Reported-decisions spec 2026-10-20 §6 (criterion 13): a decision may carry its grade. Optional, so every line written
+// before it (none carries one) stays valid; when present it is exactly "major" or "minor".
+describe("validateLine — importance", () => {
+  it("accepts a line without importance, and one graded major or minor", () => {
+    expect(validateLine(line(validDecision())).verdict).toBe("ok");
+    expect(validateLine(line(validDecision({ importance: "major" }))).verdict).toBe("ok");
+    expect(validateLine(line(validDecision({ importance: "minor" }))).verdict).toBe("ok");
+  });
+  it("rejects any other grade", () => {
+    for (const importance of ["critical", "", "Minor", 1, null]) {
+      expect(validateLine(line(validDecision({ importance }))).verdict).toBe("rejected");
+    }
   });
 });

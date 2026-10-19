@@ -358,7 +358,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // D9/M3: usage-settled activity, settled-failed request and retrying allocation add three values.
     // Debug task plan Task 10 (ruling C22): the activityKind `correction-closed` adds one: 182 + 1.
     // Debug task plan Task 12 fix round 1: the activityKind `debug-open-failed` adds one: 183 + 1.
-    expect(ENUM_VALUES.length).toBe(184);
+    // Reported-decisions spec 2026-10-20 §6 (session grant 3831d12f): the decisionKind `implementation` adds one: 184 + 1.
+    expect(ENUM_VALUES.length).toBe(185);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {

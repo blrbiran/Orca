@@ -16,14 +16,23 @@
  * to reach for) can import it too.
  */
 
-export type DecisionKind =
-  | "dependency"
-  | "interface"
-  | "scheduling"
-  | "abandon"
-  | "criteria"
-  | "boundary"
-  | "reconcile";
+/**
+ * Mirrors src/ledger/types.ts's DECISION_KINDS -- same SET, order not load-bearing here (KIND_RANK orders them).
+ * Reported-decisions spec 2026-10-20 §6: a list rather than a hand-written union, so tests/panel/webParity.test.ts can
+ * hold it to the server's at run time; `DecisionKind` is derived from it.
+ */
+export const WEB_DECISION_KINDS = [
+  "dependency",
+  "interface",
+  "scheduling",
+  "abandon",
+  "criteria",
+  "boundary",
+  "reconcile",
+  "implementation",
+] as const;
+
+export type DecisionKind = (typeof WEB_DECISION_KINDS)[number];
 
 export type DecisionScope = "file" | "task" | "repo" | "cross-repo";
 

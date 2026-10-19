@@ -103,6 +103,8 @@ export function reconcileDecision(
     },
     scope: "repo",
     kind: "reconcile",
+    // Reported-decisions spec 2026-10-20 §6: Orca's own rows say their grade rather than lean on "absent reads as major".
+    importance: "major",
   };
 }
 

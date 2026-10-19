@@ -1046,7 +1046,7 @@ export const zh: Translation<typeof en> = {
   },
   enums: {
     theme: { system: "跟随系统", light: "浅色", dark: "深色" },
-    decisionKind: { dependency: "依赖", interface: "接口", scheduling: "调度", abandon: "放弃", criteria: "判据", boundary: "边界", reconcile: "协调" },
+    decisionKind: { dependency: "依赖", interface: "接口", scheduling: "调度", abandon: "放弃", criteria: "判据", boundary: "边界", reconcile: "协调", implementation: "实现" },
     decisionScope: { file: "文件", task: "任务", repo: "仓库", "cross-repo": "跨仓库" },
     decisionVerdict: { ok: "正常", downgraded: "已降级" },
     correctionKind: { wrong: "错了", not_my_taste: "不合我意", stale: "过时" },

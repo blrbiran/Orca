@@ -177,6 +177,23 @@ describe("writeRunLedger", () => {
   });
 });
 
+// Reported-decisions spec 2026-10-20 §6 (criterion 14): the agent's grade is written as it reported it; an entry without
+// one writes no grade (it reads as major), and a grade outside the two is refused into pending, never written or hidden.
+describe("writeRunLedger and importance", () => {
+  it("writes a minor entry with importance minor and an ungraded entry with no importance", async () => {
+    const out = await writeRunLedger(dir, { ledgerRun: run, reported: arr(good({ importance: "minor" }), good()), codeAuthored: [], at, evidence: ev });
+    const lines = await readLines(dir, run);
+    expect(lines.map((l) => [l.id, l.importance])).toEqual([[`${run}/agent-0`, "minor"], [`${run}/agent-1`, undefined]]);
+    expect("importance" in lines[1]!).toBe(false);
+    expect(out.pending).toEqual([]);
+  });
+  it("refuses an entry with an unknown grade into pending", async () => {
+    const out = await writeRunLedger(dir, { ledgerRun: run, reported: arr(good({ importance: "critical" })), codeAuthored: [], at, evidence: ev });
+    expect(out.writtenIds).toEqual([]);
+    expect(out.pending.map((p) => [p.entryIndex, p.reason.startsWith("rejected:")])).toEqual([[0, true]]);
+  });
+});
+
 describe("normalizeAgentEntry", () => {
   const ctx = { ledgerRun: run, entryIndex: 3, at, evidence: ev };
   it("refuses a non-object", () => {

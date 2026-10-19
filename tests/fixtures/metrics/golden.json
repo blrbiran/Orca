@@ -55,6 +55,13 @@
         "numerator_corrections_excluding_stale": 0,
         "denominator_decisions": 1,
         "rate_excluding_stale": 0
+      },
+      {
+        "kind": "implementation",
+        "tier": "low",
+        "numerator_corrections_excluding_stale": 0,
+        "denominator_decisions": 0,
+        "rate_excluding_stale": null
       }
     ],
     "buckets": [

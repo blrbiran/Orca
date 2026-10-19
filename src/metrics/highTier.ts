@@ -25,12 +25,20 @@ export const KIND_TIER: Record<DecisionKind, "high" | "low"> = {
   // A' ERRATUM 4: a class its own source calls an order of magnitude riskier
   // is precisely one that "cuts off future options" — A' §3.6's own test.
   reconcile: "high",
+  // Reported-decisions spec 2026-10-20 §6: naming and local implementation choices. They cut off no future option, so
+  // they are low, and the high-tier metric is unchanged by their arrival.
+  implementation: "low",
 };
 
 /**
  * A' §3.6's rule verbatim: scope ∈ {cross-repo, repo} AND kind in the high
  * set. Both halves — dropping the scope half would promote every file-scoped
  * naming decision the ledger was told never to report.
+ *
+ * *** CORRECTION (2026-10-20, session 3831d12f, reported-decisions spec §6) ***
+ * "never to report" no longer holds for agent-reported decisions: the human ruled that naming and local
+ * implementation choices may be reported, graded minor, under kind `implementation`. The rule below is unchanged
+ * (`implementation` is low tier, so it is never high tier at any scope). Text above kept verbatim.
  */
 const HIGH_SCOPES: ReadonlySet<DecisionScope> = new Set<DecisionScope>(["cross-repo", "repo"]);
 

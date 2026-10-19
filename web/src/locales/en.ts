@@ -15,7 +15,7 @@ export type Translation<T> = { [K in keyof T]: T[K] extends string ? string : Tr
 
 const theme = { system: "system", light: "light", dark: "dark" } as const satisfies Record<ThemePref, string>;
 const decisionKind = {
-  dependency: "dependency", interface: "interface", scheduling: "scheduling", abandon: "abandon", criteria: "criteria", boundary: "boundary", reconcile: "reconcile",
+  dependency: "dependency", interface: "interface", scheduling: "scheduling", abandon: "abandon", criteria: "criteria", boundary: "boundary", reconcile: "reconcile", implementation: "implementation",
 } as const satisfies Record<DecisionKind, string>;
 const decisionScope = { file: "file", task: "task", repo: "repo", "cross-repo": "cross-repo" } as const satisfies Record<DecisionScope, string>;
 const decisionVerdict = { ok: "ok", downgraded: "downgraded" } as const satisfies Record<DecisionObservation["verdict"], string>;

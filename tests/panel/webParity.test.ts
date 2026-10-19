@@ -11,7 +11,9 @@ import type {
   MetricsReport as WebMetricsReport,
   PanelCoverage as WebPanelCoverage,
 } from "../../web/src/types.js";
-import { WEB_CORRECTION_KINDS, WEB_LIST_FIELDS, WEB_REPORT_FIELDS } from "../../web/src/types.js";
+import { WEB_CORRECTION_KINDS, WEB_DECISION_KINDS, WEB_LIST_FIELDS, WEB_REPORT_FIELDS } from "../../web/src/types.js";
+import type { DecisionKind as WebDecisionKind } from "../../web/src/types.js";
+import { DECISION_KINDS, type DecisionKind as ServerDecisionKind } from "../../src/ledger/types.js";
 import { CORRECTION_KINDS } from "../../src/corrections/schema.js";
 import { CUSTOM_LABEL_PREFIX, SYSTEM_LABELS } from "../../src/control/labels.js";
 import { CUSTOM_LABEL_PREFIX as WEB_CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS, WEB_WORK_ITEM_CATEGORIES } from "../../web/src/controlTypes.js";
@@ -123,6 +125,12 @@ describe("web/src/types.ts stays in lockstep with the server shapes (task 8 ruli
     expect([...WEB_CORRECTION_KINDS].sort()).toEqual([...CORRECTION_KINDS].sort());
   });
 
+  // Reported-decisions spec 2026-10-20 §6: the web's kind list was a hand-written union that a new server kind could
+  // silently outgrow (the kind filter, KIND_RANK and the enum copy all key on it); the runtime half is this SET equality.
+  it("WEB_DECISION_KINDS is the same SET as DECISION_KINDS", () => {
+    expect([...WEB_DECISION_KINDS].sort()).toEqual([...DECISION_KINDS].sort());
+  });
+
   // Labels and progress spec §2.1 (plan finding F1): the editor's system-label select offers exactly the vocabulary the
   // server's input doors accept -- a missing word cannot be chosen, an extra one would be refused as labels-invalid.
   it("WEB_SYSTEM_LABELS is the same list as SYSTEM_LABELS, and the custom prefix is the same", () => {
@@ -175,6 +183,8 @@ function correctionKindServerToWeb(x: ServerCorrectionKind): WebCorrectionKind {
 function correctionKindWebToServer(x: WebCorrectionKind): ServerCorrectionKind {
   return x;
 }
+function decisionKindServerToWeb(x: ServerDecisionKind): WebDecisionKind { return x; }
+function decisionKindWebToServer(x: WebDecisionKind): ServerDecisionKind { return x; }
 function controlConfigServerToWeb(x: ServerControlConfigV1): WebControlConfigV1 { return x; }
 function controlConfigWebToServer(x: WebControlConfigV1): ServerControlConfigV1 { return x; }
 function controlSummaryServerToWeb(x: ServerControlSummaryV1): WebControlSummaryV1 { return x; }
@@ -292,6 +302,8 @@ export const __webParityAssignabilityChecks__ = [
   listRowWebToServer,
   correctionKindServerToWeb,
   correctionKindWebToServer,
+  decisionKindServerToWeb,
+  decisionKindWebToServer,
   controlConfigServerToWeb,
   controlConfigWebToServer,
   controlSummaryServerToWeb,

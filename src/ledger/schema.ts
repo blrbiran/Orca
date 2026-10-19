@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DECISION_KINDS, DECISION_SCOPES } from "./types.js";
+import { DECISION_IMPORTANCES, DECISION_KINDS, DECISION_SCOPES } from "./types.js";
 
 export const alternativeSchema = z
   .object({
@@ -33,6 +33,9 @@ export const decisionEventSchema = z
     // decision's trustworthiness is judged); not one of the 11 required fields
     // in §3.8 check 1, but legitimate. Fix round 1, finding 1.
     evidence: z.array(z.string()).optional(),
+    // Reported-decisions spec 2026-10-20 §6: optional, so the append-only ledger's old lines stay valid; absent reads as
+    // major (src/metrics/collect.ts). Any other value refuses the line, so a bad grade lands in pending, never hidden.
+    importance: z.enum(DECISION_IMPORTANCES).optional(),
   })
   .strict();
 

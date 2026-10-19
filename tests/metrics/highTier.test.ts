@@ -24,4 +24,12 @@ describe("high-tier classification (E2 spec §3.6, A' §3.6 as corrected by A' E
       expect(KIND_TIER[kind]).toBe("high");
     }
   });
+
+  // Reported-decisions spec 2026-10-20 §6: naming and local implementation choices may be reported (as minor), but they
+  // are not what A' §3.6 calls high tier, so the high-tier metric does not move.
+  it("sorts implementation low, at any scope", () => {
+    expect(KIND_TIER.implementation).toBe("low");
+    expect(isHighTier("repo", "implementation")).toBe(false);
+    expect(isHighTier("cross-repo", "implementation")).toBe(false);
+  });
 });

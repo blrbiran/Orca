@@ -3,6 +3,11 @@
  * (src/metrics/highTier.ts), so this is a finer, UI-only importance: how hard a wrong
  * call is to undo. Keyed by DecisionKind, so a new kind without a rank is a compile
  * error -- the same lever KIND_TIER uses.
+ *
+ * *** CORRECTION (2026-10-20, session 3831d12f, reported-decisions spec §6) ***
+ * "Every decision kind is high-tier" no longer holds: `implementation` (naming and local implementation choices) is
+ * low tier. It ranks last, at the lowest level. This rank is still about the kind; a decision's own grade (major or
+ * minor) is a separate field. Text above kept verbatim.
  */
 import { enumText } from "./i18n.js";
 import type { DecisionKind } from "./types.js";
@@ -17,6 +22,7 @@ export const KIND_RANK: Record<DecisionKind, { order: number; level: KindLevel }
   boundary: { order: 4, level: 2 },
   criteria: { order: 5, level: 3 },
   scheduling: { order: 6, level: 3 },
+  implementation: { order: 7, level: 3 },
 };
 
 // A native <option> ignores CSS colour on macOS, so the level travels as text.
