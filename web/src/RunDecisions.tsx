@@ -106,7 +106,7 @@ export function RunDecisions(props: RunDecisionsProps): JSX.Element {
           ))}
         </ul>
       )}
-      <MinorToggle entries={run.pending} showMinor={showMinor.pending} onToggle={toggle("pending")} copy="control.decisions" />
+      <MinorToggle entries={run.pending} showMinor={showMinor.pending} onToggle={toggle("pending")} copy="control.decisions" list="pending" />
       {decisions.length > 0 && (
         <ul>
           {decisions.map((decision) => {
@@ -125,7 +125,7 @@ export function RunDecisions(props: RunDecisionsProps): JSX.Element {
           })}
         </ul>
       )}
-      <MinorToggle entries={run.decisions} showMinor={showMinor.decisions} onToggle={toggle("decisions")} copy="control.decisions" />
+      <MinorToggle entries={run.decisions} showMinor={showMinor.decisions} onToggle={toggle("decisions")} copy="control.decisions" list="decisions" />
       {run.unlanded.length > 0 && (
         <>
           <h5>{t("control.decisions.unlanded")}</h5>
@@ -134,7 +134,7 @@ export function RunDecisions(props: RunDecisionsProps): JSX.Element {
               {unlanded.map((entry) => <li key={entry.entryIndex}>{pair(entry.question, entry.chose)}</li>)}
             </ul>
           )}
-          <MinorToggle entries={run.unlanded} showMinor={showMinor.unlanded} onToggle={toggle("unlanded")} copy="control.decisions" />
+          <MinorToggle entries={run.unlanded} showMinor={showMinor.unlanded} onToggle={toggle("unlanded")} copy="control.decisions" list="unlanded" />
         </>
       )}
     </section>

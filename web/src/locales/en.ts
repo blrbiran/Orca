@@ -506,6 +506,11 @@ export const en = {
       unreadable: "This run's saved report could not be read.",
       showMinor: "Show {{n}} minor",
       hideMinor: "Hide minor",
+      minorName: {
+        pending: { show_one: "Show {{count}} minor pending decision", show_other: "Show {{count}} minor pending decisions", hide: "Hide minor pending decisions" },
+        decisions: { show_one: "Show {{count}} minor recorded decision", show_other: "Show {{count}} minor recorded decisions", hide: "Hide minor recorded decisions" },
+        unlanded: { show_one: "Show {{count}} minor decision that did not land", show_other: "Show {{count}} minor decisions that did not land", hide: "Hide minor decisions that did not land" },
+      },
       readFailed: "This group's decisions could not be read ({{code}}), so none are shown and none is marked as needing confirmation.",
     },
     settlement: {

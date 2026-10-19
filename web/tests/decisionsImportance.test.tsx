@@ -78,7 +78,7 @@ describe("a run's three decision lists each show major decisions and offer the m
   it("written: one shown, the two minor revealed, and a minor one stays correctable", () => {
     const onCorrect = showRun(decisionRun({ decisions: [written("run-a/agent-0"), written("run-a/agent-1", "minor"), written("run-a/agent-2", "minor")] }));
     expect(ids(/run-a\/agent/)).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Show 2 minor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 minor recorded decisions" }));
     expect(ids(/run-a\/agent/)).toHaveLength(3);
     fireEvent.click(within(screen.getByRole("listitem", { name: "run-a/agent-2" })).getByRole("button", { name: "Correct" }));
     expect(onCorrect).toHaveBeenCalledWith("github.com/example/orca", "run-a/agent-2");
@@ -87,7 +87,7 @@ describe("a run's three decision lists each show major decisions and offer the m
   it("pending: one shown, the two minor revealed and still confirmable", () => {
     showRun(decisionRun({ pending: [pending("p-0"), pending("p-1", "minor"), pending("p-2", "minor")] }));
     expect(screen.getAllByRole("listitem").map((li) => li.getAttribute("aria-label"))).toEqual(["p-0"]);
-    fireEvent.click(screen.getByRole("button", { name: "Show 2 minor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 minor pending decisions" }));
     expect(screen.getAllByRole("listitem").map((li) => li.getAttribute("aria-label"))).toEqual(["p-0", "p-1", "p-2"]);
     expect(within(screen.getByRole("listitem", { name: "p-2" })).getByRole("button", { name: "Approve" })).toBeTruthy();
   });
@@ -95,7 +95,7 @@ describe("a run's three decision lists each show major decisions and offer the m
   it("unlanded: one shown, the two minor revealed", () => {
     showRun(decisionRun({ settled: true, unlanded: [unlanded(0), unlanded(1, "minor"), unlanded(2, "minor")] }));
     expect(ids(/q u\d/)).toEqual(["q u0 → c"]);
-    fireEvent.click(screen.getByRole("button", { name: "Show 2 minor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 minor decisions that did not land" }));
     expect(ids(/q u\d/)).toEqual(["q u0 → c", "q u1 → c", "q u2 → c"]);
   });
 
@@ -108,6 +108,29 @@ describe("a run's three decision lists each show major decisions and offer the m
   it("a run whose only pending entries are minor does not ask for a person", () => {
     expect(runNeedsHuman(decisionRun({ pending: [pending("p-0", "minor")] }))).toBe(false);
     expect(runNeedsHuman(decisionRun({ pending: [pending("p-0", "minor"), pending("p-1")] }))).toBe(true);
+  });
+});
+
+// Review finding (accessibility): a run shows up to three minor toggles in one region, so each names its own list; the
+// accessible name begins with the visible words.
+describe("a run's three minor toggles are told apart by their accessible names", () => {
+  const all = () => decisionRun({ decisions: [written("run-a/agent-0", "minor")], pending: [pending("p-0", "minor"), pending("p-1", "minor")], unlanded: [unlanded(0, "minor")] });
+  const names = () => screen.getAllByRole("button").filter((b) => b.classList.contains("minor-toggle")).map((b) => b.getAttribute("aria-label"));
+
+  it("in English, and only the toggled one changes to its hide name", () => {
+    showRun(all());
+    expect(names()).toEqual(["Show 2 minor pending decisions", "Show 1 minor recorded decision", "Show 1 minor decision that did not land"]);
+    expect(screen.getByRole("button", { name: "Show 2 minor pending decisions" }).textContent).toBe("Show 2 minor");
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 minor pending decisions" }));
+    expect(names()).toEqual(["Hide minor pending decisions", "Show 1 minor recorded decision", "Show 1 minor decision that did not land"]);
+  });
+
+  it("in Chinese", async () => {
+    await i18n.changeLanguage("zh");
+    showRun(all());
+    expect(names()).toEqual(["显示 2 条次要决定（待确认）", "显示 1 条次要决定（已记录）", "显示 1 条次要决定（未落地）"]);
+    fireEvent.click(screen.getByRole("button", { name: "显示 1 条次要决定（未落地）" }));
+    expect(screen.getByRole("button", { name: "收起次要决定（未落地）" }).textContent).toBe("收起次要决定");
   });
 });
 

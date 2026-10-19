@@ -395,6 +395,11 @@ export const zh: Translation<typeof en> = {
       unreadable: "这次运行保存的报告读不出来。",
       showMinor: "显示 {{n}} 条次要决定",
       hideMinor: "收起次要决定",
+      minorName: {
+        pending: { show_one: "显示 {{count}} 条次要决定（待确认）", show_other: "显示 {{count}} 条次要决定（待确认）", hide: "收起次要决定（待确认）" },
+        decisions: { show_one: "显示 {{count}} 条次要决定（已记录）", show_other: "显示 {{count}} 条次要决定（已记录）", hide: "收起次要决定（已记录）" },
+        unlanded: { show_one: "显示 {{count}} 条次要决定（未落地）", show_other: "显示 {{count}} 条次要决定（未落地）", hide: "收起次要决定（未落地）" },
+      },
       readFailed: "这个组的决定读取失败（{{code}}），所以这里不显示任何决定，也不标出需要人确认的项。",
     },
     settlement: {
