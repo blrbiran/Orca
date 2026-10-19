@@ -1,0 +1,57 @@
+{
+  "v": 1,
+  "runId": "orca-dev-3831d12f",
+  "runtime": "claude-code",
+  "sessionRef": "3831d12f-c4f8-43b2-a622-8be53179a4b7",
+  "writtenAt": "2026-10-19T17:40:06.803Z",
+  "head": "c50a87ca67873dfd58e62ac9c6c0cfa0d6ba1b1a",
+  "level": {
+    "kind": "reading",
+    "level": 331824,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "review + merge orca-dev/test-scope (spec A)",
+    "await spec B implementers (ccloop-wt/reported-decisions, Orca-wt/decisions-importance), review, merge",
+    "rebuild main dist + web/dist",
+    "roll three handoffs; give exec summary"
+  ],
+  "open": [
+    "spec A branch bb226252 needs independent review",
+    "spec B ccloop half running",
+    "spec B Orca half running"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "review controller rulings (debug-task ledger 59 Ruling: lines + this round's progress.md)"
+    },
+    {
+      "kind": "irreversible",
+      "what": "push Orca and ccloop; then repin ccloop with decisions[] and do control-run-decisions Task 12"
+    },
+    {
+      "kind": "irreversible",
+      "what": "restart panel service after main dist rebuild"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca log --oneline -8",
+      "exitCode": 0,
+      "commit": "c50a87ca67873dfd58e62ac9c6c0cfa0d6ba1b1a",
+      "observedAt": "2026-10-19T17:40:06.744Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-3831d12f-SrFPqB/1.txt"
+    },
+    {
+      "command": "cat /Users/biran/code/skills/orca/Orca/.superpowers/sdd/2026-10-20-repin-w2-test-split/progress.md",
+      "exitCode": 0,
+      "commit": "c50a87ca67873dfd58e62ac9c6c0cfa0d6ba1b1a",
+      "observedAt": "2026-10-19T17:40:06.753Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-3831d12f-SrFPqB/2.txt"
+    }
+  ]
+}
