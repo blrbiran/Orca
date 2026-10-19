@@ -141,6 +141,13 @@ cap, run it in either estimate mode. `codex` cannot cap a call's output, so its 
 only (`--estimate-mode soft`): the output is checked after the call, and any overrun is booked and shown on the run.
 Strict estimate mode still refuses `codex` (`single-call-unavailable`).
 
+#### Third-party models
+
+`codex` and `omp` pointed at a non-native provider (a model their vendor does not ship) may not follow the plan phase's
+JSON-only instructions. Such a run fails with a `*-result-invalid` code (for example `codex-result-invalid`), shown on
+the run with its explanation; retrying the same model usually fails the same way. Use the agent's native model for
+that work, or, when the run did save its output, **Verify saved results** on the failed run instead of re-running it.
+
 ### 2. ccloop
 
 | `ORCA_CCLOOP_BIN` | Meaning |
