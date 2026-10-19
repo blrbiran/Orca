@@ -205,7 +205,7 @@ if (empty) console.log(`test-affected: 0 test files selected (no changes against
 else console.log(`test-affected: ${rootFiles.length + webFiles.length} test files selected (${rootFiles.length} root, ${webFiles.length} web)`);
 const typechecks = [["npm", ["run", "typecheck"]]];
 if (webTypecheck) typechecks.push([join(root, "node_modules", ".bin", "tsc"), ["--noEmit", "-p", "web/tsconfig.json"]]);
-console.log(`test-affected: typecheck: ${typechecks.map(([cmd, args]) => [relative(root, cmd) || cmd, ...args].join(" ")).join(" ; ")}`);
+console.log(`test-affected: typecheck: ${typechecks.map(([cmd, args]) => [cmd === "npm" ? cmd : relative(root, cmd), ...args].join(" ")).join(" ; ")}`);
 if (dryRun) process.exit(0);
 
 // --- run --------------------------------------------------------------------------------------------------------
