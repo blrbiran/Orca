@@ -33,7 +33,10 @@ describe("the service runs a node build, never tsx (spec §3, plan D4)", () => {
     const pkg = JSON.parse(await readFile("package.json", "utf8")) as { scripts: Record<string, string> };
     expect(pkg.scripts.build).toBe("tsc -p tsconfig.build.json");
     // "npm run build --workspace web" also contains "npm run build"; pin the root build, which must precede the tests.
-    expect(pkg.scripts.verify).toContain("npm run typecheck && npm run build && npm test");
+    // Spec 2026-10-20 §4.2/§4.3: the release gate refuses first, then the one suite pass behind its env refusal --
+    // and no second pass (npm test, test:all or the old re-run scripts) anywhere in the chain.
+    expect(pkg.scripts.verify.startsWith("node scripts/check-release-gate.mjs && npm run typecheck && npm run build && node scripts/check-gate-env.mjs && node scripts/verify-suite.mjs && ")).toBe(true);
+    for (const rerun of ["npm test", "test:all", "verify:control", "verify:chain", "verify:scheduler", "vitest"]) expect(pkg.scripts.verify).not.toContain(rerun);
   });
 
   it("the compiled CLI runs under plain node and boots a panel that exits 0 on SIGTERM", async () => {
