@@ -63,20 +63,27 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.00 会话 `b304f167`（2026-10-18 晚）—— **先读这一节，再读 3.01、3.0**
+### 3.000 会话 `3d44b2fb`（2026-10-18 晚 → 10-19）—— **先读这一节，再读 3.00、3.01、3.0**
 
-- **「Decisions 页：查看已审＋撤回审阅／撤回纠正」已实施并合进 main**（`--ff-only`，未 push；首笔主题行 `feat(panel): reviews gain a withdrawn action and a latest-row review state`，用 `git log --oneline --grep=withdraw` 找）。spec `docs/superpowers/specs/2026-10-18-decisions-review-withdraw-design.md`（**§10 优先于正文**），计划 `docs/superpowers/plans/2026-10-18-decisions-review-withdraw.md`；SDD 台账 `.superpowers/sdd/2026-10-18-decisions-review-withdraw/progress.md`（git-ignored；每条 `Ruling:`、延后 minor、门的数、评审包都在里面）。
-- **做成了什么**：审阅行只追加 `withdrawn`，每人以文件顺序最新一行为状态，写入方、覆盖率／待办、`orca compact-reviews` 共用一条规则（旧规则会把「同意→撤回→再同意」压成未审）；纠正的撤回写进**新文件** `~/.orca/correction-withdrawals.jsonl`（0600，`ORCA_CORRECTIONS_DIR` 改道；`corrections.jsonl` 一字节不动，因为它的读取方是严格的）；指标把撤回的纠正从所有数里去掉，报告多一个 `withdrawn_corrections`；面板 `POST /api/reviews/withdraw`、`POST /api/corrections/withdraw`，`GET /api/decision` 多返回 `review`；详情页显示谁审过、每条纠正及其状态，只对自己的有效项给「撤回」按钮；中英文案齐。
-- **人裁（本会话）**：撤回同意是主要场景；纠正可在「刚记下」时撤回（debug group 没开始就归档——要等 debug 计划实施）；**已关闭的纠正不能撤回**，再记一条新纠正开新 debug group；「本 spec 必需的既有测试都允许改」（**只对本会话有效**），改过的既有断言逐条记在台账 `Ruling:`。
-- **控制器替人定的——人已审、同意**（会话 `3d44b2fb`，原话「同意」；记在台账末节「Human review of the controller's calls」；都在台账 `Ruling:` 与 spec §4.4／§5.2–5.4／§10）：按钮叫「撤回审阅」；自己还有未撤回纠正时不能单独撤回审阅；撤回纠正顺带撤回自己的「已审」（若无别的未撤回纠正）；被拒待定决定那种纠正这轮不能撤回；撤回只在 Web 面板、不给 CLI／agent；「不在列表里」的提示改成中性句。
-- **门**（全新 clone，`ORCA_CCLOOP_BIN=/private/tmp/ccb6-qswQ/ccloop/dist/cli.js`，只指 fake 的 `ORCA_AGENTS_TABLE`）：`npm run verify` exit 0；`~/.orca` 哈希 0 差。门的 fake 表要点：每个 `command` 是单元素数组、包一层 shell 脚本；**codex 要 `integration` 模式并带 marker**、`version` 填 fake 自己答的 `--version`（codex `9.9.9-fake`、omp `18.10.1`）；**不要 export `GIT_AUTHOR_*`**（两条「本机身份不外泄」判据会红）。
-- **没做／未测（Rule 12）**：真浏览器里没看过；debug 计划那半（撤回时归档未开跑的 debug group、`correction-close` 拒撤回的纠正等）只写进了该计划末尾的修订节 `## Amendment (decisions review withdraw, session b304f167)`，**未实施**；台账里延后的 minor（写入方三处并发守卫的变异 M4b/c/d 没有确定性判据、一条判据 `withdrawApi.test.ts:386` 自身的红没单独看见等）。
-- 已调查未动手：「能用代码替代 agent 的尽量用代码」候选清单 `.superpowers/sdd/2026-10-18-decisions-review-withdraw/code-over-agent-survey.md`。
+- **「纠正 ⇒ debug task」做到一半：计划 15 个任务里 Task 1–12 已实施、逐个过评审，在分支上，【没合进 main】**。分支 `codex/correction-debug-task`，工作树 `/Users/biran/code/skills/orca/Orca-wt/correction-debug-task`（`node_modules`、`web/node_modules` 是指向主树的软链，**永不 `git add -A`**；`web/dist` 已在工作树里 build 过）。分支起点是 main 的 `docs(handoff): the human approved session b304f167's controller calls`，之后 main 只多了两笔 `chore(checkpoint): orca-dev-3d44b2fb, …` ⇒ **合进 main 前先 rebase 到 main 上**（上一轮同样做法）。**人在 Task 13 开工前叫停**，Task 13 一行没改。
+- **唯一进度源**：SDD 台账 `.superpowers/sdd/2026-10-18-correction-debug-task/progress.md`（git-ignored，只在主仓）——每个任务的派席、评审、修复轮、提交区间、`Ruling:`（共 53 条）、延后 minor、事故都在里面；同目录：`preflight-scan.md`（开工前对计划的 30 处冲突扫描）、`constraints.md`、`implementer-common.md`／`reviewer-common.md`／`rereview-common.md`（派席契约）、`task-N-brief.md`／`task-N-rulings.md`／`task-N-report.md`、`review-*.diff`。**Task 13／14 的 rulings 文件已写好、未派**。
+- **下一步**（按序）：Task 13（Web UI，`task-13-rulings.md`）→ Task 14（spec 具名更正＋Rule 17 写入方登记，`task-14-rulings.md`）→ Task 15（变异表＋全量门）→ 最强模型做一次整分支终审（指给它台账里的延后 minor 与 parked 行）→ 全新 clone 跑门（做法同 §3.00 的门要点）→ rebase → `merge --ff-only`。付费端到端一次（spec §8）要人点头。
+- **已做成（Task 1–12，均在分支）**：前置脚本 `scripts/check-debug-task-preconditions.ts`（`exit=0`）；指标多一行「指向未记录决定的纠正」；冻结 debug 输入（`src/control/debugInput.ts`）；纯函数建 debug 计划（`debugPlan.ts`）；导入不排估算（`writeImportedPlan` 的 `estimate: "deferred"`）；verb `correction-debug-open`（`debugGroup.ts`，**仓库匹配先按面板 key**）；debug run 是新 session＋占位检查命令拒确认／开跑；**复现优先检查**（`debugRepro.ts`，在 run 自己的工作区、**移出调度轮**、持久标记、崩溃后先还原再重跑）；落地提交带关闭记录（`debugClosing.ts`）；「已关闭」按目标 ref 的树判定＋纠正列表 `GET /api/control/corrections`（`correctionState.ts`，**全仓一个关闭判据**）；只限人的 `correction-record`／`correction-close`／`correction-withdraw`（`correctionCommands.ts`）；拒绝 pending 决定后自动开 debug group（失败记 `debug-open-failed` 活动行）。各任务测试与变异数在台账；最后一次两目录合跑（Task 12 修复轮，`tests/control`＋`tests/panel`，带 `ORCA_CCLOOP_BIN`）：300 文件、2969 过、33 跳过——**全量 `npm run verify` 与全新 clone 门都没跑**。
+- **人裁（本会话）**：本会话允许改所有必要的判据（**只对本会话**；每处改动在台账 `Ruling:` 写了 file:line 旧→新）；纠正列表放在 Decisions 页里（不加新分区）；复现检查在 run 自己的工作区；「已关闭」＝目标树里有关闭行（不用 `merge-base --is-ancestor`）；web build 的 chunk 超 500 kB 提示**不修**（§八已知缺口）；「执行中有问题先按控制器的建议执行、最后报人审」⇒ **控制器替人定的 53 条 `Ruling:` 等人审**（§八）。
+- **改变了前提、下一位要知道的**：① 计划原文用 `alreadyCommitted`（`git log --all`）判「已关闭」——会命中 group 分支，已全部换成目标 ref 判据；② 计划没写「没有原契约时检查命令是占位符」⇒ 现在打开时可带 `checks`（有原契约则**取并集、不替换**，mark 记来源与人／agent）；③ 复现命令按 ccloop 跑检查的方式执行（`sh -lc`、继承环境）——**它以 Orca 身份、在 ccloop 沙箱外运行**（等人知情）；④ reconcile 后自动生成的 `git revert --no-edit <attemptSha>` 可能撤不干净（spec 钉死了这个 sha，登记）。
+- **事故**：Task 8 实现席一次丢了 shell 变量，几条命令跑进主树（`git checkout` 被拒；多出的两个 `node_modules/node_modules` 软链已删）；控制器现核主树干净。此后派席契约要求变异命令一律字面绝对路径。另：一次子 agent 把 hook 报的「orca level」当成自己的上下文而停工——**那个数是父会话的**。
+
+### 3.00 会话 `b304f167`（2026-10-18 晚）—— Decisions 页撤回（已合、人已审）
+
+- **「Decisions 页：查看已审＋撤回审阅／撤回纠正」已合进 main**（首笔主题行 `feat(panel): reviews gain a withdrawn action and a latest-row review state`）。spec `docs/superpowers/specs/2026-10-18-decisions-review-withdraw-design.md`（**§10 优先**）；台账 `.superpowers/sdd/2026-10-18-decisions-review-withdraw/progress.md`。控制器替人定的点**人已审、同意**（会话 `3d44b2fb`，台账末节）。
+- **做成了什么**：审阅行只追加 `withdrawn`，每人以文件顺序最新一行为状态（写入方、覆盖率、`orca compact-reviews` 共用）；纠正的撤回写进 `~/.orca/correction-withdrawals.jsonl`（0600，`ORCA_CORRECTIONS_DIR` 改道；`corrections.jsonl` 不动）；指标去掉撤回的纠正、多 `withdrawn_corrections`；`POST /api/reviews/withdraw`、`POST /api/corrections/withdraw`；**已关闭的纠正不能撤回**。该计划末尾 Amendment 的各项已由 debug 计划 Task 6／10／11 实施（在 §3.000 的分支上）。
+- **门的 fake 表要点**（全新 clone，`ORCA_CCLOOP_BIN=/private/tmp/ccb6-qswQ/ccloop/dist/cli.js`，只指 fake 的 `ORCA_AGENTS_TABLE`）：每个 `command` 是单元素数组、包一层 shell 脚本；**codex 用 `integration` 模式并带 marker**、`version` 填 fake 自己答的 `--version`（codex `9.9.9-fake`、omp `18.10.1`）；**不要 export `GIT_AUTHOR_*`**。缺 marker 的 fake 会在 cwd 写出 `undefined.argv`（会话 `3d44b2fb` 在主仓根删过一个）。
+- 未测：真浏览器里没看过；延后 minor（写入方并发守卫变异 M4b/c/d 无确定性判据等）在台账。候选清单「能用代码替代 agent 的尽量用代码」：`.superpowers/sdd/2026-10-18-decisions-review-withdraw/code-over-agent-survey.md`。
 
 ### 3.01 会话 `1710772d`（2026-10-18 下午）—— 控制 run 写决定
 
 - **「控制 run 写决定」已合进 main**（22 笔，首笔主题行 `feat(control): read reported decisions through one adapter`；未 push）。台账 `.superpowers/sdd/2026-10-18-control-run-decisions/progress.md`（全部 `Ruling:`、延后 minor、已知缺口、门的数）。
-- ⚠️ *** **控制库 schema 13 → 14（单向）**：面板服务下次重启会把真实 `~/.orca` 控制库迁到 14（新表 `pending_decisions`），旧版 Orca 将拒开。**重启前先备份控制库**（做法同 `2026-10-12-live-service-cutover.md`）。 ***
+- ✅ **控制库 schema 13 → 14（单向）已完成**：人在会话 `3d44b2fb`（2026-10-18）先备份到 `~/.orca/backups/schema14-cutover-1792329773353/`（`control.sqlite`＋`accounts.sqlite`，`sqlite3 .backup`，文件 0644、目录 0700），再 build 主树 `dist/` 与 `web/dist` 后重启服务；现测 `meta.schemaVersion=14`、`pending_decisions` 表在。旧版 Orca 已不能开这个库；回退用该备份（做法同 `2026-10-12-live-service-cutover.md` §撤销）。
 - **没接通**：Task 12 阻塞在 ccloop 报 `decisions[]` ⇒ spec §3.1「agent 自己的决定」还没接通；`push-target`／`push-branch`／`github-pr` 合入未测；已知缺口：不同身份并发 reject 可各记一条、reject 输给 approve 时留孤儿 correction（交给 debug 计划）、E/D 的 reconciling 检查与 CAS 之间有窗口、approve/reject 串行只在单进程内。
 - 人裁：`attemptSha` 进 evidence（台账 spec ERRATUM 8）；姊妹仓合并规则已对齐。
 
@@ -105,7 +112,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **ccloop 目录缓存**：`$CCLOOP_CACHE_DIR`（缺省 `~/.cache/ccloop`），键含二进制与配置 stamp、30 分钟、版本号也缓存；codex single call 在**每个安装键一对复用的私有 `HOME`／`CODEX_HOME`**（`<cache>/codex-home/<sha256>/`，链 `auth.json`／`config.toml`、从不删正规凭据，挪成 `.displaced-<ms>`）。模型清单 API 与 web datalist。
 - **错误码**：ccloop 进程失败答 424 `ccloop-failed:<码>[: 细节]`（例外：`apply-agent-update` 仍 500）；「组在执行」单一判定（`src/control/executionPending.ts`），执行中 `start` 答 409 `group-execution-pending`。`set-task-loop` 在组 `running`／`review`／暂停时也能改**未开始**的任务。omp clarify／split 的上限拒绝不自动重试，人点 group 重试时按冻结的 `agentSlot.selection` 重算上限。web 统一经 `web/src/ccloopCodes.ts` 解释码（兜底文案不说「ccloop」）。
 - **Decisions 页撤回**：撤回自己的审阅／未关闭的纠正（§3.00）；撤回记录在 `reviews.jsonl` 的 `withdrawn` 行与 `~/.orca/correction-withdrawals.jsonl`。
-- 控制库：代码是 **schema 14、单向**（真实 `~/.orca` 在下次重启前仍是 13，见 §3.01）（切换与回退：`2026-10-12-live-service-cutover.md`）。Linux systemd 用户服务跑通过一次（两仓全量没在 Linux 跑过；`2026-10-12-followup-acceptance.md`）。
+- 控制库：**schema 14、单向**，真实 `~/.orca` 已迁到 14（2026-10-18，人重启服务前备份，见 §3.01）（切换与回退：`2026-10-12-live-service-cutover.md`）。Linux systemd 用户服务跑通过一次（两仓全量没在 Linux 跑过；`2026-10-12-followup-acceptance.md`）。
 
 ### 3.2 还不能说的（**诚实边界，原样保留**）
 
@@ -157,20 +164,20 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.1 人做的（agent 不提醒、不代做）
 
-- ⚠️ **重启面板服务前先备份控制库**：控制库已升到 schema 14（单向，见 §3.01），下次重启即迁移真实 `~/.orca`，旧版 Orca 将拒开。重启后面板才有撤回功能；第一次撤回纠正会新建 `~/.orca/correction-withdrawals.jsonl`。
+- **面板服务**：已于 2026-10-18 由人备份后重启到 schema 14（§3.01）。**下次合进 debug 分支后，主树要重新 `npm run build && npm run build --workspace web` 再重启服务**，服务跑的是主树 `dist/cli.js`（`~/.orca/panel/run.sh`）。第一次撤回纠正会新建 `~/.orca/correction-withdrawals.jsonl`。
 
 - **push**：人统一择时推三仓，agent **不提醒**、不给 push 命令。合入 main（`--ff-only`）、删已合并分支、删干净 worktree，agent 在 **Orca** 里自己做；ccloop／ccmem 已对齐（人 2026-10-18 会话 `1710772d`），agent 同样可做这三种形式。
 - **删**（人做；会话 `a3b2a7a7` 2026-10-18 现核的清单）：
   - `~/.cache/ccloop/agent-catalog/` **整个目录不能删**（在用）；只删两项：`agent-catalog/769de7de3225c97b1234142ba6835ab7aaecfd0d77e371c662ca57bf9607b532.json` 与目录 `agent-catalog/codex-home/bf5335273626c4675a00cca1a384456ab917ed8333815b54b89e45b57670b993`（内含指向 `~/.codex/{auth.json,config.toml}` 的软链，`rm -rf` 只删链）。
-  - `/private/tmp`：`mutp-swWu`、`acc-xpI0`、`mut-*` ×10、`org6-nP1k`／`org7-3oVo`／`org8-ulmF`、空目录 `cc-r-*`、`cc-t-*`、`cc-gate3/4/5-*`。`ccb6-qswQ`（pin 的 ccloop build）留到 codex 估算补跑之后。
+  - `/private/tmp`：`mutp-swWu`、`acc-xpI0`、`mut-*` ×10、`org6-nP1k`／`org7-3oVo`／`org8-ulmF`（⚠️ `org7`／`org8` 下各有一个跑了两天以上的 `orca panel` 测试进程，2026-10-19 现测 pid 18023、44796，**先停进程再删目录**）、空目录 `cc-r-*`、`cc-t-*`、`cc-gate3/4/5-*`。`ccb6-qswQ`（pin 的 ccloop build）留到 codex 估算补跑之后。
   - `$TMPDIR` 下 ccmem 测试遗留 `ccmem-*`（修复前留下的）：`find "$TMPDIR" -maxdepth 1 -name 'ccmem-*' -mmin +60 -exec rm -rf {} +`。
 - **ccmem embedding 账号无额度**（`429 You have no credits remaining`）⇒ 语义检索不可用，充值或换 key。
 - 不确定归属：`/Users/biran/.codex/worktrees/feedback-followup-20261011/Orca`（Codex 建的 detached worktree）。
 
 ### 4.2 agent 的活（**下一轮先实现，再写后续 spec**）
 
-1. ~~实施「控制 run 写决定」~~ **已合进 main**（§3.01），剩 Task 12（等 ccloop）。~~Decisions 页查看＋撤回~~ **已合进 main**（§3.00）。**下一步做第 2 条。**
-2. **实施「纠正 ⇒ debug task」**：计划 `…/2026-10-18-correction-debug-task.md`，**先读它末尾的 `## Amendment (decisions review withdraw, session b304f167)`**（撤回的纠正不开 group、未开跑的 group 随撤回归档、`correction-close` 拒撤回的纠正、其 Task 6 要登记 `correction-withdrawn` 与中英文案）；Task 1 的前置脚本先跑（名字对不上就停）。付费端到端一次要人点头。
+1. ~~实施「控制 run 写决定」~~ **已合进 main**（§3.01），剩 Task 12（等 ccloop）。~~Decisions 页查看＋撤回~~ **已合进 main**（§3.00）。
+2. **继续「纠正 ⇒ debug task」（⛔ 下一件）**：Task 1–12 已在分支 `codex/correction-debug-task`（§3.000），从 **Task 13** 接着做：读台账 `.superpowers/sdd/2026-10-18-correction-debug-task/progress.md`（`Task N: complete` 的不要重派）与 `task-13-rulings.md`、`task-14-rulings.md`；之后 Task 15、整分支终审、全新 clone 门、rebase、`--ff-only` 合入。付费端到端一次要人点头。
 3. **ccloop Codex 阶段隔离**（计划已在 ccloop main）：在 ccloop 里按它自己的规则做；**Task 4 Step 6 是停止点**——预言 `tests/control/codexSkillsFailureWorker.test.ts` 两条会红（夹具 wrapper 不答 `mcp list` 等），改夹具要人逐条点名（ccloop Rule 15）；Task 7 付费一次要人点头。
 4. **ccloop 那半：agent 在结果里报 `decisions[]` 与 `debug`**（`choseInstead`、`reproTests`、`reproCommand`、`reproduction`）——在 ccloop 仓走 brainstorming；做完才能解第 1 份计划的 Task 12（对真输出的契约测试）。
 5. **排队估算 `withdrawn` 终态**（§3.3，人已裁、未实施）。
@@ -363,7 +370,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
 - **ccloop 计划 Task 4 Step 6**：预言变红的 `tests/control/codexSkillsFailureWorker.test.ts`（夹具 wrapper 要转发非 `exec` 调用）与语义已变的 `tests/runtime/codex/extraEnv.test.ts`「sets CODEX_HOME from the installation's configDir…」——改要人逐条点名（人在会话 `1710772d` 给过「本 session 中必要的 test 都允许改」，**只对那个会话有效**）。
-- **付费**（每一次先问）：§4.2 第 7 条。
+- **会话 `3d44b2fb` 的控制器裁定待审**：台账 `.superpowers/sdd/2026-10-18-correction-debug-task/progress.md` 的全部 `Ruling:` 行（53 条，含预检的 C1–C30 处置、每个任务的设计选择、既有判据改动的 file:line）；需要人特别知情的：复现命令以 Orca 身份在 ccloop 沙箱外跑、reconcile 后生成的 revert 可能撤不干净、`checks` 取并集（人想删掉坏的原检查目前没有入口）。人审后删本条。
+- **付费**（每一次先问）：§4.2 第 7 条；debug 计划的端到端一次（spec §8）。
 - **ccmem embedding 账号无额度**。
 - **`orca chain` 真钱活体验收**：要人提交 `.orca/chain.json` 选 model（不存在时开链被 `chain-config-missing` 拒）。
 - **面板的真浏览器视觉验收**（深浅主题、几何、依赖图 SVG）——人没看过第二批以后。
@@ -382,7 +390,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - 26(a)（⑤ 一轮，要先做设计）；单 profile 给所有角色时 confirm 强制数值 handoff 阈值（今天的绕法：estimator 与 worker 选不同 profile）。
 - agent 选择：`ccloop resume`／`sweep` 不支持 `--agents` 起的 run；claude 工具进程另开进程组时杀不到；claude model 以 `[1m]` 结尾可绕过上下文档位；安装记录的`configDir`／kind 改了已开跑的组没有出路；claude 自动升级后旧 run 被 `agent-version-drift` 拒续；派活不与确认快照比对。
 - 生产部署的 execution profile 快照：spec §5.3 要求、计划与执行都没接（真实环境有 `~/.orca/profile.json` v2 快照，`contextWindowTokens:null`）。
-- 面板：Memory 页曾报 `ccmem-failed:1`（ccmem 侧缺陷，未修）；Web `BudgetEditor` 不显示决定派活的 `handoffControl`／`handoffExecution`；N2 延后小项（socket 属主 uid 不校验、状态目录可写不告警、mcp stdin 结束不 close 等，见 `.superpowers/sdd/2026-10-07-agent-entry/progress.md`）；整合时卡住的远端会让驱动等到 `ORCA_INTEGRATION_TIMEOUT_MS`。
+- 面板：web 生产 build 单 chunk 709 kB（gzip 215 kB）超 Vite 500 kB 提示——人裁不修（本机面板，依赖只有 react／i18next；要放公网或 gzip 过 500 kB 再看）；Memory 页曾报 `ccmem-failed:1`（ccmem 侧缺陷，未修）；Web `BudgetEditor` 不显示决定派活的 `handoffControl`／`handoffExecution`；N2 延后小项（socket 属主 uid 不校验、状态目录可写不告警、mcp stdin 结束不 close 等，见 `.superpowers/sdd/2026-10-07-agent-entry/progress.md`）；整合时卡住的远端会让驱动等到 `ORCA_INTEGRATION_TIMEOUT_MS`。
 - loop 方案：`evidenceRequired` 子串问题；Web 卡片「Acceptance: N check commands」不计文档检查；分钟级收尾窗口要和 ccloop 一起改；`reconcile.ts` 的 `rejectOn: ["nonzero exit"]` 无效（无害）。
 - ccloop 侧：恢复窗口不可用时 60 s 不是真上限；`PARTIAL_FLUSH_MARGIN_MS` 在 Orca 手抄一份；`agent-selection.json` 只冻结选择与 hash；stream 用量一轮有四处删了不红（`setEncoding`、写观测的 `catch`、`total !== null`、`observedUsagePath`）、`message_delta` 配对不看 `parent_tool_use_id`；`src/runtime/codex/protocol.ts`／`types.ts` 注释把「真 codex 只在阶段末报 usage」写成事实（已发布，只能追加具名 ERRATUM，未做）；Codex skills 在真模型被杀后的续跑未验。
 - 判据层（登记为冗余或弱，未编假判据）：`webFixture`／`createHarness` 的 `capabilities()` 没有独立钩子，用 `setObserved` 写「认领时能力不符」会假绿；`assertCapabilities` strict 分支不查 `requestBoundProof.workDimensions.includes("tokens")`；`ccloopPort.ts` 已发布 ERRATUM 指错段落；`webProtocol` 外层 `.strict()` 冗余；`capabilitySchema.test.ts` 标题证伪不了；旧 `ControlService` claim／continue 路径生产不可达无判据；handoff 宽限在冻结值无效时退回 0；`recoveryBlockers` 等几处换比较器无会红的判据；ccloopProtocol 的 SIGKILL 两行、controlReadApi 键数、controlConfigPort `defaults` 本来就弱；各轮 `minor (deferred)` 行（syncskill 集成、项目过滤、N1 概况串行等）见各自台账。
