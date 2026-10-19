@@ -87,9 +87,9 @@ export function RunDecisions(props: RunDecisionsProps): JSX.Element {
   // Reported-decisions spec 2026-10-20 §6: each list shows its major entries and holds the minor ones behind its own control.
   const [showMinor, setShowMinor] = useState({ pending: false, decisions: false, unlanded: false });
   const toggle = (list: keyof typeof showMinor) => (next: boolean) => setShowMinor((current) => ({ ...current, [list]: next }));
-  const pending = visibleByImportance(run.pending, showMinor.pending).shown;
-  const decisions = visibleByImportance(run.decisions, showMinor.decisions).shown;
-  const unlanded = visibleByImportance(run.unlanded, showMinor.unlanded).shown;
+  const pending = visibleByImportance(run.pending, showMinor.pending);
+  const decisions = visibleByImportance(run.decisions, showMinor.decisions);
+  const unlanded = visibleByImportance(run.unlanded, showMinor.unlanded);
   const reportedLine = !run.settled ? "control.decisions.notSettled"
     : run.reported === "absent" ? "control.decisions.notReported"
     : run.reported === "malformed" ? "control.decisions.malformed"

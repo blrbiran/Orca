@@ -49,6 +49,14 @@ describe("the Decisions page shows major decisions and offers the minor ones", (
     expect(list()).toEqual(["run/1"]);
   });
 
+  it("says so when every matching decision is minor, and still offers them", () => {
+    render(<DecisionsView rows={[row("run/1", "minor")]} filter={NO_FILTER} />);
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+    expect(screen.getByText("Only minor decisions match.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 minor" }));
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+  });
+
   it("offers no control when there is no minor decision", () => {
     render(<DecisionsView rows={[row("run/1"), row("run/2", "major")]} filter={NO_FILTER} />);
     expect(screen.queryByRole("button", { name: /minor/ })).toBeNull();

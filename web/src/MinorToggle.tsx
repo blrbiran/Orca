@@ -10,11 +10,9 @@ type Graded = { importance?: "major" | "minor" };
 
 export const isMinor = (entry: Graded): boolean => entry.importance === "minor";
 
-/** The entries a list shows, and how many minor ones it holds back (0 when they are shown or there are none). */
-export function visibleByImportance<T extends Graded>(entries: readonly T[], showMinor: boolean): { shown: T[]; hidden: number } {
-  if (showMinor) return { shown: [...entries], hidden: 0 };
-  const shown = entries.filter((entry) => !isMinor(entry));
-  return { shown, hidden: entries.length - shown.length };
+/** The entries a list shows: all of them once minor ones are asked for, otherwise the major ones. */
+export function visibleByImportance<T extends Graded>(entries: readonly T[], showMinor: boolean): T[] {
+  return showMinor ? [...entries] : entries.filter((entry) => !isMinor(entry));
 }
 
 /**

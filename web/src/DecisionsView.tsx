@@ -117,7 +117,7 @@ export function DecisionsView(props: {
   const [ownShowMinor, setOwnShowMinor] = useState(false);
   const showMinor = props.showMinor ?? ownShowMinor;
   const filtered = filterRows(props.rows, props.filter);
-  const shown = visibleByImportance(filtered, showMinor).shown;
+  const shown = visibleByImportance(filtered, showMinor);
   // Final review M-T8: the heading says which decisions are listed; Unreviewed (and no status select) keeps today's.
   const heading = props.status === "reviewed" ? { title: "decisions.titleReviewed", lede: "decisions.ledeReviewed" } as const
     : props.status === "all" ? { title: "decisions.titleAll", lede: "decisions.ledeAll" } as const

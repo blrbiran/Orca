@@ -1169,7 +1169,7 @@ export function App(): JSX.Element {
   // The Decisions pane's rows and filter, shared by both of its branches and by the review loop (taste refinement P1-3).
   const scopedDecisionRows = projects === null || scope.kind === "all" ? statusRows : statusRows.filter((row) => row.projectKey === project);
   const effectiveDecisionFilter = projects === null ? filter : { ...filter, projectKey: "" };
-  const visibleDecisionRows = visibleByImportance(filterRows(scopedDecisionRows, effectiveDecisionFilter), showMinor).shown;
+  const visibleDecisionRows = visibleByImportance(filterRows(scopedDecisionRows, effectiveDecisionFilter), showMinor);
 
   /**
    * Parked finding N-1 / ruling R71. Opening another row takes the previous
