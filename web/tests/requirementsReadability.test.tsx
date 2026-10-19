@@ -67,6 +67,9 @@ describe("the requirement list's names (#75, #78)", () => {
     const bare = listWith({ goal: undefined }, { slug: undefined });
     expect(bare.textContent).toBe("requirement-1e36e0a6 · clarifying");
     expect(bare.getAttribute("title")).toBeNull();
+    cleanup();
+    // An idea of whitespace alone names nothing either.
+    expect(listWith({ goal: " \n " }, { slug: null }).textContent).toBe("requirement-1e36e0a6 · clarifying");
   });
 });
 
