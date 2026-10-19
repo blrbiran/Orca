@@ -100,7 +100,7 @@ export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; chec
   });
 }
 
-/** The retry-task the Runs table's Retry task button sends; the `r` key sends this same one (issue #57). */
+/** The retry-task the Runs table's and the task detail's Retry task buttons send; the `r` key sends this same one (issue #57). */
 function retryTaskAction(view: GroupViewV1, run: RunViewV1): ControlAction {
   return { verb: "retry-task", groupId: view.summary.groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: String(run.taskId) } };
 }
@@ -236,7 +236,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const toggleFilter = (label: string): void =>
     setLabelFilter((current) => (current.includes(label) ? current.filter((other) => other !== label) : [...current, label]));
   const openItem = view.workItems.find((item) => item.taskId === openTask);
-  // Issue #57: `r` retries the open task's current run where its Retry task button is offered (failed, and retryRunOpen),
+  // Issue #57: `r` retries the open task's current run where the task detail offers its Retry task button (retryRunOpen),
   // like Decisions' keys only from the page body or inside this group, and never from a hidden pane.
   const sectionRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -246,7 +246,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       const target = event.target as Node | null;
       if (target !== document.body && (target === null || sectionRef.current?.contains(target) !== true)) return;
       const run = openItem?.currentRunId == null ? undefined : view.runs.find((candidate) => candidate.runId === openItem.currentRunId);
-      if (run === undefined || archived || !hasFailureOutcome(run) || !retryRunOpen(view, run)) return;
+      if (run === undefined || !retryRunOpen(view, run)) return;
       event.preventDefault();
       onCommand(retryTaskAction(view, run));
     };

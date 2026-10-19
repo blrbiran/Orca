@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * Issue #57: with a failed task open in the group view, `r` retries it -- the same retry-task the Runs table's Retry
- * button sends, and only where that button's gate (retryRunOpen) allows it. Like Decisions' j/k/a/c it never fires while
- * the person types, as a chord, from a hidden pane, or with no task open.
+ * Issue #57: with a failed task open in the group view, `r` retries it -- the same retry-task the Runs table's and the
+ * task detail's Retry task buttons send, and only where their gate (retryRunOpen) allows it. Like Decisions' j/k/a/c it
+ * never fires while the person types, as a chord, from a hidden pane, or with no task open.
  */
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -41,6 +41,19 @@ describe("r retries the open task (issue #57)", () => {
     cleanup();
     const onB = show(failedGroup(), "b"); press();
     expect(onB, "task b has no failed run").not.toHaveBeenCalled();
+  });
+
+  // The open task's detail offers Retry task wherever retryRunOpen allows it -- a saved result's ordinary retry too, which
+  // has no failure outcome -- so `r` follows that button, not only the Runs table's failed-run one.
+  it("follows the task detail's Retry task for a saved result's ordinary retry", () => {
+    const saved = view([workItem({ taskId: "a", status: "ready", currentRunId: "run-a", lineageRunIds: ["run-a"] })],
+      [run({ state: "settled-restartable", outcome: null, savedResultOrdinaryRetry: true } as Partial<RunViewV1>)]);
+    const onCommand = show(saved, "a");
+    fireEvent.click(within(screen.getByRole("region", { name: "Task a" })).getByRole("button", { name: "Retry task a" }));
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    press();
+    expect(onCommand).toHaveBeenCalledTimes(2);
+    expect(onCommand.mock.calls[1]![0]).toEqual(onCommand.mock.calls[0]![0]);
   });
 
   it("does nothing where retryRunOpen refuses (a stop intent)", () => {
