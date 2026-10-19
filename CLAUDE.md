@@ -151,3 +151,11 @@ Orca 会写**用户全局数据**（第一处是 `~/.orca/`，由 `orca correct`
 - **新建的目录与文件显式给 mode**（目录 `0700`／文件 `0600`），**不从 umask 继承**；
   **已存在的文件不改它的 mode** —— 那是人的数据，不替人做决定。
 - **仓库外的写入方要在 spec 里具名登记**：写哪个路径、谁触发、失败留什么残留。
+
+## Rule 18 — Test scope（跑哪些测试）
+人裁（会话 `f3a75a90`、`3831d12f`；spec `docs/superpowers/specs/2026-10-20-test-scope-and-release-gate-design.md`）。
+- **日常开发、修复轮、合进 `main`、push、装进面板服务：只跑 `npm test`（＋typecheck）。**
+  `npm test` 由代码按改动选测试（`scripts/test-affected.mjs`），自带 typecheck，并逐个打印选了什么、为什么。
+- *** **全量门 `npm run verify` 只在人要求打 tag 发版时跑**（`ORCA_RELEASE_TAG=<tag> npm run verify`）。*** 其它时候它自己 exit 2。
+- **计划里不排全量门**，发版计划除外。
+- ⚠️ 选出 0 个文件它会明说 0、跳过的测试它按文件报 —— **照抄进报告，不当成绿**（Rule 12）。

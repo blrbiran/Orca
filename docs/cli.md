@@ -294,10 +294,17 @@ These are registered, not hidden, straight from the design's own accounting:
 
 ## Contributing to `.decisions/`
 
-`npm run verify` runs the whole suite — typecheck, unit and scenario tests,
-ledger validation, the CLAUDE.md line-count check, the hooks-path check, and
-the scheduler scenario suite — and is the full gate for a change. The
-pre-commit hook (`scripts/githooks/pre-commit`) is deliberately narrower: it
+Day to day — iterations, fix rounds, merges into `main`, push, installing the
+panel service — `npm test` runs only the tests a change touches
+(`scripts/test-affected.mjs`: it prints every selected file with its reason,
+always runs the typecheck, and says so when it selects zero); `npm run test:all`
+runs the whole root suite. `npm run verify` is the release gate: it refuses
+(exit 2) unless the human asked for a tagged release
+(`ORCA_RELEASE_TAG=<tag> npm run verify`), then runs typecheck, build, the
+whole root suite once (with formal control verification and a chain session's
+variables), ledger validation, the CLAUDE.md line-count check, the hooks-path
+check, the web build, the ccloop pin and panel checks, and the workspace
+checks. The pre-commit hook (`scripts/githooks/pre-commit`) is deliberately narrower: it
 only re-checks `.decisions/**` for append-only violations when a commit
 actually touches that directory, which is why it stays fast regardless of
 how large `npm run verify` grows.
@@ -408,8 +415,10 @@ directory identity, and confirmed landing for successful work. Recovery retries
 only cleanup that was already durably authorized and never re-executes a merge.
 A claim without a prepared dispatch intent remains blocked for explicit recovery.
 
-Run the offline control gate with `npm run verify:control`; it is included in
-`npm run verify`. Scheduler integration tests require the existing ccloop build
+Run the offline control gate by name with `npm run verify:control`. `npm run verify`
+no longer runs it as a separate pass: its single suite pass sets `ORCA_CONTROL_VERIFY=1`
+and refuses up front when `ORCA_CCLOOP_BIN` or `ORCA_AGENTS_TABLE` is unset or
+unresolvable (`scripts/check-gate-env.mjs`). Scheduler integration tests require the existing ccloop build
 through `ORCA_CCLOOP_BIN` when the checkout has no sibling ccloop repository.
 The round criteria in `tests/scheduler` need a ccloop checkout (the sibling `../ccloop`, or
 `ORCA_CCLOOP_BIN` pointing at a checkout's `dist/cli.js`) at or after the ccloop commit titled

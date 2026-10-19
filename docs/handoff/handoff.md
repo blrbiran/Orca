@@ -356,7 +356,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ## 七、代码／协议在哪
 
 - `src/{agents,chain,checkpoint,control,corrections,entry,gate,ledger,level,memory,metrics,panel,scheduler,service,skills}/`＋`src/cli.ts`；前端 `web/`（根 `workspaces`）；agent 用的 skill 在 `skills/orca-control/`。CLI 退出码 0/1/2，另有 3（plan 级）、5（提交被钩子拒）、6（metrics 有坏行）。
-- `npm run verify` 串：typecheck、build、全量测试、台账校验、`CLAUDE.md` 行数、hooksPath、`verify:control`、`verify:scheduler`、`verify:chain`、web build、`verify:ccloop-pin`、`verify:panel`、`--ws check`。另有 `verify:saved-result`。
+- `npm run verify`（发版门，spec `2026-10-20-test-scope-and-release-gate-design.md`）串：`check-release-gate`（无 `ORCA_RELEASE_TAG` 即 exit 2）、typecheck、build、`check-gate-env`、`verify-suite`（整套只跑一遍，带 `ORCA_CONTROL_VERIFY=1` 与 chain 两变量）、台账校验、`CLAUDE.md` 行数、hooksPath、web build、`verify:ccloop-pin`、`verify:panel`、`--ws check`。`verify:control`／`verify:scheduler`／`verify:chain` 仍可按名单跑，已不在链里。日常 `npm test`＝按改动选测试（`scripts/test-affected.mjs`），整套是 `npm run test:all`。另有 `verify:saved-result`。
 - ⚠️ **`.superpowers/sdd/` 整个被 gitignore** ⇒ 留存物必须单独 `git add -f`。不删 SDD 工作区。
 - **ccloop 测试副本**（不要建 worktree）：
   ```sh
