@@ -191,6 +191,7 @@ export async function collect(opts: CollectOptions): Promise<Observations> {
           kind: event.kind,
           scope: event.scope,
           verdict: verdict.verdict === "downgraded" ? "downgraded" : "ok",
+          importance: event.importance ?? "major",
         });
       }
     }

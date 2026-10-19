@@ -125,9 +125,9 @@ describe("classifyReviews (reviews compaction spec section 3.1)", () => {
 
   it("C15 compaction changes neither the coverage nor the to-do list when every repository is present", () => {
     const decisions: DecisionObservation[] = [
-      { projectKey: PK, id: "orca-dev-1/1", at: "2026-01-01T00:00:00.000Z", kind: "interface", scope: "repo", verdict: "ok" },
-      { projectKey: PK, id: "orca-dev-1/2", at: "2026-01-02T00:00:00.000Z", kind: "dependency", scope: "repo", verdict: "ok" },
-      { projectKey: PK, id: "orca-dev-1/3", at: "2026-01-03T00:00:00.000Z", kind: "boundary", scope: "repo", verdict: "ok" },
+      { projectKey: PK, id: "orca-dev-1/1", at: "2026-01-01T00:00:00.000Z", kind: "interface", scope: "repo", verdict: "ok", importance: "major" },
+      { projectKey: PK, id: "orca-dev-1/2", at: "2026-01-02T00:00:00.000Z", kind: "dependency", scope: "repo", verdict: "ok", importance: "major" },
+      { projectKey: PK, id: "orca-dev-1/3", at: "2026-01-03T00:00:00.000Z", kind: "boundary", scope: "repo", verdict: "ok", importance: "major" },
     ];
     const text =
       [

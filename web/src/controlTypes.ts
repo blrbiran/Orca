@@ -592,15 +592,20 @@ export type GroupIntegrationViewV1 = {
 export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number; suggestedTarget: string | null };
 /** Control run decisions plan Task 8: GET /api/control/groups/:groupId/decisions, a group's decisions read from refs. */
 export type DecisionWhereV1 = "working-tree" | "target" | "group-branch";
+/**
+ * Reported-decisions spec 2026-10-20 §6: each entry's grade. The server always sends it; optional here so the literal
+ * fixtures need no edit, and an absent value reads as major (importance.ts).
+ */
+export type DecisionImportanceV1 = "major" | "minor";
 export type GroupDecisionsViewV1 = {
   schema: "orca-group-decisions-v1"; groupId: string; projectKey: string | null; pendingCount: number;
   tasks: Array<{
     taskId: string;
     runs: Array<{
       runId: string; settled: boolean; reported: "absent" | "array" | "malformed" | "unreadable";
-      decisions: Array<{ id: string; where: DecisionWhereV1; question: string; chose: string; kind: string; scope: string }>;
-      pending: Array<{ pendingId: string; reason: string; question: string | null; chose: string | null; undoHow: string | null; state: "pending" | "approved" | "rejected" }>;
-      unlanded: Array<{ entryIndex: number; question: string | null; chose: string | null }>;
+      decisions: Array<{ id: string; where: DecisionWhereV1; question: string; chose: string; kind: string; scope: string; importance?: DecisionImportanceV1 }>;
+      pending: Array<{ pendingId: string; reason: string; question: string | null; chose: string | null; undoHow: string | null; state: "pending" | "approved" | "rejected"; importance?: DecisionImportanceV1 }>;
+      unlanded: Array<{ entryIndex: number; question: string | null; chose: string | null; importance?: DecisionImportanceV1 }>;
     }>;
   }>;
 };

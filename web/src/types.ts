@@ -36,6 +36,9 @@ export type DecisionKind = (typeof WEB_DECISION_KINDS)[number];
 
 export type DecisionScope = "file" | "task" | "repo" | "cross-repo";
 
+/** Mirrors src/ledger/types.ts's DecisionImportance (reported-decisions spec 2026-10-20 §6). */
+export type DecisionImportance = "major" | "minor";
+
 export type CorrectionKind = "wrong" | "not_my_taste" | "stale";
 
 /**
@@ -59,6 +62,11 @@ export interface DecisionObservation {
   kind: DecisionKind;
   scope: DecisionScope;
   verdict: "ok" | "downgraded";
+  /**
+   * Reported-decisions spec 2026-10-20 §6: the server always sends it (absent on the line reads as major there); optional
+   * here so literal fixtures need no edit, and an absent value reads as major (importance.ts).
+   */
+  importance?: DecisionImportance;
 }
 
 export interface UnresolvedDecision {
@@ -202,7 +210,7 @@ export interface PanelCoverage {
 }
 
 /** Mirrors src/panel/listProjection.ts's DecisionListRow (question: panel UI redesign spec §4, ruling U1). */
-export type DecisionListRow = Pick<DecisionObservation, "projectKey" | "id" | "at" | "kind" | "scope" | "verdict"> & { question: string | null };
+export type DecisionListRow = Pick<DecisionObservation, "projectKey" | "id" | "at" | "kind" | "scope" | "verdict" | "importance"> & { question: string | null };
 
 /** GET /api/decisions rows (integration-and-panel-fixes spec §9.2(1)): the list row plus the two flags the status filter reads. */
 export type DecisionStatusRow = DecisionListRow & { reviewed: boolean; highTier: boolean };
@@ -215,6 +223,7 @@ export const WEB_LIST_FIELDS = [
   "kind",
   "scope",
   "verdict",
+  "importance",
 ] as const satisfies readonly (keyof DecisionListRow)[];
 
 /** D-launch spec §6.2. Mirrors src/panel/chains.ts's ChainView; parity: tests/panel/chainsApi.test.ts C10. */

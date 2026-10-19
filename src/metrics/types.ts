@@ -1,4 +1,4 @@
-import type { DecisionKind, DecisionScope } from "../ledger/types.js";
+import type { DecisionImportance, DecisionKind, DecisionScope } from "../ledger/types.js";
 import type { CorrectionKind } from "../corrections/schema.js";
 
 /**
@@ -46,6 +46,8 @@ export interface DecisionObservation {
   kind: DecisionKind;
   scope: DecisionScope;
   verdict: "ok" | "downgraded";
+  /** Reported-decisions spec 2026-10-20 §6: resolved on read -- a line without a grade reads as major. */
+  importance: DecisionImportance;
 }
 
 /** spec §3.4.1: a correction whose decision is outside what was scanned. */

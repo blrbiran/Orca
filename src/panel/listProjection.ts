@@ -28,6 +28,8 @@ export const LIST_FIELDS = [
   "kind",
   "scope",
   "verdict",
+  // Reported-decisions spec 2026-10-20 §6: the panel shows major decisions by default and minor ones on request.
+  "importance",
 ] as const satisfies readonly (keyof DecisionObservation)[];
 
 // `question` is required on both sides (web/src/types.ts mirrors it): every row carries it, the

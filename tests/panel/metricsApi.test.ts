@@ -436,6 +436,7 @@ describe("panel review coverage (spec section 4.2)", () => {
     kind: HIGH_KIND,
     scope,
     verdict: "ok",
+    importance: "major",
   });
   const review = (
     decisionId: string,

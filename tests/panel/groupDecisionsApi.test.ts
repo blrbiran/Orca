@@ -34,9 +34,9 @@ type View = {
   schema: string; groupId: string; projectKey: string | null; pendingCount: number;
   tasks: Array<{ taskId: string; runs: Array<{
     runId: string; settled: boolean; reported: string;
-    decisions: Array<{ id: string; where: string; question: string; chose: string; kind: string; scope: string }>;
-    pending: Array<{ pendingId: string; reason: string; question: string | null; chose: string | null; undoHow: string | null; state: string }>;
-    unlanded: Array<{ entryIndex: number; question: string | null; chose: string | null }>;
+    decisions: Array<{ id: string; where: string; question: string; chose: string; kind: string; scope: string; importance: string }>;
+    pending: Array<{ pendingId: string; reason: string; question: string | null; chose: string | null; undoHow: string | null; state: string; importance: string }>;
+    unlanded: Array<{ entryIndex: number; question: string | null; chose: string | null; importance: string }>;
   }> }>;
 };
 
@@ -84,6 +84,9 @@ async function world(options: HarnessOptions = {}) {
   };
 }
 
+// Rewritten under the session grant (human, session 3831d12f, 2026-10-20: 「这次批准改写所有必要的判据」): reported-decisions
+// spec §6 has every entry of the three lists carry its `importance`; the exact expectations below gain
+// `importance: "major"` (none of their entries is graded), and nothing else in them changed.
 const runOf = (view: View, runId: string) => view.tasks.flatMap((task) => task.runs).find((run) => run.runId === runId)!;
 
 describe("the group decisions view (control run decisions Task 8)", { timeout: 60_000 }, () => {
@@ -96,7 +99,7 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
       expect(before.tasks.map((task) => task.taskId)).toEqual(["a"]);
       expect(runOf(before, runId)).toEqual({
         runId, settled: true, reported: "array",
-        decisions: [{ id: `${runId}/agent-0`, where: "group-branch", question: "q", chose: "c", kind: "interface", scope: "task" }],
+        decisions: [{ id: `${runId}/agent-0`, where: "group-branch", question: "q", chose: "c", kind: "interface", scope: "task", importance: "major" }],
         pending: [], unlanded: [],
       });
       expect(await w.integrate()).toBe(true);
@@ -116,8 +119,8 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
       expect(view.pendingCount).toBe(1);
       expect(runOf(view, runId)).toEqual({
         runId, settled: true, reported: "array",
-        decisions: [{ id: `${runId}/agent-1`, where: "group-branch", question: "q", chose: "c", kind: "interface", scope: "task" }],
-        pending: [{ pendingId: `pending-${runId}-0`, reason: 'kind-unknown:"opinion"', question: "which", chose: "c", undoHow: UNDO, state: "pending" }],
+        decisions: [{ id: `${runId}/agent-1`, where: "group-branch", question: "q", chose: "c", kind: "interface", scope: "task", importance: "major" }],
+        pending: [{ pendingId: `pending-${runId}-0`, reason: 'kind-unknown:"opinion"', question: "which", chose: "c", undoHow: UNDO, state: "pending", importance: "major" }],
         unlanded: [],
       });
     } finally { await w.dispose(); }
@@ -134,13 +137,13 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
       // mutation I2: drop the pending-rows clause -> the entry is listed as unlanded too, red
       expect(runOf(await w.view(), runId)).toEqual({
         runId, settled: true, reported: "array", decisions: [],
-        pending: [{ pendingId, reason: 'tier-0: undo.how is not executable: "revert it"', question: "which", chose: "c", undoHow: "revert it", state: "pending" }],
+        pending: [{ pendingId, reason: 'tier-0: undo.how is not executable: "revert it"', question: "which", chose: "c", undoHow: "revert it", state: "pending", importance: "major" }],
         unlanded: [],
       });
       const approved = await w.deps.service!.approvePendingDecision(w.h.command("approve-pending-decision", { pendingId, undoHow: UNDO }));
       expect(approved).toMatchObject({ result: { kind: "pending-decision-approved" } });
       const after = runOf(await w.view(), runId);
-      expect(after.decisions).toEqual([{ id: `${runId}/agent-0`, where: "group-branch", question: "which", chose: "c", kind: "interface", scope: "task" }]);
+      expect(after.decisions).toEqual([{ id: `${runId}/agent-0`, where: "group-branch", question: "which", chose: "c", kind: "interface", scope: "task", importance: "major" }]);
       expect([after.pending.map((p) => p.state), after.unlanded]).toEqual([["approved"], []]);
     } finally { await w.dispose(); }
   });
@@ -163,7 +166,7 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
       expect(view.pendingCount).toBe(0);
       expect(runOf(view, runId)).toEqual({
         runId, settled: true, reported: "array", decisions: [], pending: [],
-        unlanded: [{ entryIndex: 0, question: "first", chose: "c" }, { entryIndex: 1, question: "q", chose: "second" }],
+        unlanded: [{ entryIndex: 0, question: "first", chose: "c", importance: "major" }, { entryIndex: 1, question: "q", chose: "second", importance: "major" }],
       });
     } finally { await w.dispose(); }
   });
@@ -184,7 +187,7 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
       await w.until(w.driver(), () => w.body(runId).state === "blocked");
       // mutation: list nothing for a malformed value -> unlanded [], red
       expect(runOf(await w.view(), runId)).toEqual({
-        runId, settled: true, reported: "malformed", decisions: [], pending: [], unlanded: [{ entryIndex: 0, question: "lone", chose: null }],
+        runId, settled: true, reported: "malformed", decisions: [], pending: [], unlanded: [{ entryIndex: 0, question: "lone", chose: null, importance: "major" }],
       });
     } finally { await w.dispose(); }
   });
@@ -232,6 +235,35 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
         const missing = await overSocket(path, "GET", "/api/control/groups/nope/decisions", { "x-orca-client": "mcp:reader" });
         expect([missing.status, JSON.parse(missing.text).error.code]).toEqual([404, "group-not-found"]);
       } finally { await bound.close(); await rm(dir, { recursive: true, force: true }); }
+    } finally { await w.dispose(); }
+  });
+
+  // Reported-decisions spec 2026-10-20 §6 (criterion 15): each list carries the entry's grade; a pending or unlanded
+  // entry's grade is read from its raw entry, and anything but exactly "minor" is major, so a refused entry with a bad
+  // grade is never hidden. The needs-human count counts major pending entries only (goal.md §1.3).
+  it("grades the written and pending lists and counts only major pending entries", async () => {
+    const w = await world({ decisions: () => [
+      good({ importance: "minor" }), good(),
+      good({ kind: "opinion", importance: "minor" }), good({ importance: "critical" }), good({ kind: "opinion" }),
+    ] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => SETTLED.includes(w.body(runId).state));
+      const view = await w.view();
+      const run = runOf(view, runId);
+      expect(run.decisions.map((d) => [d.id, d.importance])).toEqual([[`${runId}/agent-0`, "minor"], [`${runId}/agent-1`, "major"]]);
+      expect(run.pending.map((p) => [p.pendingId, p.state, p.importance])).toEqual([
+        [`pending-${runId}-2`, "pending", "minor"], [`pending-${runId}-3`, "pending", "major"], [`pending-${runId}-4`, "pending", "major"],
+      ]);
+      // mutation M-Bo.11: count every pending entry -> 3, red
+      expect(view.pendingCount).toBe(2);
+    } finally { await w.dispose(); }
+  });
+
+  it("grades the unlanded list from the raw entries", async () => {
+    const w = await world({ behaviour: () => "failed", decisions: () => [good({ importance: "minor" }), good({ importance: "Minor" }), good()] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => w.body(runId).state === "blocked");
+      expect(runOf(await w.view(), runId).unlanded.map((u) => [u.entryIndex, u.importance])).toEqual([[0, "minor"], [1, "major"], [2, "major"]]);
     } finally { await w.dispose(); }
   });
 });

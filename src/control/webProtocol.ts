@@ -9,6 +9,7 @@ import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema, loopSkillsSchema } f
 import { isTimeZone } from "./usageCalendar.js";
 import { WORK_ITEM_CATEGORIES } from "./workItemCategory.js";
 import { CORRECTION_KINDS } from "../corrections/schema.js";
+import { DECISION_IMPORTANCES } from "../ledger/types.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
 export { agentSelectionSchema, contextWindowSchema, panelPartialSelectionSchema, partialSelectionSchema } from "./schema.js";
@@ -1840,6 +1841,7 @@ export const repositoryIntegrationSchema = z
 export type RepositoryIntegrationV1 = z.infer<typeof repositoryIntegrationSchema>;
 // Control run decisions plan Task 8: a group's decisions, read from the refs they live on (src/panel/groupDecisions.ts).
 const decisionWhereSchema = z.enum(["working-tree", "target", "group-branch"]);
+const decisionImportanceSchema = z.enum(DECISION_IMPORTANCES);
 export const groupDecisionsViewSchema = z
   .object({
     schema: z.literal("orca-group-decisions-v1"), groupId: idSchema, projectKey: z.string().nullable(), pendingCount: safeInteger,
@@ -1851,12 +1853,13 @@ export const groupDecisionsViewSchema = z
         settled: z.boolean(),
         // "unreadable": the saved report exists but could not be read; that run lists nothing as unlanded.
         reported: z.enum(["absent", "array", "malformed", "unreadable"]),
-        decisions: z.array(z.object({ id: z.string(), where: decisionWhereSchema, question: z.string(), chose: z.string(), kind: z.string(), scope: z.string() }).strict()),
+        // Reported-decisions spec 2026-10-20 §6: every entry of the three lists carries its grade, already resolved.
+        decisions: z.array(z.object({ id: z.string(), where: decisionWhereSchema, question: z.string(), chose: z.string(), kind: z.string(), scope: z.string(), importance: decisionImportanceSchema }).strict()),
         pending: z.array(z.object({
           pendingId: z.string(), reason: z.string(), question: z.string().nullable(), chose: z.string().nullable(), undoHow: z.string().nullable(),
-          state: z.enum(["pending", "approved", "rejected"]),
+          state: z.enum(["pending", "approved", "rejected"]), importance: decisionImportanceSchema,
         }).strict()),
-        unlanded: z.array(z.object({ entryIndex: safeInteger, question: z.string().nullable(), chose: z.string().nullable() }).strict()),
+        unlanded: z.array(z.object({ entryIndex: safeInteger, question: z.string().nullable(), chose: z.string().nullable(), importance: decisionImportanceSchema }).strict()),
       }).strict()),
     }).strict()),
   })

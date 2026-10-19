@@ -21,6 +21,12 @@ const DECISIONS_MAY_STILL_LAND = new Set(["starting", "start-pending", "accepted
 const field = (value: unknown, key: string): unknown =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>)[key] : undefined;
 const textOrNull = (value: unknown): string | null => (typeof value === "string" ? value : null);
+/**
+ * Reported-decisions spec 2026-10-20 §6: an entry's grade, from its raw value. Only exactly "minor" is minor: an absent
+ * grade (every line written before it) or one the ledger would refuse reads as major, so a refused entry with a bad
+ * grade is never hidden behind the "show minor" control.
+ */
+const importanceOf = (value: unknown): "major" | "minor" => (field(value, "importance") === "minor" ? "minor" : "major");
 /** A ledger line's field as text: Orca wrote it as a string; anything else is shown as its JSON, never dropped. */
 const text = (value: unknown): string => (typeof value === "string" ? value : JSON.stringify(value) ?? "");
 
@@ -76,21 +82,21 @@ export async function readGroupDecisionsView(store: ControlStore, repo: string, 
         if (!files.has(basename(line.path)) || seen.has(line.id)) continue;
         seen.add(line.id);
         const { where, value } = first.get(line.id)!;
-        decisions.push({ id: line.id, where, question: text(field(value, "question")), chose: text(field(value, "chose")), kind: text(field(value, "kind")), scope: text(field(value, "scope")) });
+        decisions.push({ id: line.id, where, question: text(field(value, "question")), chose: text(field(value, "chose")), kind: text(field(value, "kind")), scope: text(field(value, "scope")), importance: importanceOf(value) });
       }
     }
 
     const pending: RunView["pending"] = pendingRows.filter((p) => p.runId === runId).map((p) => ({
       pendingId: p.pendingId, reason: p.entry.reason, state: p.state,
       question: textOrNull(field(p.entry.entry, "question")), chose: textOrNull(field(p.entry.entry, "chose")),
-      undoHow: textOrNull(field(field(p.entry.entry, "undo"), "how")),
+      undoHow: textOrNull(field(field(p.entry.entry, "undo"), "how")), importance: importanceOf(p.entry.entry),
     }));
 
     const unlanded: RunView["unlanded"] = [];
     if (!landed && settled) {
       // A non-array value is one entry, at index 0, as the landing records it as one pending item.
       const entries = reported.kind === "array" ? reported.entries : reported.kind === "malformed" ? [reported.value] : [];
-      entries.forEach((entry, entryIndex) => unlanded.push({ entryIndex, question: textOrNull(field(entry, "question")), chose: textOrNull(field(entry, "chose")) }));
+      entries.forEach((entry, entryIndex) => unlanded.push({ entryIndex, question: textOrNull(field(entry, "question")), chose: textOrNull(field(entry, "chose")), importance: importanceOf(entry) }));
     }
 
     const runs = tasks.get(body.taskId) ?? [];
@@ -100,7 +106,8 @@ export async function readGroupDecisionsView(store: ControlStore, repo: string, 
 
   return groupDecisionsViewSchema.parse({
     schema: "orca-group-decisions-v1", groupId, projectKey,
-    pendingCount: pendingRows.filter((p) => p.state === "pending").length,
+    // goal.md §1.3: a minor entry must not demand attention, so only major pending entries count toward needs-human.
+    pendingCount: pendingRows.filter((p) => p.state === "pending" && importanceOf(p.entry.entry) === "major").length,
     tasks: [...tasks].map(([taskId, runs]) => ({ taskId, runs })),
   });
 }

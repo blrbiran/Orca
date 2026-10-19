@@ -66,6 +66,7 @@ function decision(overrides: Partial<DecisionObservation> = {}): DecisionObserva
     kind: HIGH.kind,
     scope: HIGH.scope,
     verdict: "ok",
+    importance: "major",
     ...overrides,
   };
 }
@@ -138,6 +139,8 @@ describe("GET /api/todo (task 8 ruling K5, HTTP)", () => {
           // same tautology guard as decisionsApi.test.ts's comment explains.
           // REWRITTEN (panel UI redesign spec §2/§6.1, human ruling U1, authorised as U4 in
           // session a50f4d80): the row now also carries the ledger's question, still by hand.
+          // REWRITTEN AGAIN (reported-decisions spec 2026-10-20 §6, session grant 3831d12f): LIST_FIELDS gains
+          // `importance`; the fixture line carries no grade, so by hand it reads as major.
           const expectedRow = {
             ...Object.fromEntries(
               LIST_FIELDS.map((field) => {
@@ -148,6 +151,7 @@ describe("GET /api/todo (task 8 ruling K5, HTTP)", () => {
                   kind: second.kind,
                   scope: second.scope,
                   verdict: "ok",
+                  importance: "major",
                 };
                 return [field, value[field]];
               }),

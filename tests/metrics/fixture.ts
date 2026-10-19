@@ -10,7 +10,7 @@ export function d(
   scope: DecisionScope,
   verdict: "ok" | "downgraded",
 ): Observations["decisions"][number] {
-  return { projectKey: "github.com/biran/a", id, at, kind, scope, verdict };
+  return { projectKey: "github.com/biran/a", id, at, kind, scope, verdict, importance: "major" };
 }
 
 export function c(decisionId: string, kind: Correction["kind"], at: string): { row: Correction } {

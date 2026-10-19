@@ -159,6 +159,9 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
           });
 
           // /api/todo: the exact bytes of the pre-change shape (the five fields plus question; no new keys).
+          // Rewritten under the session grant (human, 3831d12f, 2026-10-20): reported-decisions spec §6 adds the row's
+          // `importance` (the Unreviewed list is a Decisions-page list, which shows major entries by default); the
+          // fixture's line carries no grade, so it reads as major. Still the exact bytes, so any other new key is red.
           const todo = await session.fetch("/api/todo");
           expect(todo.status).toBe(200);
           const expectedTodo = JSON.stringify({
@@ -170,11 +173,44 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
                 kind: open.kind,
                 scope: open.scope,
                 verdict: "ok",
+                importance: "major",
                 question: open.question,
               },
             ],
           });
           expect(await todo.text()).toBe(expectedTodo);
+        } finally {
+          await started.close();
+        }
+      } finally {
+        await dist.cleanup();
+        await repo.cleanup();
+      }
+    });
+  });
+
+  // Reported-decisions spec 2026-10-20 §6 (criterion 15): the row's grade is the line's own, and a line without one (every
+  // line written before the field existed) reads as major. Both lists the Decisions page reads carry it.
+  it("carries each row's importance, reading an ungraded line as major", async () => {
+    await withCorrectionsDir(async (dir) => {
+      const repo = await makeTargetRepo();
+      const dist = await makeDistFixture();
+      try {
+        const minor: DecisionEvent = { ...ORIGINAL, id: "orca-dev-1/2", at: "2026-09-01T00:01:00.000Z", importance: "minor" };
+        const major: DecisionEvent = { ...ORIGINAL, id: "orca-dev-1/3", at: "2026-09-01T00:02:00.000Z", importance: "major" };
+        await appendEvent(repo.decisionsDir, "orca-dev-1", minor);
+        await appendEvent(repo.decisionsDir, "orca-dev-1", major);
+        await git(repo.path, ["add", "-A"]);
+        await git(repo.path, ["commit", "-m", "seed graded decisions"]);
+        const started = await createPanelServer(
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env, ORCA_CORRECTIONS_DIR: dir }),
+        );
+        try {
+          const expected = { [ORIGINAL.id]: "major", [minor.id]: "minor", [major.id]: "major" };
+          for (const path of ["/api/decisions", "/api/todo"]) {
+            const body = (await (await get(started, path)).json()) as { rows: Array<Record<string, unknown>> };
+            expect(Object.fromEntries(body.rows.map((r) => [r.id, r.importance]))).toStrictEqual(expected);
+          }
         } finally {
           await started.close();
         }

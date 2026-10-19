@@ -15,6 +15,7 @@ const decision = (projectKey: string, id: string): DecisionObservation => ({
   kind: "interface",
   scope: "repo",
   verdict: "ok",
+  importance: "major",
 });
 const reviewed = (projectKey: string, decisionId: string, by = "amy"): ReviewRow => ({
   decisionId,

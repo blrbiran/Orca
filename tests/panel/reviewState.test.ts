@@ -61,6 +61,7 @@ describe("review state (decisions review withdraw spec section 4.2)", () => {
       kind: "interface",
       scope: "repo",
       verdict: "ok",
+      importance: "major",
     };
     // The positive control first: without it, a coverage that ignored reviews
     // entirely would satisfy the zero below.

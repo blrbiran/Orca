@@ -174,8 +174,10 @@ function coverageWebToServer(x: WebPanelCoverage): ServerPanelCoverage {
 function listRowServerToWeb(x: ServerDecisionListRow): WebDecisionListRow {
   return x;
 }
+// Reported-decisions spec 2026-10-20 §6 (session grant 3831d12f): `importance` is optional on the Web side so literal
+// fixtures need no edit; an absent grade reads as major, so it is normalised here and the rest is still checked both ways.
 function listRowWebToServer(x: WebDecisionListRow): ServerDecisionListRow {
-  return x;
+  return { ...x, importance: x.importance ?? "major" };
 }
 function correctionKindServerToWeb(x: ServerCorrectionKind): WebCorrectionKind {
   return x;
@@ -223,7 +225,12 @@ function usageServerToWeb(x: ServerUsageViewV1): WebUsageViewV1 { return x; }
 function usageWebToServer(x: WebUsageViewV1): ServerUsageViewV1 { return x; }
 // Control run decisions plan Task 8: the group decisions read, checked both ways like the other views.
 function groupDecisionsServerToWeb(x: ServerGroupDecisionsViewV1): WebGroupDecisionsViewV1 { return x; }
-function groupDecisionsWebToServer(x: WebGroupDecisionsViewV1): ServerGroupDecisionsViewV1 { return x; }
+// Reported-decisions spec 2026-10-20 §6 (session grant 3831d12f): each entry's `importance` is optional on the Web side, as above.
+function groupDecisionsWebToServer(x: WebGroupDecisionsViewV1): ServerGroupDecisionsViewV1 {
+  const major = <T extends { importance?: "major" | "minor" }>(e: T) => ({ ...e, importance: e.importance ?? "major" });
+  return { ...x, tasks: x.tasks.map((task) => ({ ...task, runs: task.runs.map((run) => ({ ...run,
+    decisions: run.decisions.map(major), pending: run.pending.map(major), unlanded: run.unlanded.map(major) })) })) };
+}
 
 // Task 9: the commands the browser may send. A payload mirror that drifts from the
 // server's schema is a command the ledger will refuse (or, worse, one it will
