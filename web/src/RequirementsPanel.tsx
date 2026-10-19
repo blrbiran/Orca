@@ -9,11 +9,11 @@ import { useContext, useEffect, useState, type JSX } from "react";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { useTranslation } from "react-i18next";
 import { GroupActionsMenu } from "./GroupActionsMenu.js";
-import { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText, refusalText } from "./i18n.js";
-import { explainBesideCode } from "./ccloopCodes.js";
-import { explainRunReason } from "./refusalExplain.js";
+import { LANGUAGE_NAMES, PANEL_LANGUAGES, currentLanguage, enumText } from "./i18n.js";
+import { explainBesideCode, explainEstimateReason } from "./ccloopCodes.js";
+import { explainRefusal, explainRunReason } from "./refusalExplain.js";
 import type { PanelLanguage } from "./i18n.js";
-import { TokenInput } from "./TokenInput.js";
+import { TokenInput, shortTokens } from "./TokenInput.js";
 import type { ControlAction } from "./controlApi.js";
 import { nextCommandId } from "./controlApi.js";
 import type { ControlRefusal } from "./controlState.js";
@@ -283,6 +283,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
   const valid = view.rounds.filter((round) => round.result !== null);
   const latest = valid.at(-1)?.result ?? null;
   const round = view.rounds.at(-1) ?? null, draft = view.drafts.at(-1) ?? null;
+  const short = (tokens: number): string => shortTokens(tokens, currentLanguage());
   const accepted = (decisions: Round["glossaryDecisions"]) => new Set((decisions ?? []).filter((d) => d.accept).map((d) => d.id));
   const reason = view.summary.requirement?.waiting ?? view.summary.requirement?.reasonCode ?? null;
   const step = view.requirement.consensus === null ? round : draft;
@@ -325,7 +326,9 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
         <h5>{t("requirements.glossary")}</h5><ul>{valid.flatMap((r) => r.result!.glossary.filter((e) => accepted(r.glossaryDecisions).has(e.id))).map((e) => <li key={e.id}>{e.term}: {e.definition}</li>)}</ul>
         <h5>{t("requirements.decisions")}</h5><ul>{valid.flatMap((r) => r.result!.adrs.filter((a) => accepted(r.adrDecisions).has(a.id))).map((a) => <li key={a.id}>{a.id} {a.title}</li>)}</ul>
         <h5>{t("requirements.openBranches")}</h5><ul>{(latest?.openBranches ?? []).map((branch) => <li key={branch}>{branch}</li>)}</ul>
-        <p>{t("requirements.budget", { used: view.ledger.used.tokens, limit: view.ledger.limit.tokens===null?t("budget.unlimited"):view.ledger.limit.tokens, reserved: view.ledger.reserved.tokens })}</p>
+        {/* Issue #79: short figures; `reserved` is the grant held by calls in flight (requirementRecords.ts), never a cap. */}
+        <p>{t("requirements.budget", { used: short(view.ledger.used.tokens), limit: view.ledger.limit.tokens===null?t("budget.unlimited"):short(view.ledger.limit.tokens) })}
+          <span title={t("requirements.heldTip")}>{t("requirements.held", { reserved: short(view.ledger.reserved.tokens) })}</span></p>
         {view.ledger.limit.tokens!==null&&<progress max={view.ledger.limit.tokens} value={view.ledger.used.tokens} />}
         {view.ledger.usageUnknown && <p role="status">{t("requirements.usageUnknown")}</p>}
       </section>
@@ -368,6 +371,17 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       </div>
     </article>
   );
+}
+
+/**
+ * Issue #73: a refusal in the reader's words. A ccloop failure is explained by ccloop's own code with its detail (as
+ * RefusalNotice does), and a refused estimator selection adds the words for the ccloop code it names. The probe keeps
+ * only that code (src/control/profiles.ts probeFailureCode), so ccloop's stderr is not in this refusal to show.
+ */
+function refusalWords(refusal: ControlRefusal): string {
+  const text = explainRefusal(refusal).text;
+  const words = refusal.code === "agent-selection-rejected" ? explainEstimateReason(refusal.message) : null;
+  return words === null ? text : `${text} · ${words}`;
 }
 
 const LIST_NAME_MAX = 60;
@@ -418,7 +432,7 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
   return (
     <section aria-label={t("requirements.title")} className="requirements">
       <h2>{t("requirements.title")}</h2>
-      {refusal !== null && <p role="alert">{refusal.code} · {isReason(refusal.code) ? t(`requirements.reason.${refusal.code}`, { groupId: props.selected ?? "" }) : refusalText(refusal)}</p>}
+      {refusal !== null && <p role="alert">{refusal.code} · {isReason(refusal.code) ? t(`requirements.reason.${refusal.code}`, { groupId: props.selected ?? "" }) : refusalWords(refusal)}</p>}
       <div className="split">
         <nav aria-label={t("requirements.list")}>
           <label><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.currentTarget.checked)} />{t("requirements.showArchived")}</label>

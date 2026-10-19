@@ -14,8 +14,8 @@ import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
-import i18n, { enumText } from "./i18n.js";
-import { TokenInput, parseTokens } from "./TokenInput.js";
+import i18n, { currentLanguage, enumText } from "./i18n.js";
+import { TokenInput, parseTokens, shortTokens } from "./TokenInput.js";
 import type {
   AllocationViewV1,
   Amount, BudgetAmount,
@@ -510,8 +510,9 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         onClear={() => onDraft(CONTEXT_POLICY_KEY(groupId), BLANK_DRAFT)}
       />
       <p>
-        {t("budget.ledger", { used: view.ledger.used.tokens, committed: view.ledger.committedRemaining.tokens, reserve: view.ledger.explicitUnallocatedReserve.tokens===null?t("budget.unlimited"):view.ledger.explicitUnallocatedReserve.tokens })}
-        {view.ledger.budgetDeficit.tokens > 0 ? t("budget.deficit", { deficit: view.ledger.budgetDeficit.tokens }) : ""}
+        {/* Issue #79: the ledger's token figures short, as the rest of the panel writes them (TokenInput.tsx shortTokens). */}
+        {t("budget.ledger", { used: shortTokens(view.ledger.used.tokens, currentLanguage()), committed: shortTokens(view.ledger.committedRemaining.tokens, currentLanguage()), reserve: view.ledger.explicitUnallocatedReserve.tokens===null?t("budget.unlimited"):shortTokens(view.ledger.explicitUnallocatedReserve.tokens, currentLanguage()) })}
+        {view.ledger.budgetDeficit.tokens > 0 ? t("budget.deficit", { deficit: shortTokens(view.ledger.budgetDeficit.tokens, currentLanguage()) }) : ""}
         {view.ledger.usageUnknown ? t("budget.usageUnknown") : ""}
         {view.ledger.unmeteredRuns > 0 ? t("budget.usageIncomplete", { count: view.ledger.unmeteredRuns }) : ""}
       </p>

@@ -70,6 +70,28 @@ describe("the requirement list's names (#75, #78)", () => {
   });
 });
 
+describe("the requirement's token figures (#79)", () => {
+  const counted = (): RequirementViewV1 => {
+    const view = requirementView("awaiting-answers");
+    const amount = (tokens: number) => ({ tokens, activeMs: 0, attempts: 0, sessions: 0 });
+    return { ...view, ledger: { limit: { tokens: null, activeMs: 0, attempts: 0, sessions: 0 }, used: amount(1_611_520), reserved: amount(1_000_000), usageUnknown: false } };
+  };
+
+  it("writes used, limit and the in-flight grant short, and says the grant is held by running calls", () => {
+    const root = show(counted());
+    expect(root.textContent).toContain("1.6M of Unlimited tokens used, 1M held by running calls");
+    expect(root.textContent).not.toContain("1611520");
+    const held = screen.getByTitle(/released when those calls settle/);
+    expect(held.textContent).toContain("1M held by running calls");
+  });
+
+  it("reads 运行中占用 in Chinese, with Chinese magnitudes", async () => {
+    await i18n.changeLanguage("zh");
+    const root = show(counted());
+    expect(root.textContent).toContain("已用 161.2 万 / 上限 不限 tokens，运行中占用 100 万");
+  });
+});
+
 describe("the requirement document (#77)", () => {
   const documentRegion = () => screen.getByRole("region", { name: "Requirement document" });
   it("is split into sections at its ## headings, each heading and body as text", () => {
@@ -89,5 +111,17 @@ describe("the requirement document (#77)", () => {
     const view = requirementView("answered");
     show(view);
     expect(documentRegion().querySelector("pre")?.textContent).toBe(view.document);
+  });
+});
+
+describe("a refused requirement action's detail (#73)", () => {
+  it("explains the ccloop code behind a refused estimator selection", () => {
+    show(requirementView("answered"), { status: 422, code: "agent-selection-rejected", message: "agent-selection-rejected:estimator:omp-model-catalog-unavailable", commandRevision: null });
+    expect(screen.getByRole("alert").textContent).toContain("omp could not list its model catalog");
+  });
+
+  it("explains a ccloop failure by its code and keeps ccloop's detail", () => {
+    show(requirementView("answered"), { status: 424, code: "ccloop-failed", message: "ccloop-failed:omp-model-catalog-unavailable: env: bun: No such file or directory", commandRevision: null });
+    expect(screen.getByRole("alert").textContent).toContain("omp could not list its model catalog (env: bun: No such file or directory)");
   });
 });
