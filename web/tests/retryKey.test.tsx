@@ -60,4 +60,13 @@ describe("r retries the open task (issue #57)", () => {
     const hidden = show(failedGroup(), "a", false); press();
     expect(hidden).not.toHaveBeenCalled();
   });
+
+  it("never fires with focus on a control outside this group (an account-bar button, say)", () => {
+    const onCommand = show(failedGroup(), "a");
+    const outside = document.body.appendChild(document.createElement("button"));
+    try { press({}, outside); } finally { outside.remove(); }
+    expect(onCommand).not.toHaveBeenCalled();
+    press({}, screen.getByRole("region", { name: "Task a" }));
+    expect(onCommand, "focus inside the group still works").toHaveBeenCalledTimes(1);
+  });
 });
