@@ -753,6 +753,7 @@ export const zh: Translation<typeof en> = {
     noRepository: "这个面板没有登记仓库。",
     notUnderControl: "这个项目不在任务控制之下：要在这里发起需求，请用 --repo 给出它并重启面板。",
     repositoryNotConfigured: "这个项目的仓库没有在这个面板上配置，所以不能在这里发起需求。",
+    originalIdea: "原始想法",
     understanding: "当前理解",
     statement: "陈述",
     criteria: "验收标准",

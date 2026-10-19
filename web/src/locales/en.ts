@@ -868,6 +868,7 @@ export const en = {
     noRepository: "No repository is registered with this panel.",
     notUnderControl: "This project is not under task control: restart the panel with --repo for it to start requirements here.",
     repositoryNotConfigured: "This project's repository is not configured on this panel, so a requirement cannot be started here.",
+    originalIdea: "Original idea",
     understanding: "Current understanding",
     statement: "Statement",
     criteria: "Acceptance criteria",

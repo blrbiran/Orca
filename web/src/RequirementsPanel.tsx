@@ -250,6 +250,32 @@ function RaiseLimit(props: { view: View; onCommand: OnCommand } & EditableDrafts
   );
 }
 
+/**
+ * Issue #77: the document read as sections at its `## ` headings (src/control/requirementDocument.ts writes them), each
+ * heading and body as plain text nodes -- no markdown is interpreted and nothing is injected. Text before the first
+ * heading stays above the sections; a document without one stays a single preformatted block.
+ */
+function DocumentText(props: { text: string }): JSX.Element {
+  const parts = props.text.split(/^## /m);
+  if (parts.length === 1) return <pre>{props.text}</pre>;
+  const [lead, ...sections] = parts;
+  return (
+    <>
+      {lead!.trim() !== "" && <p className="requirement-text">{lead!.trim()}</p>}
+      {sections.map((section, index) => {
+        const cut = section.indexOf("\n");
+        const title = (cut === -1 ? section : section.slice(0, cut)).trim(), body = cut === -1 ? "" : section.slice(cut + 1).trim();
+        return (
+          <section key={index} aria-label={title}>
+            <h5>{title}</h5>
+            {body !== "" && <p className="requirement-text">{body}</p>}
+          </section>
+        );
+      })}
+    </>
+  );
+}
+
 function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId: string) => void } & EditableDrafts): JSX.Element {
   const { t } = useTranslation();
   const { view } = props, groupId = view.summary.groupId;
@@ -287,6 +313,11 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
         <p>{t("control.group.archivedBanner")}</p>
         <button type="button" onClick={() => props.onCommand({ verb: "unarchive-group", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("control.group.unarchive")}</button>
       </section> : archiveAllowed && <button type="button" onClick={() => props.onCommand({ verb: "archive-group", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("control.group.archive")}</button>}
+      {/* Issue #74: the idea as the person wrote it, in every state, so each round can be read against it. */}
+      <section aria-label={t("requirements.originalIdea")}>
+        <h4>{t("requirements.originalIdea")}</h4>
+        <p className="requirement-text">{view.requirement.idea}</p>
+      </section>
       <section aria-label={t("requirements.understanding")}>
         <h4>{t("requirements.understanding")}</h4>
         <p>{latest?.statement ?? t("requirements.nothingYet")}</p>
@@ -329,7 +360,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       {view.drafts.map((d) => <DraftReview key={d.draftNo} view={view} draft={d} onCommand={props.onCommand} archived={archived} {...editable} />)}
       <section aria-label={t("requirements.document")}>
         <h4>{t("requirements.document")}</h4>
-        <pre>{view.document}</pre>
+        <DocumentText text={view.document} />
         {exportState !== "not-due" && <p>{t("requirements.export", { state: enumText("exportState", exportState) })}{view.requirement.export.commit !== null ? ` · ${t("requirements.exportCommit", { commit: view.requirement.export.commit })}` : ""}</p>}
         {/* Spec §9.3: start is refused until the export is done; this says why before anyone presses Start. */}
         {exportState === "pending" && <p role="status">{EXPORT_PENDING} · {t(`requirements.reason.${EXPORT_PENDING}`, { groupId })}</p>}
