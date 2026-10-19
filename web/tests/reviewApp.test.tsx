@@ -290,9 +290,11 @@ describe("Overview's view-all link (final review M4)", () => {
     // The row opened before the detour is no longer open.
     expect(question()).not.toBe(QUESTION_A);
   });
+});
 
-  // Reported-decisions spec 2026-10-20 §6: j / k walks the rows on screen, so a hidden minor row is skipped until the
-  // person shows the minor ones, and then it is reachable like any other.
+describe("j / k and minor decisions (reported-decisions spec 2026-10-20 §6)", () => {
+  // j / k walks the rows on screen, so a hidden minor row is skipped until the person shows the minor ones, and then it
+  // is reachable like any other.
   it("skips a hidden minor row with 'j', and reaches it with 'k' once minor rows are shown", async () => {
     rows = [A, { ...B, importance: "minor" }, C];
     render(<App />);
