@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from "node:fs";
+import { accessSync, closeSync, constants, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { PanelRejection } from "../panel/rejection.js";
 import { panelArgsWithDefaultProjects, parsePanelArgs } from "../panel/server.js";
@@ -16,6 +16,8 @@ export interface ServiceConfigV1 { schema: typeof SERVICE_CONFIG_SCHEMA; node: s
 export interface ServiceConfigInput {
   args: string[]; env: NodeJS.ProcessEnv; execPath: string; checkout: string; home: string; panelDir: string;
   isDirectory?: (path: string) => boolean;
+  /** The agents table's text, or null when it cannot be read. A seam so a criterion never reads the real ~/.orca. */
+  readTable?: (path: string) => string | null;
 }
 
 /** Plan D6: flags whose value is (or ends in) a path. */
@@ -25,6 +27,48 @@ const pathOf = (flag: string, value: string): string =>
 const VERSION_MANAGER = /\/(\.nvm|\.fnm|fnm|\.volta|\.asdf)\//;
 
 const defaultIsDirectory = (path: string): boolean => { try { return statSync(path).isDirectory(); } catch { return false; } };
+const defaultReadTable = (path: string): string | null => { try { return readFileSync(path, "utf8"); } catch { return null; } };
+const isExecutableFile = (path: string): boolean => {
+  try { accessSync(path, constants.X_OK); return statSync(path).isFile(); } catch { return false; }
+};
+/** The first line of a file, read from its first 256 bytes only: an agent command can be a large native binary. */
+function firstLine(path: string): string {
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, "r");
+    const buffer = Buffer.alloc(256);
+    return buffer.subarray(0, readSync(fd, buffer, 0, buffer.length, 0)).toString("latin1").split("\n")[0]!;
+  } catch { return ""; } finally { if (fd !== undefined) closeSync(fd); }
+}
+
+/**
+ * Issue #72: the directories the agents the service will run need on PATH. Each absolute agent command's own directory,
+ * and, for a `#!/usr/bin/env <name>` script, the directory the installing shell's PATH resolves <name> to (omp is
+ * `#!/usr/bin/env bun` under ~/.bun/bin). Never the shell's whole PATH: the service must not depend on whatever the
+ * installing terminal happened to carry.
+ */
+function agentPathDirs(tablePath: string, shellPath: string, readTable: (path: string) => string | null): { dirs: string[]; warnings: string[] } {
+  const text = readTable(tablePath);
+  let installations: unknown;
+  try { installations = text === null ? undefined : (JSON.parse(text) as { installations?: unknown }).installations; } catch { installations = undefined; }
+  if (installations === null || typeof installations !== "object") {
+    return { dirs: [], warnings: [`agents table ${tablePath} could not be read as an agents table; the service PATH carries no agent directories. Re-run orca panel install once it can.`] };
+  }
+  const searched = shellPath.split(":").filter((dir) => isAbsolute(dir));
+  const dirs: string[] = [], warnings: string[] = [];
+  for (const [id, installation] of Object.entries(installations as Record<string, unknown>)) {
+    const command = (installation as { command?: unknown } | null)?.command;
+    const executable = Array.isArray(command) ? command[0] : undefined;
+    if (typeof executable !== "string" || !isAbsolute(executable)) continue;
+    dirs.push(dirname(executable));
+    const name = /^#!\s*\/usr\/bin\/env\s+([^\s/-][^\s/]*)/.exec(firstLine(executable))?.[1];
+    if (name === undefined) continue;
+    const found = searched.find((dir) => isExecutableFile(join(dir, name)));
+    if (found !== undefined) dirs.push(found);
+    else warnings.push(`agent ${id}: ${executable} starts with #!/usr/bin/env ${name}, but ${name} is not on this shell's PATH; the service PATH leaves it out and ${id} will fail to start under the service`);
+  }
+  return { dirs, warnings };
+}
 
 export function buildServiceConfig(input: ServiceConfigInput): { config: ServiceConfigV1; warnings: string[] } {
   const { args } = input;
@@ -50,7 +94,10 @@ export function buildServiceConfig(input: ServiceConfigInput): { config: Service
     env[name] = value;
   }
   const isDirectory = input.isDirectory ?? defaultIsDirectory;
-  const pathDirs = [dirname(input.execPath), ...SYSTEM_PATH_DIRS].filter((dir, index, all) => all.indexOf(dir) === index && isDirectory(dir));
+  const agents = env.ORCA_AGENTS_TABLE === undefined
+    ? { dirs: [], warnings: [] }
+    : agentPathDirs(env.ORCA_AGENTS_TABLE, input.env.PATH ?? "", input.readTable ?? defaultReadTable);
+  const pathDirs = [dirname(input.execPath), ...agents.dirs, ...SYSTEM_PATH_DIRS].filter((dir, index, all) => all.indexOf(dir) === index && isDirectory(dir));
   env.HOME = input.home;
   env.PATH = pathDirs.join(":");
   env.NODE_OPTIONS = "";
@@ -60,6 +107,7 @@ export function buildServiceConfig(input: ServiceConfigInput): { config: Service
   const warnings = VERSION_MANAGER.test(input.execPath)
     ? [`node ${input.execPath} is managed by a version manager; uninstalling that version stops the service. Re-run orca panel install after changing node.`]
     : [];
+  warnings.push(...agents.warnings);
   return { config: { schema: SERVICE_CONFIG_SCHEMA, node: input.execPath, entry, args: [...args], env: sorted }, warnings };
 }
 

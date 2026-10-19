@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -36,8 +36,11 @@ const NVM_NODE = "/Users/biran/.nvm/versions/node/v22.13.1/bin/node";
 const input = async (over: Partial<Parameters<typeof buildServiceConfig>[0]> = {}) => ({
   args: PANEL_SH_ARGS, env: { ...PANEL_SH_ENV, SHELL: "/bin/zsh", ORCA_UNRELATED: "x", EDITOR: "vim" },
   execPath: NVM_NODE, checkout: await checkout(), home: "/Users/biran", panelDir: "/Users/biran/.orca/panel",
-  isDirectory: () => true, ...over,
+  // Issue #72: install reads the agents table ORCA_AGENTS_TABLE names. PANEL_SH_ENV names the human's real one, so
+  // these criteria read an empty table instead; the agent PATH criteria below hand in a real one under mkdtemp.
+  isDirectory: () => true, readTable: () => EMPTY_TABLE, ...over,
 });
+const EMPTY_TABLE = JSON.stringify({ schema: "ccloop-agents-table-v1", installations: {} });
 
 describe("service.json (spec §3)", () => {
   it("reproduces the human's launcher one-to-one: same panel args, only the named variables, plus HOME/PATH/NODE_OPTIONS", async () => {
@@ -102,5 +105,82 @@ describe("service.json (spec §3)", () => {
     expect(() => checkDist(stale)).toThrow(expect.objectContaining({ code: "service-dist-stale" }));
     const fresh = await checkout();
     expect(checkDist(fresh)).toBe(join(fresh, "dist", "cli.js"));
+  });
+});
+
+/**
+ * Issue #72: omp is `#!/usr/bin/env bun` under ~/.bun/bin, and the service PATH (node's dir plus the system dirs) had
+ * neither directory, so every omp run under the service died with `env: bun: No such file or directory` (exit 127).
+ * Install adds each absolute agent command's directory and, for a `#!/usr/bin/env <name>` script, the directory the
+ * installing shell resolves <name> to: never the shell's whole PATH, which would make the service depend on whatever
+ * the installing terminal happened to have.
+ */
+describe("agent directories on the service PATH (issue #72)", () => {
+  async function machine() {
+    const root = await mkdtemp(join(tmpdir(), "sp-"));
+    roots.push(root);
+    const dir = (name: string) => join(root, name);
+    for (const name of ["bun-bin", "node-bin", "unrelated-bin", "missing-bin"]) await mkdir(dir(name));
+    const exe = async (path: string, text: string) => { await writeFile(path, text); await chmod(path, 0o755); };
+    await exe(join(dir("bun-bin"), "omp"), "#!/usr/bin/env bun\nconsole.log('omp')\n");
+    await exe(join(dir("bun-bin"), "bun"), "\0binary");
+    await exe(join(dir("node-bin"), "claude"), "#!/usr/bin/env node\n");
+    await exe(join(dir("node-bin"), "node"), "\0binary");
+    await exe(join(dir("missing-bin"), "ghost"), "#!/usr/bin/env no-such-interpreter\n");
+    await exe(join(dir("unrelated-bin"), "bun"), "\0a later bun the shell would not pick");
+    const table = (installations: Record<string, unknown>) => {
+      const path = join(root, "agents.json");
+      return { path, text: JSON.stringify({ schema: "ccloop-agents-table-v1", installations }) };
+    };
+    return { root, dir, table };
+  }
+  const SYSTEM = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+
+  it("adds the agent command's directory and its env interpreter's directory, after node's and before the system dirs", async () => {
+    const m = await machine();
+    const t = m.table({
+      claude: { kind: "claude", command: [join(m.dir("node-bin"), "claude"), "--permission-mode", "acceptEdits"] },
+      omp: { kind: "omp", command: [join(m.dir("bun-bin"), "omp")] },
+    });
+    await writeFile(t.path, t.text);
+    const shellPath = ["/no/such/dir", m.dir("bun-bin"), m.dir("node-bin"), m.dir("unrelated-bin"), "/usr/bin"].join(":");
+    const { config, warnings } = buildServiceConfig(await input({
+      execPath: join(m.dir("node-bin"), "node"),
+      env: { ...PANEL_SH_ENV, ORCA_AGENTS_TABLE: t.path, PATH: shellPath },
+      readTable: undefined, // the real reader, over the mkdtemp table
+    }));
+    // node-bin once (node's own dir, claude's dir, and claude's `env node` all name it); bun-bin once (omp and its bun).
+    // unrelated-bin and /no/such/dir are on the shell's PATH but nothing resolves through them: they stay out.
+    expect(config.env.PATH).toBe(`${m.dir("node-bin")}:${m.dir("bun-bin")}:${SYSTEM}`);
+    expect(warnings).toEqual([]);
+  });
+
+  it("leaves an interpreter the installing shell cannot resolve out of PATH and says so", async () => {
+    const m = await machine();
+    const ghost = join(m.dir("missing-bin"), "ghost");
+    const t = m.table({ ghost: { kind: "omp", command: [ghost] } });
+    await writeFile(t.path, t.text);
+    const { config, warnings } = buildServiceConfig(await input({
+      execPath: "/usr/local/bin/node",
+      env: { ...PANEL_SH_ENV, ORCA_AGENTS_TABLE: t.path, PATH: `${m.dir("bun-bin")}:/usr/bin` },
+      readTable: undefined,
+    }));
+    expect(config.env.PATH).toBe(`/usr/local/bin:${m.dir("missing-bin")}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin`);
+    expect(warnings.join("\n")).toContain(`ghost: ${ghost} starts with #!/usr/bin/env no-such-interpreter`);
+  });
+
+  it("reads no table when ORCA_AGENTS_TABLE is unset: the service then runs no agents", async () => {
+    const { ORCA_AGENTS_TABLE: _unset, ...env } = PANEL_SH_ENV;
+    const { config } = buildServiceConfig(await input({
+      execPath: "/usr/local/bin/node", env,
+      readTable: () => { throw new Error("read a table the service will not use"); },
+    }));
+    expect(config.env.PATH).toBe("/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin");
+  });
+
+  it("warns, and adds nothing, when the named table cannot be read", async () => {
+    const { config, warnings } = buildServiceConfig(await input({ execPath: "/usr/local/bin/node", readTable: () => null }));
+    expect(config.env.PATH).toBe("/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin");
+    expect(warnings.join("\n")).toContain("/Users/biran/.orca/agents.json");
   });
 });
