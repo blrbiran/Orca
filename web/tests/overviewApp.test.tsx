@@ -45,6 +45,20 @@ it("metrics failure leaves healthy todo and control visible and shows metrics fa
  fireEvent.click(screen.getByRole("link", { name: "Metrics" }));
  expect(await screen.findByText(/metrics unavailable/)).toBeTruthy();
 });
+// Reported-decisions spec 2026-10-20 §6 (goal.md §1.3): minor decisions do not demand attention -- neither the sidebar
+// count nor the Overview queue includes them -- yet the Unreviewed list still reveals them on request.
+it("counts and queues only non-minor to-do rows, and the Unreviewed list still reveals the minor one", async () => {
+ const panel = setup(); panel.todo = [decisionRow("alpha", "owed-major"), decisionRow("alpha", "owed-minor", { importance: "minor" })];
+ render(<App />);
+ const page = await screen.findByRole("region", { name: "Overview" });
+ await within(page).findByRole("button", { name: /owed-major/ });
+ expect(within(page).queryByRole("button", { name: /owed-minor/ })).toBeNull();
+ expect(screen.getByTestId("nav-count-decisions").textContent).toBe("1");
+ fireEvent.click(screen.getByRole("link", { name: /^Decisions/ }));
+ expect(screen.queryByText("owed-minor")).toBeNull();
+ fireEvent.click(await screen.findByRole("button", { name: "Show 1 minor" }));
+ expect(await screen.findByText("owed-minor")).toBeTruthy();
+});
 it("All queue navigation reads the live owner and focuses its requested region without posting", async () => {
  window.localStorage.setItem("orca.projectView", "all");
  const panel = setup(); const ga = groupSummary("ga", ALPHA); const gb = groupSummary("gb", BETA);

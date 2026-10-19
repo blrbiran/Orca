@@ -117,7 +117,7 @@ import { ErrorPage } from "./ErrorPage.js";
 import i18n, { currentLanguage, refusalDetail, writeLanguage } from "./i18n.js";
 import { codeAndDetail } from "./ccloopCodes.js";
 import { DecisionsView, NO_FILTER, filterRows, rowsForStatus } from "./DecisionsView.js";
-import { visibleByImportance } from "./MinorToggle.js";
+import { isMinor, visibleByImportance } from "./MinorToggle.js";
 import { rowKey } from "./DecisionList.js";
 import { nextAfterReview } from "./reviewFlow.js";
 import { reviewKeyAction } from "./reviewKeys.js";
@@ -1428,7 +1428,8 @@ export function App(): JSX.Element {
       active={section}
       showAdvanced={showAdvanced}
       badges={{
-        unreviewed: todo.status === "available" ? todo.data?.length ?? null : null,
+        // Reported-decisions spec 2026-10-20 §6 (goal.md §1.3): the badge counts what asks for attention, so not minor rows.
+        unreviewed: todo.status === "available" ? todo.data?.filter((row) => !isMinor(row)).length ?? null : null,
         chainRunning: chains?.some((r) => r.chain?.state === "running") ?? false,
         controlAlert: controlAlert(
           summary === null || control.recovery === null

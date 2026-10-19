@@ -14,6 +14,12 @@ it("preserves same-name decisions across projects and scopes by composite identi
  value.scope = { kind: "project", repoId: BETA }; value.projectKey = "beta";
  expect(deriveOverview(value).queue.map((r) => r.target)).toEqual([{ kind: "decision", projectKey: "beta", id: "same" }]);
 });
+// Reported-decisions spec 2026-10-20 §6 (goal.md §1.3): a minor decision must not demand attention, so it is no queue
+// item; an ungraded row is major and still is one.
+it("queues only the non-minor to-do rows as decision reviews", () => {
+ const value = input(); value.todo = available([decisionRow("alpha", "major", { importance: "major" }), decisionRow("alpha", "minor", { importance: "minor" }), decisionRow("alpha", "ungraded")]);
+ expect(deriveOverview(value).queue.map((r) => r.target)).toEqual([{ kind: "decision", projectKey: "alpha", id: "major" }, { kind: "decision", projectKey: "alpha", id: "ungraded" }]);
+});
 it("deduplicates exactly the same cross-source recovery identity, preserves distinct scopes/codes/runs/owners and OR ownerRequired", () => {
  const value = input(); const blockers = [
   { scope: "group" as const, groupId: "ga", runId: null, code: "one", evidenceIds: [] },

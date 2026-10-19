@@ -8,6 +8,7 @@ import { inScope } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
 import type { DecisionListRow } from "./types.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
+import { isMinor } from "./MinorToggle.js";
 export type SourceStatus = "loading" | "available" | "stale" | "unavailable";
 export interface OverviewSource<T> { status: SourceStatus; data: T | null; error: string | null }
 export const loadingSource = <T>(): OverviewSource<T> => ({ status: "loading", data: null, error: null });
@@ -71,6 +72,9 @@ export function deriveOverview(input: OverviewInputs): OverviewModel {
     rows.set(key, { key, kind: "recovery-review", reason: blocker.code, ...ownerOf(group?.repoId ?? null), ownerRequired: false, target, priority: 0 });
   }
   for (const row of input.todo.data ?? []) {
+    // Reported-decisions spec 2026-10-20 §6 (goal.md §1.3): a minor decision never asks for attention; the Unreviewed
+    // list still reveals it on request.
+    if (isMinor(row)) continue;
     const entry = input.projects?.find((p) => p.projectKey === row.projectKey);
     if (entry && input.scope.kind === "project" && row.projectKey !== input.projectKey) continue;
     const key = `decision:${JSON.stringify([row.projectKey, row.id])}`;
