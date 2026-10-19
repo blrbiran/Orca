@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { allocateRunId } from "../../src/scheduler/runId.js";
-import { cloneDirOf, disposeWorkdir, routeOutcome, runTask, type TaskRun } from "../../src/scheduler/ccloopRunner.js";
+import { AgentsRunRefused, cloneDirOf, disposeWorkdir, routeOutcome, runTask, type TaskRun } from "../../src/scheduler/ccloopRunner.js";
 import { buildGraph, type TaskGraph } from "../../src/scheduler/graph.js";
 import type { PlanFile, PlanTask } from "../../src/scheduler/planFile.js";
 import {
@@ -233,6 +233,34 @@ describe("ccloopRunner (spec §4.3 steps 2-3, §6.1)", () => {
         /non-empty run id/,
       );
       expect(existsSync(cloneDirOf(s.runsDir))).toBe(false);
+    } finally {
+      await s.cleanup();
+    }
+  }, 120_000);
+
+  it("keeps a multibyte character whole when ccloop's output arrives split across pipe chunks", async () => {
+    // Issue #80, Orca side: the pipe hands output over in chunks with no regard for UTF-8 boundaries, and decoding each
+    // chunk on its own turns a character cut in two into U+FFFD replacement characters. ccloop's stderr carries agent
+    // and user text (CJK goals, agent replies) into AgentsRunRefused and the error messages built from it, so the
+    // stub writes "中" as its first byte, then -- after the pipe has had time to deliver that piece -- the other two.
+    const s = await makeSandbox();
+    try {
+      const base = await headOf(s.targetRepo);
+      const contractPath = await writeContract(s, "T1", { goal: "x", targetPaths: ["a.txt"], requiredChecks: ["true"] });
+      const agents = await agentsFor(s, await writeScriptedConfig(s, "T1", [{}]));
+      const task: PlanTask = { taskId: "T1", contract: contractPath, dependsOn: [] };
+      const plan = { ...(await planThatSpawns(s, [task])), ccloopBin: join(s.root, "split-utf8-ccloop.mjs") };
+      await writeFile(plan.ccloopBin, [
+        'const bytes = Buffer.from("agents-run-refused: 中文理由\\n", "utf8");',
+        'const cut = bytes.indexOf(Buffer.from("中", "utf8")) + 1;',
+        "process.stderr.write(bytes.subarray(0, cut));",
+        "setTimeout(() => { process.stderr.write(bytes.subarray(cut)); process.exitCode = 1; }, 300);",
+      ].join("\n"));
+      const runId = await allocateRunId(s.runsDir, "T1", await readFile(contractPath), base);
+
+      const refused = await runTask(plan, task, base, runId, agents).then(() => null, (error: unknown) => error);
+      expect(refused).toBeInstanceOf(AgentsRunRefused);
+      expect((refused as AgentsRunRefused).stderr).toBe("agents-run-refused: 中文理由\n");
     } finally {
       await s.cleanup();
     }

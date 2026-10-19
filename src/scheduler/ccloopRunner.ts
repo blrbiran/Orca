@@ -161,16 +161,15 @@ function spawnCcloop(bin: string, args: string[], onSpawn?: (pid: number) => voi
   return new Promise<SpawnResult>((resolve, reject) => {
     const child = spawn(process.execPath, [bin, ...args], { stdio: ["ignore", "pipe", "pipe"] });
     if (child.pid !== undefined) onSpawn?.(child.pid);
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
+    // Issue #80: kept as bytes and decoded once. A pipe chunk can end inside a multibyte UTF-8 character, and
+    // decoding each chunk alone turns that character into U+FFFD.
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
     child.on("error", reject);
-    child.on("close", (code, signal) => resolve({ code, signal, stdout, stderr }));
+    child.on("close", (code, signal) =>
+      resolve({ code, signal, stdout: Buffer.concat(stdout).toString("utf8"), stderr: Buffer.concat(stderr).toString("utf8") }));
   });
 }
 
