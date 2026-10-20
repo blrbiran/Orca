@@ -7,6 +7,8 @@ import type { ExecutionPort, ExecutionReport, StartEnvelope } from "../../../src
 import { createExecutionProfileRouter, resolveProfile } from "../../../src/control/profiles.js";
 import { readArchivedPlan, readEstimateRecord } from "../../../src/control/queries.js";
 import { WebControlService } from "../../../src/control/webService.js";
+import { createWebWakeHandlers } from "../../../src/control/webDispatch.js";
+import { deliverSchedulerWakes } from "../../../src/control/dispatch.js";
 import { controlWorkspaceRoots } from "../../../src/control/workspace.js";
 import type { ArtifactRef, Candidate } from "../../../src/control/types.js";
 import type { ExecutionProfileSnapshotV1 } from "../../../src/control/webProtocol.js";
@@ -113,4 +115,26 @@ export async function estimateHarness(options: SingleCallOptions = {}) {
     if (!predicate()) throw new Error(`the driver did not get there: run ${JSON.stringify(body().state)} ${JSON.stringify(body().drive?.blockedReason ?? null)}, estimate ${estimate().state}`);
   };
   return { h, service, runId, fake, deps, body, active, estimate, driver, rounds };
+}
+
+/**
+ * Estimate usable-answer spec, correction of 2026-10-20: an imported group whose queued estimate is NOT claimed yet, so
+ * a criterion can change the group first and then claim through the `budget-estimate` wake, as the scheduler does. The
+ * synthetic ccloop's `accept` count is the paid call: an estimate the claim withdraws must leave it at zero.
+ */
+export async function queuedEstimateHarness(options: SingleCallOptions = {}) {
+  const snapshot: ExecutionProfileSnapshotV1 = profileSnapshot();
+  const h = await webFixture(snapshot);
+  const service = new WebControlService(h.deps);
+  const fake = singleCallPort(options, () => readArchivedPlan(h.store, "g").planHash);
+  const deps: ExecutionDriverDeps = {
+    store: h.store, router: createExecutionProfileRouter([resolveProfile(snapshot, fake.port)]), admissionGate: h.deps.admissionGate,
+    roots: controlWorkspaceRoots(h.store.stateDir), resolveRepository: () => join(h.root, "repo"),
+    ccloopBin: "/bin/false", agentsTablePath: join(h.root, "agents.json"),
+  };
+  const driver = createExecutionDriver(deps);
+  /** One scheduler pump over the estimate wakes only (a start wake stays pending, as a start not yet delivered). */
+  const pump = () => deliverSchedulerWakes(h.store, { "budget-estimate": createWebWakeHandlers({ store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate, service })["budget-estimate"] });
+  const rounds = async (n = 10): Promise<void> => { for (let i = 0; i < n; i += 1) await driver.round(); };
+  return { h, service, fake, driver, pump, rounds };
 }

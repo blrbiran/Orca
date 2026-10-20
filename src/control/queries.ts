@@ -244,7 +244,7 @@ export function readBudgetProposal(store: ControlStore, groupId: string, canonic
 
 const estimateRecordSchema = z.object({
   estimateId: idSchema, estimateVersion: safeInteger.positive(),
-  state: z.enum(["queued", "running", "start-unknown", "ready", "failed", "interrupted", "blocked-capability", "input-too-large"]),
+  state: z.enum(["queued", "running", "start-unknown", "ready", "failed", "interrupted", "blocked-capability", "input-too-large", "withdrawn"]),
   profile: profileBindingSchema.nullable(), mode: z.enum(["strict", "soft"]), requestHash: hashSchema.nullable(),
   request: budgetEstimateRequestSchema.nullable(), outputHash: hashSchema.nullable(), output: budgetEstimateSchema.nullable(),
   reasonCode: z.string().min(1).nullable(), grant: amountSchema,
@@ -268,7 +268,7 @@ const estimateRecordSchema = z.object({
 
 export interface EstimateRecord {
   estimateId: string; estimateVersion: number;
-  state: "queued" | "running" | "start-unknown" | "ready" | "failed" | "interrupted" | "blocked-capability" | "input-too-large";
+  state: "queued" | "running" | "start-unknown" | "ready" | "failed" | "interrupted" | "blocked-capability" | "input-too-large" | "withdrawn";
   profile: ProfileBindingV1 | null; mode: "strict" | "soft"; requestHash: string | null; request: BudgetEstimateRequestV1 | null;
   outputHash: string | null; output: BudgetEstimateV1 | null; reasonCode: string | null; grant: Amount;
   compatibilityReasonCodes?: string[];
@@ -277,6 +277,14 @@ export interface EstimateRecord {
   origin?: { kind: "auto-retry"; of: string; problems: string[] };
   retriedAs?: string; retrySkipped?: string;
 }
+
+/**
+ * Estimate usable-answer spec, correction of 2026-10-20: why a queued estimate was withdrawn at claim time, as its
+ * reasonCode `estimate-withdrawn:<reason>` (webService.ts claimEstimate decides it).
+ */
+export const ESTIMATE_WITHDRAWN_REASONS = ["group-started", "proposal-confirmed", "superseded"] as const;
+export type EstimateWithdrawnReason = typeof ESTIMATE_WITHDRAWN_REASONS[number];
+const WITHDRAWN_REASON_CODES: ReadonlySet<string> = new Set(ESTIMATE_WITHDRAWN_REASONS.map(reason => `estimate-withdrawn:${reason}`));
 
 /** Spec §6.4 / §7 (planImport.ts rejectedEstimatorRequest): an estimate blocked because its selection was refused froze none. */
 function rejectedEstimatorSelection(estimate: z.infer<typeof estimateRecordSchema>): boolean {
@@ -328,6 +336,7 @@ export function decodeEstimateRecord(estimateId: string, row: Readonly<Record<st
   }
   if ((estimate.state === "queued" && (estimate.request === null || estimate.reasonCode !== null))
     || (estimate.state === "input-too-large" && (estimate.request === null || estimate.reasonCode !== "estimate-input-too-large"))
+    || (estimate.state === "withdrawn" && (estimate.request === null || !WITHDRAWN_REASON_CODES.has(estimate.reasonCode ?? "")))
     || (estimate.state === "blocked-capability" && !["estimate-blocked-capability", "estimate-capability-degraded"].includes(estimate.reasonCode ?? "")
       && !rejectedEstimatorSelection(estimate))) return recoveryBlocked();
   if (estimate.output) {

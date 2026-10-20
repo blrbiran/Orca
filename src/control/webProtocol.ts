@@ -1398,7 +1398,7 @@ export const estimateViewSchema = z
   .object({
     estimateId: idSchema,
     estimateVersion: positiveSafeInteger,
-    state: z.enum(["queued", "running", "start-unknown", "ready", "failed", "interrupted", "blocked-capability", "input-too-large"]),
+    state: z.enum(["queued", "running", "start-unknown", "ready", "failed", "interrupted", "blocked-capability", "input-too-large", "withdrawn"]),
     profile: profileBindingSchema.nullable(),
     mode: z.enum(["strict", "soft"]),
     requestHash: hashSchema.nullable(),

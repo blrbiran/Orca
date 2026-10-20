@@ -53,3 +53,22 @@ describe("an estimate's repairs and automatic retry (spec §4.4)", () => {
     for (const absent of ["repaired", "retry of", "retried as", "retry skipped"]) expect(text, absent).not.toContain(absent);
   });
 });
+
+// Estimate usable-answer spec, correction of 2026-10-20: a queued estimate the claim withdrew shows the state and why,
+// in both locales, for each of the three reasons.
+describe("a withdrawn estimate (spec correction 2026-10-20)", () => {
+  const withdrawn = [
+    est("e1", 1, { state: "withdrawn", reasonCode: "estimate-withdrawn:group-started" }),
+    est("e2", 2, { state: "withdrawn", reasonCode: "estimate-withdrawn:proposal-confirmed" }),
+    est("e3", 3, { state: "withdrawn", reasonCode: "estimate-withdrawn:superseded" }),
+  ];
+  it("shows the state and the reason in English", async () => {
+    const text = await show("en", withdrawn);
+    for (const expected of ["withdrawn: the group had started", "withdrawn: the proposal was confirmed", "withdrawn: a newer estimate replaced it"]) expect(text, expected).toContain(expected);
+  });
+  it("shows the state and the reason in Chinese", async () => {
+    const text = await show("zh", withdrawn);
+    for (const expected of ["已撤回", "已撤回：组已开跑", "已撤回：提案已确认", "已撤回：已被新估算取代"]) expect(text, expected).toContain(expected);
+    expect(text).not.toContain("the group had started");
+  });
+});

@@ -320,7 +320,7 @@ export type BudgetEstimateV1 = {
 export type EstimateViewV1 = {
   estimateId: string;
   estimateVersion: number;
-  state: "queued" | "running" | "start-unknown" | "ready" | "failed" | "interrupted" | "blocked-capability" | "input-too-large";
+  state: "queued" | "running" | "start-unknown" | "ready" | "failed" | "interrupted" | "blocked-capability" | "input-too-large" | "withdrawn";
   profile: ProfileBindingV1 | null;
   mode: "strict" | "soft";
   requestHash: string | null;

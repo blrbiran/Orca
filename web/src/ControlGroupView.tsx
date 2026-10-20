@@ -39,6 +39,8 @@ import { closingText } from "./CorrectionsView.js";
 import { isRetryKey } from "./reviewKeys.js";
 
 const short = (hash: string): string => hash.slice(0, 12);
+/** Estimate usable-answer spec, correction of 2026-10-20: a withdrawn estimate's reasonCode prefix (the reason follows). */
+const WITHDRAWN = "estimate-withdrawn:";
 
 /**
  * Debug task plan Task 13: a group a correction opened says so, with its frozen input's missing pieces, why the original
@@ -584,6 +586,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 {estimate.origin !== undefined ? ` · ${t("control.group.estimateRetryOf", { version: estimateVersionOf(view, estimate.origin.of) })}` : ""}
                 {estimate.retriedAs !== undefined ? ` · ${t("control.group.estimateRetriedAs", { version: estimateVersionOf(view, estimate.retriedAs) })}` : ""}
                 {estimate.retrySkipped !== undefined ? ` · ${t("control.group.estimateRetrySkipped", { code: estimate.retrySkipped })}` : ""}
+                {estimate.state === "withdrawn" && estimate.reasonCode?.startsWith(WITHDRAWN) ? ` · ${t("control.group.estimateWithdrawn", { reason: enumText("estimateWithdrawnReason", estimate.reasonCode.slice(WITHDRAWN.length)) })}` : ""}
               </li>
             ))}
           </ul>

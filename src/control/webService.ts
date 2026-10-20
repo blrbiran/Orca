@@ -19,7 +19,8 @@ import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, typ
 import { readAgentPreferences } from "./agentPreferences.js";
 import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
 import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
-import { effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
+import { effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord, type EstimateRecord, type EstimateWithdrawnReason } from "./queries.js";
+import { groupExecutionPendingInStore } from "./executionPending.js";
 import { agentSelectionSchema, amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
 import { budgetEstimateSchema, estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
@@ -254,6 +255,30 @@ export function estimateCommitments(store: ControlStore, groupId: string): Array
     }
     return [{ ownerKind: "estimate" as const, ownerId: estimate.estimateId, bucket: "work" as const, amount, fieldProvenance: provenance("system") }];
   });
+}
+/**
+ * Estimate usable-answer spec, correction of 2026-10-20: why a queued estimate's answer could no longer be used, decided by
+ * code at claim time for every queued estimate (a person's, an import's, a draft's or an automatic retry). The group has
+ * started -- past pre-start, or its execution pending by the start guard's predicate (a Web start keeps the stored status
+ * `ready` through the first run) -- the proposal is confirmed, or a newer estimate exists. The first that holds names it.
+ */
+function withdrawalReason(store: ControlStore, groupId: string, group: Group, proposal: BudgetProposalRecord, estimate: EstimateRecord): EstimateWithdrawnReason | null {
+  if (group.status === "running" || group.status === "review" || group.status === "done" || groupExecutionPendingInStore(store, groupId)) return "group-started";
+  if (proposal.state === "confirmed") return "proposal-confirmed";
+  const newest = Number(store.db.prepare("SELECT MAX(estimate_version) AS n FROM estimates WHERE group_id=?").get(groupId)?.n ?? 0);
+  if (newest > estimate.estimateVersion) return "superseded";
+  return null;
+}
+/** The terminal `withdrawn` state: no run, no settlement, no retry; the grant leaves `committedRemaining` as a settlement's does. */
+function withdrawEstimate(store: ControlStore, groupId: string, group: Group, proposal: BudgetProposalRecord, estimate: EstimateRecord, reason: EstimateWithdrawnReason): void {
+  estimate.state = "withdrawn"; estimate.reasonCode = `estimate-withdrawn:${reason}`;
+  group.ledger.committedRemaining = residual(group.reserved, zero(), estimate.grant);
+  const balance = budgetBalance(group.limit, group.used, group.ledger.committedRemaining);
+  group.ledger.budgetDeficit = balance.deficit;
+  setReserve(proposal, balance.reserve);
+  store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run(estimate.state, canonicalBytes(estimate).toString("utf8"), groupId, estimate.estimateId);
+  clearSpendCapBlock(store, groupId, "estimate");
+  saveWebAuthority(store, group, proposal); recordProjectionChange(store, [groupId]);
 }
 export function assertKnownConservation(store: ControlStore, group: Group, proposal: BudgetProposalRecord): void {
   if (store.dispatchBlocked || group.ledger.usageUnknown) throw new ControlError("recovery-blocked");
@@ -558,6 +583,10 @@ export class WebControlService {
         // pending until the group is unarchived.
         if (isGroupArchived(this.store, id)) return null;
         if (estimate.state !== "queued" || !estimate.request || estimate.profile === null) throw new ControlError("recovery-blocked");
+        // Spec correction 2026-10-20: a queued estimate whose answer can no longer be used is withdrawn, not run -- before
+        // prestart, which would throw for a started group and leave the wake re-delivered and the grant held forever.
+        const withdrawn = withdrawalReason(this.store, id, group, proposal, estimate);
+        if (withdrawn !== null) { withdrawEstimate(this.store, id, group, proposal, estimate, withdrawn); return null; }
         prestart(group); assertKnownConservation(this.store, group, proposal);
         if (group.stopped) throw new ControlError("group-stopped");
         this.deps.profileRouter.resolve("budget-estimate", estimate.profile.profileId, estimate.profile.profileHash);

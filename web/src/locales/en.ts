@@ -79,8 +79,12 @@ const requestState = {
 } as const satisfies Record<HandoffRequestViewV1["state"], string>;
 const estimateState = {
   queued: "queued", running: "running", "start-unknown": "start-unknown", ready: "ready", failed: "failed", interrupted: "interrupted",
-  "blocked-capability": "blocked-capability", "input-too-large": "input-too-large",
+  "blocked-capability": "blocked-capability", "input-too-large": "input-too-large", withdrawn: "withdrawn",
 } as const satisfies Record<EstimateViewV1["state"], string>;
+/** Estimate usable-answer spec, correction of 2026-10-20: why a queued estimate was withdrawn (reasonCode `estimate-withdrawn:<reason>`). */
+const estimateWithdrawnReason = {
+  "group-started": "the group had started", "proposal-confirmed": "the proposal was confirmed", superseded: "a newer estimate replaced it",
+} as const;
 const budgetMode = { strict: "strict", soft: "soft" } as const satisfies Record<EstimateViewV1["mode"], string>;
 const blockerScope = { global: "global", group: "group", run: "run" } as const satisfies Record<RecoveryViewV1["blockers"][number]["scope"], string>;
 const progressStep = {
@@ -426,6 +430,7 @@ export const en = {
       estimateRetryOf: "retry of v{{version}}",
       estimateRetriedAs: "retried as v{{version}}",
       estimateRetrySkipped: "retry skipped: {{code}}",
+      estimateWithdrawn: "withdrawn: {{reason}}",
       waiting: "Waiting for the ledger to answer: {{commands}}",
       dispatch: "Execution controls",
       continuableWork: "Continuable work",
@@ -1164,7 +1169,7 @@ export const en = {
   },
   enums: {
     theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,
-    groupState, roundState, draftState, exportState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, budgetMode, blockerScope, progressStep, activityKind,
+    groupState, roundState, draftState, exportState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, estimateWithdrawnReason, budgetMode, blockerScope, progressStep, activityKind,
     proposalState, ownerKind, bucket, allocationState, dimension, complexity, confidence, handoffControl, handoffExecution, budgetEnforcement, fieldProvenance,
     agentSlot, selectionSource,
   },

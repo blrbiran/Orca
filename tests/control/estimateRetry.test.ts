@@ -328,13 +328,14 @@ describe("each condition that rules the retry out is recorded on the failed esti
     } finally { await x.h.dispose(); }
   });
 
-  // Confirm is refused while an estimate runs (estimate-in-flight), so the proposal is confirmed with the estimate
-  // queued, then the estimate is claimed and settles: the shape a queued import estimate takes after an early confirm.
+  // Spec correction 2026-10-20: a queued estimate is now withdrawn at claim time once the proposal is confirmed, so the
+  // settlement case is the estimate already running when the person confirms: claimed first, then confirmed, then settled.
   it("proposal-confirmed: an estimate that settles on a confirmed proposal (its advice can no longer apply) gets no retry", async () => {
     const h = await webFixture(); try {
       const service = new WebControlService(h.deps);
-      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).toMatchObject({ result: { kind: "confirmed" } });
       const run = await service.claimEstimate("g", h.estimateId);
+      expect(run).not.toBeNull();
+      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).toMatchObject({ result: { kind: "confirmed" } });
       recordUsage(h.store, { runId: run!.runId, generation: 1, eventSeq: 1, bucket: "work", cumulative: { tokens: 10, activeMs: 1, attempts: 1, sessions: 1 }, source: { artifactId: "usage-confirmed", hash: "a".repeat(64) } });
       const row = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.runId)!.body));
       row.state = "settled-restartable"; h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), run!.runId);

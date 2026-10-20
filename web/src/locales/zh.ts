@@ -316,6 +316,7 @@ export const zh: Translation<typeof en> = {
       estimateRetryOf: "第 {{version}} 版的重试",
       estimateRetriedAs: "已重试为第 {{version}} 版",
       estimateRetrySkipped: "未重试：{{code}}",
+      estimateWithdrawn: "已撤回：{{reason}}",
       waiting: "等待台账回答：{{commands}}",
       dispatch: "执行控制",
       continuableWork: "可续跑的工作",
@@ -1083,7 +1084,8 @@ export const zh: Translation<typeof en> = {
       "request-pending": "请求待处理", latched: "已锁定", collecting: "收集中", "settled-recoverable": "已结算（可恢复）",
       "settled-restartable": "已结算（可重启）", "settled-unrecoverable": "已结算（不可恢复）", "settled-failed": "失败运行已保守结清", "outcome-unknown": "结果未知",
     },
-    estimateState: { queued: "排队中", running: "运行中", "start-unknown": "启动情况未知", ready: "就绪", failed: "失败", interrupted: "已中断", "blocked-capability": "能力不足、已阻塞", "input-too-large": "输入过大" },
+    estimateState: { queued: "排队中", running: "运行中", "start-unknown": "启动情况未知", ready: "就绪", failed: "失败", interrupted: "已中断", "blocked-capability": "能力不足、已阻塞", "input-too-large": "输入过大", withdrawn: "已撤回" },
+    estimateWithdrawnReason: { "group-started": "组已开跑", "proposal-confirmed": "提案已确认", superseded: "已被新估算取代" },
     budgetMode: { strict: "严格", soft: "宽松" },
     blockerScope: { global: "全局", group: "组", run: "运行" },
     activityKind: {
