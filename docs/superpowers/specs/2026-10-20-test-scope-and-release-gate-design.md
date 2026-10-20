@@ -197,3 +197,19 @@ technique in the criteria.
 `main` that touches `package-lock.json` (a repin) made every branch cut from it select the whole root suite until the
 human pushed. Push and installing the panel service happen from `main`, so they still see the commits they ship.
 Commit: `fix(scripts): on a branch, test-affected compares against local main`.
+
+## 8. Correction (as built, session `3d229487`, 2026-10-20) — §4.1 arguments and rules table
+
+§4.1 above is kept verbatim. As built at commit `fix(scripts): close test-affected's registered selection gaps`
+(review M1/M3/M5 of `.superpowers/sdd/2026-10-20-repin-w2-test-split/progress.md`, and the golden.json gap):
+- **Pass-through** tells a path or filter from an option's value with vitest's own parser (`parseCLI` from
+  `vitest/node`), not a hand list of value-taking flags; `--maxConcurrency 3`, `--silent passed-only`,
+  `--coverage.reportsDirectory out` are forwarded, `--run tests/x.test.ts` is still pass-through.
+- `--base=<ref>` is accepted as well as `--base <ref>`; an empty ref is refused.
+- `web/tests/setup.ts` (the web config's `setupFiles`) joins the web config row: the whole web suite.
+- **Data under `tests/` or `web/tests/`** (a file without a JS/TS extension) additionally selects the suite's test files
+  that name it (its basename as a whole quoted name or path segment), and the tests importing a helper that names it.
+  When nothing selects it, the whole suite of its tree is selected with the line
+  `test-affected: no test names <path>; selecting the whole <root|web> suite`.
+- `package.json` stays a whole-root-suite change even when only `scripts` changed (tests spawn `npm run <name>` and read
+  the scripts as text; no code here can prove an entry is outside every test's reach).
