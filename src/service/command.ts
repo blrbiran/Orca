@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildServiceConfig, missingAgentPathDirs } from "./config.js";
+import { buildServiceConfig, CAPTURED_ENV, missingAgentPathDirs } from "./config.js";
 import { detached } from "./detached.js";
 import { readServiceConfig, tailLines, writeServiceFiles } from "./files.js";
 import { identifyPanel } from "./identify.js";
@@ -76,6 +76,27 @@ async function waitForPanel(ctx: ServiceContext, kind: string, verb: string, bef
   }
 }
 
+/**
+ * Incident 308b874c: a re-install from a shell lacking variables the installed service had captured dropped them and
+ * turned off the Memory page and skills. Each captured variable this shell leaves unset keeps the installed value; one
+ * the shell sets, even to empty (the way to drop one), wins. buildServiceConfig checks a kept value as it checks a
+ * shell value. No service.json: nothing to keep. An unreadable or invalid one: warned about, and the shell alone decides.
+ */
+function keepStoredEnv(env: NodeJS.ProcessEnv, paths: ServicePaths, err: (line: string) => void): NodeJS.ProcessEnv {
+  let stored: Record<string, string>;
+  try { stored = readServiceConfig(paths).env; }
+  catch (error) {
+    if (error instanceof ServiceRejection && error.code === "service-not-installed") return env;
+    const why = error instanceof ServiceRejection ? `${error.code}: ${error.message}` : String(error);
+    err(`orca panel: warning: could not read the installed ${paths.configFile}, so nothing is kept from it (${why})`);
+    return env;
+  }
+  const kept = CAPTURED_ENV.filter((name) => env[name] === undefined && stored[name] !== undefined);
+  if (kept.length === 0) return env;
+  err(`orca panel: kept ${kept.join(", ")} from ${paths.configFile} (this shell does not set them); set one to empty (e.g. ${kept[0]}=) to drop it`);
+  return { ...env, ...Object.fromEntries(kept.map((name) => [name, stored[name]!])) };
+}
+
 export interface ServiceSeams { ctx?: Partial<ServiceContext>; platform?: NodeJS.Platform }
 
 export async function runServiceCommand(sub: string, args: string[], env: NodeJS.ProcessEnv, io: ServiceIo, seams: ServiceSeams = {}): Promise<number> {
@@ -91,9 +112,10 @@ export async function runServiceCommand(sub: string, args: string[], env: NodeJS
       code !== 0 || manager.kind === "detached" ? Promise.resolve(code) : waitForPanel(ctx, manager.kind, verb, before);
     switch (sub) {
       case "install": {
+        const installEnv = keepStoredEnv(env, paths, ctx.err);
         const { config, warnings } = buildServiceConfig({
           // config.ts does not check these: a relative checkout would put a relative entry into run.sh.
-          args: rest, env, execPath: process.execPath, checkout: resolve(env.ORCA_SERVICE_CHECKOUT || defaultCheckout()), home: homedir(), panelDir: paths.panelDir,
+          args: rest, env: installEnv, execPath: process.execPath, checkout: resolve(env.ORCA_SERVICE_CHECKOUT || defaultCheckout()), home: homedir(), panelDir: paths.panelDir,
         });
         for (const warning of warnings) ctx.err(`orca panel: warning: ${warning}`);
         if (args.includes("--dry-run")) {

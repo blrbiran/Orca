@@ -183,6 +183,87 @@ describe("orca panel <subcommand> (spec §4)", () => {
     expect(restarted.stderr).not.toContain("warning");
   });
 
+  /**
+   * Incident (session 308b874c, 2026-10-20): a re-install from a shell that lacked variables the installed service had
+   * captured rebuilt service.json from that shell only and silently dropped CCMEM_DATA_ROOT, ORCA_CCMEM_BIN and others,
+   * turning off the Memory page and skills. A re-install keeps what the shell does not set; what it sets, even to empty,
+   * wins (empty is how one is dropped), and the kept names are said once on stderr, never their values.
+   */
+  describe("a re-install keeps the captured variables this shell does not set", () => {
+    const readConfig = (paths: ServicePaths) => JSON.parse(readFileSync(paths.configFile, "utf8")) as { env: Record<string, string> };
+    const dryRun = () => captureStreams(() => main([...install.slice(0, 2), "--dry-run", ...install.slice(2)]));
+    async function installed() {
+      const s = await setup();
+      vi.stubEnv("ORCA_SYNCSKILL_BIN", "/opt/syncskill/bin/syncskill");
+      vi.stubEnv("ORCA_CCLOOP_BIN", "/opt/ccloop/bin/ccloop");
+      expect((await run("install", install.slice(2), seams())).result).toBe(1); // no panel answers; the files are written
+      return s;
+    }
+
+    it("keeps an unset one, drops an empty one, lets a set one win, and names only the kept ones", async () => {
+      const s = await installed();
+      const controlDir = process.env.ORCA_CONTROL_DIR!;
+      vi.stubEnv("ORCA_CCMEM_BIN", undefined); // unset: kept
+      vi.stubEnv("CCMEM_DATA_ROOT", undefined); // unset: kept
+      vi.stubEnv("ORCA_SYNCSKILL_BIN", ""); // explicitly empty: dropped, as before
+      vi.stubEnv("ORCA_CCLOOP_BIN", "/opt/ccloop-next/bin/ccloop"); // explicitly set: wins
+      const { result, stderr } = await run("install", install.slice(2), seams());
+      expect(result).toBe(1);
+      const env = readConfig(s.paths).env;
+      expect(env.ORCA_CCMEM_BIN).toBe("/usr/local/bin/ccmem");
+      expect(env.CCMEM_DATA_ROOT).toBeDefined();
+      expect(env.ORCA_SYNCSKILL_BIN).toBeUndefined();
+      expect(env.ORCA_CCLOOP_BIN).toBe("/opt/ccloop-next/bin/ccloop");
+      expect(env.ORCA_CONTROL_DIR).toBe(controlDir);
+      expect(readFileSync(s.paths.envFile, "utf8")).toContain('ORCA_CCMEM_BIN="/usr/local/bin/ccmem"');
+      const lines = stderr.split("\n").filter((line) => line.startsWith("orca panel: kept"));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toBe(`orca panel: kept ORCA_CCMEM_BIN, CCMEM_DATA_ROOT from ${s.paths.configFile} (this shell does not set them); set one to empty (e.g. ORCA_CCMEM_BIN=) to drop it`);
+      expect(lines[0]).not.toContain("/usr/local/bin/ccmem");
+    });
+
+    it("--dry-run prints the merged result and writes nothing", async () => {
+      const s = await installed();
+      const before = readFileSync(s.paths.configFile, "utf8");
+      vi.stubEnv("ORCA_CCMEM_BIN", undefined);
+      const { result, stdout, stderr } = await dryRun();
+      expect(result).toBe(0);
+      expect(stdout).toContain('"ORCA_CCMEM_BIN": "/usr/local/bin/ccmem"');
+      expect(stdout).toContain('ORCA_CCMEM_BIN="/usr/local/bin/ccmem"');
+      expect(stderr).toContain("orca panel: kept ORCA_CCMEM_BIN from");
+      expect(readFileSync(s.paths.configFile, "utf8")).toBe(before);
+    });
+
+    it("a kept value is checked as a shell value is: a relative one is refused", async () => {
+      const s = await installed();
+      const config = readConfig(s.paths);
+      config.env.ORCA_CCMEM_BIN = "bin/ccmem";
+      writeFileSync(s.paths.configFile, JSON.stringify({ ...config }));
+      vi.stubEnv("ORCA_CCMEM_BIN", undefined);
+      const { result, stderr } = await run("install", install.slice(2), seams());
+      expect(result).toBe(1);
+      expect(stderr).toContain("rejected: service-path-not-absolute: ORCA_CCMEM_BIN=bin/ccmem");
+    });
+
+    it("an invalid stored service.json is warned about and the shell alone decides, as before", async () => {
+      const s = await installed();
+      writeFileSync(s.paths.configFile, "{not json");
+      vi.stubEnv("ORCA_CCMEM_BIN", undefined);
+      const { stdout, stderr } = await dryRun();
+      expect(stderr).toContain(`orca panel: warning: could not read the installed ${s.paths.configFile}, so nothing is kept from it (service-config-invalid`);
+      expect(stderr).not.toContain("orca panel: kept");
+      expect(stdout).not.toContain("ORCA_CCMEM_BIN");
+    });
+
+    it("a first install (no service.json) keeps nothing and says nothing about it", async () => {
+      await setup();
+      const { result, stderr } = await dryRun();
+      expect(result).toBe(0);
+      expect(stderr).not.toContain("orca panel: kept");
+      expect(stderr).not.toContain("could not read");
+    });
+  });
+
   it("the detached manager's install starts nothing, so it does not wait for a panel", async () => {
     await setup();
     vi.stubEnv("ORCA_SERVICE_MANAGER", "detached");
