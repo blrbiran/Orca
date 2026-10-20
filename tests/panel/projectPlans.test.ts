@@ -120,6 +120,8 @@ describe("registering an in-repository plan file (spec 2026-10-21, #65)", () => 
     const digest = sha("x");
     expect(bad([{ id: "app.a", path: "/abs.json", sha256: digest }])).toBe("invalid");
     expect(bad([{ id: "app.a", path: "x/../../up.json", sha256: digest }])).toBe("invalid");
+    // Already normal, so only the ".." segment rule catches it.
+    expect(bad([{ id: "app.a", path: "../up.json", sha256: digest }])).toBe("invalid");
     expect(bad([{ id: "app.a", path: "a.json", sha256: "nothex" }])).toBe("invalid");
     expect(bad([{ id: "app.a", path: "a.json", sha256: digest }, { id: "app.a", path: "b.json", sha256: digest }])).toBe("invalid");
     expect(bad([{ id: "app.a", path: "a.json", sha256: digest }])).toBe("valid");
