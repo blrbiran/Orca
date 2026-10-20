@@ -90,8 +90,10 @@ describe("a second start is refused while execution is pending (spec B §3.2)", 
   });
 
   it("C3: an active estimate run alone is not execution: start answers estimate-in-flight", async () => {
-    const { h, service } = await confirmed(); try {
+    // Spec correction 2026-10-20: claimed before the confirm (a queued estimate is withdrawn once the proposal is confirmed).
+    const h = await webFixture(profileSnapshot()), service = new WebControlService(h.deps); try {
       expect(await service.claimEstimate("g", h.estimateId)).not.toBeNull();
+      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).toMatchObject({ result: { kind: "confirmed" } });
       expect(await service.start(h.command("start", {}))).toMatchObject({ error: { code: "estimate-in-flight" } });
     } finally { await h.dispose(); }
   });

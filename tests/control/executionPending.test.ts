@@ -25,8 +25,10 @@ describe("the execution-pending predicate (spec B §3.1)", () => {
   });
 
   it("an active estimate run alone is not pending, in the view and in the store", async () => {
-    const { h, service } = await confirmed(); try {
+    // Spec correction 2026-10-20: claimed before the confirm (a queued estimate is withdrawn once the proposal is confirmed).
+    const h = await webFixture(profileSnapshot()), service = new WebControlService(h.deps); try {
       expect(await service.claimEstimate("g", h.estimateId)).not.toBeNull();
+      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).toMatchObject({ result: { kind: "confirmed" } });
       expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g' AND active=1").get()!.n).toBe(1);
       expect([readControlGroup(h.store, "epoch-test", "g").summary.executionPending, groupExecutionPendingInStore(h.store, "g")]).toEqual([false, false]);
     } finally { await h.dispose(); }

@@ -26,7 +26,7 @@ const ACCEPTED_AT = "2026-09-20T10:00:00.000Z";
 const MAX_INSTANT = "9999-12-31T23:59:59.999Z";
 
 /** A confirmed group "g" whose only activity is one durable budget estimate. */
-async function stopFixture(capabilityPatch: Partial<CapabilityViewV1> = {}, snapshot = profileSnapshot()) {
+async function stopFixture(capabilityPatch: Partial<CapabilityViewV1> = {}, snapshot = profileSnapshot(), claimEstimateFirst = false) {
   const h = await webFixture(snapshot);
   const observed = structuredClone(snapshot.profile.capabilities) as CapabilityViewV1;
   Object.assign(observed, capabilityPatch);
@@ -35,9 +35,13 @@ async function stopFixture(capabilityPatch: Partial<CapabilityViewV1> = {}, snap
   const deps = { ...h.deps, now: () => clock.value };
   const service = new WebControlService(deps);
   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
+  // Spec correction 2026-10-20: a queued estimate is withdrawn at claim time once the proposal is confirmed, so a
+  // criterion that needs a running estimate in a confirmed group claims it first (confirm accepts a running estimate).
+  const estimateRun = claimEstimateFirst ? await service.claimEstimate("g", h.estimateId) : null;
+  if (claimEstimateFirst && estimateRun === null) throw new Error("the estimate was not claimed");
   await service.confirm(h.command("confirm", await h.confirmPayload()));
   const stopped = (beforeCommit?: () => void) => new WebControlService(beforeCommit ? { ...deps, beforeCommit } : deps);
-  return { h, service, clock, deps, stopped };
+  return { h, service, clock, deps, stopped, estimateRun };
 }
 
 /** Confirmed group with exactly one `starting` task run claimed by the scheduler. */
@@ -45,6 +49,23 @@ async function startedFixture() {
   const fixture = await stopFixture();
   const { h, service } = fixture;
   await service.start(h.command("start", {}));
+  await deliverScheduledStart({ store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate }, "g");
+  return fixture;
+}
+
+/**
+ * Spec correction 2026-10-20: `start` refuses while an estimate runs, and a queued estimate is withdrawn once the group
+ * started, so an estimate run beside a work run is now only a state an earlier Orca left behind (an estimate claimed
+ * after start). The stop path must still handle it; this reaches it by claiming the estimate before the confirm and
+ * hiding it from start's raw state read for that one command.
+ */
+async function startedWithEstimateRun() {
+  const fixture = await stopFixture({}, profileSnapshot(), true);
+  const { h, service } = fixture;
+  h.store.db.prepare("UPDATE estimates SET state='queued' WHERE group_id='g' AND id=?").run(h.estimateId);
+  const started = await service.start(h.command("start", {}));
+  h.store.db.prepare("UPDATE estimates SET state='running' WHERE group_id='g' AND id=?").run(h.estimateId);
+  if ("error" in started) throw new Error(JSON.stringify(started));
   await deliverScheduledStart({ store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate }, "g");
   return fixture;
 }
@@ -113,7 +134,9 @@ describe("stop command composition", () => {
       expect(readStopIntent(h.store, "g")).toEqual({ mode: "pause", state: "paused", frozenRunIds: [], acceptedAt: null, deadlineAt: null });
       expect(JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)).stopped).toBe(true);
       const drained = await deliverSchedulerWakes(h.store, createWebWakeHandlers({ ...h.deps, service }));
-      expect(drained.delivered).toEqual([]);
+      // Spec correction 2026-10-20: the queued estimate's wake is delivered (withdrawn, group-started); the start wake stays pending.
+      expect(drained.delivered).toEqual([`scheduler-wake:g:estimate:${h.estimateId}`]);
+      expect(String(h.store.db.prepare("SELECT state FROM estimates WHERE group_id='g' AND id=?").get(h.estimateId)!.state)).toBe("withdrawn");
       expect(workRuns(h.store).filter((run) => run.phase === "work")).toEqual([]);
     } finally { await h.dispose(); }
   });
@@ -223,10 +246,10 @@ describe("handoff-stop atomicity", () => {
   });
 
   it("freezes every active run and commits one deterministic request identity per frozen run", async () => {
-    const { h, service } = await startedFixture(); try {
+    const { h, service, estimateRun } = await startedWithEstimateRun(); try {
       const workRun = workRuns(h.store).find((run) => run.phase === "work")!;
       setRunState(h.store, workRun.runId, { state: "accepted", providerAttemptOrdinal: 1 });
-      const estimateRun = await service.claimEstimate("g", h.estimateId);
+      // Spec correction 2026-10-20: the estimate run was claimed before the start (startedWithEstimateRun).
       const frozen = [workRun.runId, String((estimateRun as { runId: string }).runId)].sort();
       const result = await service.handoffStop(h.command("handoff-stop", {}));
       if ("error" in result || result.result.kind !== "handoff-stopped") throw new Error("handoff-stop rejected");
@@ -285,8 +308,8 @@ describe("frozen-set resolution", () => {
   });
 
   it("always includes a start-unknown estimate so the frozen set cannot be vacuously complete", async () => {
-    const { h, service } = await stopFixture(); try {
-      const estimateRun = await service.claimEstimate("g", h.estimateId);
+    const { h, service, estimateRun } = await stopFixture({}, profileSnapshot(), true); try {
+      // Spec correction 2026-10-20: claimed before the confirm (a queued estimate is withdrawn once the proposal is confirmed).
       h.store.db.prepare("UPDATE estimates SET state='start-unknown' WHERE group_id='g' AND id=?").run(h.estimateId);
       const result = await service.handoffStop(h.command("handoff-stop", {}));
       if ("error" in result || result.result.kind !== "handoff-stopped") throw new Error("handoff-stop rejected");
@@ -426,8 +449,8 @@ describe("group stop state derivation", () => {
   });
 
   it("keeps handoff-pending while any frozen run is in flight and falls to handoff-partial only when none is", async () => {
-    const { h, service } = await startedFixture(); try {
-      await service.claimEstimate("g", h.estimateId);
+    const { h, service } = await startedWithEstimateRun(); try {
+      // Spec correction 2026-10-20: the estimate run was claimed before the start (startedWithEstimateRun).
       await service.handoffStop(h.command("handoff-stop", {}));
       const [first, second] = requests(h.store);
       settleHandoffRequest(depsOf(h), { requestId: first.requestId, outcome: "settled-unrecoverable", reasonCode: "profile-changed" });
@@ -439,8 +462,8 @@ describe("group stop state derivation", () => {
   });
 
   it("derives handoff-complete only when every frozen run settled recoverably or restartably", async () => {
-    const { h, service } = await stopFixture(); try {
-      const estimateRun = await service.claimEstimate("g", h.estimateId);
+    const { h, service, estimateRun } = await stopFixture({}, profileSnapshot(), true); try {
+      // Spec correction 2026-10-20: claimed before the confirm (a queued estimate is withdrawn once the proposal is confirmed).
       const runId = String((estimateRun as { runId: string }).runId);
       await service.handoffStop(h.command("handoff-stop", {}));
       const reservedBefore = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)).reserved;
@@ -455,8 +478,8 @@ describe("group stop state derivation", () => {
   });
 
   it("holds the reserve and never renders an unknown stop as a successful handoff", async () => {
-    const { h, service } = await stopFixture(); try {
-      const estimateRun = await service.claimEstimate("g", h.estimateId);
+    const { h, service, estimateRun } = await stopFixture({}, profileSnapshot(), true); try {
+      // Spec correction 2026-10-20: claimed before the confirm (a queued estimate is withdrawn once the proposal is confirmed).
       const runId = String((estimateRun as { runId: string }).runId);
       await service.handoffStop(h.command("handoff-stop", {}));
       const requestId = requests(h.store)[0].requestId;
@@ -509,8 +532,8 @@ describe("handoff stop delivery", () => {
   });
 
   it("settles an interrupted estimator as restartable and returns only its known unused commitment", async () => {
-    const { h, service } = await stopFixture(); try {
-      const estimateRun = await service.claimEstimate("g", h.estimateId);
+    const { h, service, estimateRun } = await stopFixture({}, profileSnapshot(), true); try {
+      // Spec correction 2026-10-20: claimed before the confirm (a queued estimate is withdrawn once the proposal is confirmed).
       const runId = String((estimateRun as { runId: string }).runId);
       await service.handoffStop(h.command("handoff-stop", {}));
       const deps = { store: h.store, profileRouter: h.deps.profileRouter };
@@ -523,8 +546,8 @@ describe("handoff stop delivery", () => {
   });
 
   it("leaves an estimator with unknown usage unresolved with its reserve held", async () => {
-    const { h, service } = await stopFixture(); try {
-      const estimateRun = await service.claimEstimate("g", h.estimateId);
+    const { h, service, estimateRun } = await stopFixture({}, profileSnapshot(), true); try {
+      // Spec correction 2026-10-20: claimed before the confirm (a queued estimate is withdrawn once the proposal is confirmed).
       const runId = String((estimateRun as { runId: string }).runId);
       await service.handoffStop(h.command("handoff-stop", {}));
       const reservedBefore = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)).reserved;

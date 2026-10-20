@@ -286,7 +286,8 @@ describe("no claim and no wake for an archived group (spec §6.3)", () => {
   });
 
   it("leaves a queued estimate queued and its wake pending: no estimate run is claimed until it is unarchived", async () => {
-    const { h, service } = await confirmed();
+    // Spec correction 2026-10-20: an unconfirmed group (a confirmed one's queued estimate is withdrawn, not claimed).
+    const h = await webFixture(profileSnapshot()), service = new WebControlService(h.deps);
     try {
       const wakeId = `scheduler-wake:g:estimate:${h.estimateId}`;
       const wake = () => h.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id=?").get(wakeId);

@@ -24,15 +24,22 @@ const stopped = (store: ControlStore): boolean => (JSON.parse(String(store.db.pr
 const count = (store: ControlStore, sql: string): number => Number(store.db.prepare(sql).get()!.n);
 
 /** A confirmed group `g`; `start` arms the start wake, `claim` delivers it into one `starting` Web work run. */
-async function group(options: { start: boolean; claim: boolean }): Promise<{ h: Fixture; service: WebControlService; runId: string | null }> {
+async function group(options: { start: boolean; claim: boolean; estimateRun?: boolean }): Promise<{ h: Fixture; service: WebControlService; runId: string | null; estimateRunId: string | null }> {
   const h = await webFixture();
   const service = new WebControlService(h.deps);
+  // Spec correction 2026-10-20: `start` refuses while an estimate runs, and a queued estimate is withdrawn once the
+  // proposal is confirmed or the group started, so an estimate run beside the driver's run is now only a state an earlier
+  // Orca left behind. It is reached by claiming the estimate first and hiding it from start's raw state read.
+  const estimate = options.estimateRun ? await service.claimEstimate("g", h.estimateId) : null;
+  if (options.estimateRun && estimate === null) throw new Error("the estimate was not claimed");
   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): confirmation resolves agent selections through ccloop first, so it is awaited and carries the previewed selectionsHash.
   const confirmed = await service.confirm(h.command("confirm", await h.confirmPayload()));
   if ("error" in confirmed) throw new Error(JSON.stringify(confirmed));
   let runId: string | null = null;
   if (options.start) {
+    if (estimate) h.store.db.prepare("UPDATE estimates SET state='queued' WHERE group_id='g' AND id=?").run(h.estimateId);
     const started = await service.start(h.command("start", {}));
+    if (estimate) h.store.db.prepare("UPDATE estimates SET state='running' WHERE group_id='g' AND id=?").run(h.estimateId);
     if ("error" in started) throw new Error(JSON.stringify(started));
   }
   if (options.claim) {
@@ -40,7 +47,7 @@ async function group(options: { start: boolean; claim: boolean }): Promise<{ h: 
     if (claim.kind !== "claimed") throw new Error(JSON.stringify(claim));
     runId = claim.runId;
   }
-  return { h, service, runId };
+  return { h, service, runId, estimateRunId: estimate === null ? null : String((estimate as { runId: string }).runId) };
 }
 
 describe("graceful shutdown and driver-owned groups (handoff delivery m5)", () => {
@@ -133,9 +140,7 @@ describe("graceful shutdown and driver-owned groups (handoff delivery m5)", () =
   });
 
   it("H7: freezes a driver-owned group as before while a non-driver run (an estimate) is active in it", async () => {
-    const { h, service, runId } = await group({ start: true, claim: true }); try {
-      const estimate = await service.claimEstimate("g", h.estimateId);
-      const estimateRunId = String((estimate as { runId: string }).runId);
+    const { h, runId, estimateRunId } = await group({ start: true, claim: true, estimateRun: true }); try {
       expect(frozenRunIds(h.store, "g")).toEqual([runId, estimateRunId].sort());
       const entry = shutdownGroup(h.store, "g", window, shutdownCommandId(EPOCH), true);
       // The driver's own run stays exempt (execution driver spec §4); only the estimate is frozen.

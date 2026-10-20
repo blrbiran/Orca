@@ -57,8 +57,10 @@ describe("frozen estimator", () => {
       expect(await service.createEstimate(command)).toEqual(result);
       expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! - 250000);
       h.setObserved({ ...h.frozen.snapshot.profile.capabilities, contextWindowTokens: 999999 });
-      expect(await service.claimEstimate("g", h.estimateId)).toBeNull();
-      expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "blocked-capability", reasonCode: "estimate-capability-degraded" });
+      // Spec correction 2026-10-20: the newer estimate is claimed (the import's v1 is now superseded and would be withdrawn).
+      const newer = (result as { result: { estimateId: string } }).result.estimateId;
+      expect(await service.claimEstimate("g", newer)).toBeNull();
+      expect(readEstimateRecord(h.store, "g", newer)).toMatchObject({ state: "blocked-capability", reasonCode: "estimate-capability-degraded" });
       expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()?.n).toBe(0);
       expect(readControlGroup(h.store, "epoch", "g").estimates).toHaveLength(2);
       h.setObserved({ ...h.frozen.snapshot.profile.capabilities, contextWindowTokens: 1 });

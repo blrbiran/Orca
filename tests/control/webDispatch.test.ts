@@ -139,10 +139,12 @@ describe("durable start and proof recovery", () => {
   });
 
   it("keeps a start-unknown estimator in a draft group without a coarse blocked transition", async () => {
-    const { h } = await startedFixture(); try {
+    // Spec correction 2026-10-20: claimed before the confirm (a queued estimate is withdrawn once the proposal is confirmed).
+    const h = await webFixture(profileSnapshot()); try {
       const service = new WebControlService(h.deps);
       const run = await service.claimEstimate("g", h.estimateId);
       expect(run).not.toBeNull();
+      expect(await service.confirm(h.command("confirm", await h.confirmPayload()))).toMatchObject({ result: { kind: "confirmed" } });
       const before = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)).status;
       expect(before).toBe("ready");
     } finally { await h.dispose(); }
