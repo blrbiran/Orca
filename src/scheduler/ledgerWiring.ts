@@ -103,9 +103,9 @@ export function reconcileDecision(
     },
     scope: "repo",
     kind: "reconcile",
-    // Reported-decisions spec 2026-10-20 §6: this row says its grade rather than lean on "absent reads as major". Every
-    // other code-authored row (the boundary row below, graph.ts's and run.ts's scheduling rows, corrections/derive.ts's
-    // closings) carries none and relies on absent meaning major.
+    // Reported-decisions spec 2026-10-20 §6: this row says its grade rather than lean on "absent reads as major", as
+    // corrections/derive.ts's closings do (since Orca session 3d229487). Every other code-authored row (the boundary row
+    // below, graph.ts's and run.ts's scheduling rows) carries none and relies on absent meaning major.
     importance: "major",
   };
 }

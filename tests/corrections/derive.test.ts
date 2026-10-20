@@ -69,6 +69,8 @@ describe("derived rows (spec §5 as revised by §14.2 / §14.5 / §14.22)", () =
       },
       scope: "repo",
       kind: "interface",
+      // REWRITTEN (controller-delegated grant, session 3d229487): a replacement is written major (human ruling: 纠正写出的替代决定一律算重要的).
+      importance: "major",
       evidence: ["correction c_1111111111111111", "overturns orca-dev-1/1"],
     });
 
@@ -179,7 +181,25 @@ describe("authored values on a debug closing (debug-task design §5, §12.5)", (
       because: "进程内互斥跨进程无效",
       undo: { how: `${how}${ORCA_GENERATED}`, cost: "一个文件（继承自 pending-orca-dev-1-0）", blast_radius: "本仓库（继承自 pending-orca-dev-1-0）" },
       scope: "repo", kind: "interface",
+      // REWRITTEN (controller-delegated grant, session 3d229487): written major, as in deriveRows.
+      importance: "major",
       evidence: ["correction c_1111111111111111", "pending pending-orca-dev-1-0"],
     } });
+  });
+
+  // Handoff §4.2 item 7 (B-orca review minor; human ruling: 纠正写出的替代决定一律算重要的, done in session 3d229487): the
+  // person made the replacement, so it is major in so many words -- even when the decision or raw entry it replaces was minor.
+  it("writes a replacement major even when what it replaces was graded minor", () => {
+    expect(deriveRows({ ...input, original: { ...original, importance: "minor" } }).decision.importance).toBe("major");
+    const pending = {
+      pendingId: "pending-orca-dev-1-0", ledgerRun: "orca-dev-1", entryIndex: 0, reason: "tier-0: undo.how", at: "2026-09-01T00:00:00.000Z", evidence: [],
+      entry: { question: "q", chose: "c", undo: { how: "改一下" }, scope: "repo", kind: "implementation", importance: "minor" },
+    };
+    const pendingCorrection: Correction = { ...correction, runId: "orca-dev-1", pendingId: pending.pendingId };
+    delete (pendingCorrection as { decisionId?: string }).decisionId;
+    expect(derivePendingRows({
+      correction: pendingCorrection, pending, choseInstead: "c2", undo: { how: `git revert --no-edit ${"e".repeat(40)}` }, at: "2026-09-07T12:00:00.000Z",
+      runId: "orca-fix-abcd1234", authored: { choseInstead: "human", undoHow: "orca" },
+    }).decision.importance).toBe("major");
   });
 });
