@@ -78,6 +78,14 @@ describe("the running-group cap setting (kanban spec §3.2)", () => {
     }) as typeof fetch;
   });
 
+  it("a cap that cannot be read is a quiet line, never an alert", async () => {
+    globalThis.fetch = (async () => { throw new Error("down"); }) as typeof fetch;
+    render(<AccountContext.Provider value={owner}><OrchestrationSettings /></AccountContext.Provider>);
+    await waitFor(() => expect(screen.getByTestId("orchestration-unread").textContent).toBe("The running-group setting could not be read."));
+    // mutation: show the read failure as a Refusal -> an alert, red
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("shows how many run and sends the new cap at the read revision", async () => {
     render(<AccountContext.Provider value={owner}><OrchestrationSettings /></AccountContext.Provider>);
     await waitFor(() => expect(screen.getByText("1 of at most 3 groups are running. A confirmed group starts on its own when a slot is free.")).toBeTruthy());

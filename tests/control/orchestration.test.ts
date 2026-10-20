@@ -127,6 +127,22 @@ describe("running-group cap (kanban spec §3.2)", () => {
     } finally { await h.dispose(); }
   });
 
+  it("a ready group holds a slot through each execution fact alone: an active work run, a busy task, a pending start wake", async () => {
+    for (const fact of ["run", "task", "wake"] as const) {
+      const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+        const service = new WebControlService(h.deps);
+        setCap(h, service, 1);
+        h.store.db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES ('busy',1,1,'{\"status\":\"ready\"}')").run();
+        if (fact === "run") h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('rb','busy','a',1,1,'{\"phase\":\"work\"}')").run();
+        if (fact === "task") h.store.db.prepare("INSERT INTO work_items(group_id,id,target_version,body) VALUES ('busy','a',1,'{\"kind\":\"task\",\"status\":\"running\"}')").run();
+        if (fact === "wake") h.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES ('w','busy','start','{}',0)").run();
+        await confirm(h, service, "g");
+        // mutation: drop the active-run (or busy-task, or wake) clause of runningGroupIds -> started ["g"], red
+        expect(await service.autoStart(), fact).toEqual({ started: [], refused: [] });
+      } finally { await h.dispose(); }
+    }
+  });
+
   it("a blocked group does not hold a slot", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
       const service = new WebControlService(h.deps);
