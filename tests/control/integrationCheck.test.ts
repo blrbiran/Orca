@@ -129,7 +129,9 @@ describe("the integration check (kanban spec §7 layer 1)", () => {
       h.store.db.prepare("UPDATE groups SET body=? WHERE id='g2'").run(JSON.stringify(body));
       w.setCheck(true, "true");
       await w.pass();
-      expect(readIntegrationCheckState(h.store, "repo")).toMatchObject({ covered: {}, last: { state: "errored" } });
+      // toEqual, not toMatchObject: `{}` would match any covered set.
+      expect(readIntegrationCheckState(h.store, "repo").covered).toEqual({});
+      expect(readIntegrationCheckState(h.store, "repo").last).toMatchObject({ state: "errored" });
       // A `running` state this process did not start (Orca stopped mid-check) does not block the next one.
       h.store.db.prepare("UPDATE meta SET value=? WHERE key='integration-check:repo'").run(JSON.stringify({ lastAt: 1, covered: {}, last: { state: "running", at: 1, commit: null, groups: [], detail: null, debugGroupId: null } }));
       expect(w.service.integrationCheckPass()).toEqual({ started: ["repo"] });
