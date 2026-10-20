@@ -27,6 +27,7 @@ export const NO_FILTER: DecisionFilter = { kind: "", scope: "", projectKey: "" }
 
 /** In English (criteria read them); the render uses the reader's language (panel i18n spec §3.3). */
 export const HIDDEN_BY_FILTER = en.decisions.hiddenByFilter;
+export const HIDDEN_MINOR = en.decisions.hiddenMinor;
 export const NOT_IN_LIST = en.decisions.notInList;
 
 /** Spec §9.2(1). Unreviewed is the default and today's list; Reviewed is reviewed at any tier; All is every row. */
@@ -116,17 +117,20 @@ export function DecisionsView(props: {
   const name = useProjectName();
   const [ownShowMinor, setOwnShowMinor] = useState(false);
   const showMinor = props.showMinor ?? ownShowMinor;
+  const onShowMinor = props.onShowMinor ?? setOwnShowMinor;
   const filtered = filterRows(props.rows, props.filter);
   const shown = visibleByImportance(filtered, showMinor);
   // Final review M-T8: the heading says which decisions are listed; Unreviewed (and no status select) keeps today's.
   const heading = props.status === "reviewed" ? { title: "decisions.titleReviewed", lede: "decisions.ledeReviewed" } as const
     : props.status === "all" ? { title: "decisions.titleAll", lede: "decisions.ledeAll" } as const
     : { title: "decisions.title", lede: "decisions.lede" } as const;
-  // A detail stays open after its row leaves the list (filtered away, or reviewed); say which.
+  // A detail stays open after its row leaves the list (filtered away, collapsed as minor, or reviewed); say which. A
+  // collapsed minor row is matched by the filters, so its note says minor and offers the minor rows (handoff §4.2 item 7).
   const same = (r: DecisionListRow): boolean => r.projectKey === props.selected?.projectKey && r.id === props.selected?.id;
   const note = !props.selected || props.detail == null ? null
     : !props.rows.some(same) ? t("decisions.notInList")
-    : !shown.some(same) ? t("decisions.hiddenByFilter")
+    : !filtered.some(same) ? t("decisions.hiddenByFilter")
+    : !shown.some(same) ? <>{t("decisions.hiddenMinor")} <button type="button" onClick={() => onShowMinor(true)}>{t("decisions.hiddenMinorShow")}</button></>
     : null;
   return (
     <div className="decisions">
@@ -177,7 +181,7 @@ export function DecisionsView(props: {
           ) : (
             <>
               {shown.length === 0 ? <p className="empty">{t("decisions.onlyMinor")}</p> : <DecisionList rows={shown} selected={props.selected} onOpen={props.onOpen} />}
-              <MinorToggle entries={filtered} showMinor={showMinor} onToggle={props.onShowMinor ?? setOwnShowMinor} copy="decisions" />
+              <MinorToggle entries={filtered} showMinor={showMinor} onToggle={onShowMinor} copy="decisions" />
             </>
           )}
         </div>

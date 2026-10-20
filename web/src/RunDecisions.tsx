@@ -13,7 +13,7 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import type { GroupDecisionsViewV1 } from "./controlTypes.js";
-import { MinorToggle, isMinor, visibleByImportance } from "./MinorToggle.js";
+import { MinorTag, MinorToggle, isMinor, visibleByImportance } from "./MinorToggle.js";
 
 type DecisionRun = GroupDecisionsViewV1["tasks"][number]["runs"][number];
 /** A group's decisions as the page last read them, or the code its read failed with (fix round 1, Rule 12). */
@@ -53,6 +53,7 @@ function PendingRow(props: { item: PendingItem; groupId: string; revision: numbe
   const line = because.trim();
   return (
     <li aria-label={item.pendingId}>
+      <MinorTag entry={item} copy="control.decisions" />
       {open ? <NeedsHumanBadge /> : <span>{t(item.state === "approved" ? "control.decisions.approved" : "control.decisions.rejected")}</span>}{" "}
       {pair(item.question, item.chose)}
       <p className="detail-note">{t("control.decisions.reason", { reason: item.reason })}</p>
@@ -113,7 +114,7 @@ export function RunDecisions(props: RunDecisionsProps): JSX.Element {
             const correctable = decision.where === "working-tree" && projectKey !== null;
             return (
               <li key={decision.id} aria-label={decision.id}>
-                <code>{decision.id}</code> {pair(decision.question, decision.chose)}
+                <MinorTag entry={decision} copy="control.decisions" /><code>{decision.id}</code> {pair(decision.question, decision.chose)}
                 {decision.where === "group-branch" && <> · {t("control.decisions.notIntegrated")}</>}{" "}
                 <button type="button" disabled={!correctable}
                   onClick={() => { if (correctable) props.onCorrect?.(projectKey, decision.id); }}>
@@ -131,7 +132,7 @@ export function RunDecisions(props: RunDecisionsProps): JSX.Element {
           <h5>{t("control.decisions.unlanded")}</h5>
           {unlanded.length > 0 && (
             <ul aria-label={t("control.decisions.unlanded")}>
-              {unlanded.map((entry) => <li key={entry.entryIndex}>{pair(entry.question, entry.chose)}</li>)}
+              {unlanded.map((entry) => <li key={entry.entryIndex}><MinorTag entry={entry} copy="control.decisions" />{pair(entry.question, entry.chose)}</li>)}
             </ul>
           )}
           <MinorToggle entries={run.unlanded} showMinor={showMinor.unlanded} onToggle={toggle("unlanded")} copy="control.decisions" list="unlanded" />

@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { enumText } from "./i18n.js";
 import { kindLevel } from "./kindRank.js";
 import { en } from "./locales/en.js";
+import { MinorTag } from "./MinorToggle.js";
 import { useProjectName } from "./projectNames.js";
 import type { DecisionListRow } from "./types.js";
 
@@ -74,6 +75,7 @@ export function DecisionList({
           <li key={key}>
             <button type="button" className="decision-row" aria-current={key === selectedKey ? "true" : undefined} onClick={() => onOpen?.(row)}>
               <span className="row-meta">
+                <MinorTag entry={row} copy="decisions" />
                 <span className="pill field-kind" data-level={kindLevel(String(row.kind))}>{enumText("decisionKind", String(row.kind))}</span>
                 <span className="pill field-scope">{enumText("decisionScope", String(row.scope))}</span>
                 {row.verdict !== "ok" && <span className="pill pill-warn field-verdict">{enumText("decisionVerdict", String(row.verdict))}</span>}

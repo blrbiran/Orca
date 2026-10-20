@@ -6,7 +6,7 @@
  */
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DecisionsView, NO_FILTER } from "../src/DecisionsView.js";
+import { DecisionsView, HIDDEN_BY_FILTER, HIDDEN_MINOR, NO_FILTER } from "../src/DecisionsView.js";
 import { RunDecisions } from "../src/RunDecisions.js";
 import { runNeedsHuman } from "../src/RunDecisions.js";
 import type { GroupDecisionsViewV1 } from "../src/controlTypes.js";
@@ -96,7 +96,8 @@ describe("a run's three decision lists each show major decisions and offer the m
     showRun(decisionRun({ settled: true, unlanded: [unlanded(0), unlanded(1, "minor"), unlanded(2, "minor")] }));
     expect(ids(/q u\d/)).toEqual(["q u0 → c"]);
     fireEvent.click(screen.getByRole("button", { name: "Show 2 minor decisions that did not land" }));
-    expect(ids(/q u\d/)).toEqual(["q u0 → c", "q u1 → c", "q u2 → c"]);
+    // REWRITTEN (controller-delegated grant, session 3d229487): a revealed minor entry now carries its "minor" tag.
+    expect(ids(/q u\d/)).toEqual(["q u0 → c", "minor q u1 → c", "minor q u2 → c"]);
   });
 
   it("a pending entry the server graded major (absent or invalid on the raw entry) shows by default", () => {
@@ -141,7 +142,9 @@ describe("the minor-decision control in Chinese", () => {
     const page = screen.getByRole("button", { name: /次要/ });
     expect(page.textContent).toBe("显示 1 条次要决策");
     fireEvent.click(page);
-    expect(screen.getByRole("button", { name: /次要/ }).textContent).toBe("收起次要决策");
+    // REWRITTEN (controller-delegated grant, session 3d229487): the revealed minor row's button now also says 次要, so the
+    // toggle is found as the expanded control.
+    expect(screen.getByRole("button", { name: /次要/, expanded: true }).textContent).toBe("收起次要决策");
     cleanup();
     showRun(decisionRun({ unlanded: [unlanded(0), unlanded(1, "minor")] }));
     const group = screen.getByRole("button", { name: /次要/ });
@@ -149,5 +152,83 @@ describe("the minor-decision control in Chinese", () => {
     fireEvent.click(group);
     expect(screen.getByRole("button", { name: /次要/ }).textContent).toBe("收起次要决定");
     expect(document.body.textContent).not.toMatch(/decisions\.(show|hide)Minor/);
+  });
+});
+
+// Handoff §4.2 item 7 (B-orca review minor, session 3831d12f; done in session 3d229487): once shown, a minor decision
+// says it is minor, in words a screen reader reads too; a major one carries no such mark.
+describe("a revealed minor decision is marked minor", () => {
+  it("on the Decisions page, inside the row's button, and only on the minor row", () => {
+    render(<DecisionsView rows={[row("run/1"), row("run/2", "minor")]} filter={NO_FILTER} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 minor" }));
+    const rowButton = (id: string) => screen.getByText(id).closest("button") as HTMLElement;
+    expect(within(rowButton("run/2")).getByText("minor").className).toContain("pill");
+    expect(within(rowButton("run/1")).queryByText("minor")).toBeNull();
+    expect(screen.getByRole("button", { name: /^minor .*q run\/2/ })).toBe(rowButton("run/2"));
+  });
+
+  it("in each of a run's three lists", () => {
+    showRun(decisionRun({
+      decisions: [written("run-a/agent-0"), written("run-a/agent-1", "minor")],
+      pending: [pending("p-0"), pending("p-1", "minor")],
+      unlanded: [unlanded(0), unlanded(1, "minor")],
+    }));
+    for (const toggle of screen.getAllByRole("button").filter((b) => b.classList.contains("minor-toggle"))) fireEvent.click(toggle);
+    const tagged = screen.getAllByRole("listitem").filter((li) => within(li).queryByText("minor") !== null).map((li) => li.textContent);
+    expect(tagged).toHaveLength(3);
+    expect(tagged.every((text) => text?.startsWith("minor "))).toBe(true);
+    expect(within(screen.getByRole("listitem", { name: "run-a/agent-1" })).getByText("minor")).toBeTruthy();
+    expect(within(screen.getByRole("listitem", { name: "p-1" })).getByText("minor")).toBeTruthy();
+    expect(within(screen.getByRole("listitem", { name: "run-a/agent-0" })).queryByText("minor")).toBeNull();
+    expect(within(screen.getByRole("listitem", { name: "p-0" })).queryByText("minor")).toBeNull();
+  });
+
+  it("in Chinese", async () => {
+    await i18n.changeLanguage("zh");
+    render(<DecisionsView rows={[row("run/2", "minor")]} filter={NO_FILTER} />);
+    fireEvent.click(screen.getByRole("button", { name: "显示 1 条次要决策" }));
+    expect(within(screen.getByText("run/2").closest("button") as HTMLElement).getByText("次要")).toBeTruthy();
+    cleanup();
+    showRun(decisionRun({ unlanded: [unlanded(1, "minor")] }));
+    fireEvent.click(screen.getByRole("button", { name: "显示 1 条次要决定（未落地）" }));
+    expect(screen.getByRole("listitem").textContent).toBe("次要 q u1 → c");
+  });
+});
+
+// Handoff §4.2 item 7 (B-orca review minor): an open decision whose row is a collapsed minor one is not "hidden by the
+// filters" -- the filters match it. The note says it is minor and offers to show the minor ones.
+describe("the note beside an open minor decision whose row is collapsed", () => {
+  const open = (filter = NO_FILTER) => render(
+    <DecisionsView rows={[row("run/1"), row("run/2", "minor")]} filter={filter} selected={{ projectKey: "proj", id: "run/2" }} detail={<p>detail-slot</p>} />,
+  );
+
+  it("says the decision is minor, not filtered, and its button shows the minor rows", () => {
+    open();
+    const note = screen.getByRole("note");
+    expect(note.textContent).toContain(HIDDEN_MINOR);
+    expect(note.textContent).not.toContain(HIDDEN_BY_FILTER);
+    fireEvent.click(within(note).getByRole("button", { name: "Show minor decisions" }));
+    expect(screen.getByText("run/2")).toBeTruthy();
+    expect(screen.queryByRole("note")).toBeNull();
+  });
+
+  it("keeps the filter wording when a filter also hides the row", () => {
+    open({ ...NO_FILTER, kind: "boundary" });
+    expect(screen.getByRole("note").textContent).toBe(HIDDEN_BY_FILTER);
+  });
+
+  it("hands the request to the owner of the minor state when there is one", () => {
+    const onShowMinor = vi.fn();
+    render(<DecisionsView rows={[row("run/2", "minor")]} filter={NO_FILTER} selected={{ projectKey: "proj", id: "run/2" }} detail={<p>d</p>} showMinor={false} onShowMinor={onShowMinor} />);
+    fireEvent.click(within(screen.getByRole("note")).getByRole("button", { name: "Show minor decisions" }));
+    expect(onShowMinor).toHaveBeenCalledWith(true);
+  });
+
+  it("in Chinese", async () => {
+    await i18n.changeLanguage("zh");
+    open();
+    const note = screen.getByRole("note");
+    expect(note.textContent).toContain("这是一条次要决策，次要决策目前收起着。");
+    expect(within(note).getByRole("button", { name: "显示次要决策" })).toBeTruthy();
   });
 });

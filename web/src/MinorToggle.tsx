@@ -15,6 +15,16 @@ export function visibleByImportance<T extends Graded>(entries: readonly T[], sho
   return showMinor ? [...entries] : entries.filter((entry) => !isMinor(entry));
 }
 
+/**
+ * Handoff §4.2 item 7 (Orca session 3d229487): a minor entry, once shown, says it is minor -- in text, so a screen reader
+ * reads it as part of the row; a major one carries no mark. `copy` as for MinorToggle.
+ */
+export function MinorTag(props: { entry: Graded; copy: "decisions" | "control.decisions" }): JSX.Element | null {
+  const { t } = useTranslation();
+  if (!isMinor(props.entry)) return null;
+  return <><span className="pill field-importance">{t(`${props.copy}.minorTag`)}</span>{" "}</>;
+}
+
 /** A run's three decision lists; each names its own toggle, since three alike-named buttons share one region. */
 export type RunDecisionList = "pending" | "decisions" | "unlanded";
 
