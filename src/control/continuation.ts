@@ -16,6 +16,7 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { idSchema, safeInteger } from "./schema.js";
 import { refuseClarifying } from "./requirementRecords.js";
+import { rearmParkedEstimates } from "./estimateParking.js";
 import {
   commandSuccess,
   groupCommandTarget,
@@ -227,6 +228,7 @@ export function applyResumeFromHandoff(deps: ContinuationDeps, command: ResumeFr
         store.db.prepare("DELETE FROM stop_intents WHERE group_id=?").run(groupId);
         group.stopped = false;
         saveGroupBody(store, group);
+        rearmParkedEstimates(store, groupId);
         const wakeId = armContinuationWake(store, groupId, context.nextCommandRevision, registrations);
         deps.beforeCommit?.();
         return commandSuccess(context, { kind: "resumed-from-handoff", wakeId, pendingRuns: pendingRunViews(registrations) });

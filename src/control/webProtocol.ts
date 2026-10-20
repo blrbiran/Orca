@@ -1671,6 +1671,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
     .strict(),
   z.object({ kind: z.literal("confirmed"), executionSnapshotHash: hashSchema }).strict(),
   z.object({ kind: z.literal("scheduled"), operation: z.enum(["start", "resume-dispatch"]), wakeId: nonemptyString }).strict(),
+  z.object({ kind: z.literal("resumed"), operation: z.literal("resume-dispatch") }).strict(),
   z.object({ kind: z.literal("paused"), stopMode: z.literal("pause") }).strict(),
   z
     .object({

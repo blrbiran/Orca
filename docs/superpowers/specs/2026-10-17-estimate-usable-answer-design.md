@@ -274,3 +274,10 @@ state `withdrawn`; the panel shows "withdrawn: <reason>" / 「已撤回：<原�
 **Unchanged.** `retrySkipped` `proposal-confirmed` and `superseded` on settlement stay: they apply to an estimate that
 was already running when the proposal was confirmed or a newer estimate was queued. A queued estimate of a **stopped**
 pre-start group, or one whose profile no longer resolves, is not withdrawn by this section (not in the ruling).
+
+## Correction (session 9ec98639, 2026-10-21): a stopped pre-start group's queued estimate is parked
+
+Who: Track E implementer, Orca session `9ec98639`, 2026-10-21. Corrects the last sentence of the 3d229487 Correction
+above ("A queued estimate of a **stopped** pre-start group … is not withdrawn by this section (not in the ruling)"):
+such an estimate is now **parked** — still `queued`, grant kept, its wake acknowledged in the claim's transaction —
+and re-armed by every reachable un-stop path. Ruling and design: `2026-10-21-estimate-parking-design.md`.

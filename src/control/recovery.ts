@@ -12,6 +12,7 @@ import { acquireRepoLock } from "../scheduler/repoLock.js";
 import { readGroupBody, saveGroupBody } from "./stopIntent.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { recordActivity } from "./activity.js";
+import { rearmParkedEstimates } from "./estimateParking.js";
 
 /**
  * Issue-fixes spec §3.2 (2), invariant S1: a `shutdown` stop intent whose frozen set is empty froze nothing; it is the dead
@@ -28,6 +29,7 @@ function healEmptyShutdownIntents(store:ControlStore):void {
    const groupId=String(row.group_id);
    store.db.prepare("DELETE FROM stop_intents WHERE group_id=?").run(groupId);
    const group=readGroupBody(store,groupId);group.stopped=false;saveGroupBody(store,group);
+   rearmParkedEstimates(store,groupId);
    recordProjectionChange(store,[groupId]);
    recordActivity(store,{groupId,kind:"stop-cleared",body:{reason:"empty-shutdown-intent"}});
   }

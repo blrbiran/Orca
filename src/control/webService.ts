@@ -26,6 +26,7 @@ import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
 import { budgetEstimateSchema, estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
 import { problemsFromRefusal, repairEstimateOutput } from "./estimateRepair.js";
 import { decideEstimateRetry, estimateRetryId, writeEstimateRetry } from "./estimateRetry.js";
+import { parkEstimate } from "./estimateParking.js";
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, readStopIntent, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
@@ -593,7 +594,8 @@ export class WebControlService {
         const withdrawn = withdrawalReason(this.store, id, group, proposal, estimate);
         if (withdrawn !== null) { withdrawEstimate(this.store, id, group, proposal, estimate, withdrawn); return null; }
         prestart(group); assertKnownConservation(this.store, group, proposal);
-        if (group.stopped) throw new ControlError("group-stopped");
+        // Estimate parking spec 2026-10-21: a stopped pre-start group's estimate waits, queued with its grant, for an un-stop.
+        if (group.stopped) { parkEstimate(this.store, id, estimateId); return null; }
         this.deps.profileRouter.resolve("budget-estimate", estimate.profile.profileId, estimate.profile.profileHash);
         // Found capped before the probe: re-checked here (the block recorded or cleared), never claimed unprobed.
         if (observation === null) { gateClaim(this.store, id, estimate.grant.tokens, at, "estimate"); return null; }

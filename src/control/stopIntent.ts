@@ -4,6 +4,7 @@ import { hasOptionalTaskPolicy, hasTokenPolicy } from "./fundedAllowance.js";
 import { hasValidUsageSettlement, type UsageSettlement } from "./usageSettlement.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { rearmParkedEstimates } from "./estimateParking.js";
 import { applyWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions } from "./commands.js";
@@ -420,6 +421,13 @@ export function applyResumeDispatch(deps: StopDeps, command: ResumeDispatchComma
         store.db.prepare("DELETE FROM stop_intents WHERE group_id=?").run(groupId);
         group.stopped = false;
         saveGroupBody(store, group);
+        rearmParkedEstimates(store, groupId);
+        // Estimate parking spec 2026-10-21 §3.4: a pre-start group paused before confirm has nothing to start; the
+        // pause is lifted (its parked estimates re-armed above) instead of being refused with group-state-invalid.
+        if (readBudgetProposal(store, groupId).state !== "confirmed") {
+          deps.beforeCommit?.();
+          return commandSuccess(context, { kind: "resumed", operation: "resume-dispatch" });
+        }
         const wakeId = startSchedulerWake(store, groupId, context.nextCommandRevision);
         deps.beforeCommit?.();
         return commandSuccess(context, { kind: "scheduled", operation: "resume-dispatch", wakeId }, 202);
