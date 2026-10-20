@@ -47,14 +47,17 @@ describe("the repository integration default over HTTP (integration spec §3.4)"
     expect(ids(w.state).filter((id) => id.startsWith("int-"))).toEqual([]);
   });
 
+  const OFF_CHECK = { enabled: false, command: null, last: null };
   it("reads keep at revision 0, sets an owner's scheme, reads it back, and leaves the workspace read's shape alone", async () => {
     const { repo, owner, post } = await setUp();
     expect(await (await owner.fetch(`/api/control/repositories/${repo}/integration`)).json())
-      .toEqual({ schema: "orca-repository-integration-v1", repoId: repo, integration: { delivery: "keep" }, revision: 0, suggestedTarget: "trunk" });
+      // Ruling: human approved rewriting all necessary criteria (Orca session 9ec98639, 2026-10-21): the read also names
+      // the repository's integration check (kanban spec §7 layer 1), off and never run here.
+      .toEqual({ schema: "orca-repository-integration-v1", repoId: repo, integration: { delivery: "keep" }, revision: 0, suggestedTarget: "trunk", integrationCheck: OFF_CHECK });
     const set = await post(`repositories/${repo}/integration`, { commandId: "int-o", expectedRevision: 0, payload: { integration: LOCAL } });
     expect([set.status, ((await set.json()) as { result: unknown }).result]).toEqual([200, { kind: "integration-scheme-set", repoId: repo, integration: LOCAL }]);
     expect(await (await owner.fetch(`/api/control/repositories/${repo}/integration`)).json())
-      .toEqual({ schema: "orca-repository-integration-v1", repoId: repo, integration: LOCAL, revision: 1, suggestedTarget: "trunk" });
+      .toEqual({ schema: "orca-repository-integration-v1", repoId: repo, integration: LOCAL, revision: 1, suggestedTarget: "trunk", integrationCheck: OFF_CHECK });
     expect(await (await owner.fetch(`/api/control/repositories/${repo}/workspace`)).json())
       .toEqual({ schema: "orca-repository-workspace-v1", repoId: repo, workspaceMode: "worktree", revision: 1 });
   });
