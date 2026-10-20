@@ -150,8 +150,10 @@ describe.skipIf(!realBinary)("the estimate chain against real ccloop and fake cl
 
       const confirmed = await confirmSoft(runtime, "confirm");
       expect("error" in confirmed ? confirmed.error : "confirmed").toBe("confirmed");
-      const started = await runtime.service.start(raw(runtime, "start", "start", {}));
-      expect("error" in started ? started.error.code : "started").toBe("started");
+      // Rewritten under the session grant (human, session 9ec98639: 「这次批准改写所有必要的判据」): kanban spec 2026-10-20
+      // §3.1 -- a confirmed group starts on its own, so the test no longer sends start (a second start is refused as stale);
+      // it waits for the pump's start, sent as orca-auto, and the rest is unchanged.
+      await until(() => runtime.store.db.prepare("SELECT 1 FROM commands WHERE group_id='g' AND actor_id='orca-auto'").get() !== undefined, 60_000, "the automatic start", 50);
       await until(() => JSON.parse(String(runtime.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)).status === "done", 120_000, "task a to land", 50);
       expect(w.show("a.txt")).toBe("A");
     } finally { await w.teardown(); }

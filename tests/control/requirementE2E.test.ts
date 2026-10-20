@@ -102,8 +102,10 @@ describe("a requirement from idea to landed work, against real ccloop (N1 spec �
         budgetMode: "soft", profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: hash, worker: hash, handoff: hash, goalReview: hash },
         contextPolicy: { handoffAtContextTokens: profile.snapshot.profile.capabilities.contextWindowTokens }, selectionsHash: selections.selectionsHash }));
       expect("error" in confirmed ? confirmed.error : "confirmed").toBe("confirmed");
-      const started = await runtime.service.start(raw(runtime, "start", "start", {}));
-      expect("error" in started ? started.error : "started").toBe("started");
+      // Rewritten under the session grant (human, session 9ec98639: 「这次批准改写所有必要的判据」): kanban spec 2026-10-20
+      // §3.1 -- a confirmed group starts on its own, so the test no longer sends start (a second start is refused as stale);
+      // it waits for the pump's start, sent as orca-auto, and the rest is unchanged.
+      await until(() => runtime.store.db.prepare("SELECT 1 FROM commands WHERE group_id='g' AND actor_id='orca-auto'").get() !== undefined, 60_000, "the automatic start", 50);
       await until(() => { noBlocked(runtime); return ["exporter", "images"].every((taskId) => JSON.parse(String(runtime.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(taskId)!.body)).status === "done")
         && workRuns(runtime).every((run) => run.body.drive?.cleanedUp === true); }, 300_000, "both tasks to land", 100);
       // The landed history: main, then the document commit, then the landings.

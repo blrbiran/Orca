@@ -657,7 +657,11 @@ const scriptedKeys = (w: Awaited<ReturnType<typeof worlds.world>>): string[] => 
 describe.skipIf(!realBinary)("an integration conflict resolved by a real ccloop run (integration spec §7)", { timeout: 420_000 }, () => {
   worlds.relocateHome("orca-integrate-resolve-home-");
 
-  it("merge: nothing runs before approval; markers left go back to conflict; the next approval integrates (main, tip)", async () => {
+  // Rewritten under the session grant (human, session 9ec98639: 「这次批准改写所有必要的判据」): kanban spec 2026-10-20 §9a.2
+  // overrides "nothing is dispatched without an owner's approval" -- the driver hands each conflict to an agent itself
+  // (orca-auto). What the criterion still encodes: markers left go back to conflict as the next attempt, and the next
+  // resolution integrates (main, tip); now with no person's command, and the result flagged for the person.
+  it("merge: the driver hands each conflict to an agent; markers left go back to conflict; the next resolution integrates (main, tip)", async () => {
     const w = await worlds.world([{ taskId: "a", targetPaths: ["shared.txt"], verifierType: "command" }], {
       a: { files: { "shared.txt": "A\n" } },
       "integrate-g-1": { files: { "shared.txt": MARKERS } },
@@ -665,21 +669,16 @@ describe.skipIf(!realBinary)("an integration conflict resolved by a real ccloop 
     });
     const runtime = await w.boot(); try {
       const main = await startConflicting(runtime, w, LOCAL_MERGE);
-      await until(() => integrationOf(runtime).state === "conflict", 300_000, "the conflict");
+      await until(() => integrationOf(runtime).lastIntegrated !== null, 300_000, "the integration");
       const tip = w.tip();
-      expect(integrationOf(runtime)).toMatchObject({ reason: "integration-conflict", conflict: { attempt: 1, key: "integrate-g-1", base: main, tip, paths: ["shared.txt"] } });
+      expect(integrationOf(runtime).lastIntegrated).toBe(tip);
       expect(cg(w.repo, "show", "refs/orca/integration-conflict/g/1:shared.txt")).toMatch(/^<<<<<<< /m);
-      // A few more rounds: nothing is dispatched for the conflict without an owner's approval.
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
-      expect(scriptedKeys(w).filter((key) => key.startsWith("integrate-"))).toEqual([]);
-      expect(integrationOf(runtime)).toMatchObject({ state: "conflict", resolution: null });
-      expect(code(await runtime.service.resolveIntegrationConflict(raw(runtime, "resolve-1", "resolve-integration-conflict", {})))).toBe("applied");
-      await until(() => integrationOf(runtime).state === "conflict" && integrationOf(runtime).conflict?.attempt === 2, 300_000, "the first resolution to be refused");
-      expect(integrationOf(runtime)).toMatchObject({ reason: "integration-markers-remaining:shared.txt", resolution: null, conflict: { key: "integrate-g-2", base: main, tip } });
-      expect(cg(w.repo, "rev-parse", "main")).toBe(main);
       expect(cg(w.repo, "show", "refs/orca/integration-conflict/g/2:shared.txt")).toMatch(/^<<<<<<< /m);
-      expect(code(await runtime.service.resolveIntegrationConflict(raw(runtime, "resolve-2", "resolve-integration-conflict", {})))).toBe("applied");
-      await until(() => integrationOf(runtime).lastIntegrated === tip, 300_000, "the integration");
+      // Two approvals, both the driver's, one per attempt; the integrated one is flagged for the person.
+      expect(runtime.store.db.prepare("SELECT id, actor_id FROM commands WHERE group_id='g' AND id LIKE 'orca-auto-resolve-%' ORDER BY rowid").all()
+        .map((row) => [String(row.id).replace(/-r\d+$/, ""), String(row.actor_id)])).toEqual([["orca-auto-resolve-1", "orca-auto"], ["orca-auto-resolve-2", "orca-auto"]]);
+      expect(runtime.store.db.prepare("SELECT decision_id, state FROM flagged_decisions WHERE group_id='g'").all().map((row) => [String(row.decision_id), String(row.state)]))
+        .toEqual([["integration-conflict:g:2", "flagged"]]);
       const integrated = cg(w.repo, "rev-parse", "main");
       expect(integrationOf(runtime)).toMatchObject({ state: "idle", reason: null, integratedCommit: integrated, pending: null, conflict: null, resolution: null });
       expect(parents(w.repo, integrated)).toEqual([main, tip]);
@@ -699,7 +698,10 @@ describe.skipIf(!realBinary)("an integration conflict resolved by a real ccloop 
     } finally { await w.teardown(); }
   });
 
-  it("squash: a base that moved during the resolution discards it; the next approval integrates one commit on the new main", async () => {
+  // Rewritten under the session grant (human, session 9ec98639: 「这次批准改写所有必要的判据」): kanban spec §9a.2 -- the
+  // approvals are the driver's own (orca-auto), so the test moves main once the first resolution is under way instead of
+  // after its own approval; the discarded first resolution and the integration on the moved main are unchanged.
+  it("squash: a base that moved during the resolution discards it; the next resolution integrates one commit on the new main", async () => {
     const w = await worlds.world([{ taskId: "a", targetPaths: ["shared.txt"], verifierType: "command" }], {
       a: { files: { "shared.txt": "A\n" } },
       "integrate-g-1": { files: { "shared.txt": "M\nA\n" } },
@@ -707,19 +709,15 @@ describe.skipIf(!realBinary)("an integration conflict resolved by a real ccloop 
     });
     const runtime = await w.boot(); try {
       const main = await startConflicting(runtime, w, LOCAL_SQUASH);
-      await until(() => integrationOf(runtime).state === "conflict", 300_000, "the conflict");
+      await until(() => integrationOf(runtime).state === "resolving", 300_000, "the first resolution");
       const tip = w.tip();
       expect(integrationOf(runtime).conflict).toMatchObject({ attempt: 1, base: main, tip });
-      expect(code(await runtime.service.resolveIntegrationConflict(raw(runtime, "resolve-1", "resolve-integration-conflict", {})))).toBe("applied");
-      // The person moves main (another file) before the resolution can finish: no await between the approval and this.
+      // The person moves main (another file) before the resolution can finish: no await between seeing it run and this.
       const moved = commitOn(w.repo, "refs/heads/main", { "x.txt": "x\n" }, "person again");
-      await until(() => integrationOf(runtime).conflict?.attempt === 2, 300_000, "the discarded resolution to conflict again");
-      // Discarded: main never received the first resolution, and the new conflict is against the moved main.
-      expect(cg(w.repo, "rev-parse", "main")).toBe(moved);
-      expect(integrationOf(runtime)).toMatchObject({ state: "conflict", reason: "integration-conflict", conflict: { base: moved, tip } });
-      expect(runtime.store.db.prepare("SELECT delivered FROM outbox WHERE id='integration-usage:integrate-g-1'").get()).toEqual({ delivered: 1 });
-      expect(code(await runtime.service.resolveIntegrationConflict(raw(runtime, "resolve-2", "resolve-integration-conflict", {})))).toBe("applied");
       await until(() => integrationOf(runtime).lastIntegrated === tip, 300_000, "the integration");
+      // Discarded: the first resolution was booked, and a second conflict was pinned against the moved main.
+      expect(runtime.store.db.prepare("SELECT delivered FROM outbox WHERE id='integration-usage:integrate-g-1'").get()).toEqual({ delivered: 1 });
+      expect(cg(w.repo, "rev-parse", "--verify", "--quiet", "refs/orca/integration-conflict/g/2^{commit}")).not.toBe("");
       const integrated = cg(w.repo, "rev-parse", "main");
       expect(parents(w.repo, integrated)).toEqual([moved]);
       expect(cg(w.repo, "show", `${integrated}:shared.txt`)).toBe("M\nA");
