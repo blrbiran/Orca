@@ -124,6 +124,8 @@ const USAGE = `usage:
                                  table is never overwritten: the detection goes to <table>.draft.json and the diff is printed
   orca agents show               validate the installation table (ccloop agents validate) and print what each installation
                                  resolves to with no layer overriding it; exit 1 if any entry is refused
+  orca agents refresh            record the version each installed CLI answers now (ccloop's probe) in the table; only
+                                 the version fields change, the old bytes go to <table>.bak-auto; exit 1 if a probe failed
   orca control get <path> [--control-state-dir <dir>] [--client-name <name>]
   orca control send <route> --expected-revision <n> (--payload <json> | --payload-file <file>)
                     [--command-id <id>] [--control-state-dir <dir>] [--client-name <name>]

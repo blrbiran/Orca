@@ -18,6 +18,7 @@ import type {
   AgentInstallationPreviewV1,
   AgentSelectionPreviewV1,
   AgentModelsViewV1,
+  AgentVersionRefreshV1,
   AgentsViewV1,
   CommandEnvelopeV1,
   CommandErrorV1,
@@ -205,6 +206,8 @@ async function controlProbe<T>(path: string, signal?: AbortSignal): Promise<T> {
   if (!res.ok) throw new ControlRequestError(refusalOf(`POST ${path}`, res.status, body, i18n.t("panelErrors.answered", { status: res.status })));
   return body as T;
 }
+/** Agent version auto-refresh spec 2026-10-20 §3.3: record the versions the installed CLIs answer now (owner only). */
+export const refreshAgentVersions = (): Promise<AgentVersionRefreshV1> => controlProbe<AgentVersionRefreshV1>("/api/control/agents/refresh-versions");
 export const detectAgentInstallations = (): Promise<AgentInstallationPreviewV1> => controlProbe<AgentInstallationPreviewV1>("/api/control/operator/agent-update-preview");
 export const fetchAgentInstallationPreview = (): Promise<AgentInstallationStateV1> => controlGet<AgentInstallationStateV1>("/api/control/operator/agent-update-preview");
 /** The confirm's own resolution of a group's agent slots, for the proposal version the server holds now. */

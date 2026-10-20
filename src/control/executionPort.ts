@@ -8,6 +8,7 @@ import { ControlError } from "./errors.js";
 import { createCcloopExecutionPort } from "./ccloopPort.js";
 import type { AgentResolution, ContextWindow, PartialSelection } from "./agentSelection.js";
 import type { AgentApplyRequest, AgentObservation, AgentPreview, AgentReceipt } from "./agentInstallationProtocol.js";
+import type { VersionRefresh } from "../agents/versionRefresh.js";
 /** Single-call estimate spec §4.1: protocol 3's two kinds of work. */
 // Syncskill integration spec §10.6: skillPluginDir only for a run with skills (ccloop protocol 3, additive).
 export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string;ompSkillsDir?:string }
@@ -32,6 +33,8 @@ export interface ControlFeatures { protocol:1;tokenPolicy?:"optional-v1";savedRe
 export interface ExecutionPort {
   readFeatures?():Promise<ControlFeatures>;
   observeAgentInstallations?():Promise<AgentObservation>;
+  /** Agent version auto-refresh spec 2026-10-20 §3.1: record the installed versions ccloop observes (one, or all). */
+  refreshAgentVersions?(only?:string):Promise<VersionRefresh>;
   previewAgentInstallations?():Promise<AgentPreview>;
   applyAgentInstallations?(request:AgentApplyRequest):Promise<AgentReceipt>;
   savedResultSourceEligibility?(input:{source:StartEnvelope;sourceAttempt:number;packagePath:string;packageHash:string}):Promise<SavedResultSourceEligibility>;

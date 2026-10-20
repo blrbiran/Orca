@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
-import { ccloopWorlds, g, raw, realBinary, startGroup, until, workRuns } from "./fixtures/ccloopWorld.js";
+import { ccloopWorlds, g, realBinary, startGroup, until, workRuns } from "./fixtures/ccloopWorld.js";
 
 /**
  * Ruling review R3 (human ruling 2026-09-27) on the way out that final review I-2 (a) relies on, which spec §13.6 only
@@ -11,6 +11,14 @@ import { ccloopWorlds, g, raw, realBinary, startGroup, until, workRuns } from ".
  * until the table records the version the CLI now answers, and once it does, the same frozen configHash resolves,
  * the run is accepted and lands. Real ccloop build (ORCA_CCLOOP_BIN), its fake codex behind a wrapper whose
  * `--version` answer the criterion changes; HOME and the XDG roots are relocated.
+ *
+ * *** REWRITTEN 2026-10-20 (agent version auto-refresh spec 2026-10-20; human ruling, session 308b874c: 「组跑到一半遇到
+ * agent 升级 => 直接用新版本继续」, 「静默更新就行」; changing the necessary tests authorized that session): the refusal
+ * and the "recovery-retry does not help" above are no longer the behaviour. Orca's ccloop port now answers the drift
+ * itself -- ccloop re-probes the installation, Orca records the version in the table (only that field) and asks
+ * once more -- so the start and the next dispatch go on under the new version with no person editing the table.
+ * What R3 measured still holds and is still asserted: the frozen configHash resolves after the version changes, and
+ * the sealed config records which version each run ran under. ***
  */
 const VERSION_WRAPPER = resolve("tests/control/fixtures/version-wrapper.mjs");
 const { world, removeRoots, relocateHome } = ccloopWorlds({ rootPrefix: "orca-upgrade-e2e-", epochPrefix: "epoch-upgrade-" });
@@ -42,26 +50,22 @@ describe.skipIf(!realBinary)("an agent CLI upgraded in place under a confirmed g
     codex.version = "1.0.0-before";
     writeFileSync(w.table, JSON.stringify(w.agentsTable), { mode: 0o600 });
     const upgrade = (): void => writeFileSync(versionFile, "1.0.1-after\n");
-    const recordNewVersion = (): void => {
-      codex.version = "1.0.1-after";
-      writeFileSync(w.table, JSON.stringify(w.agentsTable), { mode: 0o600 });
-    };
-    return { w, upgrade, recordNewVersion };
+    return { w, upgrade };
   }
 
-  it("refuses start on the drift, then starts under the frozen hash once the table records the new version", async () => {
-    const { w, upgrade, recordNewVersion } = await upgradable([{ taskId: "a", targetPaths: ["a.txt"] }], { a: { files: { "a.txt": "A\n" } } });
+  it("starts on the upgraded CLI under the frozen hash, the table recording the new version by itself", async () => {
+    const { w, upgrade } = await upgradable([{ taskId: "a", targetPaths: ["a.txt"] }], { a: { files: { "a.txt": "A\n" } } });
     const runtime = await w.boot(); try {
       let frozen = "";
       await startGroup(runtime, w.repoId, 0, async () => {
         frozen = String(workItem(runtime, "a").configHash);
         upgrade(); // the installed CLI upgrades itself between confirmation and start
-        const refused = await runtime.service.start(raw(runtime, "start-drifted", "start", {}));
-        expect(refused).toMatchObject({ error: { code: "control-capability-unsupported", retryable: false } });
-        expect(w.calls()).toEqual([]);
-        recordNewVersion();
-      });
+      }); // startGroup's own start must answer "started" (fixtures/ccloopWorld.ts), not the drift refusal
       expect(frozen).toMatch(/^[0-9a-f]{64}$/);
+      // Only the version changed in the table; the command (the wrapper) is the one the criterion wrote.
+      const table = JSON.parse(readFileSync(w.table, "utf8")) as { installations: { codex: { version: string; command: string[] } } };
+      expect(table.installations.codex.version).toBe("1.0.1-after");
+      expect(table.installations.codex.command).toEqual(w.agentsTable.installations.codex!.command);
       runtime.startPump(50);
       await until(() => workItem(runtime, "a").status === "done" && workRuns(runtime).every((run) => run.body.drive?.cleanedUp === true), 180_000, "the task to land");
       expect(g(w.repo, "show", "refs/heads/orca/g:a.txt")).toBe("A");
@@ -70,9 +74,9 @@ describe.skipIf(!realBinary)("an agent CLI upgraded in place under a confirmed g
     } finally { await w.teardown(); }
   });
 
-  it("blocks the next dispatch of a started group on the drift, stays blocked after a retry until the table records the new version, then lands it", async () => {
+  it("dispatches the next task of a started group on the CLI that upgraded under it, with no blocker and the frozen hashes", async () => {
     // a runs long enough for the CLI to upgrade under it; b waits on a, so its dispatch comes after the upgrade.
-    const { w, upgrade, recordNewVersion } = await upgradable(
+    const { w, upgrade } = await upgradable(
       [{ taskId: "a", targetPaths: ["a.txt"] }, { taskId: "b", dependsOn: ["a"], targetPaths: ["b.txt"] }],
       { a: { files: { "a.txt": "A\n" }, delayMs: { execute: 3_000 } }, b: { files: { "b.txt": "B\n" } } },
     );
@@ -81,24 +85,9 @@ describe.skipIf(!realBinary)("an agent CLI upgraded in place under a confirmed g
       const frozen = { a: String(workItem(runtime, "a").configHash), b: String(workItem(runtime, "b").configHash) };
       runtime.startPump(50);
       await until(() => w.calls().includes("plan"), 60_000, "a to be accepted and planning");
-      upgrade(); // accepted runs never read the table again; only new work is gated
-      await until(() => workItem(runtime, "a").status === "done", 180_000, "a to land despite the upgrade");
-      await until(() => blockerCodes(runtime).includes("claim-capability-unavailable"), 60_000, "the drift to block b's dispatch");
-      expect(workRuns(runtime).map((run) => run.task)).toEqual(["a"]);
-
-      // A retry before the table knows the new version clears the blocker, and the next delivery puts it back.
-      const early = await runtime.service.recoveryRetry(raw(runtime, "retry-early", "recovery-retry", { scope: "group", groupId: "g" }));
-      expect(early).toMatchObject({ result: { kind: "recovery-observed", resolved: true, blockerCodes: ["claim-capability-unavailable"] } });
-      expect(blockerCodes(runtime)).toEqual([]);
-      await until(() => blockerCodes(runtime).includes("claim-capability-unavailable"), 60_000, "the drift to block b again");
-      expect(workRuns(runtime).map((run) => run.task)).toEqual(["a"]);
-
-      // The person records the version the CLI answers now; nothing else in the installation changes.
-      recordNewVersion();
-      const retried = await runtime.service.recoveryRetry(raw(runtime, "retry-after-table", "recovery-retry", { scope: "group", groupId: "g" }));
-      expect(retried).toMatchObject({ result: { kind: "recovery-observed", resolved: true } });
+      upgrade(); // accepted runs never read the table again; only new work meets the new version
       await until(() => workItem(runtime, "b").status === "done" && workRuns(runtime).every((run) => run.body.drive?.cleanedUp === true), 180_000, "b to land");
-
+      expect(blockerCodes(runtime)).toEqual([]);
       expect(workRuns(runtime).map((run) => run.body.state)).toEqual(["settled", "settled"]);
       expect(g(w.repo, "show", "refs/heads/orca/g:b.txt")).toBe("B");
       expect({ a: workItem(runtime, "a").configHash, b: workItem(runtime, "b").configHash }).toEqual(frozen);

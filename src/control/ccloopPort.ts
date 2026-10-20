@@ -14,6 +14,7 @@ import { capabilityViewSchema } from "./webProtocol.js";
 import { byModelSchema } from "./usageLedger.js";
 import { boundStopReason } from "./driveRecord.js";
 import { agentObservationSchema, agentPreviewSchema, agentReceiptSchema } from "./agentInstallationProtocol.js";
+import { recordObservedVersions } from "../agents/versionRefresh.js";
 
 const MAX_OUTPUT=24*1024*1024;
 const executionStatusSchema=z.discriminatedUnion("kind",[
@@ -153,11 +154,13 @@ export function agentsTablePath(path:string):string {
  try{if(stat.isSymbolicLink()||!stat.isFile()||realpathSync(path)!==path)throw new Error();}catch{throw invalid();}
  return path;
 }
-export function createCcloopExecutionPort(options:{binary:string;agentsTablePath:string;timeoutMs:number}):ExecutionPort {
+/** ccloop's drift detail (src/agents/materialize.ts): `<installation>: table <recorded>, observed <installed>`. */
+const DRIFT_DETAIL=/^(\S+): table (\S+), observed \S+$/;
+export function createCcloopExecutionPort(options:{binary:string;agentsTablePath:string;timeoutMs:number;log?:(line:string)=>void}):ExecutionPort {
  const binary=regularAbsolute(options.binary,"control-binary-invalid",true),table=agentsTablePath(options.agentsTablePath);
  if(!Number.isSafeInteger(options.timeoutMs)||options.timeoutMs<=0)throw new ControlError("control-port-options-invalid");
  const evidenceContext=new Map<string,StartEnvelope>(),key=(ref:ArtifactRef)=>`${ref.artifactId}:${ref.hash}`;
- const raw=(method:string,payload:unknown,timeoutMs=options.timeoutMs)=>new Promise<unknown>((resolve,reject)=>{
+ const peer=(method:string,payload:unknown,timeoutMs=options.timeoutMs)=>new Promise<unknown>((resolve,reject)=>{
    const child=execFile(binary,["control",method,"--agents",table],{encoding:"utf8",maxBuffer:MAX_OUTPUT,timeout:timeoutMs},(error,stdout,stderr)=>{
     if(error){const e=error as Error&{code?:number|string;killed?:boolean};if(e.code==="ERR_CHILD_PROCESS_STDIO_MAXBUFFER"||/maxBuffer/i.test(e.message))return reject(new ControlError("control-response-too-large"));if(e.killed)return reject(new ControlError("control-peer-timeout"));const suffix=String(stderr).trim();return reject(new ControlError("control-peer-exit",`${String(e.code)}${suffix?":"+suffix:""}`));}
     if(Buffer.byteLength(stdout)>MAX_OUTPUT||Buffer.byteLength(stderr)>MAX_OUTPUT)return reject(new ControlError("control-response-too-large"));
@@ -165,6 +168,28 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
    });
    child.stdin?.end(JSON.stringify(payload));
  });
+ const log=options.log??((line:string)=>{process.stderr.write(line);});
+ /**
+  * Agent version auto-refresh spec 2026-10-20 §3.2 (human ruling, session 308b874c: 「组跑到一半遇到 agent 升级 =>
+  * 直接用新版本继续」): every control call comes through here, so a drift refusal is answered here and nowhere else.
+  * The installation ccloop named is re-probed by ccloop itself; when the table then records a version other than the
+  * one ccloop refused, the same call is asked once more. Anything else -- no observation, the same version, a peer
+  * without installation updates, a failed write -- leaves the original refusal standing.
+  */
+ const raw=async(method:string,payload:unknown,timeoutMs=options.timeoutMs):Promise<unknown>=>{
+  try{return await peer(method,payload,timeoutMs);}
+  catch(error){
+   if(peerErrorCode(error)!=="agent-version-drift")throw error;
+   const drift=DRIFT_DETAIL.exec(peerFailure(error)!.detail);
+   if(drift===null)throw error;
+   const [,id,refused]=drift as unknown as [string,string,string];
+   let row;
+   try{row=(await refreshVersions(id)).rows.find(candidate=>candidate.id===id);}catch{throw error;}
+   if(row===undefined||row.observed===null||row.observed===refused)throw error;
+   if(row.outcome==="updated")log(`orca: agent ${id} ${row.recorded} -> ${row.observed} recorded in ${table}\n`);
+   return await peer(method,payload,timeoutMs);
+  }
+ };
  const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{const parsed=schema.safeParse(value);if(!parsed.success)throw new ControlError("control-response-invalid");return parsed.data;};
  let unsupportedIdentity:string|null=null;
  const optionalIdentity=()=>{regularAbsolute(binary,'control-binary-invalid',true);const stat=lstatSync(binary,{bigint:true});return [stat.dev,stat.ino,stat.size,stat.mtimeNs,stat.ctimeNs].join(':');};
@@ -185,11 +210,15 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
  };
  const requireRecovery=async()=>{if((await readFeatures()).savedResultRecovery!=="v1")throw new ControlError("control-saved-result-unsupported");};
  const requireAgentUpdates=async()=>{if((await readFeatures()).agentInstallationUpdate!=="v1")throw new ControlError("control-agent-update-unsupported");};
+ const observe=async()=>{await requireAgentUpdates();return parse(agentObservationSchema,await peer("agent-installation-observe",{}));};
+ /** Spec §3.1: one observation (one probe per installation, by ccloop), recorded for `only` or for every installation. */
+ const refreshVersions=async(only?:string)=>recordObservedVersions(table,await observe(),only);
  const requireFeatures=async(input:StartEnvelope)=>{if(input.mode==="verify-saved-result")await requireRecovery();if(input.protocol===4&&(input.mode===undefined||input.tokenPolicy!==undefined)&&(await readFeatures()).tokenPolicy!=="optional-v1")throw new ControlError("control-token-policy-unsupported");};
  const privateRead=async(method:string,payload:unknown,ref:ArtifactRef)=>{await requireRecovery();const value=parse(evidenceSchema,await raw(method,payload));const bytes=Buffer.from(value.base64,"base64");if(value.artifactId!==ref.artifactId||value.hash!==ref.hash||bytes.toString("base64").replace(/=+$/," ").trim()!==value.base64.replace(/=+$/," ").trim()||createHash("sha256").update(bytes).digest("hex")!==ref.hash)throw new ControlError("artifact-hash-mismatch");return bytes;};
  const port:ExecutionPort={
   readFeatures,
-  async observeAgentInstallations(){await requireAgentUpdates();return parse(agentObservationSchema,await raw("agent-installation-observe",{}));},
+  async observeAgentInstallations(){return observe();},
+  refreshAgentVersions:refreshVersions,
   async previewAgentInstallations(){await requireAgentUpdates();return parse(agentPreviewSchema,await raw("agent-installation-preview",{}));},
   async applyAgentInstallations(request){await requireAgentUpdates();try{return parse(agentReceiptSchema,await raw("agent-installation-apply",request));}catch(error){
     const code=peerErrorCode(error);

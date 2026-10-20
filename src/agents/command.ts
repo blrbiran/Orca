@@ -6,15 +6,16 @@ import { createCcloopExecutionPort } from "../control/ccloopPort.js";
 import { AGENTS_DIR_MODE, AGENTS_FILE_MODE, AgentsPathError, agentsTablePath, draftPathOf } from "./paths.js";
 
 /**
- * Agent selection spec §6.7 and §8: `orca agents init|show`. The only place Orca writes the installation table,
+ * Agent selection spec §6.7 and §8: `orca agents init|show|refresh`. With src/agents/versionRefresh.ts (agent version
+ * auto-refresh spec 2026-10-20, which rewrites version fields only), the only place Orca writes the installation table,
  * which is user data outside any repository (Rule 17): the path is ORCA_AGENTS_TABLE or ~/.orca/agents.json, new
- * directories are 0700 and new files 0600 whatever the umask, an existing directory or file keeps its mode, and an
- * existing table is never overwritten -- the new detection goes to `<table>.draft.json` with a diff against it.
+ * directories are 0700 and new files 0600 whatever the umask, an existing directory or file keeps its mode, and `init`
+ * never overwrites an existing table -- the new detection goes to `<table>.draft.json` with a diff against it.
  * ccloop writes nothing outside the repository here; it only answers on stdout (spec §4.3).
  */
 export interface AgentsIo { stdout(text: string): void; stderr(text: string): void }
 
-const USAGE = "usage: orca agents init | orca agents show   (table: $ORCA_AGENTS_TABLE or ~/.orca/agents.json; ccloop: $ORCA_CCLOOP_BIN)\n";
+const USAGE = "usage: orca agents init | orca agents show | orca agents refresh   (table: $ORCA_AGENTS_TABLE or ~/.orca/agents.json; ccloop: $ORCA_CCLOOP_BIN)\n";
 const MAX_OUTPUT = 16 * 1024 * 1024;
 const PORT_TIMEOUT_MS = 60_000;
 
@@ -154,10 +155,28 @@ async function show(env: NodeJS.ProcessEnv, io: AgentsIo): Promise<number> {
   return failed ? 1 : 0;
 }
 
+/**
+ * Agent version auto-refresh spec 2026-10-20 §3.4: record the versions ccloop observes the installed CLIs answer (only
+ * each installation's `version` changes; versionRefresh.ts). Exit 1 when a probe answered nothing or ccloop refused.
+ */
+async function refresh(env: NodeJS.ProcessEnv, io: AgentsIo): Promise<number> {
+  const { table, binary } = settings(env);
+  const port = createCcloopExecutionPort({ binary, agentsTablePath: table, timeoutMs: PORT_TIMEOUT_MS });
+  let rows;
+  try { rows = (await port.refreshAgentVersions!()).rows; } catch (error) {
+    throw new AgentsRefusal(`could not refresh ${table}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  for (const row of rows) {
+    io.stdout(row.outcome === "updated" ? `${row.id}: ${row.recorded} -> ${row.observed}\n`
+      : row.outcome === "unchanged" ? `${row.id}: unchanged (${row.recorded})\n` : `${row.id}: probe failed (table ${row.recorded})\n`);
+  }
+  return rows.some((row) => row.outcome === "unavailable") ? 1 : 0;
+}
+
 export async function runAgentsCommand(args: string[], env: NodeJS.ProcessEnv, io: AgentsIo): Promise<number> {
-  if (args.length !== 1 || (args[0] !== "init" && args[0] !== "show")) { io.stderr(USAGE); return 1; }
+  if (args.length !== 1 || (args[0] !== "init" && args[0] !== "show" && args[0] !== "refresh")) { io.stderr(USAGE); return 1; }
   try {
-    return args[0] === "init" ? await init(env, io) : await show(env, io);
+    return args[0] === "init" ? await init(env, io) : args[0] === "show" ? await show(env, io) : await refresh(env, io);
   } catch (error) {
     if (!(error instanceof AgentsRefusal)) throw error;
     io.stderr(`orca agents: ${error.message}\n`);

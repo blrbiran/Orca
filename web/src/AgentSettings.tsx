@@ -65,6 +65,8 @@ export interface AgentSettingsProps {
   updateNotice?: string | null;
   updateBusy?: boolean;
   onDetectUpdates?: () => void;
+  /** Agent version auto-refresh spec 2026-10-20 §3.3: record the versions the installed CLIs answer now. */
+  onRefreshVersions?: () => void;
   onApplyUpdates?: (ids: string[]) => void;
   onRetryPendingUpdate?: () => void;
   unansweredCommandId?: string | null;
@@ -117,6 +119,7 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
           ))}
         </tbody>
       </table>
+      {props.onRefreshVersions && <button type="button" disabled={props.updateBusy} onClick={props.onRefreshVersions}>{t("agents.settings.refreshVersions")}</button>}
       {installation && <section aria-label={t("agents.updates.title")}>
         <h4>{t("agents.updates.title")}</h4>
         {installation.failureCode && <p role="status">{t("agents.updates.unavailable", { code: installation.failureCode })}{explainBesideCode(installation.failureCode) !== null ? ` ${explainBesideCode(installation.failureCode)}` : ""}</p>}

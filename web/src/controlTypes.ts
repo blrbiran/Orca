@@ -626,6 +626,8 @@ export type OperatorPreferencesV1 = {
 };
 export type AgentInstallationV1 = { id: string; kind: string; defaults: { model: string; contextWindow: ContextWindowV1 }; contextOptions: ContextWindowV1[]; version: string };
 export type AgentsViewV1 = { schema: "orca-agents-view-v1"; installations: AgentInstallationV1[] };
+/** Agent version auto-refresh spec 2026-10-20 §3.3: POST /api/control/agents/refresh-versions, per installation. */
+export type AgentVersionRefreshV1 = { schema: "orca-agent-version-refresh-v1"; rows: Array<{ id: string; recorded: string; observed: string | null; outcome: "updated" | "unchanged" | "unavailable" }> };
 /** Spec 2026-10-15 §5 (R3): GET /api/control/agents/:installation/models -- ccloop's ccloop-models-v1 under Orca's schema tag. */
 export type AgentModelsViewV1 = {
   schema: "orca-agent-models-v1"; installation: string; kind: string; source: "cache" | "probe" | "none"; observedAt: string | null;

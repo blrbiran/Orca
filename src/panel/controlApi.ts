@@ -18,7 +18,7 @@ import { agentUpdateStateSchema } from "../control/agentInstallationProtocol.js"
 import { resolveSelection, slotLayers, type PartialSelection } from "../control/agentSelection.js";
 import { idSchema } from "../control/schema.js";
 import { debugGroupIdFor, debugGroupIds } from "../control/debugGroup.js";
-import { correctionDebugOpenPayloadSchema, savedResultEligibilityViewSchema, agentModelsViewSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import { correctionDebugOpenPayloadSchema, savedResultEligibilityViewSchema, agentModelsViewSchema, agentVersionRefreshSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import { readIntegrationDefault } from "../control/integrationScheme.js";
@@ -36,7 +36,7 @@ export interface ControlReadApiDeps {
   config: Pick<TrustedControlConfig, "readView">;
   service?: WebControlService;
   /** Agent selection spec §6.8 (W6-10): the reads that ask ccloop about agents. Absent, those routes 404. */
-  port?: Pick<ExecutionPort, "listAgents" | "resolveAgent" | "listModels">;
+  port?: Pick<ExecutionPort, "listAgents" | "resolveAgent" | "listModels" | "refreshAgentVersions">;
 }
 
 function asyncRoute(handler: (req: Request, res: Response) => Promise<void> | void) {
@@ -334,6 +334,19 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
         try { res.json(agentModelsViewSchema.parse({ schema: "orca-agent-models-v1", ...(await port.listModels(installation, refresh)) })); }
         catch (error) { sendMappedControlError(res, error); }
       };
+      // Agent version auto-refresh spec 2026-10-20 §3.3: records the versions the installed CLIs answer now. It spawns them
+      // and rewrites the user's agents table, so it is an owner-only POST like the models refresh; the refreshed
+      // observation replaces the stored one, so the detection list agrees with the table it just wrote.
+      app.post("/api/control/agents/refresh-versions", asyncRoute(async (req, res) => {
+        if (Object.keys(req.query).length > 0) { sendMappedControlError(res, new ControlError("query-invalid")); return; }
+        if (!owner(res)) return;
+        if (port.refreshAgentVersions === undefined) { sendMappedControlError(res, new ControlError("control-protocol-unavailable")); return; }
+        try {
+          const refreshed = await port.refreshAgentVersions();
+          deps.service!.noteAgentObservation(refreshed.observation);
+          res.json(agentVersionRefreshSchema.parse({ schema: "orca-agent-version-refresh-v1", rows: refreshed.rows }));
+        } catch (error) { sendMappedControlError(res, error); }
+      }));
       app.get("/api/control/agents/:installation/models", asyncRoute((req, res) => listModels(req, res, false)));
       app.post("/api/control/agents/:installation/models/refresh", asyncRoute((req, res) => listModels(req, res, true)));
       app.get("/api/control/groups/:groupId/agent-preview", asyncRoute(async (req, res) => {

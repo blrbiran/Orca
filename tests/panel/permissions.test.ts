@@ -63,8 +63,12 @@ describe("the permission table (spec §3.5)", () => {
       // Reviewed detection and the model-list refresh are the only POST probes: no operator command result or table
       // mutation. Ruling (session 4de777f4, 2026-10-17, criteria changes authorized for this session): the refresh moved
       // from `GET ?refresh=1` to a POST so the CSRF check covers it.
+      // Agent version auto-refresh spec 2026-10-20 §3.3 (human ruling, session 308b874c: 「静默更新就行」; test changes
+      // authorized that session): the owner-only version refresh is a third, and it does write the agents table's
+      // version fields -- outside the command ledger by that ruling, owner-only and CSRF-checked like the models refresh.
       expect(registered.filter((entry) => !entry.startsWith("GET ") && !commandPaths.includes(entry)).sort()).toEqual([
         "POST /api/control/agents/:installation/models/refresh",
+        "POST /api/control/agents/refresh-versions",
         "POST /api/control/operator/agent-update-preview",
       ]);
       expect(commandPaths.filter((entry) => !registered.includes(entry))).toEqual([]);

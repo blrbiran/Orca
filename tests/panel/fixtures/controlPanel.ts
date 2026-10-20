@@ -76,6 +76,8 @@ export interface BootOptions {
   agentUpdatePort?: Pick<ExecutionPort, "observeAgentInstallations" | "previewAgentInstallations" | "applyAgentInstallations" | "readFeatures">;
   /** Spec 2026-10-15 §5: what the port answers for one installation's models; absent, the port has no listModels. */
   listModels?: ExecutionPort["listModels"];
+  /** Agent version auto-refresh spec 2026-10-20 §3.3: what the port answers for a version refresh; absent, it has none. */
+  refreshAgentVersions?: ExecutionPort["refreshAgentVersions"];
 }
 
 export interface Harness {
@@ -150,6 +152,7 @@ export function createHarness(): Harness {
         collect: async () => ({ events: [], candidate: null, terminal: null }),
         ...options.agentUpdatePort,
         ...(options.listModels === undefined ? {} : { listModels: options.listModels }),
+        ...(options.refreshAgentVersions === undefined ? {} : { refreshAgentVersions: options.refreshAgentVersions }),
       } as unknown as ExecutionPort;
       const frozen = resolveProfile(snapshot, port);
       const router = createExecutionProfileRouter([frozen], { now: () => new Date("2030-01-01T00:00:00.000Z") });

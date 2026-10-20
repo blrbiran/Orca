@@ -68,6 +68,7 @@ import {
   fetchAgentPreferences,
   fetchAgentInstallationState,
   detectAgentInstallations,
+  refreshAgentVersions,
   AGENT_UPDATE_PATH,
   readPendingAgentUpdate,
   writePendingAgentUpdate,
@@ -727,6 +728,14 @@ export function App(): JSX.Element {
     try { setAgentPreferences(await fetchAgentPreferences()); } catch { /* the refusal above already says why */ }
   };
 
+  /** Spec 2026-10-20 §3.3: the owner's Refresh versions, then the table and the detection state read again. */
+  const refreshVersions = async (): Promise<void> => {
+    setAgentUpdateBusy(true);
+    try { await refreshAgentVersions(); setAgentUpdateNotice(null); }
+    catch (error) { setAgentUpdateNotice(controlFailureFrom(error).message); }
+    await loadAgents(false);
+    setAgentUpdateBusy(false);
+  };
   const detectInstallationUpdates = async (): Promise<void> => {
     setAgentUpdateBusy(true);
     try {
@@ -1071,9 +1080,15 @@ export function App(): JSX.Element {
   }, [control.uncertainCommandIds]);
 
   // Agent selection spec §6.8. An unconfigured port is asked too: its refusal code is what the proposal view shows.
+  // Agent version auto-refresh spec 2026-10-20 §3.3 (human ruling: 「静默更新就行」): the first read of a page load is
+  // preceded by one version refresh, so the table shows what the installed CLIs answer now. Its refusal (a member, a
+  // peer without installation updates) is silent: the table is read either way. Returns to the page do not probe again.
   useEffect(() => {
     if (controlConfig === null) return;
-    void loadAgents(true);
+    void (async () => {
+      if (controlConfig.executionPort === "configured") { try { await refreshAgentVersions(); } catch { /* silent: the read below still runs */ } }
+      await loadAgents(true);
+    })();
   }, [controlConfig]);
 
   // Ruling review R17 (a): the operator usually fixes an installation outside this page (a terminal), so coming back
@@ -1508,6 +1523,7 @@ export function App(): JSX.Element {
             updateNotice: agentUpdateNotice,
             updateBusy: agentUpdateBusy,
             onDetectUpdates: () => { void detectInstallationUpdates(); },
+            onRefreshVersions: () => { void refreshVersions(); },
             onApplyUpdates: (ids) => { void applyInstallationUpdates(ids); },
             onRetryPendingUpdate: () => { void retryPendingInstallationUpdate(); },
             unansweredCommandId: localPendingUpdate?.commandId ?? null,

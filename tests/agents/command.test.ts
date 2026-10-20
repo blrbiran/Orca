@@ -74,7 +74,17 @@ const script = JSON.parse(fs.readFileSync(${JSON.stringify(scriptPath)}, "utf8")
 const [a, b, c, d] = process.argv.slice(2);
 if (a === "agents" && b === "detect") { process.stdout.write(script.detect ?? JSON.stringify({ schema: "ccloop-agents-detect-v1", table: script.table, candidates: {} })); process.exit(0); }
 if (a === "agents" && b === "validate") { process.stdout.write(JSON.stringify([{ id: "claude", ok: script.validateOk !== false }]) + "\\n"); process.exit(script.validateOk === false ? 1 : 0); }
-if (a === "control" && b === "capabilities" && c === "--agents") {
+// Agent version auto-refresh spec 2026-10-20 §3.4: \`orca agents refresh\` asks ccloop's features and its observation of
+// the table at \`d\`; \`script.observed\` is what each installation's --version answers (null: no answer), absent = as recorded.
+if (a === "control" && (b === "features" || b === "agent-installation-observe") && c === "--agents") {
+  process.stdin.resume(); process.stdin.on("end", () => {
+    if (b === "features") { process.stdout.write(JSON.stringify(script.noUpdates ? { protocol: 1 } : { protocol: 1, agentInstallationUpdate: "v1" })); return; }
+    const bytes = fs.readFileSync(d, "utf8"), installations = JSON.parse(bytes).installations, observed = script.observed ?? {};
+    process.stdout.write(JSON.stringify({ schema: "orca-agent-detection-observation-v1", baseTableHash: require("node:crypto").createHash("sha256").update(bytes).digest("hex"), observedAt: "2026-10-20T00:00:00.000Z",
+      installed: Object.entries(installations).map(([id, row]) => { const seen = Object.hasOwn(observed, id) ? observed[id] : row.version;
+        return { id, kind: row.kind, command: row.command, recordedVersion: row.version, observedVersion: seen, realpath: seen === null ? null : row.command[0], status: seen === null ? "unavailable" : seen === row.version ? "current" : "changed" }; }) }));
+  });
+} else if (a === "control" && b === "capabilities" && c === "--agents") {
   let stdin = ""; process.stdin.on("data", (x) => { stdin += x; }); process.stdin.on("end", () => {
     const request = JSON.parse(stdin);
     if (request.agent === null) process.stdout.write(JSON.stringify({ protocol: 3, installations: [{ id: "claude", kind: "claude", defaults: { model: "claude-opus-5-5", contextWindow: "agent-default" }, contextOptions: ["agent-default", 1000000], version: "2.1.282" }] }));
@@ -265,5 +275,41 @@ describe("orca agents show (agent selection spec §6.7)", () => {
     expect(await invalid.agents("init")).toBe(0);
     expect(await invalid.agents("show")).toBe(1);
     await assertNoStrayWrites(invalid);
+  });
+});
+
+describe("orca agents refresh (agent version auto-refresh spec 2026-10-20 §3.4)", () => {
+  // Human ruling, session 308b874c: 「不用看版本号变化，静默更新就行」 -- the command records what the installed CLIs answer,
+  // changing only each installation's version, and says per installation what it did.
+  const twoAgents = { schema: "ccloop-agents-table-v1", installations: { ...TABLE.installations, codex: { kind: "codex", command: ["/opt/codex"], version: "0.40.0", configDir: null, timeoutMs: 1_800_000, killGraceMs: 5_000 } } };
+
+  it("records an upgraded version, says old -> new or unchanged per installation, keeps the mode, and exits 0", async () => {
+    const w = await world({ table: twoAgents, observed: { codex: "0.41.0" } });
+    expect(await w.agents("init")).toBe(0);
+    await chmod(w.table, 0o644);
+    expect(await w.agents("refresh")).toBe(0);
+    expect(w.out.join("")).toContain("claude: unchanged (2.1.282)\ncodex: 0.40.0 -> 0.41.0\n");
+    const table = JSON.parse(await readFile(w.table, "utf8")) as typeof twoAgents;
+    expect([table.installations.claude.version, table.installations.codex.version]).toEqual(["2.1.282", "0.41.0"]);
+    expect(await modeOf(w.table)).toBe(0o644);
+    expect(await modeOf(`${w.table}.bak-auto`)).toBe(0o600);
+    await assertNoStrayWrites(w);
+  });
+
+  it("exits 1 and leaves the table as it was when a probe answered no version", async () => {
+    const w = await world({ table: twoAgents, observed: { claude: null } });
+    expect(await w.agents("init")).toBe(0);
+    const before = await readFile(w.table, "utf8");
+    expect(await w.agents("refresh")).toBe(1);
+    expect(w.out.join("")).toContain("claude: probe failed (table 2.1.282)\ncodex: unchanged (0.40.0)\n");
+    expect(await readFile(w.table, "utf8")).toBe(before);
+    await expect(lstat(`${w.table}.bak-auto`)).rejects.toThrow("ENOENT");
+  });
+
+  it("exits 1 naming the refusal when ccloop cannot observe installations", async () => {
+    const w = await world({ noUpdates: true });
+    expect(await w.agents("init")).toBe(0);
+    expect(await w.agents("refresh")).toBe(1);
+    expect(w.err.join("")).toContain("control-agent-update-unsupported");
   });
 });

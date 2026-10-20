@@ -892,6 +892,8 @@ export class WebControlService {
     try { this.installationObservation = await this.deps.port.observeAgentInstallations(); this.installationFailure = null; }
     catch (error) { this.installationObservation = null; this.installationFailure = error instanceof ControlError ? peerCode(error) : "control-internal-error"; }
   }
+  /** Agent version auto-refresh spec 2026-10-20 §3.3: a refresh's own observation, re-stated against the table it wrote. */
+  noteAgentObservation(observation: AgentObservation): void { this.installationObservation = observation; this.installationFailure = null; }
   agentUpdateView(operatorId: string) {
     return { schema: "orca-agent-installation-state-v1" as const, revision: readAgentUpdateRevision(this.store, operatorId),
       pending: hasPendingAgentUpdate(this.store, operatorId), pendingCommand: pendingAgentUpdateCommand(this.store, operatorId), observation: this.installationObservation,

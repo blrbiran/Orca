@@ -1899,6 +1899,18 @@ export const agentsViewSchema = z
   .strict()
   .superRefine((value, ctx) => requireSortedUnique(value.installations, (entry) => entry.id, ctx, ["installations"]));
 
+// Agent version auto-refresh spec 2026-10-20 §3.3: what recording the installed versions did, per installation.
+export const agentVersionRefreshSchema = z
+  .object({
+    schema: z.literal("orca-agent-version-refresh-v1"),
+    rows: z.array(
+      z
+        .object({ id: idSchema, recorded: nonemptyString, observed: nonemptyString.nullable(), outcome: z.enum(["updated", "unchanged", "unavailable"]) })
+        .strict(),
+    ),
+  })
+  .strict();
+
 // Spec 2026-10-15 §5 (part C): one installation's models for the selection editor, as ccloop answered them.
 export const agentModelsViewSchema = z
   .object({

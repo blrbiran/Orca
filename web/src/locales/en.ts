@@ -846,6 +846,7 @@ export const en = {
     clearTask: "Clear agent for task {{taskId}}",
     settings: {
       region: "Agents settings",
+      refreshVersions: "Refresh versions",
       operatorLine: "Operator {{operatorId}} · preferences revision {{revision}}. A change reaches groups confirmed after it; a confirmed group keeps the selection it froze.",
       noInstallations: "The installation table lists no agent. Run orca agents init, point ORCA_AGENTS_TABLE at the table it wrote (by default ~/.orca/agents.json) and restart the panel.",
       th: { installation: "installation", kind: "kind", version: "version", defaultModel: "default model", defaultContext: "default context" },

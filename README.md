@@ -87,9 +87,13 @@ orca agents show     # validates the table and prints each installation's defaul
 
 #### After upgrading an agent CLI
 
-The installation table records the CLI version. Upgrading the binary does not update that record; resolution refuses
-version drift with `agent-version-drift`. Run `orca agents show`, then `orca agents init` to detect the current
-installations. With an existing table, inspect `<table>.draft.json` and the printed differences. Preserve your existing
+The installation table records the CLI version, and ccloop refuses a mismatch as `agent-version-drift`. Orca records
+the new version itself: when ccloop refuses a claim, start or resume with that drift, Orca has ccloop probe the
+installation, writes the version it answers into the table (only that field; the previous file is kept as
+`<table>.bak-auto`) and asks once more, so a group goes on under the new version. The Agents page refreshes the
+versions when it loads and has a **Refresh versions** button; `orca agents refresh` does the same from a terminal
+(exit 1 if a probe failed). A moved binary or a new agent is not a version change: for those, run `orca agents show`,
+then `orca agents init` to detect the current installations. With an existing table, inspect `<table>.draft.json` and the printed differences. Preserve your existing
 custom commands, configuration directories and defaults; back up the old table before deliberately replacing it with
 reviewed values. Restart the panel to load the new table. Do not delete the only copy of your configuration.
 
@@ -574,7 +578,7 @@ maximum sessions, a soft maximum cost in USD, session timeout) and stops one aft
 
 | Path | Written by |
 |---|---|
-| `$ORCA_AGENTS_TABLE` (default `$HOME/.orca/agents.json`) | `orca agents init` |
+| `$ORCA_AGENTS_TABLE` (default `$HOME/.orca/agents.json`) | `orca agents init`; its `version` fields (and `<table>.bak-auto`) also `orca agents refresh`, the Agents page and the control plane on a version drift |
 | `$ORCA_CONTROL_DIR/<repo key>` and its `.runs` / `.workspaces` siblings, or `--control-state-dir` | the panel's control plane |
 | `$ORCA_CORRECTIONS_DIR` (default `$HOME/.orca`) | reviews and corrections from the panel or `orca correct` |
 | ccmem's data directory | ccmem itself, when the Memory section opens it (it may migrate it) |
