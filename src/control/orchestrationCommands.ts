@@ -22,9 +22,13 @@ export function applySetOrchestrationSettings(deps: { store: ControlStore; admis
       apply: (context) => {
         const raw = context.rawCommand as SetOrchestrationSettingsCommand;
         if (raw.target.kind !== "orchestration") throw new ControlError("control-target-not-allowed");
-        const { maxRunningGroups } = raw.payload;
-        if (readOrchestrationSettings(deps.store).maxRunningGroups === maxRunningGroups) throw new ControlError("no-op-command");
-        writeOrchestrationSettings(deps.store, { maxRunningGroups }, context.nextCommandRevision);
+        const { maxRunningGroups, criteriaReview } = raw.payload;
+        const current = readOrchestrationSettings(deps.store);
+        // Protect-acceptance-criteria spec §5: a payload without `criteriaReview` keeps the stored default.
+        const review = criteriaReview ?? current.criteriaReview;
+        const next = review === undefined ? { maxRunningGroups } : { maxRunningGroups, criteriaReview: review };
+        if (current.maxRunningGroups === maxRunningGroups && (criteriaReview === undefined || criteriaReview === current.criteriaReview)) throw new ControlError("no-op-command");
+        writeOrchestrationSettings(deps.store, next, context.nextCommandRevision);
         return { status: 200, body: {
           schema: "orca-command-success-v1", commandId: raw.commandId, actorId: raw.actorId,
           verb: raw.verb, target: raw.target, commandRevision: context.nextCommandRevision, projectionSeq: null,

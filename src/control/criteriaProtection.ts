@@ -11,8 +11,9 @@ import { QUIET_GIT } from "./workspace.js";
  * they changed, or assertions were deleted or weakened, "可以先落地，不要block住，但是需要标红提醒人 review"; a change that
  * only adds tests: "不用提示"). Detection is code (Rule 5): the files that define the task's checks, what the attempt did
  * to them, and the weakening signals. Nothing here blocks or reverts; the landing writes a major `criteria` decision and
- * flags it (kanban spec §9a's flagged state). As-built §8: no base-version re-run and no automatic reviewer yet, so
- * every non-additive change is flagged (the strict reading §7a.4 gives an ambiguous case) and stays for the person.
+ * flags it (kanban spec §9a's flagged state). As-built §9: a `modified` change is re-run with the base versions of its
+ * checks first (`runChecksAtBase`; passing there gives no notice), and a red flag is judged by Orca's reviewer
+ * (criteriaReview.ts) before it is the person's.
  */
 export type CriteriaChangeKind = "none" | "additive" | "modified" | "weakening";
 export interface CriteriaChange { kind: CriteriaChangeKind; files: string[]; signals: string[] }
@@ -110,7 +111,7 @@ export function criteriaDecision(runId: string, groupId: string, base: string, c
     question: `the attempt ${what} the files that define this task's checks: ${change.files.join(", ")}. May it land?`,
     chose: "land it and flag it for a person to review (protect-acceptance-criteria spec §4: never block)",
     alternatives: [{ option: "refuse the landing until a person looks", why_not: "the human ruled the change lands first and is flagged red for review, so no group waits on it" }],
-    because: "a task that cannot make its checks pass could change the checks instead; whether the change was justified is a person's call (no automatic reviewer yet)",
+    because: "a task that cannot make its checks pass could change the checks instead; whether the change was justified is judged by Orca's reviewer first when it is on (spec §5), else by a person",
     undo: { how: `restore ${change.files.join(", ")} from the run's base commit ${base} on orca/${groupId} and land that`, cost: "one task's checks", blast_radius: "the listed files" },
     scope: "task", kind: "criteria", importance: "major",
     evidence: [...change.signals, ...change.files.map((file) => `changed: ${file}`)].slice(0, 32),

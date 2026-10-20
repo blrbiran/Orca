@@ -631,6 +631,7 @@ export const commandVerbSchema = z.enum([
   "set-usage-calendar",
   "set-integration-scheme",
   "set-integration-check",
+  "set-criteria-review",
   "set-group-integration",
   "retry-integration",
   "resolve-integration-conflict",
@@ -820,6 +821,8 @@ export const setIntegrationSchemePayloadSchema = z.object({ integration: integra
 // of the landed groups' own required checks (some suites are slow, the human said).
 export const integrationCheckSettingSchema = z.object({ enabled: z.boolean(), command: z.string().min(1).max(4096).nullable() }).strict();
 export const setIntegrationCheckPayloadSchema = integrationCheckSettingSchema;
+// Protect-acceptance-criteria spec §5: the automatic reviewer of flagged test changes, per repository (absent: the global default).
+export const setCriteriaReviewPayloadSchema = z.object({ enabled: z.boolean() }).strict();
 // Integration spec §3.1: the group's copy, the same body shape as the repository default's.
 export const setGroupIntegrationPayloadSchema = z.object({ integration: integrationSchemeSchema }).strict();
 // Controller ruling W6-8: the envelope's expectedRevision (checked against agent_preferences.revision) is the only one.
@@ -912,7 +915,8 @@ export const rejectPendingDecisionPayloadSchema = z.object({ pendingId: idSchema
 // Kanban spec 2026-10-20 §9a: a person ratifies a landed decision Orca flagged (clears the flag; nothing else changes).
 export const ratifyFlaggedDecisionPayloadSchema = z.object({ decisionId: nonemptyString }).strict();
 // Kanban spec §3.2: at most this many groups run at once (default 3; the human asked for it for CPU load and conflicts).
-export const setOrchestrationSettingsPayloadSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64) }).strict();
+// Protect-acceptance-criteria spec §5: `criteriaReview` is the reviewer's global default (absent: unchanged; never set: on).
+export const setOrchestrationSettingsPayloadSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64), criteriaReview: z.boolean().optional() }).strict();
 // Kanban spec §3.3, §9a.5: a person's edge between groups; the target group is the dependent, `dependsOn` must land first.
 export const groupDependencyPayloadSchema = z.object({ dependsOn: idSchema }).strict();
 // Debug task plan Task 6: one recorded correction opens one debug group (spending nothing). `reopen` asks for the next
@@ -973,6 +977,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-integration-check"), target: repositoryCommandTargetSchema, payload: setIntegrationCheckPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-criteria-review"), target: repositoryCommandTargetSchema, payload: setCriteriaReviewPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("retry-integration"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -1042,6 +1047,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-check"), target: repositoryCommandTargetSchema, payload: setIntegrationCheckPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-criteria-review"), target: repositoryCommandTargetSchema, payload: setCriteriaReviewPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("retry-integration"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -1729,6 +1735,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("workspace-mode-set"), repoId: idSchema, workspaceMode: workspaceModeSchema }).strict(),
   z.object({ kind: z.literal("integration-scheme-set"), repoId: idSchema, integration: integrationSchemeSchema }).strict(),
   z.object({ kind: z.literal("integration-check-set"), repoId: idSchema, integrationCheck: integrationCheckSettingSchema }).strict(),
+  z.object({ kind: z.literal("criteria-review-set"), repoId: idSchema, enabled: z.boolean() }).strict(),
   z.object({ kind: z.literal("group-integration-set"), groupId: idSchema, integration: integrationSchemeSchema }).strict(),
   z.object({ kind: z.literal("integration-retried"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("integration-resolution-started"), groupId: idSchema }).strict(),
@@ -1840,7 +1847,7 @@ export const commandSuccessSchema = z
     const isShutdown = value.verb === "shutdown";
     // Execution driver spec §3.2: a repository-scoped command has its setting's revision and no group
     // projection.
-    const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-integration-scheme" || value.verb === "set-integration-check" || value.verb === "set-agent-preferences" || value.verb === "apply-agent-update"
+    const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-integration-scheme" || value.verb === "set-integration-check" || value.verb === "set-criteria-review" || value.verb === "set-agent-preferences" || value.verb === "apply-agent-update"
       || value.verb === "set-spend-cap" || value.verb === "clear-spend-cap" || value.verb === "set-usage-calendar"
       // Debug task plan Task 11: the `@corrections` scope has revision 0 and no group projection.
       || value.verb === "correction-record" || value.verb === "correction-close" || value.verb === "correction-withdraw"

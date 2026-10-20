@@ -78,7 +78,8 @@ function sourceAgent(store: ControlStore, source: SystemDebugSource): PartialSel
 const INSTRUCTION: Record<SystemDebugSource["kind"], string> = {
   "ladder": "The task below could not be completed: its run ended without success. Find why, and make it pass. Rule out first: a wrong or ambiguous check or task, the base already failing the check, the environment.",
   "integration-check": "Groups that each passed their own checks were combined on the target, and the checks below fail there. Find what the combination broke and fix it.",
-  "criteria-review": "A landed task changed the tests or checks that define its acceptance, and a review judged the change not justified. Restore the stronger criteria and fix the code so they pass.",
+  // Protect-acceptance-criteria spec §5 as built (§9): the judge and the fix are one run; an empty attempt is "justified".
+  "criteria-review": "A landed task changed the tests or checks that define its acceptance, and Orca flagged it. Judge whether the task's goal required that change. If it did, change nothing. If it did not, restore the stronger criteria and fix the code so they pass.",
 };
 
 /** §2: the goal, from the input alone (no model, no I/O): the same input gives the same bytes. */

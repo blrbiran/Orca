@@ -42,6 +42,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "set-integration-scheme": "human-only",
   // Kanban spec §7 layer 1: the check runs a command an owner names, in Orca's own environment.
   "set-integration-check": "human-only",
+  // Protect-acceptance-criteria spec §5: switching the reviewer off leaves every flag for a person.
+  "set-criteria-review": "human-only",
   "set-group-integration": "human-only",
   "retry-integration": "human-only",
   "resolve-integration-conflict": "human-only",

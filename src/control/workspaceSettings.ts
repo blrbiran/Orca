@@ -19,6 +19,8 @@ const settingsBodySchema = z.object({
   workspaceMode: z.enum(["worktree", "clone"]), revision: safeInteger.positive(), integration: integrationSchemeSchema.optional(),
   // Kanban spec 2026-10-20 §7 layer 1: absent is off (integrationCheck.ts).
   integrationCheck: integrationCheckSettingSchema.optional(),
+  // Protect-acceptance-criteria spec §5: the reviewer of flagged test changes for this repository; absent is the global default.
+  criteriaReview: z.boolean().optional(),
 }).strict();
 export type RepositorySettingsBody = z.infer<typeof settingsBodySchema>;
 

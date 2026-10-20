@@ -537,6 +537,15 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
         return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
       },
     },
+    {
+      path: "/api/control/repositories/:repoId/criteria-review",
+      verb: "set-criteria-review",
+      // Protect-acceptance-criteria spec §5: the repository scope's ledger key, as for set-integration-check.
+      target: (params) => {
+        const repoId = idSchema.parse(params.repoId);
+        return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
+      },
+    },
     // Integration spec §3.1: the group's copy of the scheme; the ledger key is the group's.
     { path: "/api/control/groups/:groupId/integration", verb: "set-group-integration", target: fromParams },
     // Integration spec §6.5: a blocked or conflicted integration back to idle.
@@ -645,6 +654,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "set-workspace-mode": await service.setWorkspaceMode(command); break;
           case "set-integration-scheme": await service.setIntegrationScheme(command); break;
           case "set-integration-check": service.setIntegrationCheck(command); break;
+          case "set-criteria-review": service.setCriteriaReview(command); break;
           case "set-group-integration": await service.setGroupIntegration(command); break;
           case "retry-integration": service.retryIntegration(command); break;
           case "resolve-integration-conflict": await service.resolveIntegrationConflict(command); break;

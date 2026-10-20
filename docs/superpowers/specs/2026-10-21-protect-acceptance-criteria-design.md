@@ -137,3 +137,43 @@ which is the reviewer-off behaviour §5 already defines):
 - **§5 automatic reviewer** (a single call with a strict schema; justified ⇒ ratify as `orca-auto`, not justified ⇒ a
   system debug group `criteria-review`, system debug task spec 2026-10-21) and its on/off setting.
 - **Reconciliation path (§7):** a reconcile run's own changes to check-defining files are not classified yet (step R).
+
+## 9. As-built, second part (session 9ec98639, 2026-10-21; builder's calls, reversible — same ruling as §8)
+
+This section corrects §8's "Not built yet" list: all three are built now (§8's text is kept as written).
+
+- **Reconciliation path (§7):** step R runs the same detection over `tip..reconciled` (commit
+  `feat(control): a reconciled landing goes through the same criteria detection`).
+- **§4.2 base-version re-run** (`runChecksAtBase`, `src/control/criteriaProtection.ts`; stepC in
+  `src/control/executionDriver.ts`): only for a `modified` change (a weakening is flagged whatever the re-run says, so it
+  is not run; additions skip it). In the run's own workspace at the attempt, every changed check-defining file goes back
+  to its base version (a `package.json` only in its `scripts`; a file the attempt added stays), and the contract's
+  required checks run as `debugRepro.ts` runs a command (`sh -lc`, inherited environment, each bounded by
+  `perAttemptTimeoutMs`). It runs off the driver round under the reproduce-first check's marker
+  (`drive.debugRepro = { state: "checking", …, check: "criteria-base" }`), so a restart restores the workspace and runs
+  it again; the panel does not show it as a reproduce-first check. The verdict rides on `drive.criteriaBase` to the
+  landing: `passed` ⇒ no notice; `failed` (or could not run, §7a.4) ⇒ the decision and flag name
+  `base-run-failed: <command>`. Debug groups (a correction's) keep their own reproduce-first check and get no re-run.
+- **§5 automatic reviewer** (`src/control/criteriaReview.ts`, the system debug pass in `src/control/webService.ts`).
+  **Deviation from §5's "single call":** the judge is a system debug group of source `criteria-review` (system debug task
+  spec), not a single call. Its task is told: judge whether the task's goal required the change; if it did, change
+  nothing; if not, restore the stronger criteria and fix the code. Reason: a single-call purpose needs its own claim,
+  grant and settlement plumbing (as clarify/split), while the system debug group already has claims, budgets, auto
+  confirm/start, agent choice (the source task's) and recovery; and §5's "not justified ⇒ a debug task restores" becomes
+  the same run. Cost: a full run instead of a single call.
+  - **Which flags:** red `test-change` flags on a task's run, the group not archived, the repository's reviewer on, the
+    task's contract having required checks (the judge is held to them). One judge per flagged run
+    (`sysdebug-criteria-review-<hash>`).
+  - **Where it starts:** from the flagged group's branch (`stackOn`), unless that group delivers locally (its change is
+    on the target already; then from the target).
+  - **Verdict, by code (Rule 5):** from the judge's run once it settled `succeeded`: empty attempt (D14, `landedCommit`
+    null) ⇒ `justified`; landed change ⇒ `restored` (a stacked judge's branch is fast-forwarded into the flagged group's,
+    like the ladder's fold, without a rerun). Both clear the flag as a ratify by `orca-auto`
+    (`ratifyCommandId: orca-auto-criteria-review-<judge>`). A failed judge settles `debug-failed`; a refused fold settles
+    `fold-refused`; either way the flag stays red. An empty attempt leaves the judge's task blocked (D14); that is the
+    verdict, not a failure, so the judge is settled by its run, not its task.
+  - **No loop (§7a.5):** a flag raised on a `criteria-review` judge's own landing is never judged; it is the person's.
+  - **Switch:** per repository `set-criteria-review {enabled}` (owner-only, `POST repositories/<repoId>/criteria-review`,
+    stored on the repository settings body); global default `criteriaReview` on `set-orchestration-settings` (a payload
+    without it keeps the stored value); neither set ⇒ on. The panel has no control for either yet (control API /
+    `orca control send` only) — registered.

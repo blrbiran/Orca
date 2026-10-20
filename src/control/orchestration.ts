@@ -30,7 +30,8 @@ const groupOrchestrationSchema = z.object({
 }).strict();
 export type GroupOrchestration = z.infer<typeof groupOrchestrationSchema>;
 
-const settingsSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64) }).strict();
+// Protect-acceptance-criteria spec §5: `criteriaReview` is the automatic reviewer's global default; absent is on.
+const settingsSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64), criteriaReview: z.boolean().optional() }).strict();
 export type OrchestrationSettings = z.infer<typeof settingsSchema>;
 
 export function readGroupOrchestration(store: ControlStore, groupId: string): GroupOrchestration | null {

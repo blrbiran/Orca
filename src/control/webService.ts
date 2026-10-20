@@ -43,6 +43,8 @@ import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor,
 import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderFacts, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
+import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
+import { ratifyFlag } from "./flaggedDecisions.js";
 import { applySetIntegrationCheck, forgetInterruptedIntegrationCheck, integrationCheckDue, integrationCheckFacts, readIntegrationCheckSetting, readIntegrationCheckState, recordIntegrationCheckEnded, recordIntegrationCheckStarted, runIntegrationCheck, type SetIntegrationCheckCommand } from "./integrationCheck.js";
 import { applyCorrectionClose, applyCorrectionRecord, applyCorrectionWithdraw, type CorrectionCloseCommand, type CorrectionRecordCommand, type CorrectionWithdrawCommand, type PanelCorrections } from "./correctionCommands.js";
 import { recordActivity } from "./activity.js";
@@ -710,6 +712,26 @@ export class WebControlService {
       });
       if (!("error" in answer)) out.opened.push(groupId);
     }
+    // Protect-acceptance-criteria spec §5: each red test-change flag is judged first (criteriaReview.ts). The judge starts
+    // from the flagged group's branch unless that group delivers locally (its change is then on the target already).
+    const exists = (groupId: string) => this.store.db.prepare("SELECT 1 FROM groups WHERE id=?").get(groupId) !== undefined;
+    for (const candidate of criteriaReviewCandidates(this.store, (source) => exists(systemDebugGroupId(source)))) {
+      const groupId = systemDebugGroupId(candidate.source);
+      let checks: string[];
+      try {
+        const task = readArchivedPlan(this.store, candidate.groupId).plan.tasks.find((entry) => entry.taskId === candidate.taskId);
+        checks = task === undefined ? [] : taskContractSchema.parse(JSON.parse(task.originalContractCanonicalJson)).verification.requiredChecks;
+      } catch { checks = []; }
+      if (checks.length === 0) continue; // nothing to hold the judge to: the flag stays the person's
+      const original = this.store.db.prepare("SELECT body FROM groups WHERE id=?").get(candidate.groupId);
+      const local = original !== undefined && readGroupIntegration(JSON.parse(String(original.body)))?.scheme.delivery === "local";
+      const answer = await this.openSystemDebugGroup({
+        schema: "orca-raw-command-v1", commandId: `orca-auto-criteria-review-${candidate.runId}`, actorId: ORCHESTRATION_ACTOR, expectedRevision: 0,
+        verb: "system-debug-open", target: { kind: "group", groupId },
+        payload: { source: candidate.source, stackOn: local ? null : candidate.groupId, repoId: candidate.repoId, facts: criteriaReviewFacts(candidate), checks },
+      });
+      if (!("error" in answer)) out.opened.push(groupId);
+    }
     for (const group of systemDebugGroups(this.store)) {
       const { groupId, mark } = group;
       if (mark.settled !== null || isGroupArchived(this.store, groupId)) continue;
@@ -721,6 +743,15 @@ export class WebControlService {
       if (group.status === "draft") {
         const refused = await this.autoConfirmSystemDebug(groupId, mark.source.groupId);
         if (refused === null) out.confirmed.push(groupId); else { settleSystemDebug(this.store, groupId, "confirm-refused", refused); out.settled.push(groupId); }
+        continue;
+      }
+      // Protect-acceptance-criteria spec §5: the judge is settled by its run, not by its task -- an empty attempt (justified)
+      // leaves the task blocked (D14), which is the verdict, not a failure.
+      if (mark.source.kind === "criteria-review") {
+        if (criteriaReviewVerdict(this.store, groupId) === null) continue;
+        const settled = await this.settleCriteriaReview(groupId, mark.source, mark.stackOn);
+        settleSystemDebug(this.store, groupId, settled.state, settled.detail);
+        out.settled.push(groupId);
         continue;
       }
       if (!allTasksDone(this.store, groupId)) continue;
@@ -759,11 +790,30 @@ export class WebControlService {
     return error === undefined ? null : String(error.code);
   }
   /**
-   * §3.3: fast-forward the original group's branch to the debug group's (only when it is an ancestor -- it cannot have
-   * moved while its task was blocked), then retry the failed task once as orca-auto. Idempotent: a branch already moved
-   * by an earlier pass is only retried.
+   * Protect-acceptance-criteria spec §5 (criteriaReview.ts): the judge's verdict. Justified (an empty attempt) or
+   * restored (a stacked judge's fix is fast-forwarded into the flagged group's branch) clears the flag as orca-auto; an
+   * unreadable verdict or a refused fold leaves it red for the person.
    */
-  private async foldLadder(debugGroupId: string, originalGroupId: string, taskId: string, failedRunId: string): Promise<{ state: string; detail: string | null } | null> {
+  private async settleCriteriaReview(debugGroupId: string, source: { groupId: string; runId: string | null }, stackOn: string | null): Promise<{ state: string; detail: string | null }> {
+    const verdict = criteriaReviewVerdict(this.store, debugGroupId);
+    if (verdict === null) return { state: "verdict-unknown", detail: null };
+    if (verdict === "restored" && stackOn !== null) {
+      const refused = await this.fastForwardGroupBranch(debugGroupId, stackOn);
+      if (refused !== null) return refused;
+    }
+    const decisionId = criteriaDecisionIdOf({ kind: "criteria-review", groupId: source.groupId, taskId: null, runId: source.runId });
+    try {
+      this.store.transaction(() => ratifyFlag(this.store, source.groupId, decisionId, {
+        actorId: ORCHESTRATION_ACTOR, commandId: `orca-auto-criteria-review-${debugGroupId}`, at: new Date(this.store.now()).toISOString(),
+      }));
+    } catch (error) {
+      // A person ratified it first, or the flag is gone: the verdict stands, nothing to clear.
+      if (!(error instanceof ControlError)) throw error;
+    }
+    return { state: verdict, detail: null };
+  }
+  /** Fast-forward `orca/<original>` to the debug group's branch when it is an ancestor; null, or why not. */
+  private async fastForwardGroupBranch(debugGroupId: string, originalGroupId: string): Promise<{ state: string; detail: string | null } | null> {
     const repoId = this.planRepository(originalGroupId);
     if (repoId === null) return { state: "fold-refused", detail: "original-repository-unknown" };
     try {
@@ -775,6 +825,16 @@ export class WebControlService {
         await git(repo, [...QUIET_GIT, "update-ref", workBranchRef(originalGroupId), debugHead, originalHead]);
       }
     } catch (error) { return { state: "fold-refused", detail: describeError(error) }; }
+    return null;
+  }
+  /**
+   * §3.3: fast-forward the original group's branch to the debug group's (only when it is an ancestor -- it cannot have
+   * moved while its task was blocked), then retry the failed task once as orca-auto. Idempotent: a branch already moved
+   * by an earlier pass is only retried.
+   */
+  private async foldLadder(debugGroupId: string, originalGroupId: string, taskId: string, failedRunId: string): Promise<{ state: string; detail: string | null } | null> {
+    const refused = await this.fastForwardGroupBranch(debugGroupId, originalGroupId);
+    if (refused !== null) return refused;
     const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(originalGroupId)?.revision ?? 0);
     const answer = this.retryTask({
       schema: "orca-raw-command-v1", commandId: `orca-auto-ladder-retry-${taskId}-${failedRunId}`, actorId: ORCHESTRATION_ACTOR,
@@ -784,6 +844,10 @@ export class WebControlService {
     // The retry-task command is the rerun's record (its ledger row names orca-auto; it writes task-retried).
     if (error === undefined) return null;
     return { state: "retry-refused", detail: `${String(error.code)}${typeof error.message === "string" && error.message !== "" ? `: ${error.message}` : ""}` };
+  }
+  /** Protect-acceptance-criteria spec §5: an owner turns the repository's automatic reviewer on or off. */
+  setCriteriaReview(command: SetCriteriaReviewCommand): WebCommandResult {
+    return this.mutate(() => applySetCriteriaReview({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: (repoId) => this.deps.knownRepository?.(repoId) ?? false }, command)) as WebCommandResult;
   }
   /** Kanban spec §7 layer 1: an owner turns the repository's integration check on or off and names its command. */
   setIntegrationCheck(command: SetIntegrationCheckCommand): WebCommandResult {
