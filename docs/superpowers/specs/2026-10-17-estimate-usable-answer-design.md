@@ -212,3 +212,65 @@ today accepts only claude and omp kinds; the builder extends it to codex (soft e
   tokens only.
 - codex `gpt-6-luna` (soft estimate mode) and claude 1M: one real estimate each under v2. (`gpt-6-sol` has no quota.)
 - `~/.orca` unchanged throughout (Rule 17); the person's profile is not edited by the builder.
+
+## Correction (session 3d229487, 2026-10-20): queued estimates are withdrawn at claim time
+
+Who: Orca session `3d229487` (implementer under controller `3d229487`), 2026-10-20, written on branch
+`estimate-withdrawn` from main `852ed0dc`. This section corrects §4.3 "In-flight rule (unchanged)" (its last sentence:
+"A retry still queued when the group starts meets the same fate as any queued estimate at that point today (existing
+behavior, not changed here …)") and the matching §5 bullet ("What a retry still queued at `start` does today"). The
+text above is kept verbatim; where it disagrees with this section, this section wins.
+
+**The ruling.** It is not in `.superpowers/sdd/2026-10-17-estimate-usable-answer/progress.md` (that ledger records only
+the gap: "Ruling: a retry still queued when the group starts is claimed and runs (existing queued-estimate behavior,
+observed in Task 5, not changed) … logged as a known gap for the handoff" and final-review "M1 queued retry still runs
+after confirm/start/supersede (handoff, later round)"). The human ruled in session `a3b2a7a7` on 2026-10-18, recorded in
+`docs/handoff/handoff.md` by commit `51019eb1` ("docs(handoff): record the ruling on withdrawing unusable queued
+estimates"). Quoted from that commit:
+
+> 修法**人已裁**（2026-10-18，会话 `a3b2a7a7`，人原话「同意你上面所有的建议」）。控制器建议原文：①新增终态
+> `withdrawn`，带原因码 `group-started`／`proposal-confirmed`／`superseded`，释放 grant、不触发重试，面板显示
+> 「已撤回：<原因>」（不复用 `failed`——那表示答案不合格且会走重试判定；不删行——留证据链）；②**所有排队估算一起管**，
+> 不只自动重试（判据是「结果还能不能用」，与谁排的队无关；卡死问题人的估算本来就有）；检查放在领取时、用代码。
+
+**What was wrong.** Read on main `852ed0dc` (`src/control/webService.ts` `claimEstimate`): a queued estimate whose
+proposal was confirmed, or which a newer estimate superseded, was claimed and run (a paid call whose answer the panel
+cannot apply). Once the group had started, `prestart(group)` threw `grant-amendment-unsupported` inside the claim; the
+`budget-estimate` wake handler (`webDispatch.ts`) let the throw escape, so the wake stayed undelivered and was retried
+every pump pass, the estimate stayed `queued` forever and its grant stayed in `committedRemaining`.
+
+**The rule.** `claimEstimate`, inside its transaction, for an estimate that is `queued` — whoever queued it (a person's
+`estimate`, an import, a draft acceptance, or an automatic retry) — decides by code, after the existing checks that the
+estimate is still claimable, that no run exists for it yet, and that the group is not archived (an archived group's
+estimate stays queued, issue-fixes spec §6.3, unchanged), and before every other check (`prestart`, stopped, spend cap,
+probe result):
+
+1. `group-started` — the group's status is `running`, `review` or `done` (the statuses `prestart` refuses with
+   `grant-amendment-unsupported`), or the group's execution is pending or running by the start guard's predicate
+   (`groupExecutionPendingInStore`, start-guard spec 2026-10-15 §3.1: an undelivered start/no-start/resume wake, an
+   active work run, or a busy task — a Web start leaves the stored status `ready` through the first run);
+2. `proposal-confirmed` — the budget proposal's state is `confirmed` (its advice can no longer be applied);
+3. `superseded` — the group holds an estimate with a higher `estimate_version`.
+
+The first that holds wins (a started group's proposal is always confirmed, so the more specific reason comes first).
+The estimate then becomes **`withdrawn`**, a new terminal state, with `reasonCode` `estimate-withdrawn:<reason>`:
+- its grant is released in the same transaction: `committedRemaining` minus the estimate's grant, then reserve and
+  deficit recomputed from the group's limit and usage (`budgetBalance`, as a settlement does);
+- no run row, no claim row, no provider call, no settlement and no retry decision (a withdrawn estimate is never
+  retried and never re-queued);
+- the estimate's spend-cap block, if any, is cleared;
+- the claim returns `null`; the wake handler sees a state other than `queued` and marks the wake delivered.
+
+The probe that runs before the transaction (not the paid call) may still run once for such an estimate; the decision
+is taken in the transaction so that a confirm, start or newer estimate that lands while the probe runs is seen.
+
+**Storage.** `estimates.state` is a `TEXT` column with no `CHECK` (migrations.ts); `withdrawn` is a value checked in code
+only (the record schema in `queries.ts` and the view schema in `webProtocol.ts` and its web mirror). No control-DB
+schema version change. A record in state `withdrawn` must carry a request and one of the three reason codes.
+
+**Visibility.** The group view (HTTP, MCP `orca_send`, `orca control send` and the panel read the same view) shows the
+state `withdrawn`; the panel shows "withdrawn: <reason>" / 「已撤回：<原因>」 in both locales.
+
+**Unchanged.** `retrySkipped` `proposal-confirmed` and `superseded` on settlement stay: they apply to an estimate that
+was already running when the proposal was confirmed or a newer estimate was queued. A queued estimate of a **stopped**
+pre-start group, or one whose profile no longer resolves, is not withdrawn by this section (not in the ruling).
