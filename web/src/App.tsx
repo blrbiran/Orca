@@ -1629,7 +1629,8 @@ export function App(): JSX.Element {
       )}
       </SectionPane>
       <SectionPane section="board" active={section}>
-        {controlConfig === null || control.recovery === null ? <p className="empty">{t("control.unavailable")}</p> : (
+        {/* Mounted only while shown: its cards would otherwise duplicate the Task control list's buttons in every pane. */}
+        {section !== "board" ? null : controlConfig === null || control.recovery === null ? <p className="empty">{t("control.unavailable")}</p> : (
           <BoardView groups={summaryView(control).groups} scope={scope} repoLabel={repoLabel}
             onOpen={(group) => {
               navigationSeq.current++; setOverviewFocus(null);

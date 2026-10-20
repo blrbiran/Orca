@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isGroupArchived } from "./archivedMark.js";
 import { ControlError } from "./errors.js";
-import { groupExecutionPendingInStore } from "./executionPending.js";
+import { BUSY_WORK, EXECUTION_WAKE_KINDS, groupExecutionPendingInStore } from "./executionPending.js";
 import type { ControlStore } from "./store.js";
 
 /**
@@ -88,16 +88,28 @@ export function writeOrchestrationSettings(store: ControlStore, settings: Orches
 
 type GroupFacts = { id: string; status: string; debug: boolean };
 function groupFacts(store: ControlStore): GroupFacts[] {
-  return store.db.prepare("SELECT id, body FROM groups ORDER BY rowid").all().map((row) => {
-    const body = JSON.parse(String(row.body)) as { status?: unknown; debug?: unknown };
-    return { id: String(row.id), status: String(body.status), debug: typeof body.debug === "object" && body.debug !== null };
+  return store.db.prepare("SELECT id, body FROM groups ORDER BY rowid").all().flatMap((row) => {
+    let body: { status?: unknown; debug?: unknown };
+    try { body = JSON.parse(String(row.body)) as typeof body; } catch { return []; } // its own reads name a bad body
+    return [{ id: String(row.id), status: String(body.status), debug: typeof body.debug === "object" && body.debug !== null }];
   });
 }
 
-/** A group holds a slot while it is executing (a pending start, an active run, a busy task) or is running/in review. */
-export function groupHoldsSlot(store: ControlStore, group: { id: string; status: string }): boolean {
-  if (isGroupArchived(store, group.id)) return false;
-  return group.status === "running" || group.status === "review" || (group.status === "ready" && groupExecutionPendingInStore(store, group.id));
+/**
+ * The groups holding a slot: not archived, and running, in review, or ready and executing (executionPending's three
+ * facts: an undelivered start/no-start/resume wake, an active work run, a busy task). One query whatever the number of
+ * groups, tasks or runs, so a summary that asks costs the same for every group (controlPollPerformance's bound).
+ */
+export function runningGroupIds(store: ControlStore): string[] {
+  const wakeKinds = [...EXECUTION_WAKE_KINDS].map((kind) => `'${kind}'`).join(","), busy = [...BUSY_WORK].map((status) => `'${status}'`).join(",");
+  // CASE json_valid: a body that does not parse holds no slot here (its own reads name it); json_extract would throw.
+  const at = (column: string, path: string) => `CASE WHEN json_valid(${column}) THEN json_extract(${column},'${path}') END`;
+  return store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${at("g.body", "$.archived")} IS NULL AND (
+    ${at("g.body", "$.status")} IN ('running','review') OR (${at("g.body", "$.status")}='ready' AND (
+      EXISTS (SELECT 1 FROM scheduler_wakes w WHERE w.group_id=g.id AND w.delivered=0 AND w.kind IN (${wakeKinds}))
+      OR EXISTS (SELECT 1 FROM runs r WHERE r.group_id=g.id AND r.active=1 AND ${at("r.body", "$.phase")}='work')
+      OR EXISTS (SELECT 1 FROM work_items i WHERE i.group_id=g.id AND ${at("i.body", "$.kind")}='task' AND ${at("i.body", "$.status")} IN (${busy}))))) ORDER BY g.rowid`)
+    .all().map((row) => String(row.id));
 }
 
 /**
@@ -121,11 +133,14 @@ function hasStopIntent(store: ControlStore, groupId: string): boolean {
   return store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined;
 }
 
-/** One group's place in the queue, by code. `slotFree` is decided by the caller over all groups. */
-export function autoStartState(store: ControlStore, group: { id: string; status: string }, now: number, slotFree: boolean, prerequisites: PrerequisiteReader = noPrerequisites): AutoStartState {
+/**
+ * One group's place in the queue, by code. `slotFree` is decided by the caller over all groups; `executing` is the
+ * group's own executionPending when the caller already holds it (a summary reads it over its snapshot).
+ */
+export function autoStartState(store: ControlStore, group: { id: string; status: string }, now: number, slotFree: boolean, prerequisites: PrerequisiteReader = noPrerequisites, executing?: boolean): AutoStartState {
   const row = readGroupOrchestration(store, group.id);
   if (row === null) return { kind: "none" };
-  if (row.startedRevision !== null || group.status !== "ready" || groupExecutionPendingInStore(store, group.id)) return { kind: "started" };
+  if (row.startedRevision !== null || group.status !== "ready" || (executing ?? groupExecutionPendingInStore(store, group.id))) return { kind: "started" };
   if (row.mode === "hold") return { kind: "held" };
   if (hasStopIntent(store, group.id) || isGroupArchived(store, group.id)) return { kind: "stopped" };
   const waitingFor = prerequisites(store, group.id);
@@ -136,7 +151,7 @@ export function autoStartState(store: ControlStore, group: { id: string; status:
 
 /** How many groups hold a slot now, and the cap. */
 export function slotUse(store: ControlStore): { running: number; cap: number } {
-  return { running: groupFacts(store).filter((group) => groupHoldsSlot(store, group)).length, cap: readOrchestrationSettings(store).maxRunningGroups };
+  return { running: runningGroupIds(store).length, cap: readOrchestrationSettings(store).maxRunningGroups };
 }
 
 export interface AutoStartDeps {
@@ -183,12 +198,12 @@ export async function autoStartPass(deps: AutoStartDeps): Promise<{ started: str
 }
 
 /** The summary's view of it (board card, needs-you): null when the group has no orchestration row. */
-export function orchestrationSummary(store: ControlStore, group: { id: string; status: string }, now: number, prerequisites: PrerequisiteReader = noPrerequisites):
+export function orchestrationSummary(store: ControlStore, group: { id: string; status: string }, now: number, prerequisites: PrerequisiteReader = noPrerequisites, executing?: boolean):
   { mode: "run" | "hold"; state: Exclude<AutoStartState["kind"], "none" | "eligible"> | "queued"; waitingFor: string[]; refusal: { code: string; count: number; persistent: boolean } | null } | null {
   const row = readGroupOrchestration(store, group.id);
   if (row === null) return null;
   const { running, cap } = slotUse(store);
-  const state = autoStartState(store, group, now, running < cap, prerequisites);
+  const state = autoStartState(store, group, now, running < cap, prerequisites, executing);
   const refusal = row.refusal === null ? null : { code: row.refusal.code, count: row.refusal.count, persistent: row.refusal.count >= PERSISTENT_REFUSALS };
   return {
     mode: row.mode,

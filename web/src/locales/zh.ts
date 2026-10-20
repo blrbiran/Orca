@@ -891,6 +891,7 @@ export const zh: Translation<typeof en> = {
       running: "正在运行 {{running}} 个组，上限 {{cap}} 个。确认过的组一有空位就会自动开跑。",
       cap: "同时运行的组最多",
       save: "保存",
+      unread: "读不到并行运行组数的设置。",
     },
   },
   auth: {

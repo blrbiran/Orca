@@ -412,7 +412,7 @@ export function readGroupSummary(store: ControlStore, groupId: string): GroupSum
  * waiting for a person (major pending ones plus flags not ratified -- a flag a correction answered still counts here,
  * the corrections store is not read for a summary); the first task, in plan order, whose current run failed and why.
  */
-function cardFacts(store: ControlStore, groupId: string, body: Record<string, unknown>, taskIds: readonly string[]) {
+function cardFacts(store: ControlStore, groupId: string, body: Record<string, unknown>, taskIds: readonly string[], snapshot: GroupReadSnapshot) {
   const tokens = (value: unknown): number | null => {
     const n = (value as { tokens?: unknown } | undefined)?.tokens;
     return typeof n === "number" ? n : null;
@@ -422,12 +422,13 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
   const flagged = Number(store.db.prepare("SELECT count(*) AS n FROM flagged_decisions WHERE group_id=? AND state='flagged'").get(groupId)!.n);
   let firstFailure: { taskId: string; cause: string } | null = null;
   for (const taskId of taskIds) {
-    const work = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, taskId);
-    const runId = work === undefined ? null : (JSON.parse(String(work.body)) as { currentRunId?: unknown }).currentRunId;
-    if (typeof runId !== "string") continue;
-    const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
-    if (row === undefined) continue;
-    const run = JSON.parse(String(row.body)) as { failureCode?: unknown; drive?: { blockedReason?: unknown } };
+    // Over the summary's own snapshot: each body is decoded once, shared with the counts (controlPollPerformance).
+    let runId: unknown, run: { failureCode?: unknown; drive?: { blockedReason?: unknown } } | undefined;
+    try {
+      runId = (decodedValue(snapshot.decodeWork(taskId)) as { currentRunId?: unknown } | undefined)?.currentRunId;
+      run = typeof runId === "string" ? decodedValue(snapshot.decodeRun(runId)) as typeof run : undefined;
+    } catch { continue; }
+    if (run === undefined || run === null) continue;
     const cause = typeof run.failureCode === "string" ? run.failureCode : typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason : null;
     if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200) }; break; }
   }
@@ -455,7 +456,8 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   const readSnapshot = snapshot ?? (archived === null ? undefined : readGroupSnapshot(store, groupId));
   const tally = archived === null ? null : taskCompletion(readSnapshot!, archived.plan);
   const debugMark = readDebugMark(body);
-  const orchestration = orchestrationSummary(store, { id: groupId, status: String(body.status) }, store.now(), waitingPrerequisites);
+  const executing = archived === null ? undefined : groupExecutionPending(store, groupId, archived.plan.tasks.map((task) => task.taskId), readSnapshot!);
+  const orchestration = orchestrationSummary(store, { id: groupId, status: String(body.status) }, store.now(), waitingPrerequisites, executing);
   const dependsOn = prerequisitesOf(store, groupId);
   const summary = {
     groupId,
@@ -472,10 +474,10 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     branch: workBranchRef(groupId).slice("refs/heads/".length),
     updatedAt: latestGroupActivityAt(store, groupId),
     archived: archivedMarkOf(body) !== null,
-    ...(archived === null ? {} : { executionPending: groupExecutionPending(store, groupId, archived.plan.tasks.map((task) => task.taskId), readSnapshot!) }),
+    ...(executing === undefined ? {} : { executionPending: executing }),
     ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),
     ...(dependsOn.length === 0 ? {} : { dependsOn }),
-    ...(archived === null ? {} : { card: cardFacts(store, groupId, body as Record<string, unknown>, archived.plan.tasks.map((task) => task.taskId)) }),
+    ...(archived === null ? {} : { card: cardFacts(store, groupId, body as Record<string, unknown>, archived.plan.tasks.map((task) => task.taskId), readSnapshot!) }),
     ...(orchestration === null ? {} : { orchestration }),
     ...(debugMark === null ? {} : { debug: {
       correctionId: debugMark.correctionId, ordinal: debugMark.ordinal, missing: debugMark.missing,

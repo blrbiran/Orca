@@ -1012,6 +1012,7 @@ export const en = {
       running: "{{running}} of at most {{cap}} groups are running. A confirmed group starts on its own when a slot is free.",
       cap: "At most this many groups run at once",
       save: "Save",
+      unread: "The running-group setting could not be read.",
     },
   },
   auth: {
