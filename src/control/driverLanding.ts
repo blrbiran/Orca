@@ -176,12 +176,13 @@ type CriteriaFlag = { decisionId: string; reason: string; evidence: string[] };
  * Protect-acceptance-criteria spec §4 (as-built §8): a flagged change to the task's check-defining files gives the run's
  * `criteria` decision and the flag the landing writes; null when the attempt only added tests or left them alone.
  */
-async function criteriaFlagOf(deps: ExecutionDriverDeps, run: DriverRun, repo: string, at: string): Promise<{ decision: DecisionEvent; flag: CriteriaFlag } | null> {
-  if (run.taskId === null || run.drive?.base == null || run.drive.attemptSha == null) return null;
+async function criteriaFlagOf(deps: ExecutionDriverDeps, run: DriverRun, repo: string, at: string, range?: { base: string; attempt: string }): Promise<{ decision: DecisionEvent; flag: CriteriaFlag } | null> {
+  const base = range?.base ?? run.drive?.base, attempt = range?.attempt ?? run.drive?.attemptSha;
+  if (run.taskId === null || base == null || attempt == null) return null;
   const checks = readConfirmedTaskExecution(deps.store, run.groupId, run.taskId).contract.verification.requiredChecks;
-  const change = await classifyCriteriaChange(repo, run.drive.base, run.drive.attemptSha, checks);
+  const change = await classifyCriteriaChange(repo, base, attempt, checks);
   if (!flagged(change)) return null;
-  const decision = criteriaDecision(run.runId, run.groupId, run.drive.base, change, at);
+  const decision = criteriaDecision(run.runId, run.groupId, base, change, at);
   const reason = `${change.kind === "weakening" ? "Checks weakened" : "Checks changed"} so they pass: ${[...change.signals, ...change.files].join(", ")}`.slice(0, 2048);
   return { decision, flag: { decisionId: decision.id, reason, evidence: decision.evidence ?? [] } };
 }
@@ -517,10 +518,14 @@ async function finishReconcile(
   // Kanban spec 2026-10-20 §3.5: the reconciliation's own decision (what each side changed, how they were merged) is
   // flagged for the person when the landing is recorded -- the conflict was resolved without them, they learn of it.
   let reconcileFlag: { decisionId: string; reason: string; evidence: string[] } | null = null;
+  let criteria: Awaited<ReturnType<typeof criteriaFlagOf>> = null;
   try {
     await exportLedgerDir(record.copyPath, tree, ledgerDir);
     const { reported, evidence, at } = await runLedgerInputs(deps, runId);
-    const own = await writeRunLedger(ledgerDir, { ledgerRun: runId, reported, codeAuthored: [], at, evidence });
+    // Protect-acceptance-criteria spec §7: what lands here is the tip..reconciled change (the run's own work and how the
+    // conflict was resolved), so it goes through the same detection as a plain landing.
+    criteria = await criteriaFlagOf(deps, run, record.copyPath, at, { base: record.old, attempt: attemptSha });
+    const own = await writeRunLedger(ledgerDir, { ledgerRun: runId, reported, codeAuthored: criteria === null ? [] : [criteria.decision], at, evidence });
     const reconcileEvidence = runEvidence(record.reconcileRunId, attemptSha, await ccloopEvidenceString(deps.ccloopBin));
     const otherTaskIds = record.otherTaskIds ?? [record.otherTaskId];
     const blocks = record.conflictBlocks;
@@ -552,7 +557,7 @@ async function finishReconcile(
     ];
     if (names.length > 0) tree = await treeWithLedgerFiles(record.copyPath, tree, ledgerDir, names);
     // By replacement, before the swap: a D attempt that staged items and then conflicted left them stale on the run.
-    stagePending(deps, runId, [...own.pending, ...reconciler.pending], closing?.record ?? null);
+    stagePending(deps, runId, [...own.pending, ...reconciler.pending], closing?.record ?? null, criteria?.flag ?? null);
   } finally {
     await rm(ledgerDir, { recursive: true, force: true });
   }

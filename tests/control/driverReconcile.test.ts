@@ -35,8 +35,11 @@ async function twoConflicting(
   reconcile: { files: Record<string, string>; status?: string; spent?: number; holdMs?: number; refuse?: string; fail?: string },
   affordable = true,
   planAgents?: HarnessOptions["planAgents"],
+  /** Add-only (session 9ec98639): commits made on main before the first claim. */
+  before?: (repo: string) => void,
 ) {
   const t = await driverHarness(conflicting, { files, planAgents });
+  before?.(t.repo);
   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
   await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, ...reconcile }));
   if (affordable) {
@@ -86,6 +89,27 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
       expect(flags[0]!.reason).toContain("shared.txt");
       // The flagged id is a line on the group branch's ledger.
       expect(git(t.repo, "show", `refs/heads/orca/g:.decisions/${record.reconcileRunId}.jsonl`)).toContain(`"id":"${flags[0]!.decisionId}"`);
+    } finally { await t.h.dispose(); }
+  });
+
+  // Protect-acceptance-criteria spec 2026-10-21 §7 (add-only): a reconciliation that weakens a test lands, and the run's
+  // `criteria` decision is flagged beside the reconciliation's own.
+  it("flags a reconciliation that weakened a test as a test change, beside the reconcile flag", async () => {
+    const test = "it('x', () => {\n  expect(1).toBe(1);\n  expect(2).toBe(2);\n});\n";
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n", "tests/shared.test.ts": test.replace("  expect(2).toBe(2);\n", "") } }, true, undefined, (repo) => {
+      execFileSync("mkdir", ["-p", join(repo, "tests")]); writeFileSync(join(repo, "tests", "shared.test.ts"), test);
+      git(repo, "add", "tests/shared.test.ts"); git(repo, "commit", "-qm", "tests");
+    }); try {
+      const driver = t.driver();
+      await untilDeadline(driver, () => t.ids.every((id) => [...LANDED, "blocked"].includes(t.body(id).state)));
+      const second = t.ids.find((id) => t.body(id).drive.reconcile !== null)!;
+      expect(LANDED).toContain(t.body(second).state);
+      // mutation: finishReconcile skips criteriaFlagOf -> only the reconcile flag, red
+      const flags = listFlaggedDecisions(t.h.store, "g").map((f) => [f.decisionId, f.source]);
+      expect(flags).toHaveLength(2);
+      expect(flags).toContainEqual([`${second}/orca-criteria`, "test-change"]);
+      expect(flags).toContainEqual([expect.stringMatching(new RegExp(`^${t.body(second).drive.reconcile.reconcileRunId}/`)), "reconcile"]);
+      expect(git(t.repo, "show", `refs/heads/orca/g:.decisions/${second}.jsonl`)).toContain("fewer-assertions:tests/shared.test.ts:2->1");
     } finally { await t.h.dispose(); }
   });
 
