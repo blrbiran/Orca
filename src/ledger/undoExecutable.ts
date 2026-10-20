@@ -26,9 +26,13 @@ function isArgShaped(token: string): boolean {
   );
 }
 
+// Sentence punctuation and backquotes around a token are incidental: "in median.js." names the same file as
+// "in median.js" (session 3d229487, 2026-10-20, a real agent's undo.how). Angle brackets are kept: <ref> is a placeholder.
+const EDGE_PUNCTUATION = /^[`'"([{]+|[`'",.;:!?)\]}]+$/g;
+
 /** Command shape: an adjacent token pair where the first looks like a program name and the second like an argument. */
 function hasCommandShape(how: string): boolean {
-  const tokens = how.split(/\s+/).filter((t) => t.length > 0);
+  const tokens = how.split(/\s+/).map((t) => t.replace(EDGE_PUNCTUATION, "")).filter((t) => t.length > 0);
   for (let i = 0; i + 1 < tokens.length; i += 1) {
     if (PROGRAM_WORD.test(tokens[i]) && isArgShaped(tokens[i + 1])) {
       return true;

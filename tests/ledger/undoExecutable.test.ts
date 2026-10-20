@@ -87,3 +87,25 @@ describe("undoHowIsExecutable — English prose should not pass the gate", () =>
     expect(undoHowIsExecutable("")).toBe(false);
   });
 });
+
+describe("undoHowIsExecutable — punctuation around a named file is incidental", () => {
+  // Session 3d229487 (2026-10-20), real OMP decision-scenario acceptance: two undo.how strings that name the one file
+  // to change were refused only because the file name touched a comma or a full stop, while the same agent's third
+  // ("… in median.js (`if …") passed. spec §1.1.1 counts "naming the concrete file and field to change" as legal, so
+  // sentence punctuation and backquotes around a token must not decide the tier.
+  it("a file name followed by a full stop", () => {
+    expect(undoHowIsExecutable("Remove the `module.exports.median = median;` line in median.js.")).toBe(true);
+  });
+
+  it("a file name followed by a comma", () => {
+    expect(undoHowIsExecutable("Remove `.slice()` in median.js, which would reintroduce mutation.")).toBe(true);
+  });
+
+  it("a backquoted argument", () => {
+    expect(undoHowIsExecutable("run `node build.mjs`")).toBe(true);
+  });
+
+  it("prose with punctuation still does not pass", () => {
+    expect(undoHowIsExecutable("just roll it back, please.")).toBe(false);
+  });
+});
