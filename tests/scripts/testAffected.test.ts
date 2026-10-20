@@ -14,7 +14,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const script = resolve("scripts/test-affected.mjs");
 const realModules = resolve("node_modules");
 const roots: string[] = [];
-afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
+// Cleanup only, not a criterion: ~40 throwaway repos, which took over the 10 s hook default beside pinCcloop under `npm test`.
+afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); }, 120_000);
 
 function tempRoot(): string {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "affected-")));
