@@ -216,6 +216,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.2 agent 的活（会话 `3d229487` 收尾时的建议顺序；人再定）
 
+**会话 `308b874c` 末的设计都已成 spec 并提交（人逐条裁过；原话在台账 `.superpowers/sdd/2026-10-20-session-308b874c/progress.md`）**：`2026-10-20-kanban-and-group-orchestration-design.md`（含 §9a 建造者检查后的人裁＋两份旧 spec 末尾的 Correction）、`2026-10-21-protect-acceptance-criteria-design.md`（§7a）、`2026-10-21-failure-causes-and-agent-fallback-design.md`、`2026-10-21-corrections-to-ccmem-design.md`；ccloop 分支 `spec/verifier-sees-checks-and-last-failure`（`25161e3`，两轮审阅，人选 (b)：只在 lineage 第 1 次 attempt 且非恢复路径重试；第二轮审阅的修正清单在台账，**下一会话先改 spec 再写 plan**，§8.1 的 2–4 条判据改写要人逐条点头）。还没成 spec、人已同意方向的：估算挂起、看门狗（墙钟为天花板＋空闲 10 min ⇒ `stalled`）、#65、#70——各写短 spec 再做。**人裁：本会话后半不派实施席，下一会话统一做。** 建议顺序：ccloop spec→plan→实施→repin；kanban＋编排；保护验收依据（依赖 kanban 的 flagged）；失败词表（ccloop 先）；估算挂起、看门狗、#65、#70；ccmem 两个缺陷；纠正写回 ccmem。
+
 0. **先收尾会话 `308b874c` 留下的**：`git log main` 看 agents refresh、估算文案、`install` 保留变量三件合没合（没合的在 scratchpad 或 `Orca-wt-*` 工作树里，先 `status --porcelain -uall` 再决定续做还是重做）；ccloop 分支 `spec/verifier-sees-checks-and-last-failure` 的修订版回来后**再派独立审阅**，过了交人审，人点头 `taskResultOutcome.test.ts:33/43` 等判据改写后按 TDD 实施（含「`required-check-failed` 首次重试一次」，人已裁），并把 codex 隔离 spec 的 Correction 一节与 ccloop handoff:47 的更正一起落；实施后 repin 并用 `--scenario decision` 复跑（付费，先问）。
 1. **kanban＋group 自动编排**（人已答 4 问，见 §3.0000 与台账；先 brainstorming 收尾 → spec → 计划）：独立 tab、group 层；确认后自动开跑；一个组等人不拖住别的组；顺序＝显式依赖＋合入时 reconcile（`driverLanding.ts`、`integrationResolve.ts`），写集只作提示；agent 提的依赖先生效、标红；卡片带预算／待审决定数／失败原因。goal.md §1.4。
 2. **保护验收依据＋允许改必要的测试**（合成一轮设计，人已裁「先落地、标红」）：改了定义检查的文件就用基线版本再跑一遍检查，只有改后版本能过或删弱断言 ⇒ major 决定、标红，不阻塞。
