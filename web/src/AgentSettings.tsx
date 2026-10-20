@@ -120,6 +120,8 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
         </tbody>
       </table>
       {props.onRefreshVersions && <button type="button" disabled={props.updateBusy} onClick={props.onRefreshVersions}>{t("agents.settings.refreshVersions")}</button>}
+      {/* The detection section below shows the notice when it is there; without it, a refused refresh still says why. */}
+      {!installation && props.updateNotice && <p role="alert">{props.updateNotice}</p>}
       {installation && <section aria-label={t("agents.updates.title")}>
         <h4>{t("agents.updates.title")}</h4>
         {installation.failureCode && <p role="status">{t("agents.updates.unavailable", { code: installation.failureCode })}{explainBesideCode(installation.failureCode) !== null ? ` ${explainBesideCode(installation.failureCode)}` : ""}</p>}

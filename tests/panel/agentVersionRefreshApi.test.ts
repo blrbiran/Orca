@@ -3,10 +3,13 @@
  * `POST /api/control/agents/refresh-versions` over a real Panel. It spawns the agents' CLIs and rewrites the user's
  * agents table, so it is an owner-only POST under the session's CSRF check, like the models refresh. The refreshed
  * observation replaces the panel's stored one, so the Agents page's detection list does not keep showing a version
- * as "changed" after the table already records it.
+ * as "changed" after the table already records it. The agents view itself refreshes first -- at most once per
+ * AGENT_VERSION_REFRESH_MS, since the page re-reads it on every return -- so the page shows current numbers without
+ * sending a POST of its own, and a failed refresh never keeps the view from answering.
  */
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { AGENT_VERSION_REFRESH_MS } from "../../src/panel/controlApi.js";
 import type { AgentObservation } from "../../src/control/agentInstallationProtocol.js";
 import { createHarness, get, json, type BootOptions } from "./fixtures/controlPanel.js";
 import { login, seedUser } from "./fixtures/auth.js";
@@ -43,5 +46,29 @@ describe("the version refresh route (agent version auto-refresh spec §3.3)", ()
     const panel = await boot("epoch-version-refresh-none", {});
     const refused = await panel.session.fetch("/api/control/agents/refresh-versions", { method: "POST" });
     expect([refused.status, (await errorOf(refused)).code]).toEqual([422, "control-protocol-unavailable"]);
+  });
+});
+
+describe("the agents view refreshes the versions first (agent version auto-refresh spec §3.3)", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("refreshes once per window, again after it, and answers the view even when the refresh fails", async () => {
+    let asked = 0, now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const panel = await boot("epoch-view-refresh", {
+      agentUpdatePort: { observeAgentInstallations: async () => observation("0.40.0") },
+      refreshAgentVersions: async () => { asked += 1; if (asked === 2) throw new Error("probe failed"); return { rows: [], observation: observation("0.41.0") }; },
+    });
+    const view = async () => { const response = await get(panel, "/api/control/agents"); return [response.status, ((await json(response)) as { schema: string }).schema]; };
+    expect(await view()).toEqual([200, "orca-agents-view-v1"]);
+    expect(asked).toBe(1);
+    const state = (await json(await get(panel, "/api/control/operator/agent-installations"))) as { observation: AgentObservation };
+    expect(state.observation.installed[0]).toMatchObject({ recordedVersion: "0.41.0", status: "current" });
+    now += AGENT_VERSION_REFRESH_MS - 1;
+    expect(await view()).toEqual([200, "orca-agents-view-v1"]);
+    expect(asked).toBe(1);
+    now += 1;
+    expect(await view()).toEqual([200, "orca-agents-view-v1"]);
+    expect(asked).toBe(2);
   });
 });

@@ -34,7 +34,7 @@ let stdin = ""; process.stdin.on("data", (x) => { stdin += x; }); process.stdin.
   const drift = () => { if (row.version !== installed) { process.stderr.write("agent-version-drift: codex: table " + row.version + ", observed " + installed + "\\n"); process.exit(2); } };
   if (method === "features") return process.stdout.write(JSON.stringify(knobs.observe === "unsupported" ? { protocol: 1 } : { protocol: 1, agentInstallationUpdate: "v1" }));
   if (method === "agent-installation-observe") {
-    const seen = knobs.observe === "none" ? null : knobs.observe === "same" ? row.version : knobs.observe === "elsewhere" ? installed + "-elsewhere" : installed;
+    const seen = knobs.observe === "none" ? null : knobs.observe === "same" ? row.version : knobs.observe === "elsewhere" ? installed + "-elsewhere" + fs.readFileSync(${JSON.stringify(calls)}, "utf8").split("\\n").filter((m) => m === "agent-installation-observe").length : installed;
     return process.stdout.write(JSON.stringify({ schema: "orca-agent-detection-observation-v1", baseTableHash: crypto.createHash("sha256").update(bytes).digest("hex"), observedAt: new Date().toISOString(),
       installed: [{ id: "codex", kind: "codex", command: row.command, recordedVersion: row.version, observedVersion: seen, realpath: seen === null ? null : "/opt/codex", status: seen === null ? "unavailable" : seen === row.version ? "current" : "changed" }] }));
   }
@@ -86,6 +86,7 @@ describe("an agent-version-drift refusal (agent version auto-refresh spec §3.2)
     expect(await w.version()).toBe("0.40.0");
     expect((await readdir(w.root)).sort()).toEqual(["agents.json", "calls.log", "ccloop", "installed.txt"]);
     expect(w.logged).toEqual([]);
+    expect((await w.asked()).filter((method) => method === "capabilities")).toHaveLength(1);
   });
 
   it("keeps the refusal when the peer cannot observe installations", async () => {
@@ -96,11 +97,12 @@ describe("an agent-version-drift refusal (agent version auto-refresh spec §3.2)
   });
 
   it("asks once more at most: a retry that drifts again is refused, not looped", async () => {
-    // The probe answers a version capabilities never agrees with, so the retry drifts as well.
+    // The probe answers a version capabilities never agrees with -- a new one at every observation -- so the retry
+    // drifts as well, and a port that refreshed again on it would never stop asking.
     const w = await world({ observe: "elsewhere" });
     await w.upgrade("0.41.0");
     await expect(w.port.resolveAgent({ agent: "codex" })).rejects.toMatchObject({ code: "agent-version-drift" });
-    expect(await w.version()).toBe("0.41.0-elsewhere");
+    expect(await w.version()).toBe("0.41.0-elsewhere1");
     expect((await w.asked()).filter((method) => method === "capabilities")).toHaveLength(2);
   });
 });

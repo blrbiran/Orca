@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 /**
  * Agent version auto-refresh spec 2026-10-20 §3.3 (human ruling, session 308b874c: 「不用看版本号变化，静默更新就行」):
- * the Agents page shows the versions the installed CLIs answer now, not the ones the table recorded at the last
- * upgrade. So the page's first agents read is preceded by one version refresh (a CSRF-carrying POST: it spawns the
- * CLIs and writes the table), coming back to the page does not probe again (one probe per installation per load),
- * a refusal of the refresh never keeps the table from showing, and the owner can refresh again by hand.
+ * the Agents page shows the versions the installed CLIs answer now. The server's agents view does the refresh on the
+ * page's read (tests/panel/agentVersionRefreshApi.test.ts), so loading the page sends no POST of its own -- the page
+ * still posts nothing until a person acts. The Refresh versions button is that act: a CSRF-carrying POST (it spawns
+ * the CLIs and writes the table), then the table is read again; its refusal is shown, and the table stays.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -75,29 +75,31 @@ afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks()
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 100));
 
 describe("the Agents page's version refresh (agent version auto-refresh spec §3.3)", () => {
-  it("refreshes the versions before its first agents read, shows the new number, and does not probe again on return", async () => {
-    document.cookie = "orca_csrf=token-1";
+  it("loads the agents view without a refresh POST of its own", async () => {
     render(<AccountContext.Provider value={owner}><App /></AccountContext.Provider>);
-    await screen.findByText("0.156.0");
-    expect(sent.slice(0, 2)).toEqual(["POST refresh token-1", "GET agents"]);
-    fireEvent.focus(window);
-    await waitFor(() => expect(sent.filter((entry) => entry === "GET agents").length).toBeGreaterThanOrEqual(2));
+    await screen.findByText("0.155.1");
     await settle();
-    expect(sent.filter((entry) => entry.includes("refresh"))).toHaveLength(1);
+    expect(sent.filter((entry) => entry.includes("refresh"))).toEqual([]);
   });
 
-  it("still shows the table when the refresh is refused", async () => {
+  it("keeps the table and shows the refusal when the button's refresh is refused", async () => {
     refreshStatus = 403;
+    document.cookie = "orca_csrf=token-1";
     render(<App />);
     await screen.findByText("0.155.1");
-    expect(sent.slice(0, 2)).toEqual(["POST refresh null", "GET agents"]);
+    fireEvent.click(await screen.findByRole("button", { name: "Refresh versions" }));
+    await screen.findByText("An owner account is required.");
+    expect(screen.getByText("0.155.1")).toBeTruthy();
+    expect(sent.filter((entry) => entry.includes("refresh"))).toEqual(["POST refresh token-1"]);
   });
 
   it("refreshes again from the Refresh versions button and re-reads the table", async () => {
     render(<AccountContext.Provider value={owner}><App /></AccountContext.Provider>);
-    await screen.findByText("0.156.0");
+    await screen.findByText("0.155.1");
+    const reads = sent.filter((entry) => entry === "GET agents").length;
     fireEvent.click(await screen.findByRole("button", { name: "Refresh versions" }));
-    await screen.findByText("0.157.0");
-    expect(sent.filter((entry) => entry.includes("refresh"))).toHaveLength(2);
+    await screen.findByText("0.156.0");
+    expect(sent.filter((entry) => entry.includes("refresh"))).toEqual(["POST refresh null"]);
+    expect(sent.filter((entry) => entry === "GET agents").length).toBeGreaterThan(reads);
   });
 });

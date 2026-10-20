@@ -39,6 +39,9 @@ export interface ControlReadApiDeps {
   port?: Pick<ExecutionPort, "listAgents" | "resolveAgent" | "listModels" | "refreshAgentVersions">;
 }
 
+/** Agent version auto-refresh spec 2026-10-20 §3.3: the agents view probes the installed CLIs at most this often. */
+export const AGENT_VERSION_REFRESH_MS = 60_000;
+
 function asyncRoute(handler: (req: Request, res: Response) => Promise<void> | void) {
   return (req: Request, res: Response, next: NextFunction): void => { void Promise.resolve(handler(req, res)).catch(next); };
 }
@@ -314,8 +317,18 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     });
     if (deps.port) {
       const port = deps.port;
+      // Agent version auto-refresh spec 2026-10-20 §3.3: the agents view first records the versions the installed CLIs
+      // answer now, so the Agents page shows current numbers. The page re-reads this view whenever it comes back into
+      // view, so a refresh runs at most once per AGENT_VERSION_REFRESH_MS; its failure is silent (the read goes on).
+      let refreshedAt: number | null = null;
+      const refreshVersions = async (): Promise<void> => {
+        if (port.refreshAgentVersions === undefined || (refreshedAt !== null && Date.now() - refreshedAt < AGENT_VERSION_REFRESH_MS)) return;
+        refreshedAt = Date.now();
+        try { deps.service!.noteAgentObservation((await port.refreshAgentVersions()).observation); } catch { /* silent by ruling */ }
+      };
       app.get("/api/control/agents", asyncRoute(async (_req, res) => {
         try {
+          await refreshVersions();
           const listed = await port.listAgents();
           const installations = [...listed.installations].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
           res.json(agentsViewSchema.parse({ schema: "orca-agents-view-v1", installations }));
@@ -338,7 +351,6 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       // and rewrites the user's agents table, so it is an owner-only POST like the models refresh; the refreshed
       // observation replaces the stored one, so the detection list agrees with the table it just wrote.
       app.post("/api/control/agents/refresh-versions", asyncRoute(async (req, res) => {
-        if (Object.keys(req.query).length > 0) { sendMappedControlError(res, new ControlError("query-invalid")); return; }
         if (!owner(res)) return;
         if (port.refreshAgentVersions === undefined) { sendMappedControlError(res, new ControlError("control-protocol-unavailable")); return; }
         try {
