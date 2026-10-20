@@ -102,7 +102,7 @@ describe("Codex frozen skills through real ccloop",{timeout:300000},()=>{
   await writeFile(wrapper,`import {appendFileSync,readFileSync,chmodSync} from "node:fs";
 import {pathToFileURL} from "node:url";
 const mode=process.argv[2],fake=process.argv[3],marker=process.argv[5];
-if(!process.argv.includes("--version")) {
+if(process.argv.includes("exec")) {
  const args=process.argv;const schema=JSON.parse(readFileSync(args[args.indexOf("--output-schema")+1],"utf8"));const business=schema.properties?.result??schema;
  const phase=business.anyOf?"execute":business.properties?.approved?"verify":"plan";
  appendFileSync(marker+".skills",JSON.stringify({phase,skill:readFileSync(".agents/skills/alpha/SKILL.md","utf8"),legacy:readFileSync(".agents/skills/legacy/SKILL.md","utf8")})+"\\n");
