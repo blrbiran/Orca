@@ -77,39 +77,90 @@ describe("scripts/check-gate-env.mjs (the up-front refusal verify:control had, n
   });
 });
 
-// Records what the one vitest it spawns was given, then exits with FAKE_VITEST_EXIT.
+// Records what the one vitest it spawns was given, writes a JSON report naming FAKE_REPORT_FILES (comma-separated,
+// relative to its cwd) when that variable is set, then exits with FAKE_VITEST_EXIT.
 const FAKE_VITEST = String.raw`#!/usr/bin/env node
 const fs = require("fs");
+const path = require("path");
 const keys = ["ORCA_CONTROL_VERIFY", "ORCA_CHAIN_ID", "ORCA_CHAIN_SESSION"];
 const env = Object.fromEntries(keys.map((k) => [k, process.env[k] ?? null]));
-fs.appendFileSync(process.env.FAKE_VITEST_LOG, JSON.stringify({ argv: process.argv.slice(2), env }) + "\n");
+const argv = process.argv.slice(2);
+fs.appendFileSync(process.env.FAKE_VITEST_LOG, JSON.stringify({ argv, env }) + "\n");
+const out = argv.find((a) => a.startsWith("--outputFile.json="));
+if (out && process.env.FAKE_REPORT_FILES !== undefined) {
+  const files = process.env.FAKE_REPORT_FILES.split(",").filter(Boolean);
+  const testResults = files.map((f, i) => ({ name: path.join(process.cwd(), f), status: "passed", startTime: 1000 * i, endTime: 1000 * i + 500, assertionResults: [] }));
+  fs.writeFileSync(out.slice("--outputFile.json=".length), JSON.stringify({ testResults }));
+}
 process.exit(Number(process.env.FAKE_VITEST_EXIT || 0));
 `;
 
+// What a whole-suite run collects at minimum: one file in each armed directory, plus one elsewhere.
+const ARMED_FILES = "tests/scheduler/a.test.ts,tests/chain/b.test.ts,tests/control/c.test.ts";
+
 describe("scripts/verify-suite.mjs", () => {
-  function fixture(): { root: string; log: string } {
+  function fixture(): { root: string; log: string; report: string } {
     const root = tempRoot();
     mkdirSync(join(root, "node_modules", ".bin"), { recursive: true });
     writeFileSync(join(root, "node_modules", ".bin", "vitest"), FAKE_VITEST, { mode: 0o755 });
     writeFileSync(join(root, "package.json"), JSON.stringify({ type: "commonjs" }));
-    return { root, log: join(root, "vitest.log") };
+    return { root, log: join(root, "vitest.log"), report: join(root, "suite-report.json") };
   }
   const calls = (log: string) => readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { argv: string[]; env: Record<string, string | null> });
+  const reporters = (report: string) => ["--reporter=default", "--reporter=json", `--outputFile.json=${report}`];
 
   it("runs vitest exactly once over the whole suite with formal control and a chain session's two variables set", () => {
-    const { root, log } = fixture();
-    const r = run("verify-suite.mjs", { FAKE_VITEST_LOG: log }, root);
+    const { root, log, report } = fixture();
+    const r = run("verify-suite.mjs", { FAKE_VITEST_LOG: log, ORCA_SUITE_REPORT: report, FAKE_REPORT_FILES: ARMED_FILES }, root);
     expect(r.code, r.out).toBe(0);
     expect(calls(log)).toEqual([{
-      argv: ["run"],
+      argv: ["run", ...reporters(report)],
       env: { ORCA_CONTROL_VERIFY: "1", ORCA_CHAIN_ID: "chain-deadbeef", ORCA_CHAIN_SESSION: "deadbeef-0000-4000-8000-000000000000" },
     }]);
   });
 
+  // Gate-speed ruling ⑤ (session 308b874c, 2026-10-20): the next release measures per-file time from this report, so
+  // the gate output must say where it is.
+  it("writes vitest's JSON report (per-file start and end times) to a path it prints", () => {
+    const { root, log, report } = fixture();
+    const r = run("verify-suite.mjs", { FAKE_VITEST_LOG: log, ORCA_SUITE_REPORT: report, FAKE_REPORT_FILES: ARMED_FILES }, root);
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toContain(report);
+    const results = (JSON.parse(readFileSync(report, "utf8")) as { testResults: { startTime: number; endTime: number }[] }).testResults;
+    expect(results).toHaveLength(3);
+  });
+
+  // Gate-speed ruling ③: the separate tests/scheduler and tests/chain runs are gone, so nothing named them any more.
+  // verify-scheduler.mjs:1-5 -- "this repo has shipped a gate in an unarmed state before, and nothing noticed": a
+  // config change that stops the one pass collecting either directory must turn the gate red, not leave it green.
+  for (const dir of ["tests/scheduler", "tests/chain"]) {
+    it(`fails a green run whose report collected nothing under ${dir}, and names the directory`, () => {
+      const { root, log, report } = fixture();
+      const files = ARMED_FILES.split(",").filter((f) => !f.startsWith(`${dir}/`)).join(",");
+      const r = run("verify-suite.mjs", { FAKE_VITEST_LOG: log, ORCA_SUITE_REPORT: report, FAKE_REPORT_FILES: files }, root);
+      expect(r.code).toBe(1);
+      expect(r.out).toContain(`${dir}: 0 test files collected`);
+    });
+  }
+
+  it("fails a green run that left no readable report: an unchecked gate is not a green one", () => {
+    const { root, log, report } = fixture();
+    const r = run("verify-suite.mjs", { FAKE_VITEST_LOG: log, ORCA_SUITE_REPORT: report }, root);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain(`cannot read the JSON report ${report}`);
+  });
+
   it("forwards its arguments, so one file can be run under the gate's conditions, and carries vitest's exit code", () => {
-    const { root, log } = fixture();
-    const r = run("verify-suite.mjs", { FAKE_VITEST_LOG: log, FAKE_VITEST_EXIT: "3" }, root, ["tests/checkpoint/write.test.ts"]);
+    const { root, log, report } = fixture();
+    const r = run("verify-suite.mjs", { FAKE_VITEST_LOG: log, FAKE_VITEST_EXIT: "3", ORCA_SUITE_REPORT: report }, root, ["tests/checkpoint/write.test.ts"]);
     expect(r.code).toBe(3);
-    expect(calls(log).map((c) => c.argv)).toEqual([["run", "tests/checkpoint/write.test.ts"]]);
+    expect(calls(log).map((c) => c.argv)).toEqual([["run", ...reporters(report), "tests/checkpoint/write.test.ts"]]);
+  });
+
+  it("does not demand the armed directories of a run narrowed by arguments, and says it did not check them", () => {
+    const { root, log, report } = fixture();
+    const r = run("verify-suite.mjs", { FAKE_VITEST_LOG: log, ORCA_SUITE_REPORT: report, FAKE_REPORT_FILES: "tests/checkpoint/write.test.ts" }, root, ["tests/checkpoint/write.test.ts"]);
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toContain("armed-directory check");
   });
 });
