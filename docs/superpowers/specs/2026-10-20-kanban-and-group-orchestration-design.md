@@ -255,3 +255,28 @@ Deferred (not built this round), with the reason:
 - **§7 layer 1 and layer 2 (integration check, model review):** deferred with the above (the check's only action is
   that debug task; a check that only reports would need its own surface).
 - **Agent-proposed and plan-declared group edges** (§9a.5 v2).
+
+## 12. As-built, track G (session 9ec98639, 2026-10-21)
+
+Builder decisions (reversible; human ruling for this round: "这一轮执行过程中如果有问题，先按你的建议执行"):
+
+- **Ladder levels 2-3 (§6)** are built on a *system debug group* — see `2026-10-21-system-debug-task-design.md`, which
+  also records the correction to §9a.4 (a group stacked on the original group's branch and folded back, instead of a
+  task inside the frozen plan). Level 1 is still deferred (ccloop's last-failure spec).
+- **Integration check (§7 layer 1)** (`src/control/integrationCheck.ts`):
+  - **Off by default**, per repository: `set-integration-check` (owner-only, the repository settings body's revision)
+    with `enabled` and an optional `command`; Project settings show it with the newest result. Off by default because a
+    fresh worktree has no installed dependencies, so an unconfigured check would only go red and spend a debug run; an
+    owner turns it on, typically with a command that installs first (`npm ci && npm test`).
+  - **Landed** = merged into a local target (`integration.scheme.delivery = local` and an `integratedCommit`); a check
+    covers each landed group's integrated commit, so the same merge is never checked twice.
+  - **When**: ≥ 2 landed groups not yet covered AND (no group of the repository holds a running slot OR ≥ 6 h since the
+    last check started). One check per repository at a time; it runs off the pump (not awaited); a `running` state that no
+    check of this process owns (Orca stopped mid-check) is marked `errored` and forgotten.
+  - **What**: the command if set, else the union of the landed groups' required checks, each as ccloop runs one
+    (`sh -lc`, inherited environment, 60 min bound), in a detached worktree of the target branch's head under the
+    driver's workspaces root, removed afterwards.
+  - **Red** ⇒ a system debug group (`integration-check`, not stacked, the project's own integration scheme) held to the
+    failing commands, with their exit and output tail as facts; confirmed and started by the system debug pass as
+    orca-auto. A check that could not run (no target, no worktree) is `errored` and covers nothing.
+- **Model review (§7 layer 2)** is still deferred.

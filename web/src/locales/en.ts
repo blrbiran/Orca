@@ -1015,6 +1015,20 @@ export const en = {
     account: "Account", chooseProject: "Choose a concrete project in the project picker to view or change its settings.",
     projectScope: "Defaults for {{project}}. Existing groups keep their own choices.",
     workspaceUnavailable: "Workspace settings have not been read.", integrationUnavailable: "Integration settings have not been read.",
+    integrationCheck: {
+      region: "Integration check",
+      explain: "After two or more groups have been merged into the target, Orca runs the checks again on the merged result -- when nothing of this project is running, or at most every 6 hours. A red check opens a debug task Orca runs on its own.",
+      enabled: "Run the integration check",
+      command: "Command (instead of the groups' own checks)",
+      commandPlaceholder: "for example: npm ci && npm test",
+      save: "Save",
+      last: {
+        running: "Checking the merge of {{groups}} now.",
+        passed: "The last check passed (groups {{groups}}).",
+        failed: "The last check failed (groups {{groups}}): {{detail}}. Debug task: {{debugGroupId}}.",
+        errored: "The last check could not run: {{detail}}.",
+      },
+    },
     agentsUnavailable: "Agent defaults have not been read.",
     orchestration: {
       title: "Running groups",

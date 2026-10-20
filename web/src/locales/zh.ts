@@ -894,6 +894,20 @@ export const zh: Translation<typeof en> = {
     account: "账户", chooseProject: "请在项目选择器中选择一个具体项目，再查看或修改它的设置。",
     projectScope: "{{project}} 的默认值。已有任务组保留各自的选择。",
     workspaceUnavailable: "尚未读取工作空间设置。", integrationUnavailable: "尚未读取集成设置。",
+    integrationCheck: {
+      region: "集成检查",
+      explain: "有两个及以上的组合进目标分支后，Orca 在合并结果上再跑一遍检查——在本项目没有组在跑时，或最多每 6 小时一次。检查变红就开一个由 Orca 自己跑的 debug 任务。",
+      enabled: "运行集成检查",
+      command: "命令（代替各组自己的检查）",
+      commandPlaceholder: "例如：npm ci && npm test",
+      save: "保存",
+      last: {
+        running: "正在检查 {{groups}} 合并后的结果。",
+        passed: "上次检查通过（组 {{groups}}）。",
+        failed: "上次检查失败（组 {{groups}}）：{{detail}}。debug 任务：{{debugGroupId}}。",
+        errored: "上次检查没跑成：{{detail}}。",
+      },
+    },
     agentsUnavailable: "尚未读取 Agent 默认值。",
     orchestration: {
       title: "并行运行的组",

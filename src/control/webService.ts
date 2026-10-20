@@ -43,6 +43,7 @@ import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor,
 import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderFacts, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
+import { applySetIntegrationCheck, forgetInterruptedIntegrationCheck, integrationCheckDue, integrationCheckFacts, readIntegrationCheckSetting, readIntegrationCheckState, recordIntegrationCheckEnded, recordIntegrationCheckStarted, runIntegrationCheck, type SetIntegrationCheckCommand } from "./integrationCheck.js";
 import { applyCorrectionClose, applyCorrectionRecord, applyCorrectionWithdraw, type CorrectionCloseCommand, type CorrectionRecordCommand, type CorrectionWithdrawCommand, type PanelCorrections } from "./correctionCommands.js";
 import { recordActivity } from "./activity.js";
 import { commandClientFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
@@ -722,7 +723,9 @@ export class WebControlService {
         if (refused === null) out.confirmed.push(groupId); else { settleSystemDebug(this.store, groupId, "confirm-refused", refused); out.settled.push(groupId); }
         continue;
       }
-      if (mark.source.kind !== "ladder" || mark.stackOn === null || !allTasksDone(this.store, groupId)) continue;
+      if (!allTasksDone(this.store, groupId)) continue;
+      // Only a ladder group folds back; any other is done once its own work landed.
+      if (mark.source.kind !== "ladder" || mark.stackOn === null) { settleSystemDebug(this.store, groupId, "done", null); out.settled.push(groupId); continue; }
       const refused = await this.foldLadder(groupId, mark.stackOn, mark.source.taskId!, mark.source.runId!);
       settleSystemDebug(this.store, groupId, refused === null ? "folded" : refused.state, refused?.detail ?? null);
       (refused === null ? out.folded : out.settled).push(groupId);
@@ -781,6 +784,65 @@ export class WebControlService {
     // The retry-task command is the rerun's record (its ledger row names orca-auto; it writes task-retried).
     if (error === undefined) return null;
     return { state: "retry-refused", detail: `${String(error.code)}${typeof error.message === "string" && error.message !== "" ? `: ${error.message}` : ""}` };
+  }
+  /** Kanban spec §7 layer 1: an owner turns the repository's integration check on or off and names its command. */
+  setIntegrationCheck(command: SetIntegrationCheckCommand): WebCommandResult {
+    return this.mutate(() => applySetIntegrationCheck({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: (repoId) => this.deps.knownRepository?.(repoId) ?? false }, command)) as WebCommandResult;
+  }
+  private readonly integrationChecks = new Map<string, Promise<void>>();
+  /**
+   * Kanban spec §7 layer 1: start each repository's integration check that is due (integrationCheck.ts) without waiting
+   * for it -- a slow suite must not hold the pump. A red check opens a system debug group as orca-auto; the next system
+   * debug pass confirms it. One check per repository at a time; a `running` state no check of this process owns was cut
+   * off by a stop and is forgotten.
+   */
+  integrationCheckPass(): { started: string[] } {
+    const started: string[] = [];
+    if (this.deps.resolveRepository === undefined) return { started };
+    const repoIds = [...new Set(this.store.db.prepare("SELECT body FROM groups").all().flatMap((row) => {
+      try { const repoId = (JSON.parse(String(row.body)) as { plan?: { repoId?: unknown } }).plan?.repoId; return typeof repoId === "string" ? [repoId] : []; } catch { return []; }
+    }))];
+    const now = (this.deps.now?.() ?? new Date()).getTime();
+    for (const repoId of repoIds) {
+      if (this.integrationChecks.has(repoId)) continue;
+      try {
+        if (readIntegrationCheckState(this.store, repoId).last?.state === "running") forgetInterruptedIntegrationCheck(this.store, repoId);
+        const due = integrationCheckDue(this.store, repoId, now);
+        if (due === null) continue;
+        const setting = readIntegrationCheckSetting(this.store, repoId);
+        const commands = setting.command !== null ? [setting.command] : [...new Set(due.since.flatMap((group) => group.checks))];
+        if (commands.length === 0) continue;
+        const latest = due.since.at(-1)!;
+        const groups = due.since.map((group) => group.groupId);
+        recordIntegrationCheckStarted(this.store, repoId, now, groups);
+        const job = this.runIntegrationCheckJob(repoId, due.landed, latest.groupId, latest.target, commands, groups, now)
+          .finally(() => { this.integrationChecks.delete(repoId); });
+        this.integrationChecks.set(repoId, job);
+        started.push(repoId);
+      } catch (error) {
+        process.stderr.write(`orca-control: integration check ${repoId}: ${describeError(error)}\n`);
+      }
+    }
+    return { started };
+  }
+  /** Every integration check this process started, settled (tests; a shutdown does not wait for them). */
+  async integrationChecksSettled(): Promise<void> { await Promise.all([...this.integrationChecks.values()]); }
+  private async runIntegrationCheckJob(repoId: string, landed: Parameters<typeof recordIntegrationCheckEnded>[2], latestGroupId: string, target: string, commands: string[], groups: string[], at: number): Promise<void> {
+    try {
+      const run = await runIntegrationCheck(this.repositoryPath(repoId), controlWorkspaceRoots(this.store.stateDir), repoId, target, commands, at);
+      if (run.failures.length === 0) { recordIntegrationCheckEnded(this.store, repoId, landed, { state: "passed", at, commit: run.commit, groups, detail: null, debugGroupId: null }); return; }
+      const source = { kind: "integration-check" as const, groupId: latestGroupId, taskId: null, runId: `check-${at}` };
+      const groupId = systemDebugGroupId(source);
+      const answer = await this.openSystemDebugGroup({
+        schema: "orca-raw-command-v1", commandId: `orca-auto-integration-check-${at}`, actorId: ORCHESTRATION_ACTOR, expectedRevision: 0,
+        verb: "system-debug-open", target: { kind: "group", groupId },
+        payload: { source, stackOn: null, repoId, facts: integrationCheckFacts(run, groups, target), checks: run.failures.map((failure) => failure.command) },
+      });
+      const error = (answer as { error?: { code?: unknown } }).error;
+      recordIntegrationCheckEnded(this.store, repoId, landed, { state: "failed", at, commit: run.commit, groups, detail: run.failures.map((failure) => failure.command).join("; ").slice(0, 500), debugGroupId: error === undefined ? groupId : null });
+    } catch (error) {
+      recordIntegrationCheckEnded(this.store, repoId, landed, { state: "errored", at, commit: null, groups, detail: describeError(error).slice(0, 500), debugGroupId: null });
+    }
   }
   /** Kanban spec §3.3, §9a.5: a person's edge between groups (groupEdges.ts). */
   addGroupDependency(command: AddGroupDependencyCommand): WebCommandResult {

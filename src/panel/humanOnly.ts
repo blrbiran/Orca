@@ -40,6 +40,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "set-usage-calendar": "human-only",
   // Integration spec §3.1, §8: only an owner chooses where a group's work is carried (a push, a PR).
   "set-integration-scheme": "human-only",
+  // Kanban spec §7 layer 1: the check runs a command an owner names, in Orca's own environment.
+  "set-integration-check": "human-only",
   "set-group-integration": "human-only",
   "retry-integration": "human-only",
   "resolve-integration-conflict": "human-only",

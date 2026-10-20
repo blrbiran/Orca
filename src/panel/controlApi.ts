@@ -23,6 +23,7 @@ import { correctionDebugOpenPayloadSchema, orchestrationViewSchema, savedResultE
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import { readIntegrationDefault } from "../control/integrationScheme.js";
+import { readIntegrationCheckSetting, readIntegrationCheckState } from "../control/integrationCheck.js";
 import { AgentCeilingRefusal } from "../control/spendCaps.js";
 import type { WebControlService } from "../control/webService.js";
 import type { ExecutionPort } from "../control/executionPort.js";
@@ -289,7 +290,8 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     try {
       const suggestedTarget = await deps.service.suggestedTarget(repoId);
       const { scheme, revision } = readIntegrationDefault(deps.store, repoId);
-      res.json(repositoryIntegrationSchema.parse({ schema: "orca-repository-integration-v1", repoId, integration: scheme, revision, suggestedTarget }));
+      const integrationCheck = { ...readIntegrationCheckSetting(deps.store, repoId), last: readIntegrationCheckState(deps.store, repoId).last };
+      res.json(repositoryIntegrationSchema.parse({ schema: "orca-repository-integration-v1", repoId, integration: scheme, revision, suggestedTarget, integrationCheck }));
     } catch (error) { sendMappedControlError(res, error); }
   }));
 
@@ -526,6 +528,15 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
         return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
       },
     },
+    {
+      path: "/api/control/repositories/:repoId/integration-check",
+      verb: "set-integration-check",
+      // Kanban spec §7 layer 1: the repository scope's ledger key, as for set-integration-scheme.
+      target: (params) => {
+        const repoId = idSchema.parse(params.repoId);
+        return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
+      },
+    },
     // Integration spec §3.1: the group's copy of the scheme; the ledger key is the group's.
     { path: "/api/control/groups/:groupId/integration", verb: "set-group-integration", target: fromParams },
     // Integration spec §6.5: a blocked or conflicted integration back to idle.
@@ -633,6 +644,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "retry-task": service.retryTask(command); break;
           case "set-workspace-mode": await service.setWorkspaceMode(command); break;
           case "set-integration-scheme": await service.setIntegrationScheme(command); break;
+          case "set-integration-check": service.setIntegrationCheck(command); break;
           case "set-group-integration": await service.setGroupIntegration(command); break;
           case "retry-integration": service.retryIntegration(command); break;
           case "resolve-integration-conflict": await service.resolveIntegrationConflict(command); break;

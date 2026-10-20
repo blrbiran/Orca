@@ -251,8 +251,9 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     // Kanban spec 2026-10-20 §3.1: with a driver, confirmed groups start on their own before the wakes are delivered (each
     // start is the service's own start path, which takes the admission gate itself). Without one nothing would run them.
     // System debug task spec 2026-10-21: Orca's own debug groups (the escalation ladder) are opened, confirmed and folded
-    // first, so one that was just confirmed starts in the same pass.
-    const autoStart = driver === null ? Promise.resolve() : service.systemDebugPass().then(() => service.autoStart()).then(() => service.autoResolveIntegrationConflicts()).then(() => undefined, (error: unknown) => {
+    // first, so one that was just confirmed starts in the same pass; a due integration check (kanban §7 layer 1) is
+    // started without being waited for.
+    const autoStart = driver === null ? Promise.resolve() : service.systemDebugPass().then(() => { service.integrationCheckPass(); }).then(() => service.autoStart()).then(() => service.autoResolveIntegrationConflicts()).then(() => undefined, (error: unknown) => {
       process.stderr.write(`orca-control: auto-start pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
     });
     const pass = autoStart.then(() => withAdmission({ admissionGate }, () => deliverSchedulerWakes(store, wakeHandlers)))

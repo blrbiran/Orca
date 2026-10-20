@@ -630,6 +630,7 @@ export const commandVerbSchema = z.enum([
   "clear-spend-cap",
   "set-usage-calendar",
   "set-integration-scheme",
+  "set-integration-check",
   "set-group-integration",
   "retry-integration",
   "resolve-integration-conflict",
@@ -815,6 +816,10 @@ export const integrationSchemeSchema = z.discriminatedUnion("delivery", [
   z.object({ delivery: z.enum(["push-branch", "github-pr"]), trigger: integrationTriggerSchema, target: z.string(), remote: z.string() }).strict(),
 ]);
 export const setIntegrationSchemePayloadSchema = z.object({ integration: integrationSchemeSchema }).strict();
+// Kanban spec 2026-10-20 §7 layer 1: the repository's integration check -- on/off and an optional command run instead
+// of the landed groups' own required checks (some suites are slow, the human said).
+export const integrationCheckSettingSchema = z.object({ enabled: z.boolean(), command: z.string().min(1).max(4096).nullable() }).strict();
+export const setIntegrationCheckPayloadSchema = integrationCheckSettingSchema;
 // Integration spec §3.1: the group's copy, the same body shape as the repository default's.
 export const setGroupIntegrationPayloadSchema = z.object({ integration: integrationSchemeSchema }).strict();
 // Controller ruling W6-8: the envelope's expectedRevision (checked against agent_preferences.revision) is the only one.
@@ -967,6 +972,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-integration-check"), target: repositoryCommandTargetSchema, payload: setIntegrationCheckPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("retry-integration"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -1035,6 +1041,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-check"), target: repositoryCommandTargetSchema, payload: setIntegrationCheckPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("retry-integration"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -1721,6 +1728,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("limit-set"), limit: budgetAmountSchema }).strict(),
   z.object({ kind: z.literal("workspace-mode-set"), repoId: idSchema, workspaceMode: workspaceModeSchema }).strict(),
   z.object({ kind: z.literal("integration-scheme-set"), repoId: idSchema, integration: integrationSchemeSchema }).strict(),
+  z.object({ kind: z.literal("integration-check-set"), repoId: idSchema, integrationCheck: integrationCheckSettingSchema }).strict(),
   z.object({ kind: z.literal("group-integration-set"), groupId: idSchema, integration: integrationSchemeSchema }).strict(),
   z.object({ kind: z.literal("integration-retried"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("integration-resolution-started"), groupId: idSchema }).strict(),
@@ -1832,7 +1840,7 @@ export const commandSuccessSchema = z
     const isShutdown = value.verb === "shutdown";
     // Execution driver spec §3.2: a repository-scoped command has its setting's revision and no group
     // projection.
-    const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-integration-scheme" || value.verb === "set-agent-preferences" || value.verb === "apply-agent-update"
+    const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-integration-scheme" || value.verb === "set-integration-check" || value.verb === "set-agent-preferences" || value.verb === "apply-agent-update"
       || value.verb === "set-spend-cap" || value.verb === "clear-spend-cap" || value.verb === "set-usage-calendar"
       // Debug task plan Task 11: the `@corrections` scope has revision 0 and no group projection.
       || value.verb === "correction-record" || value.verb === "correction-close" || value.verb === "correction-withdraw"
@@ -1911,7 +1919,13 @@ export type RepositoryWorkspaceV1 = z.infer<typeof repositoryWorkspaceSchema>;
 // Integration spec §3.4: the repository default's own read; the workspace read above keeps its shape.
 export const repositoryIntegrationSchema = z
   // suggestedTarget (controller ruling, Task 7): the target the panel pre-fills for a repository with no scheme yet.
-  .object({ schema: z.literal("orca-repository-integration-v1"), repoId: idSchema, integration: integrationSchemeSchema, revision: safeInteger, suggestedTarget: z.string().nullable() })
+  .object({
+    schema: z.literal("orca-repository-integration-v1"), repoId: idSchema, integration: integrationSchemeSchema, revision: safeInteger, suggestedTarget: z.string().nullable(),
+    // Kanban spec §7 layer 1 (optional on the wire so an older answer parses): the setting and the newest check's result.
+    integrationCheck: integrationCheckSettingSchema.extend({
+      last: z.object({ state: z.enum(["running", "passed", "failed", "errored"]), at: safeInteger, commit: z.string().nullable(), groups: z.array(idSchema), detail: z.string().nullable(), debugGroupId: idSchema.nullable() }).strict().nullable(),
+    }).strict().optional(),
+  })
   .strict();
 export type RepositoryIntegrationV1 = z.infer<typeof repositoryIntegrationSchema>;
 // Control run decisions plan Task 8: a group's decisions, read from the refs they live on (src/panel/groupDecisions.ts).

@@ -38,6 +38,7 @@ import type {
   HandoffStopPayloadV1,
   ImportPlanPayloadV1,
   IntegrationSchemeV1,
+  IntegrationCheckSettingV1,
   ProposalEditPayloadV1,
   ProposalSetAgentPayloadV1,
   RecoveryRetryPayloadV1,
@@ -225,6 +226,10 @@ export const fetchRepositoryIntegration = (repoId: string): Promise<RepositoryIn
   controlGet<RepositoryIntegrationV1>(`/api/control/repositories/${segment(repoId)}/integration`);
 
 export const integrationSchemePath = (repoId: string): string => `/api/control/repositories/${segment(repoId)}/integration`;
+
+/** Kanban spec §7 layer 1: set-integration-check under the repository settings revision it was read at. */
+export const sendIntegrationCheck = (repoId: string, setting: IntegrationCheckSettingV1, expectedRevision: number, commandId: string = nextCommandId()): Promise<ControlAnswer> =>
+  sendControlCommand(`/api/control/repositories/${segment(repoId)}/integration-check`, { commandId, expectedRevision, payload: setting });
 
 /** Integration spec §3.1: set-integration-scheme, naming the whole scheme under the settings revision it was read at. */
 export const sendIntegrationScheme = (repoId: string, integration: IntegrationSchemeV1, expectedRevision: number, commandId: string = nextCommandId()): Promise<ControlAnswer> =>

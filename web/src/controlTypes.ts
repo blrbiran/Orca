@@ -552,7 +552,7 @@ export type CommandSuccessV1 = {
   actorId: string;
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
-    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
+    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-integration-check" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw";
   target: CommandTargetV1;
@@ -576,6 +576,7 @@ export type CommandSuccessV1 = {
     | { kind: "limit-set"; limit: BudgetAmount }
     | { kind: "workspace-mode-set"; repoId: string; workspaceMode: "worktree" | "clone" }
     | { kind: "integration-scheme-set"; repoId: string; integration: IntegrationSchemeV1 }
+    | { kind: "integration-check-set"; repoId: string; integrationCheck: IntegrationCheckSettingV1 }
     | { kind: "group-integration-set"; groupId: string; integration: IntegrationSchemeV1 }
     | { kind: "integration-retried"; groupId: string }
     | { kind: "integration-resolution-started"; groupId: string }
@@ -622,7 +623,12 @@ export type GroupIntegrationViewV1 = {
   lastIntegrated: string | null; integratedCommit: string | null; pr: { url: string; number: number; ready: boolean } | null;
 };
 /** `suggestedTarget` (controller ruling, Task 7): origin's HEAD branch, else the current branch, else null; never stored. */
-export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number; suggestedTarget: string | null };
+export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number; suggestedTarget: string | null; integrationCheck?: IntegrationCheckV1 };
+/** Kanban spec 2026-10-20 §7 layer 1: the repository's integration check, and how its newest run ended. */
+export type IntegrationCheckSettingV1 = { enabled: boolean; command: string | null };
+export type IntegrationCheckV1 = IntegrationCheckSettingV1 & {
+  last: { state: "running" | "passed" | "failed" | "errored"; at: number; commit: string | null; groups: string[]; detail: string | null; debugGroupId: string | null } | null;
+};
 /** Control run decisions plan Task 8: GET /api/control/groups/:groupId/decisions, a group's decisions read from refs. */
 export type DecisionWhereV1 = "working-tree" | "target" | "group-branch";
 /**

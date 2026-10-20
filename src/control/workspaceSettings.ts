@@ -5,7 +5,7 @@ import { ControlError } from "./errors.js";
 import { safeInteger } from "./schema.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
-import { integrationSchemeSchema, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
+import { integrationCheckSettingSchema, integrationSchemeSchema, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
 
 export type WorkspaceMode = "worktree" | "clone";
 export interface WorkspaceSetting { workspaceMode: WorkspaceMode; revision: number }
@@ -17,6 +17,8 @@ export type SetWorkspaceModeCommand = Extract<RawAuthorityCommandV1, { verb: "se
  */
 const settingsBodySchema = z.object({
   workspaceMode: z.enum(["worktree", "clone"]), revision: safeInteger.positive(), integration: integrationSchemeSchema.optional(),
+  // Kanban spec 2026-10-20 §7 layer 1: absent is off (integrationCheck.ts).
+  integrationCheck: integrationCheckSettingSchema.optional(),
 }).strict();
 export type RepositorySettingsBody = z.infer<typeof settingsBodySchema>;
 
