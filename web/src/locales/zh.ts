@@ -305,6 +305,7 @@ export const zh: Translation<typeof en> = {
       button: "导入计划",
       registerLabel: "登记本仓库里的一个计划文件（相对仓库根目录的路径；文件必须已被 git 跟踪）",
       registerButton: "登记计划",
+      registerPlaceholder: "docs/plans/plan.json",
       registered: "已登记 {{path}}。改动文件后再登记一次，即信任新内容。",
       registerRefused: "未登记（{{code}}）：{{message}}",
     },

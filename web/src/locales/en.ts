@@ -433,6 +433,7 @@ export const en = {
       button: "Import plan",
       registerLabel: "Register a plan file in this repository (path relative to the repository; the file must be tracked by git)",
       registerButton: "Register plan",
+      registerPlaceholder: "docs/plans/plan.json",
       registered: "Registered {{path}}. Registering it again after an edit trusts the new content.",
       registerRefused: "Not registered ({{code}}): {{message}}",
     },

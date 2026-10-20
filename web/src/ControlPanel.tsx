@@ -143,7 +143,7 @@ function RegisterPlanForm(props: { repoId: string; onRegister: RegisterPlan }): 
     <div className="register-plan">
       <label>
         {t("control.import.registerLabel")}
-        <input type="text" value={path} placeholder="docs/plans/plan.json" onChange={(e) => setPath(e.currentTarget.value)} />
+        <input type="text" value={path} placeholder={t("control.import.registerPlaceholder")} onChange={(e) => setPath(e.currentTarget.value)} />
       </label>
       <button type="button" disabled={path.trim() === ""} onClick={submit}>{t("control.import.registerButton")}</button>
       {answer?.ok === true && <p role="status">{t("control.import.registered", { path: answer.path })}</p>}
