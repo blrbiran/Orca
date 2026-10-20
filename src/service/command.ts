@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildServiceConfig } from "./config.js";
+import { buildServiceConfig, missingAgentPathDirs } from "./config.js";
 import { detached } from "./detached.js";
 import { readServiceConfig, tailLines, writeServiceFiles } from "./files.js";
 import { identifyPanel } from "./identify.js";
@@ -118,7 +118,10 @@ export async function runServiceCommand(sub: string, args: string[], env: NodeJS
         return confirm("start", await manager.start(ctx));
       case "stop": return manager.stop(ctx);
       case "restart": {
-        writeServiceFiles(paths, readServiceConfig(paths)); // plan D20
+        const stored = readServiceConfig(paths);
+        const missing = missingAgentPathDirs(stored, env.PATH ?? "");
+        if (missing.length > 0) ctx.err(`orca panel: warning: the service PATH in ${paths.configFile} lacks ${missing.join(", ")}, which the agents in ${stored.env.ORCA_AGENTS_TABLE} need; restart keeps the stored PATH, re-run orca panel install to recompute it`);
+        writeServiceFiles(paths, stored); // plan D20
         const now = await identifyPanel(paths.panelJson);
         return confirm("restart", await manager.restart(ctx), now.answering ? now.panel : null);
       }

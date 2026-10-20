@@ -129,6 +129,60 @@ describe("orca panel <subcommand> (spec §4)", () => {
     expect(fresh.stdout).toContain("(pid 4343)");
   });
 
+  /**
+   * Issue #72 follow-up: restart rewrites the files from service.json and keeps its PATH. A service.json written before
+   * the #72 fix has no agent directories on it, so omp (`#!/usr/bin/env bun`) died under the service with
+   * control-peer-exit while restart said nothing. Restart is not install: it does not recompute PATH, but it says when
+   * the stored PATH lacks a directory the agents table it names needs, and still restarts.
+   */
+  it("restart warns when the stored PATH lacks a directory the agents table needs, and restarts all the same", async () => {
+    const s = await setup();
+    const dir = async (name: string) => { const d = join(s.r, name); await mkdir(d); return d; };
+    const ompBin = await dir("omp-bin"), bunBin = await dir("bun-bin");
+    await writeFile(join(ompBin, "omp"), "#!/usr/bin/env bun\n", { mode: 0o755 });
+    await writeFile(join(bunBin, "bun"), "\0binary", { mode: 0o755 });
+    const table = join(s.r, "agents.json");
+    const writeTable = (installations: Record<string, unknown>) =>
+      writeFileSync(table, JSON.stringify({ schema: "ccloop-agents-table-v1", installations }));
+    writeTable({ omp: { kind: "omp", command: [join(ompBin, "omp")] } });
+    vi.stubEnv("ORCA_AGENTS_TABLE", table);
+    vi.stubEnv("PATH", `${bunBin}:${process.env.PATH}`);
+    const url = await answeringPanel();
+    expect((await run("install", install.slice(2), seams(() => plantPanel(s.paths, url, 4242)))).result).toBe(0);
+
+    // Freshly installed: PATH already carries both directories, so restart has nothing to say.
+    const current = await run("restart", [], seams(() => plantPanel(s.paths, url, 4343)));
+    expect(current.result).toBe(0);
+    expect(current.stderr).not.toContain("warning");
+
+    // A command directory that does not exist is one install leaves out too: re-running install would not add it,
+    // so restart must not ask for it.
+    writeTable({ omp: { kind: "omp", command: [join(ompBin, "omp")] }, gone: { kind: "claude", command: [join(s.r, "no-such-dir", "claude")] } });
+    const absent = await run("restart", [], seams(() => plantPanel(s.paths, url, 4444)));
+    expect(absent.stderr).not.toContain("warning");
+
+    // The service.json a pre-#72 install wrote: node's dir and the system dirs only.
+    const config = JSON.parse(readFileSync(s.paths.configFile, "utf8")) as { env: Record<string, string> };
+    config.env.PATH = config.env.PATH!.split(":").filter((d) => d !== ompBin && d !== bunBin).join(":");
+    writeFileSync(s.paths.configFile, JSON.stringify(config));
+    const stale = await run("restart", [], seams(() => plantPanel(s.paths, url, 4545)));
+    expect(stale.result).toBe(0); // a warning, not a failure
+    expect(stale.stderr).toContain(`orca panel: warning: the service PATH in ${s.paths.configFile} lacks ${ompBin}, ${bunBin}`);
+    expect(stale.stderr).toContain(table);
+    expect(stale.stderr).toContain("re-run orca panel install");
+    // Restart does not recompute PATH: that is install's job.
+    expect(readFileSync(s.paths.envFile, "utf8")).not.toContain(bunBin);
+  });
+
+  it("restart says nothing about agent directories when service.json names no agents table (the service runs no agents)", async () => {
+    const s = await setup();
+    const url = await answeringPanel();
+    expect((await run("install", install.slice(2), seams(() => plantPanel(s.paths, url, 4242)))).result).toBe(0);
+    const restarted = await run("restart", [], seams(() => plantPanel(s.paths, url, 4343)));
+    expect(restarted.result).toBe(0);
+    expect(restarted.stderr).not.toContain("warning");
+  });
+
   it("the detached manager's install starts nothing, so it does not wait for a panel", async () => {
     await setup();
     vi.stubEnv("ORCA_SERVICE_MANAGER", "detached");

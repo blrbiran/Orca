@@ -111,6 +111,18 @@ export function buildServiceConfig(input: ServiceConfigInput): { config: Service
   return { config: { schema: SERVICE_CONFIG_SCHEMA, node: input.execPath, entry, args: [...args], env: sorted }, warnings };
 }
 
+/**
+ * Issue #72 follow-up: restart rewrites the files from service.json and keeps its PATH, so a service.json written before
+ * install put agent directories on it keeps failing them. The directories the agents table service.json names needs
+ * (computed as install computes them, existing ones only) that the stored PATH lacks. No table named: none needed.
+ */
+export function missingAgentPathDirs(config: ServiceConfigV1, shellPath: string): string[] {
+  const table = config.env.ORCA_AGENTS_TABLE;
+  if (table === undefined) return [];
+  const stored = (config.env.PATH ?? "").split(":");
+  return agentPathDirs(table, shellPath, defaultReadTable).dirs.filter((dir) => !stored.includes(dir) && defaultIsDirectory(dir));
+}
+
 /** Spec §3: the service runs the built dist/cli.js; a missing or stale build is refused by name. */
 export function checkDist(checkout: string): string {
   const entry = join(checkout, "dist", "cli.js");
