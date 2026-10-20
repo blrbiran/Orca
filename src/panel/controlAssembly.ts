@@ -20,6 +20,8 @@ import { executionProfileSnapshotSchema } from "../control/webProtocol.js";
 import { createTrustedControlConfig, type TrustedControlConfig } from "./controlConfig.js";
 import { applyPanelShutdown, withAdmission } from "./controlLifecycle.js";
 import { controlRepoKey } from "./controlOptions.js";
+import { readCorrectionList } from "../control/correctionState.js";
+import { createCorrectionExporter } from "../memory/correctionExport.js";
 import type { ControlOptions } from "./server.js";
 
 /**
@@ -118,6 +120,8 @@ export interface ControlAssemblyInput {
    * `/api/corrections` records with (cross-plan resolution 1). Absent, reject-pending-decision is refused by name.
    */
   corrections?: { dir: string; by: string; panel?: PanelCorrections };
+  /** Corrections-to-ccmem spec 2026-10-21 As-built: present only with `--ccmem-corrections` (and `corrections`). */
+  ccmemCorrections?: { ccmemBin: string; env: NodeJS.ProcessEnv };
 }
 
 /**
@@ -239,6 +243,16 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
 
   const wakeHandlers = createWebWakeHandlers({ store, profileRouter: router, admissionGate, service });
 
+  // Corrections-to-ccmem As-built: closed corrections go to ccmem off the pump's path -- started, never awaited, at most one
+  // pass per PASS_INTERVAL_MS -- so a slow or missing ccmem never holds the control plane.
+  const correctionsDir = input.corrections?.dir;
+  const correctionExporter = input.ccmemCorrections === undefined || correctionsDir === undefined ? null : createCorrectionExporter({
+    ccmemBin: input.ccmemCorrections.ccmemBin, env: input.ccmemCorrections.env, correctionsDir,
+    listCorrections: () => readCorrectionList({ store, correctionsDir, listRepositories: () => config.listRepositories(), repoIdOfProjectKey: controlRepoKey }),
+    repositoryPath: (repoId) => config.listRepositories().find((repository) => repository.repoId === repoId)?.path ?? null,
+    log: (line) => process.stderr.write(line),
+  });
+
   // spec §6. One pass at a time, and a re-entrant call is dropped rather than queued: the delivery
   // already drains the whole table, so a second concurrent pass would only race the single-writer
   // gate for rows the first one is about to take. Dropping is the correct answer, not a shortcut.
@@ -246,6 +260,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   let inFlight: Promise<void> | null = null;
   const pump = (): Promise<void> => {
     if (inFlight !== null) return inFlight;
+    void correctionExporter?.maybeRun();
     // Through the admission gate like every other write, so a pass cannot slip a claim past a
     // shutdown that has already begun draining.
     // Kanban spec 2026-10-20 §3.1: with a driver, confirmed groups start on their own before the wakes are delivered (each

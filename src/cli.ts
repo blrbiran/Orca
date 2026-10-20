@@ -61,6 +61,9 @@ const USAGE = `usage:
                                  shows recovery, and refuses those commands by name.
                                  ORCA_CCMEM_BIN (an absolute path to ccmem) turns on the read-only
                                  Memory section; unset, the panel never starts ccmem.
+                                 --ccmem-corrections also writes each closed correction to the
+                                 repository's ccmem project memory (retrieval only) and archives it
+                                 when withdrawn; it needs ORCA_CCMEM_BIN and the control plane.
                                  \`orca panel <args>\` is the same command (kept as an alias).
   orca panel install [--dry-run] <orca panel run args>
                                  record the args and the named ORCA_* variables in ~/.orca/panel/service.json

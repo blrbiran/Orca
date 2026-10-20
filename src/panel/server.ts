@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import type { Server } from "node:http";
+import { isAbsolute } from "node:path";
 import express from "express";
 import { correctionsDir } from "../corrections/paths.js";
 import type { CcmemAdapterOptions } from "../memory/ccmem.js";
@@ -61,6 +62,11 @@ export interface PanelOptions {
    * (plan D7); absent means not configured, and nothing starts ccmem. `parsePanelArgs` always sets it.
    */
   memory?: CcmemAdapterOptions;
+  /**
+   * Corrections-to-ccmem spec 2026-10-21 As-built: `--ccmem-corrections` writes closed corrections to ccmem
+   * (src/memory/correctionExport.ts). Present only when the flag was given; it needs ORCA_CCMEM_BIN and the control plane.
+   */
+  ccmemCorrections?: true;
   /** Project registry spec §4: present in file mode only. */
   projectsFile?: { file: string; boot: ProjectsFileRead };
   /** Accounts spec §3.3: `--session-days`, 1..30, default 15. Optional for literal options; `parsePanelArgs` always sets it. */
@@ -162,6 +168,15 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
   });
   if (rejection !== null) throw new PanelRejection(rejection, controlRejectionMessage(rejection));
 
+  // Corrections-to-ccmem As-built: refused by name rather than ignored -- a flag that silently does nothing is a write the
+  // person believes happens (Rule 12).
+  const ccmemCorrections = args.includes("--ccmem-corrections");
+  if (ccmemCorrections) {
+    const bin = env.ORCA_CCMEM_BIN ?? "";
+    if (bin === "" || !isAbsolute(bin)) throw new PanelRejection("ccmem-corrections-need-ccmem", "--ccmem-corrections writes corrections through ccmem: set ORCA_CCMEM_BIN to the absolute path of ccmem");
+    if (!control.enabled) throw new PanelRejection("ccmem-corrections-need-control", "--ccmem-corrections reads corrections' closed state from the control plane; it cannot run with --no-control");
+  }
+
   return {
     by,
     bind: flag("--bind") ?? "127.0.0.1",
@@ -177,6 +192,7 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
     // Memory tab spec §3.4: read at parse time from the env this panel was given, like correctionsDir. Unset or empty
     // means not configured; there is no PATH lookup, so a criterion reaches a real ccmem only by naming it.
     memory: { ccmemBin: env.ORCA_CCMEM_BIN !== undefined && env.ORCA_CCMEM_BIN !== "" ? env.ORCA_CCMEM_BIN : null, env },
+    ...(ccmemCorrections ? { ccmemCorrections: true as const } : {}),
     ...(projectsFile === undefined ? {} : { projectsFile }),
     sessionDays,
     // Read at parse time from the env this panel was given, like correctionsDir (Rule 17).
@@ -246,7 +262,8 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   const epoch = randomUUID();
   let control: ControlRuntime | null = null;
   if (opts.control.enabled) {
-    try { control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env, corrections: { dir: opts.correctionsDir, by: opts.by, panel: panelCorrections(opts, reviews) } }); }
+    try { control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env, corrections: { dir: opts.correctionsDir, by: opts.by, panel: panelCorrections(opts, reviews) },
+      ...(opts.ccmemCorrections === true && opts.memory?.ccmemBin != null ? { ccmemCorrections: { ccmemBin: opts.memory.ccmemBin, env: opts.memory.env } } : {}) }); }
     catch (error) { auth.close(); throw error; }
   }
   // Project registry spec §5: built after the control plane, which it tells about every project it adds or renames.
