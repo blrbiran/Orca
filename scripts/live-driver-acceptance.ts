@@ -278,8 +278,8 @@ const tasks: LiveTask[] = scenario === "single" || scenario === "estimate" || sc
   ? [{ taskId: "a", files: ["answer.txt"], goal: "Create a file named answer.txt at the repository root whose entire content is the characters 42 followed by one newline. Change no other file.", successCondition: "answer.txt holds exactly 42 and a newline", check: 'test "$(cat answer.txt)" = 42' }]
   : scenario === "decision"
   ? [{ taskId: "a", files: ["median.js"],
-    goal: "Create median.js at the repository root, a CommonJS module exporting median(xs): the median of an array of finite numbers (the mean of the two middle values when the length is even). The input array must not be modified. What median([]) does is not specified: choose it yourself. Change no other file.",
-    successCondition: "node can require median.js; median([3,1,2]) is 2 and median([4,1,3,2]) is 2.5",
+    goal: "Create median.js at the repository root, a CommonJS module with a named export median (exports.median = ..., so that const { median } = require('./median.js') works; do not replace module.exports with the function). median(xs) returns the median of an array of finite numbers (the mean of the two middle values when the length is even). The input array must not be modified. What median([]) does is not specified: choose it yourself. Change no other file.",
+    successCondition: "node can require median.js and its median export is a function; median([3,1,2]) is 2 and median([4,1,3,2]) is 2.5",
     check: "node check-median.js" }]
   : scenario === "deadline"
   ? [{ taskId: "a", files: Object.keys(numberFiles),
