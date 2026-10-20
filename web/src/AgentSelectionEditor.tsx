@@ -30,8 +30,9 @@ export function selectionsHashFor(view: GroupViewV1, preview: AgentSelectionPrev
 /**
  * The agent a layer inherits when it names none: the effective agent of the layers below it (spec §6.3,
  * `slotLayers`). The worker's group layer and a task's layer sit on the operator default (a task also on the
- * group worker layer); the estimator's group layer on operator → operator-estimator, never the group worker
- * layer; the reconcile group layer on operator → operator-reconcile → group worker.
+ * group worker layer); the estimator's group layer on operator → operator-estimator when the operator's estimator
+ * role names any field (never then the group worker layer), and otherwise on the group worker layer -- the effective
+ * group primary, as `slotLayers` builds it; the reconcile group layer on operator → operator-reconcile → group worker.
  */
 export function inheritedAgentFor(
   scope: Scope, preferences: OperatorPreferencesV1 | null | undefined, overrides: GroupAgentOverridesV1,
