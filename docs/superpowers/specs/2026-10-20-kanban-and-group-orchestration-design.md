@@ -199,6 +199,10 @@ Controller's calls (reversible, recorded here):
 - **Group graph view** does not exist; `DependencyGraph.tsx`/`dependencyLayout.ts` draw one group's task graph — the
   layout is reused for a new group-level view (correcting §3.3/§4).
 
+**Later correction (2026-10-21, same session, controller's call recorded in the protect-acceptance-criteria spec §7a.3):**
+system-generated findings (§7 red integration check, model-review findings) open **debug tasks directly**, not
+correction rows; a correction stays a person's act. §7's "findings become corrections/debug tasks" is read accordingly.
+
 ## 10. Open questions (none blocking the plan)
 - Default cap 3 and the 6 h / 24 h intervals are controller defaults; revisit after measuring.
 - Whether to phase out the list view — decided later from usage (human).
