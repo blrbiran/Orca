@@ -99,7 +99,17 @@ export type GroupSummaryV1 = {
   dependsOn?: string[];
   /** Kanban spec 2026-10-20 §3.1-§3.4: present only on a group confirmed since start-on-confirm exists. */
   orchestration?: GroupOrchestrationV1;
+  /** System debug task spec 2026-10-21 §3.5: present only on a debug group Orca opened itself. */
+  systemDebug?: GroupSystemDebugV1;
+  /** §3.5: tasks of this group the escalation ladder took over; `exhausted` is level 3 (needs you). */
+  escalation?: GroupEscalationV1[];
 };
+export type GroupSystemDebugV1 = {
+  source: { kind: "ladder" | "integration-check" | "criteria-review"; groupId: string; taskId: string | null; runId: string | null };
+  stackOn: string | null;
+  settled: { state: string; at: number; detail: string | null } | null;
+};
+export type GroupEscalationV1 = { taskId: string; debugGroupId: string; state: "debugging" | "rerunning" | "exhausted"; reason: string | null };
 export type GroupOrchestrationV1 = {
   mode: "run" | "hold";
   state: "held" | "started" | "stopped" | "waiting-prerequisite" | "backoff" | "waiting-slot" | "queued";
@@ -543,7 +553,7 @@ export type CommandSuccessV1 = {
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
-    | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open"
+    | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw";
   target: CommandTargetV1;
   commandRevision: number | null;
@@ -575,6 +585,7 @@ export type CommandSuccessV1 = {
     | { kind: "pending-decision-rejected"; pendingId: string; correctionId: string }
     | { kind: "flagged-decision-ratified"; decisionId: string }
     | { kind: "debug-group-opened"; groupId: string; correctionId: string; created: boolean }
+    | { kind: "system-debug-opened"; groupId: string; created: boolean }
     | { kind: "correction-recorded"; correctionId: string }
     | { kind: "correction-closed"; correctionId: string; relPath: string; alreadyClosed: boolean }
     | { kind: "correction-withdrawn"; correctionId: string; review: "written" | "duplicate" | "skipped"; debugGroups: Array<{ groupId: string; state: "archived" | "started: left running" }> }

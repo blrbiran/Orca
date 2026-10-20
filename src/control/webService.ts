@@ -40,6 +40,9 @@ import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type 
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
+import { allTasksDone, anyTaskFailed, applySystemDebugOpen, ladderCandidates, ladderFacts, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand } from "./systemDebug.js";
+import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
+import { git } from "../scheduler/gitExec.js";
 import { applyCorrectionClose, applyCorrectionRecord, applyCorrectionWithdraw, type CorrectionCloseCommand, type CorrectionRecordCommand, type CorrectionWithdrawCommand, type PanelCorrections } from "./correctionCommands.js";
 import { recordActivity } from "./activity.js";
 import { commandClientFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
@@ -674,6 +677,106 @@ export class WebControlService {
       if (error === undefined) started.push(groupId); else refused.push({ groupId, code: String(error.code) });
     }
     return { started, refused };
+  }
+  /** System debug task spec 2026-10-21 §2: Orca opens (or finds) a debug group of its own (systemDebug.ts). */
+  async openSystemDebugGroup(command: SystemDebugOpenCommand): Promise<WebCommandResult> {
+    const release = this.deps.admissionGate?.enter();
+    try { return applySystemDebugOpen({ ...this.deps, repositoryPath: (repoId) => this.repositoryPath(repoId) }, command); }
+    finally { release?.(); }
+  }
+  /**
+   * System debug task spec 2026-10-21 §2-§3, kanban spec §6 levels 2-3: one pass, as orca-auto. (1) A started group's
+   * task that ended terminally failed, with no ladder yet, opens a ladder debug group stacked on that group. (2) A system
+   * debug group not yet confirmed is confirmed with its source group's profiles (start-on-confirm then starts it). (3) A
+   * ladder debug group whose tasks are all done is folded into its original group's branch, and the failed task is
+   * retried once. Every outcome that ends the ladder is written on the debug group's mark (level 3: needs you).
+   */
+  async systemDebugPass(): Promise<{ opened: string[]; confirmed: string[]; folded: string[]; settled: string[] }> {
+    const out = { opened: [] as string[], confirmed: [] as string[], folded: [] as string[], settled: [] as string[] };
+    for (const candidate of ladderCandidates(this.store)) {
+      const source = { kind: "ladder" as const, groupId: candidate.groupId, taskId: candidate.taskId, runId: candidate.run.runId };
+      const groupId = systemDebugGroupId(source);
+      let checks: string[];
+      try {
+        const task = readArchivedPlan(this.store, candidate.groupId).plan.tasks.find((entry) => entry.taskId === candidate.taskId);
+        checks = task === undefined ? [] : taskContractSchema.parse(JSON.parse(task.originalContractCanonicalJson)).verification.requiredChecks;
+      } catch { checks = []; }
+      if (checks.length === 0) continue; // nothing to hold the debug task to: the task stays with the person (level 3)
+      const answer = await this.openSystemDebugGroup({
+        schema: "orca-raw-command-v1", commandId: `orca-auto-ladder-${candidate.taskId}`, actorId: ORCHESTRATION_ACTOR, expectedRevision: 0,
+        verb: "system-debug-open", target: { kind: "group", groupId },
+        payload: { source, stackOn: candidate.groupId, repoId: candidate.repoId, facts: ladderFacts(candidate.run), checks },
+      });
+      if (!("error" in answer)) out.opened.push(groupId);
+    }
+    for (const group of systemDebugGroups(this.store)) {
+      const { groupId, mark } = group;
+      if (mark.settled !== null || isGroupArchived(this.store, groupId)) continue;
+      if (anyTaskFailed(this.store, groupId)) { settleSystemDebug(this.store, groupId, "debug-failed", null); out.settled.push(groupId); continue; }
+      if (group.status === "draft") {
+        const refused = await this.autoConfirmSystemDebug(groupId, mark.source.groupId);
+        if (refused === null) out.confirmed.push(groupId); else { settleSystemDebug(this.store, groupId, "confirm-refused", refused); out.settled.push(groupId); }
+        continue;
+      }
+      if (mark.source.kind !== "ladder" || mark.stackOn === null || !allTasksDone(this.store, groupId)) continue;
+      const refused = await this.foldLadder(groupId, mark.stackOn, mark.source.taskId!, mark.source.runId!);
+      settleSystemDebug(this.store, groupId, refused === null ? "folded" : refused.state, refused?.detail ?? null);
+      (refused === null ? out.folded : out.settled).push(groupId);
+    }
+    return out;
+  }
+  /** §2: confirm as orca-auto with the source group's confirmed profiles, budget mode and context policy; null, or why not. */
+  private async autoConfirmSystemDebug(groupId: string, sourceGroupId: string): Promise<string | null> {
+    const source = readBudgetProposal(this.store, sourceGroupId);
+    if (source.state !== "confirmed" || source.profiles === null || source.budgetMode === null) return "source-not-confirmed";
+    const proposal = readBudgetProposal(this.store, groupId), plan = readArchivedPlan(this.store, groupId);
+    const commandId = `orca-auto-confirm-v${proposal.proposalVersion}`;
+    if (this.store.db.prepare("SELECT 1 FROM commands WHERE group_id=? AND id=?").get(groupId, commandId) !== undefined) return "confirm-already-refused";
+    let selectionsHash: string | null;
+    try { selectionsHash = (await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId, ORCHESTRATION_ACTOR)).selectionsHash; }
+    catch (error) { return describeError(error); }
+    if (selectionsHash === null) return "agent-selection-rejected";
+    const row = this.store.db.prepare("SELECT revision, body FROM groups WHERE id=?").get(groupId)!;
+    const integration = readGroupIntegration(JSON.parse(String(row.body)));
+    const { profiles } = source;
+    const answer = await this.confirm({
+      schema: "orca-raw-command-v1", commandId, actorId: ORCHESTRATION_ACTOR, expectedRevision: Number(row.revision), verb: "confirm", target: { kind: "group", groupId },
+      payload: {
+        planHash: plan.planHash, proposalVersion: proposal.proposalVersion, budgetMode: source.budgetMode,
+        profileIds: { estimator: profiles.estimator?.profileId ?? null, worker: profiles.worker.profileId, handoff: profiles.handoff.profileId, goalReview: profiles.goalReview.profileId },
+        profileHashes: { estimator: profiles.estimator?.profileHash ?? null, worker: profiles.worker.profileHash, handoff: profiles.handoff.profileHash, goalReview: profiles.goalReview.profileHash },
+        contextPolicy: source.contextPolicy, selectionsHash, ...(integration === null ? {} : { integrationHash: integration.schemeHash }),
+      },
+    });
+    const error = (answer as { error?: { code?: unknown } }).error;
+    return error === undefined ? null : String(error.code);
+  }
+  /**
+   * §3.3: fast-forward the original group's branch to the debug group's (only when it is an ancestor -- it cannot have
+   * moved while its task was blocked), then retry the failed task once as orca-auto. Idempotent: a branch already moved
+   * by an earlier pass is only retried.
+   */
+  private async foldLadder(debugGroupId: string, originalGroupId: string, taskId: string, failedRunId: string): Promise<{ state: string; detail: string | null } | null> {
+    const repoId = this.planRepository(originalGroupId);
+    if (repoId === null) return { state: "fold-refused", detail: "original-repository-unknown" };
+    try {
+      const repo = this.repositoryPath(repoId);
+      const debugHead = await revParse(repo, workBranchRef(debugGroupId)), originalHead = await revParse(repo, workBranchRef(originalGroupId));
+      if (debugHead !== originalHead) {
+        try { await git(repo, [...QUIET_GIT, "merge-base", "--is-ancestor", originalHead, debugHead]); }
+        catch { return { state: "fold-refused", detail: `orca/${originalGroupId} moved: not an ancestor of orca/${debugGroupId}` }; }
+        await git(repo, [...QUIET_GIT, "update-ref", workBranchRef(originalGroupId), debugHead, originalHead]);
+      }
+    } catch (error) { return { state: "fold-refused", detail: describeError(error) }; }
+    const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(originalGroupId)?.revision ?? 0);
+    const answer = this.retryTask({
+      schema: "orca-raw-command-v1", commandId: `orca-auto-ladder-retry-${taskId}-${failedRunId}`, actorId: ORCHESTRATION_ACTOR,
+      expectedRevision: revision, verb: "retry-task", target: { kind: "group", groupId: originalGroupId }, payload: { taskId },
+    });
+    const error = (answer as { error?: { code?: unknown; message?: unknown } }).error;
+    // The retry-task command is the rerun's record (its ledger row names orca-auto; it writes task-retried).
+    if (error === undefined) return null;
+    return { state: "retry-refused", detail: `${String(error.code)}${typeof error.message === "string" && error.message !== "" ? `: ${error.message}` : ""}` };
   }
   /** Kanban spec §3.3, §9a.5: a person's edge between groups (groupEdges.ts). */
   addGroupDependency(command: AddGroupDependencyCommand): WebCommandResult {

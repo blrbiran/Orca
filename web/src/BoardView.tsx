@@ -53,6 +53,14 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; onOpen: () 
           aria-label={t("control.groupCard.progress", { done: group.completion.done, total: group.completion.total })} />
       )}
       {group.debug !== undefined && <span className="badge" data-tone="info">{t("board.card.debug", { correctionId: group.debug.correctionId })}</span>}
+      {group.systemDebug !== undefined && <span className="badge" data-tone="info">{t("board.card.systemDebug", { groupId: group.systemDebug.source.groupId, kind: group.systemDebug.source.kind })}</span>}
+      {(group.escalation ?? []).map((entry) => (
+        <p key={entry.taskId} className="detail-note" data-testid="board-card-escalation">
+          {entry.state === "debugging" ? t("board.card.escalating", { taskId: entry.taskId, debugGroupId: entry.debugGroupId })
+            : entry.state === "rerunning" ? t("board.card.rerunning", { taskId: entry.taskId })
+            : t("board.card.escalationExhausted", { taskId: entry.taskId, reason: entry.reason ?? "" })}
+        </p>
+      ))}
       {group.stopState !== null && <span className="badge">{enumText("stopState", group.stopState)}</span>}
       {waiting !== null && <p className="detail-note">{waiting}</p>}
       {reason !== null && <p className="detail-note" data-testid="board-card-reason">{t(`board.card.reason.${reason}` as const)}</p>}

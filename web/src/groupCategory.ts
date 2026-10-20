@@ -16,7 +16,9 @@ export const GROUP_FILTER_KEY = "orca.panel.groupFilter";
  * Kanban spec 2026-10-20 §3.1: also an automatic start refused again and again (needs-you for this group only).
  */
 export function needsAttention(summary: GroupSummaryV1): boolean {
-  return (summary.counts?.blocked ?? 0) > 0 || summary.recoveryBlockerCount > 0 || summary.claimBlocked || summary.state === "blocked"
+  // System debug task spec 2026-10-21 §3.5: a blocked task the escalation ladder is still working on is Orca's, not yours.
+  const escalating = (summary.escalation ?? []).filter((entry) => entry.state !== "exhausted").length;
+  return (summary.counts?.blocked ?? 0) - escalating > 0 || summary.recoveryBlockerCount > 0 || summary.claimBlocked || summary.state === "blocked"
     || (summary.stopState != null && summary.stopState !== "handoff-complete")
     || summary.orchestration?.refusal?.persistent === true;
 }

@@ -642,6 +642,7 @@ export const commandVerbSchema = z.enum([
   "add-group-dependency",
   "remove-group-dependency",
   "correction-debug-open",
+  "system-debug-open",
   "correction-record",
   "correction-close",
   "correction-withdraw",
@@ -916,6 +917,20 @@ export const correctionDebugOpenPayloadSchema = z.object({
   // The checks the debug task is held to; required when the original run has no contract to inherit them from.
   checks: z.array(nonemptyString).min(1).optional(),
 }).strict();
+// System debug task spec 2026-10-21 §2: a debug group Orca opens itself (ladder level 2, a red integration check, a
+// flagged test change), never over HTTP. The facts are code-built lines; the checks are what the debug task is held to.
+export const SYSTEM_DEBUG_SOURCE_KINDS = ["ladder", "integration-check", "criteria-review"] as const;
+export const systemDebugSourceSchema = z.object({
+  kind: z.enum(SYSTEM_DEBUG_SOURCE_KINDS), groupId: idSchema, taskId: idSchema.nullable(), runId: idSchema.nullable(),
+}).strict();
+export const systemDebugOpenPayloadSchema = z.object({
+  source: systemDebugSourceSchema,
+  // The group whose work branch the debug group starts from and folds back into (ladder); null: the target's HEAD.
+  stackOn: idSchema.nullable(),
+  repoId: idSchema,
+  facts: z.array(z.string().min(1).max(4096)).min(1).max(32),
+  checks: z.array(nonemptyString).min(1).max(32),
+}).strict();
 // Debug task plan Task 11 (design §12.4): the panel form's record, the UI's manual close (`orca correct --close`'s
 // arguments) and the author's withdraw, as human-only verbs on the `@corrections` scope.
 const correctionIdSchema = z.string().regex(/^c_[a-f0-9]{16}$/);
@@ -965,6 +980,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("add-group-dependency"), target: groupCommandTargetSchema, payload: groupDependencyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("remove-group-dependency"), target: groupCommandTargetSchema, payload: groupDependencyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("system-debug-open"), target: groupCommandTargetSchema, payload: systemDebugOpenPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-record"), target: correctionsCommandTargetSchema, payload: correctionRecordPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-close"), target: correctionsCommandTargetSchema, payload: correctionClosePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-withdraw"), target: correctionsCommandTargetSchema, payload: correctionWithdrawPayloadSchema }).strict(),
@@ -1032,6 +1048,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("add-group-dependency"), target: groupCommandTargetSchema, payload: groupDependencyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("remove-group-dependency"), target: groupCommandTargetSchema, payload: groupDependencyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("system-debug-open"), target: groupCommandTargetSchema, payload: systemDebugOpenPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-record"), target: correctionsCommandTargetSchema, payload: correctionRecordPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-close"), target: correctionsCommandTargetSchema, payload: correctionClosePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-withdraw"), target: correctionsCommandTargetSchema, payload: correctionWithdrawPayloadSchema }).strict(),
@@ -1187,6 +1204,15 @@ export const groupSummarySchema = z
     }).strict().optional(),
     // Kanban spec §3.3: the group's direct prerequisites (a person's edges), only when it has any.
     dependsOn: z.array(idSchema).min(1).optional(),
+    // System debug task spec 2026-10-21 §3.5: present only on a group Orca opened itself (its systemDebug mark).
+    systemDebug: z.object({
+      source: systemDebugSourceSchema, stackOn: idSchema.nullable(),
+      settled: z.object({ state: nonemptyString, at: safeInteger, detail: z.string().nullable() }).strict().nullable(),
+    }).strict().optional(),
+    // §3.5: a task of this group escalated by the ladder; `exhausted` is level 3 (needs you), the others are Orca's work.
+    escalation: z.array(z.object({
+      taskId: idSchema, debugGroupId: idSchema, state: z.enum(["debugging", "rerunning", "exhausted"]), reason: z.string().nullable(),
+    }).strict()).min(1).optional(),
     orchestration: z.object({
       mode: z.enum(["run", "hold"]),
       state: z.enum(["held", "started", "stopped", "waiting-prerequisite", "backoff", "waiting-slot", "queued"]),
@@ -1708,6 +1734,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group-dependency-added"), groupId: idSchema, dependsOn: idSchema }).strict(),
   z.object({ kind: z.literal("group-dependency-removed"), groupId: idSchema, dependsOn: idSchema }).strict(),
   z.object({ kind: z.literal("debug-group-opened"), groupId: idSchema, correctionId: nonemptyString, created: z.boolean() }).strict(),
+  z.object({ kind: z.literal("system-debug-opened"), groupId: idSchema, created: z.boolean() }).strict(),
   z.object({ kind: z.literal("correction-recorded"), correctionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("correction-closed"), correctionId: nonemptyString, relPath: nonemptyString, alreadyClosed: z.boolean() }).strict(),
   z.object({

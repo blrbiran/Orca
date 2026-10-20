@@ -61,6 +61,9 @@ export function waitingPrerequisites(store: ControlStore, groupId: string): stri
  * `orca/<g>` branch); null (the target's HEAD, as before) when every prerequisite is delivered locally or there is none.
  */
 export function stackBaseOf(store: ControlStore, groupId: string): string | null {
+  // System debug task spec 2026-10-21 §3.2: a ladder debug group starts from its original group's branch.
+  const stackOn = (groupBody(store, groupId)?.systemDebug as { stackOn?: unknown } | undefined)?.stackOn;
+  if (typeof stackOn === "string") return workBranchRef(stackOn);
   const stacked = prerequisitesOf(store, groupId).filter((prerequisite) => {
     const group = groupBody(store, prerequisite);
     return group !== null && !deliversLocally(group);

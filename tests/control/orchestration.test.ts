@@ -179,6 +179,22 @@ describe("running-group cap (kanban spec §3.2)", () => {
       expect((await service.autoStart()).started).toEqual(["fix"]);
     } finally { await h.dispose(); }
   });
+
+  it("admits a debug group Orca opened itself (systemDebug mark) first too (system debug task spec 2026-10-21 §2)", async () => {
+    let now = Date.parse("2026-10-21T00:00:00.000Z");
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService({ ...h.deps, now: () => new Date(now) });
+      h.importDeferred("fix");
+      const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='fix'").get()!.body));
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id='fix'").run(JSON.stringify({ ...body, systemDebug: { source: { kind: "ladder", groupId: "g", taskId: "a", runId: "run-1" }, stackOn: "g", inputHash: "a".repeat(64), settled: null } }));
+      setCap(h, service, 1);
+      await confirm(h, service, "g");
+      now += 1_000;
+      await confirm(h, service, "fix");
+      // mutation: groupFacts reads only body.debug -> started ["g"], red
+      expect((await service.autoStart()).started).toEqual(["fix"]);
+    } finally { await h.dispose(); }
+  });
 });
 
 describe("GET /api/control/orchestration (kanban spec §3.2)", () => {

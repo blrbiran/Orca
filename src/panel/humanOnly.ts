@@ -57,6 +57,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "reject-pending-decision": "human-only",
   // Debug task design §12.4: opening a correction's debug group spends nothing, so the agent path may do it.
   "correction-debug-open": "any",
+  // System debug task spec 2026-10-21 §2: Orca's own debug group (orca-auto); no route sends it.
+  "system-debug-open": "panel",
   // Debug task plan Task 11 (design §12.4, withdraw Amendment 7): recording, closing and withdrawing a correction are an owner's acts.
   "correction-record": "human-only",
   "correction-close": "human-only",

@@ -91,7 +91,9 @@ function groupFacts(store: ControlStore): GroupFacts[] {
   return store.db.prepare("SELECT id, body FROM groups ORDER BY rowid").all().flatMap((row) => {
     let body: { status?: unknown; debug?: unknown };
     try { body = JSON.parse(String(row.body)) as typeof body; } catch { return []; } // its own reads name a bad body
-    return [{ id: String(row.id), status: String(body.status), debug: typeof body.debug === "object" && body.debug !== null }];
+    // System debug task spec 2026-10-21 §2: Orca's own debug groups are admitted first too.
+    const debug = [body.debug, (body as { systemDebug?: unknown }).systemDebug].some((mark) => typeof mark === "object" && mark !== null);
+    return [{ id: String(row.id), status: String(body.status), debug }];
   });
 }
 

@@ -12,6 +12,7 @@ import { readAgentPreferences } from "../control/agentPreferences.js";
 import { peerCode } from "../control/ccloopPort.js";
 import { groupExecutionPending } from "../control/executionPending.js";
 import { readDebugMark } from "../control/debugGroup.js";
+import { escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
 import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint } from "../control/usageSettlement.js";
@@ -459,6 +460,8 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   const executing = archived === null ? undefined : groupExecutionPending(store, groupId, archived.plan.tasks.map((task) => task.taskId), readSnapshot!);
   const orchestration = orchestrationSummary(store, { id: groupId, status: String(body.status) }, store.now(), waitingPrerequisites, executing);
   const dependsOn = prerequisitesOf(store, groupId);
+  const systemDebugMark = readSystemDebugMark(body);
+  const escalation = archived === null ? [] : escalationsOf(store, groupId);
   const summary = {
     groupId,
     repoId,
@@ -479,6 +482,8 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(dependsOn.length === 0 ? {} : { dependsOn }),
     ...(archived === null ? {} : { card: cardFacts(store, groupId, body as Record<string, unknown>, archived.plan.tasks.map((task) => task.taskId), readSnapshot!) }),
     ...(orchestration === null ? {} : { orchestration }),
+    ...(systemDebugMark === null ? {} : { systemDebug: { source: systemDebugMark.source, stackOn: systemDebugMark.stackOn, settled: systemDebugMark.settled } }),
+    ...(escalation.length === 0 ? {} : { escalation }),
     ...(debugMark === null ? {} : { debug: {
       correctionId: debugMark.correctionId, ordinal: debugMark.ordinal, missing: debugMark.missing,
       agentFallback: debugMark.agentFallback === null ? null : { reason: debugMark.agentFallback.reason },
