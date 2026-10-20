@@ -8,7 +8,7 @@ import {
   requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementOpenPayloadSchema, resumeFromHandoffPayloadSchema,
   setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema,
-  verifySavedResultPayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, correctionDebugOpenPayloadSchema,
+  verifySavedResultPayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, correctionDebugOpenPayloadSchema,
   correctionRecordPayloadSchema, correctionClosePayloadSchema, correctionWithdrawPayloadSchema,
 } from "../../src/control/webProtocol.js";
 
@@ -38,6 +38,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "verify-saved-result": verifySavedResultPayloadSchema,
   "approve-pending-decision": approvePendingDecisionPayloadSchema,
   "reject-pending-decision": rejectPendingDecisionPayloadSchema,
+  "ratify-flagged-decision": ratifyFlaggedDecisionPayloadSchema,
   "correction-debug-open": correctionDebugOpenPayloadSchema,
   "correction-record": correctionRecordPayloadSchema, "correction-close": correctionClosePayloadSchema, "correction-withdraw": correctionWithdrawPayloadSchema,
 };

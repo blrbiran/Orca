@@ -206,6 +206,7 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "archive-group": { call: (s, c) => s.archiveGroup(c), target: "group", payload: {} },
   "approve-pending-decision": { call: (s, c) => s.approvePendingDecision(c), target: "group", payload: { pendingId: "pending-run-a-0", undoHow: `git revert --no-edit ${"e".repeat(40)}` } },
   "reject-pending-decision": { call: (s, c) => s.rejectPendingDecision(c), target: "group", payload: { pendingId: "pending-run-a-0" } },
+  "ratify-flagged-decision": { call: (s, c) => s.ratifyFlaggedDecision(c), target: "group", payload: { decisionId: "run-a/agent-0" } },
   "correction-debug-open": { call: (s, c) => s.openCorrectionDebugGroup(c), target: "group", payload: { correctionId: "c_0123456789abcdef" } },
 };
 
