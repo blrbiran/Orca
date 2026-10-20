@@ -349,7 +349,8 @@ const SAME_IN_CHINESE = ["complexity.S", "complexity.M", "complexity.L", "comple
 describe("every enum value has its words in both languages (spec §3.5)", () => {
   it("reads every family", () => {
     // 33 (34 with activityKind, Task E11) with roundState, draftState and exportState (N1 Task 13, the same named rewrite: the Requirements section).
-    expect(FAMILIES.length).toBe(34);
+    // Estimate usable-answer spec correction 2026-10-20 (session 3d229487, the same named rewrite): estimateWithdrawnReason (35).
+    expect(FAMILIES.length).toBe(35);
     // Now counts groupState.clarifying (N1 Task 4, controller ruling: a named rewrite; the count follows the catalogue).
     // And runPhase.single-call (N1 Task 12, the same named rewrite: a requirement's runs in the group view, DR26).
     // And roundState (5), draftState (7) and exportState (4): 148 + 16 (N1 Task 13, the same named rewrite).
@@ -359,7 +360,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // Debug task plan Task 10 (ruling C22): the activityKind `correction-closed` adds one: 182 + 1.
     // Debug task plan Task 12 fix round 1: the activityKind `debug-open-failed` adds one: 183 + 1.
     // Reported-decisions spec 2026-10-20 §6 (session grant 3831d12f): the decisionKind `implementation` adds one: 184 + 1.
-    expect(ENUM_VALUES.length).toBe(185);
+    // Spec correction 2026-10-20: estimateState `withdrawn` and the three estimateWithdrawnReason values: 185 + 4.
+    expect(ENUM_VALUES.length).toBe(189);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {
