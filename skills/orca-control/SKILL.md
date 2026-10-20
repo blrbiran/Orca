@@ -156,6 +156,7 @@ The socket refuses these before anything runs (nothing is ledgered, the commandI
 - `approve-pending-decision` (giving a decision a landing refused an executable `undo.how` and writing it into the ledger) is owner-only → 403 `control-verb-human-only`.
 - `reject-pending-decision` (rejecting a decision a landing refused, which records a correction in the owner's name) is owner-only → 403 `control-verb-human-only`.
 - `ratify-flagged-decision` (accepting a landed decision Orca flagged for a person) is owner-only → 403 `control-verb-human-only`.
+- `add-group-dependency` and `remove-group-dependency` (making a group wait until another has landed) are owner-only → 403 `control-verb-human-only`.
 - `set-orchestration-settings` (how many groups run at once; a confirmed group starts on its own when a slot is free) is owner-only → 403 `control-verb-human-only`. A `confirm` with `"hold":true` confirms without starting; `start` it later.
 - `correction-debug-open` (opening a recorded correction's debug group; it spends nothing, and its group is `debug-<correctionId>`, or the next `-2`, `-3`, … with `"reopen":true` once the newest is stopped or archived) is open to an agent, but its `undoHow` field is human-only → 403 `control-field-human-only`. Send `expectedRevision` 0 for a new group, or the group's current revision. Add `"checks":["npm test"]` to name the checks the debug task is held to; they are added to the original contract's (never in place of them), and they are required (409 `debug-checks-required`) when the corrected run has no contract to inherit them from.
 - `correction-record`, `correction-close` and `correction-withdraw` (recording a correction, closing one by hand with the owner's `undo.how`, withdrawing one) are owner-only → 403 `control-verb-human-only`. A close while a debug group of the correction is live is refused 409 `debug-group-active`.
@@ -181,7 +182,7 @@ stdout is exactly one JSON line:
 
 ## 8. Route table
 
-`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration`, `groups/<groupId>/integration`, `groups/<groupId>/integration/retry`, `groups/<groupId>/integration/resolve`, `groups/<groupId>/decisions/approve`, `groups/<groupId>/decisions/reject`, `groups/<groupId>/decisions/ratify` the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows and `operator/set-orchestration-settings` are listed for completeness and are owner-only (section 6).
+`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration`, `groups/<groupId>/integration`, `groups/<groupId>/integration/retry`, `groups/<groupId>/integration/resolve`, `groups/<groupId>/decisions/approve`, `groups/<groupId>/decisions/reject`, `groups/<groupId>/decisions/ratify`, `groups/<groupId>/dependencies/add`, `groups/<groupId>/dependencies/remove`, the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows and `operator/set-orchestration-settings` are listed for completeness and are owner-only (section 6).
 
 | Route | Verb | Payload example |
 | --- | --- | --- |
@@ -215,6 +216,8 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/decisions/approve` | approve-pending-decision | `{"pendingId":"pending-run-x-0","undoHow":"git revert --no-edit <sha>"}` |
 | `POST groups/<groupId>/decisions/reject` | reject-pending-decision | `{"pendingId":"pending-run-x-0","because":"the premise was false"}` |
 | `POST groups/<groupId>/decisions/ratify` | ratify-flagged-decision | `{"decisionId":"run-x/agent-0"}` |
+| `POST groups/<groupId>/dependencies/add` | add-group-dependency | `{"dependsOn":"g0"}` |
+| `POST groups/<groupId>/dependencies/remove` | remove-group-dependency | `{"dependsOn":"g0"}` |
 | `POST corrections/<correctionId>/debug-group` | correction-debug-open | `{"correctionId":"c_0123456789abcdef"}` |
 | `POST corrections` | correction-record | `{"repoId":"repo-1","decisionId":"run-1/1","kind":"wrong","because":"the premise was false"}` |
 | `POST corrections/<correctionId>/close` | correction-close | `{"correctionId":"c_0123456789abcdef","choseInstead":"a file lease","undoHow":"git revert --no-edit <sha>"}` |

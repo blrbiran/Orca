@@ -43,6 +43,7 @@ import { archivedMarkOf } from "../control/archivedMark.js";
 import { workItemCategory, type WorkItemCategory } from "../control/workItemCategory.js";
 import { workBranchRef } from "../control/workspace.js";
 import { orchestrationSummary } from "../control/orchestration.js";
+import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import {
   agentSelectionPreviewSchema,
   allocationViewSchema,
@@ -427,7 +428,8 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   const readSnapshot = snapshot ?? (archived === null ? undefined : readGroupSnapshot(store, groupId));
   const tally = archived === null ? null : taskCompletion(readSnapshot!, archived.plan);
   const debugMark = readDebugMark(body);
-  const orchestration = orchestrationSummary(store, { id: groupId, status: String(body.status) }, store.now());
+  const orchestration = orchestrationSummary(store, { id: groupId, status: String(body.status) }, store.now(), waitingPrerequisites);
+  const dependsOn = prerequisitesOf(store, groupId);
   const summary = {
     groupId,
     repoId,
@@ -445,6 +447,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     archived: archivedMarkOf(body) !== null,
     ...(archived === null ? {} : { executionPending: groupExecutionPending(store, groupId, archived.plan.tasks.map((task) => task.taskId), readSnapshot!) }),
     ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),
+    ...(dependsOn.length === 0 ? {} : { dependsOn }),
     ...(orchestration === null ? {} : { orchestration }),
     ...(debugMark === null ? {} : { debug: {
       correctionId: debugMark.correctionId, ordinal: debugMark.ordinal, missing: debugMark.missing,

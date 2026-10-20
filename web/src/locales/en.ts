@@ -1325,6 +1325,12 @@ export const enErrors: Record<string, string> = {
   // Control run decisions plan Task 9: approving a decision that did not land.
   "pending-decision-not-found": "This group has no such decision waiting for confirmation.",
   "flagged-decision-not-found": "This group has no such flagged decision.",
+  "group-edge-prerequisite-not-found": "There is no group {{detail}} to wait for.",
+  "group-edge-cycle": "That dependency would make the groups wait for each other.",
+  "group-edge-dependent-started": "This group has already started; a dependency would change nothing.",
+  "group-edge-repository-mismatch": "Both groups must work on the same project.",
+  "group-edge-stack-ambiguous": "A group can stack on only one group that is not delivered locally ({{detail}}).",
+  "group-edge-self": "A group cannot wait for itself.",
   "pending-decision-settled": "This decision was already settled, so it cannot be changed now: {{detail}}",
   "decision-undo-not-executable": "The undo command still cannot be run as written; give a command such as `git revert --no-edit <commit>`: {{detail}}",
   "pending-decision-entry-invalid": "This decision is invalid for a reason a new undo command cannot fix: {{detail}}",

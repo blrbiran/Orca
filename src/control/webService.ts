@@ -46,6 +46,7 @@ import { applyApprovePendingDecision, applyRatifyFlaggedDecision, applyRejectPen
 import { readCorrections } from "../corrections/store.js";
 import { autoStartPass, recordConfirmed, type PrerequisiteReader } from "./orchestration.js";
 import { applySetOrchestrationSettings, type SetOrchestrationSettingsCommand } from "./orchestrationCommands.js";
+import { applyAddGroupDependency, applyRemoveGroupDependency, waitingPrerequisites, type AddGroupDependencyCommand, type RemoveGroupDependencyCommand } from "./groupEdges.js";
 import { readWithdrawals, withdrawnIds } from "../corrections/withdrawals.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
@@ -643,8 +644,15 @@ export class WebControlService {
    * Kanban spec 2026-10-20 §3.1-§3.2: one pass of start-on-confirm. Each start is this service's own start path, sent as
    * orca-auto; a refusal is recorded with its backoff (orchestration.ts). The panel's pump calls it before wake delivery.
    */
-  autoStart(prerequisites?: PrerequisiteReader): ReturnType<typeof autoStartPass> {
+  autoStart(prerequisites: PrerequisiteReader = waitingPrerequisites): ReturnType<typeof autoStartPass> {
     return autoStartPass({ store: this.store, now: () => (this.deps.now?.() ?? new Date()).getTime(), start: (command) => this.start(command as StartCommand), prerequisites });
+  }
+  /** Kanban spec §3.3, §9a.5: a person's edge between groups (groupEdges.ts). */
+  addGroupDependency(command: AddGroupDependencyCommand): WebCommandResult {
+    return this.mutate(() => applyAddGroupDependency({ store: this.store }, command)) as WebCommandResult;
+  }
+  removeGroupDependency(command: RemoveGroupDependencyCommand): WebCommandResult {
+    return this.mutate(() => applyRemoveGroupDependency({ store: this.store }, command)) as WebCommandResult;
   }
   /** Kanban spec §3.2: the running-group cap (orchestrationCommands.ts). */
   setOrchestrationSettings(command: SetOrchestrationSettingsCommand): WebCommandResult {

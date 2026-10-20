@@ -639,6 +639,8 @@ export const commandVerbSchema = z.enum([
   "reject-pending-decision",
   "ratify-flagged-decision",
   "set-orchestration-settings",
+  "add-group-dependency",
+  "remove-group-dependency",
   "correction-debug-open",
   "correction-record",
   "correction-close",
@@ -905,6 +907,8 @@ export const rejectPendingDecisionPayloadSchema = z.object({ pendingId: idSchema
 export const ratifyFlaggedDecisionPayloadSchema = z.object({ decisionId: nonemptyString }).strict();
 // Kanban spec §3.2: at most this many groups run at once (default 3; the human asked for it for CPU load and conflicts).
 export const setOrchestrationSettingsPayloadSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64) }).strict();
+// Kanban spec §3.3, §9a.5: a person's edge between groups; the target group is the dependent, `dependsOn` must land first.
+export const groupDependencyPayloadSchema = z.object({ dependsOn: idSchema }).strict();
 // Debug task plan Task 6: one recorded correction opens one debug group (spending nothing). `reopen` asks for the next
 // ordinal once the newest debug group is stopped or archived; `undoHow` is the owner's, recorded for the closing row.
 export const correctionDebugOpenPayloadSchema = z.object({
@@ -958,6 +962,8 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("ratify-flagged-decision"), target: groupCommandTargetSchema, payload: ratifyFlaggedDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-orchestration-settings"), target: orchestrationCommandTargetSchema, payload: setOrchestrationSettingsPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("add-group-dependency"), target: groupCommandTargetSchema, payload: groupDependencyPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("remove-group-dependency"), target: groupCommandTargetSchema, payload: groupDependencyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-record"), target: correctionsCommandTargetSchema, payload: correctionRecordPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-close"), target: correctionsCommandTargetSchema, payload: correctionClosePayloadSchema }).strict(),
@@ -1023,6 +1029,8 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("ratify-flagged-decision"), target: groupCommandTargetSchema, payload: ratifyFlaggedDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-orchestration-settings"), target: orchestrationCommandTargetSchema, payload: setOrchestrationSettingsPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("add-group-dependency"), target: groupCommandTargetSchema, payload: groupDependencyPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("remove-group-dependency"), target: groupCommandTargetSchema, payload: groupDependencyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-record"), target: correctionsCommandTargetSchema, payload: correctionRecordPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-close"), target: correctionsCommandTargetSchema, payload: correctionClosePayloadSchema }).strict(),
@@ -1171,6 +1179,8 @@ export const groupSummarySchema = z
     // Kanban spec 2026-10-20 §3.1-§3.4: present only on a group confirmed since start-on-confirm exists (a row in
     // group_orchestration). `state` is the orchestrator's own answer (src/control/orchestration.ts); `refusal.persistent`
     // marks a start refused PERSISTENT_REFUSALS times in a row (needs-you for this group only).
+    // Kanban spec §3.3: the group's direct prerequisites (a person's edges), only when it has any.
+    dependsOn: z.array(idSchema).min(1).optional(),
     orchestration: z.object({
       mode: z.enum(["run", "hold"]),
       state: z.enum(["held", "started", "stopped", "waiting-prerequisite", "backoff", "waiting-slot", "queued"]),
@@ -1688,6 +1698,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("pending-decision-rejected"), pendingId: idSchema, correctionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("flagged-decision-ratified"), decisionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("orchestration-settings-set"), maxRunningGroups: positiveSafeInteger, revision: positiveSafeInteger }).strict(),
+  z.object({ kind: z.literal("group-dependency-added"), groupId: idSchema, dependsOn: idSchema }).strict(),
+  z.object({ kind: z.literal("group-dependency-removed"), groupId: idSchema, dependsOn: idSchema }).strict(),
   z.object({ kind: z.literal("debug-group-opened"), groupId: idSchema, correctionId: nonemptyString, created: z.boolean() }).strict(),
   z.object({ kind: z.literal("correction-recorded"), correctionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("correction-closed"), correctionId: nonemptyString, relPath: nonemptyString, alreadyClosed: z.boolean() }).strict(),

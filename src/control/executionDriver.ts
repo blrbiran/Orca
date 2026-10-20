@@ -1,4 +1,5 @@
 import {hasValidUsageSettlement,settlementArtifact as settlementArtifactBytes} from "./usageSettlement.js";
+import { stackBaseOf } from "./groupEdges.js";
 import {assertCurrentSavedRecovery,savedRecoveryAccounting} from "./savedResultRecovery.js";
 import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,recoveryClosure} from "./savedResultRecoveryPackage.js";
 import {savedDispatchSchema,savedRecoverySchema,savedResultAdmissionSchema,executionFormatFailureSchema,savedExecutionSnapshotSchema,savedResultCollectionSchema,savedResultSettlementSchema,interruptedSavedResultSchema} from "./savedResultProtocol.js";
@@ -317,7 +318,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   if((run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&continued!==null)throw new ControlError("resume-handoff-invalid","saved-result-explicit-command-required");
   const recovery=run.savedRecovery===undefined?null:savedRecoverySchema.parse(run.savedRecovery);
   const original=recovery?JSON.parse((await readArtifact(store,recovery.sourceEnvelope)).toString()) as StartEnvelope:null;
-  const base = original?.work.kind==="loop"?original.work.base:continued !== null ? continued.base : await ensureWorkBranch(targetRepo, run.groupId);
+  const base = original?.work.kind==="loop"?original.work.base:continued !== null ? continued.base : await ensureWorkBranch(targetRepo, run.groupId, stackBaseOf(store, run.groupId));
   privateDirectory(drive.sourceDir);
   await ensureWorkspace(targetRepo, drive.workspaceMode, workspaceOf(drive), base, deps.roots);
   deps.crash?.("A2-after-workspace");

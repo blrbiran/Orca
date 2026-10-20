@@ -538,6 +538,9 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     // Control run decisions plan Task 9: an owner approves a refused decision with an executable undo.how.
     { path: "/api/control/groups/:groupId/decisions/approve", verb: "approve-pending-decision", target: fromParams },
     { path: "/api/control/groups/:groupId/decisions/ratify", verb: "ratify-flagged-decision", target: fromParams },
+    // Kanban spec §3.3, §9a.5: a person's edge; the group in the path is the dependent.
+    { path: "/api/control/groups/:groupId/dependencies/add", verb: "add-group-dependency", target: fromParams },
+    { path: "/api/control/groups/:groupId/dependencies/remove", verb: "remove-group-dependency", target: fromParams },
     // Control run decisions plan Task 10: an owner rejects a refused decision, recording a correction.
     { path: "/api/control/groups/:groupId/decisions/reject", verb: "reject-pending-decision", target: fromParams },
     // Debug task plan Task 6: a recorded correction opens its debug group; the ledger key is that group's.
@@ -637,6 +640,8 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "unarchive-group": service.unarchiveGroup(command); break;
           case "approve-pending-decision": await service.approvePendingDecision(command); break;
           case "ratify-flagged-decision": service.ratifyFlaggedDecision(command); break;
+          case "add-group-dependency": service.addGroupDependency(command); break;
+          case "remove-group-dependency": service.removeGroupDependency(command); break;
           case "reject-pending-decision": await service.rejectPendingDecision(command); break;
           case "correction-debug-open": await service.openCorrectionDebugGroup(command); break;
           case "correction-record": await service.recordCorrection(command); break;

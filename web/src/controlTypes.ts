@@ -93,6 +93,8 @@ export type GroupSummaryV1 = {
     checks?: { from: "original" | "original+named" | "named"; namedBy: "human" | "agent" | null };
     closing?: DebugClosingV1 | null;
   };
+  /** Kanban spec 2026-10-20 §3.3: the group's direct prerequisites (a person's edges); present only when it has any. */
+  dependsOn?: string[];
   /** Kanban spec 2026-10-20 §3.1-§3.4: present only on a group confirmed since start-on-confirm exists. */
   orchestration?: GroupOrchestrationV1;
 };
@@ -539,7 +541,7 @@ export type CommandSuccessV1 = {
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
-    | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "correction-debug-open"
+    | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw";
   target: CommandTargetV1;
   commandRevision: number | null;
@@ -579,6 +581,8 @@ export type CommandSuccessV1 = {
     | { kind: "spend-cap-cleared"; revision: number }
     | { kind: "usage-calendar-set"; revision: number }
     | { kind: "orchestration-settings-set"; maxRunningGroups: number; revision: number }
+    | { kind: "group-dependency-added"; groupId: string; dependsOn: string }
+    | { kind: "group-dependency-removed"; groupId: string; dependsOn: string }
     | { kind: "task-labels-set"; taskId: string; labelsVersion: number }
     | { kind: "task-loop-set"; taskId: string; loopVersion: number; proposalVersion: number }
     | { kind: "task-continuing"; continuationIntentId: string; pendingRunId: string; claimOrdinal: number; wakeId: string }

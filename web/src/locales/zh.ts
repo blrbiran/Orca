@@ -1255,6 +1255,12 @@ export const zhErrors: Record<string, string> = {
   // Control run decisions plan Task 9: approving a decision that did not land.
   "pending-decision-not-found": "这个组没有这条待确认的决定。",
   "flagged-decision-not-found": "这个组没有这条标红的决定。",
+  "group-edge-prerequisite-not-found": "没有要等的组 {{detail}}。",
+  "group-edge-cycle": "这条依赖会让两个组互相等待。",
+  "group-edge-dependent-started": "这个组已经开跑，加依赖不会有任何作用。",
+  "group-edge-repository-mismatch": "两个组必须是同一个项目。",
+  "group-edge-stack-ambiguous": "一个组只能叠在一个非本地交付的组上（{{detail}}）。",
+  "group-edge-self": "组不能等它自己。",
   "pending-decision-settled": "这条决定已经处理过，现在不能再改：{{detail}}",
   "decision-undo-not-executable": "撤销命令仍然无法照原样执行，请给出类似 `git revert --no-edit <commit>` 的命令：{{message}}",
   "pending-decision-entry-invalid": "这条决定有别的问题，换一条撤销命令也修不好：{{message}}",

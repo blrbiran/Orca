@@ -46,6 +46,8 @@ export const durableCommandErrorStatuses = {
   "pending-decision-not-found": 404,
   // Kanban spec §9a: no flagged decision of this group has the id.
   "flagged-decision-not-found": 404,
+  // Kanban spec §3.3: add-group-dependency names a prerequisite group that does not exist (detail: its id).
+  "group-edge-prerequisite-not-found": 404,
   // Debug task plan Task 6 (correction-debug-open): no stored correction has the id; no configured repository has the
   // correction's projectKey; the decision a correction names is in no ledger source (Task 3's DECISION_NOT_FOUND), or the
   // pending item it names has no control-DB row (Task 3's PENDING_DECISION_NOT_FOUND).
@@ -55,6 +57,15 @@ export const durableCommandErrorStatuses = {
   "original-pending-decision-not-found": 404,
   // Debug task plan Task 11 (fix round 1): correction-withdraw's membership guard, the panel withdraw route's own 404.
   "decision-not-found": 404,
+
+  // Kanban spec §3.3, §9a.1: an edge would close a cycle; the dependent already started (an edge would change nothing);
+  // the two groups are in different repositories (detail: both repoIds); a second prerequisite not delivered locally
+  // (the dependent can stack on only one branch; detail: the ids); a group named as its own prerequisite.
+  "group-edge-cycle": 409,
+  "group-edge-dependent-started": 409,
+  "group-edge-repository-mismatch": 409,
+  "group-edge-stack-ambiguous": 409,
+  "group-edge-self": 400,
 
   // Optimistic concurrency, immutable identity, and ownership conflicts.
   // Agent selection spec §6.4 step 3 (W6-12): the selections a confirmation resolves are no longer the ones the

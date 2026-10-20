@@ -60,10 +60,12 @@ export async function revParse(repo: string, rev: string): Promise<string> {
  * checked out. Create-only (`update-ref <ref> <new> ""`), so a concurrent creator wins and this reads
  * whatever it created. Never deleted.
  */
-export async function ensureWorkBranch(targetRepo: string, groupId: string): Promise<string> {
+export async function ensureWorkBranch(targetRepo: string, groupId: string, startPoint: string | null = null): Promise<string> {
   const ref = workBranchRef(groupId);
   try { return await revParse(targetRepo, ref); } catch { /* absent: create it below */ }
-  const head = await revParse(targetRepo, "HEAD");
+  // Kanban spec 2026-10-20 §9a.1: a group whose prerequisite is not delivered locally starts from that prerequisite's
+  // branch (stacked); otherwise from the target's HEAD, as always.
+  const head = await revParse(targetRepo, startPoint ?? "HEAD");
   try { await git(targetRepo, [...QUIET_GIT, "update-ref", ref, head, ""]); } catch { /* created concurrently */ }
   return revParse(targetRepo, ref);
 }

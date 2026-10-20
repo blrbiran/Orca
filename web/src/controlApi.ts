@@ -366,6 +366,9 @@ export type ControlAction =
   | { verb: "reject-pending-decision"; groupId: string; expectedRevision: number; payload: { pendingId: string; because?: string } }
   // Kanban spec 2026-10-20 §9a: a person ratifies a landed decision Orca flagged.
   | { verb: "ratify-flagged-decision"; groupId: string; expectedRevision: number; payload: { decisionId: string } }
+  // Kanban spec §3.3, §9a.5: a person's edge; `groupId` is the dependent, `dependsOn` lands first.
+  | { verb: "add-group-dependency"; groupId: string; expectedRevision: number; payload: { dependsOn: string } }
+  | { verb: "remove-group-dependency"; groupId: string; expectedRevision: number; payload: { dependsOn: string } }
   // Debug task plan Tasks 6, 11: a correction's debug group is opened (expected revision 0 for a new one), and a correction
   // is recorded or closed by hand on the `@corrections` scope (constant revision 0). `groupId` is "@corrections" for all
   // three: the open's ledger key is the debug group the server picks (src/panel/controlApi.ts debugOpenScoped).
@@ -438,6 +441,10 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/decisions/reject`;
     case "ratify-flagged-decision":
       return `${group}/decisions/ratify`;
+    case "add-group-dependency":
+      return `${group}/dependencies/add`;
+    case "remove-group-dependency":
+      return `${group}/dependencies/remove`;
     case "correction-debug-open":
       return `/api/control/corrections/${segment(action.payload.correctionId)}/debug-group`;
     case "correction-record":
