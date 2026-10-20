@@ -60,12 +60,23 @@ const GRAPH: Record<string, string> = {
   "skills/x/SKILL.md": "# x\n",
   "docs/readme.md": "# readme\n",
   "web/package.json": `{ "type": "module" }\n`,
-  "web/vite.config.ts": `export default { test: { include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"] } };\n`,
+  "web/vite.config.ts": `export default { test: { include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"], setupFiles: ["tests/setup.ts"] } };\n`,
   "web/tsconfig.json": "{}\n",
   "web/src/w.ts": "export const w = 1;\n",
   "web/src/lone.ts": "export const l = 1;\n",
   "web/tests/w.test.ts": T(`import { w } from "../src/w.js";\nvoid w;`),
-  "web/tests/other.test.tsx": T(""),
+  "web/tests/other.test.tsx": T(`const data = "fixtures/data.json";\nvoid data;`),
+  "web/tests/setup.ts": "export {};\n",
+  "web/tests/fixtures/data.json": "{}\n",
+  // Data read as text: named by a test (its basename in a path built from segments), by a helper, by nothing; a decoy
+  // whose name merely ends in the same basename must not be selected.
+  "tests/fixtures/m/golden.json": "{}\n",
+  "tests/m/cli.test.ts": T(`const golden = ["..", "fixtures", "m", "golden.json"].join("/");\nvoid golden;`),
+  "tests/n/decoy.test.ts": T(`const other = "fixtures/hook-golden.json";\nvoid other;`),
+  "tests/fixtures/p/rows.jsonl": "{}\n",
+  "tests/helpers/fixtureReader.ts": `export const rows = "rows.jsonl";\n`,
+  "tests/p/viaHelper.test.ts": T(`import { rows } from "../helpers/fixtureReader.js";\nvoid rows;`),
+  "tests/fixtures/orphan.txt": "x\n",
 };
 const ALL_ROOT = Object.keys(GRAPH).filter((p) => /^tests\/.+\.test\.ts$/.test(p)).map((p) => `root ${p}`).sort();
 
@@ -209,6 +220,49 @@ describe("selection rows (dry run against the real module graph)", () => {
     expect(dry(web).files).toEqual(["web web/tests/other.test.tsx", "web web/tests/w.test.ts"]);
   });
 
+  it("web/tests/setup.ts runs before every web test, so it selects the whole web suite like the web config", () => {
+    const repo = graphRepo();
+    write(repo, "web/tests/setup.ts", "export const changed = 1;\n");
+    commit(repo);
+    // The reason is the measure: vitest's `related` happens to answer "everything" for a setup file too, but a config
+    // row is never left to `related` (spec §4.1 rules table), so it must be the config row that selected it.
+    const r = dry(repo);
+    expect(r.files).toEqual(["web web/tests/other.test.tsx", "web web/tests/w.test.ts"]);
+    expect(r.out).toContain("  web web/tests/w.test.ts <- web/tests/setup.ts (config: whole web suite)\n");
+  });
+
+  it("a data file under tests/ selects the tests that name it, not one whose file name merely ends the same way", () => {
+    const repo = graphRepo();
+    write(repo, "tests/fixtures/m/golden.json", `{ "changed": 1 }\n`);
+    commit(repo);
+    const r = dry(repo);
+    expect(r.files).toEqual(["root tests/m/cli.test.ts"]);
+    expect(r.out).toContain("  root tests/m/cli.test.ts <- tests/fixtures/m/golden.json (named by tests/m/cli.test.ts)\n");
+  });
+
+  it("a data file named only by a helper selects the tests that import that helper", () => {
+    const repo = graphRepo();
+    write(repo, "tests/fixtures/p/rows.jsonl", "{}\n{}\n");
+    commit(repo);
+    expect(dry(repo).files).toEqual(["root tests/p/viaHelper.test.ts"]);
+  });
+
+  it("a data file under web/tests/ selects the web tests that name it", () => {
+    const repo = graphRepo();
+    write(repo, "web/tests/fixtures/data.json", `{ "changed": 1 }\n`);
+    commit(repo);
+    expect(dry(repo).files).toEqual(["web web/tests/other.test.tsx"]);
+  });
+
+  it("a data file under tests/ that no test or helper names selects the whole suite, loudly, never nothing", () => {
+    const repo = graphRepo();
+    write(repo, "tests/fixtures/orphan.txt", "changed\n");
+    commit(repo);
+    const r = dry(repo);
+    expect(r.files).toEqual(ALL_ROOT);
+    expect(r.out).toContain("test-affected: no test names tests/fixtures/orphan.txt; selecting the whole root suite\n");
+  });
+
   it("a docs-only change selects nothing and says zero, byte for byte", () => {
     const repo = graphRepo();
     write(repo, "docs/readme.md", "# changed\n");
@@ -240,6 +294,27 @@ describe("change sources", () => {
     const repo = graphRepo();
     write(repo, "tests/c/fresh.test.ts", T(""));
     expect(dry(repo).files).toEqual(["root tests/c/fresh.test.ts"]);
+  });
+});
+
+describe("base argument", () => {
+  it("--base=<ref> is the base, the same as --base <ref>", () => {
+    const repo = graphRepo();
+    write(repo, "tests/c/plain.test.ts", T("// first"));
+    commit(repo);
+    write(repo, "tests/a/other.test.ts", T("// second"));
+    commit(repo);
+    for (const args of [["--base=HEAD~1"], ["--base", "HEAD~1"]]) {
+      const r = dry(repo, args);
+      expect(r.out).toContain("against HEAD~1 ");
+      expect(r.files).toEqual(["root tests/a/other.test.ts"]);
+    }
+  });
+
+  it("--base= with no ref is refused", () => {
+    const r = affected(graphRepo(), ["--dry-run", "--base="]);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("--base needs a ref");
   });
 });
 
@@ -288,6 +363,8 @@ function runRepo(): { repo: string; log: string; calls: () => Call[] } {
   const repo = join(tempRoot(), "repo");
   mkdirSync(join(repo, "node_modules", ".bin"), { recursive: true });
   writeFileSync(join(repo, "node_modules", ".bin", "vitest"), FAKE_VITEST, { mode: 0o755 });
+  // The real package, for vitest's own argument parser (vitest/node parseCLI); the binary stays the stub.
+  symlinkSync(join(realModules, "vitest"), join(repo, "node_modules", "vitest"));
   writeFileSync(join(repo, "node_modules", ".bin", "tsc"), FAKE_TOOL("tsc", "FAKE_TSC_EXIT"), { mode: 0o755 });
   write(repo, "typecheck.js", FAKE_TOOL("typecheck", "FAKE_TYPECHECK_EXIT").replace("#!/usr/bin/env node\n", ""));
   write(repo, "package.json", JSON.stringify({ name: "orca-like", type: "commonjs", scripts: { typecheck: "node typecheck.js" } }) + "\n");
@@ -323,6 +400,25 @@ describe("pass-through", () => {
     const vitest = calls().filter((c) => c.tool === "vitest");
     expect(vitest.length).toBe(1);
     expect(vitest[0].argv.slice(0, 5)).toEqual(["run", "tests/c/plain.test.ts", "--run", "--reporter", "dot"]);
+  });
+
+  it("every vitest option that takes a value keeps its value, so flag-only arguments never fall to pass-through", () => {
+    const { repo, log, calls } = runRepo();
+    write(repo, "tests/c/plain.test.ts", T("// changed"));
+    const flags = ["--maxConcurrency", "3", "--silent", "passed-only", "--coverage.reportsDirectory", "out", "--tagsFilter", "fast", "--outputFile.junit=j.xml"];
+    const r = affected(repo, ["--base", "main", "--", ...flags], { FAKE_LOG: log });
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).not.toContain("arguments name a path or filter");
+    const vitest = calls().filter((c) => c.tool === "vitest");
+    expect(vitest.length).toBe(1);
+    expect(vitest[0].argv.slice(0, 2 + flags.length)).toEqual(["run", "tests/c/plain.test.ts", ...flags]);
+  });
+
+  it("a positional after a flag that takes no value is still a path: pass-through", () => {
+    const { repo, log, calls } = runRepo();
+    const r = affected(repo, ["--", "--run", "tests/c/plain.test.ts"], { FAKE_LOG: log });
+    expect(r.code, r.out).toBe(0);
+    expect(calls()).toEqual([{ tool: "vitest", argv: ["run", "--run", "tests/c/plain.test.ts"], cwd: repo }]);
   });
 });
 
