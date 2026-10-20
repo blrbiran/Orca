@@ -64,11 +64,11 @@ describe("a withdrawn estimate (spec correction 2026-10-20)", () => {
   ];
   it("shows the state and the reason in English", async () => {
     const text = await show("en", withdrawn);
-    for (const expected of ["withdrawn: the group had started", "withdrawn: the proposal was confirmed", "withdrawn: a newer estimate replaced it"]) expect(text, expected).toContain(expected);
+    for (const expected of ["v1 · withdrawn · ", "withdrawn: the group had started", "withdrawn: the proposal was confirmed", "withdrawn: a newer estimate replaced it"]) expect(text, expected).toContain(expected);
   });
   it("shows the state and the reason in Chinese", async () => {
     const text = await show("zh", withdrawn);
-    for (const expected of ["已撤回", "已撤回：组已开跑", "已撤回：提案已确认", "已撤回：已被新估算取代"]) expect(text, expected).toContain(expected);
+    for (const expected of ["v1 · 已撤回 · ", "已撤回：组已开跑", "已撤回：提案已确认", "已撤回：已被新估算取代"]) expect(text, expected).toContain(expected);
     expect(text).not.toContain("the group had started");
   });
 });
