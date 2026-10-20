@@ -382,3 +382,12 @@ in `.superpowers/sdd/2026-10-08-integration-and-panel-fixes/progress.md`).
   (case-insensitively) with the PR's own number; anything else gh answers blocks `integration-pr-refused`.
 - §7: a conflict copy is removed when a new attempt's conflict is materialised (the group's older copies), as well as
   when the integration that owned it succeeds or the scheme changes.
+
+## Correction (2026-10-21, Orca session 308b874c): inter-group conflicts are resolved automatically
+
+§7's rule that an integration conflict dispatches nothing and waits for a person (`resolve-integration-conflict` /
+`retry-integration` human-only, `src/panel/humanOnly.ts`) is superseded for code conflicts by
+`2026-10-20-kanban-and-group-orchestration-design.md` §9a item 2: the driver dispatches an agent to resolve the conflict
+and records the resolution as a flagged major decision. Human ruling: "同意按你的建议走" (on the controller's proposal),
+grounded in `docs/handoff/goal.md` §1.4. Integration blocks that are not code conflicts (dirty target, non-fast-forward,
+target moved) stay as specified here and are needs-you for that group only. The original text above is kept verbatim.

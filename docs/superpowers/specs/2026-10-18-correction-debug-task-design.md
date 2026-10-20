@@ -494,3 +494,12 @@ verb's write of `corrections.jsonl` is the decisions design's, registered there
 Commits: `feat(control): record and close corrections from the web UI`;
 `fix(control): correction-withdraw shares the withdraw route's membership guard, and every new branch has its
 criterion`.
+
+## Correction (2026-10-21, Orca session 308b874c): system-generated debug runs start without a click
+
+The anti-goals "Starting a debug run without the human pressing start" and "Spending money … without the human's click"
+are superseded **for debug work Orca generates itself** — the escalation ladder's level 2, a red integration check, and
+model-review findings — by `2026-10-20-kanban-and-group-orchestration-design.md` §9a item 3: those are estimated,
+confirmed and started automatically. A person's correction keeps the flow specified here unchanged. Ladder level 2 is a
+task inside the original group, not a `debug-<correctionId>` group (§9a item 4). Human ruling: "同意按你的建议走" (on the
+controller's proposal), grounded in `docs/handoff/goal.md` §1.4. The original text above is kept verbatim.
