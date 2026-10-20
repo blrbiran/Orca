@@ -210,6 +210,7 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "add-group-dependency": { call: (s, c) => s.addGroupDependency(c), target: "group", payload: { dependsOn: "other" } },
   "remove-group-dependency": { call: (s, c) => s.removeGroupDependency(c), target: "group", payload: { dependsOn: "other" } },
   "correction-debug-open": { call: (s, c) => s.openCorrectionDebugGroup(c), target: "group", payload: { correctionId: "c_0123456789abcdef" } },
+  "system-debug-open": { call: (s, c) => s.openSystemDebugGroup(c), target: "group", payload: { source: { kind: "ladder", groupId: "g", taskId: "a", runId: "run-a" }, stackOn: "g", repoId: "repo", facts: ["failed"], checks: ["true"] } },
 };
 
 describe("an archived group refuses every group-targeted command but unarchive-group (spec §6.3)", () => {

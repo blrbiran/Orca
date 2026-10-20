@@ -244,13 +244,19 @@ export function anyTaskFailed(store: ControlStore, groupId: string): boolean {
   return tasksOf(store, groupId).some((entry) => { const run = runBody(store, entry.work.currentRunId); return run !== null && isTerminallyFailedRun(run); });
 }
 
-/** §3.1: a ladder candidate -- a started group (orchestration record), not itself a debug group, with a failed task and no ladder yet. */
+/**
+ * §3.1: a ladder candidate -- a group Orca orchestrates (an orchestration record in mode `run`: a "Confirm only" group is
+ * the person's to drive, so Orca adds no run to it), not itself a debug group, with a failed task and no ladder yet.
+ */
 export function ladderCandidates(store: ControlStore): Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>>; repoId: string }> {
   const out: Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>>; repoId: string }> = [];
-  for (const row of store.db.prepare("SELECT g.id AS id, g.body AS body FROM groups g JOIN group_orchestration o ON o.group_id=g.id ORDER BY g.rowid").all()) {
+  for (const row of store.db.prepare("SELECT g.id AS id, g.body AS body, o.body AS orchestration FROM groups g JOIN group_orchestration o ON o.group_id=g.id ORDER BY g.rowid").all()) {
     const groupId = String(row.id);
     let body: Record<string, unknown>;
-    try { body = JSON.parse(String(row.body)) as Record<string, unknown>; } catch { continue; }
+    try {
+      body = JSON.parse(String(row.body)) as Record<string, unknown>;
+      if ((JSON.parse(String(row.orchestration)) as { mode?: unknown }).mode !== "run") continue;
+    } catch { continue; }
     if (Object.hasOwn(body, "debug") || Object.hasOwn(body, "systemDebug") || isGroupArchived(store, groupId)) continue;
     const repoId = (body.plan as { repoId?: unknown } | undefined)?.repoId;
     if (typeof repoId !== "string") continue;
@@ -282,15 +288,21 @@ export type EscalationState = "debugging" | "rerunning" | "exhausted";
  * `exhausted` (level 3, needs you): the debug group failed, refused or could not fold, or the rerun failed again.
  */
 export function escalationsOf(store: ControlStore, groupId: string): Array<{ taskId: string; debugGroupId: string; state: EscalationState; reason: string | null }> {
+  // One read of the ladder groups first: a group with none (nearly every group) costs no work item or run read, so a
+  // summary's reads stay independent of its task count (controlPollPerformance's bound).
+  const ladders = store.db.prepare("SELECT id, body FROM groups WHERE substr(id,1,16)='sysdebug-ladder-' ORDER BY rowid").all().flatMap((row) => {
+    let mark: SystemDebugMark | null;
+    try { mark = readSystemDebugMark(JSON.parse(String(row.body))); } catch { return []; }
+    return mark !== null && mark.source.groupId === groupId && mark.source.taskId !== null ? [{ debugGroupId: String(row.id), mark }] : [];
+  });
+  if (ladders.length === 0) return [];
   const out: Array<{ taskId: string; debugGroupId: string; state: EscalationState; reason: string | null }> = [];
-  for (const { id: taskId } of tasksOf(store, groupId)) {
-    const debugGroupId = systemDebugGroupId({ kind: "ladder", groupId, taskId, runId: null });
-    const body = groupBody(store, debugGroupId);
-    const mark = body === null ? null : readSystemDebugMark(body);
-    if (mark === null) continue;
+  for (const { debugGroupId, mark } of ladders) {
+    const taskId = mark.source.taskId!;
     const failed = terminallyFailedRun(store, groupId, taskId);
     // Done since: the rerun succeeded (or a person finished it); nothing is escalated any more.
     if (allTasksDone(store, groupId) || tasksOf(store, groupId).find((entry) => entry.id === taskId)?.work.status === "done") continue;
+    if (mark.settled?.state === "superseded") continue;
     if (mark.settled === null) {
       out.push(anyTaskFailed(store, debugGroupId) ? { taskId, debugGroupId, state: "exhausted", reason: "debug-task-failed" } : { taskId, debugGroupId, state: "debugging", reason: null });
     } else if (mark.settled.state === "folded") {

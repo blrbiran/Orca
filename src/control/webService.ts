@@ -40,7 +40,7 @@ import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type 
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
-import { allTasksDone, anyTaskFailed, applySystemDebugOpen, ladderCandidates, ladderFacts, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand } from "./systemDebug.js";
+import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderFacts, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { applyCorrectionClose, applyCorrectionRecord, applyCorrectionWithdraw, type CorrectionCloseCommand, type CorrectionRecordCommand, type CorrectionWithdrawCommand, type PanelCorrections } from "./correctionCommands.js";
@@ -713,6 +713,10 @@ export class WebControlService {
       const { groupId, mark } = group;
       if (mark.settled !== null || isGroupArchived(this.store, groupId)) continue;
       if (anyTaskFailed(this.store, groupId)) { settleSystemDebug(this.store, groupId, "debug-failed", null); out.settled.push(groupId); continue; }
+      // §3: a person retried (or otherwise moved) the original task since: the ladder steps aside -- an unconfirmed debug
+      // group is never started, a running one is not folded back.
+      const superseded = mark.source.kind === "ladder" && terminallyFailedRun(this.store, mark.source.groupId, mark.source.taskId!)?.runId !== mark.source.runId;
+      if (superseded && (group.status === "draft" || allTasksDone(this.store, groupId))) { settleSystemDebug(this.store, groupId, "superseded", null); out.settled.push(groupId); continue; }
       if (group.status === "draft") {
         const refused = await this.autoConfirmSystemDebug(groupId, mark.source.groupId);
         if (refused === null) out.confirmed.push(groupId); else { settleSystemDebug(this.store, groupId, "confirm-refused", refused); out.settled.push(groupId); }

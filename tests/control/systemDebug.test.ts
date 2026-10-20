@@ -161,6 +161,34 @@ describe("escalation ladder level 2: a system debug group fixes a failed task, w
     } finally { await t.h.dispose(); }
   });
 
+  it("does not escalate a group confirmed \"only\" (the person drives it)", async () => {
+    const w = await ladderWorld(); const { t } = w; try {
+      await w.failedRun();
+      const row = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM group_orchestration WHERE group_id='g'").get()!.body)) as Record<string, unknown>;
+      t.h.store.db.prepare("UPDATE group_orchestration SET body=? WHERE group_id='g'").run(JSON.stringify({ ...row, mode: "hold" }));
+      // mutation: ladderCandidates ignores the mode -> opened [LADDER], red
+      expect((await w.service.systemDebugPass()).opened).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("steps aside when a person retried the task before the debug group was confirmed", async () => {
+    const w = await ladderWorld(); const { t } = w; try {
+      await w.failedRun();
+      // Opened (and confirmed) in one pass, so the open is driven alone here: the pass's confirm step is what is tested.
+      const source = { kind: "ladder" as const, groupId: "g", taskId: "a", runId: (JSON.parse(String(t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)) as { currentRunId: string }).currentRunId };
+      const opened = await w.service.openSystemDebugGroup({ schema: "orca-raw-command-v1", commandId: "open-1", actorId: "orca-auto", expectedRevision: 0, verb: "system-debug-open",
+        target: { kind: "group", groupId: LADDER }, payload: { source, stackOn: "g", repoId: "repo", facts: ["failed"], checks: ["true"] } });
+      expect(opened).toMatchObject({ result: { kind: "system-debug-opened", created: true } });
+      expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a" }))).toMatchObject({ result: { kind: "task-retried" } });
+      const pass = await w.service.systemDebugPass();
+      // mutation: drop the superseded test -> confirmed [LADDER], red
+      expect([pass.confirmed, pass.settled]).toEqual([[], [LADDER]]);
+      expect(readSystemDebugMark(w.body(LADDER))?.settled?.state).toBe("superseded");
+      expect(readBudgetProposal(t.h.store, LADDER).state).not.toBe("confirmed");
+      expect(escalationsOf(t.h.store, "g")).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
   it("does not escalate a group confirmed before start-on-confirm (no orchestration record)", async () => {
     const w = await ladderWorld(); const { t } = w; try {
       await w.failedRun();

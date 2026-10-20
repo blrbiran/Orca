@@ -259,6 +259,10 @@ export async function startGroup(runtime: ControlRuntime, repoId: string, raiseT
     planHash: readArchivedPlan(runtime.store, "g").planHash, proposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion, budgetMode: "soft",
     profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: hash, worker: hash, handoff: hash, goalReview: hash },
     contextPolicy: { handoffAtContextTokens: null }, selectionsHash: selections.selectionsHash,
+    // Ruling: human approved rewriting all necessary criteria (Orca session 9ec98639, 2026-10-21). These worlds start the
+    // group by hand below, so it is confirmed "only": a person drives it, and Orca's escalation ladder (system debug
+    // task spec 2026-10-21 §3.1) adds no run of its own to a failed task -- R-F's person's retry stays the only one.
+    hold: true,
   }));
   expect("error" in confirmed ? confirmed.error : "confirmed").toBe("confirmed");
   if (raiseTokens > 0) {
