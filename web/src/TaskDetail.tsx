@@ -284,9 +284,14 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
             <li key={run.runId}>
               {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)}<RunReason run={run} /> <EvidenceList runId={run.runId} />
               {retryRunOpen(view, run) && !archived && (
-                <button type="button" onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: item.taskId } })}>
-                  {t("control.group.retryTask", { taskId: item.taskId })}
-                </button>
+                <>
+                  {/* Issue #57: `r` sends this button's retry for the open task's current run (ControlGroupView); say so here. */}
+                  <button type="button" aria-keyshortcuts={run.runId === item.currentRunId ? "r" : undefined}
+                    onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: item.taskId } })}>
+                    {t("control.group.retryTask", { taskId: item.taskId })}
+                  </button>
+                  {run.runId === item.currentRunId && <span className="kbd-hint">{t("control.task.retryKey")}</span>}
+                </>
               )}
               {/* Retry is hidden while usage is unknown (runFacts.ts retryRunOpen): show the way forward instead of nothing.
                   A handoff stop with unknown usage ends settled-unrecoverable with no failure (spec 2026-10-14-handoff-stop-unknown-usage-design.md). */}

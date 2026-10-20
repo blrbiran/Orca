@@ -10,6 +10,7 @@ import { ControlGroupView } from "../src/ControlGroupView.js";
 import type { ControlAction } from "../src/controlApi.js";
 import type { GroupViewV1, RunViewV1 } from "../src/controlTypes.js";
 import { config, run, view, workItem } from "./fixtures/board.js";
+import i18n from "../src/i18n.js";
 
 afterEach(cleanup);
 const FAILED: Partial<RunViewV1> = { state: "blocked", blockedReason: "terminal:failed", outcome: "failed", stopReason: "Error: codex-result-invalid: /runs/r/attempt-1" };
@@ -72,6 +73,28 @@ describe("r retries the open task (issue #57)", () => {
     cleanup();
     const hidden = show(failedGroup(), "a", false); press();
     expect(hidden).not.toHaveBeenCalled();
+  });
+
+  // Handoff §4.2 item 7 (W2 review minor, session 3831d12f; done in session 3d229487): the key is shown where its button is,
+  // on the open task's Retry task, and declared to assistive technology; the button the key does not press carries neither.
+  it("shows r beside the open task's Retry task, and only there", async () => {
+    show(failedGroup(), "a");
+    const detail = screen.getByRole("region", { name: "Task a" });
+    const button = within(detail).getByRole("button", { name: "Retry task a" });
+    expect(button.getAttribute("aria-keyshortcuts")).toBe("r");
+    const hint = button.nextElementSibling as HTMLElement | null;
+    expect(hint?.className).toBe("kbd-hint");
+    expect(hint?.textContent).toBe("Key: r");
+    const elsewhere = screen.getAllByRole("button", { name: "Retry task a" }).filter((other) => !detail.contains(other));
+    expect(elsewhere.length).toBeGreaterThan(0);
+    for (const other of elsewhere) expect(other.hasAttribute("aria-keyshortcuts")).toBe(false);
+    cleanup();
+    await i18n.changeLanguage("zh");
+    try {
+      show(failedGroup(), "a");
+      const zhButton = within(screen.getByRole("region", { name: "任务 a" })).getByRole("button", { name: "重试任务 a" });
+      expect(zhButton.nextElementSibling?.textContent).toBe("快捷键：r");
+    } finally { await i18n.changeLanguage("en"); }
   });
 
   it("never fires with focus on a control outside this group (an account-bar button, say)", () => {

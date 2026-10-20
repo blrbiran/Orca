@@ -356,6 +356,7 @@ export const zh: Translation<typeof en> = {
       progress: "进度：{{progress}}",
       lastTransition: " · 上次变化 {{at}}",
       runsOf: "{{taskId}} 的运行",
+      retryKey: "快捷键：r",
       runNumber: "这个任务的第 {{n}} 次运行",
     },
     progress: {

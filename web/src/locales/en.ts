@@ -466,6 +466,7 @@ export const en = {
       progress: "progress: {{progress}}",
       lastTransition: " · last transition {{at}}",
       runsOf: "Runs of {{taskId}}",
+      retryKey: "Key: r",
       runNumber: "Run {{n}} of this task",
     },
     progress: {
