@@ -74,6 +74,8 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 
 **`d0843ec0`（2026-10-17，分支 `codex/round-20261017` tip 上终审修复之后的门；clone 观测提交＝主题行 `docs(handoff): hand off at T2 with the paid acceptance and the post-fix gate next`，`ORCA_CCLOOP_BIN`＝ccloop `02cbacc` 的 build，负载 7→42）**：根级全量 3958＝3922 过／36 跳过／**0 红**（20 s 默认 `testTimeout` 之后第一次全量零超时）；`verify:control`、`verify:chain` 也都 0 红。唯一的红在 `--ws check`（1140/1141，负载 23）：`web/tests/taskLabelsDraftBase.test.tsx` › keeps the draft's base after a poll read someone else's v1…，`findByRole("button", /^g · running/)` 找不到（2291 ms）——与上面 `a852f96a` 条同名同形；**这次在默认 workers 下单跑了** 3/3 绿（负载 12–13）⇒ 判负载。
 
+**`3d229487`（2026-10-20，undo-punctuation 分支 `npm test`，`ORCA_CCLOOP_BIN`＝ccloop `af4ad33` 的 build，负载 42–75、同时有五个子代理在跑测试）**：选中 361 个根文件，4 红：`archivedWakePerformance`「defers 100 archived groups…」20 s 超时、`driverReconcile`「blocks a reconciliation that leaves conflict markers…」`the driver did not reach the expected state before the deadline`（两条都是已登记形状）；`handoffE2E` **H2** `expected [ 8, 8, 4 ] to deeply equal [ 8, 8, 3 ]` 与 **H5** `expected 2 to be 1`（**断言形状**）。三个文件同 env 单跑三遍各 69/69（负载 42→29）。⚠️ H2 断言形状现 **n＝2**（前一次 `a852f96a` Task 10 `expected 1 to be +0`），H5 这个形状 n＝1：都是实时窗口被负载挤掉的可能，**再见就在 clone 里按 `systematic-debugging` 查**。同一棵树合入 main 后的 `npm test`（529 文件）0 红。
+
 ### 已修、不再豁免的（再红就当新问题查）
 
 - `tests/control/driverSettle.test.ts` 真 git 场景：全量＋并发下撞 5 s，已给 30 s。再红要查。
@@ -88,6 +90,7 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 - `taskResultPaired` 两条硬编码旧配对二进制路径；用本地 ccloop 构建（如 OMP 分支）跑会红（2026-10-12～13 观测）。⚠️ 更正（会话 `026d10e3`，2026-10-15 现测）：**不设 `ORCA_CCLOOP_BIN` 也红**（`expected [...] to include undefined`）——它只在变量恰好等于那两条 `/private/tmp/…` 路径之一时才绿，任何正常的门里都是固定红。
 - 不设 `ORCA_CCLOOP_BIN` 跑根级全量或 `verify:scheduler` ⇒ `tests/scheduler/**` 与 `schedulerBridge` 约 39–43 条红（`ccloop bin not found at …/Orca-wt/ccloop/dist/cli.js (from the sibling-directory default)`）；要指一份 ccloop build clone。
 - `tests/control/ompSkillsE2E.test.ts` 以 `ZodError … payload.selectionsHash … received null` 红：会话 `1f3cceb2` 2026-10-14 用 `ORCA_CCLOOP_BIN` 指向本机 ccloop 构建时，分支与 main 基线上都 3/3 红 ⇒ 真 ccloop 版本与夹具不配套，不是 flake，也不是 UI 改动造成。
+- `ORCA_CCLOOP_BIN` 指姊妹仓工作树的 `dist`（不等于 pin）⇒ `ccloopModels`、`codexRequirementOpen`、`decisionsContract`、`ompSkillsE2E`、`webCcloopSmoke` 等真 ccloop 文件红；会话 `3d229487` 用 pin 那笔的 build 复核 5 文件 11/11 绿。**门一律用 pin 那笔的 clone build。**
 - 普通沙箱下 `spawnSync ps EPERM`／`listen EPERM` 大面积红（2026-10-10、10-12）⇒ 用本机进程权限重跑。
 - `TMPDIR` 太长（tsx socket 超 104 字节、`EADDRINUSE`）或是软链（git 报真实路径）⇒ 各约 7 条假红；用短真目录。
 - `check-tmp-leak.mjs` 每次留 1 个只含空 `orca-ccmem-*`／`orca-test-control-*` 的 `orca-tmp-*`：`agentUpdatePaired` 用 `describe.skipIf` 在收集期整文件跳过（没设 `ORCA_TASK9_*` 时）⇒ 由提交 `test(control): skip the paired update criterion at run time …` 修（2026-10-14 `b39a5527`，在 repin 分支上，随它合进 main）。再见就找别的收集期整文件跳过。

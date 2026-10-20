@@ -421,3 +421,16 @@ writers gain a third: **every codex loop phase run with an installation, on ever
 codex writes its own state there. Without a cache root the pair falls back to
 `<runDir>/codex/<attempt>/phase-isolation/home-*`. Residue is unchanged from §11.1. A phase whose isolation cannot be
 set up is refused before spawn, final, and books usage 0 (`neverStarted`).
+
+## 13. As built (Orca session 3d229487, 2026-10-20): §12's third writer is in ccloop main
+
+§12's registration now describes shipped code. ccloop commits `feat(codex): phase isolation module (private pair, -c list,
+named refusals)` through `test(codex): an isolated phase's child gets only what the catalog read left of the deadline`
+(ccloop spec `2026-10-18-codex-phase-isolation-design.md`) run every codex loop phase in the installation's private
+`HOME`/`CODEX_HOME` pair under `<cache>/codex-home/<sha256>/`, the same pair single call uses; the phase's commands get
+the real HOME through `shell_environment_policy.set.HOME`. A phase whose isolation cannot be built is refused before
+spawn, is final, and books 0. Each phase's `outcome.json` records the pair's paths. ccloop's own registration is the
+writer (3) note in `src/agents/codexIsolation.ts`. Measured with codex-cli 0.163.0, no model request: the isolated
+prompt input has 0 personal-skill lines (real HOME: 2) and keeps the target repository's `AGENTS.md` and repo skill;
+`~/.codex/auth.json` and `config.toml` byte-identical before and after. Not yet measured: a paid codex phase under
+isolation (ccloop plan Task 7).
