@@ -637,6 +637,7 @@ export const commandVerbSchema = z.enum([
   "unarchive-group",
   "approve-pending-decision",
   "reject-pending-decision",
+  "ratify-flagged-decision",
   "correction-debug-open",
   "correction-record",
   "correction-close",
@@ -893,6 +894,8 @@ const effectiveCommandFields = {
 export const approvePendingDecisionPayloadSchema = z.object({ pendingId: idSchema, undoHow: nonemptyString }).strict();
 // Control run decisions plan Task 10: an owner rejects a refused decision, with an optional line of their own.
 export const rejectPendingDecisionPayloadSchema = z.object({ pendingId: idSchema, because: nonemptyString.optional() }).strict();
+// Kanban spec 2026-10-20 §9a: a person ratifies a landed decision Orca flagged (clears the flag; nothing else changes).
+export const ratifyFlaggedDecisionPayloadSchema = z.object({ decisionId: nonemptyString }).strict();
 // Debug task plan Task 6: one recorded correction opens one debug group (spending nothing). `reopen` asks for the next
 // ordinal once the newest debug group is stopped or archived; `undoHow` is the owner's, recorded for the closing row.
 export const correctionDebugOpenPayloadSchema = z.object({
@@ -944,6 +947,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("approve-pending-decision"), target: groupCommandTargetSchema, payload: approvePendingDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("ratify-flagged-decision"), target: groupCommandTargetSchema, payload: ratifyFlaggedDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-record"), target: correctionsCommandTargetSchema, payload: correctionRecordPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-close"), target: correctionsCommandTargetSchema, payload: correctionClosePayloadSchema }).strict(),
@@ -1007,6 +1011,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("approve-pending-decision"), target: groupCommandTargetSchema, payload: approvePendingDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("ratify-flagged-decision"), target: groupCommandTargetSchema, payload: ratifyFlaggedDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-record"), target: correctionsCommandTargetSchema, payload: correctionRecordPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-close"), target: correctionsCommandTargetSchema, payload: correctionClosePayloadSchema }).strict(),
@@ -1661,6 +1666,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("unarchived"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("pending-decision-approved"), pendingId: idSchema, decisionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("pending-decision-rejected"), pendingId: idSchema, correctionId: nonemptyString }).strict(),
+  z.object({ kind: z.literal("flagged-decision-ratified"), decisionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("debug-group-opened"), groupId: idSchema, correctionId: nonemptyString, created: z.boolean() }).strict(),
   z.object({ kind: z.literal("correction-recorded"), correctionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("correction-closed"), correctionId: nonemptyString, relPath: nonemptyString, alreadyClosed: z.boolean() }).strict(),
@@ -1845,6 +1851,8 @@ const decisionImportanceSchema = z.enum(DECISION_IMPORTANCES);
 export const groupDecisionsViewSchema = z
   .object({
     schema: z.literal("orca-group-decisions-v1"), groupId: idSchema, projectKey: z.string().nullable(), pendingCount: safeInteger,
+    // Kanban spec §9a: flags still waiting for a person (not ratified, not corrected). Shown; nothing waits on them.
+    flaggedCount: safeInteger,
     tasks: z.array(z.object({
       taskId: idSchema,
       runs: z.array(z.object({
@@ -1854,7 +1862,11 @@ export const groupDecisionsViewSchema = z
         // "unreadable": the saved report exists but could not be read; that run lists nothing as unlanded.
         reported: z.enum(["absent", "array", "malformed", "unreadable"]),
         // Reported-decisions spec 2026-10-20 §6: every entry of the three lists carries its grade, already resolved.
-        decisions: z.array(z.object({ id: z.string(), where: decisionWhereSchema, question: z.string(), chose: z.string(), kind: z.string(), scope: z.string(), importance: decisionImportanceSchema }).strict()),
+        // Kanban spec §9a: a landed decision Orca flagged for a person; `corrected` is derived (a correction names it).
+        decisions: z.array(z.object({
+          id: z.string(), where: decisionWhereSchema, question: z.string(), chose: z.string(), kind: z.string(), scope: z.string(), importance: decisionImportanceSchema,
+          flag: z.object({ state: z.enum(["flagged", "ratified", "corrected"]), source: nonemptyString, reason: nonemptyString, evidence: z.array(z.string()) }).strict().nullable(),
+        }).strict()),
         pending: z.array(z.object({
           pendingId: z.string(), reason: z.string(), question: z.string().nullable(), chose: z.string().nullable(), undoHow: z.string().nullable(),
           state: z.enum(["pending", "approved", "rejected"]), importance: decisionImportanceSchema,

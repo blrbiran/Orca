@@ -522,6 +522,13 @@ export const en = {
         unlanded: { show_one: "Show {{count}} minor decision that did not land", show_other: "Show {{count}} minor decisions that did not land", hide: "Hide minor decisions that did not land" },
       },
       readFailed: "This group's decisions could not be read ({{code}}), so none are shown and none is marked as needing confirmation.",
+      flagged: "Flagged for review",
+      flaggedReason: "Landed, flagged by {{source}}: {{reason}}",
+      flagRatified: "Ratified",
+      flagCorrected: "Corrected",
+      ratify: "Ratify",
+      groupFlagged_one: "{{count}} landed decision flagged for review",
+      groupFlagged_other: "{{count}} landed decisions flagged for review",
     },
     settlement: {
       activityCharge: "{{bucket}}: {{tokens}} tokens, {{activeMs}} ms, {{attempts}} attempts, {{sessions}} sessions",
@@ -1300,6 +1307,7 @@ export const enErrors: Record<string, string> = {
   "integration-unapproved": "This group's integration settings differ from the ones seen at confirmation. Read the group again, then confirm.",
   // Control run decisions plan Task 9: approving a decision that did not land.
   "pending-decision-not-found": "This group has no such decision waiting for confirmation.",
+  "flagged-decision-not-found": "This group has no such flagged decision.",
   "pending-decision-settled": "This decision was already settled, so it cannot be changed now: {{detail}}",
   "decision-undo-not-executable": "The undo command still cannot be run as written; give a command such as `git revert --no-edit <commit>`: {{detail}}",
   "pending-decision-entry-invalid": "This decision is invalid for a reason a new undo command cannot fix: {{detail}}",

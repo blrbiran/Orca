@@ -4,6 +4,7 @@ import { CorrectRejection } from "../corrections/rejection.js";
 import { ControlError } from "../control/errors.js";
 import { savedReport } from "../control/executionDriver.js";
 import { labelDecisions, ledgerSources } from "../control/ledgerAtRef.js";
+import { listFlaggedDecisions } from "../control/flaggedDecisions.js";
 import { listPendingDecisions } from "../control/pendingDecisions.js";
 import { readGroup } from "../control/queries.js";
 import { reportedDecisionsOf, type ReportedDecisions } from "../control/reportedDecisions.js";
@@ -52,11 +53,21 @@ const ARTIFACT_UNREADABLE = new Set<string>(["artifact-not-found", "artifact-has
 /**
  * GET /api/control/groups/:groupId/decisions. Per task and run: the landed decisions with the first ref holding each,
  * the pending items with their reason, and -- for a run that ended without landing -- the entries it reported.
+ * Kanban spec §9a: a landed decision Orca flagged carries its flag; `correctedIds` are the decision ids some recorded
+ * correction names (the caller reads the corrections store), and a flag on one of them reads `corrected` -- disagreeing
+ * is a correction, so it no longer waits for the person. Nothing is written here.
  */
-export async function readGroupDecisionsView(store: ControlStore, repo: string, groupId: string): Promise<GroupDecisionsViewV1> {
+export async function readGroupDecisionsView(store: ControlStore, repo: string, groupId: string, correctedIds: ReadonlySet<string> = new Set()): Promise<GroupDecisionsViewV1> {
   readGroup(store, groupId); // group-not-found before any git child
   const { first, lines } = await labelDecisions(repo, await ledgerSources(store, repo, groupId));
   const pendingRows = listPendingDecisions(store, groupId);
+  const flags = new Map(listFlaggedDecisions(store, groupId).map((row) => [row.decisionId, row]));
+  const flagOf = (id: string): RunView["decisions"][number]["flag"] => {
+    const row = flags.get(id);
+    if (row === undefined) return null;
+    const state = row.state === "ratified" ? "ratified" : correctedIds.has(id) ? "corrected" : "flagged";
+    return { state, source: row.source, reason: row.reason, evidence: row.evidence };
+  };
   let projectKey: string | null;
   try { projectKey = await projectKeyOf(repo); }
   catch (error) { if (error instanceof CorrectRejection) projectKey = null; else throw error; }
@@ -82,7 +93,7 @@ export async function readGroupDecisionsView(store: ControlStore, repo: string, 
         if (!files.has(basename(line.path)) || seen.has(line.id)) continue;
         seen.add(line.id);
         const { where, value } = first.get(line.id)!;
-        decisions.push({ id: line.id, where, question: text(field(value, "question")), chose: text(field(value, "chose")), kind: text(field(value, "kind")), scope: text(field(value, "scope")), importance: importanceOf(value) });
+        decisions.push({ id: line.id, where, question: text(field(value, "question")), chose: text(field(value, "chose")), kind: text(field(value, "kind")), scope: text(field(value, "scope")), importance: importanceOf(value), flag: flagOf(line.id) });
       }
     }
 
@@ -108,6 +119,9 @@ export async function readGroupDecisionsView(store: ControlStore, repo: string, 
     schema: "orca-group-decisions-v1", groupId, projectKey,
     // goal.md §1.3: a minor entry must not demand attention, so only major pending entries count toward needs-human.
     pendingCount: pendingRows.filter((p) => p.state === "pending" && importanceOf(p.entry.entry) === "major").length,
+    // A flag counts while it waits: not ratified and no correction names its decision. Counted from the store, so a
+    // flagged decision on a ref this read does not reach still counts.
+    flaggedCount: [...flags.values()].filter((row) => row.state === "flagged" && !correctedIds.has(row.decisionId)).length,
     tasks: [...tasks].map(([taskId, runs]) => ({ taskId, runs })),
   });
 }

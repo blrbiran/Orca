@@ -150,3 +150,40 @@ describe("what a run reported (control run decisions Task 11)", () => {
     expect(screen.getByRole("region", { name: "Decisions of run-a" }).textContent).toContain("This run's saved report could not be read");
   });
 });
+
+// Kanban spec 2026-10-20 §9a (session 9ec98639): a landed decision Orca flagged is red until a person ratifies or corrects it.
+describe("flagged decisions (kanban spec §9a)", () => {
+  const flagged = (state: "flagged" | "ratified" | "corrected"): DecisionRun["decisions"][number] => ({
+    ...decision("working-tree"), flag: { state, source: "reconcile", reason: "merged both sides", evidence: [] },
+  });
+
+  it("shows a flagged decision red with its reason, and Ratify sends ratify-flagged-decision for it", () => {
+    const onCommand = showRun(decisionRun({ decisions: [flagged("flagged")] }));
+    const item = screen.getByRole("listitem", { name: "run-a/agent-1" });
+    expect(within(item).getByTestId("decision-flagged").getAttribute("data-tone")).toBe("danger");
+    expect(item.textContent).toContain("Landed, flagged by reconcile: merged both sides");
+    // Disagreeing is the existing correction, still offered beside it.
+    expect(within(item).getByRole("button", { name: "Correct" })).toBeTruthy();
+    fireEvent.click(within(item).getByRole("button", { name: "Ratify" }));
+    expect(onCommand.mock.calls).toEqual([[{ verb: "ratify-flagged-decision", groupId: "g", expectedRevision: 6, payload: { decisionId: "run-a/agent-1" } }]]);
+  });
+
+  it("a ratified or corrected flag is a plain note with no Ratify", () => {
+    showRun(decisionRun({ decisions: [flagged("ratified")] }));
+    expect(screen.queryByTestId("decision-flagged")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ratify" })).toBeNull();
+    expect(screen.getByText("Ratified")).toBeTruthy();
+    cleanup();
+    showRun(decisionRun({ decisions: [flagged("corrected")] }));
+    expect(screen.queryByRole("button", { name: "Ratify" })).toBeNull();
+    expect(screen.getByText("Corrected")).toBeTruthy();
+  });
+
+  it("the group says how many landed decisions are flagged, and says nothing when none is", () => {
+    showGroup({ ...groupDecisions([decisionRun({ decisions: [flagged("flagged")] })]), flaggedCount: 1 });
+    expect(screen.getByTestId("group-flagged").textContent).toBe("1 landed decision flagged for review");
+    cleanup();
+    showGroup({ ...groupDecisions([decisionRun({ decisions: [flagged("ratified")] })]), flaggedCount: 0 });
+    expect(screen.queryByTestId("group-flagged")).toBeNull();
+  });
+});

@@ -42,7 +42,9 @@ import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor,
 import { applyCorrectionClose, applyCorrectionRecord, applyCorrectionWithdraw, type CorrectionCloseCommand, type CorrectionRecordCommand, type CorrectionWithdrawCommand, type PanelCorrections } from "./correctionCommands.js";
 import { recordActivity } from "./activity.js";
 import { commandClientFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
-import { applyApprovePendingDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
+import { applyApprovePendingDecision, applyRatifyFlaggedDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RatifyFlaggedDecisionCommand, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
+import { readCorrections } from "../corrections/store.js";
+import { readWithdrawals, withdrawnIds } from "../corrections/withdrawals.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
@@ -844,6 +846,20 @@ export class WebControlService {
     finally { release?.(); }
   }
   /** Debug task plan Task 10: every correction with its debug groups and computed closed state; reads only. */
+  /**
+   * Kanban spec §9a: the decision ids a recorded, not withdrawn correction names -- a flag on one of them no longer waits
+   * for the person. No corrections store ⇒ none (every flag keeps waiting: the safe direction).
+   */
+  async correctedDecisionIds(): Promise<Set<string>> {
+    const dir = this.deps.correctionsDir;
+    if (dir === undefined) return new Set();
+    const withdrawn = withdrawnIds(await readWithdrawals(dir));
+    return new Set((await readCorrections(dir)).filter((c) => c.decisionId !== undefined && !withdrawn.has(c.id)).map((c) => c.decisionId!));
+  }
+  /** Kanban spec §9a: a person ratifies a flagged decision (decisionCommands.ts). */
+  ratifyFlaggedDecision(command: RatifyFlaggedDecisionCommand): WebCommandResult {
+    return this.mutate(() => applyRatifyFlaggedDecision({ store: this.store }, command)) as WebCommandResult;
+  }
   async correctionList(): Promise<CorrectionListItemV1[]> {
     const dir = this.deps.correctionsDir;
     if (dir === undefined) throw new ControlError("corrections-store-unconfigured");

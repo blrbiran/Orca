@@ -5,6 +5,7 @@ import { CORRECTION_ALREADY_RECORDED, DUPLICATE_CORRECTION_ID, readCorrections }
 import { appendEvents } from "../ledger/writer.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
+import { ratifyFlag } from "./flaggedDecisions.js";
 import { resetIntegrationForRetry } from "./integrationCommands.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { findDecision, ledgerSources, type DecisionWhere } from "./ledgerAtRef.js";
@@ -219,6 +220,28 @@ export function applyRejectPendingDecision(deps: { store: ControlStore }, comman
         verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,
         effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash,
         result: { kind: "pending-decision-rejected", pendingId, correctionId },
+      } };
+    },
+  }).body;
+}
+
+/** Kanban spec 2026-10-20 §9a: a person ratifies a landed decision Orca flagged. Only the flag changes; the line stays. */
+export type RatifyFlaggedDecisionCommand = Extract<RawAuthorityCommandV1, { verb: "ratify-flagged-decision" }>;
+
+export function applyRatifyFlaggedDecision(deps: { store: ControlStore }, command: RatifyFlaggedDecisionCommand): CommandSuccessV1 | CommandErrorBodyV1 {
+  return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
+    rawCommand: command,
+    expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+    apply: (context) => {
+      const groupId = command.target.groupId;
+      const { decisionId } = command.payload;
+      if (!deps.store.db.prepare("SELECT 1 FROM groups WHERE id=?").get(groupId)) throw new ControlError("group-not-found");
+      ratifyFlag(deps.store, groupId, decisionId, { actorId: context.rawCommand.actorId, commandId: context.rawCommand.commandId, at: new Date(deps.store.now()).toISOString() });
+      return { status: 200, body: {
+        schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,
+        verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,
+        effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash,
+        result: { kind: "flagged-decision-ratified", decisionId },
       } };
     },
   }).body;

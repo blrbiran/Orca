@@ -364,6 +364,8 @@ export type ControlAction =
   // `because` key when the person wrote no line -- the server's schema refuses an empty one).
   | { verb: "approve-pending-decision"; groupId: string; expectedRevision: number; payload: { pendingId: string; undoHow: string } }
   | { verb: "reject-pending-decision"; groupId: string; expectedRevision: number; payload: { pendingId: string; because?: string } }
+  // Kanban spec 2026-10-20 §9a: a person ratifies a landed decision Orca flagged.
+  | { verb: "ratify-flagged-decision"; groupId: string; expectedRevision: number; payload: { decisionId: string } }
   // Debug task plan Tasks 6, 11: a correction's debug group is opened (expected revision 0 for a new one), and a correction
   // is recorded or closed by hand on the `@corrections` scope (constant revision 0). `groupId` is "@corrections" for all
   // three: the open's ledger key is the debug group the server picks (src/panel/controlApi.ts debugOpenScoped).
@@ -434,6 +436,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/decisions/approve`;
     case "reject-pending-decision":
       return `${group}/decisions/reject`;
+    case "ratify-flagged-decision":
+      return `${group}/decisions/ratify`;
     case "correction-debug-open":
       return `/api/control/corrections/${segment(action.payload.correctionId)}/debug-group`;
     case "correction-record":

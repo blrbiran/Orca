@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-export const schemaVersion = "14";
+export const schemaVersion = "15";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -129,8 +129,20 @@ export const schema13To14 = `CREATE TABLE IF NOT EXISTS pending_decisions(id TEX
 CREATE INDEX IF NOT EXISTS pending_decisions_group ON pending_decisions(group_id, state);
 `;
 
+// Kanban and group orchestration spec 2026-10-20 (plan 2026-10-21, one step for all slices): a landed decision Orca flags
+// for a person (§9a, "land, then flag"; ratify clears it), a group's start-on-confirm record, the person's edges between
+// groups (from lands before to starts) and the global orchestration settings. Existing rows are untouched; all start empty.
+export const schema14To15 = `CREATE TABLE IF NOT EXISTS flagged_decisions(decision_id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES groups(id), run_id TEXT,
+  source TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('flagged','ratified')), body TEXT NOT NULL) STRICT;
+CREATE INDEX IF NOT EXISTS flagged_decisions_group ON flagged_decisions(group_id, state);
+CREATE TABLE IF NOT EXISTS group_orchestration(group_id TEXT PRIMARY KEY REFERENCES groups(id), body TEXT NOT NULL) STRICT;
+CREATE TABLE IF NOT EXISTS group_edges(from_group TEXT NOT NULL REFERENCES groups(id), to_group TEXT NOT NULL REFERENCES groups(id),
+  body TEXT NOT NULL, PRIMARY KEY(from_group, to_group), CHECK(from_group <> to_group)) STRICT;
+CREATE TABLE IF NOT EXISTS orchestration_settings(singleton INTEGER PRIMARY KEY CHECK(singleton=1), revision INTEGER NOT NULL CHECK(revision >= 0), body TEXT NOT NULL) STRICT;
+`;
+
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
-export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14;
+export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15;
 
 /**
  * Accounts spec §9: idempotent on a store a criterion downgraded by dropping only its own column or table (the 6-to-7 and
@@ -148,18 +160,23 @@ function migrate7To8(store: DatabaseSync): void {
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   // Saved recovery's 11→12 marker fenced older owners. The current 11/12→13 upgrade also
   // adds installation-update revision/outbox tables; it leaves old policy and accounting rows intact.
+  if (fromVersion === "14") {
+    store.exec(schema14To15);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "13") {
-    store.exec(schema13To14);
+    store.exec(schema13To14 + schema14To15);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "12") {
-    store.exec(schema12To13 + schema13To14);
+    store.exec(schema12To13 + schema13To14 + schema14To15);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "11") {
-    store.exec(schema12To13 + schema13To14);
+    store.exec(schema12To13 + schema13To14 + schema14To15);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -172,6 +189,6 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   else if (fromVersion !== "7" && fromVersion !== "8" && fromVersion !== "9" && fromVersion !== "10") throw new Error("control-schema-unsupported");
   // Every version before 8 goes through 7 to 8 first; 8 itself only gains the activity table (spec §5.2).
   if (fromVersion !== "8" && fromVersion !== "9" && fromVersion !== "10") migrate7To8(store);
-  store.exec(schema8To9 + schema10To11 + schema12To13 + schema13To14);
+  store.exec(schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }

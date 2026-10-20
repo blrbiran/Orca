@@ -44,6 +44,8 @@ export const durableCommandErrorStatuses = {
   "spend-cap-repository-unknown": 404,
   // Control run decisions plan Task 9: no pending decision of this group has the id.
   "pending-decision-not-found": 404,
+  // Kanban spec §9a: no flagged decision of this group has the id.
+  "flagged-decision-not-found": 404,
   // Debug task plan Task 6 (correction-debug-open): no stored correction has the id; no configured repository has the
   // correction's projectKey; the decision a correction names is in no ledger source (Task 3's DECISION_NOT_FOUND), or the
   // pending item it names has no control-DB row (Task 3's PENDING_DECISION_NOT_FOUND).

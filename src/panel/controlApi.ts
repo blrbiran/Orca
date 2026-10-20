@@ -219,7 +219,7 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       const repoId = groupRepoId(deps.store, groupId);
       const repo = deps.service?.repositoryKnown(repoId) ? deps.service.repositoryPathOf(repoId) : null;
       if (repo === null) { sendControlError(res, 404, "control-target-not-allowed", "No trusted repository has this id."); return; }
-      res.json(await readGroupDecisionsView(deps.store, repo, groupId));
+      res.json(await readGroupDecisionsView(deps.store, repo, groupId, await deps.service!.correctedDecisionIds()));
     } catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") { sendControlError(res, 404, error.code, "No control group was found."); return; }
       sendMappedControlError(res, error, readErrorContext(deps.store, groupId));
@@ -527,6 +527,7 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/unarchive", verb: "unarchive-group", target: fromParams },
     // Control run decisions plan Task 9: an owner approves a refused decision with an executable undo.how.
     { path: "/api/control/groups/:groupId/decisions/approve", verb: "approve-pending-decision", target: fromParams },
+    { path: "/api/control/groups/:groupId/decisions/ratify", verb: "ratify-flagged-decision", target: fromParams },
     // Control run decisions plan Task 10: an owner rejects a refused decision, recording a correction.
     { path: "/api/control/groups/:groupId/decisions/reject", verb: "reject-pending-decision", target: fromParams },
     // Debug task plan Task 6: a recorded correction opens its debug group; the ledger key is that group's.
@@ -623,6 +624,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "archive-group": service.archiveGroup(command); break;
           case "unarchive-group": service.unarchiveGroup(command); break;
           case "approve-pending-decision": await service.approvePendingDecision(command); break;
+          case "ratify-flagged-decision": service.ratifyFlaggedDecision(command); break;
           case "reject-pending-decision": await service.rejectPendingDecision(command); break;
           case "correction-debug-open": await service.openCorrectionDebugGroup(command); break;
           case "correction-record": await service.recordCorrection(command); break;

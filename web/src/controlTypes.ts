@@ -526,7 +526,7 @@ export type CommandSuccessV1 = {
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
-    | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "correction-debug-open"
+    | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "correction-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw";
   target: CommandTargetV1;
   commandRevision: number | null;
@@ -555,6 +555,7 @@ export type CommandSuccessV1 = {
     | { kind: "unarchived"; groupId: string }
     | { kind: "pending-decision-approved"; pendingId: string; decisionId: string }
     | { kind: "pending-decision-rejected"; pendingId: string; correctionId: string }
+    | { kind: "flagged-decision-ratified"; decisionId: string }
     | { kind: "debug-group-opened"; groupId: string; correctionId: string; created: boolean }
     | { kind: "correction-recorded"; correctionId: string }
     | { kind: "correction-closed"; correctionId: string; relPath: string; alreadyClosed: boolean }
@@ -597,13 +598,17 @@ export type DecisionWhereV1 = "working-tree" | "target" | "group-branch";
  * fixtures need no edit, and an absent value reads as major (web/src/MinorToggle.tsx).
  */
 export type DecisionImportanceV1 = "major" | "minor";
+/** Kanban spec 2026-10-20 §9a: a landed decision Orca flagged for a person; `corrected` is derived from the corrections. */
+export type DecisionFlagV1 = { state: "flagged" | "ratified" | "corrected"; source: string; reason: string; evidence: string[] };
 export type GroupDecisionsViewV1 = {
   schema: "orca-group-decisions-v1"; groupId: string; projectKey: string | null; pendingCount: number;
+  /** Optional so older literal fixtures parse; the server always sends it. */
+  flaggedCount?: number;
   tasks: Array<{
     taskId: string;
     runs: Array<{
       runId: string; settled: boolean; reported: "absent" | "array" | "malformed" | "unreadable";
-      decisions: Array<{ id: string; where: DecisionWhereV1; question: string; chose: string; kind: string; scope: string; importance?: DecisionImportanceV1 }>;
+      decisions: Array<{ id: string; where: DecisionWhereV1; question: string; chose: string; kind: string; scope: string; importance?: DecisionImportanceV1; flag?: DecisionFlagV1 | null }>;
       pending: Array<{ pendingId: string; reason: string; question: string | null; chose: string | null; undoHow: string | null; state: "pending" | "approved" | "rejected"; importance?: DecisionImportanceV1 }>;
       unlanded: Array<{ entryIndex: number; question: string | null; chose: string | null; importance?: DecisionImportanceV1 }>;
     }>;

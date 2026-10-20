@@ -12,7 +12,7 @@ import { useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
-import type { GroupDecisionsViewV1 } from "./controlTypes.js";
+import type { DecisionFlagV1, GroupDecisionsViewV1 } from "./controlTypes.js";
 import { MinorTag, MinorToggle, isMinor, visibleByImportance } from "./MinorToggle.js";
 
 type DecisionRun = GroupDecisionsViewV1["tasks"][number]["runs"][number];
@@ -82,6 +82,22 @@ function PendingRow(props: { item: PendingItem; groupId: string; revision: numbe
   );
 }
 
+/**
+ * Kanban spec 2026-10-20 §9a: a landed decision Orca flagged. Red (danger) while it waits; ratified or corrected it is a
+ * plain note. Disagreeing is the 纠正 button beside it (a correction; nothing is reverted).
+ */
+function FlagLine(props: { flag: DecisionFlagV1 }): JSX.Element {
+  const { flag } = props;
+  const { t } = useTranslation();
+  if (flag.state !== "flagged") return <span className="badge">{t(flag.state === "ratified" ? "control.decisions.flagRatified" : "control.decisions.flagCorrected")}</span>;
+  return (
+    <>
+      <span className="badge" data-tone="danger" data-testid="decision-flagged">{t("control.decisions.flagged")}</span>
+      <p className="detail-note">{t("control.decisions.flaggedReason", { source: flag.source, reason: flag.reason })}</p>
+    </>
+  );
+}
+
 export function RunDecisions(props: RunDecisionsProps): JSX.Element {
   const { run, projectKey } = props;
   const { t } = useTranslation();
@@ -116,6 +132,13 @@ export function RunDecisions(props: RunDecisionsProps): JSX.Element {
               <li key={decision.id} aria-label={decision.id}>
                 <MinorTag entry={decision} copy="control.decisions" /><code>{decision.id}</code> {pair(decision.question, decision.chose)}
                 {decision.where === "group-branch" && <> · {t("control.decisions.notIntegrated")}</>}{" "}
+                {decision.flag != null && <FlagLine flag={decision.flag} />}
+                {decision.flag?.state === "flagged" && (
+                  <button type="button" disabled={props.archived}
+                    onClick={() => props.onCommand({ verb: "ratify-flagged-decision", groupId: props.groupId, expectedRevision: props.revision, payload: { decisionId: decision.id } })}>
+                    {t("control.decisions.ratify")}
+                  </button>
+                )}
                 <button type="button" disabled={!correctable}
                   onClick={() => { if (correctable) props.onCorrect?.(projectKey, decision.id); }}>
                   {t("control.decisions.correct")}

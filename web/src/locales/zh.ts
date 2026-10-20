@@ -407,6 +407,13 @@ export const zh: Translation<typeof en> = {
         unlanded: { show_one: "显示 {{count}} 条次要决定（未落地）", show_other: "显示 {{count}} 条次要决定（未落地）", hide: "收起次要决定（未落地）" },
       },
       readFailed: "这个组的决定读取失败（{{code}}），所以这里不显示任何决定，也不标出需要人确认的项。",
+      flagged: "已标红待审",
+      flaggedReason: "已落地，由 {{source}} 标红：{{reason}}",
+      flagRatified: "已认可",
+      flagCorrected: "已纠正",
+      ratify: "认可",
+      groupFlagged_one: "{{count}} 条已落地的决定标红待审",
+      groupFlagged_other: "{{count}} 条已落地的决定标红待审",
     },
     settlement: {
       activityCharge: "{{bucket}}：{{tokens}} token，{{activeMs}} 毫秒，{{attempts}} 次尝试，{{sessions}} 个会话",
@@ -1231,6 +1238,7 @@ export const zhErrors: Record<string, string> = {
   "integration-unapproved": "这个组的集成方式和确认时看到的不一致，请重新读取后再确认。",
   // Control run decisions plan Task 9: approving a decision that did not land.
   "pending-decision-not-found": "这个组没有这条待确认的决定。",
+  "flagged-decision-not-found": "这个组没有这条标红的决定。",
   "pending-decision-settled": "这条决定已经处理过，现在不能再改：{{detail}}",
   "decision-undo-not-executable": "撤销命令仍然无法照原样执行，请给出类似 `git revert --no-edit <commit>` 的命令：{{message}}",
   "pending-decision-entry-invalid": "这条决定有别的问题，换一条撤销命令也修不好：{{message}}",

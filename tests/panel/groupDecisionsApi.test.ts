@@ -1,5 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { correctionRowFrom, recordNewCorrection } from "../../src/corrections/record.js";
+import { withdrawCorrection } from "../../src/corrections/withdrawals.js";
+import { flagDecision } from "../../src/control/flaggedDecisions.js";
+import { readGroupDecisionsView } from "../../src/panel/groupDecisions.js";
+import { profileSnapshot, webFixture } from "../control/fixtures/web.js";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -84,6 +89,8 @@ async function world(options: HarnessOptions = {}) {
   };
 }
 
+// Rewritten again under the session grant (human, session 9ec98639, 2026-10-21: 「这次批准改写所有必要的判据」): kanban spec
+// §9a gives every landed decision a `flag` (null when Orca flagged nothing); the exact expectations below gain `flag: null`.
 // Rewritten under the session grant (human, session 3831d12f, 2026-10-20: 「这次批准改写所有必要的判据」): reported-decisions
 // spec §6 has every entry of the three lists carry its `importance`; the exact expectations below gain
 // `importance: "major"` (none of their entries is graded), and nothing else in them changed.
@@ -99,7 +106,7 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
       expect(before.tasks.map((task) => task.taskId)).toEqual(["a"]);
       expect(runOf(before, runId)).toEqual({
         runId, settled: true, reported: "array",
-        decisions: [{ id: `${runId}/agent-0`, where: "group-branch", question: "q", chose: "c", kind: "interface", scope: "task", importance: "major" }],
+        decisions: [{ id: `${runId}/agent-0`, where: "group-branch", question: "q", chose: "c", kind: "interface", scope: "task", importance: "major", flag: null }],
         pending: [], unlanded: [],
       });
       expect(await w.integrate()).toBe(true);
@@ -119,7 +126,7 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
       expect(view.pendingCount).toBe(1);
       expect(runOf(view, runId)).toEqual({
         runId, settled: true, reported: "array",
-        decisions: [{ id: `${runId}/agent-1`, where: "group-branch", question: "q", chose: "c", kind: "interface", scope: "task", importance: "major" }],
+        decisions: [{ id: `${runId}/agent-1`, where: "group-branch", question: "q", chose: "c", kind: "interface", scope: "task", importance: "major", flag: null }],
         pending: [{ pendingId: `pending-${runId}-0`, reason: 'kind-unknown:"opinion"', question: "which", chose: "c", undoHow: UNDO, state: "pending", importance: "major" }],
         unlanded: [],
       });
@@ -143,7 +150,7 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
       const approved = await w.deps.service!.approvePendingDecision(w.h.command("approve-pending-decision", { pendingId, undoHow: UNDO }));
       expect(approved).toMatchObject({ result: { kind: "pending-decision-approved" } });
       const after = runOf(await w.view(), runId);
-      expect(after.decisions).toEqual([{ id: `${runId}/agent-0`, where: "group-branch", question: "which", chose: "c", kind: "interface", scope: "task", importance: "major" }]);
+      expect(after.decisions).toEqual([{ id: `${runId}/agent-0`, where: "group-branch", question: "which", chose: "c", kind: "interface", scope: "task", importance: "major", flag: null }]);
       expect([after.pending.map((p) => p.state), after.unlanded]).toEqual([["approved"], []]);
     } finally { await w.dispose(); }
   });
@@ -257,6 +264,55 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
       // mutation M-Bo.11: count every pending entry -> 3, red
       expect(view.pendingCount).toBe(2);
     } finally { await w.dispose(); }
+  });
+
+  // Kanban spec 2026-10-20 §9a (session 9ec98639): a landed decision Orca flagged carries its flag; ratify clears it.
+  it("shows a flagged landed decision's flag and counts it until it is ratified", async () => {
+    const w = await world({ decisions: () => [good()] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => SETTLED.includes(w.body(runId).state));
+      const id = `${runId}/agent-0`;
+      w.h.store.transaction(() => flagDecision(w.h.store, { decisionId: id, groupId: "g", runId, source: "reconcile", reason: "merged both sides", evidence: ["a.ts"], by: "orca-auto", at: "2026-10-21T00:00:00.000Z" }));
+      const flagged = await w.view() as unknown as { flaggedCount: number; tasks: Array<{ runs: Array<{ runId: string; decisions: Array<{ id: string; flag: unknown }> }> }> };
+      // mutation: flagOf returns null -> no flag on the line, red
+      expect(flagged.tasks.flatMap((t) => t.runs).find((r) => r.runId === runId)!.decisions.map((d) => [d.id, d.flag]))
+        .toEqual([[id, { state: "flagged", source: "reconcile", reason: "merged both sides", evidence: ["a.ts"] }]]);
+      expect(flagged.flaggedCount).toBe(1);
+      await w.deps.service!.ratifyFlaggedDecision(w.h.command("ratify-flagged-decision", { decisionId: id }));
+      const ratified = await w.view() as unknown as typeof flagged;
+      expect(ratified.tasks.flatMap((t) => t.runs).find((r) => r.runId === runId)!.decisions.map((d) => (d.flag as { state: string }).state)).toEqual(["ratified"]);
+      // mutation: count every flag row -> 1, red
+      expect(ratified.flaggedCount).toBe(0);
+    } finally { await w.dispose(); }
+  });
+
+  it("reads a flag as corrected, and stops counting it, once a correction names its decision", async () => {
+    const w = await world({ decisions: () => [good()] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => SETTLED.includes(w.body(runId).state));
+      const id = `${runId}/agent-0`;
+      w.h.store.transaction(() => flagDecision(w.h.store, { decisionId: id, groupId: "g", runId, source: "reconcile", reason: "r", evidence: [], by: "orca-auto", at: "t" }));
+      const view = await readGroupDecisionsView(w.h.store, w.repo, "g", new Set([id]));
+      // mutation: drop the correctedIds clause in flagOf -> "flagged", red
+      expect(view.tasks.flatMap((t) => t.runs).flatMap((r) => r.decisions).map((d) => d.flag?.state)).toEqual(["corrected"]);
+      // mutation: drop it in the count -> 1, red
+      expect(view.flaggedCount).toBe(0);
+    } finally { await w.dispose(); }
+  });
+
+  it("names, as corrected, the decisions a recorded and not withdrawn correction names", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "flag-corr-"));
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]);
+    try {
+      const at = () => new Date("2026-10-21T00:00:00.000Z");
+      const kept = await recordNewCorrection(dir, correctionRowFrom({ projectKey: "github.com/x/y", decisionId: "r1/agent-0", kind: "wrong", because: "no", by: "me" }, at), { again: false });
+      const gone = await recordNewCorrection(dir, correctionRowFrom({ projectKey: "github.com/x/y", decisionId: "r2/agent-0", kind: "wrong", because: "no", by: "me" }, at), { again: false });
+      await withdrawCorrection(dir, { correctionId: gone.id, by: "me", at: "2026-10-21T00:00:01.000Z", isClosed: () => false });
+      const service = new WebControlService({ ...h.deps, correctionsDir: dir, correctionsBy: "me" });
+      // mutation: drop the withdrawn filter -> r2 too, red
+      expect([...await service.correctedDecisionIds()]).toEqual([kept.decisionId]);
+      expect([...await new WebControlService(h.deps).correctedDecisionIds()]).toEqual([]);
+    } finally { await h.dispose(); await rm(dir, { recursive: true, force: true }); }
   });
 
   it("grades the unlanded list from the raw entries", async () => {

@@ -226,10 +226,11 @@ function usageWebToServer(x: WebUsageViewV1): ServerUsageViewV1 { return x; }
 // Control run decisions plan Task 8: the group decisions read, checked both ways like the other views.
 function groupDecisionsServerToWeb(x: ServerGroupDecisionsViewV1): WebGroupDecisionsViewV1 { return x; }
 // Reported-decisions spec 2026-10-20 §6 (session grant 3831d12f): each entry's `importance` is optional on the Web side, as above.
+// Kanban spec §9a (session 9ec98639): `flaggedCount` and each decision's `flag` are optional on the Web side the same way.
 function groupDecisionsWebToServer(x: WebGroupDecisionsViewV1): ServerGroupDecisionsViewV1 {
   const major = <T extends { importance?: "major" | "minor" }>(e: T) => ({ ...e, importance: e.importance ?? "major" });
-  return { ...x, tasks: x.tasks.map((task) => ({ ...task, runs: task.runs.map((run) => ({ ...run,
-    decisions: run.decisions.map(major), pending: run.pending.map(major), unlanded: run.unlanded.map(major) })) })) };
+  return { ...x, flaggedCount: x.flaggedCount ?? 0, tasks: x.tasks.map((task) => ({ ...task, runs: task.runs.map((run) => ({ ...run,
+    decisions: run.decisions.map((d) => ({ ...major(d), flag: d.flag ?? null })), pending: run.pending.map(major), unlanded: run.unlanded.map(major) })) })) };
 }
 
 // Task 9: the commands the browser may send. A payload mirror that drifts from the
