@@ -4,7 +4,7 @@ import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.
 import { escalationsOf, readSystemDebugMark, systemDebugGroupId } from "../../src/control/systemDebug.js";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
-import { WebControlService } from "../../src/control/webService.js";
+import { readWebGroup, WebControlService } from "../../src/control/webService.js";
 import { writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
 import { readGroupSummary } from "../../src/panel/controlViews.js";
 import { needsAttention } from "../../web/src/groupCategory.js";
@@ -28,7 +28,7 @@ async function ladderWorld(options: { debugFails?: boolean } = {}) {
     behaviour: (id) => (id === "a" && failing) || (id === "debug" && options.debugFails === true) ? "failed" : "succeed",
     stopReason: (id) => (id === "a" && failing ? "Error: check failed: node check.js" : null),
   });
-  const limit = (JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as { ledger: { groupLimit: Record<string, number> } }).ledger.groupLimit;
+  const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
   const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, attempts: limit.attempts + 10, sessions: limit.sessions + 10 } }));
   if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
   // The pass needs the repository's path (resolveRepository), as the panel's service has it.
