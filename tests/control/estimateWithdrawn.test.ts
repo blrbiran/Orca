@@ -129,6 +129,19 @@ describe("a queued estimate whose answer can no longer be used is withdrawn at c
     } finally { await x.h.dispose(); }
   });
 
+  it("an estimate waiting under a spend cap and then withdrawn leaves no cap block behind (its wake is done, nothing clears it later)", async () => {
+    const x = await queuedEstimateHarness(); try {
+      x.h.store.db.prepare("INSERT INTO spend_caps(scope,period,tokens,updated_at,updated_by) VALUES ('all','total',1,1,'user:u1')").run();
+      const block = () => x.h.store.db.prepare("SELECT body FROM spend_cap_blocks WHERE group_id='g'").get();
+      expect(await x.service.claimEstimate("g", x.h.estimateId)).toBeNull();
+      expect(JSON.parse(String(block()!.body))).toMatchObject({ claim: "estimate" });
+      await x.service.confirm(x.h.command("confirm", await softConfirm(x)));
+      await x.pump();
+      expect(readEstimateRecord(x.h.store, "g", x.h.estimateId)).toMatchObject({ state: "withdrawn", reasonCode: "estimate-withdrawn:proposal-confirmed" });
+      expect(block()).toBeUndefined();
+    } finally { await x.h.dispose(); }
+  });
+
   it("the group view shows the withdrawn estimate and its reason (the panel and the agent path read it)", async () => {
     const x = await queuedEstimateHarness(); try {
       await x.service.confirm(x.h.command("confirm", await softConfirm(x)));
