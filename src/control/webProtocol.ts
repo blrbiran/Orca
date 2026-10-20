@@ -1179,6 +1179,12 @@ export const groupSummarySchema = z
     // Kanban spec 2026-10-20 §3.1-§3.4: present only on a group confirmed since start-on-confirm exists (a row in
     // group_orchestration). `state` is the orchestrator's own answer (src/control/orchestration.ts); `refusal.persistent`
     // marks a start refused PERSISTENT_REFUSALS times in a row (needs-you for this group only).
+    // Kanban spec §4: a board card's facts; given for every group with a plan (optional so older fixtures parse).
+    card: z.object({
+      budget: z.object({ usedTokens: safeInteger, limitTokens: safeInteger.nullable() }).strict(),
+      pendingDecisions: safeInteger,
+      firstFailure: z.object({ taskId: idSchema, cause: nonemptyString }).strict().nullable(),
+    }).strict().optional(),
     // Kanban spec §3.3: the group's direct prerequisites (a person's edges), only when it has any.
     dependsOn: z.array(idSchema).min(1).optional(),
     orchestration: z.object({

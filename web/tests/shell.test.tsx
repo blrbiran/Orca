@@ -81,7 +81,8 @@ describe("Shell and SectionPane", () => {
 describe("the Requirements section in the shell (N1 spec §11.2)", () => {
   it("lists Requirements in the nav after Task control and keeps its pane mounted while another is active", () => {
     // Rewritten again under the human's 2026-10-03 request to reorder the tabs (session 9d95e6c8); earlier under the OK at memory-tab plan review (plan D10).
-    expect(SECTIONS).toEqual(["overview", "requirements", "tasks", "decisions", "memory", "metrics", "chains", "global-settings", "project-settings"]);
+    // Rewritten under the session grant (human, session 9ec98639: 「这次批准改写所有必要的判据」): kanban spec §4 adds the board tab after Task control.
+    expect(SECTIONS).toEqual(["overview", "requirements", "tasks", "board", "decisions", "memory", "metrics", "chains", "global-settings", "project-settings"]);
     const html = renderToStaticMarkup(
       <Shell active="tasks" badges={{ unreviewed: 0, chainRunning: false, controlAlert: false }} footer={[]}>
         <SectionPane section="requirements" active="tasks"><p>pane-r</p></SectionPane>

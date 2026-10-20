@@ -93,6 +93,8 @@ export type GroupSummaryV1 = {
     checks?: { from: "original" | "original+named" | "named"; namedBy: "human" | "agent" | null };
     closing?: DebugClosingV1 | null;
   };
+  /** Kanban spec 2026-10-20 §4: a board card's facts; the server gives them for every group with a plan. */
+  card?: { budget: { usedTokens: number; limitTokens: number | null }; pendingDecisions: number; firstFailure: { taskId: string; cause: string } | null };
   /** Kanban spec 2026-10-20 §3.3: the group's direct prerequisites (a person's edges); present only when it has any. */
   dependsOn?: string[];
   /** Kanban spec 2026-10-20 §3.1-§3.4: present only on a group confirmed since start-on-confirm exists. */

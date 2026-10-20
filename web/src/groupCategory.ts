@@ -55,3 +55,42 @@ export function writeGroupFilter(storage: Pick<Storage, "setItem"> | undefined, 
     // A filter that is not remembered costs one click next time; the list works without it.
   }
 }
+
+/**
+ * Kanban spec 2026-10-20 §4 (correction §9a: the list's five categories stay; the board extends them to seven columns).
+ * A group's column on the board, from the server's summary only. First match wins: archived, then anything that needs a
+ * person, then the life cycle. A confirmed group not yet started (held, queued, waiting for a slot or a prerequisite)
+ * is `queued`; a ready group with no orchestration record (confirmed before start-on-confirm) is queued until anything ran.
+ */
+export const BOARD_COLUMNS = ["clarifying", "awaiting-confirmation", "queued", "running", "needs-you", "done", "archived"] as const;
+export type BoardColumn = (typeof BOARD_COLUMNS)[number];
+
+export function boardColumn(summary: GroupSummaryV1): BoardColumn {
+  if (summary.archived === true) return "archived";
+  if (needsAttention(summary)) return "needs-you";
+  if (summary.state === "clarifying") return "clarifying";
+  if (summary.state === "done" || (summary.completion !== undefined && summary.completion.total > 0 && summary.completion.done === summary.completion.total)) return "done";
+  if (summary.state === "draft") return "awaiting-confirmation";
+  if (summary.state === "ready" && summary.executionPending !== true) {
+    const orchestration = summary.orchestration;
+    if (orchestration !== undefined ? orchestration.state !== "started" && orchestration.state !== "stopped"
+      : (summary.counts?.running ?? 0) + (summary.counts?.waiting ?? 0) + (summary.counts?.done ?? 0) === 0) return "queued";
+  }
+  return "running";
+}
+
+/**
+ * Spec §4: a drag is weak by design -- each allowed drop is exactly one existing command, everything else is refused on
+ * the page (the card snaps back with the reason). Builder's call (spec §11): pause is a running card dropped on
+ * `queued`; resume is a paused card dropped on `running`; done → archived archives, archived → done unarchives.
+ */
+export type BoardDrop = { verb: "pause-dispatch" | "resume-dispatch" | "archive-group" | "unarchive-group" } | { refused: "same" | "not-allowed" };
+export function boardDrop(summary: GroupSummaryV1, to: BoardColumn): BoardDrop {
+  const from = boardColumn(summary);
+  if (from === to) return { refused: "same" };
+  if (from === "running" && to === "queued" && summary.stopState === null) return { verb: "pause-dispatch" };
+  if (summary.stopState === "paused" && to === "running") return { verb: "resume-dispatch" };
+  if (from === "done" && to === "archived") return { verb: "archive-group" };
+  if (from === "archived" && to === "done") return { verb: "unarchive-group" };
+  return { refused: "not-allowed" };
+}

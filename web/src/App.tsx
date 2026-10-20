@@ -141,6 +141,7 @@ import type { Section } from "./sections.js";
 import { GlobalSettings } from "./GlobalSettings.js";
 import { ProjectSettings } from "./ProjectSettings.js";
 import { SectionPane, Shell, controlAlert } from "./Shell.js";
+import { BoardView } from "./BoardView.js";
 import { applyTheme, readTheme, writeTheme } from "./theme.js";
 import type { ThemePref } from "./theme.js";
 import { acceptArrival } from "./selection.js";
@@ -1626,6 +1627,17 @@ export function App(): JSX.Element {
           models={modelsFor} onRefreshModels={refreshModels}
         />
       )}
+      </SectionPane>
+      <SectionPane section="board" active={section}>
+        {controlConfig === null || control.recovery === null ? <p className="empty">{t("control.unavailable")}</p> : (
+          <BoardView groups={summaryView(control).groups} scope={scope} repoLabel={repoLabel}
+            onOpen={(group) => {
+              navigationSeq.current++; setOverviewFocus(null);
+              if (group.state === "clarifying") { setSelectedRequirement(group.groupId); setSection("requirements"); window.location.hash = "requirements"; void readRequirement(group.groupId); return; }
+              setSelectedGroup(group.groupId); setSection("tasks"); window.location.hash = "tasks";
+            }}
+            onCommand={(action) => { void sendControl(action); }} />
+        )}
       </SectionPane>
       <SectionPane section="requirements" active={section}>
         {controlConfig !== null && control.recovery !== null && (

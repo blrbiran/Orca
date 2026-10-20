@@ -407,6 +407,33 @@ export function readGroupSummary(store: ControlStore, groupId: string): GroupSum
   return readGroupSummaryFromSnapshot(store, groupId);
 }
 
+/**
+ * Kanban spec 2026-10-20 §4: the three facts a board card shows. Budget in tokens (limit null = unlimited); decisions
+ * waiting for a person (major pending ones plus flags not ratified -- a flag a correction answered still counts here,
+ * the corrections store is not read for a summary); the first task, in plan order, whose current run failed and why.
+ */
+function cardFacts(store: ControlStore, groupId: string, body: Record<string, unknown>, taskIds: readonly string[]) {
+  const tokens = (value: unknown): number | null => {
+    const n = (value as { tokens?: unknown } | undefined)?.tokens;
+    return typeof n === "number" ? n : null;
+  };
+  const pending = store.db.prepare("SELECT body FROM pending_decisions WHERE group_id=? AND state='pending'").all(groupId)
+    .filter((row) => (JSON.parse(String(row.body)) as { entry?: { importance?: unknown } }).entry?.importance !== "minor").length;
+  const flagged = Number(store.db.prepare("SELECT count(*) AS n FROM flagged_decisions WHERE group_id=? AND state='flagged'").get(groupId)!.n);
+  let firstFailure: { taskId: string; cause: string } | null = null;
+  for (const taskId of taskIds) {
+    const work = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, taskId);
+    const runId = work === undefined ? null : (JSON.parse(String(work.body)) as { currentRunId?: unknown }).currentRunId;
+    if (typeof runId !== "string") continue;
+    const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
+    if (row === undefined) continue;
+    const run = JSON.parse(String(row.body)) as { failureCode?: unknown; drive?: { blockedReason?: unknown } };
+    const cause = typeof run.failureCode === "string" ? run.failureCode : typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason : null;
+    if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200) }; break; }
+  }
+  return { budget: { usedTokens: tokens(body.used) ?? 0, limitTokens: tokens(body.limit) }, pendingDecisions: pending + flagged, firstFailure };
+}
+
 export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot, canonicalRecords?: ReadonlyMap<string, string>): GroupSummaryV1 {
   const body = groupBody(store, groupId);
   // N1 spec §4.1, §11.2: a clarifying group is summarised without a plan or a proposal, and without a completion.
@@ -448,6 +475,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(archived === null ? {} : { executionPending: groupExecutionPending(store, groupId, archived.plan.tasks.map((task) => task.taskId), readSnapshot!) }),
     ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),
     ...(dependsOn.length === 0 ? {} : { dependsOn }),
+    ...(archived === null ? {} : { card: cardFacts(store, groupId, body as Record<string, unknown>, archived.plan.tasks.map((task) => task.taskId)) }),
     ...(orchestration === null ? {} : { orchestration }),
     ...(debugMark === null ? {} : { debug: {
       correctionId: debugMark.correctionId, ordinal: debugMark.ordinal, missing: debugMark.missing,

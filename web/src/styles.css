@@ -428,3 +428,12 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Kanban spec 2026-10-20 §4: the board tab -- columns side by side, scrolling sideways on a narrow screen. */
+.board-columns { display: flex; gap: 12px; overflow-x: auto; align-items: flex-start; }
+.board-column { flex: 0 0 240px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; min-height: 120px; }
+.board-column ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.board-card { border: 1px solid var(--border); border-radius: 6px; padding: 8px; cursor: grab; }
+.board-card-open { all: unset; cursor: pointer; font-weight: 600; }
+.board-card-goal { margin: 4px 0; }
+.group-graph-layers { display: flex; gap: 24px; overflow-x: auto; }
