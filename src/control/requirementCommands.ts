@@ -86,7 +86,9 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
         const payload = context.effectiveCommand.payload as EffectiveOpenPayload;
         if (!(deps.knownRepository?.(payload.repoId) ?? false)) throw new ControlError("group-project-binding-required");
         if (deps.store.db.prepare("SELECT id FROM groups WHERE id=?").get(payload.groupId)) throw new ControlError("group-already-exists");
-        if (slot.outcome.kind !== "frozen") throw new ControlError("agent-selection-rejected", `estimator:${slot.outcome.code}`);
+        // Issue #73: ccloop's stderr from a failed probe follows its code, as `<code>: <detail>` (web/src/ccloopCodes.ts).
+        const probeDetail = slot.observation.probeFailureDetail;
+        if (slot.outcome.kind !== "frozen") throw new ControlError("agent-selection-rejected", `estimator:${slot.outcome.code}${probeDetail === undefined ? "" : `: ${probeDetail}`}`);
         const preflight = profile.snapshot.profile.estimatorPreflight;
         if (!preflight) throw new ControlError("control-estimator-unconfigured");
         const compatibility = estimatorCompatibility(slot.observation, estimateMode);

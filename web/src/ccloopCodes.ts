@@ -46,7 +46,27 @@ const ESTIMATOR_REJECTED = "agent-selection-rejected:estimator:";
 const CALL_FAILED = "estimate-call-failed:";
 /** An estimate's reason that carries a ccloop code (§4.3 estimator slot, §4.5 failed call); null for any other, and null when the words would only repeat the code shown beside them. */
 export function explainEstimateReason(reasonCode: string): string | null {
-  if (reasonCode.startsWith(ESTIMATOR_REJECTED)) return explainBesideCode(reasonCode.slice(ESTIMATOR_REJECTED.length));
+  if (reasonCode.startsWith(ESTIMATOR_REJECTED)) {
+    // Issue #73: requirement open writes a failed probe's ccloop stderr after the code (`<code>: <detail>`).
+    const { code, detail } = codeAndDetail(reasonCode.slice(ESTIMATOR_REJECTED.length));
+    return explainBesideCode(code) === null ? null : explainCcloopCode(code, detail);
+  }
   if (reasonCode.startsWith(CALL_FAILED)) return explainBesideCode(reasonCode.slice(CALL_FAILED.length));
   return null;
+}
+
+/** src/control/estimatorCompatibility.ts EstimatorCompatibilityReason: the codes Orca's own estimator check refuses with. */
+const ESTIMATOR_CHECK_REASONS = new Set(["selection-unavailable", "single-call-unavailable", "preflight-unavailable", "instruction-unknown",
+  "context-unavailable", "usage-unavailable", "budget-unavailable", "handoff-unavailable", "request-bound-unavailable"]);
+/**
+ * Issues #70, #73, #58: requirement open's `agent-selection-rejected:estimator:<a>,<b>` names Orca's estimator compatibility
+ * check, not ccloop. Its refusal in words, each reason code explained; null when any code is not one of that check's.
+ */
+export function explainEstimatorCheck(message: string): string | null {
+  if (!message.startsWith(ESTIMATOR_REJECTED)) return null;
+  const codes = message.slice(ESTIMATOR_REJECTED.length).split(",");
+  if (!codes.every((code) => ESTIMATOR_CHECK_REASONS.has(code))) return null;
+  const t = i18n.t as (key: string, options?: object) => unknown;
+  const reasons = codes.map((code) => String(t(`estimatorCheck.reason.${code}`))).join(currentLanguage() === "zh" ? "" : " ");
+  return String(t("estimatorCheck.refused", { reasons }));
 }

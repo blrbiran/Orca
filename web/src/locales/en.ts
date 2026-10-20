@@ -1102,6 +1102,21 @@ export const en = {
   },
   // ccloop error codes spec (2026-10-15) §4.6: a ccloop code with no entry in either table.
   ccloop: { generic: "{{code}}: {{detail}}", genericNoDetail: "{{code}}" },
+  // Issues #70, #73, #58: requirement open refused by Orca's own estimator check (src/control/estimatorCompatibility.ts).
+  estimatorCheck: {
+    refused: "Orca's estimator check refused this agent: {{reasons}}",
+    reason: {
+      "selection-unavailable": "ccloop could not resolve this agent selection.",
+      "single-call-unavailable": "This agent and model cannot make the single call an estimate needs in the current estimate mode.",
+      "preflight-unavailable": "The estimator profile has no estimate preflight.",
+      "instruction-unknown": "The estimator profile names estimate instructions this Orca does not know.",
+      "context-unavailable": "The model's context window is unknown. This usually means the model is not in the agent's catalog (for codex, a third-party model that `codex debug models` does not list); choose a model the agent lists.",
+      "usage-unavailable": "The agent cannot report how many tokens a call used.",
+      "budget-unavailable": "The agent cannot enforce the estimate's budget as the current estimate mode needs.",
+      "handoff-unavailable": "The agent has no durable handoff.",
+      "request-bound-unavailable": "The agent cannot prove a token bound on the request, which strict estimate mode needs.",
+    },
+  },
   debugRepro,
   // Debug task plan Task 13: the Corrections tab of the Decisions page, and a debug group's mark in its group view.
   corrections: {

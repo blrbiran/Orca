@@ -9,7 +9,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import i18n from "../src/i18n.js";
-import { codeAndDetail, explainCcloopCode, explainEstimateReason, peerExitReason } from "../src/ccloopCodes.js";
+import { codeAndDetail, explainCcloopCode, explainEstimateReason, explainEstimatorCheck, peerExitReason } from "../src/ccloopCodes.js";
 import { explainRefusal, explainRunReason } from "../src/refusalExplain.js";
 import { RefusalNotice } from "../src/RefusalNotice.js";
 import { RequirementsPanel } from "../src/RequirementsPanel.js";
@@ -163,5 +163,38 @@ describe("each surface (spec A §4.6 table)", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: "unavailable", reason: "omp-new-thing" }), { status: 200, headers: { "content-type": "application/json" } })));
     render(<SavedResultAction runId="run-1" groupId="g" taskId="a" revision={3} changeSeq={1} onCommand={vi.fn()} />);
     expect((await screen.findByText("omp-new-thing")).parentElement!.textContent).toBe("Saved results are unavailable for verification. omp-new-thing");
+  });
+});
+
+// Issues #70, #73, #58: requirement-open's `estimator:a,b` is Orca's own estimator compatibility check
+// (src/control/estimatorCompatibility.ts), not ccloop; the refusal names Orca as the one that refused and says each reason
+// code in words, with the catalog hint on context-unavailable. A ccloop code there keeps ccloop's words, now with its detail.
+describe("an estimator refusal at requirement open", () => {
+  const CHECK = "agent-selection-rejected:estimator:single-call-unavailable,context-unavailable";
+  const EN_SINGLE = "This agent and model cannot make the single call an estimate needs in the current estimate mode.";
+  const EN_CONTEXT = "The model's context window is unknown. This usually means the model is not in the agent's catalog (for codex, a third-party model that `codex debug models` does not list); choose a model the agent lists.";
+  const ZH_SINGLE = "这个 agent 和模型在当前估算模式下无法发起估算所需的单次调用。";
+  const ZH_CONTEXT = "模型的上下文窗口未知。这通常说明该模型不在 agent 的模型目录里（对 codex 来说，就是 `codex debug models` 没有列出的第三方模型）；请选一个 agent 列出的模型。";
+  const panel = (message: string) => {
+    const refusal = { status: 422, code: "agent-selection-rejected", message, commandRevision: 3 };
+    const { container } = render(<RequirementsPanel config={config} summary={summaryWith(requirementView("answered"))} views={{}} selected={null} agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} refusal={refusal} />);
+    const lines = [...container.querySelectorAll('p[role="alert"]')].map((p) => p.textContent);
+    cleanup();
+    return lines;
+  };
+
+  it("names Orca's estimator check and explains every reason code, in English and Chinese", async () => {
+    expect(explainEstimatorCheck(CHECK)).toBe(`Orca's estimator check refused this agent: ${EN_SINGLE} ${EN_CONTEXT}`);
+    expect(panel(CHECK)).toEqual([`agent-selection-rejected · Orca's estimator check refused this agent: ${EN_SINGLE} ${EN_CONTEXT}`]);
+    await i18n.changeLanguage("zh");
+    expect(explainEstimatorCheck(CHECK)).toBe(`Orca 的估算器检查拒绝了这个 agent：${ZH_SINGLE}${ZH_CONTEXT}`);
+  });
+
+  it("is not Orca's check when a code is not one of its reasons; a ccloop code keeps ccloop's words with the probe's detail", () => {
+    expect([explainEstimatorCheck("agent-selection-rejected:estimator:omp-model-catalog-unavailable: spawn ENOENT"), explainEstimatorCheck("agent-selection-rejected:estimator:context-unavailable,omp-new-thing"),
+      explainEstimatorCheck("agent-selection-rejected:a:single-call-unavailable")]).toEqual([null, null, null]);
+    expect(explainEstimateReason("agent-selection-rejected:estimator:omp-model-catalog-unavailable: spawn ENOENT")).toBe(EN_CATALOG);
+    expect(panel("agent-selection-rejected:estimator:omp-model-catalog-unavailable: spawn ENOENT")).toEqual([
+      `agent-selection-rejected · ccloop refused this agent selection: estimator:omp-model-catalog-unavailable: spawn ENOENT · ${EN_CATALOG}`]);
   });
 });

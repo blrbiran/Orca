@@ -10,7 +10,7 @@ import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { useTranslation } from "react-i18next";
 import { GroupActionsMenu } from "./GroupActionsMenu.js";
 import { LANGUAGE_NAMES, PANEL_LANGUAGES, currentLanguage, enumText } from "./i18n.js";
-import { explainBesideCode, explainEstimateReason } from "./ccloopCodes.js";
+import { explainBesideCode, explainEstimateReason, explainEstimatorCheck } from "./ccloopCodes.js";
 import { explainRefusal, explainRunReason } from "./refusalExplain.js";
 import type { PanelLanguage } from "./i18n.js";
 import { TokenInput, shortTokens } from "./TokenInput.js";
@@ -375,10 +375,13 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
 
 /**
  * Issue #73: a refusal in the reader's words. A ccloop failure is explained by ccloop's own code with its detail (as
- * RefusalNotice does), and a refused estimator selection adds the words for the ccloop code it names. The probe keeps
- * only that code (src/control/profiles.ts probeFailureCode), so ccloop's stderr is not in this refusal to show.
+ * RefusalNotice does), and a refused estimator selection adds the words for the ccloop code it names, with the failed
+ * probe's ccloop stderr when it had one (src/control/profiles.ts probeFailureDetail). Issues #70, #58: a refusal by
+ * Orca's own estimator check is said as that check's, not ccloop's.
  */
 function refusalWords(refusal: ControlRefusal): string {
+  const check = refusal.code === "agent-selection-rejected" ? explainEstimatorCheck(refusal.message) : null;
+  if (check !== null) return check;
   const text = explainRefusal(refusal).text;
   const words = refusal.code === "agent-selection-rejected" ? explainEstimateReason(refusal.message) : null;
   return words === null ? text : `${text} · ${words}`;

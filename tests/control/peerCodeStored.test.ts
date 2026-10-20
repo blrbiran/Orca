@@ -26,7 +26,7 @@ describe("stored codes keep ccloop's code (spec A §4.3)", () => {
       expect((await estimatorSlotFor({ store: h.store, profileRouter: h.deps.profileRouter }, "human", {}, h.frozen)).outcome)
         .toMatchObject({ kind: "rejected", code: "omp-model-catalog-unavailable" });
       const service = new WebControlService({ ...h.deps, knownRepository: (id: string) => id === "repo" });
-      expect(await service.openRequirement(open)).toMatchObject({ error: { code: "agent-selection-rejected", message: "agent-selection-rejected:estimator:omp-model-catalog-unavailable" } });
+      expect(await service.openRequirement(open)).toMatchObject({ error: { code: "agent-selection-rejected", message: "agent-selection-rejected:estimator:omp-model-catalog-unavailable: spawn ENOENT" } });
       h.resolveAgent.mockImplementation(async () => { throw new ControlError("control-peer-exit", "1:Error: lost"); });
       expect((await h.deps.profileRouter.probe(h.frozen, { agent: "codex" })).probeFailureCode).toBe("control-peer-exit");
     } finally { await h.dispose(); }
@@ -73,6 +73,19 @@ describe("stored codes keep ccloop's code (spec A §4.3)", () => {
       const crashing = new WebControlService({ ...h.deps, port: { ...base, applyAgentInstallations: async () => { throw new Error("socket hang up"); }, observeAgentInstallations: async () => observation } as unknown as ExecutionPort });
       await crashing.recoverAgentUpdates();
       expect(crashing.agentUpdateView("human").failureCode).toBe("control-internal-error");
+    } finally { await h.dispose(); }
+  });
+  // Issue #73: the probe keeps ccloop's stderr tail beside its code, so requirement-open's refusal can say what ccloop said;
+  // a code with no stderr after it adds nothing, so the refusal is exactly the code as before.
+  it("F5: a failed probe keeps ccloop's detail, and requirement-open's refusal carries it after the code only when there is one", async () => {
+    const h = await webFixture(); try {
+      const service = new WebControlService({ ...h.deps, knownRepository: (id: string) => id === "repo" });
+      h.resolveAgent.mockImplementation(async () => { throw CATALOG(); });
+      expect((await h.deps.profileRouter.probe(h.frozen, { agent: "codex" })).probeFailureDetail).toBe("spawn ENOENT");
+      expect(await service.openRequirement(open)).toMatchObject({ error: { code: "agent-selection-rejected", message: "agent-selection-rejected:estimator:omp-model-catalog-unavailable: spawn ENOENT" } });
+      h.resolveAgent.mockImplementation(async () => { throw new ControlError("control-peer-exit", "2:omp-model-catalog-unavailable"); });
+      expect((await h.deps.profileRouter.probe(h.frozen, { agent: "codex" })).probeFailureDetail).toBeUndefined();
+      expect(await service.openRequirement({ ...(open as object), commandId: "open-r2" } as never)).toMatchObject({ error: { code: "agent-selection-rejected", message: "agent-selection-rejected:estimator:omp-model-catalog-unavailable" } });
     } finally { await h.dispose(); }
   });
 });

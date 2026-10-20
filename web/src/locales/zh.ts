@@ -987,6 +987,21 @@ export const zh: Translation<typeof en> = {
   },
   // ccloop error codes spec (2026-10-15) §4.6: a ccloop code with no entry in either table.
   ccloop: { generic: "{{code}}：{{detail}}", genericNoDetail: "{{code}}" },
+  // Issues #70, #73, #58: requirement open refused by Orca's own estimator check (src/control/estimatorCompatibility.ts).
+  estimatorCheck: {
+    refused: "Orca 的估算器检查拒绝了这个 agent：{{reasons}}",
+    reason: {
+      "selection-unavailable": "ccloop 无法解析这个 agent 选择。",
+      "single-call-unavailable": "这个 agent 和模型在当前估算模式下无法发起估算所需的单次调用。",
+      "preflight-unavailable": "估算器配置没有估算预检。",
+      "instruction-unknown": "估算器配置指定的估算指令版本，当前 Orca 不认识。",
+      "context-unavailable": "模型的上下文窗口未知。这通常说明该模型不在 agent 的模型目录里（对 codex 来说，就是 `codex debug models` 没有列出的第三方模型）；请选一个 agent 列出的模型。",
+      "usage-unavailable": "这个 agent 无法报告一次调用用掉了多少 token。",
+      "budget-unavailable": "这个 agent 无法按当前估算模式的要求执行估算预算。",
+      "handoff-unavailable": "这个 agent 没有可持久的交接。",
+      "request-bound-unavailable": "这个 agent 无法证明请求的 token 上限，严格估算模式需要它。",
+    },
+  },
   // Debug task plan Task 8 (design §12.8).
   debugRepro: {
     "no-tests": "运行没有加上复现这条更正的测试",

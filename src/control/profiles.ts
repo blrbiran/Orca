@@ -1,5 +1,5 @@
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
-import { peerCode } from "./ccloopPort.js";
+import { peerCode, peerFailure } from "./ccloopPort.js";
 import type { ExecutionPort } from "./executionPort.js";
 import type { AgentResolution, PartialSelection } from "./agentSelection.js";
 import { sha256Canonical } from "./canonicalJson.js";
@@ -24,6 +24,8 @@ export interface ObservedProfile {
   readonly observed: CapabilityViewV1;
   readonly observedAt: string;
   readonly probeFailureCode: string | null;
+  /** Issue #73: ccloop's stderr after its code when the probe failed with a peer exit that printed one; absent otherwise. */
+  readonly probeFailureDetail?: string;
   /**
    * Agent selection spec §4.6: ccloop's answer for the selection the caller asked about -- what an import or a
    * re-estimate freezes. Null when the probe failed.
@@ -182,11 +184,13 @@ export function createExecutionProfileRouter(
           resolution: deepFreeze(structuredClone({ ...resolution, capabilities: result.data })),
         });
       } catch (error) {
+        const detail = peerFailure(error)?.detail ?? "";
         return Object.freeze({
           profile,
           observed: unavailableCapabilities,
           observedAt: now().toISOString(),
           probeFailureCode: probeFailureCode(error),
+          ...(detail === "" ? {} : { probeFailureDetail: detail }),
           resolution: null,
         });
       }
