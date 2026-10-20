@@ -10,6 +10,8 @@ import { privateDirectory } from "./paths.js";
 import { groupHasReconcilingRun, readGroup, saveGroup } from "./queries.js";
 import { bookReconcileUsage } from "./usageLedger.js";
 import { insertPendingDecisions } from "./pendingDecisions.js";
+import { flagDecision } from "./flaggedDecisions.js";
+import { ORCHESTRATION_ACTOR } from "./orchestration.js";
 import { reportedDecisionsOf, type ReportedDecisions } from "./reportedDecisions.js";
 import { ccloopEvidenceString, runEvidence, writeRunLedger, type PendingEntry } from "./runLedger.js";
 import { commitLedgerOnGroupBranch, exportLedgerDir, treeWithLedgerFiles } from "./ledgerTree.js";
@@ -489,6 +491,9 @@ async function finishReconcile(
   // Control run decisions plan Task 6: the merge holds the run's own ledger and the reconciliation's, written onto the
   // reconciled tree's `.decisions/` through a temporary index (ledgerTree.ts); the refused entries of both are staged.
   const ledgerDir = await mkdtemp(join(record.runsDir, "ledger-"));
+  // Kanban spec 2026-10-20 §3.5: the reconciliation's own decision (what each side changed, how they were merged) is
+  // flagged for the person when the landing is recorded -- the conflict was resolved without them, they learn of it.
+  let reconcileFlag: { decisionId: string; reason: string; evidence: string[] } | null = null;
   try {
     await exportLedgerDir(record.copyPath, tree, ledgerDir);
     const { reported, evidence, at } = await runLedgerInputs(deps, runId);
@@ -504,6 +509,13 @@ async function finishReconcile(
       }, `orca/${run.groupId}`, at),
       evidence: reconcileEvidence,
     }];
+    if (codeAuthored.length > 0) {
+      reconcileFlag = {
+        decisionId: codeAuthored[0]!.id,
+        reason: `landed by merging a conflict with ${otherTaskIds.join(", ")} in ${record.conflictedPaths.join(", ")}`.slice(0, 2048),
+        evidence: [`reconcile ${record.reconcileRunId}`, `attempt ${attemptSha}`, ...record.conflictedPaths.slice(0, 30)],
+      };
+    }
     const reconciler = await writeRunLedger(ledgerDir, {
       ledgerRun: record.reconcileRunId, reported: reportedDecisionsOf(readLoopStateRaw(loopDirOf(workdir, record.reconcileRunId))),
       codeAuthored, at, evidence: reconcileEvidence,
@@ -540,6 +552,9 @@ async function finishReconcile(
     } else {
       current.state = "landed";
       landedWithPending(store, current);
+      if (reconcileFlag !== null) {
+        flagDecision(store, { ...reconcileFlag, groupId: current.groupId, runId, source: "reconcile", by: ORCHESTRATION_ACTOR, at: new Date(store.now()).toISOString() });
+      }
       current.drive = { ...current.drive!, landedCommit: merged, reconcile: { ...current.drive!.reconcile!, outcome: loop.status, attemptSha } };
     }
     saveDriverRun(store, current);

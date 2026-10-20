@@ -44,7 +44,7 @@ import { recordActivity } from "./activity.js";
 import { commandClientFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
 import { applyApprovePendingDecision, applyRatifyFlaggedDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RatifyFlaggedDecisionCommand, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { readCorrections } from "../corrections/store.js";
-import { autoStartPass, recordConfirmed, type PrerequisiteReader } from "./orchestration.js";
+import { autoStartPass, ORCHESTRATION_ACTOR, recordConfirmed, type PrerequisiteReader } from "./orchestration.js";
 import { applySetOrchestrationSettings, type SetOrchestrationSettingsCommand } from "./orchestrationCommands.js";
 import { applyAddGroupDependency, applyRemoveGroupDependency, waitingPrerequisites, type AddGroupDependencyCommand, type RemoveGroupDependencyCommand } from "./groupEdges.js";
 import { readWithdrawals, withdrawnIds } from "../corrections/withdrawals.js";
@@ -646,6 +646,32 @@ export class WebControlService {
    */
   autoStart(prerequisites: PrerequisiteReader = waitingPrerequisites): ReturnType<typeof autoStartPass> {
     return autoStartPass({ store: this.store, now: () => (this.deps.now?.() ?? new Date()).getTime(), start: (command) => this.start(command as StartCommand), prerequisites });
+  }
+  /**
+   * Kanban spec 2026-10-20 §9a.2 (overrides integration spec 2026-10-08 §7's human-only approval for this path): a
+   * group's integration conflict is handed to an agent by the driver, as orca-auto, through the same command a person
+   * sends. One command per conflict attempt and group revision, so a pass that replays a refusal never loops; a person
+   * can still send it. The resolution, once integrated, is flagged for the person (integrationPass.ts).
+   */
+  async autoResolveIntegrationConflicts(): Promise<{ started: string[]; refused: Array<{ groupId: string; code: string }> }> {
+    const started: string[] = [], refused: Array<{ groupId: string; code: string }> = [];
+    for (const row of this.store.db.prepare("SELECT id, revision, body FROM groups ORDER BY rowid").all()) {
+      const groupId = String(row.id);
+      let integration: GroupIntegration | null;
+      try { integration = readGroupIntegration(JSON.parse(String(row.body))); } catch { continue; }
+      if (integration === null || integration.state !== "conflict" || integration.conflict === null) continue;
+      if (isGroupArchived(this.store, groupId)) continue;
+      const revision = Number(row.revision);
+      const command = {
+        schema: "orca-raw-command-v1" as const, commandId: `orca-auto-resolve-${integration.conflict.attempt}-r${revision}`, actorId: ORCHESTRATION_ACTOR,
+        expectedRevision: revision, verb: "resolve-integration-conflict" as const, target: { kind: "group" as const, groupId }, payload: {},
+      };
+      if (this.store.db.prepare("SELECT 1 FROM commands WHERE group_id=? AND id=?").get(groupId, command.commandId) !== undefined) continue;
+      const answer = await this.resolveIntegrationConflict(command);
+      const error = (answer as { error?: { code?: unknown } }).error;
+      if (error === undefined) started.push(groupId); else refused.push({ groupId, code: String(error.code) });
+    }
+    return { started, refused };
   }
   /** Kanban spec §3.3, §9a.5: a person's edge between groups (groupEdges.ts). */
   addGroupDependency(command: AddGroupDependencyCommand): WebCommandResult {

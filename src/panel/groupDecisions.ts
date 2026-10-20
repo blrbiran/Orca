@@ -73,6 +73,7 @@ export async function readGroupDecisionsView(store: ControlStore, repo: string, 
   catch (error) { if (error instanceof CorrectRejection) projectKey = null; else throw error; }
 
   const tasks = new Map<string, RunView[]>();
+  const shown = new Set<string>();
   for (const row of store.db.prepare("SELECT id, body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)) {
     const runId = String(row.id);
     const body = JSON.parse(String(row.body)) as { taskId?: unknown; state?: unknown; drive?: { landedCommit?: unknown; ledgerCommit?: unknown } };
@@ -110,6 +111,7 @@ export async function readGroupDecisionsView(store: ControlStore, repo: string, 
       entries.forEach((entry, entryIndex) => unlanded.push({ entryIndex, question: textOrNull(field(entry, "question")), chose: textOrNull(field(entry, "chose")), importance: importanceOf(entry) }));
     }
 
+    for (const decision of decisions) shown.add(decision.id);
     const runs = tasks.get(body.taskId) ?? [];
     runs.push({ runId, settled, reported: reported.kind, decisions, pending, unlanded });
     tasks.set(body.taskId, runs);
@@ -123,5 +125,8 @@ export async function readGroupDecisionsView(store: ControlStore, repo: string, 
     // flagged decision on a ref this read does not reach still counts.
     flaggedCount: [...flags.values()].filter((row) => row.state === "flagged" && !correctedIds.has(row.decisionId)).length,
     tasks: [...tasks].map(([taskId, runs]) => ({ taskId, runs })),
+    // Kanban spec §9a.2: a flag no run's landed lines carry here (an integration conflict an agent resolved has no
+    // ledger line), listed for the group so it is never only a number.
+    groupFlags: [...flags.values()].filter((row) => !shown.has(row.decisionId)).map((row) => ({ decisionId: row.decisionId, ...flagOf(row.decisionId)! })),
   });
 }

@@ -386,6 +386,16 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {decisions !== null && (decisions.flaggedCount ?? 0) > 0 && (
         <p><span className="badge" data-tone="danger" data-testid="group-flagged">{t("control.decisions.groupFlagged", { count: decisions.flaggedCount })}</span></p>
       )}
+      {decisions !== null && (decisions.groupFlags ?? []).filter((flag) => flag.state === "flagged").map((flag) => (
+        <p key={flag.decisionId} data-testid="group-flag">
+          <span className="badge" data-tone="danger">{t("control.decisions.flagged")}</span>{" "}
+          {t("control.decisions.flaggedReason", { source: flag.source, reason: flag.reason })}{" "}
+          <button type="button" disabled={archived}
+            onClick={() => props.onCommand({ verb: "ratify-flagged-decision", groupId, expectedRevision: revision, payload: { decisionId: flag.decisionId } })}>
+            {t("control.decisions.ratify")}
+          </button>
+        </p>
+      ))}
       {/* Final review T11 (Rule 12): a failed decisions read is said for the group too, not only inside an open task. */}
       {decisionsFailed !== null && <p data-testid="group-decisions-read-failed">{t("control.decisions.readFailed", { code: decisionsFailed })}</p>}
       {view.summary.claimBlocked && <p role="alert">{t("control.group.claimBlocked")}</p>}

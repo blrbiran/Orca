@@ -1,4 +1,6 @@
 import { readdirSync } from "node:fs";
+import { flagDecision } from "./flaggedDecisions.js";
+import { ORCHESTRATION_ACTOR } from "./orchestration.js";
 import { join } from "node:path";
 import { z } from "zod";
 import { recordActivity } from "./activity.js";
@@ -466,7 +468,18 @@ export async function finishResolvedIntegration(deps: IntegrationDeps, repo: str
     // A crash (Crashed) is rethrown by failureOutcome like anything else it does not name.
     outcome = failureOutcome(error, scheme, null, new Set());
   }
-  return settleAndNote(deps, groupId, integration.schemeHash, outcome);
+  const settled = await settleAndNote(deps, groupId, integration.schemeHash, outcome);
+  // Kanban spec 2026-10-20 §9a.2: an integration conflict an agent resolved is reported to the person as a flagged
+  // decision once it is integrated. It has no ledger line, so the flag is keyed by the conflict's attempt.
+  if (settled && outcome.kind === "done") {
+    write(deps, () => flagDecision(deps.store, {
+      decisionId: `integration-conflict:${groupId}:${conflict.attempt}`, groupId, runId: null, source: "integration-conflict",
+      reason: `an agent resolved the conflict integrating ${groupId} in ${conflict.paths.join(", ") || "(no paths named)"}`.slice(0, 2048),
+      evidence: [`conflict ${conflict.key}`, `base ${conflict.base}`, `tip ${conflict.tip}`, ...conflict.paths.slice(0, 29)],
+      by: ORCHESTRATION_ACTOR, at: new Date(deps.now()).toISOString(),
+    }));
+  }
+  return settled;
 }
 
 /** settle, then (ruling C22) a debug group's correction closed by what a success carried. Both settling paths use it. */

@@ -1894,6 +1894,7 @@ export const groupDecisionsViewSchema = z
     schema: z.literal("orca-group-decisions-v1"), groupId: idSchema, projectKey: z.string().nullable(), pendingCount: safeInteger,
     // Kanban spec §9a: flags still waiting for a person (not ratified, not corrected). Shown; nothing waits on them.
     flaggedCount: safeInteger,
+    groupFlags: z.array(z.object({ decisionId: nonemptyString, state: z.enum(["flagged", "ratified", "corrected"]), source: nonemptyString, reason: nonemptyString, evidence: z.array(z.string()) }).strict()),
     tasks: z.array(z.object({
       taskId: idSchema,
       runs: z.array(z.object({

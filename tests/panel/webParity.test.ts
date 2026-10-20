@@ -229,7 +229,7 @@ function groupDecisionsServerToWeb(x: ServerGroupDecisionsViewV1): WebGroupDecis
 // Kanban spec §9a (session 9ec98639): `flaggedCount` and each decision's `flag` are optional on the Web side the same way.
 function groupDecisionsWebToServer(x: WebGroupDecisionsViewV1): ServerGroupDecisionsViewV1 {
   const major = <T extends { importance?: "major" | "minor" }>(e: T) => ({ ...e, importance: e.importance ?? "major" });
-  return { ...x, flaggedCount: x.flaggedCount ?? 0, tasks: x.tasks.map((task) => ({ ...task, runs: task.runs.map((run) => ({ ...run,
+  return { ...x, flaggedCount: x.flaggedCount ?? 0, groupFlags: x.groupFlags ?? [], tasks: x.tasks.map((task) => ({ ...task, runs: task.runs.map((run) => ({ ...run,
     decisions: run.decisions.map((d) => ({ ...major(d), flag: d.flag ?? null })), pending: run.pending.map(major), unlanded: run.unlanded.map(major) })) })) };
 }
 

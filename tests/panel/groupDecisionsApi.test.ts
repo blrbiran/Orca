@@ -286,6 +286,18 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
     } finally { await w.dispose(); }
   });
 
+  it("lists a flag no landed line carries (an integration conflict an agent resolved) for the group", async () => {
+    const w = await world({ decisions: () => [good()] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => SETTLED.includes(w.body(runId).state));
+      w.h.store.transaction(() => flagDecision(w.h.store, { decisionId: "integration-conflict:g:1", groupId: "g", runId: null, source: "integration-conflict", reason: "an agent resolved it", evidence: ["f.txt"], by: "orca-auto", at: "t" }));
+      const view = await w.view() as unknown as { flaggedCount: number; groupFlags: unknown[] };
+      // mutation: groupFlags lists nothing -> [], red
+      expect(view.groupFlags).toEqual([{ decisionId: "integration-conflict:g:1", state: "flagged", source: "integration-conflict", reason: "an agent resolved it", evidence: ["f.txt"] }]);
+      expect(view.flaggedCount).toBe(1);
+    } finally { await w.dispose(); }
+  });
+
   it("reads a flag as corrected, and stops counting it, once a correction names its decision", async () => {
     const w = await world({ decisions: () => [good()] }); try {
       const runId = await w.claim();

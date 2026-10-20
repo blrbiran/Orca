@@ -179,6 +179,18 @@ describe("flagged decisions (kanban spec §9a)", () => {
     expect(screen.getByText("Corrected")).toBeTruthy();
   });
 
+  it("lists a group-level flag with Ratify (kanban spec §9a.2)", () => {
+    const onCommand = vi.fn();
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "progress", taskId: null, runId: null }}
+      view={view([workItem({ taskId: "a", currentRunId: "run-a" })], [run({ runId: "run-a", state: "settled-recoverable" })])}
+      config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand}
+      decisions={{ ...groupDecisions([]), flaggedCount: 1, groupFlags: [{ decisionId: "integration-conflict:g:1", state: "flagged", source: "integration-conflict", reason: "an agent resolved it", evidence: [] }] }} />);
+    const line = screen.getByTestId("group-flag");
+    expect(line.textContent).toContain("Landed, flagged by integration-conflict: an agent resolved it");
+    fireEvent.click(within(line).getByRole("button", { name: "Ratify" }));
+    expect(onCommand.mock.calls[0]![0]).toMatchObject({ verb: "ratify-flagged-decision", groupId: "g", payload: { decisionId: "integration-conflict:g:1" } });
+  });
+
   it("the group says how many landed decisions are flagged, and says nothing when none is", () => {
     showGroup({ ...groupDecisions([decisionRun({ decisions: [flagged("flagged")] })]), flaggedCount: 1 });
     expect(screen.getByTestId("group-flagged").textContent).toBe("1 landed decision flagged for review");

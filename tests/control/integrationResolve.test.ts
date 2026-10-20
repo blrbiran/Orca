@@ -2,6 +2,7 @@
 // resolve-integration-conflict is the approval; the pass spawns a ccloop resolution run, books its usage run-less, and
 // finishes the integration with the right commit shape. The first describe is real git with a stand-in `runTask` (no
 // ccloop); the second is the real ccloop build (ORCA_CCLOOP_BIN) and its scripted fake codex.
+import { listFlaggedDecisions } from "../../src/control/flaggedDecisions.js";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -509,6 +510,28 @@ describe("an integration conflict, materialised and approved (integration spec ย
     expect(await w.pass()).toBe(true);
   }
   const usageTokens = (store: ControlStore) => store.db.prepare("SELECT tokens FROM usage_ledger WHERE group_id='g' ORDER BY rowid").all().map((row) => Number(row.tokens));
+
+  // Kanban spec 2026-10-20 ยง9a.2 (session 9ec98639, add-only): the driver hands the conflict to an agent itself, as
+  // orca-auto, once per attempt and revision; the integrated resolution is flagged for the person.
+  it("auto-resolve: the driver sends the approval as orca-auto once, and the integrated resolution is flagged", async () => {
+    const w = await world(LOCAL_MERGE); try {
+      await conflicted(w);
+      w.raise(10_000_000);
+      // mutation: autoResolveIntegrationConflicts skips every group -> started [], red
+      expect(await w.service.autoResolveIntegrationConflicts()).toEqual({ started: ["g"], refused: [] });
+      expect(w.record()).toMatchObject({ state: "resolving" });
+      expect(w.store.db.prepare("SELECT actor_id FROM commands WHERE group_id='g' AND id LIKE 'orca-auto-resolve-%'").all().map((r) => String(r.actor_id))).toEqual(["orca-auto"]);
+      // Not resolving any more is not a conflict: nothing is sent again.
+      expect(await w.service.autoResolveIntegrationConflicts()).toEqual({ started: [], refused: [] });
+      expect(await w.pass()).toBe(true);
+      w.attempt({ "f.txt": "B\nA\ntwo\nthree\n" });
+      await w.loopState({ status: "succeeded", budgetSnapshot: { tokenBudgetRemaining: policyOf(w.store).tokenBudget! - 1_000 } });
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "idle" });
+      // mutation: drop the flag in finishResolvedIntegration -> [], red
+      expect(listFlaggedDecisions(w.store, "g").map((f) => [f.decisionId, f.source, f.state])).toEqual([["integration-conflict:g:1", "integration-conflict", "flagged"]]);
+    } finally { await w.dispose(); }
+  });
 
   it("final review C1: a conflict after a resolved one is a new attempt -- a new spawn, a new usage row, never the first resolution's tree", async () => {
     const w = await world(LOCAL_MERGE); try {

@@ -206,3 +206,52 @@ correction rows; a correction stays a person's act. §7's "findings become corre
 ## 10. Open questions (none blocking the plan)
 - Default cap 3 and the 6 h / 24 h intervals are controller defaults; revisit after measuring.
 - Whether to phase out the list view — decided later from usage (human).
+
+## 11. As-built (session 9ec98639, 2026-10-21)
+
+Builder decisions (the spec left them open; reversible; human ruling for this round: "这一轮执行过程中如果有问题，先按你的建议执行"):
+
+- **Storage:** one schema step 14 → 15 adds `flagged_decisions`, `group_orchestration`, `group_edges`, `orchestration_settings`.
+- **Flags (S1):** a flag is keyed by the landed decision's id. `ratify-flagged-decision` (owner-only) clears it; a flag
+  whose decision a recorded, not withdrawn correction names reads `corrected` (derived when the group's decisions are
+  read; nothing written). A flag with no ledger line (an integration conflict an agent resolved,
+  `integration-conflict:<g>:<attempt>`) is listed under the view's `groupFlags`.
+- **Start on confirm (S2):** `confirm` gains optional `hold: true` ("Confirm only, don't run yet"); the default confirm
+  records `group_orchestration.mode = run`. A group confirmed before this existed has no row and is never started
+  automatically. The pump runs the auto-start pass before wake delivery, only when a driver is configured. Eligible =
+  ready, not executing, no stop intent, not archived, not held, prerequisites done, no backoff, a slot free. Any `start`
+  or `resume-dispatch` records the group as started, so nothing starts it twice. Refusal backoff 30 s doubling to
+  10 min; five refusals in a row is "persistent" (needs-you for that group; the list's attention rule includes it).
+- **Cap (S2):** global `maxRunningGroups` (default 3, 1–64) on its own `@orchestration` scope and revision,
+  owner-only `set-orchestration-settings`, `GET /api/control/orchestration`. A group holds a slot while running, in
+  review, or ready and executing; a blocked or paused group does not. Debug groups are **admitted first** (not counted
+  separately).
+- **Edges (S3):** `add-group-dependency` / `remove-group-dependency` (owner-only; target = the dependent, payload
+  `dependsOn`). Refused by code: cycle, self, different repositories, a dependent that already started, a second
+  prerequisite not delivered locally (`group-edge-stack-ambiguous`: a group stacks on one branch only). Done = all tasks
+  done and, for `local` delivery, integrated with nothing pending; otherwise the dependent's branch starts from
+  `orca/<prerequisite>`. The command ledger row is the edge's record (Rule 13).
+- **Board (S4):** a `board` section after Task control. Columns as §4 (`boardColumn`). Drags: running → queued
+  pauses; a paused card → running resumes; done → archived archives; archived → done unarchives; anything else is
+  refused on the page. Card facts come from the summary's new `card` (budget in tokens, decisions waiting = major
+  pending + flags not ratified, first failed task with its cause). **"may conflict" is not shown**: summaries carry no
+  declared write sets. The group graph reuses `layoutDependencies` and adds/removes edges with selects.
+- **Conflicts (S5):** the reconciliation's own code-authored decision is flagged (`source: reconcile`) in the same write
+  that records the landing; an integration conflict is handed to an agent by the pump as `orca-auto`
+  (`resolve-integration-conflict`, one command per attempt and group revision) and its integrated resolution is flagged
+  (`source: integration-conflict`).
+
+Deferred (not built this round), with the reason:
+
+- **Ladder level 2 (§6, §9a.4) and the integration check's red action (§7 layer 1):** both need a *system-generated
+  debug task* -- §9a.4 inside the original group, §7a.3 of the protect spec "directly, not a correction row". Neither
+  exists: a confirmed group's plan cannot gain a task (the archived plan, graph version, snapshot and proposal are
+  frozen at confirm; `taskAmendments.ts` only amends a loop task's contract), and the debug-group machinery
+  (`debugGroup.ts`) is opened from a correction and assembles its input from that correction's decision. Building
+  either is a design round (how a frozen plan grows a task, or what a debug input without a correction holds), which
+  this round excludes ("这一轮先不做需要brainstorm的工作"). Level 3 (needs-you, only explicit dependents wait) is
+  today's behaviour plus S3. **Next:** a short spec for "a system debug task" that both consume.
+- **Ladder level 1** waits for the ccloop last-failure spec (as §9a says).
+- **§7 layer 1 and layer 2 (integration check, model review):** deferred with the above (the check's only action is
+  that debug task; a check that only reports would need its own surface).
+- **Agent-proposed and plan-declared group edges** (§9a.5 v2).

@@ -7,6 +7,7 @@ import { createExecutionDriver, stepE, type ExecutionDriver } from "../../src/co
 import { reconcileNextAction, stepD } from "../../src/control/driverLanding.js";
 import { readConfirmedReconcileSlot } from "../../src/control/executionSnapshot.js";
 import { readWebGroup } from "../../src/control/webService.js";
+import { listFlaggedDecisions } from "../../src/control/flaggedDecisions.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { driverHarness, git, type HarnessOptions } from "./fixtures/driverHarness.js";
 
@@ -69,6 +70,22 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
       expect(t.spawns()).toHaveLength(1);
       expect(git(reconciled.reconcile.copyPath, "rev-parse", `refs/orca/conflict/${second}`)).toBe(reconciled.reconcile.conflictCommit);
       expect(git(t.repo, "for-each-ref", "--format=%(refname)", "refs/orca/conflict/")).toBe("");
+    } finally { await t.h.dispose(); }
+  });
+
+  // Kanban spec 2026-10-20 §3.5 (session 9ec98639, add-only): a conflict resolved without the person lands and is flagged.
+  it("flags the reconciliation's own decision for the person when the reconciled run lands", async () => {
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" } }); try {
+      const driver = t.driver();
+      await untilDeadline(driver, () => t.ids.every((id) => [...LANDED, "blocked"].includes(t.body(id).state)));
+      const second = t.ids.find((id) => t.body(id).drive.reconcile !== null)!;
+      const record = t.body(second).drive.reconcile;
+      const flags = listFlaggedDecisions(t.h.store, "g");
+      // mutation: drop the flagDecision call in finishReconcile -> [], red
+      expect(flags.map((f) => [f.decisionId.startsWith(`${record.reconcileRunId}/`), f.runId, f.source, f.state, f.flaggedBy])).toEqual([[true, second, "reconcile", "flagged", "orca-auto"]]);
+      expect(flags[0]!.reason).toContain("shared.txt");
+      // The flagged id is a line on the group branch's ledger.
+      expect(git(t.repo, "show", `refs/heads/orca/g:.decisions/${record.reconcileRunId}.jsonl`)).toContain(`"id":"${flags[0]!.decisionId}"`);
     } finally { await t.h.dispose(); }
   });
 

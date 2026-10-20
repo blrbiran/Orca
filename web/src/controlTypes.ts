@@ -624,6 +624,8 @@ export type GroupDecisionsViewV1 = {
   schema: "orca-group-decisions-v1"; groupId: string; projectKey: string | null; pendingCount: number;
   /** Optional so older literal fixtures parse; the server always sends it. */
   flaggedCount?: number;
+  /** Flags not on any listed run's landed lines (an integration conflict an agent resolved); optional like flaggedCount. */
+  groupFlags?: Array<DecisionFlagV1 & { decisionId: string }>;
   tasks: Array<{
     taskId: string;
     runs: Array<{
