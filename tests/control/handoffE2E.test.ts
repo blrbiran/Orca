@@ -9,7 +9,7 @@ import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
 import { shutdownCommandId } from "../../src/panel/controlLifecycle.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import {
-  ccloopWorlds, g, KILL_GRACE_MS, noBlocked, raw, realBinary, startGroup, until, workRuns,
+  ccloopWorlds, g, KILL_GRACE_MS, noBlocked, PARALLEL_STOP_HOLD_MS, parallelStopPremise, raw, realBinary, startGroup, until, workRuns,
   type RunRow, type ScriptEntry, type Task, type World,
 } from "./fixtures/ccloopWorld.js";
 import { storeReadings } from "./fixtures/handoffHarness.js";
@@ -196,7 +196,7 @@ describe.skipIf(!realBinary)("handoff delivery against real ccloop (spec §9.2)"
   });
 
   it("H2: three parallel runs stopped mid-execute all continue; the landings are serial and reconcile exactly twice, the second against both", async () => {
-    const own = (id: string): ScriptEntry => ({ files: { "shared.txt": `${id.toUpperCase()}\n`, [`${id}.txt`]: `${id.toUpperCase()}\n` }, delayMs: { execute: 8_000 } });
+    const own = (id: string): ScriptEntry => ({ files: { "shared.txt": `${id.toUpperCase()}\n`, [`${id}.txt`]: `${id.toUpperCase()}\n` }, delayMs: { execute: PARALLEL_STOP_HOLD_MS } });
     const script: Record<string, ScriptEntry> = {
       a: own("a"), b: own("b"), d: own("d"),
       "a#continuation": { files: { "a.txt": "A2\n" } }, "b#continuation": { files: { "b.txt": "B2\n" } }, "d#continuation": { files: { "d.txt": "D2\n" } },
@@ -215,7 +215,7 @@ describe.skipIf(!realBinary)("handoff delivery against real ccloop (spec §9.2)"
       await inExecute(w, runtime, ["a", "b", "d"]);
       const requestIds = await handoffStop(runtime);
       expect(requestIds).toHaveLength(3);
-      await until(() => requestIds.every((id) => requestState(runtime, id) === "settled-recoverable"), 120_000, "three requests to settle recoverable");
+      await until(() => { parallelStopPremise(w.scripted()); return requestIds.every((id) => requestState(runtime, id) === "settled-recoverable"); }, 120_000, "three requests to settle recoverable");
       expect(w.landings()).toBe(0);
       const selections = await resumeAsThePanelWould(runtime);
       // The read model lists runs in runId order, which is not task order: all three are offered, in whatever order.

@@ -92,6 +92,27 @@ export interface WorldOptions { tokenPolicy?:"optional-v1"; claudeScript?: Recor
 /** The codex installation's killGraceMs in every world; handoffE2E's G scenario tells it apart from HANDOFF_EXTRA_GRACE_MS alone. */
 export const KILL_GRACE_MS = 5_000;
 
+/**
+ * How long each of three parallel predecessors sleeps in execute so that one handoff-stop reaches all three mid-execute
+ * (handoffE2E H2, agentSelectionE2E C3). The driver dispatches them one after another, so the last enters execute
+ * seconds after the first, and then delivers the three requests one run at a time in its round. Measured (Orca session
+ * 9ec98639, 2026-10-21, load 20-30, two H2 at once, 8 runs): first-to-last stagger 3.2-5.5 s and the last delivery
+ * 0.6-1.0 s after the stop, leaving 1.6-3.8 s of the former 8 s; under full-suite load the first predecessor finished
+ * execute before its request arrived and the run landed or ran verify (the H2 shapes in docs/handoff/known-load-flakes.md).
+ * 30 s is the window with headroom; parallelStopPremise names the case where even that is used up.
+ */
+export const PARALLEL_STOP_HOLD_MS = 30_000;
+
+/**
+ * The premise of a parallel stop, checked while its requests settle: no predecessor reached verify (with the agent verifier
+ * nothing lands without it). A lost premise is a harness timing failure and is named as one, not waited out as a timeout.
+ */
+export function parallelStopPremise(scripted: string[]): void {
+  if (scripted.some((line) => line.startsWith("verify "))) {
+    throw new Error(`premise lost: a predecessor finished its execute before the stop reached it (dispatch stagger used up PARALLEL_STOP_HOLD_MS); scripted=${JSON.stringify(scripted)}`);
+  }
+}
+
 export type World = Awaited<ReturnType<ReturnType<typeof ccloopWorlds>["world"]>>;
 
 /**

@@ -11,7 +11,7 @@ import { readArchivedPlan } from "../../src/control/queries.js";
 import { readStopIntent } from "../../src/control/stopIntent.js";
 import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
 import { readControlGroup, readSelectionPreview } from "../../src/panel/controlViews.js";
-import { ccloopWorlds, noBlocked, raw, realBinary, until, workRuns, type RunRow, type ScriptEntry, type Task, type World } from "./fixtures/ccloopWorld.js";
+import { ccloopWorlds, noBlocked, PARALLEL_STOP_HOLD_MS, parallelStopPremise, raw, realBinary, until, workRuns, type RunRow, type ScriptEntry, type Task, type World } from "./fixtures/ccloopWorld.js";
 
 /**
  * Agent selection spec §9 criteria 8 and 11 against the real ccloop build (ORCA_CCLOOP_BIN, which must contain
@@ -269,7 +269,7 @@ describe.skipIf(!realBinary)("agent selection against real ccloop (spec §9 crit
   });
 
   it("C3: under fake claude, three parallel runs stopped mid-execute all continue, and both reconciliations run with the reconcile slot's own model", async () => {
-    const own = (id: string): ScriptEntry => ({ files: { "shared.txt": `${id.toUpperCase()}\n`, [`${id}.txt`]: `${id.toUpperCase()}\n` }, delayMs: { execute: 8_000 } });
+    const own = (id: string): ScriptEntry => ({ files: { "shared.txt": `${id.toUpperCase()}\n`, [`${id}.txt`]: `${id.toUpperCase()}\n` }, delayMs: { execute: PARALLEL_STOP_HOLD_MS } });
     const script: Record<string, ScriptEntry> = {
       a: own("a"), b: own("b"), d: own("d"),
       "a#continuation": { files: { "a.txt": "A2\n" } }, "b#continuation": { files: { "b.txt": "B2\n" } }, "d#continuation": { files: { "d.txt": "D2\n" } },
@@ -287,7 +287,7 @@ describe.skipIf(!realBinary)("agent selection against real ccloop (spec §9 crit
       await inExecute(w, runtime, ["a", "b", "d"]);
       const requestIds = await handoffStop(runtime);
       expect(requestIds).toHaveLength(3);
-      await until(() => requestIds.every((id) => requestState(runtime, id) === "settled-recoverable"), 120_000, "three requests to settle recoverable");
+      await until(() => { parallelStopPremise(w.scriptedOf("claude")); return requestIds.every((id) => requestState(runtime, id) === "settled-recoverable"); }, 120_000, "three requests to settle recoverable");
       const selections = panelSelections(runtime);
       expect(selections.map((selection) => selection.taskId).sort()).toEqual(["a", "b", "d"]);
       const resumed = await runtime.service.resumeFromHandoff(raw(runtime, `resume-${++seq}`, "resume-from-handoff", { selections }));
