@@ -63,7 +63,19 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.000 会话 `3d229487`（2026-10-20）—— **先读这一节，再读 3.000a、3.000b、3.00、3.01、3.0**
+### 3.0000 会话 `308b874c`（2026-10-20 晚）—— **先读这一节**
+
+> 唯一进度源：`.superpowers/sdd/2026-10-20-session-308b874c/progress.md`（人裁原话、每笔提交、付费数、收到的调研报告要点都在里面）。
+
+- **已合进 Orca main（`--ff-only`，以 `ls-remote` 现测推没推）**：`95d04cca`（`restart` 发现已存 PATH 缺 agent 目录时报 warning）；`969f9fff`（`skillsE2E` 的 codex wrapper 只观测 `exec`，人批「批准改必要的test」）＋`98f3224a`（**repin ccloop → `86f6123`**：claude 检查放行＋Codex 阶段隔离 1–6）；`655e2732`（检查点）；`6a546005`（门：唯一那遍按目录核对已收集＋写 JSON 报告；独立的 `verify:chain` 只跑 107 个起子进程／读 chain 变量的文件；②③ 的删重复早在 `8622e03d` 已落地）；`173a7952`（decision 场景写明 `median` 是具名导出）；`e8368fbe`（goal.md §1.4）。主树依赖与 `dist`／`web/dist` 已按新 pin 重建。
+- **付费（工具报的数）**：真 claude decision（`86f6123`）全过 $0.681332；codex Task 7 阶段隔离判据全过（in 30471／out 226 token）；codex 估算 ready（13054 token）；codex decision 第一次因任务没写清导出形状失败、改后第二次全过（161402 token）。codex 把次要决定也标 major（n＝1，观察）。
+- **仓库外（Rule 17，均经人同意或由人执行）**：`~/.orca/agents.json` claude→2.1.304、codex→0.163.0（备份 `.bak-20261020`），人又把 claude 改成 `--permission-mode bypassPermissions`（备份 `.bak-20261020-perm`；验收脚本仍用 acceptEdits）；面板服务由人重装两次（第一次 agent 给的命令漏了已存的环境变量 ⇒ Memory／skills 掉了，第二次补回并已核 `service.json`）；ccmem daemon 由人 `admin daemon install` 装回 launchd（agent 在沙箱里 `restart` 曾让 launchd 丢掉 job）；`~/.codex/config.toml` 被真 codex exec 追加 `[projects."<worktree>"] trust_level`——**人裁允许、不还原**。
+- **姊妹仓**：ccmem main `afd8237`（重写 plist 时保留已装的 `CCMEM_CLAUDE_P_COMMAND`）；ccloop 分支 `spec/verifier-sees-checks-and-last-failure`（**未合**）：A＝verifier 看到 ccloop 自己跑过的检查结果，B＝上次失败喂给下次 attempt，**人加裁：`required-check-failed` 首次可自动重试一次**；独立审阅判 not ready（C1／I1–I4），修订已发回作者。
+- **本会话末仍在跑的实施席**（结果以 `git log main` 为准；没合就当没做）：`orca agents refresh`＋drift 后自动更新重派（spec `2026-10-20-agent-version-auto-refresh-design.md`）；估算被拒文案（#70／#73／#58）；`panel install` 保留已存的捕获变量。
+- **人裁要点（原话在台账）**：确认后自动开跑、一个组等人不拖住别的组、先跑后审标红（goal.md §1.4）；kanban 先做独立 tab、group 层、只读为主（拖拽只留暂停／恢复／归档），顺序靠显式依赖＋合入时 reconcile 修冲突（写集只作提示）；保护验收依据＝允许改测试，只有改后版本能过或删弱断言时**先落地、标红**；基线检查只在失败时补跑、只标注；#65 UI 登记仓库内计划路径、#70 每安装声明窗口（窄版）、#66 脚本任务进路线图、交叉 review 排在失败词表之后。
+- **改变了前提、下一位要知道的**：① Orca 闸门 hook 解析不了 `cd $VAR`（会按 Tier 0 拦）⇒ 用绝对路径／`git -C`；② auto 模式分类器会拦「经 agent 转达的人的批准」与改 agent 权限的命令，被拦就停、交人；③ 沙箱里的 `ps`／`pgrep`／`launchctl` 看不全，判 daemon 活没活看锁行心跳；④ 给人 `panel install` 命令前先读已存的 `service.json`。
+
+### 3.000 会话 `3d229487`（2026-10-20）—— 已合（下一轮可压缩）
 
 > 唯一进度源：`.superpowers/sdd/2026-10-20-repin-decisions-contract/progress.md`（git-ignored，只在主仓；人裁原话、每位实施的报告、改过的判据 file:line 旧→新、付费数都在里面）。
 > 人裁（本会话）：「这一轮允许修改必要判据。允许付费调用」「这次批准改写所有必要的判据。这一轮先不做需要brainstorm的工作」「执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核」；开头那 12 条与 `3831d12f` 的裁定：**同意**（§八 两条已删）。
@@ -190,9 +202,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.1 人做的（agent 不提醒、不代做）
 
-- **面板服务**：主树 `dist`／`web/dist` 已在会话 `3d229487` 全部合入后重建（含估算 `withdrawn`、次要标、`r` 提示）。要人**重启服务**才生效。
-- **ccmem daemon**：死键处置改了 `scripts/lib/config.mjs`，**daemon 重启后才生效**（钩子下次会话就生效）。
-- **push**：人统一择时推，agent **不提醒**。ccloop main 上的 `f772128`（claude 检查放行）与 Codex 阶段隔离要先在远端，Orca 才能 repin（§4.2 第 1 条）。
+- **面板服务**：会话 `308b874c` 末主树 `dist`／`web/dist` 按新 pin 重建；本会话之后再合入的改动（如 agents refresh、估算文案）要人**重启服务**才生效——用 `restart` 即可（PATH 与捕获变量已在人 21:56 那次 install 里修好）。
+- **push**：人统一择时推，agent **不提醒**。
 - **删**（人做；会话 `a3b2a7a7` 现核，后续会话补）：
   - `~/.cache/ccloop/agent-catalog/` **整个目录不能删**（在用）；只删两项：`agent-catalog/769de7de3225c97b1234142ba6835ab7aaecfd0d77e371c662ca57bf9607b532.json` 与目录 `agent-catalog/codex-home/bf5335273626c4675a00cca1a384456ab917ed8333815b54b89e45b57670b993`（内含指向 `~/.codex/{auth.json,config.toml}` 的软链，`rm -rf` 只删链）。
   - `/private/tmp`：`mutp-swWu`、`acc-xpI0`、`mut-*` ×10、`org6-nP1k`／`org7-3oVo`／`org8-ulmF`（⚠️ `org7`／`org8` 下各有一个跑了两天以上的 `orca panel` 测试进程，2026-10-19 现测 pid 18023、44796，**先停进程再删目录**）、空目录 `cc-r-*`、`cc-t-*`、`cc-gate3/4/5-*`；`ccb6-qswQ`（旧 pin `02cbacc` 的 build）**留到 codex 估算补跑之后**；会话 `3d229487` 的 `/private/tmp/rp-*`（门的私有 HOME）、`/private/tmp/omd-k84j`（**omp-config 里是凭据副本**）。
@@ -201,16 +212,17 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
   - 会话 `3d229487` 的 scratchpad（`…/3d229487-5cdd-4732-ad0e-0d5368ba548a/scratchpad/`）：`ccloop-af4ad33/`（**当前 pin 的 build，下一次 repin 门之前别删**）、`ccloop-f772128/`（软链 `node_modules` 到前者，先 `unlink`）、`fakes/`（指向 `ccloop-af4ad33`）、`acc-*`（付费验收证据，台账引用）、各实施席的 clone（`mut*`、`gm/`、`ew/`、`dc/`、`ccloop-mut-allow`）。
   - `$TMPDIR` 下 ccmem 测试遗留 `ccmem-*`（含本会话约 7 个 `mut-*` data root）：`find "$TMPDIR" -maxdepth 1 -name 'ccmem-*' -mmin +60 -exec rm -rf {} +`。
 - **ccmem embedding 账号无额度**（`429 You have no credits remaining`）⇒ 语义检索不可用，充值或换 key。
-- **claude 自动升到 2.1.304**，`~/.orca/agents.json` 记的是 2.1.301：旧 run 续跑可能被 `agent-version-drift` 拒；要不要 `orca agents` 重新探测归人。
 - 不确定归属：`/Users/biran/.codex/worktrees/feedback-followup-20261011/Orca`（Codex 建的 detached worktree）。
 
 ### 4.2 agent 的活（会话 `3d229487` 收尾时的建议顺序；人再定）
 
-1. **repin ccloop 到带 claude 检查放行（`f772128`）与 Codex 阶段隔离的那笔**（`ls-remote` 现测的 main；**只在人推了之后**）：照 §3.3 repin 做法；新 build 放 scratchpad，fake 表照会话 `3d229487` 的 `fakes/` 改指向。然后用 `--scenario decision` 再跑一次真 claude（应全绿，§3.000），**codex 一次**（10-22 额度恢复后）。
-2. **门提速（人还没裁）**：`.superpowers/sdd/2026-10-20-repin-w2-test-split/gate-speed-survey.md`，先报人、人裁再做。
-3. **verifier 不知道 ccloop 自己的必需检查已经过了**（ccloop `src/controller/runLoop.ts` ~:270：检查证据在 `adapter.verify` 返回后才拼进去）。claude 修好之后它不再卡人，但复合检查命令（`a && b`）claude 仍跑不了 ⇒ 仍会被 verify 否决。要不要把「ccloop 已跑过、结果如何」告诉 verifier，是 ccloop 的设计改动（Rule 16），先报人。
-4. **登记的小项**：停在开跑前的组的排队估算 wake 每轮重投（§3.3）；`handoffE2E` H2 断言形状 n＝2（`known-load-flakes.md`，再见就查）；ccloop 侧（reported-decisions spec §10）collect 每次轮询多读一遍 execution.json、非 ENOENT 读错让 collect 失败、普通 handoff 续跑的前任决定落不了地、allowance 续跑在「未落地」视图里重复一条。
-5. 之后（未排序，人再定）：issue 分诊表里「要设计」的几条（#32、#76、#65、#55）；#70（web 拿不到 single-call 不可用的细节）。
+0. **先收尾会话 `308b874c` 留下的**：`git log main` 看 agents refresh、估算文案、`install` 保留变量三件合没合（没合的在 scratchpad 或 `Orca-wt-*` 工作树里，先 `status --porcelain -uall` 再决定续做还是重做）；ccloop 分支 `spec/verifier-sees-checks-and-last-failure` 的修订版回来后**再派独立审阅**，过了交人审，人点头 `taskResultOutcome.test.ts:33/43` 等判据改写后按 TDD 实施（含「`required-check-failed` 首次重试一次」，人已裁），并把 codex 隔离 spec 的 Correction 一节与 ccloop handoff:47 的更正一起落；实施后 repin 并用 `--scenario decision` 复跑（付费，先问）。
+1. **kanban＋group 自动编排**（人已答 4 问，见 §3.0000 与台账；先 brainstorming 收尾 → spec → 计划）：独立 tab、group 层；确认后自动开跑；一个组等人不拖住别的组；顺序＝显式依赖＋合入时 reconcile（`driverLanding.ts`、`integrationResolve.ts`），写集只作提示；agent 提的依赖先生效、标红；卡片带预算／待审决定数／失败原因。goal.md §1.4。
+2. **保护验收依据＋允许改必要的测试**（合成一轮设计，人已裁「先落地、标红」）：改了定义检查的文件就用基线版本再跑一遍检查，只有改后版本能过或删弱断言 ⇒ major 决定、标红，不阻塞。
+3. **停在开跑前的组的排队估算改「挂起」**（人已同意：保持 queued 与 grant，wake 记已交付，组解除 stop 的各路径补投 wake；先核这些路径今天发不发 wake）。
+4. **#65**（UI 登记仓库内计划路径：真实路径在仓库内、记哈希、只认 git 跟踪的文件）、**#70**（每安装 `declaredContextWindow`，只在模型不在目录时生效、标「声明值」，改 ccloop 先写 spec）、**#66**（脚本任务进路线图；交叉 review 排在失败原因词表之后）。
+5. **multica 借鉴**：ccloop 失败原因词表＋只对瞬时故障自动重试（先 spec）；按活动判定卡死的看门狗；每个失败原因配「下一步」文案。基线检查：只在必需检查失败时在基线上补跑、只标注。
+6. **登记的小项**：ccmem `runTask` 未捕获 `database is locked` 让 daemon 崩、沙箱里 `restart` 让 launchd 丢 job 仍报 restarted（都在 ccmem，先报）；`handoffE2E` H2 断言形状 n＝2；ccloop reported-decisions spec §10 的四条残余；issue 分诊表里 #32、#55、#76。
    **设计轮**（先 brainstorming；有前提 spec 要先定时与人商量顺序）：
    - **group／task 执行时允许改必要的测试文件**（人原话：「orca 执行 group / task 时是都要允许改必要的 test 文件。否则很多改法都太受限了，或者只是一种workaround。」）：先量清楚测试文件今天在哪一层被拦（写集、denylist、ccloop 校验；控制路径写出写集即 `blockRun`，`src/control/executionDriver.ts` 里搜 `blockRun`），再划「允许改测试」与「不能靠改弱测试过关」的界线。
    - **group 之间的串并联图**（人原话：「当前orca 的具体 group 中可以看到 task 之间的串并联关系图。但是 group 也应该有这样一个图去看并且可以人为调整/ai agent 动态调整group（包括普通group和 debug group）之间的串并联、先后关系。」）：控制派活真正开始替人定先后时，再把「隐含依赖」「落地顺序」两类决定记进账本（决定 spec §3.2）。
@@ -399,7 +411,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
 - **ccloop Codex 阶段隔离 Task 7**（付费一次，codex 额度 10-22 恢复后、先问人）：命令在 ccloop handoff「下一件」；实施席写的 `paid.mjs` **控制器没审过，跑之前先读**。
-- **会话 `3d229487` 的控制器裁定待审**（人说「执行完在最后阶段报给我审核」）：台账 `.superpowers/sdd/2026-10-20-repin-decisions-contract/progress.md` 的各节（每位实施的 Rulings 与改过的判据 file:line 旧→新）。需要人特别知情的：ccloop 给 claude 的 execute／verify 只放行**契约里点名、能精确表达**的检查命令（复合命令仍跑不了；plan 阶段不放行）；undo 谓词剥掉 token 首尾标点后判定（spec §1.1.1 为据）；纠正写出的替代决定一律写 `importance: "major"`；排队估算撤回不覆盖 stopped 的开跑前组；`test-affected` 数据文件按 basename 选（会多选，安全）、`package.json` 只改 scripts 仍选整套；估算撤回一轮改了十余处既有判据（多为「先 claim 再 confirm」的夹具顺序，台账 ⑧ 列全）。人审后删本条。
+- **会话 `3d229487` 的控制器裁定待审**（人说「执行完在最后阶段报给我审核」）：台账 `.superpowers/sdd/2026-10-20-repin-decisions-contract/progress.md` 的各节（每位实施的 Rulings 与改过的判据 file:line 旧→新）。会话 `308b874c` 人已审并裁：放行边界（改用 dangerous 模式）、verifier 看检查结果（同意）、stopped 开跑前组的估算（改挂起）、十余处判据改写（同意）——见 §3.0000。**仍未被人逐条回复的**：undo 谓词剥掉 token 首尾标点后判定（spec §1.1.1 为据）；纠正写出的替代决定一律写 `importance: "major"`；`test-affected` 数据文件按 basename 选（会多选，安全）、`package.json` 只改 scripts 仍选整套。人审后删本条。
 - **付费**（每一次先问）：§4.2 第 6 条。
 - **ccmem embedding 账号无额度**。
 - **`orca chain` 真钱活体验收**：要人提交 `.orca/chain.json` 选 model（不存在时开链被 `chain-config-missing` 拒）。
