@@ -22,6 +22,9 @@ node_modules/
 /node_modules
 /web/node_modules
 dist/
+# A worktree that symlinks a build output (web/dist) to the main tree must not commit the link: `dist/` matches directories only.
+/web/dist
+/dist
 .orca/chain-logs/
 
 .orca/control/
