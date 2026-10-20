@@ -147,8 +147,8 @@ const scenario = args.scenario ?? "single";
 // confirm, start or task run, so a real-provider estimate costs one single call instead of the whole chain.
 const estimateOnly = args["estimate-only"] === "1";
 if (estimateOnly && scenario !== "estimate") throw new Error("--estimate-only needs --scenario estimate");
-if (scenario !== "single" && scenario !== "conflict" && scenario !== "deadline" && scenario !== "estimate" && scenario !== "requirement") throw new Error("--scenario is single, conflict, deadline, estimate or requirement");
-if (kind === "omp" && scenario !== "single" && scenario !== "estimate" && scenario !== "requirement") throw new Error("--omp acceptance supports --scenario single, estimate or requirement");
+if (scenario !== "single" && scenario !== "conflict" && scenario !== "deadline" && scenario !== "estimate" && scenario !== "requirement" && scenario !== "decision") throw new Error("--scenario is single, conflict, deadline, estimate, requirement or decision");
+if (kind === "omp" && scenario !== "single" && scenario !== "estimate" && scenario !== "requirement" && scenario !== "decision") throw new Error("--omp acceptance supports --scenario single, estimate, requirement or decision");
 if (scenario === "requirement" && kind !== "omp") throw new Error("--scenario requirement needs --omp or --fake-omp");
 // The deadline scenario reads what ccloop's claude runner observed in the stream; codex has no such file.
 if (scenario === "deadline" && kind !== "claude") throw new Error("--scenario deadline needs --claude or --fake-claude");
@@ -216,6 +216,12 @@ g(repo, "init", "-q", "-b", "main");
 await writeFile(join(repo, "README.md"), "live acceptance target\n");
 g(repo, "add", "README.md");
 if (scenario === "conflict") { await writeFile(join(repo, "shared.txt"), "base\n"); g(repo, "add", "shared.txt"); }
+// decision: the check is a committed script, so the check command is one plain `node` call. A real claude's permission
+// layer asks for approval on a compound `node -e '...;...||...'` and its verify phase then rejects (session 3d229487).
+if (scenario === "decision") {
+  await writeFile(join(repo, "check-median.js"), 'const { median } = require("./median.js");\nif (median([3, 1, 2]) !== 2 || median([4, 1, 3, 2]) !== 2.5) process.exit(1);\n');
+  g(repo, "add", "check-median.js");
+}
 g(repo, "commit", "-qm", "base");
 
 const marker = join(root, "codex-marker.json");
@@ -224,8 +230,13 @@ const scriptPath = join(root, "codex-script.json");
 // deadline: the execute answers only after 120 s but streams one closed message first (usageBeforeDelay), so it is
 // cut with observed usage; the fake keys the continuation run as `a#continuation`.
 const NUMBERS = ["one", "two", "three", "four", "five"];
+// --scenario decision (Orca session 3d229487, 2026-10-20; reported-decisions spec §6): one task that leaves a real
+// choice open (what median() does with an empty array), so a real agent has something to report in its execute
+// answer's `decisions`. What it reports is recorded (summary.reported, summary.landedDecisions), not checked: an
+// agent may rightly report nothing. The fakes answer with a fixed file and report nothing.
+const DECISION_FAKE = "exports.median = (xs) => { if (xs.length === 0) return null; const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };\n";
 const numberFiles = Object.fromEntries(NUMBERS.map((word) => [`${word}.txt`, `${word}\n`]));
-await writeFile(scriptPath, JSON.stringify(scenario === "single" || scenario === "estimate" ? { a: { files: { "answer.txt": "42\n" } } } : scenario === "deadline" ? {
+await writeFile(scriptPath, JSON.stringify(scenario === "single" || scenario === "estimate" ? { a: { files: { "answer.txt": "42\n" } } } : scenario === "decision" ? { a: { files: { "median.js": DECISION_FAKE } } } : scenario === "deadline" ? {
   a: { files: numberFiles, delayMs: { execute: 120_000 }, usageBeforeDelay: true }, "a#continuation": { files: numberFiles },
 } : {
   a: { files: { "shared.txt": "base\nA\n" } }, b: { files: { "shared.txt": "base\nB\n" } },
@@ -265,6 +276,11 @@ await writeFile(tablePath, JSON.stringify({ schema: "ccloop-agents-table-v1", in
 type LiveTask = { taskId: string; files: string[]; goal: string; successCondition: string; check: string };
 const tasks: LiveTask[] = scenario === "single" || scenario === "estimate" || scenario === "requirement"
   ? [{ taskId: "a", files: ["answer.txt"], goal: "Create a file named answer.txt at the repository root whose entire content is the characters 42 followed by one newline. Change no other file.", successCondition: "answer.txt holds exactly 42 and a newline", check: 'test "$(cat answer.txt)" = 42' }]
+  : scenario === "decision"
+  ? [{ taskId: "a", files: ["median.js"],
+    goal: "Create median.js at the repository root, a CommonJS module exporting median(xs): the median of an array of finite numbers (the mean of the two middle values when the length is even). The input array must not be modified. What median([]) does is not specified: choose it yourself. Change no other file.",
+    successCondition: "node can require median.js; median([3,1,2]) is 2 and median([4,1,3,2]) is 2.5",
+    check: "node check-median.js" }]
   : scenario === "deadline"
   ? [{ taskId: "a", files: Object.keys(numberFiles),
     goal: "Create five files one.txt, two.txt, three.txt, four.txt and five.txt at the repository root, one at a time, each holding its own number word and a newline (one.txt holds one, two.txt holds two, and so on). Change no other file.",
@@ -890,9 +906,24 @@ const landed = landedOf(landedFiles[0]!);
 summary.landedContent = scenario === "deadline" ? Object.fromEntries(landedFiles.map((file) => [file, landedOf(file)])) : landed;
 // conflict: the base line first, then A and B in either order, nothing else (a reconciliation leaving markers is refused by Orca).
 checks.landedBytes = (scenario === "single" || scenario === "estimate") ? landed === "42\n"
+  : scenario === "decision" ? landed !== null
   : scenario === "deadline" ? landedFiles.every((file) => landedOf(file) === numberFiles[file])
   : landed !== null && ["base\nA\nB\n", "base\nB\nA\n"].includes(landed);
-checks.onlyTargetChanged = (() => { try { return g(repo, "diff", "--name-only", "main", "refs/heads/orca/g") === [...landedFiles].sort().join("\n"); } catch { return false; } })();
+// decision: the landing may also add the run's ledger file under .decisions/ (control-run decisions spec §3.1).
+checks.onlyTargetChanged = (() => { try { return g(repo, "diff", "--name-only", "main", "refs/heads/orca/g").split("\n").filter((path) => !(scenario === "decision" && path.startsWith(".decisions/"))).join("\n") === [...landedFiles].sort().join("\n"); } catch { return false; } })();
+if (scenario === "decision") {
+  // What the agent reported in each execute answer ccloop kept, and what landed in the ledger on orca/g.
+  summary.reported = findEvidence("execution.json").map((file) => {
+    let answer: Record<string, unknown> | null = null;
+    try { answer = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>; } catch { answer = null; }
+    return { file, decisions: answer?.decisions ?? null, debug: answer?.debug ?? null };
+  });
+  summary.landedDecisions = (() => {
+    try {
+      return Object.fromEntries(g(repo, "ls-tree", "-r", "--name-only", "refs/heads/orca/g", "--", ".decisions").split("\n").filter(Boolean).map((path) => [path, landedOf(path)]));
+    } catch { return null; }
+  })();
+}
 const reconciled = runs.filter((run) => run.body.drive?.reconcile != null);
 summary.reconciled = reconciled.map((run) => ({ runId: run.runId, task: run.task, reconcile: run.body.drive.reconcile }));
 checks.reconciledAsExpected = scenario !== "conflict" ? reconciled.length === 0 : reconciled.length === 1 && reconciled[0]!.body.drive.reconcile.outcome === "succeeded";
@@ -914,7 +945,7 @@ if (scenario === "deadline") {
   checks.providerCalls = cut !== undefined && ["plan", "execute", "verify"].every((phase) => after.has(phase)) && phasesOf("reconcile").length === 0;
 } else {
   checks.providerCalls = JSON.stringify(phasesOf("worker")) === JSON.stringify(taskIds.flatMap(() => ["execute", "plan", "verify"]).sort())
-    && ((scenario === "single" || scenario === "estimate") ? phasesOf("reconcile").length === 0 : phasesOf("reconcile").length > 0);
+    && ((scenario === "single" || scenario === "estimate" || scenario === "decision") ? phasesOf("reconcile").length === 0 : phasesOf("reconcile").length > 0);
 }
 if (scenario === "deadline") {
   // The execute the stop was aimed at did not finish: ccloop's own outcome for that call says it was aborted.
@@ -948,7 +979,7 @@ if (kind === "omp") {
   checks.ompModel = ompCalls.length === 3 && ompCalls.every((call) => Array.isArray(call.usage) && call.usage.length > 0);
   checks.ompNoExtraPhase = JSON.stringify(phasesOf("worker")) === JSON.stringify(["execute", "plan", "verify"]);
 }
-if (fake && scenario === "single") checks.fakeCallsExact = existsSync(`${marker}.calls`) && readFileSync(`${marker}.calls`, "utf8").trim().split("\n").join(",") === "plan,execute,verify";
+if (fake && (scenario === "single" || scenario === "decision")) checks.fakeCallsExact = existsSync(`${marker}.calls`) && readFileSync(`${marker}.calls`, "utf8").trim().split("\n").join(",") === "plan,execute,verify";
 if (fakeClaude && scenario === "single") checks.fakeCallsExact = existsSync(`${marker}.tasks`) && readFileSync(`${marker}.tasks`, "utf8").trim().split("\n").map((line) => line.split(" ")[0]).join(",") === "plan,execute,verify";
 if (fakeOmp) checks.fakeCallsExact = fakeOmpCalls() === (scenario === "estimate" ? "single-call,plan,execute,verify" : "plan,execute,verify");
 if (fake && scenario === "estimate") checks.fakeCallsExact = fakeOmpCalls() === "single-call,plan,execute,verify";
