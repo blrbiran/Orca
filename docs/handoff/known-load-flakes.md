@@ -76,6 +76,8 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 
 **`3d229487`（2026-10-20，undo-punctuation 分支 `npm test`，`ORCA_CCLOOP_BIN`＝ccloop `af4ad33` 的 build，负载 42–75、同时有五个子代理在跑测试）**：选中 361 个根文件，4 红：`archivedWakePerformance`「defers 100 archived groups…」20 s 超时、`driverReconcile`「blocks a reconciliation that leaves conflict markers…」`the driver did not reach the expected state before the deadline`（两条都是已登记形状）；`handoffE2E` **H2** `expected [ 8, 8, 4 ] to deeply equal [ 8, 8, 3 ]` 与 **H5** `expected 2 to be 1`（**断言形状**）。三个文件同 env 单跑三遍各 69/69（负载 42→29）。⚠️ H2 断言形状现 **n＝2**（前一次 `a852f96a` Task 10 `expected 1 to be +0`），H5 这个形状 n＝1：都是实时窗口被负载挤掉的可能，**再见就在 clone 里按 `systematic-debugging` 查**。同一棵树合入 main 后的 `npm test`（529 文件）0 红。
 
+**`308b874c`（2026-10-20／21，多个实施席并行跑测试，负载最高 78）**：① `schedulerBridge`「runs a real conflicting graph through durable control: success」30 s 超时（已登记形状，见上表）——controller 在 main 上用 pin `86f6123` 的 build 单跑 8 过 1 红（负载 78），**无负载复跑未做**。② `handoffE2E` **H2** 第三次出现、**新形态**：`fatal: failed to read .git/worktrees/attempt-1/commondir`（测试自己的临时仓 `git worktree add` 时的 git 报错，不是断言）；同 env 单跑三遍 12/12（负载 8–16），日志在会话 `308b874c` scratchpad `est-h2-{1,2,3}.log`。⚠️ H2 现 **n＝3、两种形态**——按上条约定，下次一红就在 clone 里按 `systematic-debugging` 查，不再只登记。
+
 ### 已修、不再豁免的（再红就当新问题查）
 
 - `tests/control/driverSettle.test.ts` 真 git 场景：全量＋并发下撞 5 s，已给 30 s。再红要查。
