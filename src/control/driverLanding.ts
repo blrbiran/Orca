@@ -18,6 +18,8 @@ import { commitLedgerOnGroupBranch, exportLedgerDir, treeWithLedgerFiles } from 
 import { readDebugMark, type ClosingRecord } from "./debugChecks.js";
 import { writeDebugClosing } from "./debugClosing.js";
 import { reconcileDecision } from "../scheduler/ledgerWiring.js";
+import type { DecisionEvent } from "../ledger/schema.js";
+import { classifyCriteriaChange, criteriaDecision, flagged } from "./criteriaProtection.js";
 import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
 import { AgentsRunRefused, TERMINAL_OUTCOMES, cloneDirOf, latestAttemptSha, loopDirOf, runTask } from "../scheduler/ccloopRunner.js";
 import { netChangeSet } from "../scheduler/harvest.js";
@@ -71,6 +73,9 @@ export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommi
  */
 function landedWithPending(store: ControlStore, run: DriverRun): void {
   insertPendingDecisions(store, run.groupId, run.runId, (run.drive!.stagedPending ?? []) as PendingEntry[]);
+  // Protect-acceptance-criteria spec §4.3: the flag lands with the decision it is on, in the same write.
+  const criteria = run.drive!.stagedCriteriaFlag ?? null;
+  if (criteria !== null) flagDecision(store, { ...criteria, groupId: run.groupId, runId: run.runId, source: "test-change", by: ORCHESTRATION_ACTOR, at: new Date(store.now()).toISOString() });
   const closing = run.drive!.stagedDebugClosing ?? null;
   if (closing !== null) {
     const group = readGroup(store, run.groupId) as GroupWithMark;
@@ -78,7 +83,7 @@ function landedWithPending(store: ControlStore, run: DriverRun): void {
     // is written once at open and never removed). The guard keeps a group body from gaining a bare `debug` field.
     if (readDebugMark(group) !== null) saveGroup(store, { ...group, debug: { ...group.debug, closing } } as typeof group);
   }
-  run.drive = { ...run.drive!, stagedPending: [], stagedDebugClosing: null };
+  run.drive = { ...run.drive!, stagedPending: [], stagedDebugClosing: null, stagedCriteriaFlag: null };
 }
 
 type GroupWithMark = ReturnType<typeof readGroup> & { debug: Record<string, unknown> };
@@ -157,12 +162,28 @@ export async function runLedgerInputs(deps: ExecutionDriverDeps, runId: string):
  * Control run decisions: the run's refused decisions, replacing whatever an earlier landing attempt staged. Debug task
  * plan Task 9: a debug run's closing record is staged (and replaced) with them; every other landing stages none.
  */
-export function stagePending(deps: ExecutionDriverDeps, runId: string, pending: PendingEntry[], closing: ClosingRecord | null = null): void {
+export function stagePending(deps: ExecutionDriverDeps, runId: string, pending: PendingEntry[], closing: ClosingRecord | null = null, criteria: CriteriaFlag | null = null): void {
   write(deps, () => {
     const run = readDriverRun(deps.store, runId);
-    run.drive = { ...run.drive!, stagedPending: pending, stagedDebugClosing: closing };
+    run.drive = { ...run.drive!, stagedPending: pending, stagedDebugClosing: closing, stagedCriteriaFlag: criteria };
     saveDriverRun(deps.store, run);
   });
+}
+
+type CriteriaFlag = { decisionId: string; reason: string; evidence: string[] };
+
+/**
+ * Protect-acceptance-criteria spec §4 (as-built §8): a flagged change to the task's check-defining files gives the run's
+ * `criteria` decision and the flag the landing writes; null when the attempt only added tests or left them alone.
+ */
+async function criteriaFlagOf(deps: ExecutionDriverDeps, run: DriverRun, repo: string, at: string): Promise<{ decision: DecisionEvent; flag: CriteriaFlag } | null> {
+  if (run.taskId === null || run.drive?.base == null || run.drive.attemptSha == null) return null;
+  const checks = readConfirmedTaskExecution(deps.store, run.groupId, run.taskId).contract.verification.requiredChecks;
+  const change = await classifyCriteriaChange(repo, run.drive.base, run.drive.attemptSha, checks);
+  if (!flagged(change)) return null;
+  const decision = criteriaDecision(run.runId, run.groupId, run.drive.base, change, at);
+  const reason = `${change.kind === "weakening" ? "Checks weakened" : "Checks changed"} so they pass: ${[...change.signals, ...change.files].join(", ")}`.slice(0, 2048);
+  return { decision, flag: { decisionId: decision.id, reason, evidence: decision.evidence ?? [] } };
 }
 
 /** Debug task plan Task 9: the closing rows of a debug group's run, written beside its ledger; null for any other group. */
@@ -230,14 +251,16 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string): Promise<b
     // Control run decisions: the run's ledger lands inside its own merge commit. MERGE_HEAD keeps the commit below the
     // same two-parent merge, so findLanding still names it. `-f`: a target that ignores .decisions/ still gets it.
     const { reported, evidence, at } = await runLedgerInputs(deps, runId);
-    const { writtenIds, pending } = await writeRunLedger(join(landing, ".decisions"), { ledgerRun: runId, reported, codeAuthored: [], at, evidence });
+    // Protect-acceptance-criteria spec §4: what the attempt did to the files that define its checks, read from git.
+    const criteria = await criteriaFlagOf(deps, run, landing, at);
+    const { writtenIds, pending } = await writeRunLedger(join(landing, ".decisions"), { ledgerRun: runId, reported, codeAuthored: criteria === null ? [] : [criteria.decision], at, evidence });
     if (writtenIds.length > 0) await git(landing, [...QUIET_GIT, "add", "-f", join(".decisions", `${runId}.jsonl`)]);
     // Debug task plan Task 9: a debug run's closing rows ride the same commit (same -f).
     const closing = await debugClosingOf(deps, run, targetRepo, join(landing, ".decisions"), old);
     if (closing?.written != null) await git(landing, [...QUIET_GIT, "add", "-f", join(".decisions", closing.written)]);
     await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "commit", "--no-edit", "-m", `orca: land ${runId}`]);
     // Before the swap: a death after it finds the landing, skips this produce and still has these for markLanded.
-    stagePending(deps, runId, pending, closing?.record ?? null);
+    stagePending(deps, runId, pending, closing?.record ?? null, criteria?.flag ?? null);
     return revParse(landing, "HEAD");
   });
   if (landed.kind === "not-produced") return beginReconcile(deps, runId, targetRepo, old);

@@ -110,3 +110,30 @@ tests). Builder bounds it with the task's check timeout.
 
 ## 8. Open (not blocking)
 - Thresholds (e.g. assertion count drop of 1 already flags) — start strict, revisit with data.
+
+## 8. As-built (session 9ec98639, 2026-10-21; builder's calls, reversible — human ruling for this round: "这一轮执行过程中如果有问题，先按你的建议执行")
+
+Built (`src/control/criteriaProtection.ts`, landing step D in `src/control/driverLanding.ts`):
+- **Where:** at landing (step D), from git alone: `base..attempt` of the run, in the landing worktree. Detection is a few
+  `git diff`/`git show` reads, so it runs inline; nothing is delayed beyond them and nothing is blocked.
+- **Check-defining files (§3):** a path-like word of a required check command (`node check.js` ⇒ `check.js`), a test file
+  by shape (`tests/`, `test/`, `__tests__/`, `spec/`, `*.test.*`, `*.spec.*`, `test_*.py`, `*_test.*`), any
+  `package.json` (only its `scripts` object counts), `.github/workflows/*`. The repository's own test configuration is
+  not read in this version.
+- **Classification (§4.1):** `additive` (new files, or only added lines, no new skip) ⇒ no notice; weakening signals —
+  `deleted:<path>`, `fewer-assertions:<path>:<n>-><m>` (JS/TS `expect(` and `assert…(`/`assert x` counted per file),
+  `skip-added:<path>` (`.skip`/`.only`/`.todo`, `xit`/`xdescribe`/`xtest`, `@pytest.mark.skip`, `t.skip(`),
+  `script-removed:<file>#<name>`, `script-no-op:<file>#<name>` (`exit 0`, `true`, `:`, `echo …`); anything else
+  `modified`.
+- **Flag (§4.3):** weakening or modified ⇒ the run's ledger gets a code-authored major `criteria` decision
+  `<runId>/orca-criteria` (signals and files as evidence, undo = restore the files from the run's base) and the landing's
+  own write flags it (`source: test-change`, by `orca-auto`); crash-safe like pending decisions (staged as
+  `stagedCriteriaFlag` before the swap, written by the landing's write).
+
+Not built yet (each would only *reduce* flags or move them off the person; until then every flag stays red for the person,
+which is the reviewer-off behaviour §5 already defines):
+- **§4.2 base-version re-run** (needs the run's own workspace with dependencies before cleanup, §7a.1, with a restart
+  marker like `debugRepro`); without it a `modified` change is flagged (the strict reading §7a.4 gives an ambiguous case).
+- **§5 automatic reviewer** (a single call with a strict schema; justified ⇒ ratify as `orca-auto`, not justified ⇒ a
+  system debug group `criteria-review`, system debug task spec 2026-10-21) and its on/off setting.
+- **Reconciliation path (§7):** a reconcile run's own changes to check-defining files are not classified yet (step R).

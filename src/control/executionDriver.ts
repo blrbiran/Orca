@@ -241,7 +241,7 @@ export function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: Wo
     workspaceMode, sourceDir: sourceDirOf(roots, runId), workspacePath: workspace ? workspacePathOf(roots, runId) : null, targetRepo: null,
     prepared: false, base: null, envelopeHash: null, inspectUnknown: 0, outcome: null, attemptSha: null, landedCommit: null,
     reconcile: null, blockedAt: null, blockedReason: null, cleanedUp: false, cleanupError: null, publishError: null, skills: null,
-    stagedPending: [], ledgerCommit: null, debugRepro: null, stagedDebugClosing: null,
+    stagedPending: [], ledgerCommit: null, debugRepro: null, stagedDebugClosing: null, stagedCriteriaFlag: null,
   };
 }
 

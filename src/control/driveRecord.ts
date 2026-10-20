@@ -123,6 +123,9 @@ export const driveRecordSchema = z.object({
   // beside `stagedPending` and copied into the group's `debug.closing` by the landing's write (then cleared). Null for
   // every other run; defaulted so a drive record from before this field still parses.
   stagedDebugClosing: closingSchema.nullable().default(null),
+  // Protect-acceptance-criteria spec 2026-10-21 §4.3: the flag on this run's `criteria` decision, staged beside
+  // `stagedPending` before the swap and written by the landing's write (then cleared). Null when nothing is flagged.
+  stagedCriteriaFlag: z.object({ decisionId: z.string().min(1), reason: z.string().min(1), evidence: z.array(z.string()) }).strict().nullable().default(null),
 }).strict();
 export type DriveRecord = z.infer<typeof driveRecordSchema>;
 
