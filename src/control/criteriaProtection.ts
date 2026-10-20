@@ -1,5 +1,9 @@
 import type { DecisionEvent } from "../ledger/schema.js";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { git } from "../scheduler/gitExec.js";
+import { exitsZero, restoreWorkspace, snapshotWorkspace, type WorkspaceSnapshot } from "./debugRepro.js";
+import { gitChild, oneLine } from "./integrationGit.js";
 import { QUIET_GIT } from "./workspace.js";
 
 /**
@@ -99,7 +103,8 @@ export const flagged = (change: CriteriaChange): boolean => change.kind === "wea
 
 /** §4.3: the major `criteria` decision the landing writes in the run's own ledger (code-authored; flagged at landing). */
 export function criteriaDecision(runId: string, groupId: string, base: string, change: CriteriaChange, at: string): DecisionEvent {
-  const what = change.kind === "weakening" ? `weakened (${change.signals.join("; ")})` : "changed (not only added to)";
+  const what = change.kind === "weakening" ? `weakened (${change.signals.join("; ")})`
+    : change.signals.length > 0 ? `changed so that only the changed checks pass (${change.signals.join("; ")})` : "changed (not only added to)";
   return {
     ev: "decision", id: `${runId}/orca-criteria`, at, run: runId,
     question: `the attempt ${what} the files that define this task's checks: ${change.files.join(", ")}. May it land?`,
@@ -110,4 +115,51 @@ export function criteriaDecision(runId: string, groupId: string, base: string, c
     scope: "task", kind: "criteria", importance: "major",
     evidence: [...change.signals, ...change.files.map((file) => `changed: ${file}`)].slice(0, 32),
   };
+}
+
+/** §4.2: what the required checks did with the base versions of the changed check-defining files. */
+export type CriteriaBaseVerdict = { kind: "base-passed" } | { kind: "base-failed"; command: string };
+
+async function gitOk(workdir: string, args: string[]): Promise<void> {
+  const answer = await gitChild(workdir, args);
+  if (answer.code !== 0) throw new Error(`criteria-base-git:${args[0]}: ${oneLine(answer.stderr)}`);
+}
+
+/**
+ * §4.2 and §7a.1/§7a.4: in the run's own workspace at `attemptSha` (its dependencies are installed there), every changed
+ * check-defining file goes back to its base version -- a `package.json` only in its `scripts` -- and the required checks
+ * run as debugRepro.ts runs a command (`sh -lc`, inherited environment, each bounded by `timeoutMs`). A file the attempt
+ * added stays (it has no base version). The workspace is restored to the snapshot whatever happens; a check that throws
+ * (an abort) is rethrown after the restore. Failed and could-not-run give the same verdict (§7a.4: flag).
+ */
+export async function runChecksAtBase(input: {
+  workdir: string; base: string; attemptSha: string; files: readonly string[]; requiredChecks: readonly string[]; timeoutMs: number;
+  snapshot?: WorkspaceSnapshot; signal?: AbortSignal;
+}): Promise<CriteriaBaseVerdict> {
+  const { workdir, base, attemptSha, timeoutMs, signal } = input;
+  const snapshot = input.snapshot ?? await snapshotWorkspace(workdir);
+  let verdict: CriteriaBaseVerdict = { kind: "base-passed" };
+  try {
+    for (const path of input.files) {
+      if ((await gitChild(workdir, ["cat-file", "-e", `${base}:${path}`])).code !== 0) continue;
+      if (path === "package.json" || path.endsWith("/package.json")) {
+        const now = (await gitChild(workdir, ["cat-file", "-e", `${attemptSha}:${path}`])).code === 0 ? await show(workdir, attemptSha, path) : await show(workdir, base, path);
+        const parsed = JSON.parse(now) as Record<string, unknown>;
+        const before = (JSON.parse(await show(workdir, base, path)) as { scripts?: unknown }).scripts;
+        if (before === undefined) delete parsed.scripts; else parsed.scripts = before;
+        await writeFile(join(workdir, path), `${JSON.stringify(parsed, null, 2)}\n`);
+        continue;
+      }
+      await gitOk(workdir, ["checkout", base, "--", `:(literal)${path}`]);
+    }
+    for (const command of input.requiredChecks) {
+      if (!(await exitsZero(workdir, command, timeoutMs, signal))) { verdict = { kind: "base-failed", command }; break; }
+    }
+  } catch (error) {
+    await restoreWorkspace(workdir, attemptSha, snapshot);
+    throw error;
+  }
+  const restoreFailure = await restoreWorkspace(workdir, attemptSha, snapshot);
+  if (restoreFailure !== null) throw restoreFailure;
+  return verdict;
 }

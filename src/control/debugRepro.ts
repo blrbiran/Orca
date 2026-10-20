@@ -44,7 +44,7 @@ async function addedTests(workdir: string, base: string, attemptSha: string): Pr
  * `sh -lc` in the workspace with the environment inherited unchanged. A timeout kills its process group and counts as a
  * non-zero exit, at head and at base alike; an abort (the driver's stop) is thrown, never read as an exit.
  */
-async function exitsZero(workdir: string, command: string, timeoutMs: number, signal?: AbortSignal): Promise<boolean> {
+export async function exitsZero(workdir: string, command: string, timeoutMs: number, signal?: AbortSignal): Promise<boolean> {
   try {
     return (await spawnRunChild("sh", ["-lc", command], { cwd: workdir, timeoutMs, inheritEnv: true, ...(signal ? { signal } : {}) })).code === 0;
   } catch (error) {

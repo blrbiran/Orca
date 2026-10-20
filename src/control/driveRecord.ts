@@ -116,6 +116,9 @@ export const driveRecordSchema = z.object({
     z.object({
       state: z.literal("checking"), startedAt: z.string().min(1), attemptSha: commitSchema, headRef: z.string().min(1).nullable(),
       untrackedBefore: z.array(z.string().min(1)), empty: z.boolean(),
+      // Protect-acceptance-criteria spec §7a.1: the same off-round check, marker and restore run the base-version re-run of
+      // a run whose attempt modified its check-defining files; absent for the reproduce-first check.
+      check: z.literal("criteria-base").optional(),
     }).strict(),
     z.object({ state: z.literal("skipped"), reason: z.string().min(1) }).strict(),
   ]).nullable().default(null),
@@ -126,6 +129,13 @@ export const driveRecordSchema = z.object({
   // Protect-acceptance-criteria spec 2026-10-21 §4.3: the flag on this run's `criteria` decision, staged beside
   // `stagedPending` before the swap and written by the landing's write (then cleared). Null when nothing is flagged.
   stagedCriteriaFlag: z.object({ decisionId: z.string().min(1), reason: z.string().min(1), evidence: z.array(z.string()) }).strict().nullable().default(null),
+  // Protect-acceptance-criteria spec §4.2: the required checks run with the base versions of the changed check-defining
+  // files over the attempt -- `passed` (the code meets the old criteria too), or `failed` with the first command that did
+  // not exit 0 (failed and could-not-run are not told apart, §7a.4). Null when no re-run happened.
+  criteriaBase: z.discriminatedUnion("result", [
+    z.object({ result: z.literal("passed") }).strict(),
+    z.object({ result: z.literal("failed"), command: z.string().min(1) }).strict(),
+  ]).nullable().default(null),
 }).strict();
 export type DriveRecord = z.infer<typeof driveRecordSchema>;
 

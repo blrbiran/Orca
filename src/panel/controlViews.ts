@@ -996,7 +996,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       createdOrdinal: createdOrdinal.get(runId)!,
       ...outputBoundView(store, groupId, run),
       // Debug task plan Task 13: what the panel shows of the reproduce-first check; the restore facts stay in the body.
-      ...(run.drive?.debugRepro == null ? {} : {
+      // The criteria base-version re-run uses the same marker (spec 2026-10-21 §7a.1) and is not a reproduce-first check.
+      ...(run.drive?.debugRepro == null || (run.drive.debugRepro.state === "checking" && run.drive.debugRepro.check !== undefined) ? {} : {
         debugRepro: run.drive.debugRepro.state === "checking" ? { state: "checking" as const } : { state: "skipped" as const, reason: run.drive.debugRepro.reason },
       }),
     };

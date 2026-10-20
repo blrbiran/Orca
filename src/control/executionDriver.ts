@@ -40,6 +40,7 @@ import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, 
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { recordEmptyResultDecisions, stepD, stepR } from "./driverLanding.js";
 import { readDebugMark } from "./debugChecks.js";
+import { classifyCriteriaChange, runChecksAtBase, type CriteriaBaseVerdict } from "./criteriaProtection.js";
 import { checkReproduction, restoreWorkspace, snapshotWorkspace, type ReproVerdict, type WorkspaceSnapshot } from "./debugRepro.js";
 import { reportedDebugOf } from "./reportedDecisions.js";
 import { openRequestOf, stepH, visitOrder } from "./driverHandoff.js";
@@ -124,7 +125,7 @@ export interface DriverContext {
 }
 
 /** One reproduce-first check running off the driver round: aborted by stop(), its outcome read by a later round. */
-export interface DebugCheck { controller: AbortController; settled: { verdict: ReproVerdict } | { error: unknown } | null }
+export interface DebugCheck { controller: AbortController; settled: { verdict: ReproVerdict | CriteriaBaseVerdict } | { error: unknown } | null }
 /** For a step called outside a driver (a criterion calling stepC itself); a driver owns its own map. */
 const unownedDebugChecks = new Map<string, DebugCheck>();
 
@@ -241,7 +242,7 @@ export function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: Wo
     workspaceMode, sourceDir: sourceDirOf(roots, runId), workspacePath: workspace ? workspacePathOf(roots, runId) : null, targetRepo: null,
     prepared: false, base: null, envelopeHash: null, inspectUnknown: 0, outcome: null, attemptSha: null, landedCommit: null,
     reconcile: null, blockedAt: null, blockedReason: null, cleanedUp: false, cleanupError: null, publishError: null, skills: null,
-    stagedPending: [], ledgerCommit: null, debugRepro: null, stagedDebugClosing: null, stagedCriteriaFlag: null,
+    stagedPending: [], ledgerCommit: null, debugRepro: null, stagedDebugClosing: null, stagedCriteriaFlag: null, criteriaBase: null,
   };
 }
 
@@ -651,6 +652,26 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     startDebugCheck(deps, runId, context, { workdir, base: drive.base!, attemptSha, contract, report, snapshot });
     return true;
   }
+  // Protect-acceptance-criteria spec §4.2 / §7a.1: an attempt that modified (not only added to, not weakened) the files
+  // defining its checks has its required checks re-run with the base versions of those files, off the driver round and
+  // under the same marker as the reproduce-first check. A weakening is flagged whatever the re-run says, so it is not run.
+  if (!measured.empty) {
+    const workdir = join(drive.sourceDir, "repo");
+    const change = await classifyCriteriaChange(workdir, drive.base!, attemptSha, contract.verification.requiredChecks);
+    if (change.kind === "modified") {
+      const snapshot = await snapshotWorkspace(workdir);
+      const marked = write(deps, () => {
+        const current = readDriverRun(store, runId);
+        if (current.state !== "accepted" || current.drive === undefined) return false;
+        current.drive = { ...current.drive, debugRepro: { state: "checking", startedAt: (deps.now?.() ?? new Date()).toISOString(), attemptSha, ...snapshot, empty: false, check: "criteria-base" } };
+        saveDriverRun(store, current);
+        return true;
+      });
+      if (!marked) return false;
+      startDebugCheck(deps, runId, context, { workdir, base: drive.base!, attemptSha, contract, report, snapshot, criteriaFiles: change.files });
+      return true;
+    }
+  }
   return write(deps, () => {
     const current = readDriverRun(store, runId);
     if (current.state !== "accepted") return false;
@@ -670,13 +691,22 @@ function debugChecksOf(context: DriverContext | undefined): Map<string, DebugChe
 /** Starts the check as a promise the driver does not await; its outcome is kept on the entry for a later round. */
 function startDebugCheck(deps: ExecutionDriverDeps, runId: string, context: DriverContext | undefined, input: {
   workdir: string; base: string; attemptSha: string; contract: ReturnType<typeof readConfirmedTaskExecution>["contract"]; report: ExecutionReport; snapshot: WorkspaceSnapshot;
+  /** Set for the criteria base-version re-run (the changed check-defining files); absent for the reproduce-first check. */
+  criteriaFiles?: readonly string[];
 }): void {
   // Fix round 2: a round still running when stop() was called (parked at an await in stepC or in the resume branch) starts
   // no check that stop() could no longer abort. The marker is already persisted, so the next driver restores and checks.
   if (context?.stopped) return;
-  const reported = reportedDebugOf(input.report);
   const entry: DebugCheck = { controller: new AbortController(), settled: null };
   debugChecksOf(context).set(runId, entry);
+  if (input.criteriaFiles !== undefined) {
+    void runChecksAtBase({
+      workdir: input.workdir, base: input.base, attemptSha: input.attemptSha, files: input.criteriaFiles, requiredChecks: input.contract.verification.requiredChecks,
+      timeoutMs: input.contract.executionPolicy.perAttemptTimeoutMs, snapshot: input.snapshot, signal: entry.controller.signal,
+    }).then((verdict) => { entry.settled = { verdict }; }, (error: unknown) => { entry.settled = { error }; });
+    return;
+  }
+  const reported = reportedDebugOf(input.report);
   void (deps.checkReproduction ?? checkReproduction)({
     workdir: input.workdir, base: input.base, attemptSha: input.attemptSha, contract: input.contract, timeoutMs: input.contract.executionPolicy.perAttemptTimeoutMs,
     result: reported.kind === "object" ? reported.value : {}, resultMalformed: reported.kind === "malformed", snapshot: input.snapshot, signal: entry.controller.signal,
@@ -700,13 +730,33 @@ async function stepDebugCheck(deps: ExecutionDriverDeps, run: DriverRun, context
     const restoreFailure = await restoreWorkspace(workdir, marker.attemptSha, marker);
     if (restoreFailure !== null) throw restoreFailure;
     const contract = readConfirmedTaskExecution(store, run.groupId, run.taskId!).contract;
-    startDebugCheck(deps, runId, context, { workdir, base: drive.base!, attemptSha: marker.attemptSha, contract, report: await savedReport(store, runId), snapshot: marker });
+    // The criteria re-run recomputes its files from git (the marker keeps only what the restore needs).
+    const criteriaFiles = marker.check === "criteria-base"
+      ? (await classifyCriteriaChange(workdir, drive.base!, marker.attemptSha, contract.verification.requiredChecks)).files : undefined;
+    startDebugCheck(deps, runId, context, {
+      workdir, base: drive.base!, attemptSha: marker.attemptSha, contract, report: await savedReport(store, runId), snapshot: marker,
+      ...(criteriaFiles === undefined ? {} : { criteriaFiles }),
+    });
     return true;
   }
   if (entry.settled === null) return false;
   checks.delete(runId);
   if ("error" in entry.settled) throw entry.settled.error;
   const verdict = entry.settled.verdict;
+  if (verdict.kind === "base-passed" || verdict.kind === "base-failed") {
+    // Spec §4.2: the verdict rides on the drive record to the landing, which decides the flag (driverLanding.ts).
+    return write(deps, () => {
+      const current = readDriverRun(store, runId);
+      if (current.state !== "accepted" || current.drive?.debugRepro?.state !== "checking") return false;
+      current.state = "collected";
+      current.drive = {
+        ...current.drive, outcome: "succeeded", attemptSha: marker.attemptSha, landedCommit: null, debugRepro: null,
+        criteriaBase: verdict.kind === "base-passed" ? { result: "passed" } : { result: "failed", command: verdict.command },
+      };
+      saveDriverRun(store, current);
+      return true;
+    });
+  }
   if (verdict.kind === "failed") {
     blockRun(deps, runId, "C", `debug-repro:${verdict.reason}`, { outcome: "repro-failed", attemptSha: marker.attemptSha, debugRepro: null });
     return true;

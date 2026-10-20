@@ -182,8 +182,13 @@ async function criteriaFlagOf(deps: ExecutionDriverDeps, run: DriverRun, repo: s
   const checks = readConfirmedTaskExecution(deps.store, run.groupId, run.taskId).contract.verification.requiredChecks;
   const change = await classifyCriteriaChange(repo, base, attempt, checks);
   if (!flagged(change)) return null;
-  const decision = criteriaDecision(run.runId, run.groupId, base, change, at);
-  const reason = `${change.kind === "weakening" ? "Checks weakened" : "Checks changed"} so they pass: ${[...change.signals, ...change.files].join(", ")}`.slice(0, 2048);
+  // Spec §4.2: a modification whose code also passes the base versions of the checks gives no notice; a failed (or
+  // unrunnable, §7a.4) base run is named in the flag. A weakening is flagged either way and never re-run.
+  const baseRun = run.drive?.criteriaBase ?? null;
+  if (change.kind === "modified" && baseRun?.result === "passed") return null;
+  const baseNote = change.kind === "modified" && baseRun?.result === "failed" ? [`base-run-failed: ${baseRun.command}`] : [];
+  const decision = criteriaDecision(run.runId, run.groupId, base, { ...change, signals: [...change.signals, ...baseNote] }, at);
+  const reason = `${change.kind === "weakening" ? "Checks weakened" : baseNote.length > 0 ? "Only the changed checks pass" : "Checks changed"} so they pass: ${[...change.signals, ...baseNote, ...change.files].join(", ")}`.slice(0, 2048);
   return { decision, flag: { decisionId: decision.id, reason, evidence: decision.evidence ?? [] } };
 }
 

@@ -48,6 +48,8 @@ export interface HarnessOptions {
   decisions?: (workItemId: string) => unknown;
   /** Debug task plan Task 8: the `debug` the synthetic ccloop reports with a terminal (driverPort.ts); absent = not reported. */
   debug?: (workItemId: string) => unknown;
+  /** Protect-acceptance-criteria spec §4.2: every contract's verification.requiredChecks (web.ts; ["true"] unless said otherwise). */
+  requiredChecks?: string[];
 }
 
 /**
@@ -56,7 +58,7 @@ export interface HarnessOptions {
  */
 export async function driverHarness(tasks: readonly WebFixtureTask[], options: HarnessOptions = {}) {
   const snapshot = profileSnapshot();
-  const h = await webFixture(snapshot, tasks, { tokenPolicy:options.tokenPolicy, killGraceMs: options.killGraceMs, planAgents: options.planAgents, ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}), ...(options.storeNow ? { storeNow: options.storeNow } : {}) });
+  const h = await webFixture(snapshot, tasks, { tokenPolicy:options.tokenPolicy, killGraceMs: options.killGraceMs, planAgents: options.planAgents, ...(options.requiredChecks ? { requiredChecks: options.requiredChecks } : {}), ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}), ...(options.storeNow ? { storeNow: options.storeNow } : {}) });
   const repo = await realpath(join(h.root, "repo"));
   git(repo, "init", "-q", "-b", "main");
   await writeFile(join(repo, "base.txt"), "base\n");
