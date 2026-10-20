@@ -1,0 +1,44 @@
+{
+  "v": 1,
+  "runId": "orca-dev-3d229487",
+  "runtime": "claude-code",
+  "sessionRef": "3d229487-5cdd-4732-ad0e-0d5368ba548a",
+  "writtenAt": "2026-10-20T04:02:30.878Z",
+  "head": "aa81073f2d3784958db0c28e3e9b6e5b97ffa308",
+  "level": {
+    "kind": "reading",
+    "level": 332297,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "wait for ccloop codex-phase-isolation implementer (Tasks 1-6); Task 7 paid needs codex quota (2026-10-22)",
+    "update Orca/ccloop/ccmem docs/handoff/handoff.md; known-load-flakes.md (handoffE2E H2 n=2, H5 n=1)",
+    "give human the executive summary"
+  ],
+  "open": [
+    "Orca repin to ccloop f772128 (claude --allowedTools for required checks) after human pushes ccloop",
+    "codex decision-scenario acceptance not run (quota)"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push ccloop (f772128 + codex isolation) and Orca main and ccmem main"
+    },
+    {
+      "kind": "irreversible",
+      "what": "restart the panel service (main dist rebuilt at aa81073f); restart ccmem daemon for config.mjs dead-key change"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "ORCA_CCLOOP_BIN=<af4ad33 build> npm test",
+      "exitCode": 1,
+      "commit": "aa81073f2d3784958db0c28e3e9b6e5b97ffa308",
+      "observedAt": "2026-10-20T04:02:30.826Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-3d229487-6N3IZk/1.txt"
+    }
+  ]
+}
