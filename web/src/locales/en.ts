@@ -397,6 +397,15 @@ export const en = {
       notConfigured: "not configured",
       button: "Import plan",
     },
+    // Kanban spec 2026-10-20 §3.1-§3.4: a confirmed group on its way to starting on its own.
+    orchestration: {
+      queued: "Confirmed: starts on its own on the next pass.",
+      held: "Confirmed only: not started. Start it when you are ready.",
+      waitingSlot: "Confirmed: waiting for a free slot (the running-group cap is reached).",
+      waitingFor: "Confirmed: waiting for {{groups}} to land first.",
+      backoff: "The automatic start was refused ({{code}}); it is tried again shortly.",
+      refusedPersistent: "Needs you: the automatic start was refused {{count}} times in a row ({{code}}). Other groups keep running.",
+    },
     group: {
       region: "Control group {{groupId}}",
       heading: "{{groupId}} · {{state}} · revision {{revision}} · projection {{projection}}",
@@ -733,6 +742,8 @@ export const en = {
     confirmWaits: "Confirm waits for this proposal version's agent selections to resolve.",
     confirmDestination: "Review the Agent selections below or check installation and defaults in",
     confirm: "Confirm task plan",
+    confirmStartsNote: "Confirming starts this group on its own as soon as a slot is free.",
+    confirmHold: "Confirm only, don't run yet",
     provenanceModel: "model {{estimateId}}",
   },
   loopPlan: {
@@ -961,6 +972,12 @@ export const en = {
     projectScope: "Defaults for {{project}}. Existing groups keep their own choices.",
     workspaceUnavailable: "Workspace settings have not been read.", integrationUnavailable: "Integration settings have not been read.",
     agentsUnavailable: "Agent defaults have not been read.",
+    orchestration: {
+      title: "Running groups",
+      running: "{{running}} of at most {{cap}} groups are running. A confirmed group starts on its own when a slot is free.",
+      cap: "At most this many groups run at once",
+      save: "Save",
+    },
   },
   auth: {
     loading: "Checking your session…",

@@ -317,7 +317,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
     if (hasBadDraft(drafts)) return;
     onCommand({ verb: "set-limit", groupId, expectedRevision: view.summary.commandRevision, payload: { limit: limitAmount(view, drafts) } });
   };
-  const submitConfirm = (): void => {
+  /** Kanban spec 2026-10-20 §3.1: the default confirm also starts the group; `hold` is "Confirm only, don't run yet". */
+  const submitConfirm = (hold = false): void => {
     if (confirmBlocked || shownSelectionsHash === null || integrationBlocked) return;
     const contextDraft = drafts[CONTEXT_POLICY_KEY(groupId)];
     const tokens = contextDraft === undefined || contextDraft.trim() === "" ? null : Number(contextDraft);
@@ -341,6 +342,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         selectionsHash: shownSelectionsHash,
         // The hash of the scheme on screen binds the approval to it; a keep group adds no key, so its hash is unchanged.
         ...(view.integration === undefined ? {} : { integrationHash: view.integration.schemeHash }),
+        ...(hold ? { hold: true as const } : {}),
       },
     });
   };
@@ -520,7 +522,9 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       {estimator !== null && !archived && <button type="button" disabled={estimator.profile === null} onClick={submitEstimate}>{t("budget.reestimate")}</button>}
       {editable && <GroupIntegrationConfirm view={view} suggestedTarget={props.suggestedTarget ?? null} onCommand={onCommand} />}
       {editable && shownSelectionsHash === null && <p role="note">{t("budget.confirmWaits")} {t("budget.confirmDestination")} <a href="#global-settings">{t("nav.globalSettings")}</a></p>}
-      {!archived && <button type="button" disabled={confirmBlocked || shownSelectionsHash === null || integrationBlocked || hasBadDraft(drafts)} onClick={submitConfirm}>{t("budget.confirm")}</button>}
+      {!archived && editable && <p role="note" data-testid="confirm-starts-note">{t("budget.confirmStartsNote")}</p>}
+      {!archived && <button type="button" disabled={confirmBlocked || shownSelectionsHash === null || integrationBlocked || hasBadDraft(drafts)} onClick={() => submitConfirm()}>{t("budget.confirm")}</button>}
+      {!archived && editable && <button type="button" disabled={confirmBlocked || shownSelectionsHash === null || integrationBlocked || hasBadDraft(drafts)} onClick={() => submitConfirm(true)}>{t("budget.confirmHold")}</button>}
     </section>
   );
 }

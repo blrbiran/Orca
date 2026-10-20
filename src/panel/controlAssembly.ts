@@ -248,7 +248,12 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     if (inFlight !== null) return inFlight;
     // Through the admission gate like every other write, so a pass cannot slip a claim past a
     // shutdown that has already begun draining.
-    const pass = withAdmission({ admissionGate }, () => deliverSchedulerWakes(store, wakeHandlers))
+    // Kanban spec 2026-10-20 §3.1: with a driver, confirmed groups start on their own before the wakes are delivered (each
+    // start is the service's own start path, which takes the admission gate itself). Without one nothing would run them.
+    const autoStart = driver === null ? Promise.resolve() : service.autoStart().then(() => undefined, (error: unknown) => {
+      process.stderr.write(`orca-control: auto-start pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
+    });
+    const pass = autoStart.then(() => withAdmission({ admissionGate }, () => deliverSchedulerWakes(store, wakeHandlers)))
       // A delivered wake is a claimed run the driver can now start (spec §2.1).
       .then((delivery) => { if (delivery.delivered.length > 0) driver?.kick(); }, () => undefined)
       .finally(() => { inFlight = null; });

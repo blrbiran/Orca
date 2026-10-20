@@ -1,4 +1,5 @@
 import { finiteCommitment, type BudgetAmount } from "./tokenPolicy.js";
+import { recordStarted } from "./orchestration.js";
 import { hasOptionalTaskPolicy, hasTokenPolicy } from "./fundedAllowance.js";
 import { hasValidUsageSettlement, type UsageSettlement } from "./usageSettlement.js";
 import { createHash } from "node:crypto";
@@ -434,6 +435,8 @@ export function startSchedulerWake(store: ControlStore, groupId: string, startRe
   const wakeId = `scheduler-wake:${groupId}:${startRevision}`;
   store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'start',?,0) ON CONFLICT(id) DO NOTHING")
     .run(wakeId, groupId, canonicalBytes({ groupId, startRevision, executionSnapshotHash: proposal.executionSnapshotHash }).toString("utf8"));
+  // Kanban spec 2026-10-20 §3.1: a resume arms a start too; the orchestrator must not start the group again afterwards.
+  recordStarted(store, groupId, startRevision);
   return wakeId;
 }
 

@@ -4,6 +4,7 @@ import { commandClientFor, commandPrincipalFor } from "./commandClient.js";
 import { ControlError, durableCommandErrorStatus } from "./errors.js";
 import { appendActivity } from "./activity.js";
 import { isGroupArchived } from "./archivedMark.js";
+import { orchestrationRevision } from "./orchestration.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { ControlStore } from "./store.js";
 import {
@@ -42,7 +43,7 @@ type CommandRow = { raw_request_hash: unknown; original_status: unknown; body_js
 type CommandBody = CommandLookupV1["body"];
 
 type CommandScope = {
-  key: string; kind: "group" | "global" | "repository" | "operator" | "spend" | "corrections"; id: string;
+  key: string; kind: "group" | "global" | "repository" | "operator" | "spend" | "corrections" | "orchestration"; id: string;
   groupId: string | null; repoId: string | null; operatorId: string | null;
 };
 
@@ -54,6 +55,7 @@ function scope(command: RawAuthorityCommandV1): CommandScope {
   if (command.target.kind === "spend") return { key: "@spend", kind: "spend", id: "spend", groupId: null, repoId: null, operatorId: null };
   // Debug task plan Task 11 (controller's call 6): correction-record/-close/-withdraw share one scope with no revision.
   if (command.target.kind === "corrections") return { key: "@corrections", kind: "corrections", id: "corrections", groupId: null, repoId: null, operatorId: null };
+  if (command.target.kind === "orchestration") return { key: "@orchestration", kind: "orchestration", id: "orchestration", groupId: null, repoId: null, operatorId: null };
   if (command.target.kind === "operator") {
     return { key: `@operator:${command.target.operatorId}`, kind: "operator", id: command.target.operatorId, groupId: null, repoId: null, operatorId: command.target.operatorId };
   }
@@ -96,6 +98,8 @@ function settingRevision(store: ControlStore, commandScope: CommandScope, verb?:
   if (commandScope.kind === "spend") return spendRevision(store);
   // Constant: the corrections store has no revision; a duplicate is its own `again` check (controller's call 6).
   if (commandScope.kind === "corrections") return 0;
+  // Kanban spec §3.2: orchestration_settings.revision (0 with no row), like the spend scope's.
+  if (commandScope.kind === "orchestration") return orchestrationRevision(store);
   if (commandScope.repoId !== null) return repositoryRevision(store, commandScope.repoId);
   if (commandScope.operatorId !== null) {
     if (verb === "apply-agent-update") {

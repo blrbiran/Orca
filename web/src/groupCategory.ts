@@ -11,10 +11,14 @@ export const GROUP_FILTERS = ["all", "not-started", "running", "attention", "don
 export type GroupFilter = (typeof GROUP_FILTERS)[number];
 export const GROUP_FILTER_KEY = "orca.panel.groupFilter";
 
-/** Spec §6.4 rule 2: a blocked task, a recovery blocker, a blocked claim, a blocked group, or a stop still settling. */
+/**
+ * Spec §6.4 rule 2: a blocked task, a recovery blocker, a blocked claim, a blocked group, or a stop still settling.
+ * Kanban spec 2026-10-20 §3.1: also an automatic start refused again and again (needs-you for this group only).
+ */
 export function needsAttention(summary: GroupSummaryV1): boolean {
   return (summary.counts?.blocked ?? 0) > 0 || summary.recoveryBlockerCount > 0 || summary.claimBlocked || summary.state === "blocked"
-    || (summary.stopState != null && summary.stopState !== "handoff-complete");
+    || (summary.stopState != null && summary.stopState !== "handoff-complete")
+    || summary.orchestration?.refusal?.persistent === true;
 }
 
 export function groupCategory(summary: GroupSummaryV1): GroupCategory {

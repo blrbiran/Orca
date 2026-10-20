@@ -638,6 +638,7 @@ export const commandVerbSchema = z.enum([
   "approve-pending-decision",
   "reject-pending-decision",
   "ratify-flagged-decision",
+  "set-orchestration-settings",
   "correction-debug-open",
   "correction-record",
   "correction-close",
@@ -652,6 +653,8 @@ const spendCommandTargetSchema = z.object({ kind: z.literal("spend") }).strict()
 // Debug task plan Task 11 (controller's call 6): the corrections store is one scope with constant revision 0 (no CAS);
 // a duplicate is the store's own `again` check.
 const correctionsCommandTargetSchema = z.object({ kind: z.literal("corrections") }).strict();
+// Kanban spec 2026-10-20 §3.2: the orchestration settings (running-group cap) are one scope with one revision.
+const orchestrationCommandTargetSchema = z.object({ kind: z.literal("orchestration") }).strict();
 
 export const commandTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group"), groupId: idSchema }).strict(),
@@ -662,6 +665,7 @@ export const commandTargetSchema = z.discriminatedUnion("kind", [
   operatorCommandTargetSchema,
   spendCommandTargetSchema,
   correctionsCommandTargetSchema,
+  orchestrationCommandTargetSchema,
 ]);
 
 export const emptyPayloadSchema = z.object({}).strict();
@@ -750,6 +754,9 @@ export const confirmPayloadSchema = z
     // Integration spec §3.2 (ruling R2): the group's integration.schemeHash the owner saw; present exactly when the
     // group's scheme is not keep. Absent adds no bytes, so a keep group's confirm hashes as before.
     integrationHash: hashSchema.optional(),
+    // Kanban spec 2026-10-20 §3.1: "Confirm only, don't run yet". Absent (the default, "Confirm and run") adds no bytes,
+    // so a confirm that does not hold hashes as before.
+    hold: z.literal(true).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -896,6 +903,8 @@ export const approvePendingDecisionPayloadSchema = z.object({ pendingId: idSchem
 export const rejectPendingDecisionPayloadSchema = z.object({ pendingId: idSchema, because: nonemptyString.optional() }).strict();
 // Kanban spec 2026-10-20 §9a: a person ratifies a landed decision Orca flagged (clears the flag; nothing else changes).
 export const ratifyFlaggedDecisionPayloadSchema = z.object({ decisionId: nonemptyString }).strict();
+// Kanban spec §3.2: at most this many groups run at once (default 3; the human asked for it for CPU load and conflicts).
+export const setOrchestrationSettingsPayloadSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64) }).strict();
 // Debug task plan Task 6: one recorded correction opens one debug group (spending nothing). `reopen` asks for the next
 // ordinal once the newest debug group is stopped or archived; `undoHow` is the owner's, recorded for the closing row.
 export const correctionDebugOpenPayloadSchema = z.object({
@@ -948,6 +957,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("approve-pending-decision"), target: groupCommandTargetSchema, payload: approvePendingDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("ratify-flagged-decision"), target: groupCommandTargetSchema, payload: ratifyFlaggedDecisionPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-orchestration-settings"), target: orchestrationCommandTargetSchema, payload: setOrchestrationSettingsPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-record"), target: correctionsCommandTargetSchema, payload: correctionRecordPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-close"), target: correctionsCommandTargetSchema, payload: correctionClosePayloadSchema }).strict(),
@@ -1012,6 +1022,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("approve-pending-decision"), target: groupCommandTargetSchema, payload: approvePendingDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("ratify-flagged-decision"), target: groupCommandTargetSchema, payload: ratifyFlaggedDecisionPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-orchestration-settings"), target: orchestrationCommandTargetSchema, payload: setOrchestrationSettingsPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-record"), target: correctionsCommandTargetSchema, payload: correctionRecordPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-close"), target: correctionsCommandTargetSchema, payload: correctionClosePayloadSchema }).strict(),
@@ -1156,6 +1167,15 @@ export const groupSummarySchema = z
         z.object({ state: z.literal("chose-instead-missing") }).strict(),
         z.object({ state: z.literal("closed-by-human-first"), commit: nonemptyString }).strict(),
       ]).nullable().optional(),
+    }).strict().optional(),
+    // Kanban spec 2026-10-20 §3.1-§3.4: present only on a group confirmed since start-on-confirm exists (a row in
+    // group_orchestration). `state` is the orchestrator's own answer (src/control/orchestration.ts); `refusal.persistent`
+    // marks a start refused PERSISTENT_REFUSALS times in a row (needs-you for this group only).
+    orchestration: z.object({
+      mode: z.enum(["run", "hold"]),
+      state: z.enum(["held", "started", "stopped", "waiting-prerequisite", "backoff", "waiting-slot", "queued"]),
+      waitingFor: z.array(idSchema),
+      refusal: z.object({ code: nonemptyString, count: positiveSafeInteger, persistent: z.boolean() }).strict().nullable(),
     }).strict().optional(),
   })
   .strict();
@@ -1667,6 +1687,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("pending-decision-approved"), pendingId: idSchema, decisionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("pending-decision-rejected"), pendingId: idSchema, correctionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("flagged-decision-ratified"), decisionId: nonemptyString }).strict(),
+  z.object({ kind: z.literal("orchestration-settings-set"), maxRunningGroups: positiveSafeInteger, revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("debug-group-opened"), groupId: idSchema, correctionId: nonemptyString, created: z.boolean() }).strict(),
   z.object({ kind: z.literal("correction-recorded"), correctionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("correction-closed"), correctionId: nonemptyString, relPath: nonemptyString, alreadyClosed: z.boolean() }).strict(),
@@ -1768,7 +1789,9 @@ export const commandSuccessSchema = z
     const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-integration-scheme" || value.verb === "set-agent-preferences" || value.verb === "apply-agent-update"
       || value.verb === "set-spend-cap" || value.verb === "clear-spend-cap" || value.verb === "set-usage-calendar"
       // Debug task plan Task 11: the `@corrections` scope has revision 0 and no group projection.
-      || value.verb === "correction-record" || value.verb === "correction-close" || value.verb === "correction-withdraw";
+      || value.verb === "correction-record" || value.verb === "correction-close" || value.verb === "correction-withdraw"
+      // Kanban spec 2026-10-20 §3.2: the `@orchestration` scope has its own revision and no group projection.
+      || value.verb === "set-orchestration-settings";
     if (isShutdown ? value.commandRevision !== null : value.commandRevision === null) {
       issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");
     }
@@ -1877,6 +1900,11 @@ export const groupDecisionsViewSchema = z
   })
   .strict();
 export type GroupDecisionsViewV1 = z.infer<typeof groupDecisionsViewSchema>;
+// Kanban spec 2026-10-20 §3.2: GET /api/control/orchestration.
+export const orchestrationViewSchema = z.object({
+  schema: z.literal("orca-orchestration-v1"), revision: safeInteger, maxRunningGroups: positiveSafeInteger, runningGroups: safeInteger,
+}).strict();
+export type OrchestrationViewV1 = z.infer<typeof orchestrationViewSchema>;
 export type SetIntegrationSchemePayload = z.infer<typeof setIntegrationSchemePayloadSchema>;
 export type SetGroupIntegrationPayload = z.infer<typeof setGroupIntegrationPayloadSchema>;
 export type SetWorkspaceModePayload = z.infer<typeof setWorkspaceModePayloadSchema>;

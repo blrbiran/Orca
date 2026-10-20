@@ -1,6 +1,7 @@
 import {hasSavedOrdinaryRetryAuthorization} from "./savedResultNoDispatch.js";
 import { groupRepoIdOf } from "./usageLedger.js";
 import { releaseCommitment } from "./stopIntent.js";
+import { recordStarted } from "./orchestration.js";
 import { allocateFundedAllowance, decideFundedAllowance, hasTokenPolicy, persistFundedAllowance, type FundedAllowance } from "./fundedAllowance.js";
 import { finiteCommitment, tokenProofCovers } from "./tokenPolicy.js";
 import { add, syncWebBudget } from "./budget.js";
@@ -180,6 +181,8 @@ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand
         const wakeId = `scheduler-wake:${groupId}:${context.nextCommandRevision}`;
         store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'start',?,0)")
           .run(wakeId, groupId, canonicalBytes({ groupId, startRevision: context.nextCommandRevision, executionSnapshotHash: sha256Canonical(snapshot) }).toString("utf8"));
+        // Kanban spec 2026-10-20 §3.1: whoever started it (a person or orca-auto), nothing starts it again on its own.
+        recordStarted(store, groupId, context.nextCommandRevision);
         return success(context, { kind: "scheduled", operation: "start", wakeId }, 202);
       },
     });

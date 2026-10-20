@@ -18,7 +18,8 @@ import { agentUpdateStateSchema } from "../control/agentInstallationProtocol.js"
 import { resolveSelection, slotLayers, type PartialSelection } from "../control/agentSelection.js";
 import { idSchema } from "../control/schema.js";
 import { debugGroupIdFor, debugGroupIds } from "../control/debugGroup.js";
-import { correctionDebugOpenPayloadSchema, savedResultEligibilityViewSchema, agentModelsViewSchema, agentVersionRefreshSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import { orchestrationRevision, slotUse } from "../control/orchestration.js";
+import { correctionDebugOpenPayloadSchema, orchestrationViewSchema, savedResultEligibilityViewSchema, agentModelsViewSchema, agentVersionRefreshSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import { readIntegrationDefault } from "../control/integrationScheme.js";
@@ -225,6 +226,14 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       sendMappedControlError(res, error, readErrorContext(deps.store, groupId));
     }
   }));
+
+  // Kanban spec 2026-10-20 §3.2: the running-group cap, its revision and how many groups hold a slot now.
+  app.get("/api/control/orchestration", (_req, res) => {
+    try {
+      const { running, cap } = slotUse(deps.store);
+      res.json(orchestrationViewSchema.parse({ schema: "orca-orchestration-v1", revision: orchestrationRevision(deps.store), maxRunningGroups: cap, runningGroups: running }));
+    } catch (error) { sendMappedControlError(res, error); }
+  });
 
   // Debug task plan Task 10: every correction, its debug groups and its closed state, computed from refs (never fetched).
   // Here, so the socket (agents) reads it too. A panel with no corrections store answers corrections-store-unconfigured.
@@ -446,6 +455,7 @@ const payloadFields = (payload: unknown): Record<string, unknown> =>
 const scoped = (groupId: string) => ({ groupId, target: { kind: "group" as const, groupId } });
 const fromParams: RouteTarget = (params) => scoped(idSchema.parse(params.groupId));
 const spendScoped: RouteTarget = () => ({ groupId: "@spend", target: { kind: "spend" } });
+const orchestrationScoped: RouteTarget = () => ({ groupId: "@orchestration", target: { kind: "orchestration" } });
 /** Debug task plan Task 11: the `@corrections` scope; a path naming a correction must name the payload's. */
 const correctionsScoped: RouteTarget = (params, payload) => {
   if (params.correctionId !== undefined && String(params.correctionId) !== payloadFields(payload).correctionId) {
@@ -548,6 +558,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/operator/set-spend-cap", verb: "set-spend-cap", target: spendScoped },
     { path: "/api/control/operator/clear-spend-cap", verb: "clear-spend-cap", target: spendScoped },
     { path: "/api/control/operator/set-usage-calendar", verb: "set-usage-calendar", target: spendScoped },
+    // Kanban spec 2026-10-20 §3.2: the running-group cap; ledger key `@orchestration`.
+    { path: "/api/control/operator/set-orchestration-settings", verb: "set-orchestration-settings", target: orchestrationScoped },
     { path: "/api/control/groups/:groupId/proposal/agent", verb: "proposal-set-agent", target: fromParams },
     // N1 spec §11.1: the requirement commands; open names its group in the payload, as import-plan does.
     { path: "/api/control/requirements", verb: "requirement-open", target: (_params, payload) => scoped(idSchema.parse(payloadFields(payload).groupId)) },
@@ -641,6 +653,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "requirement-draft-feedback": service.requirementDraftFeedback(command); break;
           case "requirement-draft-accept": await service.acceptRequirementDraft(command); break;
           case "set-spend-cap": service.setSpendCap(command); break;
+          case "set-orchestration-settings": service.setOrchestrationSettings(command); break;
           case "clear-spend-cap": service.clearSpendCap(command); break;
           case "set-usage-calendar": service.setUsageCalendar(command); break;
           default: throw new ControlError("route-not-found");

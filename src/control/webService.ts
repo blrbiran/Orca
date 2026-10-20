@@ -44,6 +44,8 @@ import { recordActivity } from "./activity.js";
 import { commandClientFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
 import { applyApprovePendingDecision, applyRatifyFlaggedDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RatifyFlaggedDecisionCommand, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { readCorrections } from "../corrections/store.js";
+import { autoStartPass, recordConfirmed, type PrerequisiteReader } from "./orchestration.js";
+import { applySetOrchestrationSettings, type SetOrchestrationSettingsCommand } from "./orchestrationCommands.js";
 import { readWithdrawals, withdrawnIds } from "../corrections/withdrawals.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
@@ -637,6 +639,17 @@ export class WebControlService {
   async start(command: StartCommand): Promise<WebCommandResult> {
     return scheduleStart({ store: this.store, profileRouter: this.deps.profileRouter, admissionGate: this.deps.admissionGate }, command);
   }
+  /**
+   * Kanban spec 2026-10-20 §3.1-§3.2: one pass of start-on-confirm. Each start is this service's own start path, sent as
+   * orca-auto; a refusal is recorded with its backoff (orchestration.ts). The panel's pump calls it before wake delivery.
+   */
+  autoStart(prerequisites?: PrerequisiteReader): ReturnType<typeof autoStartPass> {
+    return autoStartPass({ store: this.store, now: () => (this.deps.now?.() ?? new Date()).getTime(), start: (command) => this.start(command as StartCommand), prerequisites });
+  }
+  /** Kanban spec §3.2: the running-group cap (orchestrationCommands.ts). */
+  setOrchestrationSettings(command: SetOrchestrationSettingsCommand): WebCommandResult {
+    return this.mutate(() => applySetOrchestrationSettings({ store: this.store, admissionGate: this.deps.admissionGate }, command)) as WebCommandResult;
+  }
   private stopDeps(): StopDeps {
     return { store: this.store, profileRouter: this.deps.profileRouter, admissionGate: this.deps.admissionGate, now: this.deps.now, beforeCommit: this.deps.beforeCommit };
   }
@@ -1094,6 +1107,8 @@ export class WebControlService {
           proposal.state = "confirmed"; proposal.budgetMode = payload.budgetMode; proposal.contextPolicy = payload.contextPolicy; proposal.profiles = profiles; proposal.executionSnapshotHash = built.snapshotHash;
           proposal.allocations.forEach(a => { a.state = "confirmed"; }); group.status = "ready"; group.budgetMode = payload.budgetMode;
           saveWebAuthority(this.store, group, proposal);
+          // Kanban spec 2026-10-20 §3.1: confirming authorizes the start unless the person chose "Confirm only".
+          recordConfirmed(this.store, id, payload.hold === true ? "hold" : "run", context.nextCommandRevision);
           this.deps.beforeCommit?.();
           return success(context, { kind: "confirmed", executionSnapshotHash: built.snapshotHash });
         },

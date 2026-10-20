@@ -26,7 +26,7 @@ import { UsageSettlement } from "./UsageSettlement.js";
 import { SkillsGiven } from "./SkillsGiven.js";
 import { NeedsHumanBadge, runNeedsHuman, type GroupDecisionsRead } from "./RunDecisions.js";
 import type {
-  AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupViewV1, ModelListState, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
+  AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupOrchestrationV1, GroupViewV1, ModelListState, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
   RunViewV1,
 } from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
@@ -193,6 +193,23 @@ workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
 function estimateVersionOf(view: GroupViewV1, estimateId: string): string {
   const found = view.estimates.find((candidate) => candidate.estimateId === estimateId);
   return found === undefined ? estimateId : String(found.estimateVersion);
+}
+
+/**
+ * Kanban spec 2026-10-20 §3.1-§3.4: where a confirmed group is on its way to starting on its own. Nothing for a group
+ * already started or stopped (the stop banner says that); a start refused again and again is an alert (needs you).
+ */
+function OrchestrationLine(props: { orchestration: GroupOrchestrationV1 | undefined }): JSX.Element | null {
+  const { t } = useTranslation();
+  const o = props.orchestration;
+  if (o === undefined || o.state === "started" || o.state === "stopped") return null;
+  if (o.refusal?.persistent === true) return <p role="alert" data-testid="orchestration-line">{t("control.orchestration.refusedPersistent", { code: o.refusal.code, count: o.refusal.count })}</p>;
+  const text = o.state === "held" ? t("control.orchestration.held")
+    : o.state === "waiting-slot" ? t("control.orchestration.waitingSlot")
+    : o.state === "waiting-prerequisite" ? t("control.orchestration.waitingFor", { groups: o.waitingFor.join(", ") })
+    : o.state === "backoff" ? t("control.orchestration.backoff", { code: o.refusal?.code ?? "" })
+    : t("control.orchestration.queued");
+  return <p role="status" data-testid="orchestration-line">{text}</p>;
 }
 
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
@@ -372,6 +389,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {/* Final review T11 (Rule 12): a failed decisions read is said for the group too, not only inside an open task. */}
       {decisionsFailed !== null && <p data-testid="group-decisions-read-failed">{t("control.decisions.readFailed", { code: decisionsFailed })}</p>}
       {view.summary.claimBlocked && <p role="alert">{t("control.group.claimBlocked")}</p>}
+      <OrchestrationLine orchestration={view.summary.orchestration} />
       {/* Spec 2026-10-08 §2.2(d), §6.5: the group's refusal is among the alerts at the top, above every action. */}
       {props.refusal ? <RefusalNotice refusal={props.refusal} testId="group-refusal" /> : null}
       {/* Issue-fixes spec §3.2 (4): one banner for any stop intent -- how it stopped, its state, and the one way out. */}

@@ -93,7 +93,17 @@ export type GroupSummaryV1 = {
     checks?: { from: "original" | "original+named" | "named"; namedBy: "human" | "agent" | null };
     closing?: DebugClosingV1 | null;
   };
+  /** Kanban spec 2026-10-20 §3.1-§3.4: present only on a group confirmed since start-on-confirm exists. */
+  orchestration?: GroupOrchestrationV1;
 };
+export type GroupOrchestrationV1 = {
+  mode: "run" | "hold";
+  state: "held" | "started" | "stopped" | "waiting-prerequisite" | "backoff" | "waiting-slot" | "queued";
+  waitingFor: string[];
+  refusal: { code: string; count: number; persistent: boolean } | null;
+};
+/** Kanban spec §3.2: GET /api/control/orchestration. */
+export type OrchestrationViewV1 = { schema: "orca-orchestration-v1"; revision: number; maxRunningGroups: number; runningGroups: number };
 
 /** Debug task plan Task 3: a piece of the frozen input that could not be read (src/control/debugInput.ts). */
 export type DebugInputPieceV1 = "run" | "base" | "attemptSha" | "objects" | "contract";
@@ -439,7 +449,8 @@ export type CommandTargetV1 =
   | { kind: "repository"; repoId: string }
   | { kind: "operator"; operatorId: string }
   | { kind: "spend" }
-  | { kind: "corrections" };
+  | { kind: "corrections" }
+  | { kind: "orchestration" };
 
 /** What a mutation POST carries: an id the ledger dedupes on, the revision it expects, and the verb's payload. */
 export type CommandEnvelopeV1 = { commandId: string; expectedRevision: number; payload?: unknown };
@@ -466,6 +477,8 @@ export type ConfirmPayloadV1 = {
   selectionsHash: string;
   /** Integration spec §3.2: the group's integration.schemeHash the owner saw; only for a non-keep scheme. */
   integrationHash?: string;
+  /** Kanban spec §3.1: "Confirm only, don't run yet"; absent is "Confirm and run". */
+  hold?: true;
 };
 export type SetLimitPayloadV1 = { limit: BudgetAmount };
 export type ImportPlanPayloadV1 = {
@@ -526,7 +539,7 @@ export type CommandSuccessV1 = {
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
-    | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "correction-debug-open"
+    | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "correction-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw";
   target: CommandTargetV1;
   commandRevision: number | null;
@@ -565,6 +578,7 @@ export type CommandSuccessV1 = {
     | { kind: "spend-cap-set"; revision: number }
     | { kind: "spend-cap-cleared"; revision: number }
     | { kind: "usage-calendar-set"; revision: number }
+    | { kind: "orchestration-settings-set"; maxRunningGroups: number; revision: number }
     | { kind: "task-labels-set"; taskId: string; labelsVersion: number }
     | { kind: "task-loop-set"; taskId: string; loopVersion: number; proposalVersion: number }
     | { kind: "task-continuing"; continuationIntentId: string; pendingRunId: string; claimOrdinal: number; wakeId: string }

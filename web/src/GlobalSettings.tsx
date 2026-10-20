@@ -1,4 +1,5 @@
 /** Progress spec §4: browser preferences and shared panel-operator defaults, composed from existing controls. */
+import { OrchestrationSettings } from "./OrchestrationSettings.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import type { ControlRefusal } from "./controlState.js";
 import type { JSX } from "react";
@@ -39,6 +40,7 @@ export function GlobalSettings(props: {
           onChange={(event) => props.onAdvanced?.(event.currentTarget.checked)} />{t("settings.showAdvanced")}</label>
       </div>
       <AccountSettings />
+      <OrchestrationSettings />
       <p>{t("settings.agentScope")}</p>
       {props.agents === null ? <p role="status">{t("settings.agentsUnavailable")}</p> : <AgentSettings {...props.agents} />}
     </section>

@@ -60,3 +60,17 @@ describe("confirming needs the previewed selectionsHash (agent selection spec §
     expect(onCommand.mock.calls[0]![0]).toMatchObject({ verb: "confirm", groupId: "g", payload: { selectionsHash: "9".repeat(64), proposalVersion: 2 } });
   });
 });
+
+// Kanban spec 2026-10-20 §3.1 (session 9ec98639): confirming says it starts the group; "Confirm only" sends hold.
+describe("start on confirm (kanban spec §3.1)", () => {
+  it("says confirming starts the group; the default confirm sends no hold, and Confirm only sends hold: true", () => {
+    const onCommand = vi.fn();
+    render(<BudgetEditor view={view} config={config} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} selectionsHash={"9".repeat(64)} />);
+    expect(screen.getByTestId("confirm-starts-note").textContent).toBe("Confirming starts this group on its own as soon as a slot is free.");
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
+    // mutation: the default button passes hold -> "hold" in the payload, red
+    expect(Object.hasOwn(onCommand.mock.calls[0]![0].payload, "hold")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm only, don't run yet" }));
+    expect(onCommand.mock.calls[1]![0]).toMatchObject({ verb: "confirm", payload: { hold: true, selectionsHash: "9".repeat(64) } });
+  });
+});

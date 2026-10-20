@@ -270,6 +270,14 @@ export const zh: Translation<typeof en> = {
       notConfigured: "未配置",
       button: "导入计划",
     },
+    orchestration: {
+      queued: "已确认：下一轮会自动开跑。",
+      held: "只确认未开跑。准备好后手动开始。",
+      waitingSlot: "已确认：在等空位（同时运行的组数已到上限）。",
+      waitingFor: "已确认：等 {{groups}} 先落地。",
+      backoff: "自动开跑被拒（{{code}}），稍后会再试。",
+      refusedPersistent: "需要你处理：自动开跑连续被拒 {{count}} 次（{{code}}）。其它组照常运行。",
+    },
     group: {
       region: "控制组 {{groupId}}",
       heading: "{{groupId}} · {{state}} · 版本 {{revision}} · 状态序号 {{projection}}",
@@ -617,6 +625,8 @@ export const zh: Translation<typeof en> = {
     confirmWaits: "确认要等这个提案版本的 agent 选择解析完成。",
     confirmDestination: "请检查下方 Agent 选择，或在此检查安装和默认值：",
     confirm: "确认任务方案",
+    confirmStartsNote: "确认后，一有空位这个组就会自动开跑。",
+    confirmHold: "只确认，先不跑",
     provenanceModel: "模型 {{estimateId}}",
   },
   loopPlan: {
@@ -842,6 +852,12 @@ export const zh: Translation<typeof en> = {
     projectScope: "{{project}} 的默认值。已有任务组保留各自的选择。",
     workspaceUnavailable: "尚未读取工作空间设置。", integrationUnavailable: "尚未读取集成设置。",
     agentsUnavailable: "尚未读取 Agent 默认值。",
+    orchestration: {
+      title: "并行运行的组",
+      running: "正在运行 {{running}} 个组，上限 {{cap}} 个。确认过的组一有空位就会自动开跑。",
+      cap: "同时运行的组最多",
+      save: "保存",
+    },
   },
   auth: {
     loading: "正在确认登录状态…",

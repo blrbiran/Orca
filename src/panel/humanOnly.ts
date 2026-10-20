@@ -49,6 +49,7 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   // Control run decisions plan Task 9: approving a refused decision writes a ledger line in an owner's name.
   "approve-pending-decision": "human-only",
   "ratify-flagged-decision": "human-only",
+  "set-orchestration-settings": "human-only",
   // Control run decisions plan Task 10: rejecting one records a correction in an owner's name.
   "reject-pending-decision": "human-only",
   // Debug task design §12.4: opening a correction's debug group spends nothing, so the agent path may do it.

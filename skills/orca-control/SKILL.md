@@ -142,6 +142,7 @@ publication, package repin and production service changes are separate human rel
 ## 5. Long work
 
 Runs take minutes to hours. Do not wait on a command. After `start` or `continue-task`, poll `get groups/<id>` every 30-60 s and act on what it shows.
+A confirmed group starts on its own once its slot is free (`.summary.orchestration.state`: `queued`, `waiting-slot`, `started`, …); do not send `start` after `confirm` unless it was confirmed with `"hold":true`.
 
 ## 6. What only a person does
 
@@ -155,6 +156,7 @@ The socket refuses these before anything runs (nothing is ledgered, the commandI
 - `approve-pending-decision` (giving a decision a landing refused an executable `undo.how` and writing it into the ledger) is owner-only → 403 `control-verb-human-only`.
 - `reject-pending-decision` (rejecting a decision a landing refused, which records a correction in the owner's name) is owner-only → 403 `control-verb-human-only`.
 - `ratify-flagged-decision` (accepting a landed decision Orca flagged for a person) is owner-only → 403 `control-verb-human-only`.
+- `set-orchestration-settings` (how many groups run at once; a confirmed group starts on its own when a slot is free) is owner-only → 403 `control-verb-human-only`. A `confirm` with `"hold":true` confirms without starting; `start` it later.
 - `correction-debug-open` (opening a recorded correction's debug group; it spends nothing, and its group is `debug-<correctionId>`, or the next `-2`, `-3`, … with `"reopen":true` once the newest is stopped or archived) is open to an agent, but its `undoHow` field is human-only → 403 `control-field-human-only`. Send `expectedRevision` 0 for a new group, or the group's current revision. Add `"checks":["npm test"]` to name the checks the debug task is held to; they are added to the original contract's (never in place of them), and they are required (409 `debug-checks-required`) when the corrected run has no contract to inherit them from.
 - `correction-record`, `correction-close` and `correction-withdraw` (recording a correction, closing one by hand with the owner's `undo.how`, withdrawing one) are owner-only → 403 `control-verb-human-only`. A close while a debug group of the correction is live is refused 409 `debug-group-active`.
 
@@ -179,7 +181,7 @@ stdout is exactly one JSON line:
 
 ## 8. Route table
 
-`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration`, `groups/<groupId>/integration`, `groups/<groupId>/integration/retry`, `groups/<groupId>/integration/resolve`, `groups/<groupId>/decisions/approve`, `groups/<groupId>/decisions/reject`, `groups/<groupId>/decisions/ratify` and the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows are listed for completeness and are owner-only (section 6).
+`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration`, `groups/<groupId>/integration`, `groups/<groupId>/integration/retry`, `groups/<groupId>/integration/resolve`, `groups/<groupId>/decisions/approve`, `groups/<groupId>/decisions/reject`, `groups/<groupId>/decisions/ratify` the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows and `operator/set-orchestration-settings` are listed for completeness and are owner-only (section 6).
 
 | Route | Verb | Payload example |
 | --- | --- | --- |
@@ -224,6 +226,7 @@ stdout is exactly one JSON line:
 | `POST operator/set-spend-cap` | set-spend-cap | `{"scope":"all","period":"week","tokens":5000000}` |
 | `POST operator/clear-spend-cap` | clear-spend-cap | `{"scope":"all","period":"week"}` |
 | `POST operator/set-usage-calendar` | set-usage-calendar | `{"timeZone":"UTC","weekStart":1}` |
+| `POST operator/set-orchestration-settings` | set-orchestration-settings | `{"maxRunningGroups":3}` |
 
 Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-stop` takes an optional `handoffDeadlineAt` (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). A spend cap's `scope` is `all` or `repo:<repoId>` and its `period` is `total`, `week` or `month` (weeks and months in the usage calendar's time zone). Examples are checked against the raw payload schemas only; the panel also judges live state, so versions, hashes and ids must be real (for example a `set-task-loop` plan must exist, and a `proposal-edit` operation with provenance `model` needs an `estimateId`). `retry-task` starts again a task whose current run ccloop ended failed (in `get groups/<groupId>`, the current run has a non-succeeded `outcome` and is either terminally `blocked`, an eligible held `settled-recoverable` failure after handoff, or an eligible released `settled-failed` failure with a valid usage settlement): the run becomes `settled-failed` and a new run starts from the group branch's current head; any other task is refused with `task-not-retryable` (409). `recovery-retry` refuses such a run with `run-terminal-failed` (409) and still resumes a run blocked for any other reason. An archived group keeps every record and refuses every command but `unarchive-group` with `group-archived` (409); reads are unchanged and it is never claimed or integrated. `archive-group` is refused while the group still has work in motion: `archive-run-active`, `archive-stop-pending` (a handoff or shutdown stop still `handoff-pending` or `handoff-unresolved`; `handoff-complete` and `handoff-partial` allow archive; a pause never blocks), `archive-integration-resolving`, `archive-call-in-flight` (an estimate or requirement call).
 
@@ -240,6 +243,7 @@ Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-
 | `repositories/<repoId>/integration` | `.revision` of `get repositories/<repoId>/integration` (`orca-repository-integration-v1`; the same revision as the workspace read: both settings share it) |
 | `operator/agent-preferences` | `.revision` of `get operator/agent-preferences` (`orca-agent-preferences-v1`; `0` before the first change) |
 | `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` | `.spendRevision` of `get usage?scope=all` (one revision for all three; `0` before the first change) |
+| `operator/set-orchestration-settings` | `.revision` of `get orchestration` (`orca-orchestration-v1`; `0` before the first change) |
 
 Where the ids come from:
 
