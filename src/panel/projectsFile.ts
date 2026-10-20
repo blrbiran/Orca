@@ -7,12 +7,14 @@
 import { createHash, randomBytes } from "node:crypto";
 import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join, posix } from "node:path";
 import { z } from "zod";
 
 export const PROJECT_ID_PATTERN = /^[a-z0-9_](?:[a-z0-9._-]*[a-z0-9_])?$/;
 
-export interface ProjectEntryV1 { id: string; name: string; path: string }
+/** In-repo plan path spec 2026-10-21 §2.1: a plan file the person registered; `path` is relative to the project. */
+export interface ProjectPlanV1 { id: string; path: string; sha256: string }
+export interface ProjectEntryV1 { id: string; name: string; path: string; plans?: ProjectPlanV1[] }
 export interface ProjectsFileV1 { version: 1; controlStateDir?: string; projects: ProjectEntryV1[] }
 export interface FileSignature { mtimeNs: bigint; size: bigint; ino: bigint; ctimeNs: bigint }
 export type ProjectsFileRead =
@@ -39,10 +41,21 @@ export function deriveProjectId(name: string, path: string, taken: ReadonlySet<s
 }
 
 const absolute = z.string().min(1).refine((value) => isAbsolute(value), "must be an absolute path");
+/** A plan path as filed: relative, already normalised, inside the project (spec §2.1). */
+export function isFiledPlanPath(value: string): boolean {
+  return value.length > 0 && !isAbsolute(value) && !value.includes("\\") && posix.normalize(value) === value
+    && value !== "." && !value.split("/").includes("..");
+}
+const planSchema = z.object({
+  id: z.string().max(200).regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/, "plan id must match [a-zA-Z0-9][a-zA-Z0-9_.-]*"),
+  path: z.string().refine(isFiledPlanPath, "plan path must be relative to the project, normalised, without '..'"),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/, "sha256 must be 64 lowercase hex digits"),
+}).strict();
 const projectSchema = z.object({
   id: z.string().regex(PROJECT_ID_PATTERN, "id must match [a-z0-9._-] and start and end with [a-z0-9_]"),
   name: z.string().refine((value) => value.trim().length > 0, "name must not be blank"),
   path: absolute,
+  plans: z.array(planSchema).optional(),
 }).strict();
 const fileSchema = z.object({ version: z.literal(1), controlStateDir: absolute.optional(), projects: z.array(projectSchema) }).strict()
   .superRefine((value, ctx) => {
@@ -51,6 +64,15 @@ const fileSchema = z.object({ version: z.literal(1), controlStateDir: absolute.o
       for (const project of value.projects) {
         if (seen.has(project[field])) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `duplicate ${field} ${JSON.stringify(project[field])}` });
         seen.add(project[field]);
+      }
+    }
+    const planIds = new Set<string>();
+    for (const project of value.projects) {
+      const paths = new Set<string>();
+      for (const plan of project.plans ?? []) {
+        if (planIds.has(plan.id)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `duplicate plan id ${JSON.stringify(plan.id)}` });
+        if (paths.has(plan.path)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `duplicate plan path ${JSON.stringify(plan.path)} in ${project.id}` });
+        planIds.add(plan.id); paths.add(plan.path);
       }
     }
   });

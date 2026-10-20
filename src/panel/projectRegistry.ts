@@ -11,21 +11,25 @@
  * - New projects are appended to `repos` -- the very `opts.repos` array every consumer reads per request (C2) --
  *   and nothing is ever removed from it at runtime.
  */
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { realpathSync, statSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { readFileSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, join as joinPath, posix, relative, sep } from "node:path";
 import { compareText } from "../control/webProtocol.js";
-import type { TrustedRepositoryConfig } from "./controlConfig.js";
+import type { TrustedPlanConfig, TrustedRepositoryConfig } from "./controlConfig.js";
 import { controlRepoKey } from "./controlOptions.js";
 import {
-  deriveProjectId, readProjectsFile, sameSignature, writeProjectsFile,
-  type FileSignature, type ProjectEntryV1, type ProjectsFileRead, type ProjectsFileV1,
+  deriveProjectId, isFiledPlanPath, readProjectsFile, sameSignature, writeProjectsFile,
+  type FileSignature, type ProjectEntryV1, type ProjectPlanV1, type ProjectsFileRead, type ProjectsFileV1,
 } from "./projectsFile.js";
 
 export interface RegistryControl {
   check(entry: TrustedRepositoryConfig): void;
   add(entry: TrustedRepositoryConfig): void;
   rename(repoId: string, displayName: string): void;
+  /** In-repo plan path spec 2026-10-21: absent on a control plane that cannot hold runtime plans (criteria fakes). */
+  checkPlan?(entry: TrustedPlanConfig): void;
+  addPlan?(entry: TrustedPlanConfig): void;
 }
 
 export interface ProjectsListV1 {
@@ -47,7 +51,21 @@ export interface ProjectRegistry {
   list(): ProjectsListV1;
   add(name: string, path: string): ProjectEntryV1;
   rename(id: string, name: string): ProjectEntryV1;
+  /** In-repo plan path spec 2026-10-21 §2.2: register (or re-trust) a plan file of a project. */
+  addPlan(projectId: string, path: string): ProjectPlanV1;
 }
+
+/** Spec 2026-10-21 §2.2: whether `rel` (relative to `repo`) is in git's index. */
+function gitTracked(repo: string, rel: string): boolean {
+  try {
+    execFileSync("git", ["ls-files", "--error-unmatch", "--", rel], { cwd: repo, stdio: ["ignore", "ignore", "ignore"] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const planSlug = (rel: string): string => rel.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "plan";
 
 function gitTopLevel(dir: string): string | null {
   try {
@@ -106,6 +124,45 @@ export function createProjectRegistry(input: {
 
   const controlEntry = (p: ProjectEntryV1): TrustedRepositoryConfig => ({ repoId: controlRepoKey(p.id), displayName: p.name, path: p.path });
 
+  /**
+   * Spec 2026-10-21 §2.2: a plan path of project `p` checked the way registration and boot both need it -- relative,
+   * its real path a regular file inside the project's real path, tracked by git. Returns the filed relative path and
+   * the real path; refuses by name.
+   */
+  const checkedPlan = (p: ProjectEntryV1, path: string): { rel: string; real: string } => {
+    if (path.length === 0 || isAbsolute(path) || path.includes("\\")) fail("plan-path-invalid", 422, `${JSON.stringify(path)} is not a path relative to the project`);
+    const projectReal = realOf(p.path);
+    let real: string;
+    try {
+      real = realpathSync(joinPath(projectReal, path));
+      if (!statSync(real).isFile()) throw new Error("not a file");
+    } catch {
+      return fail("plan-path-missing", 422, `${path} is not an existing file in ${p.id}`);
+    }
+    const rel = relative(projectReal, real);
+    if (rel.length === 0 || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) fail("plan-path-outside-project", 422, `${path} leads outside ${p.id}`);
+    const filed = rel.split(sep).join(posix.sep);
+    if (!isFiledPlanPath(filed)) fail("plan-path-invalid", 422, `${path} cannot be filed`);
+    if (!gitTracked(projectReal, filed)) fail("plan-not-tracked", 422, `${filed} is not tracked by git in ${p.id}`);
+    return { rel: filed, real };
+  };
+  const planEntry = (p: ProjectEntryV1, plan: ProjectPlanV1, real: string): TrustedPlanConfig =>
+    ({ planId: plan.id, repoId: controlRepoKey(p.id), displayName: plan.path, path: real, sha256: plan.sha256 });
+  /** Boot and hand-added projects (spec §2.4): each filed plan re-checked and joined; one that fails is skipped and named. */
+  const joinPlans = (p: ProjectEntryV1): string[] => {
+    const errors: string[] = [];
+    for (const plan of p.plans ?? []) {
+      try {
+        if (!control?.addPlan) fail("plans-need-control", 409, "the task control plane is off");
+        const { real } = checkedPlan(p, plan.path);
+        control!.addPlan!(planEntry(p, plan, real));
+      } catch (error) {
+        errors.push(`plan ${plan.id}: ${(error as Error).message}`);
+      }
+    }
+    return errors;
+  };
+
   const precheck = (p: ProjectEntryV1): void => {
     try { control?.check(controlEntry(p)); }
     catch (error) { fail("project-path-refused", 422, `the task control plane refuses ${p.path}: ${(error as Error).message}`); }
@@ -126,6 +183,8 @@ export function createProjectRegistry(input: {
       const f = config.projects.find((p) => p.id === r.id);
       if (f === undefined) { pending.push(`removed:${r.id}`); continue; }
       if (realOf(f.path) !== realOf(r.path)) pending.push(`path:${r.id}`);
+      // Spec 2026-10-21 §2.4: a hand edit of a running project's plans applies at the next start.
+      if (JSON.stringify(f.plans ?? []) !== JSON.stringify(r.plans ?? [])) pending.push(`plans:${r.id}`);
       if (f.name !== r.name) { r.name = f.name; control?.rename(controlRepoKey(r.id), f.name); }
     }
     for (const f of config.projects) {
@@ -134,9 +193,10 @@ export function createProjectRegistry(input: {
         const real = checkedPath(f.path);
         const holder = running.find((r) => realOf(r.path) === real);
         if (holder !== undefined) fail("project-path-taken", 409, `${real} is already project ${holder.id}`);
-        const entry = { id: f.id, name: f.name, path: real };
+        const entry: ProjectEntryV1 = { id: f.id, name: f.name, path: real, ...(f.plans === undefined ? {} : { plans: f.plans.map((plan) => ({ ...plan })) }) };
         precheck(entry);
         join(entry);
+        errors.push(...joinPlans(entry));
       } catch (error) {
         errors.push(`project ${f.id}: ${(error as Error).message}`);
       }
@@ -173,6 +233,9 @@ export function createProjectRegistry(input: {
 
   // The trusted config was built with display name = id; give it the file's names (spec §6).
   for (const p of running) if (p.name !== p.id) control?.rename(controlRepoKey(p.id), p.name);
+  // In-repo plan path spec 2026-10-21 §2.4: the filed plans join at boot; one that no longer checks out is named.
+  const bootPlanErrors = running.flatMap(joinPlans);
+  if (bootPlanErrors.length > 0) fileError = bootPlanErrors.join("; ");
 
   const view = (): ProjectsListV1 => ({
     source: "file", editable: true,
@@ -210,6 +273,34 @@ export function createProjectRegistry(input: {
       r.name = trimmed;
       control?.rename(controlRepoKey(id), trimmed);
       return { ...r };
+    },
+    addPlan(projectId: string, path: string) {
+      refresh();
+      writable();
+      const r = running.find((p) => p.id === projectId);
+      const f = lastGood.projects.find((p) => p.id === projectId);
+      if (r === undefined || f === undefined) return fail("project-unknown", 404, `no project ${JSON.stringify(projectId)}`);
+      if (!control?.checkPlan || !control.addPlan) return fail("plans-need-control", 409, "plans can be registered only while the task control plane is on");
+      const { rel, real } = checkedPlan(r, path);
+      const sha256 = createHash("sha256").update(readFileSync(real)).digest("hex");
+      const held = (f.plans ?? []).find((plan) => plan.path === rel);
+      let id = held?.id;
+      if (id === undefined) {
+        const taken = new Set([...lastGood.projects, ...running].flatMap((p) => (p.plans ?? []).map((plan) => plan.id)));
+        const base = `${projectId}.${planSlug(rel)}`;
+        id = base;
+        for (let n = 2; taken.has(id); n += 1) id = `${base}-${n}`;
+      }
+      const plan: ProjectPlanV1 = { id, path: rel, sha256 };
+      const entry = planEntry(r, plan, real);
+      try { control.checkPlan(entry); }
+      catch (error) { fail("plan-path-refused", 422, `the task control plane refuses ${rel}: ${(error as Error).message}`); }
+      const nextPlans = (list: ProjectPlanV1[] | undefined): ProjectPlanV1[] =>
+        held === undefined ? [...(list ?? []), plan] : (list ?? []).map((p) => (p.path === rel ? plan : p));
+      write({ ...lastGood, projects: lastGood.projects.map((p) => (p.id === projectId ? { ...p, plans: nextPlans(p.plans) } : p)) });
+      r.plans = nextPlans(r.plans);
+      control.addPlan(entry);
+      return { ...plan };
     },
   };
 }

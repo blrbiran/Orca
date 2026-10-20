@@ -44,6 +44,7 @@ import {
   recordCorrection,
   recordReview,
   renameProject,
+  registerPlan,
   requestChainStart,
   requestChainStop,
   startChainBody,
@@ -1586,6 +1587,15 @@ export function App(): JSX.Element {
           refusal={control.panelRefusal}
           groupRefusals={control.refusals}
           importRefusal={control.importRefusal}
+          {...(projectsAnswer?.editable === true ? { onRegisterPlan: async (repoId: string, path: string) => {
+            // In-repo plan path spec 2026-10-21 §2.5: the browser never derives a project from a repoId; it asks the list.
+            const holder = projectsAnswer.projects.find((entry) => entry.controlRepoId === repoId);
+            if (holder === undefined) return { ok: false as const, code: "project-unknown", message: repoId };
+            const result = await registerPlan(holder.projectKey, path);
+            if (!result.ok) return { ok: false as const, code: result.code, message: result.message };
+            await rereadAfterProjectChange();
+            return { ok: true as const };
+          } } : {})}
           refetchRequired={control.refetchRequired}
           repoId={controlRepoId}
           scope={scope}

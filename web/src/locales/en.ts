@@ -431,6 +431,10 @@ export const en = {
       summary: "{{repository}} · {{plan}} · estimate mode {{mode}}",
       notConfigured: "not configured",
       button: "Import plan",
+      registerLabel: "Register a plan file in this repository (path relative to the repository; the file must be tracked by git)",
+      registerButton: "Register plan",
+      registered: "Registered {{path}}. Registering it again after an edit trusts the new content.",
+      registerRefused: "Not registered ({{code}}): {{message}}",
     },
     // Kanban spec 2026-10-20 §3.1-§3.4: a confirmed group on its way to starting on its own.
     orchestration: {
@@ -1120,6 +1124,7 @@ export const en = {
       "contract-json": "Task {{task}}'s contract file is not JSON.",
       "contract-shape": "Task {{task}}'s contract file does not match the contract format.",
       "contract-canonical": "Task {{task}}'s contract file cannot be canonicalised.",
+      "plan-changed-since-registration": "The plan file changed after it was registered. Register it again to trust the new content, then import.",
       malformed: "{{path}}: {{msg}}",
     },
   },

@@ -8,7 +8,7 @@ import i18n, { errorEntry, fillEntry, refusalDetail, refusalText } from "./i18n.
 import { codeAndDetail, explainBesideCode, explainCcloopCode, peerExitReason } from "./ccloopCodes.js";
 
 const PLAN_REJECTED = "control-plan-rejected";
-const PLAN_ITEMS = ["target-repo-mismatch", "missing-goal", "missing-success-conditions", "duplicate-success-condition"];
+const PLAN_ITEMS = ["target-repo-mismatch", "missing-goal", "missing-success-conditions", "duplicate-success-condition", "plan-changed-since-registration"];
 const TASK_ITEMS = ["missing-target-version", "duplicate-dependency", "dangling-dependency", "contract-json", "contract-shape", "contract-canonical"];
 
 /** The current language's planItem entry for a key built at run time, with its placeholders filled. */

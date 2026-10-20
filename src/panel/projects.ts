@@ -56,6 +56,18 @@ export function registerProjectRoutes(app: Express, deps: ProjectsDeps): void {
     catch (error) { refused(res, error); }
   });
 
+  // In-repo plan path spec 2026-10-21 (#65): register, or re-trust, a plan file of a project; file mode only.
+  app.post("/api/projects/:id/plans", (req, res) => {
+    if (!deps.registry) { res.status(409).json(FROM_COMMAND_LINE); return; }
+    const body = req.body as { path?: unknown } | undefined;
+    if (typeof body?.path !== "string") {
+      res.status(400).json({ code: PANEL_BAD_REQUEST, message: "POST /api/projects/:id/plans wants { path: string }" });
+      return;
+    }
+    try { res.status(201).json({ plan: deps.registry.addPlan(String(req.params.id), body.path.trim()) }); }
+    catch (error) { refused(res, error); }
+  });
+
   app.patch("/api/projects/:id", (req, res) => {
     if (!deps.registry) { res.status(409).json(FROM_COMMAND_LINE); return; }
     const body = req.body as { name?: unknown } | undefined;

@@ -49,6 +49,8 @@ export interface ControlPanelProps {
   groupRefusals?: Record<string, ControlRefusal>;
   /** The last import's refusal, shown inside the import form. */
   importRefusal?: ControlRefusal | null;
+  /** In-repo plan path spec 2026-10-21 (#65): present in file mode; registers a plan file of the chosen repository. */
+  onRegisterPlan?: RegisterPlan;
   refetchRequired: boolean;
   /**
    * Project switcher spec D4: the chosen project's control repository. Undefined when no project is chosen (the first
@@ -119,6 +121,35 @@ interface ImportFormProps {
   onCommand: (action: ControlAction) => void;
   /** Spec 2026-10-08 §2.2(d): the last import's refusal, with the refused plan's problems one per line. */
   refusal?: ControlRefusal | null;
+  onRegisterPlan?: RegisterPlan;
+}
+
+export type RegisterPlan = (repoId: string, path: string) => Promise<{ ok: true } | { ok: false; code: string; message: string }>;
+
+/** In-repo plan path spec 2026-10-21 §2.5: a repository-relative path; registering it is the person trusting that file. */
+function RegisterPlanForm(props: { repoId: string; onRegister: RegisterPlan }): JSX.Element {
+  const { t } = useTranslation();
+  const [path, setPath] = useState("");
+  const [answer, setAnswer] = useState<{ ok: true; path: string } | { ok: false; code: string; message: string } | null>(null);
+  const submit = (): void => {
+    const trimmed = path.trim();
+    if (trimmed === "") return;
+    void props.onRegister(props.repoId, trimmed).then((result) => {
+      setAnswer(result.ok ? { ok: true, path: trimmed } : result);
+      if (result.ok) setPath("");
+    });
+  };
+  return (
+    <div className="register-plan">
+      <label>
+        {t("control.import.registerLabel")}
+        <input type="text" value={path} placeholder="docs/plans/plan.json" onChange={(e) => setPath(e.currentTarget.value)} />
+      </label>
+      <button type="button" disabled={path.trim() === ""} onClick={submit}>{t("control.import.registerButton")}</button>
+      {answer?.ok === true && <p role="status">{t("control.import.registered", { path: answer.path })}</p>}
+      {answer?.ok === false && <p role="alert">{t("control.import.registerRefused", { code: answer.code, message: answer.message })}</p>}
+    </div>
+  );
 }
 
 function ImportForm(props: ImportFormProps): JSX.Element {
@@ -206,6 +237,7 @@ function ImportForm(props: ImportFormProps): JSX.Element {
           </button>
         </>
       )}
+      {repository !== undefined && props.onRegisterPlan !== undefined && <RegisterPlanForm key={repository.repoId} repoId={repository.repoId} onRegister={props.onRegisterPlan} />}
     </section>
   );
 }
@@ -261,6 +293,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         key={scope?.kind === "all" ? ALL_PROJECTS : (scope?.kind === "project" ? scope.repoId : props.repoId) ?? ""}
         config={config} repoId={props.repoId} scope={scope} targets={props.targets} repoLabel={props.repoLabel} onCommand={props.onCommand}
         refusal={props.importRefusal ?? null}
+        {...(props.onRegisterPlan === undefined ? {} : { onRegisterPlan: props.onRegisterPlan })}
       />
       </div>
       <GroupList groups={summary.groups} selected={selected} scope={scope} repoLabel={props.repoLabel} onSelect={props.onSelect}

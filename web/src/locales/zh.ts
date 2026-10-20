@@ -303,6 +303,10 @@ export const zh: Translation<typeof en> = {
       summary: "{{repository}} · {{plan}} · 估算模式 {{mode}}",
       notConfigured: "未配置",
       button: "导入计划",
+      registerLabel: "登记本仓库里的一个计划文件（相对仓库根目录的路径；文件必须已被 git 跟踪）",
+      registerButton: "登记计划",
+      registered: "已登记 {{path}}。改动文件后再登记一次，即信任新内容。",
+      registerRefused: "未登记（{{code}}）：{{message}}",
     },
     orchestration: {
       queued: "已确认：下一轮会自动开跑。",
@@ -988,6 +992,7 @@ export const zh: Translation<typeof en> = {
   refusal: {
     planRejected: "计划没有导入。请在计划文件里改掉下面每一个问题，然后重新导入。",
     planItem: {
+      "plan-changed-since-registration": "计划文件在登记之后被改过。请再登记一次以信任新内容，然后再导入。",
       "missing-target-version": "任务 {{task}} 没有 targetVersion。请填一个正整数，通常是 1。",
       "target-repo-mismatch": "计划的 targetRepo 不是这个仓库。",
       "missing-goal": "计划没有 goal。",

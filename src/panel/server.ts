@@ -258,6 +258,8 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
       check: (entry) => control!.config.checkRepository(entry),
       add: (entry) => control!.config.addRepository(entry),
       rename: (repoId, name) => control!.config.renameRepository(repoId, name),
+      checkPlan: (entry) => control!.config.checkPlan(entry),
+      addPlan: (entry) => control!.config.addPlan(entry),
     },
   });
   buildApi(app, {

@@ -1,4 +1,5 @@
-import { fstatSync, lstatSync, realpathSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { fstatSync, lstatSync, readSync, realpathSync } from "node:fs";
 import { isAbsolute, parse, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { durableCommandErrorStatuses } from "../control/errors.js";
@@ -21,6 +22,8 @@ export interface TrustedPlanConfig {
   repoId: string;
   displayName: string;
   path: string;
+  /** In-repo plan path spec 2026-10-21 §2.3: the digest the person registered; import refuses other bytes. Boot flags carry none. */
+  sha256?: string;
 }
 
 export interface TrustedControlConfigInput {
@@ -54,6 +57,14 @@ export interface TrustedControlConfig {
   checkRepository(entry: TrustedRepositoryConfig): void;
   /** A repository added at runtime, through the same `checkedPath` witness the constructor uses. */
   addRepository(entry: TrustedRepositoryConfig): void;
+  /** The validation `addPlan` runs, without adding: the registry's pre-check before it writes its file. */
+  checkPlan(entry: TrustedPlanConfig): void;
+  /**
+   * In-repo plan path spec 2026-10-21 §2.2: a plan registered at runtime, through the same `checkedPath` witness and
+   * inside-the-repository check the constructor uses. The same planId again (same repository, same path) replaces
+   * its digest -- re-registering is how the person trusts edited content.
+   */
+  addPlan(entry: TrustedPlanConfig): void;
   /** The display name only; `repoId` and the path witness never change. */
   renameRepository(repoId: string, displayName: string): void;
   /** Debug task plan Task 6: every held repository with its trusted path (each witness re-validated), in repoId order. */
@@ -139,6 +150,16 @@ function validateOpenFile(witness: PathWitness, fd: number): void {
   }
 }
 
+/** The digest of the whole opened file, read at explicit offsets so the descriptor's position is left where it was. */
+function descriptorSha256(fd: number): string {
+  const hash = createHash("sha256"), chunk = Buffer.alloc(65536);
+  for (let offset = 0; ;) {
+    const n = readSync(fd, chunk, 0, chunk.length, offset);
+    if (n === 0) return hash.digest("hex");
+    hash.update(chunk.subarray(0, n)); offset += n;
+  }
+}
+
 function unique<T>(values: readonly T[], key: (value: T) => string): boolean {
   return new Set(values.map(key)).size === values.length;
 }
@@ -181,14 +202,23 @@ export function createTrustedControlConfig(
     return checkedPath(entry.path, "directory");
   };
   const plans = new Map<string, TrustedPlanConfig & { witness: PathWitness }>();
-  for (const entry of input.plans) {
+  const checkPlanEntry = (entry: TrustedPlanConfig): PathWitness => {
     if (!idSchema.safeParse(entry.planId).success || !idSchema.safeParse(entry.repoId).success || !entry.displayName) invalid("plan");
+    if (entry.sha256 !== undefined && !/^[a-f0-9]{64}$/.test(entry.sha256)) invalid("plan-sha256");
     const repository = repositories.get(entry.repoId);
     if (!repository) invalid("plan-repository");
     const witness = checkedPath(entry.path, "file");
     if (!isDescendant(repository.witness.canonicalPath, witness.canonicalPath)) throw new ControlError("control-path-escape");
-    plans.set(entry.planId, { ...entry, witness });
-  }
+    return witness;
+  };
+  for (const entry of input.plans) plans.set(entry.planId, { ...entry, witness: checkPlanEntry(entry) });
+  /** Runtime plans (spec 2026-10-21 §2.2): a new id, or the same id for the same repository and path (a digest refresh). */
+  const checkRuntimePlan = (entry: TrustedPlanConfig): PathWitness => {
+    const witness = checkPlanEntry(entry);
+    const held = plans.get(entry.planId);
+    if (held !== undefined && (held.repoId !== entry.repoId || held.witness.canonicalPath !== witness.canonicalPath)) invalid("duplicate-id");
+    return witness;
+  };
 
   const profiles = router.list();
   // Ruling R7: no estimator named is a state, not an error. A name that does not resolve, or
@@ -217,6 +247,8 @@ export function createTrustedControlConfig(
           const currentPlanPath = revalidatePath(plan.witness);
           if (!isDescendant(currentRepositoryPath, currentPlanPath)) throw new ControlError("control-path-escape");
           validateOpenFile(plan.witness, fd);
+          // In-repo plan path spec 2026-10-21 §2.3: only the bytes the person registered are imported.
+          if (plan.sha256 !== undefined && descriptorSha256(fd) !== plan.sha256) throw new ControlError("control-plan-rejected", "plan-changed-since-registration");
         },
       });
       return Object.freeze(resolvedTarget);
@@ -226,6 +258,11 @@ export function createTrustedControlConfig(
     addRepository(entry: TrustedRepositoryConfig) {
       const witness = checkNewRepository(entry);
       repositories.set(entry.repoId, { ...entry, witness });
+    },
+    checkPlan(entry: TrustedPlanConfig) { checkRuntimePlan(entry); },
+    addPlan(entry: TrustedPlanConfig) {
+      const witness = checkRuntimePlan(entry);
+      plans.set(entry.planId, { ...entry, witness });
     },
     renameRepository(repoId: string, displayName: string) {
       const repository = repositories.get(repoId);
