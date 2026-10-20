@@ -1,16 +1,14 @@
-import { clearSpendCapBlock } from "./spendCaps.js";
 import type { ControlStore } from "./store.js";
 
 /**
  * Estimate parking spec 2026-10-21 §3.1: a queued estimate of a stopped pre-start group stays queued with its grant;
  * its wake is acknowledged here, inside the claim's transaction, so the pump stops re-posting it, and an un-stop that
- * commits after the claim cannot be overwritten by the pump's own acknowledgement. An `estimate` cap block is cleared:
- * the estimate waits on the stop now and is gated again when re-armed.
+ * commits after the claim cannot be overwritten by the pump's own acknowledgement. (A cap block needs no clearing here:
+ * the stop that made the group stopped already cleared it, saveStopIntent in stopIntent.ts.)
  */
 export function parkEstimate(store: ControlStore, groupId: string, estimateId: string): void {
   store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE group_id=? AND kind='budget-estimate' AND delivered=0 AND json_extract(body,'$.estimateId')=?")
     .run(groupId, estimateId);
-  clearSpendCapBlock(store, groupId, "estimate");
 }
 
 /**

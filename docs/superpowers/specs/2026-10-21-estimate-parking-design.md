@@ -36,8 +36,9 @@
    withdrawn), the estimate is **parked**:
    - state stays `queued`; its grant stays in `committedRemaining` (nothing released, nothing settled);
    - every `budget-estimate` wake row of this estimate is set `delivered=1` **in the same transaction**;
-   - an `estimate` spend-cap block of the group, if any, is cleared (the estimate no longer waits on a cap; it is
-     gated again when re-armed);
+   - no spend-cap handling: the stop already cleared the group's cap block (`saveStopIntent`, accounts spec §6.3.1),
+     and the stopped check runs before `gateClaim`, so a stopped group records no new block; the estimate is gated
+     again when re-armed (found by mutation: a clear here was redundant and no test could fail on it);
    - the claim returns `null`. The handler sees `queued` and returns false (deferred); the row is already delivered,
      so the next pump does not see it. Marking inside the transaction (not by returning true to the pump) is what keeps
      an un-stop that commits between the claim and the pump's acknowledgement from being overwritten.
@@ -74,8 +75,7 @@
 3. `handoff-stop` → park → `resume-from-handoff` with no selections: wake re-armed in the command's transaction, then
    the estimate leaves `queued`. Mutation: drop the re-arm call.
 4. legacy empty shutdown intent → park → `recoverControl`: re-armed. Mutation: drop the re-arm call.
-5. capped estimate then pause → park clears the estimate's cap block. Mutation: drop the clear.
-6. helper: a delivered wake of a withdrawn estimate is not re-armed; a delivered wake of a queued one is. Mutation:
+5. helper: a delivered wake of a withdrawn estimate is not re-armed; a delivered wake of a queued one is. Mutation:
    drop the `state='queued'` filter.
 
 ## 6. Residuals

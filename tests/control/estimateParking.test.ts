@@ -92,20 +92,6 @@ describe("a queued estimate of a stopped pre-start group is parked, and un-stopp
     } finally { await x.h.dispose(); }
   });
 
-  it("an estimate that waited under a spend cap and is then parked leaves no cap block behind (it waits on the stop now)", async () => {
-    const x = await queuedEstimateHarness(); try {
-      x.h.store.db.prepare("INSERT INTO spend_caps(scope,period,tokens,updated_at,updated_by) VALUES ('all','total',1,1,'user:u1')").run();
-      const block = () => x.h.store.db.prepare("SELECT body FROM spend_cap_blocks WHERE group_id='g'").get();
-      expect(await x.service.claimEstimate("g", x.h.estimateId)).toBeNull();
-      expect(JSON.parse(String(block()!.body))).toMatchObject({ claim: "estimate" });
-      ok(await x.service.pauseDispatch(x.h.command("pause-dispatch", {})));
-      await x.pump();
-      expect(state(x)).toBe("queued");
-      expect(delivered(x)).toBe(1);
-      expect(block()).toBeUndefined();
-    } finally { await x.h.dispose(); }
-  });
-
   it("re-arming touches only wakes whose estimate is still queued: a delivered wake of an estimate that left the queue stays delivered", async () => {
     const x = await queuedEstimateHarness(); try {
       x.h.store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=?").run(wakeId(x));
