@@ -20,6 +20,7 @@ const TEST = "import { expect, it } from 'vitest';\nit('adds', () => {\n  expect
 const BASE: Record<string, string> = {
   "src/add.ts": "export const add = (a: number, b: number) => a + b;\n",
   "tests/add.test.ts": TEST,
+  "tests/helpers/sum.js": "module.exports = (xs) => xs.reduce((a, b) => a + b, 0);\n",
   "check.js": "process.exit(require('./src/add').add(1, 1) === 2 ? 0 : 1);\n",
   "package.json": JSON.stringify({ name: "x", version: "1.0.0", scripts: { test: "vitest run", lint: "eslint ." } }, null, 2) + "\n",
 };
@@ -58,6 +59,7 @@ describe("classifying an attempt's change to its checks (spec §3-§4.1)", () =>
   // Must flag: every weakening signal, and a modification that is not only additions.
   it.each([
     ["a deleted test", { "tests/add.test.ts": null }, "weakening", ["deleted:tests/add.test.ts"]],
+    ["a deleted test helper (by directory, not by name)", { "tests/helpers/sum.js": null }, "weakening", ["deleted:tests/helpers/sum.js"]],
     ["an assertion removed", { "tests/add.test.ts": TEST.replace("  expect(2 + 2).toBe(4);\n", "") }, "weakening", ["fewer-assertions:tests/add.test.ts:2->1"]],
     ["a test skipped", { "tests/add.test.ts": TEST.replace("it('adds'", "it.skip('adds'") }, "weakening", ["skip-added:tests/add.test.ts"]],
     ["the test script made a no-op", { "package.json": JSON.stringify({ name: "x", version: "1.0.0", scripts: { test: "exit 0", lint: "eslint ." } }, null, 2) + "\n" }, "weakening", ["script-no-op:package.json#test"]],
