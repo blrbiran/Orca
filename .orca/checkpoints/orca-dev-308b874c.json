@@ -1,0 +1,65 @@
+{
+  "v": 1,
+  "runId": "orca-dev-308b874c",
+  "runtime": "claude-code",
+  "sessionRef": "308b874c-2161-4914-b57e-705e8b169315",
+  "writtenAt": "2026-10-20T14:50:23.189Z",
+  "head": "98f3224a26da9dec83e806b0acf55e3acb104730",
+  "level": {
+    "kind": "reading",
+    "level": 350493,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "read paid real-claude --scenario decision result (scratchpad/acc-claude-decision.log) and record cost/decisions",
+    "run codex estimate (live-driver-acceptance --scenario estimate --estimate-only --instruction-version 2 --codex <nvm codex> --model gpt-6-luna) and codex --scenario decision against ccloop 86f6123 build",
+    "after human confirms the merged priority table: dispatch gate speed (1)(2)(3), estimate-reject wording (#70/#73/#58), install keeps captured env; ccloop short spec (verifier gets ccloop's check results + last failure fed to next attempt); estimate parking for stopped pre-start groups",
+    "collect agents version auto-refresh implementer report and merge",
+    "write ledger .superpowers/sdd/2026-10-20-session-308b874c/progress.md and roll handoffs (Orca §3/§4/§8, ccloop and ccmem Orca sections); ccloop spec correction: config.toml is not byte-unchanged under real codex exec (projects trust entries appended, human ruled allowed)"
+  ],
+  "open": [
+    "agents auto-refresh subagent running",
+    "ccmem: runTask uncaught database-is-locked crashes daemon (loop.mjs:371); restart silently falls back to detached spawn — registered, not fixed",
+    "claude dangerous mode now in ~/.orca/agents.json (human ran it); acceptance script still uses acceptEdits"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "confirm merged priority table (feedback + multica + qoder + pending items)"
+    },
+    {
+      "kind": "irreversible",
+      "what": "push Orca main (98f3224a and 95d04cca), ccmem main afd8237"
+    },
+    {
+      "kind": "tied-evidence",
+      "what": "#65 UI path registration vs 10-14 no-upload ruling; #70 per-installation context window vs R7; #66 roadmap items"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca log --oneline -4 main",
+      "exitCode": 0,
+      "commit": "98f3224a26da9dec83e806b0acf55e3acb104730",
+      "observedAt": "2026-10-20T14:50:17.507Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-308b874c-k9duLC/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "98f3224a26da9dec83e806b0acf55e3acb104730",
+      "observedAt": "2026-10-20T14:50:22.427Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-308b874c-k9duLC/2.txt"
+    },
+    {
+      "command": "/Users/biran/code/skills/orca/ccmem/bin/ccmem admin daemon status",
+      "exitCode": 0,
+      "commit": "98f3224a26da9dec83e806b0acf55e3acb104730",
+      "observedAt": "2026-10-20T14:50:23.138Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-308b874c-k9duLC/3.txt"
+    }
+  ]
+}
