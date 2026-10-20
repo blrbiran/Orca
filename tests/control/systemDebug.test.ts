@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
 import { escalationsOf, readSystemDebugMark, systemDebugGroupId } from "../../src/control/systemDebug.js";
@@ -16,6 +17,9 @@ import { driverHarness, git } from "./fixtures/driverHarness.js";
  * as orca-auto, its fix is folded into the group's branch, and the failed task reruns once from there. Driven through the
  * driver's synthetic ccloop over a real repository (fixtures/driverPort.ts); every assertion reads the store or git.
  */
+/** git with stdin (the harness's helper takes none). */
+const gitIn = (cwd: string, input: string, ...args: string[]): string =>
+  execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args], { cwd, encoding: "utf8", input }).trim();
 const LADDER = systemDebugGroupId({ kind: "ladder", groupId: "g", taskId: "a", runId: null });
 
 async function ladderWorld(options: { debugFails?: boolean } = {}) {
@@ -49,10 +53,14 @@ async function ladderWorld(options: { debugFails?: boolean } = {}) {
   return { t, service, driver, failedRun, driveDebug, taskStatus, summary, body, succeedNext: () => { failing = false; } };
 }
 
-describe("escalation ladder level 2: a system debug group fixes a failed task, which then reruns once (spec §3)", () => {
+describe("escalation ladder level 2: a system debug group fixes a failed task, which then reruns once (spec §3)", { timeout: 180_000 }, () => {
   it("opens a stacked debug group as orca-auto, confirms it, folds its fix into the group's branch and reruns the task from there", async () => {
     const w = await ladderWorld(); const { t } = w; try {
       const failedRunId = await w.failedRun();
+      // The group's branch is ahead of the target (as after an earlier task of it landed), so a debug branch started
+      // from the target's HEAD instead of the group's branch could not be folded back.
+      const tree = gitIn(t.repo, `100644 blob ${gitIn(t.repo, "earlier\n", "hash-object", "-w", "--stdin")}\tearlier\n`, "mktree");
+      git(t.repo, "update-ref", "refs/heads/orca/g", git(t.repo, "commit-tree", tree, "-p", git(t.repo, "rev-parse", "refs/heads/orca/g"), "-m", "earlier task"));
       // The repository delivers locally by default: the ladder group must still carry no scheme of its own.
       writeRepositorySettingsBody(t.h.store, "repo", { workspaceMode: "worktree", revision: 1, integration: { delivery: "local", trigger: "task", method: "merge", target: "main" } });
       const first = await w.service.systemDebugPass();
@@ -97,6 +105,7 @@ describe("escalation ladder level 2: a system debug group fixes a failed task, w
       if (delivered.kind !== "claimed") throw new Error(`rerun claim refused: ${JSON.stringify(delivered)}`);
       await t.until(w.driver, () => w.taskStatus("g", "a") === "done", 120);
       expect(git(t.repo, "show", "refs/heads/orca/g:debug")).toBe("debug");
+      expect(git(t.repo, "show", "refs/heads/orca/g:earlier")).toBe("earlier");
       expect(w.summary("g").escalation).toBeUndefined();
     } finally { await t.h.dispose(); }
   });
