@@ -40,7 +40,7 @@ import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type 
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
-import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderFacts, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand } from "./systemDebug.js";
+import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderFacts, quotaWaitCandidates, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
@@ -51,7 +51,7 @@ import { recordActivity } from "./activity.js";
 import { commandClientFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
 import { applyApprovePendingDecision, applyRatifyFlaggedDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RatifyFlaggedDecisionCommand, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { readCorrections } from "../corrections/store.js";
-import { autoStartPass, ORCHESTRATION_ACTOR, recordConfirmed, type PrerequisiteReader } from "./orchestration.js";
+import { autoStartPass, ORCHESTRATION_ACTOR, readOrchestrationSettings, recordConfirmed, type PrerequisiteReader } from "./orchestration.js";
 import { applySetOrchestrationSettings, type SetOrchestrationSettingsCommand } from "./orchestrationCommands.js";
 import { applyAddGroupDependency, applyRemoveGroupDependency, waitingPrerequisites, type AddGroupDependencyCommand, type RemoveGroupDependencyCommand } from "./groupEdges.js";
 import { readWithdrawals, withdrawnIds } from "../corrections/withdrawals.js";
@@ -696,6 +696,15 @@ export class WebControlService {
    */
   async systemDebugPass(): Promise<{ opened: string[]; confirmed: string[]; folded: string[]; settled: string[] }> {
     const out = { opened: [] as string[], confirmed: [] as string[], folded: [] as string[], settled: [] as string[] };
+    // Failure-cause spec 2026-10-21 §5: a quota failure on an installation set to wait is retried once per failed run, as
+    // orca-auto, after the re-probe interval; the retry's ledger row and its task-retried activity are its record.
+    for (const candidate of quotaWaitCandidates(this.store, new Set(readOrchestrationSettings(this.store).quotaWait ?? []), this.store.now())) {
+      const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(candidate.groupId)?.revision ?? 0);
+      this.retryTask({
+        schema: "orca-raw-command-v1", commandId: `orca-auto-quota-retry-${candidate.taskId}-${candidate.runId}`, actorId: ORCHESTRATION_ACTOR,
+        expectedRevision: revision, verb: "retry-task", target: { kind: "group", groupId: candidate.groupId }, payload: { taskId: candidate.taskId },
+      });
+    }
     for (const candidate of ladderCandidates(this.store)) {
       const source = { kind: "ladder" as const, groupId: candidate.groupId, taskId: candidate.taskId, runId: candidate.run.runId };
       const groupId = systemDebugGroupId(source);

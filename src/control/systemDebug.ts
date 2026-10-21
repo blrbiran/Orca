@@ -264,8 +264,39 @@ export function ladderCandidates(store: ControlStore): Array<{ groupId: string; 
     for (const { id: taskId } of tasksOf(store, groupId)) {
       const run = terminallyFailedRun(store, groupId, taskId);
       if (run === null) continue;
+      // Failure-cause spec 2026-10-21 §4-§5: a debug run cannot fix the agent's credentials, quota or program, and would only
+      // fail the same way at the same cost; such a task stays with the person (a quota wait may retry it, quotaWaitCandidates).
+      if (LADDER_EXEMPT_CAUSES.has(run.drive?.failureCause?.cause ?? "")) continue;
       if (groupBody(store, systemDebugGroupId({ kind: "ladder", groupId, taskId, runId: null })) !== null) continue;
       out.push({ groupId, taskId, run, repoId });
+    }
+  }
+  return out;
+}
+
+/** Failure-cause spec 2026-10-21 §4-§5: the causes the escalation ladder leaves to the person (or to a quota wait). */
+export const LADDER_EXEMPT_CAUSES: ReadonlySet<string> = new Set(["auth", "quota", "executable-missing"]);
+/** §5: how long a quota wait holds a failed task before Orca retries it (re-probe interval; no reset time is reported today). */
+export const QUOTA_REPROBE_MS = 30 * 60_000;
+
+/**
+ * Failure-cause spec 2026-10-21 §5 ("on quota exhausted, wait instead of switching", per installation, default off): an
+ * orchestrated group's task whose current run ended with cause `quota` on an installation the person set to wait, and
+ * whose last activity (its `run-blocked` row) is at least QUOTA_REPROBE_MS old. The retry itself is the re-probe.
+ */
+export function quotaWaitCandidates(store: ControlStore, waiting: ReadonlySet<string>, now: number): Array<{ groupId: string; taskId: string; runId: string }> {
+  if (waiting.size === 0) return [];
+  const out: Array<{ groupId: string; taskId: string; runId: string }> = [];
+  for (const row of store.db.prepare("SELECT g.id AS id, o.body AS orchestration FROM groups g JOIN group_orchestration o ON o.group_id=g.id ORDER BY g.rowid").all()) {
+    const groupId = String(row.id);
+    try { if ((JSON.parse(String(row.orchestration)) as { mode?: unknown }).mode !== "run") continue; } catch { continue; }
+    if (isGroupArchived(store, groupId)) continue;
+    for (const { id: taskId } of tasksOf(store, groupId)) {
+      const run = terminallyFailedRun(store, groupId, taskId) as (ReturnType<typeof terminallyFailedRun> & { agent?: { agent?: unknown } }) | null;
+      if (run === null || run.drive?.failureCause?.cause !== "quota" || typeof run.agent?.agent !== "string" || !waiting.has(run.agent.agent)) continue;
+      const last = store.db.prepare("SELECT MAX(at) AS at FROM activity WHERE run_id=?").get(run.runId)?.at;
+      if (typeof last !== "number" || now - last < QUOTA_REPROBE_MS) continue;
+      out.push({ groupId, taskId, runId: run.runId });
     }
   }
   return out;
@@ -278,6 +309,9 @@ export function ladderFacts(run: { runId: string; drive?: DriveRecord; failureCo
   if (typeof drive?.stopReason === "string") facts.push(`ccloop's stop reason: ${drive.stopReason}`);
   if (typeof drive?.blockedReason === "string") facts.push(`Orca blocked it: ${drive.blockedReason}`);
   if (typeof run.failureCode === "string") facts.push(`failure code: ${run.failureCode}`);
+  // Failure-cause spec 2026-10-21 §3: ccloop's typed cause and the last rejection it recorded, as recorded.
+  if (drive?.failureCause !== undefined) facts.push(`ccloop's failure cause: ${drive.failureCause.cause}${drive.failureCause.phase === null ? "" : ` (in ${drive.failureCause.phase})`}${drive.failureCause.detail === null ? "" : `: ${drive.failureCause.detail}`}`);
+  if (drive?.lastFailure !== undefined) facts.push(`the last rejection: ${drive.lastFailure.rejectCategory}${drive.lastFailure.failingCommand === null ? "" : ` (command: ${drive.lastFailure.failingCommand})`}`);
   if (typeof drive?.attemptSha === "string") facts.push(`the failed attempt's commit (not on the branch; read it with git show): ${drive.attemptSha}`);
   return facts.map((fact) => fact.slice(0, 4096));
 }

@@ -22,12 +22,15 @@ export function applySetOrchestrationSettings(deps: { store: ControlStore; admis
       apply: (context) => {
         const raw = context.rawCommand as SetOrchestrationSettingsCommand;
         if (raw.target.kind !== "orchestration") throw new ControlError("control-target-not-allowed");
-        const { maxRunningGroups, criteriaReview } = raw.payload;
+        const { maxRunningGroups, criteriaReview, quotaWait } = raw.payload;
         const current = readOrchestrationSettings(deps.store);
         // Protect-acceptance-criteria spec §5: a payload without `criteriaReview` keeps the stored default.
         const review = criteriaReview ?? current.criteriaReview;
-        const next = review === undefined ? { maxRunningGroups } : { maxRunningGroups, criteriaReview: review };
-        if (current.maxRunningGroups === maxRunningGroups && (criteriaReview === undefined || criteriaReview === current.criteriaReview)) throw new ControlError("no-op-command");
+        // Failure-cause spec 2026-10-21 §5: likewise `quotaWait`, stored sorted and unique so equal sets compare equal.
+        const waiting = quotaWait === undefined ? current.quotaWait : [...new Set(quotaWait)].sort();
+        const next = { maxRunningGroups, ...(review === undefined ? {} : { criteriaReview: review }), ...(waiting === undefined ? {} : { quotaWait: waiting }) };
+        if (current.maxRunningGroups === maxRunningGroups && (criteriaReview === undefined || criteriaReview === current.criteriaReview)
+          && (quotaWait === undefined || JSON.stringify(waiting) === JSON.stringify(current.quotaWait ?? []))) throw new ControlError("no-op-command");
         writeOrchestrationSettings(deps.store, next, context.nextCommandRevision);
         return { status: 200, body: {
           schema: "orca-command-success-v1", commandId: raw.commandId, actorId: raw.actorId,

@@ -73,3 +73,15 @@ export const candidateSchema=z.object({
 // every step and terminal included, the attempt numbers from that same snapshot, and when it last moved.
 export const runProgressSchema=z.object({status:z.enum(["queued","planning","executing","verifying","succeeded","blocked_waiting_human","exhausted","cancelled","failed"]),currentAttempt:safeInteger,attemptsUsed:safeInteger,attemptsRemaining:safeInteger,lastTransitionAt:z.string().min(1)}).strict();
 export type RunProgress=z.infer<typeof runProgressSchema>;
+
+/**
+ * Failure-cause spec 2026-10-21 §3 (ccloop failure-causes spec §5): ccloop's run-level cause, as collect answers it and the
+ * drive record keeps it (driveRecord.ts). `cause` is a bounded string, not a closed enum: a cause a newer ccloop adds reads
+ * as itself, and the panel words one it does not know as unknown.
+ */
+export const runFailureCauseSchema = z.object({
+  cause: z.string().min(1).max(64),
+  phase: z.enum(["plan", "execute", "verify"]).nullable(),
+  retries: safeInteger,
+  detail: z.string().nullable(),
+}).strict();

@@ -513,6 +513,25 @@ export const zh: Translation<typeof en> = {
       cause: { "execution-format-invalid": "执行输出无法解码", "execution-format-ambiguous-or-hidden": "执行输出含糊或被隐藏", "usage-unsettled": "用量尚未结清", unknown: "原因未知" },
       next: { "execution-format-invalid": "查看下方已保存成果验证资格和证据", "execution-format-ambiguous-or-hidden": "查看下方已保存成果验证资格和证据", "usage-unsettled": "请所有者核对保守用量结清", unknown: "先查看活动和证据，再使用可用的恢复操作" },
     },
+    failureCause: {
+      line: "停止原因：{{cause}}。{{next}}",
+      retries: "（已自动重试 {{retries}} 次）",
+      label: {
+        auth: "agent 的凭据被拒绝", quota: "agent 的额度或余额已用尽", "rate-limited": "provider 持续限流",
+        "provider-5xx": "provider 端持续出错", network: "到 provider 的网络持续失败", "context-overflow": "任务超出了模型的上下文窗口",
+        stalled: "agent 长时间没有动静，已被停止", "executable-missing": "找不到 agent 的程序", "required-check-failed": "必需检查没有通过",
+        "verifier-rejected": "verifier 驳回了这次工作", "budget-exhausted": "时间、token 或尝试次数预算用完了", unknown: "原因未知",
+      },
+      next: {
+        auth: "重新登录 agent（或修好它的 key），再重试这个任务。", quota: "等额度恢复或充值后，再重试这个任务。",
+        "rate-limited": "稍后重试；如果一直发生，调低同时运行的组数上限。", "provider-5xx": "稍后重试；是 provider 那边在出错。",
+        network: "检查网络或代理后，再重试这个任务。", "context-overflow": "拆分任务或换更大的上下文窗口后重试。",
+        stalled: "重试这个任务；如果再次卡住，去证据里看它当时在做什么。", "executable-missing": "安装 agent 或在 agents 表里改对路径后重试。",
+        "required-check-failed": "看下方失败检查的输出；组在自动编排下时，Orca 会自动升级处理。",
+        "verifier-rejected": "看下方 verifier 给出的原因；组在自动编排下时，Orca 会自动升级处理。",
+        "budget-exhausted": "调高任务预算或拆分任务后重试。", unknown: "先看下方证据，再重试这个任务。",
+      },
+    },
     workspace: {
       region: "工作区模式",
       line: "{{repoId}} 里新的运行使用{{mode}}（设置版本 {{revision}}）。已开始的运行保持原样。",

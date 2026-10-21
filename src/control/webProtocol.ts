@@ -2,7 +2,7 @@ import { recoveryOfSchema, savedResultSourceEligibilitySchema } from "./savedRes
 import { budgetAmountSchema } from "./schema.js";
 import { z } from "zod";
 import { usageSettlementSchema } from "./usageSettlement.js";
-import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, safeInteger } from "./schema.js";
+import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, runFailureCauseSchema, safeInteger } from "./schema.js";
 import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
 import { DRAFT_STATES, IDEA_MAX_BYTES, REQUIREMENT_WAITING, ROUND_STATES, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema } from "./requirementSchemas.js";
 import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema, loopSkillsSchema } from "./loopPlans.js";
@@ -919,7 +919,7 @@ export const rejectPendingDecisionPayloadSchema = z.object({ pendingId: idSchema
 export const ratifyFlaggedDecisionPayloadSchema = z.object({ decisionId: nonemptyString }).strict();
 // Kanban spec §3.2: at most this many groups run at once (default 3; the human asked for it for CPU load and conflicts).
 // Protect-acceptance-criteria spec §5: `criteriaReview` is the reviewer's global default (absent: unchanged; never set: on).
-export const setOrchestrationSettingsPayloadSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64), criteriaReview: z.boolean().optional() }).strict();
+export const setOrchestrationSettingsPayloadSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64), criteriaReview: z.boolean().optional(), quotaWait: z.array(z.string().min(1).max(200)).max(64).optional() }).strict();
 // Kanban spec §3.3, §9a.5: a person's edge between groups; the target group is the dependent, `dependsOn` must land first.
 export const groupDependencyPayloadSchema = z.object({ dependsOn: idSchema }).strict();
 // Debug task plan Task 6: one recorded correction opens one debug group (spending nothing). `reopen` asks for the next
@@ -1431,6 +1431,8 @@ export const runViewSchema = z
     // Retry-task button keys on it). Optional on the wire like `git`; the server always gives both, null when absent.
     stopReason: nonemptyString.nullable().optional(),
     outcome: nonemptyString.nullable().optional(),
+    // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause (driveRecord.ts runFailureCauseSchema); optional like stopReason.
+    failureCause: runFailureCauseSchema.nullable().optional(),
     unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]), settlement: usageSettlementSchema.optional() }).strict().optional(),
     continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,

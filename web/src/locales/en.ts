@@ -630,6 +630,27 @@ export const en = {
       cause: { "execution-format-invalid": "Execution output could not be decoded", "execution-format-ambiguous-or-hidden": "Execution output was ambiguous or hidden", "usage-unsettled": "Usage is unsettled", unknown: "Cause unknown" },
       next: { "execution-format-invalid": "Check saved-result eligibility below and review evidence", "execution-format-ambiguous-or-hidden": "Check saved-result eligibility below and review evidence", "usage-unsettled": "Ask an owner to review the conservative usage settlement", unknown: "Review activity and evidence, then use an offered recovery action" },
     },
+    // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause (ccloop failure-causes spec §3), what it means and what to do
+    // next. A cause this panel does not know reads as `unknown`.
+    failureCause: {
+      line: "Why it stopped: {{cause}}. {{next}}",
+      retries: " (after {{retries}} automatic retries)",
+      label: {
+        auth: "the agent's credentials were refused", quota: "the agent's quota or credits are used up", "rate-limited": "the provider kept rate-limiting",
+        "provider-5xx": "the provider kept failing on its side", network: "the network to the provider kept failing", "context-overflow": "the task did not fit the model's context window",
+        stalled: "the agent went silent and was stopped", "executable-missing": "the agent's program was not found", "required-check-failed": "a required check failed",
+        "verifier-rejected": "the verifier rejected the work", "budget-exhausted": "the time, token or attempt budget ran out", unknown: "the cause is unknown",
+      },
+      next: {
+        auth: "Log the agent in again (or fix its key), then retry the task.", quota: "Wait for the quota to reset or add credits, then retry the task.",
+        "rate-limited": "Retry later; if it keeps happening, lower the running-group cap.", "provider-5xx": "Retry later; the provider was failing.",
+        network: "Check the network or proxy, then retry the task.", "context-overflow": "Split the task or pick a larger context window, then retry.",
+        stalled: "Retry the task; if it stalls again, look at what it was doing in the evidence.", "executable-missing": "Install the agent or fix its path in the agents table, then retry.",
+        "required-check-failed": "Read the failing check's output below; Orca escalates it automatically when the group is orchestrated.",
+        "verifier-rejected": "Read the verifier's reason below; Orca escalates it automatically when the group is orchestrated.",
+        "budget-exhausted": "Raise the task's budget, or split it, then retry.", unknown: "Review the evidence below, then retry the task.",
+      },
+    },
     workspace: {
       region: "Workspace mode",
       line: "New runs in {{repoId}} use {{mode}} (setting revision {{revision}}). Runs already started keep theirs.",

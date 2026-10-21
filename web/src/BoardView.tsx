@@ -13,6 +13,7 @@ import { BOARD_COLUMNS, boardColumn, boardDrop, needsAttention, type BoardColumn
 import { GroupGraph } from "./GroupGraph.js";
 import { enumText } from "./i18n.js";
 import { inScope, type GroupScope } from "./projectScope.js";
+import { KNOWN_FAILURE_CAUSES, knownCause } from "./RunReason.js";
 
 export interface BoardViewProps {
   groups: GroupSummaryV1[];
@@ -68,7 +69,7 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; onOpen: () 
         <p className="detail-note">
           {facts.budget.limitTokens === null ? t("board.card.budgetUnlimited", { used: facts.budget.usedTokens }) : t("board.card.budget", { used: facts.budget.usedTokens, limit: facts.budget.limitTokens })}
           {facts.pendingDecisions > 0 ? ` · ${t("board.card.decisions", { count: facts.pendingDecisions })}` : ""}
-          {facts.firstFailure !== null ? ` · ${t("board.card.failure", { taskId: facts.firstFailure.taskId, cause: facts.firstFailure.cause })}` : ""}
+          {facts.firstFailure !== null ? ` · ${t("board.card.failure", { taskId: facts.firstFailure.taskId, cause: (KNOWN_FAILURE_CAUSES as readonly string[]).includes(facts.firstFailure.cause) ? t(`control.failureCause.label.${knownCause(facts.firstFailure.cause)}`) : facts.firstFailure.cause })}` : ""}
         </p>
       )}
     </li>

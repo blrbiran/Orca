@@ -68,7 +68,8 @@ describe("the board tab (kanban spec §4)", () => {
     const running = screen.getByRole("region", { name: "Running" });
     const card = within(running).getByTestId("board-card-run1");
     expect(card.textContent).toContain("Do X");
-    expect(card.textContent).toContain("1200 of 5000 tokens · 2 decisions to review · a failed: required-check-failed");
+    // Failure-cause spec 2026-10-21 §5: a cause ccloop typed is worded (was the raw code; Ruling in the commit body).
+    expect(card.textContent).toContain("1200 of 5000 tokens · 2 decisions to review · a failed: a required check failed");
     expect(within(screen.getByRole("region", { name: "Queued" })).getByTestId("board-card-wait").textContent).toContain("waiting for run1");
     const transfer = dataTransfer();
     fireEvent.dragStart(card, { dataTransfer: transfer });
@@ -79,6 +80,13 @@ describe("the board tab (kanban spec §4)", () => {
     fireEvent.drop(screen.getByRole("region", { name: "Running" }), { dataTransfer: draftTransfer });
     expect(onCommand).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("board-refusal").textContent).toContain("draft1 cannot be moved to Running");
+  });
+
+  it("keeps a failure the panel cannot word (an Orca reason, or a cause it does not know) as written", () => {
+    const card = (cause: string) => g({ groupId: `g-${cause}`, state: "running", card: { budget: { usedTokens: 0, limitTokens: null }, pendingDecisions: 0, firstFailure: { taskId: "a", cause } } });
+    render(<BoardView groups={[card("terminal:failed"), card("a-newer-cause")]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    expect(screen.getByTestId("board-card-g-terminal:failed").textContent).toContain("a failed: terminal:failed");
+    expect(screen.getByTestId("board-card-g-a-newer-cause").textContent).toContain("a failed: a-newer-cause");
   });
 
   it("hides the archived column until asked, and the group graph adds and removes a person's edge", () => {

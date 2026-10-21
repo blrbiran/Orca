@@ -424,13 +424,14 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
   let firstFailure: { taskId: string; cause: string } | null = null;
   for (const taskId of taskIds) {
     // Over the summary's own snapshot: each body is decoded once, shared with the counts (controlPollPerformance).
-    let runId: unknown, run: { failureCode?: unknown; drive?: { blockedReason?: unknown } } | undefined;
+    let runId: unknown, run: { failureCode?: unknown; drive?: { blockedReason?: unknown; failureCause?: { cause?: unknown } } } | undefined;
     try {
       runId = (decodedValue(snapshot.decodeWork(taskId)) as { currentRunId?: unknown } | undefined)?.currentRunId;
       run = typeof runId === "string" ? decodedValue(snapshot.decodeRun(runId)) as typeof run : undefined;
     } catch { continue; }
     if (run === undefined || run === null) continue;
-    const cause = typeof run.failureCode === "string" ? run.failureCode : typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason : null;
+    // Failure-cause spec 2026-10-21 §5: ccloop's typed cause first, when it stated one.
+    const cause = typeof run.drive?.failureCause?.cause === "string" ? run.drive.failureCause.cause : typeof run.failureCode === "string" ? run.failureCode : typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason : null;
     if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200) }; break; }
   }
   return { budget: { usedTokens: tokens(body.used) ?? 0, limitTokens: tokens(body.limit) }, pendingDecisions: pending + flagged, firstFailure };
@@ -982,6 +983,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       blockedReason: run.drive?.blockedReason ?? null,
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.
       stopReason: run.drive?.stopReason ?? null,
+      // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause, for the next-step line; null when it stated none.
+      failureCause: run.drive?.failureCause ?? null,
       outcome: run.drive?.outcome ?? null,
       ...settlementPreview(store, run, snapshot),
       continuable: continuableRun(store, run, snapshot),

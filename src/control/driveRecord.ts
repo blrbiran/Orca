@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { idSchema, safeInteger } from "./schema.js";
+import { idSchema, runFailureCauseSchema, safeInteger } from "./schema.js";
 import { lockSkillSchema } from "../skills/syncskill.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { pendingEntrySchema } from "./runLedger.js";
@@ -32,12 +32,7 @@ export function boundStopReason(reason: string): string {
  * the matched provider text (≤ 512 UTF-8 bytes there); Orca keeps at most FAILURE_DETAIL_MAX units of it.
  */
 export const FAILURE_DETAIL_MAX = 512;
-export const runFailureCauseSchema = z.object({
-  cause: z.string().min(1).max(64),
-  phase: z.enum(["plan", "execute", "verify"]).nullable(),
-  retries: safeInteger,
-  detail: z.string().nullable(),
-}).strict();
+export { runFailureCauseSchema };
 export type RunFailureCause = z.infer<typeof runFailureCauseSchema>;
 export function boundFailureCause(cause: RunFailureCause): RunFailureCause {
   return { ...cause, detail: cause.detail === null ? null : cause.detail.slice(0, FAILURE_DETAIL_MAX) };

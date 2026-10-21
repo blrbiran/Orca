@@ -308,6 +308,8 @@ export type RunViewV1 = {
   /** Issue fixes spec §4.2(1), (5): ccloop's reason and the drive record's outcome; optional here so literal fixtures need no edit. */
   stopReason?: string | null;
   outcome?: string | null;
+  /** Failure-cause spec 2026-10-21 §5: ccloop's run-level cause; optional so literal fixtures need no edit. */
+  failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | null; retries: number; detail: string | null } | null;
   continuable?: boolean;
   evidenceIds: string[];
   /** Board spec 2026-10-03 D4: optional here so literal fixtures need no edit; the server always sends it. */
