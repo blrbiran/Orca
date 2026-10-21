@@ -1,0 +1,44 @@
+{
+  "v": 1,
+  "runId": "orca-dev-ff456106",
+  "runtime": "claude-code",
+  "sessionRef": "ff456106-1fc7-4db8-a847-0b20ebd9cc5b",
+  "writtenAt": "2026-10-21T02:28:44.260Z",
+  "head": "16dd273d1555d3e6aaf8ab4ae4d35de198b9a568",
+  "level": {
+    "kind": "reading",
+    "level": 334457,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Wait for ccloop priorFailures implementation (track P) and Orca repin e43f2a3 + failure-cause UI/fallback (track Q)",
+    "Then Orca repin to the priorFailures build + ladder level 1",
+    "Rebuild panel dist; update three handoffs; executive summary"
+  ],
+  "open": [
+    "Ledger: .superpowers/sdd/2026-10-21-session-9ec98639/progress.md",
+    "Paid claude decision rerun pending human answer (first run failed because output was under ~/.claude)"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "Rerun paid real-claude --scenario decision with output under /private/tmp (~$0.45)"
+    },
+    {
+      "kind": "irreversible",
+      "what": "Restart ccmem daemon from own terminal (tracks B and F); restart/rebuild panel; branch -D feat/estimate-parking"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca log --oneline -15 main",
+      "exitCode": 0,
+      "commit": "16dd273d1555d3e6aaf8ab4ae4d35de198b9a568",
+      "observedAt": "2026-10-21T02:28:44.207Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-ff456106-bGNkI0/1.txt"
+    }
+  ]
+}
