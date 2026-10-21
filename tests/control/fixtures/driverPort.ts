@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import type { LastFailure, RunFailureCause } from "../../../src/control/driveRecord.js";
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -49,6 +50,8 @@ export function fakeCcloopPort(input: {
   acceptedConfigHash?: (envelope: StartEnvelope) => string;
   /** Issue fixes spec §4.4: ccloop's terminal `stopReason` for this work item's run; null or absent = none stated. */
   stopReason?: (workItemId: string) => string | null;
+  /** Failure-cause spec 2026-10-21 §3: the cause and last rejection the port maps onto the terminal; undefined = neither. */
+  failure?: (workItemId: string) => { failureCause?: RunFailureCause; lastFailure?: LastFailure } | undefined;
   /** Control run decisions: what the run reports as `decisions` on its terminal report; undefined = the field is absent. */
   decisions?: (workItemId: string) => unknown;
   /** Debug task plan Task 8: what the run reports as `debug` on its terminal report; undefined = the field is absent. */
@@ -114,7 +117,8 @@ export function fakeCcloopPort(input: {
     };
     const decisions = stop.terminal ? input.decisions?.(claim.workItemId) : undefined;
     const debug = stop.terminal ? input.debug?.(claim.workItemId) : undefined;
-    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }) };
+    const failure = stop.terminal ? input.failure?.(claim.workItemId) : undefined;
+    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }) };
   };
 
   const port: ExecutionPort = {

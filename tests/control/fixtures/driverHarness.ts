@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import type { LastFailure, RunFailureCause } from "../../../src/control/driveRecord.js";
 import { writeFile, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createExecutionProfileRouter, resolveProfile } from "../../../src/control/profiles.js";
@@ -44,6 +45,8 @@ export interface HarnessOptions {
   stopReason?: (workItemId: string) => string | null;
   /** Issue-fixes spec §5.2: the control store's clock (ms); absent, Date.now. */
   storeNow?: () => number;
+  /** Failure-cause spec 2026-10-21 §3: the cause and last rejection the synthetic ccloop maps onto a terminal (driverPort.ts). */
+  failure?: (workItemId: string) => { failureCause?: RunFailureCause; lastFailure?: LastFailure } | undefined;
   /** Control run decisions: the `decisions` the synthetic ccloop reports with a terminal (driverPort.ts); absent or undefined = not reported. */
   decisions?: (workItemId: string) => unknown;
   /** Debug task plan Task 8: the `debug` the synthetic ccloop reports with a terminal (driverPort.ts); absent = not reported. */
@@ -73,6 +76,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     workTokens: options.workTokens, duringCollect: options.duringCollect,
     ...(options.acceptedConfigHash ? { acceptedConfigHash: options.acceptedConfigHash } : {}),
     ...(options.stopReason ? { stopReason: options.stopReason } : {}),
+    ...(options.failure ? { failure: options.failure } : {}),
     ...(options.decisions ? { decisions: options.decisions } : {}),
     ...(options.debug ? { debug: options.debug } : {}),
   });

@@ -25,6 +25,37 @@ export function boundStopReason(reason: string): string {
   return reason.length > STOP_REASON_MAX ? reason.slice(0, STOP_REASON_MAX) : reason;
 }
 
+/**
+ * Failure-cause spec 2026-10-21 §3 (ccloop failure-causes spec §5): ccloop's run-level cause, which collect answers at its
+ * top level for a terminal run. `cause` is read as a bounded string, not a closed enum, so a cause a newer ccloop adds
+ * reads as itself and the panel words it as unknown (adding a cause is then no wire break). `detail` is ccloop's head of
+ * the matched provider text (≤ 512 UTF-8 bytes there); Orca keeps at most FAILURE_DETAIL_MAX units of it.
+ */
+export const FAILURE_DETAIL_MAX = 512;
+export const runFailureCauseSchema = z.object({
+  cause: z.string().min(1).max(64),
+  phase: z.enum(["plan", "execute", "verify"]).nullable(),
+  retries: safeInteger,
+  detail: z.string().nullable(),
+}).strict();
+export type RunFailureCause = z.infer<typeof runFailureCauseSchema>;
+export function boundFailureCause(cause: RunFailureCause): RunFailureCause {
+  return { ...cause, detail: cause.detail === null ? null : cause.detail.slice(0, FAILURE_DETAIL_MAX) };
+}
+
+/**
+ * ccloop priorFailures spec 2026-10-21 §3: the terminal's last recorded rejection (`recentFailures.at(-1)`), kept at
+ * collect so a later re-dispatch (escalation ladder level 1) can say why the run failed. Bounded like stopReason.
+ */
+export const lastFailureSchema = z.object({
+  rejectCategory: z.string().max(STOP_REASON_MAX),
+  failingCommand: z.string().max(STOP_REASON_MAX).nullable(),
+}).strict();
+export type LastFailure = z.infer<typeof lastFailureSchema>;
+export function boundLastFailure(failure: { rejectCategory: string; failingCommand: string | null }): LastFailure {
+  return { rejectCategory: boundStopReason(failure.rejectCategory), failingCommand: failure.failingCommand === null ? null : boundStopReason(failure.failingCommand) };
+}
+
 const commitSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 
 /** spec §5.3: one conflict's reconciliation, recorded before and while it runs so a restart can find it. */
@@ -101,6 +132,11 @@ export const driveRecordSchema = z.object({
   // units), stored when the run blocks on a terminal other than `succeeded`. Optional: absent when ccloop stated none and
   // in every drive record written before it existed; the v9 store keeps an older Orca from reading one.
   stopReason: z.string().min(1).optional(),
+  // Failure-cause spec 2026-10-21 §3 and ccloop priorFailures spec §3: ccloop's run-level cause and the terminal's last
+  // recorded rejection, stored with `stopReason` when the run blocks on a terminal other than `succeeded`. Optional: absent
+  // when ccloop stated none (an older ccloop, or a run with no rejection) and in every drive record written before them.
+  failureCause: runFailureCauseSchema.optional(),
+  lastFailure: lastFailureSchema.optional(),
   // Control run decisions: the run's refused decisions, staged by D before its compare-and-swap and inserted into
   // pending_decisions by markLanded (then cleared). Defaulted so a drive record from before this field still parses.
   stagedPending: z.array(pendingEntrySchema).default([]),

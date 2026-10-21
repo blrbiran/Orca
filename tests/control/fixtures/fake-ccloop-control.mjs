@@ -45,7 +45,7 @@ else if (method === "capabilities") {
   else {
     const selection = { ...defaults, ...payload.agent };
     if (config.mode === "rewrite-model") selection.model = "rewritten-model";
-    value = { protocol:3,selection,configHash:config.configHash ?? "d".repeat(64),timeoutMs:120000,killGraceMs:5000,capabilities:config.capabilities ?? view, ...(config.omitSingleCall ? {} : { singleCallExecution: config.singleCallExecution ?? null }) };
+    value = { protocol:3,selection,configHash:config.configHash ?? "d".repeat(64),timeoutMs:120000,killGraceMs:5000,capabilities:config.capabilities ?? view, ...(config.omitSingleCall ? {} : { singleCallExecution: config.singleCallExecution ?? null }), ...(config.resolutionExtra ?? {}) };
   }
 }
 else if (method === "accept" || method === "inspect") {

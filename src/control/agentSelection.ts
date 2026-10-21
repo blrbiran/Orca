@@ -33,7 +33,9 @@ type Provenance = Record<Field, ProvenanceSource | null>;
 
 /** Single-call estimate spec §4.4: `singleCallExecution` sits beside the seven-key view, like timeoutMs/killGraceMs. */
 // OMP single call (spec 2026-10-14 §4): so does `singleCallOutputCap` when ccloop states it; null or absent = the call honours the request's cap.
-export interface AgentResolution { selection: AgentSelection; configHash: string; timeoutMs: number; killGraceMs: number; capabilities: CapabilityViewV1; singleCallExecution: "v1" | "v1-soft" | null; singleCallOutputCap?: number | null }
+// ccloop declared-context-window spec 2026-10-21 §2.3 (#70): `contextWindowSource` marks a window that is the installation's
+// declared value; absent when it is the catalog's (or unknown).
+export interface AgentResolution { selection: AgentSelection; configHash: string; timeoutMs: number; killGraceMs: number; capabilities: CapabilityViewV1; singleCallExecution: "v1" | "v1-soft" | null; singleCallOutputCap?: number | null; contextWindowSource?: "installation-declared" }
 /** What confirmation and import freeze; `singleCallExecution` is never frozen (spec §4.4: no persisted schema changes). */
 // OMP single call (spec 2026-10-14 §4): nor is `singleCallOutputCap`.
 export interface FrozenSlot extends Omit<AgentResolution, "singleCallExecution" | "singleCallOutputCap"> { partial: PartialSelection; provenance: Record<Field, ProvenanceSource> }
@@ -46,6 +48,8 @@ export function frozenSlotOf(resolution: AgentResolution, partial: PartialSelect
   return {
     selection: resolution.selection, configHash: resolution.configHash, timeoutMs: resolution.timeoutMs,
     killGraceMs: resolution.killGraceMs, capabilities: resolution.capabilities, partial, provenance,
+    // #70: frozen only when present, so a slot without it keeps its bytes (and every hash over it).
+    ...(resolution.contextWindowSource !== undefined ? { contextWindowSource: resolution.contextWindowSource } : {}),
   };
 }
 

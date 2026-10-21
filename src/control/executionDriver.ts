@@ -624,7 +624,10 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     // Issue fixes spec §4.2(1): ccloop's reason is kept beside the outcome (the run view and the panel explain it); the
     // blocked reason is unchanged.
     const stopReason = report.terminal.stopReason ? { stopReason: report.terminal.stopReason } : {};
-    blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome, ...stopReason });
+    // Failure-cause spec 2026-10-21 §3 and ccloop priorFailures spec §3: the cause and the last rejection are kept beside
+    // the reason, for the panel's next-step line and a later re-dispatch; absent when ccloop stated none.
+    const failure = { ...(report.terminal.failureCause !== undefined ? { failureCause: report.terminal.failureCause } : {}), ...(report.terminal.lastFailure !== undefined ? { lastFailure: report.terminal.lastFailure } : {}) };
+    blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome, ...stopReason, ...failure });
     if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)await retainSavedInterruption(deps,runId);
     return true;
   }

@@ -5,6 +5,7 @@ import type { TaskResultCollectionV1 } from './taskResultProtocol.js';
 import type { RunProgress } from "./schema.js";
 import type { InputCheckpointV1 } from "./resumeBundle.js";
 import { ControlError } from "./errors.js";
+import type { LastFailure, RunFailureCause } from "./driveRecord.js";
 import { createCcloopExecutionPort } from "./ccloopPort.js";
 import type { AgentResolution, ContextWindow, PartialSelection } from "./agentSelection.js";
 import type { AgentApplyRequest, AgentObservation, AgentPreview, AgentReceipt } from "./agentInstallationProtocol.js";
@@ -17,7 +18,7 @@ export interface StartEnvelope { protocol:3|4;mode?:"verify-saved-result";savedR
 export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown"}|{kind:"stopped";proof:StopProof};
 export interface ExecutionReport {
  events:UsageEvent[];candidate:Candidate|null;
- terminal:{tokenRemainingStatus?:"known"|"unlimited"|"unknown";waitingCause?:"token-allowance";allowanceNextPhase?:"plan"|"execute"|"verify";outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string;stopReason?:string|null}|null;
+ terminal:{tokenRemainingStatus?:"known"|"unlimited"|"unknown";waitingCause?:"token-allowance";allowanceNextPhase?:"plan"|"execute"|"verify";outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string;stopReason?:string|null;failureCause?:RunFailureCause;lastFailure?:LastFailure}|null;
  /** Labels and progress spec §3.2 (§8 R5): optional so the synthetic ports need no edit; absent reads as null. */
  progress?:RunProgress|null;
  /** Decisions the agent reported: optional like `progress`; read only through reportedDecisions.ts. */

@@ -133,6 +133,9 @@ export const frozenSlotSchema = z
     timeoutMs: positiveSafeInteger.max(2_147_483_647),
     killGraceMs: safeInteger.max(60_000),
     capabilities: capabilityViewSchema,
+    // ccloop declared-context-window spec 2026-10-21 §2.3 (#70): the window is the installation's declared value. Optional,
+    // so every slot stored before it (and every slot whose window is the catalog's) still parses.
+    contextWindowSource: z.literal("installation-declared").optional(),
   })
   .strict();
 // Agent selection spec §6.4 step 4: what confirmation froze onto one task's work item, and what its runs carry.

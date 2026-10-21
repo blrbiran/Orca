@@ -288,3 +288,40 @@ describe("collect's reported decisions and debug through the real port",()=>{
     expect(["decisions" in report,"debug" in report]).toEqual([false,false]);
   });
 });
+
+// Failure-cause spec 2026-10-21 §3 (ccloop failure-causes spec §5) and ccloop priorFailures spec §3: ccloop e43f2a3 answers
+// `failureCause` at collect's top level for a terminal run. Orca's parse is strict, so without this key every collect of a
+// failed run would be refused; the port keeps the cause (detail bounded) and the terminal's last rejection.
+describe("collect's failure cause and last rejection through the real port",()=>{
+  const cause={cause:"rate-limited",phase:"execute",retries:3,detail:"stream error: last status: 429"};
+  const failures=[{rejectCategory:"verifier-rejected",primaryTargetPaths:["a.js"],failingCommand:null},{rejectCategory:"required-check-failed",primaryTargetPaths:["b.js"],failingCommand:"npm test"}];
+  it("accepts and keeps the top-level cause on protocol 3 and 4, and the terminal's last rejection",async()=>{
+    const v3=await fixture("ok",{terminal:{...FAILED_TERMINAL,recentFailures:failures},collectExtra:{failureCause:cause}});
+    expect((await v3.port.collect(v3.envelope,0)).terminal).toMatchObject({outcome:"failed",failureCause:cause,lastFailure:{rejectCategory:"required-check-failed",failingCommand:"npm test"}});
+    const v4=await fixture("ok",{terminal:{...FAILED_TERMINAL,budgetSnapshot:{...FAILED_TERMINAL.budgetSnapshot,tokenRemainingStatus:"known"}},collectExtra:{failureCause:cause},features:{protocol:1,tokenPolicy:"optional-v1"}});
+    expect((await v4.port.collect({...v4.envelope,protocol:4},0)).terminal).toMatchObject({failureCause:cause});
+  });
+  it("reads a cause a newer ccloop adds as itself, and keeps only the first 512 units of its detail",async()=>{
+    const h=await fixture("ok",{terminal:FAILED_TERMINAL,collectExtra:{failureCause:{...cause,cause:"some-new-cause",detail:"d".repeat(600)}}});
+    const terminal=(await h.port.collect(h.envelope,0)).terminal!;
+    expect([terminal.failureCause?.cause,terminal.failureCause?.detail?.length]).toEqual(["some-new-cause",512]);
+  });
+  it("still refuses a cause of the wrong shape",async()=>{
+    const h=await fixture("ok",{terminal:FAILED_TERMINAL,collectExtra:{failureCause:{...cause,extra:1}}});
+    await expect(h.port.collect(h.envelope,0)).rejects.toThrow("control-response-invalid");
+  });
+  it("states neither when ccloop gave no cause and no rejection",async()=>{
+    const h=await fixture("ok",{terminal:FAILED_TERMINAL});
+    const terminal=(await h.port.collect(h.envelope,0)).terminal!;
+    expect(["failureCause" in terminal,"lastFailure" in terminal]).toEqual([false,false]);
+  });
+});
+
+// ccloop declared-context-window spec 2026-10-21 §2.3 (#70): a resolution whose window is the installation's declared value
+// says so; Orca's strict parse accepts the marker and returns it, so frozenSlotOf can keep it.
+it("accepts and returns a resolution's installation-declared window marker",async()=>{
+  const h=await fixture("ok",{resolutionExtra:{contextWindowSource:"installation-declared"}});
+  expect((await h.port.resolveAgent({agent:"codex"})).contextWindowSource).toBe("installation-declared");
+  const wrong=await fixture("ok",{resolutionExtra:{contextWindowSource:"catalog"}});
+  await expect(wrong.port.resolveAgent({agent:"codex"})).rejects.toThrow("control-response-invalid");
+});
