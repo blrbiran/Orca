@@ -93,9 +93,9 @@ describe("priorFailures.ts: what an earlier failed run contributes (priorFailure
   it("takes evidence only from a stored verification whose fingerprint matches, and only once the collector settled", async () => {
     const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "failed" }); try {
       const store = t.h.store;
-      const verification = (paths: string[]) => Buffer.from(JSON.stringify({ approved: false, rejectCategory: "required-check-failed", primaryTargetPaths: paths, failingCommand: "node check.js", safeToRetry: false, evidence: ["stdout=boom", ""], pauseSignals: [], stopSignals: [] }));
-      const match = await writeArtifact(store, "verify-match", verification(["src/a.js"]));
-      const other = await writeArtifact(store, "verify-other", verification(["src/b.js"]));
+      const verification = (paths: string[], evidence: string[]) => Buffer.from(JSON.stringify({ approved: false, rejectCategory: "required-check-failed", primaryTargetPaths: paths, failingCommand: "node check.js", safeToRetry: false, evidence, pauseSignals: [], stopSignals: [] }));
+      const match = await writeArtifact(store, "verify-match", verification(["src/a.js"], ["stdout=boom", ""]));
+      const other = await writeArtifact(store, "verify-other", verification(["src/b.js"], ["from another fingerprint"]));
       const manifest = (attempt: number, ref: { artifactId: string; hash: string }) => ({ manifestRef: ref, manifest: { attempt, stage: "verification", verificationRef: ref }, verification: "failed" });
       const save = (status: string, observations: unknown[]) => saveTaskResultState(store, "run-x", "g", { schema: "orca-task-result-store-v1", identity: { runId: "run-x" } as never, revision: 1, sourceRevision: 1, currentAttempt: 2, observations: observations as never, status: status as never, reason: null });
       const run = { runId: "run-x", drive: { failureCause: CAUSE, lastFailure: LAST } as never };
@@ -107,6 +107,8 @@ describe("priorFailures.ts: what an earlier failed run contributes (priorFailure
       // mutation: ignore the collector's status -> evidence taken, red
       expect((await priorFailureOf(store, run)).evidence).toBeNull();
       save("available", [manifest(1, match)]);
+      // An empty recorded category is named unknown (ccloop refuses an empty string). mutation: pass it through -> "", red
+      expect((await priorFailureOf(store, { runId: "run-x", drive: { lastFailure: { rejectCategory: "", failingCommand: "" } } as never }))).toMatchObject({ rejectCategory: "unknown", failingCommand: null });
       // A last rejection recorded without its paths (an older record) matches nothing.
       expect((await priorFailureOf(store, { runId: "run-x", drive: { lastFailure: { rejectCategory: LAST.rejectCategory, failingCommand: LAST.failingCommand } } as never })).evidence).toBeNull();
     } finally { await t.h.dispose(); }
