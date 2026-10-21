@@ -34,7 +34,9 @@ export type SetIntegrationCheckCommand = Extract<RawAuthorityCommandV1, { verb: 
 export interface IntegrationCheckSetting { enabled: boolean; command: string | null }
 
 export function readIntegrationCheckSetting(store: ControlStore, repoId: string): IntegrationCheckSetting {
-  return readRepositorySettingsBody(store, repoId)?.integrationCheck ?? { enabled: false, command: null };
+  // Checks spec 2026-10-22 §4.1: the project layer's integration check (absent is off, no command).
+  const layer = readRepositorySettingsBody(store, repoId)?.checks?.integrationCheck;
+  return { enabled: layer?.enabled ?? false, command: layer?.command ?? null };
 }
 
 /** The setting under the repository settings body's revision (as the scheme and the workspace mode). */
@@ -56,7 +58,8 @@ export function applySetIntegrationCheck(
         const current = readRepositorySettingsBody(deps.store, target.repoId);
         const before = readIntegrationCheckSetting(deps.store, target.repoId);
         if (before.enabled === setting.enabled && before.command === setting.command) throw new ControlError("no-op-command");
-        const next: RepositorySettingsBody = { ...(current ?? { workspaceMode: "worktree" }), revision: context.nextCommandRevision, integrationCheck: { enabled: setting.enabled, command: setting.command } };
+        const checks = { ...current?.checks, integrationCheck: { ...current?.checks?.integrationCheck, enabled: setting.enabled, command: setting.command } };
+        const next: RepositorySettingsBody = { ...(current ?? { workspaceMode: "worktree" }), revision: context.nextCommandRevision, checks };
         writeRepositorySettingsBody(deps.store, target.repoId, next);
         return { status: 200, body: {
           schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,

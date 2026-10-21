@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
+import { canonicalBytes } from "./canonicalJson.js";
 
-export const schemaVersion = "15";
+export const schemaVersion = "16";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -141,8 +142,35 @@ CREATE TABLE IF NOT EXISTS group_edges(from_group TEXT NOT NULL REFERENCES group
 CREATE TABLE IF NOT EXISTS orchestration_settings(singleton INTEGER PRIMARY KEY CHECK(singleton=1), revision INTEGER NOT NULL CHECK(revision >= 0), body TEXT NOT NULL) STRICT;
 `;
 
+// Checks spec 2026-10-22 §5.1: one record per (project, check kind, target) -- the "reviewed up to" watermark and the
+// check's run state. Created empty; the integration check's old `meta` row is converted lazily by code (it needs git).
+export const schema15To16 = `CREATE TABLE IF NOT EXISTS check_state(repo_id TEXT NOT NULL, kind TEXT NOT NULL, target TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(repo_id, kind, target)) STRICT;
+`;
+
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
-export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15;
+export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15 + schema15To16;
+
+/**
+ * Checks spec 2026-10-22 §4.1 "Migration (no aliases, P1)": each repository settings body's `integrationCheck
+ * {enabled, command}` moves to `checks.integrationCheck {enabled, command}` (the same meaning) and the old field goes.
+ * Canonical bytes as the body's single writer stores them; the body's revision is not moved (nobody changed a setting).
+ */
+function migrateSettings15To16(store: DatabaseSync): void {
+  for (const row of store.prepare("SELECT repo_id, body FROM repository_settings ORDER BY repo_id").all()) {
+    const body = JSON.parse(String(row.body)) as Record<string, unknown>;
+    if (!Object.hasOwn(body, "integrationCheck")) continue;
+    const { integrationCheck, ...rest } = body as { integrationCheck: { enabled: unknown; command: unknown } } & Record<string, unknown>;
+    const checks = { ...(rest.checks as Record<string, unknown> | undefined), integrationCheck: { enabled: integrationCheck.enabled, command: integrationCheck.command } };
+    store.prepare("UPDATE repository_settings SET body=? WHERE repo_id=?").run(canonicalBytes({ ...rest, checks }).toString("utf8"), String(row.repo_id));
+  }
+}
+
+/** The steps every older version ends with: 15 → 16, then the version marker. */
+function finishMigration(store: DatabaseSync): void {
+  store.exec(schema15To16);
+  migrateSettings15To16(store);
+  store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+}
 
 /**
  * Accounts spec §9: idempotent on a store a criterion downgraded by dropping only its own column or table (the 6-to-7 and
@@ -160,24 +188,28 @@ function migrate7To8(store: DatabaseSync): void {
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   // Saved recovery's 11→12 marker fenced older owners. The current 11/12→13 upgrade also
   // adds installation-update revision/outbox tables; it leaves old policy and accounting rows intact.
+  if (fromVersion === "15") {
+    finishMigration(store);
+    return;
+  }
   if (fromVersion === "14") {
     store.exec(schema14To15);
-    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    finishMigration(store);
     return;
   }
   if (fromVersion === "13") {
     store.exec(schema13To14 + schema14To15);
-    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    finishMigration(store);
     return;
   }
   if (fromVersion === "12") {
     store.exec(schema12To13 + schema13To14 + schema14To15);
-    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    finishMigration(store);
     return;
   }
   if (fromVersion === "11") {
     store.exec(schema12To13 + schema13To14 + schema14To15);
-    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    finishMigration(store);
     return;
   }
   if (fromVersion === "1") store.exec(schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7);
@@ -190,5 +222,5 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   // Every version before 8 goes through 7 to 8 first; 8 itself only gains the activity table (spec §5.2).
   if (fromVersion !== "8" && fromVersion !== "9" && fromVersion !== "10") migrate7To8(store);
   store.exec(schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15);
-  store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+  finishMigration(store);
 }

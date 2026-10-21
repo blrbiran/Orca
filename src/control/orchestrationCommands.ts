@@ -28,7 +28,8 @@ export function applySetOrchestrationSettings(deps: { store: ControlStore; admis
         const review = criteriaReview ?? current.criteriaReview;
         // Failure-cause spec 2026-10-21 §5: likewise `quotaWait`, stored sorted and unique so equal sets compare equal.
         const waiting = quotaWait === undefined ? current.quotaWait : [...new Set(quotaWait)].sort();
-        const next = { maxRunningGroups, ...(review === undefined ? {} : { criteriaReview: review }), ...(waiting === undefined ? {} : { quotaWait: waiting }) };
+        // Checks spec 2026-10-22 §4.1: the global check settings are not this verb's; they are kept as stored.
+        const next = { maxRunningGroups, ...(review === undefined ? {} : { criteriaReview: review }), ...(waiting === undefined ? {} : { quotaWait: waiting }), ...(current.checks === undefined ? {} : { checks: current.checks }) };
         if (current.maxRunningGroups === maxRunningGroups && (criteriaReview === undefined || criteriaReview === current.criteriaReview)
           && (quotaWait === undefined || JSON.stringify(waiting) === JSON.stringify(current.quotaWait ?? []))) throw new ControlError("no-op-command");
         writeOrchestrationSettings(deps.store, next, context.nextCommandRevision);

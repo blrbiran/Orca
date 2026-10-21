@@ -48,11 +48,11 @@ export function applySetIntegrationScheme(
         const integration = (context.effectiveCommand.payload as { integration: IntegrationScheme }).integration;
         if (canonicalBytes(readIntegrationDefault(deps.store, target.repoId).scheme).equals(canonicalBytes(integration))) throw new ControlError("no-op-command");
         // The body's other field (the workspace mode; no row is worktree, execution driver spec §3.2) is kept.
-        // Kanban spec §7 layer 1: so is the integration check's setting.
+        // Checks spec 2026-10-22 §4.1: so are the project's check settings.
         const current = readRepositorySettingsBody(deps.store, target.repoId);
         const workspaceMode = current?.workspaceMode ?? "worktree";
         const next: RepositorySettingsBody = { workspaceMode, revision: context.nextCommandRevision, ...(integration.delivery === "keep" ? {} : { integration }),
-          ...(current?.integrationCheck === undefined ? {} : { integrationCheck: current.integrationCheck }) };
+          ...(current?.checks === undefined ? {} : { checks: current.checks }) };
         writeRepositorySettingsBody(deps.store, target.repoId, next);
         return { status: 200, body: {
           schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,

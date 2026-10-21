@@ -57,7 +57,7 @@ describe("the integration check (kanban spec §7 layer 1)", () => {
         { integration: { delivery: "local", trigger: "task", method: "merge", target: "main" } }) as never);
       expect(await scheme).toMatchObject({ result: { kind: "integration-scheme-set" } });
       // mutation: set-integration-scheme rewrites the body without the check -> undefined, red
-      expect(readRepositorySettingsBody(h.store, "repo")?.integrationCheck).toEqual({ enabled: true, command: "test -f base.txt" });
+      expect(readRepositorySettingsBody(h.store, "repo")?.checks?.integrationCheck).toEqual({ enabled: true, command: "test -f base.txt" });
     } finally { await h.dispose(); }
   });
 
