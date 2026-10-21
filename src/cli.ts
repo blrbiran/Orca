@@ -2,24 +2,15 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // CLI v2 plan Task 1 (Review Focus 1): every handler's modules load on demand, inside the arm that needs them, so a
-// command that only talks to the socket (`orca status`) never loads the control plane.
-const USAGE = `usage:
-  orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
-  orca check-append-only         read a git diff from stdin, reject if it contains any deleted line
-  orca plan <path> [--verbose]   print the plan's write sets, conflicts, and layering; execute nothing
-  orca correct --decision <run-id>/<n> --kind wrong|not_my_taste|stale --because <text>
-               [--repo <path>] [--by <who>] [--again]
-               [--chose-instead <text> --undo-how <text> [--undo-cost <text>] [--undo-blast-radius <text>]]
-                                 record a human's correction; giving either closing argument means
-                                 closing the loop, which also writes the two ledger rows and commits them
-  orca correct --close <correctionId> --undo-how <text> [--repo <path>] [--chose-instead <text>]
-                                 finish (or re-try) the closing half of a correction already recorded
-  orca metrics [--root <dir>] [--repo <key>=<path>]... [--as-of <ISO8601>] [--json]
-                                 read-only: the correction rate, the repair rate and the backlog.
-                                 Writes nothing and takes no lock. --as-of filters the input set to
-                                 what existed at that instant; without it, a row dated in the future
-                                 is refused by name. Exit 6 means the report printed in full and some
-                                 lines were malformed.
+// command that only talks to the socket (`orca status`) never loads the control plane. Help is generated from the
+// registry (src/commands/help.ts); the old top-level names are gone without aliases (plan Task 14, human ruling).
+
+/**
+ * The commands outside the registry (their own grammar, unchanged by CLI v2 §4): the panel service, its accounts, the
+ * raw socket client and the MCP server. Printed after the generated help when no command matches; moved verbatim from
+ * the old USAGE (plan Task 14), which tests/panel/usage.test.ts pins.
+ */
+const SERVICE_USAGE = `The service, its accounts, the raw socket client and the MCP server:
   orca panel run --by <who> [--port <n>] [--bind <addr>] [--root <dir>] [--repo <key>=<path>]...
              [--no-control] [--control-state-dir <path>] [--control-wake-ms <n>]
              [--estimator-profile <id> --estimate-mode strict|soft] [--session-days <n>]
@@ -59,53 +50,6 @@ const USAGE = `usage:
                                  manage panel accounts in the control root's accounts store: the same
                                  ORCA_CONTROL_DIR as the service panel, or it refuses (user-store-missing).
                                  rotate-key logs every session out; restart the panel afterwards. Exit 1 = refused
-  orca compact-reviews [--apply] [--root <dir>] [--repo <key>=<path>]...
-                                 dedupe reviews.jsonl and move rows whose decision was archived into
-                                 reviews-archive.jsonl. Without --apply it prints the report and writes
-                                 nothing. A row is left untouched when its repository is not found, its
-                                 ledger has a bad line, or its decision is in neither the ledger nor
-                                 .decisions/archive/. It never creates the store directory.
-  orca level --hook claude-code  read a Claude Code hook's JSON on stdin and print what the session should be
-                                 told about its context window: nothing below T1, a request to write a
-                                 checkpoint at T1, a breach past T2, and "no reading" whenever it cannot read
-  orca checkpoint write --session <id> --draft <path> [--transcript <path>] [--repo <path>]
-                                 write .orca/checkpoints/<run-id>.json from the agent's draft (next, open,
-                                 awaitingHuman, measure, and in a chain session chain) plus what this command
-                                 measures itself: the context-window level, HEAD, and the exit code of every
-                                 measure command. Without --transcript the transcript is found by session id under
-                                 ORCA_CLAUDE_PROJECTS_DIR, $CLAUDE_CONFIG_DIR/projects or ~/.claude/projects.
-                                 In a chain session (ORCA_CHAIN_SESSION set) --session must equal it.
-                                 Refuses a dirty worktree. Commits exactly that one file.
-  orca resume [--repo <path>] [--checkpoint <path>]
-                                 start a session from the latest checkpoint reachable from HEAD: print its
-                                 next steps and open items, the commits since, whether its measurements are
-                                 stale, re-run every one of them, report publish state from ls-remote now, and
-                                 list what waits for a human. Exit 2 when a measurement's exit code changed.
-  orca gate --hook claude-code   read a Claude Code PreToolUse hook's JSON on stdin; exit 2 with one line on stderr
-                                 when the Bash command would push, merge into main, delete a branch or remove a
-                                 worktree (Tier 0), or when it cannot decide; exit 0 otherwise
-  orca chain start --repo <path> --by <who> --goal <text> --max-sessions <n> --max-cost-usd <x>
-                   [--session-timeout-min <m>] [--chain-id <chain-xxxxxxxx>] [--via cli|panel]
-                                 run unattended Claude Code sessions one after another in <path> — a dedicated
-                                 clone or worktree of an Orca checkout with the Tier 0 gate — each starting from
-                                 \`orca resume\`, until one writes an exit checkpoint saying done or blocked, or a
-                                 limit or an anomaly stops the chain. The cost limit is soft: it is checked after
-                                 each session, and a session may overrun its --max-budget-usd. The model and the
-                                 default timeout (360 min, a backstop) come from .orca/chain.json. Exit 0 done,
-                                 1 refused before anything was written, 2 anomaly, 3 blocked on a person,
-                                 4 limit or stop request
-  orca chain stop --repo <path> [--chain-id <id>]
-                                 ask the running chain to stop after its current session ends
-  orca chain unlock --repo <path>
-                                 after checking its supervisor is gone: remove a chain's lock and record the
-                                 chain as stopped (unlocked-by-human)
-  orca agents init               detect the installed agents (ccloop agents detect) and write the installation table to
-                                 $ORCA_AGENTS_TABLE (default ~/.orca/agents.json; directory 0700, file 0600). An existing
-                                 table is never overwritten: the detection goes to <table>.draft.json and the diff is printed
-  orca agents show               validate the installation table (ccloop agents validate) and print what each installation
-                                 resolves to with no layer overriding it; exit 1 if any entry is refused
-  orca agents refresh            record the version each installed CLI answers now (ccloop's probe) in the table; only
-                                 the version fields change, the old bytes go to <table>.bak-auto; exit 1 if a probe failed
   orca control get <path> [--control-state-dir <dir>] [--client-name <name>]
   orca control send <route> --expected-revision <n> (--payload <json> | --payload-file <file>)
                     [--command-id <id>] [--control-state-dir <dir>] [--client-name <name>]
@@ -158,29 +102,13 @@ async function runPanel(args: string[]): Promise<number> {
 }
 
 export async function main(argv: string[], stdinText?: string): Promise<number> {
-  // CLI v2 spec §11 (plan Task 1): the registry first; an argv it does not match still reaches the arms below.
+  // CLI v2 spec §11: the registry first; `panel`, `user` and `mcp` keep their own grammar in the arms below.
   const { processIo, runRegistered, unknownCommand } = await import("./commands/run.js");
   const io = processIo(stdinText);
   const registered = await runRegistered(argv, io);
   if (registered !== null) return registered;
 
   const [command, ...rest] = argv;
-
-  if (command === "validate") {
-    return (await import("./commands/local/devTools.js")).runValidate(rest);
-  }
-
-  if (command === "plan") {
-    return (await import("./commands/local/devTools.js")).runPlan(rest);
-  }
-
-  if (command === "correct") {
-    return (await import("./commands/local/devTools.js")).runCorrect(rest);
-  }
-
-  if (command === "metrics") {
-    return (await import("./commands/local/devTools.js")).runMetrics(rest);
-  }
 
   if (command === "panel") {
     const sub = rest[0];
@@ -202,83 +130,15 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
     });
   }
 
-  if (command === "compact-reviews") {
-    return (await import("./commands/local/devTools.js")).runCompactReviews(rest);
-  }
-
-  if (command === "level") {
-    if (rest.length !== 2 || rest[0] !== "--hook" || rest[1] !== "claude-code") {
-      process.stderr.write(`orca level: only --hook claude-code is supported\n${USAGE}`);
-      return 1;
-    }
-    const { levelHookClaudeCode } = await import("./level/hook.js");
-    process.stdout.write(await levelHookClaudeCode(stdinText ?? (await (await import("./commands/local/devTools.js")).readStdin())));
-    return 0;
-  }
-
-  if (command === "gate") {
-    if (rest.length !== 2 || rest[0] !== "--hook" || rest[1] !== "claude-code") {
-      process.stderr.write(`orca gate: only --hook claude-code is supported\n${USAGE}`);
-      return 1;
-    }
-    const { gateHookClaudeCode } = await import("./gate/hook.js");
-    const result = await gateHookClaudeCode(stdinText ?? (await (await import("./commands/local/devTools.js")).readStdin()));
-    process.stderr.write(result.stderr);
-    return result.exitCode;
-  }
-
-  if (command === "chain") {
-    const { runChainCommand } = await import("./chain/command.js");
-    return runChainCommand(rest);
-  }
-
-  if (command === "agents") {
-    // ccloop dependency plan (2026-09-29): ORCA_CCLOOP_BIN unset ⇒ the installed ccloop package; neither ⇒ stop by name.
-    const { withDefaultCcloopBin } = await import("./control/ccloopBin.js");
-    const { runAgentsCommand } = await import("./agents/command.js");
-    const { env, notInstalled } = withDefaultCcloopBin(process.env);
-    if (notInstalled !== null) {
-      process.stderr.write(`orca agents: ${notInstalled.message}\n`);
-      return 1;
-    }
-    return runAgentsCommand(rest, env, { stdout: (text) => process.stdout.write(text), stderr: (text) => process.stderr.write(text) });
-  }
-
-  if (command === "control") {
-    const { runControlCommand } = await import("./entry/controlCommand.js");
-    return runControlCommand(rest, process.env);
-  }
-
   if (command === "mcp") {
     const { runMcpServe } = await import("./entry/mcp.js");
     return runMcpServe(rest, process.env);
   }
 
-  if (command === "checkpoint") {
-    return (await import("./commands/local/devTools.js")).runCheckpoint(rest);
-  }
-
-  if (command === "resume") {
-    return (await import("./commands/local/devTools.js")).runResume(rest);
-  }
-
-  if (command === "check-append-only") {
-    const diffText = stdinText ?? (await (await import("./commands/local/devTools.js")).readStdin());
-    const { checkAppendOnly } = await import("./ledger/appendOnly.js");
-    const result = checkAppendOnly(diffText);
-    if (result.ok) {
-      process.stdout.write("ok: append-only\n");
-      return 0;
-    }
-    for (const reason of result.reasons) {
-      process.stderr.write(`${reason}\n`);
-    }
-    return 1;
-  }
-
   const unknown = unknownCommand(argv, io);
   if (unknown !== null) return unknown;
-  process.stderr.write(USAGE);
+  const { renderHelp } = await import("./commands/help.js");
+  process.stderr.write(`${renderHelp([])}\n${SERVICE_USAGE}`);
   return 1;
 }
 

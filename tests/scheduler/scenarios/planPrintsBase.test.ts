@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { captureStdout, defaultBranchOf, headOf, makeSandbox, runCli, seedTwoTaskPlan } from "../sandbox.js";
 
-// Final review, Important 7, through the real `orca plan` rather than a
+// Final review, Important 7, through the real `orca plan preview` rather than a
 // hand-built fixture: the renderer's own formatting is covered in
 // tests/scheduler/planReport.test.ts, and this is the wiring — that the branch
 // and sha printed are the ones the round would actually cut W from, read from
@@ -10,7 +10,7 @@ import { captureStdout, defaultBranchOf, headOf, makeSandbox, runCli, seedTwoTas
 // This is the shape fix round 1 was burned by once already
 // (`emptyRequiredChecksPairs` was a seam nothing in production filled in, so
 // its warning could never fire for a real run).
-describe("orca plan prints where the work branch starts (spec §9.1)", () => {
+describe("orca plan preview prints where the work branch starts (spec §9.1)", () => {
   it("names the target repository's checked-out branch and its actual tip sha", async () => {
     const s = await makeSandbox();
     try {

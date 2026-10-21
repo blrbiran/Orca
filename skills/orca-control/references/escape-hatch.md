@@ -63,7 +63,7 @@ orca control get groups/<groupId>/decisions
 ### Recovery decisions
 
 - `revision-conflict`: read again and reconsider the action; never automatically bump a revision.
-- `agent-version-drift`: ask the human to review `orca agents init`'s draft and reload the panel. Preserve their custom
+- `agent-version-drift`: ask the human to review `orca agent init`'s draft and reload the panel. Preserve their custom
   configuration; never remove the live table or restart the service yourself.
 - A terminal failed task uses `groups/<groupId>/retry-task` with `{"taskId":"<taskId>"}` at the current group revision.
   A completed handoff-stopped failure may also become retryable after the stop is explicitly resumed. Unknown usage,

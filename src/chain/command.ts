@@ -11,7 +11,7 @@ function flags(sub: string, args: string[], allowed: string[]): Map<string, stri
     const flag = args[i];
     const value = args[i + 1];
     if (!allowed.includes(flag) || value === undefined || values.has(flag)) {
-      throw new ChainRejection("chain-args-invalid", `orca chain ${sub}: unexpected argument ${JSON.stringify(flag)}`);
+      throw new ChainRejection("chain-args-invalid", `orca dev chain ${sub}: unexpected argument ${JSON.stringify(flag)}`);
     }
     values.set(flag, value);
   }
@@ -19,13 +19,13 @@ function flags(sub: string, args: string[], allowed: string[]): Map<string, stri
 }
 function required(values: Map<string, string>, sub: string, flag: string): string {
   const value = values.get(flag);
-  if (value === undefined) throw new ChainRejection("chain-args-invalid", `orca chain ${sub}: ${flag} is required`);
+  if (value === undefined) throw new ChainRejection("chain-args-invalid", `orca dev chain ${sub}: ${flag} is required`);
   return value;
 }
 const numberOf = (values: Map<string, string>, flag: string): number | undefined => (values.has(flag) ? Number(values.get(flag)) : undefined);
 
 /**
- * `orca chain start|stop|unlock`. Catches everything (D-launch spec §4.3, review I8): a named refusal answers with its
+ * `orca dev chain start|stop|unlock`. Catches everything (D-launch spec §4.3, review I8): a named refusal answers with its
  * own code, anything unforeseen with 2 (an anomaly) — never main()'s 3, which for a chain means "blocked on a person".
  */
 export async function runChainCommand(args: string[], deps: ChainDeps = defaultChainDeps()): Promise<number> {

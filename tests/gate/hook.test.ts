@@ -27,7 +27,7 @@ function run(file: string, args: string[], input: string, env: NodeJS.ProcessEnv
   });
 }
 
-describe("orca gate --hook claude-code (Tier 0 gate spec 4, 6.2)", () => {
+describe("orca dev gate --hook claude-code (Tier 0 gate spec 4, 6.2)", () => {
   it("through the real process: a push exits 2 with the one literal line; a status exits 0 silently; another runtime is refused with 1", async () => {
     const blocked = await runCli(["dev", "gate", "--hook", "claude-code"], stdin("git push"));
     expect([blocked.code, blocked.stdout, blocked.stderr]).toEqual([2, "", PUSH_LINE]);

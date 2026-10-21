@@ -31,7 +31,7 @@ import { captureStreams, closeArgs, git, makeTargetRepo, runCli, withCorrections
  * criterion fell into (git's own echoed text satisfying an assertion that
  * was meant to check OUR wording).
  */
-describe("orca correct --close — a gitignored ledger path is a named refusal, not a crash (round-4 review, item 2)", () => {
+describe("orca dev correct --close — a gitignored ledger path is a named refusal, not a crash (round-4 review, item 2)", () => {
   it("refuses with ledger-commit-refused and exit 5, naming --close and never claiming the file was staged", async () => {
     const target = await makeTargetRepo();
     try {

@@ -173,7 +173,7 @@ describe("a round that throws (spec §4.2.1 / §6.3)", () => {
       // `unreadable-contract` rejection and a clean exit 1 (Important 1), so
       // that input can no longer reach the bootstrap's rejection arm at all.
       // The arm still has to be measured, so the rejection is forced somewhere
-      // the fix wave deliberately did not touch: `orca validate` reads each
+      // the fix wave deliberately did not touch: `orca decision validate` reads each
       // ledger file with an unguarded `readFile`, and a file `stat` can see
       // but nobody may read throws EACCES out of main().
       //

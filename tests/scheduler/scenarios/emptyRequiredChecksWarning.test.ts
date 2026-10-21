@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { captureStdout, makeSandbox, runCli, writeContract, writePlan } from "../sandbox.js";
 
-describe("orca plan warns about an empty requiredChecks union (spec 5.3 / 9.1(6), fix round 1 finding 2)", () => {
+describe("orca plan preview warns about an empty requiredChecks union (spec 5.3 / 9.1(6), fix round 1 finding 2)", () => {
   it("prints the escalation warning through the real plan path, not a hand-built fixture", async () => {
     // ccloop's own contract schema requires requiredChecks.min(1)
     // (ccloop/src/contract/schema.ts), so a contract ccloop itself would

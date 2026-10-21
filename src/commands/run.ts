@@ -24,7 +24,7 @@ async function execute(def: CommandDef, args: ParsedArgs, io: CommandIo, registr
 
 /**
  * CLI v2 spec §4, §11: run argv through the registry. null = no registered command matches, so the caller may still try
- * its old top-level arms (plan Task 1: until Task 14 removes them) before answering with `unknownCommand`.
+ * the `panel`, `user` and `mcp` arms (their own grammar) before answering with `unknownCommand`.
  */
 export async function runRegistered(argv: readonly string[], io: CommandIo, registry: readonly CommandDef[] = REGISTRY): Promise<number | null> {
   if (argv[0] === "--help") { io.stdout(renderHelp([], registry)); return 0; }

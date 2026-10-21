@@ -6,8 +6,8 @@ Orca turns an idea into tasks, runs those tasks with coding agents (Claude Code,
 on a git branch for you to review. You drive it from a local Web panel.
 
 This README is about that panel: what Orca is, how to install and configure it, how to start the panel, what each
-section does, and what is and is not safe. The command-line reference (`orca plan`, `orca correct`, checkpoints, the
-Tier 0 gate, `orca chain`, the control foundation) is in [docs/cli.md](docs/cli.md).
+section does, and what is and is not safe. The command-line reference (`orca plan preview`, `orca dev correct`, checkpoints, the
+Tier 0 gate, `orca dev chain`, the control foundation) is in [docs/cli.md](docs/cli.md).
 
 - **People:** read top to bottom.
 - **Coding agents operating Orca:** [Configure](#configure) and [Safety](#safety-what-orca-will-and-will-not-do)
@@ -75,11 +75,11 @@ repository you work on.
 
 ```sh
 export ORCA_AGENTS_TABLE="$HOME/.orca/agents.json"
-orca agents init     # asks ccloop which agents are installed and writes the table
-orca agents show     # validates the table and prints each installation's default model; exit 1 if any entry is refused
+orca agent init     # asks ccloop which agents are installed and writes the table
+orca agent show     # validates the table and prints each installation's default model; exit 1 if any entry is refused
 ```
 
-- `orca agents init` writes to `$ORCA_AGENTS_TABLE` (default `$HOME/.orca/agents.json`). A new directory is created
+- `orca agent init` writes to `$ORCA_AGENTS_TABLE` (default `$HOME/.orca/agents.json`). A new directory is created
   `0700` and a new file `0600`. An existing table is **never overwritten**: the new detection goes to
   `<table>.draft.json` and the difference is printed.
 - The panel itself does not fall back to the default path: **`ORCA_AGENTS_TABLE` must be set when you start the
@@ -91,9 +91,9 @@ The installation table records the CLI version, and ccloop refuses a mismatch as
 the new version itself: when ccloop refuses a claim, start or resume with that drift, Orca has ccloop probe the
 installation, writes the version it answers into the table (only that field; the previous file is kept as
 `<table>.bak-auto`) and asks once more, so a group goes on under the new version. The Agents page refreshes the
-versions when it loads and has a **Refresh versions** button; `orca agents refresh` does the same from a terminal
-(exit 1 if a probe failed). A moved binary or a new agent is not a version change: for those, run `orca agents show`,
-then `orca agents init` to detect the current installations. With an existing table, inspect `<table>.draft.json` and the printed differences. Preserve your existing
+versions when it loads and has a **Refresh versions** button; `orca agent refresh` does the same from a terminal
+(exit 1 if a probe failed). A moved binary or a new agent is not a version change: for those, run `orca agent show`,
+then `orca agent init` to detect the current installations. With an existing table, inspect `<table>.draft.json` and the printed differences. Preserve your existing
 custom commands, configuration directories and defaults; back up the old table before deliberately replacing it with
 reviewed values. Restart the panel to load the new table. Do not delete the only copy of your configuration.
 
@@ -102,7 +102,7 @@ reviewed values. Restart the panel to load the new table. Do not delete the only
 The table is JSON of schema `ccloop-agents-table-v1`: `{ "schema": ..., "installations": { "<id>": { ... } } }`, one
 entry per installed CLI, keyed by an id (letters, digits, `_`, `.`, `-`; it must start with a letter or digit). Orca does not
 define the entry's shape: ccloop checks it (the fields below are from ccloop at the commit Orca pins, `src/agents/`),
-and `orca agents show` runs that check. Every field is required; an unknown field is refused.
+and `orca agent show` runs that check. Every field is required; an unknown field is refused.
 
 | Field | Kinds | Rule |
 |---|---|---|
@@ -119,7 +119,7 @@ and `orca agents show` runs that check. Every field is required; an unknown fiel
 
 `claude` has no extra fields. The file and its directory must belong to you and must not be group- or world-writable,
 the file must be a regular file (not a symlink) at its own real path, and at most 1 MiB. Minimal entries, with
-placeholder paths (let `orca agents init` fill `version`, and prefer its output to hand-writing: for `claude` it also
+placeholder paths (let `orca agent init` fill `version`, and prefer its output to hand-writing: for `claude` it also
 adds isolation arguments to `command` that these minimal examples leave out):
 
 ```json
@@ -526,7 +526,7 @@ kind, scope and repository. Open one to read what was chosen, why, and what was 
 
 - **Agree** marks it reviewed (it counts toward review coverage).
 - **Correct** records a correction (`wrong`, `not_my_taste`, `stale`). It does **not** edit the ledger; closing a
-  correction is `orca correct --close` ([docs/cli.md](docs/cli.md#orca-correct)).
+  correction is `orca dev correct --close` ([docs/cli.md](docs/cli.md#orca-dev-correct)).
 
 ### Memory
 
@@ -536,15 +536,15 @@ Nothing is read until you open the section.
 ### Metrics
 
 The correction rate, the repair rate and review coverage across your repositories, with notes on how to read them
-(the same numbers as `orca metrics`). Read-only.
+(the same numbers as `orca decision metrics`). Read-only.
 
 ### Continuous improvement (advanced)
 
-`orca chain` runs unattended Claude Code sessions, one after another, in a clone of an **Orca** checkout, to develop
+`orca dev chain` runs unattended Claude Code sessions, one after another, in a clone of an **Orca** checkout, to develop
 Orca itself. It is unrelated to groups and tasks. Enable its navigation in Global settings; recognized `#chains` links
 remain available, and an active chain keeps its status and stop access. The section shows each repository's latest chain, starts one (goal,
 maximum sessions, a soft maximum cost in USD, session timeout) and stops one after its current session. Details in
-[docs/cli.md](docs/cli.md#unattended-chains-orca-chain).
+[docs/cli.md](docs/cli.md#unattended-chains-orca-dev-chain).
 
 ## Known limitations
 
@@ -578,9 +578,9 @@ maximum sessions, a soft maximum cost in USD, session timeout) and stops one aft
 
 | Path | Written by |
 |---|---|
-| `$ORCA_AGENTS_TABLE` (default `$HOME/.orca/agents.json`) | `orca agents init`; its `version` fields (and `<table>.bak-auto`) also `orca agents refresh`, the Agents page and the control plane on a version drift |
+| `$ORCA_AGENTS_TABLE` (default `$HOME/.orca/agents.json`) | `orca agent init`; its `version` fields (and `<table>.bak-auto`) also `orca agent refresh`, the Agents page and the control plane on a version drift |
 | `$ORCA_CONTROL_DIR/<repo key>` and its `.runs` / `.workspaces` siblings, or `--control-state-dir` | the panel's control plane |
-| `$ORCA_CORRECTIONS_DIR` (default `$HOME/.orca`) | reviews and corrections from the panel or `orca correct` |
+| `$ORCA_CORRECTIONS_DIR` (default `$HOME/.orca`) | reviews and corrections from the panel or `orca dev correct` |
 | ccmem's data directory | ccmem itself, when the Memory section opens it (it may migrate it) |
 
 Point these variables at a scratch directory when you are trying Orca out.

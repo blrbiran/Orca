@@ -5,7 +5,7 @@ import { readChainRecord } from "./recordSchema.js";
 import { ChainRejection } from "./rejection.js";
 
 /**
- * D-launch spec §2 (review I10), shared by `orca chain stop` and the panel: the id must have the chain shape (it
+ * D-launch spec §2 (review I10), shared by `orca dev chain stop` and the panel: the id must have the chain shape (it
  * becomes a path) and name a running chain's record. The request lives in the git dir; the supervisor latches it.
  */
 export async function requestStop(repo: string, chainId: string): Promise<string> {

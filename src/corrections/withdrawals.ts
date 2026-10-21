@@ -38,7 +38,7 @@ export type CorrectionWithdrawal = z.infer<typeof withdrawalSchema>;
 export const CORRECTION_NOT_YOURS = "correction-not-yours";
 export const CORRECTION_ALREADY_WITHDRAWN = "correction-already-withdrawn";
 export const CORRECTION_CLOSED = "correction-closed";
-/** §5.3: `orca correct --close` on a withdrawn correction (thrown in correct.ts). */
+/** §5.3: `orca dev correct --close` on a withdrawn correction (thrown in correct.ts). */
 export const CORRECTION_WITHDRAWN = "correction-withdrawn";
 /**
  * A line of the withdrawals file that does not parse. Never read as "nothing is withdrawn": that reading would turn

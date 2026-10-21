@@ -192,7 +192,7 @@ describe("a debug run's landing commit closes its correction (plan Task 9)", () 
     let closedAt: string | null = null;
     // At collect, after A2 made the group branch from main: only the target holds the human's rows.
     const t = await debugHarness({ correction }, { duringCollect: async () => {
-      closedAt ??= commitFiles(t.repo, { [`.decisions/${fixRunIdOf(correction)}.jsonl`]: jsonl(...humanClosingRows(correction)) }, "orca correct --close");
+      closedAt ??= commitFiles(t.repo, { [`.decisions/${fixRunIdOf(correction)}.jsonl`]: jsonl(...humanClosingRows(correction)) }, "orca dev correct --close");
     } }); try {
       const runId = await t.claim();
       await t.until(t.driver(), () => LANDED.includes(t.body(runId).state));
@@ -210,7 +210,7 @@ describe("a debug run's landing commit closes its correction (plan Task 9)", () 
     let closedAt: string | null = null;
     const t = await debugHarness({ correction }, { duringCollect: async () => {
       if (closedAt !== null) return;
-      closedAt = commitFiles(t.repo, { [`.decisions/${fixRunIdOf(correction)}.jsonl`]: jsonl(...humanClosingRows(correction)) }, "orca correct --close");
+      closedAt = commitFiles(t.repo, { [`.decisions/${fixRunIdOf(correction)}.jsonl`]: jsonl(...humanClosingRows(correction)) }, "orca dev correct --close");
       git(t.repo, "checkout", "-q", "side");
       // After A2, so the integration pass has had nothing to integrate; trigger `group`, so a landed task starts none.
       const row = t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!;
@@ -273,7 +273,7 @@ describe("a debug run's landing commit closes its correction (plan Task 9)", () 
       git(t.repo, "rm", "-q", path);
       git(t.repo, "commit", "-qm", "the rows leave the target");
     } }); try {
-      commitFiles(t.repo, { [path]: jsonl(...humanClosingRows(correction)) }, "orca correct --close");
+      commitFiles(t.repo, { [path]: jsonl(...humanClosingRows(correction)) }, "orca dev correct --close");
       const runId = await t.claim();
       await t.until(t.driver(), () => LANDED.includes(t.body(runId).state));
       const drive = t.body(runId).drive;

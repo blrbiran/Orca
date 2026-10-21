@@ -24,7 +24,7 @@ describe(".orca/chain.json (D-launch spec §2.2-4, §4.2, §5.1-5)", () => {
     expect(await loadChainConfig(await repoWith({ "chain.json": '{"model":"m"}' }))).toEqual({ model: "m", sessionTimeoutMin: 360 });
     expect(await loadChainConfig(await repoWith({ "chain.json": '{"model":"m","sessionTimeoutMin":90}' }))).toEqual({ model: "m", sessionTimeoutMin: 90 });
   });
-  it("CF4 a model has a window when orca level would find one: the [1m] suffix, or .orca/level.json windows", async () => {
+  it("CF4 a model has a window when orca dev level would find one: the [1m] suffix, or .orca/level.json windows", async () => {
     const bare = await repoWith({});
     expect(await modelWindowKnown(bare, "claude-opus-5[1m]")).toBe(true);
     expect(await modelWindowKnown(bare, "claude-haiku-4-5-20251001")).toBe(false);

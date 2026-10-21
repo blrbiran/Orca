@@ -14,7 +14,7 @@ import { z } from "zod";
  * *** ERRATUM (2026-09-08, run orca-dev-ad1e30c6): the sentence above is now
  * false in two of its three clauses, and the original text is kept verbatim
  * because it is published. There IS a writer -- store.ts appends rows under
- * storeLock.ts -- and there IS a CLI subcommand, `orca correct`, with both a
+ * storeLock.ts -- and there IS a CLI subcommand, `orca dev correct`, with both a
  * record-only and a loop-closing mode. Only "there is no database" survives,
  * and that one is scheduled: it is subsystem E's third cut (E3), designed on
  * top of the metrics core specified in

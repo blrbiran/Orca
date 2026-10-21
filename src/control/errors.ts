@@ -19,7 +19,7 @@ export const durableCommandErrorStatuses = {
   // refused entry is invalid for another reason no undo.how can fix (detail: the reason).
   "decision-undo-not-executable": 400,
   "pending-decision-entry-invalid": 400,
-  // Debug task plan Task 11 (correction-record / correction-close): the corrections store's and `orca correct --close`'s
+  // Debug task plan Task 11 (correction-record / correction-close): the corrections store's and `orca dev correct --close`'s
   // own refusals, booked under their own names (CorrectRejection codes, 1:1). closing-row-refused: the ledger writer
   // refused the closing row (the detail is its reason; an undo.how the tier-0 gate refuses is the usual one).
   "correction-row-invalid": 400,
@@ -113,7 +113,7 @@ export const durableCommandErrorStatuses = {
   // the item stays pending.
   "pending-decision-correction-failed": 409,
   // Control run decisions plan Task 10 (cross-plan resolution 5): the correction names a pending item, not a recorded
-  // decision, so there is no ledger row to overturn. `orca correct --close` refuses it by the same name.
+  // decision, so there is no ledger row to overturn. `orca dev correct --close` refuses it by the same name.
   "correction-target-not-a-decision": 409,
   // Debug task plan Task 6: the integration target (or HEAD) already holds the correction's closing row; the decision is
   // not in HEAD's ledger, where the debug branch starts (it is only on a group branch, in the working tree, or on a

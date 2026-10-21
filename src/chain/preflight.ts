@@ -88,7 +88,7 @@ export async function preflight(raw: unknown, deps: PreflightDeps): Promise<Pref
   }
   const config = await loadChainConfig(repo);
   if (!(await modelWindowKnown(repo, config.model))) {
-    throw new ChainRejection("model-window-unknown", `orca level knows no window for model ${config.model}: use a [1m] model or add it to .orca/level.json windows`);
+    throw new ChainRejection("model-window-unknown", `orca dev level knows no window for model ${config.model}: use a [1m] model or add it to .orca/level.json windows`);
   }
   const gate = await deps.gateCheck(repo);
   if (!gate.ok) throw new ChainRejection("gate-check-failed", gate.reason);

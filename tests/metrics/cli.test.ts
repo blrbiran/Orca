@@ -25,7 +25,7 @@ async function bareRepo(root: string, name: string, remote?: string): Promise<st
   return path;
 }
 
-describe("orca metrics (E2 spec §7)", () => {
+describe("orca decision metrics (E2 spec §7)", () => {
   it("matches the golden byte for byte", async () => {
     await withCorrectionsDir(async (store) => {
       const root = await newRoot();

@@ -23,7 +23,7 @@ const rejectionOf = async (
     (e: unknown) => e as CorrectRejection,
   );
 
-describe("orca correct argument surface (spec §3 as revised by §14.4 / §14.24, plus the --record-only ruling)", () => {
+describe("orca dev correct argument surface (spec §3 as revised by §14.4 / §14.24, plus the --record-only ruling)", () => {
   it("records only, when neither closing argument is given", async () => {
     const parsed = await parseCorrectArgs(base);
     expect(parsed.mode).toBe("record");

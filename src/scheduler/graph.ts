@@ -199,7 +199,7 @@ export function buildGraph(plan: PlanFile, contracts: Map<string, unknown>): Tas
 
   // Standard batched Kahn: every ready (zero in-degree) task goes into the
   // same layer, sorted by taskId so the result — and anything printed from
-  // it, e.g. `orca plan` — is deterministic rather than iteration-order
+  // it, e.g. `orca plan preview` — is deterministic rather than iteration-order
   // dependent.
   const remaining = new Set(taskIds);
   const layers: string[][] = [];

@@ -83,7 +83,7 @@ export function writeSetOf(contract: unknown): ClaimedPath[] {
  * validates them against ccloop's schema (fix round 1, finding 2), so a
  * malformed contract with `requiredChecks: []` reaches the planner fine and
  * would only be caught later, at spawn — which is exactly why catching it at
- * plan time (Task 5's `orca plan`) is worth doing.
+ * plan time (Task 5's `orca plan preview`) is worth doing.
  *
  * Task 11's synthesizeReconcileContract / planReconciliation (spec's own
  * `requiredChecksUnion(a, b)` interface) must import this function rather

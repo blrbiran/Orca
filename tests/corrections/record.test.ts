@@ -11,7 +11,7 @@ const recordArgs = (repo: string, overrides: string[] = []) => [
   ...overrides,
 ];
 
-describe("orca correct — record only (spec §14.3 记-1…记-3)", () => {
+describe("orca dev correct — record only (spec §14.3 记-1…记-3)", () => {
   it("writes one row keyed by the repository's remote, stamped now", async () => {
     const target = await makeTargetRepo();
     try {
@@ -67,7 +67,7 @@ describe("orca correct — record only (spec §14.3 记-1…记-3)", () => {
         expect(stderr).toContain("rejected: target-not-a-git-repo:");
         // §14.9: the predicate and the code are reused; the MESSAGE is not.
         // The existing one says "this round … the repo lock it takes before
-        // reading anything", and `orca correct` is not a round — record mode
+        // reading anything", and `orca dev correct` is not a round — record mode
         // takes no lock at all.
         expect(stderr).not.toContain("this round");
         expect(rc).toBe(1);

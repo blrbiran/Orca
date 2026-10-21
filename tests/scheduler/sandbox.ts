@@ -425,7 +425,7 @@ export async function captureStdout<T>(fn: () => Promise<T>): Promise<{ result: 
 
 // Ruling R1 (Task 5): the first scenario that needs a full, schedulable,
 // two-task plan file on disk. T1 and T2 claim disjoint paths, so the graph
-// `orca plan` builds has no implicit edge — S17 only cares that `plan` never
+// `orca plan preview` builds has no implicit edge — S17 only cares that `plan` never
 // mutates the target repo, not about any particular layering.
 // Task 6: the first scenarios (S18/S19/S22) that need an actual PlanFile
 // object in hand, not a path on disk — `preflight()` takes a PlanFile
@@ -474,7 +474,7 @@ export async function seedTwoTaskPlan(s: Sandbox): Promise<string> {
   return writePlan(s, {
     targetRepo: s.targetRepo,
     // A syntactically valid absolute path is all loadPlan's schema checks —
-    // `orca plan` never spawns ccloop (spec §9.2), so this deliberately does
+    // `orca plan preview` never spawns ccloop (spec §9.2), so this deliberately does
     // not read s.ccloopBin. Reading it would resolve the lazy getter and fail
     // this scenario on any machine where ccloop has not been built, for a
     // reason that has nothing to do with the code under test.

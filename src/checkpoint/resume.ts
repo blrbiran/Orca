@@ -13,7 +13,7 @@ import { CHAIN_RECORDS_DIR, CHECKPOINT_DIR, type Checkpoint, CheckpointRejection
  * D spec 9 item 3: a measurement's exit code changed => non-zero exit.
  *
  * `opts.git` (plan PC-20, controller ruling on W30): the git runner this function's own read-only calls make
- * (not `runMeasurement`'s `/bin/sh -c`, out of scope). Defaults to the plain `git` wrapper, so `orca resume`'s
+ * (not `runMeasurement`'s `/bin/sh -c`, out of scope). Defaults to the plain `git` wrapper, so `orca dev resume`'s
  * own behaviour, output and exit codes are unchanged; the chain supervisor passes `chainGit` (`src/chain/git.ts`)
  * so these calls carry the same `-c core.hooksPath=/dev/null -c core.fsmonitor=false` its own git calls do.
  */

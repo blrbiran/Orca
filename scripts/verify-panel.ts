@@ -244,7 +244,7 @@ async function makeFixture(): Promise<Fixture> {
 
   // Measured (L5): this is what discoverRepos would derive from the remote if
   // --repo did not name it explicitly. Used anyway, so this fixture's --repo
-  // key matches what a real `orca correct` run against this same remote would
+  // key matches what a real `orca dev correct` run against this same remote would
   // produce -- --repo itself never checks it against the remote.
   const repoKey = await projectKeyOf(repoPath);
 
@@ -289,7 +289,7 @@ async function snapshotDecisionsDir(dir: string): Promise<Record<string, string>
 // ~/.orca snapshot (ruling R56): Rule 17's own gate, the one case in this
 // script that reads the real home directory -- read-only, only to prove
 // nothing else in the run wrote there. A permanent "still absent" would
-// punish anyone who has ever run `orca correct` for real, so this compares a
+// punish anyone who has ever run `orca dev correct` for real, so this compares a
 // before/after snapshot rather than asserting absence outright.
 // ---------------------------------------------------------------------------
 
@@ -942,7 +942,7 @@ async function main(): Promise<number> {
         ["decision", "compact-reviews", "--apply", "--repo", `${fixture.repoKey}=${fixture.repoPath}`],
         env13,
         20_000,
-        "orca compact-reviews",
+        "orca decision compact-reviews",
         " A hang here means compaction never released the reviews lock or never finished.",
       ),
     );

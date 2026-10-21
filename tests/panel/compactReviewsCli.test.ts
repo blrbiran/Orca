@@ -36,7 +36,7 @@ async function snapshot(dir: string): Promise<Record<string, string>> {
   return out;
 }
 
-describe("orca compact-reviews (reviews compaction spec section 3)", () => {
+describe("orca decision compact-reviews (reviews compaction spec section 3)", () => {
   let root: string;
   let repoPath: string;
 
@@ -136,6 +136,6 @@ describe("orca compact-reviews (reviews compaction spec section 3)", () => {
 
   it("lists compact-reviews in the usage text", async () => {
     const { stderr } = await captureStreams(() => main([]));
-    expect(stderr).toContain("orca compact-reviews [--apply]");
+    expect(stderr).toContain("orca decision compact-reviews [--apply]");
   });
 });

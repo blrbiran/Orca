@@ -48,7 +48,7 @@ export function installedCcloopBin(from: string = import.meta.url): string {
 
 /**
  * The environment with ORCA_CCLOOP_BIN filled in from the installed package when it is unset. A missing package is
- * returned rather than thrown: the panel boots without an execution port anyway (ruling R5), while `orca agents`
+ * returned rather than thrown: the panel boots without an execution port anyway (ruling R5), while `orca agent`
  * stops on it by name. The caller's object is never written to.
  */
 export function withDefaultCcloopBin(

@@ -70,7 +70,7 @@ describe("requiredChecksUnion (spec 5.3 / 9.1(6), fix round 1 finding 2)", () =>
     // ccloop's own schema requires requiredChecks.min(1), so a contract
     // ccloop would accept can never reach this — but subsystem C reads
     // contract JSON as opaque and unvalidated, so a malformed contract with
-    // requiredChecks: [] does reach here. This is the case orca plan's
+    // requiredChecks: [] does reach here. This is the case orca plan preview's
     // escalation warning exists to catch before a spawn would.
     expect(requiredChecksUnion(contract([]), contract([]))).toEqual([]);
   });

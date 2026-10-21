@@ -113,7 +113,7 @@ async function readCorrectionsOrRefuse(dir: string): Promise<Correction[]> {
 /**
  * `/api/corrections` as a verb: the same row (correctionRowFrom, the panel's key, clock and identity), then the same
  * `reviewed` mark. The panel route checks the decision against its discovery; here the repository's ledger answers, as
- * `orca correct`'s close-new reads it (original-decision-not-found), so no junk row is recorded against a typo.
+ * `orca dev correct`'s close-new reads it (original-decision-not-found), so no junk row is recorded against a typo.
  */
 export function applyCorrectionRecord(deps: WebServiceDeps, command: CorrectionRecordCommand): Promise<WebCommandResult> {
   return run(deps.store, command, async () => {
@@ -155,7 +155,7 @@ function pendingClosing(store: ControlStore, row: Correction, choseInstead: stri
 }
 
 /**
- * The UI's manual close: `orca correct --close` (closeExistingCorrection, the same guards in the same order) in the
+ * The UI's manual close: `orca dev correct --close` (closeExistingCorrection, the same guards in the same order) in the
  * repository the correction's projectKey names, committed on its current branch. Refused debug-group-active while any
  * debug group of the correction is live (design §12.1; a draft counts): two closings would land two closing rows.
  */

@@ -105,7 +105,7 @@ async function withRevertInProgress(target: TargetRepo): Promise<void> {
   await git(target.path, ["revert", "-n", "HEAD"]);
 }
 
-describe("orca correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8)", () => {
+describe("orca dev correct --close / closing new — guards, lock, order, single write (§14.3 闭-1…闭-8)", () => {
   it("closes the loop end to end: one new orca-fix-*.jsonl, a decision then an overturned row", async () => {
     const target = await makeTargetRepo();
     try {

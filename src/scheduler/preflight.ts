@@ -61,7 +61,7 @@ async function probeRef(targetRepo: string, arg: string): Promise<RefProbe> {
  * it was the first of the three checks to be able to fail rather than answer.
  * A `targetRepo` that is not a git repository at all — a typo in the plan
  * file, the purest exit-1 input error there is — therefore threw out of
- * `preflight`, out of `orca plan`, and reached the user as a raw node stack
+ * `preflight`, out of `orca plan preview`, and reached the user as a raw node stack
  * with node's own exit code instead of §9.3's 1.
  *
  * ⚠️ The rest of that fix's reasoning said "the other two swallow their git
@@ -96,9 +96,9 @@ async function porcelainOf(targetRepo: string): Promise<{ output: string } | { u
  * ⚠️ Deliberately NOT a member of RUNTIME_CHECK or PLAN_LEVEL_CHECK. Both of
  * those are rendered by `renderPlanReport`, which turns "no rejection carries
  * this code" into `[pass] <code>` — so adding this code there would print a
- * green line for a check `orca plan` never runs. It is a `run`-side up-front
+ * green line for a check `orca plan preview` never runs. It is a `run`-side up-front
  * rejection, in the same position as the guards on `--adapter-config` and
- * `ledgerMode`, and `orca plan`'s report is left exactly as it was.
+ * `ledgerMode`, and `orca plan preview`'s report is left exactly as it was.
  * *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-1) -- `orca run` and its
  * `--adapter-config` guard are deleted; this rejection is printed by `runPreparedRound`, the round the control path
  * runs. Text above kept verbatim. ***
@@ -148,7 +148,7 @@ export async function unlockableTargetRejection(targetRepo: string): Promise<Pla
  *
  * All three checks read (git rev-parse, git status --porcelain) and never
  * write — spec §9.1(4) says explicitly that reading a ref or porcelain
- * output does not count as touching the repo. That is what lets `orca plan`
+ * output does not count as touching the repo. That is what lets `orca plan preview`
  * (spec §9.2: zero side effects on the target repo) call this function and
  * print real verdicts instead of leaving these three checks perpetually
  * "not evaluated".

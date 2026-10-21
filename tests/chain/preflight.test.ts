@@ -143,7 +143,7 @@ describe("preflight: D-launch spec §5.1 — refused by name, exit 1, nothing wr
     await expect(preflight(s.args(), s.deps)).rejects.toMatchObject({ code: "chain-config-missing" });
   });
 
-  it("PF14 a model orca level cannot find a window for is model-window-unknown (review M9)", async () => {
+  it("PF14 a model orca dev level cannot find a window for is model-window-unknown (review M9)", async () => {
     const s = await setup("claude-haiku-4-5-20251001");
     await expect(preflight(s.args(), s.deps)).rejects.toMatchObject({ code: "model-window-unknown" });
   });

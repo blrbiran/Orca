@@ -39,7 +39,7 @@ describe("writeCheckpoint (D spec 5 step 2, 9 item 1)", () => {
     // commit. The temp repo resolves core.hooksPath to the default .git/hooks (no global hooksPath is
     // configured on this machine, confirmed by probing a throwaway `git init` before writing this test),
     // so installing the hook there is effective for this repo only. The file is left written, not committed
-    // — the same residue `orca correct`'s exit 5 leaves (schema.ts CheckpointRejection default exitCode 1,
+    // — the same residue `orca dev correct`'s exit 5 leaves (schema.ts CheckpointRejection default exitCode 1,
     // this path passes 5 explicitly).
     const refused = await checkpointSession(400_000, { next: ["n"] });
     await writeFile(join(refused.repo, ".git", "hooks", "pre-commit"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });

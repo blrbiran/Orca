@@ -1,4 +1,4 @@
-/** Named refusals of `orca chain`. Exit 1 = refused before anything was written (D-launch spec §4.3); 2 = an anomaly. */
+/** Named refusals of `orca dev chain`. Exit 1 = refused before anything was written (D-launch spec §4.3); 2 = an anomaly. */
 export class ChainRejection extends Error {
   constructor(
     readonly code: string,

@@ -23,7 +23,7 @@ const normalize = (out: string, s: { repo: string; transcriptPath: string }): st
   out.replaceAll(s.transcriptPath, "<TRANSCRIPT>").replaceAll(s.repo, "<REPO>").replaceAll(repoRoot, "<ORCA>");
 const BAND2 = { kind: "reading" as const, level: 460_000, windowTokens: 1_000_000, t1: 330_000, t2: 450_000, band: 2 as const };
 
-describe("orca level without ORCA_CHAIN_ID is byte for byte what it was at 96cae2b (D-launch spec §3.2, §8.2-4)", () => {
+describe("orca dev level without ORCA_CHAIN_ID is byte for byte what it was at 96cae2b (D-launch spec §3.2, §8.2-4)", () => {
   isolateChainEnv();
   let previousProjectDir: string | undefined;
   beforeEach(() => {

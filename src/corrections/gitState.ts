@@ -17,7 +17,7 @@ export const TARGET_MID_OPERATION = "target-mid-git-operation";
  * an earlier day) named five state files; task 9's own remeasurement of that
  * exact five-way list on 2026-09-08 (git 2.50.1) found only three of them
  * actually govern whether `git commit -m … -- <path>` — the PARTIAL commit
- * `orca correct --close` makes — gets refused.
+ * `orca dev correct --close` makes — gets refused.
  *
  * The three rejected states, each for its own, DIFFERENT reason (ruling,
  * task-9 coordinator, 2026-09-08):
@@ -46,7 +46,7 @@ export const TARGET_MID_OPERATION = "target-mid-git-operation";
  * resolved-but-not-continued revert conflict, a resolved-but-not-continued
  * rebase conflict on both the ort/merge and the legacy apply/am backends) —
  * and the revert cases leave HEAD attached, so rejecting them would refuse
- * `orca correct --close` in a target repo where the exact write it needs to
+ * `orca dev correct --close` in a target repo where the exact write it needs to
  * make would go through cleanly. Spec §14.3's governing sentence is "守卫只拦
  * 真正拦得住的那几种，不做过度拒绝" — the five-item list was a measurement
  * taken on a different day; the principle survives correcting it.
@@ -71,7 +71,7 @@ export async function midOperationRejection(
   const refuse = (state: string, why: string): { code: string; message: string } => ({
     code: TARGET_MID_OPERATION,
     message:
-      `${repo} ${state} — orca correct commits the ledger by path, and ${why} ` +
+      `${repo} ${state} — orca dev correct commits the ledger by path, and ${why} ` +
       `Finish or abort it and re-run the same command; nothing has been written.`,
   });
 

@@ -27,7 +27,7 @@ export const REVIEWS_FILE_MODE = 0o600;
 
 /**
  * reviews compaction spec section 7: the three paths only
- * `orca compact-reviews --apply` writes. The panel itself only appends
+ * `orca decision compact-reviews --apply` writes. The panel itself only appends
  * reviews.jsonl and takes .reviews-lock.
  */
 export const reviewsArchiveFile = (dir: string): string => join(dir, "reviews-archive.jsonl");

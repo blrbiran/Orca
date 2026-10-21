@@ -48,7 +48,7 @@ export { CORRECTION_TARGET_NOT_A_DECISION };
  * a second spelling of `target-not-a-git-repo` is a bill this repository has
  * already paid twice (planFile.ts and planReport.ts each record one). Its
  * MESSAGE is not reused: it says "this round … the repo lock it takes before
- * reading anything", and `orca correct` is not a round. Changing the existing
+ * reading anything", and `orca dev correct` is not a round. Changing the existing
  * message instead would take `runOnNonGitTarget.test.ts` red, and this round
  * has no authority to rewrite an existing criterion.
  */
@@ -67,7 +67,7 @@ export async function requireGitRoot(repo: string): Promise<void> {
     throw new CorrectRejection(
       TARGET_NOT_A_GIT_REPO,
       `${repo} is not the root of a git repository (its .git must be a directory): ` +
-        `orca correct reads the ledger under <repo>/.decisions and, when it closes a loop, ` +
+        `orca dev correct reads the ledger under <repo>/.decisions and, when it closes a loop, ` +
         `puts its lock at <repo>/.git/orca-lock`,
     );
   }
@@ -147,7 +147,7 @@ export async function correct(argv: string[], opts: { now?: () => Date } = {}): 
   }
 }
 
-/** The two closing lines `orca correct` prints; the control service's correction-close answers the same facts instead. */
+/** The two closing lines `orca dev correct` prints; the control service's correction-close answers the same facts instead. */
 function reportClosed(closed: ClosedCorrection): void {
   if (closed.committed !== undefined) {
     process.stdout.write(
@@ -230,7 +230,7 @@ export function refuseChoseInsteadConflict(row: Correction, choseInstead: string
 }
 
 /**
- * `orca correct --close <correctionId>`, extracted (debug task plan Task 11) so the control service's correction-close
+ * `orca dev correct --close <correctionId>`, extracted (debug task plan Task 11) so the control service's correction-close
  * runs the very same guards in the same order. Decision-only, as the CLI is (cross-plan resolution 2): a correction
  * naming a pending item is refused correction-target-not-a-decision here; the control verb closes those itself.
  */

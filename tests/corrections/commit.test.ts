@@ -42,7 +42,7 @@ const reCloseArgs = (repo: string, correctionId: string): string[] => [
   "--undo-how", "删掉 src/scheduler/pool.ts 里的那处互斥",
 ];
 
-describe("orca correct --close — commit and branch-independent idempotence (闭-8, §14.1)", () => {
+describe("orca dev correct --close — commit and branch-independent idempotence (闭-8, §14.1)", () => {
   it("E14: commits exactly the one ledger file it wrote, leaving the worktree clean", async () => {
     const target = await makeTargetRepo();
     try {

@@ -128,7 +128,7 @@ describe("applying and dry-running compaction (reviews compaction spec section 4
   });
 
   it("C8b an apply against a store directory that does not exist creates nothing", async () => {
-    // Rule 17: `orca compact-reviews --apply` on a machine with no ~/.orca must
+    // Rule 17: `orca decision compact-reviews --apply` on a machine with no ~/.orca must
     // not be the thing that creates one.
     const absent = join(dir, "absent");
     const outcome = await applyCompaction(absent, VIEWS);

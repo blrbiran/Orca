@@ -27,7 +27,7 @@ function context(stdout: string): string {
   return parsed.hookSpecificOutput.additionalContext;
 }
 
-describe("orca level --hook claude-code (D spec 3 delivery shim, 4)", () => {
+describe("orca dev level --hook claude-code (D spec 3 delivery shim, 4)", () => {
   isolateChainEnv();
   // Final review I2: the hook reads CLAUDE_PROJECT_DIR. A session running these tests may have it set
   // (Claude Code exports it to hook commands), so every test starts without it and restores it after.

@@ -38,7 +38,7 @@ export async function loadChainConfig(repo: string): Promise<ChainConfig> {
 }
 
 /**
- * Spec §5.1-5 / §3.2 (review M9): the model must give `orca level` a window, or every hook call in the chain says
+ * Spec §5.1-5 / §3.2 (review M9): the model must give `orca dev level` a window, or every hook call in the chain says
  * "no reading" and no session ever hands off before its timeout. Asked of the real reader (src/level/claudeCode.ts)
  * with a two-line transcript, so this check and the hook cannot disagree.
  */

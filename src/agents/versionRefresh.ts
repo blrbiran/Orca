@@ -32,7 +32,7 @@ function serializeLike(original: string, value: unknown): string {
   return `${JSON.stringify(value, null, indent)}${trailing}`;
 }
 
-/** The temp naming `orca agents init` already cleans up (command.ts), so a crash's leftover has one known owner. */
+/** The temp naming `orca agent init` already cleans up (command.ts), so a crash's leftover has one known owner. */
 async function writeBeside(target: string, bytes: string, mode: number): Promise<string> {
   const temp = join(dirname(target), `.${basename(target)}.orca-agents-${randomBytes(8).toString("hex")}.tmp`);
   const handle = await open(temp, "wx", mode);
@@ -57,7 +57,7 @@ async function replace(target: string, bytes: string, mode: number): Promise<voi
 /**
  * One refresh of a table at a time in this process: the panel resolves several selections at once, and two drift
  * refusals arriving together would otherwise both pass the re-read before either renamed, losing one update.
- * Another process (a second panel, `orca agents refresh`) is still met only by the re-read before the rename.
+ * Another process (a second panel, `orca agent refresh`) is still met only by the re-read before the rename.
  */
 const inFlight = new Map<string, Promise<unknown>>();
 

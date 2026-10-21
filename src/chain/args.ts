@@ -4,7 +4,7 @@ import { CHAIN_ID_PATTERN } from "./paths.js";
 const NonBlank = z.string().refine((s) => s.trim() !== "", "must not be blank");
 
 /**
- * D-launch spec §2, §5.1-4: ONE schema for `orca chain start` and POST /api/chains. The limits have no defaults.
+ * D-launch spec §2, §5.1-4: ONE schema for `orca dev chain start` and POST /api/chains. The limits have no defaults.
  * The goal is kept exactly as given — it is the chain's authorization (spec §1 R8).
  */
 export const ChainStartSchema = z

@@ -21,7 +21,7 @@ async function repoWithRemote(remote: string): Promise<string> {
  * ordinary path-style remote — measured for `/tmp/some/bare.git`,
  * `../sibling.git`, and a colon-less `git@github.com` — and a path-style
  * origin is exactly what `git clone --local` / `git clone /path` produce.
- * Because `projectKeyOf` sits in the preflight both `orca correct` modes
+ * Because `projectKeyOf` sits in the preflight both `orca dev correct` modes
  * share, such a repository used to kill the whole command: exit 3, a stack
  * trace, instead of a named refusal.
  *

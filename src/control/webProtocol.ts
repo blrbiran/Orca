@@ -949,7 +949,7 @@ export const systemDebugOpenPayloadSchema = z.object({
   facts: z.array(z.string().min(1).max(4096)).min(1).max(32),
   checks: z.array(nonemptyString).min(1).max(32),
 }).strict();
-// Debug task plan Task 11 (design §12.4): the panel form's record, the UI's manual close (`orca correct --close`'s
+// Debug task plan Task 11 (design §12.4): the panel form's record, the UI's manual close (`orca dev correct --close`'s
 // arguments) and the author's withdraw, as human-only verbs on the `@corrections` scope.
 const correctionIdSchema = z.string().regex(/^c_[a-f0-9]{16}$/);
 export const correctionRecordPayloadSchema = z.object({

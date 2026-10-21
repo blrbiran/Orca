@@ -193,7 +193,7 @@ describe("the reviews writer after reviews.jsonl is replaced (reviews compaction
     const writer = new ReviewsWriter(dir);
     await writer.load();
     expect(await writer.append(reviewed())).toBe("written");
-    // What `orca compact-reviews --apply` does when it moves this row out.
+    // What `orca decision compact-reviews --apply` does when it moves this row out.
     const replacement = join(dir, "replacement");
     await writeFileRaw(replacement, "");
     await renameFile(replacement, reviewsFile(dir));
@@ -316,7 +316,7 @@ describe("a reviews.jsonl line that parses but is not a row (reviews compaction 
   });
 
   it("C23 readReviews drops null, a number, an array and a non-string decisionId, and keeps the rows around them", async () => {
-    // One definition of "a row": the same lines `orca compact-reviews` counts as
+    // One definition of "a row": the same lines `orca decision compact-reviews` counts as
     // unreadable (C22). coverage.ts reads r.action off every element (a probe
     // measured both functions throwing TypeError on a null), which the panel's
     // error handler answers as 500 on /api/metrics and /api/todo.

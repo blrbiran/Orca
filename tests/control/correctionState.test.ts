@@ -183,7 +183,7 @@ describe("a correction's closed state is computed from the integration target (p
     const w = await world(); try {
       const groupId = await w.open(LOCAL_MERGE);
       // The group's landing never wrote them (its mark has no `written` closing): a `--close` on the target did.
-      commitOn(w.repo, "refs/heads/main", closingFile(w.correction), "orca correct --close");
+      commitOn(w.repo, "refs/heads/main", closingFile(w.correction), "orca dev correct --close");
       g(w.repo, ["reset", "-q", "--hard", "main"]);
       w.land(groupId, { "b.txt": "b\n" });
       expect(await w.pass()).toBe(true);
@@ -240,7 +240,7 @@ describe("a correction's closed state is computed from the integration target (p
 
   it("a by-hand close on the current branch, with no debug group, is closed by-hand; a detached HEAD is read as HEAD", async () => {
     const w = await world(); try {
-      commitOn(w.repo, "refs/heads/main", closingFile(w.correction), "orca correct --close");
+      commitOn(w.repo, "refs/heads/main", closingFile(w.correction), "orca dev correct --close");
       // M-10.6: no debug group read as no target -> red.
       expect((await w.item()).closed).toEqual({ state: "closed", ref: "refs/heads/main", via: "by-hand" });
       g(w.repo, ["checkout", "-q", "--detach", "main"]);

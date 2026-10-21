@@ -3,8 +3,8 @@ import { join } from "node:path";
 
 /**
  * CLI v2 plan Task 7: the ledger and dev tools, moved verbatim out of src/cli.ts so the registry rows
- * (`orca decision validate|metrics|compact-reviews`, `orca plan preview`, `orca dev …`) and, until Task 14, the old
- * top-level arms call the same code. Each loads its modules on demand (Review Focus 1).
+ * (`orca decision validate|metrics|compact-reviews`, `orca plan preview`, `orca dev …`) call this code; the old
+ * top-level arms are gone (plan Task 14). Each loads its modules on demand (Review Focus 1).
  */
 export async function collectLedgerFiles(paths: string[]): Promise<{ files: string[]; errors: string[] }> {
   const files: string[] = [];
@@ -148,7 +148,7 @@ export async function runPlan(args: string[]): Promise<number> {
 
   // spec §9.3 (final review, Important 2): `plan` answers "is this plan legal
   // and how would it run". §4.2's three runtime checks are up-front
-  // REJECTIONS, and §9.3 gives a rejected plan exit 1 — so `orca plan` on a
+  // REJECTIONS, and §9.3 gives a rejected plan exit 1 — so `orca plan preview` on a
   // dirty worktree printing `[fail] dirty-worktree: …` and then exiting 0 was
   // a broken contract, not a warning. §9.3's "warnings do not affect the exit
   // code" carve-out is about DEGRADATION (a fully serial plan is legal; a
@@ -330,7 +330,7 @@ export async function runCheckpoint(args: string[]): Promise<number> {
   const transcriptPath = values.get("--transcript");
   const draftPath = values.get("--draft");
   if (sessionRef === undefined || draftPath === undefined) {
-    process.stderr.write(`orca checkpoint write: --session and --draft are required\n`);
+    process.stderr.write(`orca dev checkpoint write: --session and --draft are required\n`);
     return 1;
   }
   const { CheckpointRejection, describeLevel } = await import("../../checkpoint/schema.js");

@@ -53,7 +53,7 @@ function cli(args: string[], env: NodeJS.ProcessEnv, deadlineMs = 90_000) {
   const result = new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
     const timer = setTimeout(() => {
       kill();
-      reject(new Error(`orca chain did not exit within ${deadlineMs} ms; its group was killed. stderr: ${stderr}`));
+      reject(new Error(`orca dev chain did not exit within ${deadlineMs} ms; its group was killed. stderr: ${stderr}`));
     }, deadlineMs);
     child.once("close", (code) => {
       clearTimeout(timer);
@@ -88,7 +88,7 @@ function capture(over: Partial<ChainDeps> = {}) {
 
 const START = (repo: string, id: string) => ["dev", "chain", "start", "--repo", repo, "--by", "tester", "--goal", "two files", "--max-sessions", "3", "--max-cost-usd", "5", "--chain-id", id];
 
-describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11)", () => {
+describe("orca dev chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11)", () => {
   isolateChainEnv();
 
   it("E1 two sessions with the real gate check: exit 0, one notification, no orca child process, no forbidden stub called", async () => {
@@ -248,7 +248,7 @@ describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/1
     expect(existsSync(trace)).toBe(false);
   }, 60_000);
 
-  it("E6 orca chain stop: refused without a running chain; with one, it writes the request the supervisor latches", async () => {
+  it("E6 orca dev chain stop: refused without a running chain; with one, it writes the request the supervisor latches", async () => {
     const { repo } = await target(false);
     const none = capture();
     expect(await runChainCommand(["stop", "--repo", repo], none.deps)).toBe(1);
@@ -264,7 +264,7 @@ describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/1
     expect(bad.err.join("")).toContain("rejected: chain-id-invalid: ");
   }, 60_000);
 
-  it("E7 orca chain unlock: refuses when nothing is locked or the holder is alive; otherwise removes the lock and ends the record (review M13, plan PC-6)", async () => {
+  it("E7 orca dev chain unlock: refuses when nothing is locked or the holder is alive; otherwise removes the lock and ends the record (review M13, plan PC-6)", async () => {
     const { repo } = await target(false);
     const none = capture();
     expect(await runChainCommand(["unlock", "--repo", repo], none.deps)).toBe(1);
@@ -285,7 +285,7 @@ describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/1
     expect((await git(repo, ["log", "-1", "--format=%s"])).trim()).toBe("chore(chain): chain-0000000f, stopped, unlocked-by-human");
     expect((await git(repo, ["show", "--name-only", "--format=", "HEAD"])).trim()).toBe(".orca/chains/chain-0000000f.json");
   }, 60_000);
-  it("E12 orca chain unlock with a stale lock whose record is missing or invalid: refused, and the lock is still there (final review Minor-4)", async () => {
+  it("E12 orca dev chain unlock with a stale lock whose record is missing or invalid: refused, and the lock is still there (final review Minor-4)", async () => {
     const { repo } = await target(false);
     const lock = await acquireChainLock(repo, "chain-0000000f");
     cleanups.push(() => lock.release());

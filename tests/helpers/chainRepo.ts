@@ -7,7 +7,7 @@ import { tempRepo } from "./tempRepo.js";
 export const ORCA_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /**
- * A throwaway target for `orca chain`: a committed .gitignore (chain logs; `node_modules` WITHOUT a trailing slash,
+ * A throwaway target for `orca dev chain`: a committed .gitignore (chain logs; `node_modules` WITHOUT a trailing slash,
  * because the symlink below is not a directory to git — measured at 96cae2b; and settings.local.json, which a global
  * ignore hides on the person's machine, spec §9), a committed .orca/chain.json and .orca/level.json, node_modules
  * symlinked back here (always: the preflight wants node_modules/.bin/tsx), and with `gate: true` this checkout's own

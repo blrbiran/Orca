@@ -185,19 +185,19 @@ plan of tasks over ccloop (a sibling repository), reconciles their results
 against a shared work branch, and records every scheduling and reconciliation
 choice it makes into an append-only decision ledger (`.decisions/*.jsonl`).
 
-## `orca plan`
+## `orca plan preview`
 
 ```
-orca plan <path> [--verbose]
+orca plan preview <path> [--verbose]
 ```
 
-`orca plan` reads a plan file, computes every task's write set, builds the
+`orca plan preview` reads a plan file, computes every task's write set, builds the
 task graph, layers it, and prints a report — write sets, intersecting pairs,
 layers, and any up-front rejections. It touches nothing in the target
 repository beyond read-only git calls (`git rev-parse`, `git status
 --porcelain`) — no branch is created, no commit is made, no ref moves.
 
-Rounds run through the panel (`orca panel`) and its control path; `orca plan`
+Rounds run through the panel (`orca panel`) and its control path; `orca plan preview`
 previews a round.
 
 ### The plan file's shape
@@ -265,7 +265,7 @@ task.
 
 Three more are runtime checks — a read-only `git rev-parse` or `git status
 --porcelain` against the target repository, which does not count as
-"touching" it, so `orca plan` evaluates these for real too, not just
+"touching" it, so `orca plan preview` evaluates these for real too, not just
 a running round:
 
 | Code | Meaning |
@@ -278,7 +278,7 @@ A plan file that fails to parse at all (malformed JSON, or the wrong shape)
 is reported as `malformed` and is not one of these — it means there is no
 plan to evaluate them against yet.
 
-Any rejection, plan-level or runtime, makes `orca plan` and a round
+Any rejection, plan-level or runtime, makes `orca plan preview` and a round
 exit 1 (spec §9.3). A *warning* — a plan that is legal but fully serial, say
 — does not affect the exit code.
 
@@ -345,13 +345,13 @@ waiting on a person, so there is nothing honest to put in one. The round
 still contributes exit code 3, keeps the task's copy, and prints where it
 is.
 
-## `orca correct`
+## `orca dev correct`
 
 ```
-orca correct --decision <run-id>/<n> --kind wrong|not_my_taste|stale --because <text>
+orca dev correct --decision <run-id>/<n> --kind wrong|not_my_taste|stale --because <text>
              [--repo <path>] [--by <who>] [--again] [--record-only]
              [--chose-instead <text> --undo-how <text> [--undo-cost <text>] [--undo-blast-radius <text>]]
-orca correct --close <correctionId> --undo-how <text> [--repo <path>] [--chose-instead <text>]
+orca dev correct --close <correctionId> --undo-how <text> [--repo <path>] [--chose-instead <text>]
 ```
 
 A correction records a human overturning a past decision. There are two
@@ -405,8 +405,8 @@ ledger.
   `--close` command to finish just the commit, without writing the rows a
   second time.
 
-This scale is `orca correct`'s own — it does not reuse `orca plan`'s and
-a round's 0/1/2/3. `orca validate` has a separate scale of its own too: 0 (all
+This scale is `orca dev correct`'s own — it does not reuse `orca plan preview`'s and
+a round's 0/1/2/3. `orca decision validate` has a separate scale of its own too: 0 (all
 ledger files ok), 1 (a file was rejected or none were found), and 2 (a
 decision was downgraded to tier 0 — legal, but not an agent's to decide).
 
@@ -486,13 +486,13 @@ how large `npm run verify` grows.
 ## Checkpoint handoff (subsystem D, v1: Claude Code)
 
 A development session in this repository learns its own context-window level from a `PostToolUse` hook
-(`.claude/settings.json` runs `orca level --hook claude-code`). At T1 (330,000 tokens by default) it is told to
+(`.claude/settings.json` runs `orca dev level --hook claude-code`). At T1 (330,000 tokens by default) it is told to
 write a checkpoint; past T2 (450,000) it is told to hand off; when the level cannot be read it is told so on every call.
 
-- `orca checkpoint write --session <id> --transcript <path> --draft <file>` writes and commits
+- `orca dev checkpoint write --session <id> --transcript <path> --draft <file>` writes and commits
   `.orca/checkpoints/<run-id>.json`. The agent's draft carries judgment only (next steps, open items, what waits
   for a human, which commands to measure); the level, HEAD and every measurement's exit code are measured by the command.
-- `orca resume` starts the next session from the latest checkpoint reachable from HEAD and re-measures everything
+- `orca dev resume` starts the next session from the latest checkpoint reachable from HEAD and re-measures everything
   that may have changed, including publish state from `git ls-remote`.
 - Thresholds and model window sizes can be set in `.orca/level.json`; that file lives in the repository and is
   unrelated to the per-user `~/.orca` store.
@@ -503,7 +503,7 @@ Design: `docs/superpowers/specs/2026-09-17-checkpoint-handoff-design.md`.
 
 A `PreToolUse` hook (`.claude/settings.json`, `Bash` matcher) runs every Bash
 command in this repository's Claude Code sessions through
-`scripts/gate-prefilter.mjs` and, when that does not resolve it, `orca gate
+`scripts/gate-prefilter.mjs` and, when that does not resolve it, `orca dev gate
 --hook claude-code`. It blocks four irreversible git/gh moves — `git push`,
 `git branch -d`/`-D`/`--delete`, `git worktree remove`/`prune`, and `gh pr
 merge`/`gh repo sync` — plus any non-`GET` `gh api` call, whether typed
@@ -520,7 +520,7 @@ merge into main, so those, and any non-literal form of the moves above, rest
 on the hook alone.
 
 A blocked move is not lost: do it in your own terminal, outside the agent
-session. `orca resume` and `orca checkpoint write` refuse to record a
+session. `orca dev resume` and `orca dev checkpoint write` refuse to record a
 measurement the gate blocked, exiting with `measurement-gated` rather than
 recording a false pass.
 
@@ -532,11 +532,11 @@ file, an inline interpreter invocation such as `python3 -c "…"`, or `rm -rf`
 of a worktree directory. See residual risks in
 `docs/superpowers/specs/2026-09-18-tier0-gate-design.md` §7.
 
-## Unattended chains (`orca chain`)
+## Unattended chains (`orca dev chain`)
 
-`orca chain start --repo <path> --by <you> --goal <text> --max-sessions <n> --max-cost-usd <x>` runs headless Claude
+`orca dev chain start --repo <path> --by <you> --goal <text> --max-sessions <n> --max-cost-usd <x>` runs headless Claude
 Code sessions one after another in `<path>` — a dedicated clone or worktree of an Orca checkout, whose Tier 0 gate
-wiring must equal `src/gate/settings.ts`. Each session starts from `orca resume` and ends by writing an exit checkpoint
+wiring must equal `src/gate/settings.ts`. Each session starts from `orca dev resume` and ends by writing an exit checkpoint
 (`"chain": {"status": "continue" | "done" | "blocked", "why": "..."}`); code, not the model, decides whether the next
 session starts. Exit codes: 0 done, 1 refused before anything was written, 2 an anomaly (a changed gate or guarded
 path, a dirty worktree, rewritten history, a timeout, no exit checkpoint, an unreadable cost, ...), 3 everything left
@@ -545,10 +545,10 @@ waits for a person, 4 a limit or a stop request.
 - The target needs `node_modules/.bin/tsx` (a fresh worktree often has no `node_modules`: link or install it first);
   otherwise the start is refused with `tsx-missing`.
 - The model and the default session timeout (360 minutes, a backstop) come from `.orca/chain.json`, e.g.
-  `{"model": "claude-opus-5[1m]"}`; `orca level` must know that model's window. The cost limit is soft.
+  `{"model": "claude-opus-5[1m]"}`; `orca dev level` must know that model's window. The cost limit is soft.
 - The record `.orca/chains/<chain-id>.json` is committed on its own after every session; raw session output is in the
   ignored `.orca/chain-logs/`. The chain lock and stop requests live in the git dir.
-- `orca chain stop --repo <path>` stops the chain after its current session; `orca chain unlock --repo <path>` clears
+- `orca dev chain stop --repo <path>` stops the chain after its current session; `orca dev chain unlock --repo <path>` clears
   the lock of a supervisor that is gone and records the chain as stopped.
 - The panel shows each repository's latest chain, starts and stops chains, and shows a banner when one stops
   (dismissing it is remembered in the browser only). Anyone holding the panel token can start a paid, unattended agent
@@ -599,12 +599,12 @@ The round criteria in `tests/scheduler` need a ccloop checkout (the sibling `../
 `test(fixtures): fake codex plays scripted frames per attempt, for callers leaving --adapter scripted`:
 they run that checkout's `tests/fixtures/fake-codex.mjs`, which the pinned ccloop package does not ship.
 
-`orca panel` and `orca agents` find ccloop through `ORCA_CCLOOP_BIN` when it is set
+`orca panel` and `orca agent` find ccloop through `ORCA_CCLOOP_BIN` when it is set
 (an empty value means "no execution port"), and otherwise through a ccloop package
 installed in Orca's `node_modules` (Orca's `package.json` is meant to pin it to a commit
 by git URL -- see the human step in
 `docs/superpowers/plans/2026-09-29-ccloop-git-dependency.md`, Task 5). With neither,
-`orca agents` stops with `ccloop-not-installed` and the panel starts without an
+`orca agent` stops with `ccloop-not-installed` and the panel starts without an
 execution port. The real-ccloop criteria under `tests/control` and
 `npm run verify:control` still need `ORCA_CCLOOP_BIN` pointing at a ccloop checkout's
 build, because they use fixtures from ccloop's `tests/` tree, which the package does

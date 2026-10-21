@@ -49,10 +49,33 @@ export function findCommand(argv: readonly string[], registry: readonly CommandD
   return { suggestion: suggest(argv, registry) };
 }
 
-/** Spec §4 did-you-mean: within a known domain compare its actions; otherwise every command's path and last word. */
+/**
+ * Spec §4 / plan Task 14: the old top-level names, removed without aliases (human ruling). Each answers "did you mean"
+ * with its v2 command; tests/commands/removedNames.test.ts holds every file to this table.
+ */
+export const REMOVED_NAMES: Readonly<Record<string, string>> = {
+  validate: "decision validate", plan: "plan preview", correct: "dev correct", metrics: "decision metrics",
+  "compact-reviews": "decision compact-reviews", level: "dev level", gate: "dev gate", chain: "dev chain", agents: "agent",
+  checkpoint: "dev checkpoint", resume: "dev resume", "check-append-only": "dev check-append-only",
+};
+
+/** A removed name's v2 command, with the old sub-action when the v2 command has it (`chain start` ⇒ `dev chain start`). */
+function renamed(typed: readonly string[], registry: readonly CommandDef[]): string | null {
+  if (!Object.hasOwn(REMOVED_NAMES, typed[0]!)) return null;
+  const target = REMOVED_NAMES[typed[0]!]!;
+  const longer = typed[1] === undefined ? null : `${target} ${typed[1]}`;
+  return longer !== null && registry.some((def) => words(def).join(" ") === longer) ? longer : target;
+}
+
+/**
+ * Spec §4 did-you-mean: a removed name answers with its v2 command; within a known domain compare its actions; otherwise
+ * every command's path and last word.
+ */
 export function suggest(argv: readonly string[], registry: readonly CommandDef[] = REGISTRY): string | null {
   const typed = argv.filter((word) => !word.startsWith("-"));
   if (typed.length === 0) return null;
+  const old = renamed(typed, registry);
+  if (old !== null) return old;
   const inDomain = registry.filter((def) => def.domain === typed[0] && def.action !== null);
   const candidates = inDomain.length > 0 ? inDomain : registry;
   let best: { path: string; distance: number } | null = null;

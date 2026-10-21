@@ -6,7 +6,7 @@ import { createCcloopExecutionPort } from "../control/ccloopPort.js";
 import { AGENTS_DIR_MODE, AGENTS_FILE_MODE, AgentsPathError, agentsTablePath, draftPathOf } from "./paths.js";
 
 /**
- * Agent selection spec §6.7 and §8: `orca agents init|show|refresh`. With src/agents/versionRefresh.ts (agent version
+ * Agent selection spec §6.7 and §8: `orca agent init|show|refresh`. With src/agents/versionRefresh.ts (agent version
  * auto-refresh spec 2026-10-20, which rewrites version fields only), the only place Orca writes the installation table,
  * which is user data outside any repository (Rule 17): the path is ORCA_AGENTS_TABLE or ~/.orca/agents.json, new
  * directories are 0700 and new files 0600 whatever the umask, an existing directory or file keeps its mode, and `init`

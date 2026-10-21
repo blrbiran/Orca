@@ -16,7 +16,7 @@ import { captureStreams, closeArgs, makeTargetRepo, runCli, withCorrectionsDir }
  * forever, staged and uncommitted, in an append-only file.
  *
  * The fix names the one recovery that does not duplicate rows:
- * `orca correct --repo <repo> --close <correctionId> --undo-how '…'`.
+ * `orca dev correct --repo <repo> --close <correctionId> --undo-how '…'`.
  *
  * ⚠️ The assertion checks for the id ADJACENT to `--close` (`--close
  * <id>`), not merely that both substrings occur somewhere in stderr. Node's
@@ -26,7 +26,7 @@ import { captureStreams, closeArgs, makeTargetRepo, runCli, withCorrectionsDir }
  * wording, for a reason that has nothing to do with the recovery text.
  * `--close <id>` adjacent is the substring only the fixed message produces.
  */
-describe("orca correct --close — hook-refused commit names the actual recovery (round-4 review, item 1)", () => {
+describe("orca dev correct --close — hook-refused commit names the actual recovery (round-4 review, item 1)", () => {
   it("stderr names --close and the correction id when the original run was a one-shot close", async () => {
     const target = await makeTargetRepo();
     try {

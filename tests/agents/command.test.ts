@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { runAgentsCommand } from "../../src/agents/command.js";
 import { AgentsPathError, agentsTablePath } from "../../src/agents/paths.js";
 
-// Agent selection spec §6.7, §8 and CLAUDE.md Rule 17: `orca agents init` is the one writer of the installation
+// Agent selection spec §6.7, §8 and CLAUDE.md Rule 17: `orca agent init` is the one writer of the installation
 // table, user data outside any repository. Every criterion points ORCA_AGENTS_TABLE into a temporary directory and
 // HOME at an empty one that must stay empty; the ccloop here is a stand-in answering `agents detect|validate` and
 // `control capabilities` from a script file, so no real agent is probed.
@@ -74,7 +74,7 @@ const script = JSON.parse(fs.readFileSync(${JSON.stringify(scriptPath)}, "utf8")
 const [a, b, c, d] = process.argv.slice(2);
 if (a === "agents" && b === "detect") { process.stdout.write(script.detect ?? JSON.stringify({ schema: "ccloop-agents-detect-v1", table: script.table, candidates: {} })); process.exit(0); }
 if (a === "agents" && b === "validate") { process.stdout.write(JSON.stringify([{ id: "claude", ok: script.validateOk !== false }]) + "\\n"); process.exit(script.validateOk === false ? 1 : 0); }
-// Agent version auto-refresh spec 2026-10-20 §3.4: \`orca agents refresh\` asks ccloop's features and its observation of
+// Agent version auto-refresh spec 2026-10-20 §3.4: \`orca agent refresh\` asks ccloop's features and its observation of
 // the table at \`d\`; \`script.observed\` is what each installation's --version answers (null: no answer), absent = as recorded.
 if (a === "control" && (b === "features" || b === "agent-installation-observe") && c === "--agents") {
   process.stdin.resume(); process.stdin.on("end", () => {
@@ -146,7 +146,7 @@ describe("agentsTablePath (agent selection plan review P1)", () => {
   });
 });
 
-describe("orca agents init (agent selection spec §6.7, §8)", () => {
+describe("orca agent init (agent selection spec §6.7, §8)", () => {
   it("writes the detected table where ORCA_AGENTS_TABLE says, creating directories 0700 and the file 0600, and nothing under HOME", async () => {
     const w = await world();
     expect(await w.agents("init")).toBe(0);
@@ -237,7 +237,7 @@ describe("orca agents init (agent selection spec §6.7, §8)", () => {
     // anything created with a mode it did not then set. `node --import tsx` rather than the tsx CLI, whose own IPC
     // pipe would be created under the same umask.
     const cli = resolve("src/cli.ts");
-    await promisify(execFile)("/bin/sh", ["-c", `umask 0300; exec "${process.execPath}" --import tsx "${cli}" agents init`], { env: w.env, cwd: resolve(".") });
+    await promisify(execFile)("/bin/sh", ["-c", `umask 0300; exec "${process.execPath}" --import tsx "${cli}" agent init`], { env: w.env, cwd: resolve(".") });
     expect(await modeOf(join(w.root, "orca", "nested"))).toBe(0o700);
     expect(await modeOf(w.table)).toBe(0o600);
   });
@@ -252,7 +252,7 @@ describe("orca agents init (agent selection spec §6.7, §8)", () => {
   });
 });
 
-describe("orca agents show (agent selection spec §6.7)", () => {
+describe("orca agent show (agent selection spec §6.7)", () => {
   it("prints ccloop's validation and what each installation resolves to, and exits 0 when all are accepted", async () => {
     const w = await world();
     expect(await w.agents("init")).toBe(0);
@@ -278,7 +278,7 @@ describe("orca agents show (agent selection spec §6.7)", () => {
   });
 });
 
-describe("orca agents refresh (agent version auto-refresh spec 2026-10-20 §3.4)", () => {
+describe("orca agent refresh (agent version auto-refresh spec 2026-10-20 §3.4)", () => {
   // Human ruling, session 308b874c: 「不用看版本号变化，静默更新就行」 -- the command records what the installed CLIs answer,
   // changing only each installation's version, and says per installation what it did.
   const twoAgents = { schema: "ccloop-agents-table-v1", installations: { ...TABLE.installations, codex: { kind: "codex", command: ["/opt/codex"], version: "0.40.0", configDir: null, timeoutMs: 1_800_000, killGraceMs: 5_000 } } };

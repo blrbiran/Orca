@@ -33,7 +33,7 @@ async function commitCheckpoint(repo: string, value: unknown): Promise<string> {
   return path;
 }
 
-describe("orca level in a chain session (D-launch spec §3.2)", () => {
+describe("orca dev level in a chain session (D-launch spec §3.2)", () => {
   isolateChainEnv();
   let previousProjectDir: string | undefined;
   beforeEach(() => {

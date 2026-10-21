@@ -86,7 +86,7 @@ export type PlanRejection = { code: string; message: string };
 /**
  * The plan-level up-front rejection codes (spec §2.3's six, plus the
  * task-id-shape check §2.3's own "mechanically decidable from the plan file
- * alone" test admits as a seventh), in the order `orca plan` prints them.
+ * alone" test admits as a seventh), in the order `orca plan preview` prints them.
  *
  * 🔴 This list is the ONE source of these strings, and `loadPlan` below emits
  * them by destructuring it rather than by retyping the literals. Before the
@@ -120,7 +120,7 @@ const PLAN_LEVEL_CHECK = {
   UNUSABLE_TASK_ID: "unusable-task-id",
 } as const;
 
-/** The same codes as a list, in the order `orca plan` prints them. */
+/** The same codes as a list, in the order `orca plan preview` prints them. */
 export const PLAN_LEVEL_CHECKS = Object.values(PLAN_LEVEL_CHECK);
 
 const {

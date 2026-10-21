@@ -108,7 +108,7 @@ describe("Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset
     expect(typeof stream.createLineSplitter).toBe("function");
   });
 
-  it("runs orca agents init and show through the installed ccloop", async () => {
+  it("runs orca agent init and show through the installed ccloop", async () => {
     const w = await world();
     const init = await orca(w, ["agent", "init"]);
     expect(init.code, init.stdout + init.stderr).toBe(0);

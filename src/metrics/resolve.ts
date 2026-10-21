@@ -9,7 +9,7 @@ export const ARCHIVE_NAME_AMBIGUOUS = "archive-name-ambiguous";
 /**
  * spec §3.4.2, first review seat's finding C4.
  *
- * The fix rate's numerator comes from `overturned` rows, and `orca correct
+ * The fix rate's numerator comes from `overturned` rows, and `orca dev correct
  * --close` writes them into its OWN new run file (spec §1.11). That file ages
  * like any other and gets `git mv`'d into archive/. Once it does, the default
  * scan cannot see it, and a correction closed months ago reappears as backlog:

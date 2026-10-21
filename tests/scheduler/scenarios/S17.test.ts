@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { allRefShas, makeSandbox, porcelain, runCli, seedTwoTaskPlan } from "../sandbox.js";
 
 describe("S17 (spec 9.2)", () => {
-  it("S17: orca plan touches not one byte of the target repository", async () => {
+  it("S17: orca plan preview touches not one byte of the target repository", async () => {
     const s = await makeSandbox();
     try {
       const planPath = await seedTwoTaskPlan(s);

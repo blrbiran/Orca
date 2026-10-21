@@ -534,7 +534,7 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
     await withCorrectionsDir(async (dir) => {
       // makeTargetRepo()'s default remote is https://github.com/biran/orca.git
       // (tests/corrections/harness.ts) -- the same repository
-      // injectableClock.test.ts's recordArgs points `orca correct` at. The
+      // injectableClock.test.ts's recordArgs points `orca dev correct` at. The
       // panel's own --repo labelling (not a remote-derived projectKeyOf,
       // ruling J1) is set to the literal "github.com/biran/orca" so the
       // decision it discovers carries the exact projectKey GOLDEN_ID was

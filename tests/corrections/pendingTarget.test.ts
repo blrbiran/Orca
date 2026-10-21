@@ -60,7 +60,7 @@ describe("the corrections store's pending target (control run decisions Task 10)
     });
   });
 
-  it("refuses orca correct --close on a pending-target correction by name", async () => {
+  it("refuses orca dev correct --close on a pending-target correction by name", async () => {
     const target = await makeTargetRepo();
     try {
       await withCorrectionsDir(async (dir) => {

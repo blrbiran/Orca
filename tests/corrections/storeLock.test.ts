@@ -12,7 +12,7 @@ const tempDir = () => mkdtemp(join(tmpdir(), "orca-lock-"));
 describe("corrections store lock (spec §7.2 / §7.3 / §14.8)", () => {
   // §14.8 (I3): repoLock's non-recursive mkdir is safe only because
   // <repo>/.git is guaranteed to exist. ORCA_CORRECTIONS_DIR is not — on a
-  // fresh machine the very first `orca correct` used to die on
+  // fresh machine the very first `orca dev correct` used to die on
   // "ENOENT: … mkdir '…/.orca/.corrections-lock'".
   it("creates the store directory before the lock directory inside it", async () => {
     const parent = await tempDir();

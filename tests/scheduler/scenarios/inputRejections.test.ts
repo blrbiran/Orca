@@ -141,7 +141,7 @@ describe("input rejections that used to be exit 3 (spec §9.3 / §6.3)", () => {
     }
   });
 
-  it("orca plan exits 1 when a runtime check fails, and 0 when none does", async () => {
+  it("orca plan preview exits 1 when a runtime check fails, and 0 when none does", async () => {
     // spec §9.3: `plan` answers "is this plan legal". §4.2's three runtime
     // checks are up-front REJECTIONS, and §9.3 gives a rejected plan exit 1 —
     // so printing `[fail] dirty-worktree: …` and then exiting 0 was a broken
@@ -176,7 +176,7 @@ describe("input rejections that used to be exit 3 (spec §9.3 / §6.3)", () => {
     // preflight's third check was the only one of the three that could fail
     // rather than answer: `git status --porcelain` throws where the other two
     // swallow their error and answer "no". So a targetRepo that is not a git
-    // repository at all propagated a raw spawn error out of `orca plan`.
+    // repository at all propagated a raw spawn error out of `orca plan preview`.
     //
     // Reported under `dirty-worktree` rather than a fourth check name: the
     // check's claim is "the worktree is verifiably clean before C checks a

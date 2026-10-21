@@ -59,7 +59,7 @@ export async function readReviews(dir: string): Promise<ReviewRow[]> {
     //
     // (reviews compaction spec section 8 item 11) A line that parses but is not
     // a row -- `null`, a number, an array, a non-string key field -- is dropped
-    // the same way: it is exactly what `orca compact-reviews` counts as
+    // the same way: it is exactly what `orca decision compact-reviews` counts as
     // unreadable and keeps, and every caller reads fields off each element, so
     // keeping it made load() and /api/metrics and /api/todo throw.
     if (parsed === undefined) continue;
@@ -100,7 +100,7 @@ export const statIdentity: IdentityOf = async (path) => {
  * about getting the observation mechanism off that path, not further onto it.
  *
  * *** ERRATUM (2026-09-16, run orca-dev-5e5985bc, reviews compaction spec section 5) ***
- * "seeded once at startup" no longer holds on its own. `orca compact-reviews
+ * "seeded once at startup" no longer holds on its own. `orca decision compact-reviews
  * --apply` replaces reviews.jsonl by rename, so a key this set remembers may no
  * longer be on disk, and answering `duplicate` for it would leave a reviewed
  * decision on the to-do list with a 200. On a duplicate hit the writer now

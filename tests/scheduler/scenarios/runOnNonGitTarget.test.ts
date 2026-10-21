@@ -20,7 +20,7 @@ import { captureStreams, makeSandbox, runCli, seedRejectablePlan, writeScriptedC
 //
 // The code is `target-not-a-git-repo`, ruling 甲 of that spec's §1.2: a named
 // rejection of its own rather than a side effect of the three §4.2 checks.
-// ⚠️ This wires it into `run` only. `orca plan` on the same target still
+// ⚠️ This wires it into `run` only. `orca plan preview` on the same target still
 // prints the three side-effect failures pinned by preflightUnreadableRepo --
 // that half of ruling 甲 stays open, and this file does not touch it.
 //

@@ -20,7 +20,7 @@ export function isStateAction(action: string): action is ReviewStateAction {
 
 /**
  * decisions review withdraw spec section 4.3: the one dedupe rule for state
- * rows, shared by the panel's writer and `orca compact-reviews`. A state row
+ * rows, shared by the panel's writer and `orca decision compact-reviews`. A state row
  * is a duplicate exactly when it equals the person's current state for that
  * decision: reviewed -> reviewed changes nothing, reviewed -> withdrawn ->
  * reviewed is three real acts. `current` is undefined when the person has no

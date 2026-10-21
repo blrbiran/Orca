@@ -29,7 +29,7 @@ export { PLAN_LEVEL_CHECKS };
 // prior authority anywhere in the repo and were fixed by controller ruling
 // in the same round.
 //
-// Before Task 6, `orca plan` never spawned anything to evaluate these — a
+// Before Task 6, `orca plan preview` never spawned anything to evaluate these — a
 // bare `git rev-parse`/`git status --porcelain` still does not "touch" the
 // target repo per §9.1(4) — so these three always printed "not evaluated"
 // with nothing that could tell that state apart from "evaluated, and
@@ -48,7 +48,7 @@ export const RUNTIME_CHECK = {
   DIRTY_WORKTREE: "dirty-worktree",
 } as const;
 
-/** The same codes as a list, in the order `orca plan` prints them. */
+/** The same codes as a list, in the order `orca plan preview` prints them. */
 export const RUNTIME_CHECKS = Object.values(RUNTIME_CHECK);
 
 /**
@@ -62,7 +62,7 @@ export const RUNTIME_CHECKS = Object.values(RUNTIME_CHECK);
  * computed this yet.
  *
  * Fix round 1, finding 2: this used to be a seam nothing production filled in
- * — `orca plan` passed a bare TaskGraph and the field was always undefined,
+ * — `orca plan preview` passed a bare TaskGraph and the field was always undefined,
  * so the warning below could never fire for a real run, indistinguishably
  * from "checked, found none". `emptyRequiredChecksPairs()` below is what the
  * CLI now calls to actually fill it in, using the same contracts map
@@ -102,7 +102,7 @@ function checkLine(code: string, rejections: PlanRejection[], evaluated: boolean
 }
 
 /**
- * `orca plan` is the front half of `orca run`, stopped before it executes
+ * `orca plan preview` is the front half of `orca run`, stopped before it executes
  * anything (spec §9.4) — this is the shared printer both call, so what a
  * human reads before approving a run and what actually runs cannot drift
  * apart into two implementations. Pure by construction: everything it needs

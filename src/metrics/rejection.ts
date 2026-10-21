@@ -1,5 +1,5 @@
 /**
- * A named refusal `orca metrics` can make. Shape copied from
+ * A named refusal `orca decision metrics` can make. Shape copied from
  * src/corrections/rejection.ts so the two subsystems answer the same way.
  *
  * Only exit code 1 — "the input is wrong and retrying will not help". This cut

@@ -116,7 +116,7 @@ async function resolveBaseSha(repoPath: string, branch: string): Promise<string 
 }
 
 /**
- * Everything `orca plan` prints and everything `orca run` needs before it
+ * Everything `orca plan preview` prints and everything `orca run` needs before it
  * spends a cent, derived exactly once.
  * *** ERRATUM (consolidation step 3 final review, 2026-10-01, Orca session be653b22, controller ruling FW-8) -- `orca run` is deleted; what
  * needs this before a round spends anything is now runPreparedRound, called by the control path and the test
@@ -199,7 +199,7 @@ export async function loadRound(planPath: string): Promise<{ round: Round } | { 
   // exited 3. `rejections` is the shape this function already speaks in, so
   // there is nothing new for a caller to handle.
   // *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-1) -- `runRound` is deleted; loadRound is
-  // called by `orca plan`, the control path and the test harness (tests/scheduler/sandbox.ts runRoundForTest). ***
+  // called by `orca plan preview`, the control path and the test harness (tests/scheduler/sandbox.ts runRoundForTest). ***
   const contracts = new Map<string, unknown>();
   const contractRejections: PlanRejection[] = [];
   for (const task of plan.tasks) {
@@ -656,7 +656,7 @@ export async function runPreparedRound(round: Round, options: RunOptions, execut
   // to end the round on node's own errno — `ENOENT: no such file or
   // directory, mkdir '<target>/.git/orca-lock'` — which names an internal
   // path the user never asked about and never says the one thing that is
-  // wrong. The shape `orca plan` had fixed a round earlier, still standing
+  // wrong. The shape `orca plan preview` had fixed a round earlier, still standing
   // here.
   //
   // ⚠️ The fix is NOT to move preflight above the lock. The comment below

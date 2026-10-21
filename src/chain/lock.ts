@@ -53,7 +53,7 @@ export async function lockState(repo: string): Promise<LockState> {
 
 /**
  * D-launch spec §5.1-2: a lock whose holder is gone is refused by name and never cleaned up here — a person confirms
- * and runs `orca chain unlock`. Shared by the preflight (§5.1) and by acquireChainLock.
+ * and runs `orca dev chain unlock`. Shared by the preflight (§5.1) and by acquireChainLock.
  */
 export async function assertLockFree(repo: string): Promise<void> {
   const state = await lockState(repo);

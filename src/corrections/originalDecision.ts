@@ -27,7 +27,7 @@ export async function readOriginalDecision(
       try {
         parsed = JSON.parse(raw);
       } catch {
-        continue; // Someone else's malformed line is `orca validate`'s problem.
+        continue; // Someone else's malformed line is `orca decision validate`'s problem.
       }
       const candidate = (parsed as { ev?: unknown; id?: unknown });
       if (candidate.ev === "decision" && candidate.id === decisionId) {
