@@ -14,6 +14,7 @@ type Row = {
   domain: string; action: string; summary: string; verb: CommandVerbV1; scope?: RevisionScope;
   positionals?: PositionalDef[]; flags?: FlagDef[]; access?: "open" | "token"; examples?: string[];
   route: VerbMapping["route"]; payload: VerbMapping["payload"]; scopeId?: VerbMapping["scopeId"]; requiresIfRevision?: boolean;
+  conflictDocument?: VerbMapping["conflictDocument"];
 };
 
 export const verb = (row: Row): CommandDef => ({
@@ -21,6 +22,7 @@ export const verb = (row: Row): CommandDef => ({
   mapsTo: {
     kind: "verb", verb: row.verb, scope: row.scope ?? "group", route: row.route, payload: row.payload,
     ...(row.scopeId === undefined ? {} : { scopeId: row.scopeId }), ...(row.requiresIfRevision ? { requiresIfRevision: true } : {}),
+    ...(row.conflictDocument === undefined ? {} : { conflictDocument: row.conflictDocument }),
   },
   examples: row.examples ?? [], format: (body) => text(body),
 });
@@ -61,6 +63,11 @@ export interface ConfigView {
   plans: Array<{ planId: string; repoId: string }>;
   profiles: Array<{ profileId: string; profileHash: string }>;
   defaults: { estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft" } | null;
+}
+
+/** `orca proposal show`'s body: the proposal part of the group view and the revision it was read at. */
+export function proposalDocument(view: GroupView & { ledger: { groupLimit: unknown } }): unknown {
+  return { schema: "orca-proposal-view-v1", groupId: view.summary.groupId, revision: view.summary.commandRevision, proposal: view.proposal, allocations: view.allocations, groupLimit: view.ledger.groupLimit };
 }
 
 export const groupView = async (c: WriteContext): Promise<GroupView> => await c.read(`groups/${group(c)}`) as GroupView;

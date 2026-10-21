@@ -61,6 +61,11 @@ export async function runWrite(_def: CommandDef, mapping: VerbMapping, context: 
   const route = await mapping.route(context);
   const expectedRevision = context.args.global.ifRevision ?? await readRevision(mapping, context);
   const request: SentRequest = { route, expectedRevision, payload, commandId: context.args.global.commandId ?? `cli-${randomUUID()}` };
-  const response = withCurrentRevision(await sendExactly(session, request));
+  let response = withCurrentRevision(await sendExactly(session, request));
+  if (mapping.conflictDocument !== undefined && fieldOf(response.body, "currentRevision") !== undefined) {
+    // Spec §6.3 (builder's choice): the panel cannot list changed fields cheaply, so the answer carries the document now.
+    session.forget();
+    response = { ...response, body: { ...(response.body as object), current: await mapping.conflictDocument(context) } };
+  }
   return uncertain(response) ? { response, request } : { response };
 }

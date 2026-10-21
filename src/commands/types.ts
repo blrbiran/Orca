@@ -85,6 +85,8 @@ export interface VerbMapping {
   payload(context: WriteContext): unknown | Promise<unknown>;
   /** Spec §6.3: the only command the CLI refuses without --if-revision. */
   requiresIfRevision?: boolean;
+  /** Spec §6.3: on revision-conflict the answer also carries the current document, read fresh. */
+  conflictDocument?(context: WriteContext): Promise<unknown>;
 }
 
 export interface ReadMapping {
