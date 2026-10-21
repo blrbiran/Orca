@@ -46,7 +46,14 @@ import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
 import { ratifyFlag } from "./flaggedDecisions.js";
-import { applySetIntegrationCheck, forgetInterruptedIntegrationCheck, integrationCheckDue, integrationCheckFacts, readIntegrationCheckSetting, readIntegrationCheckState, recordIntegrationCheckEnded, recordIntegrationCheckStarted, runIntegrationCheck, type SetIntegrationCheckCommand } from "./integrationCheck.js";
+import { applySetIntegrationCheck, integrationCheckFacts, runIntegrationCheck, type SetIntegrationCheckCommand } from "./integrationCheck.js";
+import { migrateIntegrationMeta } from "./checks/migrate.js";
+import { prepareRange, projectTargets, rangeFacts, recordCheckEnded, recordCheckStarted } from "./checks/pass.js";
+import type { RangeGroup } from "./checks/range.js";
+import { effectiveChecks } from "./checks/settings.js";
+import { readCheckState } from "./checks/state.js";
+import { evaluateTrigger } from "./checks/trigger.js";
+import { gitChild } from "./integrationGit.js";
 import { applyCorrectionClose, applyCorrectionRecord, applyCorrectionWithdraw, type CorrectionCloseCommand, type CorrectionRecordCommand, type CorrectionWithdrawCommand, type PanelCorrections } from "./correctionCommands.js";
 import { recordActivity } from "./activity.js";
 import { DISPATCHED_PERSON_DIRNAME, commandClientFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
@@ -877,59 +884,72 @@ export class WebControlService {
   setIntegrationCheck(command: SetIntegrationCheckCommand): WebCommandResult {
     return this.mutate(() => applySetIntegrationCheck({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: (repoId) => this.deps.knownRepository?.(repoId) ?? false }, command)) as WebCommandResult;
   }
-  private readonly integrationChecks = new Map<string, Promise<void>>();
+  private readonly checkJobs = new Map<string, Promise<void>>();
   /**
-   * Kanban spec §7 layer 1: start each repository's integration check that is due (integrationCheck.ts) without waiting
-   * for it -- a slow suite must not hold the pump. A red check opens a system debug group as orca-auto; the next system
-   * debug pass confirms it. One check per repository at a time; a `running` state no check of this process owns was cut
-   * off by a stop and is forgotten.
+   * Checks spec 2026-10-22 §2–§5 (kanban spec §7 layer 1 on the check model): for each repository, convert the pre-16
+   * integration-check state once (§5.1), then evaluate each enabled check kind per target: the range W..H since the
+   * watermark, its facts, and the effective trigger (project > global > built-in). A due integration check runs without
+   * the pump waiting for it -- a slow suite must not hold the pump; a red one opens a system debug group as orca-auto
+   * (the next system debug pass confirms it). One run per (project, kind, target) at a time; a `running` record no job
+   * of this process owns was cut off by a stop and is forgotten (no failure counted).
    */
-  integrationCheckPass(): { started: string[] } {
-    const started: string[] = [];
-    if (this.deps.resolveRepository === undefined) return { started };
+  async checksPass(): Promise<{ started: string[]; initialised: string[]; skipped: string[] }> {
+    const out = { started: [] as string[], initialised: [] as string[], skipped: [] as string[] };
+    if (this.deps.resolveRepository === undefined) return out;
     const repoIds = [...new Set(this.store.db.prepare("SELECT body FROM groups").all().flatMap((row) => {
       try { const repoId = (JSON.parse(String(row.body)) as { plan?: { repoId?: unknown } }).plan?.repoId; return typeof repoId === "string" ? [repoId] : []; } catch { return []; }
     }))];
     const now = (this.deps.now?.() ?? new Date()).getTime();
     for (const repoId of repoIds) {
-      if (this.integrationChecks.has(repoId)) continue;
       try {
-        if (readIntegrationCheckState(this.store, repoId).last?.state === "running") forgetInterruptedIntegrationCheck(this.store, repoId);
-        const due = integrationCheckDue(this.store, repoId, now);
-        if (due === null) continue;
-        const setting = readIntegrationCheckSetting(this.store, repoId);
-        const commands = setting.command !== null ? [setting.command] : [...new Set(due.since.flatMap((group) => group.checks))];
-        if (commands.length === 0) continue;
-        const latest = due.since.at(-1)!;
-        const groups = due.since.map((group) => group.groupId);
-        recordIntegrationCheckStarted(this.store, repoId, now, groups);
-        const job = this.runIntegrationCheckJob(repoId, due.landed, latest.groupId, latest.target, commands, groups, now)
-          .finally(() => { this.integrationChecks.delete(repoId); });
-        this.integrationChecks.set(repoId, job);
-        started.push(repoId);
+        const repo = this.repositoryPath(repoId);
+        await migrateIntegrationMeta(this.store, gitChild, repo, repoId);
+        const settings = effectiveChecks(this.store, repoId).kinds["integration-check"];
+        if (!settings.enabled.value) continue;
+        for (const target of projectTargets(this.store, repoId)) {
+          const key = `${repoId}\0integration-check\0${target}`;
+          if (this.checkJobs.has(key)) continue;
+          if (readCheckState(this.store, repoId, "integration-check", target)?.last?.state === "running") {
+            recordCheckEnded(this.store, repoId, "integration-check", target, { state: "errored", at: now, detail: "interrupted: Orca stopped while it ran", interrupted: true });
+          }
+          const prepared = await prepareRange(this.store, gitChild, repo, repoId, "integration-check", target, now);
+          if (prepared.kind === "initialised") { out.initialised.push(repoId); continue; }
+          if (prepared.kind !== "range" || prepared.range.groups.length === 0) continue;
+          if (!evaluateTrigger(settings.trigger.value, rangeFacts(this.store, repoId, prepared.range.groups, prepared.state, now))) continue;
+          const groups = prepared.range.groups;
+          const commands = settings.command.value !== null ? [settings.command.value] : [...new Set(groups.flatMap((group) => group.checks))];
+          if (commands.length === 0) continue;
+          recordCheckStarted(this.store, repoId, "integration-check", target, now, prepared.range);
+          const job = this.runIntegrationCheckJob(repoId, target, groups, prepared.range.to, commands, now)
+            .finally(() => { this.checkJobs.delete(key); });
+          this.checkJobs.set(key, job);
+          out.started.push(repoId);
+        }
       } catch (error) {
-        process.stderr.write(`orca-control: integration check ${repoId}: ${describeError(error)}\n`);
+        process.stderr.write(`orca-control: checks ${repoId}: ${describeError(error)}\n`);
       }
     }
-    return { started };
+    return out;
   }
-  /** Every integration check this process started, settled (tests; a shutdown does not wait for them). */
-  async integrationChecksSettled(): Promise<void> { await Promise.all([...this.integrationChecks.values()]); }
-  private async runIntegrationCheckJob(repoId: string, landed: Parameters<typeof recordIntegrationCheckEnded>[2], latestGroupId: string, target: string, commands: string[], groups: string[], at: number): Promise<void> {
+  /** Every check run this process started, settled (tests; a shutdown does not wait for them). */
+  async checksSettled(): Promise<void> { await Promise.all([...this.checkJobs.values()]); }
+  private async runIntegrationCheckJob(repoId: string, target: string, groups: readonly RangeGroup[], head: string, commands: string[], at: number): Promise<void> {
+    const ids = groups.map((group) => group.groupId);
     try {
       const run = await runIntegrationCheck(this.repositoryPath(repoId), controlWorkspaceRoots(this.store.stateDir), repoId, target, commands, at, join(this.store.stateDir, DISPATCHED_PERSON_DIRNAME));
-      if (run.failures.length === 0) { recordIntegrationCheckEnded(this.store, repoId, landed, { state: "passed", at, commit: run.commit, groups, detail: null, debugGroupId: null }); return; }
-      const source = { kind: "integration-check" as const, groupId: latestGroupId, taskId: null, runId: `check-${at}` };
+      // §5.2: a completed check (green or red) covers its range: the watermark moves to the head it read at the start.
+      if (run.failures.length === 0) { recordCheckEnded(this.store, repoId, "integration-check", target, { state: "passed", at, moveTo: head }); return; }
+      const source = { kind: "integration-check" as const, groupId: ids.at(-1)!, taskId: null, runId: `check-${at}` };
       const groupId = systemDebugGroupId(source);
       const answer = await this.openSystemDebugGroup({
         schema: "orca-raw-command-v1", commandId: `orca-auto-integration-check-${at}`, actorId: ORCHESTRATION_ACTOR, expectedRevision: 0,
         verb: "system-debug-open", target: { kind: "group", groupId },
-        payload: { source, stackOn: null, repoId, facts: integrationCheckFacts(run, groups, target), checks: run.failures.map((failure) => failure.command) },
+        payload: { source, stackOn: null, repoId, facts: integrationCheckFacts(run, ids, target), checks: run.failures.map((failure) => failure.command) },
       });
       const error = (answer as { error?: { code?: unknown } }).error;
-      recordIntegrationCheckEnded(this.store, repoId, landed, { state: "failed", at, commit: run.commit, groups, detail: run.failures.map((failure) => failure.command).join("; ").slice(0, 500), debugGroupId: error === undefined ? groupId : null });
+      recordCheckEnded(this.store, repoId, "integration-check", target, { state: "failed", at, moveTo: head, detail: run.failures.map((failure) => failure.command).join("; ").slice(0, 500), debugGroupIds: error === undefined ? [groupId] : [] });
     } catch (error) {
-      recordIntegrationCheckEnded(this.store, repoId, landed, { state: "errored", at, commit: null, groups, detail: describeError(error).slice(0, 500), debugGroupId: null });
+      recordCheckEnded(this.store, repoId, "integration-check", target, { state: "errored", at, detail: describeError(error).slice(0, 500) });
     }
   }
   /** Kanban spec §3.3, §9a.5: a person's edge between groups (groupEdges.ts). */

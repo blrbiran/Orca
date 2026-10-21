@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { dispatchedEnv } from "./commandClient.js";
 import { join } from "node:path";
-import { z } from "zod";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { isGroupArchived } from "./archivedMark.js";
@@ -9,7 +8,6 @@ import { applyWebCommand } from "./commandLedger.js";
 import { ControlError } from "./errors.js";
 import { ChildTimeout, gitChild, spawnRunChild } from "./integrationGit.js";
 import { readGroupIntegration } from "./integrationScheme.js";
-import { runningGroupIds } from "./orchestration.js";
 import { readArchivedPlan } from "./queries.js";
 import type { ControlStore } from "./store.js";
 import { removeOwnPath, type WorkspaceRoots } from "./workspace.js";
@@ -72,42 +70,20 @@ export function applySetIntegrationCheck(
   } finally { release?.(); }
 }
 
-const lastSchema = z.object({
-  state: z.enum(["running", "passed", "failed", "errored"]), at: z.number().int(), commit: z.string().nullable(), groups: z.array(z.string()),
-  detail: z.string().nullable(), debugGroupId: z.string().nullable(),
-}).strict();
-const stateSchema = z.object({
-  /** When the newest check started (store clock); null before the first. */
-  lastAt: z.number().int().nullable(),
-  /** Each landed group's integrated commit the last finished check covered. */
-  covered: z.record(z.string(), z.string()),
-  last: lastSchema.nullable(),
-}).strict();
-export type IntegrationCheckState = z.infer<typeof stateSchema>;
-const EMPTY: IntegrationCheckState = { lastAt: null, covered: {}, last: null };
-const metaKey = (repoId: string): string => `integration-check:${repoId}`;
-
-/** The repository's check state (the `meta` table: a fact Orca records, not a setting anyone sets). */
-export function readIntegrationCheckState(store: ControlStore, repoId: string): IntegrationCheckState {
-  const row = store.db.prepare("SELECT value FROM meta WHERE key=?").get(metaKey(repoId));
-  if (row === undefined) return EMPTY;
-  const parsed = stateSchema.safeParse(JSON.parse(String(row.value)));
-  if (!parsed.success) throw new ControlError("recovery-blocked", "integration-check-state-invalid");
-  return parsed.data;
-}
-function writeState(store: ControlStore, repoId: string, state: IntegrationCheckState): void {
-  store.transaction(() => store.db.prepare("INSERT INTO meta(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(metaKey(repoId), JSON.stringify(stateSchema.parse(state))));
-}
-
 export interface LandedGroup { groupId: string; integratedCommit: string; target: string; checks: string[] }
 
-/** The repository's groups merged into a local target (the only delivery a check on the target can see). */
-export function landedGroups(store: ControlStore, repoId: string): LandedGroup[] {
+/**
+ * The repository's groups merged into a local target (the only delivery a check on the target can see). Checks spec
+ * 2026-10-22 §2.3: system-generated groups (any `systemDebug` mark) are left out -- they never make a range due nor
+ * appear as a side of a finding; their commits stay on the target and are checked as code.
+ */
+export function landedGroups(store: ControlStore, repoId: string, options: { includeSystem?: boolean } = {}): LandedGroup[] {
   return store.db.prepare("SELECT id, body FROM groups ORDER BY rowid").all().flatMap((row) => {
     const groupId = String(row.id);
     let body: Record<string, unknown>;
     try { body = JSON.parse(String(row.body)) as Record<string, unknown>; } catch { return []; }
     if ((body.plan as { repoId?: unknown } | undefined)?.repoId !== repoId || isGroupArchived(store, groupId)) return [];
+    if (options.includeSystem !== true && Object.hasOwn(body, "systemDebug")) return [];
     let integration: ReturnType<typeof readGroupIntegration>;
     try { integration = readGroupIntegration(body); } catch { return []; }
     if (integration === null || integration.scheme.delivery !== "local" || integration.integratedCommit === null) return [];
@@ -117,20 +93,6 @@ export function landedGroups(store: ControlStore, repoId: string): LandedGroup[]
     } catch { /* a plan that cannot be read adds no check */ }
     return [{ groupId, integratedCommit: integration.integratedCommit, target: integration.scheme.target, checks }];
   });
-}
-
-/** §7 layer 1's trigger, by code: what to check now, or null. */
-export function integrationCheckDue(store: ControlStore, repoId: string, now: number): { landed: LandedGroup[]; since: LandedGroup[] } | null {
-  if (!readIntegrationCheckSetting(store, repoId).enabled) return null;
-  const state = readIntegrationCheckState(store, repoId);
-  if (state.last?.state === "running") return null;
-  const landed = landedGroups(store, repoId);
-  const since = landed.filter((group) => state.covered[group.groupId] !== group.integratedCommit);
-  if (since.length < 2) return null;
-  const repoOf = (groupId: string): unknown => { try { return readArchivedPlan(store, groupId).plan.repoId; } catch { return null; } };
-  const idle = runningGroupIds(store).every((groupId) => repoOf(groupId) !== repoId);
-  const longEnough = state.lastAt === null || now - state.lastAt >= INTEGRATION_CHECK_MIN_INTERVAL_MS;
-  return idle || longEnough ? { landed, since } : null;
 }
 
 export interface CheckFailure { command: string; exit: string; tail: string }
@@ -166,24 +128,6 @@ export async function runIntegrationCheck(repo: string, roots: WorkspaceRoots, r
     await removeOwnPath(repo, roots, path).catch(() => undefined);
   }
   return { commit, failures, commands };
-}
-
-/** Record that a check started (so a second pass does not start another), and how it ended. */
-export function recordIntegrationCheckStarted(store: ControlStore, repoId: string, at: number, groups: string[]): void {
-  const state = readIntegrationCheckState(store, repoId);
-  writeState(store, repoId, { ...state, lastAt: at, last: { state: "running", at, commit: null, groups, detail: null, debugGroupId: null } });
-}
-export function recordIntegrationCheckEnded(store: ControlStore, repoId: string, landed: LandedGroup[], last: z.infer<typeof lastSchema>): void {
-  const state = readIntegrationCheckState(store, repoId);
-  // An errored check (no worktree, no target) covers nothing: the same groups are checked next time.
-  const covered = last.state === "errored" ? state.covered : { ...state.covered, ...Object.fromEntries(landed.map((group) => [group.groupId, group.integratedCommit])) };
-  writeState(store, repoId, { ...state, covered, last });
-}
-
-/** A check that was running when Orca stopped never ends: the next start sees `running` with no process and forgets it. */
-export function forgetInterruptedIntegrationCheck(store: ControlStore, repoId: string): void {
-  const state = readIntegrationCheckState(store, repoId);
-  if (state.last?.state === "running") writeState(store, repoId, { ...state, last: { ...state.last, state: "errored", detail: "interrupted: Orca stopped while it ran" } });
 }
 
 /** The facts a red check gives its debug task (system debug task spec §2): which commands failed, their exit and output tail. */

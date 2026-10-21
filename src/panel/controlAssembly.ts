@@ -276,7 +276,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     // System debug task spec 2026-10-21: Orca's own debug groups (the escalation ladder) are opened, confirmed and folded
     // first, so one that was just confirmed starts in the same pass; a due integration check (kanban §7 layer 1) is
     // started without being waited for.
-    const autoStart = driver === null ? Promise.resolve() : service.systemDebugPass().then(() => { service.integrationCheckPass(); }).then(() => service.autoStart()).then(() => service.autoResolveIntegrationConflicts()).then(() => undefined, (error: unknown) => {
+    const autoStart = driver === null ? Promise.resolve() : service.systemDebugPass().then(() => service.checksPass()).then(() => service.autoStart()).then(() => service.autoResolveIntegrationConflicts()).then(() => undefined, (error: unknown) => {
       process.stderr.write(`orca-control: auto-start pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
     });
     const pass = autoStart.then(() => withAdmission({ admissionGate }, () => deliverSchedulerWakes(store, wakeHandlers)))

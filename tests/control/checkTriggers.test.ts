@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { prepareRange, rangeFacts } from "../../src/control/checks/pass.js";
 import { BUILTIN_TRIGGERS, evaluateTrigger, type RangeFacts, type Trigger } from "../../src/control/checks/trigger.js";
+import { gitChild } from "../../src/control/integrationGit.js";
+import { checksWorld, g, SYSTEM_MARK } from "./fixtures/checksWorld.js";
 
 /**
  * Checks spec 2026-10-22 §2.2 / §3: a trigger is an AND of clauses, each an OR of closed conditions, evaluated by code
@@ -53,5 +56,87 @@ describe("built-in triggers (pure)", () => {
     // One clause false ⇒ false even though the other holds by both conditions.
     const u: Trigger = { all: [{ any: [{ kind: "queue-idle" }] }, { any: [{ kind: "conflict-reconciled" }] }] };
     expect(evaluateTrigger(u, facts({ queueIdle: true }))).toBe(false);
+  });
+});
+
+/**
+ * Checks spec §2.3, criterion 2 (store cases): what counts as "landed in the range". System-generated groups (every
+ * `systemDebug` mark) never make a range due nor a side of an overlap -- the one intended change to the integration
+ * check -- and `keep`-delivery groups are out of scope (human, Q1). Only an inter-group conflict flag counts as
+ * `conflict-reconciled`; a `reconcile` flag is a conflict inside one group's landing.
+ */
+describe("range facts from the store", () => {
+  const facts = async (w: Awaited<ReturnType<typeof checksWorld>>) => {
+    const prepared = await prepareRange(w.h.store, gitChild, w.repo, "repo", "integration-check", "main", w.now());
+    if (prepared.kind !== "range") return { prepared: prepared.kind };
+    const f = rangeFacts(w.h.store, "repo", prepared.range.groups, prepared.state, w.now());
+    return { groups: prepared.range.groups.map((group) => group.groupId), landed: f.landed, overlapGroups: f.overlapGroups, conflictReconciled: f.conflictReconciled };
+  };
+  /** The first evaluation: W := the target head (the check itself stays off here). */
+  const init = async (w: Awaited<ReturnType<typeof checksWorld>>) => expect((await prepareRange(w.h.store, gitChild, w.repo, "repo", "integration-check", "main", w.now())).kind).toBe("initialised");
+
+  it("a ladder fix group plus one ordinary group ⇒ one landed group, so the integration default does not fire", async () => {
+    const w = await checksWorld(); try {
+      w.setProjectChecks({ integrationCheck: { enabled: true, command: "true" } });
+      await w.pass();
+      await w.commitLand("g1", { "a.txt": "1\n" });
+      await w.commitLand("fix", { "a.txt": "2\n" }, { systemDebug: SYSTEM_MARK("ladder") });
+      expect(await facts(w)).toEqual({ groups: ["g1"], landed: 1, overlapGroups: 1, conflictReconciled: false });
+      expect((await w.pass()).started).toEqual([]);
+    } finally { await w.h.dispose(); }
+  });
+
+  it.each(["ladder", "integration-check", "criteria-review"] as const)("a %s system group with overlapping files neither counts nor overlaps", async (kind) => {
+    const w = await checksWorld(); try {
+      await init(w);
+      await w.commitLand("g1", { "shared.ts": "1\n" });
+      await w.commitLand("sys", { "shared.ts": "2\n" }, { systemDebug: SYSTEM_MARK(kind) });
+      await w.commitLand("g2", { "other.ts": "3\n" });
+      expect(await facts(w)).toMatchObject({ groups: ["g1", "g2"], landed: 2, overlapGroups: 1 });
+    } finally { await w.h.dispose(); }
+  });
+
+  it("two ordinary groups changing one path overlap (fast-forward and merge landings); groups before W are not compared", async () => {
+    const w = await checksWorld(); try {
+      await w.commitLand("before", { "shared.ts": "0\n" });
+      await init(w); // W after `before`
+      await w.mergeLand("g1", { "shared.ts": "1\n", "x.ts": "x\n" });
+      expect(await facts(w)).toMatchObject({ groups: ["g1"], overlapGroups: 1 });
+      await w.commitLand("g2", { "shared.ts": "2\n" });
+      expect(await facts(w)).toMatchObject({ groups: ["g1", "g2"], overlapGroups: 2 });
+    } finally { await w.h.dispose(); }
+  });
+
+  it("a keep or push-branch group never counts (only groups Orca merged into a local target, human Q1)", async () => {
+    const w = await checksWorld(); try {
+      await init(w);
+      await w.commitLand("g1", { "a.txt": "1\n" });
+      g(w.repo, "commit", "-q", "--allow-empty", "-m", "kept");
+      w.land("kept", g(w.repo, "rev-parse", "main"), {}, "keep");
+      g(w.repo, "commit", "-q", "--allow-empty", "-m", "pushed");
+      w.land("pushed", g(w.repo, "rev-parse", "main"), {}, "push-branch");
+      expect(await facts(w)).toMatchObject({ groups: ["g1"], landed: 1 });
+    } finally { await w.h.dispose(); }
+  });
+
+  it("an integration-conflict flag on a range group is conflict-reconciled; a reconcile flag is not", async () => {
+    const w = await checksWorld(); try {
+      await init(w);
+      await w.commitLand("g1", { "a.txt": "1\n" });
+      w.flag("g1", "reconcile");
+      expect(await facts(w)).toMatchObject({ landed: 1, conflictReconciled: false });
+      w.flag("g1", "integration-conflict");
+      expect(await facts(w)).toMatchObject({ conflictReconciled: true });
+    } finally { await w.h.dispose(); }
+  });
+
+  it("an empty range never fires, whatever the trigger says (the implied 'range non-empty')", async () => {
+    const w = await checksWorld(); try {
+      w.setProjectChecks({ integrationCheck: { enabled: true, command: "true", trigger: { all: [{ any: [{ kind: "queue-idle" }] }] } } });
+      await w.pass();
+      g(w.repo, "commit", "-q", "--allow-empty", "-m", "a person's own commit");
+      expect(await facts(w)).toEqual({ groups: [], landed: 0, overlapGroups: 0, conflictReconciled: false });
+      expect((await w.pass()).started).toEqual([]);
+    } finally { await w.h.dispose(); }
   });
 });

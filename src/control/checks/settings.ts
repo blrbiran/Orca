@@ -3,6 +3,7 @@ import { readOrchestrationSettings } from "../orchestration.js";
 import type { ControlStore } from "../store.js";
 import { readRepositorySettingsBody } from "../workspaceSettings.js";
 import { LOCKABLE_PATHS, scheduledCheckSchema, type ChecksLayer, type GlobalChecksLayer, type LockablePath, type ScheduledCheck } from "./settingsSchema.js";
+import { checkStateSchema, listCheckStates } from "./state.js";
 import { BUILTIN_TRIGGERS, triggerSchema, type Trigger } from "./trigger.js";
 
 /**
@@ -76,7 +77,8 @@ export function effectiveChecks(store: ControlStore, repoId: string | null): Eff
   };
 }
 
-// The read body (§4.3): `orca-checks-v1`. `state` carries each check's run state (Task 5); empty until then.
+// The read body (§4.3): `orca-checks-v1`. `state` carries each (kind, target)'s watermark and run facts (§5.4); the
+// global read has none.
 const sourced = <T extends z.ZodTypeAny>(value: T) => z.object({ value, source: z.enum(["project", "global", "builtin"]), lockedBy: z.literal("global").nullable() }).strict();
 export const checksReadSchema = z.object({
   schema: z.literal("orca-checks-v1"),
@@ -87,9 +89,9 @@ export const checksReadSchema = z.object({
   }).strict(),
   scheduled: z.array(sourced(scheduledCheckSchema).extend({ scope: z.enum(["project", "global"]) }).strict()),
   locks: z.array(z.enum(LOCKABLE_PATHS)),
-  state: z.array(z.unknown()),
+  state: z.array(z.object({ kind: z.enum(["integration-check", "model-review"]), target: z.string().min(1), state: checkStateSchema }).strict()),
 }).strict();
 export type ChecksReadV1 = z.infer<typeof checksReadSchema>;
 
 export const checksRead = (store: ControlStore, repoId: string | null): ChecksReadV1 =>
-  checksReadSchema.parse({ schema: "orca-checks-v1", repoId, ...effectiveChecks(store, repoId), state: [] });
+  checksReadSchema.parse({ schema: "orca-checks-v1", repoId, ...effectiveChecks(store, repoId), state: repoId === null ? [] : listCheckStates(store, repoId) });

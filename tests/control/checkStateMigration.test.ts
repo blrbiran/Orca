@@ -3,13 +3,17 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { migrateIntegrationMeta } from "../../src/control/checks/migrate.js";
+import { readCheckState } from "../../src/control/checks/state.js";
 import type { Trigger } from "../../src/control/checks/trigger.js";
+import { gitChild } from "../../src/control/integrationGit.js";
 import { schemaVersion } from "../../src/control/migrations.js";
 import { openControlStore } from "../../src/control/store.js";
 import { readIntegrationCheckSetting } from "../../src/control/integrationCheck.js";
 import { orchestrationRevision, readOrchestrationSettings, writeOrchestrationSettings } from "../../src/control/orchestration.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { readRepositorySettingsBody, writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
+import { checksWorld, g } from "./fixtures/checksWorld.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
 const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
 
@@ -100,5 +104,68 @@ describe("schema 16", () => {
       expect(service.setIntegrationCheck(h.rawCommand("ic", 1, "set-integration-check", { kind: "repository", repoId: "repo" }, { enabled: true, command: "npm test" }) as never)).toMatchObject({ result: { kind: "integration-check-set" } });
       expect(readRepositorySettingsBody(h.store, "repo")?.checks).toEqual({ integrationCheck: { trigger, enabled: true, command: "npm test" }, modelReview: { maxGroupsPerReview: 4 } });
     } finally { await h.dispose(); }
+  });
+});
+
+/**
+ * Checks spec §5.1, criterion 6 (lazy part): the integration check's pre-16 `meta` row is converted by code at the
+ * pump's first evaluation of the repository -- never earlier -- into a watermark that skips no landed-but-unchecked
+ * group. Written with the `meta` row's deletion in one transaction: a crash before the commit leaves the old row.
+ */
+describe("lazy conversion of the integration check's meta row", () => {
+  const meta = (covered: Record<string, string>, last: unknown = null) => JSON.stringify({ lastAt: 1_000, covered, last });
+  const seed = (w: Awaited<ReturnType<typeof checksWorld>>, value: string) => w.h.store.db.prepare("INSERT INTO meta(key,value) VALUES ('integration-check:repo',?)").run(value);
+  const metaRow = (w: Awaited<ReturnType<typeof checksWorld>>) => w.h.store.db.prepare("SELECT value FROM meta WHERE key='integration-check:repo'").get();
+  const state = (w: Awaited<ReturnType<typeof checksWorld>>) => readCheckState(w.h.store, "repo", "integration-check", "main");
+
+  it("all covered ⇒ W = the newest covered commit (not the last check's commit); the row is converted only by the pass", async () => {
+    const w = await checksWorld(); try {
+      const c1 = await w.commitLand("g1", { "a.txt": "1\n" });
+      const c2 = await w.commitLand("g2", { "b.txt": "2\n" });
+      await w.commitLand("other", { "o.txt": "o\n" }); // a group that is not Orca's last... landed later but covered too
+      const c3 = g(w.repo, "rev-parse", "main");
+      // The old state's last check ran at c1 (an older commit than the newest covered one).
+      seed(w, meta({ g1: c1, g2: c2, other: c3 }, { state: "passed", at: 900, commit: c1, groups: ["g1", "g2"], detail: null, debugGroupId: null }));
+      expect(state(w)).toBeNull();
+      expect(metaRow(w)).toBeDefined(); // nothing converts it before the pump's evaluation
+      await w.pass();
+      expect(metaRow(w)).toBeUndefined();
+      expect(state(w)).toMatchObject({ watermark: c3, lastStartAt: 1_000, last: { state: "passed", to: c1, groups: ["g1", "g2"] } });
+    } finally { await w.h.dispose(); }
+  });
+
+  it("one landed-but-uncovered group between covered ones ⇒ W = the first parent of its commit; the later covered one is re-covered", async () => {
+    const w = await checksWorld(); try {
+      const c1 = await w.commitLand("g1", { "a.txt": "1\n" });
+      const c2 = await w.commitLand("g2", { "b.txt": "2\n" }); // uncovered
+      const c3 = await w.commitLand("g3", { "c.txt": "3\n" });
+      seed(w, meta({ g1: c1, g3: c3 }));
+      await w.pass();
+      expect(state(w)).toMatchObject({ watermark: g(w.repo, "rev-parse", `${c2}^1`), last: { detail: "migrated: re-covers 1 groups" } });
+      expect(state(w)!.watermark).toBe(c1);
+    } finally { await w.h.dispose(); }
+  });
+
+  it("no landed group ⇒ W unset (the first-evaluation rule then sets it)", async () => {
+    const w = await checksWorld(); try {
+      seed(w, meta({}));
+      await w.service.checksPass();
+      expect(metaRow(w)).toBeUndefined();
+      // Nothing landed, no target known: no state row at all.
+      expect(state(w)).toBeNull();
+    } finally { await w.h.dispose(); }
+  });
+
+  it("a crash before the commit leaves the meta row and writes no state", async () => {
+    const w = await checksWorld(); try {
+      const c1 = await w.commitLand("g1", { "a.txt": "1\n" });
+      seed(w, meta({ g1: c1 }));
+      await expect(migrateIntegrationMeta(w.h.store, gitChild, w.repo, "repo", { beforeCommit: () => { throw new Error("injected crash"); } })).rejects.toThrow("injected crash");
+      expect(metaRow(w)).toBeDefined();
+      expect(state(w)).toBeNull();
+      expect(await migrateIntegrationMeta(w.h.store, gitChild, w.repo, "repo")).toBe(true);
+      expect(metaRow(w)).toBeUndefined();
+      expect(state(w)!.watermark).toBe(c1);
+    } finally { await w.h.dispose(); }
   });
 });

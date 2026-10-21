@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { integrationCheckDue, INTEGRATION_CHECK_MIN_INTERVAL_MS, readIntegrationCheckState } from "../../src/control/integrationCheck.js";
+import { readCheckState } from "../../src/control/checks/state.js";
+import { INTEGRATION_CHECK_MIN_INTERVAL_MS } from "../../src/control/integrationCheck.js";
 import { newGroupIntegration } from "../../src/control/integrationScheme.js";
 import { readSystemDebugMark } from "../../src/control/systemDebug.js";
 import { readArchivedPlan } from "../../src/control/queries.js";
@@ -40,17 +41,22 @@ async function world() {
   const revision = (): number => readRepositorySettingsBody(h.store, "repo")?.revision ?? 0;
   const setCheck = (enabled: boolean, command: string | null) => service.setIntegrationCheck(h.rawCommand(`check-${++sequence}`, revision(), "set-integration-check", { kind: "repository", repoId: "repo" }, { enabled, command }) as never);
   /** One pass, then wait for the check it started. */
-  const pass = async () => { const started = service.integrationCheckPass(); await service.integrationChecksSettled(); return started; };
-  return { h, repo, service, land, setCheck, pass, advance: (ms: number) => { now += ms; }, now: () => now };
+  // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): the check runs on the check model (checks spec 2026-10-22 §5):
+  // checksPass, a watermark per (project, kind, target), and real commits per landed group (a range is W..H).
+  const pass = async () => { const out = await service.checksPass(); await service.checksSettled(); return { started: out.started }; };
+  /** A commit on main, then the group landed at it. */
+  const commitLand = async (groupId: string): Promise<string> => { g(repo, "commit", "-q", "--allow-empty", "-m", `land ${groupId}`); const commit = g(repo, "rev-parse", "main"); land(groupId, commit); return commit; };
+  const state = () => readCheckState(h.store, "repo", "integration-check", "main");
+  return { h, repo, service, land, commitLand, state, setCheck, pass, advance: (ms: number) => { now += ms; }, now: () => now };
 }
 
 describe("the integration check (kanban spec §7 layer 1)", () => {
   it("is off until an owner turns it on, and keeps its setting when the integration scheme changes", async () => {
     const w = await world(); const { h } = w; try {
       w.land("g"); w.land("g2");
-      // mutation: the default setting enabled -> due, red
-      expect(integrationCheckDue(h.store, "repo", w.now())).toBeNull();
+      // mutation: the default setting enabled -> evaluated (a state row), red
       expect(await w.pass()).toEqual({ started: [] });
+      expect(w.state()).toBeNull();
       expect(w.setCheck(true, "test -f base.txt")).toMatchObject({ result: { kind: "integration-check-set", integrationCheck: { enabled: true, command: "test -f base.txt" } } });
       expect(w.setCheck(true, "test -f base.txt")).toMatchObject({ error: { code: "no-op-command" } });
       const scheme = w.service.setIntegrationScheme(h.rawCommand(`scheme-${++sequence}`, readRepositorySettingsBody(h.store, "repo")!.revision, "set-integration-scheme", { kind: "repository", repoId: "repo" },
@@ -64,50 +70,56 @@ describe("the integration check (kanban spec §7 layer 1)", () => {
   it("waits for two landed groups, and for an idle project or 6 h since the last check", async () => {
     const w = await world(); const { h } = w; try {
       w.setCheck(true, "true");
-      w.land("g");
-      // mutation: one landed group is enough -> due, red
-      expect(integrationCheckDue(h.store, "repo", w.now())).toBeNull();
-      w.land("g2");
-      expect(integrationCheckDue(h.store, "repo", w.now())?.since.map((group) => group.groupId)).toEqual(["g", "g2"]);
-      await w.pass();
-      expect(readIntegrationCheckState(h.store, "repo").last).toMatchObject({ state: "passed", groups: ["g", "g2"] });
+      w.land("old");
+      // The first evaluation only sets the watermark (checks spec §5.3).
+      expect(await w.pass()).toEqual({ started: [] });
+      await w.commitLand("g");
+      // mutation: one landed group is enough -> started, red
+      expect(await w.pass()).toEqual({ started: [] });
+      await w.commitLand("g2");
+      expect(await w.pass()).toEqual({ started: ["repo"] });
+      expect(w.state()?.last).toMatchObject({ state: "passed", groups: ["g", "g2"] });
       // The same landed commits are not checked again.
-      expect(integrationCheckDue(h.store, "repo", w.now())).toBeNull();
+      expect(await w.pass()).toEqual({ started: [] });
       // Two more land while another group of the project runs: not until 6 h after the last check.
-      g(w.repo, "commit", "-q", "--allow-empty", "-m", "next");
-      w.land("g3"); w.land("g4");
+      await w.commitLand("g3"); await w.commitLand("g4");
       h.importDeferred("busy");
       const busy = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='busy'").get()!.body)) as Record<string, unknown>;
       h.store.db.prepare("UPDATE groups SET body=? WHERE id='busy'").run(JSON.stringify({ ...busy, status: "running" }));
-      // mutation: drop the idle test (always idle) -> due, red
-      expect(integrationCheckDue(h.store, "repo", w.now())).toBeNull();
+      // mutation: drop the idle test (always idle) -> started, red
+      expect(await w.pass()).toEqual({ started: [] });
       w.advance(INTEGRATION_CHECK_MIN_INTERVAL_MS);
-      expect(integrationCheckDue(h.store, "repo", w.now())?.since.map((group) => group.groupId)).toEqual(["g3", "g4"]);
+      expect(await w.pass()).toEqual({ started: ["repo"] });
+      expect(w.state()?.last).toMatchObject({ state: "passed", groups: ["g3", "g4"] });
     } finally { await h.dispose(); }
   });
 
   it("runs the command at the target's head in a worktree it removes, and a red check opens a system debug group", async () => {
     const w = await world(); const { h } = w; try {
-      w.land("g"); w.land("g2");
       w.setCheck(true, "test -f base.txt && test -f missing.txt");
+      w.land("old"); // an earlier landing names the target; the first evaluation only sets the watermark
+      await w.pass();
+      await w.commitLand("g"); await w.commitLand("g2");
       expect(await w.pass()).toEqual({ started: ["repo"] });
-      const last = readIntegrationCheckState(h.store, "repo").last!;
-      expect(last).toMatchObject({ state: "failed", commit: g(w.repo, "rev-parse", "main"), groups: ["g", "g2"], detail: "test -f base.txt && test -f missing.txt" });
-      expect(last.debugGroupId).toMatch(/^sysdebug-integration-check-[a-f0-9]{16}$/);
-      const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(last.debugGroupId!)!.body));
+      const last = w.state()!.last!;
+      expect(last).toMatchObject({ state: "failed", to: g(w.repo, "rev-parse", "main"), groups: ["g", "g2"], detail: "test -f base.txt && test -f missing.txt" });
+      expect(last.debugGroupIds).toHaveLength(1);
+      const debugGroupId = last.debugGroupIds[0]!;
+      expect(debugGroupId).toMatch(/^sysdebug-integration-check-[a-f0-9]{16}$/);
+      const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(debugGroupId)!.body));
       expect(readSystemDebugMark(body)).toMatchObject({ source: { kind: "integration-check", groupId: "g2", taskId: null }, stackOn: null, settled: null });
-      const contract = JSON.parse(readArchivedPlan(h.store, last.debugGroupId!).plan.tasks[0]!.originalContractCanonicalJson) as { objective: { goal: string }; verification: { requiredChecks: string[] } };
+      const contract = JSON.parse(readArchivedPlan(h.store, debugGroupId).plan.tasks[0]!.originalContractCanonicalJson) as { objective: { goal: string }; verification: { requiredChecks: string[] } };
       expect(contract.verification.requiredChecks).toEqual(["test -f base.txt && test -f missing.txt"]);
       expect(contract.objective.goal).toContain("after groups g, g2 were merged into it");
       // The worktree is gone (only the repository's own remains).
       expect(g(w.repo, "worktree", "list", "--porcelain").split("\n").filter((line) => line.startsWith("worktree ")).length).toBe(1);
       // Once its work is done, a debug group that is not a ladder's is settled `done` (nothing to fold back).
-      h.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, status: "running" }), last.debugGroupId!);
-      const work = JSON.parse(String(h.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id='debug'").get(last.debugGroupId!)!.body));
-      h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id='debug'").run(JSON.stringify({ ...work, status: "done" }), last.debugGroupId!);
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, status: "running" }), debugGroupId);
+      const work = JSON.parse(String(h.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id='debug'").get(debugGroupId)!.body));
+      h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id='debug'").run(JSON.stringify({ ...work, status: "done" }), debugGroupId);
       // mutation: a non-ladder group falls through to the fold -> nothing settled, red
-      expect((await w.service.systemDebugPass()).settled).toEqual([last.debugGroupId]);
-      expect(readSystemDebugMark(JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(last.debugGroupId!)!.body)))?.settled?.state).toBe("done");
+      expect((await w.service.systemDebugPass()).settled).toEqual([debugGroupId]);
+      expect(readSystemDebugMark(JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(debugGroupId)!.body)))?.settled?.state).toBe("done");
     } finally { await h.dispose(); }
   });
 
@@ -126,30 +138,36 @@ describe("the integration check (kanban spec §7 layer 1)", () => {
 
   it("with no command, runs the landed groups' own required checks; a passing check opens nothing", async () => {
     const w = await world(); const { h } = w; try {
-      w.land("g"); w.land("g2");
       w.setCheck(true, null);
+      w.land("old"); // an earlier landing names the target; the first evaluation only sets the watermark
+      await w.pass();
+      await w.commitLand("g"); await w.commitLand("g2");
       await w.pass();
       // The fixture's tasks are held to `true`.
-      expect(readIntegrationCheckState(h.store, "repo").last).toMatchObject({ state: "passed", debugGroupId: null });
+      expect(w.state()?.last).toMatchObject({ state: "passed", debugGroupIds: [] });
       expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM groups WHERE substr(id,1,9)='sysdebug-'").get()?.n).toBe(0);
     } finally { await h.dispose(); }
   });
 
   it("a target it cannot read is an error that covers nothing, and a check cut off by a stop is forgotten", async () => {
     const w = await world(); const { h } = w; try {
-      w.land("g"); w.land("g2");
+      w.setCheck(true, "true");
+      w.land("old"); // an earlier landing names the target; the first evaluation only sets the watermark
+      await w.pass();
+      await w.commitLand("g"); await w.commitLand("g2");
       const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g2'").get()!.body)) as { integration: { scheme: { target: string } } };
       body.integration.scheme.target = "no-such-branch";
       h.store.db.prepare("UPDATE groups SET body=? WHERE id='g2'").run(JSON.stringify(body));
-      w.setCheck(true, "true");
+      const watermark = w.state()!.watermark;
       await w.pass();
-      // toEqual, not toMatchObject: `{}` would match any covered set.
-      expect(readIntegrationCheckState(h.store, "repo").covered).toEqual({});
-      expect(readIntegrationCheckState(h.store, "repo").last).toMatchObject({ state: "errored" });
+      // The unreadable target is its own state, errored; the readable one covers nothing new (one group there).
+      expect(readCheckState(h.store, "repo", "integration-check", "no-such-branch")?.last).toMatchObject({ state: "errored", detail: "target unreadable: no-such-branch" });
+      expect(w.state()!.watermark).toBe(watermark);
       // A `running` state this process did not start (Orca stopped mid-check) does not block the next one.
-      h.store.db.prepare("UPDATE meta SET value=? WHERE key='integration-check:repo'").run(JSON.stringify({ lastAt: 1, covered: {}, last: { state: "running", at: 1, commit: null, groups: [], detail: null, debugGroupId: null } }));
-      expect(w.service.integrationCheckPass()).toEqual({ started: ["repo"] });
-      await w.service.integrationChecksSettled();
+      body.integration.scheme.target = "main";
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id='g2'").run(JSON.stringify(body));
+      h.store.db.prepare("UPDATE check_state SET body=? WHERE repo_id='repo' AND kind='integration-check' AND target='main'").run(JSON.stringify({ ...w.state()!, lastStartAt: 1, last: { state: "running", at: 1, from: watermark, to: null, groups: [], detail: null, reviewGroupId: null, debugGroupIds: [], recordHash: null } }));
+      expect(await w.pass()).toEqual({ started: ["repo"] });
     } finally { await h.dispose(); }
   });
 });
