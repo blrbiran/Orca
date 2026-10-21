@@ -417,13 +417,16 @@ describe("withdraw Amendment 2: an unstarted debug group is archived, a started 
 });
 
 describe("the correction-debug-open route", () => {
-  it("opens through POST /api/control/corrections/:id/debug-group, refuses an agent's undoHow, and replays a retried reopen", async () => {
+  it("opens through POST /api/control/corrections/:id/debug-group, refuses a member's undoHow, and replays a retried reopen", async () => {
     const w = await world();
     let close = async (): Promise<void> => {};
     try {
       const app = express();
       app.use((req, res, next) => {
-        res.locals.orcaPrincipal = (req.headers["x-test-agent"] ? { kind: "agent", client: "mcp:test" } : { kind: "user", userId: "o", name: "o", roles: ["owner"] }) satisfies Principal;
+        // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): undoHow is open to the socket agent and refused to a
+        // member (I3) and to a run Orca dispatched (§15.4): `x-test-member` is a member.
+        res.locals.orcaPrincipal = (req.headers["x-test-member"] ? { kind: "user", userId: "m", name: "m", roles: ["member"] }
+          : req.headers["x-test-agent"] ? { kind: "agent", client: "mcp:test" } : { kind: "user", userId: "o", name: "o", roles: ["owner"] }) satisfies Principal;
         next();
       });
       app.use(express.json({ verify: verifyControlJsonBody }));
@@ -434,13 +437,13 @@ describe("the correction-debug-open route", () => {
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("address");
       const cid = w.correction.id;
-      const post = async (body: unknown, agent = false, id = cid) => {
+      const post = async (body: unknown, agent: boolean | "member" = false, id = cid) => {
         const response = await fetch(`http://127.0.0.1:${address.port}/api/control/corrections/${id}/debug-group`, {
-          method: "POST", headers: { "content-type": "application/json", ...(agent ? { "x-test-agent": "1" } : {}) }, body: JSON.stringify(body) });
+          method: "POST", headers: { "content-type": "application/json", ...(agent === "member" ? { "x-test-member": "1" } : agent ? { "x-test-agent": "1" } : {}) }, body: JSON.stringify(body) });
         return { status: response.status, body: await response.json() as Record<string, unknown> };
       };
-      const asAgent = await post({ commandId: "agent-1", expectedRevision: 0, payload: { correctionId: cid, undoHow: "git revert --no-edit HEAD" } }, true);
-      expect([asAgent.status, (asAgent.body.error as { code: string }).code]).toEqual([403, "control-field-human-only"]);
+      const asMember = await post({ commandId: "member-1", expectedRevision: 0, payload: { correctionId: cid, undoHow: "git revert --no-edit HEAD" } }, "member");
+      expect([asMember.status, (asMember.body.error as { code: string }).code]).toEqual([403, "control-field-human-only"]);
       expect(w.groupCount(cid)).toBe(0);
       const mismatch = await post({ commandId: "m-1", expectedRevision: 0, payload: { correctionId: "c_0000000000000000" } });
       expect(mismatch.status).toBe(400);

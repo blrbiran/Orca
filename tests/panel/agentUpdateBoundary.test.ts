@@ -62,7 +62,8 @@ describe("installation update native boundaries", () => {
     expect((await overSocket(panel.socketPath!, "GET", "/api/control/operator/agent-installations")).status).toBe(403);
     expect((await overSocket(panel.socketPath!, "POST", "/api/control/operator/agent-update-preview", undefined, {})).status).toBe(403);
     const socket = await overSocket(panel.socketPath!, "POST", "/api/control/operator/apply-agent-update", undefined, { commandId: "socket-update", expectedRevision: 0, payload: {} });
-    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-verb-human-only"]);
+    // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): apply-agent-update is the token tier on the socket.
+    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-person-token-required"]);
   });
 
   it("CSRF and request shape block preview before the producer is touched", async () => {

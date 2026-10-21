@@ -243,3 +243,26 @@ Recorded at the human review (2026-10-08, session eaee0f2c, on top of `chore(dep
 
 - Human ruling, replacing half of the Task 3 password rulings above: a successful password change ends **every** session of the user, the one that made the change too, and its answer clears the session cookies; the page then shows the login form with "Password changed. Log in with the new password." A wrong password — at login or on the change — ends no session; it only counts against the per-name login throttle (429 `login-throttled` after 5 consecutive failures, `min(2^(n−5), 300)` seconds), which the human kept. Logout still ends only its own session.
 - The re-pin to ccloop `c82b212` (Part B) makes every applied run delta a `reported` row naming its model; the reconciliation's own `ccloop run` stays one `unattributed` row (Ruling R2 above), now pinned by name in `executionDriverE2E` E1.
+
+## 15. Correction: CLI v2 access tiers and person token (2026-10-22, session b37f7ce9)
+
+Recorded by the CLI v2 implementer (plan `docs/superpowers/plans/2026-10-22-cli-v2.md` Task 10), on top of
+`feat(control): by/via attribution on every writer an opened verb reaches`. The sections above are unchanged (Rule 13);
+where they disagree with this one, `docs/superpowers/specs/2026-10-21-cli-v2-design.md` §14–§16 governs.
+
+- **§2 / §3.5 are weakened, by the human's ruling.** "A process using Orca's interfaces cannot perform a human-only
+  action without a human's password" and "the socket can never do a human-only action whatever it sends" no longer hold.
+  The control socket's agent is tiered per CLI v2 spec §15.1 (`SOCKET_TIER`, `src/panel/humanOnly.ts`): most human-only
+  verbs and fields are open to it; setting where work goes (a non-`keep` delivery), a custom integration-check command,
+  budget and spend amounts, `settle-unknown-usage` and `apply-agent-update` need a person token (`orca login`, sent only
+  with `--as-person`; refused `control-person-token-required` without one). A run Orca dispatched is refused every one of
+  them (`control-dispatched-run-refused`). **Web members are unchanged**: they keep §3.5's refusals.
+- **D14 is replaced** (CLI v2 spec §16): a correction, a reject, a ratify mark and an approval's ledger line record `by` =
+  the accountable person (the logged-in account on the Web; the panel owner, its `--by`, on the socket) and `via` = the
+  channel (`web`, `cli:<c>`, `mcp:<c>`). A correction is withdrawn by its author (the requester's `by` equals the row's)
+  or by the panel owner (controller's call, session b37f7ce9).
+- **Out-of-repo and state writes registered here (Rule 17):** `<control state dir>/dispatched-person`, created `0700` and
+  empty when the control plane assembles (an existing one keeps its mode), is the `ORCA_PERSON_DIR` of every run Orca
+  dispatches (CLI v2 spec §15.3–§15.4); left behind on failure it is an empty directory. `$ORCA_PERSON_DIR` (default
+  `~/.orca/person`, directory `0700`, `token.json` `0600`, written temp + rename by `orca login`, removed by `orca logout`)
+  is registered in CLI v2 spec §15.3.

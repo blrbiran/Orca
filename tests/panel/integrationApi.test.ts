@@ -41,7 +41,8 @@ describe("the repository integration default over HTTP (integration spec §3.4)"
     const amy = await login(panel.url, "amy");
     const route = `/api/control/repositories/${repo}/integration`;
     const socket = await overSocket((panel as StartedPanel).socketPath!, "POST", route, { "x-orca-client": "cli:test" }, { commandId: "int-a", expectedRevision: 0, payload: { integration: LOCAL } });
-    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-verb-human-only"]);
+    // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): a non-keep delivery is the token tier on the socket.
+    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-person-token-required"]);
     const member = await amy.fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "int-m", expectedRevision: 0, payload: { integration: LOCAL } }) });
     expect([member.status, ((await member.json()) as { error: { code: string } }).error.code]).toEqual([403, "control-verb-human-only"]);
     expect(ids(w.state).filter((id) => id.startsWith("int-"))).toEqual([]);
@@ -97,37 +98,42 @@ describe("the group's integration and confirm's approval over HTTP (integration 
     const amy = await login(panel.url, "amy");
     const route = "/api/control/groups/g/integration";
     const socket = await overSocket((panel as StartedPanel).socketPath!, "POST", route, { "x-orca-client": "cli:test" }, { commandId: "gi-a", expectedRevision: 0, payload: { integration: LOCAL } });
-    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-verb-human-only"]);
+    // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): a non-keep delivery is the token tier on the socket.
+    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-person-token-required"]);
     const member = await amy.fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "gi-m", expectedRevision: 0, payload: { integration: LOCAL } }) });
     expect([member.status, ((await member.json()) as { error: { code: string } }).error.code]).toEqual([403, "control-verb-human-only"]);
     expect(ids(w.state).filter((id) => id.startsWith("gi-"))).toEqual([]);
   });
 
-  it("refuses retry-integration from an agent on the socket and a member over the Web by name; routes an owner's (booked)", async () => {
+  // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): open to the socket agent (the human moved it there:
+  // Orca already dispatches conflict resolution itself); a member is refused as before (I3).
+  it("refuses retry-integration from a member over the Web by name; routes the socket agent's and an owner's (booked)", async () => {
     const { w, panel, post } = await setUp();
     seedUser(controlRoot(w.env), "amy", "member");
     const amy = await login(panel.url, "amy");
     const route = "/api/control/groups/g/integration/retry";
     const socket = await overSocket((panel as StartedPanel).socketPath!, "POST", route, { "x-orca-client": "cli:test" }, { commandId: "ri-a", expectedRevision: 0, payload: {} });
-    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-verb-human-only"]);
+    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([404, "group-not-found"]);
     const member = await amy.fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "ri-m", expectedRevision: 0, payload: {} }) });
     expect([member.status, ((await member.json()) as { error: { code: string } }).error.code]).toEqual([403, "control-verb-human-only"]);
-    expect(ids(w.state).filter((id) => id.startsWith("ri-"))).toEqual([]);
+    expect(ids(w.state).filter((id) => id.startsWith("ri-"))).toEqual(["ri-a"]);
     const owner = await post("groups/nogroup/integration/retry", { commandId: "ri-o", expectedRevision: 0, payload: {} });
     expect([owner.status, ((await owner.json()) as { error: { code: string } }).error.code]).toEqual([404, "group-not-found"]);
     expect(ids(w.state)).toContain("ri-o");
   });
 
-  it("refuses resolve-integration-conflict from an agent on the socket and a member over the Web by name; routes an owner's (booked)", async () => {
+  // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): open to the socket agent (the human moved it there:
+  // Orca already dispatches conflict resolution itself); a member is refused as before (I3).
+  it("refuses resolve-integration-conflict from a member over the Web by name; routes the socket agent's and an owner's (booked)", async () => {
     const { w, panel, post } = await setUp();
     seedUser(controlRoot(w.env), "amy", "member");
     const amy = await login(panel.url, "amy");
     const route = "/api/control/groups/g/integration/resolve";
     const socket = await overSocket((panel as StartedPanel).socketPath!, "POST", route, { "x-orca-client": "cli:test" }, { commandId: "rc-a", expectedRevision: 0, payload: {} });
-    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-verb-human-only"]);
+    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([404, "group-not-found"]);
     const member = await amy.fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "rc-m", expectedRevision: 0, payload: {} }) });
     expect([member.status, ((await member.json()) as { error: { code: string } }).error.code]).toEqual([403, "control-verb-human-only"]);
-    expect(ids(w.state).filter((id) => id.startsWith("rc-"))).toEqual([]);
+    expect(ids(w.state).filter((id) => id.startsWith("rc-"))).toEqual(["rc-a"]);
     const owner = await post("groups/nogroup/integration/resolve", { commandId: "rc-o", expectedRevision: 0, payload: {} });
     expect([owner.status, ((await owner.json()) as { error: { code: string } }).error.code]).toEqual([404, "group-not-found"]);
     expect(ids(w.state)).toContain("rc-o");
@@ -140,14 +146,16 @@ describe("the group's integration and confirm's approval over HTTP (integration 
     expect(ids(w.state)).toContain("gi-o");
   });
 
-  it("refuses a confirm carrying integrationHash from an agent on the socket: the approval is an owner's", async () => {
+  // CLI v2 spec §15.1 R3a (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): integrationHash left HUMAN_ONLY_FIELDS for the socket agent
+  // (confirm carries only the hash; a mismatch is refused integration-unapproved anyway).
+  it("routes a confirm carrying integrationHash from an agent on the socket to the service (booked)", async () => {
     const { w, panel } = await setUp();
     const payload = { planHash: "a".repeat(64), proposalVersion: 1, budgetMode: "strict", profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" },
       profileHashes: { estimator: "b".repeat(64), worker: "b".repeat(64), handoff: "b".repeat(64), goalReview: "b".repeat(64) }, contextPolicy: { handoffAtContextTokens: null },
       selectionsHash: "c".repeat(64), integrationHash: "d".repeat(64) };
     const socket = await overSocket((panel as StartedPanel).socketPath!, "POST", "/api/control/groups/g/confirm", { "x-orca-client": "cli:test" }, { commandId: "cf-a", expectedRevision: 0, payload });
-    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-field-human-only"]);
-    expect(ids(w.state).filter((id) => id.startsWith("cf-"))).toEqual([]);
+    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([404, "group-not-found"]);
+    expect(ids(w.state).filter((id) => id.startsWith("cf-"))).toEqual(["cf-a"]);
   });
 
   it("books the refusal of an unknown repository's integration default (it is not checked against any path first)", async () => {

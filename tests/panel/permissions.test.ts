@@ -13,13 +13,15 @@ const member = { kind: "user" as const, userId: "u2", name: "m", roles: ["member
 const agent = { kind: "agent" as const, client: "cli:claude" };
 
 describe("the permission table (spec §3.5)", () => {
-  it("lets an owner do human-only actions and refuses member and agent by the same codes", () => {
+  // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): the socket
+  // agent is tiered (tests/panel/accessMatrix.test.ts has every row); a member keeps today's codes (I3).
+  it("lets an owner do human-only actions, refuses a member by the human-only codes and the agent by its tier", () => {
     expect(permissionRefusal(owner, "set-limit", { limit: {} })).toBe(null);
-    for (const p of [member, agent]) {
-      expect(permissionRefusal(p, "set-limit", { limit: {} })?.code).toBe("control-verb-human-only");
-      expect(permissionRefusal(p, "requirement-open", { groupId: "g", limit: {} })?.code).toBe("control-field-human-only");
-      expect(permissionRefusal(p, "confirm", {})).toBe(null);
-    }
+    expect(permissionRefusal(member, "set-limit", { limit: {} })?.code).toBe("control-verb-human-only");
+    expect(permissionRefusal(member, "requirement-open", { groupId: "g", limit: {} })?.code).toBe("control-field-human-only");
+    expect(permissionRefusal(agent, "set-limit", { limit: {} })?.code).toBe("control-person-token-required");
+    expect(permissionRefusal(agent, "requirement-open", { groupId: "g", limit: {} })?.code).toBe("control-person-token-required");
+    for (const p of [member, agent]) expect(permissionRefusal(p, "confirm", {})).toBe(null);
     // Issue-fixes spec §6.3: archiving and unarchiving are open to every principal (access `any`).
     for (const p of [owner, member, agent]) for (const verb of ["archive-group", "unarchive-group"] as const) expect(permissionRefusal(p, verb, {})).toBe(null);
     expect([owner, member, agent].map(mayDoHumanOnly)).toEqual([true, false, false]);
@@ -32,10 +34,13 @@ describe("the permission table (spec §3.5)", () => {
 
   // Debug task plan Task 6: opening a correction's debug group spends nothing, so every principal may; the undo.how the
   // closing row records as the human's is an owner's field.
-  it("lets an agent open a debug group but not send undoHow", () => {
+  // CLI v2 spec §15.1 (plan Task 10, same Ruling): undoHow is open to the socket agent -- §16 records it by the owner, via
+  // the agent's channel -- and stays refused to a member.
+  it("lets an agent open a debug group and send undoHow; a member may not send undoHow", () => {
     const payload = { correctionId: "c_0123456789abcdef" };
     for (const p of [owner, member, agent]) expect(permissionRefusal(p, "correction-debug-open", payload)).toBe(null);
-    for (const p of [member, agent]) expect(permissionRefusal(p, "correction-debug-open", { ...payload, undoHow: "git revert --no-edit HEAD" })?.code).toBe("control-field-human-only");
+    expect(permissionRefusal(member, "correction-debug-open", { ...payload, undoHow: "git revert --no-edit HEAD" })?.code).toBe("control-field-human-only");
+    expect(permissionRefusal(agent, "correction-debug-open", { ...payload, undoHow: "git revert --no-edit HEAD" })).toBe(null);
     expect(permissionRefusal(owner, "correction-debug-open", { ...payload, undoHow: "git revert --no-edit HEAD" })).toBe(null);
   });
 

@@ -298,7 +298,9 @@ const commandIds = (state: string): string[] => {
 };
 
 describe("rejecting a pending decision is an owner's (control run decisions Task 10)", () => {
-  it("refuses reject from an agent with the human-only code", async () => {
+  // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): reject is open to the socket agent; a Web member is
+  // refused as before (I3).
+  it("refuses reject from a member with the human-only code; routes the socket agent's to the service", async () => {
     const w = await workspace();
     execFileSync("git", ["init", "-q", "-b", "trunk", w.repo], { env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))), GIT_CONFIG_NOSYSTEM: "1" } });
     const panel = await boot(w, [], { port: true });
@@ -308,12 +310,12 @@ describe("rejecting a pending decision is an owner's (control run decisions Task
     const payload = { pendingId: "pending-run-x-0", because: "no" };
     const socket = await overSocket((panel as StartedPanel).socketPath!, "POST", route, { "x-orca-client": "cli:test" }, { commandId: "rd-a", expectedRevision: 0, payload });
     const member = await amy.fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "rd-m", expectedRevision: 0, payload }) });
-    // One assertion over both principals (mutation: VERB_ACCESS "any" -> both red).
+    // One assertion over both principals (mutation: VERB_ACCESS "any" -> the member's red; SOCKET_TIER "token" -> the socket's red).
     expect({
       socketAgent: [socket.status, JSON.parse(socket.text).error.code],
       webMember: [member.status, ((await member.json()) as { error: { code: string } }).error.code],
-    }).toEqual({ socketAgent: [403, "control-verb-human-only"], webMember: [403, "control-verb-human-only"] });
-    expect(commandIds(w.state).filter((id) => id.startsWith("rd-"))).toEqual([]);
+    }).toEqual({ socketAgent: [404, "group-not-found"], webMember: [403, "control-verb-human-only"] });
+    expect(commandIds(w.state).filter((id) => id.startsWith("rd-"))).toEqual(["rd-a"]);
     // The route is the verb's: an owner's is routed to the service, refused there by name and booked.
     const owner = await sessionFor(panel, w.env);
     const routed = await owner.fetch("/api/control/groups/nogroup/decisions/reject", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "rd-o", expectedRevision: 0, payload }) });

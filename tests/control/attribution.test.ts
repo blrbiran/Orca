@@ -15,7 +15,9 @@ import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { attributionOf, principalLabel, type Principal } from "../../src/panel/permissions.js";
 import { createPanelServer, parsePanelArgs } from "../../src/panel/server.js";
 import { ORIGINAL, makeTargetRepo } from "../corrections/harness.js";
-import { sessionFor } from "../panel/fixtures/auth.js";
+import { login, seedUser, sessionFor } from "../panel/fixtures/auth.js";
+import { overSocket } from "../panel/fixtures/socketPanel.js";
+import { controlRoot } from "../../src/panel/controlOptions.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 import { openTestStore } from "./fixtures/store.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
@@ -105,6 +107,49 @@ describe("the writers an opened verb reaches (spec §16 criterion)", { timeout: 
         const db = new DatabaseSync(join(root, "control", REPO_ID, "control.sqlite"), { readOnly: true });
         try { expect(JSON.parse(String(db.prepare("SELECT body FROM groups WHERE id=?").get(`debug-${row!.id}`)!.body)).debug.undoHowBy).toEqual({ by: "tester", via: "web" }); }
         finally { db.close(); }
+      } finally { await panel.close(); }
+    } finally { await repo.cleanup(); await rm(root, { recursive: true, force: true }); }
+  });
+});
+
+// Controller's call (session b37f7ce9, ledgered): correction-withdraw is the author's -- the requester's `by` equals the
+// row's recorded `by` (the account name on the Web, the panel's --by on the socket) -- or the panel owner's (its --by).
+// Before, the verb compared the row against the panel's --by only, so a Web owner whose name is not --by could never
+// withdraw the row §16 now records in their name.
+describe("who may withdraw a correction (spec §16, controller's call)", { timeout: 60_000 }, () => {
+  it("its author on the Web may; another account may not; the panel owner on the socket may; a member is refused as before", async () => {
+    // A short root: the control socket's path must fit (control-socket-path-too-long otherwise).
+    const root = await realpath(await mkdtemp(join(tmpdir(), "wd-")));
+    const repo = await makeTargetRepo({ remote: "https://example.invalid/o/r.git" });
+    try {
+      const corrections = join(root, "corrections");
+      await mkdir(corrections, { mode: 0o700 });
+      const env: NodeJS.ProcessEnv = { ...process.env, ORCA_CONTROL_DIR: join(root, "control"), ORCA_CORRECTIONS_DIR: corrections };
+      const panel = await createPanelServer({ ...parsePanelArgs(["--by", "panel-owner", "--repo", `${PANEL_KEY}=${repo.path}`, "--control-state-dir", join(root, "s")], env), now: () => NOW }, env);
+      try {
+        const post = (s: { fetch: (path: string, init?: RequestInit) => Promise<Response> }, path: string, commandId: string, payload: unknown) =>
+          s.fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId, expectedRevision: 0, payload }) });
+        const code = async (r: Response): Promise<[number, string]> => [r.status, r.status === 200 ? "ok" : ((await r.json()) as { error: { code: string } }).error.code];
+        // "tester" is a Web owner whose account name is not the panel's --by.
+        const tester = await sessionFor(panel, env);
+        seedUser(controlRoot(env), "bob", "owner");
+        seedUser(controlRoot(env), "amy", "member");
+        const [bob, amy] = [await login(panel.url, "bob"), await login(panel.url, "amy")];
+        expect((await post(tester, "/api/control/corrections", "rec-1", RECORD)).status).toBe(200);
+        const [first] = await readCorrections(corrections);
+        expect(first!.by).toBe("tester");
+        const withdraw = `/api/control/corrections/${first!.id}/withdraw`;
+        expect({
+          otherOwner: await code(await post(bob, withdraw, "wd-bob", { correctionId: first!.id })),
+          member: await code(await post(amy, withdraw, "wd-amy", { correctionId: first!.id })),
+          author: await code(await post(tester, withdraw, "wd-tester", { correctionId: first!.id })),
+        }).toEqual({ otherOwner: [409, "correction-not-yours"], member: [403, "control-verb-human-only"], author: [200, "ok"] });
+        // The panel owner (the socket's person) withdraws a row recorded in another account's name.
+        expect((await post(tester, "/api/control/corrections", "rec-2", { ...RECORD, because: "the premise was still false" })).status).toBe(200);
+        const second = (await readCorrections(corrections)).at(-1)!;
+        expect([second.id === first!.id, second.by]).toEqual([false, "tester"]);
+        const socket = await overSocket(panel.socketPath!, "POST", `/api/control/corrections/${second.id}/withdraw`, { "x-orca-client": "cli:test" }, { commandId: "wd-owner", expectedRevision: 0, payload: { correctionId: second.id } });
+        expect([socket.status, socket.status === 200 ? "ok" : JSON.parse(socket.text).error.code]).toEqual([200, "ok"]);
       } finally { await panel.close(); }
     } finally { await repo.cleanup(); await rm(root, { recursive: true, force: true }); }
   });

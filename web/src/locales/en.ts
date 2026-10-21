@@ -1639,6 +1639,7 @@ export const enErrors: Record<string, string> = {
   "control-verb-human-only": "Only an owner logged in to the Web UI can do this.",
   "control-field-human-only": "Only an owner logged in to the Web UI can set this field. Remove it, then send again.",
   "control-dispatched-run-refused": "A run Orca dispatched cannot do this. A person does it, from the Web UI or a terminal session they attend.",
+  "control-person-token-required": "This needs a person: run `orca login` and resend the command with --as-person, or do it from the Web UI.",
   // Accounts spec §6.3: an agent's import over the spend caps' headroom, and the block shown on a group waiting on a cap.
   "control-limit-over-cap-headroom": "This import's limit is more than the spend caps have left: {{detail}}",
   // web/src/AuthGate.tsx's own check before a new password is sent (accounts spec §3.2).

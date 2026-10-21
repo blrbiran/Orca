@@ -1563,6 +1563,7 @@ export const zhErrors: Record<string, string> = {
   "control-verb-human-only": "只有登录 Web UI 的所有者能做这个操作。",
   "control-field-human-only": "这个字段只能由登录 Web UI 的所有者设置；去掉它再发送。",
   "control-dispatched-run-refused": "Orca 派出的运行不能做这个动作；请由人在 Web UI 或自己值守的终端会话里来做。",
+  "control-person-token-required": "这个动作需要人来做：先 `orca login`，再带 --as-person 重发，或在 Web UI 里做。",
   // Accounts spec §6.3: an agent's import over the spend caps' headroom, and the block shown on a group waiting on a cap.
   "control-limit-over-cap-headroom": "这次导入的额度超过了花费上限剩余的余量：{{message}}",
   // web/src/AuthGate.tsx's own check before a new password is sent (accounts spec §3.2).

@@ -82,6 +82,66 @@ export const HUMAN_ONLY_FIELDS: Readonly<Partial<Record<CommandVerbV1, readonly 
   // would be recorded as the human's.
   "correction-debug-open": ["undoHow"],
 };
+/**
+ * CLI v2 spec §15.1: the control socket's tier for each human-only entry (a verb, or `verb.field`), the table's code mirror.
+ * `open`: the socket agent may send it (a person acts through their agent, the human ruled); `token`: only with a person
+ * token (Task 11) -- setting where work goes, a command Orca runs outside the sandbox, a budget or spend amount, an agent
+ * update. A predicate reads the raw payload: what it cannot read is `token` (the stricter tier; the schema refuses it
+ * later). Web members are not tiered (I3): they keep the refusals above. A run Orca dispatched is refused every entry
+ * (§15.4, permissions.ts). tests/panel/accessMatrix.test.ts fails when an entry above has no row here.
+ */
+export type SocketTier = "open" | "token";
+type Payload = Readonly<Record<string, unknown>>;
+// §15.1: `keep` changes nothing about where work goes; any other delivery (a merge, a push, a PR) does.
+const deliveryTier = (p: Payload): SocketTier => {
+  const integration = p.integration;
+  return typeof integration === "object" && integration !== null && (integration as Payload).delivery === "keep" ? "open" : "token";
+};
+export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payload) => SocketTier)>> = {
+  "correction-record": "open",
+  "correction-close": "open",
+  "correction-withdraw": "open",
+  "correction-debug-open.undoHow": "open",
+  "approve-pending-decision": "open",
+  "reject-pending-decision": "open",
+  "ratify-flagged-decision": "open",
+  "add-group-dependency": "open",
+  "remove-group-dependency": "open",
+  "set-criteria-review": "open",
+  "set-orchestration-settings": "open",
+  // Moved to open by the human: Orca already dispatches conflict resolution itself (kanban S5).
+  "retry-integration": "open",
+  "resolve-integration-conflict": "open",
+  // The groups' own checks, or off: open. A custom command runs in Orca's own environment, outside ccloop's sandbox.
+  "set-integration-check": (p) => (p.enabled === false || p.command === null ? "open" : "token"),
+  // R3a: confirming under the configured integration (any delivery) carries only its hash; a mismatch is refused anyway.
+  "confirm.integrationHash": "open",
+  "set-integration-scheme": deliveryTier,
+  "set-group-integration": deliveryTier,
+  "set-limit": "token",
+  "requirement-open.limit": "token",
+  "proposal-edit.proposedGroupLimit": "token",
+  "set-spend-cap": "token",
+  "clear-spend-cap": "token",
+  "set-usage-calendar": "token",
+  "settle-unknown-usage": "token",
+  "apply-agent-update": "token",
+};
+
+/** The socket tier of a command: `token` when any human-only entry it carries is (an entry with no row is `token`); null when it carries none. */
+export function socketTier(verb: CommandVerbV1, payload: unknown): SocketTier | null {
+  const object: Payload = typeof payload === "object" && payload !== null && !Array.isArray(payload) ? payload as Payload : {};
+  const entries = [
+    ...(HUMAN_ONLY_VERBS.includes(verb) ? [verb as string] : []),
+    ...(HUMAN_ONLY_FIELDS[verb] ?? []).filter((field) => Object.hasOwn(object, field)).map((field) => `${verb}.${field}`),
+  ];
+  if (entries.length === 0) return null;
+  return entries.some((entry) => {
+    const rule = SOCKET_TIER[entry];
+    return rule === undefined || (typeof rule === "function" ? rule(object) : rule) === "token";
+  }) ? "token" : "open";
+}
+
 /** Spec §5 / C19: an amount field an agent may send, with the reason. Empty until a reviewed exception exists. */
 export const AGENT_AMOUNT_FIELDS: Readonly<Record<string, string>> = {};
 

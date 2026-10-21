@@ -1,12 +1,13 @@
 import type { Role } from "./accounts/jwt.js";
 import type { CommandVerbV1 } from "../control/webProtocol.js";
-import { humanOnlyRefusal } from "./humanOnly.js";
+import { humanOnlyRefusal, socketTier } from "./humanOnly.js";
 import type { Attribution } from "../control/commandClient.js";
 
 /** Accounts spec §3.5: who sent a request. A logged-in user on the TCP app, or the control socket's agent. */
 export type Principal = { kind: "user"; userId: string; name: string; roles: readonly Role[] }
-  // CLI v2 spec §15.4: `dispatchedRun` is the run id a socket request from an Orca-dispatched run carries.
-  | { kind: "agent"; client: string; dispatchedRun?: string };
+  // CLI v2 spec §15.4: `dispatchedRun` is the run id a socket request from an Orca-dispatched run carries. §15.3:
+  // `person` is the account of a verified person token (set only by the socket's token check).
+  | { kind: "agent"; client: string; dispatchedRun?: string; person?: { userId: string; name: string } };
 
 /** The command ledger's label (decision D3): `user:<id>` or `agent:<client>`. */
 export const principalLabel = (p: Principal): string => (p.kind === "user" ? `user:${p.userId}` : `agent:${p.client}`);
@@ -23,7 +24,9 @@ export const attributionOf = (p: Principal, owner: string): Attribution =>
  * Accounts spec §3.5, the one table: a row per role and one for the socket's agent (§3.1: adding a role is a row here).
  * Reading and every other command are open to every row; a column is what only some rows may do. `humanOnly` is the
  * human-only surface (verbs and fields, humanOnly.ts), refused by name; `accounts` is adding users and reading or
- * acknowledging security notices, refused `owner-required`.
+ * acknowledging security notices, refused `owner-required`. CLI v2 spec §15.1 (I3): the agent row's human-only surface is
+ * tiered (SOCKET_TIER, consulted by permissionRefusal before this table); its `false` is the blanket answer, never used
+ * for a command.
  */
 export const PERMISSIONS = {
   owner: { humanOnly: true, accounts: true },
@@ -39,13 +42,19 @@ export const may = (p: Principal, permission: Permission): boolean =>
 
 export const mayDoHumanOnly = (p: Principal): boolean => may(p, "humanOnly");
 
-/** The refusal a control command gets from this principal, or null: by the same codes for a member and an agent. */
+/**
+ * The refusal a control command gets from this principal, or null. A member: today's human-only codes (I3). The socket
+ * agent (CLI v2 spec §15.1): an `open` entry passes; a `token` entry wants a verified person token,
+ * `control-person-token-required` without one; a run Orca dispatched is refused every entry (§15.4), token or not.
+ */
 export function permissionRefusal(p: Principal, verb: CommandVerbV1, payload: unknown):
-  { code: "control-verb-human-only" | "control-field-human-only" | "control-dispatched-run-refused"; message: string } | null {
+  { code: "control-verb-human-only" | "control-field-human-only" | "control-dispatched-run-refused" | "control-person-token-required"; message: string } | null {
   const humanOnly = humanOnlyRefusal(verb, payload);
-  // CLI v2 spec §15.4: a run Orca dispatched never does a §15.1 action (approve its own work, raise its own budget),
-  // whatever tier the socket agent is given; the classification is the verb's and fields', not the principal's.
-  if (p.kind === "agent" && p.dispatchedRun !== undefined && humanOnly !== null)
+  if (humanOnly === null) return null;
+  if (p.kind === "user") return mayDoHumanOnly(p) ? null : humanOnly;
+  // The classification is the verb's and fields', not the principal's: it holds whatever tier an entry is in.
+  if (p.dispatchedRun !== undefined)
     return { code: "control-dispatched-run-refused", message: `${verb} is not done by a run Orca dispatched (${p.dispatchedRun}); a person does it, from the Web UI or an attended session.` };
-  return mayDoHumanOnly(p) ? null : humanOnly;
+  if (p.person !== undefined || socketTier(verb, payload) === "open") return null;
+  return { code: "control-person-token-required", message: `${verb}, as sent, wants a person: log in with \`orca login\` and resend it with --as-person, or do it from the Web UI.` };
 }

@@ -303,8 +303,13 @@ const commandIds = (state: string): string[] => {
   try { return (db.prepare("SELECT id FROM commands ORDER BY id").all() as Array<{ id: string }>).map((row) => row.id); } finally { db.close(); }
 };
 
+// Past the gate, each is the service's own refusal of an unknown decision or correction.
+const SOCKET_ANSWERS = [[404, "original-decision-not-found"], [404, "correction-not-found"], [404, "correction-not-found"]];
 describe("the three correction verbs are an owner's", { timeout: 60_000 }, () => {
-  it("refuses an agent and a member, booking nothing and writing no correction", async () => {
+  // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): the three
+  // verbs are open to the socket agent (no token): each passes the gate, reaches the service and is booked. A Web member
+  // is refused as before (I3).
+  it("refuses a member, booking nothing and writing no correction; routes the socket agent's to the service", async () => {
     const w = await workspace();
     execFileSync("git", ["init", "-q", "-b", "trunk", w.repo], { env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))), GIT_CONFIG_NOSYSTEM: "1" } });
     const panel = await boot(w, [], { port: true });
@@ -317,14 +322,16 @@ describe("the three correction verbs are an owner's", { timeout: 60_000 }, () =>
       [`/api/control/corrections/${cid}/withdraw`, { correctionId: cid }],
     ];
     const answers: Array<{ route: string; socketAgent: unknown; webMember: unknown }> = [];
-    for (const [route, payload] of routes) {
-      const socket = await overSocket(panel.socketPath!, "POST", route, { "x-orca-client": "cli:test" }, { commandId: "cc-a", expectedRevision: 0, payload });
+    for (const [at, [route, payload]] of routes.entries()) {
+      const socket = await overSocket(panel.socketPath!, "POST", route, { "x-orca-client": "cli:test" }, { commandId: `ca-${at}`, expectedRevision: 0, payload });
       const member = await amy.fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "cc-m", expectedRevision: 0, payload }) });
       answers.push({ route, socketAgent: [socket.status, JSON.parse(socket.text).error.code], webMember: [member.status, ((await member.json()) as { error: { code: string } }).error.code] });
     }
-    // Mutations M-11.1 / "withdraw is any" (VERB_ACCESS -> "any"): that verb's two answers are no longer 403 -> red.
-    expect(answers).toEqual(routes.map(([route]) => ({ route, socketAgent: [403, "control-verb-human-only"], webMember: [403, "control-verb-human-only"] })));
+    // Mutations M-11.1 / "withdraw is any" (VERB_ACCESS -> "any"): that verb's member answer is no longer 403 -> red;
+    // "withdraw is token" (SOCKET_TIER): its socket answer is 403 control-person-token-required -> red.
+    expect(answers).toEqual(routes.map(([route], at) => ({ route, socketAgent: SOCKET_ANSWERS[at], webMember: [403, "control-verb-human-only"] })));
     expect(commandIds(w.state).filter((id) => id.startsWith("cc-"))).toEqual([]);
+    expect(commandIds(w.state).filter((id) => id.startsWith("ca-"))).toEqual(["ca-0", "ca-1", "ca-2"]);
     expect(await read(correctionsFile(join(w.root, "corrections")))).toBeNull();
   });
 });

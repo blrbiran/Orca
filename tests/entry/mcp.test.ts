@@ -37,7 +37,8 @@ describe("orca mcp serve (spec §8, C17, C14)", () => {
       expect(envelope(sent as never)).toMatchObject({ status: 200, commandId: expect.stringMatching(/^mcp-/) });
       const refused = await client.callTool({ name: "orca_send", arguments: { route: "groups/g1/set-limit", expectedRevision: 0, payload: { limit: { tokens: 1, activeMs: 1, attempts: 1, sessions: 1 } } } });
       expect(refused.isError).toBe(true);
-      expect(envelope(refused as never).body.error.code).toBe("control-verb-human-only");
+      // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): set-limit is the token tier on the socket.
+      expect(envelope(refused as never).body.error.code).toBe("control-person-token-required");
     } finally {
       await client.close();
     }

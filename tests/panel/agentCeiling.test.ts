@@ -58,7 +58,9 @@ describe("the agent ceiling (spec §6.3.2, D4, D10)", () => {
     app.use((_req, res, next) => { res.locals.orcaPrincipal = { kind: "agent", client: "cli" }; res.locals.orcaClient = "cli"; next(); });
     app.use(express.json({ verify: verifyControlJsonBody }));
     const cap = { scope: "all" as const, period: "week" as const, tokens: 10, updatedAt: 0, updatedBy: "user:u1", used: 4, committed: 1, headroom: 5, from: 0, to: 1 };
-    const service = { importPlan: async () => { throw new AgentCeilingRefusal(cap, 9); } } as unknown as WebControlService;
+    // CLI v2 plan Task 9 made the route read service.deps (the owner's --by for §16 attribution); the stub carries an empty
+    // one (Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)).
+    const service = { deps: {}, importPlan: async () => { throw new AgentCeilingRefusal(cap, 9); } } as unknown as WebControlService;
     registerControlMutationRoutes(app, h.store, service, "socket");
     const server = createServer(app); await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address(); if (!address || typeof address === "string") throw new Error("address");

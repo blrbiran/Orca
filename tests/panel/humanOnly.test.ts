@@ -78,7 +78,9 @@ const commandIds = (state: string): string[] => {
 
 // Control run decisions plan Task 9: approving a refused decision writes a line into the ledger in the owner's name.
 describe("approving a pending decision is an owner's (control run decisions Task 9)", () => {
-  it("refuses approve-pending-decision from an agent on the socket and a member over the Web", async () => {
+  // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): approve is
+  // open to the socket agent (a person acting through their agent); a Web member is refused as before (I3).
+  it("refuses approve-pending-decision from a member over the Web; routes the socket agent's to the service", async () => {
     const w = await workspace();
     execFileSync("git", ["init", "-q", "-b", "trunk", w.repo], { env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))), GIT_CONFIG_NOSYSTEM: "1" } });
     const panel = await boot(w, [], { port: true });
@@ -88,12 +90,13 @@ describe("approving a pending decision is an owner's (control run decisions Task
     const payload = { pendingId: "pending-run-x-0", undoHow: `git revert --no-edit ${"e".repeat(40)}` };
     const socket = await overSocket((panel as StartedPanel).socketPath!, "POST", route, { "x-orca-client": "cli:test" }, { commandId: "ad-a", expectedRevision: 0, payload });
     const member = await amy.fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "ad-m", expectedRevision: 0, payload }) });
-    // One assertion over both principals, so a mutation shows each of them answered (mutation A1: VERB_ACCESS "any" -> both red).
+    // One assertion over both principals, so a mutation shows each of them answered (mutation A1: VERB_ACCESS "any" ->
+    // the member's red; SOCKET_TIER "token" -> the socket's red).
     expect({
       socketAgent: [socket.status, JSON.parse(socket.text).error.code],
       webMember: [member.status, ((await member.json()) as { error: { code: string } }).error.code],
-    }).toEqual({ socketAgent: [403, "control-verb-human-only"], webMember: [403, "control-verb-human-only"] });
-    expect(commandIds(w.state).filter((id) => id.startsWith("ad-"))).toEqual([]);
+    }).toEqual({ socketAgent: [404, "group-not-found"], webMember: [403, "control-verb-human-only"] });
+    expect(commandIds(w.state).filter((id) => id.startsWith("ad-"))).toEqual(["ad-a"]);
     // The route is the verb's: an owner's is routed to the service, refused there by name and booked.
     const owner = await sessionFor(panel, w.env);
     const routed = await owner.fetch("/api/control/groups/nogroup/decisions/approve", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: "ad-o", expectedRevision: 0, payload }) });

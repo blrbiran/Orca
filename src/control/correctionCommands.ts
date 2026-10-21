@@ -209,12 +209,16 @@ export function applyCorrectionWithdraw(deps: WebServiceDeps, command: Correctio
     }
     if (precondition.kind === "not-listed") throw new ControlError("decision-not-found", `${precondition.decisionId} in ${precondition.projectKey}`);
     const { closed } = precondition;
-    const { correction } = await withdrawCorrection(dir, { correctionId: command.payload.correctionId, by, at: panel.now().toISOString(), isClosed: (c) => closed.has(c.id) });
+    // CLI v2 spec §16 (controller's call, session b37f7ce9): the requester is the routed person -- the account on the Web,
+    // the panel owner on the socket -- and may withdraw a row recorded in their name; the panel owner (`by`) may withdraw any.
+    const requester = routedAttributionFor(command.commandId)?.by ?? by;
+    const { correction } = await withdrawCorrection(dir, { correctionId: command.payload.correctionId, by: requester, owner: by, at: panel.now().toISOString(), isClosed: (c) => closed.has(c.id) });
     let settled: ReturnType<ArchiveDebugGroups>;
     try { settled = archive(correction.id); }
     catch (error) { settled = { debugGroups: [], failure: { groupId: null, code: codeOf(error), message: error instanceof Error ? error.message : String(error) } }; }
     let review: "written" | "duplicate" | "skipped";
-    try { review = await panel.withdrawReview({ projectKey: correction.projectKey, decisionId: correction.decisionId, by }, closed); }
+    // The review mark is the correction's author's (§5.4), whoever withdrew it.
+    try { review = await panel.withdrawReview({ projectKey: correction.projectKey, decisionId: correction.decisionId, by: correction.by }, closed); }
     catch (error) { throw new ControlError("correction-withdrawn-incomplete", `${correction.id}:review-withdrawal:${codeOf(error)}`); }
     if (settled.failure !== null) throw new ControlError("correction-withdrawn-incomplete", `${correction.id}:debug-group-archive:${settled.failure.groupId ?? "(unknown)"}:${settled.failure.code}`);
     return { kind: "correction-withdrawn", correctionId: correction.id, review, debugGroups: settled.debugGroups };

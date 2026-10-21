@@ -55,11 +55,12 @@ describe("the socket gate (spec §4.2, §5, §6)", () => {
     expect(JSON.parse(res.text).error.code).toBe("control-client-invalid");
   });
 
+  // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): set-limit is the token tier on the socket.
   it("C9: set-limit over the socket is refused by name and books nothing; over the Web it is not", async () => {
     const w = await workspace(); const panel = await boot(w);
     const res = await send(panel, "groups/g1/set-limit", { commandId: "lim-1", expectedRevision: 0, payload: { limit: amount } });
     expect(res.status).toBe(403);
-    expect(JSON.parse(res.text).error).toMatchObject({ code: "control-verb-human-only", retryable: false });
+    expect(JSON.parse(res.text).error).toMatchObject({ code: "control-person-token-required", retryable: false });
     expect((await ledger(w.state)).map((row) => row.id)).not.toContain("lim-1");
     const web = await webPost(panel, w, "groups/g1/set-limit", { commandId: "lim-2", expectedRevision: 0, payload: { limit: amount } });
     expect(((await web.json()) as { error: { code: string } }).error.code).not.toBe("control-verb-human-only");
@@ -102,7 +103,8 @@ describe("the socket gate (spec §4.2, §5, §6)", () => {
     ] as const;
     for (const [route, verb, payload] of cases) {
       const socket = await send(panel, route, { commandId: `${verb}-a`, expectedRevision: 0, payload });
-      expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-verb-human-only"]);
+      // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): the spend verbs are the token tier on the socket.
+      expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([403, "control-person-token-required"]);
       const member = await amy.fetch(`/api/control/${route}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ commandId: `${verb}-m`, expectedRevision: 0, payload }) });
       expect([member.status, ((await member.json()) as { error: { code: string } }).error.code]).toEqual([403, "control-verb-human-only"]);
     }
@@ -130,14 +132,15 @@ describe("the socket gate (spec §4.2, §5, §6)", () => {
   it("C10: requirement-open with limit and proposal-edit with proposedGroupLimit are refused; without the field they are not", async () => {
     const w = await workspace(); const panel = await boot(w);
     const repoId = controlRepoKey("proj");
+    // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): the two amount fields are the token tier on the socket.
     const withLimit = await send(panel, "requirements", { commandId: "ro-1", expectedRevision: 0, payload: { groupId: "g2", repoId, idea: "x", limit: amount } });
-    expect(JSON.parse(withLimit.text).error.code).toBe("control-field-human-only");
+    expect(JSON.parse(withLimit.text).error.code).toBe("control-person-token-required");
     const edit = await send(panel, "groups/g2/proposal/edit", { commandId: "pe-1", expectedRevision: 0, payload: { baseProposalVersion: 1, operations: [], proposedGroupLimit: amount } });
-    expect(JSON.parse(edit.text).error.code).toBe("control-field-human-only");
+    expect(JSON.parse(edit.text).error.code).toBe("control-person-token-required");
     const without = await send(panel, "requirements", { commandId: "ro-2", expectedRevision: 0, payload: { groupId: "g3", repoId, idea: "x" } });
-    expect(JSON.parse(without.text).error?.code ?? "accepted").not.toBe("control-field-human-only");
+    expect(JSON.parse(without.text).error?.code ?? "accepted").not.toBe("control-person-token-required");
     const editWithout = await send(panel, "groups/g2/proposal/edit", { commandId: "pe-2", expectedRevision: 0, payload: { baseProposalVersion: 1, operations: [] } });
-    expect(JSON.parse(editWithout.text).error?.code ?? "accepted").not.toBe("control-field-human-only");
+    expect(JSON.parse(editWithout.text).error?.code ?? "accepted").not.toBe("control-person-token-required");
     expect((await ledger(w.state)).map((row) => row.id)).not.toContain("ro-1");
     expect((await ledger(w.state)).map((row) => row.id)).not.toContain("pe-1");
   });

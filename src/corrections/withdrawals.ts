@@ -97,7 +97,7 @@ export function withdrawnIds(rows: readonly CorrectionWithdrawal[]): Set<string>
  */
 export async function withdrawCorrection(
   dir: string,
-  input: { correctionId: string; by: string; at: string; isClosed: (c: DecisionCorrection) => boolean },
+  input: { correctionId: string; by: string; at: string; isClosed: (c: DecisionCorrection) => boolean; owner?: string },
 ): Promise<{ correction: DecisionCorrection; withdrawal: CorrectionWithdrawal }> {
   return withStoreLock(dir, async () => {
     const corrections = await readCorrections(dir);
@@ -114,7 +114,8 @@ export async function withdrawCorrection(
           `not a recorded decision: withdrawing it is not supported`,
       );
     }
-    if (correction.by !== input.by) {
+    // CLI v2 spec §16 (controller's call, session b37f7ce9): its author, or `owner` (the panel's --by) when the caller names one.
+    if (correction.by !== input.by && (input.owner === undefined || input.by !== input.owner)) {
       throw new CorrectRejection(
         CORRECTION_NOT_YOURS,
         `correction ${correction.id} was recorded by ${correction.by}; only they can withdraw it`,

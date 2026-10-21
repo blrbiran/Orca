@@ -33,7 +33,8 @@ describe("D9 transport permission and accounting", () => {
         expect(t.body(runId).usageSettlement.principal).toBe("user:owner-1");
         expect(t.h.store.db.prepare("SELECT client,principal FROM commands WHERE id=?").get(envelope.commandId)).toEqual({ client: "web", principal: "user:owner-1" });
       } else {
-        expect(status).toBe(403); expect(body.error.code).toBe("control-verb-human-only");
+        // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): the token tier on the socket; a member as before (I3).
+        expect(status).toBe(403); expect(body.error.code).toBe(socket ? "control-person-token-required" : "control-verb-human-only");
         expect(t.body(runId).usageSettlement).toBeUndefined(); expect(t.h.store.db.prepare("SELECT * FROM usage_ledger ORDER BY id").all()).toEqual(before);
         expect(t.h.store.db.prepare("SELECT id FROM commands WHERE id=?").get(envelope.commandId)).toBeUndefined();
       }

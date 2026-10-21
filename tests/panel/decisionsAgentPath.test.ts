@@ -66,17 +66,19 @@ describe("the agent path to pending decisions (control run decisions Task 11, §
       expect({ count: seen.pendingCount, pending: pending.map((p) => [p.pendingId, p.state]) })
         .toEqual({ count: 2, pending: [[`pending-${runId}-0`, "pending"], [`pending-${runId}-1`, "pending"]] });
 
-      // Its approve and reject are refused by name, before anything is booked.
+      // Its approve and reject are refused by name, before anything is booked. CLI v2 spec §15.1, §15.4 (plan Task 10;
+      // Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): the socket agent may approve and reject now; the agent refused is a run Orca dispatched
+      // (it must never approve its own work).
       const revision = async (): Promise<number> =>
         ((await (await fetch(`${base}/api/control/groups/g`)).json()) as { summary: { commandRevision: number } }).summary.commandRevision;
-      const agentApprove = await overSocket(socketPath, "POST", "/api/control/groups/g/decisions/approve", { "x-orca-client": "mcp:reader" },
+      const agentApprove = await overSocket(socketPath, "POST", "/api/control/groups/g/decisions/approve", { "x-orca-client": "mcp:reader", "x-orca-dispatched-run": runId },
         { commandId: "dap-agent-approve", expectedRevision: await revision(), payload: { pendingId: pending[0]!.pendingId, undoHow: UNDO } });
-      const agentReject = await overSocket(socketPath, "POST", "/api/control/groups/g/decisions/reject", { "x-orca-client": "mcp:reader" },
+      const agentReject = await overSocket(socketPath, "POST", "/api/control/groups/g/decisions/reject", { "x-orca-client": "mcp:reader", "x-orca-dispatched-run": runId },
         { commandId: "dap-agent-reject", expectedRevision: await revision(), payload: { pendingId: pending[1]!.pendingId } });
       expect({
         approve: [agentApprove.status, JSON.parse(agentApprove.text).error?.code],
         reject: [agentReject.status, JSON.parse(agentReject.text).error?.code],
-      }).toEqual({ approve: [403, "control-verb-human-only"], reject: [403, "control-verb-human-only"] });
+      }).toEqual({ approve: [403, "control-dispatched-run-refused"], reject: [403, "control-dispatched-run-refused"] });
 
       // The owner's Web posts, as the panel sends them (Approve with an edited undo.how, Reject with no line).
       const post = async (path: string, commandId: string, payload: unknown) => {
