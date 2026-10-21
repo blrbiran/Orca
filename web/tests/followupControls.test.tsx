@@ -35,6 +35,37 @@ it("the visible and context affordances open the same owner menu without nesting
   expect(document.activeElement).toBe(more);
 });
 
+// Issue #81: a menu left open covers the list; it closes on a press outside it and on Escape wherever focus is, as the
+// requirement list's menus do (the same GroupActionsMenu), while a press inside it keeps it open for its item.
+it("closes an open menu on a press outside it or Escape anywhere, and keeps it open for a press inside", () => {
+  render(<><p>elsewhere</p><GroupList groups={[group()]} selected={null} onSelect={vi.fn()} onAction={vi.fn()} /></>);
+  const more = screen.getByRole("button", { name: "More actions" });
+  fireEvent.click(more);
+  fireEvent.pointerDown(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Copy group ID" }));
+  expect(screen.getByRole("menu")).toBeTruthy();
+  fireEvent.pointerDown(screen.getByText("elsewhere"));
+  expect(screen.queryByRole("menu")).toBeNull();
+  fireEvent.click(more);
+  (document.activeElement as HTMLElement).blur();
+  fireEvent.keyDown(document.body, { key: "Escape" });
+  expect(screen.queryByRole("menu")).toBeNull();
+  // Its own button still toggles it: the press on the button is not "outside".
+  fireEvent.pointerDown(more);
+  fireEvent.click(more);
+  expect(screen.getByRole("menu")).toBeTruthy();
+  fireEvent.pointerDown(more);
+  fireEvent.click(more);
+  expect(screen.queryByRole("menu")).toBeNull();
+});
+
+it("closes the requirement list's menu on a press outside it", () => {
+  render(<RequirementsPanel config={requirementConfig} summary={summaryWith(requirementView("awaiting-answers"))} views={{}} selected={null} agents={null} language="en" onSelect={vi.fn()} onCommand={vi.fn()} />);
+  fireEvent.click(screen.getAllByRole("button", { name: "More actions" })[0]!);
+  expect(screen.getByRole("menu")).toBeTruthy();
+  fireEvent.pointerDown(screen.getByRole("heading", { name: "Requirements" }));
+  expect(screen.queryByRole("menu")).toBeNull();
+});
+
 it("menu archives the exact owner and never offers permanent deletion", () => {
   const onAction = vi.fn();
   render(<GroupList groups={[group()]} selected={null} onSelect={vi.fn()} onAction={onAction} />);

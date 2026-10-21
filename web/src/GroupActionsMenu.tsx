@@ -29,6 +29,19 @@ export function GroupActionsMenu(props: {
   const menu = useRef<HTMLDivElement>(null);
   const close = (): void => { setOpen(false); trigger.current?.focus(); };
   useEffect(() => { if (open) menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus(); }, [open]);
+  // Issue #81: an open menu closes on a press anywhere outside it (its own button toggles it) and on Escape wherever focus is.
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: Event): void => {
+      const target = event.target as Node | null;
+      if (target !== null && (menu.current?.contains(target) || trigger.current?.contains(target))) return;
+      setOpen(false);
+    };
+    const escape = (event: KeyboardEvent): void => { if (event.key === "Escape") close(); };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
+  }, [open]);
   const context = (event: MouseEvent<HTMLElement>): void => { event.preventDefault(); setOpen(true); };
   const act = (action: () => void): void => { action(); close(); };
   const moveFocus = (key: string): void => {
