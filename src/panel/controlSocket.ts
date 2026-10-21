@@ -1,19 +1,14 @@
 import express, { type Express } from "express";
 import { chmodSync, lstatSync, unlinkSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { join } from "node:path";
 import { registerControlReadRoutes, verifyControlJsonBody, type ControlReadApiDeps } from "./controlApi.js";
 import { sendControlError } from "./controlErrors.js";
 import { CLIENT_HEADER, CLIENT_PATTERN } from "../control/commandClient.js";
 import type { Principal } from "./permissions.js";
 
-/** Agent entry spec §3: the panel's second listener, for agents on this machine. Auth is the file mode. */
-export const CONTROL_SOCKET_NAME = "control.sock";
-/** sun_path including its NUL: 104 on macOS, 108 on Linux. */
-const SUN_PATH_BYTES = process.platform === "darwin" ? 104 : 108;
-
-export const controlSocketPath = (stateDir: string): string => join(stateDir, CONTROL_SOCKET_NAME);
-export const socketPathTooLong = (path: string): boolean => Buffer.byteLength(path) >= SUN_PATH_BYTES;
+// CLI v2 plan Task 1: the socket's name and path rules live in a module the CLI can load without the control routes.
+export { CONTROL_SOCKET_NAME, controlSocketPath, socketPathTooLong } from "./controlSocketPath.js";
+import { socketPathTooLong } from "./controlSocketPath.js";
 
 /** `close()` resolves once the socket server has closed (in-flight requests finished); repeated calls return the same promise. */
 export interface ControlSocketHandle { path: string; close(): Promise<void> }

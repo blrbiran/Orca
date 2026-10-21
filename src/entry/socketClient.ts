@@ -1,6 +1,6 @@
 import { request, type ClientRequest, type IncomingMessage } from "node:http";
 import { CLIENT_HEADER } from "../control/commandClient.js";
-import { socketPathTooLong } from "../panel/controlSocket.js";
+import { socketPathTooLong } from "../panel/controlSocketPath.js";
 import { EntryRejection } from "./envelope.js";
 
 /** A dropped connection may be the panel restarting; resending the same commandId is safe (spec §4.4). */

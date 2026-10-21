@@ -2,30 +2,9 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { correct } from "./corrections/correct.js";
-import { correctionsDir } from "./corrections/paths.js";
-import { collect } from "./metrics/collect.js";
-import { computeMetrics } from "./metrics/compute.js";
-import { renderJson, renderTable, renderTiming } from "./metrics/report.js";
-import { MetricsRejection } from "./metrics/rejection.js";
-import { CorrectRejection } from "./corrections/rejection.js";
-import { checkAppendOnly } from "./ledger/appendOnly.js";
-import { levelHookClaudeCode } from "./level/hook.js";
-import { gateHookClaudeCode } from "./gate/hook.js";
-import { validateFile } from "./ledger/validateFile.js";
-import { preflight } from "./scheduler/preflight.js";
-import { loadRound, renderRound } from "./scheduler/run.js";
-import { applyCompaction, dryRunCompaction, renderCompactionReport } from "./panel/compactReviews.js";
-import { buildLedgerViews, wantedDecisions } from "./panel/ledgerViews.js";
-import { reviewsFile } from "./panel/paths.js";
-import { PanelRejection } from "./panel/rejection.js";
-import { CheckpointRejection, describeLevel } from "./checkpoint/schema.js";
-import { writeCheckpoint } from "./checkpoint/write.js";
-import { resumeOutcome } from "./checkpoint/resume.js";
-import { runChainCommand } from "./chain/command.js";
-import { runAgentsCommand } from "./agents/command.js";
-import { withDefaultCcloopBin } from "./control/ccloopBin.js";
 
+// CLI v2 plan Task 1 (Review Focus 1): every handler's modules load on demand, inside the arm that needs them, so a
+// command that only talks to the socket (`orca status`) never loads the control plane.
 const USAGE = `usage:
   orca validate <path...>        validate ledger file(s) or directory (directory scans top-level *.jsonl only)
   orca check-append-only         read a git diff from stdin, reject if it contains any deleted line
@@ -180,6 +159,7 @@ async function runValidate(paths: string[]): Promise<number> {
     return 1;
   }
 
+  const { validateFile } = await import("./ledger/validateFile.js");
   const { files, errors } = await collectLedgerFiles(paths);
   for (const error of errors) {
     process.stderr.write(`${error}\n`);
@@ -263,6 +243,8 @@ async function runPlan(args: string[]): Promise<number> {
   // stops being the graph that runs.
   // *** ERRATUM (consolidation step 3, 2026-10-01, Orca session be653b22, controller ruling C-1) -- `orca run` is
   // deleted; loadRound and renderRound are now the calls the control path's `runPreparedRound` round makes. ***
+  const { loadRound, renderRound } = await import("./scheduler/run.js");
+  const { preflight } = await import("./scheduler/preflight.js");
   const loaded = await loadRound(planPath);
   if ("rejections" in loaded) {
     for (const r of loaded.rejections) {
@@ -297,6 +279,8 @@ async function runPlan(args: string[]): Promise<number> {
 }
 
 async function runCorrect(args: string[]): Promise<number> {
+  const { correct } = await import("./corrections/correct.js");
+  const { CorrectRejection } = await import("./corrections/rejection.js");
   try {
     return await correct(args);
   } catch (err) {
@@ -341,6 +325,11 @@ async function runMetrics(args: string[]): Promise<number> {
     repos.push({ projectKey: pair.slice(0, split), path: pair.slice(split + 1) });
   }
 
+  const { collect } = await import("./metrics/collect.js");
+  const { computeMetrics } = await import("./metrics/compute.js");
+  const { renderJson, renderTable, renderTiming } = await import("./metrics/report.js");
+  const { MetricsRejection } = await import("./metrics/rejection.js");
+  const { correctionsDir } = await import("./corrections/paths.js");
   const started = performance.now();
   try {
     const observations = await collect({
@@ -439,6 +428,13 @@ async function runCompactReviews(args: string[]): Promise<number> {
     return 1;
   }
 
+  const { correctionsDir } = await import("./corrections/paths.js");
+  const { collect } = await import("./metrics/collect.js");
+  const { MetricsRejection } = await import("./metrics/rejection.js");
+  const { applyCompaction, dryRunCompaction, renderCompactionReport } = await import("./panel/compactReviews.js");
+  const { buildLedgerViews, wantedDecisions } = await import("./panel/ledgerViews.js");
+  const { reviewsFile } = await import("./panel/paths.js");
+  const { PanelRejection } = await import("./panel/rejection.js");
   const dir = correctionsDir(process.env);
   try {
     const observations = await collect({ root, repos, correctionsDir: dir });
@@ -489,6 +485,8 @@ async function runCheckpoint(args: string[]): Promise<number> {
     process.stderr.write(`orca checkpoint write: --session and --draft are required\n${USAGE}`);
     return 1;
   }
+  const { CheckpointRejection, describeLevel } = await import("./checkpoint/schema.js");
+  const { writeCheckpoint } = await import("./checkpoint/write.js");
   try {
     const result = await writeCheckpoint({ repo: values.get("--repo") ?? process.cwd(), sessionRef, transcriptPath, draftPath });
     const lines = [`wrote ${result.path}`, `committed ${result.commit}`, describeLevel(result.checkpoint.level)];
@@ -510,6 +508,7 @@ async function runResume(args: string[]): Promise<number> {
     process.stderr.write(`${values}\n${USAGE}`);
     return 1;
   }
+  const { resumeOutcome } = await import("./checkpoint/resume.js");
   const outcome = await resumeOutcome({ repo: values.get("--repo") ?? process.cwd(), checkpointPath: values.get("--checkpoint") });
   if (outcome.rejection !== null) {
     process.stderr.write(`rejected: ${outcome.rejection.code}: ${outcome.rejection.message}\n`);
@@ -528,6 +527,12 @@ async function readStdin(): Promise<string> {
 }
 
 export async function main(argv: string[], stdinText?: string): Promise<number> {
+  // CLI v2 spec §11 (plan Task 1): the registry first; an argv it does not match still reaches the arms below.
+  const { processIo, runRegistered, unknownCommand } = await import("./commands/run.js");
+  const io = processIo(stdinText);
+  const registered = await runRegistered(argv, io);
+  if (registered !== null) return registered;
+
   const [command, ...rest] = argv;
 
   if (command === "validate") {
@@ -575,6 +580,7 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
       process.stderr.write(`orca level: only --hook claude-code is supported\n${USAGE}`);
       return 1;
     }
+    const { levelHookClaudeCode } = await import("./level/hook.js");
     process.stdout.write(await levelHookClaudeCode(stdinText ?? (await readStdin())));
     return 0;
   }
@@ -584,17 +590,21 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
       process.stderr.write(`orca gate: only --hook claude-code is supported\n${USAGE}`);
       return 1;
     }
+    const { gateHookClaudeCode } = await import("./gate/hook.js");
     const result = await gateHookClaudeCode(stdinText ?? (await readStdin()));
     process.stderr.write(result.stderr);
     return result.exitCode;
   }
 
   if (command === "chain") {
+    const { runChainCommand } = await import("./chain/command.js");
     return runChainCommand(rest);
   }
 
   if (command === "agents") {
     // ccloop dependency plan (2026-09-29): ORCA_CCLOOP_BIN unset ⇒ the installed ccloop package; neither ⇒ stop by name.
+    const { withDefaultCcloopBin } = await import("./control/ccloopBin.js");
+    const { runAgentsCommand } = await import("./agents/command.js");
     const { env, notInstalled } = withDefaultCcloopBin(process.env);
     if (notInstalled !== null) {
       process.stderr.write(`orca agents: ${notInstalled.message}\n`);
@@ -623,6 +633,7 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
 
   if (command === "check-append-only") {
     const diffText = stdinText ?? (await readStdin());
+    const { checkAppendOnly } = await import("./ledger/appendOnly.js");
     const result = checkAppendOnly(diffText);
     if (result.ok) {
       process.stdout.write("ok: append-only\n");
@@ -634,6 +645,8 @@ export async function main(argv: string[], stdinText?: string): Promise<number> 
     return 1;
   }
 
+  const unknown = unknownCommand(argv, io);
+  if (unknown !== null) return unknown;
   process.stderr.write(USAGE);
   return 1;
 }

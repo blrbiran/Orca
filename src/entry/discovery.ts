@@ -1,7 +1,7 @@
 import { lstatSync, readdirSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { controlRoot } from "../panel/controlOptions.js";
-import { CONTROL_SOCKET_NAME } from "../panel/controlSocket.js";
+import { CONTROL_SOCKET_NAME } from "../panel/controlSocketPath.js";
 import { projectsFilePath, readProjectsFile } from "../panel/projectsFile.js";
 import { readPanelJson } from "../service/instance.js";
 import { panelDir } from "../service/paths.js";
