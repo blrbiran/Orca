@@ -39,6 +39,7 @@
     "@modelcontextprotocol/sdk": "^1.32.1",
     "ccloop": "github:blrbiran/ccloop#76b098befe7c075ec4bb8d4bd2f980192739578d",
     "express": "^5.1.0",
+    "yaml": "2.9.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
