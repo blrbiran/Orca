@@ -288,7 +288,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
                 <>
                   {/* Issue #57: `r` sends this button's retry for the open task's current run (ControlGroupView); say so here. */}
                   <button type="button" aria-keyshortcuts={run.runId === item.currentRunId ? "r" : undefined}
-                    onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: item.taskId } })}>
+                    onClick={() => onCommand({ verb: "retry-task", groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: item.taskId, runId: run.runId } })}>
                     {t("control.group.retryTask", { taskId: item.taskId })}
                   </button>
                   {run.runId === item.currentRunId && <span className="kbd-hint">{t("control.task.retryKey")}</span>}

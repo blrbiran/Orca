@@ -522,7 +522,8 @@ export type ContinuationSelectionV1 = { taskId: string; predecessorRunId: string
 export type ResumeFromHandoffPayloadV1 = { selections: ContinuationSelectionV1[] };
 export type ContinueTaskPayloadV1 = { predecessorRunId: string; checkpointId: string };
 export type RecoveryRetryPayloadV1 = { scope: "run"; runId: string } | { scope: "group"; groupId: string };
-export type RetryTaskPayloadV1 = { taskId: string };
+/** CLI v2 spec §14 R2: `runId` is the run the person saw failing; the panel refuses task-run-moved once it is not current. */
+export type RetryTaskPayloadV1 = { taskId: string; runId?: string };
 /** N1 spec §11.1: the five requirement commands (src/control/webProtocol.ts, field for field). */
 export type RequirementOpenPayloadV1 = {
   groupId: string;

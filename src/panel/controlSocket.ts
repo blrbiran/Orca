@@ -3,6 +3,7 @@ import { chmodSync, lstatSync, unlinkSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { registerControlReadRoutes, verifyControlJsonBody, type ControlReadApiDeps } from "./controlApi.js";
 import { sendControlError } from "./controlErrors.js";
+import { registerSocketProjectRoutes, type ProjectsDeps } from "./projects.js";
 import { CLIENT_HEADER, CLIENT_PATTERN } from "../control/commandClient.js";
 import type { Principal } from "./permissions.js";
 
@@ -15,7 +16,7 @@ export interface ControlSocketHandle { path: string; close(): Promise<void> }
 export interface ControlSocketFailure { code: "control-socket-path-too-long" | "control-socket-path-occupied" | "control-socket-listen-failed"; detail: string }
 
 /** Spec §3.2: only the control routes; no page, no token, no Host check -- there is no network peer. */
-export function buildControlSocketApp(deps: ControlReadApiDeps): Express {
+export function buildControlSocketApp(deps: ControlReadApiDeps, projects?: ProjectsDeps): Express {
   const app = express();
   // Spec §4.2: before the body is read and for every verb, GET included. Attribution only, never authorization (§6).
   app.use((req, res, next) => {
@@ -29,6 +30,8 @@ export function buildControlSocketApp(deps: ControlReadApiDeps): Express {
     next();
   });
   app.use(express.json({ limit: "64kb", verify: verifyControlJsonBody }));
+  // CLI v2 spec §14 R4: plan registration over the socket, by the HTTP route's own handler (projects.ts).
+  if (projects !== undefined) registerSocketProjectRoutes(app, projects);
   registerControlReadRoutes(app, deps, "socket");
   app.use((_req, res) => { sendControlError(res, 404, "route-not-found", "The control socket serves only /api/control routes."); });
   return app;

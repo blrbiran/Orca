@@ -104,7 +104,7 @@ export function continuableRuns(view: GroupViewV1): Array<{ run: RunViewV1; chec
 
 /** The retry-task the Runs table's and the task detail's Retry task buttons send; the `r` key sends this same one (issue #57). */
 function retryTaskAction(view: GroupViewV1, run: RunViewV1): ControlAction {
-  return { verb: "retry-task", groupId: view.summary.groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: String(run.taskId) } };
+  return { verb: "retry-task", groupId: view.summary.groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: String(run.taskId), runId: run.runId } };
 }
 
 /** A run's retry, as the Runs table offers it; the Problems row and the work item row offer this same one (feedback #56/#57). */

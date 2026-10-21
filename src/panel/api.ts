@@ -29,7 +29,7 @@ import type { DecisionObservation } from "../metrics/types.js";
 import { registerChainRoutes } from "./chains.js";
 import { registerMemoryRoutes } from "./memoryApi.js";
 import { controlRepoKey } from "./controlOptions.js";
-import { registerProjectRoutes } from "./projects.js";
+import { projectsDepsOf, registerProjectRoutes } from "./projects.js";
 import type { ProjectRegistry } from "./projectRegistry.js";
 import { computePanelCoverage, reviewFlags, reviewedKeys, unreviewedHighTier } from "./coverage.js";
 import { loadDecisionRow, loadQuestionsOrEmpty } from "./decisionSource.js";
@@ -805,11 +805,7 @@ export function buildApi(app: Express, deps: ApiDeps): void {
   registerChainRoutes(app, deps.opts, objectBody);
   // Project switcher spec D1 (§8), project registry §12 C2: the control plane holds exactly the projects in
   // opts.repos (given with --repo, or added to the registry since boot), so the join is computed per request.
-  registerProjectRoutes(app, {
-    opts: deps.opts,
-    registry: deps.projects ?? null,
-    controlRepoId: (key) => (deps.control && deps.opts.repos.some((repo) => repo.projectKey === key) ? controlRepoKey(key) : null),
-  });
+  registerProjectRoutes(app, projectsDepsOf(deps.opts, deps.projects ?? null, deps.control !== undefined));
 
   // Errors last. A gate refusal is a first-class error page, never partial
   // data: relaxing here would void E2's gate entirely.

@@ -1465,6 +1465,7 @@ export const zhErrors: Record<string, string> = {
   "task-checkpoint-not-committed": "任务的检查点尚未提交。",
   "task-has-no-loop-plan": "这个任务没有 loop 做法。",
   "task-loop-version-conflict": "你开始草稿后做法已被改过，请重新读取后再提交。",
+  "task-run-moved": "你查看之后这个任务又运行过了（{{detail}} 已不是它的当前运行）。请重新读取任务组再决定。",
   "task-not-retryable": "这个任务现在不能重试（{{detail}}）。「重试任务」只用于运行以 ccloop 失败结束的任务；因别的原因阻塞的运行请用「重试运行」。",
   "usage-event-conflict": "用量事件冲突。",
   "usage-gap": "用量记录有缺口。",

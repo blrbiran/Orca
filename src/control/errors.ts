@@ -184,6 +184,8 @@ export const durableCommandErrorStatuses = {
   "task-loop-version-conflict": 409,
   // Issue fixes spec §4.2(2): retry-task on a task whose current run is not one ccloop ended failed (the detail names why).
   "task-not-retryable": 409,
+  // CLI v2 spec §14 R2: retry-task named a run that is no longer the task's current run (the detail names the run sent).
+  "task-run-moved": 409,
   "saved-result-unavailable":409,
   "saved-result-source-stale":409,
   "saved-result-usage-unsettled":409,

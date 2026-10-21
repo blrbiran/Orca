@@ -71,6 +71,8 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         if (group.status === "clarifying") throw new ControlError("group-state-invalid", "clarifying");
         if (group.stopped || readStopIntent(store, groupId) !== null) throw new ControlError("stop-mode-conflict");
         const work = readWork(store, groupId, taskId) as unknown as RetriedWork;
+        // CLI v2 spec §14 R2: the stale-retry guard the revision used to be -- before any eligibility check.
+        if (command.payload.runId !== undefined && work.currentRunId !== command.payload.runId) throw new ControlError("task-run-moved", command.payload.runId);
         if (typeof work.currentRunId !== "string") throw new ControlError("task-not-retryable", "no-run");
         const runId = work.currentRunId;
         const run = readRunBody(store, runId);

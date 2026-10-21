@@ -10,6 +10,7 @@ import { PANEL_HOST_NOT_ALLOWED, assertBindAllowed, isHostAllowed } from "./bind
 import { controlErrorBody } from "./controlErrors.js";
 import { verifyControlJsonBody } from "./controlApi.js";
 import { bindControlSocket, buildControlSocketApp, controlSocketPath, type ControlSocketHandle } from "./controlSocket.js";
+import { projectsDepsOf } from "./projects.js";
 import { randomUUID } from "node:crypto";
 import { assembleControlRuntime, type ControlRuntime } from "./controlAssembly.js";
 import { runControlPanelStartup } from "./controlLifecycle.js";
@@ -318,7 +319,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   let socket: ControlSocketHandle | null = null;
   if (control !== null) {
     const bound = await bindControlSocket(
-      buildControlSocketApp({ store: control.store, epoch, config: control.config, service: control.service, port: control.port }),
+      buildControlSocketApp({ store: control.store, epoch, config: control.config, service: control.service, port: control.port }, projectsDepsOf(opts, projects, true)),
       controlSocketPath(control.store.stateDir),
     );
     if ("code" in bound) {

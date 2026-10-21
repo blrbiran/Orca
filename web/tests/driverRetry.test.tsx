@@ -64,7 +64,7 @@ describe("retrying a task whose run ccloop ended failed (issue fixes spec §4.2(
     expect(within(screen.getByRole("tabpanel")).getByText(/did not answer in the required JSON format/)).toBeTruthy();
     expect(within(screen.getByRole("tabpanel")).getByText("Error: codex-result-invalid: /runs/r/attempt-1")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry task a" }));
-    expect(onCommand).toHaveBeenCalledWith({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a" } });
+    expect(onCommand).toHaveBeenCalledWith({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a", runId: "run-a" } });
     expect(controlCommandPath({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a" } })).toBe("/api/control/groups/g/retry-task");
   });
 
@@ -88,7 +88,7 @@ describe("retrying a task whose run ccloop ended failed (issue fixes spec §4.2(
     render(<TaskDetail view={{ ...view(runs), workItems: [item] }} item={item} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
     expect(screen.getByText("Run 2 of this task")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry task a" }));
-    expect(onCommand).toHaveBeenCalledWith({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a" } });
+    expect(onCommand).toHaveBeenCalledWith({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a", runId: "run-2" } });
   });
 });
 

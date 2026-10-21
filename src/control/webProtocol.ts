@@ -707,7 +707,8 @@ export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
   z.object({ scope: z.literal("group"), groupId: idSchema }).strict(),
 ]);
 // Issue fixes spec §4.2(2): start a task again whose current run ccloop ended failed. Group target; the task is named here.
-export const retryTaskPayloadSchema = z.object({ taskId: idSchema }).strict();
+// CLI v2 spec §14 R2: `runId`, when present, is the run the sender saw failing; refused task-run-moved unless it is current.
+export const retryTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema.optional() }).strict();
 export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]) }).strict();
 
 const proposalTargetSchema = z.discriminatedUnion("scope", [

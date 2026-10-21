@@ -15,7 +15,7 @@ describe("failed handoff recovery", () => {
     expect(within(screen.getByRole("tabpanel")).getByText(/reported an error/)).toBeTruthy();
     expect(screen.getByText(/current group branch head/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry task a" }));
-    expect(onCommand).toHaveBeenCalledWith({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a" } });
+    expect(onCommand).toHaveBeenCalledWith({ verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a", runId: "run-a" } });
     fireEvent.click(screen.getByRole("tab", { name: "Problems" }));
     expect(screen.getByText(/checkpoint/)).toBeTruthy();
   });
