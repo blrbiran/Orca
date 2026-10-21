@@ -262,7 +262,7 @@ export async function advanceIntegrationResolution(deps: IntegrationDeps, groupI
   const running = resolving.resolution.runTask(plan, task, record.conflictCommit, key, {
     agentsTable: resolving.resolution.agentsTablePath, agentSelection: { selection: slot.selection, configHash: slot.configHash },
     // As the landing's reconciliation: its own process group and log files, unref'd, so a restarted driver waits on it.
-    detachedLogDir: workdir,
+    detachedLogDir: workdir, dispatchedPersonDir: resolving.resolution.dispatchedPersonDir,
     onSpawn: (pid) => {
       try { setResolution(deps, groupId, key, { pid }); }
       catch (error) { process.stderr.write(`orca-driver: integration ${groupId}: resolution pid ${pid} not recorded: ${describeError(error)}\n`); }

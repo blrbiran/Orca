@@ -475,7 +475,7 @@ export async function stepR(deps: ExecutionDriverDeps, runId: string, context: D
     agentsTable: deps.agentsTablePath, agentSelection: { selection: reconcileSlot.selection, configHash: reconcileSlot.configHash },
     // Final review I3: its own process group, output in files inside its runs dir, unref'd -- the panel
     // closing (or a Ctrl-C to its process group) does not end it, and a restarted driver waits on its pid.
-    detachedLogDir: workdir,
+    detachedLogDir: workdir, dispatchedPersonDir: deps.dispatchedPersonDir,
     // Recorded even after stop(): the child is ours, and a restart can only wait on a pid it can read
     // (fix round 1, m2). A refused write (a draining panel) is logged; the restart then sees an orphan.
     onSpawn: (pid) => {

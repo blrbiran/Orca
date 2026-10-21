@@ -44,7 +44,7 @@ export function uncertain(response: CliResponseV1): boolean {
 
 /** Send exactly these bytes; a dropped connection is retried once, the same bytes again (spec §14 R1(a)). */
 export async function sendExactly(session: PanelSession, request: SentRequest): Promise<CliResponseV1> {
-  const send = () => controlSend({ socketPath: session.socketPath, client: session.client, ...request });
+  const send = () => controlSend({ socketPath: session.socketPath, client: session.client, headers: session.headers, ...request });
   const first = await send();
   return first.status === 0 && errorOf(first)?.code === "control-socket-error" && errorOf(first)?.retryable === true ? send() : first;
 }

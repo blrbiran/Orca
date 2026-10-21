@@ -16,6 +16,8 @@ const panelOnlyErrorStatuses = {
   // Accounts spec §3.5: the human-only refusals now reach the Web UI too (a member), so they are catalogued.
   "control-verb-human-only": 403,
   "control-field-human-only": 403,
+  // CLI v2 spec §15.4: a socket request carrying x-orca-dispatched-run, for a §15.1 verb or field.
+  "control-dispatched-run-refused": 403,
   "owner-required": 403,
   // Accounts spec §6.3.2: an agent's import-plan or requirement-draft-accept whose limit exceeds the caps' headroom.
   "control-limit-over-cap-headroom": 403,

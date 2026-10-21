@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { DISPATCHED_RUN_ENV } from "./commandClient.js";
 import { join } from "node:path";
 import { z } from "zod";
 import { taskContractSchema } from "../scheduler/planFile.js";
@@ -142,14 +143,15 @@ export async function runIntegrationCheck(repo: string, roots: WorkspaceRoots, r
   const head = await gitChild(repo, ["rev-parse", "--verify", `refs/heads/${target}^{commit}`]);
   if (head.code !== 0) throw new Error(`integration-check: target ${target} unreadable: ${head.stderr.trim().slice(0, 200)}`);
   const commit = head.stdout.trim();
-  const path = join(roots.workspacesRoot, `integration-check-${createHash("sha256").update(repoId).digest("hex").slice(0, 12)}-${at}`);
+  const checkId = `integration-check-${createHash("sha256").update(repoId).digest("hex").slice(0, 12)}-${at}`;
+  const path = join(roots.workspacesRoot, checkId);
   const added = await gitChild(repo, ["worktree", "add", "--detach", path, commit]);
   if (added.code !== 0) throw new Error(`integration-check: worktree: ${added.stderr.trim().slice(0, 200)}`);
   const failures: CheckFailure[] = [];
   try {
     for (const command of commands) {
       try {
-        const answer = await spawnRunChild("sh", ["-lc", command], { cwd: path, timeoutMs: INTEGRATION_CHECK_COMMAND_TIMEOUT_MS, inheritEnv: true });
+        const answer = await spawnRunChild("sh", ["-lc", command], { cwd: path, timeoutMs: INTEGRATION_CHECK_COMMAND_TIMEOUT_MS, inheritEnv: true, env: { [DISPATCHED_RUN_ENV]: checkId } }); // CLI v2 spec §15.4
         if (answer.code !== 0) failures.push({ command, exit: String(answer.code), tail: tail(`${answer.stdout}\n${answer.stderr}`.trim()) });
       } catch (error) {
         if (!(error instanceof ChildTimeout)) throw error;

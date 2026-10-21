@@ -1,7 +1,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { CLIENT_PATTERN } from "../control/commandClient.js";
+import { CLIENT_PATTERN, dispatchedRunHeaders } from "../control/commandClient.js";
 import { discoverSocketPath } from "./discovery.js";
 import { EntryRejection, exitCodeFor, localError, type CliResponseV1 } from "./envelope.js";
 import { controlGet, controlSend } from "./operations.js";
@@ -46,13 +46,13 @@ export async function runMcpServe(args: string[], env: NodeJS.ProcessEnv): Promi
       const socketPath = discoverSocketPath({ stateDirFlag, env });
       if (request.params.name === "orca_read") {
         if (typeof input.path !== "string") throw new EntryRejection("control-cli-argument-invalid", "path must be a string");
-        return result(await controlGet({ socketPath, client: clientHeader(), path: input.path }));
+        return result(await controlGet({ socketPath, client: clientHeader(), path: input.path, headers: dispatchedRunHeaders(env) }));
       }
       if (request.params.name === "orca_send") {
         const { route, expectedRevision, payload, commandId } = input;
         if (typeof route !== "string" || typeof expectedRevision !== "number" || typeof payload !== "object" || payload === null || Array.isArray(payload) || (commandId !== undefined && typeof commandId !== "string"))
           throw new EntryRejection("control-cli-argument-invalid", "orca_send wants route (string), expectedRevision (integer), payload (object), commandId (string, optional)");
-        return result(await controlSend({ socketPath, client: clientHeader(), route, expectedRevision, payload, commandId: commandId as string | undefined, commandIdPrefix: "mcp" }));
+        return result(await controlSend({ socketPath, client: clientHeader(), route, expectedRevision, payload, commandId: commandId as string | undefined, commandIdPrefix: "mcp", headers: dispatchedRunHeaders(env) }));
       }
       throw new EntryRejection("control-cli-argument-invalid", `unknown tool ${request.params.name}`);
     } catch (error) {

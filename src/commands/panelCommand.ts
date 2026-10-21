@@ -2,6 +2,7 @@
  * CLI v2 spec §4, §11: running a registry row that reads from, or sends to, the panel over its control socket. The CLI
  * fills ids and pins from reads made in this invocation only (nothing is cached across invocations).
  */
+import { dispatchedRunHeaders } from "../control/commandClient.js";
 import { discoverSocketPath } from "../entry/discovery.js";
 import { EntryRejection, localError, type CliResponseV1 } from "../entry/envelope.js";
 import { controlGet } from "../entry/operations.js";
@@ -17,6 +18,8 @@ export class PanelAnswer extends Error {
 export interface PanelSession {
   socketPath: string;
   client: string;
+  /** Sent with every request of this invocation (CLI v2 spec §15.5: the dispatched-run marker from the environment). */
+  headers: Record<string, string>;
   /** GET, memoised for this invocation; a non-2xx answer throws PanelAnswer, a local refusal EntryRejection. */
   read(path: string): Promise<unknown>;
   /** GET again, bypassing the memo (spec §14 R1: a retry looks the command up fresh). */
@@ -28,10 +31,11 @@ export interface PanelSession {
 export function openSession(args: ParsedArgs, io: CommandIo): PanelSession {
   const socketPath = discoverSocketPath({ stateDirFlag: args.global.controlStateDir, env: io.env });
   const client = "cli";
+  const headers = dispatchedRunHeaders(io.env);
   const memo = new Map<string, Promise<unknown>>();
-  const fresh = (path: string) => controlGet({ socketPath, client, path });
+  const fresh = (path: string) => controlGet({ socketPath, client, path, headers });
   return {
-    socketPath, client, fresh,
+    socketPath, client, headers, fresh,
     read(path) {
       let pending = memo.get(path);
       if (pending === undefined) {

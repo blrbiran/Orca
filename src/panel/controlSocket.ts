@@ -4,7 +4,7 @@ import { createServer, type Server } from "node:http";
 import { registerControlReadRoutes, verifyControlJsonBody, type ControlReadApiDeps } from "./controlApi.js";
 import { sendControlError } from "./controlErrors.js";
 import { registerSocketProjectRoutes, type ProjectsDeps } from "./projects.js";
-import { CLIENT_HEADER, CLIENT_PATTERN } from "../control/commandClient.js";
+import { CLIENT_HEADER, CLIENT_PATTERN, DISPATCHED_RUN_HEADER } from "../control/commandClient.js";
 import type { Principal } from "./permissions.js";
 
 // CLI v2 plan Task 1: the socket's name and path rules live in a module the CLI can load without the control routes.
@@ -26,7 +26,9 @@ export function buildControlSocketApp(deps: ControlReadApiDeps, projects?: Proje
       return;
     }
     // Accounts spec §3.5: every socket request acts as the agent principal; the header names it, never authorizes it.
-    res.locals.orcaPrincipal = { kind: "agent", client } satisfies Principal;
+    // CLI v2 spec §15.4: a request from a run Orca dispatched carries its run id; present (any value) marks it.
+    const dispatchedRun = req.header(DISPATCHED_RUN_HEADER);
+    res.locals.orcaPrincipal = { kind: "agent", client, ...(dispatchedRun === undefined ? {} : { dispatchedRun }) } satisfies Principal;
     next();
   });
   app.use(express.json({ limit: "64kb", verify: verifyControlJsonBody }));

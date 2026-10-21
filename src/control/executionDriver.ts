@@ -89,6 +89,8 @@ export interface ExecutionDriverDeps {
   /** spec §5.3(6): the binary and agents table a reconciliation `ccloop run` is spawned with (agent selection spec §4.9). */
   ccloopBin: string;
   agentsTablePath: string;
+  /** CLI v2 spec §15.3: the ORCA_PERSON_DIR of a reconciliation or resolution `ccloop run` (runTask's option). */
+  dispatchedPersonDir?: string;
   /** N1 spec §6: the ast-grep binary the overview's structure part runs; null = unavailable. */
   astGrepBin?: string | null;
   kickPump?: () => void;
@@ -203,7 +205,7 @@ export function integrationDepsOf(deps: ExecutionDriverDeps, context: DriverCont
     store: deps.store, roots: deps.roots, admissionGate: deps.admissionGate, repoPathOf: (repoId) => deps.resolveRepository(repoId),
     now: () => (deps.now?.() ?? new Date()).getTime(), ghBin: process.env.ORCA_GH_BIN || "gh", stopped: () => context.stopped,
     // spec §7: a conflict's resolution run, spawned as the landing reconciliations are and tracked in the same map.
-    resolution: { ccloopBin: deps.ccloopBin, agentsTablePath: deps.agentsTablePath, reconciling: context.reconciling, runTask },
+    resolution: { ccloopBin: deps.ccloopBin, agentsTablePath: deps.agentsTablePath, dispatchedPersonDir: deps.dispatchedPersonDir, reconciling: context.reconciling, runTask },
     ...(deps.crash === undefined ? {} : { crash: deps.crash }),
   };
 }

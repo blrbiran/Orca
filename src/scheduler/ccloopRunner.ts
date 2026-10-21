@@ -1,4 +1,5 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { DISPATCHED_RUN_ENV } from "../control/commandClient.js";
 import { closeSync, openSync, readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
@@ -61,6 +62,11 @@ interface RunTaskCommonOptions {
    * deleted; unset is now the test harness's round (tests/scheduler/sandbox.ts runRoundForTest). Text above kept. ***
    */
   detachedLogDir?: string;
+  /**
+   * CLI v2 spec §15.3-§15.4: the spawned ccloop (and every agent it starts) gets ORCA_DISPATCHED_RUN=<runId> always, and
+   * ORCA_PERSON_DIR pointed here when given -- the panel's empty `dispatched-person` directory.
+   */
+  dispatchedPersonDir?: string;
 }
 
 /**
@@ -156,10 +162,10 @@ interface SpawnResult {
  * on PATH — the criterion for "which ccloop ran" should be the path in the
  * plan file and nothing else.
  */
-function spawnCcloop(bin: string, args: string[], onSpawn?: (pid: number) => void, detachedLogDir?: string): Promise<SpawnResult> {
-  if (detachedLogDir !== undefined) return spawnDetached(bin, args, detachedLogDir, onSpawn);
+function spawnCcloop(bin: string, args: string[], env: NodeJS.ProcessEnv, onSpawn?: (pid: number) => void, detachedLogDir?: string): Promise<SpawnResult> {
+  if (detachedLogDir !== undefined) return spawnDetached(bin, args, env, detachedLogDir, onSpawn);
   return new Promise<SpawnResult>((resolve, reject) => {
-    const child = spawn(process.execPath, [bin, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(process.execPath, [bin, ...args], { env, stdio: ["ignore", "pipe", "pipe"] });
     if (child.pid !== undefined) onSpawn?.(child.pid);
     // Issue #80: kept as bytes and decoded once. A pipe chunk can end inside a multibyte UTF-8 character, and
     // decoding each chunk alone turns that character into U+FFFD.
@@ -174,7 +180,7 @@ function spawnCcloop(bin: string, args: string[], onSpawn?: (pid: number) => voi
 }
 
 /** RunTaskOptions.detachedLogDir: the same result, with the output read back from its files once the child ends. */
-function spawnDetached(bin: string, args: string[], logDir: string, onSpawn?: (pid: number) => void): Promise<SpawnResult> {
+function spawnDetached(bin: string, args: string[], env: NodeJS.ProcessEnv, logDir: string, onSpawn?: (pid: number) => void): Promise<SpawnResult> {
   const outPath = join(logDir, "ccloop.stdout.log");
   const errPath = join(logDir, "ccloop.stderr.log");
   const read = (path: string): string => { try { return readFileSync(path, "utf8"); } catch { return ""; } };
@@ -183,7 +189,7 @@ function spawnDetached(bin: string, args: string[], logDir: string, onSpawn?: (p
     let child: ChildProcess;
     try {
       const err = openSync(errPath, "w", 0o600);
-      try { child = spawn(process.execPath, [bin, ...args], { detached: true, stdio: ["ignore", out, err] }); }
+      try { child = spawn(process.execPath, [bin, ...args], { env, detached: true, stdio: ["ignore", out, err] }); }
       finally { closeSync(err); }
     } finally { closeSync(out); }
     if (child.pid !== undefined) onSpawn?.(child.pid);
@@ -323,7 +329,8 @@ export async function runTask(
     "--run-dir",
     loopDir,
     ...agentArgs,
-  ], options.onSpawn, options.detachedLogDir);
+  ], { ...process.env, [DISPATCHED_RUN_ENV]: runId, ...(options.dispatchedPersonDir === undefined ? {} : { ORCA_PERSON_DIR: options.dispatchedPersonDir }) },
+  options.onSpawn, options.detachedLogDir);
 
   if (spawned.code === 1) throw new AgentsRunRefused(agentsRunRefusalCode(spawned.stderr), spawned.stderr);
   const outcome = await readTerminalStatus(loopDir, spawned);

@@ -45,7 +45,7 @@ export interface IntegrationDeps {
    * spec §7: what a conflict's resolution run is spawned with (the driver's ccloop, agents table and its map of
    * background runs, shared with the landing reconciliations). Absent: `resolving` groups are not advanced.
    */
-  resolution?: { ccloopBin: string; agentsTablePath: string; reconciling: Map<string, Promise<void>>; runTask: typeof runTask };
+  resolution?: { ccloopBin: string; agentsTablePath: string; dispatchedPersonDir?: string; reconciling: Map<string, Promise<void>>; runTask: typeof runTask };
 }
 
 type Scheme = Exclude<IntegrationScheme, { delivery: "keep" }>;

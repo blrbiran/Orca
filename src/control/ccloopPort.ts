@@ -1,6 +1,7 @@
 import { savedResultCollectionSchema,savedResultSourceEligibilitySchema,savedResultEligibilitySchema,savedResultSettlementSchema } from "./savedResultProtocol.js";
 import { taskResultCollectionSchema,TaskResultUnsupportedError,TASK_RESULT_RPC_TIMEOUT_MS,MAX_TASK_RESULT_EVIDENCE_BYTES } from './taskResultProtocol.js';
 import { execFile } from "node:child_process";
+import { DISPATCHED_RUN_ENV } from "./commandClient.js";
 import { createHash } from "node:crypto";
 import { lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
@@ -160,12 +161,29 @@ export function agentsTablePath(path:string):string {
 }
 /** ccloop's drift detail (src/agents/materialize.ts): `<installation>: table <recorded>, observed <installed>`. */
 const DRIFT_DETAIL=/^(\S+): table (\S+), observed \S+$/;
-export function createCcloopExecutionPort(options:{binary:string;agentsTablePath:string;timeoutMs:number;log?:(line:string)=>void}):ExecutionPort {
+/**
+ * CLI v2 spec §15.4: the run a control call is about -- `claim.runId` of the start envelope, sent bare (accept, inspect)
+ * or as `input` (collect, handoff, evidence reads) -- or null for a call about no run (features, agents, models).
+ */
+export function dispatchedRunOf(payload:unknown):string|null{
+ const claimOf=(value:unknown)=>typeof value==="object"&&value!==null?(value as {claim?:{runId?:unknown}}).claim:undefined;
+ const runId=claimOf(payload)?.runId??claimOf((payload as {input?:unknown}|null)?.input)?.runId;
+ return typeof runId==="string"&&runId!==""?runId:null;
+}
+/**
+ * `dispatchedPersonDir` (CLI v2 spec §15.3-§15.4): read per call (the panel knows it once its store is open), the empty directory a dispatched run's ORCA_PERSON_DIR names, so the
+ * person's token store is not where its CLI looks. Every call about a run starts its ccloop with ORCA_DISPATCHED_RUN set
+ * to that run, and every process ccloop starts for the run (the worker, each agent) inherits it.
+ */
+export function createCcloopExecutionPort(options:{binary:string;agentsTablePath:string;timeoutMs:number;log?:(line:string)=>void;dispatchedPersonDir?:()=>string|undefined}):ExecutionPort {
  const binary=regularAbsolute(options.binary,"control-binary-invalid",true),table=agentsTablePath(options.agentsTablePath);
  if(!Number.isSafeInteger(options.timeoutMs)||options.timeoutMs<=0)throw new ControlError("control-port-options-invalid");
  const evidenceContext=new Map<string,StartEnvelope>(),key=(ref:ArtifactRef)=>`${ref.artifactId}:${ref.hash}`;
  const peer=(method:string,payload:unknown,timeoutMs=options.timeoutMs)=>new Promise<unknown>((resolve,reject)=>{
-   const child=execFile(binary,["control",method,"--agents",table],{encoding:"utf8",maxBuffer:MAX_OUTPUT,timeout:timeoutMs},(error,stdout,stderr)=>{
+   const run=dispatchedRunOf(payload);
+   const personDir=run===null?undefined:options.dispatchedPersonDir?.();
+   const env=run===null?undefined:{...process.env,[DISPATCHED_RUN_ENV]:run,...(personDir===undefined?{}:{ORCA_PERSON_DIR:personDir})};
+   const child=execFile(binary,["control",method,"--agents",table],{encoding:"utf8",maxBuffer:MAX_OUTPUT,timeout:timeoutMs,...(env===undefined?{}:{env})},(error,stdout,stderr)=>{
     if(error){const e=error as Error&{code?:number|string;killed?:boolean};if(e.code==="ERR_CHILD_PROCESS_STDIO_MAXBUFFER"||/maxBuffer/i.test(e.message))return reject(new ControlError("control-response-too-large"));if(e.killed)return reject(new ControlError("control-peer-timeout"));const suffix=String(stderr).trim();return reject(new ControlError("control-peer-exit",`${String(e.code)}${suffix?":"+suffix:""}`));}
     if(Buffer.byteLength(stdout)>MAX_OUTPUT||Buffer.byteLength(stderr)>MAX_OUTPUT)return reject(new ControlError("control-response-too-large"));
     try{resolve(JSON.parse(stdout));}catch{reject(new ControlError("control-response-invalid"));}

@@ -35,6 +35,7 @@ import type { ControlOptions } from "./server.js";
 
 /** spec §4: the store's siblings live under the relocated root, so one variable moves all of them. */
 const ARCHIVE = "archive";
+const DISPATCHED_PERSON = "dispatched-person";
 const EXPORT = "export";
 const EVIDENCE = "evidence";
 
@@ -129,12 +130,13 @@ export interface ControlAssemblyInput {
  * the refusing port, never `legacyExecutionPort`, which has no ledger authority and no handoff
  * protocol. "Quietly ran the work somewhere else" is worse than "refused by name".
  */
-function choosePort(control: ControlOptions, env: NodeJS.ProcessEnv): ExecutionPort {
+function choosePort(control: ControlOptions, env: NodeJS.ProcessEnv, dispatchedPersonDir: () => string | undefined): ExecutionPort {
   if (control.executionPort === "unconfigured") return createUnconfiguredControlPort();
   return createCcloopExecutionPort({
     binary: env.ORCA_CCLOOP_BIN!,
     agentsTablePath: env.ORCA_AGENTS_TABLE!,
     timeoutMs: PORT_TIMEOUT_MS,
+    dispatchedPersonDir,
   });
 }
 
@@ -161,7 +163,9 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   const { control, repos, env, epoch } = input;
   if (!control.enabled || control.stateDir === null) throw new ControlError("control-trusted-config-invalid", "assembly-called-while-disabled");
 
-  const chosen = choosePort(control, env);
+  // CLI v2 spec §15.3-§15.4: known once the store has canonicalised its directory, below; no run is dispatched before.
+  let dispatchedPersonDir: string | undefined;
+  const chosen = choosePort(control, env, () => dispatchedPersonDir);
   const port = input.wrapPort ? input.wrapPort(chosen) : chosen;
   const profiles = loadProfiles(control.profilePaths, port);
   const router = createExecutionProfileRouter(profiles);
@@ -185,6 +189,10 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   // refuses a path with a symlink in it.
   const root = store.stateDir;
   for (const child of [ARCHIVE, EXPORT, EVIDENCE]) mkdirSync(join(root, child), { recursive: true, mode: 0o700 });
+  // CLI v2 spec §15.3: the ORCA_PERSON_DIR of every run Orca dispatches -- empty, so a dispatched CLI finds no token.
+  // Created 0700; an existing one keeps its mode (Rule 17). Registered in the accounts spec's Correction (plan Task 10).
+  dispatchedPersonDir = join(root, DISPATCHED_PERSON);
+  mkdirSync(dispatchedPersonDir, { recursive: true, mode: 0o700 });
 
   const config = createTrustedControlConfig({
     epoch,
@@ -285,7 +293,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     driver = createExecutionDriver({
       store, router, admissionGate, roots: controlWorkspaceRoots(store.stateDir),
       resolveRepository: (repoId) => config.resolveRepository(repoId),
-      ccloopBin: env.ORCA_CCLOOP_BIN!, agentsTablePath: env.ORCA_AGENTS_TABLE!, astGrepBin: resolveAstGrepBin(env),
+      ccloopBin: env.ORCA_CCLOOP_BIN!, agentsTablePath: env.ORCA_AGENTS_TABLE!, dispatchedPersonDir, astGrepBin: resolveAstGrepBin(env),
       // Handoff grace: the run's frozen killGraceMs + 60 s (driverHandoff.handoffGraceMsOf, agent selection spec §6.6).
       // *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** the grace is max(killGraceMs, frozen recovery window + 5 s) + 60 s.
       kickPump: () => { void pump(); }, crash: input.driverCrash,

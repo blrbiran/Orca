@@ -18,10 +18,10 @@ function checkPath(path: string, allowQuery: boolean): void {
   if (allowQuery && BINARY.test(route)) throw new EntryRejection("control-cli-binary-route", "evidence artifacts are binary; read runs/<id>/evidence for the manifest");
 }
 
-export async function controlGet(input: { socketPath: string; client: string; path: string }): Promise<CliResponseV1> {
+export async function controlGet(input: { socketPath: string; client: string; path: string; headers?: Record<string, string> }): Promise<CliResponseV1> {
   try {
     checkPath(input.path, true);
-    const { status, body } = await requestOverSocket({ socketPath: input.socketPath, method: "GET", path: input.path, client: input.client });
+    const { status, body } = await requestOverSocket({ socketPath: input.socketPath, method: "GET", path: input.path, client: input.client, headers: input.headers });
     return { schema: "orca-cli-response-v1", status, body };
   } catch (error) {
     if (error instanceof EntryRejection) return localError(error);
@@ -30,13 +30,13 @@ export async function controlGet(input: { socketPath: string; client: string; pa
 }
 
 /** D9: the owner-only settlement route is recognized by the panel; socket/MCP senders receive its 403 permission refusal. */
-export async function controlSend(input: { socketPath: string; client: string; route: string; expectedRevision: number; payload: unknown; commandId?: string; commandIdPrefix?: "cli" | "mcp" }): Promise<CliResponseV1> {
+export async function controlSend(input: { socketPath: string; client: string; route: string; expectedRevision: number; payload: unknown; commandId?: string; commandIdPrefix?: "cli" | "mcp"; headers?: Record<string, string> }): Promise<CliResponseV1> {
   const commandId = input.commandId ?? `${input.commandIdPrefix ?? "cli"}-${randomUUID()}`;
   try {
     checkPath(input.route, false);
     if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) throw new EntryRejection("control-cli-argument-invalid", "--expected-revision wants a non-negative integer");
     if (!idSchema.safeParse(commandId).success) throw new EntryRejection("control-cli-argument-invalid", "--command-id must start with a letter or digit, at most 200 characters");
-    const { status, body } = await requestOverSocket({ socketPath: input.socketPath, method: "POST", path: input.route, client: input.client, body: { commandId, expectedRevision: input.expectedRevision, payload: input.payload } });
+    const { status, body } = await requestOverSocket({ socketPath: input.socketPath, method: "POST", path: input.route, client: input.client, headers: input.headers, body: { commandId, expectedRevision: input.expectedRevision, payload: input.payload } });
     return { schema: "orca-cli-response-v1", status, commandId, body };
   } catch (error) {
     if (error instanceof EntryRejection) return localError(error, commandId);

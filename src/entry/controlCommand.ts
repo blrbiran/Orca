@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { CLIENT_PATTERN } from "../control/commandClient.js";
+import { CLIENT_PATTERN, dispatchedRunHeaders } from "../control/commandClient.js";
 import { discoverSocketPath } from "./discovery.js";
 import { EntryRejection, exitCodeFor, localError, type CliResponseV1 } from "./envelope.js";
 import { controlGet, controlSend } from "./operations.js";
@@ -28,7 +28,7 @@ export async function runControlCommand(
     const socketPath = discoverSocketPath({ stateDirFlag: flags.get("--control-state-dir"), env });
     if (sub === "get") {
       for (const only of ["--expected-revision", "--payload", "--payload-file", "--command-id"]) if (flags.has(only)) throw new EntryRejection("control-cli-argument-invalid", `${only} is for send`);
-      return print(await controlGet({ socketPath, client, path: target }));
+      return print(await controlGet({ socketPath, client, path: target, headers: dispatchedRunHeaders(env) }));
     }
     const revisionText = flags.get("--expected-revision");
     if (revisionText === undefined || !/^(0|[1-9][0-9]*)$/.test(revisionText)) throw new EntryRejection("control-cli-argument-invalid", "--expected-revision wants a non-negative integer");
@@ -37,7 +37,7 @@ export async function runControlCommand(
     let payload: unknown;
     try { payload = JSON.parse(inline ?? io.readFile(file!)); }
     catch { throw new EntryRejection("control-cli-argument-invalid", "the payload is not readable JSON"); }
-    return print(await controlSend({ socketPath, client, route: target, expectedRevision: Number(revisionText), payload, commandId: flags.get("--command-id") }));
+    return print(await controlSend({ socketPath, client, route: target, expectedRevision: Number(revisionText), payload, commandId: flags.get("--command-id"), headers: dispatchedRunHeaders(env) }));
   } catch (error) {
     if (error instanceof EntryRejection) return print(localError(error));
     throw error;

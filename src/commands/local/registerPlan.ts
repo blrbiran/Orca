@@ -13,7 +13,7 @@ export async function runRegisterPlan(args: ParsedArgs, io: CommandIo): Promise<
     const project = await contextFor(args, io, session, {}).project();
     const path = relative(project.path, resolve(io.cwd, String(args.positionals.path)));
     if (path === "" || path.startsWith("..") || isAbsolute(path)) throw new EntryRejection("control-cli-argument-invalid", `${String(args.positionals.path)} is not inside the project ${project.projectKey} (${project.path})`);
-    const { status, body } = await requestOverSocket({ socketPath: session.socketPath, method: "POST", path: `projects/${encodeURIComponent(project.projectKey)}/plans`, client: session.client, body: { path } });
+    const { status, body } = await requestOverSocket({ socketPath: session.socketPath, method: "POST", path: `projects/${encodeURIComponent(project.projectKey)}/plans`, client: session.client, headers: session.headers, body: { path } });
     return print({ schema: "orca-cli-response-v1", status, body });
   } catch (error) {
     if (error instanceof EntryRejection) return print(localError(error));

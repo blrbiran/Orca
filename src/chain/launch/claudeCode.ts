@@ -57,6 +57,8 @@ export function childEnv(base: NodeJS.ProcessEnv, chainId: string, sessionId: st
   }
   env.ORCA_CHAIN_ID = chainId;
   env.ORCA_CHAIN_SESSION = sessionId;
+  // CLI v2 spec §15.4: a chain session is a run Orca dispatched; the chain names it (over any inherited marker).
+  env.ORCA_DISPATCHED_RUN = chainId;
   return env;
 }
 

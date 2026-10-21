@@ -3,6 +3,18 @@ import { AsyncLocalStorage } from "node:async_hooks";
 /** Agent entry spec §4.2: which client sent a socket request. Attribution only, never authorization (§6). */
 export const CLIENT_HEADER = "x-orca-client";
 export const CLIENT_PATTERN = /^(cli|mcp)(:[a-zA-Z0-9][a-zA-Z0-9._-]{0,63})?$/;
+/**
+ * CLI v2 spec §15.4, §15.5: every process Orca starts for work carries `ORCA_DISPATCHED_RUN=<runId>` (no KEY/SECRET/TOKEN
+ * in the name, so environment filters keep it); the CLI sends it as this socket header, and the socket refuses the §15.1
+ * verbs to it. A convention at Orca's interfaces, not a security boundary.
+ */
+export const DISPATCHED_RUN_ENV = "ORCA_DISPATCHED_RUN";
+export const DISPATCHED_RUN_HEADER = "x-orca-dispatched-run";
+/** The marker header for a request sent from this environment; empty when the variable is unset or empty. */
+export const dispatchedRunHeaders = (env: NodeJS.ProcessEnv): Record<string, string> => {
+  const run = env[DISPATCHED_RUN_ENV];
+  return run === undefined || run === "" ? {} : { [DISPATCHED_RUN_HEADER]: run };
+};
 
 const current = new AsyncLocalStorage<{ commandId: string; client: string; principal: string }>();
 
