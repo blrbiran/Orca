@@ -1446,6 +1446,8 @@ export const enErrors: Record<string, string> = {
   "group-edge-repository-mismatch": "Both groups must work on the same project.",
   "group-edge-stack-ambiguous": "A group can stack on only one group that is not delivered locally ({{detail}}).",
   "group-edge-self": "A group cannot wait for itself.",
+  "control-argument-invalid": "A check setting is not valid (a trigger or a schedule); the detail names which part.",
+  "check-schedule-too-frequent": "A schedule may run at most once an hour.",
   "pending-decision-settled": "This decision was already settled, so it cannot be changed now: {{detail}}",
   "decision-undo-not-executable": "The undo command still cannot be run as written; give a command such as `git revert --no-edit <commit>`: {{detail}}",
   "pending-decision-entry-invalid": "This decision is invalid for a reason a new undo command cannot fix: {{detail}}",

@@ -1370,6 +1370,8 @@ export const zhErrors: Record<string, string> = {
   "group-edge-repository-mismatch": "两个组必须是同一个项目。",
   "group-edge-stack-ambiguous": "一个组只能叠在一个非本地交付的组上（{{detail}}）。",
   "group-edge-self": "组不能等它自己。",
+  "control-argument-invalid": "检查设置无效（触发条件或定时）；详情里写明是哪一处。",
+  "check-schedule-too-frequent": "定时检查最多每小时一次。",
   "pending-decision-settled": "这条决定已经处理过，现在不能再改：{{detail}}",
   "decision-undo-not-executable": "撤销命令仍然无法照原样执行，请给出类似 `git revert --no-edit <commit>` 的命令：{{message}}",
   "pending-decision-entry-invalid": "这条决定有别的问题，换一条撤销命令也修不好：{{message}}",

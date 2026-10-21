@@ -66,6 +66,10 @@ export const durableCommandErrorStatuses = {
   "group-edge-repository-mismatch": 409,
   "group-edge-stack-ambiguous": 409,
   "group-edge-self": 400,
+  // Checks spec 2026-10-22 §2.2: a check setting's value fails its shape or bound (a trigger, a cron); the detail names
+  // which. A schedule whose cron fires more often than once an hour (spends review budget unattended).
+  "control-argument-invalid": 400,
+  "check-schedule-too-frequent": 400,
 
   // Optimistic concurrency, immutable identity, and ownership conflicts.
   // Agent selection spec §6.4 step 3 (W6-12): the selections a confirmation resolves are no longer the ones the
