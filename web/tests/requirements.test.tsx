@@ -48,6 +48,43 @@ describe("the Requirements section (N1 spec §11.2)", () => {
     expect(onCommand).toHaveBeenCalledWith({ verb: "requirement-consensus", groupId: "r", expectedRevision: 3, payload: { roundNo: 1 } });
   });
 
+  // Issue 88: consensus with questions of the current round unanswered closes the round without them, and the split is
+  // drafted from the document, which lists them as not answered -- the dialog says so, and how many.
+  it("asks before consensus while the current round's questions are unanswered, and says what happens to them", () => {
+    const onCommand = mount(requirementView("awaiting-answers"));
+    fireEvent.click(screen.getByRole("button", { name: "We agree" }));
+    expect(onCommand).not.toHaveBeenCalled();
+    let dialog = screen.getByRole("dialog", { name: "2 questions in round 1 are not answered" });
+    expect(within(dialog).getByText(/nothing tells the model to take the recommended answers/)).toBeTruthy();
+    // The open branches the model still lists are named in the same dialog.
+    expect(within(dialog).getByText("sync to a cloud drive")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep discussing" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(onCommand).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "We agree" }));
+    dialog = screen.getByRole("dialog", { name: "2 questions in round 1 are not answered" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Agree anyway" }));
+    expect(onCommand).toHaveBeenCalledWith({ verb: "requirement-consensus", groupId: "r", expectedRevision: 3, payload: { roundNo: 1 } });
+  });
+
+  // Issue 89: a split that failed shows why, and both ways on -- retry the split, or archive the requirement.
+  it("shows a failed split's reasons with Retry and Archive", () => {
+    const base = requirementView("awaiting-review");
+    const reason = "graph:buildGraph: no schedulable task among a, b — a cycle slipped through";
+    const view: RequirementViewV1 = {
+      ...base,
+      summary: { ...base.summary, requirement: { ...base.summary.requirement!, draftState: "failed", reasonCode: "split-validation-exhausted" } },
+      drafts: [{ ...base.drafts[0]!, state: "failed", autoRetry: 2, draftHash: null, reasons: [reason], layers: null, implicitEdges: null, reasonCode: "split-validation-exhausted" }],
+    };
+    const onCommand = mount(view);
+    expect(screen.getByText(reason)).toBeTruthy();
+    expect(screen.getByText(/failed code's checks three times/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "r", expectedRevision: 3, payload: { scope: "group", groupId: "r" } });
+    fireEvent.click(screen.getByRole("button", { name: "Archive group" }));
+    expect(onCommand).toHaveBeenCalledWith({ verb: "archive-group", groupId: "r", expectedRevision: 3, payload: {} });
+  });
+
   it("shows the layers code computed and the conflict behind each implicit edge, and accepts with the draft hash", () => {
     const onCommand = mount(requirementView("awaiting-review"));
     expect(screen.getByText("Layer 1: exporter")).toBeTruthy();

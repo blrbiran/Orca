@@ -180,14 +180,20 @@ function Consensus(props: { view: View; round: Round; onCommand: (a: ControlActi
   const { t } = useTranslation();
   const [asking, setAsking] = useState(false);
   const branches = props.view.rounds.filter((r) => r.result !== null).at(-1)?.result?.openBranches ?? [];
+  // Issue 88: consensus on a round still awaiting answers closes it unanswered (requirementCommands.ts
+  // applyRequirementConsensus records them as the consensus's openQuestions). The split prompt is the document, which
+  // lists them as not answered beside their recommended answers; nothing makes the split take those answers.
+  const unanswered = props.round.state === "awaiting-answers" ? props.round.result?.questions.length ?? 0 : 0;
+  const unansweredTitle = t("requirements.consensusUnansweredTitle", { count: unanswered, round: props.round.roundNo });
   const send = () => props.onCommand({ verb: "requirement-consensus", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: { roundNo: props.round.roundNo } });
   return (
     <>
-      <button type="button" onClick={() => (branches.length > 0 ? setAsking(true) : send())}>{t("requirements.consensus")}</button>
+      <button type="button" onClick={() => (branches.length > 0 || unanswered > 0 ? setAsking(true) : send())}>{t("requirements.consensus")}</button>
       {asking && (
-        <div role="dialog" aria-label={t("requirements.consensusTitle")}>
-          <p>{t("requirements.consensusTitle")}</p>
-          <ul>{branches.map((branch) => <li key={branch}>{branch}</li>)}</ul>
+        <div role="dialog" aria-label={unanswered > 0 ? unansweredTitle : t("requirements.consensusTitle")}>
+          {unanswered > 0 && <><p>{unansweredTitle}</p><p>{t("requirements.consensusUnanswered")}</p></>}
+          {branches.length > 0 && <><p>{t("requirements.consensusTitle")}</p>
+          <ul>{branches.map((branch) => <li key={branch}>{branch}</li>)}</ul></>}
           <button type="button" onClick={() => { setAsking(false); send(); }}>{t("requirements.consensusConfirm")}</button>
           <button type="button" onClick={() => setAsking(false)}>{t("requirements.consensusCancel")}</button>
         </div>
