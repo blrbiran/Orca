@@ -56,7 +56,7 @@ const KIND_INSTRUCTION: Record<DebugInputV1["correction"]["kind"], (alternative:
 /** One sentence per missing piece (§4.2, §12.7): the agent is told what it was not given, and why. */
 function missingSentence(piece: DebugInputV1["missing"][number], input: DebugInputV1): string {
   switch (piece) {
-    case "run": return `The original run ${debugRunIdOf(correctionTargetOf(input.correction))} is not a control run Orca can read: its commits and contract are unavailable.`;
+    case "run": return `The original run ${debugRunIdOf(correctionTargetOf(input.correction)) ?? "(none)"} is not a control run Orca can read: its commits and contract are unavailable.`;
     case "base": return "The original run recorded no base commit: its diff is unavailable.";
     case "attemptSha": return "The original run recorded no attempt commit: its diff is unavailable.";
     case "objects": return "The original run's commits are no longer in the repository: its diff is unavailable.";
@@ -83,6 +83,27 @@ function diffSection(commits: NonNullable<DebugInputV1["commits"]>): string[] {
   // A fence longer than any backtick run in the diff, so the diff cannot close it early.
   const fence = "`".repeat(Math.max(3, ...[...inlined.matchAll(/`+/g)].map((run) => run[0].length + 1)));
   lines.push(`${fence}diff`, inlined, fence);
+  return lines;
+}
+
+/** Flow engine spec §13.2: the window of landed groups a repository-only correction may be about, and its capped diff. */
+function windowSection(window: NonNullable<DebugInputV1["window"]>, projectKey: string): string[] {
+  const lines = [
+    `The person named only the repository ${projectKey}. What had landed there in the window (the last ${window.maxGroups} landed groups, at most ${window.maxDays} days before ${window.asOf}), newest first:`,
+  ];
+  if (window.groups.length === 0) lines.push("- (no landed group in the window)");
+  for (const group of window.groups) {
+    lines.push(`- group ${group.groupId} "${group.title}", landed ${group.landedAt}: ${group.ranges.map((range) => `${range.base}..${range.landedCommit} (run ${range.runId})`).join(", ")}`);
+    for (const brief of group.decisions) lines.push(`  - decision ${brief.id}: ${brief.question} -> ${brief.chose}`);
+  }
+  if (window.diff.totalBytes > 0) {
+    lines.push("", "The window's diff (without .decisions/):");
+    if (window.diff.keptBytes < window.diff.totalBytes) {
+      lines.push(`It is ${window.diff.totalBytes} bytes; the first ${window.diff.keptBytes} are below. Read the rest with git diff over the ranges above.`);
+    }
+    const fence = "`".repeat(Math.max(3, ...[...window.diff.text.matchAll(/`+/g)].map((run) => run[0].length + 1)));
+    lines.push(`${fence}diff`, window.diff.text, fence);
+  }
   return lines;
 }
 
@@ -116,6 +137,19 @@ export function debugGoalText(input: DebugInputV1): string {
       lines.push(`question: ${(entry as { question: string }).question}`);
     }
     lines.push(JSON.stringify(entry ?? null, null, 2));
+  }
+  if (input.runDecisions !== undefined) {
+    // Flow engine spec §13.3: the person named a whole run, not one of its decisions.
+    lines.push(`The corrected run: ${correction.runId} (the person named the run, not one decision). Its reported decisions:`);
+    lines.push(...(input.runDecisions.length === 0 ? ["- (none reported)"] : input.runDecisions.map((brief) => `- ${brief.id}: ${brief.question} -> ${brief.chose}`)));
+  }
+  if (input.window !== undefined) lines.push(...windowSection(input.window, correction.projectKey));
+  if (input.window !== undefined || input.runDecisions !== undefined) {
+    lines.push(
+      "",
+      "Locate first: before any change, report in your result `debug.located = {groupId?, runId?, decisionId?, paths[], because}` --",
+      "where in the work above the person's sentence applies (only what is listed above), the paths involved, and why. If you cannot locate it, stop and say so in `because` with no change.",
+    );
   }
   lines.push(
     "",

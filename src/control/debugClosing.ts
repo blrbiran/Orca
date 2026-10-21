@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { deriveRows, derivePendingRows } from "../corrections/derive.js";
+import { deriveCoarseRows, deriveRows, derivePendingRows } from "../corrections/derive.js";
+import { correctionTargetOf } from "../corrections/target.js";
 import { attributionText } from "./commandClient.js";
 import { deriveFixRunId } from "../corrections/fields.js";
 import type { DecisionEvent, OverturnedEvent } from "../ledger/schema.js";
@@ -86,6 +87,10 @@ export async function writeDebugClosing(input: {
     rows = [decision, overturned];
   } else if (frozen.pending !== null) {
     rows = [derivePendingRows({ correction, pending: frozen.pending, choseInstead, undo, at, runId: fixRunId, authored, attributed }).decision];
+  } else if (correctionTargetOf(correction).kind === "run" || correctionTargetOf(correction).kind === "repository") {
+    // Flow engine spec §13.4 (W-COR): one decision row, no overturned; a decision the agent located is cited.
+    const located = (await readDebugResult(store, run.runId)).located ?? null;
+    rows = [deriveCoarseRows({ correction, choseInstead, undo, at, runId: fixRunId, authored, located, attributed }).decision];
   } else {
     throw new Error(`writeDebugClosing: the frozen input of ${correction.id} names neither a decision nor a pending entry`);
   }

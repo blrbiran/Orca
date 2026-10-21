@@ -155,6 +155,8 @@ function reportWebToServer(x: WebMetricsReport): ServerMetricsReport {
   return {
     ...x,
     corrections_on_unrecorded_decisions: x.corrections_on_unrecorded_decisions ?? 0,
+    // W-COR (flow engine spec §13.4): optional on the Web side as the line above, normalised the same way.
+    corrections_on_coarse_targets: x.corrections_on_coarse_targets ?? 0,
     correction_rate: { ...x.correction_rate, caveatCodes: x.correction_rate.caveatCodes ?? [] },
     repair_rate: {
       ...x.repair_rate,

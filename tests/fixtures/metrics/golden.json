@@ -177,6 +177,7 @@
   "excluded_as_future": 0,
   "withdrawn_corrections": 0,
   "corrections_on_unrecorded_decisions": 0,
+  "corrections_on_coarse_targets": 0,
   "unresolved_decisions": [
     {
       "correctionId": "c_e26ea320c00e0138",

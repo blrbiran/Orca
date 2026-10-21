@@ -40,12 +40,14 @@ describe("the corrections store's pending target (control run decisions Task 10)
     const { runId: _r, pendingId: _p, ...bare } = PENDING;
     expect(issues(PENDING)).toEqual([]);
     expect(issues({ ...bare, decisionId: "orca-t1-0123abcd/1" })).toEqual([]);
-    const target = "exactly one target: decisionId, or both runId and pendingId";
+    // Ruling: 这次批准改写所有必要的判据 (b37f7ce9). Flow engine spec §13.1 (W-COR): `runId` alone (a bare run) and no
+    // target (the repository only) are now legal shapes; a decision with a run, and pendingId without runId, stay refused.
+    const target = "at most one target: decisionId, runId (with or without pendingId), or none";
     expect(issues({ ...PENDING, decisionId: "orca-t1-0123abcd/1" })).toEqual([target]);
     expect(issues({ ...bare, decisionId: "orca-t1-0123abcd/1", runId: "run-a" })).toEqual([target]);
-    expect(issues({ ...bare, runId: "run-a" })).toEqual([target]);
-    expect(issues({ ...bare, pendingId: PENDING.pendingId })).toEqual([target]);
-    expect(issues(bare)).toEqual([target]);
+    expect(issues({ ...bare, runId: "run-a" })).toEqual([]);
+    expect(issues({ ...bare, pendingId: PENDING.pendingId })).toEqual(["pendingId needs runId"]);
+    expect(issues(bare)).toEqual([]);
   });
 
   it("records one person's corrections of two pending items of one run as two rows", async () => {

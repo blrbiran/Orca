@@ -19,6 +19,7 @@ import type { NewCorrectionInput } from "./record.js";
 import { CORRECTION_TARGET_NOT_A_DECISION, loadCorrection } from "./store.js";
 import { withStoreLock } from "./storeLock.js";
 import { CORRECTION_WITHDRAWN, readWithdrawals } from "./withdrawals.js";
+import { describeCorrectionTarget } from "./target.js";
 
 /**
  * Ruling 2 (task 9): these two are command-level refusals, so they are
@@ -243,7 +244,7 @@ export async function closeExistingCorrection(input: CloseExistingInput): Promis
     if (!namesDecision(row)) {
       throw new CorrectRejection(
         CORRECTION_TARGET_NOT_A_DECISION,
-        `correction ${row.id} names pending decision ${row.pendingId} of run ${row.runId}, which was never ` +
+        `correction ${row.id} names ${describeCorrectionTarget(row)}, which was never ` +
           `recorded in the ledger: --close has no decision to overturn`,
       );
     }

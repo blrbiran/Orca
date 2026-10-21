@@ -12,7 +12,9 @@
 import { useEffect, useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { withdrawCorrection } from "./api.js";
+import { fetchProjects, withdrawCorrection } from "./api.js";
+import { CoarseCorrectionForm } from "./CoarseCorrection.js";
+import { projectName } from "./project.js";
 import { commandEnvelope, controlCommandPath, controlFailureFrom, nextCommandId, readCorrections, refusalFromAnswer, sendControlCommand } from "./controlApi.js";
 import type { ControlAction } from "./controlApi.js";
 import type { CommandSuccessV1, CorrectionListItemV1, DebugClosingV1 } from "./controlTypes.js";
@@ -169,7 +171,12 @@ function CorrectionRow(props: {
       <p>
         {correction.decisionId !== undefined
           ? t("corrections.targetDecision", { id: correction.decisionId })
-          : t("corrections.targetPending", { pendingId: correction.pendingId ?? "", runId: correction.runId ?? "" })}
+          : correction.pendingId !== undefined
+            ? t("corrections.targetPending", { pendingId: correction.pendingId, runId: correction.runId ?? "" })
+            // Flow engine spec §13.1 (W-COR): a bare run, or the repository only.
+            : correction.runId !== undefined
+              ? t("corrections.targetRun", { runId: correction.runId })
+              : t("corrections.targetRepository", { projectKey: correction.projectKey })}
       </p>
       <p className="correction-state" data-testid="correction-state">{state}</p>
       {item.debugGroups.length === 0 ? <p>{t("corrections.noGroup")}</p> : (
@@ -244,6 +251,16 @@ export function CorrectionsView(props: { active: boolean }): JSX.Element {
     catch (err) { setFailure(controlFailureFrom(err)); }
   };
   useEffect(() => { if (props.active) void load(); }, [props.active]);
+  // Flow engine spec §13.2 (W-COR): "Correct…" -- the repository and one sentence; the projects the control plane holds.
+  const [correcting, setCorrecting] = useState(false);
+  const [repositories, setRepositories] = useState<Array<{ repoId: string; name: string }> | null>(null);
+  const startCorrecting = async (): Promise<void> => {
+    setCorrecting(true);
+    try {
+      const answer = await fetchProjects();
+      setRepositories(answer.projects.flatMap((project) => project.controlRepoId === null ? [] : [{ repoId: project.controlRepoId, name: projectName(project) }]));
+    } catch (err) { setRepositories([]); setFailure(controlFailureFrom(err)); }
+  };
   const send = async (action: CorrectionAction, commandId: string): Promise<void> => {
     const id = action.payload.correctionId;
     setAttempts((all) => ({ ...all, [id]: { action, commandId, outcome: { kind: "pending" } } }));
@@ -266,6 +283,11 @@ export function CorrectionsView(props: { active: boolean }): JSX.Element {
     <div className="corrections" data-testid="corrections-view">
       <div className="section-head"><h1>{t("corrections.title")}</h1></div>
       <p className="section-lede">{t("corrections.lede")}</p>
+      {!correcting && <button type="button" onClick={() => { void startCorrecting(); }}>{t("corrections.coarse.correct")}</button>}
+      {correcting && repositories !== null && (
+        repositories.length === 0 ? <p className="empty">{t("corrections.coarse.noRepository")}</p>
+          : <CoarseCorrectionForm repositories={repositories} onRecorded={() => { void load(); }} onCancel={() => setCorrecting(false)} />
+      )}
       {failure !== null && <RefusalNotice refusal={failure} testId="corrections-read-refusal" />}
       {items === null ? (failure === null && <p className="empty">{t("corrections.loading")}</p>)
         : items.length === 0 ? <p className="empty">{t("corrections.empty")}</p>

@@ -103,3 +103,11 @@ async function readOriginRemote(repo: string): Promise<string> {
     );
   }
 }
+
+/**
+ * Flow engine spec §13.1 [BC-B7]: a `dir` project has no git remote, so its corrections are keyed `dir:<project id>`.
+ * No normalised remote URL starts with `dir:` (it is `<host>/<path>`), so the namespace can never equal one. In phase 1
+ * these rows stay local: the ccmem exporter skips them by this prefix (ccmem keys memories by remote).
+ */
+export const DIR_PROJECT_KEY_PREFIX = "dir:";
+export const isDirProjectKey = (projectKey: string): boolean => projectKey.startsWith(DIR_PROJECT_KEY_PREFIX);

@@ -1,0 +1,70 @@
+{
+ "generatedAt": "c688d1ca",
+ "command": "npx tsx /private/tmp/orca-b37f7ce9/wcor/gen-fixture.ts",
+ "rows": [
+  {
+   "row": {
+    "projectKey": "github.com/biran/orca",
+    "decisionId": "orca-t1-0123abcd/agent-0",
+    "kind": "wrong",
+    "because": "the facts were wrong",
+    "at": "2026-10-18T00:00:00.000Z",
+    "by": "owner@example.invalid"
+   },
+   "id": "c_f5ebd5fcb373861d",
+   "fixRunId": "orca-fix-4a785629"
+  },
+  {
+   "row": {
+    "projectKey": "github.com/biran/orca",
+    "decisionId": "orca-t1-0123abcd/1",
+    "kind": "not_my_taste",
+    "chose_instead": "the other one",
+    "because": "taste",
+    "at": "2026-10-18T00:00:00.000Z",
+    "by": "owner@example.invalid"
+   },
+   "id": "c_4d4755ecd4bacb02",
+   "fixRunId": "orca-fix-03cc814f"
+  },
+  {
+   "row": {
+    "projectKey": "github.com/biran/orca",
+    "decisionId": "reconcile-orca-t2-89abcdef/1",
+    "kind": "stale",
+    "because": "true then, not now",
+    "at": "2026-10-19T12:34:56.789Z",
+    "by": "amy"
+   },
+   "id": "c_566b5ec9882471f4",
+   "fixRunId": "orca-fix-72fbcba1"
+  },
+  {
+   "row": {
+    "projectKey": "example.invalid/o/r",
+    "runId": "run-a",
+    "pendingId": "pending-orca-t1-0123abcd-0",
+    "kind": "wrong",
+    "because": "question: q0\nchose: c",
+    "at": "2026-10-18T00:00:00.000Z",
+    "by": "owner@example.invalid"
+   },
+   "id": "c_e075d5d9252e1405",
+   "fixRunId": "orca-fix-9720e73a"
+  },
+  {
+   "row": {
+    "projectKey": "example.invalid/o/r",
+    "runId": "run-b",
+    "pendingId": "pending-reconcile-orca-t3-00000000-2",
+    "kind": "not_my_taste",
+    "chose_instead": "x",
+    "because": "引号 \"and\" 反斜杠 \\",
+    "at": "2026-10-18T00:00:00.000Z",
+    "by": "amy"
+   },
+   "id": "c_210bc2cc83e94790",
+   "fixRunId": "orca-fix-b6ce08e2"
+  }
+ ]
+}

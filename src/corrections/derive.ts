@@ -161,3 +161,50 @@ export function derivePendingRows(input: {
   } as DecisionEvent;
   return { decision };
 }
+
+/**
+ * Flow engine spec §13.2: where the debug agent located a coarse correction (`debug.located`, reportedDecisions.ts).
+ * Only `decisionId` reaches the closing row; the rest is the agent's notes.
+ */
+export interface LocatedTarget { groupId?: string; runId?: string; decisionId?: string; paths: string[]; because: string }
+
+/**
+ * Flow engine spec §13.4 (W-COR): a repository-only or bare-run correction names no ledger row, so, as a pending
+ * target, its closing is one `decision` row and never an `overturned` (an agent never writes one). With no original to
+ * copy, the question names the target, the refused option is the work as it landed, and an undo field nobody gave says
+ * Orca wrote it (ORCA_GENERATED). When the agent located a decision, `because` cites it and the evidence names it.
+ */
+export function deriveCoarseRows(input: {
+  correction: Correction; choseInstead: string; undo: { how: string; cost?: string; blastRadius?: string }; at: string; runId: string;
+  authored: DeriveInput["authored"]; located: LocatedTarget | null; attributed?: string;
+}): { decision: DecisionEvent } {
+  const { correction, at, runId, located } = input;
+  const { chose, how } = authoredValues(input.choseInstead, input.undo.how, input.authored);
+  const run = correction.runId;
+  const target = run === undefined ? `repository ${correction.projectKey}` : `run ${run}`;
+  const locatedId = located?.decisionId;
+  const decision: DecisionEvent = {
+    ev: "decision",
+    id: `${runId}/1`,
+    at,
+    run: runId,
+    question: `What should ${target} have done instead (correction ${correction.id})?`,
+    chose,
+    alternatives: [{ option: `the work in ${target} as it landed`, why_not: `人在 correction ${correction.id} 里推翻了它：${correction.because}` }],
+    because: locatedId === undefined ? correction.because : `${correction.because}（agent 定位到 ${locatedId}）`,
+    undo: {
+      how,
+      cost: input.undo.cost ?? `not stated${ORCA_GENERATED}`,
+      blast_radius: input.undo.blastRadius ?? `${target}${ORCA_GENERATED}`,
+    },
+    scope: run === undefined ? "repo" : "task",
+    kind: "criteria",
+    // Major, as in deriveRows: the human made this decision.
+    importance: "major",
+    evidence: [
+      `correction ${correction.id}`, target, ...(locatedId === undefined ? [] : [`located ${locatedId}`]),
+      ...(input.attributed === undefined ? [] : [input.attributed]),
+    ],
+  };
+  return { decision };
+}

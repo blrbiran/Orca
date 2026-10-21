@@ -241,6 +241,7 @@ export function computeMetrics(
     excluded_as_future: obs.excludedAsFuture,
     withdrawn_corrections: obs.withdrawnCorrections,
     corrections_on_unrecorded_decisions: obs.pendingTargetCorrections ?? 0,
+    corrections_on_coarse_targets: obs.coarseTargetCorrections ?? 0,
     unresolved_decisions: [...obs.unresolvedDecisions].sort((a, b) =>
       a.correctionId < b.correctionId ? -1 : a.correctionId > b.correctionId ? 1 : 0,
     ),

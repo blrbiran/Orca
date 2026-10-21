@@ -995,8 +995,10 @@ export const systemDebugOpenPayloadSchema = z.object({
 // Debug task plan Task 11 (design §12.4): the panel form's record, the UI's manual close (`orca dev correct --close`'s
 // arguments) and the author's withdraw, as human-only verbs on the `@corrections` scope.
 const correctionIdSchema = z.string().regex(/^c_[a-f0-9]{16}$/);
+// Flow engine spec §13.2–§13.3 (W-COR): `decisionId` names a recorded decision; `runId` alone a finished run; neither,
+// the repository only (one sentence). Both together is refused by the corrections schema (correction-row-invalid).
 export const correctionRecordPayloadSchema = z.object({
-  repoId: idSchema, decisionId: nonemptyString, kind: z.enum(CORRECTION_KINDS), because: nonemptyString,
+  repoId: idSchema, decisionId: nonemptyString.optional(), runId: idSchema.optional(), kind: z.enum(CORRECTION_KINDS), because: nonemptyString,
   chose_instead: z.string().optional(), again: z.boolean().optional(),
 }).strict();
 export const correctionClosePayloadSchema = z.object({

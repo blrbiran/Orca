@@ -45,7 +45,7 @@ const correctionShape = z
     decisionId: z.string().min(1).optional(),
     /**
      * Control run decisions plan Task 10 (debug-task design §12.3): a decision a landing refused has no ledger id, so
-     * reject-pending-decision names the run and the pending item instead. Exactly one target per row (below).
+     * reject-pending-decision names the run and the pending item instead. At most one target per row (below).
      */
     runId: z.string().min(1).optional(),
     pendingId: z.string().min(1).optional(),
@@ -79,11 +79,12 @@ const correctionShape = z
  * is a migration; coerced content is permanent.
  */
 export const correctionSchema = correctionShape.superRefine((value, ctx) => {
-  const decision = value.decisionId !== undefined;
-  const pending = value.runId !== undefined && value.pendingId !== undefined;
-  const partial = (value.runId !== undefined) !== (value.pendingId !== undefined);
-  if (decision === pending || partial) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [], message: "exactly one target: decisionId, or both runId and pendingId" });
+  // Flow engine spec §13.1 (W-COR): four shapes -- decisionId; runId + pendingId; runId alone (a bare run); none (the
+  // repository only, `projectKey` and one sentence). `pendingId` without `runId` names nothing and stays refused.
+  if (value.pendingId !== undefined && value.runId === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["pendingId"], message: "pendingId needs runId" });
+  } else if (value.decisionId !== undefined && value.runId !== undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [], message: "at most one target: decisionId, runId (with or without pendingId), or none" });
   }
   if (value.kind === "not_my_taste" && value.chose_instead === undefined) {
     ctx.addIssue({

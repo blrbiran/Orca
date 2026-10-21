@@ -22,9 +22,14 @@ describe("correctionTargetOf (debug task Task 1)", () => {
   it("reads a pending target whose ledger run is a reconcile", () =>
     expect(correctionTargetOf(reconcilePendingRow)).toEqual({ kind: "pending", runId: RUN, pendingId: `pending-reconcile-${RUN}-0` }));
 
-  it("refuses a row with both targets and a row with neither", () => {
+  // Ruling: 这次批准改写所有必要的判据 (b37f7ce9). Flow engine spec §13.1 (W-COR): a row with neither target is now the
+  // repository-only shape and `runId` alone the bare-run shape (tests/corrections/coarseTargets.test.ts), so the two
+  // left this refused list; both targets together, and pendingId without runId, stay refused.
+  it("refuses a row with both targets and a pendingId without its run", () => {
+    expect(correctionTargetOf(BASE)).toEqual({ kind: "repository" });
+    expect(correctionTargetOf({ ...BASE, runId: RUN })).toEqual({ kind: "run", runId: RUN });
     const both = { ...pendingRow, decisionId: `${RUN}/agent-0` };
-    for (const row of [both, BASE, { ...BASE, runId: RUN }, { ...BASE, pendingId: `pending-${RUN}-0` },
+    for (const row of [both, { ...BASE, pendingId: `pending-${RUN}-0` },
       { ...decisionRow, runId: RUN }, { ...decisionRow, pendingId: `pending-${RUN}-0` }] as CorrectionRow[]) {
       expect(() => correctionTargetOf(row)).toThrowError(expect.objectContaining({ name: "CorrectRejection", code: CORRECTION_ROW_INVALID }));
     }

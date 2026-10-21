@@ -5,6 +5,12 @@ import { withStoreLock } from "./storeLock.js";
 import { correctionSchema } from "./schema.js";
 import type { Correction } from "./schema.js";
 import { readWithdrawals, withdrawnIds } from "./withdrawals.js";
+import { correctionTargetOf, describeCorrectionTarget } from "./target.js";
+
+const coarse = (row: Correction): boolean => {
+  const kind = correctionTargetOf(row).kind;
+  return kind === "run" || kind === "repository";
+};
 
 export const CORRECTION_ALREADY_RECORDED = "correction-already-recorded";
 export const DUPLICATE_CORRECTION_ID = "duplicate-correction-id";
@@ -103,12 +109,15 @@ export async function recordCorrection(
           // Control run decisions plan Task 10: the target is decisionId or { runId, pendingId } (schema.ts).
           candidate.runId === row.runId &&
           candidate.pendingId === row.pendingId &&
-          candidate.by === row.by,
+          candidate.by === row.by &&
+          // Flow engine spec §13.2 (W-COR): a repository-only or bare-run row names no ledger row, so what the person
+          // said is what tells two of them apart; one sentence twice is still the same correction.
+          (coarse(row) ? candidate.because === row.because : true),
       );
       if (existing !== undefined) {
         throw new CorrectRejection(
           CORRECTION_ALREADY_RECORDED,
-          `${row.by} has already corrected ${row.decisionId ?? `pending decision ${row.pendingId} of run ${row.runId}`} in ${row.projectKey}: correction ${existing.id} ` +
+          `${row.by} has already corrected ${describeCorrectionTarget(row)} in ${row.projectKey}: correction ${existing.id} ` +
             `(recorded ${existing.at}). Pass --again to record another one on purpose.`,
         );
       }

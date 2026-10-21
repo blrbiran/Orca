@@ -6,6 +6,7 @@ import { namesDecision } from "./schema.js";
 import type { DecisionCorrection } from "./schema.js";
 import { CORRECTION_NOT_FOUND, CORRECTION_TARGET_NOT_A_DECISION, readCorrections } from "./store.js";
 import { withStoreLock } from "./storeLock.js";
+import { describeCorrectionTarget } from "./target.js";
 
 /**
  * Decisions review and correction withdraw spec §5.1: a withdrawal lives in its OWN file,
@@ -112,7 +113,7 @@ export async function withdrawCorrection(
     if (!namesDecision(correction)) {
       throw new CorrectRejection(
         CORRECTION_TARGET_NOT_A_DECISION,
-        `correction ${correction.id} names pending decision ${correction.pendingId} of run ${correction.runId}, ` +
+        `correction ${correction.id} names ${describeCorrectionTarget(correction)}, ` +
           `not a recorded decision: withdrawing it is not supported`,
       );
     }

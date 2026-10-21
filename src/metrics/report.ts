@@ -72,6 +72,9 @@ export function renderTable(report: MetricsReport): string {
   if (report.corrections_on_unrecorded_decisions > 0) {
     lines.push(`corrections on unrecorded decisions (in none of the rates): ${report.corrections_on_unrecorded_decisions}`);
   }
+  if (report.corrections_on_coarse_targets > 0) {
+    lines.push(`corrections naming only a repository or a run (in none of the rates): ${report.corrections_on_coarse_targets}`);
+  }
   if (report.unresolved_decisions.length > 0) {
     lines.push(
       `corrections whose decision was not scanned: ${report.unresolved_decisions.length} ` +

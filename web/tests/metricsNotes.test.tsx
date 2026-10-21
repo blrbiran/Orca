@@ -52,6 +52,8 @@ describe("metrics notes in the reader's language (spec §6.10)", () => {
     expect([...view.container.querySelectorAll("h2")].map((h) => h.textContent)).toEqual([
       zh.metrics.correctionRate, zh.metrics.repairRate, zh.metrics.reviewCoverage,
       zh.metrics.unresolvedTitle, zh.metrics.malformedTitle, zh.metrics.futureTitle, zh.metrics.unrecordedDecisionCorrections,
+      // Ruling: 这次批准改写所有必要的判据 (b37f7ce9). W-COR (flow engine spec §13.4) adds the coarse-target count's heading.
+      zh.metrics.coarseTargetCorrections,
     ]);
     expect(view.getByTestId("correction-rate").textContent).toBe(zh.metrics.unknownRate);
     // REWRITTEN (human authorisation, session 1f3cceb2): the h2 above names the count in the reader's language (pinned a few lines up), so the line repeats only the number.
@@ -60,6 +62,7 @@ describe("metrics notes in the reader's language (spec §6.10)", () => {
     expect(view.getByTestId("excluded-as-future").textContent).toBe("0");
     // The field is optional on the web type: absent reads as 0, present shows its number.
     expect(view.getByTestId("unrecorded-decision-corrections").textContent).toBe("0");
+    expect(view.getByTestId("coarse-target-corrections").textContent).toBe("0");
     view.rerender(<MetricsView report={{ ...report, corrections_on_unrecorded_decisions: 3 }} coverage={coverage} />);
     expect(view.getByTestId("unrecorded-decision-corrections").textContent).toBe("3");
     // Each note site read where it is shown: the zh no-review-coverage note is also the correction caveat's, so a

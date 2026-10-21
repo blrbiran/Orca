@@ -2,7 +2,8 @@ import { join } from "node:path";
 import { attributionText, routedAttributionFor } from "./commandClient.js";
 import { ZodError } from "zod";
 import { closeExistingCorrection, closeStoredCorrection, refuseChoseInsteadConflict, requireGitRoot, type ClosingRows } from "../corrections/correct.js";
-import { derivePendingRows } from "../corrections/derive.js";
+import { deriveCoarseRows, derivePendingRows } from "../corrections/derive.js";
+import { correctionTargetOf, describeCorrectionTarget } from "../corrections/target.js";
 import { readOriginalDecision } from "../corrections/originalDecision.js";
 import { correctionRowFrom, recordNewCorrection } from "../corrections/record.js";
 import { CorrectRejection } from "../corrections/rejection.js";
@@ -13,6 +14,7 @@ import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./
 import { debugGroupIds, debugGroupLive, repositoryOf, type WithdrawnDebugGroup } from "./debugGroup.js";
 import { ControlError, durableCommandErrorStatus, type KnownControlErrorCode } from "./errors.js";
 import { readPendingDecision } from "./pendingDecisions.js";
+import { readRun } from "./budget.js";
 import type { ControlStore } from "./store.js";
 import type { WebCommandResult, WebServiceDeps } from "./webService.js";
 import type { CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
@@ -118,23 +120,28 @@ async function readCorrectionsOrRefuse(dir: string): Promise<Correction[]> {
 export function applyCorrectionRecord(deps: WebServiceDeps, command: CorrectionRecordCommand): Promise<WebCommandResult> {
   return run(deps.store, command, async () => {
     const { dir, by, panel } = configured(deps);
-    const { repoId, decisionId, kind, because, chose_instead, again } = command.payload;
+    const { repoId, decisionId, runId, kind, because, chose_instead, again } = command.payload;
     const projectKey = panel.projectKeyOf(repoId);
     const repository = (deps.listRepositories?.() ?? []).find((candidate) => candidate.repoId === repoId);
     if (projectKey === null || repository === undefined) throw new ControlError("correction-repository-unknown", repoId);
-    await readOriginalDecision(join(repository.path, ".decisions"), decisionId);
+    // Flow engine spec §13.3: a bare-run target must be a run this control store holds (readRun refuses run-not-found).
+    // A repository-only one names nothing further to check.
+    if (decisionId !== undefined && runId === undefined) await readOriginalDecision(join(repository.path, ".decisions"), decisionId);
+    if (runId !== undefined) readRun(deps.store, runId);
     // recordNewCorrection reads the store too; a line that does not parse is refused by name, not a 500.
     await readCorrectionsOrRefuse(dir);
     // CLI v2 spec §16: the routed person and channel; a call that skips the routes records the panel's identity, as before.
     const routed = routedAttributionFor(command.commandId);
     const stored = await recordNewCorrection(dir, correctionRowFrom({
-      projectKey, decisionId, kind, ...(chose_instead === undefined ? {} : { chose_instead }), because, by: routed?.by ?? by,
+      projectKey, decisionId, runId, kind, ...(chose_instead === undefined ? {} : { chose_instead }), because, by: routed?.by ?? by,
       ...(routed === null ? {} : { via: routed.via }),
     }, () => panel.now()), { again: again === true });
     // As the panel route (its ruling J6): a refused correction never reaches this line; a failed mark is answered beside
-    // the recorded correction, never as if nothing was written.
-    try { await panel.markReviewed({ projectKey, decisionId, by }); }
-    catch (error) { throw new ControlError("correction-recorded-unreviewed", `${stored.id}:reviewed-mark:${codeOf(error)}`); }
+    // the recorded correction, never as if nothing was written. Only a decision is reviewed (the reviews file is keyed by it).
+    if (decisionId !== undefined) {
+      try { await panel.markReviewed({ projectKey, decisionId, by }); }
+      catch (error) { throw new ControlError("correction-recorded-unreviewed", `${stored.id}:reviewed-mark:${codeOf(error)}`); }
+    }
     return { kind: "correction-recorded", correctionId: stored.id };
   });
 }
@@ -146,6 +153,15 @@ export function applyCorrectionRecord(deps: WebServiceDeps, command: CorrectionR
  */
 function pendingClosing(store: ControlStore, row: Correction, choseInstead: string | undefined, undo: { how: string; cost?: string; blastRadius?: string }, attributed?: string): ClosingRows {
   refuseChoseInsteadConflict(row, choseInstead);
+  const target = correctionTargetOf(row);
+  // Flow engine spec §13.4 (W-COR): a repository-only or bare-run correction closes the same way, one decision row and
+  // no overturned; closed by hand, no located decision is cited.
+  if (target.kind === "run" || target.kind === "repository") {
+    return {
+      message: `ledger: close ${row.id} after ${row.by}'s correction of ${describeCorrectionTarget(row)}`,
+      rows: (chose, at, runId) => [deriveCoarseRows({ correction: row, choseInstead: chose, undo, at, runId, authored: undefined, located: null, ...(attributed === undefined ? {} : { attributed }) }).decision],
+    };
+  }
   const pending = readPendingDecision(store, row.pendingId!);
   if (pending === null) throw new ControlError("original-pending-decision-not-found", row.pendingId);
   return {

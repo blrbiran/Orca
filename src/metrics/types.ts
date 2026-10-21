@@ -209,6 +209,8 @@ export interface MetricsReport {
   withdrawn_corrections: number;
   /** Debug-task design §12.3: live corrections on a decision a landing refused; they are in none of the rates. */
   corrections_on_unrecorded_decisions: number;
+  /** Flow engine spec §13.4 (W-COR): live corrections naming only a repository or a run; in none of the rates. */
+  corrections_on_coarse_targets: number;
   /** correctionId ascending */
   unresolved_decisions: UnresolvedDecision[];
   /** path ascending */
@@ -240,6 +242,7 @@ export const METRICS_FIELDS = [
   "excluded_as_future",
   "withdrawn_corrections",
   "corrections_on_unrecorded_decisions",
+  "corrections_on_coarse_targets",
   "unresolved_decisions",
   "unkeyable_repos",
   "malformed_lines",

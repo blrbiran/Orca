@@ -26,6 +26,12 @@ export const debugResultSchema = z.object({
   reproCommand: z.string().min(1).optional(),
   reproduction: z.literal("not-expressible").optional(),
   reproductionReason: z.string().min(1).optional(),
+  // Flow engine spec §13.2 (W-COR): for a repository-only or bare-run correction, where the agent located it. Code
+  // bounded where it could look (the frozen window); the person sees it; a located decision is cited when closing.
+  located: z.object({
+    groupId: z.string().min(1).optional(), runId: z.string().min(1).optional(), decisionId: z.string().min(1).optional(),
+    paths: z.array(z.string().min(1)), because: z.string().min(1),
+  }).strict().optional(),
 }).strict();
 export type DebugResult = z.infer<typeof debugResultSchema>;
 

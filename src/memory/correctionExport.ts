@@ -2,7 +2,9 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, open, readFile, rename } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import { isDirProjectKey } from "../corrections/projectKey.js";
 import type { Correction } from "../corrections/schema.js";
+import { describeCorrectionTarget } from "../corrections/target.js";
 import type { CorrectionListItemV1 } from "../control/correctionState.js";
 import { readLedgerAtRef } from "../control/ledgerAtRef.js";
 
@@ -72,10 +74,13 @@ export interface CorrectedDecision { question: string; chose: string }
  * agent's choice 100, the person's choice 120, the reason whatever is left; the whole text never exceeds MEMORY_MAX_CHARS.
  */
 export function correctionMemoryText(correction: Correction, decision: CorrectedDecision | null): string {
-  const target = correction.decisionId !== undefined ? `decision ${correction.decisionId}` : `pending decision ${correction.pendingId} of run ${correction.runId}`;
+  // Flow engine spec §13.4: the head names the target -- a decision (pending or recorded), a run, or the repository.
+  const target = describeCorrectionTarget(correction);
   const kind = correction.kind === "wrong" ? "wrong" : correction.kind === "stale" ? "stale" : "not to the person's taste";
+  const named = correction.decisionId !== undefined || correction.pendingId !== undefined ? `an agent's ${target}`
+    : correction.runId !== undefined ? target : `the work in ${target}`;
   const head = decision === null
-    ? `Orca correction: the person ruled an agent's ${target} ${kind}.`
+    ? `Orca correction: the person ruled ${named} ${kind}.`
     : `Orca correction: for "${clip(oneLine(decision.question), 100)}" an agent chose "${clip(oneLine(decision.chose), 100)}"; the person ruled it ${kind}.`;
   const instead = correction.chose_instead === undefined ? "" : ` Instead: "${clip(oneLine(correction.chose_instead), 120)}".`;
   const tail = ` [${target}; correction ${correction.id}]`;
@@ -150,6 +155,8 @@ export async function exportCorrectionsPass(deps: CorrectionExporterDeps): Promi
   const file = await readExports(deps.correctionsDir);
   for (const item of await deps.listCorrections()) {
     const id = item.correction.id;
+    // Flow engine spec §13.1 [BC-B7]: a `dir:` project has no remote identity ccmem could key it by; skipped by name.
+    if (isDirProjectKey(item.correction.projectKey)) continue;
     const row = file.rows[id];
     const repo = item.repoId === null ? null : deps.repositoryPath(item.repoId);
     if (repo === null || !isAbsolute(repo)) continue;

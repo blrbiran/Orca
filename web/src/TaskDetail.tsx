@@ -13,6 +13,7 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { controlFailureFrom, fetchSavedResultEligibility, downloadEvidenceArtifact, fetchRunActivity, fetchRunEvidence, type ControlAction } from "./controlApi.js";
 import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
+import { CorrectRunButton } from "./CoarseCorrection.js";
 import type { SavedResultEligibilityV1, ActivityEntryV1, EvidenceManifestV1, GroupDecisionsViewV1, GroupViewV1, WorkItemProgressV1, WorkItemViewV1 } from "./controlTypes.js";
 import { TaskResults } from "./TaskResults.js";
 import { RunDecisions } from "./RunDecisions.js";
@@ -284,6 +285,8 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
           {runs.map((run) => (
             <li key={run.runId}>
               {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)}<RunReason run={run} /> <EvidenceList runId={run.runId} />
+              {/* Flow engine spec §13.3 (W-COR): a finished run may be corrected as a whole, in one sentence. */}
+              {run.phase === "work" && run.outcome === "succeeded" && <CorrectRunButton repoId={view.summary.repoId} runId={run.runId} />}
               {retryRunOpen(view, run) && !archived && (
                 <>
                   {/* Issue #57: `r` sends this button's retry for the open task's current run (ControlGroupView); say so here. */}

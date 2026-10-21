@@ -394,7 +394,7 @@ export type ControlAction =
   // is recorded or closed by hand on the `@corrections` scope (constant revision 0). `groupId` is "@corrections" for all
   // three: the open's ledger key is the debug group the server picks (src/panel/controlApi.ts debugOpenScoped).
   | { verb: "correction-debug-open"; groupId: string; expectedRevision: number; payload: CorrectionDebugOpenPayloadV1 }
-  | { verb: "correction-record"; groupId: string; expectedRevision: number; payload: { repoId: string; decisionId: string; kind: "wrong" | "not_my_taste" | "stale"; because: string; chose_instead?: string; again?: boolean } }
+  | { verb: "correction-record"; groupId: string; expectedRevision: number; payload: { repoId: string; decisionId?: string; runId?: string; kind: "wrong" | "not_my_taste" | "stale"; because: string; chose_instead?: string; again?: boolean } }
   | { verb: "correction-close"; groupId: string; expectedRevision: number; payload: CorrectionClosePayloadV1 };
 
 /** The route a verb is served on -- src/panel/controlApi.ts's mutation table. */

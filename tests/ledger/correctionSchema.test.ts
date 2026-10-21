@@ -22,7 +22,16 @@ describe("correction — spec §4 (DB side, migratable)", () => {
 
   // Seven, not eight: chose_instead is conditional and is covered on its own
   // below. Listing it here would contradict that.
-  for (const field of ["id", "projectKey", "decisionId", "kind", "because", "at", "by"]) {
+  // Ruling: 这次批准改写所有必要的判据 (b37f7ce9). Six now: flow engine spec §13.1 (W-COR) makes a row with no
+  // decisionId the repository-only shape (projectKey + one sentence), so decisionId left the required list; the
+  // replacement assertion below pins that its absence is accepted only as that shape.
+  it("accepts a correction missing decisionId as the repository-only shape", () => {
+    const value = correction();
+    delete value.decisionId;
+    expect(correctionSchema.safeParse(value).success).toBe(true);
+    expect(correctionSchema.safeParse({ ...value, pendingId: "pending-r-0" }).success).toBe(false);
+  });
+  for (const field of ["id", "projectKey", "kind", "because", "at", "by"]) {
     it(`rejects a correction missing ${field}`, () => {
       const value = correction();
       delete value[field];

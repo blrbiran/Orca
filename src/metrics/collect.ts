@@ -56,6 +56,11 @@ export interface Observations {
    * Optional: absent reads as 0.
    */
   pendingTargetCorrections?: number;
+  /**
+   * Flow engine spec §13.4 (W-COR): live corrections naming only a repository or a run. Their own line, in none of the
+   * rates, apart from the pending-target count above. Optional: absent reads as 0.
+   */
+  coarseTargetCorrections?: number;
   unresolvedDecisions: UnresolvedDecision[];
   unkeyableRepos: UnkeyableRepo[];
   malformed: MalformedLine[];
@@ -147,11 +152,16 @@ export async function collect(opts: CollectOptions): Promise<Observations> {
   const corrections: CorrectionObservation[] = [];
   let withdrawnCorrections = 0;
   let pendingTargetCorrections = 0;
+  let coarseTargetCorrections = 0;
   for (const row of storeRead.rows) {
     // debug-task design §12.3: a pending-target row names no decision, so it reaches no rate; it has its own line.
+    // Flow engine spec §13.4: so does a repository-only or bare-run row, on a line of its own.
     if (!namesDecision(row)) {
       if (withdrawn.has(row.id)) withdrawnCorrections += 1;
-      else if (keep(row.at, row.id)) pendingTargetCorrections += 1;
+      else if (keep(row.at, row.id)) {
+        if (row.pendingId !== undefined) pendingTargetCorrections += 1;
+        else coarseTargetCorrections += 1;
+      }
       continue;
     }
     if (withdrawn.has(row.id)) {
@@ -247,6 +257,7 @@ export async function collect(opts: CollectOptions): Promise<Observations> {
     excludedAsFuture: future.length,
     withdrawnCorrections,
     pendingTargetCorrections,
+    coarseTargetCorrections,
     unresolvedDecisions,
     unkeyableRepos: unkeyable,
     malformed,
