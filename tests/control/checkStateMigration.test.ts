@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { Trigger } from "../../src/control/checks/trigger.js";
 import { schemaVersion } from "../../src/control/migrations.js";
 import { openControlStore } from "../../src/control/store.js";
 import { readIntegrationCheckSetting } from "../../src/control/integrationCheck.js";
@@ -86,7 +87,7 @@ describe("schema 16", () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]);
     try {
       const service = new WebControlService({ ...h.deps, knownRepository: (repoId: string) => repoId === "repo" });
-      const trigger = { all: [{ any: [{ kind: "landed-groups", min: 3 }] }] } as const;
+      const trigger: Trigger = { all: [{ any: [{ kind: "landed-groups", min: 3 }] }] };
       const globalChecks = { modelReview: { enabled: false, budgetTokens: 500_000 }, locks: ["modelReview.budgetTokens" as const] };
       h.store.transaction(() => {
         writeOrchestrationSettings(h.store, { maxRunningGroups: 3, checks: globalChecks }, 1);
