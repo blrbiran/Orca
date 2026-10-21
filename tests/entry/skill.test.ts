@@ -5,7 +5,7 @@ import { VERB_ACCESS } from "../../src/panel/humanOnly.js";
 import {
   confirmPayloadSchema, continueTaskPayloadSchema, emptyPayloadSchema, handoffStopPayloadSchema, importPlanPayloadSchema, proposalEditPayloadSchema,
   proposalSetAgentPayloadSchema, recoveryRetryPayloadSchema, retryTaskPayloadSchema, settleUnknownUsagePayloadSchema, reestimatePayloadSchema, requirementAnswerPayloadSchema, requirementConsensusPayloadSchema,
-  requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementOpenPayloadSchema, resumeFromHandoffPayloadSchema,
+  requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementClarifyMorePayloadSchema, requirementClassifyPayloadSchema, requirementOpenPayloadSchema, resumeFromHandoffPayloadSchema,
   setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema, setIntegrationCheckPayloadSchema, setCriteriaReviewPayloadSchema,
   verifySavedResultPayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
@@ -29,7 +29,8 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "recovery-retry": recoveryRetryPayloadSchema, "retry-task": retryTaskPayloadSchema, "settle-unknown-usage": settleUnknownUsagePayloadSchema, "set-workspace-mode": setWorkspaceModePayloadSchema, "set-agent-preferences": setAgentPreferencesPayloadSchema,
   "proposal-set-agent": proposalSetAgentPayloadSchema, "requirement-open": requirementOpenPayloadSchema, "requirement-answer": requirementAnswerPayloadSchema,
   "requirement-consensus": requirementConsensusPayloadSchema, "requirement-draft-feedback": requirementDraftFeedbackPayloadSchema,
-  "requirement-draft-accept": requirementDraftAcceptPayloadSchema, "set-task-labels": setTaskLabelsPayloadSchema, "set-task-loop": setTaskLoopPayloadSchema,
+  "requirement-draft-accept": requirementDraftAcceptPayloadSchema, "requirement-clarify-more": requirementClarifyMorePayloadSchema,
+  "requirement-classify": requirementClassifyPayloadSchema, "set-task-labels": setTaskLabelsPayloadSchema, "set-task-loop": setTaskLoopPayloadSchema,
   "set-spend-cap": setSpendCapPayloadSchema, "clear-spend-cap": clearSpendCapPayloadSchema, "set-usage-calendar": setUsageCalendarPayloadSchema,
   "set-integration-scheme": setIntegrationSchemePayloadSchema, "set-group-integration": setGroupIntegrationPayloadSchema,
   "set-integration-check": setIntegrationCheckPayloadSchema,
@@ -70,7 +71,8 @@ describe("the orca-control skill (spec §7, C18)", () => {
   // Task 7 (deferred Task 2 minor): the requirement rows read as one run, not split by an integration row.
   it("keeps the requirement rows together", () => {
     const at = rows.flatMap((row, index) => (row.route.includes("requirement") ? [index] : []));
-    expect(at.length).toBe(5);
+    // Clarify caps spec 2026-10-21 §3.1, §3.3: clarify-more and classify are requirement routes too (was 5).
+    expect(at.length).toBe(7);
     expect(at.at(-1)! - at[0]!).toBe(at.length - 1);
   });
 

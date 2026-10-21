@@ -24,6 +24,9 @@ it into a draft task group. Read the returned state rather than infer success fr
 1. Read `config`, `summary` and `recovery`. Choose a concrete registered repository; never guess a filesystem path.
 2. Open a requirement only with a single-call capable agent (the pinned Codex adapter lacks that capability), or import
    a registered plan. Read the group/requirement before each edit; use its current `commandRevision`.
+   Clarification is capped by the requirement's class (`.clarify` of `get groups/<id>/requirement`: round 1's
+   scope/clarity, the round cap and per-round caps). After the cap round is answered no next round is drafted: reach
+   consensus, or send `requirement/clarify-more` for exactly one more round; `requirement/classify` sets the class.
 3. Review task goals, acceptance, limits, optional token policy, workspace and integration. Check the effective worker,
    estimator and reconcile Agent selections, plus worker, handoff and goal-review profile bindings. Confirm the task
    plan with real profile/selection hashes from the reads, then send `groups/<id>/start` at the new revision.
@@ -210,6 +213,8 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/requirement/consensus` | requirement-consensus | `{"roundNo":1}` |
 | `POST groups/<groupId>/requirement/feedback` | requirement-draft-feedback | `{"draftNo":1,"feedback":"what to change"}` |
 | `POST groups/<groupId>/requirement/accept` | requirement-draft-accept | `{"draftNo":1,"draftHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}` |
+| `POST groups/<groupId>/requirement/clarify-more` | requirement-clarify-more | `{"roundNo":1}` |
+| `POST groups/<groupId>/requirement/classify` | requirement-classify | `{"scope":"medium","clarity":"fair"}` |
 | `POST groups/<groupId>/integration` | set-group-integration | `{"integration":{"delivery":"keep"}}` |
 | `POST groups/<groupId>/integration/retry` | retry-integration | `{}` |
 | `POST groups/<groupId>/integration/resolve` | resolve-integration-conflict | `{}` |

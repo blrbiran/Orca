@@ -76,8 +76,8 @@ import { budgetBalance } from "./budget.js";
 import { hasRequirementBlock, latestDraft, latestRound, readRequirementGroup, refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall } from "./singleCallLedger.js";
 import {
-  applyRequirementAnswer, applyRequirementConsensus, applyRequirementDraftAccept, applyRequirementDraftFeedback, applyRequirementOpen,
-  type RequirementAnswerCommand, type RequirementConsensusCommand, type RequirementDraftAcceptCommand, type RequirementDraftFeedbackCommand, type RequirementOpenCommand,
+  applyRequirementAnswer, applyRequirementClarifyMore, applyRequirementClassify, applyRequirementConsensus, applyRequirementDraftAccept, applyRequirementDraftFeedback, applyRequirementOpen,
+  type RequirementAnswerCommand, type RequirementClarifyMoreCommand, type RequirementClassifyCommand, type RequirementConsensusCommand, type RequirementDraftAcceptCommand, type RequirementDraftFeedbackCommand, type RequirementOpenCommand,
 } from "./requirementCommands.js";
 
 export type ProposalEditCommand = Extract<RawAuthorityCommandV1, { verb: "proposal-edit" }>;
@@ -986,6 +986,9 @@ export class WebControlService {
   answerRequirement(command: RequirementAnswerCommand): WebCommandResult { return applyRequirementAnswer(this.deps, command); }
   requirementConsensus(command: RequirementConsensusCommand): WebCommandResult { return applyRequirementConsensus(this.deps, command); }
   requirementDraftFeedback(command: RequirementDraftFeedbackCommand): WebCommandResult { return applyRequirementDraftFeedback(this.deps, command); }
+  /** Clarify caps spec 2026-10-21 §3.1, §3.3. */
+  requirementClarifyMore(command: RequirementClarifyMoreCommand): WebCommandResult { return applyRequirementClarifyMore(this.deps, command); }
+  requirementClassify(command: RequirementClassifyCommand): WebCommandResult { return applyRequirementClassify(this.deps, command); }
   /** N1 spec §9.1. */
   acceptRequirementDraft(command: RequirementDraftAcceptCommand): Promise<WebCommandResult> { return applyRequirementDraftAccept(this.deps, command); }
   /** Execution driver spec §3.2. A panel started without the repository refuses it by name. */

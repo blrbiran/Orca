@@ -160,7 +160,12 @@ export type ClarifyResultV1 = {
   openBranches: string[];
   glossary: Array<{ id: string; term: string; definition: string }>;
   adrs: Array<{ id: string; title: string; context: string; decision: string; consequences: string }>;
+  /** Clarify caps spec 2026-10-21 §3.1: round 1's judgement; absent on later rounds and on rounds written before it. */
+  classification?: RequirementClassificationV1;
 };
+export type RequirementScopeV1 = "small" | "medium" | "large";
+export type RequirementClarityV1 = "clear" | "fair" | "vague";
+export type RequirementClassificationV1 = { scope: RequirementScopeV1; scopeReason: string; clarity: RequirementClarityV1; clarityReason: string };
 export type RoundBodyV1 = {
   roundNo: number;
   state: "drafting" | "awaiting-answers" | "answered" | "interrupted" | "failed";
@@ -227,6 +232,13 @@ export type RequirementViewV1 = {
   drafts: DraftViewV1[];
   /** The live document until accept, the frozen text after. */
   document: string;
+  /** Clarify caps spec §3.6: code's caps (tier from the person's class, else the model's; unclassified is large). */
+  clarify?: {
+    classification: RequirementClassificationV1 | null; override: { scope: RequirementScopeV1; clarity: RequirementClarityV1 } | null;
+    tier: RequirementScopeV1; roundCap: number; questions: number; glossary: number; adrs: number; stoppedAtCap: boolean;
+  };
+  /** Epoch ms of the command that started the current drafting step; null when nothing drafts or it is not known. */
+  draftingSince?: number | null;
 };
 
 export type ControlSummaryV1 = {
@@ -553,7 +565,7 @@ export type CommandSuccessV1 = {
   commandId: string;
   actorId: string;
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
-    | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept"
+    | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-clarify-more" | "requirement-classify"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-integration-check" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw";
@@ -610,6 +622,8 @@ export type CommandSuccessV1 = {
     | { kind: "requirement-answered"; roundNo: number; nextRoundNo: number | null; wakeId: string | null }
     | { kind: "requirement-consensus"; roundNo: number; draftNo: number; wakeId: string }
     | { kind: "requirement-draft-rejected"; draftNo: number; nextDraftNo: number; wakeId: string }
+    | { kind: "requirement-clarify-more"; roundNo: number; nextRoundNo: number; wakeId: string }
+    | { kind: "requirement-classified"; scope: RequirementScopeV1; clarity: RequirementClarityV1 }
     | { kind: "requirement-draft-accepted"; draftNo: number; estimateId: string; estimateState: "queued" | "blocked-capability" | "input-too-large"; documentSha256: string; exportWakeId: string }
     | { kind: "shutdown"; groups: Array<{ groupId: string; disposition: "created" | "strengthened-pause" | "preserved-pause" | "preserved-handoff" | "preserved-shutdown" | "blocked-inconsistent" | "skipped-driver-owned" | "unchanged-idle"; changed: boolean; commandRevision: number; projectionSeq: number; frozenRunIds: string[]; requestIds: string[]; blockerCode: string | null }> };
 };

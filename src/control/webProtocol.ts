@@ -4,7 +4,7 @@ import { z } from "zod";
 import { usageSettlementSchema } from "./usageSettlement.js";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, runFailureCauseSchema, safeInteger } from "./schema.js";
 import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
-import { DRAFT_STATES, IDEA_MAX_BYTES, REQUIREMENT_WAITING, ROUND_STATES, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema } from "./requirementSchemas.js";
+import { CLARITIES, DRAFT_STATES, IDEA_MAX_BYTES, REQUIREMENT_WAITING, ROUND_STATES, SCOPES, classPairSchema, classificationSchema, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema } from "./requirementSchemas.js";
 import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema, loopSkillsSchema } from "./loopPlans.js";
 import { isTimeZone } from "./usageCalendar.js";
 import { WORK_ITEM_CATEGORIES } from "./workItemCategory.js";
@@ -629,6 +629,8 @@ export const commandVerbSchema = z.enum([
   "requirement-consensus",
   "requirement-draft-feedback",
   "requirement-draft-accept",
+  "requirement-clarify-more",
+  "requirement-classify",
   "set-spend-cap",
   "clear-spend-cap",
   "set-usage-calendar",
@@ -894,6 +896,9 @@ export const requirementDraftFeedbackPayloadSchema = z.object({
   draftNo: positiveSafeInteger, feedback: nonemptyString.refine((text) => Buffer.byteLength(text, "utf8") <= IDEA_MAX_BYTES, "feedback-too-large"),
 }).strict();
 export const requirementDraftAcceptPayloadSchema = z.object({ draftNo: positiveSafeInteger, draftHash: hashSchema }).strict();
+// Clarify caps spec 2026-10-21 §3.1, §3.3: the person grants one more round after the latest one, or sets the class.
+export const requirementClarifyMorePayloadSchema = z.object({ roundNo: positiveSafeInteger }).strict();
+export const requirementClassifyPayloadSchema = classPairSchema;
 
 const groupCommandTargetSchema = z.object({ kind: z.literal("group"), groupId: idSchema }).strict();
 const taskCommandTargetSchema = z.object({ kind: z.literal("task"), groupId: idSchema, taskId: idSchema }).strict();
@@ -1007,6 +1012,8 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("requirement-consensus"), target: groupCommandTargetSchema, payload: requirementConsensusPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-draft-feedback"), target: groupCommandTargetSchema, payload: requirementDraftFeedbackPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-draft-accept"), target: groupCommandTargetSchema, payload: requirementDraftAcceptPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("requirement-clarify-more"), target: groupCommandTargetSchema, payload: requirementClarifyMorePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("requirement-classify"), target: groupCommandTargetSchema, payload: requirementClassifyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-spend-cap"), target: spendCommandTargetSchema, payload: setSpendCapPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("clear-spend-cap"), target: spendCommandTargetSchema, payload: clearSpendCapPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-usage-calendar"), target: spendCommandTargetSchema, payload: setUsageCalendarPayloadSchema }).strict(),
@@ -1077,6 +1084,8 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-consensus"), target: groupCommandTargetSchema, payload: requirementConsensusPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-draft-feedback"), target: groupCommandTargetSchema, payload: requirementDraftFeedbackPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-draft-accept"), target: groupCommandTargetSchema, payload: requirementDraftAcceptPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("requirement-clarify-more"), target: groupCommandTargetSchema, payload: requirementClarifyMorePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("requirement-classify"), target: groupCommandTargetSchema, payload: requirementClassifyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-spend-cap"), target: spendCommandTargetSchema, payload: setSpendCapPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("clear-spend-cap"), target: spendCommandTargetSchema, payload: clearSpendCapPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-usage-calendar"), target: spendCommandTargetSchema, payload: setUsageCalendarPayloadSchema }).strict(),
@@ -1277,6 +1286,14 @@ export const requirementViewSchema = z.object({
   drafts: z.array(draftBodySchema.omit({ plan: true })),
   document: z.string(),
   spendCapBlock: spendCapBlockSchema.nullable().optional(),
+  // Clarify caps spec 2026-10-21 §3.6: code's caps for this requirement, and when the current drafting step was asked for
+  // (epoch ms of its command's activity row; null when nothing drafts or the row was retired). Optional on the wire so
+  // older fixtures still parse; the server always gives both.
+  clarify: z.object({
+    classification: classificationSchema.nullable(), override: classPairSchema.nullable(), tier: z.enum(["small", "medium", "large"]),
+    roundCap: positiveSafeInteger, questions: positiveSafeInteger, glossary: positiveSafeInteger, adrs: positiveSafeInteger, stoppedAtCap: z.boolean(),
+  }).strict().optional(),
+  draftingSince: safeInteger.nullable().optional(),
 }).strict();
 export type RequirementViewV1 = z.infer<typeof requirementViewSchema>;
 
@@ -1794,6 +1811,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("requirement-answered"), roundNo: positiveSafeInteger, nextRoundNo: positiveSafeInteger.nullable(), wakeId: nonemptyString.nullable() }).strict(),
   z.object({ kind: z.literal("requirement-consensus"), roundNo: positiveSafeInteger, draftNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
   z.object({ kind: z.literal("requirement-draft-rejected"), draftNo: positiveSafeInteger, nextDraftNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
+  z.object({ kind: z.literal("requirement-clarify-more"), roundNo: positiveSafeInteger, nextRoundNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
+  z.object({ kind: z.literal("requirement-classified"), scope: z.enum(SCOPES), clarity: z.enum(CLARITIES) }).strict(),
   z
     .object({
       kind: z.literal("requirement-draft-accepted"),

@@ -27,11 +27,34 @@ export const questionSchema = z.object({ id: questionIdSchema, key: nonempty, qu
 export const criterionSchema = z.object({ id: nonempty, text: nonempty }).strict();
 export const glossaryEntrySchema = z.object({ id: z.string().regex(/^R[1-9]\d*\.G[1-9]\d*$/), term: nonempty, definition: nonempty }).strict();
 export const adrSchema = z.object({ id: z.string().regex(/^R[1-9]\d*\.ADR[1-9]\d*$/), title: nonempty, context: nonempty, decision: nonempty, consequences: nonempty }).strict();
-/** A round's classified output (spec §7.3): ids assigned by code, the slug decided by code. */
+/** Clarify caps spec 2026-10-21 §3.1: the model's judgement of a requirement, written in round 1. */
+export const SCOPES = ["small", "medium", "large"] as const;
+export const CLARITIES = ["clear", "fair", "vague"] as const;
+export const classPairSchema = z.object({ scope: z.enum(SCOPES), clarity: z.enum(CLARITIES) }).strict();
+export const classificationSchema = z.object({ scope: z.enum(SCOPES), scopeReason: nonempty, clarity: z.enum(CLARITIES), clarityReason: nonempty }).strict();
+export type ClassPair = z.infer<typeof classPairSchema>;
+export type Classification = z.infer<typeof classificationSchema>;
+export type ClarifyTier = "small" | "medium" | "large";
+export interface ClarifyCaps { rounds: number; questions: number; glossary: number; adrs: number }
+/**
+ * Spec §3.2: code, not the model, maps a class to caps; the one table. The clarify instruction states it (requirementClarify.ts
+ * builds that text from here), so changing a number here changes the instruction and needs a new instruction version.
+ */
+export const CLARIFY_CAPS: Readonly<Record<ClarifyTier, Readonly<ClarifyCaps>>> = Object.freeze({
+  small: Object.freeze({ rounds: 1, questions: 3, glossary: 2, adrs: 1 }),
+  medium: Object.freeze({ rounds: 2, questions: 5, glossary: 4, adrs: 2 }),
+  large: Object.freeze({ rounds: 3, questions: 5, glossary: 5, adrs: 3 }),
+});
+/** Spec §3.2, §3.4: small and clear is small; large or vague is large; anything else medium. Unclassified (null) is large. */
+export function clarifyTier(c: ClassPair | null): ClarifyTier {
+  if (c === null || c.scope === "large" || c.clarity === "vague") return "large";
+  return c.scope === "small" && c.clarity === "clear" ? "small" : "medium";
+}
+/** A round's classified output (spec §7.3): ids assigned by code, the slug decided by code. `classification`: round 1 only (clarify caps spec §3.1); absent on rounds written before it. */
 export const clarifyResultSchema = z.object({
   slug: z.string().regex(SLUG_PATTERN).nullable(), statement: nonempty, acceptanceCriteria: z.array(criterionSchema),
   questions: z.array(questionSchema).max(MAX_QUESTIONS), frontierEmpty: z.boolean(), openBranches: z.array(nonempty),
-  glossary: z.array(glossaryEntrySchema), adrs: z.array(adrSchema),
+  glossary: z.array(glossaryEntrySchema), adrs: z.array(adrSchema), classification: classificationSchema.optional(),
 }).strict();
 /** One call of a round or draft (spec §4.2 "the run ids and usage of the round's calls, the overview hash and commit"). */
 export const callRecordSchema = z.object({

@@ -1,11 +1,19 @@
 import { z } from "zod";
-import { MAX_QUESTIONS, SLUG_PATTERN, type ClarifyResult, type RoundBody } from "./requirementSchemas.js";
+import {
+  CLARIFY_CAPS, classificationSchema, clarifyTier, MAX_QUESTIONS, SLUG_PATTERN, type ClarifyCaps, type ClarifyResult, type ClassPair, type RoundBody,
+} from "./requirementSchemas.js";
 
-export const CLARIFY_PROMPT_HEAD = "Orca requirement clarification, instruction version 1.";
+export const CLARIFY_PROMPT_HEAD = "Orca requirement clarification, instruction version 2.";
 const LANGUAGE_NAMES = { en: "English", zh: "中文 (Chinese)" } as const;
 
-/** N1 spec §7.1: the fixed instruction, carrying the four grilling rules of goal.md N1. Changing it means version 2. */
-const CLARIFY_INSTRUCTION_V1 = [
+const capLine = (c: ClarifyCaps) => `${c.rounds} ${c.rounds === 1 ? "round" : "rounds"}; per round at most ${c.questions} questions, ${c.glossary} glossary entries and ${c.adrs} decisions.`;
+
+/**
+ * N1 spec §7.1: the fixed instruction, carrying the four grilling rules of goal.md N1. Version 2 (clarify caps spec
+ * 2026-10-21 §3.5): only questions that change the plan, the round-1 classification, and the cap table, stated from
+ * CLARIFY_CAPS. Changing it (or that table) means version 3.
+ */
+const CLARIFY_INSTRUCTION_V2 = [
   CLARIFY_PROMPT_HEAD,
   "",
   "You help a person turn an idea into an agreed requirement for one software repository, by asking rounds of questions. You have no tools: you cannot run, open or inspect anything, and everything you may use is below. Answer with one JSON object and nothing else.",
@@ -23,7 +31,20 @@ const CLARIFY_INSTRUCTION_V1 = [
   "1. Ask only questions on the frontier: questions whose premises the idea, the repository or earlier answers already settle. Defer every other branch and list it in `openBranches`.",
   "2. Give every question a recommended answer, and say why in `why`.",
   "3. Do not ask what the repository overview already answers.",
-  "4. Ask at most five questions. When nothing is left on the frontier, ask none and set `frontierEmpty` to true.",
+  "4. Ask at most as many questions as the `Limits:` line allows, most decisive first. When nothing is left on the frontier, ask none and set `frontierEmpty` to true.",
+  "",
+  "## Which questions are the person's",
+  "",
+  "Ask only questions whose answer changes the plan materially: the goal, what is in and out of scope, constraints the work must respect, how success is judged, and choices that are hard to undo. Do not ask about implementation details, edge cases, file locations, naming, error handling, test layout or cleanup: the agent that carries out the work decides those and reports them afterwards as decisions. When in doubt, leave a question out.",
+  "",
+  "## Size and limits",
+  "",
+  "In round 1 only, judge the requirement and write `classification`: `scope` is `small` (one focused change), `medium` (several connected changes) or `large` (work spanning many parts of the repository); `clarity` is `clear` (the goal and its boundaries are stated), `fair` (the goal is stated, some boundaries are not) or `vague` (the goal itself is open). Give one sentence of reason for each. Leave `classification` out after round 1.",
+  "Orca turns the class into limits:",
+  `- small scope and clear: ${capLine(CLARIFY_CAPS.small)}`,
+  `- large scope, or vague: ${capLine(CLARIFY_CAPS.large)}`,
+  `- anything else: ${capLine(CLARIFY_CAPS.medium)}`,
+  "The `Limits:` line below names this round's limits; in round 1 without a class set by the person, the class you write decides them. An answer over a limit is discarded. Clarification stops after the last round unless the person asks for one more.",
   "",
   "## The answer",
   "",
@@ -37,7 +58,8 @@ const CLARIFY_INSTRUCTION_V1 = [
   "  \"frontierEmpty\": true when nothing is left on the frontier, otherwise false,",
   "  \"openBranches\": [ branches you saw and deliberately deferred ],",
   "  \"glossary\": [ { \"term\": a term, \"definition\": what it means, without implementation detail } ] -- new terms only,",
-  "  \"adrs\": [ { \"title\", \"context\", \"decision\", \"consequences\" } ] -- new decisions worth recording",
+  "  \"adrs\": [ { \"title\", \"context\", \"decision\", \"consequences\" } ] -- new decisions worth recording,",
+  "  \"classification\": in round 1 only: { \"scope\": small, medium or large, \"scopeReason\": one sentence, \"clarity\": clear, fair or vague, \"clarityReason\": one sentence }",
   "}",
   "Every string is non-empty. An answer that breaks any rule above is discarded whole.",
 ].join("\n");
@@ -61,6 +83,7 @@ export const CLARIFY_JSON_SCHEMA: Readonly<Record<string, unknown>> = deepFreeze
   frontierEmpty: { type: "boolean" }, openBranches: strings,
   glossary: { type: "array", items: object({ term: str, definition: str }, ["term", "definition"]) },
   adrs: { type: "array", items: object({ title: str, context: str, decision: str, consequences: str }, ["title", "context", "decision", "consequences"]) },
+  classification: object({ scope: str, scopeReason: str, clarity: str, clarityReason: str }, ["scope", "scopeReason", "clarity", "clarityReason"]),
 }, ["statement", "acceptanceCriteria", "questions", "frontierEmpty", "openBranches", "glossary", "adrs"]));
 
 const nonempty = z.string().min(1);
@@ -71,16 +94,34 @@ export const clarifyOutputSchema = z.object({
   frontierEmpty: z.boolean(), openBranches: z.array(nonempty),
   glossary: z.array(z.object({ term: nonempty, definition: nonempty }).strict()),
   adrs: z.array(z.object({ title: nonempty, context: nonempty, decision: nonempty, consequences: nonempty }).strict()),
+  classification: classificationSchema.optional(),
 }).strict();
 
 export type ClarifyClass = { ok: true; result: ClarifyResult } | { ok: false; reason: string };
 
-/** N1 spec §7.3 (Rule 5: code decides): the schema, the frontier rule, dependencies, unique ids; code numbers everything. */
-export function classifyClarifyOutput(value: unknown, context: { roundNo: number; requirementId: string; earlierQuestionIds: readonly string[] }): ClarifyClass {
+/**
+ * Clarify caps spec §3.2: the caps a round is held to. `known` is the class set before this call (the person's, else
+ * round 1's); round 1 without one is held to the class its own answer writes. Unclassified is the large tier (§3.4).
+ */
+export function roundCaps(roundNo: number, known: ClassPair | null, written: ClassPair | null = null): ClarifyCaps {
+  return CLARIFY_CAPS[clarifyTier(known ?? (roundNo === 1 ? written : null))];
+}
+
+/**
+ * N1 spec §7.3 (Rule 5: code decides): the schema, the frontier rule, dependencies, unique ids; code numbers everything.
+ * Clarify caps spec §3.1-§3.2: round 1 must classify; every round is held to its caps (an answer over one is invalid and
+ * retried, never truncated). `classification` is the class known before the call (null: none yet).
+ */
+export function classifyClarifyOutput(value: unknown, context: { roundNo: number; requirementId: string; earlierQuestionIds: readonly string[]; classification?: ClassPair | null }): ClarifyClass {
   if (value === null) return { ok: false, reason: "no-output" };
   const parsed = clarifyOutputSchema.safeParse(value);
   if (!parsed.success) { const issue = parsed.error.issues[0]; return { ok: false, reason: `schema:${issue?.path.join(".") ?? ""}:${issue?.message ?? "invalid"}` }; }
   const out = parsed.data;
+  if (context.roundNo === 1 && out.classification === undefined) return { ok: false, reason: "classification-missing" };
+  const caps = roundCaps(context.roundNo, context.classification ?? null, out.classification ?? null);
+  for (const [field, max] of [["questions", caps.questions], ["glossary", caps.glossary], ["adrs", caps.adrs]] as const) {
+    if (out[field].length > max) return { ok: false, reason: `cap:${field}:${out[field].length}>${max}` };
+  }
   if (!out.frontierEmpty && out.questions.length === 0) return { ok: false, reason: "frontier-not-empty-without-questions" };
   const keys = out.questions.map((q) => q.key);
   if (new Set(keys).size !== keys.length) return { ok: false, reason: "duplicate-question-key" };
@@ -98,6 +139,7 @@ export function classifyClarifyOutput(value: unknown, context: { roundNo: number
     frontierEmpty: out.frontierEmpty, openBranches: out.openBranches,
     glossary: out.glossary.map((entry, i) => ({ id: `R${n}.G${i + 1}`, ...entry })),
     adrs: out.adrs.map((adr, i) => ({ id: `R${n}.ADR${i + 1}`, ...adr })),
+    ...(n === 1 && out.classification !== undefined ? { classification: out.classification } : {}),
   } };
 }
 
@@ -121,10 +163,21 @@ function earlierRounds(rounds: RoundBody[]): unknown[] {
   });
 }
 
-export function buildClarifyPrompt(input: { idea: string; contentLanguage: "en" | "zh"; overview: { canonicalJson: string; hash: string }; earlier: RoundBody[]; retryReason: string | null }): string {
+/** Clarify caps spec §3.5: this round's caps, as code computed them; round 1 without a known class names the table instead. */
+export function limitsLine(roundNo: number, classification: ClassPair | null, roundCap: number): string {
+  if (roundNo === 1 && classification === null) return "Limits: round 1; the class you write decides this round's limits (see the list above).";
+  const caps = roundCaps(roundNo, classification);
+  return `Limits: round ${roundNo} of at most ${roundCap}; in this round at most ${caps.questions} questions, ${caps.glossary} glossary entries and ${caps.adrs} decisions.`;
+}
+
+export function buildClarifyPrompt(input: {
+  idea: string; contentLanguage: "en" | "zh"; overview: { canonicalJson: string; hash: string }; earlier: RoundBody[]; retryReason: string | null;
+  /** Clarify caps spec §3.5: the round, the class known before the call (null: none yet) and the round cap. */
+  limits: { roundNo: number; classification: ClassPair | null; roundCap: number };
+}): string {
   const nonce = input.overview.hash.slice(0, 16);
   const blocks = [
-    CLARIFY_INSTRUCTION_V1, `Write in: ${LANGUAGE_NAMES[input.contentLanguage]}`,
+    CLARIFY_INSTRUCTION_V2, limitsLine(input.limits.roundNo, input.limits.classification, input.limits.roundCap), `Write in: ${LANGUAGE_NAMES[input.contentLanguage]}`,
     fence("idea", nonce, input.idea), fence("repository-overview", nonce, input.overview.canonicalJson),
     fence("rounds", nonce, JSON.stringify(earlierRounds(input.earlier))),
     ...(input.retryReason === null ? [] : [fence("retry", nonce, input.retryReason)]),

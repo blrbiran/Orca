@@ -13,7 +13,7 @@ import {
 import type { ExecutionProfileRouter, FrozenProfile } from "./profiles.js";
 import { renderRequirementDocument } from "./requirementDocument.js";
 import {
-  insertClarifyingGroup, latestDraft, latestRound, newDraft, newRound, queueRequirementCall, readDraft, readRequirementGroup, readRounds, saveRequirementGroup,
+  clarifyLimits, insertClarifyingGroup, latestDraft, latestRound, newDraft, newRound, queueRequirementCall, readDraft, readRequirementGroup, readRounds, saveRequirementGroup,
   writeDraft, writeRound,
 } from "./requirementRecords.js";
 import { writeCanonicalRecord } from "./snapshot.js";
@@ -30,6 +30,8 @@ export type RequirementAnswerCommand = Extract<RawAuthorityCommandV1, { verb: "r
 export type RequirementConsensusCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-consensus" }>;
 export type RequirementDraftFeedbackCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-draft-feedback" }>;
 export type RequirementDraftAcceptCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-draft-accept" }>;
+export type RequirementClarifyMoreCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-clarify-more" }>;
+export type RequirementClassifyCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-classify" }>;
 type Result = CommandLookupV1["body"];
 export interface RequirementCommandDeps {
   store: ControlStore; admissionGate?: AdmissionGate; profileRouter: ExecutionProfileRouter; defaults: () => ImportDefaults | null;
@@ -127,10 +129,50 @@ export function applyRequirementAnswer(deps: RequirementCommandDeps, command: Re
         return { id: q.id, kind: a.kind, text: a.kind === "text" ? a.text : q.recommendedAnswer };
       });
       writeRound(deps.store, id, { ...round, state: "answered", answers, glossaryDecisions: payload.glossaryDecisions, adrDecisions: payload.adrDecisions, answeredAt: nowOf(deps).toISOString() });
-      if (result.frontierEmpty) return commandSuccess(context, { kind: "requirement-answered", roundNo: round.roundNo, nextRoundNo: null, wakeId: null });
+      // Clarify caps spec §3.3: at the round cap clarification stops as at an empty frontier; requirement-clarify-more grants one more.
+      if (result.frontierEmpty || round.roundNo >= clarifyLimits(deps.store, readRequirementGroup(deps.store, id)).roundCap) {
+        return commandSuccess(context, { kind: "requirement-answered", roundNo: round.roundNo, nextRoundNo: null, wakeId: null });
+      }
       writeRound(deps.store, id, newRound(round.roundNo + 1));
       const wakeId = queueRequirementCall(deps.store, id, `answer-${context.nextCommandRevision}`);
       return commandSuccess(context, { kind: "requirement-answered", roundNo: round.roundNo, nextRoundNo: round.roundNo + 1, wakeId });
+    },
+  }).body);
+}
+
+/** Clarify caps spec §3.3: clarification has stopped (no consensus; the latest round answered, not closed by consensus). The person grants exactly one more round. */
+export function applyRequirementClarifyMore(deps: RequirementCommandDeps, command: RequirementClarifyMoreCommand): Result {
+  return admitted(deps, () => applyWebCommand<Result>(deps.store, {
+    rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+    apply: (context) => {
+      const id = command.target.groupId, group = clarifying(deps.store, id);
+      notStopped(deps.store, group);
+      if (group.requirement.consensus !== null) invalid("consensus-reached");
+      const round = latestRound(deps.store, id);
+      if (round === null || round.roundNo !== command.payload.roundNo || round.state !== "answered" || round.closedByConsensus) return invalid("round-not-stopped");
+      const nextRoundNo = round.roundNo + 1;
+      group.requirement.roundsGranted = nextRoundNo;
+      saveRequirementGroup(deps.store, group);
+      writeRound(deps.store, id, newRound(nextRoundNo));
+      const wakeId = queueRequirementCall(deps.store, id, `clarify-more-${context.nextCommandRevision}`);
+      return commandSuccess(context, { kind: "requirement-clarify-more", roundNo: round.roundNo, nextRoundNo, wakeId });
+    },
+  }).body);
+}
+
+/** Clarify caps spec §3.1: the person's class, kept beside the model's (round 1's result keeps the model's as written). */
+export function applyRequirementClassify(deps: RequirementCommandDeps, command: RequirementClassifyCommand): Result {
+  return admitted(deps, () => applyWebCommand<Result>(deps.store, {
+    rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+    apply: (context) => {
+      const id = command.target.groupId, group = clarifying(deps.store, id);
+      if (group.requirement.consensus !== null) invalid("consensus-reached");
+      const { scope, clarity } = command.payload;
+      const current = group.requirement.classOverride;
+      if (current !== undefined && current.scope === scope && current.clarity === clarity) throw new ControlError("no-op-command");
+      group.requirement.classOverride = { scope, clarity };
+      saveRequirementGroup(deps.store, group);
+      return commandSuccess(context, { kind: "requirement-classified", scope, clarity });
     },
   }).body);
 }

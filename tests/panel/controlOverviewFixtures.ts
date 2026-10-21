@@ -6,7 +6,7 @@ import {command,createHarness,get,json,GROUP,revision,view,claudeCodexResolveAge
 import {insertClarifyingGroup,newRound,writeRound} from "../../src/control/requirementRecords.js";
 import {clarifyingInput} from "../control/fixtures/requirement.js";
 import {classifyClarifyOutput} from "../../src/control/requirementClarify.js";
-import {ROUND_TWO} from "../control/fixtures/requirementOutputs.js";
+import {CLASSIFICATION, ROUND_TWO} from "../control/fixtures/requirementOutputs.js";
 
 export function createOverviewFixtures(h: ReturnType<typeof createHarness>) {
   async function panelFixture(twoIndependentTasks = false) {
@@ -43,7 +43,7 @@ export function createOverviewFixtures(h: ReturnType<typeof createHarness>) {
     return await json(response) as {schema:string; epoch:string; groups:any[]; steps:any[]; issues:any[]};
   }
   function seedZeroQuestion(panel: Awaited<ReturnType<typeof panelFixture>>["panel"], groupId = "zero-questions") {
-    const classified = classifyClarifyOutput({ ...ROUND_TWO, slug: "markdown-export" }, { roundNo: 1, requirementId: "0123456789abcdef0123456789abcdef", earlierQuestionIds: [] });
+    const classified = classifyClarifyOutput({ ...ROUND_TWO, slug: "markdown-export", classification: CLASSIFICATION }, { roundNo: 1, requirementId: "0123456789abcdef0123456789abcdef", earlierQuestionIds: [] });
     if (!classified.ok) throw new Error(classified.reason);
     panel.store.transaction(() => {
       insertClarifyingGroup(panel.store, clarifyingInput(groupId));

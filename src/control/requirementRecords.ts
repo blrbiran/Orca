@@ -12,8 +12,8 @@ import type { Amount } from "./types.js";
 import { frozenSlotSchema, profileBindingSchema } from "./webProtocol.js";
 import type { FrozenSlot } from "./agentSelection.js";
 import {
-  draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema, SLUG_PATTERN,
-  type DraftBody, type RoundBody,
+  CLARIFY_CAPS, classPairSchema, clarifyTier, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema, SLUG_PATTERN,
+  type ClarifyTier, type Classification, type ClassPair, type DraftBody, type RoundBody,
 } from "./requirementSchemas.js";
 
 /** N1 spec §4.1: the requirement block a clarifying group (and later the group it became) carries. */
@@ -28,6 +28,9 @@ export const requirementBlockSchema = z.object({
   acceptedDraftNo: safeInteger.positive().nullable(),
   document: z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), recordHash: z.string().regex(/^[a-f0-9]{64}$/), frozenAt: canonicalTimestampSchema }).strict().nullable(),
   export: requirementExportSchema,
+  /** Clarify caps spec 2026-10-21 §3.1, §3.3: the person's class, and the round number "one more round" granted up to. Absent on older blocks (§3.4). */
+  classOverride: classPairSchema.optional(),
+  roundsGranted: safeInteger.positive().optional(),
 }).strict();
 export type RequirementBlock = z.infer<typeof requirementBlockSchema>;
 
@@ -192,4 +195,15 @@ export function queueRequirementCall(store: ControlStore, groupId: string, tag: 
   store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'requirement-call',?,0) ON CONFLICT(id) DO NOTHING")
     .run(wakeId, groupId, canonicalBytes({ groupId }).toString("utf8"));
   return wakeId;
+}
+
+/** Clarify caps spec §3.1-§3.3: what code holds a requirement's clarification to, from its records. */
+export interface ClarifyLimits { classification: Classification | null; override: ClassPair | null; effective: ClassPair | null; tier: ClarifyTier; roundCap: number }
+export function clarifyLimits(store: ControlStore, group: RequirementGroup): ClarifyLimits {
+  const row = store.db.prepare("SELECT state,body FROM requirement_rounds WHERE group_id=? AND round_no=1").get(group.groupId);
+  const classification = row ? parsedRound(group.groupId, row.state, row.body).result?.classification ?? null : null;
+  const override = group.requirement.classOverride ?? null;
+  const effective = override ?? (classification === null ? null : { scope: classification.scope, clarity: classification.clarity });
+  const tier = clarifyTier(effective);
+  return { classification, override, effective, tier, roundCap: Math.max(CLARIFY_CAPS[tier].rounds, group.requirement.roundsGranted ?? 0) };
 }

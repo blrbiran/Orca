@@ -5,7 +5,7 @@ import { latestRound, readDraft, readRequirementGroup, readRound, saveRequiremen
 import { WebControlService } from "../../src/control/webService.js";
 import { rawAuthorityCommandSchema } from "../../src/control/webProtocol.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
-import { INVALID_SPLIT, ROUND_ONE, ROUND_TWO, VALID_SPLIT } from "./fixtures/requirementOutputs.js";
+import { CLASSIFICATION, INVALID_SPLIT, ROUND_ONE, ROUND_TWO, VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 import { profileSnapshot } from "./fixtures/web.js";
 
 // N1 spec §11.1: every requirement command goes through applyWebCommand (id, expected revision, actor, replay); code
@@ -19,7 +19,7 @@ const recommendedAll = (roundNo: number, x: Awaited<ReturnType<typeof requiremen
   return { roundNo, answers: result.questions.map((q) => ({ id: q.id, kind: "recommended" })), glossaryDecisions: result.glossary.map((e) => ({ id: e.id, accept: true })), adrDecisions: result.adrs.map((a) => ({ id: a.id, accept: false })) };
 };
 /** A round-1 output whose frontier is already empty: no questions, one open branch (spec §7.2). */
-const SETTLED_ROUND_ONE = { ...ROUND_TWO, slug: "markdown-export" };
+const SETTLED_ROUND_ONE = { ...ROUND_TWO, slug: "markdown-export", classification: CLASSIFICATION };
 const bad = { ...ROUND_ONE, questions: [], frontierEmpty: false };
 
 describe("requirement-open (N1 spec §11.1 item 1)", () => {

@@ -1,4 +1,6 @@
 /** N1 spec §7.2: model outputs the criteria hand the single-call port, as a real model would write them. */
+/** Clarify caps spec 2026-10-21 §3.1: round 1's judgement (medium tier: two rounds, as these fixtures run). */
+export const CLASSIFICATION = { scope: "medium", scopeReason: "An exporter and its image handling.", clarity: "fair", clarityReason: "The format is open." } as const;
 export const ROUND_ONE = {
   slug: "markdown-export",
   statement: "People can export a note as a Markdown file.",
@@ -11,6 +13,7 @@ export const ROUND_ONE = {
   openBranches: ["sync to a cloud drive"],
   glossary: [{ term: "note", definition: "One page of text a person wrote." }],
   adrs: [{ title: "One file per note", context: "Notes are independent.", decision: "Export each note to its own file.", consequences: "Many notes make many files." }],
+  classification: CLASSIFICATION,
 };
 export const ROUND_TWO = {
   statement: "People can export a note as a CommonMark file; images are links.",

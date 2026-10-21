@@ -23,14 +23,14 @@ import { WebControlService, readWebGroup } from "../../../src/control/webService
 import { controlWorkspaceRoots } from "../../../src/control/workspace.js";
 import { FIXTURE_AGENT_ID, fixtureResolveAgent, seedPanelOperator, seedPreferences } from "./agents.js";
 import { clarifyingInput } from "./requirement.js";
-import { ROUND_TWO } from "./requirementOutputs.js";
+import { CLASSIFICATION, ROUND_TWO } from "./requirementOutputs.js";
 import { openTestStore } from "./store.js";
 import { profileSnapshot } from "./web.js";
 
 /** N1 plan Task 6: one queued model answer per single call, in order; `purpose` is checked against the prompt's first line. */
 /** `output` may be a function of the prompt (an estimate's answer must echo the plan hash its request carries). */
 export interface QueuedAnswer { purpose: "clarify" | "split" | "estimate"; output: unknown; outcome?: "complete" | "failed" | "aborted"; tokens?: number | null; errorCode?: string | null }
-const HEADS = { clarify: "Orca requirement clarification, instruction version 1.", split: "Orca requirement split, instruction version 1.", estimate: "You are estimating the budget" } as const;
+const HEADS = { clarify: "Orca requirement clarification, instruction version 2.", split: "Orca requirement split, instruction version 1.", estimate: "You are estimating the budget" } as const;
 const sha = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
 
 function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
@@ -90,7 +90,7 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
  */
 function seedConsensus(store: Awaited<ReturnType<typeof openTestStore>>["store"]): void {
   const group = readRequirementGroup(store, "r");
-  const classified = classifyClarifyOutput({ ...ROUND_TWO, slug: "markdown-export" }, { roundNo: 1, requirementId: group.requirement.requirementId, earlierQuestionIds: [] });
+  const classified = classifyClarifyOutput({ ...ROUND_TWO, slug: "markdown-export", classification: CLASSIFICATION }, { roundNo: 1, requirementId: group.requirement.requirementId, earlierQuestionIds: [] });
   if (!classified.ok) throw new Error(`requirementHarness: ROUND_TWO did not classify: ${classified.reason}`);
   writeRound(store, "r", { ...newRound(1), state: "answered", result: classified.result, answers: [], glossaryDecisions: [], adrDecisions: [], answeredAt: "2026-10-02T08:05:00.000Z" });
   group.requirement.slug = classified.result.slug;

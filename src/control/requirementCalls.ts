@@ -7,7 +7,7 @@ import { buildClarifyPrompt, CLARIFY_JSON_SCHEMA, classifyClarifyOutput } from "
 import { renderRequirementDocument } from "./requirementDocument.js";
 import { buildRepositoryOverview } from "./requirementOverview.js";
 import {
-  clarifyingLedger, latestDraft, latestRound, newDraft, queueRequirementCall, readDraft, readDrafts, readRequirementGroup, readRound, readRounds,
+  clarifyingLedger, clarifyLimits, latestDraft, latestRound, newDraft, queueRequirementCall, readDraft, readDrafts, readRequirementGroup, readRound, readRounds,
   saveRequirementGroup, writeDraft, writeRound, type RequirementGroup,
 } from "./requirementRecords.js";
 import { MAX_AUTO_RETRIES, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody, type RequirementWaiting } from "./requirementSchemas.js";
@@ -195,7 +195,7 @@ function recordClarify(store: ControlStore, group: RequirementGroup, target: Req
   const round = readRound(store, group.groupId, target.no);
   if (round.state !== "drafting") throw new ControlError("recovery-blocked", "requirement-round-moved");
   const earlierQuestionIds = readRounds(store, group.groupId).filter((r) => r.roundNo < round.roundNo).flatMap((r) => r.result?.questions.map((q) => q.id) ?? []);
-  const classified = classifyClarifyOutput(rawOutput, { roundNo: round.roundNo, requirementId: group.requirement.requirementId, earlierQuestionIds });
+  const classified = classifyClarifyOutput(rawOutput, { roundNo: round.roundNo, requirementId: group.requirement.requirementId, earlierQuestionIds, classification: clarifyLimits(store, group).effective });
   round.calls = [...round.calls, failure !== null ? callOf(run, "failed", failure) : callOf(run, classified.ok ? "valid" : "invalid", classified.ok ? null : classified.reason)];
   if (classified.ok) {
     Object.assign(round, { result: classified.result, state: "awaiting-answers", lastInvalidReason: null });
@@ -252,9 +252,12 @@ async function prepareRequirementCall(
 export const CLARIFY_HANDLER: SingleCallHandler = {
   purpose: "clarify",
   async prepare(deps, run) {
-    return prepareRequirementCall(deps, run, CLARIFY_JSON_SCHEMA, (target) => readRound(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) =>
-      buildClarifyPrompt({ idea: group.requirement.idea, contentLanguage: group.requirement.contentLanguage, overview: built,
-        earlier: readRounds(deps.store, run.groupId).filter((r) => r.roundNo < target.no), retryReason: readRound(deps.store, run.groupId, target.no).lastInvalidReason }));
+    return prepareRequirementCall(deps, run, CLARIFY_JSON_SCHEMA, (target) => readRound(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) => {
+      const limits = clarifyLimits(deps.store, group);
+      return buildClarifyPrompt({ idea: group.requirement.idea, contentLanguage: group.requirement.contentLanguage, overview: built,
+        earlier: readRounds(deps.store, run.groupId).filter((r) => r.roundNo < target.no), retryReason: readRound(deps.store, run.groupId, target.no).lastInvalidReason,
+        limits: { roundNo: target.no, classification: limits.effective, roundCap: limits.roundCap } });
+    });
   },
   classify: classifyClarifyOutput,
   complete(deps, run, rawOutput, commitTerminal, failure = null) {
