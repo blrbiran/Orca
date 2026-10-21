@@ -21,7 +21,8 @@ describe("orca panel usage text (spec §3.3)", () => {
     expect(stderr).toContain("Never starts a panel");
     expect(stderr).toContain("3 is reserved for crashes (unexpected errors)");
     expect(stderr).toContain("orca mcp serve");
-    expect(stderr).toContain("orca_read and orca_send");
+    // CLI v2 plan Task 13 (Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): one MCP tool.
+    expect(stderr).toContain("one tool, orca, whose args are this CLI's argv");
   });
 
   it("documents the panel service commands (panel service spec §2, §4)", async () => {

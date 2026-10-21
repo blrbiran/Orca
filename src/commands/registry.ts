@@ -14,6 +14,12 @@ import type { CommandDef, FindResult } from "./types.js";
 
 export const REGISTRY: readonly CommandDef[] = [...META_ROWS, ...READ_ROWS, ...WORK_ROWS, ...PROPOSAL_ROWS, ...SETTINGS_ROWS, ...COMMAND_ROWS, ...TOOL_ROWS, ...DEV_ROWS, ...CONTROL_ROWS];
 
+/**
+ * Spec §11: the control verbs with no command, reachable only through `orca control send` (references/escape-hatch.md).
+ * tests/commands/verbCoverage.test.ts fails on any other verb the panel knows that no row maps.
+ */
+export const ESCAPE_HATCH_ONLY = ["shutdown", "system-debug-open"] as const;
+
 const words = (def: CommandDef): string[] => [def.domain, ...(def.action === null ? [] : def.action.split(" "))];
 
 export function levenshtein(a: string, b: string): number {

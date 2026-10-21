@@ -12,10 +12,15 @@ import {
   correctionRecordPayloadSchema, correctionClosePayloadSchema, correctionWithdrawPayloadSchema,
 } from "../../src/control/webProtocol.js";
 
-const skill = readFileSync("skills/orca-control/SKILL.md", "utf8");
+// CLI v2 plan Task 13 (spec §10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): SKILL.md is
+// short and routes by intent; the `orca control` escape hatch, its route table and its rules moved verbatim to
+// references/escape-hatch.md. The route table is read there; the taught phrases are read across the skill's own files.
+const skillMd = readFileSync("skills/orca-control/SKILL.md", "utf8");
+const escapeHatch = readFileSync("skills/orca-control/references/escape-hatch.md", "utf8");
+const skill = [skillMd, escapeHatch, readFileSync("skills/orca-control/references/troubleshooting.md", "utf8")].join("\n");
 const api = readFileSync("src/panel/controlApi.ts", "utf8");
 
-const rows = [...skill.matchAll(/^\| `POST ([^`]+)` \| ([a-z-]+) \| `([^`]*)` \|/gm)].map((m) => ({ route: m[1]!, verb: m[2]!, payload: m[3]! }));
+const rows = [...escapeHatch.matchAll(/^\| `POST ([^`]+)` \| ([a-z-]+) \| `([^`]*)` \|/gm)].map((m) => ({ route: m[1]!, verb: m[2]!, payload: m[3]! }));
 const panelRoutes = new Map([...api.matchAll(/path:\s*"\/api\/control\/([^"]+)",\s*verb:\s*"([^"]+)"/g)]
   .map((m) => [m[1]!.replace(/:([A-Za-z]+)/g, "<$1>"), m[2]!] as const));
 const ownerOnlyUnlistedRoute = { route: "operator/apply-agent-update", verb: "apply-agent-update" } as const;
@@ -49,10 +54,21 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
 };
 
 describe("the orca-control skill (spec §7, C18)", () => {
-  it("has frontmatter naming it", () => {
-    const front = /^---\n([\s\S]*?)\n---\n/.exec(skill)?.[1] ?? "";
+  it("has frontmatter naming it, with the CLI's version (spec §8)", () => {
+    const front = /^---\n([\s\S]*?)\n---\n/.exec(skillMd)?.[1] ?? "";
     expect(front).toMatch(/^name: orca-control$/m);
     expect(front).toMatch(/^description: .{20,}$/m);
+    const version = (JSON.parse(readFileSync("package.json", "utf8")) as { version: string }).version;
+    expect(front.match(/^version: (.+)$/m)?.[1]).toBe(version);
+  });
+
+  // Spec §10: SKILL.md at most ~120 lines -- what Orca is, the core rules, an intent routing table, the escape-hatch pointer.
+  it("keeps SKILL.md within 120 lines, routes by intent to commands and references, and points at the escape hatch", () => {
+    expect(skillMd.split("\n").length - (skillMd.endsWith("\n") ? 1 : 0)).toBeLessThanOrEqual(120);
+    expect(skillMd).toMatch(/^\| I want to .* \| .* \|$/m);
+    expect(skillMd).toContain("references/escape-hatch.md");
+    expect(skillMd).toContain("--if-revision");
+    expect(skillMd).not.toMatch(/^\| `POST /m);
   });
 
   it("lists exactly the documented panel mutation routes, including saved-result verification", () => {

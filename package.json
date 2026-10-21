@@ -16,6 +16,7 @@
   ],
   "scripts": {
     "test": "node scripts/test-affected.mjs",
+    "gen:cli-docs": "tsx scripts/gen-cli-docs.ts",
     "test:all": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",

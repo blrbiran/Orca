@@ -328,8 +328,10 @@ describe("GET /api/control/corrections (plan Task 10)", { timeout: 60_000 }, () 
     } finally { for (const close of closers) await close(); await w.dispose(); }
   });
 
+  // CLI v2 plan Task 13 (Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): the old skill text, its
+  // reading section included, moved verbatim to the escape-hatch reference.
   it("is listed in the orca-control skill's reading section", async () => {
-    const skill = await readFile("skills/orca-control/SKILL.md", "utf8");
+    const skill = await readFile("skills/orca-control/references/escape-hatch.md", "utf8");
     const reading = skill.slice(skill.indexOf("## 2. Reading"), skill.indexOf("## 3. Writing"));
     expect(reading).toContain("`orca control get corrections`");
   });

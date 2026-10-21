@@ -31,7 +31,7 @@ export interface PanelSession {
 
 export function openSession(args: ParsedArgs, io: CommandIo): PanelSession {
   const socketPath = discoverSocketPath({ stateDirFlag: args.global.controlStateDir, env: io.env });
-  const client = "cli";
+  const client = io.client ?? "cli";
   // CLI v2 spec §15.3: the person token only with --as-person (refused here under the dispatched-run marker).
   const headers = { ...dispatchedRunHeaders(io.env), ...(args.global.asPerson ? personTokenHeaders(io.env) : {}) };
   const memo = new Map<string, Promise<unknown>>();

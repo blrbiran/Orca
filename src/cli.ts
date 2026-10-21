@@ -118,8 +118,8 @@ const USAGE = `usage:
                                  Web UI. Exit 0 answered 2xx, 1 refused here (panel-not-running included),
                                  2 the panel answered an error; 3 is reserved for crashes (unexpected errors)
   orca mcp serve [--control-state-dir <dir>]
-                                 a stdio MCP server with two tools, orca_read and orca_send, that talk to a
-                                 running panel over its control socket exactly as orca control does
+                                 a stdio MCP server with one tool, orca, whose args are this CLI's argv (run
+                                 with --json; the panel, user and dev domains are refused)
 `;
 
 async function runPanel(args: string[]): Promise<number> {

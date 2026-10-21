@@ -58,6 +58,8 @@ export interface CommandIo {
   /** Given by a caller that already holds stdin (tests, the hook entry); else read from process.stdin on demand. */
   stdinText?: string;
   stdinIsTTY: boolean;
+  /** The x-orca-client this invocation sends (agent entry spec §6); `cli` when unset. `orca mcp serve` sets mcp:<name>. */
+  client?: string;
   /** A secret typed at the terminal with echo off (`orca login`); a seam for the criteria. Default: ttySecret.ts. */
   readSecret?(prompt: string): Promise<string>;
 }
