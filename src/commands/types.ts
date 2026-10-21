@@ -69,6 +69,8 @@ export interface WriteContext {
   ids: Record<string, string>;
   /** GET over the socket, memoised for this invocation only; a non-2xx answer throws a PanelAnswer. */
   read(path: string): Promise<unknown>;
+  /** Spec §4 "Project": --project, else the registered repository holding cwd, else the only one. */
+  project(): Promise<{ repoId: string; projectKey: string; path: string }>;
   io: CommandIo;
 }
 
@@ -89,7 +91,7 @@ export interface ReadMapping {
   kind: "read";
   /** One path: the body is that GET's body verbatim. Several: `compose` builds the body (spec §14 R6). */
   paths(context: WriteContext): string[] | Promise<string[]>;
-  compose?(bodies: unknown[], context: WriteContext): unknown;
+  compose?(bodies: unknown[], context: WriteContext): unknown | Promise<unknown>;
 }
 
 export interface LocalMapping {

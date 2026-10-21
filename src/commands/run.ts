@@ -18,7 +18,8 @@ async function execute(def: CommandDef, args: ParsedArgs, io: CommandIo, registr
   }
   const mapping = def.mapsTo;
   if (mapping.kind === "local") return (await mapping.load())(args, io);
-  throw new Error(`orca ${def.domain}: no runner for a ${mapping.kind} mapping yet`);
+  const { runPanelCommand } = await import("./panelCommand.js");
+  return runPanelCommand(def, args, io);
 }
 
 /**
