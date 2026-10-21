@@ -383,6 +383,8 @@ describe("the model review run (checks spec §6, criterion 8)", { timeout: 240_0
       // One slot: the person's group goes before the review, whatever the confirm order.
       w.h.importDeferred("p");
       w.h.store.db.prepare("UPDATE groups SET body=? WHERE id='p'").run(JSON.stringify({ ...w.body("p"), status: "ready" }));
+      // Confirmed after the review: by confirm time alone the review would go first.
+      w.advance(60_000);
       w.h.store.transaction(() => recordConfirmed(w.h.store, "p", "run", 1));
       const order: string[] = [];
       w.h.store.db.prepare("INSERT INTO orchestration_settings(singleton,revision,body) VALUES (1,1,?) ON CONFLICT(singleton) DO UPDATE SET body=excluded.body").run(JSON.stringify({ maxRunningGroups: 64 }));
