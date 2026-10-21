@@ -41,14 +41,26 @@ import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type 
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
+import { writeSystemDebugSettled, type SystemDebugMark } from "./systemDebug.js";
 import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
-import { ratifyFlag } from "./flaggedDecisions.js";
+import { flagDecision, ratifyFlag, readFlaggedDecision } from "./flaggedDecisions.js";
+import { join as joinPath } from "node:path";
+import { decideFundedAllowance } from "./fundedAllowance.js";
+import { failedRunDetail, groupWorkerAgent, MODEL_REVIEW_ADMIT_MS, newestConfirmedGroup, rangeDenylist, reviewAgentOf, reviewInputsOf, reviewPathDenied, type ReviewRunFacts } from "./modelReview/run.js";
+import { writeReviewInputs } from "./modelReview/inputs.js";
+import { FINDINGS_PATH, validatorCommand } from "./modelReview/plan.js";
+import { parseFindings, validateFindings, type Finding } from "./modelReview/findings.js";
+import { rangeOf } from "./checks/range.js";
+import { landedGroups } from "./integrationCheck.js";
+import { groupStopState } from "./stopIntent.js";
+import { readGroupOrchestration } from "./orchestration.js";
+import type { PartialSelection } from "./agentSelection.js";
 import { applySetIntegrationCheck, integrationCheckFacts, runIntegrationCheck, type SetIntegrationCheckCommand } from "./integrationCheck.js";
 import { migrateIntegrationMeta } from "./checks/migrate.js";
-import { prepareRange, projectTargets, rangeFacts, recordCheckEnded, recordCheckStarted } from "./checks/pass.js";
+import { applyCheckEnded, prepareRange, projectTargets, rangeFacts, recordCheckEnded, recordCheckStarted, type CheckEnd } from "./checks/pass.js";
 import type { RangeGroup } from "./checks/range.js";
 import { effectiveChecks } from "./checks/settings.js";
 import { readCheckState } from "./checks/state.js";
@@ -690,9 +702,9 @@ export class WebControlService {
     return { started, refused };
   }
   /** System debug task spec 2026-10-21 §2: Orca opens (or finds) a debug group of its own (systemDebug.ts). */
-  async openSystemDebugGroup(command: SystemDebugOpenCommand): Promise<WebCommandResult> {
+  async openSystemDebugGroup(command: SystemDebugOpenCommand, reviewAgent?: PartialSelection): Promise<WebCommandResult> {
     const release = this.deps.admissionGate?.enter();
-    try { return applySystemDebugOpen({ ...this.deps, repositoryPath: (repoId) => this.repositoryPath(repoId) }, command); }
+    try { return applySystemDebugOpen({ ...this.deps, repositoryPath: (repoId) => this.repositoryPath(repoId) }, command, reviewAgent); }
     finally { release?.(); }
   }
   /**
@@ -765,6 +777,12 @@ export class WebControlService {
     }
     for (const group of systemDebugGroups(this.store)) {
       const { groupId, mark } = group;
+      // Checks spec 2026-10-22 §6.1: a review's group is settled into exactly one end of its own (modelReviewStep).
+      if (mark.source.kind === "model-review" && mark.settled === null) {
+        const step = await this.modelReviewStep(group);
+        if (step === "confirmed") out.confirmed.push(groupId); else if (step === "settled") out.settled.push(groupId);
+        continue;
+      }
       if (mark.settled !== null || isGroupArchived(this.store, groupId)) continue;
       if (anyTaskFailed(this.store, groupId)) { settleSystemDebug(this.store, groupId, "debug-failed", null); out.settled.push(groupId); continue; }
       // §3: a person retried (or otherwise moved) the original task since: the ladder steps aside -- an unconfirmed debug
@@ -772,9 +790,15 @@ export class WebControlService {
       const superseded = mark.source.kind === "ladder" && terminallyFailedRun(this.store, mark.source.groupId, mark.source.taskId!)?.runId !== mark.source.runId;
       if (superseded && (group.status === "draft" || allTasksDone(this.store, groupId))) { settleSystemDebug(this.store, groupId, "superseded", null); out.settled.push(groupId); continue; }
       if (group.status === "draft") {
-        // Checks spec 2026-10-22 §6.1: a review or a finding's fix has no source group; its confirm is Task 9's.
-        if (!isGroupSource(mark.source)) continue;
-        const refused = await this.autoConfirmSystemDebug(groupId, mark.source.groupId);
+        // Checks spec 2026-10-22 §6.1: a finding's fix takes the profiles of its newest involved group that is confirmed,
+        // else the repository's newest confirmed group.
+        let profileGroup: string | null;
+        if (isGroupSource(mark.source)) profileGroup = mark.source.groupId;
+        else if (mark.source.kind === "model-review-finding") {
+          const involved = readFlaggedDecision(this.store, `model-review:${mark.source.reviewGroupId}:${mark.source.findingId}`)?.involvedGroupIds ?? [];
+          profileGroup = newestConfirmedGroup(this.store, mark.source.repoId, involved) ?? newestConfirmedGroup(this.store, mark.source.repoId);
+        } else continue;
+        const refused = profileGroup === null ? "no-profiles" : await this.autoConfirmSystemDebug(groupId, profileGroup);
         if (refused === null) out.confirmed.push(groupId); else { settleSystemDebug(this.store, groupId, "confirm-refused", refused); out.settled.push(groupId); }
         continue;
       }
@@ -795,6 +819,119 @@ export class WebControlService {
       (refused === null ? out.folded : out.settled).push(groupId);
     }
     return out;
+  }
+  /**
+   * Checks spec 2026-10-22 §6.1: one step of a review group, by code. Archived, not admitted within 24 h of opening
+   * (archived then as orca-auto), stopped, refused at confirm or claim, or a run that ended without success ⇒ one
+   * `errored` end; a succeeded run ⇒ its findings are read, checked and routed (completeModelReview). Null: nothing yet.
+   */
+  private async modelReviewStep(group: { groupId: string; status: string; mark: SystemDebugMark }): Promise<"confirmed" | "settled" | null> {
+    const { groupId, mark } = group;
+    const source = mark.source as Extract<SystemDebugMark["source"], { kind: "model-review" }>;
+    const end = (detail: string): "settled" => { this.endModelReview(groupId, source, { state: "errored", at: this.store.now(), detail }); return "settled"; };
+    if (isGroupArchived(this.store, groupId)) return end("archived");
+    const orchestration = readGroupOrchestration(this.store, groupId);
+    if ((orchestration?.startedRevision ?? null) === null && mark.openedAt !== undefined && this.store.now() - mark.openedAt >= MODEL_REVIEW_ADMIT_MS) {
+      const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)?.revision ?? 0);
+      this.archiveGroup({ schema: "orca-raw-command-v1", commandId: `orca-auto-not-admitted-${groupId}`, actorId: ORCHESTRATION_ACTOR, expectedRevision: revision, verb: "archive-group", target: { kind: "group", groupId }, payload: {} } as ArchiveGroupCommand);
+      return end("not-admitted");
+    }
+    const stop = groupStopState(this.store, groupId);
+    if (stop === "handoff-complete" || stop === "handoff-partial") return end("stopped");
+    if (group.status === "draft") {
+      const profileGroup = newestConfirmedGroup(this.store, source.repoId);
+      if (profileGroup === null) return end("no-profiles");
+      const refused = await this.autoConfirmSystemDebug(groupId, profileGroup);
+      return refused === null ? "confirmed" : end(`confirm-refused:${refused}`);
+    }
+    const row = this.store.db.prepare("SELECT id, body FROM runs WHERE group_id=? ORDER BY rowid DESC LIMIT 1").get(groupId);
+    if (row === undefined) {
+      // §6.1: a claim refused for lack of grant or limit before any run is the budget's end; any other refusal is its own.
+      if ((orchestration?.startedRevision ?? null) === null) return null;
+      const decision = decideFundedAllowance(this.store, groupId, null, this.store.now());
+      if (decision.allowance !== null) return null;
+      if (decision.reason === "group-budget-unavailable" || decision.reason === "task-budget-unavailable") return end("budget: limit");
+      if (decision.reason === "spend-cap-reached") return end(`claim-refused:${decision.reason}`);
+      return null;
+    }
+    const run = JSON.parse(String(row.body)) as { runId: string; state: string; drive?: { outcome?: string | null; blockedReason?: string | null; landedCommit?: string | null; base?: string | null; failureCause?: { cause?: string }; budgetSnapshot?: ReviewRunFacts["budgetSnapshot"] } };
+    const facts: ReviewRunFacts = {
+      state: run.state, outcome: run.drive?.outcome ?? null, blockedReason: run.drive?.blockedReason ?? null, landedCommit: run.drive?.landedCommit ?? null,
+      base: run.drive?.base ?? null, failureCause: run.drive?.failureCause?.cause ?? null, budgetSnapshot: run.drive?.budgetSnapshot ?? null,
+    };
+    if (run.state === "blocked") return end(failedRunDetail(facts));
+    if (run.state !== "settled" || !allTasksDone(this.store, groupId)) return null;
+    return this.completeModelReview(groupId, source, mark, run.runId, facts);
+  }
+  /** §5.2, §6.1: the review's end on its mark and on the check state, in one transaction. */
+  private endModelReview(groupId: string, source: { repoId: string; target: string }, end: CheckEnd, extra: () => void = () => {}): void {
+    this.store.transaction(() => {
+      extra();
+      if (writeSystemDebugSettled(this.store, groupId, end.state, end.detail ?? null)) applyCheckEnded(this.store, source.repoId, "model-review", source.target, { ...end, reviewGroupId: groupId });
+    });
+  }
+  /**
+   * §6.1 step 3, §6.4, §6.5: a succeeded review. Any path on its branch other than the findings file and its decision
+   * ledger ⇒ not-read-only (nothing read); a findings file that fails the schema or names another range ⇒
+   * findings-invalid; else each finding is checked against the range's groups and the files at its head, invalid ones are
+   * dropped with their reason, valid ones flagged (major red with a fix group held to the involved groups' checks, when
+   * they have any; minor not red), the record is written and the watermark moves -- with the end, in one transaction.
+   */
+  private async completeModelReview(groupId: string, source: Extract<SystemDebugMark["source"], { kind: "model-review" }>, mark: SystemDebugMark, runId: string, run: ReviewRunFacts): Promise<"settled"> {
+    const at = this.store.now();
+    const errored = (detail: string): "settled" => { this.endModelReview(groupId, source, { state: "errored", at, detail }); return "settled"; };
+    const repo = this.repositoryPath(source.repoId);
+    const tip = (await gitChild(repo, ["rev-parse", "--verify", "--quiet", `${workBranchRef(groupId)}^{commit}`])).stdout.trim() || run.landedCommit;
+    if (tip === null || run.base === null) return errored("findings-invalid");
+    const changed = (await gitChild(repo, ["diff", "--name-only", "--no-renames", run.base, tip])).stdout.split("\n").filter((line) => line !== "");
+    if (changed.some((path) => path !== FINDINGS_PATH && !path.startsWith(".decisions/"))) return errored("not-read-only");
+    const file = await gitChild(repo, ["show", `${tip}:${FINDINGS_PATH}`]);
+    let value: unknown = null;
+    try { value = file.code === 0 ? JSON.parse(file.stdout) : null; } catch { value = null; }
+    const parsed = parseFindings(value, { from: source.from, to: source.to });
+    if (!parsed.ok) return errored("findings-invalid");
+    const included = new Set(mark.review?.groups ?? []);
+    const landed = landedGroups(this.store, source.repoId).filter((entry) => included.has(entry.groupId));
+    const boundaries = new Set(landedGroups(this.store, source.repoId, { includeSystem: true }).filter((entry) => entry.target === source.target).map((entry) => entry.integratedCommit));
+    const groups = (await rangeOf(gitChild, repo, source.from, source.to, landed, boundaries)).groups;
+    const lines = new Map<string, number | null>();
+    for (const path of new Set(parsed.doc.findings.flatMap((entry) => entry.evidence.map((evidence) => evidence.path)))) {
+      const shown = await gitChild(repo, ["show", `${source.to}:${path}`]);
+      lines.set(path, shown.code !== 0 ? null : shown.stdout === "" ? 0 : shown.stdout.split("\n").length - (shown.stdout.endsWith("\n") ? 1 : 0));
+    }
+    const { valid, dropped } = validateFindings(parsed.doc, groups, (path) => lines.get(path) ?? null);
+    const order = groups.map((entry) => entry.groupId);
+    const involvedOf = (entry: Finding) => order.filter((id) => entry.evidence.some((evidence) => evidence.groupId === id));
+    const routed: Array<{ findingId: string; severity: string; debugGroupId: string | null; detail: string | null }> = [];
+    const debugGroupIds: string[] = [];
+    for (const entry of valid) {
+      if (entry.severity === "minor") { routed.push({ findingId: entry.id, severity: "minor", debugGroupId: null, detail: null }); continue; }
+      const involved = involvedOf(entry);
+      const checks = [...new Set(groups.filter((group) => involved.includes(group.groupId)).flatMap((group) => group.checks))].slice(0, 32);
+      if (checks.length === 0) { routed.push({ findingId: entry.id, severity: "major", debugGroupId: null, detail: "no-checks: fix not opened" }); continue; }
+      const findingSource = { kind: "model-review-finding" as const, repoId: source.repoId, reviewGroupId: groupId, findingId: entry.id };
+      const fixId = systemDebugGroupId(findingSource);
+      const facts = [`${entry.category} (${entry.severity}): ${entry.title}`, entry.explanation, ...entry.evidence.map((evidence) => `evidence: group ${evidence.groupId}, ${evidence.path}:${evidence.line}${evidence.note === "" ? "" : ` -- ${evidence.note}`}`), ...(entry.suggestedFix === "" ? [] : [`suggested fix: ${entry.suggestedFix}`])].map((fact) => fact.slice(0, 4096)).slice(0, 32);
+      const answer = await this.openSystemDebugGroup({
+        schema: "orca-raw-command-v1", commandId: `orca-auto-finding-${groupId}-${entry.id}`, actorId: ORCHESTRATION_ACTOR, expectedRevision: 0,
+        verb: "system-debug-open", target: { kind: "group", groupId: fixId }, payload: { source: findingSource, stackOn: null, repoId: source.repoId, facts, checks },
+      }, [...involved].reverse().map((id) => groupWorkerAgent(this.store, id)).find((agent) => agent !== undefined) ?? (() => { const profile = newestConfirmedGroup(this.store, source.repoId); return profile === null ? undefined : reviewAgentOf(this.store, profile); })());
+      const error = (answer as { error?: { code?: unknown } }).error;
+      if (error === undefined) debugGroupIds.push(fixId);
+      routed.push({ findingId: entry.id, severity: "major", debugGroupId: error === undefined ? fixId : null, detail: error === undefined ? null : `fix-open-refused:${String(error.code)}` });
+    }
+    const record = { schema: "orca-model-review-record-v1", reviewGroupId: groupId, runId, range: { target: source.target, from: source.from, to: source.to }, groups: order, valid, dropped: dropped.map((entry) => ({ findingId: entry.finding.id, reason: entry.reason })), routed };
+    const recordJson = canonicalBytes(record).toString("utf8"), recordHash = sha256Canonical(record);
+    const iso = new Date(at).toISOString();
+    this.endModelReview(groupId, source, { state: "completed", at, moveTo: source.to, debugGroupIds, recordHash, detail: null }, () => {
+      writeCanonicalRecord(this.store, groupId, recordHash, recordJson);
+      for (const entry of valid) flagDecision(this.store, {
+        decisionId: `model-review:${groupId}:${entry.id}`, groupId, runId, source: "model-review", reason: `${entry.category}: ${entry.title}`.slice(0, 2048),
+        evidence: entry.evidence.map((evidence) => `${evidence.groupId}:${evidence.path}:${evidence.line}`), by: ORCHESTRATION_ACTOR, at: iso,
+        severity: entry.severity, involvedGroupIds: involvedOf(entry).slice(0, 8),
+      });
+    });
+    return "settled";
   }
   /** §2: confirm as orca-auto with the source group's confirmed profiles, budget mode and context policy; null, or why not. */
   private async autoConfirmSystemDebug(groupId: string, sourceGroupId: string): Promise<string | null> {
@@ -895,8 +1032,8 @@ export class WebControlService {
    * (the next system debug pass confirms it). One run per (project, kind, target) at a time; a `running` record no job
    * of this process owns was cut off by a stop and is forgotten (no failure counted).
    */
-  async checksPass(): Promise<{ started: string[]; initialised: string[]; skipped: string[] }> {
-    const out = { started: [] as string[], initialised: [] as string[], skipped: [] as string[] };
+  async checksPass(): Promise<{ started: string[]; initialised: string[]; skipped: string[]; opened: string[] }> {
+    const out = { started: [] as string[], initialised: [] as string[], skipped: [] as string[], opened: [] as string[] };
     if (this.deps.resolveRepository === undefined) return out;
     const repoIds = [...new Set(this.store.db.prepare("SELECT body FROM groups").all().flatMap((row) => {
       try { const repoId = (JSON.parse(String(row.body)) as { plan?: { repoId?: unknown } }).plan?.repoId; return typeof repoId === "string" ? [repoId] : []; } catch { return []; }
@@ -907,6 +1044,7 @@ export class WebControlService {
         const repo = this.repositoryPath(repoId);
         await migrateIntegrationMeta(this.store, gitChild, repo, repoId);
         const settings = effectiveChecks(this.store, repoId).kinds["integration-check"];
+        for (const target of projectTargets(this.store, repoId)) await this.modelReviewTick(repoId, repo, target, now, out);
         if (!settings.enabled.value) continue;
         for (const target of projectTargets(this.store, repoId)) {
           const key = `${repoId}\0integration-check\0${target}`;
@@ -932,6 +1070,60 @@ export class WebControlService {
       }
     }
     return out;
+  }
+  /**
+   * Checks spec 2026-10-22 §2, §6.1-§6.2: the model-review kind on one target. One review in flight per (project, kind,
+   * target) -- its group, until settled; a `running` record with no group was cut off before the open and is forgotten.
+   * A due trigger cuts the range to maxGroupsPerReview (oldest first), writes the inputs under the runs root and opens
+   * the review group as orca-auto; no confirmed group in the project, or a findings path the range's denylist forbids,
+   * ends the run errored without opening anything.
+   */
+  private async modelReviewTick(repoId: string, repo: string, target: string, now: number, out: { initialised: string[]; opened: string[] }): Promise<void> {
+    const settings = effectiveChecks(this.store, repoId).kinds["model-review"];
+    if (!settings.enabled.value) return;
+    const last = readCheckState(this.store, repoId, "model-review", target)?.last ?? null;
+    if (last?.state === "running") {
+      const body = last.reviewGroupId === null ? undefined : this.store.db.prepare("SELECT body FROM groups WHERE id=?").get(last.reviewGroupId);
+      if (body !== undefined) return; // its group settles it (systemDebugPass)
+      recordCheckEnded(this.store, repoId, "model-review", target, { state: "errored", at: now, detail: "interrupted: Orca stopped before the review opened", interrupted: true });
+    }
+    const prepared = await prepareRange(this.store, gitChild, repo, repoId, "model-review", target, now);
+    if (prepared.kind === "initialised") { if (!out.initialised.includes(repoId)) out.initialised.push(repoId); return; }
+    if (prepared.kind !== "range" || prepared.range.groups.length === 0) return;
+    if (!evaluateTrigger(settings.trigger.value, rangeFacts(this.store, repoId, prepared.range.groups, prepared.state, now))) return;
+    const groups = prepared.range.groups.slice(0, settings.maxGroupsPerReview.value);
+    const to = groups.length < prepared.range.groups.length ? groups.at(-1)!.integratedCommit : prepared.range.to;
+    const source = { kind: "model-review" as const, repoId, target, from: prepared.range.from, to, runSeq: prepared.state.runSeq + 1 };
+    const reviewId = systemDebugGroupId(source);
+    recordCheckStarted(this.store, repoId, "model-review", target, now, { from: source.from, to, groups }, { reviewGroupId: reviewId });
+    const end = (detail: string) => recordCheckEnded(this.store, repoId, "model-review", target, { state: "errored", at: now, detail: detail.slice(0, 500) });
+    try {
+      const profileGroup = newestConfirmedGroup(this.store, repoId);
+      if (profileGroup === null) { end("no-profiles"); return; }
+      const denylist = rangeDenylist(this.store, groups);
+      if (reviewPathDenied(denylist)) { end("findings-path-denied"); return; }
+      const stats = new Map<string, string>();
+      for (const group of groups) stats.set(group.groupId, (await gitChild(repo, ["diff", "--shortstat", `${group.integratedCommit}^1`, group.integratedCommit])).stdout.trim());
+      const instruction = [
+        "Review the groups that landed in the range for, in priority order: (1) contract or convention drift between groups, (2) duplication, (3) whole behaviour no check covers.",
+        `Change no file except ${FINDINGS_PATH}. Write it as orca-model-review-findings-v1 with range {from: ${source.from}, to: ${to}}.`,
+        "Every finding needs evidence (group, path, line) from two groups that landed in the range. Report nothing rather than guess.",
+      ].join("\n");
+      const inputs = reviewInputsOf(this.store, { target, from: source.from, to }, groups, (group) => stats.get(group.groupId) ?? "", instruction);
+      const dir = joinPath(controlWorkspaceRoots(this.store.stateDir).runsRoot, "model-review", reviewId);
+      const written = await writeReviewInputs(dir, inputs);
+      const answer = await this.openSystemDebugGroup({
+        schema: "orca-raw-command-v1", commandId: `orca-auto-model-review-${reviewId}`, actorId: ORCHESTRATION_ACTOR, expectedRevision: 0,
+        verb: "system-debug-open", target: { kind: "group", groupId: reviewId },
+        payload: {
+          source, stackOn: null, repoId, facts: [`model review of ${source.from}..${to} on ${target}; inputs: ${dir}`.slice(0, 4096)], checks: [validatorCommand(source.from, to)],
+          review: { inputDir: dir, inputSha256: written.sha256, groups: groups.map((group) => group.groupId), budgetTokens: settings.budgetTokens.value, denylistPaths: denylist },
+        },
+      }, reviewAgentOf(this.store, profileGroup));
+      const error = (answer as { error?: { code?: unknown } }).error;
+      if (error !== undefined) { end(`open-refused:${String(error.code)}`); return; }
+      out.opened.push(reviewId);
+    } catch (error) { end(describeError(error)); }
   }
   /** Every check run this process started, settled (tests; a shutdown does not wait for them). */
   async checksSettled(): Promise<void> { await Promise.all([...this.checkJobs.values()]); }

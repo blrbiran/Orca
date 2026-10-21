@@ -261,10 +261,18 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
  * artifacts and no wake -- the estimator slot is not resolved or frozen either, as no estimate would use it. The reserve
  * follows the non-queued branch, so a later estimate's grant is still available to the first re-estimate.
  */
-export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, carry: RequirementCarryOver | null, opts: { estimate: "deferred" }): { estimateId: null; preflight: null };
+export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, carry: RequirementCarryOver | null, opts: { estimate: "deferred"; stripped?: { workTokens: number } }): { estimateId: null; preflight: null };
 export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, carry: RequirementCarryOver | null, opts?: { estimate: "preflight" | "deferred" }): { estimateId: string | null; preflight: FrozenEstimateRequest | null };
-export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, carry: RequirementCarryOver | null, opts: { estimate: "preflight" | "deferred" } = { estimate: "preflight" }): { estimateId: string | null; preflight: FrozenEstimateRequest | null } {
+/**
+ * `stripped` (checks spec 2026-10-22 §6.1, a model review; deferred only): the task's work grant is `workTokens` tokens
+ * (non-token dimensions from TASK_WORK), the group limit equals it, and the handoff and goal-review allocations are
+ * present (the protocol requires them) with zero amounts, as is every non-token reserve. So the review budget caps the
+ * whole group.
+ */
+export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, carry: RequirementCarryOver | null, opts: { estimate: "preflight" | "deferred"; stripped?: { workTokens: number } } = { estimate: "preflight" }): { estimateId: string | null; preflight: FrozenEstimateRequest | null } {
   const deferred = opts.estimate === "deferred";
+  const stripped = deferred && carry === null ? opts.stripped ?? null : null;
+  const handoffAmount = stripped === null ? TASK_HANDOFF : zero(), reviewAmount = stripped === null ? GOAL_REVIEW : zero();
   const plan = input.plan;
   const planCanonicalJson = canonicalBytes(plan).toString("utf8");
   const planHash = sha256Canonical(plan);
@@ -285,15 +293,15 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   const estimateId = deferred ? null : `estimate-${sha256Canonical({ groupId: input.groupId, planHash, version: 1 }).slice(0, 24)}`;
   const queued = preflight?.state === "queued";
   const legacyCarry=carry!==null&&!hasTokenPolicy(deps.store,input.groupId);
-  const authoredTokens=(task:ControlPlanV1["tasks"][number]):number|null=>legacyCarry?TASK_WORK.tokens:JSON.parse(task.originalContractCanonicalJson).executionPolicy.tokenBudget;
+  const authoredTokens=(task:ControlPlanV1["tasks"][number]):number|null=>stripped!==null?stripped.workTokens:legacyCarry?TASK_WORK.tokens:JSON.parse(task.originalContractCanonicalJson).executionPolicy.tokenBudget;
   const taskAllocations = plan.tasks.flatMap(task => [
     { ownerKind: "task", ownerId: task.taskId, bucket: "work", state: "draft-encumbered", amount: {...TASK_WORK,tokens:authoredTokens(task)}, fieldProvenance: defaultProvenance() },
-    { ownerKind: "task", ownerId: task.taskId, bucket: "handoff", state: "draft-encumbered", amount: cloneAmount(TASK_HANDOFF), fieldProvenance: defaultProvenance() },
+    { ownerKind: "task", ownerId: task.taskId, bucket: "handoff", state: "draft-encumbered", amount: cloneAmount(handoffAmount), fieldProvenance: defaultProvenance() },
   ]);
-  let base = checkedAdd(ESTIMATE_GRANT, GOAL_REVIEW);
-  for (const _task of plan.tasks) base = checkedAdd(base, checkedAdd(TASK_WORK, TASK_HANDOFF));
-  const initialReserve = reserve20(base);
-  const explicitUnallocatedReserve:BudgetAmount = queued ? initialReserve : checkedAdd(initialReserve, ESTIMATE_GRANT);
+  let base = stripped === null ? checkedAdd(ESTIMATE_GRANT, GOAL_REVIEW) : zero();
+  for (const _task of plan.tasks) base = checkedAdd(base, stripped === null ? checkedAdd(TASK_WORK, TASK_HANDOFF) : { ...TASK_WORK, tokens: stripped.workTokens });
+  const initialReserve = stripped === null ? reserve20(base) : zero();
+  const explicitUnallocatedReserve:BudgetAmount = queued || stripped !== null ? initialReserve : checkedAdd(initialReserve, ESTIMATE_GRANT);
   const groupLimit = checkedAdd(base, initialReserve);
   // Spec §6.3.2 (H10), D4, D10: an agent's import may not promise more than the caps leave -- its fresh limit (no carried
   // clarifying spend) against the headroom without this group's own runs. Not a ControlError: the command transaction
@@ -303,26 +311,26 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
     if (blocking !== null) throw new AgentCeilingRefusal(blocking, groupLimit.tokens);
   }
   const used = carry === null ? zero() : { ...carry.used };
-  const limit:BudgetAmount = {...checkedAdd(groupLimit, used),tokens:carry===null?null:legacyCarry?checkedAdd(groupLimit,used).tokens:(carry.existingBody.limit as BudgetAmount).tokens};
-  let committedRemaining = checkedAdd(GOAL_REVIEW, zero());
-  for (const _task of plan.tasks) committedRemaining = checkedAdd(committedRemaining, checkedAdd(TASK_WORK, TASK_HANDOFF));
+  const limit:BudgetAmount = {...checkedAdd(groupLimit, used),tokens:stripped!==null?groupLimit.tokens:carry===null?null:legacyCarry?checkedAdd(groupLimit,used).tokens:(carry.existingBody.limit as BudgetAmount).tokens};
+  let committedRemaining = checkedAdd(reviewAmount, zero());
+  for (const _task of plan.tasks) committedRemaining = checkedAdd(committedRemaining, stripped === null ? checkedAdd(TASK_WORK, TASK_HANDOFF) : TASK_WORK);
   if (queued) committedRemaining = checkedAdd(committedRemaining, ESTIMATE_GRANT);
-  if(!legacyCarry)committedRemaining.tokens=GOAL_REVIEW.tokens+(queued?ESTIMATE_GRANT.tokens:0);
+  if(!legacyCarry)committedRemaining.tokens=reviewAmount.tokens+(queued?ESTIMATE_GRANT.tokens:0);
   explicitUnallocatedReserve.tokens=limit.tokens===null?null:limit.tokens-used.tokens-committedRemaining.tokens;
   if(explicitUnallocatedReserve.tokens!==null&&explicitUnallocatedReserve.tokens<0)throw new ControlError("group-budget-unavailable");
   const allocations = [
     ...taskAllocations,
-    { ownerKind: "goal-review", ownerId: `${input.groupId}:goal-review`, bucket: "review", state: "draft-encumbered", amount: cloneAmount(GOAL_REVIEW), fieldProvenance: defaultProvenance() },
+    { ownerKind: "goal-review", ownerId: `${input.groupId}:goal-review`, bucket: "review", state: "draft-encumbered", amount: cloneAmount(reviewAmount), fieldProvenance: defaultProvenance() },
     { ownerKind: "reserve", ownerId: `${input.groupId}:reserve`, bucket: "reserve", state: "draft-encumbered", amount: explicitUnallocatedReserve, fieldProvenance: systemProvenance() },
   ].sort((left, right) => compare(`${left.ownerKind}\0${left.ownerId}\0${left.bucket}`, `${right.ownerKind}\0${right.ownerId}\0${right.bucket}`));
   const group = {
     ...(carry === null ? {} : carry.existingBody),
     groupId: input.groupId, projectKey: input.repoId, goal: plan.goal, successConditions: plan.successConditions,
-    budgetMode: input.estimateMode, limit, reviewReserve: cloneAmount(GOAL_REVIEW), deadlineAt: null,
+    budgetMode: input.estimateMode, limit, reviewReserve: cloneAmount(reviewAmount), deadlineAt: null,
     revision: 0, commandRevision: 0, graphVersion: 1, stopped: false, status: "draft", used, reserved: committedRemaining,
     // N1 spec §9.1: the budget version keeps counting from the clarifying phase's usage bookings (usage.ts), so a
     // group-handoff outbox id is never reused; revision and commandRevision are set by applyWebCommand afterwards.
-    reviewRemaining: cloneAmount(GOAL_REVIEW), budgetVersion: carry === null ? 1 : carry.existingBody.budgetVersion, planHash,
+    reviewRemaining: cloneAmount(reviewAmount), budgetVersion: carry === null ? 1 : carry.existingBody.budgetVersion, planHash,
     plan: { repoId: input.repoId, planId: input.planId, planHash, goal: plan.goal, successConditions: plan.successConditions },
     proposal: { state: "editable", proposalVersion: 1, planHash, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
     ledger: { groupLimit: limit, used, committedRemaining, explicitUnallocatedReserve, budgetDeficit: zero(), usageUnknown: carry === null ? false : carry.usageUnknown },
@@ -351,7 +359,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
       contract: { contentAddressedHash: task.originalContractHash },
       // Agent selection spec §6.2 / §12 I3: a draft has no configHash; confirmation freezes ccloop's.
       configHash: null,
-      grant: { work: {...TASK_WORK,tokens:authoredTokens(task)}, handoff: cloneAmount(TASK_HANDOFF) }, targetVersion: task.targetVersion,
+      grant: { work: {...TASK_WORK,tokens:authoredTokens(task)}, handoff: cloneAmount(handoffAmount) }, targetVersion: task.targetVersion,
       status: "draft", originalContractHash: task.originalContractHash, derivedContractHash: null,
       // Ruling review R7: the task's panel layer; the plan's `agent` for this task stays in the archived plan.
       agentOverride: null,

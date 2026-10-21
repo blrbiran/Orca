@@ -179,6 +179,8 @@ type CriteriaFlag = { decisionId: string; reason: string; evidence: string[] };
 async function criteriaFlagOf(deps: ExecutionDriverDeps, run: DriverRun, repo: string, at: string, range?: { base: string; attempt: string }): Promise<{ decision: DecisionEvent; flag: CriteriaFlag } | null> {
   const base = range?.base ?? run.drive?.base, attempt = range?.attempt ?? run.drive?.attemptSha;
   if (run.taskId === null || base == null || attempt == null) return null;
+  // Checks spec 2026-10-22 §6.1 step 4: a model review writes only its findings file; its check names that file.
+  if (run.groupId.startsWith("sysreview-")) return null;
   const checks = readConfirmedTaskExecution(deps.store, run.groupId, run.taskId).contract.verification.requiredChecks;
   const change = await classifyCriteriaChange(repo, base, attempt, checks);
   if (!flagged(change)) return null;

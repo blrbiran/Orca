@@ -48,7 +48,8 @@ export function criteriaReviewCandidates(store: ControlStore, isOpen: (source: S
     if (body === null) continue;
     let mark: ReturnType<typeof readSystemDebugMark>;
     try { mark = readSystemDebugMark(body); } catch { continue; }
-    if (mark?.source.kind === "criteria-review") continue;
+    // A judge is never judged (§7a.5); a model review can change no test (checks spec 2026-10-22 §6.1 step 4).
+    if (mark?.source.kind === "criteria-review" || mark?.source.kind === "model-review") continue;
     const repoId = (body.plan as { repoId?: unknown } | undefined)?.repoId;
     if (typeof repoId !== "string" || !criteriaReviewEnabled(store, repoId)) continue;
     const runRow = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);

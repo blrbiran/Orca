@@ -960,6 +960,11 @@ export const systemDebugOpenPayloadSchema = z.object({
   repoId: idSchema,
   facts: z.array(z.string().min(1).max(4096)).min(1).max(32),
   checks: z.array(nonemptyString).min(1).max(32),
+  // Checks spec 2026-10-22 §6.1-§6.2: a model review's own plan inputs (required for that source kind, refused on any other).
+  review: z.object({
+    inputDir: z.string().min(1).max(4096), inputSha256: hashSchema, groups: z.array(idSchema).min(1).max(50),
+    budgetTokens: safeInteger.positive(), denylistPaths: z.array(z.string().min(1).max(4096)).max(256),
+  }).strict().optional(),
 }).strict();
 // Debug task plan Task 11 (design §12.4): the panel form's record, the UI's manual close (`orca dev correct --close`'s
 // arguments) and the author's withdraw, as human-only verbs on the `@corrections` scope.

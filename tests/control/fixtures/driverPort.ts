@@ -17,6 +17,8 @@ import type { CapabilityViewV1 } from "../../../src/control/webProtocol.js";
  */
 // Issue fixes spec §4.4: `failed` ends the run failed, as ccloop does when a phase fails.
 export type FakeBehaviour = "succeed" | "unknown" | "forget-first-accept" | "lost-accept" | "refuse" | "wrong-config" | "exhausted" | "failed"
+  // Checks spec 2026-10-22 §6.1: ccloop's terminal `blocked_waiting_human`.
+  | "blocked-waiting-human"
   // Handoff delivery (Task 4): runs until a handoff request arrives, then stops at a boundary with a candidate and
   // no terminal; `-silent` latches the request but never produces anything; `orphan-candidate` reports a proved
   // stop with no terminal and no request at all (criterion X1); `stoppable-usage-unknown` stops like `stoppable`
@@ -56,6 +58,8 @@ export function fakeCcloopPort(input: {
   decisions?: (workItemId: string) => unknown;
   /** Debug task plan Task 8: what the run reports as `debug` on its terminal report; undefined = the field is absent. */
   debug?: (workItemId: string) => unknown;
+  /** Checks spec 2026-10-22 §6.1: the terminal's budgetSnapshot (ccloop's remaining attempts, time and tokens); undefined = none. */
+  budgetSnapshot?: (workItemId: string) => { attemptsRemaining: number; timeRemainingMs: number; tokenBudgetRemaining: number | null } | undefined;
 }): FakeCcloop {
   const calls = { accept: [] as StartEnvelope[], inspect: 0, collect: 0, handoff: [] as HandoffRequest[] };
   const handoffs = new Map<string, HandoffRequest>();
@@ -91,7 +95,7 @@ export function fakeCcloopPort(input: {
     if (variant === "stoppable-usage-gap") events.push({ runId: claim.runId, generation: claim.generation, eventSeq: 4, bucket: "handoff", cumulative: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, source: put(`usage-${claim.runId}-4`, Buffer.from(`handoff usage ${claim.runId} 4`)) });
     if (variant === "stoppable-handoff-usage-unknown") events.push({ runId: claim.runId, generation: claim.generation, eventSeq: 3, bucket: "handoff", cumulative: null, source: put(`usage-${claim.runId}-3`, Buffer.from(`handoff usage ${claim.runId} 3`)) });
     const unresolvedRequestIds = variant === "stoppable-unresolved" ? ["open-question-1"] : [];
-    const outcome = variant === "exhausted" ? "exhausted" : variant === "failed" ? "failed" : "succeeded";
+    const outcome = variant === "exhausted" ? "exhausted" : variant === "failed" ? "failed" : variant === "blocked-waiting-human" ? "blocked_waiting_human" : "succeeded";
     const stopReason = input.stopReason?.(claim.workItemId) ?? null;
     // Fix round 1 (review Important 1): a `protocol:1` packet handoff.ts's `packetSchema` (and its
     // identity/usageHighWater check against the committed candidate) actually accepts -- the driver's
@@ -118,7 +122,8 @@ export function fakeCcloopPort(input: {
     const decisions = stop.terminal ? input.decisions?.(claim.workItemId) : undefined;
     const debug = stop.terminal ? input.debug?.(claim.workItemId) : undefined;
     const failure = stop.terminal ? input.failure?.(claim.workItemId) : undefined;
-    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }) };
+    const budgetSnapshot = stop.terminal ? input.budgetSnapshot?.(claim.workItemId) : undefined;
+    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }) };
   };
 
   const port: ExecutionPort = {

@@ -91,14 +91,16 @@ export function writeOrchestrationSettings(store: ControlStore, settings: Orches
     .run(revision, JSON.stringify(settingsSchema.parse(settings)));
 }
 
-type GroupFacts = { id: string; status: string; debug: boolean };
+type GroupFacts = { id: string; status: string; debug: boolean; review: boolean };
 function groupFacts(store: ControlStore): GroupFacts[] {
   return store.db.prepare("SELECT id, body FROM groups ORDER BY rowid").all().flatMap((row) => {
     let body: { status?: unknown; debug?: unknown };
     try { body = JSON.parse(String(row.body)) as typeof body; } catch { return []; } // its own reads name a bad body
     // System debug task spec 2026-10-21 §2: Orca's own debug groups are admitted first too.
     const debug = [body.debug, (body as { systemDebug?: unknown }).systemDebug].some((mark) => typeof mark === "object" && mark !== null);
-    return [{ id: String(row.id), status: String(body.status), debug }];
+    // Checks spec 2026-10-22 §6.1: a model review fixes nothing, so it is admitted after every person-confirmed group.
+    const review = (body as { systemDebug?: { source?: { kind?: unknown } } }).systemDebug?.source?.kind === "model-review";
+    return [{ id: String(row.id), status: String(body.status), debug: debug && !review, review }];
   });
 }
 
@@ -182,7 +184,7 @@ export async function autoStartPass(deps: AutoStartDeps): Promise<{ started: str
   const candidates = facts
     .map((group) => ({ group, row: readGroupOrchestration(store, group.id) }))
     .filter((entry): entry is { group: GroupFacts; row: GroupOrchestration } => entry.row !== null && entry.row.mode === "run" && entry.row.startedRevision === null)
-    .sort((a, b) => Number(b.group.debug) - Number(a.group.debug) || a.row.confirmedAt - b.row.confirmedAt || a.group.id.localeCompare(b.group.id));
+    .sort((a, b) => Number(a.group.review) - Number(b.group.review) || Number(b.group.debug) - Number(a.group.debug) || a.row.confirmedAt - b.row.confirmedAt || a.group.id.localeCompare(b.group.id));
   for (const { group } of candidates) {
     const { running, cap } = slotUse(store);
     const state = autoStartState(store, group, deps.now(), running < cap, prerequisites);

@@ -143,6 +143,9 @@ export const driveRecordSchema = z.object({
   // when ccloop stated none (an older ccloop, or a run with no rejection) and in every drive record written before them.
   failureCause: runFailureCauseSchema.optional(),
   lastFailure: lastFailureSchema.optional(),
+  // Checks spec 2026-10-22 §6.1: ccloop's terminal budgetSnapshot, stored with them, so a review that ran out of tokens,
+  // attempts or time is told from one that failed (the outcome `exhausted` alone does not say which).
+  budgetSnapshot: z.object({ attemptsRemaining: safeInteger, timeRemainingMs: safeInteger, tokenBudgetRemaining: safeInteger.nullable() }).strict().optional(),
   // Control run decisions: the run's refused decisions, staged by D before its compare-and-swap and inserted into
   // pending_decisions by markLanded (then cleared). Defaulted so a drive record from before this field still parses.
   stagedPending: z.array(pendingEntrySchema).default([]),

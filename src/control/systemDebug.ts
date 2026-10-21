@@ -7,6 +7,7 @@ import { applyWebCommand } from "./commandLedger.js";
 import { DEBUG_DEFAULT_EXECUTION_POLICY, DEBUG_DEFAULT_MAX_FILES_TOUCHED, DEBUG_REJECT_ON, DEBUG_TASK_ID, DEBUG_VERIFIER_TYPE, debugPlanId } from "./debugPlan.js";
 import { isTerminallyFailedRun, type DriveRecord } from "./driveRecord.js";
 import { ControlError } from "./errors.js";
+import { buildModelReviewPlanSource } from "./modelReview/plan.js";
 import { normalizeControlPlan, writeImportedPlan } from "./planImport.js";
 import { readArchivedPlan } from "./queries.js";
 import { writeCanonicalRecord } from "./snapshot.js";
@@ -31,6 +32,9 @@ const settledSchema = z.object({ state: z.string().min(1), at: z.number().int(),
 const systemDebugMarkSchema = z.object({
   source: systemDebugSourceSchema, stackOn: z.string().min(1).nullable(), inputHash: z.string().regex(/^[a-f0-9]{64}$/),
   settled: settledSchema.nullable(),
+  // Checks spec 2026-10-22 §6.1: when Orca opened it (a review's 24 h admission rule), and a review's inputs.
+  openedAt: z.number().int().optional(),
+  review: z.object({ inputDir: z.string().min(1), inputSha256: z.string().regex(/^[a-f0-9]{64}$/), groups: z.array(z.string().min(1)).min(1), budgetTokens: z.number().int().positive() }).strict().optional(),
 }).strict();
 export type SystemDebugMark = z.infer<typeof systemDebugMarkSchema>;
 
@@ -171,13 +175,17 @@ function success(context: Parameters<Parameters<typeof applyWebCommand>[1]["appl
  * its grant is the contract's own budget); a ladder group's work is folded back into its original group, so it carries
  * no integration scheme of its own (keep).
  */
-export function applySystemDebugOpen(deps: SystemDebugOpenDeps, command: SystemDebugOpenCommand): WebCommandResult {
-  const { source, stackOn, repoId, facts, checks } = command.payload;
+export function applySystemDebugOpen(deps: SystemDebugOpenDeps, command: SystemDebugOpenCommand, reviewAgent?: PartialSelection): WebCommandResult {
+  const { source, stackOn, repoId, facts, checks, review } = command.payload;
   let repoPath: string | null = null, refusal: unknown = null;
   try { repoPath = deps.repositoryPath(repoId); } catch (error) { refusal = error instanceof ControlError ? error : new ControlError("correction-repository-unknown", repoId); }
   return applyWebCommand<WebCommandResult>(deps.store, {
     rawCommand: command,
-    expand: () => { if (refusal !== null) throw refusal; return { ...command, schema: "orca-authority-command-v1" }; },
+    expand: () => {
+      if (refusal !== null) throw refusal;
+      if ((source.kind === "model-review") !== (review !== undefined)) throw new ControlError("control-argument-invalid", "system-debug-review-inputs");
+      return { ...command, schema: "orca-authority-command-v1" };
+    },
     authorityChanged: (outcome) => "result" in outcome.body && outcome.body.result.kind === "system-debug-opened" && outcome.body.result.created,
     apply: (context) => {
       const groupId = command.target.groupId;
@@ -190,7 +198,11 @@ export function applySystemDebugOpen(deps: SystemDebugOpenDeps, command: SystemD
       const input: SystemDebugInputV1 = { schema: SYSTEM_DEBUG_INPUT_SCHEMA, source, stackOn, repoId, facts: [...facts], checks: [...checks] };
       const inputJson = canonicalBytes(input).toString("utf8"), inputHash = sha256Canonical(input);
       const planId = debugPlanId(groupId);
-      const plan = normalizeControlPlan({ ...buildSystemDebugPlanSource(input, sourceContract(deps.store, source), repoPath!, sourceAgent(deps.store, source)), repoId, planId });
+      // Checks spec §6.1 step 0: a review has its own read-only plan builder (the debug builder's write set is `**`).
+      const planSource = source.kind === "model-review" && review !== undefined
+        ? buildModelReviewPlanSource({ source, inputDir: review.inputDir, inputSha256: review.inputSha256, groups: [...review.groups], budgetTokens: review.budgetTokens, denylistPaths: [...review.denylistPaths] }, repoPath!, reviewAgent)
+        : buildSystemDebugPlanSource(input, sourceContract(deps.store, source), repoPath!, source.kind === "model-review-finding" ? reviewAgent : sourceAgent(deps.store, source));
+      const plan = normalizeControlPlan({ ...planSource, repoId, planId });
       const defaults = deps.defaults();
       writeImportedPlan({
         ...deps, estimatorSlot: { kind: "rejected", partial: null, code: "control-estimator-unconfigured" },
@@ -198,11 +210,15 @@ export function applySystemDebugOpen(deps: SystemDebugOpenDeps, command: SystemD
       }, {
         groupId, repoId, planId, plan, actorId: context.rawCommand.actorId, commandId: context.rawCommand.commandId,
         estimatorProfileId: defaults?.estimatorProfileId ?? null, estimatorProfileHash: defaults?.estimatorProfileHash ?? null, estimateMode: defaults?.estimateMode ?? "strict",
-      }, null, { estimate: "deferred" });
+      }, null, { estimate: "deferred", ...(review === undefined ? {} : { stripped: { workTokens: review.budgetTokens } }) });
       writeCanonicalRecord(deps.store, groupId, inputHash, inputJson);
       const body = groupBody(deps.store, groupId)!;
-      if (stackOn !== null) delete body.integration;
-      const mark: SystemDebugMark = { source, stackOn, inputHash, settled: null };
+      // A review never lands (integration keep, spec §6.1); a ladder group folds back into its original instead.
+      if (stackOn !== null || review !== undefined) delete body.integration;
+      const mark: SystemDebugMark = {
+        source, stackOn, inputHash, settled: null,
+        ...(review === undefined ? {} : { openedAt: deps.store.now(), review: { inputDir: review.inputDir, inputSha256: review.inputSha256, groups: [...review.groups], budgetTokens: review.budgetTokens } }),
+      };
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, systemDebug: mark }), groupId);
       deps.beforeCommit?.();
       return success(context, groupId, true);
@@ -212,12 +228,15 @@ export function applySystemDebugOpen(deps: SystemDebugOpenDeps, command: SystemD
 
 /** Records how a system debug group ended for its source (§3.4); written once, in its own transaction. */
 export function settleSystemDebug(store: ControlStore, groupId: string, state: string, detail: string | null): void {
-  store.transaction(() => {
-    const body = groupBody(store, groupId);
-    const mark = body === null ? null : readSystemDebugMark(body);
-    if (body === null || mark === null || mark.settled !== null) return;
-    store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, systemDebug: { ...mark, settled: { state, at: store.now(), detail: detail === null ? null : detail.slice(0, 500) } } }), groupId);
-  });
+  store.transaction(() => { writeSystemDebugSettled(store, groupId, state, detail); });
+}
+/** The settle write inside the caller's transaction; whether this call wrote it (false: settled already, or no mark). */
+export function writeSystemDebugSettled(store: ControlStore, groupId: string, state: string, detail: string | null): boolean {
+  const body = groupBody(store, groupId);
+  const mark = body === null ? null : readSystemDebugMark(body);
+  if (body === null || mark === null || mark.settled !== null) return false;
+  store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, systemDebug: { ...mark, settled: { state, at: store.now(), detail: detail === null ? null : detail.slice(0, 500) } } }), groupId);
+  return true;
 }
 
 /** The system debug groups, with their marks, in creation order. */

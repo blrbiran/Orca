@@ -97,8 +97,15 @@ export function recordCheckStarted(store: ControlStore, repoId: string, kind: Ch
  * watermark moves to `moveTo` and the failure streak resets; `errored` ⇒ the watermark stays and the streak grows;
  * an interruption (Orca stopped) ⇒ the watermark stays and the streak does not count it (§5.4).
  */
-export function recordCheckEnded(store: ControlStore, repoId: string, kind: CheckKind, target: string, end: { state: "passed" | "failed" | "completed" | "errored"; at: number; detail?: string | null; moveTo?: string; debugGroupIds?: string[]; reviewGroupId?: string | null; recordHash?: string | null; interrupted?: boolean }): CheckState {
-  return update(store, repoId, kind, target, (s) => {
+export type CheckEnd = { state: "passed" | "failed" | "completed" | "errored"; at: number; detail?: string | null; moveTo?: string; debugGroupIds?: string[]; reviewGroupId?: string | null; recordHash?: string | null; interrupted?: boolean };
+export function recordCheckEnded(store: ControlStore, repoId: string, kind: CheckKind, target: string, end: CheckEnd): CheckState {
+  let next = EMPTY_CHECK_STATE;
+  store.transaction(() => { next = applyCheckEnded(store, repoId, kind, target, end); });
+  return next;
+}
+/** The same inside the caller's transaction (a review's end is written with its settled mark, spec §5.2). */
+export function applyCheckEnded(store: ControlStore, repoId: string, kind: CheckKind, target: string, end: CheckEnd): CheckState {
+  const change = (s: CheckState): CheckState => {
     const completed = end.state !== "errored";
     const last = record({
       ...(s.last ?? {}), state: end.state, at: end.at, detail: end.detail ?? null,
@@ -109,5 +116,8 @@ export function recordCheckEnded(store: ControlStore, repoId: string, kind: Chec
       watermark: completed && end.moveTo !== undefined ? end.moveTo : s.watermark,
       failureStreak: completed ? 0 : end.interrupted === true ? s.failureStreak : s.failureStreak + 1,
     };
-  });
+  };
+  const next = change(readCheckState(store, repoId, kind, target) ?? EMPTY_CHECK_STATE);
+  writeCheckState(store, repoId, kind, target, next);
+  return next;
 }

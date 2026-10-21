@@ -632,7 +632,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     const stopReason = report.terminal.stopReason ? { stopReason: report.terminal.stopReason } : {};
     // Failure-cause spec 2026-10-21 §3 and ccloop priorFailures spec §3: the cause and the last rejection are kept beside
     // the reason, for the panel's next-step line and a later re-dispatch; absent when ccloop stated none.
-    const failure = { ...(report.terminal.failureCause !== undefined ? { failureCause: report.terminal.failureCause } : {}), ...(report.terminal.lastFailure !== undefined ? { lastFailure: report.terminal.lastFailure } : {}) };
+    const failure = { ...(report.terminal.failureCause !== undefined ? { failureCause: report.terminal.failureCause } : {}), ...(report.terminal.lastFailure !== undefined ? { lastFailure: report.terminal.lastFailure } : {}), ...(report.terminal.budgetSnapshot !== undefined ? { budgetSnapshot: report.terminal.budgetSnapshot } : {}) };
     blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome, ...stopReason, ...failure });
     if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)await retainSavedInterruption(deps,runId);
     return true;

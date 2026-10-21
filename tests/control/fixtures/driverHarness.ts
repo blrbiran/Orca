@@ -53,6 +53,8 @@ export interface HarnessOptions {
   debug?: (workItemId: string) => unknown;
   /** Protect-acceptance-criteria spec §4.2: every contract's verification.requiredChecks (web.ts; ["true"] unless said otherwise). */
   requiredChecks?: string[];
+  /** Checks spec 2026-10-22 §6.1: the terminal's budgetSnapshot the synthetic ccloop reports (driverPort.ts). */
+  budgetSnapshot?: (workItemId: string) => { attemptsRemaining: number; timeRemainingMs: number; tokenBudgetRemaining: number | null } | undefined;
 }
 
 /**
@@ -79,6 +81,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     ...(options.failure ? { failure: options.failure } : {}),
     ...(options.decisions ? { decisions: options.decisions } : {}),
     ...(options.debug ? { debug: options.debug } : {}),
+    ...(options.budgetSnapshot ? { budgetSnapshot: options.budgetSnapshot } : {}),
   });
   fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;
   const deps: ExecutionDriverDeps = {
