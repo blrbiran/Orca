@@ -108,6 +108,8 @@ const settledOf = (w: World, reviewId: string) => w.mark(reviewId).settled;
 describe("the model review run (checks spec §6, criterion 8)", { timeout: 240_000 }, () => {
   it("opens one read-only review as orca-auto, routes valid findings, drops the invalid one, and moves the watermark", async () => {
     const w = await world(); try {
+      // The project's own default merges into main: a review must still never carry it (it never lands, §6.1).
+      writeRepositorySettingsBody(w.h.store, "repo", { workspaceMode: "worktree", revision: 1, integration: { delivery: "local", trigger: "task", method: "merge", target: "main" } } as never);
       const { W } = await w.landThree();
       const H = git(w.repo, "rev-parse", "main");
       const opened = await w.service.checksPass();
