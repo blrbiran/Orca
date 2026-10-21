@@ -29,6 +29,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `budget-overflow` | 422 |
 | `budget-owned-by-loop-plan` | 422 |
 | `ccloop-failed` | 424 |
+| `check-schedule-too-frequent` | 400 |
 | `checkpoint-id-conflict` | 409 |
 | `checkpoint-identity-conflict` | 409 |
 | `checkpoint-not-committed` | 404 |
@@ -43,6 +44,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `continuation-identity-conflict` | 409 |
 | `continuation-predecessor-unrecoverable` | 422 |
 | `control-agent-update-unsupported` | 422 |
+| `control-argument-invalid` | 400 |
 | `control-capability-unsupported` | 422 |
 | `control-dispatched-run-refused` | 403 |
 | `control-estimator-unconfigured` | 422 |
