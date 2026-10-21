@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ControlError } from "./errors.js";
 import type { StartEnvelope } from "./executionPort.js";
 import { dispatchEnvelopeSchema, type DispatchEnvelopeV1 } from "./webProtocol.js";
-import { agentSelectionSchema, grantSchema, idSchema, safeInteger, startEnvelopeSchema } from "./schema.js";
+import { agentSelectionSchema, grantSchema, idSchema, safeInteger, startEnvelopeSchema, type PriorFailure } from "./schema.js";
 import type { InputCheckpointV1 } from "./resumeBundle.js";
 
 /**
@@ -45,6 +45,8 @@ export interface StartEnvelopeWork {
   codexSkillsDir?: string;
   /** OMP skill injection (2026-10-13): the snapshot's `skills` directory for an omp run, as for codex. */
   ompSkillsDir?: string;
+  /** ccloop priorFailures spec 2026-10-21 §3: earlier runs' failures, built once at A2 (priorFailures.ts); absent stays absent. */
+  priorFailures?: PriorFailure[];
 }
 
 /** The checks both translations share (see toStartEnvelope's comment), and the claim built from the run row. */
@@ -117,6 +119,7 @@ export function toStartEnvelope(
       ...(work.skillPluginDir !== undefined ? { skillPluginDir: work.skillPluginDir } : {}),
       ...(work.codexSkillsDir !== undefined ? { codexSkillsDir: work.codexSkillsDir } : {}),
       ...(work.ompSkillsDir !== undefined ? { ompSkillsDir: work.ompSkillsDir } : {}),
+      ...(work.priorFailures !== undefined ? { priorFailures: work.priorFailures } : {}),
     },
   };
   // Parsed against the repository's own start-envelope schema rather than merely typed as one, so

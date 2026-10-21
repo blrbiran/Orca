@@ -298,3 +298,28 @@ mechanism, so it is **not built**; the ladder keeps starting at level 2 (§12):
   group is given the failed run's facts (`ladderFacts`).
 **Next:** a short ccloop spec for an optional `priorFailures` start input (bounded like its §7.2 evidence excerpt),
 then level 1 here as one re-dispatch per task through `retry-task` with that input.
+
+## 14. As-built, track L1 (session 9ec98639, 2026-10-21) — ladder level 1 built (corrects §13's "not built")
+
+ccloop gained the optional `work.priorFailures` start input (ccloop main 76b098b, spec
+`2026-10-21-prior-failures-start-input-design.md`, which §13's "Next" asked for). Level 1 is now built; it lands together
+with the repin to that ccloop (an older ccloop refuses the field: its start envelope is strict).
+- **Level 1** (`systemDebugPass`, `webService.ts`): a ladder candidate (§12's rules: orchestrated `run` group, not a debug
+  group, not archived, cause not auth/quota/executable-missing) whose group has no `orca-auto-ladder-l1-<task>` command
+  gets one `retry-task` as `orca-auto` with that command id. The command row (applied or refused) is the level's record;
+  the next terminal failure of the task goes to level 2 as before. Cap (§6): level 1's run + level 2's rerun = 2 extra
+  runs per task; a third failure is level 3 (`exhausted`, `rerun-failed`).
+- **What the run carries** (`priorFailures.ts`, built once at A2, frozen in the envelope): every fresh run of a task whose
+  earlier runs in the group ended on a ccloop terminal other than `succeeded` (blocked at C, or `settled-failed` after a
+  retry; a never-dispatched saved result is not one) carries the latest three of them, oldest first — level 1's run,
+  level 2's rerun and a person's retry alike (one rule, controller's call). Each: `rejectCategory`/`failingCommand` from
+  the stored last rejection, else `run-failed:<cause|unknown>`; `failureCause` = the cause; `evidence` only from the
+  task-result collector's stored verification copy whose fingerprint (category, paths, command) equals the last rejection,
+  only when the collector is `available`, else null. Everything is cut to ccloop's UTF-8 byte bounds with its head rule.
+  A continuation copies its predecessor's frozen entries; a saved-result recovery carries none (Orca's start-envelope
+  schema refuses them with `verify-saved-result`, as ccloop does).
+- **Stored fingerprint:** the drive record's `lastFailure` keeps `primaryTargetPaths` (optional; dropped whole when it
+  does not fit 64 × 500 units — a cut fingerprint would match the wrong copy).
+- **Not built:** the alternate agent for a role (§9 bullet 4; failure-cause spec §8.5); a separate escalation state on
+  the card for level 1 (its run is simply the task's current run); the legacy `ControlService.continueTask` path never
+  builds the field, so it copies nothing either.

@@ -48,15 +48,31 @@ async function ladderWorld(options: { debugFails?: boolean } = {}) {
     if (delivered.kind !== "claimed") throw new Error(`debug claim refused: ${JSON.stringify(delivered)}`);
     await t.until(driver, () => until(taskStatus(LADDER, "debug")) || t.body(delivered.runId).state === "blocked", 120);
   };
+  /**
+   * Kanban spec §6 level 1 (ccloop priorFailures spec §3): the first escalation of a failed task is one re-dispatch as
+   * orca-auto. Drives that re-dispatch until it fails too, so the ladder's next pass reaches level 2; answers its run.
+   */
+  const failedThroughLevelOne = async (): Promise<string> => {
+    await failedRun();
+    const pass = await service.systemDebugPass();
+    expect([pass.redispatched, pass.opened]).toEqual([["g:a"], []]);
+    replenishStartWakes({ store: t.h.store, admissionGate: t.h.deps.admissionGate });
+    const delivered = await deliverScheduledStart(t.dispatch, "g");
+    if (delivered.kind !== "claimed") throw new Error(`level-1 claim refused: ${JSON.stringify(delivered)}`);
+    await t.until(driver, () => t.body(delivered.runId).state === "blocked", 120);
+    return delivered.runId;
+  };
   const summary = (groupId: string) => readGroupSummary(t.h.store, groupId) as unknown as GroupSummaryV1;
   const body = (groupId: string) => JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)) as Record<string, unknown>;
-  return { t, service, driver, failedRun, driveDebug, taskStatus, summary, body, succeedNext: () => { failing = false; } };
+  return { t, service, driver, failedRun, failedThroughLevelOne, driveDebug, taskStatus, summary, body, succeedNext: () => { failing = false; } };
 }
 
 describe("escalation ladder level 2: a system debug group fixes a failed task, which then reruns once (spec §3)", { timeout: 180_000 }, () => {
+  // Ruling: human approved rewriting all necessary criteria, Orca session 9ec98639, 2026-10-21 -- level 1 (one re-dispatch)
+  // now comes first, so each level-2 case reaches the ladder through failedThroughLevelOne instead of a single failure.
   it("opens a stacked debug group as orca-auto, confirms it, folds its fix into the group's branch and reruns the task from there", async () => {
     const w = await ladderWorld(); const { t } = w; try {
-      const failedRunId = await w.failedRun();
+      const failedRunId = await w.failedThroughLevelOne();
       // The group's branch is ahead of the target (as after an earlier task of it landed), so a debug branch started
       // from the target's HEAD instead of the group's branch could not be folded back.
       const tree = gitIn(t.repo, `100644 blob ${gitIn(t.repo, "earlier\n", "hash-object", "-w", "--stdin")}\tearlier\n`, "mktree");
@@ -94,7 +110,7 @@ describe("escalation ladder level 2: a system debug group fixes a failed task, w
       expect(readSystemDebugMark(w.body(LADDER))?.settled?.state).toBe("folded");
       expect(t.body(failedRunId).state).toBe("settled-failed");
       expect(w.taskStatus("g", "a")).toBe("ready");
-      const retryActor = t.h.store.db.prepare("SELECT actor_id FROM commands WHERE group_id='g' AND verb='retry-task'").get();
+      const retryActor = t.h.store.db.prepare("SELECT actor_id FROM commands WHERE group_id='g' AND verb='retry-task' AND substr(id,1,23)='orca-auto-ladder-retry-'").get();
       expect(retryActor?.actor_id).toBe("orca-auto");
       expect(w.summary("g").escalation).toEqual([{ taskId: "a", debugGroupId: LADDER, state: "rerunning", reason: null }]);
 
@@ -112,7 +128,7 @@ describe("escalation ladder level 2: a system debug group fixes a failed task, w
 
   it("level 3: the rerun failing again is the person's (exhausted), and nothing further is opened", async () => {
     const w = await ladderWorld(); const { t } = w; try {
-      await w.failedRun();
+      await w.failedThroughLevelOne();
       await w.service.systemDebugPass();
       await w.driveDebug((status) => status === "done");
       await w.service.systemDebugPass();
@@ -123,13 +139,14 @@ describe("escalation ladder level 2: a system debug group fixes a failed task, w
       expect(escalationsOf(t.h.store, "g")).toEqual([{ taskId: "a", debugGroupId: LADDER, state: "exhausted", reason: "rerun-failed" }]);
       expect(needsAttention(w.summary("g"))).toBe(true);
       const again = await w.service.systemDebugPass();
-      expect([again.opened, again.folded]).toEqual([[], []]);
+      // Cap (kanban §6: two extra runs per task): level 1 and level 2's rerun are spent; nothing is re-dispatched either.
+      expect([again.redispatched, again.opened, again.folded]).toEqual([[], [], []]);
     } finally { await t.h.dispose(); }
   });
 
   it("level 3: the debug task's own failure ends the ladder (it is not escalated in turn)", async () => {
     const w = await ladderWorld({ debugFails: true }); const { t } = w; try {
-      await w.failedRun();
+      await w.failedThroughLevelOne();
       await w.service.systemDebugPass();
       await w.driveDebug(() => false);
       const pass = await w.service.systemDebugPass();
@@ -144,7 +161,7 @@ describe("escalation ladder level 2: a system debug group fixes a failed task, w
 
   it("level 3: a group branch that moved since the failure is not folded over", async () => {
     const w = await ladderWorld(); const { t } = w; try {
-      const failedRunId = await w.failedRun();
+      const failedRunId = await w.failedThroughLevelOne();
       await w.service.systemDebugPass();
       await w.driveDebug((status) => status === "done");
       // Someone moved orca/g off the debug branch's base.
@@ -156,7 +173,7 @@ describe("escalation ladder level 2: a system debug group fixes a failed task, w
       expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(moved);
       // Not retried: the failed run is still the task's, blocked where ccloop ended it.
       expect(t.body(failedRunId).state).toBe("blocked");
-      expect(t.h.store.db.prepare("SELECT 1 FROM commands WHERE group_id='g' AND verb='retry-task'").get()).toBeUndefined();
+      expect(t.h.store.db.prepare("SELECT 1 FROM commands WHERE group_id='g' AND verb='retry-task' AND substr(id,1,23)='orca-auto-ladder-retry-'").get()).toBeUndefined();
       expect(escalationsOf(t.h.store, "g")).toEqual([{ taskId: "a", debugGroupId: LADDER, state: "exhausted", reason: "fold-refused" }]);
     } finally { await t.h.dispose(); }
   });
@@ -193,7 +210,7 @@ describe("escalation ladder level 2: a system debug group fixes a failed task, w
     const w = await ladderWorld(); const { t } = w; try {
       await w.failedRun();
       t.h.store.db.prepare("DELETE FROM group_orchestration WHERE group_id='g'").run();
-      expect(await w.service.systemDebugPass()).toEqual({ opened: [], confirmed: [], folded: [], settled: [] });
+      expect(await w.service.systemDebugPass()).toEqual({ redispatched: [], opened: [], confirmed: [], folded: [], settled: [] });
     } finally { await t.h.dispose(); }
   });
 });

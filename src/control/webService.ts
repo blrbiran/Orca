@@ -40,7 +40,7 @@ import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type 
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
-import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderFacts, quotaWaitCandidates, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand } from "./systemDebug.js";
+import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
@@ -688,14 +688,15 @@ export class WebControlService {
     finally { release?.(); }
   }
   /**
-   * System debug task spec 2026-10-21 §2-§3, kanban spec §6 levels 2-3: one pass, as orca-auto. (1) A started group's
-   * task that ended terminally failed, with no ladder yet, opens a ladder debug group stacked on that group. (2) A system
+   * System debug task spec 2026-10-21 §2-§3, kanban spec §6 levels 1-3: one pass, as orca-auto. (1) A started group's
+   * task that ended terminally failed is first re-dispatched once (level 1); failing again, with no ladder yet, it opens a
+   * ladder debug group stacked on that group. (2) A system
    * debug group not yet confirmed is confirmed with its source group's profiles (start-on-confirm then starts it). (3) A
    * ladder debug group whose tasks are all done is folded into its original group's branch, and the failed task is
    * retried once. Every outcome that ends the ladder is written on the debug group's mark (level 3: needs you).
    */
-  async systemDebugPass(): Promise<{ opened: string[]; confirmed: string[]; folded: string[]; settled: string[] }> {
-    const out = { opened: [] as string[], confirmed: [] as string[], folded: [] as string[], settled: [] as string[] };
+  async systemDebugPass(): Promise<{ redispatched: string[]; opened: string[]; confirmed: string[]; folded: string[]; settled: string[] }> {
+    const out = { redispatched: [] as string[], opened: [] as string[], confirmed: [] as string[], folded: [] as string[], settled: [] as string[] };
     // Failure-cause spec 2026-10-21 §5: a quota failure on an installation set to wait is retried once per failed run, as
     // orca-auto, after the re-probe interval; the retry's ledger row and its task-retried activity are its record.
     for (const candidate of quotaWaitCandidates(this.store, new Set(readOrchestrationSettings(this.store).quotaWait ?? []), this.store.now())) {
@@ -706,6 +707,19 @@ export class WebControlService {
       });
     }
     for (const candidate of ladderCandidates(this.store)) {
+      // Kanban spec §6 level 1 (ccloop priorFailures spec §3): the first escalation of a task is one fresh re-dispatch
+      // as orca-auto; its run carries the earlier runs' failures (A2, priorFailures.ts). The retry-task command row is
+      // the level's record -- once it exists (applied or refused), the next failure goes to level 2.
+      const levelOne = ladderLevelOneCommandId(candidate.taskId);
+      if (this.store.db.prepare("SELECT 1 FROM commands WHERE group_id=? AND id=?").get(candidate.groupId, levelOne) === undefined) {
+        const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(candidate.groupId)?.revision ?? 0);
+        const answer = this.retryTask({
+          schema: "orca-raw-command-v1", commandId: levelOne, actorId: ORCHESTRATION_ACTOR, expectedRevision: revision,
+          verb: "retry-task", target: { kind: "group", groupId: candidate.groupId }, payload: { taskId: candidate.taskId },
+        });
+        if (!("error" in answer)) out.redispatched.push(`${candidate.groupId}:${candidate.taskId}`);
+        continue;
+      }
       const source = { kind: "ladder" as const, groupId: candidate.groupId, taskId: candidate.taskId, runId: candidate.run.runId };
       const groupId = systemDebugGroupId(source);
       let checks: string[];

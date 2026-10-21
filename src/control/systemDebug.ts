@@ -274,6 +274,9 @@ export function ladderCandidates(store: ControlStore): Array<{ groupId: string; 
   return out;
 }
 
+/** Kanban spec §6 level 1: the retry-task command that re-dispatches a task once, and is the level's record. */
+export function ladderLevelOneCommandId(taskId: string): string { return `orca-auto-ladder-l1-${taskId}`; }
+
 /** Failure-cause spec 2026-10-21 §4-§5: the causes the escalation ladder leaves to the person (or to a quota wait). */
 export const LADDER_EXEMPT_CAUSES: ReadonlySet<string> = new Set(["auth", "quota", "executable-missing"]);
 /** §5: how long a quota wait holds a failed task before Orca retries it (re-probe interval; no reset time is reported today). */

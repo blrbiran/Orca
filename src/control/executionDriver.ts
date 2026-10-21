@@ -25,6 +25,7 @@ import { publishPending } from "./projection.js";
 import { readBudgetProposal, readGroup, readWork } from "./queries.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
+import { priorFailuresAtPrepare } from "./priorFailures.js";
 import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
 import { recordActivity } from "./activity.js";
 import {artifactSchema,type RunProgress} from "./schema.js";
@@ -353,10 +354,13 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     ...confirmed.contract, context: { ...confirmed.contract.context, repoPath: workspaceOf(drive) },
     executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work),
   };
+  // ccloop priorFailures spec 2026-10-21 §3 (kanban spec §6 level 1): built once here, frozen in the envelope below. A
+  // continuation copies its predecessor's entries; a saved-result recovery carries none (ccloop refuses them there).
+  const priorFailures = await priorFailuresAtPrepare(store, { groupId: run.groupId, taskId: run.taskId, runId }, { recovery: recovery !== null, predecessorRunId: continued?.predecessorRunId ?? null });
   const packageRecord=recovery?{...materializeRecoveryPackage(store,drive.sourceDir,recovery),recoveryOf:recovery.recoveryOf}:undefined;
   if(recovery)write(deps,()=>{assertCurrentSavedRecovery(store,readDriverRun(store,runId),(deps.now?.()??new Date()).getTime());const admission=savedResultAdmissionSchema.parse(JSON.parse(settlementArtifactBytes(store,recovery.admission).toString()));publishRecoveryFence(drive.sourceDir,admission,packageRecord!.packageHash,packageRecord!.admissionHash);});
   const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), {...run,...(packageRecord?{savedResultRecovery:packageRecord}:{})}, {
-    sourceDir: drive.sourceDir, targetRepo, base, ...(skills !== null ? skillsKind === "codex" ? { codexSkillsDir: join(skills.dir,"skills") } : skillsKind === "omp" ? { ompSkillsDir: join(skills.dir,"skills") } : { skillPluginDir: skills.dir } : {}),
+    sourceDir: drive.sourceDir, targetRepo, base, ...(priorFailures !== undefined ? { priorFailures } : {}), ...(skills !== null ? skillsKind === "codex" ? { codexSkillsDir: join(skills.dir,"skills") } : skillsKind === "omp" ? { ompSkillsDir: join(skills.dir,"skills") } : { skillPluginDir: skills.dir } : {}),
   }, contract, inputCheckpoint);
   const envelopeHash = sha256Canonical(envelope);
   return write(deps, () => {

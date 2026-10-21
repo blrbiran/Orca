@@ -45,10 +45,21 @@ export function boundFailureCause(cause: RunFailureCause): RunFailureCause {
 export const lastFailureSchema = z.object({
   rejectCategory: z.string().max(STOP_REASON_MAX),
   failingCommand: z.string().max(STOP_REASON_MAX).nullable(),
+  // Ladder level 1 (priorFailures spec §3): the rest of ccloop's failure fingerprint, so the run's stored verification
+  // copy can be matched to it (priorFailures.ts). Optional: a record from before this field still parses (its evidence
+  // is then null). Kept only while it fits LAST_FAILURE_PATHS_MAX paths of STOP_REASON_MAX units each, else dropped.
+  primaryTargetPaths: z.array(z.string().max(STOP_REASON_MAX)).max(64).optional(),
 }).strict();
+export const LAST_FAILURE_PATHS_MAX = 64;
 export type LastFailure = z.infer<typeof lastFailureSchema>;
-export function boundLastFailure(failure: { rejectCategory: string; failingCommand: string | null }): LastFailure {
-  return { rejectCategory: boundStopReason(failure.rejectCategory), failingCommand: failure.failingCommand === null ? null : boundStopReason(failure.failingCommand) };
+export function boundLastFailure(failure: { rejectCategory: string; failingCommand: string | null; primaryTargetPaths?: string[] }): LastFailure {
+  // A fingerprint that does not fit is dropped whole, never cut: a cut one would match nothing, or the wrong copy.
+  const paths = failure.primaryTargetPaths;
+  const keep = paths !== undefined && paths.length <= LAST_FAILURE_PATHS_MAX && paths.every((path) => path.length <= STOP_REASON_MAX);
+  return {
+    rejectCategory: boundStopReason(failure.rejectCategory), failingCommand: failure.failingCommand === null ? null : boundStopReason(failure.failingCommand),
+    ...(keep ? { primaryTargetPaths: paths } : {}),
+  };
 }
 
 const commitSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
