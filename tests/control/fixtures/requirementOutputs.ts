@@ -27,3 +27,19 @@ export const VALID_SPLIT = {
 };
 /** Spec §8.3.4: a target under a directory the commit does not have. */
 export const INVALID_SPLIT = { ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, targetPaths: ["missing/dir/x.ts"] }, VALID_SPLIT.tasks[1]!] };
+/**
+ * Issue 88 (external tester, 2026-10-08): the split that hit "a cycle slipped through" -- fifteen tasks writing one file,
+ * with the dependsOn edges the issue lists. Its taskIds put "t10".."t15" before "t2" in lexicographic order.
+ */
+const ISSUE_88_DEPENDS_ON: Record<string, string[]> = {
+  "t1-preflight": [], "t2-env-introspection": ["t1-preflight"], "t3-test-baseline-1": ["t2-env-introspection"],
+  "t4-dim-cli": ["t2-env-introspection"], "t5-dim-sync": ["t2-env-introspection"], "t6-dim-err": ["t2-env-introspection"], "t7-dim-rcv": ["t2-env-introspection"],
+  "t8-findings-consolidation": ["t4-dim-cli", "t5-dim-sync", "t6-dim-err", "t7-dim-rcv"], "t9-rev-section": ["t4-dim-cli", "t5-dim-sync", "t6-dim-err", "t7-dim-rcv"],
+  "t10-doc-drift": ["t1-preflight"], "t11-dimension-tables": ["t8-findings-consolidation", "t9-rev-section", "t10-doc-drift"],
+  "t12-unverified-index": ["t8-findings-consolidation"], "t13-impl-section": ["t3-test-baseline-1", "t8-findings-consolidation", "t10-doc-drift"],
+  "t14-overview-appendix": ["t11-dimension-tables", "t12-unverified-index", "t13-impl-section"], "t15-final-verify": ["t14-overview-appendix"],
+};
+export const ISSUE_88_SPLIT = {
+  tasks: Object.entries(ISSUE_88_DEPENDS_ON).map(([taskId, dependsOn]) => ({ ...VALID_SPLIT.tasks[0]!, taskId, title: taskId, targetPaths: ["README.md"], dependsOn, traces: ["AC1", "AC2"] })),
+  notes: "R11.Q1-Q5 were not answered.",
+};

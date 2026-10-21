@@ -120,7 +120,16 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
     if (!(error instanceof ControlError)) throw error;
     return { ok: false, reasons: importReasons(error), layers: null, implicitEdges: null };
   }
-  const graph = buildGraph({ ...plan, tasks: output.tasks.map((task) => ({ taskId: task.taskId, contract: task.taskId, dependsOn: task.dependsOn })) } as PlanFile, contracts);
+  // Issue 89: the layers are code's judgement of this output alone, so a draft code cannot layer is handed back with the
+  // error as its reason, like any other check's. Thrown, it left the call's run blocked at C with its draft drafting:
+  // retrying the run judged the same output and threw again, so the draft never ended and the requirement could not
+  // be retried or archived.
+  let graph: ReturnType<typeof buildGraph>;
+  try {
+    graph = buildGraph({ ...plan, tasks: output.tasks.map((task) => ({ taskId: task.taskId, contract: task.taskId, dependsOn: task.dependsOn })) } as PlanFile, contracts);
+  } catch (error) {
+    return { ok: false, reasons: [`graph:${error instanceof Error ? error.message : String(error)}`], layers: null, implicitEdges: null };
+  }
   return { ok: true, reasons, layers: graph.layers, implicitEdges: graph.implicit.map((edge) => ({ from: edge.from, to: edge.to, conflicts: edge.conflicts.map((c) => ({ a: c.a.declared, b: c.b.declared })) })) };
 }
 

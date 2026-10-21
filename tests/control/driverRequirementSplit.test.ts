@@ -4,7 +4,7 @@ import { readDraft, readRequirementGroup, readRound, writeDraft, writeRound } fr
 import { SPLIT_JSON_SCHEMA } from "../../src/control/requirementSplit.js";
 import { singleCallHandler } from "../../src/control/singleCallPurposes.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
-import { INVALID_SPLIT, VALID_SPLIT } from "./fixtures/requirementOutputs.js";
+import { INVALID_SPLIT, ISSUE_88_SPLIT, VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 
 // N1 spec §8 and H7: a draft is one single call; an invalid one is handed back automatically, at most twice.
 describe("the split purpose on the single-call chain (N1 spec §8)", () => {
@@ -81,6 +81,23 @@ describe("the split purpose on the single-call chain (N1 spec §8)", () => {
       await x.until(() => x.runs()[0]!.state === "blocked");
       expect(x.runs()[0]).toMatchObject({ drive: { blockedAt: "C", blockedReason: expect.stringContaining("requirement-draft-moved") } });
       expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "interrupted", output: null, calls: [] });
+    } finally { await x.dispose(); }
+  });
+
+  // Issues 88 and 89: this split used to throw "a cycle slipped through" while its layers were computed, which left the
+  // call's run blocked (active) at C and its draft drafting for good -- retry, consensus, archive all refused.
+  it("brings the tester's fifteen-task split with one shared path to awaiting-review, its call's run closed", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: ISSUE_88_SPLIT }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
+      const draft = readDraft(x.store, "r", 1);
+      expect(draft).toMatchObject({ state: "awaiting-review", reasons: [] });
+      // One shared path: every task in its own layer, t10 before t2 (no dependsOn joins them) and t2 before t11 (dependsOn does).
+      expect(draft.layers!.map((layer) => layer.length)).toEqual(Array(15).fill(1));
+      const order = draft.layers!.flat();
+      expect(order.indexOf("t10-doc-drift")).toBeLessThan(order.indexOf("t2-env-introspection"));
+      expect(order.indexOf("t2-env-introspection")).toBeLessThan(order.indexOf("t11-dimension-tables"));
+      expect(x.runs().map((run) => [run.state, run.active])).toEqual([["settled-restartable", 0]]);
     } finally { await x.dispose(); }
   });
 
