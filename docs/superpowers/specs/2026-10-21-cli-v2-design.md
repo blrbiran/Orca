@@ -406,3 +406,26 @@ New refusal codes: `control-person-token-required` (403), `control-person-token-
   be rewritten. Each rewrite is listed in the plan's ledger as file:line old → new with the reason (Rule 9 still
   applies: a rewritten criterion must be seen red on a mutation of the behaviour it now pins).
 - The controller's call on `set-integration-check` with a custom command (token tier, §15.1): human "同意".
+
+## Correction (2026-10-22, session b37f7ce9)
+
+Recorded by the CLI v2 fixer (session b37f7ce9) on `feat/cli-v2`, after review finding M2. §15.3's text above is kept
+as written (Rule 13); this section corrects it.
+
+- **Wrong:** §15.3's last bullet says getting around the dispatched-run guard "takes a deliberate change of environment
+  and `HOME`". `HOME` need not change. A dispatched run's processes run as the person, Orca does not relocate their
+  `HOME`, and the token's default path is under that real `HOME` (`~/.orca/person/token.json`). Unsetting
+  `ORCA_DISPATCHED_RUN` and `ORCA_PERSON_DIR` is enough: the CLI then reads the person's token and sends it with
+  `--as-person`, and the socket sees no marker header.
+- **What the protection actually rests on:** (1) the token is sent only when a command carries `--as-person`, so it is
+  never used by accident; (2) a process that keeps the environment Orca gave it is refused twice — the CLI refuses
+  `--as-person` (and `login`) under the marker, and the socket refuses every §15.1 verb to a request carrying the
+  marker header; (3) its `ORCA_PERSON_DIR` names an empty directory, so even a CLI that ignored the marker finds no
+  token. All three hold only while the dispatched process leaves `ORCA_DISPATCHED_RUN` and `ORCA_PERSON_DIR` as set: a
+  process that deliberately unsets them, or reads the token file directly, is not stopped. The boundary that does hold
+  is the operating-system user; §15.3's "a convention at Orca's interfaces, not a security boundary" stands.
+- **Same review, implemented on this branch:** the default path is computed from the passed environment's `HOME`, not
+  `os.homedir()` (a missing or relative `HOME` is refused), as `src/agents/paths.ts` does; and the marker and the empty
+  person directory now also reach the agent-written commands Orca runs itself — the debug reproduction check, the
+  criteria base re-run, the integration check — and chain sessions (a per-chain empty `0700` directory under the git
+  dir, beside the chain's stop request).

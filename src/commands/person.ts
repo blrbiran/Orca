@@ -9,8 +9,7 @@
  * `.token.json.<pid>.tmp` beside it, removed on the way out).
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { DISPATCHED_RUN_ENV } from "../control/commandClient.js";
 import { discoverSocketPath } from "../entry/discovery.js";
 import { EntryRejection } from "../entry/envelope.js";
@@ -23,7 +22,19 @@ const TOKEN_FILE = "token.json";
 
 export interface StoredPersonToken { schema: typeof PERSON_TOKEN_SCHEMA; token: string; sid: string; user: string; expiresAt: number }
 
-export const personDir = (env: NodeJS.ProcessEnv): string => env.ORCA_PERSON_DIR || join(homedir(), ".orca", "person");
+/**
+ * Review M2 (session b37f7ce9), as agents/paths.ts: the default is under the PASSED environment's HOME, never
+ * os.homedir(), so a caller (a criterion) that relocates HOME relocates the token store; a missing or non-absolute HOME
+ * is refused rather than falling back to the process's real home.
+ */
+export function personDir(env: NodeJS.ProcessEnv): string {
+  if (env.ORCA_PERSON_DIR) return env.ORCA_PERSON_DIR;
+  const home = env.HOME;
+  if (home === undefined || home === "" || !isAbsolute(home)) {
+    throw new EntryRejection("person-dir-unresolved", `ORCA_PERSON_DIR is not set and HOME is not an absolute path (got ${JSON.stringify(home)})`);
+  }
+  return join(home, ".orca", "person");
+}
 
 const marked = (env: NodeJS.ProcessEnv): boolean => (env[DISPATCHED_RUN_ENV] ?? "") !== "";
 
@@ -71,13 +82,14 @@ export async function runLogin(args: ParsedArgs, io: CommandIo): Promise<number>
   const name = args.flags.name as string;
   if (marked(io.env)) return fail(io, 1, "control-dispatched-run-refused", "orca login is not run by a run Orca dispatched");
   if (!io.stdinIsTTY) return fail(io, 1, "person-login-needs-terminal", "orca login reads the password at a terminal; run it in a session you attend");
+  // Resolved before the panel is asked, so a store that cannot be named leaves no live session behind.
+  const dir = personDir(io.env);
   const socketPath = discoverSocketPath({ stateDirFlag: args.global.controlStateDir, env: io.env });
   const read = io.readSecret ?? (async (prompt: string) => (await import("../panel/accounts/ttySecret.js")).readSecretFromTty(prompt));
   const password = await read(`Password for ${name} on this panel: `);
   const { status, body } = await requestOverSocket({ socketPath, method: "POST", path: "person/login", client: "cli", body: { name, password } });
   if (status !== 200) { const e = errorOf(body); return fail(io, 2, e.code, e.message); }
   const answer = body as { token: string; sid: string; user: { name: string }; expiresAt: number };
-  const dir = personDir(io.env);
   store(dir, { schema: PERSON_TOKEN_SCHEMA, token: answer.token, sid: answer.sid, user: answer.user.name, expiresAt: answer.expiresAt });
   if (!args.global.quiet) io.stdout(`logged in as ${answer.user.name} until ${new Date(answer.expiresAt).toISOString()}; token in ${join(dir, TOKEN_FILE)} (sent only with --as-person)\n`);
   return 0;

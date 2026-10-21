@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { personDir } from "../../src/commands/person.js";
 import { runRegistered } from "../../src/commands/run.js";
 import type { CommandIo } from "../../src/commands/types.js";
 import type { StartedPanel } from "../../src/panel/server.js";
@@ -53,6 +54,19 @@ async function setUp() {
   const codeOf = (out: string): string | undefined => (JSON.parse(out) as { body: { error?: { code: string } } }).body.error?.code;
   return { w, env, personDir, run, tokenWrite, codeOf, prompts };
 }
+
+// Review M2 (session b37f7ce9): the default store is under the passed environment's HOME (as agents/paths.ts), never
+// os.homedir(); pure calls only, so no mutation of it can read or write the real ~/.orca.
+describe("personDir (CLI v2 spec §15.3, review M2)", () => {
+  it("defaults under env.HOME, prefers ORCA_PERSON_DIR, and refuses a missing or relative HOME", () => {
+    // Mutation "join(homedir(), ...)" -> the real home -> red.
+    expect(personDir({ HOME: "/tmp/orca-person-home" })).toBe("/tmp/orca-person-home/.orca/person");
+    expect(personDir({ HOME: "/tmp/h", ORCA_PERSON_DIR: "/tmp/p" })).toBe("/tmp/p");
+    for (const HOME of [undefined, "", "relative/home"]) {
+      expect(() => personDir({ HOME })).toThrow(expect.objectContaining({ code: "person-dir-unresolved" }));
+    }
+  });
+});
 
 describe("orca login / logout and --as-person (CLI v2 spec §15.3)", { timeout: 60_000 }, () => {
   it("login stores the token: dir 0700, token.json 0600, the password read at the terminal", async () => {
