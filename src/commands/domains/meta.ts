@@ -9,6 +9,19 @@ export const META_ROWS: CommandDef[] = [
     exitCodes: { 0: "every check ok (warnings allowed)", 1: "a check failed" },
     examples: ["orca status", "orca status --json"], format: () => "",
   },
+  {
+    domain: "doctor", action: null, summary: "status's checks plus slower ones (agent CLIs on the service PATH, ~/.orca modes, stale sockets), with one fix line per failure (read-only)",
+    positionals: [], flags: [], access: "panel-local",
+    mapsTo: { kind: "local", load: async () => (await import("../doctor.js")).runDoctor },
+    exitCodes: { 0: "every check ok (warnings allowed)", 1: "a check failed" },
+    examples: ["orca doctor"], format: () => "",
+  },
+  {
+    domain: "version", action: null, summary: "the CLI's version (the orca-control skill's version: should equal it)",
+    positionals: [], flags: [], access: "panel-local",
+    mapsTo: { kind: "local", load: async () => (await import("../status.js")).runVersion },
+    examples: ["orca version", "orca version --json"], format: () => "",
+  },
   // CLI v2 spec §15.3: a person token for an attended terminal session (sent only with --as-person).
   {
     domain: "login", action: null, summary: "store a person token for this terminal: the panel account's password, typed here; used only with --as-person",
