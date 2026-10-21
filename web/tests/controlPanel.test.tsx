@@ -173,7 +173,9 @@ describe("ControlPanel", () => {
   it("shows a group's spend-cap block with its scope, period and cap, and a link to the Usage panel", () => {
     const blocked = groupView({ spendCapBlock: { code: "spend-cap-reached", scope: "repo:orca", period: "month", capTokens: 7_654_321, grantTokens: 2_345_678 } });
     const html = renderToStaticMarkup(<ControlPanel {...panelProps({ groups: { g: blocked } })} />);
-    expect(html).toContain("the monthly cap for project orca is 7654321 tokens and the next claim needs 2345678");
+    // Issue #84: the figures short, the exact ones in the title (was "... is 7654321 tokens and the next claim needs 2345678").
+    expect(html).toContain("the monthly cap for project orca is 7.7M tokens and the next claim needs 2.3M");
+    expect(html).toContain('title="7,654,321 / 2,345,678"');
     expect(html).toContain(`href="#metrics"`);
     expect(renderToStaticMarkup(<ControlPanel {...panelProps()} />)).not.toContain(`href="#metrics"`);
   });

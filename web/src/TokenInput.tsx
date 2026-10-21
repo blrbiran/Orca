@@ -1,6 +1,6 @@
 /**
  * Spec §9.2 item 3: a token amount is an integer shown grouped by the app language ("10,000,000") with a magnitude
- * hint ("≈ 10M" / "约 1000 万"). Typing accepts digits grouped by `,`, space, U+00A0 or U+202F; anything else is
+ * hint ("≈ 10M" / "约 10M"; issue #84: K/M/B in both languages). Typing accepts digits grouped by `,`, space, U+00A0 or U+202F; anything else is
  * refused in the field and never reaches `onChange`, so callers only ever hold a whole number.
  */
 import { useEffect, useState } from "react";
@@ -24,11 +24,16 @@ export function formatTokens(n: number, lang: string): string {
 
 const trimmed = (x: number): string => String(Math.round(x * 10) / 10);
 
-/** 10000000 -> "10M" (en) / "1000 万" (zh); a number below the first unit is written as is. */
-export function shortTokens(n: number, lang: string): string {
-  const units: [number, string][] = lang === "zh" ? [[1e8, " 亿"], [1e4, " 万"]] : [[1e9, "B"], [1e6, "M"], [1e3, "K"]];
-  const unit = units.find(([size]) => n >= size);
+const UNITS: readonly [number, string][] = [[1e9, "B"], [1e6, "M"], [1e3, "K"]];
+/** 10000000 -> "10M", -2500 -> "-2.5K"; a number below a thousand is written as is. Issue #84 (human: 中文界面也统一用 K/M/B): one scale in every language. */
+export function shortTokens(n: number): string {
+  const unit = UNITS.find(([size]) => Math.abs(n) >= size);
   return unit === undefined ? String(n) : `${trimmed(n / unit[0])}${unit[1]}`;
+}
+
+/** Issue #84: a token figure written short, with the exact number in its title. */
+export function Tokens(props: { n: number }): JSX.Element {
+  return <span title={formatTokens(props.n, currentLanguage())}>{shortTokens(props.n)}</span>;
 }
 
 export interface TokenInputProps {
@@ -48,7 +53,7 @@ export interface TokenInputProps {
   "aria-label"?: string;
   /**
    * A visible label for the field (final review M-T10). The label holds only this text; the magnitude hint and the
-   * field error sit beside the field, never inside the label (a wrapping <label> would read "token约 900 万").
+   * field error sit beside the field, never inside the label (a wrapping <label> would read "token约 900K").
    */
   label?: string;
 }
@@ -86,7 +91,7 @@ export function TokenInput({ value, onChange, onInvalid, onReset, allowEmpty, on
   );
   const note = invalid
     ? <small role="alert" style={{ color: "red" }}>{t("tokens.invalid", { min: formatTokens(min, lang) })}</small>
-    : blank&&allowEmpty&&emptyLabel?<small>{emptyLabel}</small>: parsed !== null && parsed >= 1000 && <small>{t("tokens.hint", { short: shortTokens(parsed, lang) })}</small>;
+    : blank&&allowEmpty&&emptyLabel?<small>{emptyLabel}</small>: parsed !== null && parsed >= 1000 && <small>{t("tokens.hint", { short: shortTokens(parsed) })}</small>;
   if (label === undefined) return <>{input}{note}</>;
   return <div className="token-field"><label>{label}{input}</label>{note}</div>;
 }

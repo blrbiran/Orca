@@ -11,7 +11,8 @@ import type { ControlAction } from "./controlApi.js";
 import type { GroupSummaryV1 } from "./controlTypes.js";
 import { BOARD_COLUMNS, boardColumn, boardDrop, needsAttention, type BoardColumn } from "./groupCategory.js";
 import { GroupGraph } from "./GroupGraph.js";
-import { enumText } from "./i18n.js";
+import { currentLanguage, enumText } from "./i18n.js";
+import { formatTokens, shortTokens } from "./TokenInput.js";
 import { inScope, type GroupScope } from "./projectScope.js";
 import { KNOWN_FAILURE_CAUSES, knownCause } from "./RunReason.js";
 
@@ -66,8 +67,9 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; onOpen: () 
       {waiting !== null && <p className="detail-note">{waiting}</p>}
       {reason !== null && <p className="detail-note" data-testid="board-card-reason">{t(`board.card.reason.${reason}` as const)}</p>}
       {facts !== undefined && (
-        <p className="detail-note">
-          {facts.budget.limitTokens === null ? t("board.card.budgetUnlimited", { used: facts.budget.usedTokens }) : t("board.card.budget", { used: facts.budget.usedTokens, limit: facts.budget.limitTokens })}
+        // Issue #84: the budget's figures short (K/M/B), the exact ones in the title.
+        <p className="detail-note" title={[facts.budget.usedTokens, facts.budget.limitTokens].flatMap((n) => (n === null ? [] : [formatTokens(n, currentLanguage())])).join(" / ")}>
+          {facts.budget.limitTokens === null ? t("board.card.budgetUnlimited", { used: shortTokens(facts.budget.usedTokens) }) : t("board.card.budget", { used: shortTokens(facts.budget.usedTokens), limit: shortTokens(facts.budget.limitTokens) })}
           {facts.pendingDecisions > 0 ? ` · ${t("board.card.decisions", { count: facts.pendingDecisions })}` : ""}
           {facts.firstFailure !== null ? ` · ${t("board.card.failure", { taskId: facts.firstFailure.taskId, cause: (KNOWN_FAILURE_CAUSES as readonly string[]).includes(facts.firstFailure.cause) ? t(`control.failureCause.label.${knownCause(facts.firstFailure.cause)}`) : facts.firstFailure.cause })}` : ""}
         </p>

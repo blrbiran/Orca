@@ -70,7 +70,8 @@ describe("the budget editor and the loop card in Chinese", () => {
       "profile all：交接控制 阶段结束时 · 交接执行 无 · 绑定到它的工作不会被调度（claim-capability-unavailable）",
       "归属", "桶", "活跃毫秒", "会话数", "建议", "任务 a", "草稿占用", " 在做法卡片里改", "模型 est-1", "采用 2000000", "应用整行", "应用全部建议",
       "估算理由（est-1）", "b · M · 置信度 高 · rationale-x", "组上限", "设置上限", "上下文达到多少 token 时交接（留空则不设）",
-      "已用 0 · 已承诺 300 万 · 余量 600 万", "保存提案", "重新估算", "确认要等这个提案版本的 agent 选择解析完成。", "确认任务方案",
+      // Issue #84 (human: 中文界面也统一用 K/M/B): was "已用 0 · 已承诺 300 万 · 余量 600 万".
+      "已用 0 · 已承诺 3M · 余量 6M", "保存提案", "重新估算", "确认要等这个提案版本的 agent 选择解析完成。", "确认任务方案",
     ]) expect(text, expected).toContain(expected);
     expect(screen.getByRole("button", { name: "对 b 工作 token 采用 2000000" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "应用整行 b 工作" })).toBeTruthy();
@@ -79,12 +80,12 @@ describe("the budget editor and the loop card in Chinese", () => {
     expect(texts("thead th")).toEqual(["归属", "桶", "状态", "token", "活跃毫秒", "尝试次数", "会话数", "建议"]);
     const rowB = [...document.querySelectorAll("tbody tr")][1]!;
     expect([...rowB.querySelectorAll("td")].slice(0, 3).map((cell) => cell.textContent)).toEqual(["任务 b", "工作", "草稿占用"]);
-    expect(texts("td small")).toEqual([...Array<string>(4).fill(" 在做法卡片里改"), "约 300 万", "模型 est-1", "人", "人", "人"]);
+    expect(texts("td small")).toEqual([...Array<string>(4).fill(" 在做法卡片里改"), "约 3M", "模型 est-1", "人", "人", "人"]);
     expect(texts("span.sr-only")).toEqual(["b 工作 token", "b 工作 活跃毫秒", "b 工作 尝试次数", "b 工作 会话数"]);
     // Final review M-T10 (rewrite): the magnitude hint used to render inside the token label ("token约 900 万"); it now
     // sits beside the field, outside the label, so the label is its own text and the hint is pinned on its own.
     expect(texts("fieldset label")).toEqual(["token", "活跃毫秒", "尝试次数", "会话数"]);
-    expect(texts("fieldset small")).toEqual(["约 900 万"]);
+    expect(texts("fieldset small")).toEqual(["约 9M"]); // Issue #84: was "约 900 万".
     expect(screen.getByRole("region", { name: "预算提案" })).toBeTruthy();
   });
 
@@ -102,9 +103,9 @@ describe("the budget editor and the loop card in Chinese", () => {
     for (const expected of [
       "提案 v2 · 已确认", "预算模式 未选择 · 观测到的约束方式 确认时已冻结",
       "profile all：交接控制 阶段结束时 · 交接执行 运行内机械交接 v1 · 绑定到它的工作不会被调度（claim-capability-unavailable）",
-      "已用 0 · 已承诺 300 万 · 余量 600 万 · 缺口 5 · 用量未知",
+      "已用 0 · 已承诺 3M · 余量 6M · 缺口 5 · 用量未知",
     ]) expect(text, expected).toContain(expected);
-    expect(texts("td small").slice(4)).toEqual(["约 300 万", "人", "complex-1m 默认值", "系统", "人"]);
+    expect(texts("td small").slice(4)).toEqual(["约 3M", "人", "complex-1m 默认值", "系统", "人"]);
     cleanup();
     const stale: GroupViewV1 = { ...view, estimates: [{ ...view.estimates[0]!, stale: true }] };
     text = render(<BudgetEditor view={stale} config={{ ...config, profiles: [] }} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container.textContent ?? "";

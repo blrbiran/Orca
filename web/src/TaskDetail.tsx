@@ -22,6 +22,7 @@ import { explainRunReason } from "./refusalExplain.js";
 import { explainBesideCode } from "./ccloopCodes.js";
 import { hasFailureOutcome, reasonCode, retryRunOpen, savedResultSourceRunId, taskRunNumber } from "./runFacts.js";
 import i18n, { enumText } from "./i18n.js";
+import { shortTokens } from "./TokenInput.js";
 import { UsageSettlement } from "./UsageSettlement.js";
 import type { Role } from "./auth.js";
 
@@ -53,9 +54,9 @@ export function progressText(progress: WorkItemProgressV1 | null | undefined): s
     : i18n.t("control.progress.attempt", { current: progress.attempt.current, max: progress.attempt.max });
   const tokens = progress.tokens === null
     ? i18n.t("control.progress.tokensUnknown")
-    : progress.tokens.grant===null?i18n.t("control.progress.tokensUnlimited",{used:progress.tokens.used})
+    : progress.tokens.grant===null?i18n.t("control.progress.tokensUnlimited",{used:shortTokens(progress.tokens.used)})
     : progress.tokens.grant === 0
-      ? i18n.t("control.progress.tokensOfZero", { used: progress.tokens.used })
+      ? i18n.t("control.progress.tokensOfZero", { used: shortTokens(progress.tokens.used) })
       : i18n.t("control.progress.tokensPercent", { percent: Math.floor((progress.tokens.used * 100) / progress.tokens.grant) });
   return i18n.t("control.progress.line", { step, attempt, tokens });
 }

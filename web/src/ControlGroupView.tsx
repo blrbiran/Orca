@@ -33,7 +33,7 @@ import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import { LabelChips, SavedResultEntry, TaskDetail, progressText } from "./TaskDetail.js";
 import { planText } from "./LoopPlanCard.js";
 import { currentLanguage, enumText } from "./i18n.js";
-import { formatTokens, shortTokens } from "./TokenInput.js";
+import { Tokens, formatTokens, shortTokens } from "./TokenInput.js";
 import { capScopeText } from "./UsagePanel.js";
 import { closingText } from "./CorrectionsView.js";
 import { isRetryKey } from "./reviewKeys.js";
@@ -422,12 +422,13 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       )}
       {/* Accounts spec §6.3.1, §7: a claim waiting on a spend cap names the cap and links to the Usage panel. */}
       {view.spendCapBlock && (
-        <p role="status" data-testid="spend-cap-block">
+        <p role="status" data-testid="spend-cap-block" title={`${formatTokens(view.spendCapBlock.capTokens, currentLanguage())} / ${formatTokens(view.spendCapBlock.grantTokens, currentLanguage())}`}>
           {t("control.group.spendCapBlock", {
             scope: capScopeText(view.spendCapBlock.scope),
             period: t(`usage.capPeriod.${view.spendCapBlock.period}` as const),
-            cap: view.spendCapBlock.capTokens,
-            grant: view.spendCapBlock.grantTokens,
+            // Issue #84: short figures (K/M/B), the exact ones in the title.
+            cap: shortTokens(view.spendCapBlock.capTokens),
+            grant: shortTokens(view.spendCapBlock.grantTokens),
           })}{" "}
           <a href="#metrics">{t("control.group.spendCapLink")}</a>
         </p>
@@ -567,8 +568,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
               </td>
               <td><details><summary>{run.profile.profileId}</summary><code>{run.profile.profileHash}</code></details></td>
-              <td><span title={formatTokens(run.used.tokens, currentLanguage())}>{shortTokens(run.used.tokens, "en")}</span></td>
-              <td>{run.remaining.tokens===null ? t(run.tokenRemainingStatus==="unknown"?"control.progress.tokensUnknown":"budget.unlimited") : <span title={formatTokens(run.remaining.tokens, currentLanguage())}>{shortTokens(run.remaining.tokens, "en")}</span>}</td>
+              <td><Tokens n={run.used.tokens} /></td>
+              <td>{run.remaining.tokens===null ? t(run.tokenRemainingStatus==="unknown"?"control.progress.tokensUnknown":"budget.unlimited") : <Tokens n={run.remaining.tokens} />}</td>
               <td>
                 <EvidenceLink runId={run.runId} />
                 {run.evidenceIds.length > 0 && <details><summary>{t("control.group.evidenceCount", { n: run.evidenceIds.length })}</summary><ul>{run.evidenceIds.map((id) => <li key={id}><code>{id}</code></li>)}</ul></details>}

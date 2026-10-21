@@ -64,17 +64,19 @@ describe("UsagePanel (spec §5.3, §6, §7)", () => {
     renderAs(member);
     await screen.findByTestId("usage-total");
     expect(lastRead()).toEqual({ scope: "all", groupBy: "model" });
-    expect(screen.getByTestId("usage-total").textContent).toBe("98765");
-    expect(screen.getByTestId("usage-week").textContent).toBe("4321");
-    expect(screen.getByTestId("usage-month").textContent).toBe("8642");
+    // Issue #84: every token figure short (K/M/B; was "98765", "4321", "8642", "7317", "1000"), the exact one in its title.
+    expect(screen.getByTestId("usage-total").textContent).toBe("98.8K");
+    expect(screen.getByTestId("usage-total").querySelector("span")!.title).toBe("98,765");
+    expect(screen.getByTestId("usage-week").textContent).toBe("4.3K");
+    expect(screen.getByTestId("usage-month").textContent).toBe("8.6K");
     const rows = screen.getAllByRole("row").map((row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent));
     expect(rows).toContainEqual(["claude-haiku-4-5", "11", "12", "13", "14", "50"]);
     expect(rows).toContainEqual(["claude-opus-5-5", "101", "102", "103", "104", "410"]);
-    expect(rows).toContainEqual(["unattributed", "0", "0", "0", "0", "7317"]);
+    expect(rows).toContainEqual(["unattributed", "0", "0", "0", "0", "7.3K"]);
     expect(screen.getByTestId("usage-unattributed").textContent).toMatch(/unattributed[^0-9]*1$/i);
     expect(screen.getByTestId("usage-mismatch").textContent).toMatch(/2$/);
     expect(screen.getByTestId("usage-unknown").textContent).toMatch(/0$/);
-    expect(rows).toContainEqual(["all projects", "weekly", "1000", "400", "100", "500"]);
+    expect(rows).toContainEqual(["all projects", "weekly", "1K", "400", "100", "500"]);
   });
 
   // Spec §14 / final review Important 2: the total and the all-time caps count pre-ledger tokens that no range holds, so
@@ -83,13 +85,14 @@ describe("UsagePanel (spec §5.3, §6, §7)", () => {
   it("names the tokens that predate per-model tracking when the total exceeds the all-time range, in English and Chinese", async () => {
     renderAs(member);
     expect((await screen.findByTestId("usage-pre-ledger")).textContent).toBe(
-      "Total and all-time caps include 90988 tokens used before per-model tracking began; they are in no range.",
+      // Issue #84: was "90988 tokens" (and "有 90988 个 token" in Chinese).
+      "Total and all-time caps include 91K tokens used before per-model tracking began; they are in no range.",
     );
     cleanup();
     await i18n.changeLanguage("zh");
     try {
       renderAs(member);
-      expect((await screen.findByTestId("usage-pre-ledger")).textContent).toBe("总量和全期上限里有 90988 个 token 用在按模型统计开始之前；它们不属于任何区间。");
+      expect((await screen.findByTestId("usage-pre-ledger")).textContent).toBe("总量和全期上限里有 91K token 用在按模型统计开始之前；它们不属于任何区间。");
     } finally { await i18n.changeLanguage("en"); }
     cleanup();
     view = { ...VIEW, headline: { ...VIEW.headline, total: VIEW.range.tokens } };

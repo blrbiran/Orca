@@ -9,7 +9,7 @@ import { useContext, useEffect, useState, type JSX } from "react";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { useTranslation } from "react-i18next";
 import { GroupActionsMenu } from "./GroupActionsMenu.js";
-import { LANGUAGE_NAMES, PANEL_LANGUAGES, currentLanguage, enumText } from "./i18n.js";
+import { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText } from "./i18n.js";
 import { explainBesideCode, explainEstimateReason, explainEstimatorCheck } from "./ccloopCodes.js";
 import { explainRefusal, explainRunReason } from "./refusalExplain.js";
 import type { PanelLanguage } from "./i18n.js";
@@ -289,7 +289,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
   const valid = view.rounds.filter((round) => round.result !== null);
   const latest = valid.at(-1)?.result ?? null;
   const round = view.rounds.at(-1) ?? null, draft = view.drafts.at(-1) ?? null;
-  const short = (tokens: number): string => shortTokens(tokens, currentLanguage());
+  const short = (tokens: number): string => shortTokens(tokens);
   const accepted = (decisions: Round["glossaryDecisions"]) => new Set((decisions ?? []).filter((d) => d.accept).map((d) => d.id));
   const reason = view.summary.requirement?.waiting ?? view.summary.requirement?.reasonCode ?? null;
   const step = view.requirement.consensus === null ? round : draft;

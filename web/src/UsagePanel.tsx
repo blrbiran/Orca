@@ -16,8 +16,8 @@ import {
 import type {
   ClearSpendCapPayloadV1, CommandErrorV1, SetSpendCapPayloadV1, SetUsageCalendarPayloadV1, SpendPeriodV1, UsageViewV1,
 } from "./controlTypes.js";
-import i18n from "./i18n.js";
-import { TokenInput } from "./TokenInput.js";
+import i18n, { currentLanguage } from "./i18n.js";
+import { TokenInput, Tokens, formatTokens, shortTokens } from "./TokenInput.js";
 import { Refusal } from "./Refusal.js";
 
 const SPEND_SCOPE = "@spend";
@@ -148,6 +148,8 @@ export function UsagePanel({ project, active = true }: { project: string | null;
 
 type Send = (path: string, payload: SetSpendCapPayloadV1 | ClearSpendCapPayloadV1 | SetUsageCalendarPayloadV1) => void;
 
+const exact = (n: number): string => formatTokens(n, currentLanguage());
+
 function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean; project: string | null; onSend: Send }): JSX.Element {
   const { view, grouped, owner, project, onSend } = props;
   const { t } = useTranslation();
@@ -155,15 +157,16 @@ function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean;
   return (
     <>
       <dl className="usage-headline">
-        <div><dt>{t("usage.headline.total")}</dt><dd data-testid="usage-total">{view.headline.total}</dd></div>
-        <div><dt>{t("usage.headline.week")}</dt><dd data-testid="usage-week">{view.headline.week}</dd></div>
-        <div><dt>{t("usage.headline.month")}</dt><dd data-testid="usage-month">{view.headline.month}</dd></div>
+        {/* Issue #84: every token figure short (K/M/B), its exact number in the title. */}
+        <div><dt>{t("usage.headline.total")}</dt><dd data-testid="usage-total"><Tokens n={view.headline.total} /></dd></div>
+        <div><dt>{t("usage.headline.week")}</dt><dd data-testid="usage-week"><Tokens n={view.headline.week} /></dd></div>
+        <div><dt>{t("usage.headline.month")}</dt><dd data-testid="usage-month"><Tokens n={view.headline.month} /></dd></div>
       </dl>
-      <p data-testid="usage-range">{t("usage.rangeTokens", { n: view.range.tokens })}</p>
+      <p data-testid="usage-range" title={exact(view.range.tokens)}>{t("usage.rangeTokens", { n: shortTokens(view.range.tokens) })}</p>
       {/* Spec §14: pre-ledger rows count in the total and in all-time caps but in no range, so with no range bounds the
           difference between the two is exactly them; named here so the page does not look as if tokens were lost. */}
       {view.from === null && view.to === null && view.headline.total - view.range.tokens > 0 && (
-        <p data-testid="usage-pre-ledger">{t("usage.preLedger", { n: view.headline.total - view.range.tokens })}</p>
+        <p data-testid="usage-pre-ledger" title={exact(view.headline.total - view.range.tokens)}>{t("usage.preLedger", { n: shortTokens(view.headline.total - view.range.tokens) })}</p>
       )}
 
       <h3>{t("usage.byModel")}</h3>
@@ -178,8 +181,8 @@ function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean;
         <tbody>
           {view.range.byModel.map((entry) => (
             <tr key={entry.model ?? "\u0000unattributed"}>
-              <td>{label(entry.model)}</td><td>{entry.input}</td><td>{entry.output}</td>
-              <td>{entry.cacheRead}</td><td>{entry.cacheWrite}</td><td>{entry.tokens}</td>
+              <td>{label(entry.model)}</td><td><Tokens n={entry.input} /></td><td><Tokens n={entry.output} /></td>
+              <td><Tokens n={entry.cacheRead} /></td><td><Tokens n={entry.cacheWrite} /></td><td><Tokens n={entry.tokens} /></td>
             </tr>
           ))}
         </tbody>
@@ -189,7 +192,7 @@ function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean;
         <div className="table-scroll"><table data-testid="usage-groups" className="table-narrow">
           <thead><tr><th>{t("usage.th.group")}</th><th>{t("usage.th.total")}</th></tr></thead>
           <tbody>
-            {view.range.groups.map((group) => <tr key={group.key ?? "\u0000unattributed"}><td>{label(group.key)}</td><td>{group.tokens}</td></tr>)}
+            {view.range.groups.map((group) => <tr key={group.key ?? "\u0000unattributed"}><td>{label(group.key)}</td><td><Tokens n={group.tokens} /></td></tr>)}
           </tbody>
         </table></div>
       )}
@@ -239,8 +242,8 @@ function Caps({ view, owner, project, onSend }: { view: UsageViewV1; owner: bool
               const tokens = drafts[key] === undefined ? cap.tokens : drafts[key]!;
               return (
                 <tr key={key} data-testid={`cap-${key}`}>
-                  <td>{capScopeText(cap.scope)}</td><td>{t(`usage.capPeriod.${cap.period}` as const)}</td><td>{cap.tokens}</td>
-                  <td>{cap.used}</td><td>{cap.committed}</td><td>{cap.headroom}</td>
+                  <td>{capScopeText(cap.scope)}</td><td>{t(`usage.capPeriod.${cap.period}` as const)}</td><td><Tokens n={cap.tokens} /></td>
+                  <td><Tokens n={cap.used} /></td><td><Tokens n={cap.committed} /></td><td><Tokens n={cap.headroom} /></td>
                   {owner && (
                     <td>
                       <TokenInput

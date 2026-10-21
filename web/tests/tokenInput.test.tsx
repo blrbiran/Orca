@@ -2,7 +2,7 @@
 /**
  * Integration + panel fixes spec §9.2 item 3: token amounts are typed and shown as grouped integers
  * ("10,000,000", grouped by the app language), parsed from `,` / space / U+00A0 / U+202F separators, refused in the
- * field (and never sent) when they are anything else, and hinted by magnitude ("≈ 10M" / "约 1000 万").
+ * field (and never sent) when they are anything else, and hinted by magnitude ("≈ 10M" / "约 10M"; issue #84: K/M/B in both languages).
  */
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
@@ -37,13 +37,15 @@ describe("formatTokens / shortTokens", () => {
     expect(formatTokens(10_000_000, "en")).toBe("10,000,000");
     expect(formatTokens(10_000_000, "zh")).toBe("10,000,000");
   });
-  it("writes the magnitude per language", () => {
-    expect(shortTokens(10_000_000, "en")).toBe("10M");
-    expect(shortTokens(1_500, "en")).toBe("1.5K");
-    expect(shortTokens(2_300_000_000, "en")).toBe("2.3B");
-    expect(shortTokens(10_000_000, "zh")).toBe("1000 万");
-    expect(shortTokens(150_000_000, "zh")).toBe("1.5 亿");
-    expect(shortTokens(999, "en")).toBe("999");
+  // Issue #84 (human: 中文界面也统一用 K/M/B): one scale in every language; zh used to write "1000 万" and "1.5 亿".
+  it("writes the magnitude in K/M/B whatever the language", () => {
+    expect(shortTokens(10_000_000)).toBe("10M");
+    expect(shortTokens(1_500)).toBe("1.5K");
+    expect(shortTokens(2_300_000_000)).toBe("2.3B");
+    expect(shortTokens(1_639_000)).toBe("1.6M");
+    expect(shortTokens(150_000_000)).toBe("150M");
+    expect(shortTokens(999)).toBe("999");
+    expect(shortTokens(-2_500)).toBe("-2.5K");
   });
 });
 
@@ -89,7 +91,7 @@ describe("TokenInput", () => {
     cleanup();
     await i18n.changeLanguage("zh");
     render(<Harness start={10_000_000} onChange={vi.fn()} />);
-    expect(screen.getByText("约 1000 万")).toBeTruthy();
+    expect(screen.getByText("约 10M")).toBeTruthy();
     cleanup();
     render(<Harness start={999} onChange={vi.fn()} />);
     expect(screen.queryByText(/约/)).toBeNull();

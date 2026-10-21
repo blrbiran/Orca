@@ -69,7 +69,9 @@ describe("the board tab (kanban spec §4)", () => {
     const card = within(running).getByTestId("board-card-run1");
     expect(card.textContent).toContain("Do X");
     // Failure-cause spec 2026-10-21 §5: a cause ccloop typed is worded (was the raw code; Ruling in the commit body).
-    expect(card.textContent).toContain("1200 of 5000 tokens · 2 decisions to review · a failed: a required check failed");
+    // Issue #84: the budget's figures short (was "1200 of 5000 tokens"), the exact ones in the title.
+    expect(card.textContent).toContain("1.2K of 5K tokens · 2 decisions to review · a failed: a required check failed");
+    expect(within(card).getByTitle("1,200 / 5,000")).toBeTruthy();
     expect(within(screen.getByRole("region", { name: "Queued" })).getByTestId("board-card-wait").textContent).toContain("waiting for run1");
     const transfer = dataTransfer();
     fireEvent.dragStart(card, { dataTransfer: transfer });

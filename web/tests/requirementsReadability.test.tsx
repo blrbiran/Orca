@@ -88,10 +88,11 @@ describe("the requirement's token figures (#79)", () => {
     expect(held.textContent).toContain("1M held by running calls");
   });
 
-  it("reads 运行中占用 in Chinese, with Chinese magnitudes", async () => {
+  // Issue #84 (human: 中文界面也统一用 K/M/B): was "已用 161.2 万 / 上限 不限 tokens，运行中占用 100 万".
+  it("reads 运行中占用 in Chinese, with the same K/M/B magnitudes as English", async () => {
     await i18n.changeLanguage("zh");
     const root = show(counted());
-    expect(root.textContent).toContain("已用 161.2 万 / 上限 不限 tokens，运行中占用 100 万");
+    expect(root.textContent).toContain("已用 1.6M / 上限 不限 tokens，运行中占用 1M");
   });
 });
 
