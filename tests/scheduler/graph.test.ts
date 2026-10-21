@@ -100,6 +100,79 @@ describe("buildGraph (spec 2.4)", () => {
   });
 });
 
+// Issue 88 (external tester, 2026-10-08; human ruling: fix it): every implicit edge used to point from the
+// lexicographically smaller taskId to the larger one. taskId order says nothing about dependsOn, so with "t10" < "t2"
+// an implicit t11 -> t2 closed a cycle with the explicit chain t2 -> ... -> t11 and buildGraph threw "a cycle slipped
+// through" on a draft whose dependsOn graph was a valid DAG. The tester's split, exactly: fifteen tasks, one shared
+// target path, the dependsOn edges the issue lists.
+const ISSUE_88_DEPENDS_ON: Record<string, string[]> = {
+  "t1-preflight": [],
+  "t2-env-introspection": ["t1-preflight"],
+  "t3-test-baseline-1": ["t2-env-introspection"],
+  "t4-dim-cli": ["t2-env-introspection"],
+  "t5-dim-sync": ["t2-env-introspection"],
+  "t6-dim-err": ["t2-env-introspection"],
+  "t7-dim-rcv": ["t2-env-introspection"],
+  "t8-findings-consolidation": ["t4-dim-cli", "t5-dim-sync", "t6-dim-err", "t7-dim-rcv"],
+  "t9-rev-section": ["t4-dim-cli", "t5-dim-sync", "t6-dim-err", "t7-dim-rcv"],
+  "t10-doc-drift": ["t1-preflight"],
+  "t11-dimension-tables": ["t8-findings-consolidation", "t9-rev-section", "t10-doc-drift"],
+  "t12-unverified-index": ["t8-findings-consolidation"],
+  "t13-impl-section": ["t3-test-baseline-1", "t8-findings-consolidation", "t10-doc-drift"],
+  "t14-overview-appendix": ["t11-dimension-tables", "t12-unverified-index", "t13-impl-section"],
+  "t15-final-verify": ["t14-overview-appendix"],
+};
+
+describe("implicit edges never close a cycle with dependsOn (issue 88)", () => {
+  const ids = Object.keys(ISSUE_88_DEPENDS_ON);
+  const shared = () => contracts(Object.fromEntries(ids.map((id) => [id, ["docs/gap-analysis-vs-orca-syncskill.md"]])));
+  const issuePlan = () => plan(ids.map((id): [string, string[]] => [id, ISSUE_88_DEPENDS_ON[id]!]));
+
+  it("schedules the tester's fifteen-task split, every edge pointing forward in the layer order", () => {
+    // The direct regression: on the lexicographic rule this throws before any assertion below runs.
+    const g = buildGraph(issuePlan(), shared());
+    // Every pair intersects, so the layers are one total order: dependsOn's topological order, smallest taskId first
+    // among the tasks free at the same time (t10 before t2, and t12, t13 before t9, as lexicographic order would also say).
+    expect(g.layers).toEqual([
+      "t1-preflight", "t10-doc-drift", "t2-env-introspection", "t3-test-baseline-1", "t4-dim-cli", "t5-dim-sync", "t6-dim-err", "t7-dim-rcv",
+      "t8-findings-consolidation", "t12-unverified-index", "t13-impl-section", "t9-rev-section", "t11-dimension-tables", "t14-overview-appendix", "t15-final-verify",
+    ].map((id) => [id]));
+    // 105 intersecting pairs, 26 of them already ordered by a dependsOn edge: those carry no implicit edge.
+    expect(g.implicit).toHaveLength(105 - 26);
+    const position = new Map(g.layers.flat().map((id, index) => [id, index]));
+    for (const edge of g.implicit) expect(position.get(edge.from)!).toBeLessThan(position.get(edge.to)!);
+    // The edge the lexicographic rule pointed backwards: t11 is downstream of t2 through dependsOn, though "t11" < "t2".
+    expect(g.implicit.find((e) => [e.from, e.to].sort().join() === ["t11-dimension-tables", "t2-env-introspection"].sort().join()))
+      .toMatchObject({ from: "t2-env-introspection", to: "t11-dimension-tables" });
+  });
+
+  it("orders a pair dependsOn does not relate by the same total order, not pairwise, so implicit edges cannot form a cycle among themselves and dependsOn", () => {
+    // c -> a explicitly; b relates to neither. Orienting each implicit pair on its own (lexicographic, or by dependsOn
+    // reachability where there is one) gives a -> b and b -> c, which with c -> a is a cycle. One total order cannot:
+    // b and c are free first and b is the smaller, then c, then a -- so b runs before a although "a" < "b".
+    const g = buildGraph(plan([["a", ["c"]], ["b", []], ["c", []]]), contracts({ a: ["x.txt"], b: ["x.txt"], c: ["x.txt"] }));
+    expect(g.layers).toEqual([["b"], ["c"], ["a"]]);
+    expect(g.implicit.map((e) => [e.from, e.to])).toEqual([["b", "a"], ["b", "c"]]);
+  });
+
+  it("keeps taskId lexicographic order when there is no dependsOn edge at all", () => {
+    const g = buildGraph(plan(["t2", "t10", "t1"]), contracts({ t1: ["x.txt"], t2: ["x.txt"], t10: ["x.txt"] }));
+    expect(g.layers).toEqual([["t1"], ["t10"], ["t2"]]);
+  });
+
+  it("says in the decision what fixed the direction, which is no longer always the smaller taskId", () => {
+    const g = buildGraph(issuePlan(), shared());
+    const decisions = implicitEdgeDecisions(g, "orca-r-abcd1234");
+    const backwards = decisions.find((d) => d.chose === "t2-env-introspection runs before t11-dimension-tables")!;
+    expect(backwards).toBeDefined();
+    expect(validateLine(JSON.stringify(backwards)).verdict).toBe("ok");
+    // The old wording claimed "(t2-env-introspection < t11-dimension-tables)" in lexicographic order, which is false.
+    expect(JSON.stringify(backwards)).not.toContain("t2-env-introspection < t11-dimension-tables");
+    expect(backwards.because).toContain("topological order of the dependsOn edges");
+    expect(backwards.alternatives[0]!.why_not).toContain("topological order of the dependsOn edges");
+  });
+});
+
 describe("detectCycle (ruling R2 — shared with planFile's loadPlan)", () => {
   it("says false for an acyclic dependsOn graph", () => {
     const tasks: PlanTask[] = [

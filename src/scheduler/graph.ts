@@ -26,9 +26,9 @@ export interface TaskGraph {
  *
  * Operates on dependsOn edges only — the explicit graph a plan file declares.
  * It says nothing about the implicit (write-set) edges buildGraph derives;
- * those are constructed to never contradict an explicit edge (see
- * buildGraph's dedup below), so they cannot introduce a cycle that this
- * function would have missed.
+ * those all point forward along one topological order of these same
+ * dependsOn edges (see buildImplicitEdges), so they cannot introduce a cycle
+ * that this function would have missed.
  */
 export function detectCycle(tasks: ReadonlyArray<Pick<PlanTask, "taskId" | "dependsOn">>): boolean {
   const byId = new Map(tasks.map((task) => [task.taskId, task]));
@@ -78,19 +78,61 @@ function pairKey(a: string, b: string): string {
 }
 
 /**
+ * Issue 88 (human ruling: fix it): the position of every task in ONE total order that extends the dependsOn graph —
+ * Kahn's topological order, taking the smallest taskId whenever several tasks are free at once. Implicit edges are
+ * oriented along it. The earlier rule oriented each pair on its own by taskId lexicographic order, which says nothing
+ * about dependsOn: with "t10" < "t2", the implicit edge t11 -> t2 closed a cycle with the explicit chain t2 -> ... -> t11
+ * and buildGraph threw on a valid plan. Orienting each pair by dependsOn reachability where there is one is not enough
+ * either: with c -> a explicit and b unrelated to both, the pairs a/b and b/c fall back to taskId order (a -> b, b -> c)
+ * and close a cycle through c -> a. Edges that all point forward along a single order cannot form a cycle.
+ * A plan without dependsOn is therefore ordered exactly as before (lexicographically); with dependsOn, a task can come
+ * before one with a smaller taskId even when no dependsOn chain joins the two (b before a in the example above).
+ *
+ * A task left without a position (only possible if dependsOn itself has a cycle, which loadPlan rejects first) is placed
+ * after the rest in taskId order, so buildGraph still reaches its own loud failure rather than this one.
+ */
+function explicitTopologicalOrder(tasks: PlanTask[]): Map<string, number> {
+  const ids = new Set(tasks.map((task) => task.taskId));
+  const successors = new Map<string, string[]>(tasks.map((task) => [task.taskId, []]));
+  const waitingOn = new Map<string, number>(tasks.map((task) => [task.taskId, 0]));
+  for (const task of tasks) {
+    for (const dep of task.dependsOn) {
+      if (!ids.has(dep)) continue;
+      successors.get(dep)!.push(task.taskId);
+      waitingOn.set(task.taskId, waitingOn.get(task.taskId)! + 1);
+    }
+  }
+  const position = new Map<string, number>();
+  const free = tasks.map((task) => task.taskId).filter((id) => waitingOn.get(id) === 0);
+  while (free.length > 0) {
+    free.sort();
+    const next = free.shift()!;
+    position.set(next, position.size);
+    for (const succ of successors.get(next)!) {
+      waitingOn.set(succ, waitingOn.get(succ)! - 1);
+      if (waitingOn.get(succ) === 0) free.push(succ);
+    }
+  }
+  for (const id of [...ids].filter((id) => !position.has(id)).sort()) position.set(id, position.size);
+  return position;
+}
+
+/**
  * spec 2.4: edges = explicit dependsOn ∪ implicit (write-set intersection).
  * An implicit edge has no natural direction (spec 2.4's own warning — bazel,
  * buck2, snakemake and pants all hit this and hand it to a human), so the
- * tie-break is taskId lexicographic order, deterministic and cheap.
+ * tie-break is deterministic and cheap: the earlier task in
+ * explicitTopologicalOrder above goes first. Without dependsOn that is taskId
+ * lexicographic order; with it, one order for every pair is what keeps the
+ * union acyclic (issue 88).
  *
  * A pair that already has an explicit edge (either direction) is skipped
  * here on purpose: dependsOn already fixes that pair's order for a real
- * reason, and if the lexicographic tie-break happened to disagree with it
- * (nothing requires taskId order to match author intent), adding an implicit
- * edge on top would silently create a 2-node cycle that nothing upstream
- * checks for — detectCycle above only looks at dependsOn. Skipping is also
- * the honest scheduling story: there was no arbitrary choice to record,
- * because the order was never ambiguous.
+ * reason, so there was no arbitrary choice to record, because the order was
+ * never ambiguous. (This skip used to be what kept the lexicographic
+ * tie-break from contradicting a direct dependsOn edge; it did nothing for a
+ * longer dependsOn chain, which is issue 88. The topological order now keeps
+ * every implicit edge consistent with dependsOn on its own.)
  */
 function buildImplicitEdges(tasks: PlanTask[], writeSets: Map<string, ClaimedPath[]>): ImplicitEdge[] {
   const explicitPairs = new Set<string>();
@@ -98,6 +140,7 @@ function buildImplicitEdges(tasks: PlanTask[], writeSets: Map<string, ClaimedPat
     for (const dep of task.dependsOn) explicitPairs.add(pairKey(dep, task.taskId));
   }
 
+  const position = explicitTopologicalOrder(tasks);
   const edges: ImplicitEdge[] = [];
   for (let i = 0; i < tasks.length; i += 1) {
     for (let j = i + 1; j < tasks.length; j += 1) {
@@ -106,7 +149,7 @@ function buildImplicitEdges(tasks: PlanTask[], writeSets: Map<string, ClaimedPat
       if (explicitPairs.has(pairKey(a, b))) continue;
       const conflicts = intersect(writeSets.get(a) ?? [], writeSets.get(b) ?? []);
       if (conflicts.length === 0) continue;
-      const [from, to] = a < b ? [a, b] : [b, a];
+      const [from, to] = position.get(a)! < position.get(b)! ? [a, b] : [b, a];
       edges.push({ from, to, conflicts });
     }
   }
@@ -164,9 +207,10 @@ export function buildGraph(plan: PlanFile, contracts: Map<string, unknown>): Tas
     const ready = [...remaining].filter((id) => (inDegree.get(id) ?? 0) === 0).sort();
     if (ready.length === 0) {
       // Cannot happen given the invariants above (explicit edges are acyclic
-      // per loadPlan's detectCycle call, and implicit edges never contradict
-      // an explicit one — see buildImplicitEdges) — but a loop that could
-      // spin forever on bad input must fail loudly, not hang.
+      // per loadPlan's detectCycle call, and every implicit edge points
+      // forward along one topological order of them — see
+      // buildImplicitEdges) — but a loop that could spin forever on bad input
+      // must fail loudly, not hang.
       throw new Error(`buildGraph: no schedulable task among ${[...remaining].join(", ")} — a cycle slipped through`);
     }
     layers.push(ready);
@@ -206,17 +250,17 @@ export function implicitEdgeDecisions(
       id: `${runId}/${index + 1}`,
       at,
       run: runId,
-      question: `the write sets of ${edge.from} and ${edge.to} intersect (${paths}), and nothing about the pair says which of them should run first`,
+      question: `the write sets of ${edge.from} and ${edge.to} intersect (${paths}), and no dependsOn edge between the two says which of them should run first`,
       chose: `${edge.from} runs before ${edge.to}`,
       alternatives: [
         {
           option: `${edge.to} runs before ${edge.from}`,
-          why_not: `neither direction is more correct than the other; taskId lexicographic order puts the smaller one first as a deterministic default (${edge.from} < ${edge.to}), and the scheduler is not allowed to make that choice silently on a person's behalf`,
+          why_not: `the scheduler orients every implicit edge along one order of all the tasks, a topological order of the dependsOn edges that takes the smallest taskId first whenever several tasks are free, so that no implicit edge can close a cycle with dependsOn or with another implicit edge; ${edge.from} comes before ${edge.to} in that order. In a plan without dependsOn that order is taskId lexicographic order; either way it is a deterministic default, not a judgement that this direction is more correct, and the scheduler is not allowed to make that choice silently on a person's behalf`,
         },
       ],
-      because: `an implicit edge has no natural direction (spec 2.4); this implementation's convention is taskId lexicographic order, and ${edge.from} < ${edge.to}, so ${edge.from} goes first`,
+      because: `an implicit edge has no natural direction (spec 2.4); this implementation follows a topological order of the dependsOn edges, smallest taskId first among tasks free at the same time, and ${edge.from} comes before ${edge.to} in it, so ${edge.from} goes first`,
       undo: {
-        how: `edit src/scheduler/graph.ts: swap the implicit edge direction between ${edge.from} and ${edge.to}`,
+        how: `declare the other order in the plan: make ${edge.from} depend on ${edge.to}; a dependsOn edge between the two replaces this implicit one`,
         cost: "change one direction choice and re-run the affected layering",
         blast_radius: `the execution order of ${edge.from} and ${edge.to} within this run`,
       },
