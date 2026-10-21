@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   captureStdout,
+  failOnceCheck,
   git,
   makeSandbox,
   runCli,
@@ -24,9 +25,13 @@ describe("a non-succeeded task never lands (spec §6.1, §7)", () => {
   it.each([
     // Measured routes (sandbox.ts ContractSpec, S8): a rejected verification ends `exhausted` under maxAttempts 1
     // and `failed` under maxAttempts 2.
-    { status: "exhausted", maxAttempts: 1 },
-    { status: "failed", maxAttempts: 2 },
-  ])("keeps a task that ended $status off W although it published an attempt commit", async ({ status, maxAttempts }) => {
+    // *** ERRATUM (2026-10-21, Orca session 9ec98639, repin to ccloop 71d650c): a failed required check is now
+    // retried once on the first attempt and a second check failure on the same paths ends `exhausted`; `failed` needs
+    // attempt 2 rejected by the agent verifier with no safe retry (failOnceCheck fails attempt 1; S8 has the
+    // measurement). Text above kept verbatim. ***
+    { status: "exhausted", maxAttempts: 1, failOnce: false },
+    { status: "failed", maxAttempts: 3, failOnce: true },
+  ])("keeps a task that ended $status off W although it published an attempt commit", async ({ status, maxAttempts, failOnce }) => {
     const s = await makeSandbox();
     try {
       // The first check writes a.txt into the attempt worktree, so the attempt commit carries real work; the second
@@ -37,13 +42,14 @@ describe("a non-succeeded task never lands (spec §6.1, §7)", () => {
           contract: {
             goal: "write a.txt",
             targetPaths: ["a.txt"],
-            requiredChecks: [writeFileCheck("a.txt", "a1"), "false"],
+            requiredChecks: [writeFileCheck("a.txt", "a1"), failOnce ? failOnceCheck(join(s.root, "t1-fail-once")) : "false"],
+            ...(failOnce ? { verifierType: "agent" as const } : {}),
             buildTestCommands: ["true"],
             maxAttempts,
           },
         },
       ]);
-      const adapterConfig = await writeScriptedConfig(s, "two-frames", [{}, {}]);
+      const adapterConfig = await writeScriptedConfig(s, "two-frames", [{}, failOnce ? { approved: false, safeToRetry: false } : {}]);
       const { result: rc, stdout } = await captureStdout(() => runCli(["run", p.planPath, "--adapter-config", adapterConfig]));
 
       expect(stdout).toContain(`T1: ccloop reported ${status}`);

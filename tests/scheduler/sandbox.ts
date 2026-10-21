@@ -642,6 +642,15 @@ export async function seedFanOutPlan(
 // check that writes a file is the one route by which a `scripted` run
 // produces a non-empty attempt commit — which §7's reconciliation, and
 // therefore landing at all, depends on.
+// A check that fails the first time it runs and passes from then on. The flag lives outside every attempt worktree
+// (each attempt gets a fresh one), so the second attempt sees it. ccloop 71d650c retries a failed required check once
+// on the lineage's first attempt (its spec 2026-10-20, option (b)); a scenario that needs ccloop's `failed` row lets
+// this check fail attempt 1 and has the agent verifier reject attempt 2 with no safe retry (a second required-check
+// failure on the same paths would be a repeated failure, `exhausted`).
+export function failOnceCheck(flagPath: string): string {
+  return `if [ -e ${flagPath} ]; then true; else : > ${flagPath}; false; fi`;
+}
+
 export function writeFileCheck(path: string, content: string): string {
   const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
   const mkdirPrefix = dir === "" ? "" : `mkdir -p ${dir} && `;

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { routeOutcome, runTask } from "../../../src/scheduler/ccloopRunner.js";
 import { buildGraph } from "../../../src/scheduler/graph.js";
@@ -13,6 +14,7 @@ import {
   writeFileCheck,
   writeScriptedConfig,
   agentsFor,
+  failOnceCheck,
 } from "../sandbox.js";
 
 describe("S8 (spec §6.1: a failed task)", () => {
@@ -31,11 +33,19 @@ describe("S8 (spec §6.1: a failed task)", () => {
       // maxAttempts` test (which would give `exhausted`) is checked before the
       // safeToRetry test that produces `failed`. maxAttempts 1 would therefore
       // give the wrong terminal state for this scenario.
+      // *** ERRATUM (2026-10-21, Orca session 9ec98639, repin to ccloop 71d650c): ccloop now retries a failed
+      // required check once on the lineage's first attempt, and a second required-check failure on the same paths
+      // ends `exhausted` ("repeated failure pattern detected", stopController's isRepeatedFailure matches category
+      // plus paths OR command). `failed` is now reached when attempt 2 is rejected for a different reason with no safe
+      // retry: failOnceCheck fails attempt 1 only, then the agent verifier rejects attempt 2 (frame 2, safeToRetry
+      // false). maxAttempts 3 keeps the `attemptNumber >= maxAttempts` rule out of the way. Text above kept
+      // verbatim. ***
       const { plan, contracts } = await seedFanOutPlan(s, {
         goal: "write a.txt",
         targetPaths: ["a.txt"],
-        requiredChecks: ["false"],
-        maxAttempts: 2,
+        requiredChecks: [failOnceCheck(join(s.root, "t1-fail-once"))],
+        maxAttempts: 3,
+        verifierType: "agent",
       });
       const graph = buildGraph(plan, contracts);
       // Guards the fixture itself: if T3 ever acquired an edge to T1 or T2,
@@ -45,7 +55,7 @@ describe("S8 (spec §6.1: a failed task)", () => {
 
       const t1 = plan.tasks.find((t) => t.taskId === "T1")!;
       const id1 = await allocateRunId(s.runsDir, "T1", await readFile(t1.contract), base);
-      const r1 = await runTask(plan, t1, base, id1, await agentsFor(s, await writeScriptedConfig(s, "T1", [{}, {}])));
+      const r1 = await runTask(plan, t1, base, id1, await agentsFor(s, await writeScriptedConfig(s, "T1", [{}, { approved: false, safeToRetry: false }])));
       expect(r1.outcome).toBe("failed");
 
       const route = routeOutcome(graph, "T1", r1.outcome);
@@ -87,6 +97,9 @@ describe("S8 (spec §6.1: a failed task)", () => {
     // directory happens to look the same as never having run". T3 is
     // independent and succeeds, so it lands and its (successful) copy IS
     // deleted -- a second, opposite control on the same measurement.
+    // *** ERRATUM (2026-10-21, Orca session 9ec98639, ccloop 71d650c): T1 now ends `exhausted` (its check is retried
+    // once and fails again on the same paths), not `failed`; both are failures that keep the copy and contribute 2,
+    // so nothing below changes. Text above kept verbatim. ***
     const s = await makeSandbox();
     try {
       const p = await seedRunnablePlan(s, [
