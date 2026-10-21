@@ -1,4 +1,5 @@
 import { projectKeyOf } from "../corrections/projectKey.js";
+import { attributionText, commandAttributionFor, routedAttributionFor } from "./commandClient.js";
 import { correctionRowFrom, recordNewCorrection } from "../corrections/record.js";
 import { CorrectRejection } from "../corrections/rejection.js";
 import { CORRECTION_ALREADY_RECORDED, DUPLICATE_CORRECTION_ID, readCorrections } from "../corrections/store.js";
@@ -70,7 +71,8 @@ export async function prepareApproval(
   // goal.md §1.1: who wrote the undo.how is visible on the line.
   const normalized = normalizeAgentEntry(entry, {
     ledgerRun, entryIndex, at, undoHow,
-    evidence: [...evidence, `undo.how by ${command.actorId} via approve-pending-decision ${command.commandId}`],
+    // CLI v2 spec §16: `by <person> via <channel>`, then the verb and command that wrote it.
+    evidence: [...evidence, `undo.how ${attributionText(commandAttributionFor(command.commandId, command.actorId))} approve-pending-decision ${command.commandId}`],
   });
   if (!normalized.ok) {
     return refused(normalized.reason.startsWith("tier-0:") ? "decision-undo-not-executable" : "pending-decision-entry-invalid", normalized.reason);
@@ -173,6 +175,9 @@ export async function prepareRejection(
   const decided = rejectRefusal(row, groupId);
   if (decided !== null) return decided;
   const { ledgerRun, entryIndex, entry } = row!.entry;
+  // CLI v2 spec §16: the routed person and channel; a call that skips the routes records the panel's identity, as before.
+  const routed = routedAttributionFor(command.commandId);
+  const by = routed?.by ?? corrections.by;
   const id = agentDecisionId(ledgerRun, entryIndex);
   const found = await findDecision(repo, await ledgerSources(store, repo, groupId), id);
   if (found !== null) return { kind: "refused", code: "pending-decision-settled", detail: `decision-recorded:${id}@${found.where}` };
@@ -185,14 +190,14 @@ export async function prepareRejection(
     const stored = await recordNewCorrection(corrections.dir, correctionRowFrom({
       projectKey, runId: row!.runId, pendingId, kind: "wrong",
       because: `${because === undefined ? "" : `${because}\n`}question: ${textOr(fields.question)}\nchose: ${textOr(fields.chose)}`,
-      by: corrections.by,
+      by, ...(routed === null ? {} : { via: routed.via }),
     }, now), { again: false });
     return { kind: "recorded", correctionId: stored.id };
   } catch (error) {
     // The same identity's double submit raced past the lookup: the store already holds its correction, so answer it.
     // (Two identities racing both record: the lookup and the append are not one store-lock hold; a named gap.)
     if (error instanceof CorrectRejection && (error.code === CORRECTION_ALREADY_RECORDED || error.code === DUPLICATE_CORRECTION_ID)) {
-      const raced = (await readCorrections(corrections.dir)).find((c) => c.runId === row!.runId && c.pendingId === pendingId && c.by === corrections.by);
+      const raced = (await readCorrections(corrections.dir)).find((c) => c.runId === row!.runId && c.pendingId === pendingId && c.by === by);
       if (raced !== undefined) return { kind: "recorded", correctionId: raced.id };
     }
     if (error instanceof CorrectRejection) return { kind: "refused", code: "pending-decision-correction-failed", detail: error.code };
@@ -236,7 +241,8 @@ export function applyRatifyFlaggedDecision(deps: { store: ControlStore }, comman
       const groupId = command.target.groupId;
       const { decisionId } = command.payload;
       if (!deps.store.db.prepare("SELECT 1 FROM groups WHERE id=?").get(groupId)) throw new ControlError("group-not-found");
-      ratifyFlag(deps.store, groupId, decisionId, { actorId: context.rawCommand.actorId, commandId: context.rawCommand.commandId, at: new Date(deps.store.now()).toISOString() });
+      const { by, via } = commandAttributionFor(context.rawCommand.commandId, context.rawCommand.actorId);
+      ratifyFlag(deps.store, groupId, decisionId, { actorId: by, via, commandId: context.rawCommand.commandId, at: new Date(deps.store.now()).toISOString() });
       return { status: 200, body: {
         schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,
         verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,

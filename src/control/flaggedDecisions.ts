@@ -18,6 +18,8 @@ const flagBodySchema = z.object({
   flaggedBy: z.string().min(1),
   flaggedAt: z.string().min(1),
   ratifiedBy: z.string().min(1).optional(),
+  // CLI v2 spec §16: the channel the ratify came by; absent on rows ratified before it and on Orca's own.
+  ratifiedVia: z.string().min(1).optional(),
   ratifiedAt: z.string().min(1).optional(),
   ratifyCommandId: z.string().min(1).optional(),
 }).strict();
@@ -33,6 +35,7 @@ export interface FlaggedDecisionRow {
   flaggedBy: string;
   flaggedAt: string;
   ratifiedBy: string | null;
+  ratifiedVia: string | null;
   ratifiedAt: string | null;
 }
 
@@ -56,7 +59,7 @@ function toRow(row: Stored): FlaggedDecisionRow {
   return {
     decisionId: row.decision_id, groupId: row.group_id, runId: row.run_id, source: row.source, state: row.state,
     reason: body.reason, evidence: body.evidence, flaggedBy: body.flaggedBy, flaggedAt: body.flaggedAt,
-    ratifiedBy: body.ratifiedBy ?? null, ratifiedAt: body.ratifiedAt ?? null,
+    ratifiedBy: body.ratifiedBy ?? null, ratifiedVia: body.ratifiedVia ?? null, ratifiedAt: body.ratifiedAt ?? null,
   };
 }
 
@@ -83,10 +86,10 @@ export function readFlaggedDecision(store: ControlStore, decisionId: string): Fl
 }
 
 /** Flagged → ratified. Refuses an unknown id (or another group's) by name, and a second ratify as a no-op command. */
-export function ratifyFlag(store: ControlStore, groupId: string, decisionId: string, by: { actorId: string; commandId: string; at: string }): void {
+export function ratifyFlag(store: ControlStore, groupId: string, decisionId: string, by: { actorId: string; via?: string; commandId: string; at: string }): void {
   const row = store.db.prepare(`SELECT ${COLUMNS} FROM flagged_decisions WHERE decision_id=?`).get(decisionId) as Stored | undefined;
   if (row === undefined || row.group_id !== groupId) throw new ControlError("flagged-decision-not-found");
   if (row.state === "ratified") throw new ControlError("no-op-command");
-  const body = { ...flagBodySchema.parse(JSON.parse(row.body)), ratifiedBy: by.actorId, ratifiedAt: by.at, ratifyCommandId: by.commandId };
+  const body = { ...flagBodySchema.parse(JSON.parse(row.body)), ratifiedBy: by.actorId, ...(by.via === undefined ? {} : { ratifiedVia: by.via }), ratifiedAt: by.at, ratifyCommandId: by.commandId };
   store.db.prepare("UPDATE flagged_decisions SET state='ratified', body=? WHERE decision_id=?").run(JSON.stringify(flagBodySchema.parse(body)), decisionId);
 }

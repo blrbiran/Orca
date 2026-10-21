@@ -16,10 +16,13 @@ export const dispatchedRunHeaders = (env: NodeJS.ProcessEnv): Record<string, str
   return run === undefined || run === "" ? {} : { [DISPATCHED_RUN_HEADER]: run };
 };
 
-const current = new AsyncLocalStorage<{ commandId: string; client: string; principal: string }>();
+/** CLI v2 spec §16: `by` the accountable person, `via` the channel (web, cli:<c>, mcp:<c>); two fields, never one string. */
+export interface Attribution { by: string; via: string }
+
+const current = new AsyncLocalStorage<{ commandId: string; client: string; principal: string; attribution?: Attribution }>();
 
 /** Accounts spec §3.5, D3: client (spec §6) and principal ride beside the command, outside the raw command, so in neither hash. */
-export function withCommandContext<T>(commandId: string, context: { client: string; principal: string }, fn: () => T): T {
+export function withCommandContext<T>(commandId: string, context: { client: string; principal: string; attribution?: Attribution }, fn: () => T): T {
   return current.run({ commandId, ...context }, fn);
 }
 
@@ -35,3 +38,14 @@ export function withCommandClient<T>(commandId: string, client: string, fn: () =
 const forCommand = (commandId: string) => { const c = current.getStore(); return c !== undefined && c.commandId === commandId ? c : null; };
 export function commandClientFor(commandId: string): string | null { return forCommand(commandId)?.client ?? null; }
 export function commandPrincipalFor(commandId: string): string | null { return forCommand(commandId)?.principal ?? null; }
+/**
+ * CLI v2 spec §16: who a writer records for this command. The control routes set it (controlApi.ts, from the principal);
+ * a command issued inside the panel process (Orca's own, or a caller that skips the routes) is `via panel`, by `fallbackBy`.
+ */
+export function commandAttributionFor(commandId: string, fallbackBy: string): Attribution {
+  return forCommand(commandId)?.attribution ?? { by: fallbackBy, via: "panel" };
+}
+/** The routed attribution only, or null: for a store whose rows predate `via` and stay as they were when none is known. */
+export function routedAttributionFor(commandId: string): Attribution | null { return forCommand(commandId)?.attribution ?? null; }
+/** CLI v2 spec §16: the attribution where a store holds one line of text. */
+export const attributionText = (a: Attribution): string => `by ${a.by} via ${a.via}`;

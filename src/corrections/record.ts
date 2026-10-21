@@ -36,6 +36,7 @@ export function correctionRowFrom(input: NewCorrectionInput, now: () => Date): C
     because: input.because,
     at: now().toISOString(),
     by: input.by,
+    ...(input.via === undefined ? {} : { via: input.via }),
   };
 }
 

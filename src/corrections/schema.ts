@@ -60,6 +60,11 @@ const correctionShape = z
     because: z.string().min(1),
     at: z.string().min(1),
     by: z.string().min(1),
+    /**
+     * CLI v2 spec §16: the channel the recording command came by (web, cli:<c>, mcp:<c>); `by` stays the person.
+     * Optional: rows written before it, and by `orca dev correct` or /api/corrections, have none.
+     */
+    via: z.string().min(1).optional(),
   })
   .strict();
 

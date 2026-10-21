@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { routedAttributionFor } from "./commandClient.js";
 import { ZodError } from "zod";
 import { closeExistingCorrection, closeStoredCorrection, refuseChoseInsteadConflict, requireGitRoot, type ClosingRows } from "../corrections/correct.js";
 import { derivePendingRows } from "../corrections/derive.js";
@@ -124,8 +125,11 @@ export function applyCorrectionRecord(deps: WebServiceDeps, command: CorrectionR
     await readOriginalDecision(join(repository.path, ".decisions"), decisionId);
     // recordNewCorrection reads the store too; a line that does not parse is refused by name, not a 500.
     await readCorrectionsOrRefuse(dir);
+    // CLI v2 spec §16: the routed person and channel; a call that skips the routes records the panel's identity, as before.
+    const routed = routedAttributionFor(command.commandId);
     const stored = await recordNewCorrection(dir, correctionRowFrom({
-      projectKey, decisionId, kind, ...(chose_instead === undefined ? {} : { chose_instead }), because, by,
+      projectKey, decisionId, kind, ...(chose_instead === undefined ? {} : { chose_instead }), because, by: routed?.by ?? by,
+      ...(routed === null ? {} : { via: routed.via }),
     }, () => panel.now()), { again: again === true });
     // As the panel route (its ruling J6): a refused correction never reaches this line; a failed mark is answered beside
     // the recorded correction, never as if nothing was written.

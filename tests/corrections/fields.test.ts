@@ -81,7 +81,8 @@ describe("correction id and fix run id (spec §14.11)", () => {
     const withoutAlternative = row({ kind: "wrong", chose_instead: undefined });
     const parsed = Object.keys(JSON.parse(canonicalCorrectionJson(withoutAlternative)));
     expect(parsed).not.toContain("chose_instead");
-    // Control run decisions Task 10: runId and pendingId (a pending target) are absent optionals on this row too.
-    expect(parsed).toEqual(CORRECTION_FIELDS.filter((f) => !["chose_instead", "runId", "pendingId"].includes(f)));
+    // Control run decisions Task 10: runId and pendingId (a pending target) are absent optionals on this row too; so is
+    // CLI v2 spec §16's via (Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)).
+    expect(parsed).toEqual(CORRECTION_FIELDS.filter((f) => !["chose_instead", "runId", "pendingId", "via"].includes(f)));
   });
 });

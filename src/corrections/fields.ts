@@ -44,6 +44,8 @@ export const CORRECTION_FIELDS = [
   // from the canonical JSON, so every existing correction id and fix-run id is unchanged.
   "runId",
   "pendingId",
+  // CLI v2 spec §16: appended likewise; absent on every earlier row.
+  "via",
 ] as const satisfies readonly (keyof CorrectionRow)[];
 
 /**

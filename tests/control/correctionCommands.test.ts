@@ -106,10 +106,16 @@ describe("correction-record (debug task plan Task 11)", { timeout: 60_000 }, () 
         await recordByVerb(ctx);
         stores.push({ corrections: await read(correctionsFile(ctx.corrections)), reviews: await read(reviewsFile(ctx.corrections)) });
       }, { repo });
-      // Full bytes: one clock, and `by` is the panel's identity on both paths (cross-plan resolution 1). Mutations "by =
-      // actorId" and "drop the reviewed mark" each make the second store differ.
+      // One clock, and `by` is the same person on both paths (the logged-in owner is the panel's --by here). Mutations "by =
+      // actorId" and "drop the reviewed mark" each make the second store differ. CLI v2 spec §16: the verb's row also
+      // names its channel, so it (and the id derived from the whole row) is the one difference (Ruling: 这次批准改写所有
+      // 必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)).
       expect(stores[0]!.reviews).toContain('"action":"reviewed"');
-      expect(stores[1]).toEqual(stores[0]);
+      const rows = stores.map((store) => store.corrections!.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>));
+      expect(rows.map((lines) => lines.length)).toEqual([1, 1]);
+      const { id: _routeId, ...routeRow } = rows[0]![0]!;
+      const { id: _verbId, via, ...verbRow } = rows[1]![0]!;
+      expect([verbRow, via, stores[1]!.reviews]).toEqual([routeRow, "web", stores[0]!.reviews]);
     } finally { await repo.cleanup(); }
   });
 

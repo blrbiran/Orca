@@ -17,6 +17,8 @@ export type ClosingRecord = { state: "written"; relPath: string; fixRunId: strin
 export interface DebugMark {
   correctionId: string; ordinal: number; inputHash: string; missing: DebugInputV1["missing"];
   agentFallback: { original: PartialSelection; reason: string } | null; undoHow: string | null; closing: ClosingRecord | null;
+  /** CLI v2 spec §16: who gave `undoHow` and by which channel; null without one (and on marks written before it). */
+  undoHowBy: { by: string; via: string } | null;
   /** Where the task's checks came from (the owner or an agent named them); `namedBy` is null when only the original's are used. */
   checks: { from: "original" | "original+named" | "named"; namedBy: "human" | "agent" | null };
   /**
@@ -35,6 +37,7 @@ const debugMarkSchema = z.object({
     reason: z.string().min(1),
   }).strict().nullable(),
   undoHow: z.string().min(1).nullable(), closing: closingSchema.nullable(),
+  undoHowBy: z.object({ by: z.string().min(1), via: z.string().min(1) }).strict().nullable().default(null),
   checks: z.object({ from: z.enum(["original", "original+named", "named"]), namedBy: z.enum(["human", "agent"]).nullable() }).strict()
     .default({ from: "original", namedBy: null }),
   closedNotedAt: z.number().int().nonnegative().nullable().default(null),

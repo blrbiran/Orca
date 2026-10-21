@@ -11,7 +11,7 @@ import type { PartialSelection } from "./agentSelection.js";
 import type { ArchiveGroupCommand } from "./archiveGroup.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
-import { withCommandContext } from "./commandClient.js";
+import { withCommandContext, commandAttributionFor } from "./commandClient.js";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { correctionClosedAtRef } from "./correctionState.js";
 import { collectDebugInput, PENDING_DECISION_NOT_FOUND, type DebugInputV1 } from "./debugInput.js";
@@ -249,6 +249,7 @@ export async function applyCorrectionDebugOpen(deps: DebugOpenDeps, command: Cor
       const mark: DebugMark = {
         correctionId, ordinal: groupId === baseId(correctionId) ? 1 : Number(groupId.slice(baseId(correctionId).length + 1)),
         inputHash, missing: [...input.missing], agentFallback: prepared.agentFallback, undoHow: undoHow ?? null, closing: null, closedNotedAt: null,
+        undoHowBy: undoHow === undefined ? null : commandAttributionFor(context.rawCommand.commandId, context.rawCommand.actorId),
         checks: checksProvenance(input.contract !== null, prepared.checks !== undefined, commandPrincipalFor(context.rawCommand.commandId)),
       };
       const body = JSON.parse(String(deps.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)) as Record<string, unknown>;

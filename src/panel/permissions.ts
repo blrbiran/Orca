@@ -1,6 +1,7 @@
 import type { Role } from "./accounts/jwt.js";
 import type { CommandVerbV1 } from "../control/webProtocol.js";
 import { humanOnlyRefusal } from "./humanOnly.js";
+import type { Attribution } from "../control/commandClient.js";
 
 /** Accounts spec §3.5: who sent a request. A logged-in user on the TCP app, or the control socket's agent. */
 export type Principal = { kind: "user"; userId: string; name: string; roles: readonly Role[] }
@@ -9,6 +10,14 @@ export type Principal = { kind: "user"; userId: string; name: string; roles: rea
 
 /** The command ledger's label (decision D3): `user:<id>` or `agent:<client>`. */
 export const principalLabel = (p: Principal): string => (p.kind === "user" ? `user:${p.userId}` : `agent:${p.client}`);
+
+/**
+ * CLI v2 spec §16: the person accountable for a command and the channel it came by. A logged-in account is its own
+ * person, on the Web; a socket call is the panel owner's (`owner`, the panel's --by: the socket is local to the owner's
+ * machine), by its client (`cli:<c>`, `mcp:<c>`). Never an agent in `by`.
+ */
+export const attributionOf = (p: Principal, owner: string): Attribution =>
+  p.kind === "user" ? { by: p.name, via: "web" } : { by: owner, via: p.client };
 
 /**
  * Accounts spec §3.5, the one table: a row per role and one for the socket's agent (§3.1: adding a role is a row here).

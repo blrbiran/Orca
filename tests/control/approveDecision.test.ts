@@ -51,8 +51,9 @@ describe("approve-pending-decision (control run decisions Task 9)", { timeout: 6
       expect(r).toMatchObject({ result: { kind: "pending-decision-approved", pendingId, decisionId: `${t.runId}/agent-0` } });
       const line = t.branchLines().at(-1)!;
       expect(line).toMatchObject({ id: `${t.runId}/agent-0`, run: t.runId, question: "q0", undo: { how: `git revert --no-edit ${SHA_E}` } });
-      // goal.md §1.1: who wrote the undo.how is visible on the line itself.
-      expect(line.evidence).toEqual([...readPendingDecision(t.h.store, pendingId)!.entry.evidence, `undo.how by human via approve-pending-decision ${command.commandId}`]);
+      // goal.md §1.1: who wrote the undo.how is visible on the line itself. CLI v2 spec §16: `by <person> via <channel>`;
+      // a call that skips the routes is via panel (Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)).
+      expect(line.evidence).toEqual([...readPendingDecision(t.h.store, pendingId)!.entry.evidence, `undo.how by human via panel approve-pending-decision ${command.commandId}`]);
       expect(git(t.repo, "rev-parse", "refs/heads/orca/g^")).toBe(before);
       expect(git(t.repo, "log", "-1", "--format=%s", "refs/heads/orca/g")).toBe(`orca: approve ${pendingId}`);
       expect(readPendingDecision(t.h.store, pendingId)).toMatchObject({ state: "approved", approvedId: `${t.runId}/agent-0` });
