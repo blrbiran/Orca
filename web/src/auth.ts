@@ -55,6 +55,11 @@ export const fetchUsers = (): Promise<{ users: Array<{ id: string; name: string 
 export const fetchNotices = (): Promise<{ notices: Notice[] }> => getJson<{ notices: Notice[] }>("/api/auth/notices");
 export const ackNotice = (seq: number): Promise<PostResult<unknown>> => postJson(`/api/auth/notices/${seq}/ack`, {});
 
+/** CLI v2 spec §15.3: one of the person's sessions -- a browser's, or a person token's from `orca login` (`cli`). */
+export interface AccountSession { sid: string; kind: "browser" | "cli"; createdAt: number; expiresAt: number; current: boolean }
+export const fetchSessions = (): Promise<{ sessions: AccountSession[] }> => getJson<{ sessions: AccountSession[] }>("/api/auth/sessions");
+export const revokeSession = (sid: string): Promise<PostResult<unknown>> => postJson(`/api/auth/sessions/${encodeURIComponent(sid)}/revoke`, {});
+
 /** Spec §3.3: refresh once less than half of the session's lifetime is left, so an active person is never logged out. */
 export function shouldRefresh(me: Me, nowMs: number): boolean {
   return me.expiresAt - nowMs < (me.sessionDays * 86_400_000) / 2;

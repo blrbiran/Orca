@@ -5,13 +5,15 @@ import { INITIAL_PASSWORD_FILE, ensureDefaultOwner } from "./accounts/initialOwn
 import { signAccessToken, verifyAccessToken, type AccessClaims } from "./accounts/jwt.js";
 import { hashPassword, verifyPassword } from "./accounts/password.js";
 import { loadOrCreateSigningKey } from "./accounts/signingKey.js";
-import { USER_NAME_PATTERN, openAccountsStore, type AccountsStore, type UserRow } from "./accounts/store.js";
+import { USER_NAME_PATTERN, openAccountsStore, type AccountsStore, type SessionKind, type UserRow } from "./accounts/store.js";
 
 export interface AuthenticatedUser { user: UserRow; claims: AccessClaims }
 
 type Refused = { ok: false; code: "login-failed" } | { ok: false; code: "login-throttled"; retryAfterSec: number };
 export type LoginResult = { ok: true; token: string; csrf: string; user: UserRow } | Refused;
 export type PasswordChangeResult = { ok: true } | Refused;
+/** CLI v2 spec §15.3: a person token -- its own `cli` session, of the Web session's length, never refreshed. */
+export type PersonLoginResult = { ok: true; token: string; sid: string; user: UserRow; expiresAt: number } | Refused;
 
 export interface PanelAuth {
   /** For criteria only (as `store.db` is): production code goes through the methods. */
@@ -20,7 +22,12 @@ export interface PanelAuth {
   /** The panel's one clock (PanelOptions.now), read by the routes so a criterion can move time. */
   nowMs(): number;
   login(name: string, password: string, nowMs: number): LoginResult;
+  /** A browser session's token (the Web cookie); a person token is not one. */
   authenticate(token: string | undefined, nowMs: number): AuthenticatedUser | null;
+  /** CLI v2 spec §15.3: `orca login`, over the control socket; the same password check and per-name throttle as login. */
+  personLogin(name: string, password: string, nowMs: number): PersonLoginResult;
+  /** A live person token (x-orca-person-token), or null; a browser session's token is not one. */
+  authenticatePerson(token: string, nowMs: number): AuthenticatedUser | null;
   /** A token with a new exp and the same sid; refuses (`login-required`) a session no longer active. */
   refresh(current: AuthenticatedUser, nowMs: number): string;
   /**
@@ -92,32 +99,50 @@ export function createPanelAuth(input: {
     return { token: signAccessToken(key, { sub: user.id, roles: user.roles, sid, iat, exp }), exp };
   };
 
+  /** The password check login and personLogin share: the name pattern, the throttle, scrypt against a dummy for an unknown name. */
+  const credentials = (name: string, password: string, nowMs: number): { ok: true; user: UserRow } | Refused => {
+    // A name no user can have is refused before the throttle and before scrypt: it reveals nothing and costs nothing.
+    if (!USER_NAME_PATTERN.test(name)) return { ok: false, code: "login-failed" };
+    const refused = throttled(name, nowMs);
+    if (refused !== null) return refused;
+    const found = store.findByName(name);
+    const usable = found !== null && found.disabledAt === null;
+    const verified = verifyPassword(password, usable ? found.passwordHash : dummyHash!);
+    if (!usable || !verified) return failed(name, nowMs);
+    throttle.delete(name);
+    const { passwordHash: _hash, ...user } = found;
+    return { ok: true, user };
+  };
+  const authenticateKind = (token: string | undefined, nowMs: number, kind: SessionKind): AuthenticatedUser | null => {
+    if (token === undefined || token.length === 0) return null;
+    const claims = verifyAccessToken(key, token, Math.floor(nowMs / 1000));
+    if (claims === null || !store.sessionActive(claims.sid, claims.sub, nowMs, kind)) return null;
+    const user = store.findById(claims.sub);
+    return user === null ? null : { user, claims };
+  };
+
   return {
     store,
     sessionDays: days,
     nowMs: input.nowMs,
     login(name, password, nowMs) {
-      // A name no user can have is refused before the throttle and before scrypt: it reveals nothing and costs nothing.
-      if (!USER_NAME_PATTERN.test(name)) return { ok: false, code: "login-failed" };
-      const refused = throttled(name, nowMs);
-      if (refused !== null) return refused;
-      const found = store.findByName(name);
-      const usable = found !== null && found.disabledAt === null;
-      const verified = verifyPassword(password, usable ? found.passwordHash : dummyHash!);
-      if (!usable || !verified) return failed(name, nowMs);
-      throttle.delete(name);
-      const { passwordHash: _hash, ...user } = found;
+      const checked = credentials(name, password, nowMs);
+      if (!checked.ok) return checked;
+      const user = checked.user;
       const { exp } = expiryOf(nowMs, days);
       const sid = store.createSession(user.id, nowMs, exp * 1000);
       return { ok: true, token: mint(user, sid, nowMs).token, csrf: randomBytes(32).toString("base64url"), user };
     },
-    authenticate(token, nowMs) {
-      if (token === undefined || token.length === 0) return null;
-      const claims = verifyAccessToken(key, token, Math.floor(nowMs / 1000));
-      if (claims === null || !store.sessionActive(claims.sid, claims.sub, nowMs)) return null;
-      const user = store.findById(claims.sub);
-      return user === null ? null : { user, claims };
+    personLogin(name, password, nowMs) {
+      const checked = credentials(name, password, nowMs);
+      if (!checked.ok) return checked;
+      const user = checked.user;
+      const { exp } = expiryOf(nowMs, days);
+      const sid = store.createSession(user.id, nowMs, exp * 1000, "cli");
+      return { ok: true, token: mint(user, sid, nowMs).token, sid, user, expiresAt: exp * 1000 };
     },
+    authenticatePerson(token, nowMs) { return authenticateKind(token, nowMs, "cli"); },
+    authenticate(token, nowMs) { return authenticateKind(token, nowMs, "browser"); },
     refresh(current, nowMs) {
       const { token, exp } = mint(current.user, current.claims.sid, nowMs);
       store.extendSession(current.claims.sid, nowMs, exp * 1000);

@@ -5,7 +5,7 @@ import { commandErrorBodySchema, compareText, type CommandErrorV1 } from "../con
 import { PANEL_HOST_NOT_ALLOWED } from "./bindGuard.js";
 import { CSRF_REQUIRED, LOGIN_REQUIRED, PASSWORD_CHANGE_REQUIRED } from "./rejection.js";
 
-type ControlHttpStatus = 400 | 401 | 403 | 404 | 409 | 422 | 423 | 424 | 500 | 503;
+type ControlHttpStatus = 400 | 401 | 403 | 404 | 409 | 422 | 423 | 424 | 429 | 500 | 503;
 type ExistingControlCode = keyof typeof durableCommandErrorStatuses | keyof typeof nonDurableControlErrorClassifications;
 
 const panelOnlyErrorStatuses = {
@@ -20,6 +20,11 @@ const panelOnlyErrorStatuses = {
   "control-dispatched-run-refused": 403,
   // CLI v2 spec §15.1, §15.5: a token-tier entry from the socket without a person token.
   "control-person-token-required": 403,
+  // CLI v2 spec §15.3, §15.5: an x-orca-person-token that is not a live person token (bad, expired, revoked).
+  "control-person-token-invalid": 401,
+  // CLI v2 spec §15.3: `orca login` over the socket answers the Web login's refusals by the same codes.
+  "login-failed": 401,
+  "login-throttled": 429,
   "owner-required": 403,
   // Accounts spec §6.3.2: an agent's import-plan or requirement-draft-accept whose limit exceeds the caps' headroom.
   "control-limit-over-cap-headroom": 403,

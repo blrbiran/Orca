@@ -158,6 +158,25 @@ export function registerAuthRoutes(app: Express, auth: PanelAuth): void {
     res.json({});
   });
 
+  // CLI v2 spec §15.3: the user's own sessions, browser and CLI (a person token from `orca login`), each revocable here.
+  app.get("/api/auth/sessions", (_req, res) => {
+    const current = currentUser(res);
+    if (current === undefined) return;
+    const sessions = auth.store.listSessions(current.user.id, auth.nowMs()).map((row) => ({ ...row, current: row.sid === current.claims.sid }));
+    res.json({ sessions });
+  });
+
+  app.post("/api/auth/sessions/:sid/revoke", (req, res) => {
+    const current = currentUser(res);
+    if (current === undefined) return;
+    // Only the user's own: another user's sid answers as unknown, so it says nothing about which sids exist.
+    if (!auth.store.revokeUserSession(current.user.id, String(req.params.sid), auth.nowMs())) {
+      res.status(404).json({ code: "session-not-found", message: "no such session of yours" });
+      return;
+    }
+    res.json({});
+  });
+
   app.post("/api/auth/password", (req, res, next) => {
     const current = currentUser(res);
     if (current === undefined) return;

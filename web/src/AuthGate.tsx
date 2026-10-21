@@ -14,9 +14,10 @@ import { useTranslation } from "react-i18next";
 import type { PanelRefusal } from "./api.js";
 import { failureFrom, onLoginRequired } from "./api.js";
 import {
-  ackNotice, addUser, changePassword, fetchMe, fetchNotices, fetchUsers, isOwner, login, logout, MIN_PASSWORD_LENGTH, refreshSession, shouldRefresh,
+  ackNotice, addUser, changePassword, fetchMe, fetchNotices, fetchSessions, fetchUsers, isOwner, login, logout, MIN_PASSWORD_LENGTH, refreshSession,
+  revokeSession, shouldRefresh,
 } from "./auth.js";
-import type { Me, Notice, Role } from "./auth.js";
+import type { AccountSession, Me, Notice, Role } from "./auth.js";
 import i18n from "./i18n.js";
 import { en } from "./locales/en.js";
 import { Refusal } from "./Refusal.js";
@@ -35,6 +36,7 @@ export function AccountSettings(): JSX.Element | null {
     <section aria-label={t("settings.account")}>
       <h3>{t("settings.account")}</h3>
       <ChangePasswordForm me={account.me} onChanged={account.onPasswordChanged} initial={false} />
+      <Sessions />
       {isOwner(account.me) && <AddUserForm />}
     </section>
   );
@@ -248,6 +250,52 @@ function AddUserForm(): JSX.Element {
       {added !== null && <p role="status">{t("auth.added", { name: added })}</p>}
       {refusal !== null && <Refusal refusal={refusal} />}
     </form>
+  );
+}
+
+/**
+ * CLI v2 spec §15.3: the person's sessions, browsers and the CLI's person tokens (`orca login`), each revocable except
+ * this one (logging out ends it). Revoking a CLI session kills its token at once.
+ */
+function Sessions(): JSX.Element {
+  const { t } = useTranslation();
+  const [sessions, setSessions] = useState<AccountSession[]>([]);
+  const [refusal, setRefusal] = useState<PanelRefusal | null>(null);
+  const [busy, setBusy] = useState(false);
+  const read = useCallback(async (): Promise<void> => {
+    try {
+      const body = await fetchSessions();
+      // A panel that does not list sessions (an older one) answers without the list: shown as a refusal, never a crash.
+      if (!Array.isArray(body.sessions)) throw new Error("GET /api/auth/sessions answered without a sessions list");
+      setSessions(body.sessions);
+    }
+    catch (err) { setRefusal(failureFrom(err)); }
+  }, []);
+  useEffect(() => { void read(); }, [read]);
+  const revoke = async (sid: string): Promise<void> => {
+    setBusy(true);
+    try {
+      const answer = await revokeSession(sid);
+      setRefusal(answer.ok ? null : answer);
+      await read();
+    } catch (err) { setRefusal(failureFrom(err)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <section className="account-sessions" aria-label={t("auth.sessionsTitle")}>
+      <h4>{t("auth.sessionsTitle")}</h4>
+      <ul>
+        {sessions.map((session) => (
+          <li key={session.sid}>
+            {t("auth.sessionLine", { kind: t(`auth.sessionKind.${session.kind}` as const), since: new Date(session.createdAt).toLocaleString(), until: new Date(session.expiresAt).toLocaleString() })}
+            {session.current
+              ? <span> · {t("auth.thisSession")}</span>
+              : <button type="button" disabled={busy} onClick={() => void revoke(session.sid)}>{t("auth.revokeSession")}</button>}
+          </li>
+        ))}
+      </ul>
+      {refusal !== null && <Refusal refusal={refusal} />}
+    </section>
   );
 }
 

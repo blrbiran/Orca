@@ -991,6 +991,11 @@ export const zh: Translation<typeof en> = {
     noticeKind: { "user-created": "新增了用户", "password-changed": "修改了密码", "user-disabled": "停用了用户", "key-rotated": "更换了签名密钥" },
     dismiss: "知道了",
     dismissAll: "全部知道了",
+    sessionsTitle: "会话",
+    sessionLine: "{{kind}} · 自 {{since}} · 至 {{until}}",
+    sessionKind: { browser: "浏览器", cli: "终端（orca login）" },
+    thisSession: "当前会话",
+    revokeSession: "吊销",
   },
   usage: {
     title: "用量",
@@ -1559,11 +1564,13 @@ export const zhErrors: Record<string, string> = {
   "user-not-found": "找不到这个用户。",
   "owner-required": "只有所有者能做这件事。",
   "notice-not-found": "找不到这条提醒。",
+  "session-not-found": "在你的会话里没有找到这个会话。",
   // Accounts spec §3.5: the human-only refusals, now also answered to a member in the Web UI (src/panel/humanOnly.ts).
   "control-verb-human-only": "只有登录 Web UI 的所有者能做这个操作。",
   "control-field-human-only": "这个字段只能由登录 Web UI 的所有者设置；去掉它再发送。",
   "control-dispatched-run-refused": "Orca 派出的运行不能做这个动作；请由人在 Web UI 或自己值守的终端会话里来做。",
   "control-person-token-required": "这个动作需要人来做：先 `orca login`，再带 --as-person 重发，或在 Web UI 里做。",
+  "control-person-token-invalid": "person token 已失效（错误、过期或已吊销），请重新 `orca login`。",
   // Accounts spec §6.3: an agent's import over the spend caps' headroom, and the block shown on a group waiting on a cap.
   "control-limit-over-cap-headroom": "这次导入的额度超过了花费上限剩余的余量：{{message}}",
   // web/src/AuthGate.tsx's own check before a new password is sent (accounts spec §3.2).

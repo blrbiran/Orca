@@ -1119,6 +1119,11 @@ export const en = {
     noticeKind: { "user-created": "user created", "password-changed": "password changed", "user-disabled": "user disabled", "key-rotated": "signing key rotated" },
     dismiss: "Dismiss",
     dismissAll: "Dismiss all",
+    sessionsTitle: "Sessions",
+    sessionLine: "{{kind}} · since {{since}} · until {{until}}",
+    sessionKind: { browser: "Browser", cli: "Terminal (orca login)" },
+    thisSession: "this session",
+    revokeSession: "Revoke",
   },
   usage: {
     title: "Usage",
@@ -1635,11 +1640,13 @@ export const enErrors: Record<string, string> = {
   "user-not-found": "The user was not found.",
   "owner-required": "Only an owner can do this.",
   "notice-not-found": "The notice was not found.",
+  "session-not-found": "That session was not found among yours.",
   // Accounts spec §3.5: the human-only refusals, now also answered to a member in the Web UI (src/panel/humanOnly.ts).
   "control-verb-human-only": "Only an owner logged in to the Web UI can do this.",
   "control-field-human-only": "Only an owner logged in to the Web UI can set this field. Remove it, then send again.",
   "control-dispatched-run-refused": "A run Orca dispatched cannot do this. A person does it, from the Web UI or a terminal session they attend.",
   "control-person-token-required": "This needs a person: run `orca login` and resend the command with --as-person, or do it from the Web UI.",
+  "control-person-token-invalid": "The person token is not live (wrong, expired or revoked). Run `orca login` again.",
   // Accounts spec §6.3: an agent's import over the spend caps' headroom, and the block shown on a group waiting on a cap.
   "control-limit-over-cap-headroom": "This import's limit is more than the spend caps have left: {{detail}}",
   // web/src/AuthGate.tsx's own check before a new password is sent (accounts spec §3.2).

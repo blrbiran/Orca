@@ -18,6 +18,10 @@ export class AccountsRejection extends Error {
   }
 }
 
+/** CLI v2 spec §15.3: a Web login's session, or a person token's (`orca login`): each kind authenticates only its own channel. */
+export type SessionKind = "browser" | "cli";
+export interface SessionRow { sid: string; kind: SessionKind; createdAt: number; expiresAt: number }
+
 export interface UserRow { id: string; name: string; roles: Role[]; createdAt: number; disabledAt: number | null; mustChangePassword: boolean }
 export type SecurityEventKind = "user-created" | "password-changed" | "user-disabled" | "login-failed" | "key-rotated";
 /** The kinds an owner is shown until acknowledged; `login-failed` is a log row only. */
@@ -36,10 +40,15 @@ export interface AccountsStore {
   resetPassword(userId: string, password: string, now: number, by: string): void;
   setName(userId: string, name: string): void;
   disableUser(userId: string, now: number, by: string): void;
-  createSession(userId: string, now: number, expiresAt: number): string;
+  createSession(userId: string, now: number, expiresAt: number, kind?: SessionKind): string;
   /** Refuses (`login-required`) a session that is revoked, expired at `now`, or whose user is disabled. */
   extendSession(sid: string, now: number, expiresAt: number): void;
-  sessionActive(sid: string, userId: string, now: number): boolean;
+  /** Active and of `kind`, a browser's by default (CLI v2 spec §15.3: a cli token is no Web session, and the reverse). */
+  sessionActive(sid: string, userId: string, now: number, kind?: SessionKind): boolean;
+  /** The user's sessions that are neither revoked nor expired at `now`, oldest first. */
+  listSessions(userId: string, now: number): SessionRow[];
+  /** Revokes one active session of this user; false when the user has no such session (another user's is not found). */
+  revokeUserSession(userId: string, sid: string, now: number): boolean;
   revokeSession(sid: string, now: number): void;
   revokeAllSessions(now: number): void;
   /** Every session of the user, the one that made the change too (human ruling 2026-10-08: a changed password ends them all). */
@@ -54,10 +63,10 @@ export interface AccountsStore {
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, roles TEXT NOT NULL, created_at INTEGER NOT NULL, disabled_at INTEGER, must_change_password INTEGER NOT NULL DEFAULT 0 CHECK(must_change_password IN (0,1))) STRICT;
-CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER) STRICT;
+CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER, kind TEXT NOT NULL DEFAULT 'browser') STRICT;
 CREATE TABLE IF NOT EXISTS security_events(seq INTEGER PRIMARY KEY, at INTEGER NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE IF NOT EXISTS security_acks(seq INTEGER PRIMARY KEY REFERENCES security_events(seq), at INTEGER NOT NULL, by TEXT NOT NULL) STRICT;
-INSERT OR IGNORE INTO meta VALUES ('accountsSchemaVersion','1');
+INSERT OR IGNORE INTO meta VALUES ('accountsSchemaVersion','2');
 `;
 
 const USER_COLUMNS = "id, name, roles, created_at, disabled_at, must_change_password";
@@ -99,6 +108,11 @@ export function openAccountsStore(root: string): AccountsStore {
   const db = new DatabaseSync(path);
   db.exec("PRAGMA busy_timeout=5000; PRAGMA journal_mode=DELETE; PRAGMA foreign_keys=ON;");
   db.exec(SCHEMA);
+  // CLI v2 spec §15.3 (schema 1 -> 2): a version-1 store's sessions gain `kind`; every existing one was a browser's.
+  if (!(db.prepare("PRAGMA table_info(sessions)").all() as Row[]).some((column) => column.name === "kind")) {
+    db.exec("ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'browser'");
+  }
+  db.exec("UPDATE meta SET value = '2' WHERE key = 'accountsSchemaVersion' AND value <> '2'");
 
   const transaction = <T>(fn: () => T): T => {
     db.exec("BEGIN IMMEDIATE");
@@ -176,9 +190,9 @@ export function openAccountsStore(root: string): AccountsStore {
         appendEvent("user-disabled", { userId, by }, now);
       });
     },
-    createSession(userId, now, expiresAt) {
+    createSession(userId, now, expiresAt, kind = "browser") {
       const sid = randomUUID();
-      db.prepare("INSERT INTO sessions(id, user_id, created_at, expires_at, revoked_at) VALUES (?, ?, ?, ?, NULL)").run(sid, userId, now, expiresAt);
+      db.prepare("INSERT INTO sessions(id, user_id, created_at, expires_at, revoked_at, kind) VALUES (?, ?, ?, ?, NULL, ?)").run(sid, userId, now, expiresAt, kind);
       return sid;
     },
     extendSession(sid, now, expiresAt) {
@@ -187,10 +201,17 @@ export function openAccountsStore(root: string): AccountsStore {
       ).run(expiresAt, sid, now).changes;
       if (Number(changed) !== 1) throw new AccountsRejection("login-required", 401, "the session is not active");
     },
-    sessionActive(sid, userId, now) {
+    sessionActive(sid, userId, now, kind = "browser") {
       return db.prepare(
-        "SELECT 1 FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.user_id = ? AND s.revoked_at IS NULL AND s.expires_at > ? AND u.disabled_at IS NULL",
-      ).get(sid, userId, now) !== undefined;
+        "SELECT 1 FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.user_id = ? AND s.revoked_at IS NULL AND s.expires_at > ? AND u.disabled_at IS NULL AND s.kind = ?",
+      ).get(sid, userId, now, kind) !== undefined;
+    },
+    listSessions(userId, now) {
+      return (db.prepare("SELECT id, kind, created_at, expires_at FROM sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY created_at, id").all(userId, now) as Row[])
+        .map((row) => ({ sid: String(row.id), kind: row.kind === "cli" ? "cli" : "browser", createdAt: Number(row.created_at), expiresAt: Number(row.expires_at) }));
+    },
+    revokeUserSession(userId, sid, now) {
+      return Number(db.prepare("UPDATE sessions SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL").run(now, sid, userId).changes) === 1;
     },
     revokeSession(sid, now) {
       db.prepare("UPDATE sessions SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL").run(now, sid);

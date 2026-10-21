@@ -7,6 +7,7 @@ import { discoverSocketPath } from "../entry/discovery.js";
 import { EntryRejection, localError, type CliResponseV1 } from "../entry/envelope.js";
 import { controlGet } from "../entry/operations.js";
 import { printResponse } from "./output.js";
+import { personTokenHeaders } from "./person.js";
 import { resolveId, resolveProject, type ProjectRef } from "./resolve.js";
 import type { CommandDef, CommandIo, ParsedArgs, ReadMapping, WriteContext } from "./types.js";
 
@@ -31,7 +32,8 @@ export interface PanelSession {
 export function openSession(args: ParsedArgs, io: CommandIo): PanelSession {
   const socketPath = discoverSocketPath({ stateDirFlag: args.global.controlStateDir, env: io.env });
   const client = "cli";
-  const headers = dispatchedRunHeaders(io.env);
+  // CLI v2 spec §15.3: the person token only with --as-person (refused here under the dispatched-run marker).
+  const headers = { ...dispatchedRunHeaders(io.env), ...(args.global.asPerson ? personTokenHeaders(io.env) : {}) };
   const memo = new Map<string, Promise<unknown>>();
   const fresh = (path: string) => controlGet({ socketPath, client, path, headers });
   return {

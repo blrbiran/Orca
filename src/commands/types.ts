@@ -58,6 +58,8 @@ export interface CommandIo {
   /** Given by a caller that already holds stdin (tests, the hook entry); else read from process.stdin on demand. */
   stdinText?: string;
   stdinIsTTY: boolean;
+  /** A secret typed at the terminal with echo off (`orca login`); a seam for the criteria. Default: ttySecret.ts. */
+  readSecret?(prompt: string): Promise<string>;
 }
 
 export type LocalHandler = (args: ParsedArgs, io: CommandIo) => Promise<number>;

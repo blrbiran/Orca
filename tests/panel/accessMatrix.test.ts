@@ -51,7 +51,7 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "apply-agent-update", payload: {}, tier: "token" },
 ];
 
-const PERSON = { userId: "u9", name: "ana" };
+const PERSON = { userId: "u9", name: "ana", roles: ["owner" as const] };
 const PRINCIPALS: Record<string, Principal> = {
   socket: { kind: "agent", client: "cli:claude" },
   socketToken: { kind: "agent", client: "cli:claude", person: PERSON },

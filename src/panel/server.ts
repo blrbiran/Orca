@@ -319,7 +319,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   let socket: ControlSocketHandle | null = null;
   if (control !== null) {
     const bound = await bindControlSocket(
-      buildControlSocketApp({ store: control.store, epoch, config: control.config, service: control.service, port: control.port }, projectsDepsOf(opts, projects, true)),
+      buildControlSocketApp({ store: control.store, epoch, config: control.config, service: control.service, port: control.port }, projectsDepsOf(opts, projects, true), auth),
       controlSocketPath(control.store.stateDir),
     );
     if ("code" in bound) {

@@ -35,6 +35,8 @@ const BY_HAND = [
   // src/panel/authRoutes.ts, src/panel/accounts/store.ts (accounts spec §3.2-§3.3, §8)
   "login-failed", "login-throttled", "csrf-required", "password-too-short", "user-name-invalid", "user-name-taken", "owner-required",
   "user-role-invalid", "notice-not-found", "user-not-found",
+  // CLI v2 spec §15.3 (plan Task 11, add-only): revoking a session that is not the user's own (authRoutes.ts)
+  "session-not-found",
   // src/control/spendCaps.ts gateClaim (accounts spec §6.3.1): projected on a group view, never a command outcome
   "spend-cap-reached",
 ];

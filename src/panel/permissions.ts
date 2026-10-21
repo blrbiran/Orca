@@ -6,8 +6,8 @@ import type { Attribution } from "../control/commandClient.js";
 /** Accounts spec §3.5: who sent a request. A logged-in user on the TCP app, or the control socket's agent. */
 export type Principal = { kind: "user"; userId: string; name: string; roles: readonly Role[] }
   // CLI v2 spec §15.4: `dispatchedRun` is the run id a socket request from an Orca-dispatched run carries. §15.3:
-  // `person` is the account of a verified person token (set only by the socket's token check).
-  | { kind: "agent"; client: string; dispatchedRun?: string; person?: { userId: string; name: string } };
+  // `person` is the account of a verified person token (set only by the socket's token check), its roles as stored now.
+  | { kind: "agent"; client: string; dispatchedRun?: string; person?: { userId: string; name: string; roles: readonly Role[] } };
 
 /** The command ledger's label (decision D3): `user:<id>` or `agent:<client>`. */
 export const principalLabel = (p: Principal): string => (p.kind === "user" ? `user:${p.userId}` : `agent:${p.client}`);
@@ -15,10 +15,11 @@ export const principalLabel = (p: Principal): string => (p.kind === "user" ? `us
 /**
  * CLI v2 spec §16: the person accountable for a command and the channel it came by. A logged-in account is its own
  * person, on the Web; a socket call is the panel owner's (`owner`, the panel's --by: the socket is local to the owner's
- * machine), by its client (`cli:<c>`, `mcp:<c>`). Never an agent in `by`.
+ * machine), or the person token's account when it carries one (§15.3), by its client (`cli:<c>`, `mcp:<c>`). Never an
+ * agent in `by`.
  */
 export const attributionOf = (p: Principal, owner: string): Attribution =>
-  p.kind === "user" ? { by: p.name, via: "web" } : { by: owner, via: p.client };
+  p.kind === "user" ? { by: p.name, via: "web" } : { by: p.person?.name ?? owner, via: p.client };
 
 /**
  * Accounts spec §3.5, the one table: a row per role and one for the socket's agent (§3.1: adding a role is a row here).
@@ -55,6 +56,8 @@ export function permissionRefusal(p: Principal, verb: CommandVerbV1, payload: un
   // The classification is the verb's and fields', not the principal's: it holds whatever tier an entry is in.
   if (p.dispatchedRun !== undefined)
     return { code: "control-dispatched-run-refused", message: `${verb} is not done by a run Orca dispatched (${p.dispatchedRun}); a person does it, from the Web UI or an attended session.` };
-  if (p.person !== undefined || socketTier(verb, payload) === "open") return null;
+  if (socketTier(verb, payload) === "open") return null;
+  // A token is its person's: an owner's opens the token tier; a member's answers the member's own refusal (I3).
+  if (p.person !== undefined) return mayDoHumanOnly({ kind: "user", ...p.person }) ? null : humanOnly;
   return { code: "control-person-token-required", message: `${verb}, as sent, wants a person: log in with \`orca login\` and resend it with --as-person, or do it from the Web UI.` };
 }
