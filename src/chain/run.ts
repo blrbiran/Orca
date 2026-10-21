@@ -205,7 +205,7 @@ async function runSessions(
       logDir: chainLogDir(repo, chainId),
       // Review M1 (session b37f7ce9): beside the chain's stop request, under the git dir -- outside the worktree, so a
       // session's cleanup cannot reach it, and never the person's own ~/.orca/person. The panel's dispatched-person
-      // directory is not used: a chain is started by `orca chain` with no panel state in reach.
+      // directory is not used: `orca dev chain start` runs with no panel state in reach (the panel too starts it detached).
       personDir: join(await chainStateDir(repo), chainId, "person"),
       prompt: chainPrompt({ chainId, n, goal: record.goal, sessionId, repo, resumeText: r.text }),
       claudeBin: deps.claudeBin,
