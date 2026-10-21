@@ -21,7 +21,7 @@ describe("orca plan prints where the work branch starts (spec §9.1)", () => {
       const branch = await defaultBranchOf(s.targetRepo);
       const head = await headOf(s.targetRepo);
 
-      const { result: rc, stdout } = await captureStdout(() => runCli(["plan", planPath]));
+      const { result: rc, stdout } = await captureStdout(() => runCli(["plan", "preview", planPath]));
       expect(rc).toBe(0);
 
       // Mutation `M-BASE-WIRING`: pass `base: { branch: "", sha: null }` from

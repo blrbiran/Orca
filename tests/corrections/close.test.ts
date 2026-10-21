@@ -38,14 +38,14 @@ async function readFixFile(decisionsDir: string, added: string[]): Promise<unkno
 // "given more than once" guard instead of exercising what the criterion wants
 // to test. These two small local variants exist only for that reason.
 const closeArgsForDecision = (repo: string, decisionId: string): string[] => [
-  "correct", "--repo", repo, "--by", "amy",
+  "dev", "correct", "--repo", repo, "--by", "amy",
   "--decision", decisionId, "--kind", "not_my_taste", "--because", "进程内互斥跨进程无效",
   "--chose-instead", "改用文件租约",
   "--undo-how", "删掉 src/scheduler/pool.ts 里的那处互斥",
 ];
 
 const closeArgsForUndoHow = (repo: string, undoHow: string): string[] => [
-  "correct", "--repo", repo, "--by", "amy",
+  "dev", "correct", "--repo", repo, "--by", "amy",
   "--decision", "orca-dev-1/1", "--kind", "not_my_taste", "--because", "进程内互斥跨进程无效",
   "--chose-instead", "改用文件租约",
   "--undo-how", undoHow,
@@ -241,7 +241,7 @@ describe("orca correct --close / closing new — guards, lock, order, single wri
       await withCorrectionsDir(async () => {
         const pre = await captureStreams(() =>
           runCli([
-            "correct", "--repo", target.path, "--by", "amy",
+            "dev", "correct", "--repo", target.path, "--by", "amy",
             "--decision", "orca-dev-1/1", "--kind", "wrong", "--because", "早就不成立了",
           ]),
         );
@@ -357,7 +357,7 @@ describe("orca correct --close / closing new — guards, lock, order, single wri
       await withCorrectionsDir(async (dir) => {
         const rec = await captureStreams(() =>
           runCli([
-            "correct", "--repo", target.path, "--by", "amy",
+            "dev", "correct", "--repo", target.path, "--by", "amy",
             "--decision", "orca-dev-1/1", "--kind", "wrong", "--because", "已经不成立了",
           ]),
         );
@@ -369,7 +369,7 @@ describe("orca correct --close / closing new — guards, lock, order, single wri
         const before = await ledgerFiles(target.decisionsDir);
         const { result: rc, stderr } = await captureStreams(() =>
           runCli([
-            "correct", "--repo", target.path, "--by", "amy", "--close", id,
+            "dev", "correct", "--repo", target.path, "--by", "amy", "--close", id,
             "--undo-how", "删掉 src/scheduler/pool.ts 里的那处互斥",
           ]),
         );
@@ -389,7 +389,7 @@ describe("orca correct --close / closing new — guards, lock, order, single wri
       await withCorrectionsDir(async (dir) => {
         const rec = await captureStreams(() =>
           runCli([
-            "correct", "--repo", target.path, "--by", "amy",
+            "dev", "correct", "--repo", target.path, "--by", "amy",
             "--decision", "orca-dev-1/1", "--kind", "not_my_taste", "--because", "进程内互斥跨进程无效",
             "--chose-instead", "改用文件租约", "--record-only",
           ]),
@@ -400,7 +400,7 @@ describe("orca correct --close / closing new — guards, lock, order, single wri
 
         const { result: rc, stderr } = await captureStreams(() =>
           runCli([
-            "correct", "--repo", target.path, "--by", "amy", "--close", id,
+            "dev", "correct", "--repo", target.path, "--by", "amy", "--close", id,
             "--chose-instead", "改用别的方案",
             "--undo-how", "删掉 src/scheduler/pool.ts 里的那处互斥",
           ]),
@@ -438,7 +438,7 @@ describe("orca correct --close / closing new — guards, lock, order, single wri
 
         const closeAmy = await captureStreams(() =>
           runCli([
-            "correct", "--repo", target.path, "--by", "amy", "--close", idAmy,
+            "dev", "correct", "--repo", target.path, "--by", "amy", "--close", idAmy,
             "--undo-how", "删掉 src/scheduler/pool.ts 里的那处互斥",
           ]),
         );
@@ -446,7 +446,7 @@ describe("orca correct --close / closing new — guards, lock, order, single wri
 
         const closeBob = await captureStreams(() =>
           runCli([
-            "correct", "--repo", target.path, "--by", "bob", "--close", idBob,
+            "dev", "correct", "--repo", target.path, "--by", "bob", "--close", idBob,
             "--undo-how", "删掉 src/scheduler/pool.ts 里的那处互斥",
           ]),
         );
@@ -473,7 +473,7 @@ describe("orca correct --close / closing new — guards, lock, order, single wri
       await withCorrectionsDir(async (dir) => {
         const rec = await captureStreams(() =>
           runCli([
-            "correct", "--repo", target.path, "--by", "amy",
+            "dev", "correct", "--repo", target.path, "--by", "amy",
             "--decision", "orca-dev-1/1", "--kind", "not_my_taste", "--because", "进程内互斥跨进程无效",
             "--chose-instead", "改用文件租约", "--record-only",
           ]),
@@ -485,7 +485,7 @@ describe("orca correct --close / closing new — guards, lock, order, single wri
         const before = await ledgerFiles(target.decisionsDir);
         const { result: rc, stderr } = await captureStreams(() =>
           runCli([
-            "correct", "--repo", target.path, "--by", "amy", "--close", id,
+            "dev", "correct", "--repo", target.path, "--by", "amy", "--close", id,
             "--undo-how", "删掉 src/scheduler/pool.ts 里的那处互斥",
           ]),
         );

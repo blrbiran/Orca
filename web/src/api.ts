@@ -241,7 +241,7 @@ export function startChainBody(form: { repoKey: string; goal: string; maxSession
     ...(form.sessionTimeoutMin.trim() === "" ? {} : { sessionTimeoutMin: Number(form.sessionTimeoutMin) }),
   };
 }
-/** POST /api/chains -- the panel spawns `orca chain start`; it never runs a chain itself. */
+/** POST /api/chains -- the panel spawns `orca dev chain start`; it never runs a chain itself. */
 export const requestChainStart = (input: StartChainInput): Promise<PostResult<{ chainId: string }>> => postJson("/api/chains", input);
 /** POST /api/chains/:id/stop -- writes the stop request; the chain stops after its current session. */
 export const requestChainStop = (repoKey: string, chainId: string): Promise<PostResult<{ chainId: string }>> =>

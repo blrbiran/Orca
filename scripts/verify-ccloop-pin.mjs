@@ -2,7 +2,7 @@
 // Gate step (human ruling 2026-09-29, session 2f65a729): Orca's current source against the ccloop package installed in
 // node_modules, with ORCA_CCLOOP_BIN unset, so a pin too old for what Orca now asks of ccloop turns the gate red rather
 // than surfacing the first time someone runs `orca panel` without the override. It catches only what
-// tests/control/ccloopDefaultE2E.test.ts exercises (the package's layout, `orca agents init/show`, a panel boot).
+// tests/control/ccloopDefaultE2E.test.ts exercises (the package's layout, `orca agent init/show`, a panel boot).
 //
 //   node scripts/verify-ccloop-pin.mjs
 //

@@ -14,7 +14,7 @@ describe("orca plan wires the real preflight in (spec §9.1(4) / ruling 3)", () 
     const s = await makeSandbox();
     try {
       const planPath = await seedTwoTaskPlan(s);
-      const { result: rc, stdout } = await captureStdout(() => runCli(["plan", planPath]));
+      const { result: rc, stdout } = await captureStdout(() => runCli(["plan", "preview", planPath]));
       expect(rc).toBe(0);
 
       for (const code of RUNTIME_CHECKS) {

@@ -159,7 +159,7 @@ export async function commitLedgerFile(
   correctionId: string,
 ): Promise<void> {
   const recovery =
-    `fix that and run \`orca correct --repo ${repo} --close ${correctionId} --undo-how '<the same undo>'\`, ` +
+    `fix that and run \`orca dev correct --repo ${repo} --close ${correctionId} --undo-how '<the same undo>'\`, ` +
     `which will finish this step`;
 
   try {

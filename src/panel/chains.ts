@@ -15,8 +15,8 @@ import type { PanelOptions } from "./server.js";
 
 /**
  * D-launch spec §6.2–§6.3. The panel READS chain records and never writes one: a chain is started only by spawning
- * `orca chain start` (detached, stdio to a log file — review I3), and stopped only through requestStop, the same
- * function `orca chain stop` uses. Panel spec §2.1 still holds for this process: no repo lock, no .decisions/, no commit.
+ * `orca dev chain start` (detached, stdio to a log file — review I3), and stopped only through requestStop, the same
+ * function `orca dev chain stop` uses. Panel spec §2.1 still holds for this process: no repo lock, no .decisions/, no commit.
  */
 const ORCA_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const CHAIN_START_WAIT_MS = 10_000;
@@ -140,7 +140,7 @@ export function registerChainRoutes(
       const logPath = join(logDir, "supervisor.log");
       const log = await open(logPath, "a");
       const argv = [
-        join(ORCA_ROOT, "src", "cli.ts"), "chain", "start", "--repo", a.repo, "--by", a.by, "--goal", a.goal,
+        join(ORCA_ROOT, "src", "cli.ts"), "dev", "chain", "start", "--repo", a.repo, "--by", a.by, "--goal", a.goal,
         "--max-sessions", String(a.maxSessions), "--max-cost-usd", String(a.maxCostUsd),
         ...(a.sessionTimeoutMin === undefined ? [] : ["--session-timeout-min", String(a.sessionTimeoutMin)]),
         "--chain-id", chainId, "--via", "panel",
@@ -168,7 +168,7 @@ export function registerChainRoutes(
           res.status(409).json({ code: refusal[1], message: refusal[2] });
           return;
         }
-        res.status(500).json({ code: "chain-start-failed", message: `orca chain start exited ${outcome.code} without starting; see ${logPath}` });
+        res.status(500).json({ code: "chain-start-failed", message: `orca dev chain start exited ${outcome.code} without starting; see ${logPath}` });
         return;
       }
       res.status(500).json({

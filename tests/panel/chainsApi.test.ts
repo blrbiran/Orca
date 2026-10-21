@@ -100,8 +100,14 @@ const DONE_SCENARIO = { steps: [{ do: "commit" as const, file: "panel.txt" }, { 
 describe("chains in the panel (D-launch spec §6.2, §6.3, §8.2-8)", () => {
   isolateChainEnv();
 
-  it("C1 POST /api/chains starts a chain ONLY by spawning `orca chain start`: the supervisor is another process; the status view follows it to done", async () => {
-    const s = await setup();
+  it("C1 POST /api/chains starts a chain ONLY by spawning `orca dev chain start`: the supervisor is another process; the status view follows it to done", async () => {
+    // CLI v2 plan Task 7: the spawned argv is pinned through a wrapper that records it, then runs the real tsx.
+    const wrapperDir = await mkdtemp(join(tmpdir(), "orca-panel-tsx-wrapper-"));
+    cleanups.push(() => rm(wrapperDir, { recursive: true, force: true }));
+    const argvLog = join(wrapperDir, "argv.txt");
+    const wrapper = join(wrapperDir, "tsx");
+    await writeFile(wrapper, `#!/bin/sh\nprintf '%s\\n' "$@" > '${argvLog}'\nexec '${join(ORCA_ROOT, "node_modules", ".bin", "tsx")}' "$@"\n`, { mode: 0o700 });
+    const s = await setup({ over: { chainTsxBin: wrapper } });
     await s.fake.scenario(1, DONE_SCENARIO);
     const res = await post(s.panel, "/api/chains", { repoKey: "chains", goal: "panel goal", maxSessions: 2, maxCostUsd: 1 });
     expect(res.status).toBe(200);
@@ -122,6 +128,7 @@ describe("chains in the panel (D-launch spec §6.2, §6.3, §8.2-8)", () => {
     expect(await s.fake.call(1)).not.toBeNull();
     expect(await readFile(join(s.repo, ".orca", "chain-logs", chainId, "supervisor.log"), "utf8")).toContain(`orca chain: started ${chainId}\n`);
     expect([...Object.keys(view.chain)].sort()).toEqual([...CHAIN_VIEW_FIELDS].sort());
+    expect((await readFile(argvLog, "utf8")).split("\n").slice(0, 4)).toEqual([join(ORCA_ROOT, "src", "cli.ts"), "dev", "chain", "start"]);
   }, 120_000);
 
   it("C2 an unknown repository is 404 and bad arguments are 400, both before anything is spawned or written", async () => {

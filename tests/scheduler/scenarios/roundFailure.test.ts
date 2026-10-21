@@ -185,7 +185,7 @@ describe("a round that throws (spec §4.2.1 / §6.3)", () => {
       await chmod(unreadable, 0o000);
       try {
         await expect(
-          execFileAsync("npx", ["tsx", "src/cli.ts", "validate", unreadable], { cwd: repoRoot }),
+          execFileAsync("npx", ["tsx", "src/cli.ts", "decision", "validate", unreadable], { cwd: repoRoot }),
         ).rejects.toMatchObject({ code: 3 });
       } finally {
         await chmod(unreadable, 0o600);

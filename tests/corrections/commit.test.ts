@@ -38,7 +38,7 @@ async function countOverturned(decisionsDir: string): Promise<number> {
  * rather than exercise the idempotence questions this file is about.
  */
 const reCloseArgs = (repo: string, correctionId: string): string[] => [
-  "correct", "--repo", repo, "--by", "amy", "--close", correctionId,
+  "dev", "correct", "--repo", repo, "--by", "amy", "--close", correctionId,
   "--undo-how", "删掉 src/scheduler/pool.ts 里的那处互斥",
 ];
 

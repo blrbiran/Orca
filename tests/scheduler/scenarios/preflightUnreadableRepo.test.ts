@@ -25,7 +25,7 @@ describe("preflight on a target repo git cannot read (final review, promoted fol
       await mkdir(notARepo, { recursive: true });
 
       const planPath = await seedRejectablePlan(s, { targetRepo: notARepo });
-      const { result: rc, stdout } = await captureStdout(() => runCli(["plan", planPath]));
+      const { result: rc, stdout } = await captureStdout(() => runCli(["plan", "preview", planPath]));
 
       // §9.3: a plan with rejections exits 1. Pinned so a future change that
       // makes this path exit 0 cannot leave the assertions below vacuously

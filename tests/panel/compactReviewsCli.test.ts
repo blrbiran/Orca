@@ -64,10 +64,10 @@ describe("orca compact-reviews (reviews compaction spec section 3)", () => {
 
   it("refuses an unknown argument and a malformed --repo by name with exit 1", async () => {
     await inStore(async () => {
-      const unknown = await captureStreams(() => main(["compact-reviews", "--bogus"]));
+      const unknown = await captureStreams(() => main(["decision", "compact-reviews", "--bogus"]));
       expect(unknown.result).toBe(1);
-      expect(unknown.stderr).toContain('unknown argument "--bogus"');
-      const badRepo = await captureStreams(() => main(["compact-reviews", "--repo", "no-equals-sign"]));
+      expect(unknown.stderr).toContain("unknown flag --bogus");
+      const badRepo = await captureStreams(() => main(["decision", "compact-reviews", "--repo", "no-equals-sign"]));
       expect(badRepo.result).toBe(1);
       expect(badRepo.stderr).toContain("--repo wants <projectKey>=<path>");
     });
@@ -77,7 +77,7 @@ describe("orca compact-reviews (reviews compaction spec section 3)", () => {
     await inStore(async (store) => {
       const odd = `null\n${JSON.stringify({ decisionId: 7, projectKey: PK, action: "reviewed", by: "amy", at: "2026-09-10T00:00:00.000Z" })}\n`;
       await writeFile(reviewsFile(store), odd + STORE);
-      const run = await captureStreams(() => main(["compact-reviews", "--repo", `${PK}=${repoPath}`]));
+      const run = await captureStreams(() => main(["decision", "compact-reviews", "--repo", `${PK}=${repoPath}`]));
       expect(run.result).toBe(0);
       expect(run.stdout).toContain("  unreadable  2");
     });
@@ -87,7 +87,7 @@ describe("orca compact-reviews (reviews compaction spec section 3)", () => {
     await inStore(async (store) => {
       await writeFile(reviewsFile(store), STORE);
       const before = await snapshot(store);
-      const run = await captureStreams(() => main(["compact-reviews", "--repo", `${PK}=${repoPath}`]));
+      const run = await captureStreams(() => main(["decision", "compact-reviews", "--repo", `${PK}=${repoPath}`]));
       expect(run.result).toBe(0);
       expect(run.stdout).toBe(
         [
@@ -112,7 +112,7 @@ describe("orca compact-reviews (reviews compaction spec section 3)", () => {
   it("with --apply compacts and says a running panel needs no restart", async () => {
     await inStore(async (store) => {
       await writeFile(reviewsFile(store), STORE);
-      const run = await captureStreams(() => main(["compact-reviews", "--apply", "--repo", `${PK}=${repoPath}`]));
+      const run = await captureStreams(() => main(["decision", "compact-reviews", "--apply", "--repo", `${PK}=${repoPath}`]));
       expect(run.result).toBe(0);
       expect(run.stdout.trimEnd().split("\n").at(-1)).toBe(APPLIED_LAST_LINE);
       expect(await readFile(reviewsFile(store), "utf8")).toBe(`${KEPT}\n${NOT_FOUND}\n`);
@@ -127,7 +127,7 @@ describe("orca compact-reviews (reviews compaction spec section 3)", () => {
       // whole command (spec section 1.7), and compaction inherits that.
       await writeFile(join(repoPath, ".decisions", "future.jsonl"), `${decisionLine("orca-dev-2/1", "2099-01-01T00:00:00.000Z")}\n`);
       const before = await snapshot(store);
-      const run = await captureStreams(() => main(["compact-reviews", "--apply", "--repo", `${PK}=${repoPath}`]));
+      const run = await captureStreams(() => main(["decision", "compact-reviews", "--apply", "--repo", `${PK}=${repoPath}`]));
       expect(run.result).toBe(1);
       expect(run.stderr).toContain("rejected: future-rows-without-as-of");
       expect(await snapshot(store)).toEqual(before);

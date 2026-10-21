@@ -45,7 +45,7 @@ async function hookBody(stdinText: string): Promise<string> {
   const chainId = process.env.ORCA_CHAIN_ID;
   const inChain = chainId !== undefined && chainId !== "";
   const command =
-    `Run: ${orcaCommand(["checkpoint", "write", "--repo", repo, "--session", input.sessionRef, "--transcript", input.transcriptPath, "--draft"])} <draft.json>` +
+    `Run: ${orcaCommand(["dev", "checkpoint", "write", "--repo", repo, "--session", input.sessionRef, "--transcript", input.transcriptPath, "--draft"])} <draft.json>` +
     ` where the draft is a file outside the repository shaped like ${inChain ? CHAIN_DRAFT_SHAPE : DRAFT_SHAPE}`;
   let chain: ChainMode | undefined;
   if (inChain) {

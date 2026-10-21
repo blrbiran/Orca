@@ -93,7 +93,7 @@ export async function startChain(raw: unknown, deps: ChainDeps): Promise<number>
   const pre = await preflight(raw, deps);
   if (pre.repo === (await realpath(deps.supervisorRoot).catch(() => deps.supervisorRoot))) {
     deps.err(
-      `orca chain: warning: ${pre.repo} is the checkout this supervisor runs from; a session's changes to src/chain/** take effect at the next \`orca chain start\` (D-launch spec §7-6). Prefer a dedicated clone or worktree.\n`,
+      `orca chain: warning: ${pre.repo} is the checkout this supervisor runs from; a session's changes to src/chain/** take effect at the next \`orca dev chain start\` (D-launch spec §7-6). Prefer a dedicated clone or worktree.\n`,
     );
   }
   const lock = await acquireChainLock(pre.repo, pre.chainId);

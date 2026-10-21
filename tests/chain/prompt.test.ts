@@ -20,13 +20,13 @@ describe("chainPrompt (D-launch spec §3.3)", () => {
   });
   it("PR2 gives the full write command for this session, with the target repository's own CLI (plan PC-11)", () => {
     expect(chainPrompt(INPUT)).toContain(
-      "'/work/orca-clone/node_modules/.bin/tsx' '/work/orca-clone/src/cli.ts' 'checkpoint' 'write' '--repo' '/work/orca-clone' '--session' '22222222-0000-4000-8000-000000000002' '--draft' <draft.json>",
+      "'/work/orca-clone/node_modules/.bin/tsx' '/work/orca-clone/src/cli.ts' 'dev' 'checkpoint' 'write' '--repo' '/work/orca-clone' '--session' '22222222-0000-4000-8000-000000000002' '--draft' <draft.json>",
     );
   });
   it("PR3 lists every guarded path and ends with the resume output", () => {
     const p = chainPrompt(INPUT);
     for (const path of GUARDED_PATHS) expect(p).toContain(path);
     expect(p).toContain(".claude/settings.local.json");
-    expect(p.endsWith(`orca resume output:\n${INPUT.resumeText}`)).toBe(true);
+    expect(p.endsWith(`orca dev resume output:\n${INPUT.resumeText}`)).toBe(true);
   });
 });

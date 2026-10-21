@@ -156,13 +156,13 @@ describe("input rejections that used to be exit 3 (spec §9.3 / §6.3)", () => {
     try {
       const planPath = await seedTwoTaskPlan(s);
 
-      const clean = await captureStreams(() => runCli(["plan", planPath]));
+      const clean = await captureStreams(() => runCli(["plan", "preview", planPath]));
       expect(clean.result).toBe(0);
       expect(clean.stdout).toContain("[pass] dirty-worktree");
 
       await writeFile(join(s.targetRepo, "untracked.txt"), "someone's uncommitted work\n");
 
-      const dirty = await captureStreams(() => runCli(["plan", planPath]));
+      const dirty = await captureStreams(() => runCli(["plan", "preview", planPath]));
       // The report is still printed — a caller who only reads the exit status
       // must not lose the reason.
       expect(dirty.stdout).toContain("[fail] dirty-worktree:");
@@ -192,7 +192,7 @@ describe("input rejections that used to be exit 3 (spec §9.3 / §6.3)", () => {
       const { result: rc, stdout } = await captureStreams(() =>
         // Captured for the same reason as above: with preflight's guard
         // removed this rejects rather than returning a code.
-        runCli(["plan", planPath]).catch((err: Error) => err.message),
+        runCli(["plan", "preview", planPath]).catch((err: Error) => err.message),
       );
 
       expect(rc).toBe(1);

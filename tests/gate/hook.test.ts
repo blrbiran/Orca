@@ -29,11 +29,11 @@ function run(file: string, args: string[], input: string, env: NodeJS.ProcessEnv
 
 describe("orca gate --hook claude-code (Tier 0 gate spec 4, 6.2)", () => {
   it("through the real process: a push exits 2 with the one literal line; a status exits 0 silently; another runtime is refused with 1", async () => {
-    const blocked = await runCli(["gate", "--hook", "claude-code"], stdin("git push"));
+    const blocked = await runCli(["dev", "gate", "--hook", "claude-code"], stdin("git push"));
     expect([blocked.code, blocked.stdout, blocked.stderr]).toEqual([2, "", PUSH_LINE]);
-    const allowed = await runCli(["gate", "--hook", "claude-code"], stdin("git status"));
+    const allowed = await runCli(["dev", "gate", "--hook", "claude-code"], stdin("git status"));
     expect([allowed.code, allowed.stdout, allowed.stderr]).toEqual([0, "", ""]);
-    const other = await runCli(["gate", "--hook", "codex"], stdin("git push"));
+    const other = await runCli(["dev", "gate", "--hook", "codex"], stdin("git push"));
     expect(other.code).toBe(1);
   });
 
@@ -68,10 +68,10 @@ describe("orca gate --hook claude-code (Tier 0 gate spec 4, 6.2)", () => {
 
   it("reads the real current branch: a merge on main exits 2, on another branch 0", async () => {
     const repo = await tempRepo();
-    const merged = await runCli(["gate", "--hook", "claude-code"], stdin("git merge x", repo));
+    const merged = await runCli(["dev", "gate", "--hook", "claude-code"], stdin("git merge x", repo));
     expect(merged.code).toBe(2);
     await git(repo, ["checkout", "-q", "-b", "feat"]);
-    const onFeat = await runCli(["gate", "--hook", "claude-code"], stdin("git merge x", repo));
+    const onFeat = await runCli(["dev", "gate", "--hook", "claude-code"], stdin("git merge x", repo));
     expect([onFeat.code, onFeat.stderr]).toEqual([0, ""]);
   });
 
@@ -80,7 +80,7 @@ describe("orca gate --hook claude-code (Tier 0 gate spec 4, 6.2)", () => {
     await writeFile(join(bin, "git"), "#!/bin/sh\nexec sleep 30\n");
     await chmod(join(bin, "git"), 0o755);
     const cwd = await realpath(await mkdtemp(join(tmpdir(), "orca-gate-cwd-")));
-    const out = await run(join(repoRoot, "node_modules", ".bin", "tsx"), [join(repoRoot, "src", "cli.ts"), "gate", "--hook", "claude-code"], stdin("git merge x", cwd), {
+    const out = await run(join(repoRoot, "node_modules", ".bin", "tsx"), [join(repoRoot, "src", "cli.ts"), "dev", "gate", "--hook", "claude-code"], stdin("git merge x", cwd), {
       ...process.env,
       PATH: `${bin}:${process.env.PATH}`,
     });

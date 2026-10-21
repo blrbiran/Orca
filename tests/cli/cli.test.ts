@@ -14,15 +14,15 @@ const fixtures = join(repoRoot, "tests", "fixtures", "ledger");
 
 describe("main — validate exit codes", () => {
   it("returns 0 when everything passes", async () => {
-    expect(await main(["validate", join(fixtures, "ok.jsonl")])).toBe(0);
+    expect(await main(["decision", "validate", join(fixtures, "ok.jsonl")])).toBe(0);
   });
 
   it("returns 1 when something is rejected", async () => {
-    expect(await main(["validate", join(fixtures, "rejected.jsonl")])).toBe(1);
+    expect(await main(["decision", "validate", join(fixtures, "rejected.jsonl")])).toBe(1);
   });
 
   it("returns 2 when only downgraded, nothing rejected", async () => {
-    expect(await main(["validate", join(fixtures, "downgraded.jsonl")])).toBe(2);
+    expect(await main(["decision", "validate", join(fixtures, "downgraded.jsonl")])).toBe(2);
   });
 
   it("returns 1 when both downgraded and rejected are present", async () => {
@@ -35,11 +35,11 @@ describe("main — validate exit codes", () => {
   });
 
   it("a directory argument scans top-level *.jsonl files", async () => {
-    expect(await main(["validate", fixtures])).toBe(1);
+    expect(await main(["decision", "validate", fixtures])).toBe(1);
   });
 
   it("returns 1 when the path does not exist", async () => {
-    expect(await main(["validate", join(fixtures, "nope.jsonl")])).toBe(1);
+    expect(await main(["decision", "validate", join(fixtures, "nope.jsonl")])).toBe(1);
   });
 
   it("returns 1 when no subcommand is given", async () => {
@@ -51,7 +51,7 @@ describe("main — validate exit codes", () => {
   // real pass. Validating zero files must not read as ok.
   it("returns 1 when a directory contains no .jsonl files (an empty check must not read as a pass)", async () => {
     const emptyDir = await mkdtemp(join(tmpdir(), "orca-cli-empty-"));
-    expect(await main(["validate", emptyDir])).toBe(1);
+    expect(await main(["decision", "validate", emptyDir])).toBe(1);
   });
 });
 
@@ -64,7 +64,7 @@ describe("main — check-append-only exit codes", () => {
       "@@ -1,0 +2 @@",
       '+{"ev":"bound","id":"x/1"}',
     ].join("\n");
-    expect(await main(["check-append-only"], diff)).toBe(0);
+    expect(await main(["dev", "check-append-only"], diff)).toBe(0);
   });
 
   it("returns 1 when the diff contains a deleted line", async () => {
@@ -76,7 +76,7 @@ describe("main — check-append-only exit codes", () => {
       '-{"ev":"decision","id":"x/1"}',
       '+{"ev":"decision","id":"x/2"}',
     ].join("\n");
-    expect(await main(["check-append-only"], diff)).toBe(1);
+    expect(await main(["dev", "check-append-only"], diff)).toBe(1);
   });
 });
 
@@ -87,7 +87,7 @@ describe("main — check-append-only exit codes", () => {
 describe("real process exit code", () => {
   it("rejected.jsonl makes the process exit with 1", async () => {
     await expect(
-      execFileAsync("npx", ["tsx", "src/cli.ts", "validate", join(fixtures, "rejected.jsonl")], {
+      execFileAsync("npx", ["tsx", "src/cli.ts", "decision", "validate", join(fixtures, "rejected.jsonl")], {
         cwd: repoRoot,
       }),
     ).rejects.toMatchObject({ code: 1 });
@@ -96,7 +96,7 @@ describe("real process exit code", () => {
   it("ok.jsonl makes the process exit with 0", async () => {
     const { stdout } = await execFileAsync(
       "npx",
-      ["tsx", "src/cli.ts", "validate", join(fixtures, "ok.jsonl")],
+      ["tsx", "src/cli.ts", "decision", "validate", join(fixtures, "ok.jsonl")],
       { cwd: repoRoot },
     );
     expect(stdout).toContain("ok");
@@ -132,7 +132,7 @@ describe("validate — the directory is the resolution scope (ruling orca-dev-c1
       join(dir, "run-9d.jsonl"),
       decision("run-9d/1", "run-9d") + "\n" + overturned() + "\n",
     );
-    expect(await main(["validate", dir])).toBe(0);
+    expect(await main(["decision", "validate", dir])).toBe(0);
   });
 
   it("still rejects when that decision exists in no file in the directory", async () => {
@@ -141,6 +141,6 @@ describe("validate — the directory is the resolution scope (ruling orca-dev-c1
       join(dir, "run-9d.jsonl"),
       decision("run-9d/1", "run-9d") + "\n" + overturned() + "\n",
     );
-    expect(await main(["validate", dir])).toBe(1);
+    expect(await main(["decision", "validate", dir])).toBe(1);
   });
 });

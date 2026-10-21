@@ -124,10 +124,10 @@ describe("orca level --hook claude-code (D spec 3 delivery shim, 4)", () => {
 
   it("through the real process: exits 0 with the injection on stdout, and refuses another runtime with 1", async () => {
     const s = await setup(330_000);
-    const ok = await runCli(["level", "--hook", "claude-code"], s.stdin);
+    const ok = await runCli(["dev", "level", "--hook", "claude-code"], s.stdin);
     expect(ok.code).toBe(0);
     expect(context(ok.stdout)).toContain("Write a checkpoint now.");
-    const refused = await runCli(["level", "--hook", "codex"], s.stdin);
+    const refused = await runCli(["dev", "level", "--hook", "codex"], s.stdin);
     expect(refused.code).toBe(1);
   });
 });

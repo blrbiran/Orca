@@ -37,7 +37,7 @@ describe("orca plan warns about an empty requiredChecks union (spec 5.3 / 9.1(6)
         ],
       });
 
-      const { result: rc, stdout } = await captureStdout(() => runCli(["plan", planPath]));
+      const { result: rc, stdout } = await captureStdout(() => runCli(["plan", "preview", planPath]));
       expect(rc).toBe(0);
       expect(stdout).toContain("T1 x T2");
       expect(stdout).toContain("would escalate");

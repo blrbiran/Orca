@@ -18,7 +18,7 @@ const ROW: CorrectionRow = {
 };
 
 const recordArgs = (repo: string, overrides: string[] = []) => [
-  "correct", "--repo", repo, "--by", "amy",
+  "dev", "correct", "--repo", repo, "--by", "amy",
   "--decision", "orca-dev-1/1", "--kind", "wrong", "--because", "那个前提当时就不成立",
   ...overrides,
 ];

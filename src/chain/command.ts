@@ -81,7 +81,7 @@ async function unlockChain(values: Map<string, string>, deps: ChainDeps): Promis
   const state = await lockState(repo);
   if (state.kind === "free") throw new ChainRejection("no-chain-lock", `there is no chain lock in ${repo}`);
   if (state.kind === "held") {
-    throw new ChainRejection("chain-running", `chain ${state.holder.chainId} is still running as pid ${state.holder.pid}; use \`orca chain stop\``);
+    throw new ChainRejection("chain-running", `chain ${state.holder.chainId} is still running as pid ${state.holder.pid}; use \`orca dev chain stop\``);
   }
   // Final review Minor-4: the record is read and validated first, so a refusal (exit 1) really leaves everything as it was.
   const record = state.holder === null ? null : await readChainRecord(repo, state.holder.chainId);

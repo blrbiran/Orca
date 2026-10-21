@@ -52,7 +52,7 @@ describe("the decisions area in Chinese", () => {
     expect(container.querySelector(".actions > button.btn-primary")?.textContent).toBe("同意");
     expect(texts(container, ".detail-help")).toEqual([
       "标记为已评审：我读过了，不需要改。计入评审覆盖率。",
-      "这会记录一条纠正；它不改台账。要改决策本身，用 orca correct --close 关闭它，或交给修复 agent。",
+      "这会记录一条纠正；它不改台账。要改决策本身，用 orca dev correct --close 关闭它，或交给修复 agent。",
     ]);
     expect(labelTexts(container, ".correction-form")).toEqual(["类型", "理由", "改选（可选）"]);
     expect(container.querySelector('.correction-form button[type="submit"]')?.textContent).toBe("纠正");

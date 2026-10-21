@@ -20,7 +20,7 @@ if [ "$decisions_changed" -ne 0 ]; then
   tmp="$(mktemp)"
   # Avoid a pipe here: a pipe would swallow git's exit code (CLAUDE.md Rule 14).
   git diff --cached --unified=0 -- .decisions > "$tmp"
-  npx tsx src/cli.ts check-append-only < "$tmp"
+  npx tsx src/cli.ts dev check-append-only < "$tmp"
   rm -f "$tmp"
 
   # Exit code 2 means "downgraded", not "rejected": this repository's first
@@ -30,5 +30,5 @@ if [ "$decisions_changed" -ne 0 ]; then
   # criterion -- the one in tests/ledger/validateFile.test.ts that names the
   # exact set of downgraded lines this repository may contain. Exit code 1
   # still blocks the commit.
-  npx tsx src/cli.ts validate .decisions || [ $? -eq 2 ]
+  npx tsx src/cli.ts decision validate .decisions || [ $? -eq 2 ]
 fi

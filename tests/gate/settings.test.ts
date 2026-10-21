@@ -59,8 +59,11 @@ describe(".claude/settings.json wires the Tier 0 gate (spec 5, 6.2)", () => {
     // Changed on purpose 2026-10-18 (human ruling, Orca session a3b2a7a7): `git branch -d*`, `git branch --delete*` and
     // `git worktree remove*` left the deny list. The previous literal was
     // eb0dfc953e904ac96ad090e2470a43cf1630765b532ec165c1dfd1cefffba87b.
+    // Changed on purpose 2026-10-22 (CLI v2 plan Task 7, session b37f7ce9; ruling 8b1469ea "允许改必要的test"): the hook
+    // now runs `src/cli.ts dev gate --hook claude-code` (the old top-level `gate` moves under `orca dev`, spec §5). The
+    // previous literal was ed88ba55956978ea4b94cc32717f3f57e6864bf9807eac22fa61a18b42d89bcf.
     expect(createHash("sha256").update(JSON.stringify({ COMMAND, DENY })).digest("hex")).toBe(
-      "ed88ba55956978ea4b94cc32717f3f57e6864bf9807eac22fa61a18b42d89bcf",
+      "5ccfb3af072c8cec3ad6e3c79a01adbd360466834ea93db667015b41e90b87ee",
     );
   });
 });

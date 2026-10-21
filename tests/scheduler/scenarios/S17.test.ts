@@ -9,7 +9,7 @@ describe("S17 (spec 9.2)", () => {
       const refsBefore = await allRefShas(s.targetRepo);
       const porcelainBefore = await porcelain(s.targetRepo);
 
-      const rc = await runCli(["plan", planPath]);
+      const rc = await runCli(["plan", "preview", planPath]);
       expect(rc).toBe(0);
 
       // Measured directly, not via `git diff | wc -c`: that comparison is

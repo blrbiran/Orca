@@ -15,7 +15,7 @@ import { AGENTS_DIR_MODE, AGENTS_FILE_MODE, AgentsPathError, agentsTablePath, dr
  */
 export interface AgentsIo { stdout(text: string): void; stderr(text: string): void }
 
-const USAGE = "usage: orca agents init | orca agents show | orca agents refresh   (table: $ORCA_AGENTS_TABLE or ~/.orca/agents.json; ccloop: $ORCA_CCLOOP_BIN)\n";
+const USAGE = "usage: orca agent init | orca agent show | orca agent refresh   (table: $ORCA_AGENTS_TABLE or ~/.orca/agents.json; ccloop: $ORCA_CCLOOP_BIN)\n";
 const MAX_OUTPUT = 16 * 1024 * 1024;
 const PORT_TIMEOUT_MS = 60_000;
 

@@ -26,7 +26,7 @@ const recordArgs = (repo: string): string[] => [
   "--decision", "orca-dev-1/1", "--kind", "wrong", "--because", "那个前提当时就不成立",
 ];
 
-const closeArgsForCorrect = (repo: string): string[] => closeArgs(repo).slice(1);
+const closeArgsForCorrect = (repo: string): string[] => closeArgs(repo).slice(2);
 
 /**
  * The golden id `correct(recordArgs(...), { now: () => new Date(INSTANT) })`

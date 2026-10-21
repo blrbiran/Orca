@@ -4,7 +4,7 @@
  */
 import { COMMAND_ROWS } from "./domains/command.js";
 import { CONTROL_ROWS } from "./domains/control.js";
-import { DEV_ROWS } from "./domains/dev.js";
+import { DEV_ROWS, TOOL_ROWS } from "./domains/dev.js";
 import { META_ROWS } from "./domains/meta.js";
 import { READ_ROWS } from "./domains/reads.js";
 import { PROPOSAL_ROWS } from "./domains/proposal.js";
@@ -12,7 +12,7 @@ import { SETTINGS_ROWS } from "./domains/settings.js";
 import { WORK_ROWS } from "./domains/work.js";
 import type { CommandDef, FindResult } from "./types.js";
 
-export const REGISTRY: readonly CommandDef[] = [...META_ROWS, ...READ_ROWS, ...WORK_ROWS, ...PROPOSAL_ROWS, ...SETTINGS_ROWS, ...COMMAND_ROWS, ...DEV_ROWS, ...CONTROL_ROWS];
+export const REGISTRY: readonly CommandDef[] = [...META_ROWS, ...READ_ROWS, ...WORK_ROWS, ...PROPOSAL_ROWS, ...SETTINGS_ROWS, ...COMMAND_ROWS, ...TOOL_ROWS, ...DEV_ROWS, ...CONTROL_ROWS];
 
 const words = (def: CommandDef): string[] => [def.domain, ...(def.action === null ? [] : def.action.split(" "))];
 

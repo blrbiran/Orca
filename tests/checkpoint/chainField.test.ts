@@ -169,7 +169,7 @@ describe("checkpoint write in a chain (D-launch spec §3.1, §3.4)", () => {
     const s = await checkpointSession(1, { next: ["n"] });
     const root = await projectsWith("-p");
     const d = await decoy();
-    const out = await runCli(["checkpoint", "write", "--repo", s.repo, "--session", SESSION, "--draft", s.draftPath], "", undefined, {
+    const out = await runCli(["dev", "checkpoint", "write", "--repo", s.repo, "--session", SESSION, "--draft", s.draftPath], "", undefined, {
       ...process.env,
       ORCA_CLAUDE_PROJECTS_DIR: root,
       CLAUDE_CONFIG_DIR: d,

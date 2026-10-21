@@ -86,7 +86,7 @@ function capture(over: Partial<ChainDeps> = {}) {
   return { deps, out, err };
 }
 
-const START = (repo: string, id: string) => ["chain", "start", "--repo", repo, "--by", "tester", "--goal", "two files", "--max-sessions", "3", "--max-cost-usd", "5", "--chain-id", id];
+const START = (repo: string, id: string) => ["dev", "chain", "start", "--repo", repo, "--by", "tester", "--goal", "two files", "--max-sessions", "3", "--max-cost-usd", "5", "--chain-id", id];
 
 describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/11)", () => {
   isolateChainEnv();
@@ -117,7 +117,7 @@ describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/1
   it("E8 must-catch for E1: an orca child started by absolute path is seen by the recorder", async () => {
     const { repo, fake } = await target(false);
     const nodeLog = join(fake.dir, "node.jsonl");
-    await cli(["resume", "--repo", repo], fake.env({ NODE_OPTIONS: `--require ${RECORDER}`, ORCA_TEST_NODE_LOG: nodeLog })).result;
+    await cli(["dev", "resume", "--repo", repo], fake.env({ NODE_OPTIONS: `--require ${RECORDER}`, ORCA_TEST_NODE_LOG: nodeLog })).result;
     const others = cliRoles(await readFile(nodeLog, "utf8")).filter((x) => x.startsWith("other: "));
     expect(others.length).toBeGreaterThan(0);
     expect(others.every((x) => x.includes(" resume --repo "))).toBe(true);
@@ -188,7 +188,7 @@ describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/1
   it("E5 an unforeseen error in a chain subcommand is exit 2, never main()'s 3 (review I8); an unknown subcommand is 1", async () => {
     const { repo, fake } = await target(false);
     const c = capture({ env: fake.env(), gateCheck: async () => { throw new Error("gate probe exploded"); } });
-    expect(await runChainCommand(START(repo, "chain-0000000e").slice(1), c.deps)).toBe(2);
+    expect(await runChainCommand(START(repo, "chain-0000000e").slice(2), c.deps)).toBe(2);
     expect(c.err.join("").startsWith("orca chain: Error: gate probe exploded")).toBe(true);
     const u = capture();
     expect(await runChainCommand(["pause"], u.deps)).toBe(1);
@@ -220,7 +220,7 @@ describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/1
     c.deps.env = fake.env({ CLAUDE_CONFIG_DIR: poisoned });
     c.deps.claudeBin = fake.claude;
     // A preflight-time refusal (D-launch spec §4.3): exit 1, nothing written — not the in-loop gate-check-failed's 2.
-    expect(await runChainCommand(START(repo, "chain-0000000c").slice(1), c.deps)).toBe(1);
+    expect(await runChainCommand(START(repo, "chain-0000000c").slice(2), c.deps)).toBe(1);
     expect(c.err.join("")).toContain("rejected: gate-check-failed");
     expect(c.err.join("")).toContain("disableAllHooks");
     expect(existsSync(join(repo, ".orca", "chains"))).toBe(false);
@@ -244,7 +244,7 @@ describe("orca chain through the real CLI (D-launch spec §4.3, §5.3, §8.2-3/1
     await fake.scenario(2, { steps: [{ do: "commit", file: "two.txt" }, { do: "exitCheckpoint", status: "done", next: [] }], result: { subtype: "success", cost: 0.1 } });
     const c = capture();
     c.deps.env = fake.env();
-    expect(await runChainCommand(START(repo, "chain-0000000b").slice(1), c.deps)).toBe(0);
+    expect(await runChainCommand(START(repo, "chain-0000000b").slice(2), c.deps)).toBe(0);
     expect(existsSync(trace)).toBe(false);
   }, 60_000);
 

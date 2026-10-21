@@ -30,7 +30,7 @@ describe("resume (D spec 5 step 4, 9 item 3)", () => {
       measure: ["true"],
     });
     await commitFile(s.repo, "a.txt", "a\n", "later work");
-    const out = await runCli(["resume", "--repo", s.repo]);
+    const out = await runCli(["dev", "resume", "--repo", s.repo]);
     expect(out.code).toBe(0);
     expect(out.stdout).toContain(`checkpoint: ${s.path}\n`);
     // E6-1: describeLevel has no assertion anywhere else in this plan. Asserted as a literal, not via
@@ -141,7 +141,7 @@ describe("resume (D spec 5 step 4, 9 item 3)", () => {
 
   it("through the real process a refusal is one stderr line and exit 1 (unchanged by D-launch)", async () => {
     const repo = await tempRepo();
-    const out = await runCli(["resume", "--repo", repo]);
+    const out = await runCli(["dev", "resume", "--repo", repo]);
     expect([out.code, out.stdout, out.stderr]).toEqual([1, "", "rejected: no-checkpoint: no commit reachable from HEAD touches .orca/checkpoints\n"]);
   });
 

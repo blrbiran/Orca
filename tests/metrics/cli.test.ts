@@ -31,7 +31,7 @@ describe("orca metrics (E2 spec §7)", () => {
       const root = await newRoot();
       await buildFixture(root, store);
       const { result, stdout } = await captureStdout(() =>
-        main(["metrics", "--root", root, "--as-of", AS_OF, "--json"]),
+        main(["decision", "metrics", "--root", root, "--as-of", AS_OF, "--json"]),
       );
       expect(result).toBe(0);
       expect(stdout).toBe(await readFile(GOLDEN, "utf8"));
@@ -44,7 +44,7 @@ describe("orca metrics (E2 spec §7)", () => {
       await buildFixture(root, store);
       const other = await newRoot();              // 一个不含任何仓库的 root
       const { result } = await captureStdout(() =>
-        main(["metrics", "--root", other, "--as-of", AS_OF, "--json"]),
+        main(["decision", "metrics", "--root", other, "--as-of", AS_OF, "--json"]),
       );
       expect(result).toBe(1);
     });
@@ -56,7 +56,7 @@ describe("orca metrics (E2 spec §7)", () => {
       await buildFixture(root, store);
       await bareRepo(root, "alpha-twin", "https://github.com/biran/alpha.git");
       const { result } = await captureStdout(() =>
-        main(["metrics", "--root", root, "--as-of", AS_OF, "--json"]),
+        main(["decision", "metrics", "--root", root, "--as-of", AS_OF, "--json"]),
       );
       expect(result).toBe(1);
     });
@@ -75,7 +75,7 @@ describe("orca metrics (E2 spec §7)", () => {
           scope: "repo", kind: "interface",
         })}\n`,
       );
-      const { result } = await captureStdout(() => main(["metrics", "--root", root, "--json"]));
+      const { result } = await captureStdout(() => main(["decision", "metrics", "--root", root, "--json"]));
       expect(result).toBe(1);
     });
   });
@@ -89,7 +89,7 @@ describe("orca metrics (E2 spec §7)", () => {
       const root = await newRoot();
       await buildFixture(root, store, { corruptMiddleLine: true });
       const { result, stdout } = await captureStdout(() =>
-        main(["metrics", "--root", root, "--as-of", AS_OF, "--json"]),
+        main(["decision", "metrics", "--root", root, "--as-of", AS_OF, "--json"]),
       );
       expect(result).toBe(6);
       expect(stdout.length).toBeGreaterThan(0);
@@ -102,7 +102,7 @@ describe("orca metrics (E2 spec §7)", () => {
       const root = await newRoot();
       await buildFixture(root, store, { tornStoreTail: true });
       const { result, stdout } = await captureStdout(() =>
-        main(["metrics", "--root", root, "--as-of", AS_OF, "--json"]),
+        main(["decision", "metrics", "--root", root, "--as-of", AS_OF, "--json"]),
       );
       expect(result).toBe(0);
       const parsed = JSON.parse(stdout);
@@ -117,7 +117,7 @@ describe("orca metrics (E2 spec §7)", () => {
       const root = await newRoot();
       await buildFixture(root, store, { tornStoreTail: true, corruptMiddleLine: true });
       const { result, stdout } = await captureStdout(() =>
-        main(["metrics", "--root", root, "--as-of", AS_OF, "--json"]),
+        main(["decision", "metrics", "--root", root, "--as-of", AS_OF, "--json"]),
       );
       expect(result).toBe(6);
       expect(JSON.parse(stdout).malformed_lines).toHaveLength(2);
@@ -130,7 +130,7 @@ describe("orca metrics (E2 spec §7)", () => {
       const root = await newRoot();
       await buildFixture(root, store);
       const { stdout } = await captureStdout(() =>
-        main(["metrics", "--root", root, "--as-of", AS_OF, "--json"]),
+        main(["decision", "metrics", "--root", root, "--as-of", AS_OF, "--json"]),
       );
       // 夹具的 store 里有 3 条 correction。读错目录就不可能是 3。
       expect(JSON.parse(stdout).correction_rate.corrections_total_including_stale).toBe(3);

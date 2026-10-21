@@ -15,7 +15,7 @@ export interface PromptInput {
 /** D-launch spec §3.3: a deterministic template. The goal is the whole authorization; nothing here widens it. */
 export function chainPrompt(p: PromptInput): string {
   // Plan PC-11: the target repository's own CLI, the same one its level hook names.
-  const write = `${[join(p.repo, "node_modules", ".bin", "tsx"), join(p.repo, "src", "cli.ts"), "checkpoint", "write", "--repo", p.repo, "--session", p.sessionId, "--draft"]
+  const write = `${[join(p.repo, "node_modules", ".bin", "tsx"), join(p.repo, "src", "cli.ts"), "dev", "checkpoint", "write", "--repo", p.repo, "--session", p.sessionId, "--draft"]
     .map(shellQuote)
     .join(" ")} <draft.json>`;
   return [
@@ -36,7 +36,7 @@ export function chainPrompt(p: PromptInput): string {
     `3. Do not change ${GUARDED_PATHS.join(", ")} (your own checkpoint file excepted), and do not create ${SETTINGS_LOCAL}. A change stops the chain.`,
     "4. Pushing, merging into main, deleting a branch and removing a worktree are for a person: list them under awaitingHuman and do not attempt them.",
     "",
-    "orca resume output:",
+    "orca dev resume output:",
     p.resumeText,
   ].join("\n");
 }

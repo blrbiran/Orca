@@ -936,17 +936,17 @@ async function main(): Promise<number> {
     await git(fixture.repoPath, ["mv", join(".decisions", ledgerName), archivedRel]);
     const compaction = await must(
       13,
-      "orca compact-reviews --apply exits by itself",
+      "orca decision compact-reviews --apply exits by itself",
       "exit within 20000ms",
       runToExit(
-        ["compact-reviews", "--apply", "--repo", `${fixture.repoKey}=${fixture.repoPath}`],
+        ["decision", "compact-reviews", "--apply", "--repo", `${fixture.repoKey}=${fixture.repoPath}`],
         env13,
         20_000,
         "orca compact-reviews",
         " A hang here means compaction never released the reviews lock or never finished.",
       ),
     );
-    if (compaction.code !== 0) fail(13, "orca compact-reviews --apply exits 0", 0, `${compaction.code}: ${compaction.stderr}`);
+    if (compaction.code !== 0) fail(13, "orca decision compact-reviews --apply exits 0", 0, `${compaction.code}: ${compaction.stderr}`);
     if ((await reviewedRows13(B)) !== 0) {
       fail(13, "compaction moved the archived decision's 'reviewed' row out of reviews.jsonl", 0, await reviewedRows13(B));
     }
@@ -972,7 +972,7 @@ async function main(): Promise<number> {
     }
     pass(13, "a running panel writes a review again after compaction moved it out, and ~/.orca is still unchanged");
 
-    // Step 14 (D-launch spec §8.2-8): the real panel opens a chain by spawning `orca chain start`; a fake claude's one
+    // Step 14 (D-launch spec §8.2-8): the real panel opens a chain by spawning `orca dev chain start`; a fake claude's one
     // session ends it with done; the status view says so; malformed and unknown stops are refused; ~/.orca untouched.
     const chainTarget = await makeChainRepo({ gate: true });
     cleanups.push({ what: "remove step 14's chain target repository", run: chainTarget.cleanup });
@@ -1023,7 +1023,7 @@ async function main(): Promise<number> {
     await panel14Exited;
     const homeAfter14 = await snapshotHomeOrca();
     if (JSON.stringify(homeAfter14) !== JSON.stringify(homeBefore)) fail(14, "~/.orca is unchanged by step 14", homeBefore, homeAfter14);
-    pass(14, "the panel opened a chain by spawning orca chain start, it ran to done and the status view says so, bad stops are refused, ~/.orca is unchanged");
+    pass(14, "the panel opened a chain by spawning orca dev chain start, it ran to done and the status view says so, bad stops are refused, ~/.orca is unchanged");
   } catch (err) {
     if (err instanceof StepFailure) {
       console.error(`FAIL ${err.step} ${err.what}: ${JSON.stringify(err.expected)} vs ${JSON.stringify(err.got)}`);

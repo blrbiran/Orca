@@ -55,7 +55,7 @@ export const ORIGINAL: DecisionEvent = {
  * fixture helpers, rather than inside close.test.ts.
  */
 export const closeArgs = (repo: string, overrides: string[] = []): string[] => [
-  "correct", "--repo", repo, "--by", "amy",
+  "dev", "correct", "--repo", repo, "--by", "amy",
   "--decision", "orca-dev-1/1", "--kind", "not_my_taste", "--because", "进程内互斥跨进程无效",
   "--chose-instead", "改用文件租约",
   "--undo-how", "删掉 src/scheduler/pool.ts 里的那处互斥",

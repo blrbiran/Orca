@@ -110,7 +110,7 @@ describe("Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset
 
   it("runs orca agents init and show through the installed ccloop", async () => {
     const w = await world();
-    const init = await orca(w, ["agents", "init"]);
+    const init = await orca(w, ["agent", "init"]);
     expect(init.code, init.stdout + init.stderr).toBe(0);
     expect(init.stdout).toContain(`orca agents: wrote ${w.table}`);
     const written = JSON.parse(await readFile(w.table, "utf8")) as { installations: Record<string, { command: string[]; version: string }> };
@@ -119,7 +119,7 @@ describe("Orca with ccloop installed as its dependency and ORCA_CCLOOP_BIN unset
     // detect also searches /opt/homebrew/bin and /usr/local/bin whatever PATH says; keep only what this world owns,
     // so `show` measures Orca and ccloop rather than whichever claude this machine has. The file keeps its 0600.
     await writeFile(w.table, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: { codex: written.installations.codex } }));
-    const show = await orca(w, ["agents", "show"]);
+    const show = await orca(w, ["agent", "show"]);
     expect(show.code, show.stdout + show.stderr).toBe(0);
     expect(show.stdout).toMatch(/^codex \(codex 9\.9\.9-fake\): .* configHash [0-9a-f]{64}$/m);
   }, 120_000);

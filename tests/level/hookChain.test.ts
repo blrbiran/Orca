@@ -21,7 +21,7 @@ async function setup(prompt: number) {
   await writeFile(transcriptPath, jsonl([modelRow("claude-opus-5[1m]"), usageRow({ input: prompt, cacheRead: 0, cacheCreation: 0, output: 0 })]));
   const stdin = JSON.stringify({ session_id: SESSION, transcript_path: transcriptPath, cwd: repo, hook_event_name: "PostToolUse" });
   const command =
-    `Run: '${repoRoot}/node_modules/.bin/tsx' '${repoRoot}/src/cli.ts' 'checkpoint' 'write' '--repo' '${repo}' '--session' '${SESSION}' ` +
+    `Run: '${repoRoot}/node_modules/.bin/tsx' '${repoRoot}/src/cli.ts' 'dev' 'checkpoint' 'write' '--repo' '${repo}' '--session' '${SESSION}' ` +
     `'--transcript' '${transcriptPath}' '--draft' <draft.json> where the draft is a file outside the repository shaped like ${SHAPE}`;
   return { repo, transcriptPath, stdin, command };
 }

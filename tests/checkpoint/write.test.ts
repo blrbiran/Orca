@@ -118,7 +118,7 @@ describe("writeCheckpoint (D spec 5 step 2, 9 item 1)", () => {
 
   it("through the real process: prints where it wrote and exits 0; a rejection exits 1 by name", async () => {
     const s = await checkpointSession(400_000, { next: ["n"] });
-    const args = ["checkpoint", "write", "--repo", s.repo, "--session", SESSION, "--transcript", s.transcriptPath, "--draft", s.draftPath];
+    const args = ["dev", "checkpoint", "write", "--repo", s.repo, "--session", SESSION, "--transcript", s.transcriptPath, "--draft", s.draftPath];
     const ok = await runCli(args);
     expect(ok.code).toBe(0);
     expect(ok.stdout.startsWith(`wrote ${join(s.repo, FILE)}\n`)).toBe(true);

@@ -13,11 +13,11 @@ const LOOP = { plan: "standard", goal: "write a.txt", successCondition: "a.txt e
 const loopPlan = (s: Sandbox): Promise<string> => seedRejectablePlan(s, { tasks: [{ taskId: "T1", loop: LOOP, dependsOn: [] }] });
 
 describe("the CLI refuses a loop task by name (spec §3.4)", () => {
-  it.each([["plan"], ["run"]])("orca %s exits 1 naming loop-plan-cli-unsupported:T1", async (command) => {
+  it.each([["plan preview"], ["run"]])("orca %s exits 1 naming loop-plan-cli-unsupported:T1", async (command) => {
     const s = await makeSandbox();
     try {
       const planPath = await loopPlan(s);
-      const { result, stderr } = await captureStreams(() => runCli([command, planPath]).catch((err: Error) => err.message));
+      const { result, stderr } = await captureStreams(() => runCli([...command.split(" "), planPath]).catch((err: Error) => err.message));
       expect(result).toBe(1);
       expect(stderr).toContain("rejected: loop-plan-cli-unsupported:T1:");
     } finally { await s.cleanup(); }

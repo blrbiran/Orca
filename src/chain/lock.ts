@@ -59,7 +59,7 @@ export async function assertLockFree(repo: string): Promise<void> {
   const state = await lockState(repo);
   if (state.kind === "held") throw new ChainRejection("chain-running", `chain ${state.holder.chainId} is running in ${repo} (pid ${state.holder.pid})`);
   if (state.kind === "stale") {
-    throw new ChainRejection("chain-lock-stale", `a chain lock is left in ${repo} and its holder is gone (${state.why}); check, then run \`orca chain unlock --repo ${repo}\``);
+    throw new ChainRejection("chain-lock-stale", `a chain lock is left in ${repo} and its holder is gone (${state.why}); check, then run \`orca dev chain unlock --repo ${repo}\``);
   }
 }
 

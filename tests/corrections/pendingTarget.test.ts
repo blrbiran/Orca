@@ -67,7 +67,7 @@ describe("the corrections store's pending target (control run decisions Task 10)
         const stored = await recordNewCorrection(dir, { ...PENDING, projectKey: "github.com/biran/orca", by: "amy" }, { again: false });
         const before = await readdir(target.decisionsDir);
         const { result: rc, stderr } = await captureStreams(() =>
-          runCli(["correct", "--repo", target.path, "--by", "amy", "--close", stored.id, "--chose-instead", "x", "--undo-how", "git revert --no-edit HEAD"]),
+          runCli(["dev", "correct", "--repo", target.path, "--by", "amy", "--close", stored.id, "--chose-instead", "x", "--undo-how", "git revert --no-edit HEAD"]),
         );
         expect(stderr).toContain("rejected: correction-target-not-a-decision:");
         expect(rc).toBe(1);
