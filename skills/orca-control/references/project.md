@@ -38,16 +38,6 @@ where the project's finished work goes by default
 - `--target <target>`: the target branch
 - `--remote <remote>`: the remote
 
-## `orca project set-integration-check [--on] [--off] [--command <command>]`
-
-re-run the checks on the target after two or more groups land (--command runs that instead)
-
-- What it does: sends control verb `set-integration-check`.
-- Who may: open over the socket (a flag marked human-only still needs a person token).
-- `--on`: switch it on
-- `--off`: switch it off
-- `--command <command>`: a command to run instead of the groups' own checks — human-only: needs a person token
-
 ## `orca project set-criteria-review [--on] [--off]`
 
 whether Orca's reviewer judges a flagged test change before a person sees it

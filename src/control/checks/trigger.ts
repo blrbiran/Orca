@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ControlError } from "../errors.js";
-import { cronTooFrequent, parseCron } from "./cron.js";
+import { cronTooFrequent, parseCron, validateSchedule } from "./cron.js";
 
 /**
  * Checks spec 2026-10-22 §2.2: a trigger is `{all: Clause[]}`, a clause `{any: Condition[]}`, over a closed condition
@@ -23,8 +23,11 @@ export const triggerSchema = z.object({
 export type Condition = z.infer<typeof conditionSchema>;
 export type Trigger = z.infer<typeof triggerSchema>;
 
-/** The write-time check: the schema's bounds, then every `schedule` cron parses and fires at most hourly. */
-export function validateTrigger(value: unknown): Trigger {
+/**
+ * The write-time check: the schema's bounds, then every `schedule` cron parses and fires at most hourly and, given the
+ * zone its slots are read in, that zone exists (`check-time-zone-invalid`, not Intl's RangeError at the next tick).
+ */
+export function validateTrigger(value: unknown, timeZone?: string): Trigger {
   const parsed = triggerSchema.safeParse(value);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -32,7 +35,8 @@ export function validateTrigger(value: unknown): Trigger {
   }
   for (const clause of parsed.data.all) for (const condition of clause.any) {
     if (condition.kind !== "schedule") continue;
-    if (cronTooFrequent(parseCron(condition.cron))) throw new ControlError("check-schedule-too-frequent", condition.cron);
+    if (timeZone !== undefined) validateSchedule(condition.cron, timeZone);
+    else if (cronTooFrequent(parseCron(condition.cron))) throw new ControlError("check-schedule-too-frequent", condition.cron);
   }
   return parsed.data;
 }

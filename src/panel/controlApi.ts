@@ -468,6 +468,10 @@ const scoped = (groupId: string) => ({ groupId, target: { kind: "group" as const
 const fromParams: RouteTarget = (params) => scoped(idSchema.parse(params.groupId));
 const spendScoped: RouteTarget = () => ({ groupId: "@spend", target: { kind: "spend" } });
 const orchestrationScoped: RouteTarget = () => ({ groupId: "@orchestration", target: { kind: "orchestration" } });
+const repositoryScoped: RouteTarget = (params) => {
+  const repoId = idSchema.parse(params.repoId);
+  return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
+};
 /** Debug task plan Task 11: the `@corrections` scope; a path naming a correction must name the payload's. */
 const correctionsScoped: RouteTarget = (params, payload) => {
   if (params.correctionId !== undefined && String(params.correctionId) !== payloadFields(payload).correctionId) {
@@ -538,19 +542,20 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
         return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
       },
     },
-    {
-      path: "/api/control/repositories/:repoId/integration-check",
-      verb: "set-integration-check",
-      // Kanban spec §7 layer 1: the repository scope's ledger key, as for set-integration-scheme.
-      target: (params) => {
-        const repoId = idSchema.parse(params.repoId);
-        return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
-      },
-    },
+    // Checks spec 2026-10-22 §4.4: the project layer's check settings and schedules, run-now and resume; the
+    // repository scope's ledger key, as for set-integration-scheme.
+    { path: "/api/control/repositories/:repoId/checks/settings", verb: "set-check-settings", target: repositoryScoped },
+    { path: "/api/control/repositories/:repoId/checks/scheduled", verb: "set-scheduled-check", target: repositoryScoped },
+    { path: "/api/control/repositories/:repoId/checks/run", verb: "run-check-now", target: repositoryScoped },
+    { path: "/api/control/repositories/:repoId/checks/resume", verb: "resume-check", target: repositoryScoped },
+    // The global layer and its locks; ledger key `@orchestration`.
+    { path: "/api/control/operator/checks/settings", verb: "set-check-settings", target: orchestrationScoped },
+    { path: "/api/control/operator/checks/scheduled", verb: "set-scheduled-check", target: orchestrationScoped },
+    { path: "/api/control/operator/checks/locks", verb: "set-check-locks", target: orchestrationScoped },
     {
       path: "/api/control/repositories/:repoId/criteria-review",
       verb: "set-criteria-review",
-      // Protect-acceptance-criteria spec §5: the repository scope's ledger key, as for set-integration-check.
+      // Protect-acceptance-criteria spec §5: the repository scope's ledger key, as for set-integration-scheme.
       target: (params) => {
         const repoId = idSchema.parse(params.repoId);
         return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
@@ -668,7 +673,11 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "retry-task": service.retryTask(command); break;
           case "set-workspace-mode": await service.setWorkspaceMode(command); break;
           case "set-integration-scheme": await service.setIntegrationScheme(command); break;
-          case "set-integration-check": service.setIntegrationCheck(command); break;
+          case "set-check-settings": service.setCheckSettings(command); break;
+          case "set-scheduled-check": service.setScheduledCheck(command); break;
+          case "set-check-locks": service.setCheckLocks(command); break;
+          case "run-check-now": service.runCheckNow(command); break;
+          case "resume-check": service.resumeCheck(command); break;
           case "set-criteria-review": service.setCriteriaReview(command); break;
           case "set-group-integration": await service.setGroupIntegration(command); break;
           case "retry-integration": service.retryIntegration(command); break;

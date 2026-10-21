@@ -229,9 +229,9 @@ export const fetchRepositoryIntegration = (repoId: string): Promise<RepositoryIn
 
 export const integrationSchemePath = (repoId: string): string => `/api/control/repositories/${segment(repoId)}/integration`;
 
-/** Kanban spec §7 layer 1: set-integration-check under the repository settings revision it was read at. */
+/** Checks spec 2026-10-22 §4.4: the project layer's integration check through set-check-settings, under the repository settings revision it was read at. */
 export const sendIntegrationCheck = (repoId: string, setting: IntegrationCheckSettingV1, expectedRevision: number, commandId: string = nextCommandId()): Promise<ControlAnswer> =>
-  sendControlCommand(`/api/control/repositories/${segment(repoId)}/integration-check`, { commandId, expectedRevision, payload: setting });
+  sendControlCommand(`/api/control/repositories/${segment(repoId)}/checks/settings`, { commandId, expectedRevision, payload: { kind: "integration-check", set: setting, clear: [] } });
 
 /** Integration spec §3.1: set-integration-scheme, naming the whole scheme under the settings revision it was read at. */
 export const sendIntegrationScheme = (repoId: string, integration: IntegrationSchemeV1, expectedRevision: number, commandId: string = nextCommandId()): Promise<ControlAnswer> =>

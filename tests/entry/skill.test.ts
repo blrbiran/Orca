@@ -7,7 +7,8 @@ import {
   proposalSetAgentPayloadSchema, recoveryRetryPayloadSchema, retryTaskPayloadSchema, settleUnknownUsagePayloadSchema, reestimatePayloadSchema, requirementAnswerPayloadSchema, requirementConsensusPayloadSchema,
   requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementClarifyMorePayloadSchema, requirementClassifyPayloadSchema, requirementOpenPayloadSchema, resumeFromHandoffPayloadSchema,
   setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
-  setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema, setIntegrationCheckPayloadSchema, setCriteriaReviewPayloadSchema,
+  setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema, setCriteriaReviewPayloadSchema,
+  setCheckSettingsPayloadSchema, setScheduledCheckPayloadSchema, setCheckLocksPayloadSchema, checkKindPayloadSchema,
   verifySavedResultPayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
   correctionRecordPayloadSchema, correctionClosePayloadSchema, correctionWithdrawPayloadSchema,
 } from "../../src/control/webProtocol.js";
@@ -38,7 +39,9 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "requirement-classify": requirementClassifyPayloadSchema, "set-task-labels": setTaskLabelsPayloadSchema, "set-task-loop": setTaskLoopPayloadSchema,
   "set-spend-cap": setSpendCapPayloadSchema, "clear-spend-cap": clearSpendCapPayloadSchema, "set-usage-calendar": setUsageCalendarPayloadSchema,
   "set-integration-scheme": setIntegrationSchemePayloadSchema, "set-group-integration": setGroupIntegrationPayloadSchema,
-  "set-integration-check": setIntegrationCheckPayloadSchema,
+  // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): the integration-check setter is removed (checks spec 2026-10-22 §4.4).
+  "set-check-settings": setCheckSettingsPayloadSchema, "set-scheduled-check": setScheduledCheckPayloadSchema, "set-check-locks": setCheckLocksPayloadSchema,
+  "run-check-now": checkKindPayloadSchema, "resume-check": checkKindPayloadSchema,
   "set-criteria-review": setCriteriaReviewPayloadSchema,
   "retry-integration": emptyPayloadSchema,
   "resolve-integration-conflict": emptyPayloadSchema,

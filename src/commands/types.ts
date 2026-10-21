@@ -83,7 +83,8 @@ export interface VerbMapping {
   verb: CommandVerbV1;
   /** The control route without `/api/control/`. */
   route(context: WriteContext): string | Promise<string>;
-  scope: RevisionScope;
+  /** A function when one row writes either of two scopes (checks spec 2026-10-22 §4.1: `orca check set --global`). */
+  scope: RevisionScope | ((context: WriteContext) => RevisionScope);
   /** The group (scope "group") or repository (scope "repository") the revision is read from; default ids.group / ids.repo. */
   scopeId?(context: WriteContext): string | Promise<string>;
   payload(context: WriteContext): unknown | Promise<unknown>;

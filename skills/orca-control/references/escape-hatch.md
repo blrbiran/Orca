@@ -171,7 +171,7 @@ The socket refuses these before anything runs (nothing is ledgered, the commandI
 - `reject-pending-decision` (rejecting a decision a landing refused, which records a correction in the owner's name) is owner-only → 403 `control-verb-human-only`.
 - `ratify-flagged-decision` (accepting a landed decision Orca flagged for a person) is owner-only → 403 `control-verb-human-only`.
 - `add-group-dependency` and `remove-group-dependency` (making a group wait until another has landed) are owner-only → 403 `control-verb-human-only`.
-- `set-integration-check` (whether Orca re-runs the checks on the target after two or more groups were merged into it, and the optional command it runs instead of the groups' own checks) is owner-only → 403 `control-verb-human-only`.
+- `set-check-settings`, `set-scheduled-check`, `set-check-locks`, `run-check-now` and `resume-check` (the integration check and the model review: each kind's event trigger, fields such as the integration check's command or the review's token budget, scheduled checks, the global locks, a run now, re-arming a check paused after three errored runs; `orca check …` sends them) are owner-only → 403 `control-verb-human-only`. A project value looser than a global lock is refused 409 `check-setting-locked`; a 9th scheduled check in one layer 409 `check-schedule-limit`; a cron firing more often than hourly 400 `check-schedule-too-frequent`.
 - `set-criteria-review` (whether Orca's automatic reviewer judges a flagged test change in this repository before a person sees it; unset follows the global default in `operator/set-orchestration-settings`, on unless switched off) is owner-only → 403 `control-verb-human-only`.
 - `set-orchestration-settings` (how many groups run at once; a confirmed group starts on its own when a slot is free; optional `quotaWait`: the agent installations whose quota failures Orca retries after 30 min instead of leaving to a person) is owner-only → 403 `control-verb-human-only`. A `confirm` with `"hold":true` confirms without starting; `start` it later.
 - `correction-debug-open` (opening a recorded correction's debug group; it spends nothing, and its group is `debug-<correctionId>`, or the next `-2`, `-3`, … with `"reopen":true` once the newest is stopped or archived) is open to an agent, but its `undoHow` field is human-only → 403 `control-field-human-only`. Send `expectedRevision` 0 for a new group, or the group's current revision. Add `"checks":["npm test"]` to name the checks the debug task is held to; they are added to the original contract's (never in place of them), and they are required (409 `debug-checks-required`) when the corrected run has no contract to inherit them from.
@@ -198,7 +198,7 @@ stdout is exactly one JSON line:
 
 ## 8. Route table
 
-`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration`, `repositories/<repoId>/integration-check`, `repositories/<repoId>/criteria-review`, `groups/<groupId>/integration`, `groups/<groupId>/integration/retry`, `groups/<groupId>/integration/resolve`, `groups/<groupId>/decisions/approve`, `groups/<groupId>/decisions/reject`, `groups/<groupId>/decisions/ratify`, `groups/<groupId>/dependencies/add`, `groups/<groupId>/dependencies/remove`, the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows and `operator/set-orchestration-settings` are listed for completeness and are owner-only (section 6).
+`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration`, the `repositories/<repoId>/checks/…` and `operator/checks/…` rows, `repositories/<repoId>/criteria-review`, `groups/<groupId>/integration`, `groups/<groupId>/integration/retry`, `groups/<groupId>/integration/resolve`, `groups/<groupId>/decisions/approve`, `groups/<groupId>/decisions/reject`, `groups/<groupId>/decisions/ratify`, `groups/<groupId>/dependencies/add`, `groups/<groupId>/dependencies/remove`, the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows and `operator/set-orchestration-settings` are listed for completeness and are owner-only (section 6).
 
 | Route | Verb | Payload example |
 | --- | --- | --- |
@@ -243,13 +243,19 @@ stdout is exactly one JSON line:
 | `POST recovery/retry` | recovery-retry | `{"scope":"run","runId":"run1"}` |
 | `POST repositories/<repoId>/workspace-mode` | set-workspace-mode | `{"workspaceMode":"worktree"}` |
 | `POST repositories/<repoId>/integration` | set-integration-scheme | `{"integration":{"delivery":"keep"}}` |
-| `POST repositories/<repoId>/integration-check` | set-integration-check | `{"enabled":true,"command":null}` |
+| `POST repositories/<repoId>/checks/settings` | set-check-settings | `{"kind":"model-review","set":{"enabled":false},"clear":[]}` |
+| `POST repositories/<repoId>/checks/scheduled` | set-scheduled-check | `{"id":"weekly","kind":"model-review","cron":"0 9 * * 1","enabled":true}` |
+| `POST repositories/<repoId>/checks/run` | run-check-now | `{"kind":"model-review"}` |
+| `POST repositories/<repoId>/checks/resume` | resume-check | `{"kind":"model-review"}` |
 | `POST repositories/<repoId>/criteria-review` | set-criteria-review | `{"enabled":false}` |
 | `POST operator/agent-preferences` | set-agent-preferences | `{"preferences":{"perAgent":{}}}` |
 | `POST operator/set-spend-cap` | set-spend-cap | `{"scope":"all","period":"week","tokens":5000000}` |
 | `POST operator/clear-spend-cap` | clear-spend-cap | `{"scope":"all","period":"week"}` |
 | `POST operator/set-usage-calendar` | set-usage-calendar | `{"timeZone":"UTC","weekStart":1}` |
 | `POST operator/set-orchestration-settings` | set-orchestration-settings | `{"maxRunningGroups":3}` |
+| `POST operator/checks/settings` | set-check-settings | `{"kind":"integration-check","set":{"enabled":true,"command":null},"clear":[]}` |
+| `POST operator/checks/scheduled` | set-scheduled-check | `{"id":"weekly","remove":true}` |
+| `POST operator/checks/locks` | set-check-locks | `{"locks":["modelReview.budgetTokens"]}` |
 
 Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-stop` takes an optional `handoffDeadlineAt` (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). A spend cap's `scope` is `all` or `repo:<repoId>` and its `period` is `total`, `week` or `month` (weeks and months in the usage calendar's time zone). Examples are checked against the raw payload schemas only; the panel also judges live state, so versions, hashes and ids must be real (for example a `set-task-loop` plan must exist, and a `proposal-edit` operation with provenance `model` needs an `estimateId`). `retry-task` starts again a task whose current run ccloop ended failed (in `get groups/<groupId>`, the current run has a non-succeeded `outcome` and is either terminally `blocked`, an eligible held `settled-recoverable` failure after handoff, or an eligible released `settled-failed` failure with a valid usage settlement): the run becomes `settled-failed` and a new run starts from the group branch's current head; any other task is refused with `task-not-retryable` (409). `recovery-retry` refuses such a run with `run-terminal-failed` (409) and still resumes a run blocked for any other reason. An archived group keeps every record and refuses every command but `unarchive-group` with `group-archived` (409); reads are unchanged and it is never claimed or integrated. `archive-group` is refused while the group still has work in motion: `archive-run-active`, `archive-stop-pending` (a handoff or shutdown stop still `handoff-pending` or `handoff-unresolved`; `handoff-complete` and `handoff-partial` allow archive; a pause never blocks), `archive-integration-resolving`, `archive-call-in-flight` (an estimate or requirement call).
 
@@ -264,11 +270,12 @@ Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-
 | `recovery/retry` | the `commandRevision` of the group it acts on: with `"scope":"group"` that `groupId`; with `"scope":"run"` the run's group (`get recovery` lists `.blockers[]` with `groupId` and `runId`; a clarifying group's blocked call is `.summary.requirement.blockedRun.runId` of `get groups/<groupId>/requirement`) |
 | `repositories/<repoId>/workspace-mode` | `.revision` of `get repositories/<repoId>/workspace` (`orca-repository-workspace-v1`; `0` before the first change) |
 | `repositories/<repoId>/integration` | `.revision` of `get repositories/<repoId>/integration` (`orca-repository-integration-v1`; the same revision as the workspace read: both settings share it) |
-| `repositories/<repoId>/integration-check` | the same `.revision` (the integration check's setting shares the repository settings revision) |
+| `repositories/<repoId>/checks/settings`, `…/checks/scheduled`, `…/checks/run`, `…/checks/resume` | the same `.revision` (the project's check settings share the repository settings revision; run and resume do not move it) |
 | `repositories/<repoId>/criteria-review` | the same `.revision` (the reviewer's switch shares the repository settings revision) |
 | `operator/agent-preferences` | `.revision` of `get operator/agent-preferences` (`orca-agent-preferences-v1`; `0` before the first change) |
 | `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` | `.spendRevision` of `get usage?scope=all` (one revision for all three; `0` before the first change) |
 | `operator/set-orchestration-settings` | `.revision` of `get orchestration` (`orca-orchestration-v1`; `0` before the first change) |
+| `operator/checks/settings`, `operator/checks/scheduled`, `operator/checks/locks` | the same `.revision` of `get orchestration` (the global check settings share it) |
 
 Where the ids come from:
 

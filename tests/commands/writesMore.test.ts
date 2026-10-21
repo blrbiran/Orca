@@ -25,14 +25,29 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
   [["project", "set-integration", "--delivery", "keep"], "repositories/repo-1/integration", 7, { integration: { delivery: "keep" } }],
   [["project", "set-integration", "--delivery", "github-pr", "--trigger", "group", "--target", "main", "--remote", "origin"], "repositories/repo-1/integration", 7,
     { integration: { delivery: "github-pr", trigger: "group", target: "main", remote: "origin" } }],
-  [["project", "set-integration-check", "--on"], "repositories/repo-1/integration-check", 7, { enabled: true, command: null }],
-  [["project", "set-integration-check", "--on", "--command", "npm test"], "repositories/repo-1/integration-check", 7, { enabled: true, command: "npm test" }],
-  [["project", "set-integration-check", "--off"], "repositories/repo-1/integration-check", 7, { enabled: false, command: null }],
+  // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): `project set-integration-check` is removed; `orca check` sends the
+  // check verbs (checks spec 2026-10-22 §7), the project layer at the repository revision, --global at orchestration's.
+  [["check", "set", "integration-check", "--on", "--no-command"], "repositories/repo-1/checks/settings", 7, { kind: "integration-check", set: { enabled: true, command: null }, clear: [] }],
+  [["check", "set", "integration-check", "--command", "npm test"], "repositories/repo-1/checks/settings", 7, { kind: "integration-check", set: { command: "npm test" }, clear: [] }],
+  [["check", "set", "model-review", "--off", "--budget-tokens", "500000", "--max-groups", "4", "--global"], "operator/checks/settings", 4,
+    { kind: "model-review", set: { enabled: false, budgetTokens: 500000, maxGroupsPerReview: 4 }, clear: [] }],
+  [["check", "set", "model-review", "--trigger", '{"all":[{"any":[{"kind":"queue-idle"}]}]}'], "repositories/repo-1/checks/settings", 7,
+    { kind: "model-review", set: { trigger: { all: [{ any: [{ kind: "queue-idle" }] }] } }, clear: [] }],
+  [["check", "reset", "model-review", "trigger", "budgetTokens"], "repositories/repo-1/checks/settings", 7, { kind: "model-review", set: {}, clear: ["trigger", "budgetTokens"] }],
+  [["check", "reset", "integration-check", "command", "--global"], "operator/checks/settings", 4, { kind: "integration-check", set: {}, clear: ["command"] }],
+  [["check", "schedule", "weekly", "--kind", "model-review", "--cron", "0 9 * * 1"], "repositories/repo-1/checks/scheduled", 7, { id: "weekly", kind: "model-review", cron: "0 9 * * 1", enabled: true }],
+  [["check", "schedule", "weekly", "--kind", "model-review", "--cron", "0 9 * * 1", "--off", "--global"], "operator/checks/scheduled", 4, { id: "weekly", kind: "model-review", cron: "0 9 * * 1", enabled: false }],
+  [["check", "schedule", "weekly", "--remove"], "repositories/repo-1/checks/scheduled", 7, { id: "weekly", remove: true }],
+  [["check", "lock", "--lock", "modelReview.budgetTokens", "--lock", "integrationCheck.command"], "operator/checks/locks", 4, { locks: ["integrationCheck.command", "modelReview.budgetTokens"] }],
+  [["check", "lock"], "operator/checks/locks", 4, { locks: [] }],
+  [["check", "run", "model-review"], "repositories/repo-1/checks/run", 7, { kind: "model-review" }],
+  [["check", "resume", "integration-check"], "repositories/repo-1/checks/resume", 7, { kind: "integration-check" }],
   [["project", "set-criteria-review", "--off"], "repositories/repo-1/criteria-review", 7, { enabled: false }],
   [["decision", "approve", "g-alpha", "pending-run-x-0", "--undo-how", "git revert --no-edit abc"], "groups/g-alpha/decisions/approve", 5, { pendingId: "pending-run-x-0", undoHow: "git revert --no-edit abc" }],
   [["decision", "reject", "g-alpha", "pending-run-x-0", "--because", "false premise"], "groups/g-alpha/decisions/reject", 5, { pendingId: "pending-run-x-0", because: "false premise" }],
   [["decision", "reject", "g-alpha", "pending-run-x-0"], "groups/g-alpha/decisions/reject", 5, { pendingId: "pending-run-x-0" }],
   [["decision", "ratify", "g-alpha", "run-x/agent-0"], "groups/g-alpha/decisions/ratify", 5, { decisionId: "run-x/agent-0" }],
+  [["decision", "ratify", "g-alpha", "run-x/agent-0", "--note", "not a drift: both follow the spec"], "groups/g-alpha/decisions/ratify", 5, { decisionId: "run-x/agent-0", note: "not a drift: both follow the spec" }],
   [["correction", "record", "--decision", "run-1/1", "--kind", "wrong", "--because", "false premise"], "corrections", 0,
     { repoId: "repo-1", decisionId: "run-1/1", kind: "wrong", because: "false premise" }],
   [["correction", "record", "--decision", "run-1/1", "--kind", "stale", "--because", "b", "--chose-instead", "a lease", "--again"], "corrections", 0,
@@ -43,6 +58,9 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
   [["correction", "debug", CID, "--check", "npm test"], `corrections/${CID}/debug-group`, 0, { correctionId: CID, checks: ["npm test"] }],
   [["correction", "debug", CID, "--reopen"], `corrections/${CID}/debug-group`, 0, { correctionId: CID, reopen: true }],
   [["agent", "set-preferences", "--file", prefsFile], "operator/agent-preferences", 2, { preferences: { perAgent: {} } }],
+  [["agent", "set-preferences", "--file", prefsFile, "--review", "codex-main:gpt-5"], "operator/agent-preferences", 2, { preferences: { perAgent: {}, review: { agent: "codex-main", model: "gpt-5" } } }],
+  // Checks spec §6.1: --review alone keeps the current preferences (read now) and sets only the review slot.
+  [["agent", "set-preferences", "--review", "claude-main"], "operator/agent-preferences", 2, { preferences: { perAgent: {}, review: { agent: "claude-main" } } }],
   [["agent", "apply-update", "--accept", "ch-2", "--accept", "ch-1"], "operator/apply-agent-update", 2, { previewId: "pv-1", baseTableHash: H.table, acceptedChangeIds: ["ch-1", "ch-2"] }],
   [["usage", "set-cap", "--scope", "all", "--period", "week", "--tokens", "5000000"], "operator/set-spend-cap", 8, { scope: "all", period: "week", tokens: 5000000 }],
   [["usage", "clear-cap", "--scope", "repo:repo-1", "--period", "month"], "operator/clear-spend-cap", 8, { scope: "repo:repo-1", period: "month" }],
@@ -66,7 +84,7 @@ describe("project, decision, correction, agent, usage, orchestration, recovery w
 
   it("the token-tier rows say so in their help (spec §15.1)", async () => {
     const w = await world();
-    for (const argv of [["usage", "set-cap"], ["agent", "apply-update"], ["group", "set-limit"], ["task", "settle-usage"]]) {
+    for (const argv of [["usage", "set-cap"], ["agent", "apply-update"], ["group", "set-limit"], ["task", "settle-usage"], ["check", "lock"], ["check", "set"], ["check", "schedule"]]) {
       expect((await cli([...argv, "--help"], w.dir)).stdout, JSON.stringify(argv)).toContain("person token");
     }
   });

@@ -15,7 +15,7 @@ const fieldOf = (body: unknown, key: string): unknown => (body !== null && typeo
 
 /** Spec §6.1: the counter the panel checks `expectedRevision` against, read now. A group not yet created is 0. */
 export async function readRevision(mapping: VerbMapping, context: WriteContext): Promise<number> {
-  switch (mapping.scope) {
+  switch (typeof mapping.scope === "function" ? mapping.scope(context) : mapping.scope) {
     case "group": {
       const groupId = mapping.scopeId === undefined ? context.ids.group : await mapping.scopeId(context);
       const summary = await context.read("summary") as { groups: Array<{ groupId: string; commandRevision: number }> };

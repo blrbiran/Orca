@@ -4,14 +4,14 @@ import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { CommandVerbV1 } from "../../control/webProtocol.js";
 import { EntryRejection } from "../../entry/envelope.js";
-import type { CommandDef, FlagDef, PositionalDef, RevisionScope, VerbMapping, WriteContext } from "../types.js";
+import type { CommandDef, FlagDef, PositionalDef, VerbMapping, WriteContext } from "../types.js";
 import { text } from "./format.js";
 
 export const GROUP: PositionalDef = { name: "group", summary: "a group id or a unique prefix", required: true };
 export const TASK: PositionalDef = { name: "task", summary: "a task id or a unique prefix", required: true };
 
 type Row = {
-  domain: string; action: string; summary: string; verb: CommandVerbV1; scope?: RevisionScope;
+  domain: string; action: string; summary: string; verb: CommandVerbV1; scope?: VerbMapping["scope"];
   positionals?: PositionalDef[]; flags?: FlagDef[]; access?: "open" | "token"; examples?: string[];
   route: VerbMapping["route"]; payload: VerbMapping["payload"]; scopeId?: VerbMapping["scopeId"]; requiresIfRevision?: boolean;
   conflictDocument?: VerbMapping["conflictDocument"];

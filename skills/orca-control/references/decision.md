@@ -32,14 +32,15 @@ reject a decision a landing refused (records a correction)
 - `<id>`: the pending item's id
 - `--because <because>`: a line of your own
 
-## `orca decision ratify <group> <id>`
+## `orca decision ratify <group> <id> [--note <note>]`
 
-accept a landed decision Orca flagged
+accept a landed decision Orca flagged (dismiss a review finding, with --note saying why)
 
 - What it does: sends control verb `ratify-flagged-decision`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 - `<id>`: the decision id
+- `--note <note>`: why (kept beside the ratification; at most 2048 characters)
 
 ## `orca decision validate <path>...`
 

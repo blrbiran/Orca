@@ -29,7 +29,10 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `budget-overflow` | 422 |
 | `budget-owned-by-loop-plan` | 422 |
 | `ccloop-failed` | 424 |
+| `check-schedule-limit` | 409 |
 | `check-schedule-too-frequent` | 400 |
+| `check-setting-locked` | 409 |
+| `check-time-zone-invalid` | 400 |
 | `checkpoint-id-conflict` | 409 |
 | `checkpoint-identity-conflict` | 409 |
 | `checkpoint-not-committed` | 404 |

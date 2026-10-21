@@ -2,17 +2,13 @@ import { createHash } from "node:crypto";
 import { dispatchedEnv } from "./commandClient.js";
 import { join } from "node:path";
 import { taskContractSchema } from "../scheduler/planFile.js";
-import type { AdmissionGate } from "./admissionGate.js";
 import { isGroupArchived } from "./archivedMark.js";
-import { applyWebCommand } from "./commandLedger.js";
-import { ControlError } from "./errors.js";
 import { ChildTimeout, gitChild, spawnRunChild } from "./integrationGit.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { readArchivedPlan } from "./queries.js";
 import type { ControlStore } from "./store.js";
 import { removeOwnPath, type WorkspaceRoots } from "./workspace.js";
-import { readRepositorySettingsBody, writeRepositorySettingsBody, type RepositorySettingsBody } from "./workspaceSettings.js";
-import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
+import { readRepositorySettingsBody } from "./workspaceSettings.js";
 
 /**
  * Kanban spec 2026-10-20 §7 layer 1 (human: "同意，但是不要那么频繁，并且可以关闭。有的代码跑test 太费时间"): after groups
@@ -28,46 +24,12 @@ export const INTEGRATION_CHECK_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
 export const INTEGRATION_CHECK_COMMAND_TIMEOUT_MS = 60 * 60 * 1000;
 const TAIL_CHARS = 2048;
 
-export type SetIntegrationCheckCommand = Extract<RawAuthorityCommandV1, { verb: "set-integration-check" }>;
 export interface IntegrationCheckSetting { enabled: boolean; command: string | null }
 
 export function readIntegrationCheckSetting(store: ControlStore, repoId: string): IntegrationCheckSetting {
   // Checks spec 2026-10-22 §4.1: the project layer's integration check (absent is off, no command).
   const layer = readRepositorySettingsBody(store, repoId)?.checks?.integrationCheck;
   return { enabled: layer?.enabled ?? false, command: layer?.command ?? null };
-}
-
-/** The setting under the repository settings body's revision (as the scheme and the workspace mode). */
-export function applySetIntegrationCheck(
-  deps: { store: ControlStore; admissionGate?: AdmissionGate; knownRepository(repoId: string): boolean },
-  command: SetIntegrationCheckCommand,
-): CommandSuccessV1 | CommandErrorBodyV1 {
-  const release = deps.admissionGate?.enter();
-  try {
-    return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
-      rawCommand: command,
-      expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
-      authorityChanged: false,
-      projectionGroupIds: [],
-      apply: (context) => {
-        const target = context.rawCommand.target;
-        if (target.kind !== "repository" || !deps.knownRepository(target.repoId)) throw new ControlError("control-target-not-allowed");
-        const setting = context.effectiveCommand.payload as IntegrationCheckSetting;
-        const current = readRepositorySettingsBody(deps.store, target.repoId);
-        const before = readIntegrationCheckSetting(deps.store, target.repoId);
-        if (before.enabled === setting.enabled && before.command === setting.command) throw new ControlError("no-op-command");
-        const checks = { ...current?.checks, integrationCheck: { ...current?.checks?.integrationCheck, enabled: setting.enabled, command: setting.command } };
-        const next: RepositorySettingsBody = { ...(current ?? { workspaceMode: "worktree" }), revision: context.nextCommandRevision, checks };
-        writeRepositorySettingsBody(deps.store, target.repoId, next);
-        return { status: 200, body: {
-          schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,
-          verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: null,
-          effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash,
-          result: { kind: "integration-check-set", repoId: target.repoId, integrationCheck: { enabled: setting.enabled, command: setting.command } },
-        } };
-      },
-    }).body;
-  } finally { release?.(); }
 }
 
 export interface LandedGroup { groupId: string; integratedCommit: string; target: string; checks: string[] }

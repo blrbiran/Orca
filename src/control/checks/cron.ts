@@ -49,12 +49,26 @@ export function parseCron(expr: string): CronSpec {
 export const cronTooFrequent = (spec: CronSpec): boolean => spec.minutes.length > 1;
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
-function wall(t: number, tz: string): { y: number; m: number; d: number; h: number; mi: number } {
+/** A zone the host cannot read is a named refusal, never Intl's RangeError (checks review finding 7). */
+function formatterOf(tz: string): Intl.DateTimeFormat {
   let format = formatters.get(tz);
   if (format === undefined) {
-    format = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    try {
+      format = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    } catch { throw new ControlError("check-time-zone-invalid", tz); }
     formatters.set(tz, format);
   }
+  return format;
+}
+/** The write-time check of a schedule: the cron parses, fires at most hourly, and the zone it is read in exists. */
+export function validateSchedule(cron: string, tz: string): CronSpec {
+  const spec = parseCron(cron);
+  if (cronTooFrequent(spec)) throw new ControlError("check-schedule-too-frequent", cron);
+  formatterOf(tz);
+  return spec;
+}
+function wall(t: number, tz: string): { y: number; m: number; d: number; h: number; mi: number } {
+  const format = formatterOf(tz);
   const p = Object.fromEntries(format.formatToParts(new Date(t)).map((part) => [part.type, part.value]));
   return { y: Number(p.year), m: Number(p.month), d: Number(p.day), h: Number(p.hour), mi: Number(p.minute) };
 }
@@ -91,12 +105,16 @@ function slotsOn(spec: CronSpec, day: Day, tz: string): number[] {
 
 export const CRON_SLOT_LIMIT = 10_000;
 
-/** Slots s with afterExclusive < s <= toInclusive, ascending, at most CRON_SLOT_LIMIT. */
+/**
+ * Slots s with afterExclusive < s <= toInclusive, ascending, at most CRON_SLOT_LIMIT. The walk ends at the bound's own
+ * day, never at DAY_CAP: a range longer than DAY_CAP days still yields every slot in it (checks review finding 7).
+ */
 export function cronSlotsBetween(spec: CronSpec, tz: string, afterExclusive: number, toInclusive: number): number[] {
   const out: number[] = [];
+  if (toInclusive <= afterExclusive) return out;
   const last = wall(toInclusive, tz);
   // A day starts one wall day before the bound's local date: an instant's local date can trail its UTC date.
-  for (let day = shift(wall(afterExclusive, tz), -1), n = 0; n < DAY_CAP + 2; day = shift(day, 1), n += 1) {
+  for (let day = shift(wall(afterExclusive, tz), -1); ; day = shift(day, 1)) {
     for (const s of slotsOn(spec, day, tz)) {
       if (s > afterExclusive && s <= toInclusive) { out.push(s); if (out.length === CRON_SLOT_LIMIT) return out; }
     }

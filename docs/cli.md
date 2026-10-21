@@ -39,7 +39,6 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca project show` — the project's workspace mode and integration settings (and their revision)
 - `orca project set-workspace-mode --mode <mode>` — worktree or clone for the project's runs
 - `orca project set-integration --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>]` — where the project's finished work goes by default
-- `orca project set-integration-check [--on] [--off] [--command <command>]` — re-run the checks on the target after two or more groups land (--command runs that instead)
 - `orca project set-criteria-review [--on] [--off]` — whether Orca's reviewer judges a flagged test change before a person sees it
 - `orca project register-plan <path>` — register (or re-trust) a git-tracked plan file of the project so it can be imported
 
@@ -106,7 +105,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca decision list <group>` — a group's landed, pending and unlanded decisions
 - `orca decision approve <group> <id> --undo-how <undo-how>` — approve a decision a landing refused, with an executable undo.how
 - `orca decision reject <group> <id> [--because <because>]` — reject a decision a landing refused (records a correction)
-- `orca decision ratify <group> <id>` — accept a landed decision Orca flagged
+- `orca decision ratify <group> <id> [--note <note>]` — accept a landed decision Orca flagged (dismiss a review finding, with --note saying why)
 - `orca decision validate <path>...` — validate ledger file(s) or a directory (its top-level *.jsonl only)
 - `orca decision metrics [--root <root>] [--repo <repo>] [--as-of <as-of>]` — read-only: the correction rate, the repair rate and the backlog (--json: the report as JSON)
 - `orca decision compact-reviews [--apply] [--root <root>] [--repo <repo>]` — compact the reviews store: a dry-run report, or --apply
@@ -123,7 +122,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 - `orca agent list` — the agent installations the panel can run
 - `orca agent models <installation>` — an installation's models
-- `orca agent set-preferences --file <file>` — set the operator's agent preferences from a JSON file
+- `orca agent set-preferences [--file <file>] [--review <review>]` — set the operator's agent preferences from a JSON file, or only the model review's agent (--review)
 - `orca agent apply-update --accept <accept>` — apply the detected installation changes named by --accept (person token)
 - `orca agent init` — detect the installed agents (ccloop agents detect) and write the installation table; an existing table is never overwritten (the detection goes to <table>.draft.json)
 - `orca agent show` — validate the installation table and print what each installation resolves to; exit 1 if any entry is refused
@@ -150,6 +149,17 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 - `orca command show <commandId> [--group <group>] [--operator] [--spend] [--corrections] [--orchestration]` — a command's retained result, looked up under its scope
 - `orca command retry --request <request>` — for an uncertain outcome: look the request up first; resend its exact bytes only on a confirmed miss
+
+### `orca check`
+
+- `orca check show [--global]` — the effective check settings, where each value comes from, locks, scheduled checks and each check's state
+- `orca check findings <review>` — a model review's record: range, groups, valid findings, dropped findings with reasons
+- `orca check set <kind> [--global] [--on] [--off] [--trigger <trigger>] [--command <command>] [--no-command] [--budget-tokens <budget-tokens>] [--max-groups <max-groups>]` — set a check kind's fields in this project (or --global); --command and --budget-tokens need a person token
+- `orca check reset <kind> <field>... [--global]` — remove a kind's fields from this project (or --global) so the next layer applies
+- `orca check schedule <id> [--global] [--kind <kind>] [--cron <cron>] [--off] [--remove]` — add, replace or remove a scheduled check in this project (or --global); adding or enabling one needs a person token
+- `orca check lock [--lock <lock>]` — set the global lock list (needs a person token); no --lock clears every lock (person token)
+- `orca check run <kind>` — run a check kind now in this project (ignores its trigger; still waits for a run in flight and skips an empty range)
+- `orca check resume <kind>` — re-arm a check kind paused after three errored runs in this project
 
 ### `orca plan`
 

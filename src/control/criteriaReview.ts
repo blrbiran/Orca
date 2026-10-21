@@ -100,7 +100,7 @@ export function criteriaReviewVerdict(store: ControlStore, debugGroupId: string)
 
 export type SetCriteriaReviewCommand = Extract<RawAuthorityCommandV1, { verb: "set-criteria-review" }>;
 
-/** §5's per-repository switch, under the repository settings body's revision (as set-integration-check). */
+/** §5's per-repository switch, under the repository settings body's revision (as set-workspace-mode). */
 export function applySetCriteriaReview(
   deps: { store: ControlStore; admissionGate?: AdmissionGate; knownRepository(repoId: string): boolean },
   command: SetCriteriaReviewCommand,

@@ -7,9 +7,9 @@ import { isGroupArchived } from "./archivedMark.js";
 import { orchestrationRevision } from "./orchestration.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { ControlStore } from "./store.js";
+import { storedCommandSuccessSchema } from "./checks/retired.js";
 import {
   commandErrorBodySchema,
-  commandSuccessSchema,
   effectiveAuthorityCommandSchema,
   rawAuthorityCommandSchema,
   type CommandLookupV1,
@@ -120,7 +120,8 @@ function invalidResult(): never {
 function validatedOutcome(statusValue: unknown, body: unknown): StoredCommandOutcome<CommandBody> {
   const status = Number(statusValue);
   if (!Number.isSafeInteger(status) || !((status >= 200 && status < 300) || (status >= 400 && status < 500))) invalidResult();
-  const parsed = (status >= 200 && status < 300 ? commandSuccessSchema : commandErrorBodySchema).safeParse(body);
+  // A stored body may name a verb removed since it was written (checks/retired.ts); a new command never does.
+  const parsed = (status >= 200 && status < 300 ? storedCommandSuccessSchema : commandErrorBodySchema).safeParse(body);
   if (!parsed.success) invalidResult();
   if ("error" in parsed.data && parsed.data.error.retryable) invalidResult();
   return { status, body: parsed.data } as StoredCommandOutcome<CommandBody>;

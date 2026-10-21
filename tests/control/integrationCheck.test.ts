@@ -39,7 +39,8 @@ async function world() {
     h.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, status: "done", integration }), groupId);
   };
   const revision = (): number => readRepositorySettingsBody(h.store, "repo")?.revision ?? 0;
-  const setCheck = (enabled: boolean, command: string | null) => service.setIntegrationCheck(h.rawCommand(`check-${++sequence}`, revision(), "set-integration-check", { kind: "repository", repoId: "repo" }, { enabled, command }) as never);
+  // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): the integration-check setter is removed; set-check-settings writes the same fields (checks spec §4.4).
+  const setCheck = (enabled: boolean, command: string | null) => service.setCheckSettings(h.rawCommand(`check-${++sequence}`, revision(), "set-check-settings", { kind: "repository", repoId: "repo" }, { kind: "integration-check", set: { enabled, command }, clear: [] }) as never);
   /** One pass, then wait for the check it started. */
   // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): the check runs on the check model (checks spec 2026-10-22 §5):
   // checksPass, a watermark per (project, kind, target), and real commits per landed group (a range is W..H).
@@ -57,7 +58,8 @@ describe("the integration check (kanban spec §7 layer 1)", () => {
       // mutation: the default setting enabled -> evaluated (a state row), red
       expect(await w.pass()).toEqual({ started: [] });
       expect(w.state()).toBeNull();
-      expect(w.setCheck(true, "test -f base.txt")).toMatchObject({ result: { kind: "integration-check-set", integrationCheck: { enabled: true, command: "test -f base.txt" } } });
+      // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): set-check-settings answers the layer it wrote (spec §4.4).
+      expect(w.setCheck(true, "test -f base.txt")).toMatchObject({ result: { kind: "check-settings-set", repoId: "repo", checks: { integrationCheck: { enabled: true, command: "test -f base.txt" } } } });
       expect(w.setCheck(true, "test -f base.txt")).toMatchObject({ error: { code: "no-op-command" } });
       const scheme = w.service.setIntegrationScheme(h.rawCommand(`scheme-${++sequence}`, readRepositorySettingsBody(h.store, "repo")!.revision, "set-integration-scheme", { kind: "repository", repoId: "repo" },
         { integration: { delivery: "local", trigger: "task", method: "merge", target: "main" } }) as never);

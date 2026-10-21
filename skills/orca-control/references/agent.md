@@ -19,13 +19,14 @@ an installation's models
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<installation>`: an installation id
 
-## `orca agent set-preferences --file <file>`
+## `orca agent set-preferences [--file <file>] [--review <review>]`
 
-set the operator's agent preferences from a JSON file
+set the operator's agent preferences from a JSON file, or only the model review's agent (--review)
 
 - What it does: sends control verb `set-agent-preferences`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
-- `--file <file>` (required): the preferences JSON (orca-agent-preferences-v1 .preferences)
+- `--file <file>`: the preferences JSON (orca-agent-preferences-v1 .preferences)
+- `--review <review>`: the model review's agent, <installation>[:<model>] (on top of --file, else of the current preferences)
 
 ## `orca agent apply-update --accept <accept>`
 

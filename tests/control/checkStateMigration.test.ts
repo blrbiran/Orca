@@ -100,8 +100,9 @@ describe("schema 16", () => {
       // set-orchestration-settings changes the cap; the global check settings stay as stored.
       expect(service.setOrchestrationSettings(h.rawCommand("cap", orchestrationRevision(h.store), "set-orchestration-settings", { kind: "orchestration" }, { maxRunningGroups: 5 }) as never)).toMatchObject({ result: { kind: "orchestration-settings-set" } });
       expect(readOrchestrationSettings(h.store)).toEqual({ maxRunningGroups: 5, checks: globalChecks });
-      // set-integration-check (until it is replaced) writes enabled/command and keeps the project's trigger and other kinds.
-      expect(service.setIntegrationCheck(h.rawCommand("ic", 1, "set-integration-check", { kind: "repository", repoId: "repo" }, { enabled: true, command: "npm test" }) as never)).toMatchObject({ result: { kind: "integration-check-set" } });
+      // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): set-check-settings (which replaced the removed setter, spec §4.4)
+      // writes enabled/command and keeps the project's trigger and other kinds.
+      expect(service.setCheckSettings(h.rawCommand("ic", 1, "set-check-settings", { kind: "repository", repoId: "repo" }, { kind: "integration-check", set: { enabled: true, command: "npm test" }, clear: [] }) as never)).toMatchObject({ result: { kind: "check-settings-set" } });
       expect(readRepositorySettingsBody(h.store, "repo")?.checks).toEqual({ integrationCheck: { trigger, enabled: true, command: "npm test" }, modelReview: { maxGroupsPerReview: 4 } });
     } finally { await h.dispose(); }
   });

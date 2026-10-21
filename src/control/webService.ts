@@ -58,7 +58,8 @@ import { landedGroups } from "./integrationCheck.js";
 import { groupStopState } from "./stopIntent.js";
 import { readGroupOrchestration } from "./orchestration.js";
 import type { PartialSelection } from "./agentSelection.js";
-import { applySetIntegrationCheck, integrationCheckFacts, runIntegrationCheck, type SetIntegrationCheckCommand } from "./integrationCheck.js";
+import { integrationCheckFacts, runIntegrationCheck } from "./integrationCheck.js";
+import { applyResumeCheck, applyRunCheckNow, applySetCheckLocks, applySetCheckSettings, applySetScheduledCheck, type CheckCommand } from "./checks/commands.js";
 import { migrateIntegrationMeta } from "./checks/migrate.js";
 import { applyCheckEnded, prepareRange, projectTargets, rangeFacts, recordCheckEnded, recordCheckStarted, type CheckEnd } from "./checks/pass.js";
 import type { RangeGroup } from "./checks/range.js";
@@ -1034,10 +1035,15 @@ export class WebControlService {
   setCriteriaReview(command: SetCriteriaReviewCommand): WebCommandResult {
     return this.mutate(() => applySetCriteriaReview({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: (repoId) => this.deps.knownRepository?.(repoId) ?? false }, command)) as WebCommandResult;
   }
-  /** Kanban spec §7 layer 1: an owner turns the repository's integration check on or off and names its command. */
-  setIntegrationCheck(command: SetIntegrationCheckCommand): WebCommandResult {
-    return this.mutate(() => applySetIntegrationCheck({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: (repoId) => this.deps.knownRepository?.(repoId) ?? false }, command)) as WebCommandResult;
+  /** Checks spec 2026-10-22 §4.4: a person's check settings, schedules, locks, run-now and resume (checks/commands.ts). */
+  private checkDeps() {
+    return { store: this.store, admissionGate: this.deps.admissionGate, knownRepository: (repoId: string) => this.deps.knownRepository?.(repoId) ?? false };
   }
+  setCheckSettings(command: CheckCommand<"set-check-settings">): WebCommandResult { return this.mutate(() => applySetCheckSettings(this.checkDeps(), command)) as WebCommandResult; }
+  setScheduledCheck(command: CheckCommand<"set-scheduled-check">): WebCommandResult { return this.mutate(() => applySetScheduledCheck(this.checkDeps(), command)) as WebCommandResult; }
+  setCheckLocks(command: CheckCommand<"set-check-locks">): WebCommandResult { return this.mutate(() => applySetCheckLocks(this.checkDeps(), command)) as WebCommandResult; }
+  runCheckNow(command: CheckCommand<"run-check-now">): WebCommandResult { return this.mutate(() => applyRunCheckNow(this.checkDeps(), command)) as WebCommandResult; }
+  resumeCheck(command: CheckCommand<"resume-check">): WebCommandResult { return this.mutate(() => applyResumeCheck(this.checkDeps(), command)) as WebCommandResult; }
   private readonly checkJobs = new Map<string, Promise<void>>();
   /**
    * Checks spec 2026-10-22 §2–§5 (kanban spec §7 layer 1 on the check model): for each repository, convert the pre-16

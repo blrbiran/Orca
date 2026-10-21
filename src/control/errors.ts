@@ -70,6 +70,11 @@ export const durableCommandErrorStatuses = {
   // which. A schedule whose cron fires more often than once an hour (spends review budget unattended).
   "control-argument-invalid": 400,
   "check-schedule-too-frequent": 400,
+  // Checks spec 2026-10-22 §2.4: a 9th scheduled check in one layer (project or global); §4.2: a project value looser
+  // than a global lock allows (the detail names the lock); a schedule evaluated in a time zone the host cannot read.
+  "check-schedule-limit": 409,
+  "check-setting-locked": 409,
+  "check-time-zone-invalid": 400,
 
   // Optimistic concurrency, immutable identity, and ownership conflicts.
   // Agent selection spec §6.4 step 3 (W6-12): the selections a confirmation resolves are no longer the ones the

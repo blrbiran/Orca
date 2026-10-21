@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cronSlotsBetween, cronTooFrequent, latestSlot, nextSlots, parseCron } from "../../src/control/checks/cron.js";
+import { cronSlotsBetween, cronTooFrequent, latestSlot, nextSlots, parseCron, validateSchedule } from "../../src/control/checks/cron.js";
 import { ControlError } from "../../src/control/errors.js";
 
 /**
@@ -58,6 +58,24 @@ describe("cron", () => {
 
   it("bounds a slot listing at 10,000 slots", () => {
     expect(cronSlotsBetween(parseCron("0 * * * *"), "UTC", at("2026-01-01T00:00:00Z"), at("2028-01-01T00:00:00Z"))).toHaveLength(10_000);
+  });
+
+  // Checks review finding 7: a listing over a range longer than the day cap (~8 years) used to stop at the cap.
+  it("lists every slot of a range longer than 3000 days (a yearly cron over 2010-2026: 16 slots, the last one in 2025)", () => {
+    const slots = cronSlotsBetween(parseCron("0 9 1 1 *"), "UTC", at("2010-01-01T00:00:00Z"), at("2026-01-01T00:00:00Z"));
+    expect(slots).toHaveLength(16);
+    expect(slots.at(-1)).toBe(at("2025-01-01T09:00:00Z"));
+  });
+
+  // Checks review finding 7: a zone the host cannot read is a named refusal, never Intl's RangeError.
+  it("refuses a time zone the host cannot read as check-time-zone-invalid in every slot function", () => {
+    const spec = parseCron("0 9 * * 1");
+    for (const call of [() => cronSlotsBetween(spec, "Mars/Olympus", 0, 1), () => latestSlot(spec, "Mars/Olympus", 0, 1), () => nextSlots(spec, "Mars/Olympus", 0, 1), () => validateSchedule("0 9 * * 1", "Mars/Olympus")]) {
+      let caught: unknown;
+      try { call(); } catch (error) { caught = error; }
+      expect(caught instanceof ControlError ? caught.code : String(caught)).toBe("check-time-zone-invalid");
+    }
+    expect(validateSchedule("0 9 * * 1", "Europe/Berlin").minutes).toEqual([0]);
   });
 
   it("calls a cron with more than one minute value too frequent; one minute value fires at most hourly", () => {

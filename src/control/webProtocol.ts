@@ -7,6 +7,7 @@ import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
 import { CLARITIES, DRAFT_STATES, IDEA_MAX_BYTES, REQUIREMENT_WAITING, ROUND_STATES, SCOPES, classPairSchema, classificationSchema, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema } from "./requirementSchemas.js";
 import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema, loopSkillsSchema } from "./loopPlans.js";
 import { isTimeZone } from "./usageCalendar.js";
+import { CHECK_KINDS, LOCKABLE_PATHS, globalChecksLayerSchema, integrationCheckLayerSchema, modelReviewLayerSchema, scheduledCheckSchema } from "./checks/settingsSchema.js";
 import { WORK_ITEM_CATEGORIES } from "./workItemCategory.js";
 import { CORRECTION_KINDS } from "../corrections/schema.js";
 import { DECISION_IMPORTANCES } from "../ledger/types.js";
@@ -637,7 +638,6 @@ export const commandVerbSchema = z.enum([
   "clear-spend-cap",
   "set-usage-calendar",
   "set-integration-scheme",
-  "set-integration-check",
   "set-criteria-review",
   "set-group-integration",
   "retry-integration",
@@ -655,6 +655,13 @@ export const commandVerbSchema = z.enum([
   "correction-record",
   "correction-close",
   "correction-withdraw",
+  // Checks spec 2026-10-22 §4.4: the check settings, schedules and locks (they replace the integration-check setter, removed
+  // with no alias; its stored results stay readable, checks/retired.ts), and a person's run-now and resume.
+  "set-check-settings",
+  "set-scheduled-check",
+  "set-check-locks",
+  "run-check-now",
+  "resume-check",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -667,6 +674,8 @@ const spendCommandTargetSchema = z.object({ kind: z.literal("spend") }).strict()
 const correctionsCommandTargetSchema = z.object({ kind: z.literal("corrections") }).strict();
 // Kanban spec 2026-10-20 §3.2: the orchestration settings (running-group cap) are one scope with one revision.
 const orchestrationCommandTargetSchema = z.object({ kind: z.literal("orchestration") }).strict();
+// Checks spec 2026-10-22 §4.1: a check setting lives in the project layer (repository) or the global one (@orchestration).
+const checkSettingsTargetSchema = z.discriminatedUnion("kind", [repositoryCommandTargetSchema, orchestrationCommandTargetSchema]);
 
 export const commandTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group"), groupId: idSchema }).strict(),
@@ -828,7 +837,24 @@ export const setIntegrationSchemePayloadSchema = z.object({ integration: integra
 // Kanban spec 2026-10-20 §7 layer 1: the repository's integration check -- on/off and an optional command run instead
 // of the landed groups' own required checks (some suites are slow, the human said).
 export const integrationCheckSettingSchema = z.object({ enabled: z.boolean(), command: z.string().min(1).max(4096).nullable() }).strict();
-export const setIntegrationCheckPayloadSchema = integrationCheckSettingSchema;
+// Checks spec 2026-10-22 §4.1, §4.4: one kind's fields of a settings layer (repository or @orchestration). `set` writes
+// fields (a `command: null` overrides with "the groups' own checks"); `clear` removes fields so the next layer applies.
+const clearOf = <T extends readonly [string, ...string[]]>(fields: T) => z.array(z.enum(fields)).max(fields.length).superRefine((values, ctx) => requireUnique(values, String, ctx, []));
+export const setCheckSettingsPayloadSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("integration-check"), set: integrationCheckLayerSchema, clear: clearOf(["enabled", "trigger", "command"] as const) }).strict(),
+  z.object({ kind: z.literal("model-review"), set: modelReviewLayerSchema, clear: clearOf(["enabled", "trigger", "budgetTokens", "maxGroupsPerReview"] as const) }).strict(),
+]).superRefine((value, ctx) => {
+  for (const field of value.clear) if (Object.hasOwn(value.set, field)) issue(ctx, ["clear"], "check-field-set-and-cleared");
+});
+// §2.4: add or replace one scheduled check by id (params reserved: always {}), or remove it.
+export const setScheduledCheckPayloadSchema = z.union([
+  scheduledCheckSchema.omit({ params: true }).strict(),
+  z.object({ id: scheduledCheckSchema.shape.id, remove: z.literal(true) }).strict(),
+]);
+// §4.2: the whole lock list of the global layer.
+export const setCheckLocksPayloadSchema = z.object({ locks: z.array(z.enum(LOCKABLE_PATHS)).max(LOCKABLE_PATHS.length).superRefine((values, ctx) => requireUnique(values, String, ctx, [])) }).strict();
+// §2.4, §5.4: a person's run of one kind now (trigger ignored), and re-arming a kind paused after three errored ends.
+export const checkKindPayloadSchema = z.object({ kind: z.enum(CHECK_KINDS) }).strict();
 // Protect-acceptance-criteria spec §5: the automatic reviewer of flagged test changes, per repository (absent: the global default).
 export const setCriteriaReviewPayloadSchema = z.object({ enabled: z.boolean() }).strict();
 // Integration spec §3.1: the group's copy, the same body shape as the repository default's.
@@ -1002,7 +1028,11 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
-  z.object({ ...rawCommandFields, verb: z.literal("set-integration-check"), target: repositoryCommandTargetSchema, payload: setIntegrationCheckPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-check-settings"), target: checkSettingsTargetSchema, payload: setCheckSettingsPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-scheduled-check"), target: checkSettingsTargetSchema, payload: setScheduledCheckPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-check-locks"), target: checkSettingsTargetSchema, payload: setCheckLocksPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("run-check-now"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("resume-check"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-criteria-review"), target: repositoryCommandTargetSchema, payload: setCriteriaReviewPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("retry-integration"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -1074,7 +1104,11 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
-  z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-check"), target: repositoryCommandTargetSchema, payload: setIntegrationCheckPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-check-settings"), target: checkSettingsTargetSchema, payload: setCheckSettingsPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-scheduled-check"), target: checkSettingsTargetSchema, payload: setScheduledCheckPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-check-locks"), target: checkSettingsTargetSchema, payload: setCheckLocksPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("run-check-now"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("resume-check"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-criteria-review"), target: repositoryCommandTargetSchema, payload: setCriteriaReviewPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("retry-integration"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -1774,7 +1808,14 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("limit-set"), limit: budgetAmountSchema }).strict(),
   z.object({ kind: z.literal("workspace-mode-set"), repoId: idSchema, workspaceMode: workspaceModeSchema }).strict(),
   z.object({ kind: z.literal("integration-scheme-set"), repoId: idSchema, integration: integrationSchemeSchema }).strict(),
+  // Kept for stored results of the retired integration-check setter (checks/retired.ts); nothing writes it now.
   z.object({ kind: z.literal("integration-check-set"), repoId: idSchema, integrationCheck: integrationCheckSettingSchema }).strict(),
+  // Checks spec 2026-10-22 §4: the layer written (repoId null = the global layer), and the run-now / resume answers.
+  z.object({ kind: z.literal("check-settings-set"), repoId: idSchema.nullable(), checks: globalChecksLayerSchema }).strict(),
+  z.object({ kind: z.literal("scheduled-check-set"), repoId: idSchema.nullable(), scheduled: z.array(scheduledCheckSchema) }).strict(),
+  z.object({ kind: z.literal("check-locks-set"), locks: z.array(z.enum(LOCKABLE_PATHS)) }).strict(),
+  z.object({ kind: z.literal("check-run-requested"), repoId: idSchema, checkKind: z.enum(CHECK_KINDS), targets: z.array(nonemptyString) }).strict(),
+  z.object({ kind: z.literal("check-resumed"), repoId: idSchema, checkKind: z.enum(CHECK_KINDS), targets: z.array(nonemptyString) }).strict(),
   z.object({ kind: z.literal("criteria-review-set"), repoId: idSchema, enabled: z.boolean() }).strict(),
   z.object({ kind: z.literal("group-integration-set"), groupId: idSchema, integration: integrationSchemeSchema }).strict(),
   z.object({ kind: z.literal("integration-retried"), groupId: idSchema }).strict(),
@@ -1871,7 +1912,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
-export const commandSuccessSchema = z
+/** The success body's fields; checks/retired.ts reads stored bodies of a retired verb with the same fields. */
+export const commandSuccessObjectSchema = z
   .object({
     schema: z.literal("orca-command-success-v1"),
     commandId: idSchema,
@@ -1884,17 +1926,20 @@ export const commandSuccessSchema = z
     authorityCommandHash: hashSchema,
     result: commandResultSchema,
   })
-  .strict()
+  .strict();
+export const commandSuccessSchema = commandSuccessObjectSchema
   .superRefine((value, ctx) => {
     const isShutdown = value.verb === "shutdown";
     // Execution driver spec §3.2: a repository-scoped command has its setting's revision and no group
     // projection.
-    const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-integration-scheme" || value.verb === "set-integration-check" || value.verb === "set-criteria-review" || value.verb === "set-agent-preferences" || value.verb === "apply-agent-update"
+    const projectionless = isShutdown || value.verb === "set-workspace-mode" || value.verb === "set-integration-scheme" || value.verb === "set-criteria-review" || value.verb === "set-agent-preferences" || value.verb === "apply-agent-update"
       || value.verb === "set-spend-cap" || value.verb === "clear-spend-cap" || value.verb === "set-usage-calendar"
       // Debug task plan Task 11: the `@corrections` scope has revision 0 and no group projection.
       || value.verb === "correction-record" || value.verb === "correction-close" || value.verb === "correction-withdraw"
       // Kanban spec 2026-10-20 §3.2: the `@orchestration` scope has its own revision and no group projection.
-      || value.verb === "set-orchestration-settings";
+      || value.verb === "set-orchestration-settings"
+      // Checks spec 2026-10-22 §4.4: repository or @orchestration settings scopes, no group projection.
+      || value.verb === "set-check-settings" || value.verb === "set-scheduled-check" || value.verb === "set-check-locks" || value.verb === "run-check-now" || value.verb === "resume-check";
     if (isShutdown ? value.commandRevision !== null : value.commandRevision === null) {
       issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");
     }

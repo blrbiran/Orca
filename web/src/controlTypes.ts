@@ -570,9 +570,10 @@ export type CommandSuccessV1 = {
   actorId: string;
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-clarify-more" | "requirement-classify"
-    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-integration-check" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
+    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
-    | "correction-record" | "correction-close" | "correction-withdraw";
+    | "correction-record" | "correction-close" | "correction-withdraw"
+    | "set-check-settings" | "set-scheduled-check" | "set-check-locks" | "run-check-now" | "resume-check";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -595,6 +596,11 @@ export type CommandSuccessV1 = {
     | { kind: "workspace-mode-set"; repoId: string; workspaceMode: "worktree" | "clone" }
     | { kind: "integration-scheme-set"; repoId: string; integration: IntegrationSchemeV1 }
     | { kind: "integration-check-set"; repoId: string; integrationCheck: IntegrationCheckSettingV1 }
+    | { kind: "check-settings-set"; repoId: string | null; checks: ChecksLayerV1 }
+    | { kind: "scheduled-check-set"; repoId: string | null; scheduled: ScheduledCheckV1[] }
+    | { kind: "check-locks-set"; locks: CheckLockV1[] }
+    | { kind: "check-run-requested"; repoId: string; checkKind: CheckKindV1; targets: string[] }
+    | { kind: "check-resumed"; repoId: string; checkKind: CheckKindV1; targets: string[] }
     | { kind: "criteria-review-set"; repoId: string; enabled: boolean }
     | { kind: "group-integration-set"; groupId: string; integration: IntegrationSchemeV1 }
     | { kind: "integration-retried"; groupId: string }
@@ -647,6 +653,20 @@ export type GroupIntegrationViewV1 = {
 export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number; suggestedTarget: string | null; integrationCheck?: IntegrationCheckV1 };
 /** Kanban spec 2026-10-20 §7 layer 1: the repository's integration check, and how its newest run ended. */
 export type IntegrationCheckSettingV1 = { enabled: boolean; command: string | null };
+// Checks spec 2026-10-22 §2.2, §2.4, §4.1: a trigger, a scheduled check and one settings layer's `checks` field.
+export type CheckKindV1 = "integration-check" | "model-review";
+export type CheckConditionV1 =
+  | { kind: "landed-groups"; min: number } | { kind: "conflict-reconciled" } | { kind: "overlapping-files"; minGroups: number }
+  | { kind: "queue-idle" } | { kind: "since-last"; ms: number } | { kind: "schedule"; cron: string };
+export type CheckTriggerV1 = { all: Array<{ any: CheckConditionV1[] }> };
+export type ScheduledCheckV1 = { id: string; kind: CheckKindV1; cron: string; enabled: boolean; params: Record<string, never> };
+export type CheckLockV1 = "integrationCheck.command" | "modelReview.budgetTokens";
+export type ChecksLayerV1 = {
+  integrationCheck?: { enabled?: boolean; trigger?: CheckTriggerV1; command?: string | null };
+  modelReview?: { enabled?: boolean; trigger?: CheckTriggerV1; budgetTokens?: number; maxGroupsPerReview?: number };
+  scheduled?: ScheduledCheckV1[];
+  locks?: CheckLockV1[];
+};
 export type IntegrationCheckV1 = IntegrationCheckSettingV1 & {
   last: { state: "running" | "passed" | "failed" | "errored"; at: number; commit: string | null; groups: string[]; detail: string | null; debugGroupId: string | null } | null;
 };

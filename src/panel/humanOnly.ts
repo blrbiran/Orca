@@ -43,8 +43,6 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "set-usage-calendar": "human-only",
   // Integration spec §3.1, §8: only an owner chooses where a group's work is carried (a push, a PR).
   "set-integration-scheme": "human-only",
-  // Kanban spec §7 layer 1: the check runs a command an owner names, in Orca's own environment.
-  "set-integration-check": "human-only",
   // Protect-acceptance-criteria spec §5: switching the reviewer off leaves every flag for a person.
   "set-criteria-review": "human-only",
   "set-group-integration": "human-only",
@@ -70,6 +68,13 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "correction-record": "human-only",
   "correction-close": "human-only",
   "correction-withdraw": "human-only",
+  // Checks spec 2026-10-22 §4.4: every check setting, schedule, lock, run-now and resume is a person's act (a custom
+  // command runs in Orca's environment; a schedule or a run spends review budget unattended; a lock is an admin act).
+  "set-check-settings": "human-only",
+  "set-scheduled-check": "human-only",
+  "set-check-locks": "human-only",
+  "run-check-now": "human-only",
+  "resume-check": "human-only",
 };
 export const HUMAN_ONLY_VERBS: readonly CommandVerbV1[] =
   (Object.keys(VERB_ACCESS) as CommandVerbV1[]).filter((verb) => VERB_ACCESS[verb] === "human-only");
@@ -112,8 +117,19 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   // Moved to open by the human: Orca already dispatches conflict resolution itself (kanban S5).
   "retry-integration": "open",
   "resolve-integration-conflict": "open",
-  // The groups' own checks, or off: open. A custom command runs in Orca's own environment, outside ccloop's sandbox.
-  "set-integration-check": (p) => (p.enabled === false || p.command === null ? "open" : "token"),
+  // Checks plan "Access mapping": a custom command (runs in Orca's own environment, outside ccloop's sandbox) or a
+  // budget (spend) is token; switching, triggers and group counts are open. Adding or enabling a schedule spends review
+  // budget unattended: token; disabling or removing one is open. Locks are an admin act: token. Run-now and resume:
+  // open (as retry-integration).
+  "set-check-settings": (p) => {
+    const set = typeof p.set === "object" && p.set !== null ? p.set as Payload : null;
+    if (set === null) return "token";
+    return typeof set.command === "string" || Object.hasOwn(set, "budgetTokens") ? "token" : "open";
+  },
+  "set-scheduled-check": (p) => (p.remove !== true && p.enabled !== false ? "token" : "open"),
+  "set-check-locks": "token",
+  "run-check-now": "open",
+  "resume-check": "open",
   // R3a: confirming under the configured integration (any delivery) carries only its hash; a mismatch is refused anyway.
   "confirm.integrationHash": "open",
   "set-integration-scheme": deliveryTier,

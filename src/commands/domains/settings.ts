@@ -74,10 +74,6 @@ export const SETTINGS_ROWS: CommandDef[] = [
     route: async (c) => `repositories/${await repo(c)}/workspace-mode`, payload: (c) => ({ workspaceMode: str(c, "mode") }) }),
   verb({ domain: "project", action: "set-integration", summary: "where the project's finished work goes by default", verb: "set-integration-scheme", scope: "repository", flags: SCHEME_FLAGS,
     route: async (c) => `repositories/${await repo(c)}/integration`, payload: (c) => ({ integration: schemeFromFlags(c) }) }),
-  verb({ domain: "project", action: "set-integration-check", summary: "re-run the checks on the target after two or more groups land (--command runs that instead)",
-    verb: "set-integration-check", scope: "repository",
-    flags: [...ON_OFF, { name: "command", type: "string", humanOnly: true, summary: "a command to run instead of the groups' own checks" }],
-    route: async (c) => `repositories/${await repo(c)}/integration-check`, payload: (c) => ({ enabled: onOff(c), command: str(c, "command") ?? null }) }),
   verb({ domain: "project", action: "set-criteria-review", summary: "whether Orca's reviewer judges a flagged test change before a person sees it", verb: "set-criteria-review", scope: "repository",
     flags: ON_OFF, route: async (c) => `repositories/${await repo(c)}/criteria-review`, payload: (c) => ({ enabled: onOff(c) }) }),
   {
@@ -94,9 +90,10 @@ export const SETTINGS_ROWS: CommandDef[] = [
   verb({ domain: "decision", action: "reject", summary: "reject a decision a landing refused (records a correction)", verb: "reject-pending-decision", positionals: [GROUP, ID],
     flags: [{ name: "because", type: "string", summary: "a line of your own" }],
     route: (c) => `groups/${group(c)}/decisions/reject`, payload: (c) => ({ pendingId: c.ids.id, ...(str(c, "because") === undefined ? {} : { because: str(c, "because") }) }) }),
-  verb({ domain: "decision", action: "ratify", summary: "accept a landed decision Orca flagged", verb: "ratify-flagged-decision",
+  verb({ domain: "decision", action: "ratify", summary: "accept a landed decision Orca flagged (dismiss a review finding, with --note saying why)", verb: "ratify-flagged-decision",
     positionals: [GROUP, { name: "id", summary: "the decision id", required: true }],
-    route: (c) => `groups/${group(c)}/decisions/ratify`, payload: (c) => ({ decisionId: c.ids.id }) }),
+    flags: [{ name: "note", type: "string", summary: "why (kept beside the ratification; at most 2048 characters)" }],
+    route: (c) => `groups/${group(c)}/decisions/ratify`, payload: (c) => ({ decisionId: c.ids.id, ...(str(c, "note") === undefined ? {} : { note: str(c, "note") }) }) }),
 
   // --- correction (corrections scope: revision 0; debug opens a group)
   verb({ domain: "correction", action: "record", summary: "record a correction of a decision in the project", verb: "correction-record", scope: "corrections",
@@ -139,9 +136,21 @@ export const SETTINGS_ROWS: CommandDef[] = [
     }) }),
 
   // --- agent (operator scope)
-  verb({ domain: "agent", action: "set-preferences", summary: "set the operator's agent preferences from a JSON file", verb: "set-agent-preferences", scope: "operator",
-    flags: [{ name: "file", type: "string", required: true, summary: "the preferences JSON (orca-agent-preferences-v1 .preferences)" }],
-    route: () => "operator/agent-preferences", payload: (c) => ({ preferences: file(c) }) }),
+  verb({ domain: "agent", action: "set-preferences", summary: "set the operator's agent preferences from a JSON file, or only the model review's agent (--review)", verb: "set-agent-preferences", scope: "operator",
+    flags: [
+      { name: "file", type: "string", summary: "the preferences JSON (orca-agent-preferences-v1 .preferences)" },
+      { name: "review", type: "string", summary: "the model review's agent, <installation>[:<model>] (on top of --file, else of the current preferences)" },
+    ],
+    route: () => "operator/agent-preferences",
+    payload: async (c) => {
+      const review = str(c, "review");
+      if (str(c, "file") === undefined && review === undefined) throw invalid("give --file <preferences.json>, --review <installation>[:<model>], or both");
+      const base = str(c, "file") !== undefined ? file(c) : (await c.read("operator/agent-preferences") as { preferences: unknown }).preferences;
+      if (review === undefined) return { preferences: base };
+      const at = review.indexOf(":");
+      const slot = at < 0 ? { agent: review } : { agent: review.slice(0, at), model: review.slice(at + 1) };
+      return { preferences: { ...(base as object), review: slot } };
+    } }),
   verb({ domain: "agent", action: "apply-update", summary: "apply the detected installation changes named by --accept", verb: "apply-agent-update", scope: "operator", access: "token",
     flags: [{ name: "accept", type: "string", repeatable: true, required: true, summary: "a change id from the update preview (repeatable)" }],
     route: () => "operator/apply-agent-update",
