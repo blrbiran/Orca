@@ -23,7 +23,7 @@ import { correctionDebugOpenPayloadSchema, orchestrationViewSchema, savedResultE
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import { readIntegrationDefault } from "../control/integrationScheme.js";
-import { readIntegrationCheckSetting, readIntegrationCheckState } from "../control/integrationCheck.js";
+import { checksRead } from "../control/checks/settings.js";
 import { AgentCeilingRefusal } from "../control/spendCaps.js";
 import type { WebControlService } from "../control/webService.js";
 import type { ExecutionPort } from "../control/executionPort.js";
@@ -290,10 +290,20 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     try {
       const suggestedTarget = await deps.service.suggestedTarget(repoId);
       const { scheme, revision } = readIntegrationDefault(deps.store, repoId);
-      const integrationCheck = { ...readIntegrationCheckSetting(deps.store, repoId), last: readIntegrationCheckState(deps.store, repoId).last };
-      res.json(repositoryIntegrationSchema.parse({ schema: "orca-repository-integration-v1", repoId, integration: scheme, revision, suggestedTarget, integrationCheck }));
+      res.json(repositoryIntegrationSchema.parse({ schema: "orca-repository-integration-v1", repoId, integration: scheme, revision, suggestedTarget }));
     } catch (error) { sendMappedControlError(res, error); }
   }));
+
+  // Checks spec 2026-10-22 §4.3: the effective check settings, each field with its source layer and lock; `?repoId=`
+  // for a project, none for the global layer alone. A read (open to an agent, §7).
+  app.get("/api/control/checks", (req, res) => {
+    const repoId = typeof req.query.repoId === "string" ? req.query.repoId : null;
+    if (repoId !== null && (!idSchema.safeParse(repoId).success || !deps.service?.repositoryKnown(repoId))) {
+      sendControlError(res, 404, "control-target-not-allowed", "No trusted repository has this id.");
+      return;
+    }
+    try { res.json(checksRead(deps.store, repoId)); } catch (error) { sendMappedControlError(res, error); }
+  });
 
   // Agent selection spec §6.8 (plan T14). The operator is the one the mutation routes act as, so only a panel that
   // can command has one; the agents view and the preview also ask ccloop, so they need the port as well.

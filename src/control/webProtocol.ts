@@ -1953,10 +1953,6 @@ export const repositoryIntegrationSchema = z
   // suggestedTarget (controller ruling, Task 7): the target the panel pre-fills for a repository with no scheme yet.
   .object({
     schema: z.literal("orca-repository-integration-v1"), repoId: idSchema, integration: integrationSchemeSchema, revision: safeInteger, suggestedTarget: z.string().nullable(),
-    // Kanban spec §7 layer 1 (optional on the wire so an older answer parses): the setting and the newest check's result.
-    integrationCheck: integrationCheckSettingSchema.extend({
-      last: z.object({ state: z.enum(["running", "passed", "failed", "errored"]), at: safeInteger, commit: z.string().nullable(), groups: z.array(idSchema), detail: z.string().nullable(), debugGroupId: idSchema.nullable() }).strict().nullable(),
-    }).strict().optional(),
   })
   .strict();
 export type RepositoryIntegrationV1 = z.infer<typeof repositoryIntegrationSchema>;
