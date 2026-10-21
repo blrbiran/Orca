@@ -280,3 +280,21 @@ Builder decisions (reversible; human ruling for this round: "这一轮执行过�
     failing commands, with their exit and output tail as facts; confirmed and started by the system debug pass as
     orca-auto. A check that could not run (no target, no worktree) is `errored` and covers nothing.
 - **Model review (§7 layer 2)** is still deferred.
+
+## 13. As-built, track R (session 9ec98639, 2026-10-21) — ladder level 1 not built
+
+Orca now pins ccloop 71d650c (`chore(deps): repin ccloop to 71d650c …`), the round §9a said level 1 waits for. Read
+against that build, level 1 as §6.1 states it ("a new run for the task carrying all prior failures") still has no
+mechanism, so it is **not built**; the ladder keeps starting at level 2 (§12):
+- ccloop feeds a previous failure to plan/execute only from its own run state (`state.recentFailures`, in-run retries)
+  or from a token-allowance continuation (`materialize.ts` `readAllowanceContinuation`, which requires a predecessor
+  parked with `waitingCause: "token-allowance"`). A fresh run started after a terminal failure carries nothing, and
+  ccloop's start input has no field for prior failures (its control wire is strict).
+- Carrying them from Orca would mean either a new ccloop start input (a ccloop spec, Orca Rule 16) or changing the
+  task's frozen contract text per run (contract hashes are checked end to end). Both are design choices this round
+  excludes ("这一轮先不做需要brainstorm的工作").
+- The alternate agent for a role (§9 bullet 4) has no configuration either.
+- What exists instead: ccloop's in-run first retry now carries the failure (its spec option (b)), and level 2's debug
+  group is given the failed run's facts (`ladderFacts`).
+**Next:** a short ccloop spec for an optional `priorFailures` start input (bounded like its §7.2 evidence excerpt),
+then level 1 here as one re-dispatch per task through `retry-task` with that input.
