@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { routedAttributionFor } from "./commandClient.js";
+import { attributionText, routedAttributionFor } from "./commandClient.js";
 import { ZodError } from "zod";
 import { closeExistingCorrection, closeStoredCorrection, refuseChoseInsteadConflict, requireGitRoot, type ClosingRows } from "../corrections/correct.js";
 import { derivePendingRows } from "../corrections/derive.js";
@@ -144,13 +144,13 @@ export function applyCorrectionRecord(deps: WebServiceDeps, command: CorrectionR
  * design §12.3's, written from the refused entry in the control store with the human's undo; no `overturned` row, since
  * no ledger row exists to overturn.
  */
-function pendingClosing(store: ControlStore, row: Correction, choseInstead: string | undefined, undo: { how: string; cost?: string; blastRadius?: string }): ClosingRows {
+function pendingClosing(store: ControlStore, row: Correction, choseInstead: string | undefined, undo: { how: string; cost?: string; blastRadius?: string }, attributed?: string): ClosingRows {
   refuseChoseInsteadConflict(row, choseInstead);
   const pending = readPendingDecision(store, row.pendingId!);
   if (pending === null) throw new ControlError("original-pending-decision-not-found", row.pendingId);
   return {
     message: `ledger: close ${row.pendingId} after ${row.by}'s correction ${row.id}`,
-    rows: (chose, at, runId) => [derivePendingRows({ correction: row, pending: pending.entry, choseInstead: chose, undo, at, runId, authored: undefined }).decision],
+    rows: (chose, at, runId) => [derivePendingRows({ correction: row, pending: pending.entry, choseInstead: chose, undo, at, runId, authored: undefined, ...(attributed === undefined ? {} : { attributed }) }).decision],
   };
 }
 
@@ -178,10 +178,14 @@ export function applyCorrectionClose(deps: WebServiceDeps, command: CorrectionCl
     if (live.length > 0) throw new ControlError("debug-group-active", live.join(","));
     await requireGitRoot(repository.path);
     const undo = { how: undoHow, ...(undoCost === undefined ? {} : { cost: undoCost }), ...(undoBlastRadius === undefined ? {} : { blastRadius: undoBlastRadius }) };
-    const input = { repo: repository.path, correctionId, choseInstead, undo, dir };
+    // CLI v2 spec §16 (review I3): the routed person and channel on the closing row; a call that skips the routes writes
+    // the rows as before (no line), as correction-record keeps a row without `via`.
+    const routed = routedAttributionFor(command.commandId);
+    const attributed = routed === null ? undefined : `closed ${attributionText(routed)} correction-close ${command.commandId}`;
+    const input = { repo: repository.path, correctionId, choseInstead, undo, dir, ...(attributed === undefined ? {} : { attributed }) };
     const closed = namesDecision(correction)
       ? await closeExistingCorrection(input)
-      : await closeStoredCorrection(input, async (row) => pendingClosing(deps.store, row, choseInstead, undo));
+      : await closeStoredCorrection(input, async (row) => pendingClosing(deps.store, row, choseInstead, undo, attributed));
     return { kind: "correction-closed", correctionId, relPath: closed.relPath, alreadyClosed: closed.alreadyClosed };
   });
 }

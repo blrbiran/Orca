@@ -7,7 +7,9 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
-import { applyCorrectionRecord, type PanelCorrections } from "../../src/control/correctionCommands.js";
+import { applyCorrectionClose, applyCorrectionRecord, type PanelCorrections } from "../../src/control/correctionCommands.js";
+import { fixRunIdOf } from "../../src/control/correctionState.js";
+import { correctionRowFrom, recordNewCorrection } from "../../src/corrections/record.js";
 import { flagDecision, readFlaggedDecision } from "../../src/control/flaggedDecisions.js";
 import { WebControlService, type WebServiceDeps } from "../../src/control/webService.js";
 import { readCorrections } from "../../src/corrections/store.js";
@@ -73,6 +75,25 @@ describe("the writers an opened verb reaches (spec §16 criterion)", { timeout: 
       const answer = await as({ kind: "agent", client: "mcp:x" }, "rec-mcp", () => applyCorrectionRecord(deps, command));
       expect(answer).toMatchObject({ result: { kind: "correction-recorded" } });
       expect((await readCorrections(dir)).map((row) => [row.by, row.via])).toEqual([[OWNER, "mcp:x"]]);
+    } finally { await repo.cleanup(); await h.dispose(); }
+  });
+
+  // Review I3 (session b37f7ce9): the manual close's closing row, through the socket.
+  it("a correction closed by cli:claude writes `closed by <owner> via cli:claude correction-close <id>` on the decision row", async () => {
+    const h = await openTestStore();
+    const repo = await makeTargetRepo({ remote: "https://example.invalid/o/r.git" });
+    try {
+      const dir = join(h.root, "corrections");
+      await mkdir(dir, { mode: 0o700 });
+      const row = await recordNewCorrection(dir, correctionRowFrom({ projectKey: PANEL_KEY, decisionId: ORIGINAL.id, kind: "wrong", chose_instead: "a file lease", because: "b", by: OWNER }, () => NOW), { again: false });
+      const deps = { store: h.store, correctionsDir: dir, listRepositories: () => [{ repoId: REPO_ID, path: repo.path }], repoIdOfProjectKey: () => REPO_ID } as unknown as WebServiceDeps;
+      const command = { schema: "orca-raw-command-v1", commandId: "close-cli", actorId: "operator-x", expectedRevision: 0, verb: "correction-close", target: { kind: "corrections" },
+        payload: { correctionId: row.id, undoHow: `git revert --no-edit ${"a".repeat(40)}` } } as never;
+      const answer = await as({ kind: "agent", client: "cli:claude" }, "close-cli", () => applyCorrectionClose(deps, command));
+      expect(answer).toMatchObject({ result: { kind: "correction-closed", relPath: `.decisions/${fixRunIdOf(row)}.jsonl` } });
+      const [decision] = git(repo.path, "show", `HEAD:.decisions/${fixRunIdOf(row)}.jsonl`).trim().split("\n").map((line) => JSON.parse(line) as { id: string; evidence: string[] });
+      // The id is the fix run's, as before; mutation "the verb drops the routed attribution" -> two lines -> red.
+      expect([decision!.id, decision!.evidence.at(-1)]).toEqual([`${fixRunIdOf(row)}/1`, `closed by ${OWNER} via cli:claude correction-close close-cli`]);
     } finally { await repo.cleanup(); await h.dispose(); }
   });
 

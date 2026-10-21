@@ -27,6 +27,11 @@ export interface DeriveInput {
    * human wrote both, as on every `--close`. The suffixes are added here and nowhere else, so callers pass bare values.
    */
   authored?: { choseInstead: "human" | "agent"; undoHow: "human" | "orca" };
+  /**
+   * CLI v2 spec §16 (review I3, session b37f7ce9): the evidence line naming who gave the human values and through which
+   * channel (`... by <person> via <channel> ...`), appended last. Absent, the rows are exactly as before.
+   */
+  attributed?: string;
 }
 
 /** The two authored values as they are written: a non-human one carries its suffix. */
@@ -101,7 +106,7 @@ export function deriveRows(input: DeriveInput): DerivedRows {
     // Major in so many words (human ruling, Orca session 3d229487 2026-10-20: 纠正写出的替代决定一律算重要的): the human
     // made this replacement, so it is major even when the decision it overturns was graded minor. Never copied from it.
     importance: "major",
-    evidence: [`correction ${correction.id}`, `overturns ${original.id}`],
+    evidence: [`correction ${correction.id}`, `overturns ${original.id}`, ...(input.attributed === undefined ? [] : [input.attributed])],
   };
 
   const overturned: OverturnedEvent = {
@@ -127,7 +132,7 @@ const objectOf = (value: unknown): Record<string, unknown> =>
  */
 export function derivePendingRows(input: {
   correction: Correction; pending: PendingEntry; choseInstead: string; undo: { how: string; cost?: string; blastRadius?: string }; at: string; runId: string;
-  authored: DeriveInput["authored"];
+  authored: DeriveInput["authored"]; attributed?: string;
 }): { decision: DecisionEvent } {
   const { correction, pending, at, runId } = input;
   const entry = objectOf(pending.entry);
@@ -152,7 +157,7 @@ export function derivePendingRows(input: {
     kind: entry.kind,
     // Major, as in deriveRows: the human made this decision, so it is major whatever grade the agent's raw entry carried.
     importance: "major",
-    evidence: [`correction ${correction.id}`, `pending ${pending.pendingId}`],
+    evidence: [`correction ${correction.id}`, `pending ${pending.pendingId}`, ...(input.attributed === undefined ? [] : [input.attributed])],
   } as DecisionEvent;
   return { decision };
 }

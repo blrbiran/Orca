@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deriveRows, derivePendingRows } from "../corrections/derive.js";
+import { attributionText } from "./commandClient.js";
 import { deriveFixRunId } from "../corrections/fields.js";
 import type { DecisionEvent, OverturnedEvent } from "../ledger/schema.js";
 import { appendEvents } from "../ledger/writer.js";
@@ -74,14 +75,17 @@ export async function writeDebugClosing(input: {
     undoHow: mark.undoHow === null ? "orca" as const : "human" as const,
   };
   const undo = { how: mark.undoHow ?? `git revert --no-edit ${attemptSha}` };
+  // CLI v2 spec §16 (review I3): who gave the human's undo.how at debug-open, and through which channel. A mark written
+  // before undoHowBy existed (null) adds no line.
+  const attributed = mark.undoHow !== null && mark.undoHowBy !== null ? `undo.how ${attributionText(mark.undoHowBy)} correction-debug-open` : undefined;
   const at = input.now().toISOString();
 
   let rows: Array<DecisionEvent | OverturnedEvent>;
   if (frozen.decision !== null) {
-    const { decision, overturned } = deriveRows({ correction, original: frozen.decision, choseInstead, undo, at, runId: fixRunId, authored });
+    const { decision, overturned } = deriveRows({ correction, original: frozen.decision, choseInstead, undo, at, runId: fixRunId, authored, attributed });
     rows = [decision, overturned];
   } else if (frozen.pending !== null) {
-    rows = [derivePendingRows({ correction, pending: frozen.pending, choseInstead, undo, at, runId: fixRunId, authored }).decision];
+    rows = [derivePendingRows({ correction, pending: frozen.pending, choseInstead, undo, at, runId: fixRunId, authored, attributed }).decision];
   } else {
     throw new Error(`writeDebugClosing: the frozen input of ${correction.id} names neither a decision nor a pending entry`);
   }

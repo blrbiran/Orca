@@ -69,7 +69,7 @@ function humanClosingRows(correction: Correction): unknown[] {
   ];
 }
 
-interface Setup { correction: Correction; decision?: DecisionEvent | null; pending?: PendingEntry | null; undoHow?: string | null }
+interface Setup { correction: Correction; decision?: DecisionEvent | null; pending?: PendingEntry | null; undoHow?: string | null; undoHowBy?: { by: string; via: string } | null }
 
 /** The frozen input at open (ruling 3) and the group's debug mark naming it. */
 function markGroup(t: Awaited<ReturnType<typeof driverHarness>>, setup: Setup): void {
@@ -82,6 +82,7 @@ function markGroup(t: Awaited<ReturnType<typeof driverHarness>>, setup: Setup): 
   const mark = {
     correctionId: setup.correction.id, ordinal: 1, inputHash: hash, missing: ["run"], agentFallback: null,
     undoHow: setup.undoHow ?? null, closing: null, checks: { from: "named", namedBy: "human" },
+    ...(setup.undoHowBy === undefined ? {} : { undoHowBy: setup.undoHowBy }),
   };
   const row = t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!;
   t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...JSON.parse(String(row.body)), debug: mark }));
@@ -133,6 +134,24 @@ describe("a debug run's landing commit closes its correction (plan Task 9)", () 
       const [decision] = lines(t.repo, t.body(runId).drive.landedCommit, `.decisions/${fixRunIdOf(correction)}.jsonl`);
       expect(decision!.chose).toBe("a file lease");
       expect(decision!.undo.how).toBe(how);
+      // Review I3: a mark with no undoHowBy (written before it existed) adds no attribution line.
+      expect(decision!.evidence).toEqual([`correction ${CID}`, `overturns ${ORIGINAL.id}`]);
+    } finally { await t.h.dispose(); }
+  });
+
+  // CLI v2 spec §16 (review I3, session b37f7ce9): the human's undo.how given at debug-open names who gave it and the
+  // channel on the closing row; the rows' ids (the fix run, `<fixRunId>/1`) do not change.
+  it("a human undo.how names its giver and channel (debug-open's undoHowBy) as the last evidence line", async () => {
+    const correction = decisionCorrection({ chose_instead: "a file lease" });
+    const how = `git revert --no-edit ${"d".repeat(40)}`;
+    const t = await debugHarness({ correction, undoHow: how, undoHowBy: { by: "tester", via: "cli:claude" } }, { debug: () => ({}) }); try {
+      const runId = await t.claim();
+      await t.until(t.driver(), () => LANDED.includes(t.body(runId).state));
+      const fixRunId = fixRunIdOf(correction);
+      const [decision] = lines(t.repo, t.body(runId).drive.landedCommit, `.decisions/${fixRunId}.jsonl`);
+      expect(decision!.id).toBe(`${fixRunId}/1`);
+      // Mutation "debugClosing ignores undoHowBy" -> the two-line evidence -> red.
+      expect(decision!.evidence).toEqual([`correction ${CID}`, `overturns ${ORIGINAL.id}`, "undo.how by tester via cli:claude correction-debug-open"]);
     } finally { await t.h.dispose(); }
   });
 

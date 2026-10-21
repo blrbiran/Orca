@@ -149,8 +149,10 @@ describe("correction-close (debug task plan Task 11)", { timeout: 60_000 }, () =
       expect(archived.status).toBe(200);
       const closed = await ctx.command(`/api/control/corrections/${correction.id}/close`, closePayload(correction.id), "close-2");
       expect([closed.status, closed.body.result]).toEqual([200, { kind: "correction-closed", correctionId: correction.id, relPath, alreadyClosed: false }]);
-      const lines = gitShow(ctx.repo.path, relPath)!.trim().split("\n").map((line) => JSON.parse(line) as { ev: string });
+      const lines = gitShow(ctx.repo.path, relPath)!.trim().split("\n").map((line) => JSON.parse(line) as { ev: string; evidence?: string[] });
       expect(lines.map((line) => line.ev)).toEqual(["decision", "overturned"]);
+      // CLI v2 spec §16 (review I3, session b37f7ce9): the closing row names the Web account and channel, last.
+      expect(lines[0]!.evidence).toEqual([`correction ${correction.id}`, `overturns ${ORIGINAL.id}`, "closed by tester via web correction-close close-2"]);
     });
   });
 
@@ -217,7 +219,7 @@ describe("correction-close (debug task plan Task 11)", { timeout: 60_000 }, () =
       const lines = gitShow(ctx.repo.path, relPath)!.trim().split("\n").map((line) => JSON.parse(line) as { ev: string; chose: string; evidence: string[]; undo: unknown });
       // Mutation "close a pending target through closeExistingCorrection": refused target-not-a-decision -> red. Mutation
       // "drop derivePendingRows' cost/blast-radius overrides": the inherited values are written instead -> red.
-      expect(lines.map((line) => [line.ev, line.chose, line.evidence, line.undo])).toEqual([["decision", "file lease", [`correction ${correction.id}`, `pending ${pendingId}`],
+      expect(lines.map((line) => [line.ev, line.chose, line.evidence, line.undo])).toEqual([["decision", "file lease", [`correction ${correction.id}`, `pending ${pendingId}`, "closed by tester via web correction-close close-1"],
         { how: `git revert --no-edit ${SHA}`, cost: "one ledger line", blast_radius: "this repository" }]]);
     });
   });

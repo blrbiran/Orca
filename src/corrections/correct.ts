@@ -205,14 +205,18 @@ export interface ClosedCorrection {
   committed?: { commit: string; refs: string };
 }
 
-export interface CloseExistingInput { repo: string; correctionId: string; choseInstead?: string; undo: UndoArgs; dir: string }
+export interface CloseExistingInput {
+  repo: string; correctionId: string; choseInstead?: string; undo: UndoArgs; dir: string;
+  /** CLI v2 spec §16: the control verb's `closed by <person> via <channel> ...` evidence line (deriveRows' `attributed`). */
+  attributed?: string;
+}
 
 /** --close's overturn of a recorded decision: deriveRows' two rows, one landing. */
-function overturnClosing(row: DecisionCorrection, original: DecisionEvent, undo: UndoArgs): ClosingRows {
+function overturnClosing(row: DecisionCorrection, original: DecisionEvent, undo: UndoArgs, attributed?: string): ClosingRows {
   return {
     message: `ledger: overturn ${original.id} after ${row.by}'s correction ${row.id}`,
     rows: (choseInstead, at, runId) => {
-      const { decision, overturned } = deriveRows({ correction: row, original, choseInstead, undo, at, runId });
+      const { decision, overturned } = deriveRows({ correction: row, original, choseInstead, undo, at, runId, ...(attributed === undefined ? {} : { attributed }) });
       return [decision, overturned];
     },
   };
@@ -244,7 +248,7 @@ export async function closeExistingCorrection(input: CloseExistingInput): Promis
       );
     }
     refuseChoseInsteadConflict(row, input.choseInstead);
-    return overturnClosing(row, await readOriginalDecision(join(input.repo, ".decisions"), row.decisionId), input.undo);
+    return overturnClosing(row, await readOriginalDecision(join(input.repo, ".decisions"), row.decisionId), input.undo, input.attributed);
   });
 }
 
