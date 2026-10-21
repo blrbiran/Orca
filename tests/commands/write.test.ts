@@ -77,6 +77,20 @@ describe("requirement, group and task commands: route and payload (spec §4)", (
   });
 });
 
+// Review M4 (session b37f7ce9): the MCP server runs the CLI in-process as client mcp[:<name>]; its command ids say so.
+describe("the command id's prefix names the entry", () => {
+  it("mcp- under client mcp:<name> and mcp, cli- under the CLI's own client", async () => {
+    const ids: string[] = [];
+    for (const client of ["mcp:orca-test", "mcp", "cli"]) {
+      const w = await world();
+      expect((await cli(["group", "start", "g-alpha", "--json"], w.dir, { client })).code).toBe(0);
+      ids.push(w.posts()[0]!.commandId);
+    }
+    // Mutation "always cli-" -> red.
+    expect(ids.map((id) => id.replace(/-[0-9a-f-]{36}$/, ""))).toEqual(["mcp", "mcp", "cli"]);
+  });
+});
+
 describe("the revision (spec §6.2)", () => {
   it("group start sends the revision it just read", async () => {
     const w = await world({ revision: 11 });

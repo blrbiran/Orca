@@ -60,7 +60,10 @@ export async function runWrite(_def: CommandDef, mapping: VerbMapping, context: 
   const payload = await mapping.payload(context);
   const route = await mapping.route(context);
   const expectedRevision = context.args.global.ifRevision ?? await readRevision(mapping, context);
-  const request: SentRequest = { route, expectedRevision, payload, commandId: context.args.global.commandId ?? `cli-${randomUUID()}` };
+  // Review M4 (session b37f7ce9): a command id names its entry, as controlSend's commandIdPrefix does -- `mcp-` when the
+  // MCP server runs the CLI in-process (client `mcp` or `mcp:<name>`), `cli-` otherwise.
+  const prefix = session.client === "mcp" || session.client.startsWith("mcp:") ? "mcp" : "cli";
+  const request: SentRequest = { route, expectedRevision, payload, commandId: context.args.global.commandId ?? `${prefix}-${randomUUID()}` };
   let response = withCurrentRevision(await sendExactly(session, request));
   if (mapping.conflictDocument !== undefined && fieldOf(response.body, "currentRevision") !== undefined) {
     // Spec §6.3 (builder's choice): the panel cannot list changed fields cheaply, so the answer carries the document now.
