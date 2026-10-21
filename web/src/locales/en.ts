@@ -1120,6 +1120,7 @@ export const en = {
     dismiss: "Dismiss",
     dismissAll: "Dismiss all",
     sessionsTitle: "Sessions",
+    sessionsUnlisted: "This panel did not list the sessions (an older panel?).",
     sessionLine: "{{kind}} · since {{since}} · until {{until}}",
     sessionKind: { browser: "Browser", cli: "Terminal (orca login)" },
     thisSession: "this session",

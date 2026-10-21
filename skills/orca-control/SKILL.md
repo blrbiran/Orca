@@ -14,8 +14,8 @@ or with the MCP tool `orca`, whose `args` are the same words. `orca help [<domai
 
 ## Core rules
 
-1. **Never start, stop or restart the panel or its service** (`orca panel …`, `orca user …`): a person does that. If
-   `orca status` says the panel is not answering, report it and stop.
+1. **Never start, stop or restart the panel or its service.** `orca panel install|uninstall|start|stop|restart` change the human's running service. Never run them; ask the human.
+   `orca user …` is a person's too. If `orca status` says the panel is not answering, report it and stop.
 2. **Read state, not command acceptance.** A 2xx answer means the panel booked the command, not that the work is done.
    Read the group again and act on what it shows.
 3. **Long work is polled.** Runs take minutes to hours: after `group start` or `task continue`, run `orca group show <g>`

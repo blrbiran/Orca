@@ -992,6 +992,7 @@ export const zh: Translation<typeof en> = {
     dismiss: "知道了",
     dismissAll: "全部知道了",
     sessionsTitle: "会话",
+    sessionsUnlisted: "这个面板没有列出会话（可能是较旧的面板）。",
     sessionLine: "{{kind}} · 自 {{since}} · 至 {{until}}",
     sessionKind: { browser: "浏览器", cli: "终端（orca login）" },
     thisSession: "当前会话",

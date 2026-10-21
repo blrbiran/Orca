@@ -266,11 +266,11 @@ function Sessions(): JSX.Element {
     try {
       const body = await fetchSessions();
       // A panel that does not list sessions (an older one) answers without the list: shown as a refusal, never a crash.
-      if (!Array.isArray(body.sessions)) throw new Error("GET /api/auth/sessions answered without a sessions list");
+      if (!Array.isArray(body.sessions)) throw new Error(t("auth.sessionsUnlisted"));
       setSessions(body.sessions);
     }
     catch (err) { setRefusal(failureFrom(err)); }
-  }, []);
+  }, [t]);
   useEffect(() => { void read(); }, [read]);
   const revoke = async (sid: string): Promise<void> => {
     setBusy(true);
