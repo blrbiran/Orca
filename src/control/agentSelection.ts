@@ -22,6 +22,8 @@ export interface OperatorPreferences {
   perAgent: Record<string, { model?: string; contextWindow?: ContextWindow }>;
   estimator?: PartialSelection;
   reconcile?: PartialSelection;
+  /** Checks spec 2026-10-22 §6.1: the model review's agent. */
+  review?: PartialSelection;
 }
 /** The panel's own layers of a group (ruling review R7: the plan's layers are no longer copied in). */
 export interface GroupAgentOverrides { worker?: PanelPartialSelection; estimator?: PanelPartialSelection; reconcile?: PanelPartialSelection }

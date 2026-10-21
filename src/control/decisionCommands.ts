@@ -239,10 +239,10 @@ export function applyRatifyFlaggedDecision(deps: { store: ControlStore }, comman
     expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
       const groupId = command.target.groupId;
-      const { decisionId } = command.payload;
+      const { decisionId, note } = command.payload;
       if (!deps.store.db.prepare("SELECT 1 FROM groups WHERE id=?").get(groupId)) throw new ControlError("group-not-found");
       const { by, via } = commandAttributionFor(context.rawCommand.commandId, context.rawCommand.actorId);
-      ratifyFlag(deps.store, groupId, decisionId, { actorId: by, via, commandId: context.rawCommand.commandId, at: new Date(deps.store.now()).toISOString() });
+      ratifyFlag(deps.store, groupId, decisionId, { actorId: by, via, commandId: context.rawCommand.commandId, at: new Date(deps.store.now()).toISOString(), ...(note === undefined ? {} : { note }) });
       return { status: 200, body: {
         schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,
         verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,

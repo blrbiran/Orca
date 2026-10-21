@@ -67,6 +67,8 @@ export const operatorPreferencesSchema = z
     perAgent: z.record(idSchema, z.object({ model: preferenceModelSchema.optional(), contextWindow: contextWindowSchema.optional() }).strict()),
     estimator: partialSelectionSchema.optional(),
     reconcile: partialSelectionSchema.optional(),
+    // Checks spec 2026-10-22 §6.1: the agent the model review runs on; absent is defaultAgent.
+    review: partialSelectionSchema.optional(),
   })
   .strict();
 // Agent selection spec §6.2 (W6-20): a group's own selection layers, one per slot; a panel write replaces a whole layer.
@@ -922,7 +924,8 @@ export const approvePendingDecisionPayloadSchema = z.object({ pendingId: idSchem
 // Control run decisions plan Task 10: an owner rejects a refused decision, with an optional line of their own.
 export const rejectPendingDecisionPayloadSchema = z.object({ pendingId: idSchema, because: nonemptyString.optional() }).strict();
 // Kanban spec 2026-10-20 §9a: a person ratifies a landed decision Orca flagged (clears the flag; nothing else changes).
-export const ratifyFlaggedDecisionPayloadSchema = z.object({ decisionId: nonemptyString }).strict();
+// Checks spec 2026-10-22 §6.5: dismissing a model-review finding is this ratify, with the person's optional reason.
+export const ratifyFlaggedDecisionPayloadSchema = z.object({ decisionId: nonemptyString, note: z.string().min(1).max(2048).optional() }).strict();
 // Kanban spec §3.2: at most this many groups run at once (default 3; the human asked for it for CPU load and conflicts).
 // Protect-acceptance-criteria spec §5: `criteriaReview` is the reviewer's global default (absent: unchanged; never set: on).
 export const setOrchestrationSettingsPayloadSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64), criteriaReview: z.boolean().optional(), quotaWait: z.array(z.string().min(1).max(200)).max(64).optional() }).strict();
@@ -937,10 +940,19 @@ export const correctionDebugOpenPayloadSchema = z.object({
 }).strict();
 // System debug task spec 2026-10-21 §2: a debug group Orca opens itself (ladder level 2, a red integration check, a
 // flagged test change), never over HTTP. The facts are code-built lines; the checks are what the debug task is held to.
-export const SYSTEM_DEBUG_SOURCE_KINDS = ["ladder", "integration-check", "criteria-review"] as const;
-export const systemDebugSourceSchema = z.object({
-  kind: z.enum(SYSTEM_DEBUG_SOURCE_KINDS), groupId: idSchema, taskId: idSchema.nullable(), runId: idSchema.nullable(),
-}).strict();
+// Checks spec 2026-10-22 §6.1: a model review has no single source group, so the source is a union on `kind`; the three
+// group-sourced kinds keep their exact shape (and so their ids).
+export const SYSTEM_DEBUG_SOURCE_KINDS = ["ladder", "integration-check", "criteria-review", "model-review", "model-review-finding"] as const;
+const groupSourceSchema = <K extends "ladder" | "integration-check" | "criteria-review">(kind: K) =>
+  z.object({ kind: z.literal(kind), groupId: idSchema, taskId: idSchema.nullable(), runId: idSchema.nullable() }).strict();
+const commitSchema = z.string().regex(/^[a-f0-9]{40}([a-f0-9]{24})?$/);
+export const systemDebugSourceSchema = z.discriminatedUnion("kind", [
+  groupSourceSchema("ladder"), groupSourceSchema("integration-check"), groupSourceSchema("criteria-review"),
+  // The review of the range from..to on target; runSeq makes each attempt at a range its own group (§5.4).
+  z.object({ kind: z.literal("model-review"), repoId: idSchema, target: nonemptyString, from: commitSchema, to: commitSchema, runSeq: safeInteger.positive() }).strict(),
+  // A major finding's fix (§6.5).
+  z.object({ kind: z.literal("model-review-finding"), repoId: idSchema, reviewGroupId: idSchema, findingId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/) }).strict(),
+]);
 export const systemDebugOpenPayloadSchema = z.object({
   source: systemDebugSourceSchema,
   // The group whose work branch the debug group starts from and folds back into (ladder); null: the target's HEAD.
@@ -1964,7 +1976,9 @@ export const groupDecisionsViewSchema = z
     schema: z.literal("orca-group-decisions-v1"), groupId: idSchema, projectKey: z.string().nullable(), pendingCount: safeInteger,
     // Kanban spec §9a: flags still waiting for a person (not ratified, not corrected). Shown; nothing waits on them.
     flaggedCount: safeInteger,
-    groupFlags: z.array(z.object({ decisionId: nonemptyString, state: z.enum(["flagged", "ratified", "corrected"]), source: nonemptyString, reason: nonemptyString, evidence: z.array(z.string()) }).strict()),
+    // Checks spec 2026-10-22 §6.6: `severity` (absent = major), and for a flag another group owns (a model-review finding
+    // this group is involved in) `ownerGroupId`, the group a ratify must target.
+    groupFlags: z.array(z.object({ decisionId: nonemptyString, state: z.enum(["flagged", "ratified", "corrected"]), source: nonemptyString, reason: nonemptyString, evidence: z.array(z.string()), severity: z.enum(["major", "minor"]).optional(), ownerGroupId: idSchema.optional() }).strict()),
     tasks: z.array(z.object({
       taskId: idSchema,
       runs: z.array(z.object({

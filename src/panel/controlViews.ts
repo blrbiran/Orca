@@ -410,6 +410,14 @@ export function readGroupSummary(store: ControlStore, groupId: string): GroupSum
 }
 
 /**
+ * Kanban spec §9a, checks spec 2026-10-22 §6.6 (P5): the flags of a group that wait for a person, for its card -- a minor
+ * flag (a model-review finding graded minor) is listed in the group's decisions, never counted here.
+ */
+export function groupCardFlaggedCount(store: ControlStore, groupId: string): number {
+  return Number(store.db.prepare("SELECT count(*) AS n FROM flagged_decisions WHERE group_id=? AND state='flagged' AND (json_valid(body)=0 OR json_extract(body,'$.severity') IS NOT 'minor')").get(groupId)!.n);
+}
+
+/**
  * Kanban spec 2026-10-20 §4: the three facts a board card shows. Budget in tokens (limit null = unlimited); decisions
  * waiting for a person (major pending ones plus flags not ratified -- a flag a correction answered still counts here,
  * the corrections store is not read for a summary); the first task, in plan order, whose current run failed and why.
@@ -421,7 +429,7 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
   };
   const pending = store.db.prepare("SELECT body FROM pending_decisions WHERE group_id=? AND state='pending'").all(groupId)
     .filter((row) => (JSON.parse(String(row.body)) as { entry?: { importance?: unknown } }).entry?.importance !== "minor").length;
-  const flagged = Number(store.db.prepare("SELECT count(*) AS n FROM flagged_decisions WHERE group_id=? AND state='flagged'").get(groupId)!.n);
+  const flagged = groupCardFlaggedCount(store, groupId);
   let firstFailure: { taskId: string; cause: string } | null = null;
   for (const taskId of taskIds) {
     // Over the summary's own snapshot: each body is decoded once, shared with the counts (controlPollPerformance).

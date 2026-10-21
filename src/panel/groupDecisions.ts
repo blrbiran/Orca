@@ -4,7 +4,7 @@ import { CorrectRejection } from "../corrections/rejection.js";
 import { ControlError } from "../control/errors.js";
 import { savedReport } from "../control/executionDriver.js";
 import { labelDecisions, ledgerSources } from "../control/ledgerAtRef.js";
-import { listFlaggedDecisions } from "../control/flaggedDecisions.js";
+import { listFlaggedDecisions, listFlagsInvolving } from "../control/flaggedDecisions.js";
 import { listPendingDecisions } from "../control/pendingDecisions.js";
 import { readGroup } from "../control/queries.js";
 import { reportedDecisionsOf, type ReportedDecisions } from "../control/reportedDecisions.js";
@@ -61,13 +61,20 @@ export async function readGroupDecisionsView(store: ControlStore, repo: string, 
   readGroup(store, groupId); // group-not-found before any git child
   const { first, lines } = await labelDecisions(repo, await ledgerSources(store, repo, groupId));
   const pendingRows = listPendingDecisions(store, groupId);
-  const flags = new Map(listFlaggedDecisions(store, groupId).map((row) => [row.decisionId, row]));
+  // Checks spec 2026-10-22 §6.6: a model-review finding this group is involved in is listed here too (its row is the
+  // review group's, named as ownerGroupId so a ratify goes there).
+  const flags = new Map([...listFlaggedDecisions(store, groupId), ...listFlagsInvolving(store, groupId)].map((row) => [row.decisionId, row]));
   const flagOf = (id: string): RunView["decisions"][number]["flag"] => {
     const row = flags.get(id);
     if (row === undefined) return null;
     const state = row.state === "ratified" ? "ratified" : correctedIds.has(id) ? "corrected" : "flagged";
     return { state, source: row.source, reason: row.reason, evidence: row.evidence };
   };
+  const groupFlagOf = (row: ReturnType<typeof listFlaggedDecisions>[number]) => ({
+    decisionId: row.decisionId, ...flagOf(row.decisionId)!,
+    ...(row.severity === "minor" ? { severity: "minor" as const } : row.source === "model-review" ? { severity: "major" as const } : {}),
+    ...(row.groupId === groupId ? {} : { ownerGroupId: row.groupId }),
+  });
   let projectKey: string | null;
   try { projectKey = await projectKeyOf(repo); }
   catch (error) { if (error instanceof CorrectRejection) projectKey = null; else throw error; }
@@ -123,10 +130,11 @@ export async function readGroupDecisionsView(store: ControlStore, repo: string, 
     pendingCount: pendingRows.filter((p) => p.state === "pending" && importanceOf(p.entry.entry) === "major").length,
     // A flag counts while it waits: not ratified and no correction names its decision. Counted from the store, so a
     // flagged decision on a ref this read does not reach still counts.
-    flaggedCount: [...flags.values()].filter((row) => row.state === "flagged" && !correctedIds.has(row.decisionId)).length,
+    // Checks spec §6.6 (P5): a minor flag is listed, never counted.
+    flaggedCount: [...flags.values()].filter((row) => row.state === "flagged" && row.severity !== "minor" && !correctedIds.has(row.decisionId)).length,
     tasks: [...tasks].map(([taskId, runs]) => ({ taskId, runs })),
     // Kanban spec §9a.2: a flag no run's landed lines carry here (an integration conflict an agent resolved has no
     // ledger line), listed for the group so it is never only a number.
-    groupFlags: [...flags.values()].filter((row) => !shown.has(row.decisionId)).map((row) => ({ decisionId: row.decisionId, ...flagOf(row.decisionId)! })),
+    groupFlags: [...flags.values()].filter((row) => !shown.has(row.decisionId)).map(groupFlagOf),
   });
 }

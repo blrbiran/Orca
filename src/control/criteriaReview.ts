@@ -79,7 +79,7 @@ export function criteriaReviewFacts(candidate: CriteriaReviewCandidate): string[
 }
 
 /** The flag a criteria-review debug group judges: its source run's `criteria` decision. */
-export const criteriaDecisionIdOf = (source: SystemDebugSource): string => `${source.runId}/orca-criteria`;
+export const criteriaDecisionIdOf = (source: Extract<SystemDebugSource, { runId: string | null }>): string => `${source.runId}/orca-criteria`;
 
 /**
  * §5's verdict, from the judge's own run once it settled succeeded: `justified` when the attempt was empty (Deviation D14:

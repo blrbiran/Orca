@@ -41,7 +41,7 @@ import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type 
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
-import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand } from "./systemDebug.js";
+import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
@@ -772,6 +772,8 @@ export class WebControlService {
       const superseded = mark.source.kind === "ladder" && terminallyFailedRun(this.store, mark.source.groupId, mark.source.taskId!)?.runId !== mark.source.runId;
       if (superseded && (group.status === "draft" || allTasksDone(this.store, groupId))) { settleSystemDebug(this.store, groupId, "superseded", null); out.settled.push(groupId); continue; }
       if (group.status === "draft") {
+        // Checks spec 2026-10-22 §6.1: a review or a finding's fix has no source group; its confirm is Task 9's.
+        if (!isGroupSource(mark.source)) continue;
         const refused = await this.autoConfirmSystemDebug(groupId, mark.source.groupId);
         if (refused === null) out.confirmed.push(groupId); else { settleSystemDebug(this.store, groupId, "confirm-refused", refused); out.settled.push(groupId); }
         continue;

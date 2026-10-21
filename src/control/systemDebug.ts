@@ -47,9 +47,16 @@ export function readSystemDebugMark(group: unknown): SystemDebugMark | null {
  * ladder debug group per (group, task) is the ladder's cap (kanban §6: at most 2 extra runs per task).
  */
 export function systemDebugGroupId(source: SystemDebugSource): string {
+  // Checks spec 2026-10-22 §6.1: a review and a finding's fix have their own prefixes (no prefix is another's prefix),
+  // over the whole canonical source -- a review's runSeq makes each attempt its own group.
+  if (source.kind === "model-review") return `sysreview-${sha256Canonical(source).slice(0, 16)}`;
+  if (source.kind === "model-review-finding") return `sysfinding-${sha256Canonical(source).slice(0, 16)}`;
   const key = source.kind === "ladder" ? { kind: source.kind, groupId: source.groupId, taskId: source.taskId } : source;
   return `sysdebug-${source.kind}-${sha256Canonical(key).slice(0, 16)}`;
 }
+export type GroupSource = Extract<SystemDebugSource, { groupId: string }>;
+/** The three kinds Orca opens for one source group (ladder, integration check, criteria review). */
+export const isGroupSource = (source: SystemDebugSource): source is GroupSource => "groupId" in source;
 
 function groupBody(store: ControlStore, groupId: string): Record<string, unknown> | null {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
@@ -60,7 +67,7 @@ type TaskContract = z.infer<typeof taskContractSchema>;
 
 /** The source task's contract as the archived plan froze it; null when there is no task or it cannot be read. */
 function sourceContract(store: ControlStore, source: SystemDebugSource): TaskContract | null {
-  if (source.taskId === null) return null;
+  if (!isGroupSource(source) || source.taskId === null) return null;
   try {
     const task = readArchivedPlan(store, source.groupId).plan.tasks.find((entry) => entry.taskId === source.taskId);
     return task === undefined ? null : taskContractSchema.parse(JSON.parse(task.originalContractCanonicalJson));
@@ -69,7 +76,7 @@ function sourceContract(store: ControlStore, source: SystemDebugSource): TaskCon
 
 /** The source task's frozen agent and model (the plan layer of the debug group), so it runs where the original ran. */
 function sourceAgent(store: ControlStore, source: SystemDebugSource): PartialSelection | undefined {
-  if (source.taskId === null) return undefined;
+  if (!isGroupSource(source) || source.taskId === null) return undefined;
   const row = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(source.groupId, source.taskId);
   const agent = row === undefined ? undefined : (JSON.parse(String(row.body)) as { agent?: { agent?: unknown; model?: unknown } }).agent;
   return typeof agent?.agent === "string" && typeof agent.model === "string" ? { agent: agent.agent, model: agent.model } : undefined;
@@ -80,11 +87,17 @@ const INSTRUCTION: Record<SystemDebugSource["kind"], string> = {
   "integration-check": "Groups that each passed their own checks were combined on the target, and the checks below fail there. Find what the combination broke and fix it.",
   // Protect-acceptance-criteria spec §5 as built (§9): the judge and the fix are one run; an empty attempt is "justified".
   "criteria-review": "A landed task changed the tests or checks that define its acceptance, and Orca flagged it. Judge whether the task's goal required that change. If it did, change nothing. If it did not, restore the stronger criteria and fix the code so they pass.",
+  // Checks spec 2026-10-22 §6.2 item 5, §6.5: the review is read-only (its own plan builder, Task 8); the fix is ordinary.
+  "model-review": "Review the groups that landed in the range below for, in priority order: contract or convention drift between groups, duplication, and whole behaviour no check covers. Change no file except .orca-review/findings.json; every finding needs evidence from two groups; report nothing rather than guess.",
+  "model-review-finding": "A review of groups that landed together found the problem below, with evidence from each involved group. Fix it so the involved groups agree, and keep their checks passing.",
 };
 
 /** §2: the goal, from the input alone (no model, no I/O): the same input gives the same bytes. */
 export function systemDebugGoalText(input: SystemDebugInputV1, contract: TaskContract | null): string {
-  const where = [`group ${input.source.groupId}`, ...(input.source.taskId === null ? [] : [`task ${input.source.taskId}`]), ...(input.source.runId === null ? [] : [`run ${input.source.runId}`])].join(", ");
+  const source = input.source;
+  const where = source.kind === "model-review" ? `the range ${source.from}..${source.to} on ${source.target} (review ${source.runSeq})`
+    : source.kind === "model-review-finding" ? `finding ${source.findingId} of review ${source.reviewGroupId}`
+    : [`group ${source.groupId}`, ...(source.taskId === null ? [] : [`task ${source.taskId}`]), ...(source.runId === null ? [] : [`run ${source.runId}`])].join(", ");
   const lines = [
     `System debug task (${input.source.kind}) opened by Orca for ${where}.`,
     INSTRUCTION[input.source.kind],
@@ -209,7 +222,7 @@ export function settleSystemDebug(store: ControlStore, groupId: string, state: s
 
 /** The system debug groups, with their marks, in creation order. */
 export function systemDebugGroups(store: ControlStore): Array<{ groupId: string; status: string; mark: SystemDebugMark }> {
-  return store.db.prepare("SELECT id, body FROM groups WHERE substr(id,1,9)='sysdebug-' ORDER BY rowid").all().flatMap((row) => {
+  return store.db.prepare("SELECT id, body FROM groups WHERE substr(id,1,9)='sysdebug-' OR substr(id,1,10)='sysreview-' OR substr(id,1,11)='sysfinding-' ORDER BY rowid").all().flatMap((row) => {
     const body = JSON.parse(String(row.body)) as Record<string, unknown>;
     const mark = readSystemDebugMark(body);
     return mark === null ? [] : [{ groupId: String(row.id), status: String(body.status), mark }];
@@ -331,12 +344,12 @@ export function escalationsOf(store: ControlStore, groupId: string): Array<{ tas
   const ladders = store.db.prepare("SELECT id, body FROM groups WHERE substr(id,1,16)='sysdebug-ladder-' ORDER BY rowid").all().flatMap((row) => {
     let mark: SystemDebugMark | null;
     try { mark = readSystemDebugMark(JSON.parse(String(row.body))); } catch { return []; }
-    return mark !== null && mark.source.groupId === groupId && mark.source.taskId !== null ? [{ debugGroupId: String(row.id), mark }] : [];
+    return mark !== null && mark.source.kind === "ladder" && mark.source.groupId === groupId && mark.source.taskId !== null ? [{ debugGroupId: String(row.id), mark }] : [];
   });
   if (ladders.length === 0) return [];
   const out: Array<{ taskId: string; debugGroupId: string; state: EscalationState; reason: string | null }> = [];
   for (const { debugGroupId, mark } of ladders) {
-    const taskId = mark.source.taskId!;
+    const taskId = (mark.source as GroupSource).taskId!;
     const failed = terminallyFailedRun(store, groupId, taskId);
     // Done since: the rerun succeeded (or a person finished it); nothing is escalated any more.
     if (allTasksDone(store, groupId) || tasksOf(store, groupId).find((entry) => entry.id === taskId)?.work.status === "done") continue;
@@ -345,7 +358,7 @@ export function escalationsOf(store: ControlStore, groupId: string): Array<{ tas
       out.push(anyTaskFailed(store, debugGroupId) ? { taskId, debugGroupId, state: "exhausted", reason: "debug-task-failed" } : { taskId, debugGroupId, state: "debugging", reason: null });
     } else if (mark.settled.state === "folded") {
       // The rerun is the task's next run; the same failed run still current means the retry has not been claimed yet.
-      out.push(failed !== null && failed.runId !== mark.source.runId ? { taskId, debugGroupId, state: "exhausted", reason: "rerun-failed" } : { taskId, debugGroupId, state: "rerunning", reason: null });
+      out.push(failed !== null && failed.runId !== (mark.source as GroupSource).runId ? { taskId, debugGroupId, state: "exhausted", reason: "rerun-failed" } : { taskId, debugGroupId, state: "rerunning", reason: null });
     } else {
       out.push({ taskId, debugGroupId, state: "exhausted", reason: mark.settled.state });
     }

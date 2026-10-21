@@ -105,7 +105,10 @@ export type GroupSummaryV1 = {
   escalation?: GroupEscalationV1[];
 };
 export type GroupSystemDebugV1 = {
-  source: { kind: "ladder" | "integration-check" | "criteria-review"; groupId: string; taskId: string | null; runId: string | null };
+  // Checks spec 2026-10-22 §6.1: a model review and a finding's fix have no single source group.
+  source: { kind: "ladder" | "integration-check" | "criteria-review"; groupId: string; taskId: string | null; runId: string | null }
+    | { kind: "model-review"; repoId: string; target: string; from: string; to: string; runSeq: number }
+    | { kind: "model-review-finding"; repoId: string; reviewGroupId: string; findingId: string };
   stackOn: string | null;
   settled: { state: string; at: number; detail: string | null } | null;
 };
