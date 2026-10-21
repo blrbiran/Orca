@@ -9,6 +9,7 @@ import type { CommandDef, WriteContext } from "../types.js";
 import {
   checkpointOf, config, currentRun, file, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, verb, workItem,
 } from "./verbs.js";
+import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 
 interface RequirementView { summary: { requirement?: { roundNo: number | null; draftNo: number | null } }; drafts: Array<{ draftNo: number; draftHash: string | null }> }
 const requirement = async (c: WriteContext): Promise<RequirementView> => await c.read(`groups/${group(c)}/requirement`) as RequirementView;
@@ -33,22 +34,6 @@ const decision = (value: string, flag: string): { id: string; accept: boolean } 
 
 const empty = (domain: string, action: string, summary: string, verbName: Parameters<typeof verb>[0]["verb"], path: string): CommandDef =>
   verb({ domain, action, summary, verb: verbName, positionals: [GROUP], route: (c) => `groups/${group(c)}/${path}`, payload: () => ({}) });
-
-/** Integration spec §3: one scheme, from flags. */
-function scheme(c: WriteContext): unknown {
-  const delivery = str(c, "delivery");
-  if (delivery === "keep") return { delivery };
-  const need = (flag: string): string => { const value = str(c, flag); if (value === undefined) throw invalid(`--delivery ${delivery} wants --${flag}`); return value; };
-  if (delivery === "local") return { delivery, trigger: need("trigger"), method: need("method"), target: need("target") };
-  if (delivery === "push-target") return { delivery, trigger: need("trigger"), method: need("method"), target: need("target"), remote: need("remote") };
-  if (delivery === "push-branch" || delivery === "github-pr") return { delivery, trigger: need("trigger"), target: need("target"), remote: need("remote") };
-  throw invalid("--delivery wants keep|local|push-target|push-branch|github-pr");
-}
-const SCHEME_FLAGS = [
-  { name: "delivery", type: "string" as const, required: true, summary: "keep|local|push-target|push-branch|github-pr (anything but keep needs a person token)" },
-  { name: "trigger", type: "string" as const, summary: "task|group" }, { name: "method", type: "string" as const, summary: "merge|squash" },
-  { name: "target", type: "string" as const, summary: "the target branch" }, { name: "remote", type: "string" as const, summary: "the remote" },
-];
 
 export const WORK_ROWS: CommandDef[] = [
   // --- requirement
@@ -158,7 +143,7 @@ export const WORK_ROWS: CommandDef[] = [
     flags: [{ name: "limit", type: "string", required: true, summary: "JSON {tokens,activeMs,attempts,sessions}" }],
     route: (c) => `groups/${group(c)}/set-limit`, payload: (c) => ({ limit: json(c, "limit") }) }),
   verb({ domain: "group", action: "set-integration", summary: "where this group's finished work goes", verb: "set-group-integration", positionals: [GROUP], flags: SCHEME_FLAGS,
-    route: (c) => `groups/${group(c)}/integration`, payload: (c) => ({ integration: scheme(c) }) }),
+    route: (c) => `groups/${group(c)}/integration`, payload: (c) => ({ integration: schemeFromFlags(c) }) }),
   empty("group", "retry-integration", "a blocked or conflicted integration back to idle", "retry-integration", "integration/retry"),
   empty("group", "resolve-integration", "approve an agent resolving the group's integration conflict", "resolve-integration-conflict", "integration/resolve"),
   ...(["depend", "undepend"] as const).map((action) => verb({
