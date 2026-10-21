@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -153,6 +153,42 @@ describe("lazy conversion of the integration check's meta row", () => {
       expect(metaRow(w)).toBeUndefined();
       // Nothing landed, no target known: no state row at all.
       expect(state(w)).toBeNull();
+    } finally { await w.h.dispose(); }
+  });
+
+  it("an unreadable target keeps the meta row: the conversion is retried once the target reads, and no group is skipped", async () => {
+    const w = await checksWorld(); try {
+      w.setProjectChecks({ integrationCheck: { enabled: true, command: "true" } });
+      const c1 = await w.commitLand("g1", { "a.txt": "1\n" });
+      await w.commitLand("g2", { "b.txt": "2\n" }); // uncovered
+      seed(w, meta({ g1: c1 }));
+      g(w.repo, "branch", "-m", "main", "gone");
+      await w.pass();
+      expect(metaRow(w)).toBeDefined();
+      // The pass's own evaluation records the unreadable target, without a watermark.
+      expect(state(w)).toMatchObject({ watermark: null, last: { state: "errored", detail: "target unreadable: main" } });
+      g(w.repo, "branch", "-m", "gone", "main");
+      await w.pass();
+      expect(metaRow(w)).toBeUndefined();
+      // Not the head (that would skip g2): the conversion's watermark, before g2.
+      expect(state(w)).toMatchObject({ watermark: c1, last: { detail: "migrated: re-covers 0 groups" } });
+    } finally { await w.h.dispose(); }
+  });
+
+  it("a landed group off the target's first-parent history is named in the record, not dropped silently", async () => {
+    const w = await checksWorld(); try {
+      const c1 = await w.commitLand("g1", { "a.txt": "1\n" });
+      // A side branch's own commit is the group's integrated commit; a merge (not a group) brings it into main.
+      g(w.repo, "checkout", "-q", "-b", "side");
+      await writeFile(join(w.repo, "s.txt"), "s\n");
+      g(w.repo, "add", "s.txt"); g(w.repo, "commit", "-qm", "side");
+      const side = g(w.repo, "rev-parse", "side");
+      g(w.repo, "checkout", "-q", "main"); g(w.repo, "merge", "-q", "--no-ff", "-m", "merge side", "side");
+      w.land("side", side);
+      seed(w, meta({ g1: c1 }));
+      await w.service.checksPass();
+      expect(metaRow(w)).toBeUndefined();
+      expect(state(w)).toMatchObject({ watermark: c1, last: { state: "migrated", detail: "off first-parent history: side" } });
     } finally { await w.h.dispose(); }
   });
 

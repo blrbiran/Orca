@@ -269,6 +269,88 @@ describe("the model review run (checks spec §6, criterion 8)", { timeout: 240_0
     } finally { await w.h.dispose(); }
   });
 
+  it("a paused review waits: its unclaimable task is not a budget end and adds nothing to the streak", async () => {
+    // decideFundedAllowance answers task-budget-unavailable for every group it skips (a pause, a recovery blocker,
+    // unknown usage); before any run the task's grant is whole, so only the group's own limit is a budget end.
+    const w = await world(); try {
+      const reviewId = await openOne(w);
+      expect((await w.service.systemDebugPass()).confirmed).toContain(reviewId);
+      expect((await w.service.autoStart()).started).toContain(reviewId);
+      const revision = Number(w.h.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(reviewId)!.revision);
+      expect("error" in await w.service.pauseDispatch(w.h.rawCommand("pause-review", revision, "pause-dispatch", { kind: "group", groupId: reviewId }, {}) as never)).toBe(false);
+      expect((await w.service.systemDebugPass()).settled).toEqual([]);
+      expect(settledOf(w, reviewId)).toBeNull();
+      expect(w.state()).toMatchObject({ failureStreak: 0, last: { state: "running", reviewGroupId: reviewId } });
+    } finally { await w.h.dispose(); }
+  });
+
+  it("a blocked run a person can still recover waits; it is not ended as run-failed", async () => {
+    // "refuse": the start is refused before ccloop accepts it -- the run blocks before C, and recovery-retry resumes it.
+    const w = await world({ behaviour: "refuse" }); try {
+      const reviewId = await openOne(w);
+      const runId = await w.driveReview(reviewId);
+      expect(w.t.body(runId)).toMatchObject({ state: "blocked" });
+      expect(w.t.body(runId).drive.blockedAt).not.toBe("C");
+      expect((await w.service.systemDebugPass()).settled).toEqual([]);
+      expect(settledOf(w, reviewId)).toBeNull();
+      expect(w.state()).toMatchObject({ failureStreak: 0, last: { state: "running" } });
+    } finally { await w.h.dispose(); }
+  });
+
+  it("a terminal failed run ends the review run-failed:<state> unless its task was re-armed", async () => {
+    const w = await world(); try {
+      const reviewId = await openOne(w);
+      w.setFindings(goodFindings(w, reviewId));
+      const runId = await w.driveReview(reviewId);
+      const setRun = (state: string) => {
+        const run = w.t.body(runId) as Record<string, unknown> & { drive: Record<string, unknown> };
+        w.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...run, state, drive: { ...run.drive, outcome: null, failureCause: null, budgetSnapshot: null } }), runId);
+      };
+      const setTask = (status: string) => w.h.store.db.prepare("UPDATE work_items SET body=json_set(body,'$.status',?) WHERE group_id=?").run(status, reviewId);
+      // Re-armed (a retry-task, or a no-start that re-arms): the next claim continues the review.
+      for (const state of ["settled-failed", "failed-before-provider"]) {
+        setRun(state); setTask("ready");
+        expect((await w.service.systemDebugPass()).settled).toEqual([]);
+        expect(settledOf(w, reviewId)).toBeNull();
+      }
+      // Not re-armed: nothing will ever move it again.
+      setTask("blocked");
+      expect((await w.service.systemDebugPass()).settled).toContain(reviewId);
+      expect(settledOf(w, reviewId)).toMatchObject({ state: "errored", detail: "run-failed:failed-before-provider" });
+      expect(w.state()).toMatchObject({ failureStreak: 1, last: { state: "errored", detail: "run-failed:failed-before-provider" } });
+    } finally { await w.h.dispose(); }
+  });
+
+  it("a succeeded run whose base cannot be read ends errored: range-unavailable (not findings-invalid)", async () => {
+    const w = await world(); try {
+      const reviewId = await openOne(w);
+      w.setFindings(goodFindings(w, reviewId));
+      const runId = await w.driveReview(reviewId);
+      const run = w.t.body(runId) as Record<string, unknown> & { drive: Record<string, unknown> };
+      w.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...run, drive: { ...run.drive, base: null } }), runId);
+      await w.service.systemDebugPass();
+      expect(settledOf(w, reviewId)).toMatchObject({ state: "errored", detail: "range-unavailable" });
+    } finally { await w.h.dispose(); }
+  });
+
+  it("a not-admitted review whose archive is refused stays live and is retried on a later pass", async () => {
+    const w = await world(); try {
+      const reviewId = await openOne(w);
+      expect((await w.service.systemDebugPass()).confirmed).toContain(reviewId);
+      // Something in motion refuses the archive (archive-run-active).
+      w.h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('busy',?,'debug',1,1,?)").run(reviewId, JSON.stringify({ runId: "busy", taskId: "debug", state: "starting" }));
+      w.advance(MODEL_REVIEW_ADMIT_MS);
+      expect((await w.service.systemDebugPass()).settled).toEqual([]);
+      expect(settledOf(w, reviewId)).toBeNull();
+      expect(w.body(reviewId).archived).toBeUndefined();
+      w.h.store.db.prepare("DELETE FROM runs WHERE id='busy'").run();
+      w.advance(1);
+      await w.service.systemDebugPass();
+      expect(settledOf(w, reviewId)).toMatchObject({ state: "errored", detail: "not-admitted" });
+      expect(w.body(reviewId).archived).toMatchObject({ actor: ORCHESTRATION_ACTOR });
+    } finally { await w.h.dispose(); }
+  });
+
   it("a review a person archives or stops is errored: archived / stopped", async () => {
     const w = await world(); try {
       const reviewId = await openOne(w);

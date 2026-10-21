@@ -72,6 +72,21 @@ export async function rangeOf(git: Git, repo: string, W: string, H: string, land
   return { from: base.from, to: H, groups: out, rebased: base.rebased };
 }
 
+/**
+ * §5.2: a range cut to `max` groups, oldest first; `to` = the last included group's commit (the rest is the next
+ * range). A group off the first-parent history sorts last, so its commit can be an ancestor of that `to` although the
+ * cut left it out -- the moved watermark would pass it and it would never be checked; every such group is kept.
+ */
+export async function cutRange(git: Git, repo: string, range: CheckRange, max: number): Promise<{ to: string; groups: RangeGroup[] }> {
+  if (range.groups.length <= max) return { to: range.to, groups: range.groups };
+  const to = range.groups[max - 1]!.integratedCommit;
+  const groups: RangeGroup[] = [];
+  for (const [index, group] of range.groups.entries()) {
+    if (index < max || (await git(repo, ["merge-base", "--is-ancestor", group.integratedCommit, to])).code === 0) groups.push(group);
+  }
+  return { to, groups };
+}
+
 /** The largest number of range groups that changed one same path (0 or 1 means no overlap). */
 export function overlapGroups(groups: readonly RangeGroup[]): number {
   const count = new Map<string, number>();

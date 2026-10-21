@@ -20,7 +20,7 @@ import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, typ
 import { readAgentPreferences } from "./agentPreferences.js";
 import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
 import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
-import { effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord, type EstimateRecord, type EstimateWithdrawnReason } from "./queries.js";
+import { allWork, effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord, type EstimateRecord, type EstimateWithdrawnReason } from "./queries.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import { agentSelectionSchema, amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
@@ -53,7 +53,7 @@ import { failedRunDetail, groupWorkerAgent, MODEL_REVIEW_ADMIT_MS, newestConfirm
 import { writeReviewInputs } from "./modelReview/inputs.js";
 import { FINDINGS_PATH, validatorCommand } from "./modelReview/plan.js";
 import { parseFindings, validateFindings, type Finding } from "./modelReview/findings.js";
-import { rangeOf } from "./checks/range.js";
+import { cutRange, rangeOf } from "./checks/range.js";
 import { landedGroups } from "./integrationCheck.js";
 import { groupStopState } from "./stopIntent.js";
 import { readGroupOrchestration } from "./orchestration.js";
@@ -92,7 +92,8 @@ import type { Amount } from "./types.js";
 import type { ControlStore } from "./store.js";
 import type { BudgetEstimateV1, CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, RawAuthorityCommandV1, ProfileBindingV1 } from "./webProtocol.js";
 import type { AdmissionGate } from "./admissionGate.js";
-import { budgetBalance } from "./budget.js";
+import { budgetBalance, isTerminalRunState } from "./budget.js";
+import { isTerminallyFailedRun } from "./driveRecord.js";
 import { hasRequirementBlock, latestDraft, latestRound, readRequirementGroup, refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall } from "./singleCallLedger.js";
 import {
@@ -833,8 +834,10 @@ export class WebControlService {
     const orchestration = readGroupOrchestration(this.store, groupId);
     if ((orchestration?.startedRevision ?? null) === null && mark.openedAt !== undefined && this.store.now() - mark.openedAt >= MODEL_REVIEW_ADMIT_MS) {
       const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)?.revision ?? 0);
-      this.archiveGroup({ schema: "orca-raw-command-v1", commandId: `orca-auto-not-admitted-${groupId}`, actorId: ORCHESTRATION_ACTOR, expectedRevision: revision, verb: "archive-group", target: { kind: "group", groupId }, payload: {} } as ArchiveGroupCommand);
-      return end("not-admitted");
+      // A refused archive (something in motion) leaves the group live: not ended, retried on a later pass under a new
+      // command id (a refusal is booked under its id and would only replay).
+      const archived = this.archiveGroup({ schema: "orca-raw-command-v1", commandId: `orca-auto-not-admitted-${groupId}-${this.store.now()}`, actorId: ORCHESTRATION_ACTOR, expectedRevision: revision, verb: "archive-group", target: { kind: "group", groupId }, payload: {} } as ArchiveGroupCommand);
+      return (archived as { error?: unknown }).error === undefined ? end("not-admitted") : null;
     }
     const stop = groupStopState(this.store, groupId);
     if (stop === "handoff-complete" || stop === "handoff-partial") return end("stopped");
@@ -850,16 +853,28 @@ export class WebControlService {
       if ((orchestration?.startedRevision ?? null) === null) return null;
       const decision = decideFundedAllowance(this.store, groupId, null, this.store.now());
       if (decision.allowance !== null) return null;
-      if (decision.reason === "group-budget-unavailable" || decision.reason === "task-budget-unavailable") return end("budget: limit");
+      // Only the group's limit is a budget end here: before any run the task's grant is whole, and
+      // `task-budget-unavailable` is decideFundedAllowance's answer for every group it skips (a pause or stop intent, a
+      // recovery blocker, unknown usage) -- those wait, with no end and nothing added to the streak.
+      if (decision.reason === "group-budget-unavailable") return end("budget: limit");
       if (decision.reason === "spend-cap-reached") return end(`claim-refused:${decision.reason}`);
       return null;
     }
-    const run = JSON.parse(String(row.body)) as { runId: string; state: string; drive?: { outcome?: string | null; blockedReason?: string | null; landedCommit?: string | null; base?: string | null; failureCause?: { cause?: string }; budgetSnapshot?: ReviewRunFacts["budgetSnapshot"] } };
+    const body = JSON.parse(String(row.body));
+    const run = body as { runId: string; state: string; drive?: { outcome?: string | null; blockedReason?: string | null; landedCommit?: string | null; base?: string | null; failureCause?: { cause?: string }; budgetSnapshot?: ReviewRunFacts["budgetSnapshot"] } };
     const facts: ReviewRunFacts = {
       state: run.state, outcome: run.drive?.outcome ?? null, blockedReason: run.drive?.blockedReason ?? null, landedCommit: run.drive?.landedCommit ?? null,
       base: run.drive?.base ?? null, failureCause: run.drive?.failureCause?.cause ?? null, budgetSnapshot: run.drive?.budgetSnapshot ?? null,
     };
-    if (run.state === "blocked") return end(failedRunDetail(facts));
+    // A blocked run ends the review only when recovery-retry cannot move it (ccloop's own terminal at C, or a write
+    // outside the read-only set); any other block waits for a person's recovery-retry (or an archive/stop).
+    if (run.state === "blocked") return isTerminallyFailedRun(body) || facts.blockedReason?.startsWith("out-of-bounds:") === true ? end(failedRunDetail(facts)) : null;
+    // §6.1 any other non-succeeded terminal ⇒ run-failed -- unless its task was re-armed (a retry-task, a no-start): the
+    // next claim continues the review.
+    if (isTerminalRunState(run.state) && run.state !== "settled") {
+      const rearmed = allWork(this.store, groupId).some((work) => work.kind === "task" && ["ready", "continuing"].includes(work.status));
+      return rearmed ? null : end(failedRunDetail({ ...facts, blockedReason: facts.blockedReason ?? run.state }));
+    }
     if (run.state !== "settled" || !allTasksDone(this.store, groupId)) return null;
     return this.completeModelReview(groupId, source, mark, run.runId, facts);
   }
@@ -882,7 +897,7 @@ export class WebControlService {
     const errored = (detail: string): "settled" => { this.endModelReview(groupId, source, { state: "errored", at, detail }); return "settled"; };
     const repo = this.repositoryPath(source.repoId);
     const tip = (await gitChild(repo, ["rev-parse", "--verify", "--quiet", `${workBranchRef(groupId)}^{commit}`])).stdout.trim() || run.landedCommit;
-    if (tip === null || run.base === null) return errored("findings-invalid");
+    if (tip === null || run.base === null) return errored("range-unavailable");
     const changed = (await gitChild(repo, ["diff", "--name-only", "--no-renames", run.base, tip])).stdout.split("\n").filter((line) => line !== "");
     if (changed.some((path) => path !== FINDINGS_PATH && !path.startsWith(".decisions/"))) return errored("not-read-only");
     const file = await gitChild(repo, ["show", `${tip}:${FINDINGS_PATH}`]);
@@ -1053,7 +1068,7 @@ export class WebControlService {
             recordCheckEnded(this.store, repoId, "integration-check", target, { state: "errored", at: now, detail: "interrupted: Orca stopped while it ran", interrupted: true });
           }
           const prepared = await prepareRange(this.store, gitChild, repo, repoId, "integration-check", target, now);
-          if (prepared.kind === "initialised") { out.initialised.push(repoId); continue; }
+          if (prepared.kind === "initialised") { if (!out.initialised.includes(repoId)) out.initialised.push(repoId); continue; }
           if (prepared.kind !== "range" || prepared.range.groups.length === 0) continue;
           if (!evaluateTrigger(settings.trigger.value, rangeFacts(this.store, repoId, prepared.range.groups, prepared.state, now))) continue;
           const groups = prepared.range.groups;
@@ -1091,8 +1106,7 @@ export class WebControlService {
     if (prepared.kind === "initialised") { if (!out.initialised.includes(repoId)) out.initialised.push(repoId); return; }
     if (prepared.kind !== "range" || prepared.range.groups.length === 0) return;
     if (!evaluateTrigger(settings.trigger.value, rangeFacts(this.store, repoId, prepared.range.groups, prepared.state, now))) return;
-    const groups = prepared.range.groups.slice(0, settings.maxGroupsPerReview.value);
-    const to = groups.length < prepared.range.groups.length ? groups.at(-1)!.integratedCommit : prepared.range.to;
+    const { groups, to } = await cutRange(gitChild, repo, prepared.range, settings.maxGroupsPerReview.value);
     const source = { kind: "model-review" as const, repoId, target, from: prepared.range.from, to, runSeq: prepared.state.runSeq + 1 };
     const reviewId = systemDebugGroupId(source);
     recordCheckStarted(this.store, repoId, "model-review", target, now, { from: source.from, to, groups }, { reviewGroupId: reviewId });

@@ -74,11 +74,15 @@ export function rangeFacts(store: ControlStore, repoId: string, groups: readonly
   const ids = groups.map((group) => group.groupId);
   const conflictReconciled = ids.length > 0 && store.db.prepare(`SELECT 1 FROM flagged_decisions WHERE source='integration-conflict' AND group_id IN (${ids.map(() => "?").join(",")}) LIMIT 1`).get(...ids) !== undefined;
   const repoOf = (groupId: string): unknown => { try { return readArchivedPlan(store, groupId).plan.repoId; } catch { return null; } };
+  // §2.3: a system group (any systemDebug mark) never counts, so its running slot does not make the queue busy either.
+  const isSystem = (groupId: string): boolean => {
+    try { return Object.hasOwn(JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)?.body ?? "{}")) as object, "systemDebug"); } catch { return false; }
+  };
   return {
     landed: groups.length,
     conflictReconciled,
     overlapGroups: overlapGroups(groups),
-    queueIdle: runningGroupIds(store).every((groupId) => repoOf(groupId) !== repoId),
+    queueIdle: runningGroupIds(store).every((groupId) => isSystem(groupId) || repoOf(groupId) !== repoId),
     msSinceLastStart: state.lastStartAt === null ? null : now - state.lastStartAt,
     scheduleDue,
   };

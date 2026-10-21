@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { prepareRange } from "../../src/control/checks/pass.js";
+import { cutRange, type RangeGroup } from "../../src/control/checks/range.js";
 import { checksRead } from "../../src/control/checks/settings.js";
 import { readCheckState, writeCheckState } from "../../src/control/checks/state.js";
 import { gitChild } from "../../src/control/integrationGit.js";
@@ -32,7 +33,11 @@ describe("the check watermark (integration-check kind)", () => {
       await w.service.checksSettled();
       expect(state(w)).toMatchObject({ watermark: head, failureStreak: 0, last: { state: "passed", groups: ["g1", "g2"] } });
       // The settings read carries each check's state (spec §4.3, §7: watermark, last run).
-      expect(checksRead(w.h.store, "repo").state).toEqual([{ kind: "integration-check", target: "main", state: state(w) }]);
+      // The model review is on by default (§3), so its own (initialised) state is listed beside it.
+      expect(checksRead(w.h.store, "repo").state).toEqual([
+        { kind: "integration-check", target: "main", state: state(w) },
+        { kind: "model-review", target: "main", state: readCheckState(w.h.store, "repo", "model-review", "main") },
+      ]);
       expect(checksRead(w.h.store, null).state).toEqual([]);
       // Nothing new: nothing starts.
       w.advance(7 * 3_600_000);
@@ -117,3 +122,26 @@ describe("the check watermark (integration-check kind)", () => {
     } finally { await w.h.dispose(); }
   });
 });
+
+/**
+ * Checks spec §5.2 (a cut range moves W to the last included group's commit, the rest is the next range): a group off
+ * the target's first-parent history sorts last, so a cut can leave it out although its commit is an ancestor of the new
+ * `to` -- W would then pass it and it would never be reviewed. The cut keeps every such group.
+ */
+describe("cutting a range to maxGroupsPerReview", () => {
+  const group = (groupId: string, integratedCommit: string) => ({ groupId, integratedCommit, target: "main", paths: [] }) as unknown as RangeGroup;
+  // Ancestry: a <- b <- c on the chain; x (off the chain) is an ancestor of b; y is not.
+  const ancestors: Record<string, string[]> = { b: ["a", "x"], c: ["a", "b", "x"] };
+  const git = async (_repo: string, args: string[]) => ({ code: args[0] === "merge-base" && args[1] === "--is-ancestor" && (ancestors[args[3]!] ?? []).includes(args[2]!) ? 0 : 1, stdout: "", stderr: "" });
+  const range = { from: "w", to: "H", rebased: false, groups: [group("ga", "a"), group("gb", "b"), group("gc", "c"), group("gx", "x"), group("gy", "y")] };
+
+  it("keeps an excluded group whose commit is an ancestor of the new to; leaves out the rest", async () => {
+    const cut = await cutRange(git, "/repo", range, 2);
+    expect(cut).toEqual({ to: "b", groups: [range.groups[0], range.groups[1], range.groups[3]] });
+  });
+
+  it("an uncut range is returned whole, to = H", async () => {
+    expect(await cutRange(git, "/repo", range, 5)).toEqual({ to: "H", groups: range.groups });
+  });
+});
+

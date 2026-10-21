@@ -130,6 +130,25 @@ describe("range facts from the store", () => {
     } finally { await w.h.dispose(); }
   });
 
+  it("queue-idle: a running system group holds no slot for the trigger; a running ordinary group does (§2.3)", async () => {
+    const w = await checksWorld(); try {
+      await init(w);
+      await w.commitLand("g1", { "a.txt": "1\n" });
+      const queueIdle = async () => {
+        const prepared = await prepareRange(w.h.store, gitChild, w.repo, "repo", "integration-check", "main", w.now());
+        if (prepared.kind !== "range") throw new Error(prepared.kind);
+        return rangeFacts(w.h.store, "repo", prepared.range.groups, prepared.state, w.now()).queueIdle;
+      };
+      expect(await queueIdle()).toBe(true);
+      w.h.importDeferred("sys");
+      w.h.store.db.prepare("UPDATE groups SET body=? WHERE id='sys'").run(JSON.stringify({ ...w.groupBody("sys"), status: "running", systemDebug: SYSTEM_MARK("ladder") }));
+      expect(await queueIdle()).toBe(true);
+      w.h.importDeferred("busy");
+      w.h.store.db.prepare("UPDATE groups SET body=? WHERE id='busy'").run(JSON.stringify({ ...w.groupBody("busy"), status: "running" }));
+      expect(await queueIdle()).toBe(false);
+    } finally { await w.h.dispose(); }
+  });
+
   it("an empty range never fires, whatever the trigger says (the implied 'range non-empty')", async () => {
     const w = await checksWorld(); try {
       w.setProjectChecks({ integrationCheck: { enabled: true, command: "true", trigger: { all: [{ any: [{ kind: "queue-idle" }] }] } } });
