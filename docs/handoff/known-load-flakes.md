@@ -80,6 +80,8 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 
 ### 已修、不再豁免的（再红就当新问题查）
 
+- **`handoffE2E` H2／`agentSelectionE2E` C3 —— 已查清（会话 `9ec98639`，2026-10-21，修复主题行 `test(control): hold parallel predecessors 30 s so one stop reaches all three mid-execute, and name a lost premise`）**：根因是 harness 时间窗，不是产品。driver 逐个派发三个 run、逐个投递 handoff 请求；实测（负载 20–30）首个进 execute 到最后一个 3.2–5.5 s、最后一次投递再晚 0.6–1.0 s，原 8 s execute 只剩 1.6–3.8 s；负载再高就用完 ⇒ 首个 predecessor 跑完 execute、进 verify／落地（spec §3「stop 前已完成」），产生 `expected 1 to be +0`、`[8,8,4]`、「three requests to settle recoverable」超时三种形态。clone 里用 `wrapPort` 推迟第三次 accept 9 s 可确定复现。修法：hold 改 `PARALLEL_STOP_HOLD_MS`＝30 s，并加 `parallelStopPremise`——再用完会报「premise lost: …」。`commondir` 那一形态（n＝1）不属此机制，未复现，仍登记。
+
 - `tests/control/driverSettle.test.ts` 真 git 场景：全量＋并发下撞 5 s，已给 30 s。再红要查。
 - `tests/control/estimateE2E.test.ts` › E2：曾以 `SyntaxError: Unexpected end of JSON input` 红（夹具读到 fake 已建未写的日志），已由
   `test(fixture): read a fake CLI log created but not yet written as no lines` 修（`logLines` 跳过空行，判据 `ccloopWorldLogLines.test.ts` 对旧读法见红）。
@@ -98,6 +100,8 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 - `check-tmp-leak.mjs` 每次留 1 个只含空 `orca-ccmem-*`／`orca-test-control-*` 的 `orca-tmp-*`：`agentUpdatePaired` 用 `describe.skipIf` 在收集期整文件跳过（没设 `ORCA_TASK9_*` 时）⇒ 由提交 `test(control): skip the paired update criterion at run time …` 修（2026-10-14 `b39a5527`，在 repin 分支上，随它合进 main）。再见就找别的收集期整文件跳过。
 
 ## ccloop 侧（供 Orca 跑 ccloop 全量时对照；**权威名单在 ccloop 仓自己的 handoff 与 `scripts/check-known-reds.mjs`**）
+
+- **会话 `9ec98639`（2026-10-21，负载 10–80）**：ccloop 全量在高负载下当门不可靠——`savedResultRecovery.native`（`ENOTEMPTY`、marker 未出现）、`runCodexPhase`「`expected 'timeout' to be 'output-limit'`」、`ompPhase` 超时、`phasesCompleted` 5 s 超时，在**未改动的 main** 上交错对比同样红（如负载 42 时 `savedResultRecovery.native` 10/28）。`verifySavedResult`「r1 command interruption」不是负载，是真缺陷，已修（ccloop 主题行 `fix(recovery): a saved-result check's group answering kill() with EPERM is gone, not a failed check`）。
 
 - 2026-10-13 会话 `808feb6a`，`codex/omp-agent-integration` 原生全量（1632/1639、1635/1639、1635/1639）里红过、单跑 3/3 绿（负载 10–33）的文件：
   `verifySavedResult`、`codexAdapter`、codex adapter、`cli parseArgs`、`savedResultRecovery.native`（dist 重建竞态）。
