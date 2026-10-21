@@ -540,6 +540,7 @@ export function buildApi(app: Express, deps: ApiDeps): void {
       // The panel never builds a `CorrectionRow` literal of its own -- that is
       // exactly the shape fields.ts's comment says makes the "both paths
       // agree" criterion unmutatable.
+      const recordingPrincipal = res.locals.orcaPrincipal as Principal | undefined;
       const input = {
         projectKey,
         decisionId,
@@ -551,7 +552,10 @@ export function buildApi(app: Express, deps: ApiDeps): void {
         // refuses rather than coerces in order to prevent.
         ...(body.chose_instead === undefined ? {} : { chose_instead: body.chose_instead }),
         because: String(body.because ?? ""),
-        by: deps.opts.by,
+        // CLI v2 spec §16 (controller's call, session b37f7ce9): the person is the logged-in account and the channel is the
+        // Web, as on the correction-record verb, so that account may later withdraw what it recorded.
+        by: recordingPrincipal?.kind === "user" ? recordingPrincipal.name : deps.opts.by,
+        via: "web",
       } as NewCorrectionInput;
       const row = correctionRowFrom(input, panelClock(deps.opts));
 

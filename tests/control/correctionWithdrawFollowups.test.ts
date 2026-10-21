@@ -102,6 +102,29 @@ describe("CLI v2 follow-ups to the correction verbs (controller, session b37f7ce
     });
   });
 
+  it("(d) the old record route records the logged-in account and via web, so that account may withdraw what it recorded", async () => {
+    await withPanel(async ({ panel, env, corrections }) => {
+      // "tester" is a Web owner whose account name is not the panel's --by ("panel-owner"); "bob" is another owner account.
+      const tester = await sessionFor(panel, env);
+      seedUser(controlRoot(env), "bob", "owner");
+      const bob = await login(panel.url, "bob");
+      const body = { projectKey: PANEL_KEY, decisionId: ORIGINAL.id, kind: "wrong", because: "the premise was false" };
+      expect((await post(tester, "/api/corrections", body)).status).toBe(200);
+      expect((await post(tester, "/api/corrections", { ...body, because: "still false", again: true })).status).toBe(200);
+      const [first, second] = await readCorrections(corrections);
+      // Mutations "by: deps.opts.by" and "drop via" on the route each make this red; the id is derived from the whole row.
+      expect([first, second].map((row) => [row!.by, row!.via, row!.id === deriveCorrectionId(row!)])).toEqual([["tester", "web", true], ["tester", "web", true]]);
+      // The withdraw rule (requester by == row by, or the panel owner): another account is refused, the author is not --
+      // on the old Web withdraw route and on the correction-withdraw verb alike.
+      expect({
+        otherAccount: await code(await post(bob, "/api/corrections/withdraw", { correctionId: first!.id })),
+        authorRoute: await code(await post(tester, "/api/corrections/withdraw", { correctionId: first!.id })),
+        authorVerb: await code(await command(tester, `/api/control/corrections/${second!.id}/withdraw`, "w-d", { correctionId: second!.id })),
+      }).toEqual({ otherAccount: [409, "correction-not-yours"], authorRoute: [200, "ok"], authorVerb: [200, "ok"] });
+      expect((await readWithdrawals(corrections)).map((row) => [row.correctionId, row.by])).toEqual([[first!.id, "tester"], [second!.id, "tester"]]);
+    });
+  });
+
   it("(c) `via` is appended, optional: an earlier row without it still reads strictly and leniently, and correction ids stay put", async () => {
     const dir = await realpath(await mkdtemp(join(tmpdir(), "wf-old-")));
     try {

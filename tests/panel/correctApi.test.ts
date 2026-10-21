@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { deriveCorrectionId } from "../../src/corrections/fields.js";
 import { correctionRowFrom } from "../../src/corrections/record.js";
 import { CORRECTION_ROW_INVALID } from "../../src/corrections/record.js";
 import { CORRECTION_ALREADY_RECORDED, readCorrections } from "../../src/corrections/store.js";
@@ -550,15 +551,21 @@ describe("recording a correction from the panel (spec sections 2.1, 2.3 and 4.4)
         };
         const started = await createPanelServer(opts);
         try {
-          const res = await post(started, "/api/corrections", {
-            projectKey: "github.com/biran/orca",
-            decisionId: "orca-dev-1/1",
-            kind: "wrong",
-            because: "那个前提当时就不成立",
+          // CLI v2 spec §16 (controller's follow-up, session b37f7ce9; Ruling: 这次批准改写所有必要的判据 (b37f7ce9);
+          // 允许改必要的test (8b1469ea)): the route now records the logged-in account as `by` and `via: "web"`. The
+          // account here is "amy", the CLI fixture's --by, so the ONE construction point still makes the rows equal but
+          // for the channel: the CLI's row (no via) keeps GOLDEN_ID, and the panel's id is that row plus via "web".
+          const amy = await sessionFor(started, process.env, "amy");
+          const res = await amy.fetch("/api/corrections", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ projectKey: "github.com/biran/orca", decisionId: "orca-dev-1/1", kind: "wrong", because: "那个前提当时就不成立" }),
           });
           expect(res.status).toBe(200);
           const body = (await res.json()) as { correction: { id: string } };
-          expect(body.correction.id).toBe(GOLDEN_ID);
+          expect(deriveCorrectionId(sanityRow)).toBe(GOLDEN_ID);
+          expect(body.correction.id).toBe(deriveCorrectionId({ ...sanityRow, via: "web" }));
+          expect(body.correction.id).not.toBe(GOLDEN_ID);
         } finally {
           await started.close();
         }
