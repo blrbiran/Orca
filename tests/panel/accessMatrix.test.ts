@@ -16,39 +16,44 @@ import { boot, overSocket, useSocketPanels, workspace } from "./fixtures/socketP
 const LOCAL = { delivery: "local", trigger: "task", method: "merge", target: "main" };
 const PUSH = { delivery: "push-branch", trigger: "task", target: "main", remote: "origin" };
 
-/** §15.1, row by row: the entry it exercises (a verb, or `verb.field`), a payload, and the socket agent's tier with no token. */
-const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tier: "open" | "token" }> = [
-  { entry: "correction-record", payload: {}, tier: "open" },
-  { entry: "correction-close", payload: {}, tier: "open" },
-  { entry: "correction-withdraw", payload: {}, tier: "open" },
-  { entry: "correction-debug-open.undoHow", payload: { correctionId: "c_1", undoHow: "git revert --no-edit HEAD" }, tier: "open" },
-  { entry: "approve-pending-decision", payload: {}, tier: "open" },
-  { entry: "reject-pending-decision", payload: {}, tier: "open" },
-  { entry: "ratify-flagged-decision", payload: {}, tier: "open" },
-  { entry: "add-group-dependency", payload: {}, tier: "open" },
-  { entry: "remove-group-dependency", payload: {}, tier: "open" },
-  { entry: "set-criteria-review", payload: { enabled: false }, tier: "open" },
-  { entry: "set-orchestration-settings", payload: {}, tier: "open" },
-  { entry: "retry-integration", payload: {}, tier: "open" },
-  { entry: "resolve-integration-conflict", payload: {}, tier: "open" },
-  { entry: "set-integration-check", payload: { enabled: true, command: null }, tier: "open" },
-  { entry: "set-integration-check", payload: { enabled: false, command: "npm test" }, tier: "open" },
-  { entry: "set-integration-check", payload: { enabled: true, command: "npm test" }, tier: "token" },
-  { entry: "confirm.integrationHash", payload: { integrationHash: "d".repeat(64) }, tier: "open" },
-  { entry: "set-integration-scheme", payload: { integration: { delivery: "keep" } }, tier: "open" },
-  { entry: "set-group-integration", payload: { integration: { delivery: "keep" } }, tier: "open" },
-  { entry: "set-integration-scheme", payload: { integration: LOCAL }, tier: "token" },
-  { entry: "set-group-integration", payload: { integration: PUSH }, tier: "token" },
+/**
+ * §15.1, row by row: the entry it exercises (a verb, or `verb.field`), a payload, the socket agent's tier with no token,
+ * and (review M5, session b37f7ce9) a Web member's refusal code, written out here rather than read back from
+ * humanOnlyRefusal, the code under test: I3 keeps today's member refusals -- a human-only verb by verb, a field by field.
+ */
+const V = "control-verb-human-only", F = "control-field-human-only";
+const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tier: "open" | "token"; member: typeof V | typeof F }> = [
+  { entry: "correction-record", payload: {}, tier: "open", member: V },
+  { entry: "correction-close", payload: {}, tier: "open", member: V },
+  { entry: "correction-withdraw", payload: {}, tier: "open", member: V },
+  { entry: "correction-debug-open.undoHow", payload: { correctionId: "c_1", undoHow: "git revert --no-edit HEAD" }, tier: "open", member: F },
+  { entry: "approve-pending-decision", payload: {}, tier: "open", member: V },
+  { entry: "reject-pending-decision", payload: {}, tier: "open", member: V },
+  { entry: "ratify-flagged-decision", payload: {}, tier: "open", member: V },
+  { entry: "add-group-dependency", payload: {}, tier: "open", member: V },
+  { entry: "remove-group-dependency", payload: {}, tier: "open", member: V },
+  { entry: "set-criteria-review", payload: { enabled: false }, tier: "open", member: V },
+  { entry: "set-orchestration-settings", payload: {}, tier: "open", member: V },
+  { entry: "retry-integration", payload: {}, tier: "open", member: V },
+  { entry: "resolve-integration-conflict", payload: {}, tier: "open", member: V },
+  { entry: "set-integration-check", payload: { enabled: true, command: null }, tier: "open", member: V },
+  { entry: "set-integration-check", payload: { enabled: false, command: "npm test" }, tier: "open", member: V },
+  { entry: "set-integration-check", payload: { enabled: true, command: "npm test" }, tier: "token", member: V },
+  { entry: "confirm.integrationHash", payload: { integrationHash: "d".repeat(64) }, tier: "open", member: F },
+  { entry: "set-integration-scheme", payload: { integration: { delivery: "keep" } }, tier: "open", member: V },
+  { entry: "set-group-integration", payload: { integration: { delivery: "keep" } }, tier: "open", member: V },
+  { entry: "set-integration-scheme", payload: { integration: LOCAL }, tier: "token", member: V },
+  { entry: "set-group-integration", payload: { integration: PUSH }, tier: "token", member: V },
   // A payload the predicate cannot read is the stricter tier (the schema refuses it later anyway).
-  { entry: "set-group-integration", payload: {}, tier: "token" },
-  { entry: "set-limit", payload: { limit: {} }, tier: "token" },
-  { entry: "requirement-open.limit", payload: { groupId: "g", limit: {} }, tier: "token" },
-  { entry: "proposal-edit.proposedGroupLimit", payload: { proposedGroupLimit: {} }, tier: "token" },
-  { entry: "set-spend-cap", payload: {}, tier: "token" },
-  { entry: "clear-spend-cap", payload: {}, tier: "token" },
-  { entry: "set-usage-calendar", payload: {}, tier: "token" },
-  { entry: "settle-unknown-usage", payload: {}, tier: "token" },
-  { entry: "apply-agent-update", payload: {}, tier: "token" },
+  { entry: "set-group-integration", payload: {}, tier: "token", member: V },
+  { entry: "set-limit", payload: { limit: {} }, tier: "token", member: V },
+  { entry: "requirement-open.limit", payload: { groupId: "g", limit: {} }, tier: "token", member: F },
+  { entry: "proposal-edit.proposedGroupLimit", payload: { proposedGroupLimit: {} }, tier: "token", member: F },
+  { entry: "set-spend-cap", payload: {}, tier: "token", member: V },
+  { entry: "clear-spend-cap", payload: {}, tier: "token", member: V },
+  { entry: "set-usage-calendar", payload: {}, tier: "token", member: V },
+  { entry: "settle-unknown-usage", payload: {}, tier: "token", member: V },
+  { entry: "apply-agent-update", payload: {}, tier: "token", member: V },
 ];
 
 const PERSON = { userId: "u9", name: "ana", roles: ["owner" as const] };
@@ -78,22 +83,22 @@ describe("the socket access tiers (CLI v2 spec §15.1)", () => {
   it("answers every row x {socket, socket+token, socket+marker, socket+token+marker, Web member, Web owner} as the table says", () => {
     const answers = ROWS.map(({ entry, payload }) => {
       const verb = entry.split(".")[0] as never;
-      const memberCode = humanOnlyRefusal(verb, payload)!.code;
-      return { entry, payload, answer: Object.fromEntries(Object.entries(PRINCIPALS).map(([name, p]) => [name, permissionRefusal(p, verb, payload)?.code ?? "accepted"])), memberCode };
+      return { entry, payload, answer: Object.fromEntries(Object.entries(PRINCIPALS).map(([name, p]) => [name, permissionRefusal(p, verb, payload)?.code ?? "accepted"])) };
     });
-    expect(answers.map(({ entry, payload, answer }) => ({ entry, payload, answer }))).toEqual(ROWS.map(({ entry, payload, tier }, at) => ({
+    expect(answers).toEqual(ROWS.map(({ entry, payload, tier, member }) => ({
       entry, payload, answer: {
         socket: tier === "open" ? "accepted" : "control-person-token-required",
         socketToken: "accepted",
         socketMarker: "control-dispatched-run-refused",
         socketTokenMarker: "control-dispatched-run-refused",
-        // I3: a member's refusal is today's, by today's code.
-        webMember: answers[at]!.memberCode,
+        // I3: a member's refusal is today's, by today's code (the literal column above; mutation "a field refused by
+        // the verb code" in humanOnlyRefusal -> red, where reading the code back from it stayed green).
+        webMember: member,
         webOwner: "accepted",
       },
     })));
-    // The member's codes are the human-only ones, never a tier code.
-    expect(new Set(answers.map((a) => a.memberCode))).toEqual(new Set(["control-verb-human-only", "control-field-human-only"]));
+    // The Web member's code is also humanOnlyRefusal's (the permission table still routes a member through it).
+    for (const { entry, payload, member } of ROWS) expect(humanOnlyRefusal(entry.split(".")[0] as never, payload)?.code, entry).toBe(member);
   });
 
   it("a command carrying an open verb and a token-tier field is the token tier; a verb outside §15.1 is open to all", () => {
