@@ -89,7 +89,7 @@ export interface ExecutionDriverDeps {
   /** spec §5.3(6): the binary and agents table a reconciliation `ccloop run` is spawned with (agent selection spec §4.9). */
   ccloopBin: string;
   agentsTablePath: string;
-  /** CLI v2 spec §15.3: the ORCA_PERSON_DIR of a reconciliation or resolution `ccloop run` (runTask's option). */
+  /** CLI v2 spec §15.3: the ORCA_PERSON_DIR of a reconciliation or resolution `ccloop run` (runTask's option), and of the debug and criteria checks (review I1). */
   dispatchedPersonDir?: string;
   /** N1 spec §6: the ast-grep binary the overview's structure part runs; null = unavailable. */
   astGrepBin?: string | null;
@@ -708,17 +708,19 @@ function startDebugCheck(deps: ExecutionDriverDeps, runId: string, context: Driv
   if (context?.stopped) return;
   const entry: DebugCheck = { controller: new AbortController(), settled: null };
   debugChecksOf(context).set(runId, entry);
+  // Review I1: the commands are the agent's; they run as this run, with the panel's empty person directory.
+  const as = { runId, ...(deps.dispatchedPersonDir === undefined ? {} : { personDir: deps.dispatchedPersonDir }) };
   if (input.criteriaFiles !== undefined) {
     void runChecksAtBase({
       workdir: input.workdir, base: input.base, attemptSha: input.attemptSha, files: input.criteriaFiles, requiredChecks: input.contract.verification.requiredChecks,
-      timeoutMs: input.contract.executionPolicy.perAttemptTimeoutMs, snapshot: input.snapshot, signal: entry.controller.signal,
+      timeoutMs: input.contract.executionPolicy.perAttemptTimeoutMs, snapshot: input.snapshot, signal: entry.controller.signal, as,
     }).then((verdict) => { entry.settled = { verdict }; }, (error: unknown) => { entry.settled = { error }; });
     return;
   }
   const reported = reportedDebugOf(input.report);
   void (deps.checkReproduction ?? checkReproduction)({
     workdir: input.workdir, base: input.base, attemptSha: input.attemptSha, contract: input.contract, timeoutMs: input.contract.executionPolicy.perAttemptTimeoutMs,
-    result: reported.kind === "object" ? reported.value : {}, resultMalformed: reported.kind === "malformed", snapshot: input.snapshot, signal: entry.controller.signal,
+    result: reported.kind === "object" ? reported.value : {}, resultMalformed: reported.kind === "malformed", snapshot: input.snapshot, signal: entry.controller.signal, as,
   }).then((verdict) => { entry.settled = { verdict }; }, (error: unknown) => { entry.settled = { error }; });
 }
 

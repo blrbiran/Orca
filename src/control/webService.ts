@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { peerCode, peerFailure } from "./ccloopPort.js";
 import {retainSavedInterruption,readDriverRun,describeError} from "./executionDriver.js";
 import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
@@ -48,7 +49,7 @@ import { ratifyFlag } from "./flaggedDecisions.js";
 import { applySetIntegrationCheck, forgetInterruptedIntegrationCheck, integrationCheckDue, integrationCheckFacts, readIntegrationCheckSetting, readIntegrationCheckState, recordIntegrationCheckEnded, recordIntegrationCheckStarted, runIntegrationCheck, type SetIntegrationCheckCommand } from "./integrationCheck.js";
 import { applyCorrectionClose, applyCorrectionRecord, applyCorrectionWithdraw, type CorrectionCloseCommand, type CorrectionRecordCommand, type CorrectionWithdrawCommand, type PanelCorrections } from "./correctionCommands.js";
 import { recordActivity } from "./activity.js";
-import { commandClientFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
+import { DISPATCHED_PERSON_DIRNAME, commandClientFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
 import { applyApprovePendingDecision, applyRatifyFlaggedDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RatifyFlaggedDecisionCommand, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { readCorrections } from "../corrections/store.js";
 import { autoStartPass, ORCHESTRATION_ACTOR, readOrchestrationSettings, recordConfirmed, type PrerequisiteReader } from "./orchestration.js";
@@ -916,7 +917,7 @@ export class WebControlService {
   async integrationChecksSettled(): Promise<void> { await Promise.all([...this.integrationChecks.values()]); }
   private async runIntegrationCheckJob(repoId: string, landed: Parameters<typeof recordIntegrationCheckEnded>[2], latestGroupId: string, target: string, commands: string[], groups: string[], at: number): Promise<void> {
     try {
-      const run = await runIntegrationCheck(this.repositoryPath(repoId), controlWorkspaceRoots(this.store.stateDir), repoId, target, commands, at);
+      const run = await runIntegrationCheck(this.repositoryPath(repoId), controlWorkspaceRoots(this.store.stateDir), repoId, target, commands, at, join(this.store.stateDir, DISPATCHED_PERSON_DIRNAME));
       if (run.failures.length === 0) { recordIntegrationCheckEnded(this.store, repoId, landed, { state: "passed", at, commit: run.commit, groups, detail: null, debugGroupId: null }); return; }
       const source = { kind: "integration-check" as const, groupId: latestGroupId, taskId: null, runId: `check-${at}` };
       const groupId = systemDebugGroupId(source);

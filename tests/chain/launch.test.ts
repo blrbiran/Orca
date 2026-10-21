@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, realpath } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -28,6 +28,7 @@ async function setup(opts: { brokenShebang?: boolean } = {}) {
     logDir,
     n: 1,
     chainId: "chain-0000000a",
+    personDir: join(logDir, "..", "person"),
     baseEnv: fake.env(),
     graceMs: 300,
     pollMs: 100,
@@ -64,6 +65,18 @@ describe("launchClaudeCode (D-launch spec §2.2-4/5, §4.2, §8.2-2)", () => {
     expect(Object.keys(env).filter((k) => /^CMUX_|^CLAUDE_CODE_SESSION_|^CLAUDE_CODE_MESSAGING_/.test(k))).toEqual([]);
     expect(Object.fromEntries(Object.keys(mustKeep).map((k) => [k, env[k]]))).toEqual(mustKeep);
     expect([env.ORCA_CHAIN_ID, env.ORCA_CHAIN_SESSION]).toEqual(["chain-0000000a", SID]);
+  });
+
+  // CLI v2 spec §15.3-§15.4 (review M1, session b37f7ce9): a chain session is a run Orca dispatched -- the marker names the
+  // chain and ORCA_PERSON_DIR an empty directory the launch creates 0700, over any inherited value.
+  it("A2b the session runs as the dispatched chain: ORCA_DISPATCHED_RUN and an empty 0700 ORCA_PERSON_DIR", async () => {
+    const { fake, req } = await setup();
+    const personDir = join(await realpath(await mkdtemp(join(tmpdir(), "orca-chain-person-"))), "chain-0000000a", "person");
+    await launchClaudeCode(req({ personDir, baseEnv: fake.env({ ORCA_PERSON_DIR: "/inherited/person", ORCA_DISPATCHED_RUN: "inherited" }) }));
+    const env = (await fake.call(1))?.env ?? {};
+    // Mutation "childEnv drops ORCA_PERSON_DIR" -> the inherited value -> red.
+    expect([env.ORCA_DISPATCHED_RUN, env.ORCA_PERSON_DIR]).toEqual(["chain-0000000a", personDir]);
+    expect([(await stat(personDir)).mode & 0o777, await readdir(personDir)]).toEqual([0o700, []]);
   });
 
   it("A3 stdin is /dev/null, cwd is the repository, stdout and stderr land in two files", async () => {

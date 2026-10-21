@@ -10,6 +10,15 @@ export const CLIENT_PATTERN = /^(cli|mcp)(:[a-zA-Z0-9][a-zA-Z0-9._-]{0,63})?$/;
  */
 export const DISPATCHED_RUN_ENV = "ORCA_DISPATCHED_RUN";
 export const DISPATCHED_RUN_HEADER = "x-orca-dispatched-run";
+/** CLI v2 spec §15.3: the panel state's empty directory every dispatched run's ORCA_PERSON_DIR names (controlAssembly.ts). */
+export const DISPATCHED_PERSON_DIRNAME = "dispatched-person";
+/**
+ * Review I1/M1 (session b37f7ce9): who an agent-written command Orca runs itself runs as -- the run Orca dispatched, and
+ * the empty person directory when one is known -- as the variables set over the inherited environment.
+ */
+export interface DispatchedAs { runId: string; personDir?: string }
+export const dispatchedEnv = (as: DispatchedAs): Record<string, string> =>
+  ({ [DISPATCHED_RUN_ENV]: as.runId, ...(as.personDir === undefined ? {} : { ORCA_PERSON_DIR: as.personDir }) });
 /** The marker header for a request sent from this environment; empty when the variable is unset or empty. */
 export const dispatchedRunHeaders = (env: NodeJS.ProcessEnv): Record<string, string> => {
   const run = env[DISPATCHED_RUN_ENV];

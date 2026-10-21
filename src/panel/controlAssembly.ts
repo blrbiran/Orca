@@ -23,6 +23,7 @@ import { controlRepoKey } from "./controlOptions.js";
 import { readCorrectionList } from "../control/correctionState.js";
 import { createCorrectionExporter } from "../memory/correctionExport.js";
 import type { ControlOptions } from "./server.js";
+import { DISPATCHED_PERSON_DIRNAME } from "../control/commandClient.js";
 
 /**
  * Assembly plan Task 5. Everything above `server.ts` stays as it was; this turns parsed options into
@@ -35,7 +36,6 @@ import type { ControlOptions } from "./server.js";
 
 /** spec §4: the store's siblings live under the relocated root, so one variable moves all of them. */
 const ARCHIVE = "archive";
-const DISPATCHED_PERSON = "dispatched-person";
 const EXPORT = "export";
 const EVIDENCE = "evidence";
 
@@ -191,7 +191,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   for (const child of [ARCHIVE, EXPORT, EVIDENCE]) mkdirSync(join(root, child), { recursive: true, mode: 0o700 });
   // CLI v2 spec §15.3: the ORCA_PERSON_DIR of every run Orca dispatches -- empty, so a dispatched CLI finds no token.
   // Created 0700; an existing one keeps its mode (Rule 17). Registered in the accounts spec's Correction (plan Task 10).
-  dispatchedPersonDir = join(root, DISPATCHED_PERSON);
+  dispatchedPersonDir = join(root, DISPATCHED_PERSON_DIRNAME);
   mkdirSync(dispatchedPersonDir, { recursive: true, mode: 0o700 });
 
   const config = createTrustedControlConfig({

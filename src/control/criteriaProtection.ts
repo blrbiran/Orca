@@ -2,6 +2,7 @@ import type { DecisionEvent } from "../ledger/schema.js";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { git } from "../scheduler/gitExec.js";
+import type { DispatchedAs } from "./commandClient.js";
 import { exitsZero, restoreWorkspace, snapshotWorkspace, type WorkspaceSnapshot } from "./debugRepro.js";
 import { gitChild, oneLine } from "./integrationGit.js";
 import { QUIET_GIT } from "./workspace.js";
@@ -136,8 +137,10 @@ async function gitOk(workdir: string, args: string[]): Promise<void> {
 export async function runChecksAtBase(input: {
   workdir: string; base: string; attemptSha: string; files: readonly string[]; requiredChecks: readonly string[]; timeoutMs: number;
   snapshot?: WorkspaceSnapshot; signal?: AbortSignal;
+  /** The run the checks run as (exitsZero; review I1). */
+  as: DispatchedAs;
 }): Promise<CriteriaBaseVerdict> {
-  const { workdir, base, attemptSha, timeoutMs, signal } = input;
+  const { workdir, base, attemptSha, timeoutMs, signal, as } = input;
   const snapshot = input.snapshot ?? await snapshotWorkspace(workdir);
   let verdict: CriteriaBaseVerdict = { kind: "base-passed" };
   try {
@@ -154,7 +157,7 @@ export async function runChecksAtBase(input: {
       await gitOk(workdir, ["checkout", base, "--", `:(literal)${path}`]);
     }
     for (const command of input.requiredChecks) {
-      if (!(await exitsZero(workdir, command, timeoutMs, signal))) { verdict = { kind: "base-failed", command }; break; }
+      if (!(await exitsZero(workdir, command, timeoutMs, as, signal))) { verdict = { kind: "base-failed", command }; break; }
     }
   } catch (error) {
     await restoreWorkspace(workdir, attemptSha, snapshot);

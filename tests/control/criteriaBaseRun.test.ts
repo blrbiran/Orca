@@ -44,7 +44,7 @@ async function workspace(base: Record<string, string>, attempt: Record<string, s
 /** The run, then the restore: HEAD back on `work` at the attempt and nothing changed or left behind. */
 async function ran(w: Awaited<ReturnType<typeof workspace>>, files: string[], checks: string[], signal?: AbortSignal) {
   try {
-    return await runChecksAtBase({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, files, requiredChecks: checks, timeoutMs: 10_000, ...(signal ? { signal } : {}) });
+    return await runChecksAtBase({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, files, requiredChecks: checks, timeoutMs: 10_000, as: { runId: "run-t" }, ...(signal ? { signal } : {}) });
   } finally {
     expect(git(w.repo, "rev-parse", "HEAD")).toBe(w.attemptSha);
     expect(git(w.repo, "symbolic-ref", "HEAD")).toBe("refs/heads/work");
@@ -142,6 +142,20 @@ describe("the driver re-runs a modified check at base before landing (spec §7a.
       const decision = JSON.parse(ledgerOf(t, runId).split("\n").find((line) => line.includes("orca-criteria"))!) as { evidence: string[] };
       expect(decision.evidence).toContain(`base-run-failed: ${CHECK}`);
     } finally { await t.h.dispose(); }
+  });
+
+  // CLI v2 spec §15.3-§15.4 (review I1, session b37f7ce9): the re-run executes the agent's required checks in the panel's
+  // environment, so each runs as the run Orca dispatched: its marker and the panel's empty person directory.
+  it("runs the base re-run's checks with the run's marker and the empty person directory", async () => {
+    const out = await realpath(await mkdtemp(join(tmpdir(), "orca-criteria-marker-")));
+    const person = join(out, "dispatched-person"), seen = join(out, "seen.txt");
+    const check = `printf '%s %s\\n' "\${ORCA_DISPATCHED_RUN-unset}" "\${ORCA_PERSON_DIR-unset}" >> '${seen}'; ${CHECK}`;
+    const { t, runId } = await landing({ "tests/value.test.txt": "expect 4 # reworded\n" }, [check]); try {
+      await land(t, runId, createExecutionDriver({ ...t.deps, dispatchedPersonDir: person }));
+      expect(t.body(runId).drive.criteriaBase).toEqual({ result: "passed" });
+      // Mutation "runChecksAtBase without the dispatched env": `unset unset` -> red.
+      expect(readFileSync(seen, "utf8")).toBe(`${runId} ${person}\n`);
+    } finally { await t.h.dispose(); await rm(out, { recursive: true, force: true }); }
   });
 
   it("does not re-run a weakening (it is flagged whatever the base says)", async () => {

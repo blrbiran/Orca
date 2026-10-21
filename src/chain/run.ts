@@ -11,7 +11,7 @@ import { checkGate } from "./gateCheck.js";
 import { KILL_GRACE_MS, type LaunchRequest, type SessionResult, launchClaudeCode } from "./launch/claudeCode.js";
 import { acquireChainLock } from "./lock.js";
 import { macNotify, summaryText } from "./notify.js";
-import { chainLogDir } from "./paths.js";
+import { chainLogDir, chainStateDir } from "./paths.js";
 import { type PreflightDeps, type Preflighted, preflight } from "./preflight.js";
 import { chainPrompt } from "./prompt.js";
 import { commitChainRecord, commitMessage, writeChainRecordFile } from "./record.js";
@@ -203,6 +203,10 @@ async function runSessions(
       budgetUsd: record.limits.maxCostUsd - spent,
       timeoutMs: record.limits.sessionTimeoutMin * 60_000,
       logDir: chainLogDir(repo, chainId),
+      // Review M1 (session b37f7ce9): beside the chain's stop request, under the git dir -- outside the worktree, so a
+      // session's cleanup cannot reach it, and never the person's own ~/.orca/person. The panel's dispatched-person
+      // directory is not used: a chain is started by `orca chain` with no panel state in reach.
+      personDir: join(await chainStateDir(repo), chainId, "person"),
       prompt: chainPrompt({ chainId, n, goal: record.goal, sessionId, repo, resumeText: r.text }),
       claudeBin: deps.claudeBin,
       baseEnv: deps.env,

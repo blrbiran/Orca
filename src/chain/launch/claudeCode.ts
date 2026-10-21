@@ -24,6 +24,11 @@ export interface LaunchRequest {
   logDir: string;
   n: number;
   chainId: string;
+  /**
+   * CLI v2 spec §15.3 (review M1, session b37f7ce9): the session's ORCA_PERSON_DIR -- an empty per-chain directory, so the
+   * CLI the session runs finds no person token. Created 0700 when absent; an existing one keeps its mode (Rule 17).
+   */
+  personDir: string;
   claudeBin?: string;
   baseEnv?: NodeJS.ProcessEnv;
   graceMs?: number;
@@ -50,7 +55,7 @@ export function claudeArgv(r: { prompt: string; model: string; sessionId: string
   return ["-p", r.prompt, "--output-format", "json", "--permission-mode", "auto", "--model", r.model, "--session-id", r.sessionId, "--max-budget-usd", formatBudget(r.budgetUsd)];
 }
 
-export function childEnv(base: NodeJS.ProcessEnv, chainId: string, sessionId: string): NodeJS.ProcessEnv {
+export function childEnv(base: NodeJS.ProcessEnv, chainId: string, sessionId: string, personDir: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...base };
   for (const key of Object.keys(env)) {
     if ((STRIPPED_ENV as readonly string[]).includes(key) || STRIPPED_ENV_PREFIXES.some((p) => key.startsWith(p))) delete env[key];
@@ -59,6 +64,8 @@ export function childEnv(base: NodeJS.ProcessEnv, chainId: string, sessionId: st
   env.ORCA_CHAIN_SESSION = sessionId;
   // CLI v2 spec §15.4: a chain session is a run Orca dispatched; the chain names it (over any inherited marker).
   env.ORCA_DISPATCHED_RUN = chainId;
+  // §15.3: and its empty person directory, over any inherited one.
+  env.ORCA_PERSON_DIR = personDir;
   return env;
 }
 
@@ -111,6 +118,7 @@ async function waitForEmptyGroup(pgid: number, ms: number): Promise<void> {
  */
 export async function launchClaudeCode(req: LaunchRequest): Promise<SessionResult> {
   await mkdir(req.logDir, { recursive: true });
+  await mkdir(req.personDir, { recursive: true, mode: 0o700 });
   const stdoutPath = join(req.logDir, `${req.n}.stdout.json`);
   const stderrPath = join(req.logDir, `${req.n}.stderr.txt`);
   const out = await open(stdoutPath, "w");
@@ -123,7 +131,7 @@ export async function launchClaudeCode(req: LaunchRequest): Promise<SessionResul
     try {
       child = spawn(req.claudeBin ?? "claude", claudeArgv(req), {
         cwd: req.repo,
-        env: childEnv(req.baseEnv ?? process.env, req.chainId, req.sessionId),
+        env: childEnv(req.baseEnv ?? process.env, req.chainId, req.sessionId, req.personDir),
         stdio: ["ignore", out.fd, err.fd],
         detached: true,
       });

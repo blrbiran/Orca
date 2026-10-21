@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -107,6 +108,19 @@ describe("the integration check (kanban spec §7 layer 1)", () => {
       // mutation: a non-ladder group falls through to the fold -> nothing settled, red
       expect((await w.service.systemDebugPass()).settled).toEqual([last.debugGroupId]);
       expect(readSystemDebugMark(JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(last.debugGroupId!)!.body)))?.settled?.state).toBe("done");
+    } finally { await h.dispose(); }
+  });
+
+  // CLI v2 spec §15.3-§15.4 (review M1, session b37f7ce9): the check's command runs as a run Orca dispatched -- the
+  // check's id as the marker and the panel state's empty `dispatched-person` directory as ORCA_PERSON_DIR.
+  it("runs the command with the check's marker and the panel's dispatched-person directory", async () => {
+    const w = await world(); const { h } = w; try {
+      w.land("g"); w.land("g2");
+      const seen = join(h.root, "seen.txt");
+      w.setCheck(true, `printf '%s %s' "\${ORCA_DISPATCHED_RUN-unset}" "\${ORCA_PERSON_DIR-unset}" > '${seen}'`);
+      expect(await w.pass()).toEqual({ started: ["repo"] });
+      // Mutation "webService passes another directory" (or none) -> red.
+      expect(readFileSync(seen, "utf8")).toMatch(new RegExp(`^integration-check-[0-9a-f]{12}-\\d+ ${join(h.store.stateDir, "dispatched-person")}$`));
     } finally { await h.dispose(); }
   });
 

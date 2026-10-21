@@ -59,7 +59,7 @@ const contract = (command: string) => ({ context: { buildTestCommands: [command]
 
 /** The check, then Review Focus 4: HEAD is the attempt, on the same symbolic ref, and `git status` is clean. */
 async function checked(w: Awaited<ReturnType<typeof workspace>>, result: DebugResult, command = "true", resultMalformed?: boolean, timeoutMs = 10_000): Promise<ReproVerdict> {
-  const verdict = await checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result, contract: contract(command), timeoutMs, ...(resultMalformed === undefined ? {} : { resultMalformed }) });
+  const verdict = await checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result, contract: contract(command), timeoutMs, as: { runId: "run-t" }, ...(resultMalformed === undefined ? {} : { resultMalformed }) });
   expect(git(w.repo, "rev-parse", "HEAD")).toBe(w.attemptSha);
   expect(execFileSync("sh", ["-c", "git symbolic-ref -q HEAD || true"], { cwd: w.repo, encoding: "utf8" }).trim()).toBe(w.symbolic);
   expect(git(w.repo, "status", "--porcelain", "--untracked-files=all")).toBe("");
@@ -132,7 +132,7 @@ describe("checkReproduction (design §12.8)", () => {
     const w = await workspace({ branch: true });
     writeFileSync(join(w.repo, "keep.txt"), "mine\n");
     const command = `touch stray.txt; mkdir -p build && touch build/out; ${REPRO}`;
-    const verdict = await checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result: { reproTests: ["tests/repro.test.txt"], reproCommand: command }, contract: contract("true"), timeoutMs: 10_000 });
+    const verdict = await checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result: { reproTests: ["tests/repro.test.txt"], reproCommand: command }, contract: contract("true"), timeoutMs: 10_000, as: { runId: "run-t" } });
     expect(verdict.kind).toBe("passed");
     expect(git(w.repo, "rev-parse", "HEAD")).toBe(w.attemptSha);
     expect(git(w.repo, "symbolic-ref", "-q", "HEAD")).toBe("refs/heads/work");
@@ -177,7 +177,7 @@ describe("checkReproduction keeps its own error (fix round 2, optional minor)", 
     aborted.abort();
     // The restore's checkout fails on a leftover index lock; the check itself fails first, on its aborted signal.
     writeFileSync(join(w.repo, ".git", "index.lock"), "");
-    await expect(checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result: { reproTests: ["tests/repro.test.txt"], reproCommand: REPRO }, contract: contract("true"), timeoutMs: 10_000, signal: aborted.signal }))
+    await expect(checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result: { reproTests: ["tests/repro.test.txt"], reproCommand: REPRO }, contract: contract("true"), timeoutMs: 10_000, as: { runId: "run-t" }, signal: aborted.signal }))
       .rejects.toThrow(/^sh: aborted$/);
   });
 });
@@ -303,6 +303,26 @@ describe("stepC runs the check only for a debug group's run (plan Task 8)", () =
       const runId = await t.claim();
       await settle(driver, () => t.body(runId).state === "blocked");
       expect(t.body(runId).drive.blockedReason).toBe("debug-repro:result-invalid");
+    } finally { await driver.stop(); await t.h.dispose(); }
+  });
+
+  // CLI v2 spec §15.3-§15.4 (review I1, session b37f7ce9): the reproduction command is agent-written and runs in the
+  // panel's environment, so it runs as the run Orca dispatched -- its marker and the panel's empty person directory --
+  // and an `orca --as-person` it starts is refused. HOME and the ORCA_* state dirs of that CLI are temp paths (Rule 17).
+  it("runs the reproduction command as the dispatched run: marker, empty person dir, `orca --as-person` refused", async () => {
+    const out = await tempDir();
+    const person = join(out, "dispatched-person"), seen = join(out, "seen.txt"), said = join(out, "orca.txt");
+    const orca = `HOME='${out}' ORCA_CONTROL_DIR='${out}/c' ORCA_PANEL_DIR='${out}/p' ORCA_PROJECTS_FILE='${out}/p.json' ORCA_CORRECTIONS_DIR='${out}/k' `
+      + `'${process.cwd()}/node_modules/.bin/tsx' '${process.cwd()}/src/cli.ts' group list --as-person --json --control-state-dir '${out}/s'`;
+    const t = await debugHarness(() => ({ reproCommand: `printf '%s %s\\n' "\${ORCA_DISPATCHED_RUN-unset}" "\${ORCA_PERSON_DIR-unset}" >> '${seen}'; ${orca} >> '${said}' 2>&1; test -f a` }));
+    const driver = createExecutionDriver({ ...t.deps, dispatchedPersonDir: person });
+    try {
+      const runId = await t.claim();
+      await settle(driver, () => ["landed", "blocked"].includes(t.body(runId).state), 60_000);
+      // Mutation "exitsZero without the dispatched env" (or the driver passing no person dir): `unset` here -> red.
+      expect(readFileSync(seen, "utf8")).toBe(`${runId} ${person}\n`.repeat(2));
+      expect(readFileSync(said, "utf8").match(/control-dispatched-run-refused/g)).toHaveLength(2);
+      expect(t.body(runId).state).toBe("landed");
     } finally { await driver.stop(); await t.h.dispose(); }
   });
 

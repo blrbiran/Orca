@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { taskContractSchema } from "../scheduler/planFile.js";
 import { DEBUG_DEFAULT_BUILD_TEST_COMMANDS, DEBUG_TEST_DIRS } from "./debugPlan.js";
+import { dispatchedEnv, type DispatchedAs } from "./commandClient.js";
 import { ChildTimeout, gitChild, oneLine, spawnRunChild } from "./integrationGit.js";
 import type { DebugResult } from "./reportedDecisions.js";
 
@@ -43,10 +44,12 @@ async function addedTests(workdir: string, base: string, attemptSha: string): Pr
  * True when the command exits 0. It runs as ccloop runs a contract's required checks (runLoop.js runRequiredChecks):
  * `sh -lc` in the workspace with the environment inherited unchanged. A timeout kills its process group and counts as a
  * non-zero exit, at head and at base alike; an abort (the driver's stop) is thrown, never read as an exit.
+ * The command is agent-written and runs in the panel's environment, so it runs `as` the run Orca dispatched (CLI v2 spec
+ * §15.3-§15.4, review I1): ORCA_DISPATCHED_RUN and ORCA_PERSON_DIR over the inherited variables.
  */
-export async function exitsZero(workdir: string, command: string, timeoutMs: number, signal?: AbortSignal): Promise<boolean> {
+export async function exitsZero(workdir: string, command: string, timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<boolean> {
   try {
-    return (await spawnRunChild("sh", ["-lc", command], { cwd: workdir, timeoutMs, inheritEnv: true, ...(signal ? { signal } : {}) })).code === 0;
+    return (await spawnRunChild("sh", ["-lc", command], { cwd: workdir, timeoutMs, inheritEnv: true, env: dispatchedEnv(as), ...(signal ? { signal } : {}) })).code === 0;
   } catch (error) {
     if (error instanceof ChildTimeout) return false;
     throw error;
@@ -86,8 +89,10 @@ export async function restoreWorkspace(workdir: string, attemptSha: string, snap
 export async function checkReproduction(input: {
   workdir: string; base: string; attemptSha: string; result: DebugResult; contract: TaskContract; timeoutMs: number;
   resultMalformed?: boolean; snapshot?: WorkspaceSnapshot; signal?: AbortSignal;
+  /** The run the command runs as (exitsZero). */
+  as: DispatchedAs;
 }): Promise<ReproVerdict> {
-  const { workdir, base, attemptSha, result, timeoutMs, signal } = input;
+  const { workdir, base, attemptSha, result, timeoutMs, signal, as } = input;
   if (result.reproduction === "not-expressible") {
     return result.reproductionReason === undefined ? { kind: "failed", reason: "result-invalid" } : { kind: "skipped", reason: result.reproductionReason };
   }
@@ -107,11 +112,11 @@ export async function checkReproduction(input: {
   let verdict: ReproVerdict;
   try {
     // stepC's commitAttempt has just made HEAD `attemptSha`, every change committed; a resumed check restored it first.
-    if (!(await exitsZero(workdir, command, timeoutMs, signal))) verdict = { kind: "failed", reason: "red-at-head" };
+    if (!(await exitsZero(workdir, command, timeoutMs, as, signal))) verdict = { kind: "failed", reason: "red-at-head" };
     else {
       await git(workdir, ["checkout", "--force", "--detach", base]);
       await git(workdir, ["checkout", attemptSha, "--", ...tests.map(literal)]);
-      verdict = (await exitsZero(workdir, command, timeoutMs, signal)) ? { kind: "failed", reason: "green-at-base" } : { kind: "passed", tests, command };
+      verdict = (await exitsZero(workdir, command, timeoutMs, as, signal)) ? { kind: "failed", reason: "green-at-base" } : { kind: "passed", tests, command };
     }
   } catch (error) {
     // The check's own failure is the one reported; a restore failure after it would only hide it (the next round restores).

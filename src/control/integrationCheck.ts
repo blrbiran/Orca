@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { DISPATCHED_RUN_ENV } from "./commandClient.js";
+import { dispatchedEnv } from "./commandClient.js";
 import { join } from "node:path";
 import { z } from "zod";
 import { taskContractSchema } from "../scheduler/planFile.js";
@@ -138,8 +138,9 @@ const tail = (text: string): string => text.length <= TAIL_CHARS ? text : text.s
 /**
  * Run the commands in a detached worktree of `target`'s head under the driver's workspaces root (removed afterwards).
  * Each command as ccloop runs a required check (`sh -lc`, inherited environment); a timeout is a failure.
+ * `personDir`: the panel's empty `dispatched-person` directory, the commands' ORCA_PERSON_DIR (CLI v2 spec §15.3, review M1).
  */
-export async function runIntegrationCheck(repo: string, roots: WorkspaceRoots, repoId: string, target: string, commands: string[], at: number): Promise<IntegrationCheckRun> {
+export async function runIntegrationCheck(repo: string, roots: WorkspaceRoots, repoId: string, target: string, commands: string[], at: number, personDir: string): Promise<IntegrationCheckRun> {
   const head = await gitChild(repo, ["rev-parse", "--verify", `refs/heads/${target}^{commit}`]);
   if (head.code !== 0) throw new Error(`integration-check: target ${target} unreadable: ${head.stderr.trim().slice(0, 200)}`);
   const commit = head.stdout.trim();
@@ -151,7 +152,7 @@ export async function runIntegrationCheck(repo: string, roots: WorkspaceRoots, r
   try {
     for (const command of commands) {
       try {
-        const answer = await spawnRunChild("sh", ["-lc", command], { cwd: path, timeoutMs: INTEGRATION_CHECK_COMMAND_TIMEOUT_MS, inheritEnv: true, env: { [DISPATCHED_RUN_ENV]: checkId } }); // CLI v2 spec §15.4
+        const answer = await spawnRunChild("sh", ["-lc", command], { cwd: path, timeoutMs: INTEGRATION_CHECK_COMMAND_TIMEOUT_MS, inheritEnv: true, env: dispatchedEnv({ runId: checkId, personDir }) }); // CLI v2 spec §15.3-§15.4 (review M1)
         if (answer.code !== 0) failures.push({ command, exit: String(answer.code), tail: tail(`${answer.stdout}\n${answer.stderr}`.trim()) });
       } catch (error) {
         if (!(error instanceof ChildTimeout)) throw error;

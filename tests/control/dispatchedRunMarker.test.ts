@@ -115,21 +115,23 @@ describe("the marker on Orca's other work processes (spec §15.4)", () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
-  it("a chain session's environment names the chain as the dispatched run, over any inherited value", () => {
-    const env = childEnv({ ORCA_DISPATCHED_RUN: "inherited" }, "chain-7", "s-1");
-    expect(env.ORCA_DISPATCHED_RUN).toBe("chain-7");
+  it("a chain session's environment names the chain as the dispatched run, and its person dir, over any inherited value", () => {
+    const env = childEnv({ ORCA_DISPATCHED_RUN: "inherited", ORCA_PERSON_DIR: "/inherited" }, "chain-7", "s-1", "/chain/person");
+    expect([env.ORCA_DISPATCHED_RUN, env.ORCA_PERSON_DIR]).toEqual(["chain-7", "/chain/person"]);
   });
 
-  it("an integration check command carries ORCA_DISPATCHED_RUN naming the check", async () => {
+  it("an integration check command carries ORCA_DISPATCHED_RUN naming the check and the given ORCA_PERSON_DIR", async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), "orca-marker-check-")));
     try {
       const { repo } = await repoAt(root);
       const out = join(root, "marker.txt");
       const roots = { runsRoot: join(root, "runs"), workspacesRoot: join(root, "ws") };
       await mkdir(roots.runsRoot); await mkdir(roots.workspacesRoot);
-      const run = await runIntegrationCheck(repo, roots, "repo-1", "main", [`printf '%s' "\${ORCA_DISPATCHED_RUN-unset}" > '${out}'`], 123);
+      const person = join(root, "dispatched-person");
+      const run = await runIntegrationCheck(repo, roots, "repo-1", "main", [`printf '%s %s' "\${ORCA_DISPATCHED_RUN-unset}" "\${ORCA_PERSON_DIR-unset}" > '${out}'`], 123, person);
       expect(run.failures).toEqual([]);
-      expect(readFileSync(out, "utf8")).toMatch(/^integration-check-[0-9a-f]{12}-123$/);
+      // Review M1 (session b37f7ce9): and the panel's empty person directory -- `unset` here is red.
+      expect(readFileSync(out, "utf8")).toMatch(new RegExp(`^integration-check-[0-9a-f]{12}-123 ${person}$`));
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 });

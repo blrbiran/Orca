@@ -129,6 +129,17 @@ describe("startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3)", ()
     expect(await lockState(s.repo)).toEqual({ kind: "free" });
   }, 60_000);
 
+  // CLI v2 spec §15.3 (review M1, session b37f7ce9): each session's ORCA_PERSON_DIR is the chain's own empty directory
+  // beside its stop request (under the git dir), never a person's.
+  it("W1b each session runs with ORCA_PERSON_DIR = <chain state dir>/<chainId>/person", async () => {
+    const s = await setup();
+    await s.fake.scenario(1, { steps: [work(1), done], result: { subtype: "success", cost: 0.5 } });
+    expect(await s.run()).toBe(0);
+    const env = (await s.fake.call(1))?.env ?? {};
+    // Mutation "run.ts passes another directory" -> red.
+    expect([env.ORCA_DISPATCHED_RUN, env.ORCA_PERSON_DIR]).toEqual([ID, join(dirname(await s.stopPath()), "person")]);
+  }, 60_000);
+
   it("W2 blocked: exit 3, awaitingHuman carried into the record and the summary", async () => {
     const s = await setup();
     await s.fake.scenario(1, {
