@@ -289,6 +289,7 @@ export const en = {
     epoch: "epoch {{epoch}}",
   },
   project: {
+    dirLabel: "{{name}} (folder)",
     none: "No project yet",
     all: "All projects",
     add: "Add project",
@@ -1073,6 +1074,7 @@ export const en = {
     account: "Account", chooseProject: "Choose a concrete project in the project picker to view or change its settings.",
     projectScope: "Defaults for {{project}}. Existing groups keep their own choices.",
     workspaceUnavailable: "Workspace settings have not been read.", integrationUnavailable: "Integration settings have not been read.",
+    dirNoIntegration: "A folder project's runs never integrate: their results reach the folder itself.",
     checks: {
       region: "Checks",
       explain: "Orca checks what lands on each target branch: the integration check runs the checks again on the merged result; the model review reads the merged changes of several groups for drift between them, duplication and behaviour no check covers. Each value says where it comes from: this project, the global settings, or Orca's built-in default.",

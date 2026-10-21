@@ -159,6 +159,7 @@ export const zh: Translation<typeof en> = {
     epoch: "服务会话 {{epoch}}",
   },
   project: {
+    dirLabel: "{{name}}（文件夹）",
     none: "还没有项目",
     all: "全部项目",
     add: "新增项目",
@@ -945,6 +946,7 @@ export const zh: Translation<typeof en> = {
     account: "账户", chooseProject: "请在项目选择器中选择一个具体项目，再查看或修改它的设置。",
     projectScope: "{{project}} 的默认值。已有任务组保留各自的选择。",
     workspaceUnavailable: "尚未读取工作空间设置。", integrationUnavailable: "尚未读取集成设置。",
+    dirNoIntegration: "文件夹项目的运行从不集成：结果直接回到文件夹本身。",
     checks: {
       region: "检查",
       explain: "Orca 检查落到每个目标分支上的东西：集成检查在合并结果上再跑一遍检查；模型审查读几个组合并后的改动，找组与组之间的约定漂移、重复实现和没有检查覆盖的行为。每个值都标明它来自哪里：本项目、全局设置，或 Orca 的内置默认。",

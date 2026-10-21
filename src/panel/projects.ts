@@ -12,6 +12,7 @@ import { discoverRepos } from "../metrics/discover.js";
 import { controlRepoKey } from "./controlOptions.js";
 import { PANEL_BAD_REQUEST } from "./rejection.js";
 import { ProjectRegistryError, type ProjectRegistry } from "./projectRegistry.js";
+import type { ProjectKind } from "./projectsFile.js";
 import type { PanelOptions } from "./server.js";
 
 export interface ProjectsDeps {
@@ -29,7 +30,10 @@ export function projectsDepsOf(opts: ProjectsDeps["opts"], registry: ProjectRegi
 
 const FROM_COMMAND_LINE = { code: "projects-from-command-line", message: "this panel's projects come from the command line (--repo/--root); restart it without them to manage projects here" };
 
-const row = (deps: ProjectsDeps) => (p: { id: string; name: string; path: string }) => ({ projectKey: p.id, name: p.name, path: p.path, controlRepoId: deps.controlRepoId(p.id) });
+// Flow engine spec §5.1: only a `dir` project names its kind; a repository's row keeps the shape it always had.
+const row = (deps: ProjectsDeps) => (p: { id: string; name: string; path: string; kind?: ProjectKind }) => ({
+  projectKey: p.id, name: p.name, path: p.path, ...(p.kind === "dir" ? { kind: "dir" as const } : {}), controlRepoId: deps.controlRepoId(p.id),
+});
 
 /** GET /api/projects's body; the control socket serves the same body (CLI v2 spec §4: the project is resolved from cwd). */
 export async function listProjects(deps: ProjectsDeps): Promise<unknown> {

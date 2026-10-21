@@ -125,7 +125,7 @@ import { nextAfterReview } from "./reviewFlow.js";
 import { reviewKeyAction } from "./reviewKeys.js";
 import type { DecisionFilter, DecisionStatus } from "./DecisionsView.js";
 import { MemoryView } from "./MemoryView.js";
-import { pickProject, projectName, readProject, writeProject } from "./project.js";
+import { pickProject, projectKindForRepo, projectName, readProject, writeProject } from "./project.js";
 import type { ProjectsAnswerV1 } from "./project.js";
 import { ProjectControl } from "./ProjectControl.js";
 import { ALL_PROJECTS, allowsAll, groupScope, readProjectView, writeProjectView } from "./projectScope.js";
@@ -1529,6 +1529,7 @@ export function App(): JSX.Element {
       </SectionPane>
       <SectionPane section="project-settings" active={section}>
         <ProjectSettings key={panelRepoId ?? "unresolved"} repoId={panelRepoId} repoLabel={panelRepoId === null ? null : repoLabel(panelRepoId)}
+          dir={projectKindForRepo(projects ?? [], panelRepoId) === "dir"}
           refusal={panelRepoId === null ? null : settingsRefusal(`@repository:${panelRepoId}`)}
           workspace={panelRepoId === null ? null : workspaces[panelRepoId] ?? null}
           integration={panelRepoId === null ? null : integrations[panelRepoId] ?? null}

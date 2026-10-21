@@ -57,7 +57,7 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
           <select name="project" value={withAll && props.view === "all" ? ALL_PROJECTS : props.project ?? ""}
             onChange={(e) => (e.currentTarget.value === ALL_PROJECTS ? props.onAll?.() : props.onProject(e.currentTarget.value))}>
             {withAll && <option value={ALL_PROJECTS}>{t("project.all")}</option>}
-            {projects.map((p) => <option key={p.projectKey} value={p.projectKey}>{projectName(p)}</option>)}
+            {projects.map((p) => <option key={p.projectKey} value={p.projectKey}>{p.kind === "dir" ? t("project.dirLabel", { name: projectName(p) }) : projectName(p)}</option>)}
           </select>
         </label>
       )}

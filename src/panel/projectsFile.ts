@@ -14,7 +14,13 @@ export const PROJECT_ID_PATTERN = /^[a-z0-9_](?:[a-z0-9._-]*[a-z0-9_])?$/;
 
 /** In-repo plan path spec 2026-10-21 §2.1: a plan file the person registered; `path` is relative to the project. */
 export interface ProjectPlanV1 { id: string; path: string; sha256: string }
-export interface ProjectEntryV1 { id: string; name: string; path: string; plans?: ProjectPlanV1[] }
+/**
+ * Flow engine spec §5.1: `dir` is a plain folder the person owns, worked on through a vault and never required to be a
+ * git repository. Absent means `repo` and stays absent (a file written before the field existed re-saves byte-equal).
+ */
+export type ProjectKind = "repo" | "dir";
+export interface ProjectEntryV1 { id: string; name: string; path: string; kind?: ProjectKind; plans?: ProjectPlanV1[] }
+export const projectKindOf = (entry: Pick<ProjectEntryV1, "kind">): ProjectKind => entry.kind ?? "repo";
 export interface ProjectsFileV1 { version: 1; controlStateDir?: string; projects: ProjectEntryV1[] }
 export interface FileSignature { mtimeNs: bigint; size: bigint; ino: bigint; ctimeNs: bigint }
 export type ProjectsFileRead =
@@ -55,6 +61,7 @@ const projectSchema = z.object({
   id: z.string().regex(PROJECT_ID_PATTERN, "id must match [a-z0-9._-] and start and end with [a-z0-9_]"),
   name: z.string().refine((value) => value.trim().length > 0, "name must not be blank"),
   path: absolute,
+  kind: z.enum(["repo", "dir"]).optional(),
   plans: z.array(planSchema).optional(),
 }).strict();
 const fileSchema = z.object({ version: z.literal(1), controlStateDir: absolute.optional(), projects: z.array(projectSchema) }).strict()

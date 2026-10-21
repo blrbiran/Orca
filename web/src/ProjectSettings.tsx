@@ -12,6 +12,8 @@ export function ProjectSettings(props: {
   refusal?: ControlRefusal | null;
   repoId: string | null;
   repoLabel: string | null;
+  /** Flow engine spec §5.1 (IR-I7): a folder project's groups never integrate, so its integration settings are not shown. */
+  dir?: boolean;
   workspace: RepositoryWorkspaceV1 | null;
   integration: RepositoryIntegrationV1 | null;
   onWorkspaceMode: (mode: "worktree" | "clone", revision: number) => void;
@@ -26,9 +28,10 @@ export function ProjectSettings(props: {
         <>
           <p>{t("settings.projectScope", { project: props.repoLabel ?? props.repoId })}</p>
           {props.workspace === null ? <p role="status">{t("settings.workspaceUnavailable")}</p> : <WorkspaceModeSelector workspace={props.workspace} onChange={props.onWorkspaceMode} />}
-          {props.integration === null ? <p role="status">{t("settings.integrationUnavailable")}</p> : <RepositoryIntegration integration={props.integration} onSave={props.onIntegrationScheme} />}
+          {props.dir === true ? <p role="note">{t("settings.dirNoIntegration")}</p>
+            : props.integration === null ? <p role="status">{t("settings.integrationUnavailable")}</p> : <RepositoryIntegration integration={props.integration} onSave={props.onIntegrationScheme} />}
           {/* Checks spec 2026-10-22 §7: the project's checks, each field with its source layer; it reads and writes them itself. */}
-          <ChecksSettings key={props.repoId} scope={{ repoId: props.repoId }} />
+          {props.dir !== true && <ChecksSettings key={props.repoId} scope={{ repoId: props.repoId }} />}
         </>
       )}
     </section>

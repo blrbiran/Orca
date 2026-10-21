@@ -13,6 +13,8 @@ export interface ProjectV1 {
   path?: string;
   /** The control plane's repoId for this project, or null when the control plane does not hold it. */
   controlRepoId: string | null;
+  /** Flow engine spec §5.1: present only on a plain folder worked on through a vault; absent is a repository. */
+  kind?: "dir";
 }
 
 export interface ProjectsAnswerV1 {
@@ -24,6 +26,10 @@ export interface ProjectsAnswerV1 {
 }
 
 export const projectName = (project: ProjectV1): string => project.name ?? project.projectKey;
+
+/** Flow engine spec §5.1: the kind of the project a control repository belongs to; a repository when none is listed. */
+export const projectKindForRepo = (projects: readonly ProjectV1[], repoId: string | null): "repo" | "dir" =>
+  projects.find((project) => project.controlRepoId !== null && project.controlRepoId === repoId)?.kind === "dir" ? "dir" : "repo";
 
 export function readProject(storage: Pick<Storage, "getItem"> | undefined): string | null {
   try {

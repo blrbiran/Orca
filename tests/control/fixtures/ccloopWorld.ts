@@ -82,7 +82,14 @@ const optionalPolicyWorlds=new WeakSet<ControlRuntime>();
 export interface WorldOptions { tokenPolicy?:"optional-v1"; claudeScript?: Record<string, ScriptEntry | SingleCallScriptEntry>; /** Single-call estimate: the profile's declared context window (null otherwise, so the estimate stays blocked-capability). */ declaredContextWindowTokens?: number;
   /** Syncskill integration plan Task 6: more variables for the assembled runtime's env (ORCA_SYNCSKILL_BIN and what the fake syncskill reads). */
   env?: NodeJS.ProcessEnv;
-  /** Spec 2026-10-15 criterion 4: the panel's estimate mode (soft when absent). */ estimateMode?: "strict" | "soft" }
+  /** Spec 2026-10-15 criterion 4: the panel's estimate mode (soft when absent). */ estimateMode?: "strict" | "soft";
+  /**
+   * Flow engine spec §5.2 (vault-as-target probe, plan Task 2): the target is a bare repository made like a vault
+   * (`git init --bare --shared=0600`), `shared.txt` committed by plumbing, HEAD left unborn, and `orca/g` created at
+   * that commit as the explicit start point. The plan file is written into the bare directory (control config trusts
+   * a plan file only inside its repository); it is no object of the repository.
+   */
+  bareTarget?: boolean }
 // *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) *** on `declaredContextWindowTokens`
 // above ("null otherwise, so the estimate stays blocked-capability"): measured on 06f15c53 (ccloop codex/every-agent-chain
 // efcd5b3 built), a codex world's import-time estimate is blocked first by
@@ -127,10 +134,17 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     roots.push(root);
     const repo = join(root, "target");
     await mkdir(repo);
-    g(repo, "init", "-q", "-b", "main");
-    await writeFile(join(repo, "shared.txt"), "base\n");
-    g(repo, "add", "shared.txt");
-    g(repo, "commit", "-qm", "base");
+    if (worldOptions.bareTarget === true) {
+      g(repo, "init", "-q", "--bare", "--shared=0600");
+      const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd: repo, input: "base\n", encoding: "utf8" }).trim();
+      const tree = execFileSync("git", ["mktree"], { cwd: repo, input: `100644 blob ${blob}\tshared.txt\n`, encoding: "utf8" }).trim();
+      g(repo, "update-ref", "refs/heads/orca/g", g(repo, "commit-tree", tree, "-m", "orca: import"), "");
+    } else {
+      g(repo, "init", "-q", "-b", "main");
+      await writeFile(join(repo, "shared.txt"), "base\n");
+      g(repo, "add", "shared.txt");
+      g(repo, "commit", "-qm", "base");
+    }
     const marker = join(root, "codex-marker.json");
     const scriptPath = join(root, "codex-script.json");
     await writeFile(scriptPath, JSON.stringify(script));
