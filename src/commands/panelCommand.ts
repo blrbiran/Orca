@@ -99,10 +99,19 @@ export async function runPanelCommand(def: CommandDef, args: ParsedArgs, io: Com
   const print = (response: CliResponseV1, request?: Parameters<typeof printResponse>[3]): number =>
     printResponse(response, { json: args.global.json, quiet: args.global.quiet, format: def.format }, io, request);
   try {
+    // Spec §6.3: the one command refused without --if-revision, before anything is asked of the panel.
+    if (def.mapsTo.kind === "verb" && def.mapsTo.requiresIfRevision && args.global.ifRevision === undefined) {
+      throw new EntryRejection("control-cli-argument-invalid", `orca ${def.domain} ${def.action} replaces a whole document: pass --if-revision <n> with the revision you based it on (orca proposal show)`);
+    }
     const session = openSession(args, io);
     const context = contextFor(args, io, session, await resolveIds(args, session));
     const mapping = def.mapsTo;
     if (mapping.kind === "read") return print(await runRead(def, mapping, context));
+    if (mapping.kind === "verb") {
+      const { runWrite } = await import("./write.js");
+      const { response, request } = await runWrite(def, mapping, context, session);
+      return print(response, request);
+    }
     throw new Error(`orca ${def.domain}: a local row reached the panel runner`);
   } catch (error) {
     if (error instanceof PanelAnswer) return print(error.response);

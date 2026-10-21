@@ -26,7 +26,7 @@ export function useFakePanels(): void {
   });
 }
 
-/** `routes` keys: `GET summary`, `POST groups/g/start` (no /api/control/ prefix; a query is part of the path). */
+/** `routes` keys: `GET summary`, `POST groups/g/start` (no /api/control/ prefix; a query is part of the path); `POST *` answers the rest. */
 export async function fakePanel(routes: Record<string, Route>) {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "fp-")));
   const requests: Recorded[] = [];
@@ -41,7 +41,7 @@ export async function fakePanel(routes: Record<string, Route>) {
       const key = `${req.method} ${path}`;
       const nth = counts.get(key) ?? 0;
       counts.set(key, nth + 1);
-      const route = routes[key];
+      const route = routes[key] ?? routes[`${req.method} *`];
       const answer: Answer = route === undefined ? { status: 404, body: { error: { code: "route-not-found", message: key, retryable: false } } } : typeof route === "function" ? route(recorded, nth) : route;
       if (answer === "drop") { req.socket.destroy(); return; }
       res.writeHead(answer.status, { "content-type": "application/json" }).end(JSON.stringify(answer.body));
