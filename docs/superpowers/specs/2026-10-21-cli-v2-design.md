@@ -388,3 +388,21 @@ New refusal codes: `control-person-token-required` (403), `control-person-token-
 13. Attribution (§15.2) and marker propagation (§15.4) as stated there.
 - §12 criterion 2's "fake panel" = the existing control-plane harness used by `tests/control/*E2E.test.ts` with the
   fake agents table (`tests/control/fixtures/ccloopWorld.ts`); the builder names the exact entry point in the plan.
+
+## 16. Correction after commit (human review, session 8b1469ea)
+
+- **§15.2 attribution is replaced.** Human: "具体的记法你可以再review一下，我感觉怪怪的". The earlier text mixed two facts
+  in one field (`agent:<client>` as if an agent were an accountable party; `user:<id> via agent:<client>` as one string).
+  Every writer an opened verb reaches records two separate fields:
+  - `by`: the accountable **person**, always a person. A token call ⇒ the token's account. A socket call without a
+    token ⇒ the panel owner (the socket is local to the owner's machine; the human ruled that what a person does through
+    an agent is the person's choice). Orca-dispatched runs are refused (§15.4), so they never reach a writer.
+  - `via`: the channel — `web`, `cli:<client>`, `mcp:<client>`.
+  - Where a store holds one line of text (e.g. the `.decisions` evidence line), it is rendered `by <person> via <channel>`.
+  - Criterion (replaces §15.2's): an agent-sent approve and record each produce `by` = the owner and `via` = `cli:<client>`
+    or `mcp:<client>` (red if `via` is dropped or `by` holds a non-person value).
+- **Existing tests.** Human: "允许改必要的test。改cli这个大架构变化肯定会影响到现有test。" Tests that pin removed command
+  names, the old CLI/MCP surfaces, the gate hook string and its sha256, and the human-only refusals that §15 changes may
+  be rewritten. Each rewrite is listed in the plan's ledger as file:line old → new with the reason (Rule 9 still
+  applies: a rewritten criterion must be seen red on a mutation of the behaviour it now pins).
+- The controller's call on `set-integration-check` with a custom command (token tier, §15.1): human "同意".
