@@ -1,0 +1,56 @@
+{
+  "v": 1,
+  "runId": "orca-dev-b37f7ce9",
+  "runtime": "claude-code",
+  "sessionRef": "b37f7ce9-9c30-4f71-8e8f-8b56ff9496a7",
+  "writtenAt": "2026-10-21T20:12:35.782Z",
+  "head": "9b2b961b73da84f6d715adddd0587948495691db",
+  "level": {
+    "kind": "reading",
+    "level": 335173,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "ccloop: land review-round-1 fixes (fixer running), ff-merge feat/per-contract-tool-rules into ccloop main",
+    "CLI v2: T8-T9 implementer running; then T10-T11, T12-T16, gate, ff, rebuild, panel restart",
+    "checks: non-CLI tasks running on feat/checks-triggers; rebase on CLI v2 then T4/T6/T10/T11 + schema16 backup",
+    "flow: W-COR running; T4+ after checks schema 16; T1 repin after human push"
+  ],
+  "open": [
+    "ccloop gate full suite red at load 98 (17 reds, all reproduce on main or green alone) - judged load",
+    "abortedUsage n=1 shape to register in known-load-flakes"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push ccloop main (deny rule Bash(git push*) blocks agent despite session authorisation) - needed before Orca repin"
+    },
+    {
+      "kind": "irreversible",
+      "what": "push blrbiran/md2publish-skills main a81c5fa6"
+    },
+    {
+      "kind": "irreversible",
+      "what": "push Orca main after merges"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/ccloop ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "9b2b961b73da84f6d715adddd0587948495691db",
+      "observedAt": "2026-10-21T20:12:35.597Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-b37f7ce9-u01L1p/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca worktree list",
+      "exitCode": 0,
+      "commit": "9b2b961b73da84f6d715adddd0587948495691db",
+      "observedAt": "2026-10-21T20:12:35.675Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-b37f7ce9-u01L1p/2.txt"
+    }
+  ]
+}
