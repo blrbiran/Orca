@@ -182,5 +182,6 @@ it("shows unlimited separately from finite used tokens and clears a externally r
 import { progressText } from "../src/TaskDetail.js";
 it("shows finite used tokens for an unlimited ceiling without a percentage",()=>{
  const text=progressText({runId:"r",step:"execute",attempt:{current:1,max:3},tokens:{used:3_200_000,grant:null},lastTransitionAt:null});
- expect(text).toContain("3200000");expect(text).toContain("unlimited");expect(text).not.toContain("%");
+ // Issue #84: the used figure is short (was "3200000").
+ expect(text).toContain("3.2M tokens used");expect(text).toContain("unlimited");expect(text).not.toContain("%");
 });
