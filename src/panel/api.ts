@@ -716,6 +716,10 @@ export function buildApi(app: Express, deps: ApiDeps): void {
       const correctionId = String(body.correctionId ?? "");
       const dir = deps.opts.correctionsDir;
       const by = deps.opts.by;
+      // CLI v2 spec §16 (controller's call, session b37f7ce9): the correction-withdraw verb's rule -- the requester is the
+      // logged-in account, who may withdraw a row recorded in their name; the panel owner (--by) may withdraw any.
+      const requester = res.locals.orcaPrincipal as Principal | undefined;
+      const requesterBy = requester?.kind === "user" ? requester.name : by;
 
       // Debug task plan Task 11 (fix round 1): the membership guard and the closed set are one helper, shared with the
       // correction-withdraw verb (panelCorrections below), because the closed set is only sound for a listed decision.
@@ -733,7 +737,9 @@ export function buildApi(app: Express, deps: ApiDeps): void {
       try {
         withdrawn = await withdrawCorrection(dir, {
           correctionId,
-          by,
+          by: requesterBy,
+          owner: by,
+          via: "web",
           at: nowIso(deps.opts),
           isClosed: (c) => closed.has(c.id),
         });

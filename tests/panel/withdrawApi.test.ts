@@ -34,8 +34,8 @@ import { sessionFor } from "./fixtures/auth.js";
  */
 const get = async (started: StartedPanel, path: string): Promise<Response> => (await sessionFor(started)).fetch(path);
 
-const post = async (started: StartedPanel, path: string, body: unknown): Promise<Response> =>
-  (await sessionFor(started)).fetch(path, {
+const post = async (started: StartedPanel, path: string, body: unknown, as = ME): Promise<Response> =>
+  (await sessionFor(started, process.env, as)).fetch(path, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -377,7 +377,7 @@ describe("POST /api/corrections/withdraw (spec §5.2, §5.4, §5.5)", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as { withdrawal: Record<string, unknown>; review: string };
       expect(body.review).toBe("written");
-      expect(body.withdrawal).toStrictEqual({ correctionId: c.id, projectKey: PK, by: ME, at: body.withdrawal.at });
+      expect(body.withdrawal).toStrictEqual({ correctionId: c.id, projectKey: PK, by: ME, at: body.withdrawal.at, via: "web" });
       expect(await todoIds(started)).toContain(D1);
       expect((await detail(started)).mine).toBe("none");
       // Append-only: corrections.jsonl is byte-identical across the withdrawal.
@@ -473,9 +473,9 @@ describe("POST /api/corrections/withdraw (spec §5.2, §5.4, §5.5)", () => {
         expect((await post(started, "/api/corrections/withdraw", { correctionId: mine.id })).status).toBe(200);
         await closeInLedger(repo, closed, clock.tick());
 
-        const expectRefusal = async (correctionId: string, status: number, code: string): Promise<void> => {
+        const expectRefusal = async (correctionId: string, status: number, code: string, as = ME): Promise<void> => {
           const before = await readOr(withdrawalsFile(dir));
-          const res = await post(started, "/api/corrections/withdraw", { correctionId });
+          const res = await post(started, "/api/corrections/withdraw", { correctionId }, as);
           const body = (await res.json()) as { code: string; message: string };
           expect({ status: res.status, code: body.code }).toStrictEqual({ status, code });
           // The panel's own sentence: never the CLI's flags.
@@ -484,7 +484,9 @@ describe("POST /api/corrections/withdraw (spec §5.2, §5.4, §5.5)", () => {
         };
         await expectRefusal("c_nosuchid", 404, CORRECTION_NOT_FOUND);
         await expectRefusal(pending.id, 409, CORRECTION_TARGET_NOT_A_DECISION);
-        await expectRefusal(amys.id, 409, CORRECTION_NOT_YOURS);
+        // CLI v2 spec §16 (controller's call, b37f7ce9): the panel owner (ME is --by) may withdraw any row, so the
+        // not-yours refusal is asked by another account, neither the row's author nor the panel owner.
+        await expectRefusal(amys.id, 409, CORRECTION_NOT_YOURS, "bob");
         await expectRefusal(mine.id, 409, CORRECTION_ALREADY_WITHDRAWN);
         await expectRefusal(closed.id, 409, CORRECTION_CLOSED);
 

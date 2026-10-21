@@ -211,8 +211,9 @@ export function applyCorrectionWithdraw(deps: WebServiceDeps, command: Correctio
     const { closed } = precondition;
     // CLI v2 spec §16 (controller's call, session b37f7ce9): the requester is the routed person -- the account on the Web,
     // the panel owner on the socket -- and may withdraw a row recorded in their name; the panel owner (`by`) may withdraw any.
-    const requester = routedAttributionFor(command.commandId)?.by ?? by;
-    const { correction } = await withdrawCorrection(dir, { correctionId: command.payload.correctionId, by: requester, owner: by, at: panel.now().toISOString(), isClosed: (c) => closed.has(c.id) });
+    const routed = routedAttributionFor(command.commandId);
+    const requester = routed?.by ?? by;
+    const { correction } = await withdrawCorrection(dir, { correctionId: command.payload.correctionId, by: requester, owner: by, at: panel.now().toISOString(), isClosed: (c) => closed.has(c.id), ...(routed === null ? {} : { via: routed.via }) });
     let settled: ReturnType<ArchiveDebugGroups>;
     try { settled = archive(correction.id); }
     catch (error) { settled = { debugGroups: [], failure: { groupId: null, code: codeOf(error), message: error instanceof Error ? error.message : String(error) } }; }

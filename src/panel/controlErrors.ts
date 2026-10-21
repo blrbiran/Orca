@@ -36,6 +36,9 @@ const panelOnlyErrorStatuses = {
 const readErrorStatuses = {
   "query-invalid": 400,
   "usage-query-invalid": 400,
+  // Web recoverable control spec §6: same command id, different canonical raw request (commandLedger.ts) -- a named
+  // refusal, not control-internal-error; nothing is booked under the id by the second request.
+  "command-id-conflict": 409,
   "control-operation-in-progress": 503,
   "control-owner-changed": 503,
   "control-recovery-busy": 503,

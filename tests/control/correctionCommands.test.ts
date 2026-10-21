@@ -289,7 +289,7 @@ describe("correction-withdraw (debug task plan Task 11, withdraw Amendment 7)", 
       const withdrawn = await ctx.command(`/api/control/corrections/${correction.id}/withdraw`, { correctionId: correction.id }, "wd-1");
       expect([withdrawn.status, withdrawn.body.result]).toEqual([200, { kind: "correction-withdrawn", correctionId: correction.id, review: "written", debugGroups: [{ groupId, state: "archived" }] }]);
       expect(Object.hasOwn(JSON.parse(String(ctx.db<{ body: string }>("SELECT body FROM groups WHERE id=?", groupId)!.body)), "archived")).toBe(true);
-      expect(JSON.parse((await read(withdrawalsFile(ctx.corrections)))!.trim())).toEqual({ correctionId: correction.id, projectKey: PANEL_KEY, by: "tester", at: NOW.toISOString() });
+      expect(JSON.parse((await read(withdrawalsFile(ctx.corrections)))!.trim())).toEqual({ correctionId: correction.id, projectKey: PANEL_KEY, by: "tester", at: NOW.toISOString(), via: "web" });
       const reviews = (await read(reviewsFile(ctx.corrections)))!.trim().split("\n").map((line) => JSON.parse(line) as { action: string; by: string });
       expect(reviews.map((row) => [row.action, row.by])).toEqual([["reviewed", "tester"], ["withdrawn", "tester"]]);
     });

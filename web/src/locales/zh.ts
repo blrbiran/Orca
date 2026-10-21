@@ -1293,6 +1293,7 @@ export const zhErrors: Record<string, string> = {
   "checkpoint-usage-high-water": "检查点的用量高水位与已记录的不一致。",
   "cleanup-not-recoverable": "清理无法恢复。",
   "command-result-not-found": "台账里没有这条命令的结果：{{detail}}",
+  "command-id-conflict": "这个命令 id 已用于另一条不同的请求；请换一个新 id 重发（{{detail}}）。",
   "continuation-budget-unavailable": "续跑所需的预算不够。",
   "continuation-identity-conflict": "续跑身份冲突。",
   "continuation-predecessor-unrecoverable": "前一个运行无法恢复，不能续跑。",

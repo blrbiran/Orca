@@ -27,6 +27,8 @@ export const withdrawalSchema = z
     projectKey: z.string().min(1),
     by: z.string().min(1),
     at: z.string().min(1),
+    /** CLI v2 spec §16: the channel (web, cli:<c>, mcp:<c>). Appended and optional: rows written before it have none. */
+    via: z.string().min(1).optional(),
   })
   .strict();
 
@@ -97,7 +99,7 @@ export function withdrawnIds(rows: readonly CorrectionWithdrawal[]): Set<string>
  */
 export async function withdrawCorrection(
   dir: string,
-  input: { correctionId: string; by: string; at: string; isClosed: (c: DecisionCorrection) => boolean; owner?: string },
+  input: { correctionId: string; by: string; at: string; isClosed: (c: DecisionCorrection) => boolean; owner?: string; via?: string },
 ): Promise<{ correction: DecisionCorrection; withdrawal: CorrectionWithdrawal }> {
   return withStoreLock(dir, async () => {
     const corrections = await readCorrections(dir);
@@ -141,6 +143,7 @@ export async function withdrawCorrection(
       projectKey: correction.projectKey,
       by: input.by,
       at: input.at,
+      ...(input.via === undefined ? {} : { via: input.via }),
     });
     // The same two rules as appendCorrectionLocked (store.ts records why): a separator when the last line has no
     // newline, so the row is never glued onto it; and an explicit mode that applies only when this call CREATES the

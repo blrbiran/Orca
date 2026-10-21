@@ -1369,6 +1369,7 @@ export const enErrors: Record<string, string> = {
   "checkpoint-usage-high-water": "The checkpoint's usage high-water mark differs from the run's recorded one.",
   "cleanup-not-recoverable": "This run is not in a state that can be cleaned up for recovery.",
   "command-result-not-found": "The ledger has no result for this command: {{detail}}",
+  "command-id-conflict": "This command id was already used for a different request; send it again with a new id ({{detail}}).",
   "continuation-budget-unavailable": "There is not enough budget for the continuation.",
   "continuation-identity-conflict": "The continuation's identity conflicts with the recorded one.",
   "continuation-predecessor-unrecoverable": "The previous run cannot be recovered, so it cannot be continued.",
