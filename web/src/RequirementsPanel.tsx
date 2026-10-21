@@ -282,6 +282,79 @@ function DocumentText(props: { text: string }): JSX.Element {
   );
 }
 
+const SCOPES = ["small", "medium", "large"] as const;
+const CLARITIES = ["clear", "fair", "vague"] as const;
+
+/**
+ * Clarify caps spec 2026-10-21 §3.6: the class code holds clarification to -- the model's judgement with its reasons,
+ * the person's own when set -- the caps it gives (the server's numbers), and a way to set it while clarifying.
+ */
+function ClarifySize(props: { view: View; onCommand: OnCommand; editable: boolean }): JSX.Element | null {
+  const { t } = useTranslation();
+  const clarify = props.view.clarify;
+  const effective = clarify?.override ?? clarify?.classification ?? null;
+  const [scope, setScope] = useState<(typeof SCOPES)[number]>(effective?.scope ?? "medium");
+  const [clarity, setClarity] = useState<(typeof CLARITIES)[number]>(effective?.clarity ?? "fair");
+  // Before round 1 has answered there is nothing judged yet: the model's class is still coming.
+  if (clarify === undefined || (clarify.override === null && (props.view.rounds[0]?.result ?? null) === null)) return null;
+  const { classification, override } = clarify;
+  return (
+    <section aria-label={t("requirements.size")}>
+      <h4>{t("requirements.size")} · {enumText("requirementScope", clarify.tier)}</h4>
+      {classification !== null
+        ? <p>{t("requirements.modelJudged", { scope: enumText("requirementScope", classification.scope), scopeReason: classification.scopeReason,
+          clarity: enumText("requirementClarity", classification.clarity), clarityReason: classification.clarityReason })}</p>
+        : override === null && <p>{t("requirements.unclassified")}</p>}
+      {override !== null && <p>{t("requirements.personSet", { scope: enumText("requirementScope", override.scope), clarity: enumText("requirementClarity", override.clarity) })}</p>}
+      <p>{t("requirements.caps", { rounds: clarify.roundCap, questions: clarify.questions, glossary: clarify.glossary, adrs: clarify.adrs })}</p>
+      {props.editable && (
+        <form aria-label={t("requirements.setSize")} onSubmit={(event) => {
+          event.preventDefault();
+          props.onCommand({ verb: "requirement-classify", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: { scope, clarity } });
+        }}>
+          <label>{t("requirements.scope")}<select value={scope} onChange={(e) => setScope(e.currentTarget.value as (typeof SCOPES)[number])}>
+            {SCOPES.map((value) => <option key={value} value={value}>{enumText("requirementScope", value)}</option>)}</select></label>
+          <label>{t("requirements.clarity")}<select value={clarity} onChange={(e) => setClarity(e.currentTarget.value as (typeof CLARITIES)[number])}>
+            {CLARITIES.map((value) => <option key={value} value={value}>{enumText("requirementClarity", value)}</option>)}</select></label>
+          <button type="submit" disabled={effective !== null && effective.scope === scope && effective.clarity === clarity}>{t("requirements.setSize")}</button>
+        </form>
+      )}
+    </section>
+  );
+}
+
+/** Issue #83: an answered round as one line per question -- a recommended answer once, marked -- with the rest folded away. */
+function AnsweredRound(props: { round: Round }): JSX.Element {
+  const { t } = useTranslation();
+  const result = props.round.result!;
+  const questionOf = new Map(result.questions.map((q) => [q.id, q]));
+  const decided = (decisions: Round["glossaryDecisions"]) => new Map((decisions ?? []).map((d) => [d.id, d.accept]));
+  const glossary = decided(props.round.glossaryDecisions), adrs = decided(props.round.adrDecisions);
+  return (
+    <>
+      <ul>{(props.round.answers ?? []).map((a) => (
+        <li key={a.id}><span title={questionOf.get(a.id)?.question}>{a.id}</span>: {a.text}{a.kind === "recommended" ? ` ${t("requirements.recommendedMark")}` : ""}</li>
+      ))}</ul>
+      <details>
+        <summary>{t("requirements.roundDetails")}</summary>
+        {result.questions.map((q) => <p key={q.id}>{q.id} {q.question} · {t("requirements.why", { why: q.why })}</p>)}
+        {result.glossary.map((e) => <p key={e.id}>{e.id} {e.term}: {e.definition} · {t(glossary.get(e.id) ? "requirements.accept" : "requirements.reject")}</p>)}
+        {result.adrs.map((a) => <p key={a.id}>{a.id} {a.title} · {t(adrs.get(a.id) ? "requirements.accept" : "requirements.reject")}</p>)}
+      </details>
+    </>
+  );
+}
+
+/** Issue #87: the time since the drafting step was asked for, ticking once a second while it is shown. */
+function Elapsed(props: { since: number }): JSX.Element {
+  const { t } = useTranslation();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
+  const seconds = Math.max(0, Math.floor((now - props.since) / 1000));
+  const elapsed = seconds < 60 ? t("requirements.elapsedSeconds", { n: seconds }) : t("requirements.elapsedMinutes", { m: Math.floor(seconds / 60), s: seconds % 60 });
+  return <>{t("requirements.draftingFor", { elapsed })}</>;
+}
+
 function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId: string) => void } & EditableDrafts): JSX.Element {
   const { t } = useTranslation();
   const { view } = props, groupId = view.summary.groupId;
@@ -296,6 +369,8 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
   // ccloop error codes spec (2026-10-15) §4.5-§4.6: a failed step names its latest failed call's ccloop code.
   const failedCall = step?.state === "failed" ? [...step.calls].reverse().find((call) => call.outcome === "failed") ?? null : null;
   const drafting = step?.state === "drafting";
+  // Clarify caps spec §3.3: no next round was drafted after the latest answered one (requirementCommands.ts requirement-clarify-more).
+  const stoppedClarifying = view.summary.state === "clarifying" && view.requirement.consensus === null && round !== null && round.state === "answered" && !round.closedByConsensus;
   // Spec §11.1: recovery-retry re-queues a failed or interrupted round or draft -- one the person stopped carries no reason code.
   const stalled = step?.state === "failed" || step?.state === "interrupted";
   // Final review finding 5: a stop that completed with no call in flight interrupts nothing; recovery-retry lifts it (DR15).
@@ -329,15 +404,20 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
         <h4>{t("requirements.understanding")}</h4>
         <p>{latest?.statement ?? t("requirements.nothingYet")}</p>
         <h5>{t("requirements.criteria")}</h5><ul>{(latest?.acceptanceCriteria ?? []).map((c) => <li key={c.id}>{c.id}: {c.text}</li>)}</ul>
-        <h5>{t("requirements.glossary")}</h5><ul>{valid.flatMap((r) => r.result!.glossary.filter((e) => accepted(r.glossaryDecisions).has(e.id))).map((e) => <li key={e.id}>{e.term}: {e.definition}</li>)}</ul>
-        <h5>{t("requirements.decisions")}</h5><ul>{valid.flatMap((r) => r.result!.adrs.filter((a) => accepted(r.adrDecisions).has(a.id))).map((a) => <li key={a.id}>{a.id} {a.title}</li>)}</ul>
-        <h5>{t("requirements.openBranches")}</h5><ul>{(latest?.openBranches ?? []).map((branch) => <li key={branch}>{branch}</li>)}</ul>
+        {/* Issue #83: the supporting detail folds away under one summary. */}
+        <details>
+          <summary>{t("requirements.moreDetails")}</summary>
+          <h5>{t("requirements.glossary")}</h5><ul>{valid.flatMap((r) => r.result!.glossary.filter((e) => accepted(r.glossaryDecisions).has(e.id))).map((e) => <li key={e.id}>{e.term}: {e.definition}</li>)}</ul>
+          <h5>{t("requirements.decisions")}</h5><ul>{valid.flatMap((r) => r.result!.adrs.filter((a) => accepted(r.adrDecisions).has(a.id))).map((a) => <li key={a.id}>{a.id} {a.title}</li>)}</ul>
+          <h5>{t("requirements.openBranches")}</h5><ul>{(latest?.openBranches ?? []).map((branch) => <li key={branch}>{branch}</li>)}</ul>
+        </details>
         {/* Issue #79: short figures; `reserved` is the grant held by calls in flight (requirementRecords.ts), never a cap. */}
         <p>{t("requirements.budget", { used: short(view.ledger.used.tokens), limit: view.ledger.limit.tokens===null?t("budget.unlimited"):short(view.ledger.limit.tokens) })}
           <span title={t("requirements.heldTip")}>{t("requirements.held", { reserved: short(view.ledger.reserved.tokens) })}</span></p>
         {view.ledger.limit.tokens!==null&&<progress max={view.ledger.limit.tokens} value={view.ledger.used.tokens} />}
         {view.ledger.usageUnknown && <p role="status">{t("requirements.usageUnknown")}</p>}
       </section>
+      <ClarifySize view={view} onCommand={props.onCommand} editable={!archived && view.summary.state === "clarifying" && view.requirement.consensus === null} />
       <div id={overviewRegionId("requirement", groupId, "problem")} tabIndex={-1} data-overview-region="problem">
       {!archived && (reason !== null || retryable) && (
         <p role="alert">{reason !== null && <>{reason}{isReason(reason) ? ` · ${t(`requirements.reason.${reason}`, { groupId })}` : ""} </>}
@@ -355,14 +435,28 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       </div>
       <section id={overviewRegionId("requirement", groupId, "answers")} tabIndex={-1} data-overview-region="answers" aria-label={t("requirements.rounds")}>
         <h4>{t("requirements.rounds")}</h4>
-        {view.rounds.map((r) => (
-          <details key={r.roundNo} open={r === round}>
-            <summary>{t("requirements.round", { n: r.roundNo })} · {enumText("roundState", r.state)}</summary>
-            {!archived && r.state === "awaiting-answers" && r.result !== null && view.requirement.consensus === null && <RoundForm view={view} round={r} onCommand={props.onCommand} {...editable} />}
-            {r.answers?.map((a) => <p key={a.id}>{a.id}: {a.text}</p>)}
-          </details>
-        ))}
-        {!archived && drafting && view.summary.stopState === null && <p role="status">{t("requirements.drafting")} <button type="button" onClick={() => props.onCommand({ verb: "handoff-stop", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("requirements.stop")}</button></p>}
+        {view.rounds.map((r) => {
+          // Issue #83: the round waiting on the person stands out (warn: needs action) and is open; answered ones fold.
+          const pending = !archived && r.state === "awaiting-answers" && r.result !== null && view.requirement.consensus === null;
+          const answered = r.state === "answered" && r.result !== null && r.answers !== null && !r.closedByConsensus;
+          return (
+            <details key={r.roundNo} className="requirement-round" open={pending || (!answered && r === round)} data-tone={pending ? "warn" : undefined}>
+              <summary>{t("requirements.round", { n: r.roundNo })} · {enumText("roundState", r.state)}{r.result !== null ? ` · ${t("requirements.questionCount", { n: r.result.questions.length })}` : ""}</summary>
+              {pending && <RoundForm view={view} round={r} onCommand={props.onCommand} {...editable} />}
+              {answered ? <AnsweredRound round={r} /> : !pending && r.answers?.map((a) => <p key={a.id}>{a.id}: {a.text}</p>)}
+            </details>
+          );
+        })}
+        {!archived && drafting && view.summary.stopState === null && (
+          <p role="status">{view.requirement.consensus === null ? t("requirements.draftingRound", { n: (step as Round).roundNo }) : t("requirements.draftingSplit", { n: (step as Draft).draftNo })}
+            {view.draftingSince != null && <> <Elapsed since={view.draftingSince} /></>}{" "}
+            <button type="button" onClick={() => props.onCommand({ verb: "handoff-stop", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("requirements.stop")}</button></p>
+        )}
+        {/* Clarify caps spec §3.3: clarification stopped (the cap, or nothing left to ask); one more round on request. */}
+        {!archived && stoppedClarifying && round !== null && (
+          <p role="note">{view.clarify?.stoppedAtCap === true ? t("requirements.stoppedAtCap", { n: round.roundNo }) : t("requirements.frontierEmpty")}{" "}
+            <button type="button" onClick={() => props.onCommand({ verb: "requirement-clarify-more", groupId, expectedRevision: revisionOf(view), payload: { roundNo: round.roundNo } })}>{t("requirements.clarifyMore")}</button></p>
+        )}
         {!archived && view.requirement.consensus === null && round !== null && ["answered", "awaiting-answers", "failed", "interrupted"].includes(round.state) && valid.length > 0 && <Consensus view={view} round={round} onCommand={props.onCommand} />}
       </section>
       <div id={overviewRegionId("requirement", groupId, "draft")} tabIndex={-1} data-overview-region="draft">

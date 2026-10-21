@@ -423,6 +423,11 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .detail-region-tabs [aria-selected="true"], .detail-region-tabs [aria-pressed="true"] { font-weight: 700; border-bottom: 2px solid currentColor; }
 [role="tabpanel"][hidden] { display: none; }
 
+/* Issue #83: each clarification round is a box; the one waiting on the person wears data-tone="warn" (DESIGN.md). */
+.requirement-round { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; margin: 0 0 8px; }
+.requirement-round > summary { cursor: pointer; font-weight: 600; }
+.requirement-round ul { margin: 6px 0; }
+
 /* Issue convergence W1 (#74, #77): a requirement's idea and document sections are shown as written, line breaks kept. */
 .requirement-text {
   white-space: pre-wrap;

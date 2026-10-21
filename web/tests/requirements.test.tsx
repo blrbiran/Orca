@@ -157,7 +157,8 @@ describe("the Requirements section, the rest of its branches (N1 spec §11.2)", 
   it("shows drafting with a stop button that stops the call in flight", () => {
     const view = requirementView("answered");
     const onCommand = mount({ ...view, rounds: [...view.rounds, { ...view.rounds[0]!, roundNo: 2, state: "drafting", result: null, answers: null }] });
-    expect(screen.getByText(/The model is drafting\./)).toBeTruthy();
+    // Issue #87: it says what is drafted (was /The model is drafting\./).
+    expect(screen.getByText(/The model is drafting round 2's questions\./)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     expect(onCommand).toHaveBeenCalledWith({ verb: "handoff-stop", groupId: "r", expectedRevision: 3, payload: {} });
   });

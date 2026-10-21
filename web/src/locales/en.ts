@@ -44,6 +44,8 @@ const chainBanner = {
 
 const groupState = { clarifying: "clarifying", draft: "draft", ready: "ready", running: "running", review: "review", done: "done", blocked: "blocked" } as const satisfies Record<GroupSummaryV1["state"], string>;
 // N1 spec §11.2: a requirement's rounds, drafts and export.
+const requirementScope = { small: "small", medium: "medium", large: "large" } as const;
+const requirementClarity = { clear: "clear", fair: "fair", vague: "vague" } as const;
 const roundState = { drafting: "drafting", "awaiting-answers": "awaiting answers", answered: "answered", interrupted: "interrupted", failed: "failed" } as const satisfies Record<RequirementViewV1["rounds"][number]["state"], string>;
 const draftState = { drafting: "drafting", "awaiting-review": "awaiting review", accepted: "accepted", rejected: "rejected", invalid: "handed back", interrupted: "interrupted", failed: "failed" } as const satisfies Record<RequirementViewV1["drafts"][number]["state"], string>;
 const exportState = { "not-due": "not due", pending: "pending", done: "done", conflict: "blocked" } as const satisfies Record<RequirementViewV1["requirement"]["export"]["state"], string>;
@@ -986,7 +988,12 @@ export const en = {
     usageUnknown: "Usage is not known yet.",
     rounds: "Rounds",
     round: "Round {{n}}",
-    drafting: "The model is drafting.",
+    // Issue #87: what is being drafted, and since when (the command that asked for it).
+    draftingRound: "The model is drafting round {{n}}'s questions.",
+    draftingSplit: "The model is drafting the task split (draft {{n}}).",
+    draftingFor: "Waiting {{elapsed}}.",
+    elapsedSeconds: "{{n}} s",
+    elapsedMinutes: "{{m}} min {{s}} s",
     stop: "Stop",
     useRecommended: "Use recommended",
     ownAnswer: "Own answer",
@@ -1020,6 +1027,23 @@ export const en = {
     blockedRun: "This step's call is blocked; Retry this call runs the blocked step again.",
     retryRun: "Retry this call",
     raiseLimit: "Raise the limit",
+    // Issue #83: answered rounds as one line per question; the pending round stands out; the rest folds away.
+    recommendedMark: "(recommended)",
+    questionCount: "{{n}} questions",
+    roundDetails: "Questions, reasons and proposals",
+    moreDetails: "Glossary, decisions and open branches",
+    // Clarify caps spec 2026-10-21 §3: the class code holds clarification to, and what the person can do about it.
+    size: "Clarification size",
+    scope: "Scope",
+    clarity: "Clarity",
+    unclassified: "Not classified yet: held to the widest limits.",
+    modelJudged: "The model judged: scope {{scope}} ({{scopeReason}}), clarity {{clarity}} ({{clarityReason}})",
+    personSet: "You set: scope {{scope}}, clarity {{clarity}}",
+    caps: "Limits: up to {{rounds}} rounds; per round at most {{questions}} questions, {{glossary}} glossary entries and {{adrs}} decisions.",
+    setSize: "Set the size",
+    stoppedAtCap: "Clarification stopped after round {{n}}, the last this size allows. Agree to go on to the split, or ask for one more round.",
+    frontierEmpty: "The model has nothing left to ask. Agree to go on to the split, or ask for one more round.",
+    clarifyMore: "Clarify one more round",
     reason: {
       "clarify-output-invalid": "The model's answers for this round were invalid three times.",
       "split-output-invalid": "The model's split was not valid JSON for a split three times.",
@@ -1293,7 +1317,7 @@ export const en = {
   },
   enums: {
     theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,
-    groupState, roundState, draftState, exportState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, estimateWithdrawnReason, budgetMode, blockerScope, progressStep, activityKind,
+    groupState, roundState, draftState, requirementScope, requirementClarity, exportState, stopMode, stopState, workStatus, runPhase, runState, requestState, estimateState, estimateWithdrawnReason, budgetMode, blockerScope, progressStep, activityKind,
     proposalState, ownerKind, bucket, allocationState, dimension, complexity, confidence, handoffControl, handoffExecution, budgetEnforcement, fieldProvenance,
     agentSlot, selectionSource,
   },
