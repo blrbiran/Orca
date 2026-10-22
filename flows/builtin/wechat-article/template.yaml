@@ -5,7 +5,7 @@
 # Pins (H34): runskills and md2publish-skills at full commits; secrets come from the machine, never from the template.
 format: orca-flow-v1
 id: wechat-article
-version: 1
+version: 2
 title: {en: WeChat article, zh: 公众号文章}
 params:
   idea: {type: longtext, required: true}
@@ -25,7 +25,8 @@ requires:
     - source: github.com/blrbiran/md2publish-skills
       ref: eabf4f7e3aeec16019e55afb0ed918647580d580
       path: skills
-      skills: [wechat-finetune, md2publish-visuals, md2publish-article, md2publish-cover, md2publish-draft]
+      # md2publish-diagram: its svg2raster.py turns a vector cover into the raster WeChat takes (the cover skill has none).
+      skills: [wechat-finetune, md2publish-visuals, md2publish-article, md2publish-cover, md2publish-draft, md2publish-diagram]
   commands:
     # A check, never an installer. Passing does not prove the IP whitelist (md2publish-draft/SKILL.md step 1).
     - {name: md2wechat, check: "md2wechat doctor --json"}
@@ -166,13 +167,17 @@ steps:
   - id: cover
     kind: work
     budget: {tokens: 1000000}
-    skills: [md2publish-cover]
+    skills: [md2publish-cover, md2publish-diagram]
     prompt: prompts/cover.md
     parallelWith: article
     effect: image-generate
     recommendedLevel: confirm
     when: {not: {param: coverImage, truthy: true}}
-    acceptance: {checks: [{id: cover-final, run: "test -s assets/wechat/00-cover.final.txt", role: gate}]}
+    acceptance:
+      checks:
+        - {id: cover-final, run: "test -s assets/wechat/00-cover.final.txt", role: gate}
+        # T18 enact: md2wechat refused an SVG cover at the draft box; the cover hands over a PNG or JPG.
+        - {id: cover-raster, run: "grep -Eiq '[.](png|jpe?g)$' assets/wechat/00-cover.final.txt", role: gate}
     tools:
       commands:
         - {prefix: "mkdir -p"}
@@ -182,6 +187,7 @@ steps:
         - {prefix: "python3 '{{skill.md2publish-cover.dir}}/shared/scripts/artifacts.py'"}
         - {prefix: "python3 '{{skill.md2publish-cover.dir}}/shared/scripts/compress.py'"}
         - {prefix: "bun '{{skill.md2publish-cover.dir}}/shared/scripts/imagegen/main.ts'"}
+        - {prefix: "python3 '{{skill.md2publish-diagram.dir}}/shared/scripts/svg2raster.py'"}
       network: true
       secrets: [AGNES_API_KEY, AZURE_OPENAI_API_KEY, AZURE_OPENAI_BASE_URL, DASHSCOPE_API_KEY, GOOGLE_API_KEY, GEMINI_API_KEY,
         JIMENG_ACCESS_KEY_ID, JIMENG_SECRET_ACCESS_KEY, MINIMAX_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, REPLICATE_API_TOKEN,
@@ -197,6 +203,7 @@ steps:
     recommendedLevel: confirm
     tools:
       commands:
+        - {exact: "grep -Eiq '[.](jpe?g|png|gif|bmp|webp)$' assets/wechat/00-cover.final.txt"}
         - {prefix: "md2wechat doctor"}
         - {prefix: "md2wechat upload_image"}
         - {prefix: "md2wechat create_draft"}

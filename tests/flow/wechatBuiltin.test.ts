@@ -3,7 +3,9 @@ import { seedBuiltinTemplates } from "../../src/flow/builtins.js";
 import { checkTemplate } from "../../src/flow/template/checklist.js";
 import { BUILTIN_ROOT, directoryAssets, loadBuiltin, parseTemplateDraft } from "../../src/flow/template/load.js";
 import type { FlowStep } from "../../src/flow/template/schema.js";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openTestStore } from "../control/fixtures/store.js";
 
@@ -16,6 +18,9 @@ import { openTestStore } from "../control/fixtures/store.js";
  * the draft box: publishing is the person's click in the WeChat backend. Each effect step's prompt passes the effect
  * record as `--confirmed-by-orca`, and the draft box reads the cover step's FINAL file, never the sidecar default.
  */
+/** T18 enact: md2wechat 3.2.0 uploads jpg, jpeg, png, gif, bmp or webp only ("unsupported image format" for the SVG). */
+const RASTER_CHECK = "grep -Eiq '[.](jpe?g|png|gif|bmp|webp)$' assets/wechat/00-cover.final.txt";
+const COVER_RASTER_GATE = "grep -Eiq '[.](png|jpe?g)$' assets/wechat/00-cover.final.txt";
 const RUNSKILLS = "e62c5f8edaaf7d36770fc13962dad22404765adc";
 const MD2PUBLISH = "eabf4f7e3aeec16019e55afb0ed918647580d580";
 const dir = join(BUILTIN_ROOT, "wechat-article");
@@ -32,7 +37,7 @@ describe("built-in wechat-article (§15)", () => {
     expect(draft.ok).toBe(true);
     const effectSkills = new Set(steps.filter((s) => "effect" in s && s.effect !== undefined).flatMap((s) => ("skills" in s ? s.skills ?? [] : [])));
     expect(checkTemplate((draft as { raw: unknown }).raw, directoryAssets(dir), { builtinEffectSkills: effectSkills })).toEqual({ errors: [], warnings: [] });
-    expect(loaded.template).toMatchObject({ id: "wechat-article", version: 1, workspace: { kind: "dir" }, effects: { "image-generate": { class: "cost" }, "wechat-draft": { class: "external" } } });
+    expect(loaded.template).toMatchObject({ id: "wechat-article", version: 2, workspace: { kind: "dir" }, effects: { "image-generate": { class: "cost" }, "wechat-draft": { class: "external" } } });
   });
 
   it("is the spec's table: steps in order with their kinds, skills, effects, conditions and parallel sibling", () => {
@@ -40,7 +45,7 @@ describe("built-in wechat-article (§15)", () => {
       ["brief", "clarify", []], ["outline", "work", ["tech-writer"]], ["approve-outline", "ask", []], ["draft", "work", ["tech-writer"]],
       ["deslop", "work", ["tech-writer-deslop"]], ["voice", "work", ["tech-writer-voice"]], ["finetune", "work", ["wechat-finetune"]],
       ["pick-title", "ask", []], ["visuals", "work", ["md2publish-visuals"]], ["article", "work", ["md2publish-article"]],
-      ["cover", "work", ["md2publish-cover"]], ["to-draft-box", "work", ["md2publish-draft"]],
+      ["cover", "work", ["md2publish-cover", "md2publish-diagram"]], ["to-draft-box", "work", ["md2publish-draft"]],
     ]);
     expect(step("brief")).toMatchObject({ mode: "auto", sections: ["Reader", "Purpose", "Angle", "Must-use material", "Length"] });
     expect(step("approve-outline")).toMatchObject({ executor: "person", policy: "review-after", form: { approve: { type: "bool", default: true } } });
@@ -56,7 +61,7 @@ describe("built-in wechat-article (§15)", () => {
   it("pins runskills and md2publish-skills at full commits", () => {
     expect(loaded.template.requires?.skills).toEqual([
       { source: "github.com/blrbiran/runskills", ref: RUNSKILLS, path: "skills", skills: ["tech-writer", "tech-writer-deslop", "tech-writer-voice"] },
-      { source: "github.com/blrbiran/md2publish-skills", ref: MD2PUBLISH, path: "skills", skills: ["wechat-finetune", "md2publish-visuals", "md2publish-article", "md2publish-cover", "md2publish-draft"] },
+      { source: "github.com/blrbiran/md2publish-skills", ref: MD2PUBLISH, path: "skills", skills: ["wechat-finetune", "md2publish-visuals", "md2publish-article", "md2publish-cover", "md2publish-draft", "md2publish-diagram"] },
     ]);
   });
 
@@ -70,7 +75,7 @@ describe("built-in wechat-article (§15)", () => {
     expect((step("outline") as { hints?: { equals?: string } }).hints?.equals).toBe("headings({{param.slug}}.outline.md)");
     for (const work of steps.filter((s) => s.kind === "work")) expect((work as { tools?: unknown }).tools, work.id).toBeDefined();
     expect(rules("deslop")).toEqual(["python3 '{{skill.tech-writer-deslop.dir}}/scripts/scan.py' --json '{{param.slug}}.md'"]);
-    expect(rules("to-draft-box")).toEqual(["md2wechat doctor", "md2wechat upload_image", "md2wechat create_draft"]);
+    expect(rules("to-draft-box")).toEqual([RASTER_CHECK, "md2wechat doctor", "md2wechat upload_image", "md2wechat create_draft"]);
     expect((step("to-draft-box") as { tools: { network: boolean; secrets: string[] } }).tools).toMatchObject({ network: true, secrets: ["WECHAT_APPID", "WECHAT_SECRET"] });
     for (const id of ["visuals", "cover"]) expect((step(id) as { tools: { network: boolean } }).tools.network, id).toBe(true);
     for (const id of ["outline", "draft", "deslop", "voice", "finetune", "article"]) expect((step(id) as { tools: { network?: boolean } }).tools.network, id).toBe(false);
@@ -83,11 +88,13 @@ describe("built-in wechat-article (§15)", () => {
     expect(all.filter((r) => /^\s*cd(\s|$)/.test(r))).toEqual([]);
     // T18 acceptance: ccloop refused every rule ending in a space (8 in cover, 2 in article); none is left.
     expect(all.filter((r) => r !== r.trim())).toEqual([]);
+    // Ruling: 这次批准改写所有必要的判据 (b37f7ce9) -- a script is under one of its own step's skills (the cover's
+    // svg2raster.py is md2publish-diagram's: md2publish-cover does not ship it at the pinned commit).
     for (const id of ["finetune", "visuals", "article", "cover"]) {
-      const skill = (step(id) as { skills: string[] }).skills[0]!;
+      const skills = (step(id) as { skills: string[] }).skills.join("|");
       const scripts = rules(id).filter((r) => /^(python3|bun) /.test(r));
       expect(scripts.length, id).toBeGreaterThan(0);
-      for (const r of scripts) expect(r, id).toMatch(new RegExp(`^(python3|bun) '\\{\\{skill\\.${skill}\\.dir\\}\\}/(shared/)?scripts/[a-z0-9_/]+\\.(py|ts)'( |$)`));
+      for (const r of scripts) expect(r, id).toMatch(new RegExp(`^(python3|bun) '\\{\\{skill\\.(${skills})\\.dir\\}\\}/(shared/)?scripts/[a-z0-9_/]+\\.(py|ts)'( |$)`));
     }
     for (const id of ["finetune", "visuals", "article", "cover", "to-draft-box"]) expect(prompt(id), id).not.toMatch(/`cd '/);
   });
@@ -114,17 +121,40 @@ describe("built-in wechat-article (§15)", () => {
     for (const id of ["visuals", "cover", "to-draft-box"]) expect(prompt(id), id).toContain("--confirmed-by-orca '{{effect.recordId}}'");
     expect(prompt("article")).toContain("--confirmed-by-orca '{{run.id}}'");
     expect(prompt("cover")).toContain("assets/wechat/00-cover.final.txt");
-    expect(gates("cover")).toEqual(["test -s assets/wechat/00-cover.final.txt"]);
+    expect(gates("cover")).toEqual(["test -s assets/wechat/00-cover.final.txt", COVER_RASTER_GATE]);
     expect(prompt("to-draft-box")).toContain("assets/wechat/00-cover.final.txt");
     expect(prompt("to-draft-box")).toMatch(/never the sidecar default/);
     expect(prompt("finetune")).toContain("flow.candidates.title");
   });
 
+  // T18 enact: the cover step drew an SVG; md2wechat 3.2.0 refused it ("unsupported image format") only at the draft
+  // box, after the person enacted the external effect. The cover must hand over a raster (a vector is converted with
+  // svg2raster.py first), its gate refuses anything else, and the draft box checks the cover before any upload and
+  // stops with a named failure. Version 2: the bytes changed.
+  it("the cover hands over a raster; the draft box refuses a non-raster cover before uploading", () => {
+    const dirOf = mkdtempSync(join(tmpdir(), "orca-raster-"));
+    try {
+      const exits = (command: string, final: string): number => {
+        mkdirSync(join(dirOf, "assets/wechat"), { recursive: true });
+        writeFileSync(join(dirOf, "assets/wechat/00-cover.final.txt"), final);
+        return spawnSync("/bin/sh", ["-c", command], { cwd: dirOf }).status!;
+      };
+      for (const [final, cover, box] of [["assets/wechat/00-cover.svg\n", 1, 1], ["assets/wechat/00-cover.png\n", 0, 0], ["assets/wechat/00-cover.JPG\n", 0, 0],
+        ["assets/wechat/00-cover.webp\n", 1, 0], ["assets/wechat/00-cover.png.svg\n", 1, 1]] as const) {
+        expect([exits(COVER_RASTER_GATE, final), exits(RASTER_CHECK, final)], final).toEqual([cover, box]);
+      }
+    } finally { rmSync(dirOf, { recursive: true, force: true }); }
+    expect(rules("cover")).toContain("python3 '{{skill.md2publish-diagram.dir}}/shared/scripts/svg2raster.py'");
+    expect(prompt("cover")).toContain("python3 '{{skill.md2publish-diagram.dir}}/shared/scripts/svg2raster.py' --svg");
+    expect(prompt("to-draft-box")).toContain(RASTER_CHECK);
+    expect(prompt("to-draft-box")).toContain("cover-not-raster");
+  });
+
   it("is seeded into flow_templates by upsert at start; seeding again changes nothing", async () => {
     const h = await openTestStore(); try {
       const rows = () => h.store.db.prepare("SELECT layer, id, version, sha256, published_by AS publishedBy FROM flow_templates ORDER BY id").all();
-      expect(seedBuiltinTemplates(h.store, 5)).toEqual([{ id: "wechat-article", version: 1, sha256: loaded.sha256 }]);
-      expect(rows()).toEqual([{ layer: "builtin", id: "wechat-article", version: 1, sha256: loaded.sha256, publishedBy: "orca" }]);
+      expect(seedBuiltinTemplates(h.store, 5)).toEqual([{ id: "wechat-article", version: 2, sha256: loaded.sha256 }]);
+      expect(rows()).toEqual([{ layer: "builtin", id: "wechat-article", version: 2, sha256: loaded.sha256, publishedBy: "orca" }]);
       seedBuiltinTemplates(h.store, 6);
       expect(rows()).toHaveLength(1);
     } finally { await h.dispose(); }

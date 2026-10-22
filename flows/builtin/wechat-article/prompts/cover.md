@@ -15,3 +15,8 @@ from there, never from the sidecar default.
 The effect is the generated image. Report the image the generator saved (its `savedImage`, as a path relative to this
 workspace) as `flow.effect.remoteId`. When no image provider is configured or the generation fails, stop there: never
 draw, write or copy a stand-in cover, and report no `flow.effect` -- Orca records the cover as failed for the person.
+
+The cover you hand over is a raster, PNG or JPG: md2wechat uploads no SVG. When the cover you have is a vector (an
+`.svg`), convert it first, by its absolute path: `python3 '{{skill.md2publish-diagram.dir}}/shared/scripts/svg2raster.py' --svg
+<the .svg> --out <the same name, .png> --aspect <the SVG's own viewBox ratio> --json`, and write the PNG's path into
+`assets/wechat/00-cover.final.txt`. A gate refuses a final file that does not end in `.png`, `.jpg` or `.jpeg`.

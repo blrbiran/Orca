@@ -11,6 +11,11 @@ once; if it fails, stop and report -- never retry.
   `assets/wechat/00-cover.final.txt` (the cover step's final file). Pass it explicitly; never the sidecar default
   `00-cover.json`, which may name an older cover.
 
+Before anything is uploaded, the cover must be a raster md2wechat takes (jpg, jpeg, png, gif, bmp or webp). With the
+cover step's final file, run exactly `grep -Eiq '[.](jpe?g|png|gif|bmp|webp)$' assets/wechat/00-cover.final.txt`;
+with the person's cover, look at its extension. If it is not one of those (an `.svg`, say), stop at once with the
+failure `cover-not-raster: <the path>`: upload nothing, create no draft.
+
 Run the skill's commands as they are, never after a `cd` (the shell returns to this workspace after every command): `md2wechat doctor --json`,
 `md2wechat upload_image ... --json`, `md2wechat create_draft ... --json`, with absolute paths into this workspace.
 Report the draft's `media_id` as `flow.effect.remoteId` (and its URL when one comes back).
