@@ -122,3 +122,21 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 - 2026-10-12 OMP 一轮：一条 5 s 更新判据全量与整文件都超时、单例 4.3 s 过；四条 saved-result worker 全量里未及时封口、整文件 28/28。
 - 更早：`codexWatchdog` 在负载 33 下红过（ccloop 人裁 139：负载下 1.5 s 太紧）；`runLoop.integration.test.ts` 里 19 条 `perAttemptTimeoutMs: 20` 的真 plan／verify 判据
   在重负载下可能红，特征 "… phase exceeded per-attempt timeout of 20ms"（agent 选择台账 §18）。
+
+## 会话 `b37f7ce9`（2026-10-22）新见、尚未满足「个位数负载 3/3」的形状（n 很小，**下次红先对照，不豁免**）
+
+> 本会话多 agent 并行，负载长期 10–200，没有一次降到个位数；以下每条都是「全量里红、单文件重跑绿」，判负载只是暂定。出处：会话台账同名行（`.superpowers/sdd/2026-10-22-session-b37f7ce9/progress.md`）。
+
+| 仓 › 文件 › 现象 | 观测 |
+|---|---|
+| Orca › `tests/panel/panelSocketE2e.test.ts` | 检查分支全量（负载 95–200）红；单跑 3/3 绿（负载 18–40） |
+| Orca › `tests/control/debugRepro.test.ts` | 同上 |
+| Orca › `tests/control/taskResultCollector.test.ts` › 「flushes owned queued results…」 | `control-peer-timeout`／`:282` 断言形状；多次全量红，单跑绿（负载 24–40） |
+| Orca › `tests/control/tokenPolicyRuntime.test.ts` | 检查分支全量红；单跑 3/3 绿 |
+| Orca › web `tests/followupApp.test.tsx` | 同上，单跑 4/4 |
+| Orca › web `tests/reviewApp.test.tsx` | 流程分支全量红 2 条（负载约 37）；单跑 15/15、3/3 |
+| Orca › `tests/control/executionDriverE2E.test.ts` › E2/W1 | `fatal: failed to read .git/worktrees/attempt-1/commondir`（已登记的 commondir 形状、新文件）；单跑 10/10（负载 33） |
+| Orca › `tests/control/criteriaBaseRun.test.ts` › 「a restart while the re-run is in flight…」 | `index.lock`；单跑 3×10/10（负载 29.8） |
+| Orca › `tests/control/agentSelectionE2E.test.ts`、`driverReconcile*`、`schedulerBridge`、`driverSettle`、`handoffE2E` | 已登记形状在本会话多次再见，单跑全绿 |
+| ccloop › `tests/runtime/codex/abortedUsage.test.ts` | 断言形状「expected null to be a CodexPhaseAborted」，n＝1；单跑 3/3 绿 |
+| ccloop › `phasesCompleted`、`savedResultRecovery.native` | 在未改动的 main 上同样红（负载 37–66）；负载约 13 时两边各 3/3 绿 |
