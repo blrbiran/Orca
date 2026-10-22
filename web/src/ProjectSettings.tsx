@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { WorkspaceModeSelector } from "./WorkspaceModeSelector.js";
 import { RepositoryIntegration } from "./IntegrationScheme.js";
 import { ChecksSettings } from "./ChecksSettings.js";
+import { FlowSettings } from "./FlowSettings.js";
 import type { IntegrationSchemeV1, RepositoryIntegrationV1, RepositoryWorkspaceV1 } from "./controlTypes.js";
 
 export function ProjectSettings(props: {
@@ -32,6 +33,8 @@ export function ProjectSettings(props: {
             : props.integration === null ? <p role="status">{t("settings.integrationUnavailable")}</p> : <RepositoryIntegration integration={props.integration} onSave={props.onIntegrationScheme} />}
           {/* Checks spec 2026-10-22 §7: the project's checks, each field with its source layer; it reads and writes them itself. */}
           {props.dir !== true && <ChecksSettings key={props.repoId} scope={{ repoId: props.repoId }} />}
+          {/* Flow engine spec §11.2: the project's flow settings, each field with its source and lock. */}
+          <FlowSettings key={`flows-${props.repoId}`} scope={{ repoId: props.repoId }} />
         </>
       )}
     </section>
