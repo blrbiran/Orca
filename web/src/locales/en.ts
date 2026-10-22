@@ -1185,6 +1185,7 @@ export const en = {
       addOthers: "Add steps that are not candidates",
       keepNote: "An unticked step keeps its current output.",
       run: "Run these steps",
+      discard: "Discard this plan",
       history_one: "{{count}} plan",
       history_other: "{{count}} plans",
       row: "Plan {{n}} · {{state}} · ran {{steps}} · skipped {{skips}}",

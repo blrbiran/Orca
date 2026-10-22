@@ -982,6 +982,8 @@ export const flowMessagePayloadSchema = z.object({
 export const flowPlanPayloadSchema = z.object({ runId: flowRunIdSchema }).strict();
 export const flowRerunPayloadSchema = z.object({
   runId: flowRunIdSchema, planNo: positiveSafeInteger, skip: z.array(flowStepKeySchema).optional(), add: z.array(flowStepKeySchema).optional(),
+  // §7.4 (T18 enact): the person withdraws the plan instead of running it (`orca flow discard-plan`); no skip or add.
+  discard: z.literal(true).optional(),
 }).strict();
 export const flowAnswerPayloadSchema = z.object({
   runId: flowRunIdSchema, stepKey: flowStepKeySchema,
@@ -1913,6 +1915,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("flow-message-stored"), flowRunId: nonemptyString, seq: positiveSafeInteger, state: z.enum(["accepted", "applied", "rejected", "excluded"]), reason: z.string().nullable(), deduped: z.boolean() }).strict(),
   z.object({ kind: z.literal("flow-plan-made"), flowRunId: nonemptyString, planNo: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("flow-plan-run"), flowRunId: nonemptyString, planNo: positiveSafeInteger }).strict(),
+  z.object({ kind: z.literal("flow-plan-discarded"), flowRunId: nonemptyString, planNo: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("flow-answered"), flowRunId: nonemptyString, stepKey: nonemptyString, answer: z.enum(["ask", "needs", "clarify", "consensus"]) }).strict(),
   z.object({ kind: z.literal("flow-effect-done"), recordId: nonemptyString, action: z.enum(["confirm", "enact", "discard"]), state: z.enum(["running", "restaged", "discarded"]), replacedBy: nonemptyString.optional() }).strict(),
   z.object({ kind: z.literal("flow-pool-raised"), flowRunId: nonemptyString, poolTokens: positiveSafeInteger }).strict(),

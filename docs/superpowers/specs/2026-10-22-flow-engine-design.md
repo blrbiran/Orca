@@ -1065,3 +1065,15 @@ in `progress.md` (`- flow T18:` lines).
   (`tools-whitespace`), not trimmed at load: ccloop refuses such a rule (T18: 8 rules in `cover`, 2 in `article` came back
   `refused`), and trimming would widen it -- ccloop compiles a claude prefix `v` to `Bash(v *)`, i.e. `^v( .*)?$`, so
   `mkdir -p ` trimmed would also allow a bare `mkdir -p`. The author removes the space; the built-in has none.
+- **25.3 (adds to §7.4, §8.1 and the §14.2 table; flow enact fixer, session b37f7ce9).** `orca flow discard-plan <run>
+  [--plan n]` -- the `flow-rerun` verb with `discard: true`, so `human-only` like running a plan -- withdraws the open,
+  proposed plan instead of running it: the plan is `abandoned`, a `command` message `discard-plan` records who, and the
+  person's feedback messages that made it (or that it carried in) move `applied` → `excluded`, so no later plan carries
+  them and no rewind re-applies them. Not "back to accepted": messages only move forward (§8.1), and an accepted one
+  would rebuild the same plan at the next boundary. Edits stay (they are outputs; a rewind undoes them). The Web plan
+  checklist offers "Discard this plan" next to Run.
+- **25.4 (adds to §5.4, §6.2, §9.2).** An open plan holds which executions START; it never stops the kernel from
+  settling one already running (T18 enact: a failed draft-box child stayed `running`, its record `confirmed`, because
+  the pass returned at the plan before polling). And an execution that starts outside a pass -- an enacted or confirmed
+  effect record, a pool raise -- takes the person's drift first, as every pass does; an enact whose drift moves what the
+  record was staged on restages it (§9.2). The resumed execution's basis is the active outputs it runs on.

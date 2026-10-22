@@ -621,6 +621,7 @@ export type CommandSuccessV1 = {
     | { kind: "flow-message-stored"; flowRunId: string; seq: number; state: "accepted" | "applied" | "rejected" | "excluded"; reason: string | null; deduped: boolean }
     | { kind: "flow-plan-made"; flowRunId: string; planNo: number }
     | { kind: "flow-plan-run"; flowRunId: string; planNo: number }
+    | { kind: "flow-plan-discarded"; flowRunId: string; planNo: number }
     | { kind: "flow-answered"; flowRunId: string; stepKey: string; answer: "ask" | "needs" | "clarify" | "consensus" }
     | { kind: "flow-effect-done"; recordId: string; action: "confirm" | "enact" | "discard"; state: "running" | "restaged" | "discarded"; replacedBy?: string }
     | { kind: "flow-pool-raised"; flowRunId: string; poolTokens: number }

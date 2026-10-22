@@ -31,6 +31,8 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
   [["flow", "plan", "fr-0a"], "flows/plan", 0, { runId: RUN }],
   [["flow", "rerun", "fr-0a", "--skip", "cover,pick-title"], "flows/rerun", 0, { runId: RUN, planNo: 2, skip: ["cover", "pick-title"] }],
   [["flow", "rerun", "fr-0a", "--plan", "3", "--add", "visuals"], "flows/rerun", 0, { runId: RUN, planNo: 3, add: ["visuals"] }],
+  [["flow", "discard-plan", "fr-0a"], "flows/rerun", 0, { runId: RUN, planNo: 2, discard: true }],
+  [["flow", "discard-plan", "fr-0a", "--plan", "3"], "flows/rerun", 0, { runId: RUN, planNo: 3, discard: true }],
   [["flow", "rewind", "fr-0a", "--to", "draft#1", "--exclude", "4"], "flows/messages", 0, { runId: RUN, kind: "command", target: { kind: "run" }, body: { command: "rewind", toStep: "draft", toSeq: 1, exclude: [4] } }],
   [["flow", "pause", "fr-0a"], "flows/messages", 0, { runId: RUN, kind: "command", target: { kind: "run" }, body: { command: "pause" } }],
   [["flow", "resume", "fr-0a"], "flows/messages", 0, { runId: RUN, kind: "command", target: { kind: "run" }, body: { command: "resume" } }],

@@ -179,6 +179,19 @@ run the open plan: its candidates minus the skips (default: the model's proposed
 orca flow rerun fr-1234 --skip cover,pick-title --as-person
 ```
 
+## `orca flow discard-plan <run> [--plan <plan>]`
+
+withdraw the open plan instead of running it: nothing re-runs, the feedback that made it is excluded; needs a person token
+
+- What it does: sends control verb `flow-rerun`.
+- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- `<run>`: a flow run id (fr-…) or a unique prefix
+- `--plan <n>`: the plan number (default: the open one)
+
+```
+orca flow discard-plan fr-1234 --as-person
+```
+
 ## `orca flow rewind <run> --to <to> [--exclude <exclude>]`
 
 move a step's active output back (to execution n, or to not run); later messages are re-applied unless excluded

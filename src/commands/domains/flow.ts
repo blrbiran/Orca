@@ -143,6 +143,15 @@ const RUN_ROWS: CommandDef[] = [
       const planNo = typeof c.args.flags.plan === "number" ? c.args.flags.plan : await openPlanNo(c, runId);
       return { runId, planNo, ...(skip === undefined ? {} : { skip }), ...(add === undefined ? {} : { add }) };
     } }),
+  run({ action: "discard-plan", summary: "withdraw the open plan instead of running it: nothing re-runs, the feedback that made it is excluded; needs a person token",
+    verb: "flow-rerun", access: "token", positionals: [RUN],
+    flags: [{ name: "plan", type: "integer", summary: "the plan number (default: the open one)" }],
+    examples: ["orca flow discard-plan fr-1234 --as-person"],
+    route: () => "flows/rerun",
+    payload: async (c) => {
+      const runId = await runOf(c);
+      return { runId, planNo: typeof c.args.flags.plan === "number" ? c.args.flags.plan : await openPlanNo(c, runId), discard: true };
+    } }),
   runCommand("rewind", "move a step's active output back (to execution n, or to not run); later messages are re-applied unless excluded",
     (c) => {
       const to = str(c, "to")!;

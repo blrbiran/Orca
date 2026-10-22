@@ -20,7 +20,7 @@ import { answerFlowClarify, flowClarifyConsensus } from "./kinds/clarify.js";
 import type { ExecutionBody } from "./kinds/registry.js";
 import { acceptMessage } from "./messages.js";
 import { POOL_EXHAUSTED } from "./pool.js";
-import { proposePlan, runPlan } from "./rerun.js";
+import { discardPlan, proposePlan, runPlan } from "./rerun.js";
 import { appendMessage, getFlowRun, listExecutions } from "./store.js";
 
 export const FLOW_VERBS = ["flow-start", "flow-message", "flow-plan", "flow-rerun", "flow-answer", "flow-effect", "flow-pool"] as const;
@@ -138,6 +138,11 @@ async function act(flow: FlowDeps, command: FlowCommand, projects: () => Readonl
     }
     case "flow-rerun": {
       const p = command.payload;
+      if (p.discard === true) {
+        if (p.skip !== undefined || p.add !== undefined) throw new ControlError("control-argument-invalid", "a discarded plan takes no skip or add");
+        await discardPlan(flow, p.runId, p.planNo, who.by, who.via);
+        return { kind: "flow-plan-discarded", flowRunId: p.runId, planNo: p.planNo };
+      }
       await runPlan(flow, p.runId, p.planNo, { ...(p.skip === undefined ? {} : { skip: p.skip }), ...(p.add === undefined ? {} : { add: p.add }) }, who.by, who.via);
       return { kind: "flow-plan-run", flowRunId: p.runId, planNo: p.planNo };
     }

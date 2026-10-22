@@ -156,6 +156,15 @@ describe("the re-run plan (§7.4)", () => {
     // mutation: send the model's skips instead of the person's ticks -> skip ["cover"], red
     expect(lastPost()).toEqual({ url: "/api/control/flows/rerun", body: expect.objectContaining({ expectedRevision: 0, payload: { runId: RUN, planNo: 1, skip: ["pick-title", "cover"], add: ["outline"] } }) });
   });
+
+  // T18 enact: the person withdraws a plan they do not want run (its feedback is excluded server side).
+  it("discards the plan instead of running it", async () => {
+    await mount();
+    const plan = screen.getByRole("region", { name: "Re-run plan 1" });
+    fireEvent.click(within(plan).getByRole("button", { name: "Discard this plan" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost()).toEqual({ url: "/api/control/flows/rerun", body: expect.objectContaining({ expectedRevision: 0, payload: { runId: RUN, planNo: 1, discard: true } }) });
+  });
 });
 
 describe("asks, confirm cards and effect records (§4.4, §9)", () => {
@@ -252,7 +261,7 @@ describe("who may act (§14.2)", () => {
     expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
     expect(within(stepBox("voice")).getByRole("button", { name: "Send feedback" })).toBeTruthy();
     // mutation: offer the human-only acts to a member -> these buttons exist, red
-    for (const name of ["Run these steps", "Confirm and run", "Enact", "Discard", "Send the answer", "Raise the pool"]) expect(screen.queryByRole("button", { name })).toBeNull();
+    for (const name of ["Run these steps", "Discard this plan", "Confirm and run", "Enact", "Discard", "Send the answer", "Raise the pool"]) expect(screen.queryByRole("button", { name })).toBeNull();
   });
 });
 

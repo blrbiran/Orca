@@ -19,7 +19,7 @@ import { advanceRun, definitionOf, FlowRefusal, loadRun, recordOfExecution, step
 import type { ExecutionBody, LoadedRun } from "./kinds/registry.js";
 import { bounded } from "./prompt.js";
 import { readFlowSettings } from "./settings.js";
-import { appendFlowDecision, appendMessage, getFlowRun, listExecutions, listHeads, listPlans, putPlan, setFlowRunState, type PlanRow } from "./store.js";
+import { appendFlowDecision, appendMessage, getFlowRun, listExecutions, listHeads, listMessages, listPlans, putPlan, setFlowRunState, setMessageState, type PlanRow } from "./store.js";
 import { evaluateWhen } from "./template/when.js";
 import { vaultGit } from "./vault/vault.js";
 
@@ -282,6 +282,36 @@ export async function runPlan(deps: FlowDeps, flowRunId: string, planNo: number,
       by, via, state: "applied", reason: null, at,
     });
     choose(deps.store, plan, run, skips, choice.add ?? [], proposal);
+  });
+  await advanceRun(deps, flowRunId);
+}
+
+/**
+ * §7.4, §8.1 `orca flow discard-plan` (human-only, the `flow-rerun` verb with `discard`): the person withdraws the open
+ * plan they have not run. It is `abandoned`; the person's feedback that made it (and that it carried in from older
+ * plans) is `excluded` -- messages only move forward, and an `accepted` one would rebuild the same plan at the next
+ * boundary -- so no later plan carries it and no rewind re-applies it. Edits stay: they are outputs already (a rewind
+ * undoes those). Only the newest open, proposed plan can be discarded: anything else is `flow-plan-stale`.
+ */
+export async function discardPlan(deps: FlowDeps, flowRunId: string, planNo: number, by: string, via: string): Promise<void> {
+  loadRun(deps.store, flowRunId);
+  const plan = openPlan(deps.store, flowRunId);
+  if (plan === null || plan.planNo !== planNo || plan.state !== "proposed") throw new FlowRefusal("flow-plan-stale", `plan ${planNo}`);
+  const feedback = (plan.candidates as PlanCandidates).feedback;
+  const withdrawn = listMessages(deps.store, flowRunId).filter((m) => {
+    if (m.kind !== "feedback" || m.state !== "applied" || m.by === "orca-auto") return false;
+    const body = m.body as { text?: unknown; target?: { stepKey?: string } };
+    const key = body.target?.stepKey;
+    return key !== undefined && (feedback[key] ?? []).includes(String(body.text));
+  });
+  const at = deps.now();
+  deps.store.transaction(() => {
+    putPlan(deps.store, { ...plan, state: "abandoned" });
+    for (const m of withdrawn) setMessageState(deps.store, flowRunId, m.seq, "applied", "excluded", `excluded by discarding plan ${planNo}`);
+    appendMessage(deps.store, {
+      flowRunId, requestId: `discard-plan:${planNo}`, kind: "command", target: "run", body: { command: "discard-plan", planNo, excluded: withdrawn.map((m) => m.seq) },
+      by, via, state: "applied", reason: null, at,
+    });
   });
   await advanceRun(deps, flowRunId);
 }

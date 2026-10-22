@@ -177,6 +177,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca flow edit <run> --step <step> [--file <file>] [--set <set>]` — the person's own output for a step (record fields, or workspace files); the step is not re-run
 - `orca flow plan <run>` — compute and propose a re-run plan from what changed (spends one single call)
 - `orca flow rerun <run> [--skip <skip>] [--add <add>] [--plan <plan>]` — run the open plan: its candidates minus the skips (default: the model's proposed skips) plus additions; needs a person token (person token)
+- `orca flow discard-plan <run> [--plan <plan>]` — withdraw the open plan instead of running it: nothing re-runs, the feedback that made it is excluded; needs a person token (person token)
 - `orca flow rewind <run> --to <to> [--exclude <exclude>]` — move a step's active output back (to execution n, or to not run); later messages are re-applied unless excluded
 - `orca flow pause <run>` — pause the run at its next step boundary (a running step is never interrupted)
 - `orca flow resume <run>` — resume a paused run

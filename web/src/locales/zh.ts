@@ -1055,6 +1055,7 @@ export const zh: Translation<typeof en> = {
       addOthers: "加入不在候选里的步骤",
       keepNote: "不勾选的步骤保留它当前的产出。",
       run: "运行这些步骤",
+      discard: "放弃这个计划",
       history_one: "{{count}} 个计划",
       history_other: "{{count}} 个计划",
       row: "计划 {{n}} · {{state}} · 运行了 {{steps}} · 跳过了 {{skips}}",

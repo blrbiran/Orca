@@ -304,6 +304,8 @@ function PlanChecklist(props: { plan: FlowPlanV1; steps: Step[]; runId: string; 
           {props.may ? <button type="button" className="btn-primary" onClick={run}>{t("flow.plan.run")}</button> : <p role="note">{t("flow.ownerOnly")}</p>}
         </>
       )}
+      {/* T18 enact: the person may withdraw the plan instead of running it; its feedback is excluded. */}
+      {props.may && <button type="button" onClick={() => props.send("rerun", { runId: props.runId, planNo: plan.planNo, discard: true })}>{t("flow.plan.discard")}</button>}
     </section>
   );
 }
