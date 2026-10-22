@@ -85,6 +85,19 @@ describe("reportedFlowOf (spec §4.3)", () => {
     expect(reportedFlowOf({ flow: { needs: { kind: "input", question: "q" } } }).kind).toBe("malformed");
     expect(reportedFlowOf({ flow: { extra: 1 } }).kind).toBe("malformed");
   });
+
+  // Controller ruling (b37f7ce9 acceptance): a real effect reported with more keys than Orca reads is still reported --
+  // read as unreported, a person would enact again and make a duplicate draft. The extra names are kept, bounded.
+  it("strips an effect's other keys and names them; everything else stays strict", () => {
+    expect(reportedFlowOf({ flow: { effect: { remoteId: "d-1", url: "https://u", confirmedBy: "eff-1", coverMediaId: "t-1" } } }))
+      .toEqual({ kind: "object", value: { effect: { remoteId: "d-1", url: "https://u" } }, effectExtraKeys: ["confirmedBy", "coverMediaId"] });
+    const many = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`k${i}${"x".repeat(70)}`, i]));
+    const read = reportedFlowOf({ flow: { effect: { remoteId: "d-1", ...many } } });
+    expect(read.kind === "object" ? read.effectExtraKeys?.map((k) => k.length) : null).toEqual(Array(8).fill(64));
+    expect(reportedFlowOf({ flow: { effect: { remoteId: "" } } }).kind).toBe("malformed");
+    expect(reportedFlowOf({ flow: { effect: { remoteId: "d-1", url: 3 } } }).kind).toBe("malformed");
+    expect(reportedFlowOf({ flow: { effect: { remoteId: "d-1" }, other: 1 } }).kind).toBe("malformed");
+  });
 });
 
 describe("buildStepPrompt (spec §12.1)", () => {

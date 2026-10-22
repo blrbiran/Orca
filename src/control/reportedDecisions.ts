@@ -72,11 +72,15 @@ export const flowResultSchema = z.object({
     z.object({ kind: z.literal("input"), question: text, candidates: z.array(text) }).strict(),
   ]).optional(),
   candidates: z.record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]*$/), flowCandidatesSchema).optional(),
-  effect: z.object({ remoteId: text, url: text.optional() }).strict().optional(),
+  // Controller ruling (b37f7ce9 acceptance): an effect's other keys are stripped, never "malformed" -- a real external
+  // effect read as unreported invites a second enact (a duplicate WeChat draft). Only `effect` is lenient.
+  effect: z.object({ remoteId: text, url: text.optional() }).catchall(z.unknown()).optional(),
 }).strict();
-export type FlowResult = z.infer<typeof flowResultSchema>;
+export type FlowResult = Omit<z.infer<typeof flowResultSchema>, "effect"> & { effect?: { remoteId: string; url?: string } };
 export type FlowNeeds = NonNullable<FlowResult["needs"]>;
-export type ReportedFlow = { kind: "absent" } | { kind: "object"; value: FlowResult } | { kind: "malformed"; value: unknown };
+/** `effectExtraKeys`: the effect's stripped key names, sorted, at most EFFECT_EXTRA_KEYS_MAX of them, each cut to 64. */
+export type ReportedFlow = { kind: "absent" } | { kind: "object"; value: FlowResult; effectExtraKeys?: string[] } | { kind: "malformed"; value: unknown };
+export const EFFECT_EXTRA_KEYS_MAX = 8;
 
 /** Reads only the top-level `flow` key, as reportedDecisionsOf reads `decisions`; a value the schema refuses is malformed. */
 export function reportedFlowOf(result: unknown): ReportedFlow {
@@ -84,5 +88,11 @@ export function reportedFlowOf(result: unknown): ReportedFlow {
   const value = (result as { flow?: unknown }).flow;
   if (value === undefined) return { kind: "absent" };
   const parsed = flowResultSchema.safeParse(value);
-  return parsed.success ? { kind: "object", value: parsed.data } : { kind: "malformed", value };
+  if (!parsed.success) return { kind: "malformed", value };
+  const { effect, ...rest } = parsed.data;
+  if (effect === undefined) return { kind: "object", value: parsed.data };
+  const { remoteId, url, ...extra } = effect;
+  const kept: FlowResult = { ...rest, effect: { remoteId, ...(url === undefined ? {} : { url: url as string }) } };
+  const names = Object.keys(extra).sort().slice(0, EFFECT_EXTRA_KEYS_MAX).map((name) => name.slice(0, 64));
+  return names.length === 0 ? { kind: "object", value: kept } : { kind: "object", value: kept, effectExtraKeys: names };
 }

@@ -41,7 +41,8 @@ describe.skipIf(!realBinary)("an effect step that changes no file, through the r
     const vaults = await realpath(await mkdtemp(join(tmpdir(), "orca-effect-noop-vaults-")));
     const w = await world([], {}, { claudeScript: {}, declaredContextWindowTokens: 1_000_000, env: { ORCA_VAULT_DIR: vaults } });
     // The person's folder already holds what the agent writes: the attempt is empty.
-    const f = await flowRunWorld(w, { templates: { upload: UPLOAD }, folder: { "answer.txt": "42\n" }, flow: { effect: { remoteId: "draft-7" } } });
+    const f = await flowRunWorld(w, { templates: { upload: UPLOAD }, folder: { "answer.txt": "42\n" }, // As in the acceptance, the agent puts more beside the remote id; the effect is still applied (controller ruling).
+      flow: { effect: { remoteId: "draft-7", confirmedBy: "eff-x", coverMediaId: "thumb-1" } } });
     const { runtime, flowRunId } = await f.start("builtin/upload");
     try {
       runtime.startPump(50);
@@ -62,6 +63,7 @@ describe.skipIf(!realBinary)("an effect step that changes no file, through the r
       expect([effect!.state, effect!.remoteRef]).toEqual(["applied", "draft-7"]);
       expect((upload.body as { flags?: string[] }).flags).toContain("effect-applied");
       expect((upload.body as { reported?: unknown }).reported).toEqual({ effect: { remoteId: "draft-7" } });
+      expect((upload.body as { warnings?: string[] }).warnings).toEqual(["effect-report-extra-keys:confirmedBy,coverMediaId"]);
       // No files: the output is the execution's record, never a workspace commit, so the composition does not move.
       expect(upload.outputKind).toBe("artifact");
       expect(await runtime.shutdown()).toBe(true);

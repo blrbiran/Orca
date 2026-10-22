@@ -43,7 +43,7 @@ export interface FlowChildOpen {
 export type FlowChildStatus =
   | { state: "running" }
   /** `commit` null: an effect step that changed no file (§9.6); its output is no files. */
-  | { state: "landed"; commit: string | null; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[]; flow?: { needs?: FlowNeeds; candidates?: Record<string, { items: string[]; recommended: number }>; effect?: { remoteId: string; url?: string } } }
+  | { state: "landed"; commit: string | null; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[]; flow?: { needs?: FlowNeeds; candidates?: Record<string, { items: string[]; recommended: number }>; effect?: { remoteId: string; url?: string }; effectExtraKeys?: string[] } }
   | { state: "failed"; reason: string; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[] };
 /** The driver-backed side of a work step: open (idempotent per child id) and read how the child is doing. */
 export interface FlowChildPort {
@@ -146,7 +146,10 @@ export function skillLocksOf(ctx: KindContext, lock: readonly LockSkill[] | unde
  */
 function settle(ctx: KindContext, status: Exclude<FlowChildStatus, { state: "running" }>, baseCommit: string): KindOutcome {
   const flags = toolRuleFlags(status.toolRules);
-  const { skillLocks, warnings } = skillLocksOf(ctx, status.skills);
+  const { skillLocks, warnings: lockWarnings } = skillLocksOf(ctx, status.skills);
+  // The effect's stripped keys (reportedFlowOf): shown, never a refusal -- the effect itself is applied.
+  const extra = status.state === "landed" ? status.flow?.effectExtraKeys : undefined;
+  const warnings = extra === undefined ? lockWarnings : [...lockWarnings, `${EFFECT_REPORT_EXTRA_KEYS}:${extra.join(",")}`];
   const record = { toolRules: status.toolRules ?? null, ...(status.skills === undefined ? {} : { skills: status.skills }), ...(warnings.length === 0 ? {} : { warnings }) };
   if (status.state === "failed") return { failed: { reason: status.reason, record, ...(flags.length === 0 ? {} : { flags }) } };
   if (status.flow?.needs !== undefined) return { needs: status.flow.needs };
@@ -159,4 +162,5 @@ function settle(ctx: KindContext, status: Exclude<FlowChildStatus, { state: "run
   } };
 }
 
+export const EFFECT_REPORT_EXTRA_KEYS = "effect-report-extra-keys";
 export const WORK_KIND: KindDefinition & { settle: typeof settle } = { kind: "work", kindVersion: 1, interactive: false, start, settle };

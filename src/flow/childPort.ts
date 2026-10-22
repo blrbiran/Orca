@@ -170,6 +170,7 @@ async function childStatus(deps: DriverChildPortDeps, childGroupId: string): Pro
   const flow = reported.kind === "object" ? {
     ...(reported.value.needs === undefined ? {} : { needs: reported.value.needs }), ...(reported.value.candidates === undefined ? {} : { candidates: reported.value.candidates }),
     ...(reported.value.effect === undefined ? {} : { effect: reported.value.effect }),
+    ...(reported.effectExtraKeys === undefined ? {} : { effectExtraKeys: reported.effectExtraKeys }),
   } : undefined;
   return { state: "landed", commit, spentTokens, ...(landedRules === undefined ? {} : { toolRules: landedRules }), ...(skills === undefined ? {} : { skills }), ...(flow === undefined ? {} : { flow }) };
 }
