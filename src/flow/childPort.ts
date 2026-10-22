@@ -145,12 +145,16 @@ async function childStatus(deps: DriverChildPortDeps, childGroupId: string): Pro
   const commit = (await run("/usr/bin/git", ["--git-dir", vault, "rev-parse", "--verify", "--quiet", `${workBranchRef(childGroupId)}^{commit}`])).stdout.trim();
   // §4.3: what the agent reported under `flow`, which ccloop (fbd3512 on) answers at collect's top level and the driver
   // saves with the report. A codex agent cannot report `candidates` (ccloop's closed wire shape omits them).
-  const reported = reportedFlowOf(await savedReport(deps.store, current.runId));
+  const saved = await savedReport(deps.store, current.runId);
+  const reported = reportedFlowOf(saved);
+  // ccloop spec §5: the driver keeps the tool-rule report on the drive record only for a failed run; a landed run's is in
+  // its saved collect report (T18 acceptance: every landed step lost its report and its flags).
+  const landedRules = toolRules ?? saved.toolRules;
   const flow = reported.kind === "object" ? {
     ...(reported.value.needs === undefined ? {} : { needs: reported.value.needs }), ...(reported.value.candidates === undefined ? {} : { candidates: reported.value.candidates }),
     ...(reported.value.effect === undefined ? {} : { effect: reported.value.effect }),
   } : undefined;
-  return { state: "landed", commit, spentTokens, ...(toolRules === undefined ? {} : { toolRules }), ...(skills === undefined ? {} : { skills }), ...(flow === undefined ? {} : { flow }) };
+  return { state: "landed", commit, spentTokens, ...(landedRules === undefined ? {} : { toolRules: landedRules }), ...(skills === undefined ? {} : { skills }), ...(flow === undefined ? {} : { flow }) };
 }
 
 export function createDriverChildPort(deps: DriverChildPortDeps): FlowChildPort {
