@@ -14,7 +14,7 @@ import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { acceptMessage } from "../../src/flow/messages.js";
 import { planStep } from "../../src/flow/planStep.js";
 import { runPlan } from "../../src/flow/rerun.js";
-import { getFlowRun, listEffects, listPlans } from "../../src/flow/store.js";
+import { getFlowRun, listEffects, listPlans, putPlan } from "../../src/flow/store.js";
 import { fakeChildPort } from "./fixtures/childPort.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
 
@@ -275,6 +275,47 @@ describe("a newer plan replaces an open one (§5.6): a pending question carries 
       await w.answer(proposalCall(), { skips: [{ stepKey: "cover", reason: "the cover does not show the voice" }] });
       expect((plan(2).chosen as Chosen).pending ?? []).toEqual([]);
       expect((plan(2).chosen as Chosen).steps).not.toContain("cover");
+    } finally { await w.dispose(); }
+  });
+});
+
+describe("only a pending question times out (§2.3, gaps plan Task 4 carried from Task 3's review)", () => {
+  it("a held effect older than the timeout still waits: the question resolves, the held draft box stays parked", async () => {
+    const { w, clock, flowRunId, decisions, children } = await coverPending(); try {
+      // The person defers `article`: the external draft box after it is held (§6.3).
+      expect(await acceptMessage(w.deps, flowRunId, { kind: "command", target: { kind: "step", stepKey: "article" }, body: { command: "defer" }, by: "ann", via: "cli:test", requestId: "d1" })).toMatchObject({ state: "applied" });
+      clock.now = T0 + 300_000;
+      await w.advance();
+      expect(decisions().map((d) => d.body.kind)).toEqual(["rerun-unsure-timeout"]);
+      expect(w.latest(flowRunId, "to-draft-box")).toMatchObject({ seq: 2, state: "parked", planNo: 1 });
+      expect((w.latest(flowRunId, "to-draft-box")!.body as { needsYou?: unknown }).needsYou).toEqual({ kind: "deferred-upstream", deferred: ["article"] });
+      const records = listEffects(w.store, flowRunId).length;
+      clock.now = T0 + 300_000 + 24 * 60 * MIN;
+      await w.advance();
+      await w.advance();
+      expect(w.latest(flowRunId, "to-draft-box")).toMatchObject({ seq: 2, state: "parked" });
+      expect(listEffects(w.store, flowRunId)).toHaveLength(records);
+      expect(children.opened.has(childGroupIdOf(flowRunId, "to-draft-box", 2))).toBe(false);
+      expect(decisions()).toHaveLength(1);
+      expect(getFlowRun(w.store, flowRunId)!.state).toBe("running");
+    } finally { await w.dispose(); }
+  });
+
+  it("an overdue question code can no longer accept is closed, never thrown; another overdue one still resolves", async () => {
+    const { w, clock, flowRunId, plan, decisions } = await coverPending(); try {
+      // A second question, on a step already accepted in this plan (decidePlanStep refuses it): listed first.
+      const row = plan(1);
+      const chosen = row.chosen as Chosen;
+      const voiceAccepted = { stepKey: "voice", seq: 2, by: "ann", via: "cli:test", at: T0, source: "person", ranOnInputs: { start: "x", params: "y", earlier: [] } };
+      w.store.transaction(() => putPlan(w.store, { ...row, chosen: { ...chosen, pending: [{ stepKey: "voice", question: "Keep voice?", askedAt: T0, deadline: T0 + 300_000, answer: null }, ...chosen.pending!], accepted: [voiceAccepted] } as never }));
+      clock.now = T0 + 300_000;
+      await w.advance();
+      const pending = (plan(1).chosen as Chosen).pending!;
+      expect(pending[0]).toMatchObject({ stepKey: "voice", answer: { choice: "accept-unchanged", source: "timeout" }, closed: expect.stringContaining("already accepted") });
+      expect(pending[1]).toMatchObject({ stepKey: "cover", answer: { choice: "accept-unchanged", by: "orca-auto", source: "timeout" } });
+      expect(decisions().map((d) => [d.stepKey, d.body.kind])).toEqual([["cover", "rerun-unsure-timeout"]]);
+      expect(w.latest(flowRunId, "cover")).toMatchObject({ seq: 2, state: "skipped" });
+      expect((getFlowRun(w.store, flowRunId)!.body as { lastError?: unknown }).lastError).toBeUndefined();
     } finally { await w.dispose(); }
   });
 });

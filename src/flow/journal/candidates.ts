@@ -13,8 +13,8 @@
  *   fill                        the person filled it (gaps spec §6.4); like `feedback`, the model may not skip it
  *   never-succeeded             it has no active `done` execution (a failed or rate-limited one is never reused)
  *   compose-conflict            its active output no longer merges into the composition
- * A step targeted by an `edit` is not a candidate (its new output is the edit); a step whose `when` is false is
- * skipped, never a candidate.
+ * A step targeted by an `edit` is not a candidate (its new output is the edit); a step whose `when` is false, or that
+ * the person skipped or deferred (gaps spec §6.2), is never a candidate and never an upstream reason.
  */
 export type ExecutionState = "queued" | "running" | "done" | "failed" | "skipped" | "needs-person" | "parked" | "staged";
 export interface RecordedOutput { stepKey: string; outputHash: string | null; projection: string | null }
@@ -54,6 +54,8 @@ export interface WorkspaceState {
   acceptedUnchanged?: ReadonlySet<string>;
   /** Steps the person filled (gaps spec §6.4): reason `fill`, after `feedback`. */
   filled?: ReadonlySet<string>;
+  /** Steps the person skipped or deferred (gaps spec §6.2): treated like a `when`-false step. */
+  marked?: ReadonlySet<string>;
 }
 export interface Candidate { stepKey: string; reasons: string[] }
 
@@ -73,7 +75,7 @@ export function candidates(journal: Journal, template: { steps: ReadonlyArray<{ 
   const rerunning = new Set<string>();
 
   for (const [index, stepKey] of order.entries()) {
-    if (ws.whenFalse.has(stepKey)) continue;
+    if (ws.whenFalse.has(stepKey) || ws.marked?.has(stepKey) === true) continue;
     const active = activeExecution(journal, stepKey);
     const done = active !== null && active.state === "done";
     const reasons: string[] = [];
@@ -89,7 +91,7 @@ export function candidates(journal: Journal, template: { steps: ReadonlyArray<{ 
       if (active.ranOnInputs.start !== ws.start && changed("start")) reasons.push("upstream-changed:start");
       if (active.ranOnInputs.params !== ws.params) reasons.push("upstream-changed:params");
       for (const earlier of order.slice(0, index)) {
-        if (ws.whenFalse.has(earlier)) continue;
+        if (ws.whenFalse.has(earlier) || ws.marked?.has(earlier) === true) continue;
         if (upstreamMoved(journal, active, earlier, rerunning, ws) && changed(earlier)) reasons.push(`upstream-changed:${earlier}`);
       }
     }

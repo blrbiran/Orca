@@ -40,7 +40,7 @@ export async function wechatWorld() {
   return { w, children, commands, child, goalOf };
 }
 
-const zeroRound = {
+export const zeroRound = {
   slug: SLUG, statement: "An article on tea for engineers.", acceptanceCriteria: [{ id: "AC1", text: "Says why tea helps." }],
   questions: [], frontierEmpty: true, openBranches: [], glossary: [], adrs: [],
   classification: { scope: "small", scopeReason: "One article.", clarity: "clear", clarityReason: "The idea says it all." },

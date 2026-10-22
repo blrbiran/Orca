@@ -10,6 +10,10 @@
  *   record, or files committed onto the active workspace output; the edited step is not re-run, later steps are planned.
  * - `command`: `pause`, `resume`, `stop`, `retry` (a failed step), `rewind` (rewind.ts), `repin {version}`. A command
  *   that does not hold at its boundary is stored `rejected` with the reason; `budget` is the human-only `flow-pool` verb's.
+ * - Gaps spec §6: `skip`, `defer {effects?}` and `fill` on a step (marks.ts derives the marks from the applied ones). A
+ *   skip/defer closes the step's open effect record (discarded by the person), follows its newest execution with a
+ *   `skipped` one carrying `body.mark`, takes it out of a running plan that had not run it, and recomposes the flow head
+ *   (the folder loses its output); `fill` makes a plan (trigger `fill`) with the step a candidate for reason `fill`.
  */
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -23,10 +27,12 @@ import {
   advanceRun, advanceWorkspace, appendQueued, FlowRefusal, latestByStep, loadRun, recordOfExecution, stepOf, vaultOf, writeRecord, type FlowDeps,
 } from "./kernel.js";
 import type { ExecutionBody, LoadedRun } from "./kinds/registry.js";
-import { makePlan } from "./rerun.js";
+import { dropFromOpenPlan, makePlan } from "./rerun.js";
+import { discardEffect } from "./effects.js";
+import { MARK_COMMANDS, MARKABLE_KINDS, marksOf } from "./marks.js";
 import { applyRewind, reapplyEdits } from "./rewind.js";
 import {
-  appendExecution, appendMessage, getHead, listExecutions, listMessages, setFlowRunState, setFlowRunTemplate, setHead, setMessageState,
+  appendExecution, appendMessage, finishExecution, getEffect, getHead, listExecutions, listMessages, setFlowRunState, setFlowRunTemplate, setHead, setMessageState,
   type ExecutionRow, type MessageRow,
 } from "./store.js";
 import { isInsidePath } from "./template/checklist.js";
@@ -43,7 +49,7 @@ export type MessageTarget =
 export interface FlowMessageInput { kind: "feedback" | "edit" | "command"; target: MessageTarget; body: Record<string, unknown>; by: string; via: string; requestId: string }
 export interface AcceptResult { state: MessageRow["state"]; reason: string | null; seq: number; deduped: boolean }
 
-const COMMANDS = ["pause", "resume", "stop", "retry", "rewind", "repin"] as const;
+const COMMANDS = ["pause", "resume", "stop", "retry", "rewind", "repin", "skip", "defer", "fill"] as const;
 const stepKeyOf = (target: MessageTarget): string | null => ("stepKey" in target ? target.stepKey : null);
 
 /** What can be told at once, before any boundary: the shape and that the target exists. */
@@ -73,6 +79,16 @@ function shapeRefusal(store: ControlStore, run: LoadedRun, input: FlowMessageInp
     if (command === "budget") return "flow-command-budget:the pool is raised by flow-pool (human-only)";
     if (!COMMANDS.includes(command as never)) return `flow-command-unknown:${String(command)}`;
     if (command === "retry" && stepKey === null) return "flow-message-target-missing";
+    if (MARK_COMMANDS.has(String(command))) {
+      if (stepKey === null) return "flow-message-target-missing";
+      // Gaps spec §6.1: a clarify step takes consensus (or the run's `clarify: skip`), an ask step its answer or default.
+      if (command !== "fill" && !MARKABLE_KINDS.has(run.template.steps.find((s) => s.id === stepKey)!.kind)) return `flow-step-not-skippable:${stepKey}`;
+      const effects = input.body.effects;
+      if (effects !== undefined) {
+        if (command !== "defer" || typeof effects !== "object" || effects === null || Array.isArray(effects)) return "flow-message-invalid:effects";
+        if (Object.entries(effects).some(([key, choice]) => !run.template.steps.some((s) => s.id === key) || (choice !== "proceed" && choice !== "wait"))) return "flow-message-invalid:effects";
+      }
+    }
   }
   return null;
 }
@@ -104,6 +120,8 @@ export async function consumeAtBoundary(deps: FlowDeps, flowRunId: string): Prom
   let moved = await reapplyEdits(deps, loadRun(deps.store, flowRunId));
   const feedback: Record<string, string[]> = {};
   const edits: string[] = [];
+  const fills: string[] = [];
+  let recompose = false;
   let plan: { by: string; via: string; trigger: string } | null = null;
   // A rewind queues messages again; they are taken in the same round, so one plan carries everything.
   for (;;) {
@@ -124,6 +142,8 @@ export async function consumeAtBoundary(deps: FlowDeps, flowRunId: string): Prom
         } else {
           const replan = await applyCommand(deps, loadRun(deps.store, flowRunId), message, target);
           if (replan !== null) plan = { by: message.by, via: message.via, trigger: replan };
+          if (replan === "fill") fills.push(stepKeyOf(target)!);
+          if ((message.body as { command?: unknown }).command === "skip" || (message.body as { command?: unknown }).command === "defer") recompose = true;
         }
         deps.store.transaction(() => setMessageState(deps.store, flowRunId, message.seq, "accepted", "applied"));
       } catch (error) {
@@ -132,7 +152,11 @@ export async function consumeAtBoundary(deps: FlowDeps, flowRunId: string): Prom
       }
     }
   }
-  if (plan !== null) await makePlan(deps, flowRunId, { ...plan, feedback, edits });
+  // Gaps spec §6.2: the head is composed again without the suppressed output and copied back (only once the mark is
+  // applied: the composition reads the applied messages), so the person's folder loses it too.
+  const vault = recompose ? vaultOf(loadRun(deps.store, flowRunId)) : null;
+  if (vault !== null) await advanceWorkspace(deps, loadRun(deps.store, flowRunId), vault, null);
+  if (plan !== null) await makePlan(deps, flowRunId, { ...plan, feedback, edits, fills });
   return moved;
 }
 
@@ -157,8 +181,35 @@ async function applyCommand(deps: FlowDeps, run: LoadedRun, message: MessageRow,
     }
     case "repin": return repin(deps, run, body.version);
     case "rewind": return applyRewind(deps, run, message);
+    case "skip": case "defer": markStep(deps, run, message, stepKeyOf(target)!, body.command); return null;
+    case "fill": {
+      const stepKey = stepKeyOf(target)!;
+      if (!marksOf(listMessages(deps.store, run.row.id)).has(stepKey)) throw new FlowRefusal("flow-step-not-marked", stepKey);
+      return "fill";
+    }
     default: throw new FlowRefusal("flow-command-unknown", String(body.command));
   }
+}
+
+/**
+ * Gaps spec §6.1: a skip or defer at its boundary. The step's open effect record (staged, or its confirm card) is
+ * discarded by the person; its newest execution, whatever its state, is followed by a `skipped` one with `body.mark`
+ * (which lets a run stopped at a failed step go on); a running plan that had not run it lets it go.
+ */
+function markStep(deps: FlowDeps, run: LoadedRun, message: MessageRow, stepKey: string, kind: "skip" | "defer"): void {
+  stepOf(run, stepKey);
+  const newest = latestByStep(listExecutions(deps.store, run.row.id)).get(stepKey);
+  const recordId = (newest?.body as ExecutionBody | undefined)?.effectRecordId;
+  if (newest !== undefined && typeof recordId === "string" && (newest.state === "staged" || newest.state === "needs-person") && getEffect(deps.store, recordId)?.state === "staged") {
+    discardEffect(deps, recordId, message.by, message.via);
+  }
+  const at = deps.now();
+  const seq = (newest?.seq ?? 0) + 1;
+  deps.store.transaction(() => {
+    appendQueued(deps, run, stepKey, seq, [kind], { mark: { kind, messageSeq: message.seq } }, message.by, message.via, at);
+    finishExecution(deps.store, { flowRunId: run.row.id, stepKey, seq }, "queued", "skipped", at);
+    dropFromOpenPlan(deps.store, run.row.id, stepKey);
+  });
 }
 
 /** §8.1 `repin {version}`: the run moves to that version of its template; steps whose definition changed are candidates. */

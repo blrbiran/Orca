@@ -17,14 +17,17 @@ export interface ExecutionOutput extends StepOutput { seq: number }
 
 export const headRef = (flowRunId: string): string => `refs/orca/${flowRunId}/head`;
 
-/** The active output of every step before `beforeStep` (all steps when it is null), in template order. */
-export function activeOutputs(executions: readonly ExecutionOutput[], heads: Readonly<Record<string, number>>, order: readonly string[], beforeStep: string | null): StepOutput[] {
+/**
+ * The active output of every step before `beforeStep` (all steps when it is null), in template order. A `suppressed`
+ * step (gaps spec §6.2: skipped or deferred by the person) is left out as a step with no head is; its head stays.
+ */
+export function activeOutputs(executions: readonly ExecutionOutput[], heads: Readonly<Record<string, number>>, order: readonly string[], beforeStep: string | null, suppressed: ReadonlySet<string> = new Set()): StepOutput[] {
   const end = beforeStep === null ? order.length : order.indexOf(beforeStep);
   if (end === -1) throw new Error(`flow-step-not-found: ${beforeStep}`);
   const out: StepOutput[] = [];
   for (const stepKey of order.slice(0, end)) {
     const seq = heads[stepKey];
-    if (seq === undefined) continue;
+    if (seq === undefined || suppressed.has(stepKey)) continue;
     const exec = executions.find((e) => e.stepKey === stepKey && e.seq === seq);
     if (exec === undefined) throw new Error(`orca: step ${stepKey} points at execution ${seq}, which has no output`);
     out.push({ stepKey, commit: exec.commit, parent: exec.parent });

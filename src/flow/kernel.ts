@@ -25,7 +25,7 @@ import { runShell } from "./kinds/check.js";
 import { builtinKinds, type ExecutionBody, type FlowRunBody, type KindContext, type KindDefinition, type KindOutcome, type KindRegistry, type LoadedRun, type RoleResolution } from "./kinds/registry.js";
 import { buildStepPrompt, bounded } from "./prompt.js";
 import {
-  appendExecution, appendFlowDecision, appendMessage, finishExecution, getFlowRun, getHead, insertFlowRun, listExecutions, listHeads, listRunsWithOpenWork, setDefinitionHash, setFlowRunState, setHead,
+  appendExecution, appendFlowDecision, appendMessage, finishExecution, getFlowRun, getHead, insertFlowRun, listExecutions, listHeads, listMessages, listRunsWithOpenWork, setDefinitionHash, setFlowRunState, setHead,
   updateFlowRunBody,
   type ExecutionKey, type ExecutionRow, type ExecutionState,
 } from "./store.js";
@@ -51,6 +51,7 @@ import { completePlanCall, finishPlan, makePlan, planOf, PLAN_KEY } from "./reru
 import { flowLayers, readFlowSettings } from "./settings.js";
 import { EFFECT_NOT_REPORTED, effectUnreported, gateEffect, settleEffect } from "./effects.js";
 import { consumeAtBoundary } from "./messages.js";
+import { heldBy, markPointer, marksOf, suppressedSteps, type Mark } from "./marks.js";
 
 /** A refusal by name (spec §14, Global Constraints' codes); nothing was written. */
 export class FlowRefusal extends Error {
@@ -284,7 +285,16 @@ export function vaultOf(run: LoadedRun): Vault | null {
   return run.body.vaultPath === null || run.body.dir === null ? null : { path: run.body.vaultPath, dir: run.body.dir };
 }
 
-/** §5.3: the composition `stepKey` starts from -- the import plus every earlier step's active commit output. */
+/** Gaps spec §6: the run's standing marks and the steps whose active output is suppressed (marks.ts). */
+export function markStateOf(store: ControlStore, flowRunId: string): { marks: Map<string, Mark>; suppressed: Set<string> } {
+  const marks = marksOf(listMessages(store, flowRunId));
+  return { marks, suppressed: suppressedSteps(marks, listExecutions(store, flowRunId)) };
+}
+
+/**
+ * §5.3: the composition `stepKey` starts from -- the import plus every earlier step's active commit output, except a
+ * suppressed one (gaps spec §6.2: later steps never see a skipped or deferred step's output, old or new).
+ */
 export async function compositionFor(store: ControlStore, run: LoadedRun, stepKey: string | null): Promise<{ vault: Vault; commit: string } | null> {
   const vault = vaultOf(run);
   if (vault === null || run.body.importCommit === null) return null;
@@ -292,7 +302,8 @@ export async function compositionFor(store: ControlStore, run: LoadedRun, stepKe
     .map((e) => ({ stepKey: e.stepKey, seq: e.seq, commit: e.outputRef!, parent: String((e.body as { parent?: string }).parent ?? e.baseCommit) }));
   // Record outputs (clarify, draft, check, review) are not in the workspace: only heads on commit outputs compose.
   const heads = Object.fromEntries(Object.entries(listHeads(store, run.row.id)).filter(([key, seq]) => commits.some((c) => c.stepKey === key && c.seq === seq)));
-  const composed = await compose(vault, run.body.importCommit, activeOutputs(commits, heads, run.template.steps.map((s) => s.id), stepKey));
+  const { suppressed } = markStateOf(store, run.row.id);
+  const composed = await compose(vault, run.body.importCommit, activeOutputs(commits, heads, run.template.steps.map((s) => s.id), stepKey, suppressed));
   if ("conflict" in composed) throw new FlowRefusal("compose-conflict", composed.conflict);
   return { vault, commit: composed.commit };
 }
@@ -311,10 +322,15 @@ export function contextFor(deps: FlowDeps, run: LoadedRun, execution: ExecutionR
   const pointers = (): string[] => {
     const heads = listHeads(deps.store, run.row.id);
     const all = executions();
+    const { marks, suppressed } = markStateOf(deps.store, run.row.id);
     const out: string[] = [];
     for (const earlier of run.template.steps.slice(0, run.template.steps.findIndex((s) => s.id === step.id))) {
+      // Gaps spec §6.2: a skipped or deferred step gets a code-owned line instead of its output (a filled one not yet
+      // re-run gets nothing: its old output is not shown).
+      const mark = marks.get(earlier.id);
+      if (mark !== undefined) { out.push(markPointer(earlier.id, mark)); continue; }
       const seq = heads[earlier.id];
-      if (seq === undefined) continue;
+      if (seq === undefined || suppressed.has(earlier.id)) continue;
       const exec = all.find((e) => e.stepKey === earlier.id && e.seq === seq);
       if (exec === undefined) continue;
       let summary: string;
@@ -586,8 +602,11 @@ export async function absorbDrift(deps: FlowDeps, run: LoadedRun, vault: Vault):
   if (drift === null) return false;
   const executions = listExecutions(deps.store, run.row.id);
   const heads = listHeads(deps.store, run.row.id);
+  // Gaps spec §6.2: a suppressed output is not in the head the folder was given; the person's paths never land on it.
+  const { suppressed } = markStateOf(deps.store, run.row.id);
   const outputs: Array<{ stepKey: string; active: ExecutionRow; parent: string; paths: string[] }> = [];
   for (const step of run.template.steps) {
+    if (suppressed.has(step.id)) continue;
     const active = executions.find((e) => e.stepKey === step.id && e.seq === heads[step.id]);
     if (active?.outputKind !== "commit" || active.outputRef === null) continue;
     const parent = String((active.body as { parent?: string }).parent ?? active.baseCommit);
@@ -715,10 +734,23 @@ export function flagComposeConflict(deps: FlowDeps, run: LoadedRun, stepKey: str
   }));
 }
 
-/** Start a queued execution: it takes its basis now and its kind's start decides the rest. */
-async function runQueued(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow, basis: Record<string, number>): Promise<void> {
+/** Gaps spec §6.3: what a held effect step's parked execution waits on. */
+export const DEFERRED_UPSTREAM = "deferred-upstream";
+const isDeferredPark = (execution: ExecutionRow): boolean =>
+  execution.state === "parked" && (execution.body as { needsYou?: { kind?: unknown } }).needsYou?.kind === DEFERRED_UPSTREAM;
+
+/**
+ * Start a queued execution: it takes its basis now and its kind's start decides the rest. Gaps spec §6.3: an effect step
+ * a standing defer holds (`heldBy` names the deferred steps) does not start: it is parked, before its level gate.
+ */
+async function runQueued(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow, basis: Record<string, number>, heldBy: readonly string[] = []): Promise<void> {
   const step = stepOf(run, execution.stepKey);
   const key: ExecutionKey = { flowRunId: execution.flowRunId, stepKey: execution.stepKey, seq: execution.seq };
+  if (heldBy.length > 0) {
+    const parked = { ...(execution.body as ExecutionBody), basis, needsYou: { kind: DEFERRED_UPSTREAM, deferred: [...heldBy] } };
+    deps.store.transaction(() => finishExecution(deps.store, key, "queued", "parked", deps.now(), { body: parked }));
+    return;
+  }
   // §6.4, §7.2: what it ran on, so a later plan can tell which of its inputs moved since.
   const body: ExecutionBody = { ...(execution.body as ExecutionBody), basis, ranOnInputs: ranOnInputsOf(deps.store, run, step.id) };
   // §9.2: an effect-classed step is gated on its level before it starts (its record is written with the move).
@@ -748,8 +780,11 @@ export function ranOnInputsOf(store: ControlStore, run: LoadedRun, stepKey: stri
   const all = listExecutions(store, run.row.id);
   const index = run.template.steps.findIndex((s) => s.id === stepKey);
   const step = run.template.steps[index]!;
+  // Gaps spec §6.2: a suppressed step is recorded as no output, so a later step that ran without it is a candidate once
+  // it is filled and re-runs.
+  const { suppressed } = markStateOf(store, run.row.id);
   const earlier = run.template.steps.slice(0, index).filter((s) => !parallel(s, step)).map((s) => {
-    const active = all.find((e) => e.stepKey === s.id && e.seq === heads[s.id]);
+    const active = suppressed.has(s.id) ? undefined : all.find((e) => e.stepKey === s.id && e.seq === heads[s.id]);
     // Gaps spec §7: with the output's `hints.equals` projection, so an equal projection is no change (the cutoff).
     const projection = active?.state === "done" ? (active.body as { projection?: string | null }).projection ?? null : null;
     return { stepKey: s.id, outputHash: active?.state === "done" ? active.outputHash : null, projection };
@@ -800,21 +835,39 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
   const executions = listExecutions(deps.store, run.row.id);
   const latest = latestByStep(executions);
   const heads = listHeads(deps.store, run.row.id);
+  const { marks } = markStateOf(deps.store, run.row.id);
+  const held = (stepKey: string): string[] => heldBy(run.template, marks, stepKey);
   const blockers: FlowStep[] = [];
   let satisfied = true;
   // Gaps spec §5.4: an open question holds its step and, through it, every later step (template order is the dependency
   // in phase 1); its `parallelWith` sibling and the steps before it run.
   const asking = new Set((plan?.chosen.pending ?? []).filter((item) => item.answer === null).map((item) => item.stepKey));
   for (const [index, step] of run.template.steps.entries()) {
+    // Gaps spec §6.2: a skipped or deferred step is settled whatever its basis, never run, never a blocker.
+    if (marks.has(step.id)) continue;
     const current = latest.get(step.id);
     const basis = basisOf(run, index, heads);
     const free = blockers.every((b) => parallel(b, step));
+    // §6.3: a held effect step waits while a standing defer holds it. Released (a newer defer said `proceed`, or the
+    // deferred step was filled) it starts afresh -- a new execution, so its own level gate applies -- under the plan that
+    // chose it, if one did (so the plan does not run it a second time).
+    if (current !== undefined && isDeferredPark(current)) {
+      if (held(step.id).length > 0 || !free) { satisfied = false; blockers.push(step); continue; }
+      const at = deps.now();
+      const planNo = plan !== null && plan.chosen.steps.includes(step.id) ? plan.planNo : current.planNo;
+      const parkedBody = current.body as ExecutionBody;
+      deps.store.transaction(() => {
+        finishExecution(deps.store, current, "parked", "skipped", at, { body: { ...parkedBody, released: { at } } });
+        appendQueued(deps, run, step.id, current.seq + 1, current.reasons.map(String), { feedback: parkedBody.feedback ?? [] }, current.by, current.via, at, planNo);
+      });
+      return true;
+    }
     if (current !== undefined && (current.state === "running" || WAITING.has(current.state))) { satisfied = false; blockers.push(step); continue; }
     if (current?.state === "failed") return false;
     if (current?.state === "queued") {
       if (!free) return false;
       if (await driftBeforeExecution(deps, run.row.id)) return true;
-      await runQueued(deps, run, current, basis);
+      await runQueued(deps, run, current, basis, held(step.id));
       return true;
     }
     if (asking.has(step.id)) { satisfied = false; blockers.push(step); continue; }
@@ -845,7 +898,7 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
       const reasons = plan.candidates.list.find((c) => c.stepKey === step.id)?.reasons ?? ["added"];
       const feedback = plan.candidates.feedback[step.id] ?? [];
       deps.store.transaction(() => appendQueued(deps, run, step.id, seq, reasons, { feedback }, plan.by, plan.via, at, plan.planNo));
-      await runQueued(deps, run, listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.id && e.seq === seq)!, basis);
+      await runQueued(deps, run, listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.id && e.seq === seq)!, basis, held(step.id));
       return true;
     }
     if (current !== undefined && SETTLED.has(current.state) && sameBasis((current.body as ExecutionBody).basis, basis)) continue;
@@ -874,7 +927,7 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
     }
     if (await driftBeforeExecution(deps, run.row.id)) return true;
     deps.store.transaction(() => appendQueued(deps, run, step.id, seq, reasons, {}, "orca-auto", "orca", at, plan?.planNo ?? null));
-    await runQueued(deps, run, listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.id && e.seq === seq)!, basis);
+    await runQueued(deps, run, listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.id && e.seq === seq)!, basis, held(step.id));
     return true;
   }
   if (plan !== null && satisfied) { deps.store.transaction(() => finishPlan(deps.store, plan)); return true; }

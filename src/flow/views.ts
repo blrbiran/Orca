@@ -10,6 +10,7 @@ import type { RoundBody } from "../control/requirementSchemas.js";
 import type { ControlStore } from "../control/store.js";
 import type { ToolRulesReport } from "../control/toolRules.js";
 import { FlowRefusal, latestByStep, loadRun, openAsks, recordOfExecution } from "./kernel.js";
+import { marksOf } from "./marks.js";
 import { getFlowRun, listEffects, listExecutions, listHeads, listMessages, listPlans, type ExecutionRow } from "./store.js";
 
 /**
@@ -41,8 +42,10 @@ export function readFlowList(store: ControlStore): FlowListV1 {
         flowRunId: row.id, groupId: row.groupId, templateRef: row.templateRef, state: row.state, poolTokens: row.poolTokens, poolDrawn: row.poolDrawn,
         // Task 16: the kanban card's project scope (a run's settings layer) and its folder.
         projectId: body.projectId ?? null, dir: body.dir ?? null,
-        // Steps whose newest execution waits on the person (an ask, a confirm card, a question, an exhausted pool).
-        needsYou: [...latestByStep(listExecutions(store, row.id)).values()].filter((e) => e.state === "needs-person" || e.state === "parked").length,
+        // Steps whose newest execution waits on the person (an ask, a confirm card, a question, an exhausted pool, an
+        // effect a deferral holds), plus each deferred step: owed, "fill when ready" (gaps spec §6.2). A skip owes nothing.
+        needsYou: [...latestByStep(listExecutions(store, row.id)).values()].filter((e) => e.state === "needs-person" || e.state === "parked").length
+          + [...marksOf(listMessages(store, row.id)).values()].filter((m) => m.kind === "defer").length,
       };
     }),
   };

@@ -34,7 +34,8 @@ async function enactedUnderProposedPlan() {
   await w.answer(0, { content: "note" });
   expect(getFlowRun(w.store, flowRunId)!.state).toBe("done");
   const [record] = listEffects(w.store, flowRunId);
-  // The person's feedback makes a plan; nobody runs it (rerunReview: review), so it stays proposed.
+  // The person's feedback makes a plan; its proposal call is never answered here, so it stays proposed (the
+  // built-in rerunReview is `auto` since gaps spec §5.2: an answered proposal would run it at once).
   await acceptMessage(w.deps, flowRunId, { kind: "feedback", target: { kind: "step", stepKey: "note" }, body: { text: "shorter" }, by: "ann", via: "cli:test", requestId: "fb-1" });
   expect(listPlans(w.store, flowRunId).map((p) => p.state)).toEqual(["proposed"]);
   expect(await enactEffect(w.deps, record!.id, "ann", "cli:test")).toEqual({ state: "running", recordId: record!.id });
