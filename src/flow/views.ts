@@ -78,6 +78,8 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
     schema: "orca-flow-run-view-v1",
     flowRunId: run.row.id, groupId: run.row.groupId, templateRef: run.body.templateRef, state: run.row.state, params: run.params,
     poolTokens: run.row.poolTokens, poolDrawn: run.row.poolDrawn, by: run.body.by, via: run.body.via, dir: run.body.dir,
+    // Why nothing moves, when a kernel pass keeps failing (kernel.recordRunError); null once a pass succeeds.
+    lastError: (run.body as { lastError?: { message: string; at: number } }).lastError ?? null,
     template: { id: run.template.id, version: run.template.version ?? null, title: run.template.title ?? null },
     steps: run.template.steps.map((step) => {
       const newest = latest.get(step.id);
