@@ -3,6 +3,7 @@ import {savedDispatchSchema,recoveryOfSchema,savedRecoverySchema,savedSourceSche
 import { hasOptionalTaskPolicy, readFundedAllowance } from "../control/fundedAllowance.js";
 import { tokenPolicySchema, tokenRemainingStatus } from "../control/tokenPolicy.js";
 import { budgetAmountSchema } from "../control/schema.js";
+import { listFlagsInvolving } from "../control/flaggedDecisions.js";
 import { readGroupSnapshot, type GroupReadSnapshot, type StoredJsonResult } from "./groupReadSnapshot.js";
 import { validateRetryGrantSource } from "../control/retryGrant.js";
 import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executionSnapshot.js";
@@ -443,7 +444,12 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     const cause = typeof run.drive?.failureCause?.cause === "string" ? run.drive.failureCause.cause : typeof run.failureCode === "string" ? run.failureCode : typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason : null;
     if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200) }; break; }
   }
-  return { budget: { usedTokens: tokens(body.used) ?? 0, limitTokens: tokens(body.limit) }, pendingDecisions: pending + flagged, firstFailure };
+  const findings = listFlagsInvolving(store, groupId).filter((row) => row.state === "flagged");
+  const major = findings.filter((row) => row.severity === "major").length;
+  return {
+    budget: { usedTokens: tokens(body.used) ?? 0, limitTokens: tokens(body.limit) }, pendingDecisions: pending + flagged, firstFailure,
+    ...(findings.length === 0 ? {} : { reviewFindings: { major, minor: findings.length - major } }),
+  };
 }
 
 export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot, canonicalRecords?: ReadonlyMap<string, string>): GroupSummaryV1 {

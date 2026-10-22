@@ -2,7 +2,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { effectiveChecks } from "../../src/control/checks/settings.js";
+import { nextSlots, parseCron } from "../../src/control/checks/cron.js";
+import { checksRead, effectiveChecks } from "../../src/control/checks/settings.js";
+import { readUsageCalendar } from "../../src/control/usageCalendar.js";
 import type { ChecksLayer, GlobalChecksLayer } from "../../src/control/checks/settingsSchema.js";
 import { BUILTIN_TRIGGERS, validateTrigger, type Trigger } from "../../src/control/checks/trigger.js";
 import { ControlError } from "../../src/control/errors.js";
@@ -242,5 +244,31 @@ describe("check setting writes", () => {
     expect([codeOf(bad), messageOf(bad)]).toEqual(["check-time-zone-invalid", "check-time-zone-invalid:Mars/Olympus"]);
     expect(codeOf(settings(store, REPO, { kind: "model-review", set: { trigger: { all: [{ any: [{ kind: "schedule", cron: "0 9 * * 1" }] }] } }, clear: [] }))).toBe("check-time-zone-invalid");
     expect(readRepositorySettingsBody(store, "repo")).toBeNull();
+  }));
+
+  // Spec §4.3, §7 (Task 10): the Web saves a layer under the revision it read, so the read names the revision a write to
+  // that layer is checked against -- the project's own for a project read (a run-now or resume is checked against it
+  // too), `@orchestration`'s for the global read -- and each enabled scheduled check's next slots, computed by the
+  // server's own cron (the Web keeps no copy of it).
+  it("the read names its layer's revision and each enabled scheduled check's next three slots", () => withStore((store) => {
+    expect([checksRead(store, "repo").revision, checksRead(store, null).revision]).toEqual([0, 0]);
+    expect(codeOf(settings(store, REPO, { kind: "model-review", set: { enabled: false }, clear: [] }))).toBe("accepted");
+    expect(codeOf(settings(store, GLOBAL, { kind: "model-review", set: { maxGroupsPerReview: 5 }, clear: [] }))).toBe("accepted");
+    expect(codeOf(settings(store, GLOBAL, { kind: "model-review", set: { maxGroupsPerReview: 6 }, clear: [] }))).toBe("accepted");
+    // mutation: the project read names the @orchestration revision -> 2, red
+    expect(checksRead(store, "repo").revision).toBe(1);
+    expect(checksRead(store, null).revision).toBe(2);
+
+    expect(codeOf(schedule(store, GLOBAL, { id: "weekly", kind: "model-review", cron: "0 9 * * 1", enabled: true }))).toBe("accepted");
+    expect(codeOf(schedule(store, GLOBAL, { id: "off", kind: "integration-check", cron: "0 3 * * *", enabled: false }))).toBe("accepted");
+    const now = Date.UTC(2026, 9, 22, 12, 0, 0); // a Thursday
+    const read = checksRead(store, "repo", now);
+    expect(read.nextSlots.weekly).toEqual(nextSlots(parseCron("0 9 * * 1"), readUsageCalendar(store).timeZone, now, 3));
+    expect(read.nextSlots.weekly).toHaveLength(3);
+    // mutation: compute slots for a disabled one too -> three slots, red
+    expect(read.nextSlots.off).toEqual([]);
+    // A time zone the host cannot read leaves the preview empty; the read itself still answers.
+    store.db.prepare("INSERT INTO usage_calendar(singleton,time_zone,week_start) VALUES (1,'Mars/Olympus',1)").run();
+    expect(checksRead(store, "repo", now).nextSlots.weekly).toEqual([]);
   }));
 });

@@ -19,4 +19,29 @@ describe("a board card's facts (kanban spec §4)", () => {
       expect(readGroupSummary(h.store, "g").card!.firstFailure).toEqual({ taskId: "b", cause: "terminal:exhausted" });
     } finally { await h.dispose(); }
   });
+
+  // Checks spec 2026-10-22 §6.6, §7: a model-review finding's row is the review group's, so the badge on an involved
+  // group's card is counted from the flag's involvedGroupIds -- waiting (not ratified) only, major and minor apart.
+  it("counts the model-review findings waiting on a group it is involved in, major and minor apart", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      // mutation: always give reviewFindings -> present with zeros, red
+      expect(readGroupSummary(h.store, "g").card!.reviewFindings).toBeUndefined();
+      h.store.db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES ('sysreview-r',1,1,'{}')").run();
+      const flag = (id: string, severity: "major" | "minor", involved: string[], groupId = "sysreview-r") => h.store.transaction(() => flagDecision(h.store, {
+        decisionId: `model-review:${groupId}:${id}`, groupId, runId: null, source: "model-review", reason: `contract-drift: ${id}`, evidence: [], by: "orca-auto", at: "t", severity, involvedGroupIds: involved,
+      }));
+      flag("f1", "major", ["g", "other"]);
+      flag("f2", "minor", ["g", "other"]);
+      flag("f3", "minor", ["g", "other"]);
+      flag("f4", "major", ["x", "other"]);
+      // mutation: count every model-review flag (drop the involved filter) -> major 2, red
+      // mutation: count minor as major -> { major: 3, minor: 0 }, red
+      expect(readGroupSummary(h.store, "g").card!.reviewFindings).toEqual({ major: 1, minor: 2 });
+      // The review group's own flags are not the involved group's decisions waiting (P5: a finding never blocks).
+      expect(readGroupSummary(h.store, "g").card!.pendingDecisions).toBe(0);
+      h.store.db.prepare("UPDATE flagged_decisions SET state='ratified' WHERE decision_id='model-review:sysreview-r:f1'").run();
+      // mutation: count ratified (dismissed) ones too -> major 1, red
+      expect(readGroupSummary(h.store, "g").card!.reviewFindings).toEqual({ major: 0, minor: 2 });
+    } finally { await h.dispose(); }
+  });
 });

@@ -1,7 +1,10 @@
 import { z } from "zod";
-import { readOrchestrationSettings } from "../orchestration.js";
+import { listFlaggedDecisions } from "../flaggedDecisions.js";
+import { orchestrationRevision, readOrchestrationSettings } from "../orchestration.js";
 import type { ControlStore } from "../store.js";
+import { readUsageCalendar } from "../usageCalendar.js";
 import { readRepositorySettingsBody } from "../workspaceSettings.js";
+import { nextSlots, parseCron } from "./cron.js";
 import { LOCKABLE_PATHS, scheduledCheckSchema, type ChecksLayer, type GlobalChecksLayer, type LockablePath, type ScheduledCheck } from "./settingsSchema.js";
 import { checkStateSchema, listCheckStates } from "./state.js";
 import { BUILTIN_TRIGGERS, triggerSchema, type Trigger } from "./trigger.js";
@@ -90,11 +93,36 @@ export const checksReadSchema = z.object({
   scheduled: z.array(sourced(scheduledCheckSchema).extend({ scope: z.enum(["project", "global"]) }).strict()),
   locks: z.array(z.enum(LOCKABLE_PATHS)),
   state: z.array(z.object({ kind: z.enum(["integration-check", "model-review"]), target: z.string().min(1), state: checkStateSchema }).strict()),
+  // Task 10: the revision a write to this read's layer is checked against (the project's settings revision, which run-now
+  // and resume are checked against too; `@orchestration`'s for the global read), and each scheduled check's next three
+  // slots by id (empty when disabled, or when the panel's time zone cannot be read) -- the Web keeps no copy of the cron.
+  revision: z.number().int().min(0),
+  nextSlots: z.record(z.string(), z.array(z.number().int())),
 }).strict();
 export type ChecksReadV1 = z.infer<typeof checksReadSchema>;
 
-export const checksRead = (store: ControlStore, repoId: string | null): ChecksReadV1 =>
-  checksReadSchema.parse({ schema: "orca-checks-v1", repoId, ...effectiveChecks(store, repoId), state: repoId === null ? [] : listCheckStates(store, repoId) });
+export function checksRead(store: ControlStore, repoId: string | null, now: number = store.now()): ChecksReadV1 {
+  const effective = effectiveChecks(store, repoId);
+  const timeZone = readUsageCalendar(store).timeZone;
+  const slotsOf = (entry: ScheduledCheck): number[] => {
+    if (!entry.enabled) return [];
+    try { return nextSlots(parseCron(entry.cron), timeZone, now, 3); } catch { return []; }
+  };
+  return checksReadSchema.parse({
+    schema: "orca-checks-v1", repoId, ...effective, state: repoId === null ? [] : listCheckStates(store, repoId),
+    revision: repoId === null ? orchestrationRevision(store) : readRepositorySettingsBody(store, repoId)?.revision ?? 0,
+    nextSlots: Object.fromEntries(effective.scheduled.map((entry) => [entry.value.id, slotsOf(entry.value)])),
+  });
+}
+
+/**
+ * Spec §6.5, §7: a review's dismissals -- its findings a person ratified, with who, when and the note -- served with the
+ * record so the detail view and later learning read one place. The record itself is frozen when the review settles.
+ */
+export function reviewDismissals(store: ControlStore, reviewGroupId: string): Array<{ decisionId: string; by: string | null; at: string | null; note: string | null }> {
+  return listFlaggedDecisions(store, reviewGroupId).filter((row) => row.source === "model-review" && row.state === "ratified")
+    .map((row) => ({ decisionId: row.decisionId, by: row.ratifiedBy, at: row.ratifiedAt, note: row.note }));
+}
 
 /**
  * Spec §6.5 (`orca check findings`): the model review's record written when the review settled

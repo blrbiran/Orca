@@ -3,6 +3,7 @@
 // served: another canonical record of the same group (a frozen document, a snapshot) is not a review's record.
 import { afterAll, describe, expect, it } from "vitest";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
+import { flagDecision, ratifyFlag } from "../../src/control/flaggedDecisions.js";
 import { writeCanonicalRecord } from "../../src/control/snapshot.js";
 import { command, createHarness, get, GROUP, json } from "./fixtures/controlPanel.js";
 
@@ -24,7 +25,16 @@ describe("GET /api/control/checks/reviews/:reviewGroupId", () => {
     put(panel.store, record);
     const found = await get(panel, `/api/control/checks/reviews/${GROUP}`);
     expect(found.status).toBe(200);
-    expect(await json(found)).toEqual(record);
+    // Spec §6.5, §7: the dismissals (ratified findings with the person's note) are served with the record, so the
+    // detail view and later learning read one place. None yet.
+    expect(await json(found)).toEqual({ ...record, dismissals: [] });
+    panel.store.transaction(() => {
+      for (const id of ["f2", "f3"]) flagDecision(panel.store, { decisionId: `model-review:${GROUP}:${id}`, groupId: GROUP, runId: null, source: "model-review", reason: `duplication: ${id}`, evidence: [], by: "orca-auto", at: "t0", severity: "minor", involvedGroupIds: ["g1", "g2"] });
+      ratifyFlag(panel.store, GROUP, `model-review:${GROUP}:f2`, { actorId: "owner", commandId: "c-1", at: "t1", note: "intended: two stores on purpose" });
+    });
+    // mutation: list every flag of the review group (drop the ratified filter) -> f3 listed too, red
+    expect(((await json(await get(panel, `/api/control/checks/reviews/${GROUP}`))) as { dismissals: unknown }).dismissals)
+      .toEqual([{ decisionId: `model-review:${GROUP}:f2`, by: "owner", at: "t1", note: "intended: two stores on purpose" }]);
 
     const unknown = await get(panel, "/api/control/checks/reviews/sysreview-nope");
     expect([unknown.status, ((await json(unknown)) as { error: { code: string } }).error.code]).toEqual([404, "group-not-found"]);
