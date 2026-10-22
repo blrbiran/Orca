@@ -8,7 +8,7 @@ The title is the person's choice, made in the next step: write the frontmatter w
 your three candidates (each within 32 characters) as `flow.candidates.title = {"items": [...], "recommended": <index>}`.
 Fill `author` from the profile and write a `digest` within 128 characters.
 
-Run the skill's self-check from its directory, exactly:
+Run the skill's self-check by its absolute path, exactly (no `cd`: the shell returns to this workspace after every
+command):
 
-    cd '{{skill.wechat-finetune.dir}}'
-    python3 scripts/verify.py <absolute path of {{param.slug}}.md> <absolute path of {{param.slug}}.wechat.md>
+    python3 '{{skill.wechat-finetune.dir}}/scripts/verify.py' <absolute path of {{param.slug}}.md> <absolute path of {{param.slug}}.wechat.md>

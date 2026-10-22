@@ -70,19 +70,24 @@ describe("built-in wechat-article (§15)", () => {
     expect((step("outline") as { hints?: { equals?: string } }).hints?.equals).toBe("headings({{param.slug}}.outline.md)");
     for (const work of steps.filter((s) => s.kind === "work")) expect((work as { tools?: unknown }).tools, work.id).toBeDefined();
     expect(rules("deslop")).toEqual(["python3 '{{skill.tech-writer-deslop.dir}}/scripts/scan.py' --json '{{param.slug}}.md'"]);
-    expect(rules("to-draft-box")).toEqual(["cd '{{skill.md2publish-draft.dir}}'", "md2wechat doctor ", "md2wechat upload_image ", "md2wechat create_draft "]);
+    expect(rules("to-draft-box")).toEqual(["md2wechat doctor ", "md2wechat upload_image ", "md2wechat create_draft "]);
     expect((step("to-draft-box") as { tools: { network: boolean; secrets: string[] } }).tools).toMatchObject({ network: true, secrets: ["WECHAT_APPID", "WECHAT_SECRET"] });
     for (const id of ["visuals", "cover"]) expect((step(id) as { tools: { network: boolean } }).tools.network, id).toBe(true);
     for (const id of ["outline", "draft", "deslop", "voice", "finetune", "article"]) expect((step(id) as { tools: { network?: boolean } }).tools.network, id).toBe(false);
     const all = steps.flatMap((s) => rules(s.id));
     expect(all.filter((r) => /^(python3?|bash|sh|zsh|node|bun|deno)\s*$/.test(r.trim()))).toEqual([]);
     expect(all.filter((r) => /python3? -c|python3? - /.test(r))).toEqual([]);
-    // md2publish steps run their skill's script files from the skill's directory (§16.4): `cd` exact, the scripts as prefixes.
-    for (const id of ["visuals", "article", "cover", "to-draft-box"]) {
-      expect(rules(id)[0], id).toBe(`cd '{{skill.${(step(id) as { skills: string[] }).skills[0]}.dir}}'`);
-      for (const r of rules(id).filter((r) => r.startsWith("python3"))) expect(r, id).toMatch(/^python3 (shared\/)?scripts\/[a-z0-9_]+\.py( |$)/);
+    // T18 acceptance: claude resets the shell's working directory after every command, so `cd '<skill dir>'` then
+    // `python3 scripts/…` failed (ENOENT) and the cover's generator and finetune's self-check never ran. Every skill
+    // script is named by its absolute path under its own step's skill directory (§16.4); no rule is a `cd`.
+    expect(all.filter((r) => /^\s*cd(\s|$)/.test(r))).toEqual([]);
+    for (const id of ["finetune", "visuals", "article", "cover"]) {
+      const skill = (step(id) as { skills: string[] }).skills[0]!;
+      const scripts = rules(id).filter((r) => /^(python3|bun) /.test(r));
+      expect(scripts.length, id).toBeGreaterThan(0);
+      for (const r of scripts) expect(r, id).toMatch(new RegExp(`^(python3|bun) '\\{\\{skill\\.${skill}\\.dir\\}\\}/(shared/)?scripts/[a-z0-9_/]+\\.(py|ts)'( |$)`));
     }
-    expect(rules("cover")).toContain("python3 shared/scripts/query.py ");
+    for (const id of ["finetune", "visuals", "article", "cover", "to-draft-box"]) expect(prompt(id), id).not.toMatch(/`cd '/);
   });
 
   it("each effect step passes its record as --confirmed-by-orca; the article passes the run id; the draft box takes the cover's FINAL path", () => {

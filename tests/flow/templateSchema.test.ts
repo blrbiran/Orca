@@ -118,6 +118,8 @@ describe("orca-flow-v1 schema and checklist (C1)", () => {
     ["tools-bare-interpreter", (t: any) => { t.steps[1].tools.commands.push({ prefix: "bash " }); }],
     ["tools-bare-interpreter", (t: any) => { t.steps[1].tools.commands.push({ prefix: "node" }); }],
     ["tools-bare-interpreter", (t: any) => { t.steps[1].tools.commands.push({ prefix: "bun" }); }],
+    // T18 acceptance: claude resets the shell's working directory after each command, so a `cd` rule helps nothing.
+    ["tools-cd", (t: any) => { t.steps[1].tools.commands.unshift({ exact: "cd '{{skill.tech-writer.dir}}'" }); }],
     ["executor-person-not-allowed", (t: any) => { t.steps[3].executor = "person"; }],
     ["executor-person-not-allowed", (t: any) => { t.steps[2].executor = "person"; }],
     ["parallel-with-unknown", (t: any) => { t.steps[7].parallelWith = "nope"; }],
@@ -135,6 +137,20 @@ describe("orca-flow-v1 schema and checklist (C1)", () => {
     ["hints-equals-invalid", (t: any) => { t.steps[1].hints.equals = "words(x.md)"; }],
   ])("S4: %s", (code, fn) => {
     expect(errorsOf(mutate(fn))).toEqual([code]);
+  });
+
+  // T18 acceptance (fr-12b4198a): the template's `cd '<skill dir>'` then `python3 scripts/verify.py` failed with ENOENT,
+  // because claude resets the shell's working directory after every command; finetune's self-check and the cover's
+  // generator never ran. A command relative to a `cd` rule is flagged where it is; without a `cd`, a relative path is
+  // the workspace's and stays allowed.
+  it("S4b: a command that depends on a cd rule is an error at that command; a workspace-relative one alone is not", () => {
+    const findings = checkTemplate(mutate((t) => {
+      t.steps[1].tools.commands = [{ exact: "cd '{{skill.tech-writer.dir}}'" }, { prefix: "python3 scripts/verify.py" }, { prefix: "bun shared/scripts/imagegen/main.ts" }, { exact: "wc -m '{{param.slug}}.md'" }];
+    }), assets(), ctx).errors;
+    expect(findings.map((f) => [f.code, f.path])).toEqual([
+      ["tools-cd", "steps.1.tools.commands.0"], ["tools-depends-on-cd", "steps.1.tools.commands.1"], ["tools-depends-on-cd", "steps.1.tools.commands.2"],
+    ]);
+    expect(errorsOf(mutate((t) => { t.steps[1].tools.commands.push({ prefix: "python3 tools/check.py" }); }))).toEqual([]);
   });
 
   it("S5: every finding names where it is, so Web and CLI can point at it", () => {

@@ -11,6 +11,6 @@ once; if it fails, stop and report -- never retry.
   `assets/wechat/00-cover.final.txt` (the cover step's final file). Pass it explicitly; never the sidecar default
   `00-cover.json`, which may name an older cover.
 
-Run the skill's commands from its directory (`cd '{{skill.md2publish-draft.dir}}'`): `md2wechat doctor --json`,
+Run the skill's commands as they are, never after a `cd` (the shell returns to this workspace after every command): `md2wechat doctor --json`,
 `md2wechat upload_image ... --json`, `md2wechat create_draft ... --json`, with absolute paths into this workspace.
 Report the draft's `media_id` as `flow.effect.remoteId` (and its URL when one comes back).

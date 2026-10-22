@@ -1049,3 +1049,15 @@ Phase 2+ criteria are set in their own plans; syncskill's, ccloop's and md2publi
    overwrite question, and the inline `python3 -c "…"` lines become script files. All of this is in your repo. Accept
    that scope, or keep only the md2publish-draft switch (then `visuals` and `article` would stop with `needs`, and the
    cover step could not use exact tool rules for those lines)?
+
+## 25. Corrections after the T18 acceptance run (append-only; the sections above stay as written)
+
+Recorded by the flow acceptance fixer (session b37f7ce9, 2026-10-22) on `feat/flow-engine`; the run is `fr-12b4198a…`
+in `progress.md` (`- flow T18:` lines).
+
+- **25.1 (corrects §15 ¶1 and row 11's tools).** "Commands in md2publish steps run from the injected skill directory
+  (`cd '{{skill.<name>.dir}}'` exact, then the skill's own scripts)" does not work: claude resets the shell's working
+  directory after every Bash command, so the relative scripts failed with ENOENT (the cover's generator and finetune's
+  `verify.py` never ran). Every skill script is named by its absolute path, `'{{skill.<name>.dir}}/…'`; no step has a
+  `cd` rule. The static checklist (§3.3) refuses a `cd` command rule (`tools-cd`) and, in a step that has one, each
+  command whose program is a relative path (`tools-depends-on-cd`).

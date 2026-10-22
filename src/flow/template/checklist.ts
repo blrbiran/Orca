@@ -22,7 +22,14 @@ export interface ChecklistContext {
 const COMMAND_PARAM_TYPES: ReadonlySet<ParamType> = new Set(["slug", "int", "enum", "path"]);
 /** [IR-I9]: a prefix rule naming only an interpreter allows any script. */
 const BARE_INTERPRETERS = new Set(["python3", "python", "bash", "sh", "zsh", "node", "bun", "deno"]);
-const PERSON_KINDS: ReadonlySet<FlowStep["kind"]> = new Set(["ask", "work", "review"]);
+const CD = /^\s*cd(\s|$)/;
+/** The program a command runs (the script after an interpreter) is a relative path such as `scripts/x.py`. */
+function relativeProgram(command: string): boolean {
+  const words = command.trim().split(/\s+/);
+  const program = (BARE_INTERPRETERS.has(words[0] ?? "") ? words[1] : words[0])?.replace(/^['"]/, "") ?? "";
+  return program.includes("/") && !/^(\/|\{\{|~|\$)/.test(program);
+}
+const PERSON_KINDS:ReadonlySet<FlowStep["kind"]> = new Set(["ask", "work", "review"]);
 const EQUALS_HINT = /^(verdict|headings\(.+\)|json\(.+,\s*.+\))$/;
 
 /** A relative, normalised path with no `..`, no backslash, no NUL or newline (and no quote for a path param). */
@@ -138,10 +145,14 @@ export function checkTemplate(raw: unknown, assets: AssetReader, ctx: ChecklistC
       else if (check.role !== "gate") err("loop-check-not-gate", `${at}.loop.until.check`, `loop waits for ${name}, a diagnostic; only a gate can end a loop`);
     }
     if ("tools" in step && step.tools?.commands !== undefined) {
+      const hasCd = step.tools.commands.some((rule) => CD.test("exact" in rule ? rule.exact : rule.prefix));
       step.tools.commands.forEach((rule, i) => {
         const command = "exact" in rule ? rule.exact : rule.prefix;
         const where = `${at}.tools.commands.${i}`;
         if ("prefix" in rule && BARE_INTERPRETERS.has(rule.prefix.trim())) err("tools-bare-interpreter", where, `prefix ${JSON.stringify(rule.prefix)} allows any script; name the script (§3.2, IR-I9)`);
+        // T18 acceptance: claude resets the shell's working directory after every command, so a `cd` carries nothing over.
+        if (CD.test(command)) err("tools-cd", where, `${JSON.stringify(command)}: the agent's shell returns to the workspace after each command; name skill files by '{{skill.<name>.dir}}/…' instead`);
+        else if (hasCd && relativeProgram(command)) err("tools-depends-on-cd", where, `${JSON.stringify(command)} names a relative path that only a cd before it would resolve; use '{{skill.<name>.dir}}/…'`);
         checkVars(command, "command", where, step);
       });
     }
