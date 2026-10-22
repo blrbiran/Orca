@@ -458,12 +458,16 @@ export async function advanceWorkspace(deps: FlowDeps, run: LoadedRun, vault: Va
 
 /** §5.3-§5.4: the flow head moves by CAS to the composition of every active output; the change is copied back. */
 async function composeHeadAndCopyBack(deps: FlowDeps, run: LoadedRun, vault: Vault, key: ExecutionKey | null): Promise<void> {
-  let previous: string | null = null;
-  let next: string;
+  // A copy-back still owed (a crash or a failure after an earlier move) is done first: the folder is never two moves behind.
+  if (!(await redoPendingCopyBack(deps, run.row.id, vault))) return;
   try {
-    next = await advanceHeadWithRetry(vault, run.row.id, async (current) => {
-      previous = current;
+    await advanceHeadWithRetry(vault, run.row.id, async (current) => {
       const composition = await compositionFor(deps.store, run, null);
+      // I2: journaled before the swap, so a crash between the move and the copy-back leaves it owed, not lost.
+      if (current !== null && run.body.dir !== null) {
+        const pending: PendingCopyBack = { from: current, to: composition!.commit, key };
+        deps.store.transaction(() => updateFlowRunBody(deps.store, run.row.id, (body) => ({ ...body, pendingCopyBack: pending })));
+      }
       return composition!.commit;
     });
   } catch (error) {
@@ -472,14 +476,55 @@ async function composeHeadAndCopyBack(deps: FlowDeps, run: LoadedRun, vault: Vau
     flagComposeConflict(deps, run, error.detail);
     return;
   }
-  if (previous === null || run.body.dir === null) return;
-  const result = await copyBack(vault, run.body.dir, previous, next);
-  if (result.conflicts.length === 0 || key === null) return;
-  const execution = listExecutions(deps.store, key.flowRunId).find((e) => e.stepKey === key.stepKey && e.seq === key.seq)!;
-  const body = execution.body as ExecutionBody;
-  deps.store.transaction(() => finishExecution(deps.store, key, execution.state, execution.state, deps.now(), {
-    body: { ...body, flags: [...(body.flags ?? []), "copy-back-conflict"], copyBackConflicts: result.conflicts },
+  await redoPendingCopyBack(deps, run.row.id, vault);
+}
+
+/** I2: the copy-back a head move owes the folder, journaled on the run before the move. */
+interface PendingCopyBack { from: string; to: string; key: ExecutionKey | null; error?: { message: string; at: number } }
+const pendingOf = (store: ControlStore, flowRunId: string): PendingCopyBack | undefined =>
+  (getFlowRun(store, flowRunId)?.body as { pendingCopyBack?: PendingCopyBack } | undefined)?.pendingCopyBack;
+
+/**
+ * §5.4, I2: do the journaled copy-back. When the head is not where the journal says it moved (the swap never happened,
+ * or a later move replaced this one), nothing is owed. A copy-back is idempotent (a path already holding the step's
+ * bytes is left as it is), so a redo after a crash finishes what the first one started. A failure (git, EACCES) is
+ * recorded on the journal and on the step's execution, never thrown through the pump; it is tried again next pass.
+ * True when nothing is owed any more.
+ */
+export async function redoPendingCopyBack(deps: FlowDeps, flowRunId: string, vault: Vault): Promise<boolean> {
+  const pending = pendingOf(deps.store, flowRunId);
+  if (pending === undefined) return true;
+  const clear = (): void => deps.store.transaction(() => updateFlowRunBody(deps.store, flowRunId, (body) => {
+    const { pendingCopyBack: _done, ...rest } = body;
+    return rest;
   }));
+  const dir = loadRun(deps.store, flowRunId).body.dir;
+  if (dir === null || await readHead(vault, flowRunId) !== pending.to) { clear(); return true; }
+  let result: Awaited<ReturnType<typeof copyBack>>;
+  try { result = await copyBack(vault, dir, pending.from, pending.to); }
+  catch (error) {
+    const failure = { message: error instanceof Error ? error.message : String(error), at: deps.now() };
+    deps.store.transaction(() => {
+      updateFlowRunBody(deps.store, flowRunId, (body) => ({ ...body, pendingCopyBack: { ...pending, error: failure } }));
+      if (pending.key !== null) flagExecution(deps, pending.key, "copy-back-failed", { copyBackError: failure.message });
+    });
+    return false;
+  }
+  if (pending.key !== null && result.conflicts.length > 0) {
+    const key = pending.key;
+    deps.store.transaction(() => flagExecution(deps, key, "copy-back-conflict", { copyBackConflicts: result.conflicts }));
+  }
+  clear();
+  return true;
+}
+
+/** Add `flag` (once) and `extra` to an execution's body, its state unchanged. Inside the caller's transaction. */
+function flagExecution(deps: FlowDeps, key: ExecutionKey, flag: string, extra: Record<string, unknown>): void {
+  const execution = listExecutions(deps.store, key.flowRunId).find((e) => e.stepKey === key.stepKey && e.seq === key.seq);
+  if (execution === undefined) return;
+  const body = execution.body as ExecutionBody;
+  const flags = (body.flags ?? []).includes(flag) ? body.flags! : [...(body.flags ?? []), flag];
+  finishExecution(deps.store, key, execution.state, execution.state, deps.now(), { body: { ...body, ...extra, flags } });
 }
 
 /**
@@ -492,6 +537,8 @@ async function composeHeadAndCopyBack(deps: FlowDeps, run: LoadedRun, vault: Vau
  */
 export async function absorbDrift(deps: FlowDeps, run: LoadedRun, vault: Vault): Promise<boolean> {
   if (run.body.dir === null || run.body.importCommit === null) return false;
+  // I2: while a copy-back is owed the folder is behind the head; what differs is not the person's.
+  if (!(await redoPendingCopyBack(deps, run.row.id, vault))) return false;
   const head = await readHead(vault, run.row.id);
   if (head === null) return false;
   const drift = await snapshotDrift(vault, run.body.dir, head);
@@ -691,6 +738,9 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
   if (await consumeAtBoundary(deps, run.row.id)) return true;
   const fresh = loadRun(deps.store, run.row.id);
   if (fresh.row.state !== "running") return false;
+  // I2: a copy-back a crash or a failure left owed is done at the next boundary.
+  const vault = vaultOf(fresh);
+  if (vault !== null && pendingOf(deps.store, run.row.id) !== undefined) await redoPendingCopyBack(deps, run.row.id, vault);
   // §7.4-§7.5: an open plan the person (or the proposal) has not settled holds the run; a running one decides what runs.
   const planned = await planOf(deps, fresh);
   if (planned === "moved") return true;
