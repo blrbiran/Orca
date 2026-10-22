@@ -33,7 +33,8 @@ describe("the requirement document (N1 spec §10)", () => {
       "## Glossary", "", "- **note**: One page of text a person wrote.", "",
       "## Decisions (ADRs)", "", "(none)", "",
       "## Rounds", "", "### Round 1", "",
-      "- R1.Q1: Which Markdown flavour?", "  - recommended: CommonMark", "  - answer: CommonMark",
+      // Issue 95 (rewritten under 0e13a9b7's ruling): an answer picked as the recommendation is one line, marked.
+      "- R1.Q1: Which Markdown flavour?", "  - answer: CommonMark (recommended)",
       "- R1.Q2: Are images exported?", "  - recommended: As links", "  - answer: As links, relative to the note", "",
       "### Round 2", "", "(no questions)", "",
       "## Consensus", "", "- round: 2", "- at: 2026-10-02T08:06:00.000Z", "- open branches:", "  - sync to a cloud drive", "",
@@ -51,7 +52,18 @@ describe("the requirement document (N1 spec §10)", () => {
     const text = renderRequirementDocument({ groupId: "r", requirement: { ...requirement, contentLanguage: "zh" }, rounds: rounds(), acceptedSplit: null });
     expect(text).toContain("## 陈述\n");
     expect(text).toContain("## 验收标准\n\n- AC1: ");
-    expect(text).toContain("- R1.Q1: Which Markdown flavour?\n  - 推荐：CommonMark\n  - 回答：CommonMark");
+    // Issue 95 (rewritten under 0e13a9b7's ruling): the mark is in the content language too.
+    expect(text).toContain("- R1.Q1: Which Markdown flavour?\n  - 回答：CommonMark（推荐）\n");
+  });
+
+  // Issue 95: whether an answer is the recommendation is how it was given (its kind), never a string comparison: a
+  // person who typed the recommendation's words chose to type them, and both lines stay.
+  it("folds the recommendation into the answer only when the answer was picked as the recommendation", () => {
+    const [one, two] = rounds();
+    const typedSame = [{ id: "R1.Q1", kind: "text" as const, text: "CommonMark" }, { id: "R1.Q2", kind: "recommended" as const, text: "As links" }];
+    const text = renderRequirementDocument({ groupId: "r", requirement, rounds: [{ ...one!, answers: typedSame }, two!], acceptedSplit: null });
+    expect(text).toContain("- R1.Q1: Which Markdown flavour?\n  - recommended: CommonMark\n  - answer: CommonMark\n");
+    expect(text).toContain("- R1.Q2: Are images exported?\n  - answer: As links (recommended)\n");
   });
 
   it("names the document path, with a suffix only when one is needed", () => {

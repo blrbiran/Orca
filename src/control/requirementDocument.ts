@@ -4,11 +4,11 @@ import type { RoundBody, SplitOutput } from "./requirementSchemas.js";
 /** DR20: prose headings in the requirement's content language; ids, paths and dates are not translated. */
 const WORDS = {
   en: { statement: "Statement", criteria: "Acceptance criteria", glossary: "Glossary", decisions: "Decisions (ADRs)", rounds: "Rounds", round: "Round",
-    consensus: "Consensus", split: "Split", recommended: "- recommended: ", answer: "- answer: ", unanswered: "(not answered)", noQuestions: "(no questions)",
+    consensus: "Consensus", split: "Split", recommended: "- recommended: ", answer: "- answer: ", recommendedMark: " (recommended)", unanswered: "(not answered)", noQuestions: "(no questions)",
     none: "(none)", roundLine: "- round: ", atLine: "- at: ", openBranches: "- open branches:", openQuestions: "- open questions:", criterion: "Criterion", tasks: "Tasks",
     context: "- context: ", decision: "- decision: ", consequences: "- consequences: " },
   zh: { statement: "陈述", criteria: "验收标准", glossary: "术语", decisions: "决策（ADR）", rounds: "问答轮次", round: "轮次", consensus: "共识", split: "拆分",
-    recommended: "- 推荐：", answer: "- 回答：", unanswered: "（未回答）", noQuestions: "（本轮无问题）", none: "（无）", roundLine: "- 轮次：", atLine: "- 时间：",
+    recommended: "- 推荐：", answer: "- 回答：", recommendedMark: "（推荐）", unanswered: "（未回答）", noQuestions: "（本轮无问题）", none: "（无）", roundLine: "- 轮次：", atLine: "- 时间：",
     openBranches: "- 暂缓的分支：", openQuestions: "- 未回答的问题：", criterion: "标准", tasks: "任务", context: "- 背景：", decision: "- 决定：", consequences: "- 后果：" },
 } as const;
 
@@ -54,10 +54,16 @@ export function renderRequirementDocument(input: RequirementDocumentInput): stri
   out.push(`## ${w.rounds}`, "");
   if (valid.length === 0) out.push(w.none, "");
   for (const round of valid) {
-    const answers = new Map((round.answers ?? []).map((answer) => [answer.id, answer.text]));
+    const answers = new Map((round.answers ?? []).map((answer) => [answer.id, answer]));
     out.push(`### ${w.round} ${round.roundNo}`, "");
     if (round.result!.questions.length === 0) out.push(w.noQuestions);
-    for (const q of round.result!.questions) out.push(item("- ", `${q.id}: ${q.question}`), item(`  ${w.recommended}`, q.recommendedAnswer), item(`  ${w.answer}`, answers.get(q.id) ?? w.unanswered));
+    for (const q of round.result!.questions) {
+      const answer = answers.get(q.id);
+      out.push(item("- ", `${q.id}: ${q.question}`));
+      // Issue 95: an answer picked as the recommendation (its kind, never a string comparison) is one marked line.
+      if (answer?.kind === "recommended") out.push(item(`  ${w.answer}`, `${answer.text}${w.recommendedMark}`));
+      else out.push(item(`  ${w.recommended}`, q.recommendedAnswer), item(`  ${w.answer}`, answer?.text ?? w.unanswered));
+    }
     out.push("");
   }
   const consensus = input.requirement.consensus;
