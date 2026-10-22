@@ -80,7 +80,11 @@ describe("the permission table (spec §3.5)", () => {
       // Every verb has an entry, and a verb a principal can send has exactly one route; a panel verb has none.
       const verbs = [...commandVerbSchema.options].sort();
       expect(Object.keys(VERB_ACCESS).sort()).toEqual(verbs);
-      const routed = commands.map((route) => route.verb).sort();
+      // Checks spec 2026-10-22 §4.4 (plan Task 4): the two settings-layer verbs have one route per layer -- the project's
+      // and the global one -- and only they. Ruling: 这次批准改写所有必要的判据 (b37f7ce9).
+      const PER_LAYER = ["set-check-settings", "set-scheduled-check"];
+      expect(PER_LAYER.map((verb) => commands.filter((route) => route.verb === verb).length)).toEqual([2, 2]);
+      const routed = commands.map((route) => route.verb).filter((verb, index, all) => !PER_LAYER.includes(verb) || all.indexOf(verb) === index).sort();
       expect(routed).toEqual(verbs.filter((verb) => VERB_ACCESS[verb] !== "panel"));
       expect(new Set(routed).size).toBe(routed.length);
     } finally { await h.dispose(); }
