@@ -1,4 +1,5 @@
 import {validSavedNoDispatch} from "../control/savedResultNoDispatch.js";
+import { flowRoleSql } from "../flow/groups.js";
 import {savedDispatchSchema,recoveryOfSchema,savedRecoverySchema,savedSourceSchema} from "../control/savedResultProtocol.js";
 import { hasOptionalTaskPolicy, readFundedAllowance } from "../control/fundedAllowance.js";
 import { tokenPolicySchema, tokenRemainingStatus } from "../control/tokenPolicy.js";
@@ -550,8 +551,17 @@ export function readOverviewGroupSource(store: ControlStore, groupId: string) {
   return { body, summary, proposal, estimates, workItems, runs, blockers: blockerRows(store, groupId, snapshot) };
 }
 
+/**
+ * Flow engine spec §6.2: a flow run's groups are not cards -- its `work` children are hidden (shown inside the run page),
+ * and its parent row is shown by the run page too (Task 16), not as a plan group.
+ */
 function allGroupIds(store: ControlStore): string[] {
-  return store.db.prepare("SELECT id FROM groups ORDER BY id").all().map(row => String(row.id));
+  return store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${flowRoleSql("g")} IS NULL ORDER BY g.id`).all().map(row => String(row.id));
+}
+function withoutFlowGroups(store: ControlStore, groupIds: readonly string[]): string[] {
+  if (groupIds.length === 0) return [];
+  const flow = new Set(store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${flowRoleSql("g")} IS NOT NULL`).all().map(row => String(row.id)));
+  return groupIds.filter(groupId => !flow.has(groupId));
 }
 
 function readGroupOwnedCanonicalRecord(store: ControlStore, groupId: string, hash: string): string {
@@ -570,7 +580,7 @@ export function readControlSummary(
   const changes = forceComplete || sinceChangeSeq === null
     ? { changeSeq: state.changeSeq, resetRequired: true, groups: allGroupIds(store).map(groupId => ({ groupId })) }
     : readProjectionChanges(store, sinceChangeSeq);
-  const groupIds = changes.resetRequired || forceComplete ? allGroupIds(store) : changes.groups.map(group => group.groupId);
+  const groupIds = changes.resetRequired || forceComplete ? allGroupIds(store) : withoutFlowGroups(store, changes.groups.map(group => group.groupId));
   const view = {
     schema: "orca-control-summary-v1" as const,
     epoch,

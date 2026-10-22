@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { flowRoleSql } from "../flow/groups.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { ControlError } from "./errors.js";
 import { globalChecksLayerSchema } from "./checks/settingsSchema.js";
@@ -91,7 +92,7 @@ export function writeOrchestrationSettings(store: ControlStore, settings: Orches
     .run(revision, JSON.stringify(settingsSchema.parse(settings)));
 }
 
-type GroupFacts = { id: string; status: string; debug: boolean; review: boolean };
+type GroupFacts = { id: string; status: string; debug: boolean; review: boolean; flowChild: boolean };
 function groupFacts(store: ControlStore): GroupFacts[] {
   return store.db.prepare("SELECT id, body FROM groups ORDER BY rowid").all().flatMap((row) => {
     let body: { status?: unknown; debug?: unknown };
@@ -100,7 +101,9 @@ function groupFacts(store: ControlStore): GroupFacts[] {
     const debug = [body.debug, (body as { systemDebug?: unknown }).systemDebug].some((mark) => typeof mark === "object" && mark !== null);
     // Checks spec 2026-10-22 §6.1: a model review fixes nothing, so it is admitted after every person-confirmed group.
     const review = (body as { systemDebug?: { source?: { kind?: unknown } } }).systemDebug?.source?.kind === "model-review";
-    return [{ id: String(row.id), status: String(body.status), debug: debug && !review, review }];
+    // Flow engine spec §6.2: a flow run's child runs under the slot its parent holds.
+    const flowChild = (body as { flow?: { role?: unknown } }).flow?.role === "child";
+    return [{ id: String(row.id), status: String(body.status), debug: debug && !review, review, flowChild }];
   });
 }
 
@@ -113,7 +116,9 @@ export function runningGroupIds(store: ControlStore): string[] {
   const wakeKinds = [...EXECUTION_WAKE_KINDS].map((kind) => `'${kind}'`).join(","), busy = [...BUSY_WORK].map((status) => `'${status}'`).join(",");
   // CASE json_valid: a body that does not parse holds no slot here (its own reads name it); json_extract would throw.
   const at = (column: string, path: string) => `CASE WHEN json_valid(${column}) THEN json_extract(${column},'${path}') END`;
-  return store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${at("g.body", "$.archived")} IS NULL AND (
+  // Flow engine spec §6.2: a flow run holds one slot, through its parent, while the run is running; its children hold none.
+  return store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${at("g.body", "$.archived")} IS NULL AND ${flowRoleSql("g")} IS NOT 'child' AND (
+    (${flowRoleSql("g")} = 'parent' AND EXISTS (SELECT 1 FROM flow_runs f WHERE f.group_id=g.id AND f.state='running')) OR
     ${at("g.body", "$.status")} IN ('running','review') OR (${at("g.body", "$.status")}='ready' AND (
       EXISTS (SELECT 1 FROM scheduler_wakes w WHERE w.group_id=g.id AND w.delivered=0 AND w.kind IN (${wakeKinds}))
       OR EXISTS (SELECT 1 FROM runs r WHERE r.group_id=g.id AND r.active=1 AND ${at("r.body", "$.phase")}='work')
@@ -187,7 +192,7 @@ export async function autoStartPass(deps: AutoStartDeps): Promise<{ started: str
     .sort((a, b) => Number(a.group.review) - Number(b.group.review) || Number(b.group.debug) - Number(a.group.debug) || a.row.confirmedAt - b.row.confirmedAt || a.group.id.localeCompare(b.group.id));
   for (const { group } of candidates) {
     const { running, cap } = slotUse(store);
-    const state = autoStartState(store, group, deps.now(), running < cap, prerequisites);
+    const state = autoStartState(store, group, deps.now(), running < cap || group.flowChild, prerequisites);
     if (state.kind !== "eligible") continue;
     const row = readGroupOrchestration(store, group.id)!;
     const revision = store.db.prepare("SELECT revision FROM groups WHERE id=?").get(group.id);

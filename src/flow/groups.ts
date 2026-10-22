@@ -71,6 +71,9 @@ export function flowGroupRepoId(store: ControlStore, groupId: string): string | 
   return group === null || group.workspaceKind !== "dir" || group.vaultId === null ? null : flowVaultRepoId(group.vaultId);
 }
 
+/** SQL: the `flow.role` of the group row `alias` ('parent', 'child'), NULL for any other group or a body that does not parse. */
+export const flowRoleSql = (alias: string): string => `(CASE WHEN json_valid(${alias}.body) THEN json_extract(${alias}.body,'$.flow.role') END)`;
+
 /** §5.3: a child's work branch starts at the composition it was opened on. */
 export function flowChildStartPoint(store: ControlStore, groupId: string): string | null {
   const block = flowBlockOf(groupBodyOf(store, groupId));

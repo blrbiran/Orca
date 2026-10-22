@@ -1,4 +1,5 @@
 import type { ControlStore } from "../control/store.js";
+import { flowRoleSql } from "../flow/groups.js";
 import { ControlError } from "../control/errors.js";
 import { readProjectionState } from "../control/projectionJournal.js";
 import { readGroupIntegration } from "../control/integrationScheme.js";
@@ -102,7 +103,8 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
       add("start-review", groupId, repoId, "ready-to-start-review", groupDestination("dispatch"), `proposal:${proposal.proposalVersion}`);
     }
   }
-  for (const row of store.db.prepare("SELECT id FROM groups ORDER BY id").all()) {
+  // Flow engine spec §6.2: a flow run's groups are shown by its run page (Task 16), not here.
+  for (const row of store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${flowRoleSql("g")} IS NULL ORDER BY g.id`).all()) {
     const groupId = String(row.id);
     let repoId: string | null = null;
     try {
