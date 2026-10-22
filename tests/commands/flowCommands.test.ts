@@ -12,7 +12,9 @@ const OTHER = "fr-9f000000-0000-4000-8000-000000000002";
 const READS = {
   "GET flows": { status: 200, body: { schema: "orca-flow-list-v1", runs: [{ flowRunId: RUN }, { flowRunId: OTHER }] } },
   [`GET flows/${RUN}`]: { status: 200, body: { schema: "orca-flow-run-view-v1", flowRunId: RUN, plans: [{ planNo: 1, state: "abandoned" }, { planNo: 2, state: "proposed" }],
-    openAsks: [{ stepKey: "brief", seq: 1, ask: { kind: "clarify-round", roundNo: 2 } }] } },
+    // The real view's shape (flow/views.ts, kernel openAsks): a waiting clarify round is on its step's latest execution,
+    // never in openAsks (T18 acceptance: the CLI read openAsks and could not answer any clarify round).
+    openAsks: [], steps: [{ stepKey: "brief", latest: { seq: 1, state: "needs-person", ask: { kind: "clarify-round", roundNo: 2 } } }] } },
   "GET flows/settings": { status: 200, body: { locks: ["effects.cost"] } },
   // The fake ledger: the `@flows` scope is always 0, the global layer is orchestration's 4.
   ...Object.fromEntries(["flows", "flows/messages", "flows/plan", "flows/rerun", "flows/answer", "flows/effect", "flows/pool"].map((path) => [`POST ${path}`, accept(() => 0)])),

@@ -187,8 +187,10 @@ const RUN_ROWS: CommandDef[] = [
         return { id, accept: verdict === "accept" };
       });
       if (list(c, "answer").length > 0 || list(c, "glossary").length > 0 || list(c, "adr").length > 0) {
-        const view = (await c.read(`flows/${runId}`)) as { openAsks: Array<{ stepKey: string; ask: { roundNo?: number } }> };
-        const roundNo = view.openAsks.find((a) => a.stepKey === stepKey)?.ask.roundNo;
+        // A waiting clarify round is on its step's latest execution; the view's openAsks never lists clarify rounds.
+        const view = (await c.read(`flows/${runId}`)) as { steps?: Array<{ stepKey: string; latest?: { state?: string; ask?: { kind?: string; roundNo?: number } } | null }> };
+        const latest = view.steps?.find((s) => s.stepKey === stepKey)?.latest;
+        const roundNo = latest?.state === "needs-person" && latest.ask?.kind === "clarify-round" ? latest.ask.roundNo : undefined;
         if (roundNo === undefined) throw invalid(`step ${stepKey} has no clarify round waiting`);
         const answers = list(c, "answer").map((pair) => {
           const at = pair.indexOf("=");
