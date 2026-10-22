@@ -96,7 +96,7 @@ export function FlowSettings(props: { scope: FlowSettingsScope }): JSX.Element {
     try {
       const next = await controlGet<FlowSettingsReadV1>(readPath);
       // An answer that is not a flow settings read (an older panel) is "not read", never half-rendered.
-      if (typeof next?.effects !== "object" || next.effects === null || typeof next.budgets !== "object") throw new Error("not a flow settings read");
+      if (typeof next?.effects !== "object" || next.effects === null || typeof next.budgets !== "object") throw new TypeError("flow-settings-shape");
       setView(next); setUnread(false);
     } catch { setUnread(true); }
   }, [readPath]);
