@@ -1,5 +1,6 @@
 import {hasValidUsageSettlement,settlementArtifact as settlementArtifactBytes} from "./usageSettlement.js";
 import { stackBaseOf } from "./groupEdges.js";
+import { flowGroupRepoId } from "../flow/groups.js";
 import {assertCurrentSavedRecovery,savedRecoveryAccounting} from "./savedResultRecovery.js";
 import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,recoveryClosure} from "./savedResultRecoveryPackage.js";
 import {savedDispatchSchema,savedRecoverySchema,savedResultAdmissionSchema,executionFormatFailureSchema,savedExecutionSnapshotSchema,savedResultCollectionSchema,savedResultSettlementSchema,interruptedSavedResultSchema} from "./savedResultProtocol.js";
@@ -214,8 +215,9 @@ export function integrationDepsOf(deps: ExecutionDriverDeps, context: DriverCont
 
 export function groupRepoId(store: ControlStore, groupId: string): string {
   const group = readGroup(store, groupId) as unknown as { plan?: { repoId: string }; requirement?: { repoId: string } };
+  // Flow engine spec §6.2: a `dir` flow group (parent or child) targets its run's vault, whatever else it names.
   // N1 plan F16: a clarifying group has no plan yet; its requirement names the repository.
-  const repoId = group.plan?.repoId ?? group.requirement?.repoId;
+  const repoId = flowGroupRepoId(store, groupId) ?? group.plan?.repoId ?? group.requirement?.repoId;
   if (repoId === undefined) throw new ControlError("recovery-blocked", `group-repository-missing:${groupId}`);
   return repoId;
 }

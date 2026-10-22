@@ -24,6 +24,7 @@ import { readCorrectionList } from "../control/correctionState.js";
 import { createCorrectionExporter } from "../memory/correctionExport.js";
 import type { ControlOptions } from "./server.js";
 import { DISPATCHED_PERSON_DIRNAME } from "../control/commandClient.js";
+import { vaultPathOfRepoId } from "../flow/groups.js";
 
 /**
  * Assembly plan Task 5. Everything above `server.ts` stays as it was; this turns parsed options into
@@ -216,6 +217,10 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     ? null
     : router.list().find((profile) => profile.snapshot.profile.profileId === control.estimatorProfileId) ?? null;
 
+  // Flow engine spec §5.2: a `dir` flow group's repository id names its run's vault ($ORCA_VAULT_DIR, Rule 17); every
+  // other id is a trusted repository of the config, as before.
+  const resolveRepository = (repoId: string): string => vaultPathOfRepoId(env, repoId) ?? config.resolveRepository(repoId);
+
   const admissionGate = createAdmissionGate();
   const service = new WebControlService({
     store,
@@ -232,7 +237,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       ? (repoId: string) => config.hasRepository(repoId)
       : undefined,
     // Integration spec §3.3: the path the integration setters' git checks run in (only a known repository is checked).
-    resolveRepository: (repoId: string) => config.resolveRepository(repoId),
+    resolveRepository: (repoId: string) => resolveRepository(repoId),
     // Debug task plan Task 6: correction-debug-open finds the repository a correction's projectKey names among these.
     listRepositories: () => config.listRepositories(),
     // A correction recorded on the panel names the panel's project key; its repository's repoId is that key's.
@@ -292,7 +297,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   if (control.executionPort === "configured") {
     driver = createExecutionDriver({
       store, router, admissionGate, roots: controlWorkspaceRoots(store.stateDir),
-      resolveRepository: (repoId) => config.resolveRepository(repoId),
+      resolveRepository,
       ccloopBin: env.ORCA_CCLOOP_BIN!, agentsTablePath: env.ORCA_AGENTS_TABLE!, dispatchedPersonDir, astGrepBin: resolveAstGrepBin(env),
       // Handoff grace: the run's frozen killGraceMs + 60 s (driverHandoff.handoffGraceMsOf, agent selection spec §6.6).
       // *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** the grace is max(killGraceMs, frozen recovery window + 5 s) + 60 s.

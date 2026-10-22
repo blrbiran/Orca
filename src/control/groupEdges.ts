@@ -7,6 +7,7 @@ import type { ControlStore } from "./store.js";
 import { groupRepoIdOf } from "./usageLedger.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 import { workBranchRef } from "./workspace.js";
+import { flowChildStartPoint } from "../flow/groups.js";
 
 /**
  * Kanban spec 2026-10-20 §3.3-§3.4 and §9a items 1 and 5: v1 edges between groups come from the person only. An edge
@@ -61,6 +62,9 @@ export function waitingPrerequisites(store: ControlStore, groupId: string): stri
  * `orca/<g>` branch); null (the target's HEAD, as before) when every prerequisite is delivered locally or there is none.
  */
 export function stackBaseOf(store: ControlStore, groupId: string): string | null {
+  // Flow engine spec §5.3: a flow step's child group starts at the composition it was opened on.
+  const composed = flowChildStartPoint(store, groupId);
+  if (composed !== null) return composed;
   // System debug task spec 2026-10-21 §3.2: a ladder debug group starts from its original group's branch.
   const stackOn = (groupBody(store, groupId)?.systemDebug as { stackOn?: unknown } | undefined)?.stackOn;
   if (typeof stackOn === "string") return workBranchRef(stackOn);
