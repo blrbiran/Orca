@@ -757,6 +757,9 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
   // I2: a copy-back a crash or a failure left owed is done at the next boundary.
   const vault = vaultOf(fresh);
   if (vault !== null && pendingOf(deps.store, run.row.id) !== undefined) await redoPendingCopyBack(deps, run.row.id, vault);
+  // §6.2: how a running execution ended is read before anything else -- an open plan holds what STARTS, never what
+  // already runs (T18 enact: a failed child under a proposed plan stayed `running` and its effect record `confirmed`).
+  if (await settleRunning(deps, run)) return true;
   // §7.4-§7.5: an open plan the person (or the proposal) has not settled holds the run; a running one decides what runs.
   const planned = await planOf(deps, fresh);
   if (planned === "moved") return true;
@@ -771,13 +774,6 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
     const current = latest.get(step.id);
     const basis = basisOf(run, index, heads);
     const free = blockers.every((b) => parallel(b, step));
-    if (current?.state === "running" && step.kind === "work" && (current.body as ExecutionBody).call === undefined && await pollChild(deps, run, current)) return true;
-    // §6.2: a call the driver settled left its raw output on the execution; the kind judges it now.
-    const callResult = current?.state === "running" ? (current.body as { callResult?: FlowCallResult }).callResult : undefined;
-    if (callResult !== undefined && (current!.body as ExecutionBody).call !== undefined) {
-      await completeFlowCall(deps, { flowRunId: run.row.id, stepKey: step.id, seq: current!.seq }, callResult.rawOutput, callResult.failure);
-      return true;
-    }
     if (current !== undefined && (current.state === "running" || WAITING.has(current.state))) { satisfied = false; blockers.push(step); continue; }
     if (current?.state === "failed") return false;
     if (current?.state === "queued") {
@@ -830,6 +826,25 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
   }
   if (plan !== null && satisfied) { deps.store.transaction(() => finishPlan(deps.store, plan)); return true; }
   if (satisfied && run.row.state === "running") { deps.store.transaction(() => setFlowRunState(deps.store, run.row.id, "running", "done")); }
+  return false;
+}
+
+/**
+ * §6.2: every running execution of the run, in template order: a `work` step's child is polled and settled; a call the
+ * driver settled left its raw output on the execution and the kind judges it now. True when something moved.
+ */
+async function settleRunning(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
+  const latest = latestByStep(listExecutions(deps.store, run.row.id));
+  for (const step of run.template.steps) {
+    const current = latest.get(step.id);
+    if (current?.state !== "running") continue;
+    const body = current.body as ExecutionBody & { callResult?: FlowCallResult };
+    if (step.kind === "work" && body.call === undefined && await pollChild(deps, run, current)) return true;
+    if (body.callResult !== undefined && body.call !== undefined) {
+      await completeFlowCall(deps, { flowRunId: run.row.id, stepKey: step.id, seq: current.seq }, body.callResult.rawOutput, body.callResult.failure);
+      return true;
+    }
+  }
   return false;
 }
 
