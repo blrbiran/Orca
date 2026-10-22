@@ -20,12 +20,12 @@ import { readCanonicalRecord, writeCanonicalRecord } from "../control/snapshot.j
 import { MAX_AUTO_RETRIES } from "../control/requirementSchemas.js";
 import type { FlowNeeds } from "../control/reportedDecisions.js";
 import type { ControlStore } from "../control/store.js";
-import { definitionHash, outputHashOfCommit, outputHashOfRecord } from "./journal/fingerprint.js";
+import { definitionHash, outputHashOfCommit, outputHashOfRecord, type SkillLock } from "./journal/fingerprint.js";
 import { runShell } from "./kinds/check.js";
 import { builtinKinds, type ExecutionBody, type FlowRunBody, type KindContext, type KindDefinition, type KindOutcome, type KindRegistry, type LoadedRun, type RoleResolution } from "./kinds/registry.js";
 import { buildStepPrompt, bounded } from "./prompt.js";
 import {
-  appendExecution, appendFlowDecision, appendMessage, finishExecution, getFlowRun, getHead, insertFlowRun, listExecutions, listFlowRunIds, listHeads, setFlowRunState, setHead,
+  appendExecution, appendFlowDecision, appendMessage, finishExecution, getFlowRun, getHead, insertFlowRun, listExecutions, listFlowRunIds, listHeads, setDefinitionHash, setFlowRunState, setHead,
   type ExecutionKey, type ExecutionRow, type ExecutionState,
 } from "./store.js";
 import { isInsidePath } from "./template/checklist.js";
@@ -376,6 +376,7 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
     if ("done" in outcome) {
       const extra = {
         ...(outcome.done.flags === undefined ? {} : { flags: outcome.done.flags }),
+        ...(outcome.done.warnings === undefined ? {} : { warnings: outcome.done.warnings }),
         ...(outcome.done.reported === undefined ? {} : { reported: outcome.done.reported }),
       };
       if (workspaceOutput !== null) {
@@ -387,6 +388,8 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
         const hash = writeRecord(deps.store, run.row.groupId, outcome.done.record);
         finishExecution(deps.store, key, from, "done", at, { output: { kind: "artifact", ref: hash, hash: outputHashOfRecord(hash) }, body: { ...body, ...extra } });
       }
+      // §12.2 phase 1: fingerprints use the skills' actual content_md5, known once the execution injected them.
+      if (outcome.done.skillLocks !== undefined) setDefinitionHash(deps.store, key, definitionOf(deps, run, step, outcome.done.skillLocks));
       setHead(deps.store, key.flowRunId, key.stepKey, getHead(deps.store, key.flowRunId, key.stepKey), key.seq);
       for (const decision of outcome.done.decisions ?? []) appendFlowDecision(deps.store, { flowRunId: key.flowRunId, grade: decision.grade, stepKey: key.stepKey, body: decision.body, by: decision.by });
       if (outcome.done.revise !== undefined) queueRevision(deps, run, outcome.done.revise.stepKey, outcome.done.revise.feedback, { reviewedBy: key.stepKey }, at);
@@ -440,17 +443,24 @@ function queueRevision(deps: FlowDeps, run: LoadedRun, stepKey: string, feedback
   appendQueued(deps, run, stepKey, seq, ["feedback"], { feedback, ...extra }, "orca-auto", "orca", at);
 }
 
+/** fp1's definition of a step (§6.4): its fields, prompt bytes, skill locks, checks, tools and kind version. */
+function definitionOf(deps: FlowDeps, run: LoadedRun, step: FlowStep, skillLocks: readonly SkillLock[]): string {
+  const kind = kindFor(deps, step);
+  const promptRel = "prompt" in step ? step.prompt : undefined;
+  return definitionHash({
+    step, promptBytes: promptRel === undefined ? "" : run.assets[promptRel] ?? "", skillLocks,
+    checks: "acceptance" in step && step.acceptance !== undefined ? step.acceptance.checks.map((c) => c.run) : [],
+    tools: "tools" in step ? step.tools ?? null : null, kindVersion: kind?.kindVersion ?? 0,
+  });
+}
+
 export function appendQueued(deps: FlowDeps, run: LoadedRun, stepKey: string, seq: number, reasons: string[], extra: Record<string, unknown>, by: string, via: string, at: number): void {
   const step = stepOf(run, stepKey);
   const kind = kindFor(deps, step);
-  const promptRel = "prompt" in step ? step.prompt : undefined;
   appendExecution(deps.store, {
     flowRunId: run.row.id, stepKey, seq, kind: step.kind, kindVersion: kind?.kindVersion ?? 0, state: "queued",
-    definitionHash: definitionHash({
-      step, promptBytes: promptRel === undefined ? "" : run.assets[promptRel] ?? "", skillLocks: [],
-      checks: "acceptance" in step && step.acceptance !== undefined ? step.acceptance.checks.map((c) => c.run) : [],
-      tools: "tools" in step ? step.tools ?? null : null, kindVersion: kind?.kindVersion ?? 0,
-    }),
+    // A step with skills is defined again with their actual locks when it ran (§12.2 phase 1); until then none.
+    definitionHash: definitionOf(deps, run, step, []),
     baseCommit: null, ranOn: null, fingerprint: null, outputKind: null, outputRef: null, outputHash: null, readSetHash: null, reasons, planNo: null, childGroupId: null,
     by, via, createdAt: at, updatedAt: at, body: { basis: {}, retries: 0, retryReason: null, feedback: [], ...extra } satisfies ExecutionBody,
   });

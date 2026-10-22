@@ -5,6 +5,7 @@
  * under the single-call kinds: `start` says what to call, the kernel dispatches it, `collect` judges what came back.
  * The zod schema of each kind is the template schema's (src/flow/template/schema.ts), which drives validation and forms.
  */
+import type { SkillLock } from "../journal/fingerprint.js";
 import type { FlowNeeds } from "../../control/reportedDecisions.js";
 import type { ControlStore } from "../../control/store.js";
 import type { FlowStep, FlowTemplate } from "../template/schema.js";
@@ -33,6 +34,10 @@ export type KindOutcome =
       commit?: { commit: string; parent: string };
       /** §4.3 rule 4: what the agent reported for later `ask` steps (`candidatesFrom`). */
       reported?: { candidates?: Record<string, { items: string[]; recommended: number }> };
+      /** §12.2 phase 1: the skills the execution actually ran with; its definition hash is recomputed with their content_md5. */
+      skillLocks?: SkillLock[];
+      /** Run-page warnings (never a refusal), e.g. a skill lock that is not at the template's pinned ref. */
+      warnings?: string[];
     } }
   | { failed: { reason: string; record?: unknown; flags?: string[] } }
   /** §6.2: a `work` execution's child group is open; the kernel reads how it settles through the child port. */

@@ -208,6 +208,11 @@ export function finishExecution(store: ControlStore, key: ExecutionKey, from: Ex
   if (change.body !== undefined) store.db.prepare("UPDATE step_executions SET body=? WHERE flow_run_id=? AND step_key=? AND seq=?").run(json(change.body), key.flowRunId, key.stepKey, key.seq);
 }
 
+/** §12.2 phase 1: a running execution's definition, once the skills it injected are known (their actual content_md5). */
+export function setDefinitionHash(store: ControlStore, key: ExecutionKey, hash: string): void {
+  store.db.prepare("UPDATE step_executions SET definition_hash=? WHERE flow_run_id=? AND step_key=? AND seq=?").run(hash, key.flowRunId, key.stepKey, key.seq);
+}
+
 export function listHeads(store: ControlStore, flowRunId: string): Record<string, number> {
   return Object.fromEntries(store.db.prepare("SELECT step_key, active_seq FROM step_heads WHERE flow_run_id=?").all(flowRunId).map((row) => [String(row.step_key), Number(row.active_seq)]));
 }

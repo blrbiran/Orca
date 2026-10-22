@@ -1,6 +1,6 @@
 import {hasValidUsageSettlement,settlementArtifact as settlementArtifactBytes} from "./usageSettlement.js";
 import { stackBaseOf } from "./groupEdges.js";
-import { flowGroupRepoId } from "../flow/groups.js";
+import { flowChildSkills, flowGroupRepoId } from "../flow/groups.js";
 import {assertCurrentSavedRecovery,savedRecoveryAccounting} from "./savedResultRecovery.js";
 import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,recoveryClosure} from "./savedResultRecoveryPackage.js";
 import {savedDispatchSchema,savedRecoverySchema,savedResultAdmissionSchema,executionFormatFailureSchema,savedExecutionSnapshotSchema,savedResultCollectionSchema,savedResultSettlementSchema,interruptedSavedResultSchema} from "./savedResultProtocol.js";
@@ -338,16 +338,18 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     await cleanupPredecessor(deps, targetRepo, continued.predecessorRunId);
   }
   const confirmed = readConfirmedTaskExecution(store, run.groupId, run.taskId);
+  // Flow engine spec §12.2 phase 1: a flow step's child injects exactly its step's skills through the same path.
+  const declaredSkills = confirmed.skills ?? flowChildSkills(store, run.groupId);
   let skills: DriveRecord["skills"] = null;
   let skillsKind: string | undefined;
-  if (confirmed.skills !== null) {
+  if (declaredSkills !== null) {
     try {
       skillsKind = (await portFor(deps,run).listAgents()).installations.find(installation=>installation.id===frozenAgent.agent.agent)?.kind;
       if (skillsKind !== "claude" && skillsKind !== "codex" && skillsKind !== "omp") {
         blockRun(deps,runId,"A2",`skills-unsupported-agent:${run.taskId}:${frozenAgent.agent.agent}:${skillsKind ?? "not-in-table"}`);
         return true;
       }
-      skills = await injectRunSkills(deps, targetRepo, runId, confirmed.skills);
+      skills = await injectRunSkills(deps, targetRepo, runId, declaredSkills);
     }
     catch (error) {
       blockRun(deps, runId, "A2", `skills-inject-failed:${error instanceof SyncskillError ? error.code : describeError(error)}`);

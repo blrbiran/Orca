@@ -77,6 +77,8 @@ function importChild(deps: DriverChildPortDeps, request: FlowChildOpen, repoId: 
       body.flow = {
         role: "child", flowRunId: request.flowRunId, parentGroupId: request.parentGroupId, stepKey: request.stepKey, seq: request.seq,
         baseCommit: request.baseCommit, ...(request.effectRecordId === null ? {} : { effectRecordId: request.effectRecordId }),
+        // §12.2 phase 1: the step's own skills, injected by the driver's A2 (flowChildSkills).
+        ...(request.skills.length === 0 ? {} : { skills: [...request.skills] }),
       };
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(body), request.childGroupId);
       // Revision 1 with its projection recorded, as the import command it stands in for would leave it.
@@ -131,9 +133,10 @@ async function childStatus(deps: DriverChildPortDeps, childGroupId: string): Pro
   if (current === null) return { state: "running" };
   const spentTokens = runs.reduce((sum, r) => sum + (r.cumulative?.work?.tokens ?? 0), 0);
   const toolRules = current.drive?.toolRules as ToolRulesReport | undefined;
+  const skills = current.drive?.skills?.lock;
   if (isTerminallyFailedRun(current as Parameters<typeof isTerminallyFailedRun>[0])) {
     const reason = current.drive?.failureCause?.cause ?? `outcome:${current.drive?.outcome ?? "unknown"}`;
-    return { state: "failed", reason, spentTokens, ...(toolRules === undefined ? {} : { toolRules }) };
+    return { state: "failed", reason, spentTokens, ...(toolRules === undefined ? {} : { toolRules }), ...(skills === undefined ? {} : { skills }) };
   }
   if (work?.status !== "done" || current.state !== "settled") return { state: "running" };
   const flowRun = getFlowRun(deps.store, block.flowRunId);
@@ -143,7 +146,7 @@ async function childStatus(deps: DriverChildPortDeps, childGroupId: string): Pro
   // §4.3: what the agent reported under `flow` (the pinned ccloop carries only `decisions` and `debug`: absent until it does).
   const reported = reportedFlowOf(await savedReport(deps.store, current.runId));
   const flow = reported.kind === "object" ? { ...(reported.value.needs === undefined ? {} : { needs: reported.value.needs }), ...(reported.value.candidates === undefined ? {} : { candidates: reported.value.candidates }) } : undefined;
-  return { state: "landed", commit, spentTokens, ...(toolRules === undefined ? {} : { toolRules }), ...(flow === undefined ? {} : { flow }) };
+  return { state: "landed", commit, spentTokens, ...(toolRules === undefined ? {} : { toolRules }), ...(skills === undefined ? {} : { skills }), ...(flow === undefined ? {} : { flow }) };
 }
 
 export function createDriverChildPort(deps: DriverChildPortDeps): FlowChildPort {

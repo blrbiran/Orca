@@ -74,6 +74,12 @@ export function flowGroupRepoId(store: ControlStore, groupId: string): string | 
 /** SQL: the `flow.role` of the group row `alias` ('parent', 'child'), NULL for any other group or a body that does not parse. */
 export const flowRoleSql = (alias: string): string => `(CASE WHEN json_valid(${alias}.body) THEN json_extract(${alias}.body,'$.flow.role') END)`;
 
+/** §12.2 phase 1: the skills a `work` child injects (exactly its step's), as the driver's A2 reads a frozen set; null: none. */
+export function flowChildSkills(store: ControlStore, groupId: string): { profile: null; names: string[] } | null {
+  const block = flowBlockOf(groupBodyOf(store, groupId)) as (FlowGroupBlock & { skills?: unknown }) | null;
+  return block?.role === "child" && Array.isArray(block.skills) && block.skills.length > 0 ? { profile: null, names: block.skills.map(String) } : null;
+}
+
 /** §5.3: a child's work branch starts at the composition it was opened on. */
 export function flowChildStartPoint(store: ControlStore, groupId: string): string | null {
   const block = flowBlockOf(groupBodyOf(store, groupId));

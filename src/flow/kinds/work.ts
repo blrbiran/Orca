@@ -7,6 +7,8 @@
  * The child itself is opened, confirmed and driven behind `FlowChildPort` (the driver-backed port); the kind only says
  * what to open and reads back how it settled.
  */
+import type { LockSkill } from "../../skills/syncskill.js";
+import type { SkillLock } from "../journal/fingerprint.js";
 import { buildFlowStepPlanSource, type FlowStepPlanInput } from "../../control/flowStepPlan.js";
 import type { Amount } from "../../control/types.js";
 import type { FlowNeeds } from "../../control/reportedDecisions.js";
@@ -24,8 +26,8 @@ export interface FlowChildOpen {
 }
 export type FlowChildStatus =
   | { state: "running" }
-  | { state: "landed"; commit: string; spentTokens: number; toolRules?: ToolRulesReport; flow?: { needs?: FlowNeeds; candidates?: Record<string, { items: string[]; recommended: number }> } }
-  | { state: "failed"; reason: string; spentTokens: number; toolRules?: ToolRulesReport };
+  | { state: "landed"; commit: string; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[]; flow?: { needs?: FlowNeeds; candidates?: Record<string, { items: string[]; recommended: number }> } }
+  | { state: "failed"; reason: string; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[] };
 /** The driver-backed side of a work step: open (idempotent per child id) and read how the child is doing. */
 export interface FlowChildPort {
   open(request: FlowChildOpen): Promise<void>;
@@ -80,14 +82,30 @@ async function start(ctx: KindContext): Promise<KindOutcome> {
   return { dispatched: { childGroupId, baseCommit: composition.commit } };
 }
 
+/**
+ * §12.2 phase 1: what the child injected, as fingerprints read it (the actual content_md5), and a warning -- never a
+ * refusal -- for each skill whose lock's resolved_commit is not the `ref` the template's `requires.skills` names.
+ */
+export function skillLocksOf(ctx: KindContext, lock: readonly LockSkill[] | undefined): { skillLocks: SkillLock[]; warnings: string[] } {
+  const required = ctx.run.template.requires?.skills ?? [];
+  const warnings: string[] = [];
+  for (const entry of lock ?? []) {
+    const pin = required.find((r) => r.skills.includes(entry.name));
+    if (pin !== undefined && entry.resolved_commit !== pin.ref) warnings.push(`skill-ref-mismatch:${entry.name}`);
+  }
+  return { skillLocks: (lock ?? []).map((e) => ({ sourceId: e.source?.name ?? "", resolvedCommit: e.resolved_commit ?? "", contentMd5: e.content_md5 })), warnings };
+}
+
 /** How the settled child ends the step: its landed commit is the output; the tool-rule report is kept per execution. */
-function settle(_ctx: KindContext, status: Exclude<FlowChildStatus, { state: "running" }>, baseCommit: string): KindOutcome {
+function settle(ctx: KindContext, status: Exclude<FlowChildStatus, { state: "running" }>, baseCommit: string): KindOutcome {
   const flags = toolRuleFlags(status.toolRules);
-  const record = { toolRules: status.toolRules ?? null };
+  const { skillLocks, warnings } = skillLocksOf(ctx, status.skills);
+  const record = { toolRules: status.toolRules ?? null, ...(status.skills === undefined ? {} : { skills: status.skills }), ...(warnings.length === 0 ? {} : { warnings }) };
   if (status.state === "failed") return { failed: { reason: status.reason, record, ...(flags.length === 0 ? {} : { flags }) } };
   if (status.flow?.needs !== undefined) return { needs: status.flow.needs };
   return { done: {
     record, commit: { commit: status.commit, parent: baseCommit }, ...(flags.length === 0 ? {} : { flags }),
+    ...(status.skills === undefined ? {} : { skillLocks }), ...(warnings.length === 0 ? {} : { warnings }),
     ...(status.flow?.candidates === undefined ? {} : { reported: { candidates: status.flow.candidates } }),
   } };
 }
