@@ -57,7 +57,21 @@ describe("the run page's read (Task 16, §16.2)", () => {
       expect(step.latest!.flags).toEqual(["tool-rule:detected"]);
       expect(step.executions.map((e) => [e.seq, e.state])).toEqual([[1, "done"]]);
       const list = readFlowList(w.store) as { runs: Array<{ flowRunId: string; projectId: string | null; dir: string | null }> };
-      expect(list.runs).toEqual([expect.objectContaining({ flowRunId, projectId: null, dir: w.folder })]);
+      expect(list.runs).toEqual([expect.objectContaining({ flowRunId, projectId: null, dir: w.folder, needsYou: 0 })]);
+    } finally { await w.dispose(); }
+  });
+
+  it("counts the steps waiting on the person in the run list (the kanban card's needs-you)", async () => {
+    const children = fakeChildPort();
+    const w = await flowWorld({ w: { yaml: YAML, assets: { "p.md": "Write.\n" } } }, { children: children.port });
+    try {
+      const { flowRunId } = await w.start({ templateRef: "builtin/w" });
+      await w.advance();
+      children.land(childGroupIdOf(flowRunId, "write", 1), { "a.md": "a\n" }, { flow: { needs: { kind: "input", question: "Which tone?", candidates: [] } } });
+      await w.advance();
+      expect(w.latest(flowRunId, "write")!.state).toBe("needs-person");
+      // mutation: count nothing -> 0, red
+      expect((readFlowList(w.store) as { runs: Array<{ needsYou: number }> }).runs[0]!.needsYou).toBe(1);
     } finally { await w.dispose(); }
   });
 });

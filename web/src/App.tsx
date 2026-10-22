@@ -142,7 +142,7 @@ import type { Section } from "./sections.js";
 import { GlobalSettings } from "./GlobalSettings.js";
 import { ProjectSettings } from "./ProjectSettings.js";
 import { SectionPane, Shell, controlAlert } from "./Shell.js";
-import { BoardView } from "./BoardView.js";
+import { FlowBoard } from "./FlowBoard.js";
 import { applyTheme, readTheme, writeTheme } from "./theme.js";
 import type { ThemePref } from "./theme.js";
 import { acceptArrival } from "./selection.js";
@@ -1642,7 +1642,7 @@ export function App(): JSX.Element {
       <SectionPane section="board" active={section}>
         {/* Mounted only while shown: its cards would otherwise duplicate the Task control list's buttons in every pane. */}
         {section !== "board" ? null : controlConfig === null || control.recovery === null ? <p className="empty">{t("control.unavailable")}</p> : (
-          <BoardView groups={summaryView(control).groups} scope={scope} repoLabel={repoLabel}
+          <FlowBoard groups={summaryView(control).groups} scope={scope} repoLabel={repoLabel}
             onOpen={(group) => {
               navigationSeq.current++; setOverviewFocus(null);
               if (group.state === "clarifying") { setSelectedRequirement(group.groupId); setSection("requirements"); window.location.hash = "requirements"; void readRequirement(group.groupId); return; }

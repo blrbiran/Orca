@@ -114,6 +114,10 @@ export const zh: Translation<typeof en> = {
     dropRefused: "{{groupId}} 不能拖到“{{column}}”：拖拽只能暂停、恢复、归档和取消归档。",
     column: { clarifying: "澄清中", "awaiting-confirmation": "待确认", queued: "排队中", running: "运行中", "needs-you": "需要你", done: "已完成", archived: "已归档" },
     card: {
+      flowTemplate: "流程：{{template}}",
+      flowNeedsYou_one: "{{count}} 个步骤等你处理",
+      flowNeedsYou_other: "{{count}} 个步骤等你处理",
+      flowPool: "已提取 {{drawn}}，共 {{pool}} token",
       waitingFor: "等待 {{groups}}",
       waitingSlot: "等待空位",
       held: "只确认，未开跑",
@@ -955,6 +959,14 @@ export const zh: Translation<typeof en> = {
   },
   // Flow engine spec §14.1 (plan Task 16): a flow run's page.
   flow: {
+    start: {
+      title: "启动一个流程",
+      template: "内置模板",
+      dir: "文件夹（绝对路径）",
+      params: "参数，每行一个 键=值",
+      unattended: "无人值守：没人回答；取默认值并记成决定",
+      send: "启动",
+    },
     page: "流程运行 {{title}}",
     back: "回到看板",
     unread: "读不到这次流程运行；读到之前什么都不显示。",

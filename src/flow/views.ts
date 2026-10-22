@@ -27,7 +27,7 @@ export interface FlowExecutionViewV1 {
 /** Task 16: the run list (`orca flow list`, the kanban's flow cards); paired with the Web's copy (webParity). */
 export interface FlowListV1 {
   schema: "orca-flow-list-v1";
-  runs: Array<{ flowRunId: string; groupId: string; templateRef: string; state: string; poolTokens: number; poolDrawn: number; projectId: string | null; dir: string | null }>;
+  runs: Array<{ flowRunId: string; groupId: string; templateRef: string; state: string; poolTokens: number; poolDrawn: number; projectId: string | null; dir: string | null; needsYou: number }>;
 }
 
 export function readFlowList(store: ControlStore): FlowListV1 {
@@ -41,6 +41,8 @@ export function readFlowList(store: ControlStore): FlowListV1 {
         flowRunId: row.id, groupId: row.groupId, templateRef: row.templateRef, state: row.state, poolTokens: row.poolTokens, poolDrawn: row.poolDrawn,
         // Task 16: the kanban card's project scope (a run's settings layer) and its folder.
         projectId: body.projectId ?? null, dir: body.dir ?? null,
+        // Steps whose newest execution waits on the person (an ask, a confirm card, a question, an exhausted pool).
+        needsYou: [...latestByStep(listExecutions(store, row.id)).values()].filter((e) => e.state === "needs-person" || e.state === "parked").length,
       };
     }),
   };

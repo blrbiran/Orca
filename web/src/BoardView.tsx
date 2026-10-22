@@ -8,7 +8,7 @@ import { useState } from "react";
 import type { DragEvent, JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
-import type { GroupSummaryV1 } from "./controlTypes.js";
+import type { FlowListV1, GroupSummaryV1 } from "./controlTypes.js";
 import { BOARD_COLUMNS, boardColumn, boardDrop, needsAttention, type BoardColumn } from "./groupCategory.js";
 import { GroupGraph } from "./GroupGraph.js";
 import { currentLanguage, enumText } from "./i18n.js";
@@ -22,6 +22,32 @@ export interface BoardViewProps {
   repoLabel?: (repoId: string) => string;
   onOpen: (group: GroupSummaryV1) => void;
   onCommand: (action: ControlAction) => void;
+  /** Flow engine spec §14.1: flow runs, each a card for its parent with a template badge (children are never cards). */
+  flows?: FlowListV1["runs"];
+  onOpenFlow?: (flowRunId: string) => void;
+}
+
+type FlowRun = FlowListV1["runs"][number];
+/** A flow run's column: waiting on the person, running, or finished (stopped runs end there too, with their state). */
+export function flowColumn(run: FlowRun): BoardColumn {
+  if (run.state === "paused" || run.needsYou > 0) return run.state === "done" || run.state === "stopped" ? "done" : "needs-you";
+  return run.state === "done" || run.state === "stopped" ? "done" : "running";
+}
+/** The template's id from its ref (`builtin/<id>@<version>`). */
+const templateOf = (ref: string): string => ref.replace(/^builtin\//, "").replace(/@\d+$/, "");
+
+function FlowCard(props: { run: FlowRun; onOpen: () => void }): JSX.Element {
+  const { t } = useTranslation();
+  const { run } = props;
+  return (
+    <li className="board-card" data-testid={`board-flow-${run.flowRunId}`}>
+      <button type="button" className="board-card-open" onClick={props.onOpen}>{run.flowRunId} · {t(`flow.state.${run.state}`, { defaultValue: run.state })}</button>
+      <span className="badge" data-tone="info" data-testid="board-flow-badge">{t("board.card.flowTemplate", { template: templateOf(run.templateRef) })}</span>
+      {run.dir !== null && <p className="board-card-goal">{run.dir}</p>}
+      {run.needsYou > 0 && <p className="detail-note" data-testid="board-card-reason">{t("board.card.flowNeedsYou", { count: run.needsYou })}</p>}
+      <p className="detail-note">{t("board.card.flowPool", { drawn: shortTokens(run.poolDrawn), pool: shortTokens(run.poolTokens) })}</p>
+    </li>
+  );
 }
 
 /** Why a needs-you card needs the person, in the order the list's attention rule checks it. */
@@ -89,6 +115,8 @@ export function BoardView(props: BoardViewProps): JSX.Element {
   const scope = props.scope;
   if (scope.kind === "unresolved") return <p role="note">{t("project.listUnavailable")}</p>;
   const groups = props.groups.filter((group) => inScope(scope, group.repoId));
+  // A run on a folder belongs to no project (null): it is shown in every scope; one tied to a project, in that project's.
+  const flows = (props.flows ?? []).filter((run) => run.projectId === null || inScope(scope, run.projectId));
   const label = (repoId: string): string => (scope.kind === "all" ? ` · ${props.repoLabel?.(repoId) ?? repoId}` : "");
   const columns = BOARD_COLUMNS.filter((column) => column !== "archived" || showArchived);
 
@@ -120,12 +148,14 @@ export function BoardView(props: BoardViewProps): JSX.Element {
         <div className="board-columns">
           {columns.map((column) => {
             const cards = groups.filter((group) => boardColumn(group) === column);
+            const flowCards = flows.filter((run) => flowColumn(run) === column);
             return (
               <section key={column} className="board-column" aria-label={t(`board.column.${column}` as const)} data-column={column}
                 onDragOver={(event) => event.preventDefault()} onDrop={drop(column)}>
-                <h3>{t(`board.column.${column}` as const)} <span className="nav-count">{cards.length}</span></h3>
+                <h3>{t(`board.column.${column}` as const)} <span className="nav-count">{cards.length + flowCards.length}</span></h3>
                 <ul>
                   {cards.map((group) => <BoardCard key={group.groupId} group={group} repoText={label(group.repoId)} onOpen={() => props.onOpen(group)} />)}
+                  {flowCards.map((run) => <FlowCard key={run.flowRunId} run={run} onOpen={() => props.onOpenFlow?.(run.flowRunId)} />)}
                 </ul>
               </section>
             );

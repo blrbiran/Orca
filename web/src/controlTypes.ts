@@ -1019,7 +1019,7 @@ export type FlowSettingsReadV1 = {
 };
 export type FlowListV1 = {
   schema: "orca-flow-list-v1";
-  runs: Array<{ flowRunId: string; groupId: string; templateRef: string; state: string; poolTokens: number; poolDrawn: number; projectId: string | null; dir: string | null }>;
+  runs: Array<{ flowRunId: string; groupId: string; templateRef: string; state: string; poolTokens: number; poolDrawn: number; projectId: string | null; dir: string | null; needsYou: number }>;
 };
 export type FlowToolRuleStatusV1 = "enforced" | "detected" | "recorded-only" | "refused";
 export type FlowToolRulesReportV1 = {

@@ -245,6 +245,10 @@ export const en = {
     dropRefused: "{{groupId}} cannot be moved to {{column}}: only pause, resume, archive and unarchive can be done by dragging.",
     column: { clarifying: "Clarifying", "awaiting-confirmation": "Awaiting confirmation", queued: "Queued", running: "Running", "needs-you": "Needs you", done: "Done", archived: "Archived" },
     card: {
+      flowTemplate: "flow: {{template}}",
+      flowNeedsYou_one: "{{count}} step waits for you",
+      flowNeedsYou_other: "{{count}} steps wait for you",
+      flowPool: "{{drawn}} of {{pool}} tokens drawn",
       waitingFor: "waiting for {{groups}}",
       waitingSlot: "waiting for a slot",
       held: "confirmed only, not started",
@@ -1085,6 +1089,14 @@ export const en = {
   },
   // Flow engine spec §14.1 (plan Task 16): a flow run's page.
   flow: {
+    start: {
+      title: "Start a flow",
+      template: "Built-in template",
+      dir: "Folder (absolute path)",
+      params: "Parameters, one key=value per line",
+      unattended: "Unattended: nobody answers; defaults are taken and recorded as decisions",
+      send: "Start",
+    },
     page: "Flow run {{title}}",
     back: "Back to the board",
     unread: "The flow run could not be read; showing nothing until it can.",
