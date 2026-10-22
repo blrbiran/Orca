@@ -101,6 +101,12 @@ describe("locate / loc1 (§4.3, G1)", () => {
     expect(readingFile(fs)).toEqual({ ambiguous: ["a.md", "b.md"] });
     expect(readingFile([file("a.md", "", 0), file("b.md", "", 2)])).toMatchObject({ file: { path: "b.md" } });
   });
+  it("an ordinal that exists in only one of several files by the reading writer is still ambiguous", () => {
+    const fs = [file("a.md", "甲。\n\n乙。", 1, "w"), file("b.md", "丙。", 1, "w")];
+    const [r] = locate([{ paragraph: 2 }], fs);
+    expect(r).not.toHaveProperty("located");
+    expect(r).toMatchObject({ hits: [{ file: "a.md", paragraph: 2 }] });
+  });
   it("caps hits at 5 and says how many are not shown", () => {
     const f = [file("a.md", Array.from({ length: 8 }, () => "完全相同的一整句话。").join("\n\n"))];
     const [r] = locate([{ quote: "完全相同的一整句话" }], f);
