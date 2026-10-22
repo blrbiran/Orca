@@ -53,6 +53,14 @@ export function flowGroupOf(store: ControlStore, groupId: string): (FlowGroupBlo
   return { ...block, workspaceKind: String(workspace.kind), vaultId: run.vault_id === null ? null : String(run.vault_id) };
 }
 
+/**
+ * A flow run's hidden child. Its checks are the template's (code-owned), and the files they name are the step's own
+ * inputs and outputs, so protect-acceptance-criteria does not judge it (T18 acceptance finding).
+ */
+export function isFlowChildGroup(store: ControlStore, groupId: string): boolean {
+  return flowBlockOf(groupBodyOf(store, groupId))?.role === "child";
+}
+
 /** §6.2, §9.6: refuse a task-level retry or continuation on a flow run's hidden child. */
 export function refuseFlowChild(store: ControlStore, groupId: string): void {
   if (flowBlockOf(groupBodyOf(store, groupId))?.role === "child") throw new ControlError(FLOW_CHILD_MANAGED, groupId);

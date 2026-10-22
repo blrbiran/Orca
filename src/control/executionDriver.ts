@@ -1,6 +1,6 @@
 import {hasValidUsageSettlement,settlementArtifact as settlementArtifactBytes} from "./usageSettlement.js";
 import { stackBaseOf } from "./groupEdges.js";
-import { flowChildSkills, flowGroupRepoId } from "../flow/groups.js";
+import { flowChildSkills, flowGroupRepoId, isFlowChildGroup } from "../flow/groups.js";
 import { withSkillDirs } from "../flow/template/vars.js";
 import {assertCurrentSavedRecovery,savedRecoveryAccounting} from "./savedResultRecovery.js";
 import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,recoveryClosure} from "./savedResultRecoveryPackage.js";
@@ -677,7 +677,8 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   // Protect-acceptance-criteria spec §4.2 / §7a.1: an attempt that modified (not only added to, not weakened) the files
   // defining its checks has its required checks re-run with the base versions of those files, off the driver round and
   // under the same marker as the reproduce-first check. A weakening is flagged whatever the re-run says, so it is not run.
-  if (!measured.empty) {
+  // A flow run's hidden child is never judged (its checks are the template's; driverLanding.criteriaFlagOf), so not re-run.
+  if (!measured.empty && !isFlowChildGroup(store, run.groupId)) {
     const workdir = join(drive.sourceDir, "repo");
     const change = await classifyCriteriaChange(workdir, drive.base!, attemptSha, contract.verification.requiredChecks);
     if (change.kind === "modified") {

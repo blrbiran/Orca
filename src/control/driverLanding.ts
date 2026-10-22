@@ -14,7 +14,7 @@ import { flagDecision } from "./flaggedDecisions.js";
 import { ORCHESTRATION_ACTOR } from "./orchestration.js";
 import { reportedDecisionsOf, type ReportedDecisions } from "./reportedDecisions.js";
 import { ccloopEvidenceString, runEvidence, runLedgerEvents, writeRunLedger, type PendingEntry } from "./runLedger.js";
-import { flowGroupOf, isDirFlowGroup } from "../flow/groups.js";
+import { flowGroupOf, isDirFlowGroup, isFlowChildGroup } from "../flow/groups.js";
 import { appendFlowDecision } from "../flow/store.js";
 import { commitLedgerOnGroupBranch, exportLedgerDir, treeWithLedgerFiles } from "./ledgerTree.js";
 import { readDebugMark, type ClosingRecord } from "./debugChecks.js";
@@ -214,6 +214,8 @@ async function criteriaFlagOf(deps: ExecutionDriverDeps, run: DriverRun, repo: s
   if (run.taskId === null || base == null || attempt == null) return null;
   // Checks spec 2026-10-22 §6.1 step 4: a model review writes only its findings file; its check names that file.
   if (run.groupId.startsWith("sysreview-")) return null;
+  // A flow step's checks are its template's, never files of the folder: a hidden child is not judged (T18).
+  if (isFlowChildGroup(deps.store, run.groupId)) return null;
   const checks = readConfirmedTaskExecution(deps.store, run.groupId, run.taskId).contract.verification.requiredChecks;
   const change = await classifyCriteriaChange(repo, base, attempt, checks);
   if (!flagged(change)) return null;
