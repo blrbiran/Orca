@@ -27,7 +27,7 @@ const isRootConfig = (p) =>
 // web/tests/setup.ts is web/vite.config.ts's setupFiles entry: it runs before every web test.
 const WEB_CONFIG = new Set(["web/package.json", "web/vite.config.ts", "web/tsconfig.json", "web/tests/setup.ts"]);
 // Text read by tests, which no module graph can see. A short explicit table; anything else read as text is a known gap.
-const TEXT_READERS = [["skills/", "tests/entry/"], [".decisions/", "tests/ledger/validateFile.test.ts"]];
+const TEXT_READERS = [["skills/", "tests/entry/"], [".decisions/", "tests/ledger/validateFile.test.ts"], ["flows/", "tests/flow/"]];
 const CODE = /\.[cm]?[jt]sx?$/;
 
 function fail(message) {

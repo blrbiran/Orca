@@ -55,10 +55,12 @@ const GRAPH: Record<string, string> = {
   "tests/entry/cli.test.ts": T(""),
   "tests/scripts/s.test.ts": T(""),
   "tests/ledger/validateFile.test.ts": T(""),
+  "tests/flow/kernel.test.ts": T(""),
   "tests/panel/parity.test.ts": T(`import { w } from "../../web/src/w.js";\nvoid w;`),
   "tests/setup/env.ts": "export {};\n",
   ".decisions/d1.json": "{}\n",
   "skills/x/SKILL.md": "# x\n",
+  "flows/builtin/x/template.yaml": "format: orca-flow-v1\n",
   "docs/readme.md": "# readme\n",
   "web/package.json": `{ "type": "module" }\n`,
   "web/vite.config.ts": `export default { test: { include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"], setupFiles: ["tests/setup.ts"] } };\n`,
@@ -195,7 +197,7 @@ describe("selection rows (dry run against the real module graph)", () => {
     expect(r.out).toContain("typecheck: npm run typecheck\n");
   });
 
-  it("text read by tests: skills/** selects tests/entry, .decisions/** selects the ledger file validator", () => {
+  it("text read by tests: skills/** selects tests/entry, .decisions/** selects the ledger file validator, flows/** the flow tests", () => {
     const skills = graphRepo();
     write(skills, "skills/x/SKILL.md", "# changed\n");
     commit(skills);
@@ -204,6 +206,11 @@ describe("selection rows (dry run against the real module graph)", () => {
     write(ledger, ".decisions/d2.json", "{}\n");
     commit(ledger);
     expect(dry(ledger).files).toEqual(["root tests/ledger/validateFile.test.ts"]);
+    // Flow engine plan Task 14: a built-in template or prompt (flows/**) is read as text by the flow tests.
+    const flows = graphRepo();
+    write(flows, "flows/builtin/x/prompts/p.md", "Write.\n");
+    commit(flows);
+    expect(dry(flows).files).toEqual(["root tests/flow/kernel.test.ts"]);
   });
 
   it("a config file selects the whole suite explicitly: root config the root suite, web config the web suite", () => {
