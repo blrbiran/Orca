@@ -121,6 +121,27 @@ export async function writeRunLedger(
   return { writtenIds, pending };
 }
 
+/**
+ * Flow engine spec §6.2: the same entries writeRunLedger would write, normalised the same way, without a file -- a `dir`
+ * flow group's landing writes them to `flow_decisions` instead of `.decisions/`. Refused entries are pending as there.
+ */
+export function runLedgerEvents(input: { ledgerRun: string; reported: ReportedDecisions; codeAuthored: DecisionEvent[]; at: string; evidence: string[] }): { events: DecisionEvent[]; pending: PendingEntry[] } {
+  const { ledgerRun, reported, codeAuthored, at, evidence } = input;
+  const events: DecisionEvent[] = [...codeAuthored];
+  const pending: PendingEntry[] = [];
+  const refuse = (entryIndex: number, entry: unknown, reason: string): void => {
+    pending.push({ pendingId: pendingIdOf(ledgerRun, entryIndex), ledgerRun, entryIndex, entry, reason, at, evidence });
+  };
+  if (reported.kind === "malformed") refuse(0, reported.value, "decisions-not-array");
+  else if (reported.kind === "array") {
+    reported.entries.forEach((entry, index) => {
+      const r = normalizeAgentEntry(entry, { ledgerRun, entryIndex: index, at, evidence });
+      if (r.ok) events.push(r.event); else refuse(index, entry, r.reason);
+    });
+  }
+  return { events, pending };
+}
+
 export function runEvidence(runId: string, attemptSha: string, ccloop: string): string[] {
   return [`run ${runId}`, `attempt ${attemptSha}`, ccloop];
 }

@@ -178,6 +178,9 @@ export const driveRecordSchema = z.object({
   // Protect-acceptance-criteria spec 2026-10-21 §4.3: the flag on this run's `criteria` decision, staged beside
   // `stagedPending` before the swap and written by the landing's write (then cleared). Null when nothing is flagged.
   stagedCriteriaFlag: z.object({ decisionId: z.string().min(1), reason: z.string().min(1), evidence: z.array(z.string()) }).strict().nullable().default(null),
+  // Flow engine spec §6.2: a `dir` flow group's normalised decisions, staged before the swap and written to `flow_decisions`
+  // by the landing's write (then cleared). Absent for every other run, so their drive records are unchanged.
+  stagedFlowDecisions: z.array(z.unknown()).optional(),
   // Protect-acceptance-criteria spec §4.2: the required checks run with the base versions of the changed check-defining
   // files over the attempt -- `passed` (the code meets the old criteria too), or `failed` with the first command that did
   // not exit 0 (failed and could-not-run are not told apart, §7a.4). Null when no re-run happened.

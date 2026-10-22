@@ -13,7 +13,9 @@ import { insertPendingDecisions } from "./pendingDecisions.js";
 import { flagDecision } from "./flaggedDecisions.js";
 import { ORCHESTRATION_ACTOR } from "./orchestration.js";
 import { reportedDecisionsOf, type ReportedDecisions } from "./reportedDecisions.js";
-import { ccloopEvidenceString, runEvidence, writeRunLedger, type PendingEntry } from "./runLedger.js";
+import { ccloopEvidenceString, runEvidence, runLedgerEvents, writeRunLedger, type PendingEntry } from "./runLedger.js";
+import { flowGroupOf, isDirFlowGroup } from "../flow/groups.js";
+import { appendFlowDecision } from "../flow/store.js";
 import { commitLedgerOnGroupBranch, exportLedgerDir, treeWithLedgerFiles } from "./ledgerTree.js";
 import { readDebugMark, type ClosingRecord } from "./debugChecks.js";
 import { writeDebugClosing } from "./debugClosing.js";
@@ -83,7 +85,23 @@ function landedWithPending(store: ControlStore, run: DriverRun): void {
     // is written once at open and never removed). The guard keeps a group body from gaining a bare `debug` field.
     if (readDebugMark(group) !== null) saveGroup(store, { ...group, debug: { ...group.debug, closing } } as typeof group);
   }
-  run.drive = { ...run.drive!, stagedPending: [], stagedDebugClosing: null, stagedCriteriaFlag: null };
+  // Flow engine spec §6.2: a `dir` flow group's decisions go to `flow_decisions` in this same write, not to `.decisions/`.
+  const flowDecisions = run.drive!.stagedFlowDecisions;
+  if (flowDecisions !== undefined && flowDecisions.length > 0) writeFlowDecisions(store, run.groupId, flowDecisions as DecisionEvent[]);
+  run.drive = { ...run.drive!, stagedPending: [], stagedDebugClosing: null, stagedCriteriaFlag: null, ...(flowDecisions === undefined ? {} : { stagedFlowDecisions: [] }) };
+}
+
+/** §6.2: one `flow_decisions` row per decision, graded as the ledger reads it (absent importance is major), by orca-auto. */
+function writeFlowDecisions(store: ControlStore, groupId: string, events: readonly DecisionEvent[]): void {
+  const flow = flowGroupOf(store, groupId);
+  if (flow === null) throw new ControlError("recovery-blocked", `flow-group-missing:${groupId}`);
+  for (const event of events) appendFlowDecision(store, { flowRunId: flow.flowRunId, grade: event.importance ?? "major", stepKey: flow.stepKey ?? "", body: event, by: ORCHESTRATION_ACTOR });
+}
+
+/** §6.2 recovery probe: the rows a landing of `runId` already wrote (only that write writes them, with the landing). */
+function flowDecisionsWritten(store: ControlStore, groupId: string, runId: string): boolean {
+  const flow = flowGroupOf(store, groupId);
+  return flow !== null && store.db.prepare("SELECT 1 FROM flow_decisions WHERE flow_run_id=? AND json_extract(body,'$.run')=? LIMIT 1").get(flow.flowRunId, runId) !== undefined;
 }
 
 type GroupWithMark = ReturnType<typeof readGroup> & { debug: Record<string, unknown> };
@@ -104,6 +122,21 @@ export async function recordEmptyResultDecisions(deps: ExecutionDriverDeps, runI
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
   catch { blockRun(deps, runId, "E", "repository-path"); return "blocked"; }
+  // Flow engine spec §6.2: a `dir` flow group makes no ledger-only commit; its decisions are written to `flow_decisions` in
+  // the write that records the result, and a replay that finds them there writes none again.
+  if (isDirFlowGroup(store, run.groupId)) {
+    const { reported, evidence, at } = await runLedgerInputs(deps, runId);
+    const { events, pending } = runLedgerEvents({ ledgerRun: runId, reported, codeAuthored: [], at, evidence });
+    write(deps, () => {
+      const current = readDriverRun(store, runId);
+      if (current.state !== "landed") return;
+      if (!flowDecisionsWritten(store, current.groupId, runId)) current.drive = { ...current.drive!, stagedPending: pending, stagedFlowDecisions: events };
+      landedWithPending(store, current);
+      current.drive = { ...current.drive!, ledgerCommit: null };
+      saveDriverRun(store, current);
+    });
+    return "settle";
+  }
   const name = `${runId}.jsonl`;
   const subject = `orca: decisions ${runId}`;
   const tip = await revParse(targetRepo, workBranchRef(run.groupId));
@@ -162,10 +195,10 @@ export async function runLedgerInputs(deps: ExecutionDriverDeps, runId: string):
  * Control run decisions: the run's refused decisions, replacing whatever an earlier landing attempt staged. Debug task
  * plan Task 9: a debug run's closing record is staged (and replaced) with them; every other landing stages none.
  */
-export function stagePending(deps: ExecutionDriverDeps, runId: string, pending: PendingEntry[], closing: ClosingRecord | null = null, criteria: CriteriaFlag | null = null): void {
+export function stagePending(deps: ExecutionDriverDeps, runId: string, pending: PendingEntry[], closing: ClosingRecord | null = null, criteria: CriteriaFlag | null = null, flowDecisions?: DecisionEvent[]): void {
   write(deps, () => {
     const run = readDriverRun(deps.store, runId);
-    run.drive = { ...run.drive!, stagedPending: pending, stagedDebugClosing: closing, stagedCriteriaFlag: criteria };
+    run.drive = { ...run.drive!, stagedPending: pending, stagedDebugClosing: closing, stagedCriteriaFlag: criteria, ...(flowDecisions === undefined ? {} : { stagedFlowDecisions: flowDecisions }) };
     saveDriverRun(deps.store, run);
   });
 }
@@ -261,14 +294,21 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string): Promise<b
     const { reported, evidence, at } = await runLedgerInputs(deps, runId);
     // Protect-acceptance-criteria spec §4: what the attempt did to the files that define its checks, read from git.
     const criteria = await criteriaFlagOf(deps, run, landing, at);
-    const { writtenIds, pending } = await writeRunLedger(join(landing, ".decisions"), { ledgerRun: runId, reported, codeAuthored: criteria === null ? [] : [criteria.decision], at, evidence });
-    if (writtenIds.length > 0) await git(landing, [...QUIET_GIT, "add", "-f", join(".decisions", `${runId}.jsonl`)]);
+    const codeAuthored = criteria === null ? [] : [criteria.decision];
+    // Flow engine spec §6.2: a `dir` flow group's decisions are staged for `flow_decisions`; its landing commits no ledger file.
+    let flowDecisions: DecisionEvent[] | undefined, pending: PendingEntry[];
+    if (isDirFlowGroup(store, run.groupId)) ({ events: flowDecisions, pending } = runLedgerEvents({ ledgerRun: runId, reported, codeAuthored, at, evidence }));
+    else {
+      const ledger = await writeRunLedger(join(landing, ".decisions"), { ledgerRun: runId, reported, codeAuthored, at, evidence });
+      pending = ledger.pending;
+      if (ledger.writtenIds.length > 0) await git(landing, [...QUIET_GIT, "add", "-f", join(".decisions", `${runId}.jsonl`)]);
+    }
     // Debug task plan Task 9: a debug run's closing rows ride the same commit (same -f).
     const closing = await debugClosingOf(deps, run, targetRepo, join(landing, ".decisions"), old);
     if (closing?.written != null) await git(landing, [...QUIET_GIT, "add", "-f", join(".decisions", closing.written)]);
     await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "commit", "--no-edit", "-m", `orca: land ${runId}`]);
     // Before the swap: a death after it finds the landing, skips this produce and still has these for markLanded.
-    stagePending(deps, runId, pending, closing?.record ?? null, criteria?.flag ?? null);
+    stagePending(deps, runId, pending, closing?.record ?? null, criteria?.flag ?? null, flowDecisions);
     return revParse(landing, "HEAD");
   });
   if (landed.kind === "not-produced") return beginReconcile(deps, runId, targetRepo, old);
