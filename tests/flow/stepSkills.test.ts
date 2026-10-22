@@ -13,6 +13,7 @@ import { stepA1, stepA2 } from "../../src/control/executionDriver.js";
 import { definitionHash } from "../../src/flow/journal/fingerprint.js";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { insertFlowRun } from "../../src/flow/store.js";
+import { readCanonicalRecord } from "../../src/control/snapshot.js";
 import type { SyncskillOptions } from "../../src/skills/syncskill.js";
 import { FIXTURE_OTHER_AGENT_ID } from "../control/fixtures/agents.js";
 import { driverHarness } from "../control/fixtures/driverHarness.js";
@@ -58,6 +59,32 @@ describe("per-step skills (§12.2 phase 1)", () => {
         expect(drive.skills.lock.map((l: { name: string; content_md5: string }) => [l.name, l.content_md5])).toEqual([["alpha", "md5-alpha"], ["beta", "md5-beta"]]);
       }
       // A2 leaves the snapshot read-only; give write back so the harness can remove it.
+      const { chmodSync, readdirSync, lstatSync } = await import("node:fs");
+      const restore = (path: string): void => { let s; try { s = lstatSync(path); } catch { return; } if (s.isSymbolicLink()) return; chmodSync(path, 0o700); if (s.isDirectory()) for (const e of readdirSync(path)) restore(join(path, e)); };
+      cleanups.push(async () => restore(`${t.h.store.stateDir}.workspaces`));
+    }
+  });
+
+  it("§12.1: A2 fills a flow child's {{skill.<name>.dir}} with the copy it injected; a skill it did not inject blocks", { timeout: 60_000 }, async () => {
+    for (const [check, blocked] of [["test -d '{{skill.alpha.dir}}'", null], ["test -d '{{skill.gamma.dir}}'", "flow-skill-dir-unknown:gamma"]] as const) {
+      const fake = await fakeSyncskill();
+      const t = await driverHarness([{ taskId: "a", agent: { agent: FIXTURE_OTHER_AGENT_ID } }], { syncskill: fake.o, requiredChecks: [check] });
+      cleanups.push(() => t.h.dispose());
+      t.h.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES ('parent',1,1,1,?)").run(JSON.stringify({ groupId: "parent", flow: { role: "parent", flowRunId: "fr-1" } }));
+      insertFlowRun(t.h.store, { id: "fr-1", groupId: "parent", templateRef: "builtin/x", templateSha256: "t", workspace: { projectId: null, kind: "dir" }, vaultId: "f".repeat(64), paramsSha256: "p", poolTokens: 1, poolDrawn: 0, state: "running", revision: 0, body: {} });
+      const body = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...body, flow: { role: "child", flowRunId: "fr-1", parentGroupId: "parent", stepKey: "write", seq: 1, skills: ["alpha", "beta"] } }));
+      const runId = await t.claim();
+      expect(stepA1(t.deps, runId)).toBe(true);
+      expect(await stepA2(t.deps, runId)).toBe(true);
+      const record = t.body(runId);
+      if (blocked !== null) {
+        expect(record.state).toBe("blocked");
+        expect(JSON.stringify(record)).toContain(blocked);
+      } else {
+        const envelope = JSON.parse(readCanonicalRecord(t.h.store, record.drive.envelopeHash)) as { work: { contract: { verification: { requiredChecks: string[] } } } };
+        expect(envelope.work.contract.verification.requiredChecks).toEqual([`test -d '${record.drive.skills.dir}/skills/alpha'`]);
+      }
       const { chmodSync, readdirSync, lstatSync } = await import("node:fs");
       const restore = (path: string): void => { let s; try { s = lstatSync(path); } catch { return; } if (s.isSymbolicLink()) return; chmodSync(path, 0o700); if (s.isDirectory()) for (const e of readdirSync(path)) restore(join(path, e)); };
       cleanups.push(async () => restore(`${t.h.store.stateDir}.workspaces`));

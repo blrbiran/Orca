@@ -31,7 +31,7 @@ import {
 import { isInsidePath } from "./template/checklist.js";
 import { loadBuiltin } from "./template/load.js";
 import type { FlowStep, FlowTemplate } from "./template/schema.js";
-import { deriveParam, expandVars } from "./template/vars.js";
+import { deriveParam, expandKeepingSkillDirs } from "./template/vars.js";
 import { evaluateWhen, type ParamValue } from "./template/when.js";
 import { returnUnspent } from "./pool.js";
 import type { FlowChildPort } from "./kinds/work.js";
@@ -311,7 +311,13 @@ export function contextFor(deps: FlowDeps, run: LoadedRun, execution: ExecutionR
   };
   const instructionOf = (): string => {
     if (!("prompt" in step) || step.prompt === undefined) return "";
-    return expandVars(asset(step.prompt), { params: run.params, runId: run.row.id, workspace: "{{workspace}}", skillDirs: {} }, "prompt");
+    // §12.1: a declared parameter the run left unset reads empty in a prompt (never in a command); the workspace is the
+    // agent's working directory; a skill's directory is filled when its copy is injected (the driver's A2).
+    const unset = Object.fromEntries(Object.keys(run.template.params ?? {}).map((id) => [id, ""]));
+    return expandKeepingSkillDirs(asset(step.prompt), {
+      params: { ...unset, ...run.params }, runId: run.row.id, workspace: ".",
+      ...(typeof body.effectRecordId === "string" ? { effectRecordId: body.effectRecordId } : {}),
+    }, "prompt", "skills" in step ? step.skills ?? [] : []);
   };
   const acceptanceOf = (): string[] => step.kind === "work" ? (step.acceptance?.checks ?? []).filter((c) => c.role === "gate").map((c) => `gate: ${c.run}`) : [];
   return {

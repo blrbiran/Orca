@@ -102,3 +102,32 @@ export function deriveParam(kind: "slug-of-idea" | "today", params: Readonly<Rec
   const slug = idea.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 64).replace(/^-+|-+$/g, "");
   return slug.length > 0 ? slug : `article-${createHash("sha256").update(idea).digest("hex").slice(0, 8)}`;
 }
+
+/** §12.1: `{{skill.<name>.dir}}` as a template writes it. */
+export const skillDirToken = (name: string): string => `{{skill.${name}.dir}}`;
+const SKILL_DIR_TOKEN = /\{\{skill\.([^.\s{}]+)\.dir\}\}/g;
+
+/**
+ * Expand everything known before an execution runs and keep `{{skill.<name>.dir}}` as it is written: the injected copy
+ * of a `work` step's skills exists only once its child's run injected them (the driver's A2 fills it, `withSkillDirs`).
+ * A marker no template can contain stands in for the token while the rest expands, so the walk ends.
+ */
+export function expandKeepingSkillDirs(text: string, scope: Omit<VarScope, "skillDirs">, where: VarWhere, skills: readonly string[]): string {
+  const marker = (name: string): string => `\u0001skill:${name}\u0001`;
+  const out = expandVars(text, { ...scope, skillDirs: Object.fromEntries(skills.map((name) => [name, marker(name)])) }, where);
+  return out.replace(/\u0001skill:([^\u0001]+)\u0001/g, (_, name: string) => skillDirToken(name));
+}
+
+/**
+ * The driver's A2 for a flow step's child: every `{{skill.<name>.dir}}` in the contract becomes the copy this run
+ * injected (`<skills dir>/skills/<name>`). A token naming a skill the run did not inject is returned, never guessed.
+ */
+export function withSkillDirs<T>(value: T, skillsDir: string, injected: readonly string[]): { value: T } | { unknown: string } {
+  const json = JSON.stringify(value);
+  let unknown: string | null = null;
+  const out = json.replace(SKILL_DIR_TOKEN, (token, name: string) => {
+    if (!injected.includes(name)) { unknown ??= name; return token; }
+    return JSON.stringify(`${skillsDir}/skills/${name}`).slice(1, -1);
+  });
+  return unknown === null ? { value: JSON.parse(out) as T } : { unknown };
+}

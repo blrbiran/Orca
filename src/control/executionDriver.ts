@@ -1,6 +1,7 @@
 import {hasValidUsageSettlement,settlementArtifact as settlementArtifactBytes} from "./usageSettlement.js";
 import { stackBaseOf } from "./groupEdges.js";
 import { flowChildSkills, flowGroupRepoId } from "../flow/groups.js";
+import { withSkillDirs } from "../flow/template/vars.js";
 import {assertCurrentSavedRecovery,savedRecoveryAccounting} from "./savedResultRecovery.js";
 import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,recoveryClosure} from "./savedResultRecoveryPackage.js";
 import {savedDispatchSchema,savedRecoverySchema,savedResultAdmissionSchema,executionFormatFailureSchema,savedExecutionSnapshotSchema,savedResultCollectionSchema,savedResultSettlementSchema,interruptedSavedResultSchema} from "./savedResultProtocol.js";
@@ -358,10 +359,15 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   }
   // ccloop opens its attempt worktrees from repoPath's HEAD, not from `base` (spec §3.2), so the
   // contract points at this run's own workspace. The frozen derivedContractHash is unchanged.
-  const contract = {
+  const runtime = {
     ...confirmed.contract, context: { ...confirmed.contract.context, repoPath: workspaceOf(drive) },
     executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work),
   };
+  // Flow engine spec §12.1: a flow step's `{{skill.<name>.dir}}` names the copy this run injected, known only now.
+  const filled = confirmed.skills == null && skills !== null && flowChildSkills(store, run.groupId) !== null
+    ? withSkillDirs(runtime, skills.dir, skills.lock.map((entry) => entry.name)) : { value: runtime };
+  if ("unknown" in filled) { blockRun(deps, runId, "A2", `flow-skill-dir-unknown:${filled.unknown}`); return true; }
+  const contract = filled.value;
   // ccloop priorFailures spec 2026-10-21 §3 (kanban spec §6 level 1): built once here, frozen in the envelope below. A
   // continuation copies its predecessor's entries; a saved-result recovery carries none (ccloop refuses them there).
   const priorFailures = await priorFailuresAtPrepare(store, { groupId: run.groupId, taskId: run.taskId, runId }, { recovery: recovery !== null, predecessorRunId: continued?.predecessorRunId ?? null });

@@ -16,6 +16,22 @@ import type { ToolRulesReport } from "../../control/toolRules.js";
 import { getFlowRun } from "../store.js";
 import { allocationFor, childWorkAmount, drawAllocation, POOL_EXHAUSTED } from "../pool.js";
 import type { KindContext, KindDefinition, KindOutcome } from "./registry.js";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { expandKeepingSkillDirs } from "../template/vars.js";
+import { vaultGitBytes, type Vault } from "../vault/vault.js";
+
+/**
+ * §12.1 `{{base:<path>}}` for a `work` step: the checks run later, in the child's attempt, so the copy is written now,
+ * under the vault (dir 0700, file 0400, never from umask); a path the composition lacks is an empty file. A restart
+ * finds the same copy (same execution, same composition) and leaves it.
+ */
+async function writeBaseCopy(vault: Vault, commit: string, path: string, file: string): Promise<void> {
+  await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+  const bytes = await vaultGitBytes(vault, ["cat-file", "blob", `${commit}:${path}`]).catch(() => Buffer.alloc(0));
+  try { await writeFile(file, bytes, { mode: 0o400, flag: "wx" }); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+}
 
 export interface FlowChildOpen {
   childGroupId: string; parentGroupId: string; flowRunId: string; stepKey: string; seq: number; baseCommit: string; vaultPath: string;
@@ -64,11 +80,34 @@ async function start(ctx: KindContext): Promise<KindOutcome> {
   const draw = ctx.store.transaction(() => drawAllocation(ctx.store, key.flowRunId, childGroupId, wanted));
   if ("exhausted" in draw) return { parked: { reason: POOL_EXHAUSTED, detail: draw.exhausted } };
   const effectRecordId = typeof ctx.body.effectRecordId === "string" ? ctx.body.effectRecordId : null;
-  const gates = (step.acceptance?.checks ?? []).filter((c) => c.role === "gate").map((c) => c.run);
+  // §12.1: commands carry their variables expanded (a command never reads an unset parameter as empty); `{{base:<path>}}`
+  // is a read-only copy of <path> at this execution's composition, kept with the vault; the skills' directories are the
+  // driver's to fill once the child injected them.
+  let gates: string[];
+  let tools: typeof step.tools;
+  try {
+    const bases = join(composition.vault.path, "orca-base", key.flowRunId, `${key.stepKey}-${key.seq}`);
+    const copies: Array<{ file: string; path: string }> = [];
+    const scope = {
+      params: run.params, runId: run.row.id, workspace: ".", ...(effectRecordId === null ? {} : { effectRecordId }),
+      base: (path: string): string => {
+        const known = copies.find((copy) => copy.path === path);
+        if (known !== undefined) return known.file;
+        const file = join(bases, `${copies.length + 1}-${path.replace(/[^A-Za-z0-9._-]/g, "_")}`);
+        copies.push({ file, path });
+        return file;
+      },
+    };
+    const expand = (command: string): string => expandKeepingSkillDirs(command, scope, "command", step.skills ?? []);
+    gates = (step.acceptance?.checks ?? []).filter((c) => c.role === "gate").map((c) => expand(c.run));
+    tools = step.tools === undefined ? undefined : { ...step.tools, ...(step.tools.commands === undefined ? {} : {
+      commands: step.tools.commands.map((rule) => ("exact" in rule ? { exact: expand(rule.exact) } : { prefix: expand(rule.prefix) })) }) };
+    for (const copy of copies) await writeBaseCopy(composition.vault, composition.commit, copy.path, copy.file);
+  } catch (error) { return { failed: { reason: `flow-command-vars:${(error as Error).message}` } }; }
   // §12.3: the step's role, as resolved at run start, is the child's agent (the plan's own layer).
   const role = step.role === undefined ? undefined : run.body.roles[step.role];
   const input: FlowStepPlanInput = {
-    flowRunId: key.flowRunId, step, seq: key.seq, baseCommit: composition.commit, vaultPath: composition.vault.path,
+    flowRunId: key.flowRunId, step: { ...step, ...(tools === undefined ? {} : { tools }) }, seq: key.seq, baseCommit: composition.commit, vaultPath: composition.vault.path,
     promptEnvelope: ctx.prompt(), gates, effectRecordId,
     ...(role === undefined ? {} : { agent: { agent: role.agent, ...(role.model === null ? {} : { model: role.model }) } }),
   };
