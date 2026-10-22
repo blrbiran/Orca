@@ -5,8 +5,8 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { WorkspaceModeSelector } from "./WorkspaceModeSelector.js";
 import { RepositoryIntegration } from "./IntegrationScheme.js";
-import { IntegrationCheck } from "./IntegrationCheck.js";
-import type { IntegrationCheckSettingV1, IntegrationSchemeV1, RepositoryIntegrationV1, RepositoryWorkspaceV1 } from "./controlTypes.js";
+import { ChecksSettings } from "./ChecksSettings.js";
+import type { IntegrationSchemeV1, RepositoryIntegrationV1, RepositoryWorkspaceV1 } from "./controlTypes.js";
 
 export function ProjectSettings(props: {
   refusal?: ControlRefusal | null;
@@ -16,8 +16,6 @@ export function ProjectSettings(props: {
   integration: RepositoryIntegrationV1 | null;
   onWorkspaceMode: (mode: "worktree" | "clone", revision: number) => void;
   onIntegrationScheme: (scheme: IntegrationSchemeV1, revision: number) => void;
-  /** Kanban spec §7 layer 1; absent, the check's section is not shown. */
-  onIntegrationCheck?: (setting: IntegrationCheckSettingV1, revision: number) => void;
 }): JSX.Element {
   const { t } = useTranslation();
   return (
@@ -29,10 +27,8 @@ export function ProjectSettings(props: {
           <p>{t("settings.projectScope", { project: props.repoLabel ?? props.repoId })}</p>
           {props.workspace === null ? <p role="status">{t("settings.workspaceUnavailable")}</p> : <WorkspaceModeSelector workspace={props.workspace} onChange={props.onWorkspaceMode} />}
           {props.integration === null ? <p role="status">{t("settings.integrationUnavailable")}</p> : <RepositoryIntegration integration={props.integration} onSave={props.onIntegrationScheme} />}
-          {props.integration?.integrationCheck !== undefined && props.onIntegrationCheck !== undefined && (
-            // Keyed by the revision, so the form starts again from what the server holds after every change.
-            <IntegrationCheck key={`${props.integration.repoId}:${props.integration.revision}`} check={props.integration.integrationCheck} revision={props.integration.revision} onSave={props.onIntegrationCheck} />
-          )}
+          {/* Checks spec 2026-10-22 §7: the project's checks, each field with its source layer; it reads and writes them itself. */}
+          <ChecksSettings key={props.repoId} scope={{ repoId: props.repoId }} />
         </>
       )}
     </section>

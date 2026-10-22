@@ -397,3 +397,7 @@ function resultGroupWebToServer(x: import('../../web/src/controlTypes.js').Group
 function resultOutputServerToWeb(x: import('../../src/control/webProtocol.js').ResultOutputV1): import('../../web/src/controlTypes.js').ResultOutputV1 { return x; }
 function resultOutputWebToServer(x: import('../../web/src/controlTypes.js').ResultOutputV1): import('../../src/control/webProtocol.js').ResultOutputV1 { return x; }
 export const __resultParityChecks__ = [resultRunServerToWeb, resultRunWebToServer, resultGroupServerToWeb, resultGroupWebToServer, resultOutputServerToWeb, resultOutputWebToServer];
+// Checks spec 2026-10-22 §4.3 (Task 10): GET /api/control/checks, the server's read body and the Web's copy, both ways.
+function checksReadServerToWeb(x: import('../../src/control/checks/settings.js').ChecksReadV1): import('../../web/src/controlTypes.js').ChecksReadV1 { return x; }
+function checksReadWebToServer(x: import('../../web/src/controlTypes.js').ChecksReadV1): import('../../src/control/checks/settings.js').ChecksReadV1 { return x; }
+export const __checksParityChecks__ = [checksReadServerToWeb, checksReadWebToServer];

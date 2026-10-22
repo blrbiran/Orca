@@ -1,7 +1,7 @@
 /**
  * Agent selection spec §6.8 (T15): the "Agents" settings page. It lists the installation table exactly as the
  * server read it from ccloop and edits this operator's defaults -- the default agent, each agent's model and
- * context, and the estimator and reconcile slots -- as one set-agent-preferences under the revision it read.
+ * context, and the estimator, reconcile and review slots -- as one set-agent-preferences under the revision it read.
  */
 import { useState } from "react";
 import type { JSX } from "react";
@@ -32,7 +32,7 @@ export function preferencesFromDrafts(agents: AgentsViewV1, view: AgentPreferenc
     const entry = { ...(model === undefined ? {} : { model }), ...(contextWindow === undefined ? {} : { contextWindow }) };
     if (Object.keys(entry).length > 0) perAgent[row.id] = entry;
   }
-  const slot = (name: "estimator" | "reconcile") => {
+  const slot = (name: "estimator" | "reconcile" | "review") => {
     // A stored model/context-only role belonged to the old primary. Changing the primary must not quietly
     // attach that role's model or context to another installation; choosing the role Agent explicitly opts in.
     const agentEdited = Object.hasOwn(drafts, `agents:${name}:agent`);
@@ -47,11 +47,14 @@ export function preferencesFromDrafts(agents: AgentsViewV1, view: AgentPreferenc
   };
   const estimator = slot("estimator");
   const reconcile = slot("reconcile");
+  // Checks spec 2026-10-22 §6.1: the agent the model review runs on, a slot like the other two.
+  const review = slot("review");
   return {
     ...(defaultAgent === undefined ? {} : { defaultAgent }),
     perAgent,
     ...(estimator === undefined ? {} : { estimator }),
     ...(reconcile === undefined ? {} : { reconcile }),
+    ...(review === undefined ? {} : { review }),
   };
 }
 
@@ -80,14 +83,14 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
   const { t } = useTranslation();
   const defaultText = draftText(drafts, DEFAULT_AGENT_KEY, preferences.preferences.defaultAgent ?? "");
   const defaultAgent = textOrUndefined(defaultText);
-  const roleInheritedAgent = (name: "estimator" | "reconcile"): string | undefined =>
+  const roleInheritedAgent = (name: "estimator" | "reconcile" | "review"): string | undefined =>
     prefsRoleFromOldPrimary(name) ? preferences.preferences.defaultAgent : defaultAgent;
-  const prefsRoleFromOldPrimary = (name: "estimator" | "reconcile"): boolean =>
+  const prefsRoleFromOldPrimary = (name: "estimator" | "reconcile" | "review"): boolean =>
     !Object.hasOwn(drafts, `agents:${name}:agent`) && preferences.preferences.defaultAgent !== defaultAgent
     && preferences.preferences[name]?.agent === undefined
     && (preferences.preferences[name]?.model !== undefined || preferences.preferences[name]?.contextWindow !== undefined);
   const invalid = agents.installations.some((row) => selectionFieldErrors(agents, `agents:per:${row.id}`, preferences.preferences.perAgent[row.id], undefined, drafts, row.id, row.id).length > 0)
-    || (["estimator", "reconcile"] as const).some((name) => selectionFieldErrors(agents, `agents:${name}`, preferences.preferences[name], undefined, drafts, roleInheritedAgent(name)).some((error) => error.field === "contextWindow"));
+    || (["estimator", "reconcile", "review"] as const).some((name) => selectionFieldErrors(agents, `agents:${name}`, preferences.preferences[name], undefined, drafts, roleInheritedAgent(name)).some((error) => error.field === "contextWindow"));
   const [open, setOpen] = useState(readOpen);
   const [accepted, setAccepted] = useState<{ previewId: string; ids: string[] }>({ previewId: "", ids: [] });
   const installation = props.installationState;
@@ -183,6 +186,7 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
         <summary>{t("agents.settings.roleOverrides")}</summary>
         <SelectionFields agents={agents} prefix="agents:estimator" label={t("agents.settings.estimatorSlot")} current={preferences.preferences.estimator} inheritedAgent={roleInheritedAgent("estimator")} showMissingAgent={false} drafts={drafts} onDraft={onDraft} models={props.models} onRefreshModels={props.onRefreshModels} />
         <SelectionFields agents={agents} prefix="agents:reconcile" label={t("agents.settings.reconcileSlot")} current={preferences.preferences.reconcile} inheritedAgent={roleInheritedAgent("reconcile")} showMissingAgent={false} drafts={drafts} onDraft={onDraft} models={props.models} onRefreshModels={props.onRefreshModels} />
+        <SelectionFields agents={agents} prefix="agents:review" label={t("agents.settings.reviewSlot")} current={preferences.preferences.review} inheritedAgent={roleInheritedAgent("review")} showMissingAgent={false} drafts={drafts} onDraft={onDraft} models={props.models} onRefreshModels={props.onRefreshModels} />
       </details>
       <button type="button" disabled={invalid} onClick={() => props.onSave(preferencesFromDrafts(agents, preferences, drafts), preferences.revision)}>{t("agents.settings.save")}</button>
     </section>

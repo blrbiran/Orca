@@ -325,6 +325,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           workspaceFor={props.workspaceFor}
           integrationFor={props.integrationFor}
           decisions={props.decisionsFor?.(view.summary.groupId) ?? null}
+          revisionOf={(groupId) => summary.groups.find((group) => group.groupId === groupId)?.commandRevision ?? null}
           onCorrectDecision={props.onCorrectDecision}
           refusal={props.groupRefusals?.[view.summary.groupId] ?? null}
         />

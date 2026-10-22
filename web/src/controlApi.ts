@@ -38,7 +38,6 @@ import type {
   HandoffStopPayloadV1,
   ImportPlanPayloadV1,
   IntegrationSchemeV1,
-  IntegrationCheckSettingV1,
   ProposalEditPayloadV1,
   ProposalSetAgentPayloadV1,
   RecoveryRetryPayloadV1,
@@ -229,9 +228,19 @@ export const fetchRepositoryIntegration = (repoId: string): Promise<RepositoryIn
 
 export const integrationSchemePath = (repoId: string): string => `/api/control/repositories/${segment(repoId)}/integration`;
 
-/** Checks spec 2026-10-22 §4.4: the project layer's integration check through set-check-settings, under the repository settings revision it was read at. */
-export const sendIntegrationCheck = (repoId: string, setting: IntegrationCheckSettingV1, expectedRevision: number, commandId: string = nextCommandId()): Promise<ControlAnswer> =>
-  sendControlCommand(`/api/control/repositories/${segment(repoId)}/checks/settings`, { commandId, expectedRevision, payload: { kind: "integration-check", set: setting, clear: [] } });
+/** Checks spec 2026-10-22 §4.3: the effective check settings of one project, or of the global layer alone. */
+export type ChecksScope = "global" | { repoId: string };
+export const checksReadPath = (scope: ChecksScope): string => (scope === "global" ? "/api/control/checks" : `/api/control/checks?repoId=${segment(scope.repoId)}`);
+/**
+ * §4.4: where each check command of a scope is sent. The project layer and its run-now / resume are repository-scoped
+ * (the repository settings revision); the global layer and its locks are `@orchestration`'s.
+ */
+export function checksCommandPath(scope: ChecksScope, verb: "set-check-settings" | "set-scheduled-check" | "set-check-locks" | "run-check-now" | "resume-check"): string {
+  const leaf = { "set-check-settings": "settings", "set-scheduled-check": "scheduled", "set-check-locks": "locks", "run-check-now": "run", "resume-check": "resume" }[verb];
+  return scope === "global" ? `/api/control/operator/checks/${leaf}` : `/api/control/repositories/${segment(scope.repoId)}/checks/${leaf}`;
+}
+/** §6.5, §7: a model review's record and its dismissals, by the review group's id. */
+export const reviewRecordPath = (reviewGroupId: string): string => `/api/control/checks/reviews/${segment(reviewGroupId)}`;
 
 /** Integration spec §3.1: set-integration-scheme, naming the whole scheme under the settings revision it was read at. */
 export const sendIntegrationScheme = (repoId: string, integration: IntegrationSchemeV1, expectedRevision: number, commandId: string = nextCommandId()): Promise<ControlAnswer> =>
@@ -375,7 +384,9 @@ export type ControlAction =
   | { verb: "approve-pending-decision"; groupId: string; expectedRevision: number; payload: { pendingId: string; undoHow: string } }
   | { verb: "reject-pending-decision"; groupId: string; expectedRevision: number; payload: { pendingId: string; because?: string } }
   // Kanban spec 2026-10-20 §9a: a person ratifies a landed decision Orca flagged.
-  | { verb: "ratify-flagged-decision"; groupId: string; expectedRevision: number; payload: { decisionId: string } }
+  // Checks spec 2026-10-22 §6.5: a dismissed model-review finding carries the person's note; `groupId` is the flag's owner
+  // (the review group), whatever card it was dismissed from.
+  | { verb: "ratify-flagged-decision"; groupId: string; expectedRevision: number; payload: { decisionId: string; note?: string } }
   // Kanban spec §3.3, §9a.5: a person's edge; `groupId` is the dependent, `dependsOn` lands first.
   | { verb: "add-group-dependency"; groupId: string; expectedRevision: number; payload: { dependsOn: string } }
   | { verb: "remove-group-dependency"; groupId: string; expectedRevision: number; payload: { dependsOn: string } }

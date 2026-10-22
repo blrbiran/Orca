@@ -129,7 +129,9 @@ describe("the Agents settings page (agent selection spec §6.8)", () => {
     expect(options("agents:per:codex:context")).toEqual(["", "agent-default"]);
     // The estimator slot names no agent of its own, so it offers what the default agent (claude) can express.
     expect(options("agents:estimator:context")).toEqual(["", "agent-default", "1000000"]);
-    expect(container.querySelectorAll('select[name$=":context"]')).toHaveLength(4);
+    // Checks spec 2026-10-22 §6.1 (Task 10): the review slot is a fifth context dropdown, like the estimator's.
+    expect(options("agents:review:context")).toEqual(["", "agent-default", "1000000"]);
+    expect(container.querySelectorAll('select[name$=":context"]')).toHaveLength(5);
     expect(container.querySelectorAll('input[name$=":context"]')).toHaveLength(0);
   });
 

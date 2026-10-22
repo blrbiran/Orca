@@ -94,7 +94,11 @@ export type GroupSummaryV1 = {
     closing?: DebugClosingV1 | null;
   };
   /** Kanban spec 2026-10-20 §4: a board card's facts; the server gives them for every group with a plan. */
-  card?: { budget: { usedTokens: number; limitTokens: number | null }; pendingDecisions: number; firstFailure: { taskId: string; cause: string } | null };
+  card?: {
+    budget: { usedTokens: number; limitTokens: number | null }; pendingDecisions: number; firstFailure: { taskId: string; cause: string } | null;
+    /** Checks spec 2026-10-22 §6.6, §7: model-review findings waiting on this group that a review group owns; absent when none. */
+    reviewFindings?: { major: number; minor: number };
+  };
   /** Kanban spec 2026-10-20 §3.3: the group's direct prerequisites (a person's edges); present only when it has any. */
   dependsOn?: string[];
   /** Kanban spec 2026-10-20 §3.1-§3.4: present only on a group confirmed since start-on-confirm exists. */
@@ -595,7 +599,8 @@ export type CommandSuccessV1 = {
     | { kind: "limit-set"; limit: BudgetAmount }
     | { kind: "workspace-mode-set"; repoId: string; workspaceMode: "worktree" | "clone" }
     | { kind: "integration-scheme-set"; repoId: string; integration: IntegrationSchemeV1 }
-    | { kind: "integration-check-set"; repoId: string; integrationCheck: IntegrationCheckSettingV1 }
+    // A retired verb's stored answer (checks spec §4.4): still readable from the command history.
+    | { kind: "integration-check-set"; repoId: string; integrationCheck: { enabled: boolean; command: string | null } }
     | { kind: "check-settings-set"; repoId: string | null; checks: ChecksLayerV1 }
     | { kind: "scheduled-check-set"; repoId: string | null; scheduled: ScheduledCheckV1[] }
     | { kind: "check-locks-set"; locks: CheckLockV1[] }
@@ -650,9 +655,7 @@ export type GroupIntegrationViewV1 = {
   lastIntegrated: string | null; integratedCommit: string | null; pr: { url: string; number: number; ready: boolean } | null;
 };
 /** `suggestedTarget` (controller ruling, Task 7): origin's HEAD branch, else the current branch, else null; never stored. */
-export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number; suggestedTarget: string | null; integrationCheck?: IntegrationCheckV1 };
-/** Kanban spec 2026-10-20 §7 layer 1: the repository's integration check, and how its newest run ended. */
-export type IntegrationCheckSettingV1 = { enabled: boolean; command: string | null };
+export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number; suggestedTarget: string | null };
 // Checks spec 2026-10-22 §2.2, §2.4, §4.1: a trigger, a scheduled check and one settings layer's `checks` field.
 export type CheckKindV1 = "integration-check" | "model-review";
 export type CheckConditionV1 =
@@ -667,8 +670,38 @@ export type ChecksLayerV1 = {
   scheduled?: ScheduledCheckV1[];
   locks?: CheckLockV1[];
 };
-export type IntegrationCheckV1 = IntegrationCheckSettingV1 & {
-  last: { state: "running" | "passed" | "failed" | "errored"; at: number; commit: string | null; groups: string[]; detail: string | null; debugGroupId: string | null } | null;
+// Checks spec §4.3: GET /api/control/checks[?repoId=] (src/control/checks/settings.ts checksReadSchema), each field with
+// the layer it came from and whether a global lock binds it; `revision` is the layer's, `nextSlots` by scheduled-check id.
+export type CheckSourceV1 = "project" | "global" | "builtin";
+export type CheckSourcedV1<T> = { value: T; source: CheckSourceV1; lockedBy: "global" | null };
+export type CheckLastStateV1 = "running" | "passed" | "failed" | "completed" | "errored" | "initialised" | "skipped" | "migrated";
+export type CheckStateV1 = {
+  watermark: string | null; lastStartAt: number | null; lastSlot: Record<string, number>; runSeq: number; failureStreak: number; paused: boolean;
+  pendingRun: { commandId: string; at: number } | null; rebased: boolean;
+  last: { state: CheckLastStateV1; at: number; from: string | null; to: string | null; groups: string[]; detail: string | null; reviewGroupId: string | null; debugGroupIds: string[]; recordHash: string | null } | null;
+};
+export type ChecksReadV1 = {
+  schema: "orca-checks-v1"; repoId: string | null;
+  kinds: {
+    "integration-check": { enabled: CheckSourcedV1<boolean>; trigger: CheckSourcedV1<CheckTriggerV1>; command: CheckSourcedV1<string | null> };
+    "model-review": { enabled: CheckSourcedV1<boolean>; trigger: CheckSourcedV1<CheckTriggerV1>; budgetTokens: CheckSourcedV1<number>; maxGroupsPerReview: CheckSourcedV1<number> };
+  };
+  scheduled: Array<CheckSourcedV1<ScheduledCheckV1> & { scope: "project" | "global" }>;
+  locks: CheckLockV1[];
+  state: Array<{ kind: CheckKindV1; target: string; state: CheckStateV1 }>;
+  revision: number;
+  nextSlots: Record<string, number[]>;
+};
+/** Spec §6.5, §7: GET /api/control/checks/reviews/:reviewGroupId -- the review's record and its dismissals. */
+export type ReviewFindingV1 = {
+  id: string; category: "contract-drift" | "duplication" | "uncovered-behaviour"; severity: "major" | "minor"; title: string; explanation: string;
+  evidence: Array<{ groupId: string; path: string; line: number; note: string }>; suggestedFix: string;
+};
+export type ReviewRecordV1 = {
+  schema: "orca-model-review-record-v1"; reviewGroupId: string; runId: string; range: { target: string; from: string; to: string }; groups: string[];
+  valid: ReviewFindingV1[]; dropped: Array<{ findingId: string; reason: string }>;
+  routed: Array<{ findingId: string; severity: string; debugGroupId: string | null; detail: string | null }>;
+  dismissals: Array<{ decisionId: string; by: string | null; at: string | null; note: string | null }>;
 };
 /** Control run decisions plan Task 8: GET /api/control/groups/:groupId/decisions, a group's decisions read from refs. */
 export type DecisionWhereV1 = "working-tree" | "target" | "group-branch";
@@ -684,7 +717,7 @@ export type GroupDecisionsViewV1 = {
   /** Optional so older literal fixtures parse; the server always sends it. */
   flaggedCount?: number;
   /** Flags not on any listed run's landed lines (an integration conflict an agent resolved); optional like flaggedCount. */
-  groupFlags?: Array<DecisionFlagV1 & { decisionId: string }>;
+  groupFlags?: Array<DecisionFlagV1 & { decisionId: string; severity?: "major" | "minor"; ownerGroupId?: string }>;
   tasks: Array<{
     taskId: string;
     runs: Array<{
@@ -709,6 +742,8 @@ export type OperatorPreferencesV1 = {
   perAgent: Record<string, { model?: string; contextWindow?: ContextWindowV1 }>;
   estimator?: PartialSelectionV1;
   reconcile?: PartialSelectionV1;
+  /** Checks spec 2026-10-22 §6.1: the agent the model review runs on; absent is defaultAgent. */
+  review?: PartialSelectionV1;
 };
 export type AgentInstallationV1 = { id: string; kind: string; defaults: { model: string; contextWindow: ContextWindowV1 }; contextOptions: ContextWindowV1[]; version: string };
 export type AgentsViewV1 = { schema: "orca-agents-view-v1"; installations: AgentInstallationV1[] };

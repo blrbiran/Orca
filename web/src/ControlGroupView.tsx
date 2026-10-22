@@ -140,6 +140,8 @@ function RunRetry({ view, run, archived, onCommand, active = true }: { view: Gro
 import { overviewRegionId } from "./overviewNavigation.js";
 import { GroupResults } from "./GroupResults.js";
 import { GroupDetailRegions } from "./GroupDetailRegions.js";
+import { ReviewDetail } from "./ReviewDetail.js";
+import type { GroupDecisionsViewV1 } from "./controlTypes.js";
 import { defaultDetailRegion, focusedDetailRegion, runRegionId, type DetailRegion } from "./detailRegion.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
 
@@ -187,6 +189,40 @@ workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
   decisions?: GroupDecisionsRead | null;
   /** Open a decision's detail, where it is corrected (App.tsx). */
   onCorrectDecision?: (projectKey: string, decisionId: string) => void;
+  /** Checks spec 2026-10-22 §6.6: another group's command revision (a review group's, to dismiss its finding); null if unknown. */
+  revisionOf?: (groupId: string) => number | null;
+}
+
+/**
+ * Checks spec 2026-10-22 §6.5, §6.6 (review focus 5): a model-review finding in a group's decisions. Its flag's row is the
+ * review group's, so Dismiss (ratify-flagged-decision with the person's note) targets the REVIEW group under that group's
+ * revision, whatever group's view it is dismissed from; with that revision unknown it cannot be sent. Major red, minor grey.
+ */
+function FindingFlag(props: {
+  flag: NonNullable<GroupDecisionsViewV1["groupFlags"]>[number]; groupId: string; revision: number; archived: boolean;
+  revisionOf?: (groupId: string) => number | null; onCommand: (action: ControlAction) => void;
+}): JSX.Element {
+  const { t } = useTranslation();
+  const { flag } = props;
+  const [note, setNote] = useState("");
+  const [detail, setDetail] = useState(false);
+  const owner = flag.ownerGroupId ?? props.groupId;
+  const ownerRevision = flag.ownerGroupId === undefined ? (props.archived ? null : props.revision) : props.revisionOf?.(owner) ?? null;
+  const severity = flag.severity ?? "major";
+  return (
+    <div data-testid="group-flag">
+      <span className="badge" data-testid="group-flag-severity" {...(severity === "major" ? { "data-tone": "danger" } : {})}>{t(`control.decisions.severity.${severity}` as const)}</span>{" "}
+      {t("control.decisions.flaggedReason", { source: flag.source, reason: flag.reason })}
+      {flag.ownerGroupId !== undefined && <>{" · "}{t("control.decisions.reviewOwner", { groupId: owner })}</>}{" "}
+      <input type="text" aria-label={t("control.decisions.dismissNote")} placeholder={t("control.decisions.dismissNote")} value={note} onChange={(event) => setNote(event.currentTarget.value)} />
+      <button type="button" disabled={ownerRevision === null}
+        onClick={() => { if (ownerRevision !== null) props.onCommand({ verb: "ratify-flagged-decision", groupId: owner, expectedRevision: ownerRevision, payload: note.trim() === "" ? { decisionId: flag.decisionId } : { decisionId: flag.decisionId, note: note.trim() } }); }}>
+        {t("control.decisions.dismiss")}
+      </button>{" "}
+      <button type="button" aria-expanded={detail} onClick={() => setDetail(!detail)}>{t("control.decisions.reviewDetail")}</button>
+      {detail && <ReviewDetail reviewGroupId={owner} />}
+    </div>
+  );
 }
 
 /** The version of the estimate with this id in the same group; the id itself when the list does not carry it. */
@@ -386,7 +422,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {decisions !== null && (decisions.flaggedCount ?? 0) > 0 && (
         <p><span className="badge" data-tone="danger" data-testid="group-flagged">{t("control.decisions.groupFlagged", { count: decisions.flaggedCount })}</span></p>
       )}
-      {decisions !== null && (decisions.groupFlags ?? []).filter((flag) => flag.state === "flagged").map((flag) => (
+      {decisions !== null && (decisions.groupFlags ?? []).filter((flag) => flag.state === "flagged").map((flag) => flag.source === "model-review" ? (
+        <FindingFlag key={flag.decisionId} flag={flag} groupId={groupId} revision={revision} archived={archived} revisionOf={props.revisionOf} onCommand={props.onCommand} />
+      ) : (
         <p key={flag.decisionId} data-testid="group-flag">
           <span className="badge" data-tone="danger">{t("control.decisions.flagged")}</span>{" "}
           {t("control.decisions.flaggedReason", { source: flag.source, reason: flag.reason })}{" "}
@@ -396,6 +434,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           </button>
         </p>
       ))}
+      {/* Checks spec 2026-10-22 §7: a review group's own view shows its review's detail (the card opens this view). */}
+      {view.summary.systemDebug?.source.kind === "model-review" && <ReviewDetail reviewGroupId={groupId} />}
       {/* Final review T11 (Rule 12): a failed decisions read is said for the group too, not only inside an open task. */}
       {decisionsFailed !== null && <p data-testid="group-decisions-read-failed">{t("control.decisions.readFailed", { code: decisionsFailed })}</p>}
       {view.summary.claimBlocked && <p role="alert">{t("control.group.claimBlocked")}</p>}

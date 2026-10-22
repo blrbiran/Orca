@@ -85,7 +85,6 @@ import {
   refusalFromAnswer,
   sendControlCommand,
   sendIntegrationScheme,
-  sendIntegrationCheck,
   workspaceModePath,
   writeUncertainCommands,
 } from "./controlApi.js";
@@ -97,7 +96,7 @@ import type { ControlAnswer } from "./controlApi.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import { UncertainOperations } from "./UncertainOperations.js";
 import type {
-  AgentPreferencesViewV1, AgentInstallationStateV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, GroupDecisionsViewV1, IntegrationCheckSettingV1, IntegrationSchemeV1, ModelListState, OperatorPreferencesV1, RepositoryIntegrationV1,
+  AgentPreferencesViewV1, AgentInstallationStateV1, AgentSelectionPreviewV1, AgentsViewV1, CommandSuccessV1, ControlConfigV1, ControlSummaryV1, GroupDecisionsViewV1, IntegrationSchemeV1, ModelListState, OperatorPreferencesV1, RepositoryIntegrationV1,
   RepositoryWorkspaceV1, RequirementViewV1, OverviewV1, RecoveryViewV1,
 } from "./controlTypes.js";
 import { DecisionDetail } from "./DecisionDetail.js";
@@ -712,17 +711,6 @@ export function App(): JSX.Element {
     const scope = `@repository:${repoId}`;
     const request = beginSettingsSave(scope);
     const answer = await sendIntegrationScheme(repoId, scheme, expectedRevision);
-    showSettingsAnswer(scope, request, answer);
-    if (answer.kind === "uncertain") dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: answer.refusal });
-    else if (answer.status >= 400) dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: refusalFromAnswer(answer) });
-    await readIntegration(repoId);
-  };
-
-  /** Kanban spec §7 layer 1: the repository's integration check, under the settings revision it was read at; read back. */
-  const sendRepositoryIntegrationCheck = async (repoId: string, setting: IntegrationCheckSettingV1, expectedRevision: number): Promise<void> => {
-    const scope = `@repository:${repoId}`;
-    const request = beginSettingsSave(scope);
-    const answer = await sendIntegrationCheck(repoId, setting, expectedRevision);
     showSettingsAnswer(scope, request, answer);
     if (answer.kind === "uncertain") dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: answer.refusal });
     else if (answer.status >= 400) dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: refusalFromAnswer(answer) });
@@ -1546,7 +1534,6 @@ export function App(): JSX.Element {
           integration={panelRepoId === null ? null : integrations[panelRepoId] ?? null}
           onWorkspaceMode={(mode, revision) => { if (panelRepoId !== null) void sendWorkspaceMode(panelRepoId, mode, revision); }}
           onIntegrationScheme={(scheme, revision) => { if (panelRepoId !== null) void sendRepositoryIntegration(panelRepoId, scheme, revision); }}
-          onIntegrationCheck={(setting, revision) => { if (panelRepoId !== null) void sendRepositoryIntegrationCheck(panelRepoId, setting, revision); }}
         />
       </SectionPane>
       <SectionPane section="overview" active={section}>

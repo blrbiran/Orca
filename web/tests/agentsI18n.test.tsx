@@ -77,7 +77,7 @@ describe("the agents area in Chinese", () => {
     const defaultLabel = container.querySelector(`select[name="agents:default-agent"]`)!.closest("label")!;
     expect(ownText(defaultLabel)).toBe("默认 agent");
     expect(defaultLabel.querySelector(`option[value=""]`)?.textContent).toBe("无（每个组都得自己选一个）");
-    expect(texts(container, "legend")).toEqual(["codex 的默认值", "估算槽", "协调槽"]);
+    expect(texts(container, "legend")).toEqual(["codex 的默认值", "估算槽", "协调槽", "审查槽"]);
     const estimator = fieldset(container, "估算槽");
     expect(estimator.getAttribute("aria-label")).toBe("估算槽");
     expect([...estimator.querySelectorAll("label")].map(ownText)).toEqual(["agent", "模型", "上下文窗口"]);

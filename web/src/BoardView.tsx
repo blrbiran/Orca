@@ -74,6 +74,9 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; onOpen: () 
           {facts.firstFailure !== null ? ` · ${t("board.card.failure", { taskId: facts.firstFailure.taskId, cause: (KNOWN_FAILURE_CAUSES as readonly string[]).includes(facts.firstFailure.cause) ? t(`control.failureCause.label.${knownCause(facts.firstFailure.cause)}`) : facts.firstFailure.cause })}` : ""}
         </p>
       )}
+      {/* Checks spec 2026-10-22 §7: a model review's findings this group is involved in -- major red, minor grey (P5). */}
+      {(facts?.reviewFindings?.major ?? 0) > 0 && <span className="badge" data-tone="danger" data-testid="board-card-findings-major">{t("board.card.findingsMajor", { count: facts!.reviewFindings!.major })}</span>}
+      {(facts?.reviewFindings?.minor ?? 0) > 0 && <span className="badge" data-testid="board-card-findings-minor">{t("board.card.findingsMinor", { count: facts!.reviewFindings!.minor })}</span>}
     </li>
   );
 }
