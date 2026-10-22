@@ -34,4 +34,17 @@ describe("reportedDebugOf", () => {
     expect(reportedDebugOf({ debug: { stray: 1 } }).kind).toBe("malformed");
     expect(reportedDebugOf({ debug: { reproduction: "expressible" } }).kind).toBe("malformed");
   });
+
+  // Controller call (session b37f7ce9): `located` is parsed on its own. A malformed one must not wipe the fields the
+  // closing and the reproduce-first check read (choseInstead, reproTests, reproCommand); a coarse check then fails
+  // `not-located` instead.
+  it("a malformed located drops only itself", () => {
+    const rest = { choseInstead: "keep the totals row", reproTests: ["t.test.ts"], reproCommand: "c" };
+    expect(reportedDebugOf({ debug: { ...rest, located: { paths: "src/a.ts" } } })).toEqual({ kind: "object", value: rest });
+    expect(reportedDebugOf({ debug: { ...rest, located: "somewhere" } })).toEqual({ kind: "object", value: rest });
+    // A valid located is kept; a malformed rest stays malformed whatever located holds.
+    const located = { paths: ["src/a.ts"], because: "there" };
+    expect(reportedDebugOf({ debug: { ...rest, located } })).toEqual({ kind: "object", value: { ...rest, located } });
+    expect(reportedDebugOf({ debug: { stray: 1, located: "x" } }).kind).toBe("malformed");
+  });
 });

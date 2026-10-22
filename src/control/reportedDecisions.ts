@@ -37,11 +37,23 @@ export type DebugResult = z.infer<typeof debugResultSchema>;
 
 export type ReportedDebug = { kind: "absent" } | { kind: "object"; value: DebugResult } | { kind: "malformed"; value: unknown };
 
-/** Reads only the top-level `debug` key, as reportedDecisionsOf reads `decisions`; a value the schema refuses is malformed. */
+const debugResultWithoutLocated = debugResultSchema.omit({ located: true });
+
+/**
+ * Reads only the top-level `debug` key, as reportedDecisionsOf reads `decisions`; a value the schema refuses is malformed.
+ * `located` is read on its own (controller call, session b37f7ce9): a malformed `located` drops only itself, so the
+ * agent's choseInstead and reproduction fields still count; a coarse correction's check then fails `not-located`.
+ */
 export function reportedDebugOf(result: unknown): ReportedDebug {
   if (typeof result !== "object" || result === null || !("debug" in result)) return { kind: "absent" };
   const value = (result as { debug?: unknown }).debug;
   if (value === undefined) return { kind: "absent" };
   const parsed = debugResultSchema.safeParse(value);
-  return parsed.success ? { kind: "object", value: parsed.data } : { kind: "malformed", value };
+  if (parsed.success) return { kind: "object", value: parsed.data };
+  if (typeof value === "object" && value !== null && !Array.isArray(value) && "located" in value) {
+    const { located: _located, ...rest } = value as Record<string, unknown>;
+    const withoutLocated = debugResultWithoutLocated.safeParse(rest);
+    if (withoutLocated.success) return { kind: "object", value: withoutLocated.data };
+  }
+  return { kind: "malformed", value };
 }

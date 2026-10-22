@@ -58,8 +58,8 @@ async function workspace(opts: { branch?: boolean; attempt?: Record<string, stri
 const contract = (command: string) => ({ context: { buildTestCommands: [command] } }) as never;
 
 /** The check, then Review Focus 4: HEAD is the attempt, on the same symbolic ref, and `git status` is clean. */
-async function checked(w: Awaited<ReturnType<typeof workspace>>, result: DebugResult, command = "true", resultMalformed?: boolean, timeoutMs = 10_000): Promise<ReproVerdict> {
-  const verdict = await checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result, contract: contract(command), timeoutMs, as: { runId: "run-t" }, ...(resultMalformed === undefined ? {} : { resultMalformed }) });
+async function checked(w: Awaited<ReturnType<typeof workspace>>, result: DebugResult, command = "true", resultMalformed?: boolean, timeoutMs = 10_000, requireLocated?: boolean): Promise<ReproVerdict> {
+  const verdict = await checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result, contract: contract(command), timeoutMs, as: { runId: "run-t" }, ...(resultMalformed === undefined ? {} : { resultMalformed }), ...(requireLocated === undefined ? {} : { requireLocated }) });
   expect(git(w.repo, "rev-parse", "HEAD")).toBe(w.attemptSha);
   expect(execFileSync("sh", ["-c", "git symbolic-ref -q HEAD || true"], { cwd: w.repo, encoding: "utf8" }).trim()).toBe(w.symbolic);
   expect(git(w.repo, "status", "--porcelain", "--untracked-files=all")).toBe("");
@@ -114,6 +114,25 @@ describe("checkReproduction (design §12.8)", () => {
     const empty = await workspace({ attempt: {} });
     expect(empty.attemptSha).not.toBe(empty.base);
     expect(await checked(empty, {}, REPRO)).toEqual({ kind: "failed", reason: "no-tests" });
+  });
+
+  // Flow engine spec §13.2: a repository-only or bare-run correction must be located first; one the agent could not
+  // locate fails `not-located` before any command runs, whatever else the result holds.
+  it("a coarse correction with nothing located fails not-located, and no command runs", async () => {
+    const w = await workspace();
+    const marker = join(await tempDir(), "ran");
+    const located = (input: DebugResult) => checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result: input, contract: contract(`touch ${marker}`), timeoutMs: 10_000, as: { runId: "run-t" }, requireLocated: true });
+    const repro = { reproTests: ["tests/repro.test.txt"], reproCommand: `touch ${marker}` };
+    expect(await located(repro)).toEqual({ kind: "failed", reason: "not-located" });
+    expect(await located({ ...repro, located: { paths: [], because: "could not tell where" } })).toEqual({ kind: "failed", reason: "not-located" });
+    expect(existsSync(marker)).toBe(false);
+    // Anything named counts as located: the check goes on to the reproduction (here, red at base and green at head).
+    for (const where of [{ paths: ["src/a.ts"] }, { groupId: "g1", paths: [] }, { runId: "r1", paths: [] }, { decisionId: "r1/1", paths: [] }]) {
+      expect(await checked(w, { reproTests: ["tests/repro.test.txt"], reproCommand: REPRO, located: { ...where, because: "there" } }, REPRO, undefined, 10_000, true))
+        .toEqual({ kind: "passed", tests: ["tests/repro.test.txt"], command: REPRO });
+    }
+    // A decision target never needs it.
+    expect(await checked(w, { reproTests: ["tests/repro.test.txt"], reproCommand: REPRO })).toEqual({ kind: "passed", tests: ["tests/repro.test.txt"], command: REPRO });
   });
 
   it("a malformed result fails result-invalid unless Orca can compute the tests itself", async () => {

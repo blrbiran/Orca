@@ -106,7 +106,11 @@ describe("a debug run's landing commit closes its correction (plan Task 9)", () 
     const correction = decisionCorrection();
     const t = await debugHarness({ correction }, { debug: () => ({ choseInstead: "a file lease", reproCommand: "true" }) }); try {
       const runId = await t.claim();
-      await t.until(t.driver(), () => LANDED.includes(t.body(runId).state));
+      // Flow engine spec §13.2: only a repository-only or bare-run correction must be located; a decision target is not asked.
+      const asked: Array<boolean | undefined> = [];
+      const passing = async (check: { requireLocated?: boolean }) => { asked.push(check.requireLocated); return { kind: "passed" as const, tests: [], command: "true" }; };
+      await t.until(t.driver({ checkReproduction: passing }), () => LANDED.includes(t.body(runId).state));
+      expect(asked).toEqual([undefined]);
       const drive = t.body(runId).drive;
       const fixRunId = fixRunIdOf(correction);
       const rows = lines(t.repo, drive.landedCommit, `.decisions/${fixRunId}.jsonl`);

@@ -12,7 +12,7 @@ type TaskContract = z.infer<typeof taskContractSchema>;
  * correction before it fixed it -- a test it added fails at the run's base and passes at its attempt. No model call.
  */
 
-export type ReproFailure = "no-tests" | "no-command" | "green-at-base" | "red-at-head" | "result-invalid";
+export type ReproFailure = "no-tests" | "no-command" | "green-at-base" | "red-at-head" | "result-invalid" | "not-located";
 export type ReproVerdict = { kind: "passed"; tests: string[]; command: string } | { kind: "skipped"; reason: string }
   | { kind: "failed"; reason: ReproFailure };
 
@@ -86,13 +86,23 @@ export async function restoreWorkspace(workdir: string, attemptSha: string, snap
  * the driver persisted before the check started (taken here when absent); the workspace is restored to it whatever
  * happens.
  */
+function locatesSomething(located: DebugResult["located"]): boolean {
+  if (located === undefined) return false;
+  return located.groupId !== undefined || located.runId !== undefined || located.decisionId !== undefined || located.paths.length > 0;
+}
+
 export async function checkReproduction(input: {
   workdir: string; base: string; attemptSha: string; result: DebugResult; contract: TaskContract; timeoutMs: number;
   resultMalformed?: boolean; snapshot?: WorkspaceSnapshot; signal?: AbortSignal;
   /** The run the command runs as (exitsZero). */
   as: DispatchedAs;
+  /** Flow engine spec §13.2: the correction is repository-only or a bare run, so the agent had to locate it first. */
+  requireLocated?: boolean;
 }): Promise<ReproVerdict> {
   const { workdir, base, attemptSha, result, timeoutMs, signal, as } = input;
+  // Spec §13.2: a coarse correction the agent could not locate fails `not-located` (its notes stay in the saved report):
+  // no `located`, or one naming neither a group, a run, a decision nor a path.
+  if (input.requireLocated === true && !locatesSomething(result.located)) return { kind: "failed", reason: "not-located" };
   if (result.reproduction === "not-expressible") {
     return result.reproductionReason === undefined ? { kind: "failed", reason: "result-invalid" } : { kind: "skipped", reason: result.reproductionReason };
   }

@@ -41,6 +41,8 @@ import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, 
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { recordEmptyResultDecisions, stepD, stepR } from "./driverLanding.js";
 import { readDebugMark } from "./debugChecks.js";
+import type { DebugInputV1 } from "./debugInput.js";
+import { correctionTargetOf } from "../corrections/target.js";
 import { classifyCriteriaChange, runChecksAtBase, type CriteriaBaseVerdict } from "./criteriaProtection.js";
 import { checkReproduction, restoreWorkspace, snapshotWorkspace, type ReproVerdict, type WorkspaceSnapshot } from "./debugRepro.js";
 import { reportedDebugOf } from "./reportedDecisions.js";
@@ -659,7 +661,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
       return true;
     });
     if (!marked) return false;
-    startDebugCheck(deps, runId, context, { workdir, base: drive.base!, attemptSha, contract, report, snapshot });
+    startDebugCheck(deps, runId, context, { groupId: run.groupId, workdir, base: drive.base!, attemptSha, contract, report, snapshot });
     return true;
   }
   // Protect-acceptance-criteria spec §4.2 / §7a.1: an attempt that modified (not only added to, not weakened) the files
@@ -678,7 +680,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
         return true;
       });
       if (!marked) return false;
-      startDebugCheck(deps, runId, context, { workdir, base: drive.base!, attemptSha, contract, report, snapshot, criteriaFiles: change.files });
+      startDebugCheck(deps, runId, context, { groupId: run.groupId, workdir, base: drive.base!, attemptSha, contract, report, snapshot, criteriaFiles: change.files });
       return true;
     }
   }
@@ -699,8 +701,18 @@ function debugChecksOf(context: DriverContext | undefined): Map<string, DebugChe
 }
 
 /** Starts the check as a promise the driver does not await; its outcome is kept on the entry for a later round. */
+/** Flow engine spec §13.2: a debug group whose frozen correction is repository-only or a bare run, so locating comes first. */
+function locateRequired(store: ExecutionDriverDeps["store"], groupId: string): boolean {
+  const mark = readDebugMark(readGroup(store, groupId));
+  if (mark === null) return false;
+  // A frozen input that is gone is not this check's to report: the landing reads it and blocks the run at D by name.
+  if (!store.db.prepare("SELECT 1 FROM execution_snapshots WHERE hash=?").get(mark.inputHash)) return false;
+  const kind = correctionTargetOf((JSON.parse(readCanonicalRecord(store, mark.inputHash)) as DebugInputV1).correction).kind;
+  return kind === "run" || kind === "repository";
+}
+
 function startDebugCheck(deps: ExecutionDriverDeps, runId: string, context: DriverContext | undefined, input: {
-  workdir: string; base: string; attemptSha: string; contract: ReturnType<typeof readConfirmedTaskExecution>["contract"]; report: ExecutionReport; snapshot: WorkspaceSnapshot;
+  groupId: string; workdir: string; base: string; attemptSha: string; contract: ReturnType<typeof readConfirmedTaskExecution>["contract"]; report: ExecutionReport; snapshot: WorkspaceSnapshot;
   /** Set for the criteria base-version re-run (the changed check-defining files); absent for the reproduce-first check. */
   criteriaFiles?: readonly string[];
 }): void {
@@ -722,6 +734,7 @@ function startDebugCheck(deps: ExecutionDriverDeps, runId: string, context: Driv
   void (deps.checkReproduction ?? checkReproduction)({
     workdir: input.workdir, base: input.base, attemptSha: input.attemptSha, contract: input.contract, timeoutMs: input.contract.executionPolicy.perAttemptTimeoutMs,
     result: reported.kind === "object" ? reported.value : {}, resultMalformed: reported.kind === "malformed", snapshot: input.snapshot, signal: entry.controller.signal, as,
+    ...(locateRequired(deps.store, input.groupId) ? { requireLocated: true } : {}),
   }).then((verdict) => { entry.settled = { verdict }; }, (error: unknown) => { entry.settled = { error }; });
 }
 
@@ -746,7 +759,7 @@ async function stepDebugCheck(deps: ExecutionDriverDeps, run: DriverRun, context
     const criteriaFiles = marker.check === "criteria-base"
       ? (await classifyCriteriaChange(workdir, drive.base!, marker.attemptSha, contract.verification.requiredChecks)).files : undefined;
     startDebugCheck(deps, runId, context, {
-      workdir, base: drive.base!, attemptSha: marker.attemptSha, contract, report: await savedReport(store, runId), snapshot: marker,
+      groupId: run.groupId, workdir, base: drive.base!, attemptSha: marker.attemptSha, contract, report: await savedReport(store, runId), snapshot: marker,
       ...(criteriaFiles === undefined ? {} : { criteriaFiles }),
     });
     return true;

@@ -203,9 +203,12 @@ describe("closing a coarse correction when its debug run lands (spec §13.4)", (
         const mark = { correctionId: correction.id, ordinal: 1, inputHash: hash, missing: [], agentFallback: null, undoHow: null, closing: null, checks: { from: "named", namedBy: "human" } };
         const body = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
         t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...body, debug: mark }));
-        const passing = async () => ({ kind: "passed" as const, tests: [], command: "true" });
+        // Spec §13.2: the driver asks the check to require a located correction (checkReproduction fails `not-located`).
+        const asked: Array<boolean | undefined> = [];
+        const passing = async (check: { requireLocated?: boolean }) => { asked.push(check.requireLocated); return { kind: "passed" as const, tests: [], command: "true" }; };
         const runId = await t.claim();
         await t.until(createExecutionDriver({ ...t.deps, checkReproduction: passing }), () => ["landed", "settled"].includes(t.body(runId).state));
+        expect(asked).toEqual([true]);
         const rows = lines(t.repo, t.body(runId).drive.landedCommit, `.decisions/${fixRunId}.jsonl`);
         expect(rows.map((r) => r.ev)).toEqual(["decision"]);
         expect(rows[0]).toMatchObject({ id: `${fixRunId}/1`, importance: "major" });
