@@ -129,9 +129,13 @@ describe("the integration check (kanban spec §7 layer 1)", () => {
   // check's id as the marker and the panel state's empty `dispatched-person` directory as ORCA_PERSON_DIR.
   it("runs the command with the check's marker and the panel's dispatched-person directory", async () => {
     const w = await world(); const { h } = w; try {
-      w.land("g"); w.land("g2");
       const seen = join(h.root, "seen.txt");
       w.setCheck(true, `printf '%s %s' "\${ORCA_DISPATCHED_RUN-unset}" "\${ORCA_PERSON_DIR-unset}" > '${seen}'`);
+      // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): on the checks model the first evaluation only sets the watermark
+      // (checks spec 2026-10-22 §5.2), so two landings after it are what run the command.
+      w.land("old");
+      await w.pass();
+      await w.commitLand("g"); await w.commitLand("g2");
       expect(await w.pass()).toEqual({ started: ["repo"] });
       // Mutation "webService passes another directory" (or none) -> red.
       expect(readFileSync(seen, "utf8")).toMatch(new RegExp(`^integration-check-[0-9a-f]{12}-\\d+ ${join(h.store.stateDir, "dispatched-person")}$`));
