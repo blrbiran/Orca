@@ -112,13 +112,17 @@ export function roundCaps(roundNo: number, known: ClassPair | null, written: Cla
  * Clarify caps spec §3.1-§3.2: round 1 must classify; every round is held to its caps (an answer over one is invalid and
  * retried, never truncated). `classification` is the class known before the call (null: none yet).
  */
-export function classifyClarifyOutput(value: unknown, context: { roundNo: number; requirementId: string; earlierQuestionIds: readonly string[]; classification?: ClassPair | null }): ClarifyClass {
+export function classifyClarifyOutput(value: unknown, context: {
+  roundNo: number; requirementId: string; earlierQuestionIds: readonly string[]; classification?: ClassPair | null;
+  /** Gaps spec §4.6: a host's own fixed caps (the feedback host's); no class is then asked for. Absent: the class table. */
+  caps?: ClarifyCaps;
+}): ClarifyClass {
   if (value === null) return { ok: false, reason: "no-output" };
   const parsed = clarifyOutputSchema.safeParse(value);
   if (!parsed.success) { const issue = parsed.error.issues[0]; return { ok: false, reason: `schema:${issue?.path.join(".") ?? ""}:${issue?.message ?? "invalid"}` }; }
   const out = parsed.data;
-  if (context.roundNo === 1 && out.classification === undefined) return { ok: false, reason: "classification-missing" };
-  const caps = roundCaps(context.roundNo, context.classification ?? null, out.classification ?? null);
+  if (context.caps === undefined && context.roundNo === 1 && out.classification === undefined) return { ok: false, reason: "classification-missing" };
+  const caps = context.caps ?? roundCaps(context.roundNo, context.classification ?? null, out.classification ?? null);
   for (const [field, max] of [["questions", caps.questions], ["glossary", caps.glossary], ["adrs", caps.adrs]] as const) {
     if (out[field].length > max) return { ok: false, reason: `cap:${field}:${out[field].length}>${max}` };
   }
@@ -187,11 +191,15 @@ export function buildClarifyPrompt(input: {
    * is the requirement host's (CLARIFY_INSTRUCTION_V2 and `repository-overview`), byte for byte (C7).
    */
   frame?: { instruction: string; contextName: string };
+  /** Gaps spec §4.6: a host's fixed caps name the limits line instead of the class table. Absent: as always (C7). */
+  caps?: ClarifyCaps;
 }): string {
   const nonce = input.overview.hash.slice(0, 16);
   const superseded = earlierRounds(input.superseded ?? []);
   const blocks = [
-    input.frame?.instruction ?? CLARIFY_INSTRUCTION_V2, limitsLine(input.limits.roundNo, input.limits.classification, input.limits.roundCap), `Write in: ${LANGUAGE_NAMES[input.contentLanguage]}`,
+    input.frame?.instruction ?? CLARIFY_INSTRUCTION_V2,
+    input.caps === undefined ? limitsLine(input.limits.roundNo, input.limits.classification, input.limits.roundCap)
+      : `Limits: round ${input.limits.roundNo} of at most ${input.caps.rounds}; in this round at most ${input.caps.questions} questions, ${input.caps.glossary} glossary entries and ${input.caps.adrs} decisions.`, `Write in: ${LANGUAGE_NAMES[input.contentLanguage]}`,
     fence("idea", nonce, input.idea), fence(input.frame?.contextName ?? "repository-overview", nonce, input.overview.canonicalJson),
     fence("rounds", nonce, JSON.stringify(earlierRounds(input.earlier))),
     ...(superseded.length === 0 ? [] : [

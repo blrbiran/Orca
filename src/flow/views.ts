@@ -11,6 +11,7 @@ import type { ControlStore } from "../control/store.js";
 import type { ToolRulesReport } from "../control/toolRules.js";
 import { FlowRefusal, latestByStep, loadRun, openAsks, recordOfExecution } from "./kernel.js";
 import { marksOf } from "./marks.js";
+import { waitingIntakes } from "./feedback/intake.js";
 import { getFlowRun, listEffects, listExecutions, listHeads, listMessages, listPlans, type ExecutionRow } from "./store.js";
 
 /**
@@ -45,7 +46,9 @@ export function readFlowList(store: ControlStore): FlowListV1 {
         // Steps whose newest execution waits on the person (an ask, a confirm card, a question, an exhausted pool, an
         // effect a deferral holds), plus each deferred step: owed, "fill when ready" (gaps spec §6.2). A skip owes nothing.
         needsYou: [...latestByStep(listExecutions(store, row.id)).values()].filter((e) => e.state === "needs-person" || e.state === "parked").length
-          + [...marksOf(listMessages(store, row.id)).values()].filter((m) => m.kind === "defer").length,
+          + [...marksOf(listMessages(store, row.id)).values()].filter((m) => m.kind === "defer").length
+          // Gaps spec §4.2: a feedback intake waiting on the person (a location to pick, a clarify round to answer).
+          + waitingIntakes(store, row.id),
       };
     }),
   };

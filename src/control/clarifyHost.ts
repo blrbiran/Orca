@@ -1,6 +1,6 @@
 import { CLARIFY_INSTRUCTION_V2, CLARIFY_PROMPT_HEAD, deepFreeze, CLARIFY_JSON_SCHEMA } from "./requirementClarify.js";
 import { newDraft, queueRequirementCall, saveRequirementGroup, writeDraft, type RequirementGroup } from "./requirementRecords.js";
-import { CLARIFY_CAPS } from "./requirementSchemas.js";
+import { CLARIFY_CAPS, type ClarifyCaps } from "./requirementSchemas.js";
 import type { ControlStore } from "./store.js";
 
 /**
@@ -23,6 +23,11 @@ export interface ClarifyHost {
   sections(): readonly string[] | null;
   /** What reaching consensus does; returns the wake it queued, if any. */
   onConsensus(input: ConsensusInput): string | null;
+  /**
+   * Gaps spec §4.6: a host's own fixed caps (the feedback host's `{rounds: 1, questions: 2, glossary: 0, adrs: 0}`),
+   * enforced by the shared classifier when given. Absent: CLARIFY_CAPS by class, as the requirement and flow step hosts.
+   */
+  caps?(): ClarifyCaps;
 }
 
 const REQUIREMENT_FRAME: ClarifyFrame = Object.freeze({ instruction: CLARIFY_INSTRUCTION_V2, contextName: "repository-overview" });

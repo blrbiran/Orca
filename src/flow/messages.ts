@@ -4,8 +4,8 @@
  * the run is running nothing is consumed, so a message never interrupts a running step (R §3).
  *
  * - `feedback` on a step (or one of its executions) becomes the plan's `feedback` reason and the text of that step's
- *   revision prompt (rerun.ts plans the rest). Run-level feedback needs triage over `hints.owns`, which is not built yet:
- *   it is stored rejected, named, rather than guessed at.
+ *   revision prompt (rerun.ts plans the rest). Gaps spec §4: feedback on the run, or with an anchor, opens an intake
+ *   (feedback/intake.ts) and is taken here only once the intake is `ready`, re-verified, with its location text.
  * - `edit` makes the person's value the step's new active output (by = the person): record fields over the active
  *   record, or files committed onto the active workspace output; the edited step is not re-run, later steps are planned.
  * - `command`: `pause`, `resume`, `stop`, `retry` (a failed step), `rewind` (rewind.ts), `repin {version}`. A command
@@ -31,8 +31,10 @@ import { dropFromOpenPlan, makePlan } from "./rerun.js";
 import { discardEffect } from "./effects.js";
 import { holdableAfter, MARK_COMMANDS, MARKABLE_KINDS, marksOf } from "./marks.js";
 import { applyRewind, reapplyEdits } from "./rewind.js";
+import { hasAttachment } from "./feedback/attachments.js";
+import { feedbackShapeRefusal, markPlanned, openIntake, takeReadyIntake, withdrawIntakes } from "./feedback/intake.js";
 import {
-  appendExecution, appendMessage, finishExecution, getEffect, getHead, listExecutions, listMessages, setFlowRunState, setFlowRunTemplate, setHead, setMessageState,
+  appendExecution, appendMessage, finishExecution, getEffect, getHead, getIntake, listExecutions, listMessages, setFlowRunState, setFlowRunTemplate, setHead, setMessageState,
   type ExecutionRow, type MessageRow,
 } from "./store.js";
 import { isInsidePath } from "./template/checklist.js";
@@ -53,7 +55,7 @@ const COMMANDS = ["pause", "resume", "stop", "retry", "rewind", "repin", "skip",
 const stepKeyOf = (target: MessageTarget): string | null => ("stepKey" in target ? target.stepKey : null);
 
 /** What can be told at once, before any boundary: the shape and that the target exists. */
-function shapeRefusal(store: ControlStore, run: LoadedRun, input: FlowMessageInput): string | null {
+function shapeRefusal(store: ControlStore, run: LoadedRun, input: FlowMessageInput, env: NodeJS.ProcessEnv): string | null {
   const target = input.target;
   if (target.kind === "round") return "flow-message-target-missing";
   if (target.kind === "effect") {
@@ -64,7 +66,10 @@ function shapeRefusal(store: ControlStore, run: LoadedRun, input: FlowMessageInp
   if (target.kind === "execution" && !listExecutions(store, run.row.id).some((e) => e.stepKey === target.stepKey && e.seq === target.seq)) return "flow-message-target-missing";
   if (input.kind === "feedback") {
     if (typeof input.body.text !== "string" || input.body.text.trim() === "") return "flow-message-invalid:text";
-    if (stepKey === null) return "flow-message-target-missing:run-feedback-triage-not-built";
+    // Gaps spec §4.1, §4.8: run-level feedback opens an intake; anchors, attachments and a replacement are checked here.
+    if (target.kind !== "run" && stepKey === null) return "flow-message-target-missing";
+    const refusal = feedbackShapeRefusal(store, run.row.id, input.body, (id) => hasAttachment(env, id));
+    if (refusal !== null) return refusal;
   }
   if (input.kind === "edit") {
     if (stepKey === null) return "flow-message-target-missing";
@@ -99,12 +104,17 @@ function shapeRefusal(store: ControlStore, run: LoadedRun, input: FlowMessageInp
 /** §8.1: store the message, then take it if the run is at a boundary. */
 export async function acceptMessage(deps: FlowDeps, flowRunId: string, input: FlowMessageInput): Promise<AcceptResult> {
   const run = loadRun(deps.store, flowRunId);
-  const refusal = run.row.state === "stopped" ? "flow-run-stopped" : shapeRefusal(deps.store, run, input);
+  const refusal = run.row.state === "stopped" ? "flow-run-stopped" : shapeRefusal(deps.store, run, input, deps.env);
   const at = deps.now();
-  const { row, deduped } = deps.store.transaction(() => appendMessage(deps.store, {
-    flowRunId, requestId: input.requestId, kind: input.kind, target: input.target.kind, body: { ...input.body, target: input.target },
-    by: input.by, via: input.via, state: refusal === null ? "accepted" : "rejected", reason: refusal, at,
-  }));
+  const { row, deduped } = deps.store.transaction(() => {
+    const appended = appendMessage(deps.store, {
+      flowRunId, requestId: input.requestId, kind: input.kind, target: input.target.kind, body: { ...input.body, target: input.target },
+      by: input.by, via: input.via, state: refusal === null ? "accepted" : "rejected", reason: refusal, at,
+    });
+    // Gaps spec §4.2: run-level or anchored feedback opens its intake with the message (and withdraws what it replaces).
+    if (!appended.deduped && refusal === null) openIntake(deps.store, run, appended.row, at);
+    return appended;
+  });
   if (!deduped && refusal === null) {
     await consumeAtBoundary(deps, flowRunId);
     await advanceRun(deps, flowRunId);
@@ -124,17 +134,33 @@ export async function consumeAtBoundary(deps: FlowDeps, flowRunId: string): Prom
   const feedback: Record<string, string[]> = {};
   const edits: string[] = [];
   const fills: string[] = [];
+  const taken: number[] = [];
+  const paused = loadRun(deps.store, flowRunId).row.state === "paused";
   let recompose = false;
   let plan: { by: string; via: string; trigger: string } | null = null;
   // A rewind queues messages again; they are taken in the same round, so one plan carries everything.
   for (;;) {
-    const pending = listMessages(deps.store, flowRunId).filter((m) => m.state === "accepted" && (m.body as { reapply?: unknown }).reapply === undefined);
+    // Gaps spec §4.2: a feedback with an intake is taken only once the intake is `ready` (and not while the run is
+    // paused: it plans nothing until the resume); until then only the intake waits.
+    const pending = listMessages(deps.store, flowRunId).filter((m) => {
+      if (m.state !== "accepted" || (m.body as { reapply?: unknown }).reapply !== undefined) return false;
+      const intake = m.kind === "feedback" ? getIntake(deps.store, flowRunId, m.seq) : null;
+      return intake === null || (intake.state === "ready" && !paused && !taken.includes(m.seq));
+    });
     if (pending.length === 0) break;
     moved = true;
     for (const message of pending) {
       const target = (message.body as { target: MessageTarget }).target;
       try {
-        if (message.kind === "feedback") {
+        const intake = message.kind === "feedback" ? getIntake(deps.store, flowRunId, message.seq) : null;
+        if (intake !== null) {
+          // §4.2: re-verified against the current composition first; a miss sends it back to needs-location.
+          taken.push(message.seq);
+          const ready = await takeReadyIntake(deps, loadRun(deps.store, flowRunId), intake);
+          if (ready === null) continue;
+          for (const key of ready.targets) feedback[key] = [...(feedback[key] ?? []), ready.text];
+          plan = { by: message.by, via: message.via, trigger: "feedback" };
+        } else if (message.kind === "feedback") {
           const key = stepKeyOf(target)!;
           feedback[key] = [...(feedback[key] ?? []), String((message.body as { text: string }).text)];
           plan = { by: message.by, via: message.via, trigger: "feedback" };
@@ -159,7 +185,11 @@ export async function consumeAtBoundary(deps: FlowDeps, flowRunId: string): Prom
   // applied: the composition reads the applied messages), so the person's folder loses it too.
   const vault = recompose ? vaultOf(loadRun(deps.store, flowRunId)) : null;
   if (vault !== null) await advanceWorkspace(deps, loadRun(deps.store, flowRunId), vault, null);
-  if (plan !== null) await makePlan(deps, flowRunId, { ...plan, feedback, edits, fills });
+  if (plan !== null) {
+    const planNo = await makePlan(deps, flowRunId, { ...plan, feedback, edits, fills });
+    const planned = taken.filter((seq) => listMessages(deps.store, flowRunId).find((m) => m.seq === seq)?.state === "applied");
+    if (planned.length > 0) markPlanned(deps, flowRunId, planned, planNo);
+  }
   return moved;
 }
 
@@ -174,7 +204,7 @@ async function applyCommand(deps: FlowDeps, run: LoadedRun, message: MessageRow,
   switch (body.command) {
     case "pause": move(["running"], "paused"); return null;
     case "resume": move(["paused"], "running"); return null;
-    case "stop": move(["running", "paused", "done"], "stopped"); return null;
+    case "stop": move(["running", "paused", "done"], "stopped"); deps.store.transaction(() => withdrawIntakes(deps.store, run.row.id, `run stopped by message ${message.seq}`, deps.now())); return null;
     case "retry": {
       const stepKey = stepKeyOf(target)!;
       const latest = latestByStep(listExecutions(deps.store, run.row.id)).get(stepKey);

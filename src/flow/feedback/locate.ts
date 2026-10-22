@@ -147,3 +147,8 @@ function resolve(anchor: Anchor, parsed: ReadonlyArray<{ file: SearchFile; doc: 
   }
   return done();
 }
+
+/** The paragraphs of a file as `loc1` numbers them (1-based: index 0 is paragraph 1); for prompts and re-checks only. */
+export function paragraphTexts(raw: string): string[] {
+  return parse(raw).paras.map((p) => p.text);
+}

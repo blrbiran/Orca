@@ -25,7 +25,7 @@ import { runShell } from "./kinds/check.js";
 import { builtinKinds, type ExecutionBody, type FlowRunBody, type KindContext, type KindDefinition, type KindOutcome, type KindRegistry, type LoadedRun, type RoleResolution } from "./kinds/registry.js";
 import { buildStepPrompt, bounded } from "./prompt.js";
 import {
-  appendExecution, appendFlowDecision, appendMessage, finishExecution, getFlowRun, getHead, insertFlowRun, listExecutions, listHeads, listMessages, listRunsWithOpenWork, setDefinitionHash, setFlowRunState, setHead,
+  appendExecution, appendFlowDecision, appendMessage, FEEDBACK_KEY, finishExecution, getFlowRun, getHead, insertFlowRun, listExecutions, listHeads, listMessages, listRunsWithOpenWork, setDefinitionHash, setFlowRunState, setHead,
   updateFlowRunBody,
   type ExecutionKey, type ExecutionRow, type ExecutionState,
 } from "./store.js";
@@ -52,6 +52,7 @@ import { flowLayers, readFlowSettings } from "./settings.js";
 import { EFFECT_NOT_REPORTED, effectUnreported, gateEffect, settleEffect } from "./effects.js";
 import { consumeAtBoundary } from "./messages.js";
 import { heldBy, markPointer, marksOf, suppressedSteps, type Mark } from "./marks.js";
+import { advanceIntakes, completeIntakeCall, hasBusyIntake } from "./feedback/intake.js";
 
 /** A refusal by name (spec §14, Global Constraints' codes); nothing was written. */
 export class FlowRefusal extends Error {
@@ -817,6 +818,9 @@ export async function resumeExecution(deps: FlowDeps, run: LoadedRun, execution:
 
 /** One pass over a run: start at most one execution; true when something moved (the caller passes again). */
 async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
+  // Gaps spec §4.2: the person's feedback intakes move first, on any run that is not stopped -- a `done` or `paused` one
+  // too (single calls on the person's request); only the intake waits for the person, never the run.
+  if (run.row.state !== "stopped" && await advanceIntakes(deps, run)) return true;
   // §8.2: the person's messages are taken at a boundary only, never in the middle of a running step.
   if (await consumeAtBoundary(deps, run.row.id)) return true;
   const fresh = loadRun(deps.store, run.row.id);
@@ -931,7 +935,8 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
     return true;
   }
   if (plan !== null && satisfied) { deps.store.transaction(() => finishPlan(deps.store, plan)); return true; }
-  if (satisfied && run.row.state === "running") { deps.store.transaction(() => setFlowRunState(deps.store, run.row.id, "running", "done")); }
+  // Gaps spec §4.2: an intake Orca still owes a move (locating, triaging, restating, ready) keeps the run from `done`.
+  if (satisfied && run.row.state === "running" && !hasBusyIntake(deps.store, run.row.id)) { deps.store.transaction(() => setFlowRunState(deps.store, run.row.id, "running", "done")); }
   return false;
 }
 
@@ -984,10 +989,10 @@ function setExecutionStateSkipped(store: ControlStore, key: ExecutionKey, at: nu
  * again; a clean pass clears it.
  */
 export async function advanceFlowRuns(deps: FlowDeps): Promise<void> {
-  // Gaps spec §4.2, §5.3: every run with open work. A paused run's open plan and its deadlines wait for the resume
-  // (nobody was asked meanwhile either); a `done` run's open intakes are the intake stage's (gaps plan Task 5).
+  // Gaps spec §4.2, §5.3: every run with open work that is not stopped. A `done` or `paused` run is passed for its
+  // feedback intakes (passRun's first stage); a paused run's open plan and its deadlines still wait for the resume.
   for (const flowRunId of listRunsWithOpenWork(deps.store)) {
-    if (getFlowRun(deps.store, flowRunId)?.state !== "running") continue;
+    if (getFlowRun(deps.store, flowRunId)?.state === "stopped") continue;
     let failed: string | null = null;
     try { await advanceRun(deps, flowRunId); }
     catch (error) { failed = error instanceof Error ? error.message : String(error); }
@@ -1019,6 +1024,7 @@ export async function advanceRun(deps: FlowDeps, flowRunId: string): Promise<voi
  */
 export async function completeFlowCall(deps: FlowDeps, key: ExecutionKey, rawOutput: unknown, failure: string | null = null): Promise<void> {
   if (key.stepKey === PLAN_KEY) return completePlanCall(deps, key.flowRunId, key.seq, rawOutput, failure);
+  if (key.stepKey === FEEDBACK_KEY) return completeIntakeCall(deps, key.flowRunId, key.seq, rawOutput, failure);
   const run = loadRun(deps.store, key.flowRunId);
   const execution = listExecutions(deps.store, key.flowRunId).find((e) => e.stepKey === key.stepKey && e.seq === key.seq);
   if (execution === undefined || execution.state !== "running" || (execution.body as ExecutionBody).call === undefined) return;

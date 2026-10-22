@@ -120,6 +120,8 @@ export function appendMessage(store: ControlStore, input: MessageInput): { row: 
 
 /** The step key a plan's rerun-proposal call is filed under (never a template step id: those are slugs). */
 export const PLAN_KEY = "@plan";
+/** Gaps spec §4.4, §4.6: the key a feedback intake's single calls (triage, its clarify round) are filed under, with the message seq. */
+export const FEEDBACK_KEY = "@feedback";
 
 export interface PlanRow {
   flowRunId: string; planNo: number; state: "proposed" | "chosen" | "running" | "done" | "abandoned";

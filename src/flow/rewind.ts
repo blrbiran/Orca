@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { applyEdit, type MessageTarget } from "./messages.js";
 import { FlowRefusal, recordOfExecution, stepOf, vaultOf, type FlowDeps } from "./kernel.js";
 import { openPlan } from "./rerun.js";
+import { reuseIntake } from "./feedback/intake.js";
 import type { ExecutionBody, LoadedRun } from "./kinds/registry.js";
 import { appendMessage, clearHead, finishExecution, getHead, listExecutions, listMessages, setHead, setMessageState, type ExecutionRow, type MessageRow } from "./store.js";
 import { vaultGitBytes, type Vault } from "./vault/vault.js";
@@ -54,7 +55,10 @@ export async function applyRewind(deps: FlowDeps, run: LoadedRun, message: Messa
       const target = (m.body as { target: MessageTarget }).target;
       const requestId = `rewind:${message.seq}:${m.seq}`;
       if (m.kind === "feedback") {
-        appendMessage(deps.store, { flowRunId: run.row.id, requestId, kind: "feedback", target: target.kind as MessageRow["target"], body: { ...(m.body as object), reappliedFrom: m.seq }, by: m.by, via: m.via, state: "accepted", reason: null, at: deps.now() });
+        const requeued = appendMessage(deps.store, { flowRunId: run.row.id, requestId, kind: "feedback", target: target.kind as MessageRow["target"], body: { ...(m.body as object), reappliedFrom: m.seq }, by: m.by, via: m.via, state: "accepted", reason: null, at: deps.now() });
+        // Gaps spec §4.2: a feedback that had an intake reuses it -- located anchors (re-verified at the boundary), targets,
+        // restated text -- and makes no new triage or clarify call.
+        if (!requeued.deduped) reuseIntake(deps.store, run.row.id, m.seq, requeued.row.seq, deps.now());
         continue;
       }
       // The newest execution of that edit (a re-applied edit keeps the original message's number).

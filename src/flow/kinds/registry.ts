@@ -20,7 +20,7 @@ import { ASK_KIND } from "./ask.js";
 import { WORK_KIND, type FlowChildPort, type FlowChildStatus } from "./work.js";
 
 /** Plan Task 8: the parent group's single-call purposes a flow uses (the driver-backed port registers them, Task 10). */
-export const FLOW_CALL_PURPOSES = ["clarify", "flow-draft", "flow-review", "flow-ask", "rerun-proposal"] as const;
+export const FLOW_CALL_PURPOSES = ["clarify", "flow-draft", "flow-review", "flow-ask", "rerun-proposal", "feedback-triage"] as const;
 
 export interface CallSpec { purpose: string; prompt: string; responseSchema: Record<string, unknown>; maxOutputTokens: number }
 export interface RecordOutput { record: unknown; flags?: string[] }

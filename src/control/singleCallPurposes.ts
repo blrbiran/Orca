@@ -71,6 +71,7 @@ const flowHandler = (purpose: SingleCallPurpose): SingleCallHandler => ({ purpos
 const HANDLERS: Readonly<Record<SingleCallPurpose, SingleCallHandler>> = Object.freeze({
   estimate: ESTIMATE, clarify: CLARIFY_ANY, split: SPLIT_HANDLER,
   "flow-draft": flowHandler("flow-draft"), "flow-review": flowHandler("flow-review"), "flow-ask": flowHandler("flow-ask"), "rerun-proposal": flowHandler("rerun-proposal"),
+  "feedback-triage": flowHandler("feedback-triage"),
 });
 
 export function singleCallHandler(purpose: SingleCallPurpose): SingleCallHandler {
