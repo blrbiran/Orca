@@ -18,6 +18,9 @@ import type { FlowTemplate } from "../../src/flow/template/schema.js";
 import { getFlowRun, listEffects, listHeads, listMessages, listPlans, type MessageRow } from "../../src/flow/store.js";
 import { readHead } from "../../src/flow/vault/compose.js";
 import { readFlowList } from "../../src/flow/views.js";
+import { childGroupIdOf } from "../../src/flow/kinds/work.js";
+import { fakeChildPort } from "./fixtures/childPort.js";
+import { flowWorld } from "./fixtures/flowWorld.js";
 import { SLUG, TITLES, WECHAT, wechatFile, wechatWorld, zeroRound } from "./fixtures/wechatWorld.js";
 
 type World = Awaited<ReturnType<typeof wechatWorld>>;
@@ -326,6 +329,36 @@ describe("skip / defer / fill on the wechat run (G5)", { timeout: 60_000 }, () =
       expect((listPlans(w.store, flowRunId)[0]!.chosen as { steps: string[] }).steps).not.toContain("visuals");
       expect(w.execs(flowRunId, "visuals").map((e) => e.state)).toEqual(["done", "skipped", "skipped", "skipped"]);
       expect(listEffects(w.store, flowRunId).filter((r) => r.stepKey === "visuals").map((r) => r.state)).toEqual(["applied", "discarded"]);
+    } finally { await w.dispose(); }
+  });
+});
+
+describe("a marked step is no candidate of a later plan (§6.2, like a `when`-false step)", () => {
+  const TPL = { t: { yaml: `format: orca-flow-v1
+id: t
+workspace: {kind: dir}
+effects:
+  push: {class: external}
+steps:
+  - {id: voice, kind: draft, prompt: v.md}
+  - {id: cover, kind: draft, prompt: c.md}
+  - {id: box, kind: work, prompt: b.md, effect: push}
+`, assets: { "v.md": "V.\n", "c.md": "C.\n", "b.md": "B.\n" } } };
+  it("feedback on voice after cover was skipped: cover is neither a candidate nor an upstream reason", async () => {
+    const children = fakeChildPort();
+    const w = await flowWorld(TPL, { children: children.port }); try {
+      const { flowRunId } = await w.start({ templateRef: "builtin/t" });
+      await w.advance();
+      const call = (stepKey: string, seq: number) => w.calls.findIndex((c) => c.key.stepKey === stepKey && c.key.seq === seq);
+      await w.answer(call("voice", 1), { content: "voice 1" });
+      await w.answer(call("cover", 1), { content: "cover 1" });
+      children.land(childGroupIdOf(flowRunId, "box", 1), { "sent.json": "{}\n" }, { flow: { effect: { remoteId: "m1" } } });
+      await w.advance();
+      expect(getFlowRun(w.store, flowRunId)!.state).toBe("done");
+      await acceptMessage(w.deps, flowRunId, { kind: "command", target: { kind: "step", stepKey: "cover" }, body: { command: "skip" }, by: "ann", via: "cli:test", requestId: "s1" });
+      await acceptMessage(w.deps, flowRunId, { kind: "feedback", target: { kind: "step", stepKey: "voice" }, body: { text: "warmer" }, by: "ann", via: "cli:test", requestId: "f1" });
+      const list = (listPlans(w.store, flowRunId)[0]!.candidates as { list: Array<{ stepKey: string; reasons: string[] }> }).list;
+      expect(list).toEqual([{ stepKey: "voice", reasons: ["feedback"] }, { stepKey: "box", reasons: ["upstream-changed:voice"] }]);
     } finally { await w.dispose(); }
   });
 });
