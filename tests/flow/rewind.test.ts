@@ -36,6 +36,8 @@ const last = (w: Awaited<ReturnType<typeof flowWorld>>) => w.calls.length - 1;
 /** Run to done, re-run everything from draft (draft#2 and every later step on it), then feedback on voice and an edit to finetune. */
 async function history() {
   const w = await flowWorld({ t: TPL });
+  // The person's checklist (`rerunReview: review`); the built-in default is `auto` since gaps spec §5.2.
+  w.deps.rerunReview = () => "review";
   const { flowRunId } = await w.start({ templateRef: "builtin/t" });
   await w.advance();
   for (const [i, content] of ["D1", "V1", FT1, "A1"].entries()) await w.answer(i, { content });
@@ -120,6 +122,7 @@ describe("rewind keeps later messages (C11)", () => {
   it("a workspace edit is re-applied by git merge-file on the step's re-run output and copied back", async () => {
     const children = fakeChildPort();
     const w = await flowWorld({ w: { yaml: "format: orca-flow-v1\nid: w\nworkspace: {kind: dir}\nsteps:\n  - {id: tune, kind: work, prompt: p.md}\n", assets: { "p.md": "Tune.\n" } } }, { children: children.port }); try {
+      w.deps.rerunReview = () => "review";
       const { flowRunId } = await w.start({ templateRef: "builtin/w" });
       await w.advance();
       children.land(childGroupIdOf(flowRunId, "tune", 1), { "t.md": FT1 });

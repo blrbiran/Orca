@@ -25,6 +25,8 @@ steps:
 
 async function proposed() {
   const w = await flowWorld(TPL);
+  // The person's checklist (`rerunReview: review`); the built-in default is `auto` since gaps spec §5.2.
+  w.deps.rerunReview = () => "review";
   const { flowRunId } = await w.start({ templateRef: "builtin/t" });
   await w.advance();
   await w.answer(0, { content: "voice" });

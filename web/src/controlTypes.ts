@@ -699,6 +699,7 @@ export type FlowLockV1 = "effects.local" | "effects.cost" | "effects.external" |
 export type FlowsLayerV1 = {
   effects?: { local?: FlowLevelSettingV1; cost?: FlowLevelSettingV1; external?: FlowLevelSettingV1; irreversible?: FlowLevelSettingV1 };
   rerunReview?: "auto" | "review";
+  rerunAskTimeoutSeconds?: number;
   roles?: Record<string, { agent: string; model?: string }>;
   allowedSkillSources?: string[];
   budgets?: { tokensPerRun?: number };
@@ -1020,6 +1021,7 @@ export type FlowSourcedV1<T> = { value: T; source: "project" | "global" | "built
 export type FlowSettingsReadV1 = {
   effects: Record<FlowEffectClassV1, FlowSourcedV1<FlowLevelSettingV1>>;
   rerunReview: FlowSourcedV1<"auto" | "review">;
+  rerunAskTimeoutSeconds: FlowSourcedV1<number>;
   roles: FlowSourcedV1<Record<string, { agent: string; model?: string }>>;
   allowedSkillSources: FlowSourcedV1<string[] | null>;
   budgets: { tokensPerRun: FlowSourcedV1<number> };

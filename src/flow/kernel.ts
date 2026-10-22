@@ -25,7 +25,7 @@ import { runShell } from "./kinds/check.js";
 import { builtinKinds, type ExecutionBody, type FlowRunBody, type KindContext, type KindDefinition, type KindOutcome, type KindRegistry, type LoadedRun, type RoleResolution } from "./kinds/registry.js";
 import { buildStepPrompt, bounded } from "./prompt.js";
 import {
-  appendExecution, appendFlowDecision, appendMessage, finishExecution, getFlowRun, getHead, insertFlowRun, listExecutions, listFlowRunIds, listHeads, setDefinitionHash, setFlowRunState, setHead,
+  appendExecution, appendFlowDecision, appendMessage, finishExecution, getFlowRun, getHead, insertFlowRun, listExecutions, listHeads, listRunsWithOpenWork, setDefinitionHash, setFlowRunState, setHead,
   updateFlowRunBody,
   type ExecutionKey, type ExecutionRow, type ExecutionState,
 } from "./store.js";
@@ -775,6 +775,9 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
   const heads = listHeads(deps.store, run.row.id);
   const blockers: FlowStep[] = [];
   let satisfied = true;
+  // Gaps spec §5.4: an open question holds its step and, through it, every later step (template order is the dependency
+  // in phase 1); its `parallelWith` sibling and the steps before it run.
+  const asking = new Set((plan?.chosen.pending ?? []).filter((item) => item.answer === null).map((item) => item.stepKey));
   for (const [index, step] of run.template.steps.entries()) {
     const current = latest.get(step.id);
     const basis = basisOf(run, index, heads);
@@ -785,6 +788,23 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
       if (!free) return false;
       if (await driftBeforeExecution(deps, run.row.id)) return true;
       await runQueued(deps, run, current, basis);
+      return true;
+    }
+    if (asking.has(step.id)) { satisfied = false; blockers.push(step); continue; }
+    // Gaps spec §5.5: a candidate of the plan accepted as unchanged is not run: its output is carried onto the inputs it
+    // now stands for, once, when its turn comes (the steps it depends on have settled).
+    const accepted = plan?.chosen.accepted?.find((a) => a.stepKey === step.id);
+    if (plan !== null && accepted !== undefined && plan.candidates.list.some((c) => c.stepKey === step.id) && current !== undefined
+      && (current.state === "done" || current.state === "skipped") && !executions.some((e) => e.stepKey === step.id && e.planNo === plan.planNo)) {
+      if (!free) return false;
+      const at = deps.now();
+      deps.store.transaction(() => {
+        appendQueued(deps, run, step.id, current.seq + 1, ["accepted-unchanged"], {
+          basis, carriedForward: getHead(deps.store, run.row.id, step.id), ranOnInputs: ranOnInputsOf(deps.store, run, step.id),
+          acceptedUnchanged: { by: accepted.by, via: accepted.via, source: accepted.source },
+        }, accepted.by, accepted.via, at, plan.planNo);
+        setExecutionStateSkipped(deps.store, { flowRunId: run.row.id, stepKey: step.id, seq: current.seq + 1 }, at);
+      });
       return true;
     }
     const executedUnderPlan = plan !== null && executions.some((e) => e.stepKey === step.id && e.planNo === plan.planNo && (e.body as ExecutionBody).carriedForward === undefined);
@@ -807,7 +827,8 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
       if (!free) return false;
       const at = deps.now();
       deps.store.transaction(() => {
-        appendQueued(deps, run, step.id, current.seq + 1, ["plan-skip"], { basis, carriedForward: getHead(deps.store, run.row.id, step.id) }, plan.by, plan.via, at, plan.planNo);
+        // Gaps spec §5.5: with what it now stands on, so the next plan does not propose it again for inputs it already took.
+        appendQueued(deps, run, step.id, current.seq + 1, ["plan-skip"], { basis, carriedForward: getHead(deps.store, run.row.id, step.id), ranOnInputs: ranOnInputsOf(deps.store, run, step.id) }, plan.by, plan.via, at, plan.planNo);
         setExecutionStateSkipped(deps.store, { flowRunId: run.row.id, stepKey: step.id, seq: current.seq + 1 }, at);
       });
       return true;
@@ -883,7 +904,10 @@ function setExecutionStateSkipped(store: ControlStore, key: ExecutionKey, at: nu
  * again; a clean pass clears it.
  */
 export async function advanceFlowRuns(deps: FlowDeps): Promise<void> {
-  for (const flowRunId of listFlowRunIds(deps.store, "running")) {
+  // Gaps spec §4.2, §5.3: every run with open work. A paused run's open plan and its deadlines wait for the resume
+  // (nobody was asked meanwhile either); a `done` run's open intakes are the intake stage's (gaps plan Task 5).
+  for (const flowRunId of listRunsWithOpenWork(deps.store)) {
+    if (getFlowRun(deps.store, flowRunId)?.state !== "running") continue;
     let failed: string | null = null;
     try { await advanceRun(deps, flowRunId); }
     catch (error) { failed = error instanceof Error ? error.message : String(error); }

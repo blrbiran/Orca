@@ -27,6 +27,8 @@ const msg = (over: Record<string, unknown>) => ({ by: "ann", via: "cli:test", re
 
 async function settledRun() {
   const w = await flowWorld({ t: TPL });
+  // The person's checklist (`rerunReview: review`); the built-in default is `auto` since gaps spec §5.2.
+  w.deps.rerunReview = () => "review";
   const { flowRunId } = await w.start({ templateRef: "builtin/t" });
   await w.advance();
   await w.answer(0, { content: "A1" });
@@ -61,7 +63,7 @@ describe("message stream (§8)", () => {
       expect(proposalCall.prompt).toContain("more tea");
       expect(listPlans(w.store, flowRunId)[0]!.candidates).toMatchObject({ list: [{ stepKey: "b", reasons: ["feedback"] }, { stepKey: "c", reasons: ["upstream-changed:b"] }] });
       await w.answer(w.calls.length - 1, { skips: [{ stepKey: "c", reason: "c only formats" }] });
-      // A person's plan waits for them (rerunReview defaults to review): nothing runs.
+      // A person's plan waits for them (rerunReview: review, pinned in settledRun): nothing runs.
       const calls = w.calls.length;
       await w.advance();
       expect(w.calls).toHaveLength(calls);

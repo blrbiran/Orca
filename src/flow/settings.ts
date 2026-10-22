@@ -22,6 +22,8 @@ export interface ResolvedLevel { value: FlowLevel; source: "project" | "global" 
 export const BUILTIN_LEVELS: Readonly<Record<FlowEffectClass, FlowLevel>> = { local: "apply-flag", cost: "apply-flag", external: "apply-flag", irreversible: "confirm" };
 /** Global Constraints default: the run pool when no layer and no template sets one. */
 export const BUILTIN_TOKENS_PER_RUN = 2_000_000;
+/** Gaps spec §5.3: the built-in wait of an unsure re-run question, in seconds. */
+export const BUILTIN_RERUN_ASK_TIMEOUT_SECONDS = 300;
 const RANK: Readonly<Record<FlowLevel, number>> = { "apply-flag": 0, confirm: 1, "stage-only": 2 };
 
 /** A setting value as a level for this step, and where the level came from: the setting, the template, or the class default. */
@@ -83,6 +85,7 @@ export function settingNotLooser(mine: FlowLevelSetting, bound: FlowLevelSetting
 export interface FlowSettingsRead {
   effects: Record<FlowEffectClass, Sourced<FlowLevelSetting>>;
   rerunReview: Sourced<"auto" | "review">;
+  rerunAskTimeoutSeconds: Sourced<number>;
   roles: Sourced<Record<string, { agent: string; model?: string }>>;
   allowedSkillSources: Sourced<string[] | null>;
   budgets: { tokensPerRun: Sourced<number> };
@@ -97,7 +100,9 @@ export function readFlowSettings(store: ControlStore, repoId: string | null): Fl
   const effects = Object.fromEntries(FLOW_EFFECT_CLASSES.map((cls) => [cls, locked<FlowLevelSetting>(project?.effects?.[cls], global?.effects?.[cls], BUILTIN_LEVELS[cls], isLocked(`effects.${cls}`), settingNotLooser)])) as FlowSettingsRead["effects"];
   return {
     effects,
-    rerunReview: pick(project?.rerunReview, global?.rerunReview, "review"),
+    // Gaps spec §5.2: the built-in default is `auto` -- only unsure steps are asked (with the timeout); `review` waits.
+    rerunReview: pick(project?.rerunReview, global?.rerunReview, "auto"),
+    rerunAskTimeoutSeconds: pick(project?.rerunAskTimeoutSeconds, global?.rerunAskTimeoutSeconds, BUILTIN_RERUN_ASK_TIMEOUT_SECONDS),
     roles: pick(project?.roles, global?.roles, {}),
     allowedSkillSources: locked<string[] | null>(project?.allowedSkillSources, global?.allowedSkillSources, null, isLocked("allowedSkillSources"),
       (mine, bound) => bound === null || mine!.every((source) => bound.includes(source))),

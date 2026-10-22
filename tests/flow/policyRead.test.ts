@@ -10,6 +10,7 @@ import { openControlStore, type ControlStore } from "../../src/control/store.js"
 import { readRepositorySettingsBody, writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
 import { readFlowSettings } from "../../src/flow/settings.js";
 import { applySetFlowLocks, applySetFlowSettings } from "../../src/flow/settingsCommands.js";
+import { FLOW_LOCKABLE_PATHS, FLOW_SETTING_FIELDS, flowsLayerSchema } from "../../src/flow/settingsSchema.js";
 
 /**
  * Flow engine spec §11.2, §21 C18: the flow settings, written by a person one layer at a time and read field by field
@@ -42,22 +43,26 @@ describe("flow settings read (C18)", () => {
         local: { value: "apply-flag", source: "builtin", lockedBy: null }, cost: { value: "apply-flag", source: "builtin", lockedBy: null },
         external: { value: "apply-flag", source: "builtin", lockedBy: null }, irreversible: { value: "confirm", source: "builtin", lockedBy: null },
       },
-      rerunReview: { value: "review", source: "builtin", lockedBy: null },
+      rerunReview: { value: "auto", source: "builtin", lockedBy: null },
+      rerunAskTimeoutSeconds: { value: 300, source: "builtin", lockedBy: null },
       roles: { value: {}, source: "builtin", lockedBy: null },
       allowedSkillSources: { value: null, source: "builtin", lockedBy: null },
       budgets: { tokensPerRun: { value: 2_000_000, source: "builtin", lockedBy: null } },
       locks: [],
     });
-    expect(codeOf(settings(store, GLOBAL, { effects: { cost: "stage-only" }, rerunReview: "auto", budgets: { tokensPerRun: 900_000 } }))).toBe("accepted");
-    expect(codeOf(settings(store, REPO, { effects: { cost: "confirm" } }))).toBe("accepted");
+    expect(codeOf(settings(store, GLOBAL, { effects: { cost: "stage-only" }, rerunReview: "review", rerunAskTimeoutSeconds: 120, budgets: { tokensPerRun: 900_000 } }))).toBe("accepted");
+    expect(codeOf(settings(store, REPO, { effects: { cost: "confirm" }, rerunAskTimeoutSeconds: 600 }))).toBe("accepted");
     const read = readFlowSettings(store, "repo");
     expect(read.effects.cost).toEqual({ value: "confirm", source: "project", lockedBy: null });
-    expect(read.rerunReview).toEqual({ value: "auto", source: "global", lockedBy: null });
+    expect(read.rerunReview).toEqual({ value: "review", source: "global", lockedBy: null });
+    expect(read.rerunAskTimeoutSeconds).toEqual({ value: 600, source: "project", lockedBy: null });
+    expect(readFlowSettings(store, null).rerunAskTimeoutSeconds).toEqual({ value: 120, source: "global", lockedBy: null });
     expect(read.budgets.tokensPerRun).toEqual({ value: 900_000, source: "global", lockedBy: null });
     expect(readFlowSettings(store, null).effects.cost).toEqual({ value: "stage-only", source: "global", lockedBy: null });
     // Clearing the project's field lets the global one apply again.
-    expect(codeOf(settings(store, REPO, {}, ["effects.cost"]))).toBe("accepted");
+    expect(codeOf(settings(store, REPO, {}, ["effects.cost", "rerunAskTimeoutSeconds"]))).toBe("accepted");
     expect(readFlowSettings(store, "repo").effects.cost.source).toBe("global");
+    expect(readFlowSettings(store, "repo").rerunAskTimeoutSeconds).toEqual({ value: 120, source: "global", lockedBy: null });
     expect(readRepositorySettingsBody(store, "repo")).not.toHaveProperty("flows");
   }));
 });
@@ -123,7 +128,7 @@ describe("the kernel reads the flow settings (§6.3, §7.4, §12.3)", () => {
     } finally { await w.dispose(); }
   });
 
-  it("rerunReview auto runs a person's plan with the proposal at once (no decisions: the person is there)", async () => {
+  it("rerunReview auto runs a person's plan with the proposal at once; each model skip nobody ticked is a minor decision (gaps §5.2)", async () => {
     const w = await flowWorld({ t: TPL }); try {
       global(w.store, { rerunReview: "auto" });
       const { flowRunId } = await w.start({ templateRef: "builtin/t" });
@@ -134,7 +139,17 @@ describe("the kernel reads the flow settings (§6.3, §7.4, §12.3)", () => {
       await w.answer(w.calls.length - 1, { skips: [{ stepKey: "b", reason: "b is fine" }] });
       expect(listPlans(w.store, flowRunId)[0]).toMatchObject({ state: "running", chosen: { steps: ["a"] } });
       expect(w.calls.at(-1)).toMatchObject({ purpose: "flow-draft", key: { stepKey: "a", seq: 2 } });
-      expect(w.store.db.prepare("SELECT count(*) AS n FROM flow_decisions").get()!.n).toBe(0);
+      expect(w.store.db.prepare("SELECT grade, step_key AS stepKey, body FROM flow_decisions").all().map((r) => ({ ...r, body: JSON.parse(String(r.body)) })))
+        .toEqual([{ grade: "minor", stepKey: "b", body: { kind: "rerun-skip", planNo: 1, reason: "b is fine", source: "rerun-proposal" } }]);
     } finally { await w.dispose(); }
+  });
+});
+
+describe("flows.rerunAskTimeoutSeconds (gaps §5.3)", () => {
+  it("is an integer 30-86400 and not lockable (not a security field)", () => {
+    for (const ok of [30, 300, 86_400]) expect(flowsLayerSchema.safeParse({ rerunAskTimeoutSeconds: ok }).success).toBe(true);
+    for (const bad of [29, 86_401, 300.5, "300"]) expect(flowsLayerSchema.safeParse({ rerunAskTimeoutSeconds: bad }).success).toBe(false);
+    expect((FLOW_LOCKABLE_PATHS as readonly string[]).includes("rerunAskTimeoutSeconds")).toBe(false);
+    expect((FLOW_SETTING_FIELDS as readonly string[]).includes("rerunAskTimeoutSeconds")).toBe(true);
   });
 });

@@ -14,12 +14,13 @@ import type { ControlStore } from "../control/store.js";
 import type { FlowCallResult } from "./calls.js";
 import { candidates, chosenPlan, type Candidate, type Execution, type FlowMessage, type Journal } from "./journal/candidates.js";
 import { afterExecution } from "./journal/cutoff.js";
-import { validateProposal, type Skip } from "./journal/proposal.js";
-import { advanceRun, definitionOf, FlowRefusal, loadRun, recordOfExecution, stepOf, type FlowDeps, type RanOnInputs } from "./kernel.js";
+import { validateProposal, type Skip, type Unsure } from "./journal/proposal.js";
+import { canonicalBytes } from "../control/canonicalJson.js";
+import { advanceRun, definitionOf, FlowRefusal, loadRun, ranOnInputsOf, recordOfExecution, stepOf, type FlowDeps, type RanOnInputs } from "./kernel.js";
 import type { ExecutionBody, LoadedRun } from "./kinds/registry.js";
 import { bounded } from "./prompt.js";
 import { readFlowSettings } from "./settings.js";
-import { appendFlowDecision, appendMessage, getFlowRun, listExecutions, listHeads, listMessages, listPlans, putPlan, setFlowRunState, setMessageState, type PlanRow } from "./store.js";
+import { appendFlowDecision, appendMessage, getFlowRun, getHead, listExecutions, listHeads, listMessages, listPlans, putPlan, setFlowRunState, setMessageState, type PlanRow } from "./store.js";
 import { evaluateWhen } from "./template/when.js";
 import { vaultGit } from "./vault/vault.js";
 
@@ -38,30 +39,71 @@ export const PROPOSAL_JSON_SCHEMA = Object.freeze({
   },
 });
 
-export interface PlanCandidates { list: Candidate[]; feedback: Record<string, string[]>; edits: string[]; trigger: string }
-export interface PlanProposal { retries: number; lastInvalid: string | null; call: { runId?: string } | null; callResult?: FlowCallResult; skips: Skip[] | null; exhausted: string | null }
-export interface PlanChosen { steps: string[]; skips: string[]; added: string[] }
+/**
+ * Gaps spec §5.6: what a newer plan takes over from the open plan it replaces -- the questions still pending there, the
+ * accept decisions whose step's inputs did not move since (already filtered when the plan is made), and the person's
+ * `run` answers on steps that had not run yet.
+ */
+export interface CarriedDecisions { pending: Array<{ stepKey: string; question: string; fromPlan: number }>; accepted: AcceptedItem[]; run: Array<{ stepKey: string; question: string; answer: PendingAnswer }> }
+export interface PlanCandidates { list: Candidate[]; feedback: Record<string, string[]>; edits: string[]; trigger: string; carried?: CarriedDecisions }
+export interface PlanProposal { retries: number; lastInvalid: string | null; call: { runId?: string } | null; callResult?: FlowCallResult; skips: Skip[] | null; unsure?: Unsure[] | null; exhausted: string | null }
+export type PlanStepChoice = "run" | "accept-unchanged";
+export interface PendingAnswer { choice: PlanStepChoice; by: string; via: string; at: number; source: "person" | "timeout" | "carried"; fromPlan?: number }
+/** Gaps spec §5.2: an unsure candidate under `auto` asks the person; at `deadline` it resolves to accept-unchanged. */
+export interface PendingItem { stepKey: string; question: string; askedAt: number; deadline: number; answer: PendingAnswer | null }
+/** Gaps spec §5.5: the step's output stands for its new inputs; `ranOnInputs` is what those inputs were when decided (§5.6). */
+export interface AcceptedItem { stepKey: string; seq: number; by: string; via: string; at: number; source: "person" | "timeout" | "carried"; fromPlan?: number; ranOnInputs: RanOnInputs }
+export interface PlanChosen { steps: string[]; skips: string[]; added: string[]; pending?: PendingItem[]; accepted?: AcceptedItem[] }
 export interface RunningPlan { flowRunId: string; planNo: number; by: string; via: string; candidates: PlanCandidates; chosen: PlanChosen }
 
 const isOpen = (plan: PlanRow): boolean => plan.state === "proposed" || plan.state === "running";
 export const openPlan = (store: ControlStore, flowRunId: string): PlanRow | null => listPlans(store, flowRunId).filter(isOpen).at(-1) ?? null;
 
-/** The kernel's journal in the planner's terms (§6.4): every execution with what it ran on and what it produced. */
+type StoredBody = ExecutionBody & { ranOnInputs?: RanOnInputs; carriedForward?: number };
+
+/**
+ * The kernel's journal in the planner's terms (§6.4): every execution with what it ran on and what it produced. Gaps
+ * spec §5.5: an active output stands for what its newest done or carried-forward execution ran on -- a plan skip, an
+ * accept or a timeout carries the output onto new inputs without running it, and the next plan must see those inputs,
+ * not the older ones the output was first made on. The output (hash, projection) stays the head's.
+ */
 function journalOf(store: ControlStore, run: LoadedRun): Journal {
-  const executions: Execution[] = listExecutions(store, run.row.id).map((e) => {
-    const body = e.body as ExecutionBody & { ranOnInputs?: RanOnInputs };
+  const rows = listExecutions(store, run.row.id);
+  const heads = listHeads(store, run.row.id);
+  const standsOn = new Map<string, RanOnInputs>();
+  for (const e of rows) {
+    const body = e.body as StoredBody;
+    const head = heads[e.stepKey];
+    const carriesHead = e.state === "skipped" && body.carriedForward !== undefined && body.carriedForward === head;
+    if (body.ranOnInputs !== undefined && ((e.state === "done" && e.seq === head) || carriesHead)) standsOn.set(e.stepKey, body.ranOnInputs);
+  }
+  // kernel.ts ranOnInputsOf: a `parallelWith` sibling is not an input; it is recorded as it stands when the planner reads
+  // it, so only its re-run (never its finishing later) makes the step a candidate.
+  const order = run.template.steps.map((s) => s.id);
+  const active = (key: string) => rows.find((e) => e.stepKey === key && e.seq === heads[key] && e.state === "done");
+  const withSiblings = (stepKey: string, inputs: RanOnInputs): RanOnInputs => {
+    const step = run.template.steps.find((s) => s.id === stepKey);
+    const siblings = run.template.steps.filter((s) => step !== undefined && order.indexOf(s.id) < order.indexOf(stepKey) && parallelSteps(s, step)
+      && !inputs.earlier.some((e) => e.stepKey === s.id));
+    if (siblings.length === 0) return inputs;
+    const asItStands = siblings.map((s) => ({ stepKey: s.id, outputHash: active(s.id)?.outputHash ?? null, projection: null }));
+    return { ...inputs, earlier: [...inputs.earlier, ...asItStands] };
+  };
+  const executions: Execution[] = rows.map((e) => {
+    const body = e.body as StoredBody;
+    const ranOnInputs = (e.seq === heads[e.stepKey] ? standsOn.get(e.stepKey) : undefined) ?? body.ranOnInputs;
     return {
       stepKey: e.stepKey, seq: e.seq, state: e.state, failure: body.failure ?? null, definitionHash: e.definitionHash, fingerprint: e.fingerprint ?? "",
       // No record of what it ran on (it never started): unknown, so every input counts as moved.
-      ranOnInputs: body.ranOnInputs ?? { start: "unknown", params: "unknown", earlier: [] },
+      ranOnInputs: ranOnInputs === undefined ? { start: "unknown", params: "unknown", earlier: [] } : withSiblings(e.stepKey, ranOnInputs),
       outputHash: e.outputHash, projection: null, readSet: null,
     };
   });
-  return { executions, heads: listHeads(store, run.row.id) };
+  return { executions, heads };
 }
 
 /** §7.2 measured now: definitions from the run's template (with the skills its active execution ran), `when`, the import. */
-export function currentCandidates(deps: FlowDeps, run: LoadedRun, messages: readonly FlowMessage[]): Candidate[] {
+export function currentCandidates(deps: FlowDeps, run: LoadedRun, messages: readonly FlowMessage[], acceptedUnchanged?: ReadonlySet<string>): Candidate[] {
   const journal = journalOf(deps.store, run);
   const rows = listExecutions(deps.store, run.row.id);
   const definitionHashes: Record<string, string> = {};
@@ -77,6 +119,7 @@ export function currentCandidates(deps: FlowDeps, run: LoadedRun, messages: read
   }).map((step) => step.id));
   return candidates(journal, run.template, messages, {
     definitionHashes, start: run.body.importCommit ?? "none", params: run.row.paramsSha256, whenFalse, composeConflicts,
+    ...(acceptedUnchanged === undefined ? {} : { acceptedUnchanged }),
   });
 }
 
@@ -98,10 +141,13 @@ async function changeOf(deps: FlowDeps, run: LoadedRun, stepKey: string): Promis
 
 async function proposalPrompt(deps: FlowDeps, run: LoadedRun, plan: { candidates: PlanCandidates; lastInvalid: string | null }): Promise<string> {
   const lines = [
-    "Orca flow re-run proposal, instruction version 1.",
+    "Orca flow re-run proposal, instruction version 2.",
     "Code listed the steps that may need to run again (the candidates) with the reasons. You may only propose to SKIP candidates",
     "whose output would not change; give a reason for each. You cannot add steps, reorder them, or skip a step that has feedback.",
-    "Answer JSON {\"skips\": [{\"stepKey\", \"reason\"}], \"startAt\"?: <candidate>} (startAt skips every earlier candidate).",
+    "Mark a candidate \"unsure\" only when its output might or might not change and the person would know: give one short",
+    "question (at most 200 characters) they can answer with \"run it\" or \"keep it\". Never mark a step that has feedback, a fill,",
+    "or that never succeeded. A candidate you neither skip nor mark unsure runs.",
+    "Answer JSON {\"skips\": [{\"stepKey\", \"reason\"}], \"startAt\"?: <candidate>, \"unsure\"?: [{\"stepKey\", \"question\"}]} (startAt skips every earlier candidate).",
     "",
     "## Candidates",
     ...plan.candidates.list.map((c) => {
@@ -136,6 +182,42 @@ async function requestProposal(deps: FlowDeps, run: LoadedRun, planNo: number): 
   });
 }
 
+const sameInputs = (a: RanOnInputs, b: RanOnInputs): boolean => canonicalBytes(a).equals(canonicalBytes(b));
+/** The person's words or hands put the step in the plan (feedback, fill) or there is no output to keep: never carried past. */
+const keepsNoDecision = (c: Candidate | undefined): boolean => c !== undefined && c.reasons.some((r) => r === "feedback" || r === "fill" || r === "never-succeeded");
+
+/**
+ * Gaps spec §5.6: what the open plans this one replaces hand over. A pending question still unanswered carries (the new
+ * proposal settles it again, with a fresh deadline). An accept carries only while the step's inputs are the ones it was
+ * decided on -- equal `ranOnInputsOf` now, and no earlier step it depends on is a candidate of the new plan (it is
+ * about to re-run, so the inputs will move: unknown => include) -- and the new plan gives it no reason of its own
+ * (feedback, fill). A person's `run` answer on a step that has not run yet carries as it is: running is never wrong.
+ */
+function carriedFrom(store: ControlStore, run: LoadedRun, older: readonly PlanRow[], list: readonly Candidate[], executions: ReturnType<typeof listExecutions>): CarriedDecisions | undefined {
+  const order = run.template.steps.map((s) => s.id);
+  const earlierCandidate = (key: string): boolean => {
+    const step = stepOf(run, key);
+    return list.some((c) => order.indexOf(c.stepKey) < order.indexOf(key) && !parallelSteps(stepOf(run, c.stepKey), step));
+  };
+  const out: CarriedDecisions = { pending: [], accepted: [], run: [] };
+  for (const plan of older) {
+    const chosen = plan.chosen as PlanChosen | null;
+    if (chosen === null) continue;
+    const ranUnder = (key: string) => executions.some((e) => e.stepKey === key && e.planNo === plan.planNo && (e.body as StoredBody).carriedForward === undefined);
+    for (const item of chosen.pending ?? []) {
+      if (item.answer === null) out.pending.push({ stepKey: item.stepKey, question: item.question, fromPlan: plan.planNo });
+      else if (item.answer.choice === "run" && !ranUnder(item.stepKey)) out.run.push({ stepKey: item.stepKey, question: item.question, answer: { ...item.answer, source: "carried", fromPlan: plan.planNo } });
+    }
+    for (const item of chosen.accepted ?? []) {
+      const candidate = list.find((c) => c.stepKey === item.stepKey);
+      if (!sameInputs(item.ranOnInputs, ranOnInputsOf(store, run, item.stepKey)) || earlierCandidate(item.stepKey) || keepsNoDecision(candidate)) continue;
+      out.accepted.push({ ...item, source: "carried", fromPlan: plan.planNo });
+    }
+  }
+  return out.pending.length + out.accepted.length + out.run.length === 0 ? undefined : out;
+}
+const parallelSteps = (a: { id: string; parallelWith?: string }, b: { id: string; parallelWith?: string }): boolean => a.parallelWith === b.id || b.parallelWith === a.id;
+
 /**
  * §7.1: a plan from the person's feedback and edits (or a repin, a rewind, `orca flow plan`, an unattended trigger).
  * An open older plan is abandoned; the feedback of the steps it had not run yet moves into this one. No candidates:
@@ -157,13 +239,15 @@ export async function makePlan(deps: FlowDeps, flowRunId: string, input: { by: s
   const edits = input.edits ?? [];
   const messages: FlowMessage[] = [...feedbackMessages(feedback), ...edits.map((stepKey) => ({ kind: "edit" as const, target: { kind: "step" as const, stepKey } }))];
   const list = currentCandidates(deps, run, messages);
+  const carried = carry ? carriedFrom(deps.store, run, plans.filter(isOpen), list, executions) : undefined;
   const planNo = (plans.at(-1)?.planNo ?? 0) + 1;
   const empty = list.length === 0;
   deps.store.transaction(() => {
     for (const older of plans.filter(isOpen)) putPlan(deps.store, { ...older, state: "abandoned" });
     const proposal: PlanProposal = { retries: 0, lastInvalid: null, call: empty ? null : {}, skips: empty ? [] : null, exhausted: null };
     putPlan(deps.store, {
-      flowRunId, planNo, state: empty ? "running" : "proposed", candidates: { list, feedback, edits, trigger: input.trigger } satisfies PlanCandidates,
+      flowRunId, planNo, state: empty ? "running" : "proposed",
+      candidates: { list, feedback, edits, trigger: input.trigger, ...(carried === undefined ? {} : { carried }) } satisfies PlanCandidates,
       proposal, chosen: empty ? ({ steps: [], skips: [], added: [] } satisfies PlanChosen) : null, by: input.by, via: input.via,
     });
     const state = getFlowRun(deps.store, flowRunId)!.state;
@@ -191,17 +275,47 @@ function choose(store: ControlStore, plan: PlanRow, run: LoadedRun, skips: reado
   putPlan(store, { ...plan, state: "running", proposal, chosen: { steps, skips: [...skips], added: [...add] } satisfies PlanChosen });
 }
 
-/** A settled proposal: unattended (or `rerunReview: auto`) takes it now; otherwise the plan waits for the person. */
+/** Gaps spec §5.3: `flows.rerunAskTimeoutSeconds` of the run's project (project > global > 300), in milliseconds. */
+function askTimeoutOf(deps: FlowDeps, run: LoadedRun): number {
+  return readFlowSettings(deps.store, run.body.projectId).rerunAskTimeoutSeconds.value * 1000;
+}
+
+/**
+ * A settled proposal. Under `rerunReview: review` (and only for a person's plan) the plan waits for the person's
+ * checklist, the unsure marks shown with no deadline. Otherwise nobody ticks it (gaps spec §5.2): the model's skips are
+ * taken, each a minor decision the person can correct by feedback (P5, P7); each unsure candidate becomes a pending
+ * question with a deadline resolved now (§5.3); everything else runs. What the replaced plan handed over (§5.6) comes
+ * first: a carried accept keeps its step out, a carried `run` keeps it in, a carried question is asked again unless the
+ * new proposal skips it -- with the new proposal's question when it gives one, and always a fresh deadline.
+ */
 function settleProposal(deps: FlowDeps, run: LoadedRun, plan: PlanRow, proposal: PlanProposal): void {
   const unattended = plan.by === "orca-auto";
   deps.store.transaction(() => {
     if (!unattended && rerunReviewOf(deps, run) === "review") { putPlan(deps.store, { ...plan, proposal }); return; }
-    choose(deps.store, plan, run, proposal.skips!.map((s) => s.stepKey), [], proposal);
-    // P7, §7.4: each skip the model proposed and nobody looked at is a minor decision the person can correct by feedback.
-    if (unattended) {
-      for (const skip of proposal.skips!) {
-        appendFlowDecision(deps.store, { flowRunId: run.row.id, grade: "minor", stepKey: skip.stepKey, by: "orca-auto", body: { kind: "rerun-skip", planNo: plan.planNo, reason: skip.reason, source: "rerun-proposal" } });
-      }
+    const cands = plan.candidates as PlanCandidates;
+    const carried = cands.carried ?? { pending: [], accepted: [], run: [] };
+    const isCandidate = (key: string) => cands.list.some((c) => c.stepKey === key);
+    const now = deps.now();
+    const accepted = carried.accepted.map((a) => ({ ...a, at: now }));
+    const kept = new Set([...accepted.map((a) => a.stepKey), ...carried.run.map((r) => r.stepKey)]);
+    const skips = proposal.skips!.filter((s) => !kept.has(s.stepKey));
+    const skipped = new Set(skips.map((s) => s.stepKey));
+    const questions = new Map((proposal.unsure ?? []).map((u) => [u.stepKey, u.question]));
+    for (const item of carried.pending) {
+      if (isCandidate(item.stepKey) && !skipped.has(item.stepKey) && !questions.has(item.stepKey) && !keepsNoDecision(cands.list.find((c) => c.stepKey === item.stepKey))) questions.set(item.stepKey, item.question);
+    }
+    const deadline = now + askTimeoutOf(deps, run);
+    const order = run.template.steps.map((s) => s.id);
+    const pending: PendingItem[] = order.filter((key) => questions.has(key) && !kept.has(key))
+      .map((stepKey) => ({ stepKey, question: questions.get(stepKey)!, askedAt: now, deadline, answer: null }));
+    const answered: PendingItem[] = carried.run.filter((r) => isCandidate(r.stepKey))
+      .map((r) => ({ stepKey: r.stepKey, question: r.question, askedAt: now, deadline: now, answer: r.answer }));
+    const out = new Set([...skipped, ...pending.map((p) => p.stepKey), ...accepted.map((a) => a.stepKey)]);
+    const steps = chosenPlan(cands.list, { skips: [...out], add: [] }, order);
+    putPlan(deps.store, { ...plan, state: "running", proposal, chosen: { steps, skips: [...skipped], added: [], pending: [...pending, ...answered], accepted } satisfies PlanChosen });
+    // P7, §7.4, gaps §5.2: each skip the model proposed and nobody ticked is a minor decision the person can correct by feedback.
+    for (const skip of skips) {
+      appendFlowDecision(deps.store, { flowRunId: run.row.id, grade: "minor", stepKey: skip.stepKey, by: "orca-auto", body: { kind: "rerun-skip", planNo: plan.planNo, reason: skip.reason, source: "rerun-proposal" } });
     }
   });
 }
@@ -217,12 +331,12 @@ export async function completePlanCall(deps: FlowDeps, flowRunId: string, planNo
   // A call the pool or the parent could not fund never gets better by asking again.
   const final = failure === "flow-pool-exhausted" || failure === "flow-call-unconfirmed";
   const verdict = failure !== null ? { ok: false as const, why: `call-failed:${failure}` } : validateProposal(rawOutput, cands.list, new Set(Object.keys(cands.feedback)));
-  if (verdict.ok) return settleProposal(deps, run, plan, { ...rest, call: null, skips: verdict.skips });
+  if (verdict.ok) return settleProposal(deps, run, plan, { ...rest, call: null, skips: verdict.skips, unsure: verdict.unsure });
   if (!final && rest.retries < MAX_AUTO_RETRIES) {
     deps.store.transaction(() => putPlan(deps.store, { ...plan, proposal: { ...rest, retries: rest.retries + 1, lastInvalid: verdict.why, call: {} } satisfies PlanProposal }));
     return requestProposal(deps, run, planNo);
   }
-  settleProposal(deps, run, plan, { ...rest, call: null, skips: [], exhausted: verdict.why });
+  settleProposal(deps, run, plan, { ...rest, call: null, skips: [], unsure: [], exhausted: verdict.why });
 }
 
 /**
@@ -241,14 +355,31 @@ export async function planOf(deps: FlowDeps, run: LoadedRun): Promise<"wait" | "
   }
   const cands = plan.candidates as PlanCandidates;
   const chosen = plan.chosen as PlanChosen;
-  // Executed = finished under this plan.
+  // Gaps spec §5.3: a pending question past its deadline is accepted as unchanged by orca-auto -- never run -- once.
+  const at = deps.now();
+  const overdue = (chosen.pending ?? []).filter((item) => item.answer === null && item.deadline <= at);
+  if (overdue.length > 0) {
+    deps.store.transaction(() => {
+      let row = plan;
+      for (const item of overdue) {
+        row = decidePlanStep(deps.store, run, row, item.stepKey, { choice: "accept-unchanged", by: "orca-auto", via: "orca", at, source: "timeout" });
+        appendFlowDecision(deps.store, { flowRunId: run.row.id, grade: "minor", stepKey: item.stepKey, by: "orca-auto", body: { kind: "rerun-unsure-timeout", planNo: plan.planNo, stepKey: item.stepKey, question: item.question, deadline: item.deadline } });
+      }
+    });
+    return "moved";
+  }
+  // Executed = finished under this plan (an accepted step carried forward under it counts: its output stands).
   const executions = listExecutions(deps.store, run.row.id);
-  const executed = chosen.steps.filter((key) => executions.some((e) => e.stepKey === key && e.planNo === plan.planNo && (e.state === "done" || e.state === "skipped")));
+  const finishedUnder = (key: string) => executions.some((e) => e.stepKey === key && e.planNo === plan.planNo && (e.state === "done" || e.state === "skipped"));
+  const accepted = chosen.accepted ?? [];
+  const executed = [...new Set([...chosen.steps, ...accepted.map((a) => a.stepKey)])].filter(finishedUnder);
   if (executed.length > 0) {
     // Still live: the feedback of chosen steps not run yet, and a chosen step running now (a parallel sibling) as re-running.
     const started = chosen.steps.filter((key) => !executed.includes(key) && executions.some((e) => e.stepKey === key && e.planNo === plan.planNo));
     const live = { ...Object.fromEntries(Object.entries(cands.feedback).filter(([key]) => !executed.includes(key))), ...Object.fromEntries(started.map((key) => [key, []])) };
-    const now = currentCandidates(deps, run, feedbackMessages(live));
+    // §5.5: an executed step the person accepted feeds the cutoff as unchanged for every later step.
+    const unchanged = new Set(accepted.map((a) => a.stepKey).filter((key) => chosen.steps.includes(key) && finishedUnder(key)));
+    const now = currentCandidates(deps, run, feedbackMessages(live), unchanged);
     const kept = afterExecution({ chosen: chosen.steps, executed }, now).chosen;
     const steps = chosen.steps.filter((key) => kept.includes(key) || chosen.added.includes(key));
     if (steps.length !== chosen.steps.length) {
@@ -257,6 +388,48 @@ export async function planOf(deps: FlowDeps, run: LoadedRun): Promise<"wait" | "
     }
   }
   return { flowRunId: run.row.id, planNo: plan.planNo, by: plan.by, via: plan.via, candidates: cands, chosen };
+}
+
+/**
+ * Gaps spec §5.5: the person's (or the timeout's) answer on one step of the running plan, inside the caller's
+ * transaction; returns the plan as written. `run` takes a pending question into the plan's steps (template order).
+ * `accept-unchanged` on a pending step, or a chosen step with no execution under the plan yet, takes it out (the kernel
+ * carries its output forward when it reaches it); on a step executed under the plan it records that its new output
+ * counts as unchanged (the cutoff). Anything else -- not in the plan, never succeeded, running, already decided -- is
+ * `flow-plan-step-not-candidate`. Steps only ever leave a plan by accept; `run` only answers a question the plan asked.
+ */
+export function decidePlanStep(store: ControlStore, run: LoadedRun, plan: PlanRow, stepKey: string, answer: PendingAnswer): PlanRow {
+  const chosen = plan.chosen as PlanChosen;
+  const pending = chosen.pending ?? [];
+  const accepted = chosen.accepted ?? [];
+  const refuse = (why: string): never => { throw new FlowRefusal("flow-plan-step-not-candidate", `${stepKey}: ${why}`); };
+  if (accepted.some((a) => a.stepKey === stepKey)) refuse("already accepted as unchanged");
+  const open = pending.find((p) => p.stepKey === stepKey && p.answer === null);
+  const answerOpen = (items: PendingItem[]): PendingItem[] => items.map((p) => (p === open ? { ...p, answer } : p));
+  const order = run.template.steps.map((s) => s.id);
+  let next: PlanChosen;
+  if (answer.choice === "run") {
+    if (open === undefined) refuse("no open question on it in this plan");
+    next = { ...chosen, steps: order.filter((key) => key === stepKey || chosen.steps.includes(key)), pending: answerOpen(pending) };
+  } else {
+    const under = listExecutions(store, run.row.id).filter((e) => e.stepKey === stepKey && e.planNo === plan.planNo);
+    const executed = under.find((e) => e.state === "done" && (e.body as StoredBody).carriedForward === undefined);
+    const head = getHead(store, run.row.id, stepKey);
+    let seq: number;
+    if (open !== undefined || (chosen.steps.includes(stepKey) && under.length === 0)) {
+      if (head === null) refuse("it has no output to keep");
+      seq = head!;
+    } else if (executed !== undefined && chosen.steps.includes(stepKey)) seq = executed.seq;
+    else return refuse(under.length > 0 ? "it is running under this plan" : "not in this plan");
+    const { at, by, via, source } = answer;
+    const item: AcceptedItem = { stepKey, seq, by, via, at, source, ranOnInputs: ranOnInputsOf(store, run, stepKey) };
+    next = executed !== undefined && open === undefined
+      ? { ...chosen, accepted: [...accepted, item] }
+      : { ...chosen, steps: chosen.steps.filter((key) => key !== stepKey), pending: answerOpen(pending), accepted: [...accepted, item] };
+  }
+  const row: PlanRow = { ...plan, chosen: next };
+  putPlan(store, row);
+  return row;
 }
 
 export function finishPlan(store: ControlStore, plan: RunningPlan): void {

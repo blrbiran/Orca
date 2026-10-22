@@ -19,6 +19,8 @@ describe("wechat-article end to end (C6)", { timeout: 60_000 }, () => {
   it("runs to the draft box across an ask, then re-runs only what the person chose after feedback on voice", async () => {
     const world = await wechatWorld();
     const { w, children, child, goalOf } = world; try {
+      // The person's checklist (`rerunReview: review`); the built-in default is `auto` since gaps spec §5.2.
+      w.deps.rerunReview = () => "review";
       const flowRunId = await toDraftBox(world);
       expect(world.commands).toEqual(["md2wechat doctor --json"]);
       expect(getFlowRun(w.store, flowRunId)!.state).toBe("done");

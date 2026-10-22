@@ -23,7 +23,7 @@ const S = <T,>(value: T, source: "project" | "global" | "builtin" = "builtin", l
   ({ value, source, lockedBy, ...(overriddenByLock === undefined ? {} : { overriddenByLock }) });
 const READ: FlowSettingsReadV1 = {
   effects: { local: S("apply-flag"), cost: S("confirm", "project"), external: S("stage-only", "global", "global", "apply-flag"), irreversible: S("confirm") },
-  rerunReview: S("review"), roles: S({}), allowedSkillSources: S(null), budgets: { tokensPerRun: S(2_000_000) }, locks: ["effects.external"],
+  rerunReview: S("review"), rerunAskTimeoutSeconds: S(300), roles: S({}), allowedSkillSources: S(null), budgets: { tokensPerRun: S(2_000_000) }, locks: ["effects.external"],
 };
 
 let posts: Array<{ url: string; body: { expectedRevision: number; payload: unknown } }>;

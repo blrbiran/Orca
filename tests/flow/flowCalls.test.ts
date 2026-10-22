@@ -118,6 +118,8 @@ describe("flow single calls on the parent (§6.2)", () => {
 describe("the rerun proposal on the parent (§7.3, plan Task 11)", () => {
   async function settledWithChange() {
     const r = await world();
+    // The person's checklist (`rerunReview: review`); the built-in default is `auto` since gaps spec §5.2.
+    r.w.deps.rerunReview = () => "review";
     await r.w.advance();
     const [run] = callRuns(r.w, r.groupId);
     singleCallHandler("flow-draft").complete({ store: r.w.store }, { ...run!.body }, { content: "An outline." }, () => {
