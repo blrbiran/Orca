@@ -33,7 +33,7 @@ export type KindOutcome =
       /** A workspace output (§5.3): a vault commit on `parent`; the record, if any, is kept in the body. */
       commit?: { commit: string; parent: string };
       /** §4.3 rule 4: what the agent reported for later `ask` steps (`candidatesFrom`). */
-      reported?: { candidates?: Record<string, { items: string[]; recommended: number }> };
+      reported?: { candidates?: Record<string, { items: string[]; recommended: number }>; effect?: { remoteId: string; url?: string } };
       /** §12.2 phase 1: the skills the execution actually ran with; its definition hash is recomputed with their content_md5. */
       skillLocks?: SkillLock[];
       /** Run-page warnings (never a refusal), e.g. a skill lock that is not at the template's pinned ref. */

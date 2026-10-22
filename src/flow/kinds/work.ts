@@ -26,7 +26,7 @@ export interface FlowChildOpen {
 }
 export type FlowChildStatus =
   | { state: "running" }
-  | { state: "landed"; commit: string; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[]; flow?: { needs?: FlowNeeds; candidates?: Record<string, { items: string[]; recommended: number }> } }
+  | { state: "landed"; commit: string; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[]; flow?: { needs?: FlowNeeds; candidates?: Record<string, { items: string[]; recommended: number }>; effect?: { remoteId: string; url?: string } } }
   | { state: "failed"; reason: string; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[] };
 /** The driver-backed side of a work step: open (idempotent per child id) and read how the child is doing. */
 export interface FlowChildPort {
@@ -106,7 +106,9 @@ function settle(ctx: KindContext, status: Exclude<FlowChildStatus, { state: "run
   return { done: {
     record, commit: { commit: status.commit, parent: baseCommit }, ...(flags.length === 0 ? {} : { flags }),
     ...(status.skills === undefined ? {} : { skillLocks }), ...(warnings.length === 0 ? {} : { warnings }),
-    ...(status.flow?.candidates === undefined ? {} : { reported: { candidates: status.flow.candidates } }),
+    // §4.3, §9.6: what the agent reported for later asks, and the remote id of the effect it enacted.
+    ...(status.flow?.candidates === undefined && status.flow?.effect === undefined ? {} : { reported: {
+      ...(status.flow.candidates === undefined ? {} : { candidates: status.flow.candidates }), ...(status.flow.effect === undefined ? {} : { effect: status.flow.effect }) } }),
   } };
 }
 

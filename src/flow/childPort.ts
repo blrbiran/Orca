@@ -145,7 +145,10 @@ async function childStatus(deps: DriverChildPortDeps, childGroupId: string): Pro
   const commit = (await run("/usr/bin/git", ["--git-dir", vault, "rev-parse", "--verify", "--quiet", `${workBranchRef(childGroupId)}^{commit}`])).stdout.trim();
   // §4.3: what the agent reported under `flow` (the pinned ccloop carries only `decisions` and `debug`: absent until it does).
   const reported = reportedFlowOf(await savedReport(deps.store, current.runId));
-  const flow = reported.kind === "object" ? { ...(reported.value.needs === undefined ? {} : { needs: reported.value.needs }), ...(reported.value.candidates === undefined ? {} : { candidates: reported.value.candidates }) } : undefined;
+  const flow = reported.kind === "object" ? {
+    ...(reported.value.needs === undefined ? {} : { needs: reported.value.needs }), ...(reported.value.candidates === undefined ? {} : { candidates: reported.value.candidates }),
+    ...(reported.value.effect === undefined ? {} : { effect: reported.value.effect }),
+  } : undefined;
   return { state: "landed", commit, spentTokens, ...(toolRules === undefined ? {} : { toolRules }), ...(skills === undefined ? {} : { skills }), ...(flow === undefined ? {} : { flow }) };
 }
 

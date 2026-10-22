@@ -45,6 +45,7 @@ import { parentGroupBody, type FlowParentConfirmation } from "./parent.js";
 import type { FlowCallResult } from "./calls.js";
 import { completePlanCall, finishPlan, planOf, PLAN_KEY } from "./rerun.js";
 import { flowLayers, readFlowSettings } from "./settings.js";
+import { gateEffect, settleEffect } from "./effects.js";
 import { consumeAtBoundary } from "./messages.js";
 
 /** A refusal by name (spec §14, Global Constraints' codes); nothing was written. */
@@ -382,8 +383,11 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
   const changed = workspaceOutput === null || vault === null ? null : await changesBetween(vault, workspaceOutput.parent, workspaceOutput.commit);
   deps.store.transaction(() => {
     if ("done" in outcome) {
+      // §9.2: an applied effect is flagged red for review, with the remote id the agent reported.
+      const effectFlags = settleEffect(deps.store, body, "done", outcome.done.reported?.effect?.remoteId ?? null, at);
+      const flags = [...(outcome.done.flags ?? []), ...effectFlags];
       const extra = {
-        ...(outcome.done.flags === undefined ? {} : { flags: outcome.done.flags }),
+        ...(flags.length === 0 ? {} : { flags }),
         ...(outcome.done.skillLocks === undefined ? {} : { skillLocks: outcome.done.skillLocks }),
         ...(outcome.done.warnings === undefined ? {} : { warnings: outcome.done.warnings }),
         ...(outcome.done.reported === undefined ? {} : { reported: outcome.done.reported }),
@@ -404,9 +408,11 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
       if (outcome.done.revise !== undefined) queueRevision(deps, run, outcome.done.revise.stepKey, outcome.done.revise.feedback, { reviewedBy: key.stepKey }, at);
     } else if ("failed" in outcome) {
       const hash = outcome.failed.record === undefined ? null : writeRecord(deps.store, run.row.groupId, outcome.failed.record);
+      // §9.6: a failed effect is red and is not retried until the person retries (a new execution, a new record).
+      const flags = [...(outcome.failed.flags ?? []), ...settleEffect(deps.store, body, "failed", null, at)];
       finishExecution(deps.store, key, from, "failed", at, {
         ...(hash === null ? {} : { output: { kind: "artifact" as const, ref: hash, hash: outputHashOfRecord(hash) } }),
-        body: { ...body, failure: outcome.failed.reason, ...(outcome.failed.flags === undefined ? {} : { flags: outcome.failed.flags }) },
+        body: { ...body, failure: outcome.failed.reason, ...(flags.length === 0 ? {} : { flags }) },
       });
     } else if ("waiting" in outcome) {
       finishExecution(deps.store, key, from, "needs-person", at, { body: { ...body, ask: outcome.waiting.ask } });
@@ -487,15 +493,27 @@ const basisOf = (run: LoadedRun, index: number, heads: Record<string, number>): 
 const sameBasis = (a: Record<string, number> | undefined, b: Record<string, number>): boolean =>
   canonicalBytes(a ?? {}).equals(canonicalBytes(b));
 const parallel = (a: FlowStep, b: FlowStep): boolean => a.parallelWith === b.id || b.parallelWith === a.id;
-const WAITING: ReadonlySet<ExecutionState> = new Set(["needs-person", "parked", "staged"]);
+// §9.2: a `staged` effect waits for nobody: the flow goes on (or ends) without it.
+const WAITING: ReadonlySet<ExecutionState> = new Set(["needs-person", "parked"]);
+const SETTLED: ReadonlySet<ExecutionState> = new Set(["done", "skipped", "staged"]);
 
 /** Start a queued execution: it takes its basis now and its kind's start decides the rest. */
 async function runQueued(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow, basis: Record<string, number>): Promise<void> {
   const step = stepOf(run, execution.stepKey);
   const key: ExecutionKey = { flowRunId: execution.flowRunId, stepKey: execution.stepKey, seq: execution.seq };
   // §6.4, §7.2: what it ran on, so a later plan can tell which of its inputs moved since.
-  const body = { ...(execution.body as ExecutionBody), basis, ranOnInputs: ranOnInputsOf(deps.store, run, step.id) };
-  deps.store.transaction(() => finishExecution(deps.store, key, "queued", "running", deps.now(), { body }));
+  const body: ExecutionBody = { ...(execution.body as ExecutionBody), basis, ranOnInputs: ranOnInputsOf(deps.store, run, step.id) };
+  // §9.2: an effect-classed step is gated on its level before it starts (its record is written with the move).
+  const gate = deps.store.transaction(() => {
+    const gated = (execution.body as ExecutionBody).effectRecordId === undefined ? gateEffect(deps, run, execution, step) : null;
+    const at = deps.now();
+    if (gated !== null && "staged" in gated) { finishExecution(deps.store, key, "queued", "staged", at, { body: { ...body, effectRecordId: gated.staged } }); return gated; }
+    if (gated !== null && "waiting" in gated) { finishExecution(deps.store, key, "queued", "needs-person", at, { body: { ...body, effectRecordId: gated.waiting.recordId, ask: gated.waiting.ask } }); return gated; }
+    if (gated !== null) body.effectRecordId = gated.run;
+    finishExecution(deps.store, key, "queued", "running", at, { body });
+    return gated;
+  });
+  if (gate !== null && !("run" in gate)) return;
   const running: ExecutionRow = { ...execution, state: "running", body };
   const kind = kindFor(deps, step);
   if (kind === undefined) return applyOutcome(deps, run, running, "running", { failed: { reason: `kind-not-available:${step.kind}` } });
@@ -519,6 +537,23 @@ export function ranOnInputsOf(store: ControlStore, run: LoadedRun, stepKey: stri
   return { start: run.body.importCommit ?? "none", params: run.row.paramsSha256, earlier };
 }
 export interface RanOnInputs { start: string; params: string; earlier: Array<{ stepKey: string; outputHash: string | null; projection: null }> }
+
+/**
+ * §9.2: a confirmed card or an enacted staged record: the waiting execution runs now, with its record id in the prompt.
+ * Then the run goes on from its boundaries.
+ */
+export async function resumeExecution(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow): Promise<void> {
+  const key: ExecutionKey = { flowRunId: execution.flowRunId, stepKey: execution.stepKey, seq: execution.seq };
+  const { ask: _card, ...rest } = execution.body as ExecutionBody;
+  const body = rest as ExecutionBody;
+  deps.store.transaction(() => finishExecution(deps.store, key, execution.state, "running", deps.now(), { body }));
+  const running: ExecutionRow = { ...execution, state: "running", body };
+  const kind = kindFor(deps, stepOf(run, execution.stepKey));
+  if (kind === undefined) await applyOutcome(deps, run, running, "running", { failed: { reason: `kind-not-available:${execution.kind}` } });
+  else await applyOutcome(deps, run, running, "running", await kind.start(contextFor(deps, run, running)));
+  if (getFlowRun(deps.store, run.row.id)?.state === "done") setFlowRunState(deps.store, run.row.id, "done", "running");
+  await advanceRun(deps, run.row.id);
+}
 
 /** One pass over a run: start at most one execution; true when something moved (the caller passes again). */
 async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
@@ -567,7 +602,7 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
       await runQueued(deps, run, listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.id && e.seq === seq)!, basis);
       return true;
     }
-    if (current !== undefined && (current.state === "done" || current.state === "skipped") && sameBasis((current.body as ExecutionBody).basis, basis)) continue;
+    if (current !== undefined && SETTLED.has(current.state) && sameBasis((current.body as ExecutionBody).basis, basis)) continue;
     // §7.5: a step the plan does not run keeps its active output: a skipped execution carries it onto the new basis.
     if (plan !== null && current !== undefined && (current.state === "done" || current.state === "skipped") && !executedUnderPlan) {
       if (!free) return false;
