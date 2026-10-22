@@ -59,7 +59,7 @@ async function registeredDirProject(projects: ReadonlyArray<{ repoId: string; pa
 const BOOKED: ReadonlySet<string> = new Set([
   "flow-run-not-found", "flow-step-not-found", "flow-template-invalid", "flow-param-invalid", "flow-command-missing", "role-unresolved",
   "flow-profiles-unresolved", "flow-ask-closed", "flow-answer-invalid", "flow-effect-not-staged", "flow-effect-closed", "flow-plan-stale",
-  "flow-message-target-missing", "flow-run-stopped",
+  "flow-message-target-missing", "flow-run-stopped", "flow-attachment-invalid",
 ]);
 
 export function asFlowControlError(error: unknown): unknown {

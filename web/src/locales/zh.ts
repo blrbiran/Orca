@@ -1676,6 +1676,7 @@ export const zhErrors: Record<string, string> = {
   "flow-effect-not-staged": "这条效果记录不在等待执行：{{detail}}",
   "flow-effect-closed": "这条效果记录已关闭：{{detail}}",
   "flow-plan-stale": "这份重跑计划已经不是当前的那一份：{{detail}}",
+  "flow-attachment-invalid": "附件没有收下：{{detail}}",
   "flow-run-stopped": "流程运行已停止：{{detail}}",
   "flow-refused": "流程拒绝了这条命令：{{detail}}",
   "flow-unavailable": "这个面板不运行流程（没有执行驱动）：{{detail}}",

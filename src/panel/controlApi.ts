@@ -5,7 +5,9 @@ import { readResultOutputBytes } from './taskResultOutputs.js';
 import { readControlOverview } from "./controlOverview.js";
 import { readGroupDecisionsView } from "./groupDecisions.js";
 import { groupRepoId } from "../control/executionDriver.js";
-import type { Express, NextFunction, Request, Response } from "express";
+import express, { type Express, type NextFunction, type Request, type Response } from "express";
+import { ATTACHMENT_MAX_BYTES, storeAttachment } from "../flow/feedback/attachments.js";
+import { loadRun } from "../flow/kernel.js";
 import { randomUUID } from "node:crypto";
 import { canonicalBytes } from "../control/canonicalJson.js";
 import { readArtifact } from "../control/archive.js";
@@ -773,5 +775,22 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
       if (error instanceof ZodError) sendControlError(res, 400, "control-non-json-payload", "The command body does not match the closed V1 schema.", context);
       else sendMappedControlError(res, error, context);
     }
+  }));
+  /**
+   * Gaps spec §4.7, §13: a screenshot for a feedback message, the raw image as the body; answers its store id. A write
+   * outside the command ledger (content-addressed and idempotent: the same bytes are the same file), so no verb: the
+   * verb-coverage test asks a registry row only of VERB_ACCESS verbs (gaps plan Task 5 ruling). Access as `flow-message`
+   * (`any`): any principal the listener admitted. Stored under $ORCA_CONTROL_DIR from the flow ports' environment.
+   */
+  app.post("/api/control/flows/:runId/attachments", express.raw({ type: () => true, limit: ATTACHMENT_MAX_BYTES + 1 }), asyncRoute(async (req, res) => {
+    try {
+      if (res.locals.orcaPrincipal === undefined) throw new Error("control request carries no principal (res.locals.orcaPrincipal)");
+      const flow = service.deps.flowDeps?.() ?? null;
+      if (flow === null) throw new ControlError("flow-unavailable");
+      loadRun(store, String(req.params.runId));
+      const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      const stored = storeAttachment(flow.env, bytes);
+      res.json({ schema: "orca-flow-attachment-v1", id: `${stored.sha256}.${stored.ext}`, sha256: stored.sha256, ext: stored.ext });
+    } catch (error) { sendMappedControlError(res, asFlowControlError(error)); }
   }));
 }

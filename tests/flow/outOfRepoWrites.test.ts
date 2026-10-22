@@ -1,9 +1,13 @@
-import { mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getFlowRun } from "../../src/flow/store.js";
-import { toDraftBox, wechatWorld } from "./fixtures/wechatWorld.js";
+import { attachmentPath, attachmentsDir, storeAttachment } from "../../src/flow/feedback/attachments.js";
+import { childGroupIdOf } from "../../src/flow/kinds/work.js";
+import { acceptMessage } from "../../src/flow/messages.js";
+import { getFlowRun, getIntake, listExecutions } from "../../src/flow/store.js";
+import { toDraftBox, wechatWorld, WECHAT } from "./fixtures/wechatWorld.js";
 
 /**
  * Flow engine spec §20, §21 C21 (CLAUDE.md Rule 17, IR-C4): a whole flow run -- the built-in article flow from the brief
@@ -26,6 +30,40 @@ describe("out-of-repo writes (C21)", { timeout: 60_000 }, () => {
       const flowRunId = await toDraftBox(world);
       expect(getFlowRun(world.w.store, flowRunId)!.state).toBe("done");
       expect(readdirSync(home, { recursive: true })).toEqual([]);
+    } finally { await world.w.dispose(); }
+  });
+
+  // Gaps spec §4.7, §16 (G14): feedback with two screenshots on a finished run. The store is under ORCA_CONTROL_DIR
+  // (0700/0600), nothing lands under HOME, and no attachment reaches the attempt commit, the vault head or the folder.
+  // (§4.7's copy into the attempt workspace is open for the human, spec §21 entry 2: tests/flow/attachments.test.ts todo.)
+  it("feedback with two attachments writes them only to the store, never under HOME, into a commit, the head or the folder", async () => {
+    const world = await wechatWorld();
+    try {
+      const { w, children } = world;
+      const control = realpathSync(mkdtempSync(join(tmpdir(), "orca-g14-control-")));
+      w.deps.env.ORCA_CONTROL_DIR = control;
+      const flowRunId = await toDraftBox(world);
+      const ids = [Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]), Buffer.from([0xff, 0xd8, 0xff, 0xe0, 2])]
+        .map((bytes) => { const s = storeAttachment(w.deps.env, bytes); return `${s.sha256}.${s.ext}`; });
+      const sent = await acceptMessage(w.deps, flowRunId, { kind: "feedback", target: { kind: "run" }, body: { text: "see the screenshots", anchors: [{ quote: "It has a ritual." }], attachments: ids }, by: "ann", via: "cli:test", requestId: "g14" });
+      expect(sent.state).toBe("accepted");
+      await w.answer(w.calls.length - 1, { targets: [{ stepKey: "finetune", why: "tone" }] });
+      expect(getIntake(w.store, flowRunId, sent.seq)!.state).toBe("planned");
+      await w.answer(w.calls.length - 1, { skips: [] });
+      const finetune = childGroupIdOf(flowRunId, "finetune", 2);
+      const landed = children.land(finetune, { [WECHAT]: "---\ntitle: T\n---\n\nTea.\n" });
+      await w.advance();
+      expect(listExecutions(w.store, flowRunId).find((e) => e.stepKey === "finetune" && e.seq === 2)!.state).toBe("done");
+      const run = getFlowRun(w.store, flowRunId)!.body as { vaultPath: string };
+      const git = (...args: string[]) => execFileSync("/usr/bin/git", ["--git-dir", run.vaultPath, ...args], { encoding: "utf8" });
+      const named = (listing: string) => ids.some((id) => listing.includes(id)) || listing.includes(".orca/");
+      expect(named(git("ls-tree", "-r", "--name-only", landed))).toBe(false);
+      expect(named(git("ls-tree", "-r", "--name-only", `refs/orca/${flowRunId}/head`))).toBe(false);
+      expect(named(readdirSync(w.folder, { recursive: true }).map(String).join("\n"))).toBe(false);
+      expect(readdirSync(home, { recursive: true })).toEqual([]);
+      expect(statSync(attachmentsDir(w.deps.env)).mode & 0o777).toBe(0o700);
+      for (const id of ids) expect(statSync(attachmentPath(w.deps.env, id)).mode & 0o777).toBe(0o600);
+      rmSync(control, { recursive: true, force: true });
     } finally { await world.w.dispose(); }
   });
 });

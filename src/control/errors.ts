@@ -94,6 +94,8 @@ export const durableCommandErrorStatuses = {
   "flow-effect-not-staged": 409,
   "flow-effect-closed": 409,
   "flow-plan-stale": 409,
+  // Gaps spec §4.7: an upload that is not a png/jpg/webp by its bytes, or larger than 5 MiB.
+  "flow-attachment-invalid": 400,
   "flow-run-stopped": 409,
   "flow-refused": 409,
   "flow-unavailable": 409,

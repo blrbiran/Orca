@@ -872,3 +872,30 @@ Appended per Rule 13: the sections above stay as published; entries here correct
 | `control.sqlite.pre-v<from>-<ms>` (`-1`, `-2`, … when the name is taken), in the control state dir (`$ORCA_CONTROL_DIR`, default `~/.orca/control/`) | `openControlStore` (`src/control/store.ts`) when it opens an existing store whose schema version differs from the build's, before the migration transaction; a consistent `VACUUM INTO` copy | file `0600` (set explicitly, inside `privateIO`) | one full copy per version change, never pruned; a failed migration leaves its backup; a failed copy aborts the open and migrates nothing |
 
    Criteria write it only under temp state dirs (Rule 17).
+
+2. **§4.7's attachment copy into the attempt workspace: the premise failed; built without it (gaps plan Task 5,
+   implementer of session `0e13a9b7`, 2026-10-23, measured at `9776c56c`; controller ruling: option (c)).**
+   - **What failed.** §4.7 says code copies each attachment into the child's attempt workspace at
+     `.orca/attachments/<sha256>.<ext>` before the agent starts, kept out of commits by the vault's `info/exclude`. With the
+     real driver neither half holds:
+     (1) Orca's last write before the agent is the run workspace (driver A2, `ensureWorkspace`, `src/control/workspace.ts`),
+     and ccloop opens each attempt worktree from that workspace's HEAD (ccloop `fbd3512` `src/workspace/worktreeManager.ts`
+     `createAttemptWorkspace`), so an untracked file Orca puts there never reaches the agent;
+     (2) when the attempt worktree still exists at result materialisation, ccloop's `copyLiveWorkspace`
+     (`src/control/resultRepository.ts`) copies it into a plain clone, where the vault's `info/exclude` does not apply, and
+     Orca's `commitAttempt` (`git add -A`) commits `.orca/attachments/*`.
+     Evidence: `/private/tmp/orca-0e13a9b7/logs/gaps/t5-g14-premise.sh` and `.log` (the exact git commands of both sides;
+     rc 0; the attachment is absent from the attempt worktree and present in Orca's attempt commit).
+   - **What was built.** The store (`src/flow/feedback/attachments.ts`, `storeAttachment`: magic bytes, ≤ 5 MiB, ≤ 4 per
+     message, dir `0700` / files `0600`, under `$ORCA_CONTROL_DIR/flow-attachments/`), the upload route
+     `POST /api/control/flows/:runId/attachments`, the message field `attachments`. Triage, the feedback clarify round and
+     the work prompts of the targets name attachments **by id only**; no copy is made into any workspace and `.orca/` is
+     **not** added to the vault's `info/exclude`. G14's rows for the store's modes, nothing under `HOME`, and no attachment
+     in the attempt commit, the vault head or the folder are kept as guards (`tests/flow/outOfRepoWrites.test.ts`,
+     `tests/flow/attachments.test.ts`).
+   - **Awaiting the human.** G14's row "present in the child's workspace" is a named todo in `tests/flow/attachments.test.ts`:
+     choose (a) an absolute path outside the workspace (needs the answer to whether ccloop lets the agent read it), or
+     (b) a ccloop change that seeds files into each attempt and keeps them out of the result (its own spec in ccloop,
+     Rule 16). §8.1's `.orca/params/coverImage.<ext>` copy (Task 6) rests on the same mechanism.
+   - **Moved.** G2's case "a later clarify-round revision is re-applied as a round revision" on rewind moves to Task 7
+     (round edits are built there); Task 5 builds rewind's reuse of the stored intake only.

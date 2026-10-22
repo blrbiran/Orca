@@ -1753,6 +1753,7 @@ export const enErrors: Record<string, string> = {
   "flow-effect-not-staged": "The effect record is not waiting to be enacted: {{detail}}",
   "flow-effect-closed": "The effect record is closed: {{detail}}",
   "flow-plan-stale": "That re-run plan is no longer the open one: {{detail}}",
+  "flow-attachment-invalid": "The attachment was not taken: {{detail}}",
   "flow-run-stopped": "The flow run is stopped: {{detail}}",
   "flow-refused": "The flow refused the command: {{detail}}",
   "flow-unavailable": "This panel runs no flows (it has no execution driver): {{detail}}",
