@@ -56,6 +56,8 @@ describe("flow verb access (C19)", () => {
     const world = await wechatWorld();
     cleanups.push(() => world.w.dispose());
     const { w, children, child } = world;
+    // The person's checklist (`rerunReview: review`); the built-in default is `auto` since gaps spec §5.2.
+    w.deps.rerunReview = () => "review";
     // A short root: the socket path is capped at ~104 bytes.
     const root = realpathSync(mkdtempSync("/tmp/fva-"));
     cleanups.push(() => rmSync(root, { recursive: true, force: true }));
