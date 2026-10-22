@@ -212,6 +212,8 @@ export async function applyEdit(deps: FlowDeps, run: LoadedRun, message: Pick<Me
   if (active === undefined || active.state !== "done") throw new FlowRefusal("flow-message-target-missing", `${stepKey} has no active output to edit`);
   const seq = Math.max(...all.filter((e) => e.stepKey === stepKey).map((e) => e.seq)) + 1;
   const body = message.body as { record?: Record<string, unknown>; files?: Record<string, string> };
+  // Review M3: refused by name (the stored message is then `rejected`), never a TypeError through the boundary.
+  if (body.record === undefined && body.files === undefined) throw new FlowRefusal("flow-message-invalid", "edit needs record or files");
   const activeBody = active.body as ExecutionBody;
   const at = deps.now();
   const common = {
