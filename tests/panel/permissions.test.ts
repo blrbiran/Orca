@@ -71,9 +71,12 @@ describe("the permission table (spec §3.5)", () => {
       // Agent version auto-refresh spec 2026-10-20 §3.3 (human ruling, session 308b874c: 「静默更新就行」; test changes
       // authorized that session): the owner-only version refresh is a third, and it does write the agents table's
       // version fields -- outside the command ledger by that ruling, owner-only and CSRF-checked like the models refresh.
+      // Gaps spec §4.7, §13 (plan Task 5; Ruling: 这次批准改写所有必要的判据 (0e13a9b7)): the feedback attachment upload is a
+      // fourth -- content-addressed and idempotent, outside the command ledger as §13 names it, access as flow-message.
       expect(registered.filter((entry) => !entry.startsWith("GET ") && !commandPaths.includes(entry)).sort()).toEqual([
         "POST /api/control/agents/:installation/models/refresh",
         "POST /api/control/agents/refresh-versions",
+        "POST /api/control/flows/:runId/attachments",
         "POST /api/control/operator/agent-update-preview",
       ]);
       expect(commandPaths.filter((entry) => !registered.includes(entry))).toEqual([]);
