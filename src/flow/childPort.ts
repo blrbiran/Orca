@@ -12,7 +12,7 @@
  *
  * `status` reads how the child is doing from its task's run and drive record: running (also while blocked short of a
  * terminal: a person's recovery acts there), failed (a terminal other than `succeeded`), or landed with the tip of
- * `orca/<child>` in the vault as the step's output.
+ * `orca/<child>` in the vault as the step's output -- or, for an effect step that changed no file, landed with no commit.
  */
 import { updateRevision } from "../control/commandLedger.js";
 import { execFile } from "node:child_process";
@@ -115,11 +115,24 @@ async function selectionsHashOf(deps: DriverChildPortDeps, groupId: string): Pro
   return hash;
 }
 
-type RunBody = { runId: string; state: string; drive?: DriveRecord; cumulative?: { work?: { tokens?: number } } };
+type RunBody = { runId: string; state: string; drive?: DriveRecord; cumulative?: { work?: { tokens?: number } }; recoverable?: boolean; checkpointId?: string };
 
 function childRuns(store: ControlStore, groupId: string): RunBody[] {
   return store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId).map((row) => JSON.parse(String(row.body)) as RunBody)
     .filter((body) => (body as { phase?: unknown }).phase === "work");
+}
+
+/**
+ * §9.6: an effect step's side effect may change no file (an upload, a WeChat draft). Its run succeeded and settled with
+ * a complete checkpoint but landed nothing, so it has no acceptance and the driver leaves the work item `blocked`
+ * (deviation D14, the dev rule, kept as it is). For an effect child -- and only one -- that is a finished step with no
+ * files (acceptance b37f7ce9: the draft id was never stored and the step never settled).
+ */
+function effectChangedNothing(store: ControlStore, block: { effectRecordId?: string | null }, current: RunBody, work: { status?: string } | null): boolean {
+  if (typeof block.effectRecordId !== "string" || work?.status !== "blocked" || current.state !== "settled" || current.recoverable !== true) return false;
+  if (current.drive?.outcome !== "succeeded" || current.drive.landedCommit !== null) return false;
+  const checkpoint = current.checkpointId === undefined ? undefined : store.db.prepare("SELECT body FROM checkpoints WHERE id=? AND run_id=?").get(current.checkpointId, current.runId);
+  return checkpoint !== undefined && (JSON.parse(String(checkpoint.body)) as { result?: unknown }).result === "complete";
 }
 
 async function childStatus(deps: DriverChildPortDeps, childGroupId: string): Promise<FlowChildStatus | null> {
@@ -138,11 +151,15 @@ async function childStatus(deps: DriverChildPortDeps, childGroupId: string): Pro
     const reason = current.drive?.failureCause?.cause ?? `outcome:${current.drive?.outcome ?? "unknown"}`;
     return { state: "failed", reason, spentTokens, ...(toolRules === undefined ? {} : { toolRules }), ...(skills === undefined ? {} : { skills }) };
   }
-  if (work?.status !== "done" || current.state !== "settled") return { state: "running" };
-  const flowRun = getFlowRun(deps.store, block.flowRunId);
-  const vault = flowRun?.vaultId == null ? null : vaultPathOfRepoId(deps.env, flowVaultRepoId(flowRun.vaultId));
-  if (vault === null) throw new ControlError("recovery-blocked", `flow-child-vault-missing:${childGroupId}`);
-  const commit = (await run("/usr/bin/git", ["--git-dir", vault, "rev-parse", "--verify", "--quiet", `${workBranchRef(childGroupId)}^{commit}`])).stdout.trim();
+  const unchanged = effectChangedNothing(deps.store, block, current, work);
+  if (!unchanged && (work?.status !== "done" || current.state !== "settled")) return { state: "running" };
+  let commit: string | null = null;
+  if (!unchanged) {
+    const flowRun = getFlowRun(deps.store, block.flowRunId);
+    const vault = flowRun?.vaultId == null ? null : vaultPathOfRepoId(deps.env, flowVaultRepoId(flowRun.vaultId));
+    if (vault === null) throw new ControlError("recovery-blocked", `flow-child-vault-missing:${childGroupId}`);
+    commit = (await run("/usr/bin/git", ["--git-dir", vault, "rev-parse", "--verify", "--quiet", `${workBranchRef(childGroupId)}^{commit}`])).stdout.trim();
+  }
   // §4.3: what the agent reported under `flow`, which ccloop (fbd3512 on) answers at collect's top level and the driver
   // saves with the report. A codex agent cannot report `candidates` (ccloop's closed wire shape omits them).
   const saved = await savedReport(deps.store, current.runId);

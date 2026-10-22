@@ -10,6 +10,7 @@ import { resolveGroupSelections } from "../../src/control/agentFreeze.js";
 import { buildFlowStepPlanSource } from "../../src/control/flowStepPlan.js";
 import { ORCHESTRATION_ACTOR } from "../../src/control/orchestration.js";
 import { readBudgetProposal } from "../../src/control/queries.js";
+import { writeArtifact } from "../../src/control/archive.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
 import { CHILD_CONFIRM_COMMAND_ID, createDriverChildPort } from "../../src/flow/childPort.js";
@@ -81,6 +82,55 @@ describe("the driver-backed child port (§6.2)", () => {
       expect(count(h, "SELECT count(*) AS n FROM groups WHERE id LIKE 'flow-fr-1-%'")).toBe(1);
       expect(count(h, "SELECT count(*) AS n FROM commands WHERE group_id=?", request.childGroupId)).toBe(1);
       expect(await port.status("g")).toBe(null);
+    } finally { await h.dispose(); }
+  });
+
+  // §9.6 (acceptance b37f7ce9, `flow draft push:`): a child whose run succeeded and settled complete but landed nothing.
+  // The driver leaves its work item blocked (D14). Only an effect step's child reads that as finished with no files;
+  // any other step's output is its files, so an empty result there is not an output and the child stays unsettled. Each
+  // other fact is one the driver's own "completed" rests on: without it the run is not finished, whatever the step.
+  type Empty = { recoverable: boolean; result: string; outcome: string; landedCommit: string | null; workStatus: string };
+  const EMPTY: Empty = { recoverable: true, result: "complete", outcome: "succeeded", landedCommit: null, workStatus: "blocked" };
+  async function settledEmpty(h: Awaited<ReturnType<typeof webFixture>>, groupId: string, e: Empty = EMPTY): Promise<void> {
+    const runId = `run-${groupId}`;
+    const work = h.store.db.prepare("SELECT id, body FROM work_items WHERE group_id=?").get(groupId)!;
+    h.store.db.prepare("INSERT INTO runs VALUES (?,?,?,1,0,?)").run(runId, groupId, String(work.id), JSON.stringify({
+      runId, groupId, phase: "work", state: "settled", recoverable: e.recoverable, checkpointId: `cp-${runId}`, drive: { outcome: e.outcome, landedCommit: e.landedCommit },
+    }));
+    h.store.db.prepare("INSERT INTO checkpoints VALUES (?,?,?,?)").run(`cp-${runId}`, runId, "h", JSON.stringify({ result: e.result }));
+    h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=?").run(JSON.stringify({ ...JSON.parse(String(work.body)), status: e.workStatus, currentRunId: runId }), groupId);
+    const source = await writeArtifact(h.store, `report-${runId}`, Buffer.from(JSON.stringify({ flow: { effect: { remoteId: "draft-7" } } })));
+    h.store.db.prepare("INSERT INTO outbox VALUES (?, 'report', ?, 0)").run(`report:${runId}`, JSON.stringify({ source }));
+  }
+  const effectChild = (request: FlowChildOpen, stepKey: string): FlowChildOpen => ({ ...request, childGroupId: `flow-fr-1-${stepKey}-1`, stepKey, effectRecordId: `eff-${stepKey}`,
+    plan: buildFlowStepPlanSource({ flowRunId: "fr-1", step: { ...STEP, id: stepKey, effect: "wechat-draft" } as FlowStep, seq: 1, baseCommit: BASE, vaultPath: request.vaultPath,
+      promptEnvelope: "Upload.", gates: [], effectRecordId: `eff-${stepKey}`, agent: { agent: "codex" } }) });
+
+  it("an effect child that changed no file lands with no commit; a non-effect child's empty result stays unsettled", async () => {
+    const { h, port, request } = await world(); try {
+      const effect = effectChild(request, "upload");
+      await port.open(request);
+      await port.open(effect);
+      await settledEmpty(h, request.childGroupId);
+      await settledEmpty(h, effect.childGroupId);
+      expect(await port.status(request.childGroupId)).toEqual({ state: "running" });
+      expect(await port.status(effect.childGroupId)).toEqual({ state: "landed", commit: null, spentTokens: 0, flow: { effect: { remoteId: "draft-7" } } });
+    } finally { await h.dispose(); }
+  });
+
+  it("an effect child's empty result short of the driver's completed stays unsettled", async () => {
+    const { h, port, request } = await world(); try {
+      const short: Array<[string, Partial<Empty>]> = [
+        ["unrecoverable", { recoverable: false }], ["partial", { result: "partial" }], ["unsucceeded", { outcome: "failed" }],
+        // A landing whose acceptance is missing waits for it (repairAcceptedWork); it is never read as no files.
+        ["landed", { landedCommit: "c".repeat(40) }], ["undecided", { workStatus: "ready" }],
+      ];
+      for (const [stepKey, change] of short) {
+        const child = effectChild(request, stepKey);
+        await port.open(child);
+        await settledEmpty(h, child.childGroupId, { ...EMPTY, ...change });
+        expect([stepKey, await port.status(child.childGroupId)]).toEqual([stepKey, { state: "running" }]);
+      }
     } finally { await h.dispose(); }
   });
 

@@ -42,7 +42,8 @@ export interface FlowChildOpen {
 }
 export type FlowChildStatus =
   | { state: "running" }
-  | { state: "landed"; commit: string; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[]; flow?: { needs?: FlowNeeds; candidates?: Record<string, { items: string[]; recommended: number }>; effect?: { remoteId: string; url?: string } } }
+  /** `commit` null: an effect step that changed no file (§9.6); its output is no files. */
+  | { state: "landed"; commit: string | null; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[]; flow?: { needs?: FlowNeeds; candidates?: Record<string, { items: string[]; recommended: number }>; effect?: { remoteId: string; url?: string } } }
   | { state: "failed"; reason: string; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[] };
 /** The driver-backed side of a work step: open (idempotent per child id) and read how the child is doing. */
 export interface FlowChildPort {
@@ -139,7 +140,10 @@ export function skillLocksOf(ctx: KindContext, lock: readonly LockSkill[] | unde
   return { skillLocks: (lock ?? []).map((e) => ({ sourceId: e.source?.name ?? "", resolvedCommit: e.resolved_commit ?? "", contentMd5: e.content_md5 })), warnings };
 }
 
-/** How the settled child ends the step: its landed commit is the output; the tool-rule report is kept per execution. */
+/**
+ * How the settled child ends the step: its landed commit is the output; the tool-rule report is kept per execution. An
+ * effect step that changed no file has no commit: its output is the record, and the composition does not move (§5.3).
+ */
 function settle(ctx: KindContext, status: Exclude<FlowChildStatus, { state: "running" }>, baseCommit: string): KindOutcome {
   const flags = toolRuleFlags(status.toolRules);
   const { skillLocks, warnings } = skillLocksOf(ctx, status.skills);
@@ -147,7 +151,7 @@ function settle(ctx: KindContext, status: Exclude<FlowChildStatus, { state: "run
   if (status.state === "failed") return { failed: { reason: status.reason, record, ...(flags.length === 0 ? {} : { flags }) } };
   if (status.flow?.needs !== undefined) return { needs: status.flow.needs };
   return { done: {
-    record, commit: { commit: status.commit, parent: baseCommit }, ...(flags.length === 0 ? {} : { flags }),
+    record, ...(status.commit === null ? {} : { commit: { commit: status.commit, parent: baseCommit } }), ...(flags.length === 0 ? {} : { flags }),
     ...(status.skills === undefined ? {} : { skillLocks }), ...(warnings.length === 0 ? {} : { warnings }),
     // §4.3, §9.6: what the agent reported for later asks, and the remote id of the effect it enacted.
     ...(status.flow?.candidates === undefined && status.flow?.effect === undefined ? {} : { reported: {
