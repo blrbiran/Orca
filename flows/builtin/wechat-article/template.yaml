@@ -32,6 +32,9 @@ requires:
 effects:
   image-generate: {class: cost}
   wechat-draft: {class: external}
+# Sized from the T18 acceptance run (tokens per child execution, plan + execute): about 1.5x what each step used there;
+# the pool funds every step's budget at once, plus room for the run's calls (clarify rounds, asks, the planner).
+budget: {tokensPerRun: 6000000}
 steps:
   - id: brief
     kind: clarify
@@ -42,6 +45,7 @@ steps:
 
   - id: outline
     kind: work
+    budget: {tokens: 250000}
     role: writer
     skills: [tech-writer]
     prompt: prompts/outline.md
@@ -59,6 +63,7 @@ steps:
 
   - id: draft
     kind: work
+    budget: {tokens: 350000}
     role: writer
     skills: [tech-writer]
     prompt: prompts/draft.md
@@ -67,6 +72,7 @@ steps:
 
   - id: deslop
     kind: work
+    budget: {tokens: 350000}
     role: writer
     skills: [tech-writer-deslop]
     prompt: prompts/deslop.md
@@ -82,6 +88,7 @@ steps:
 
   - id: voice
     kind: work
+    budget: {tokens: 350000}
     role: writer
     skills: [tech-writer-voice]
     prompt: prompts/voice.md
@@ -98,6 +105,7 @@ steps:
 
   - id: finetune
     kind: work
+    budget: {tokens: 600000}
     role: writer
     skills: [wechat-finetune]
     prompt: prompts/finetune.md
@@ -118,6 +126,7 @@ steps:
 
   - id: visuals
     kind: work
+    budget: {tokens: 1000000}
     skills: [md2publish-visuals]
     prompt: prompts/visuals.md
     effect: image-generate
@@ -141,6 +150,7 @@ steps:
 
   - id: article
     kind: work
+    budget: {tokens: 850000}
     skills: [md2publish-article]
     prompt: prompts/article.md
     acceptance:
@@ -155,6 +165,7 @@ steps:
 
   - id: cover
     kind: work
+    budget: {tokens: 1000000}
     skills: [md2publish-cover]
     prompt: prompts/cover.md
     parallelWith: article
@@ -179,6 +190,7 @@ steps:
 
   - id: to-draft-box
     kind: work
+    budget: {tokens: 400000}
     skills: [md2publish-draft]
     prompt: prompts/to-draft-box.md
     effect: wechat-draft

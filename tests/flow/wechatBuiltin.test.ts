@@ -92,6 +92,24 @@ describe("built-in wechat-article (§15)", () => {
     for (const id of ["finetune", "visuals", "article", "cover", "to-draft-box"]) expect(prompt(id), id).not.toMatch(/`cd '/);
   });
 
+  // T18 acceptance (fr-12b4198a, tokens per child execution, plan + execute, from ccloop's usage.json:
+  // wechat-acceptance/logs/usage-final.txt): the even share of the pool (~220-245k a work step) was too small --
+  // finetune#1 ended budget-exhausted at 308,331. Each work step declares its own budget, at least 1.5x what it used
+  // there (the cover's is its two attempts together), and the run's pool funds all of them at once.
+  it("declares a budget per work step sized from the acceptance run, and a run pool at least their sum", () => {
+    const measured: Record<string, number> = {
+      outline: 141_650, draft: 204_585, deslop: 202_530, voice: 189_211, finetune: 308_331, article: 551_824, cover: 660_760,
+    };
+    const work = steps.filter((s) => s.kind === "work");
+    const budgets = Object.fromEntries(work.map((s) => [s.id, s.budget?.tokens]));
+    for (const s of work) expect(budgets[s.id], s.id).toBeGreaterThan(0);
+    for (const [id, used] of Object.entries(measured)) expect(budgets[id]!, id).toBeGreaterThanOrEqual(Math.ceil(used * 1.5));
+    // visuals makes images as the cover does (unmeasured: illustrations were off); it gets at least the cover's.
+    expect(budgets.visuals!).toBeGreaterThanOrEqual(budgets.cover!);
+    const sum = work.reduce((total, s) => total + s.budget!.tokens, 0);
+    expect(loaded.template.budget?.tokensPerRun).toBeGreaterThanOrEqual(sum);
+  });
+
   it("each effect step passes its record as --confirmed-by-orca; the article passes the run id; the draft box takes the cover's FINAL path", () => {
     for (const id of ["visuals", "cover", "to-draft-box"]) expect(prompt(id), id).toContain("--confirmed-by-orca '{{effect.recordId}}'");
     expect(prompt("article")).toContain("--confirmed-by-orca '{{run.id}}'");
