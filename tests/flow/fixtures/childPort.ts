@@ -47,7 +47,7 @@ export function fakeChildPort() {
       return commit;
     } finally { rmSync(dir, { recursive: true, force: true }); }
   };
-  const fail = (id: string, reason: string, spentTokens = 0) => { statuses.set(id, { state: "failed", reason, spentTokens }); };
+  const fail = (id: string, reason: string, spentTokens = 0, extra: Partial<Extract<FlowChildStatus, { state: "failed" }>> = {}) => { statuses.set(id, { state: "failed", reason, spentTokens, ...extra }); };
   const bind = (s: ControlStore): FlowChildPort => { store = s; return port; };
   return { port: bind, opened, land, fail, failNextOpen: () => { failNextOpen = true; }, counts: () => ({ opens, dispatches }) };
 }

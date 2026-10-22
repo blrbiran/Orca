@@ -997,3 +997,81 @@ export interface GroupResultsV1 {
 
 export type RecoveryOf={sourceRunId:string;sourceAttempt:number;capsuleHash:string;snapshotHash:string;normalizedExecutionHash:string};
 export type SavedResultEligibilityV1={status:"unavailable";reason:string}|{status:"eligible";authorityKind:"execution-format-failure-v1"|"legacy-published-candidate-v1";sourceIdentity:{groupId:string;workItemId:string;taskId:string;runId:string;generation:number;graphVersion:number;targetVersion:number;executionId:string;envelopeHash:string};rawExecutionTokens:number;recoveryOf:RecoveryOf;limitation:"published-candidate-only; current membership and settled accounting require controller admission"};
+
+/**
+ * Flow engine spec §11.2, §14.1 (plan Task 16): the flow reads the Web renders. FlowSettingsReadV1 and FlowListV1 are
+ * paired with the server's (tests/panel/webParity.test.ts); the run view and the journal are plain JSON the server builds
+ * from its store (src/flow/views.ts, typed `unknown` there), so their copies here name only what the run page reads.
+ */
+export const WEB_FLOW_EFFECT_CLASSES = ["local", "cost", "external", "irreversible"] as const;
+export type FlowEffectClassV1 = (typeof WEB_FLOW_EFFECT_CLASSES)[number];
+export type FlowLevelV1 = "apply-flag" | "confirm" | "stage-only";
+export const WEB_FLOW_LOCKABLE_PATHS = ["effects.local", "effects.cost", "effects.external", "effects.irreversible", "allowedSkillSources", "budgets.tokensPerRun"] as const;
+export type FlowLockablePathV1 = (typeof WEB_FLOW_LOCKABLE_PATHS)[number];
+export type FlowSourcedV1<T> = { value: T; source: "project" | "global" | "builtin"; lockedBy: "global" | null; overriddenByLock?: T };
+export type FlowSettingsReadV1 = {
+  effects: Record<FlowEffectClassV1, FlowSourcedV1<FlowLevelSettingV1>>;
+  rerunReview: FlowSourcedV1<"auto" | "review">;
+  roles: FlowSourcedV1<Record<string, { agent: string; model?: string }>>;
+  allowedSkillSources: FlowSourcedV1<string[] | null>;
+  budgets: { tokensPerRun: FlowSourcedV1<number> };
+  locks: FlowLockablePathV1[];
+};
+export type FlowListV1 = {
+  schema: "orca-flow-list-v1";
+  runs: Array<{ flowRunId: string; groupId: string; templateRef: string; state: string; poolTokens: number; poolDrawn: number; projectId: string | null; dir: string | null }>;
+};
+export type FlowToolRuleStatusV1 = "enforced" | "detected" | "recorded-only" | "refused";
+export type FlowToolRulesReportV1 = {
+  schema: "ccloop-tool-rules-report-v1"; agentKind: "claude" | "codex" | "omp"; baseline: string;
+  rules: Array<{
+    rule: { kind: "commands-closed" } | { kind: "exact" | "prefix"; value: string } | { kind: "network"; value: boolean } | { kind: "secretEnv"; name: string };
+    status: FlowToolRuleStatusV1; reason: string | null; phases: Array<"plan" | "execute" | "verify">; present?: boolean;
+  }>;
+};
+/** What a waiting step asks: an `ask` form, an effect's confirm card, or an agent's question / confirmation request. */
+export type FlowAskV1 =
+  | { kind: "ask"; form: Record<string, { type: string; options?: string[]; default?: string | number | boolean; required?: boolean }>; candidates: Record<string, string[]>; defaults: Record<string, string | number | boolean>; freeText: boolean }
+  | { kind: "effect-confirm"; recordId: string; stepKey: string; effectKind: string; class: string; policy: FlowResolvedLevelV1; summary: string }
+  | { kind: "input"; question: string; candidates: string[]; unclassed?: boolean }
+  | { kind: "confirmation"; what: string; payloadSummary: string; unclassed?: boolean }
+  | { kind: "clarify-round"; roundNo: number };
+export type FlowResolvedLevelV1 = { value: FlowLevelV1; source: "project" | "global" | "template" | "builtin"; lockedBy: "global" | null; overriddenByLock?: FlowLevelV1 };
+export type FlowExecutionViewV1 = {
+  seq: number; state: string; reasons: string[]; planNo: number | null; childGroupId: string | null; by: string; via: string;
+  flags: string[]; failure: string | null;
+  output: { kind: "commit" | "artifact" | "none"; ref: string | null; hash: string | null } | null;
+  toolRules: FlowToolRulesReportV1 | null; ask: FlowAskV1 | null; needsYou: { reason?: string } | null;
+  reported: { candidates?: Record<string, { items: string[]; recommended: number }>; effect?: { remoteId: string; url?: string } } | null;
+  warnings: string[]; effectRecordId: string | null;
+};
+export type FlowPlanV1 = {
+  flowRunId: string; planNo: number; state: "proposed" | "chosen" | "running" | "done" | "abandoned";
+  candidates: { list: Array<{ stepKey: string; reasons: string[] }>; feedback: Record<string, string[]>; edits: string[]; trigger: string };
+  proposal: { retries: number; lastInvalid: string | null; skips: Array<{ stepKey: string; reason: string }> | null; exhausted: string | null } | null;
+  chosen: { steps: string[]; skips: string[]; added: string[] } | null; by: string; via: string;
+};
+export type FlowEffectV1 = {
+  id: string; flowRunId: string; stepKey: string; seq: number; effectKind: string; class: string; level: string; policy: FlowResolvedLevelV1;
+  state: "staged" | "confirmed" | "applied" | "discarded" | "failed"; payloadHash: string; remoteRef: string | null; by: string; via: string; createdAt: number; updatedAt: number;
+};
+export type FlowRunViewV1 = {
+  schema: "orca-flow-run-view-v1"; flowRunId: string; groupId: string; templateRef: string; state: string; params: Record<string, string | number | boolean>;
+  poolTokens: number; poolDrawn: number; by: string; via: string; dir: string | null;
+  template: { id: string; version: number | null; title: { en?: string; zh?: string } | null };
+  steps: Array<{
+    stepKey: string; kind: string; head: number | null; executor: "agent" | "person" | "either" | null; parallelWith: string | null;
+    effect: { kind: string; class: string | null } | null;
+    latest: FlowExecutionViewV1 | null; executions: FlowExecutionViewV1[];
+    clarify: { rounds: RoundBodyV1[]; chain: number[] } | null;
+  }>;
+  openAsks: Array<{ stepKey: string; seq: number; ask: FlowAskV1 }>;
+  plans: FlowPlanV1[];
+  effects: FlowEffectV1[];
+  decisions: Array<{ seq: number; grade: "major" | "minor"; stepKey: string | null; body: Record<string, unknown>; by: string }>;
+};
+export type FlowMessageV1 = {
+  flowRunId: string; seq: number; requestId: string; kind: string; target: string; body: Record<string, unknown>;
+  by: string; via: string; state: "accepted" | "applied" | "rejected" | "excluded"; reason: string | null; at: number;
+};
+export type FlowJournalV1 = { schema: "orca-flow-journal-v1"; flowRunId: string; messages: FlowMessageV1[] };

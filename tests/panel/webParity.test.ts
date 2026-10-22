@@ -18,6 +18,11 @@ import { CORRECTION_KINDS } from "../../src/corrections/schema.js";
 import { CUSTOM_LABEL_PREFIX, SYSTEM_LABELS } from "../../src/control/labels.js";
 import { CUSTOM_LABEL_PREFIX as WEB_CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS, WEB_WORK_ITEM_CATEGORIES } from "../../web/src/controlTypes.js";
 import { WORK_ITEM_CATEGORIES } from "../../src/control/workItemCategory.js";
+import type { FlowSettingsRead as ServerFlowSettingsRead } from "../../src/flow/settings.js";
+import { FLOW_EFFECT_CLASSES, FLOW_LOCKABLE_PATHS } from "../../src/flow/settingsSchema.js";
+import type { FlowListV1 as ServerFlowListV1 } from "../../src/flow/views.js";
+import type { FlowListV1 as WebFlowListV1, FlowSettingsReadV1 as WebFlowSettingsReadV1 } from "../../web/src/controlTypes.js";
+import { WEB_FLOW_EFFECT_CLASSES, WEB_FLOW_LOCKABLE_PATHS } from "../../web/src/controlTypes.js";
 import type {
   AgentModelsViewV1 as ServerAgentModelsViewV1,
   AgentPreferencesViewV1 as ServerAgentPreferencesViewV1,
@@ -142,9 +147,22 @@ describe("web/src/types.ts stays in lockstep with the server shapes (task 8 ruli
   it("WEB_WORK_ITEM_CATEGORIES is the same list as WORK_ITEM_CATEGORIES", () => {
     expect([...WEB_WORK_ITEM_CATEGORIES]).toEqual([...WORK_ITEM_CATEGORIES]);
   });
+
+  // Flow engine spec §11.2 (plan Task 16): the flow settings form offers exactly the server's classes and lockable paths.
+  it("WEB_FLOW_EFFECT_CLASSES and WEB_FLOW_LOCKABLE_PATHS are the server's lists, in order", () => {
+    expect([...WEB_FLOW_EFFECT_CLASSES]).toEqual([...FLOW_EFFECT_CLASSES]);
+    expect([...WEB_FLOW_LOCKABLE_PATHS]).toEqual([...FLOW_LOCKABLE_PATHS]);
+  });
 });
 
 // --- compile-time mutual-assignability checks (never called at runtime) ---
+
+// Flow engine spec §11.2, §14.1 (plan Task 16): the flow settings read and the run list, both ways.
+function flowSettingsServerToWeb(x: ServerFlowSettingsRead): WebFlowSettingsReadV1 { return x; }
+function flowSettingsWebToServer(x: WebFlowSettingsReadV1): ServerFlowSettingsRead { return x; }
+function flowListServerToWeb(x: ServerFlowListV1): WebFlowListV1 { return x; }
+function flowListWebToServer(x: WebFlowListV1): ServerFlowListV1 { return x; }
+export const __flowParityChecks__ = [flowSettingsServerToWeb, flowSettingsWebToServer, flowListServerToWeb, flowListWebToServer];
 
 function reportServerToWeb(x: ServerMetricsReport): WebMetricsReport {
   return x;

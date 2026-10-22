@@ -4,19 +4,65 @@
  * `flows/:id/journal` (every execution and message). Plain JSON of what the store holds; the Web run page (Task 16) and
  * `orca flow show|list|journal` read them.
  */
+import { activeChain } from "../control/clarifyChain.js";
+import { readRoundsAt } from "../control/requirementRecords.js";
+import type { RoundBody } from "../control/requirementSchemas.js";
 import type { ControlStore } from "../control/store.js";
-import { FlowRefusal, latestByStep, loadRun, openAsks } from "./kernel.js";
-import { getFlowRun, listEffects, listExecutions, listHeads, listMessages, listPlans } from "./store.js";
+import type { ToolRulesReport } from "../control/toolRules.js";
+import { FlowRefusal, latestByStep, loadRun, openAsks, recordOfExecution } from "./kernel.js";
+import { getFlowRun, listEffects, listExecutions, listHeads, listMessages, listPlans, type ExecutionRow } from "./store.js";
 
-export function readFlowList(store: ControlStore): unknown {
+/**
+ * One execution as the run page shows it (Task 16): its state, why it ran, its output, red flags and -- for a `work`
+ * step -- ccloop's tool-rule report as ccloop gave it (§16.2), plus what it waits on (`ask`, `needsYou`) and what the
+ * agent reported (`reported`: candidates, an effect's remote id).
+ */
+export interface FlowExecutionViewV1 {
+  seq: number; state: string; reasons: unknown[]; planNo: number | null; childGroupId: string | null; by: string; via: string;
+  flags: string[]; failure: string | null;
+  output: { kind: "commit" | "artifact" | "none"; ref: string | null; hash: string | null } | null;
+  toolRules: ToolRulesReport | null; ask: unknown; needsYou: unknown; reported: unknown; warnings: string[]; effectRecordId: string | null;
+}
+
+/** Task 16: the run list (`orca flow list`, the kanban's flow cards); paired with the Web's copy (webParity). */
+export interface FlowListV1 {
+  schema: "orca-flow-list-v1";
+  runs: Array<{ flowRunId: string; groupId: string; templateRef: string; state: string; poolTokens: number; poolDrawn: number; projectId: string | null; dir: string | null }>;
+}
+
+export function readFlowList(store: ControlStore): FlowListV1 {
   const rows = store.db.prepare("SELECT id FROM flow_runs ORDER BY rowid").all() as Array<{ id: string }>;
   return {
     schema: "orca-flow-list-v1",
     runs: rows.map(({ id }) => {
       const row = getFlowRun(store, String(id))!;
-      return { flowRunId: row.id, groupId: row.groupId, templateRef: row.templateRef, state: row.state, poolTokens: row.poolTokens, poolDrawn: row.poolDrawn };
+      const body = row.body as { projectId?: string | null; dir?: string | null };
+      return {
+        flowRunId: row.id, groupId: row.groupId, templateRef: row.templateRef, state: row.state, poolTokens: row.poolTokens, poolDrawn: row.poolDrawn,
+        // Task 16: the kanban card's project scope (a run's settings layer) and its folder.
+        projectId: body.projectId ?? null, dir: body.dir ?? null,
+      };
     }),
   };
+}
+
+function executionView(execution: ExecutionRow): FlowExecutionViewV1 {
+  const body = execution.body as Record<string, unknown>;
+  const record = (body.record ?? null) as { toolRules?: ToolRulesReport | null } | null;
+  return {
+    seq: execution.seq, state: execution.state, reasons: execution.reasons, planNo: execution.planNo, childGroupId: execution.childGroupId, by: execution.by, via: execution.via,
+    flags: (body.flags as string[] | undefined) ?? [], failure: (body.failure as string | undefined) ?? null,
+    output: execution.outputKind === null ? null : { kind: execution.outputKind, ref: execution.outputRef, hash: execution.outputHash },
+    toolRules: record?.toolRules ?? null, ask: body.ask ?? null, needsYou: body.needsYou ?? null, reported: body.reported ?? null,
+    warnings: (body.warnings as string[] | undefined) ?? [], effectRecordId: typeof body.effectRecordId === "string" ? body.effectRecordId : null,
+  };
+}
+
+/** A failed `work` execution keeps its tool-rule report in its artifact record (kernel.ts applyOutcome). */
+function withArtifactRules(store: ControlStore, execution: ExecutionRow, view: FlowExecutionViewV1): FlowExecutionViewV1 {
+  if (view.toolRules !== null || execution.outputKind !== "artifact") return view;
+  const record = recordOfExecution(store, execution) as { toolRules?: ToolRulesReport | null } | null;
+  return { ...view, toolRules: record?.toolRules ?? null };
 }
 
 export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
@@ -30,14 +76,18 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
     schema: "orca-flow-run-view-v1",
     flowRunId: run.row.id, groupId: run.row.groupId, templateRef: run.body.templateRef, state: run.row.state, params: run.params,
     poolTokens: run.row.poolTokens, poolDrawn: run.row.poolDrawn, by: run.body.by, via: run.body.via, dir: run.body.dir,
+    template: { id: run.template.id, version: run.template.version ?? null, title: run.template.title ?? null },
     steps: run.template.steps.map((step) => {
       const newest = latest.get(step.id);
+      const mine = executions.filter((e) => e.stepKey === step.id);
+      const effect = "effect" in step && typeof step.effect === "string" ? { kind: step.effect, class: run.template.effects?.[step.effect]?.class ?? null } : null;
       return {
         stepKey: step.id, kind: step.kind, head: heads[step.id] ?? null,
-        latest: newest === undefined ? null : {
-          seq: newest.seq, state: newest.state, reasons: newest.reasons, planNo: newest.planNo, childGroupId: newest.childGroupId, by: newest.by, via: newest.via,
-          flags: (newest.body as { flags?: string[] }).flags ?? [], failure: (newest.body as { failure?: string }).failure ?? null,
-        },
+        executor: "executor" in step ? step.executor ?? null : null, parallelWith: step.parallelWith ?? null, effect,
+        latest: newest === undefined ? null : withArtifactRules(store, newest, executionView(newest)),
+        executions: mine.map((e) => withArtifactRules(store, e, executionView(e))),
+        // §10.3: a clarify step's rounds of its newest execution, and the active chain over them.
+        clarify: step.kind !== "clarify" || newest === undefined ? null : clarifyOf(readRoundsAt(store, { groupId: run.row.groupId, stepKey: step.id, execSeq: newest.seq })),
       };
     }),
     openAsks: openAsks(store, flowRunId),
@@ -45,6 +95,10 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
     effects: listEffects(store, flowRunId),
     decisions,
   };
+}
+
+function clarifyOf(rounds: RoundBody[]): { rounds: RoundBody[]; chain: number[] } {
+  return { rounds, chain: activeChain(rounds.map((r) => ({ roundNo: r.roundNo, ...(r.revises === undefined ? {} : { revises: r.revises }) }))).chain };
 }
 
 export function readFlowJournal(store: ControlStore, flowRunId: string): unknown {
