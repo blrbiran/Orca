@@ -152,24 +152,37 @@ function parsedDraft(groupId: string, state: unknown, body: unknown): DraftBody 
   return parsed.data;
 }
 
-export function readRounds(store: ControlStore, groupId: string): RoundBody[] {
-  return store.db.prepare("SELECT state,body FROM requirement_rounds WHERE group_id=? ORDER BY round_no").all(groupId).map((row) => parsedRound(groupId, row.state, row.body));
+/**
+ * Flow engine spec §10.1: rounds are kept per step execution. The dev flow's requirement host is always ('clarify', 1);
+ * the unkeyed readers and writers below are that host's, so every dev-flow caller stays as it was.
+ */
+export interface RoundsKey { groupId: string; stepKey: string; execSeq: number }
+export const devRounds = (groupId: string): RoundsKey => ({ groupId, stepKey: "clarify", execSeq: 1 });
+
+export function readRoundsAt(store: ControlStore, key: RoundsKey): RoundBody[] {
+  return store.db.prepare("SELECT state,body FROM requirement_rounds WHERE group_id=? AND step_key=? AND exec_seq=? ORDER BY round_no").all(key.groupId, key.stepKey, key.execSeq)
+    .map((row) => parsedRound(key.groupId, row.state, row.body));
 }
-export function readRound(store: ControlStore, groupId: string, roundNo: number): RoundBody {
-  const row = store.db.prepare("SELECT state,body FROM requirement_rounds WHERE group_id=? AND round_no=?").get(groupId, roundNo);
+export function readRoundAt(store: ControlStore, key: RoundsKey, roundNo: number): RoundBody {
+  const row = store.db.prepare("SELECT state,body FROM requirement_rounds WHERE group_id=? AND step_key=? AND exec_seq=? AND round_no=?").get(key.groupId, key.stepKey, key.execSeq, roundNo);
   if (!row) throw new ControlError("work-not-found", `round-${roundNo}`);
-  return parsedRound(groupId, row.state, row.body);
+  return parsedRound(key.groupId, row.state, row.body);
 }
-export function latestRound(store: ControlStore, groupId: string): RoundBody | null {
-  const row = store.db.prepare("SELECT state,body FROM requirement_rounds WHERE group_id=? ORDER BY round_no DESC LIMIT 1").get(groupId);
-  return row ? parsedRound(groupId, row.state, row.body) : null;
+export function latestRoundAt(store: ControlStore, key: RoundsKey): RoundBody | null {
+  const row = store.db.prepare("SELECT state,body FROM requirement_rounds WHERE group_id=? AND step_key=? AND exec_seq=? ORDER BY round_no DESC LIMIT 1").get(key.groupId, key.stepKey, key.execSeq);
+  return row ? parsedRound(key.groupId, row.state, row.body) : null;
 }
-export function writeRound(store: ControlStore, groupId: string, round: RoundBody): void {
+export function writeRoundAt(store: ControlStore, key: RoundsKey, round: RoundBody): void {
   const body = canonicalBytes(roundBodySchema.parse(round)).toString("utf8");
-  store.db.prepare("INSERT INTO requirement_rounds(group_id,round_no,state,body) VALUES (?,?,?,?) ON CONFLICT(group_id,round_no) DO UPDATE SET state=excluded.state, body=excluded.body")
-    .run(groupId, round.roundNo, round.state, body);
-  recordProjectionChange(store, [groupId]);
+  store.db.prepare(`INSERT INTO requirement_rounds(group_id,step_key,exec_seq,round_no,state,body) VALUES (?,?,?,?,?,?)
+    ON CONFLICT(group_id,step_key,exec_seq,round_no) DO UPDATE SET state=excluded.state, body=excluded.body`)
+    .run(key.groupId, key.stepKey, key.execSeq, round.roundNo, round.state, body);
+  recordProjectionChange(store, [key.groupId]);
 }
+export const readRounds = (store: ControlStore, groupId: string): RoundBody[] => readRoundsAt(store, devRounds(groupId));
+export const readRound = (store: ControlStore, groupId: string, roundNo: number): RoundBody => readRoundAt(store, devRounds(groupId), roundNo);
+export const latestRound = (store: ControlStore, groupId: string): RoundBody | null => latestRoundAt(store, devRounds(groupId));
+export const writeRound = (store: ControlStore, groupId: string, round: RoundBody): void => writeRoundAt(store, devRounds(groupId), round);
 export function readDrafts(store: ControlStore, groupId: string): DraftBody[] {
   return store.db.prepare("SELECT state,body FROM requirement_drafts WHERE group_id=? ORDER BY draft_no").all(groupId).map((row) => parsedDraft(groupId, row.state, row.body));
 }
@@ -200,7 +213,8 @@ export function queueRequirementCall(store: ControlStore, groupId: string, tag: 
 /** Clarify caps spec §3.1-§3.3: what code holds a requirement's clarification to, from its records. */
 export interface ClarifyLimits { classification: Classification | null; override: ClassPair | null; effective: ClassPair | null; tier: ClarifyTier; roundCap: number }
 export function clarifyLimits(store: ControlStore, group: RequirementGroup): ClarifyLimits {
-  const row = store.db.prepare("SELECT state,body FROM requirement_rounds WHERE group_id=? AND round_no=1").get(group.groupId);
+  const key = devRounds(group.groupId);
+  const row = store.db.prepare("SELECT state,body FROM requirement_rounds WHERE group_id=? AND step_key=? AND exec_seq=? AND round_no=1").get(key.groupId, key.stepKey, key.execSeq);
   const classification = row ? parsedRound(group.groupId, row.state, row.body).result?.classification ?? null : null;
   const override = group.requirement.classOverride ?? null;
   const effective = override ?? (classification === null ? null : { scope: classification.scope, clarity: classification.clarity });

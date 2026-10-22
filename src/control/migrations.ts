@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { canonicalBytes } from "./canonicalJson.js";
 
-export const schemaVersion = "16";
+export const schemaVersion = "17";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -147,8 +147,62 @@ CREATE TABLE IF NOT EXISTS orchestration_settings(singleton INTEGER PRIMARY KEY 
 export const schema15To16 = `CREATE TABLE IF NOT EXISTS check_state(repo_id TEXT NOT NULL, kind TEXT NOT NULL, target TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(repo_id, kind, target)) STRICT;
 `;
 
+// Flow engine spec 2026-10-22 §6.1: the flow journal. STRICT, JSON bodies; created empty. `step_executions`,
+// `flow_messages`, `flow_decisions` are append-only and `effect_records` changes only `state`, forward (src/flow/store.ts
+// enforces both); `step_heads` is the one mutable pointer. Times are epoch milliseconds.
+export const schema16To17 = `CREATE TABLE IF NOT EXISTS flow_runs(id TEXT PRIMARY KEY, group_id TEXT NOT NULL UNIQUE REFERENCES groups(id),
+  template_ref TEXT NOT NULL, template_sha256 TEXT NOT NULL, workspace TEXT NOT NULL, vault_id TEXT, params_sha256 TEXT NOT NULL,
+  pool_tokens INTEGER NOT NULL CHECK(pool_tokens >= 0 AND pool_tokens <= 9007199254740991),
+  pool_drawn INTEGER NOT NULL DEFAULT 0 CHECK(pool_drawn >= 0 AND pool_drawn <= 9007199254740991),
+  state TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision >= 0), body TEXT NOT NULL) STRICT;
+CREATE TABLE IF NOT EXISTS step_executions(flow_run_id TEXT NOT NULL REFERENCES flow_runs(id), step_key TEXT NOT NULL,
+  seq INTEGER NOT NULL CHECK(seq > 0), kind TEXT NOT NULL, kind_version INTEGER NOT NULL CHECK(kind_version > 0),
+  state TEXT NOT NULL CHECK(state IN ('queued','running','done','failed','skipped','needs-person','parked','staged')),
+  definition_hash TEXT NOT NULL, base_commit TEXT, ran_on TEXT, fingerprint TEXT,
+  output_kind TEXT CHECK(output_kind IS NULL OR output_kind IN ('commit','artifact','none')), output_ref TEXT, output_hash TEXT,
+  read_set_hash TEXT, reasons TEXT NOT NULL, plan_no INTEGER, child_group_id TEXT REFERENCES groups(id), "by" TEXT NOT NULL, via TEXT NOT NULL,
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(flow_run_id, step_key, seq)) STRICT;
+CREATE TABLE IF NOT EXISTS step_heads(flow_run_id TEXT NOT NULL REFERENCES flow_runs(id), step_key TEXT NOT NULL,
+  active_seq INTEGER NOT NULL CHECK(active_seq > 0), PRIMARY KEY(flow_run_id, step_key)) STRICT;
+CREATE TABLE IF NOT EXISTS flow_messages(flow_run_id TEXT NOT NULL REFERENCES flow_runs(id), seq INTEGER NOT NULL CHECK(seq > 0),
+  request_id TEXT NOT NULL, kind TEXT NOT NULL, target TEXT NOT NULL CHECK(target IN ('run','step','execution','round','effect')),
+  body TEXT NOT NULL, "by" TEXT NOT NULL, via TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('accepted','applied','rejected','excluded')),
+  reason TEXT, at INTEGER NOT NULL, PRIMARY KEY(flow_run_id, seq), UNIQUE(flow_run_id, request_id)) STRICT;
+CREATE TABLE IF NOT EXISTS rerun_plans(flow_run_id TEXT NOT NULL REFERENCES flow_runs(id), plan_no INTEGER NOT NULL CHECK(plan_no > 0),
+  state TEXT NOT NULL CHECK(state IN ('proposed','chosen','running','done','abandoned')), candidates TEXT NOT NULL, proposal TEXT,
+  chosen TEXT, "by" TEXT NOT NULL, via TEXT NOT NULL, PRIMARY KEY(flow_run_id, plan_no)) STRICT;
+CREATE TABLE IF NOT EXISTS effect_records(id TEXT PRIMARY KEY, flow_run_id TEXT NOT NULL REFERENCES flow_runs(id), step_key TEXT NOT NULL,
+  seq INTEGER NOT NULL CHECK(seq > 0), effect_kind TEXT NOT NULL, class TEXT NOT NULL, level TEXT NOT NULL, policy TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('staged','confirmed','applied','discarded','failed')), payload_hash TEXT NOT NULL, remote_ref TEXT,
+  "by" TEXT NOT NULL, via TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL) STRICT;
+CREATE TABLE IF NOT EXISTS flow_decisions(flow_run_id TEXT NOT NULL REFERENCES flow_runs(id), seq INTEGER NOT NULL CHECK(seq > 0),
+  grade TEXT NOT NULL CHECK(grade IN ('major','minor')), step_key TEXT NOT NULL, body TEXT NOT NULL, "by" TEXT NOT NULL,
+  PRIMARY KEY(flow_run_id, seq)) STRICT;
+CREATE TABLE IF NOT EXISTS flow_templates(layer TEXT NOT NULL, id TEXT NOT NULL, version INTEGER NOT NULL CHECK(version > 0),
+  sha256 TEXT NOT NULL, path TEXT NOT NULL, published_by TEXT NOT NULL, published_at INTEGER NOT NULL, PRIMARY KEY(layer, id, version)) STRICT;
+`;
+
+// Flow engine spec §10.1: `requirement_rounds` keyed by step execution. Rebuilt -- create, copy, drop, rename -- inside
+// the migration's one transaction (store.ts); every existing row is the dev flow's ('clarify', 1), other columns as stored.
+const requirementRoundsKeyed = `CREATE TABLE requirement_rounds_keyed(group_id TEXT NOT NULL REFERENCES groups(id), step_key TEXT NOT NULL,
+  exec_seq INTEGER NOT NULL CHECK(exec_seq > 0), round_no INTEGER NOT NULL CHECK(round_no > 0 AND round_no <= 9007199254740991),
+  state TEXT NOT NULL CHECK(state IN ('drafting','awaiting-answers','answered','interrupted','failed')), body TEXT NOT NULL,
+  PRIMARY KEY(group_id, step_key, exec_seq, round_no)) STRICT;
+INSERT INTO requirement_rounds_keyed(group_id, step_key, exec_seq, round_no, state, body)
+  SELECT group_id, 'clarify', 1, round_no, state, body FROM requirement_rounds ORDER BY group_id, round_no;
+DROP TABLE requirement_rounds;
+ALTER TABLE requirement_rounds_keyed RENAME TO requirement_rounds;
+`;
+
+/** Re-keys `requirement_rounds` once: a store whose table already has `step_key` (a fresh one, or a re-run step) is left as it is. */
+function rekeyRequirementRounds(store: DatabaseSync): void {
+  if (store.prepare("PRAGMA table_info(requirement_rounds)").all().some((row) => row.name === "step_key")) return;
+  store.exec(requirementRoundsKeyed);
+}
+
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
-export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15 + schema15To16;
+export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15 + schema15To16
+  + requirementRoundsKeyed + schema16To17;
 
 /**
  * Checks spec 2026-10-22 §4.1 "Migration (no aliases, P1)": each repository settings body's `integrationCheck
@@ -165,10 +219,17 @@ function migrateSettings15To16(store: DatabaseSync): void {
   }
 }
 
-/** The steps every older version ends with: 15 → 16, then the version marker. */
+/** 16 → 17 (flow engine spec §6.1, §10.1): the flow journal tables and the `requirement_rounds` re-key. */
+function migrate16To17(store: DatabaseSync): void {
+  rekeyRequirementRounds(store);
+  store.exec(schema16To17);
+}
+
+/** The steps every older version ends with: 15 → 16, 16 → 17, then the version marker. */
 function finishMigration(store: DatabaseSync): void {
   store.exec(schema15To16);
   migrateSettings15To16(store);
+  migrate16To17(store);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }
 
@@ -188,6 +249,11 @@ function migrate7To8(store: DatabaseSync): void {
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   // Saved recovery's 11→12 marker fenced older owners. The current 11/12→13 upgrade also
   // adds installation-update revision/outbox tables; it leaves old policy and accounting rows intact.
+  if (fromVersion === "16") {
+    migrate16To17(store);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "15") {
     finishMigration(store);
     return;
