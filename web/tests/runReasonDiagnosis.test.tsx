@@ -48,6 +48,13 @@ describe("run failure cause (failure-cause spec §5)", () => {
     expect(renderToStaticMarkup(<RunReason run={failed("a-newer-cause")} />)).toContain("Why it stopped: the cause is unknown. Review the evidence below, then retry the task.");
   });
 
+  // ccloop per-contract tool rules spec 2026-10-22 §4, §9: a broken tool rule is its own cause, worded, not `unknown`.
+  it("words a tool-rule violation, in English and Chinese", async () => {
+    expect(renderToStaticMarkup(<RunReason run={failed("tool-rule-violated")} />)).toContain("Why it stopped: the agent broke the step&#x27;s tool rules. Read the tool-rule report and the evidence below, then fix the step&#x27;s tools or the task, and retry.");
+    await i18n.changeLanguage("zh");
+    expect(renderToStaticMarkup(<RunReason run={failed("tool-rule-violated")} />)).toContain("停止原因：agent 违反了这一步的工具规则。看下方工具规则报告和证据，改好这一步的 tools 或任务后重试。");
+  });
+
   it("says nothing of a cause when ccloop stated none", () => {
     expect(renderToStaticMarkup(<RunReason run={run({ runId: "run-n", state: "blocked", outcome: "failed", stopReason: "Error: x", failureCause: null })} />)).not.toContain("Why it stopped");
   });

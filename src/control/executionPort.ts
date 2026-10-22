@@ -1,5 +1,6 @@
 import type { SavedResultSourcePackage,SavedResultSourceEligibility,SavedResultSettlement,RecoveryOf } from "./savedResultProtocol.js";
 import type { TokenPolicy } from "./tokenPolicy.js";
+import type { ToolRulesReport } from "./toolRules.js";
 import type { Candidate, Claim, StopProof, UsageEvent, ArtifactRef, HandoffRequest, HandoffAck } from "./types.js";
 import type { TaskResultCollectionV1 } from './taskResultProtocol.js';
 import type { PriorFailure, RunProgress } from "./schema.js";
@@ -25,6 +26,8 @@ export interface ExecutionReport {
  decisions?:unknown;
  /** A debug run's reproduction and closing values: optional like `decisions`; read only through reportedDecisions.ts. */
  debug?:unknown;
+ /** ccloop per-contract tool rules spec §5: the run's tool-rule report, present iff the contract had rules and ccloop wrote it. */
+ toolRules?:ToolRulesReport;
 }
 /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
 export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }

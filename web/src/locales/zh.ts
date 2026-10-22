@@ -530,7 +530,7 @@ export const zh: Translation<typeof en> = {
         auth: "agent 的凭据被拒绝", quota: "agent 的额度或余额已用尽", "rate-limited": "provider 持续限流",
         "provider-5xx": "provider 端持续出错", network: "到 provider 的网络持续失败", "context-overflow": "任务超出了模型的上下文窗口",
         stalled: "agent 长时间没有动静，已被停止", "executable-missing": "找不到 agent 的程序", "required-check-failed": "必需检查没有通过",
-        "verifier-rejected": "verifier 驳回了这次工作", "budget-exhausted": "时间、token 或尝试次数预算用完了", unknown: "原因未知",
+        "verifier-rejected": "verifier 驳回了这次工作", "budget-exhausted": "时间、token 或尝试次数预算用完了", "tool-rule-violated": "agent 违反了这一步的工具规则", unknown: "原因未知",
       },
       next: {
         auth: "重新登录 agent（或修好它的 key），再重试这个任务。", quota: "等额度恢复或充值后，再重试这个任务。",
@@ -539,7 +539,7 @@ export const zh: Translation<typeof en> = {
         stalled: "重试这个任务；如果再次卡住，去证据里看它当时在做什么。", "executable-missing": "安装 agent 或在 agents 表里改对路径后重试。",
         "required-check-failed": "看下方失败检查的输出；组在自动编排下时，Orca 会自动升级处理。",
         "verifier-rejected": "看下方 verifier 给出的原因；组在自动编排下时，Orca 会自动升级处理。",
-        "budget-exhausted": "调高任务预算或拆分任务后重试。", unknown: "先看下方证据，再重试这个任务。",
+        "budget-exhausted": "调高任务预算或拆分任务后重试。", "tool-rule-violated": "看下方工具规则报告和证据，改好这一步的 tools 或任务后重试。", unknown: "先看下方证据，再重试这个任务。",
       },
     },
     workspace: {

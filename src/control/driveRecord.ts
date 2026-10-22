@@ -3,6 +3,7 @@ import { idSchema, runFailureCauseSchema, safeInteger } from "./schema.js";
 import { lockSkillSchema } from "../skills/syncskill.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { pendingEntrySchema } from "./runLedger.js";
+import { toolRulesReportSchema } from "./toolRules.js";
 import type { ControlStore } from "./store.js";
 
 /**
@@ -146,6 +147,9 @@ export const driveRecordSchema = z.object({
   // Checks spec 2026-10-22 §6.1: ccloop's terminal budgetSnapshot, stored with them, so a review that ran out of tokens,
   // attempts or time is told from one that failed (the outcome `exhausted` alone does not say which).
   budgetSnapshot: z.object({ attemptsRemaining: safeInteger, timeRemainingMs: safeInteger, tokenBudgetRemaining: safeInteger.nullable() }).strict().optional(),
+  // ccloop per-contract tool rules spec 2026-10-22 §5: the run's tool-rule report, stored with `failureCause` (a violation
+  // is the cause `tool-rule-violated`). Optional: absent for a contract without rules and in every older drive record.
+  toolRules: toolRulesReportSchema.optional(),
   // Control run decisions: the run's refused decisions, staged by D before its compare-and-swap and inserted into
   // pending_decisions by markLanded (then cleared). Defaulted so a drive record from before this field still parses.
   stagedPending: z.array(pendingEntrySchema).default([]),

@@ -51,6 +51,8 @@ export interface HarnessOptions {
   decisions?: (workItemId: string) => unknown;
   /** Debug task plan Task 8: the `debug` the synthetic ccloop reports with a terminal (driverPort.ts); absent = not reported. */
   debug?: (workItemId: string) => unknown;
+  /** ccloop per-contract tool rules spec §5: the tool-rule report the synthetic ccloop answers at collect (driverPort.ts). */
+  toolRules?: (workItemId: string) => unknown;
   /** Protect-acceptance-criteria spec §4.2: every contract's verification.requiredChecks (web.ts; ["true"] unless said otherwise). */
   requiredChecks?: string[];
   /** Checks spec 2026-10-22 §6.1: the terminal's budgetSnapshot the synthetic ccloop reports (driverPort.ts). */
@@ -82,6 +84,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     ...(options.decisions ? { decisions: options.decisions } : {}),
     ...(options.debug ? { debug: options.debug } : {}),
     ...(options.budgetSnapshot ? { budgetSnapshot: options.budgetSnapshot } : {}),
+    ...(options.toolRules ? { toolRules: options.toolRules } : {}),
   });
   fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;
   const deps: ExecutionDriverDeps = {

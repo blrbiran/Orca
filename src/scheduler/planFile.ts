@@ -7,6 +7,7 @@ import { ControlError } from "../control/errors.js";
 import { partialSelectionSchema, safeInteger } from "../control/schema.js";
 import type { PartialSelection } from "../control/agentSelection.js";
 import { inputLabelsSchema } from "../control/labels.js";
+import { toolRulesSchema } from "../control/toolRules.js";
 import { detectCycle } from "./graph.js";
 import { expandLoopTask, loopPlanFileSchema, type LoopPlanFileInput, type LoopRecipe } from "../control/loopPlans.js";
 
@@ -209,6 +210,8 @@ export const taskContractSchema = z.object({
     perAttemptTimeoutMs: z.number().int().positive(), totalRuntimeBudgetMs: z.number().int().positive(),
     tokenBudget: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable().default(null), worktreeRequired: z.literal(true),
     partialOutcomeRecoveryWindowMs: z.number().int().nonnegative(),
+    // ccloop per-contract tool rules spec 2026-10-22 §2: optional; absent, the contract is byte-identical to before.
+    toolRules: toolRulesSchema.optional(),
   }).strict(),
   safetyPolicy: z.object({
     allowlistPaths: z.array(z.string()).default([]), denylistPaths: z.array(z.string()).default([]),

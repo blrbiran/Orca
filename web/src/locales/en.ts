@@ -651,7 +651,7 @@ export const en = {
         auth: "the agent's credentials were refused", quota: "the agent's quota or credits are used up", "rate-limited": "the provider kept rate-limiting",
         "provider-5xx": "the provider kept failing on its side", network: "the network to the provider kept failing", "context-overflow": "the task did not fit the model's context window",
         stalled: "the agent went silent and was stopped", "executable-missing": "the agent's program was not found", "required-check-failed": "a required check failed",
-        "verifier-rejected": "the verifier rejected the work", "budget-exhausted": "the time, token or attempt budget ran out", unknown: "the cause is unknown",
+        "verifier-rejected": "the verifier rejected the work", "budget-exhausted": "the time, token or attempt budget ran out", "tool-rule-violated": "the agent broke the step's tool rules", unknown: "the cause is unknown",
       },
       next: {
         auth: "Log the agent in again (or fix its key), then retry the task.", quota: "Wait for the quota to reset or add credits, then retry the task.",
@@ -660,7 +660,7 @@ export const en = {
         stalled: "Retry the task; if it stalls again, look at what it was doing in the evidence.", "executable-missing": "Install the agent or fix its path in the agents table, then retry.",
         "required-check-failed": "Read the failing check's output below; Orca escalates it automatically when the group is orchestrated.",
         "verifier-rejected": "Read the verifier's reason below; Orca escalates it automatically when the group is orchestrated.",
-        "budget-exhausted": "Raise the task's budget, or split it, then retry.", unknown: "Review the evidence below, then retry the task.",
+        "budget-exhausted": "Raise the task's budget, or split it, then retry.", "tool-rule-violated": "Read the tool-rule report and the evidence below, then fix the step's tools or the task, and retry.", unknown: "Review the evidence below, then retry the task.",
       },
     },
     workspace: {

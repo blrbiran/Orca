@@ -60,6 +60,8 @@ export function fakeCcloopPort(input: {
   debug?: (workItemId: string) => unknown;
   /** Checks spec 2026-10-22 §6.1: the terminal's budgetSnapshot (ccloop's remaining attempts, time and tokens); undefined = none. */
   budgetSnapshot?: (workItemId: string) => { attemptsRemaining: number; timeRemainingMs: number; tokenBudgetRemaining: number | null } | undefined;
+  /** ccloop per-contract tool rules spec §5: the run's tool-rule report collect answers at the top level; undefined = absent. */
+  toolRules?: (workItemId: string) => unknown;
 }): FakeCcloop {
   const calls = { accept: [] as StartEnvelope[], inspect: 0, collect: 0, handoff: [] as HandoffRequest[] };
   const handoffs = new Map<string, HandoffRequest>();
@@ -123,7 +125,8 @@ export function fakeCcloopPort(input: {
     const debug = stop.terminal ? input.debug?.(claim.workItemId) : undefined;
     const failure = stop.terminal ? input.failure?.(claim.workItemId) : undefined;
     const budgetSnapshot = stop.terminal ? input.budgetSnapshot?.(claim.workItemId) : undefined;
-    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }) };
+    const toolRules = input.toolRules?.(claim.workItemId);
+    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }), ...(toolRules === undefined ? {} : { toolRules }) };
   };
 
   const port: ExecutionPort = {
