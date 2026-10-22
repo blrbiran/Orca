@@ -2,7 +2,7 @@
 /**
  * Flow engine spec §5.1 and §22 (plan Task 2): a `dir` project is a plain folder worked on through a vault. The project
  * list shows it with a folder badge, and Project settings hides what only a repository has -- the integration scheme
- * (delivery, PR) and its check -- because a dir group's delivery is fixed to keep (§5.1, IR-I7).
+ * (delivery, PR) and the checks settings -- because a dir group's delivery is fixed to keep (§5.1, IR-I7).
  */
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -38,8 +38,10 @@ describe("dir projects in the panel (flow spec §5.1)", () => {
 
   it("D3: Project settings of a dir project hides the integration scheme and says why", () => {
     render(<ProjectSettings repoId="articles-11111111" repoLabel="Articles" dir workspace={null} integration={integration}
-      onWorkspaceMode={vi.fn()} onIntegrationScheme={vi.fn()} onIntegrationCheck={vi.fn()} />);
+      onWorkspaceMode={vi.fn()} onIntegrationScheme={vi.fn()} />);
     expect(screen.queryByRole("region", { name: "Integration" })).toBeNull();
+    // The checks settings (checks spec §7) check what lands on a target branch; a folder has no target branch.
+    expect(screen.queryByRole("region", { name: "Checks" })).toBeNull();
     expect(screen.getByRole("note").textContent).toBe("A folder project's runs never integrate: their results reach the folder itself.");
   });
 

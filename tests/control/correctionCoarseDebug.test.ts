@@ -248,7 +248,7 @@ describe("recording and closing coarse corrections through the panel's verbs (sp
       const recorded = await ctx.command("/api/control/corrections", { repoId: REPO_ID, kind: "wrong", because: "the export page lost its totals" }, "rec-1");
       expect([recorded.status, recorded.body.result?.kind]).toEqual([200, "correction-recorded"]);
       const [row] = await readCorrections(ctx.corrections);
-      expect(row).toEqual({ id: recorded.body.result.correctionId, projectKey: PANEL_KEY, kind: "wrong", because: "the export page lost its totals", at: CORRECTED_AT, by: "tester" });
+      expect(row).toEqual({ id: recorded.body.result.correctionId, projectKey: PANEL_KEY, kind: "wrong", because: "the export page lost its totals", at: CORRECTED_AT, by: "tester", via: "web" });
       // The reviews file is keyed by decision: a correction naming none leaves no review mark behind.
       expect(await readFile(reviewsFile(ctx.corrections), "utf8").catch(() => null)).toBeNull();
       const closed = await ctx.command(`/api/control/corrections/${row!.id}/close`, { correctionId: row!.id, choseInstead: "keep the totals row", undoHow: "git revert --no-edit HEAD" }, "close-1");
@@ -258,6 +258,8 @@ describe("recording and closing coarse corrections through the panel's verbs (sp
       const rows = text.trim().split("\n").map((line) => JSON.parse(line));
       expect(rows.map((r) => r.ev)).toEqual(["decision"]);
       expect(rows[0].chose).toBe("keep the totals row");
+      // CLI v2 spec §16: the routed closer is named in the evidence, as on a decision or pending target's closing.
+      expect(rows[0].evidence).toEqual([`correction ${row!.id}`, `repository ${PANEL_KEY}`, "closed by tester via web correction-close close-1"]);
     });
   });
 

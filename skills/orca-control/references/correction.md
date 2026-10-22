@@ -11,13 +11,14 @@ every recorded correction, its debug groups and closed state
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 
-## `orca correction record --decision <decision> --kind <kind> --because <because> [--chose-instead <chose-instead>] [--again]`
+## `orca correction record [--decision <decision>] [--run <run>] --kind <kind> --because <because> [--chose-instead <chose-instead>] [--again]`
 
-record a correction of a decision in the project
+record a correction of a decision, a run (--run) or, with neither, the project
 
 - What it does: sends control verb `correction-record`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
-- `--decision <decision>` (required): <run-id>/<n>
+- `--decision <decision>`: <run-id>/<n>
+- `--run <run>`: a finished run's id (instead of --decision)
 - `--kind <kind>` (required): wrong|not_my_taste|stale
 - `--because <because>` (required): why
 - `--chose-instead <chose-instead>`: what was chosen instead

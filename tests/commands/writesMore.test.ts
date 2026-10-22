@@ -52,6 +52,11 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
     { repoId: "repo-1", decisionId: "run-1/1", kind: "wrong", because: "false premise" }],
   [["correction", "record", "--decision", "run-1/1", "--kind", "stale", "--because", "b", "--chose-instead", "a lease", "--again"], "corrections", 0,
     { repoId: "repo-1", decisionId: "run-1/1", kind: "stale", because: "b", chose_instead: "a lease", again: true }],
+  // Flow engine spec §13.2–§13.3 (W-COR): no --decision is a repository-only correction (one sentence); --run a bare run.
+  [["correction", "record", "--kind", "wrong", "--because", "the export page lost its totals"], "corrections", 0,
+    { repoId: "repo-1", kind: "wrong", because: "the export page lost its totals" }],
+  [["correction", "record", "--run", "run-7", "--kind", "wrong", "--because", "b"], "corrections", 0,
+    { repoId: "repo-1", runId: "run-7", kind: "wrong", because: "b" }],
   [["correction", "close", CID, "--undo-how", "git revert --no-edit abc", "--chose-instead", "a lease"], `corrections/${CID}/close`, 0,
     { correctionId: CID, undoHow: "git revert --no-edit abc", choseInstead: "a lease" }],
   [["correction", "withdraw", CID], `corrections/${CID}/withdraw`, 0, { correctionId: CID }],

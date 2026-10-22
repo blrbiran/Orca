@@ -113,7 +113,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 ### `orca correction`
 
 - `orca correction list` — every recorded correction, its debug groups and closed state
-- `orca correction record --decision <decision> --kind <kind> --because <because> [--chose-instead <chose-instead>] [--again]` — record a correction of a decision in the project
+- `orca correction record [--decision <decision>] [--run <run>] --kind <kind> --because <because> [--chose-instead <chose-instead>] [--again]` — record a correction of a decision, a run (--run) or, with neither, the project
 - `orca correction close <correction> --undo-how <undo-how> [--chose-instead <chose-instead>] [--undo-cost <undo-cost>] [--undo-blast-radius <undo-blast-radius>]` — close a correction by hand with its undo.how
 - `orca correction withdraw <correction>` — withdraw a correction
 - `orca correction debug <correction> [--reopen] [--check <check>] [--undo-how <undo-how>]` — open the correction's debug group (spends nothing); --reopen for the next one

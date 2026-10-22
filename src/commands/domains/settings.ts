@@ -96,15 +96,18 @@ export const SETTINGS_ROWS: CommandDef[] = [
     route: (c) => `groups/${group(c)}/decisions/ratify`, payload: (c) => ({ decisionId: c.ids.id, ...(str(c, "note") === undefined ? {} : { note: str(c, "note") }) }) }),
 
   // --- correction (corrections scope: revision 0; debug opens a group)
-  verb({ domain: "correction", action: "record", summary: "record a correction of a decision in the project", verb: "correction-record", scope: "corrections",
+  // Flow engine spec §13.2–§13.3 (W-COR): --decision names a decision, --run alone a finished run, neither the repository.
+  verb({ domain: "correction", action: "record", summary: "record a correction of a decision, a run (--run) or, with neither, the project", verb: "correction-record", scope: "corrections",
     flags: [
-      { name: "decision", type: "string", required: true, summary: "<run-id>/<n>" }, { name: "kind", type: "string", required: true, summary: "wrong|not_my_taste|stale" },
+      { name: "decision", type: "string", summary: "<run-id>/<n>" }, { name: "run", type: "string", summary: "a finished run's id (instead of --decision)" },
+      { name: "kind", type: "string", required: true, summary: "wrong|not_my_taste|stale" },
       { name: "because", type: "string", required: true, summary: "why" }, { name: "chose-instead", type: "string", summary: "what was chosen instead" },
       { name: "again", type: "boolean", summary: "record it although the decision has a correction already" },
     ],
     route: () => "corrections",
     payload: async (c) => ({
-      repoId: await repo(c), decisionId: str(c, "decision"), kind: str(c, "kind"), because: str(c, "because"),
+      repoId: await repo(c), ...(str(c, "decision") === undefined ? {} : { decisionId: str(c, "decision") }),
+      ...(str(c, "run") === undefined ? {} : { runId: str(c, "run") }), kind: str(c, "kind"), because: str(c, "because"),
       ...(str(c, "chose-instead") === undefined ? {} : { chose_instead: str(c, "chose-instead") }), ...(c.args.flags.again === true ? { again: true } : {}),
     }) }),
   verb({ domain: "correction", action: "close", summary: "close a correction by hand with its undo.how", verb: "correction-close", scope: "corrections", positionals: [CORRECTION],
