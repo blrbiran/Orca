@@ -13,7 +13,7 @@ const capLine = (c: ClarifyCaps) => `${c.rounds} ${c.rounds === 1 ? "round" : "r
  * 2026-10-21 §3.5): only questions that change the plan, the round-1 classification, and the cap table, stated from
  * CLARIFY_CAPS. Changing it (or that table) means version 3.
  */
-const CLARIFY_INSTRUCTION_V2 = [
+export const CLARIFY_INSTRUCTION_V2 = [
   CLARIFY_PROMPT_HEAD,
   "",
   "You help a person turn an idea into an agreed requirement for one software repository, by asking rounds of questions. You have no tools: you cannot run, open or inspect anything, and everything you may use is below. Answer with one JSON object and nothing else.",
@@ -182,12 +182,17 @@ export function buildClarifyPrompt(input: {
    * nothing, so a requirement never revised gets the prompt it always got (C7).
    */
   superseded?: RoundBody[];
+  /**
+   * Flow engine spec §10.1: the clarify host's frame -- its fixed instruction and the name of its context block. Absent
+   * is the requirement host's (CLARIFY_INSTRUCTION_V2 and `repository-overview`), byte for byte (C7).
+   */
+  frame?: { instruction: string; contextName: string };
 }): string {
   const nonce = input.overview.hash.slice(0, 16);
   const superseded = earlierRounds(input.superseded ?? []);
   const blocks = [
-    CLARIFY_INSTRUCTION_V2, limitsLine(input.limits.roundNo, input.limits.classification, input.limits.roundCap), `Write in: ${LANGUAGE_NAMES[input.contentLanguage]}`,
-    fence("idea", nonce, input.idea), fence("repository-overview", nonce, input.overview.canonicalJson),
+    input.frame?.instruction ?? CLARIFY_INSTRUCTION_V2, limitsLine(input.limits.roundNo, input.limits.classification, input.limits.roundCap), `Write in: ${LANGUAGE_NAMES[input.contentLanguage]}`,
+    fence("idea", nonce, input.idea), fence(input.frame?.contextName ?? "repository-overview", nonce, input.overview.canonicalJson),
     fence("rounds", nonce, JSON.stringify(earlierRounds(input.earlier))),
     ...(superseded.length === 0 ? [] : [
       `${SUPERSEDED_NOTE}\n${fence("superseded-rounds", nonce, JSON.stringify(superseded))}`,

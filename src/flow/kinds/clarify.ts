@@ -1,0 +1,225 @@
+/**
+ * Flow engine spec §10 (H22, H23; plan Task 8 criteria C8, C9): the `clarify` kind on the flow host. Today's round
+ * machinery -- `requirement_rounds`, the call purpose `clarify`, CLARIFY_CAPS, the output classifier, the active chain --
+ * keyed by (parent group, step key, execution), never the dev flow's ('clarify', 1). The template supplies background,
+ * focus and sections; the context is the run's params and a bounded listing of the composition; consensus completes the
+ * step with the document as its output record.
+ *
+ * Optional at three levels (§10.2): a template may omit the step; under `mode: auto` a round-1 answer may claim zero
+ * rounds, which code accepts only for small + clear (one minor decision records the understanding); a run started with
+ * `clarify: skip` records the idea as the document, marked not clarified.
+ */
+import { sha256Canonical, canonicalBytes } from "../../control/canonicalJson.js";
+import { activeChain, chainRounds } from "../../control/clarifyChain.js";
+import { flowClarifyInstruction, flowClarifyJsonSchema, type ClarifyHost, type ConsensusInput } from "../../control/clarifyHost.js";
+import { buildClarifyPrompt, classifyClarifyOutput } from "../../control/requirementClarify.js";
+import { latestRoundAt, newRound, readRoundsAt, writeRoundAt, type RoundsKey } from "../../control/requirementRecords.js";
+import { CLARIFY_CAPS, MAX_AUTO_RETRIES, clarifyTier, type ClassPair, type RoundBody } from "../../control/requirementSchemas.js";
+import { applyOutcome, compositionFor, contextFor, FlowRefusal, loadRun, stepOf, type FlowDeps } from "../kernel.js";
+import { listExecutions, type ExecutionRow } from "../store.js";
+import type { FlowStep } from "../template/schema.js";
+import { vaultGit } from "../vault/vault.js";
+import type { ExecutionBody, KindContext, KindDefinition, LoadedRun } from "./registry.js";
+
+type ClarifyStep = Extract<FlowStep, { kind: "clarify" }>;
+const LISTING_MAX = 500;
+export const FLOW_CLARIFY_MAX_OUTPUT_TOKENS = 64_000;
+
+const roundsKey = (run: LoadedRun, stepKey: string, execSeq: number): RoundsKey => ({ groupId: run.row.groupId, stepKey, execSeq });
+const clarifyStep = (step: FlowStep): ClarifyStep => {
+  if (step.kind !== "clarify") throw new Error("orca: clarify kind on a non-clarify step");
+  return step;
+};
+
+/** Round 1's class, as the classifier and the caps read it. */
+function effectiveClass(rounds: readonly RoundBody[]): ClassPair | null {
+  const c = rounds.find((r) => r.roundNo === 1)?.result?.classification;
+  return c === undefined ? null : { scope: c.scope, clarity: c.clarity };
+}
+const roundCap = (rounds: readonly RoundBody[]): number => CLARIFY_CAPS[clarifyTier(effectiveClass(rounds))].rounds;
+
+/** Spec §10.1 flow host: `flowClarifyHost(run, step, execSeq)`; `onConsensus` hands the document to `complete`. */
+export function flowClarifyHost(store: FlowDeps["store"], run: LoadedRun, step: ClarifyStep, execSeq: number, complete: (document: unknown) => void = () => undefined): ClarifyHost {
+  const zeroRound = step.mode === "auto";
+  return {
+    groupId: run.row.groupId, stepKey: step.id, execSeq,
+    background: () => ({
+      instruction: flowClarifyInstruction({ background: step.background === undefined ? "" : run.assets[step.background] ?? "", focus: step.focus ?? null, sections: step.sections ?? [], zeroRound }),
+      contextName: "context",
+    }),
+    async context() {
+      let files: string[] = [];
+      let total = 0;
+      if (run.body.vaultPath !== null && run.body.dir !== null && run.body.importCommit !== null) {
+        const composition = await compositionFor(store, run, step.id);
+        if (composition !== null) {
+          const all = (await vaultGit(composition.vault, ["ls-tree", "-r", "--name-only", "-z", composition.commit])).split("\0").filter((p) => p.length > 0);
+          total = all.length;
+          files = all.slice(0, LISTING_MAX);
+        }
+      }
+      const context = { params: run.params, files, ...(total > files.length ? { filesCut: total - files.length } : {}) };
+      return { canonicalJson: canonicalBytes(context).toString("utf8"), hash: sha256Canonical(context) };
+    },
+    sections: () => step.sections ?? [],
+    onConsensus(input: ConsensusInput) {
+      const rounds = chainRounds(readRoundsAt(store, roundsKey(run, step.id, execSeq)));
+      complete(documentOf(step, rounds, { openBranches: input.openBranches, openQuestions: input.openQuestions }));
+      return null;
+    },
+  };
+}
+
+/** The step's output record: the brief as the chain of rounds left it (spec §10.1 "the requirement document"). */
+function documentOf(step: ClarifyStep, chain: readonly RoundBody[], extra: Record<string, unknown>): unknown {
+  const understood = chain.filter((r) => r.result !== null);
+  const last = understood.at(-1)?.result ?? null;
+  const accepted = (decisions: RoundBody["glossaryDecisions"]) => new Set((decisions ?? []).filter((d) => d.accept).map((d) => d.id));
+  return {
+    schema: "orca-flow-clarify-document-v1", sections: step.sections ?? [],
+    statement: last?.statement ?? "", acceptanceCriteria: last?.acceptanceCriteria ?? [],
+    rounds: understood.map((r) => {
+      const answerOf = new Map((r.answers ?? []).map((a) => [a.id, a.text]));
+      return { roundNo: r.roundNo, questions: r.result!.questions.map((q) => ({ id: q.id, question: q.question, recommendedAnswer: q.recommendedAnswer, answer: answerOf.get(q.id) ?? null })) };
+    }),
+    glossary: understood.flatMap((r) => r.result!.glossary.filter((g) => accepted(r.glossaryDecisions).has(g.id))),
+    adrs: understood.flatMap((r) => r.result!.adrs.filter((a) => accepted(r.adrDecisions).has(a.id))),
+    ...extra,
+  };
+}
+
+async function clarifyPrompt(ctx: KindContext, host: ClarifyHost, rounds: RoundBody[], drafting: RoundBody): Promise<string> {
+  const context = await host.context();
+  const { chain } = activeChain(rounds);
+  const position = chain.indexOf(drafting.roundNo);
+  return buildClarifyPrompt({
+    idea: String(ctx.run.params.idea ?? ""), contentLanguage: ctx.run.params.language === "zh" ? "zh" : "en", overview: context,
+    earlier: chainRounds(rounds).filter((r) => r.roundNo !== drafting.roundNo), retryReason: ctx.body.retryReason,
+    limits: { roundNo: position === -1 ? drafting.roundNo : position + 1, classification: effectiveClass(rounds), roundCap: roundCap(rounds) },
+    frame: host.background(),
+  });
+}
+
+export const CLARIFY_KIND: KindDefinition = {
+  kind: "clarify", kindVersion: 1, interactive: true,
+  async start(ctx) {
+    const step = clarifyStep(ctx.step);
+    // §10.2 level 3: skipped at start, the document is the idea, marked not clarified.
+    if (ctx.run.body.clarify === "skip") {
+      return { done: { record: { schema: "orca-flow-clarify-document-v1", sections: step.sections ?? [], statement: String(ctx.run.params.idea ?? ""), acceptanceCriteria: [], rounds: [], glossary: [], adrs: [], notClarified: true } } };
+    }
+    const key = roundsKey(ctx.run, step.id, ctx.key.seq);
+    let drafting = latestRoundAt(ctx.store, key);
+    if (drafting === null) { drafting = newRound(1); writeRoundAt(ctx.store, key, drafting); }
+    if (drafting.state !== "drafting") throw new Error(`orca: clarify ${step.id}#${ctx.key.seq} has no round drafting`);
+    const host = flowClarifyHost(ctx.store, ctx.run, step, ctx.key.seq);
+    const prompt = await clarifyPrompt(ctx, host, readRoundsAt(ctx.store, key), drafting);
+    return { call: { purpose: "clarify", prompt, responseSchema: flowClarifyJsonSchema(step.mode === "auto") as Record<string, unknown>, maxOutputTokens: FLOW_CLARIFY_MAX_OUTPUT_TOKENS } };
+  },
+  collect(ctx, raw) {
+    const step = clarifyStep(ctx.step);
+    const store = ctx.store;
+    const key = roundsKey(ctx.run, step.id, ctx.key.seq);
+    const round = latestRoundAt(store, key);
+    if (round === null || round.state !== "drafting") throw new Error(`orca: clarify ${step.id}#${ctx.key.seq} has no round drafting`);
+    const rounds = readRoundsAt(store, key);
+    const invalid = (reason: string) => {
+      const exhausted = round.retries >= MAX_AUTO_RETRIES;
+      writeRoundAt(store, key, exhausted ? { ...round, state: "failed", reasonCode: "clarify-output-invalid", lastInvalidReason: reason } : { ...round, retries: round.retries + 1, lastInvalidReason: reason });
+      return { invalid: reason } as const;
+    };
+    // §10.2 level 2: the zero-round claim is read on its own, then the rest goes to the shared classifier.
+    let zero: { understanding: string } | null = null;
+    let rest = raw;
+    if (typeof raw === "object" && raw !== null && !Array.isArray(raw) && ("zeroRound" in raw || "understanding" in raw)) {
+      const { zeroRound, understanding, ...others } = raw as Record<string, unknown>;
+      rest = others;
+      if (zeroRound === true) {
+        if (typeof understanding !== "string" || understanding.trim() === "") return invalid("zero-round-without-understanding");
+        zero = { understanding };
+      } else if (zeroRound !== undefined && zeroRound !== false) return invalid("schema:zeroRound:must be a boolean");
+    }
+    const earlierQuestionIds = rounds.filter((r) => r.roundNo < round.roundNo).flatMap((r) => r.result?.questions.map((q) => q.id) ?? []);
+    const classified = classifyClarifyOutput(rest, { roundNo: round.roundNo, requirementId: ctx.run.row.id.replace(/^fr-/, ""), earlierQuestionIds, classification: effectiveClass(rounds) });
+    if (!classified.ok) return invalid(classified.reason);
+    const result = classified.result;
+    if (zero !== null) {
+      const cls = result.classification;
+      // Code decides: only under mode auto, only in round 1, only small + clear, and with nothing asked.
+      if (step.mode !== "auto" || round.roundNo !== 1 || cls === undefined || cls.scope !== "small" || cls.clarity !== "clear" || result.questions.length > 0) {
+        return invalid(`zero-round-not-allowed: zeroRound is accepted only in round 1 of a mode auto step judged small and clear with no questions (judged ${cls?.scope ?? "?"}/${cls?.clarity ?? "?"})`);
+      }
+      const at = new Date(ctx.now()).toISOString();
+      writeRoundAt(store, key, { ...round, state: "answered", result, answers: [], glossaryDecisions: [], adrDecisions: [], answeredAt: at, closedByConsensus: true, lastInvalidReason: null });
+      const chain = chainRounds(readRoundsAt(store, key));
+      return {
+        done: {
+          record: documentOf(step, chain, { openBranches: result.openBranches, openQuestions: [], zeroRound: true, understanding: zero.understanding }),
+          decisions: [{ grade: "minor", by: "orca-auto", body: { kind: "clarify-zero-round", understanding: zero.understanding, classification: cls } }],
+        },
+      };
+    }
+    writeRoundAt(store, key, { ...round, state: "awaiting-answers", result, lastInvalidReason: null });
+    return { waiting: { ask: { kind: "clarify-round", roundNo: round.roundNo } } };
+  },
+  projection: (record) => {
+    const doc = record as { statement: string; acceptanceCriteria: Array<{ id: string; text: string }>; notClarified?: boolean };
+    return [doc.statement, ...doc.acceptanceCriteria.map((c) => `- ${c.id}: ${c.text}`), ...(doc.notClarified === true ? ["(not clarified)"] : [])].join("\n");
+  },
+};
+
+function waitingClarify(deps: FlowDeps, target: { flowRunId: string; stepKey: string }): { run: LoadedRun; step: ClarifyStep; execution: ExecutionRow; key: RoundsKey } {
+  const run = loadRun(deps.store, target.flowRunId);
+  const step = stepOf(run, target.stepKey);
+  if (step.kind !== "clarify") throw new FlowRefusal("flow-step-not-found", `${target.stepKey} is not a clarify step`);
+  const execution = listExecutions(deps.store, target.flowRunId).filter((e) => e.stepKey === target.stepKey).at(-1);
+  if (execution === undefined || execution.state !== "needs-person") throw new FlowRefusal("flow-ask-closed", target.stepKey);
+  return { run, step, execution, key: roundsKey(run, step.id, execution.seq) };
+}
+
+/** A person answers the round awaiting answers; the next round is drafted unless the frontier is empty or the cap is reached. */
+export async function answerFlowClarify(deps: FlowDeps, target: { flowRunId: string; stepKey: string }, payload: {
+  roundNo: number; answers: Array<{ id: string; kind: "recommended" } | { id: string; kind: "text"; text: string }>;
+  glossaryDecisions: Array<{ id: string; accept: boolean }>; adrDecisions: Array<{ id: string; accept: boolean }>;
+}, by: string, via: string): Promise<void> {
+  const { run, step, execution, key } = waitingClarify(deps, target);
+  const round = latestRoundAt(deps.store, key);
+  if (round === null || round.state !== "awaiting-answers" || round.roundNo !== payload.roundNo) throw new FlowRefusal("flow-ask-closed", `round ${payload.roundNo}`);
+  const questions = new Map(round.result!.questions.map((q) => [q.id, q]));
+  const ids = payload.answers.map((a) => a.id);
+  if (new Set(ids).size !== ids.length || ids.length !== questions.size || ids.some((id) => !questions.has(id))) throw new FlowRefusal("flow-answer-invalid", "answer every question of the round once");
+  const answers = payload.answers.map((a) => ({ id: a.id, kind: a.kind, text: a.kind === "text" ? a.text : questions.get(a.id)!.recommendedAnswer }));
+  writeRoundAt(deps.store, key, { ...round, state: "answered", answers, glossaryDecisions: payload.glossaryDecisions, adrDecisions: payload.adrDecisions, answeredAt: new Date(deps.now()).toISOString(), by, via });
+  const rounds = readRoundsAt(deps.store, key);
+  if (round.result!.frontierEmpty || activeChain(rounds).chain.length >= roundCap(rounds)) {
+    // Clarification stops as today: the person reaches consensus (or, later, grants one more round).
+    return;
+  }
+  writeRoundAt(deps.store, key, newRound(Math.max(...rounds.map((r) => r.roundNo)) + 1));
+  const body: ExecutionBody = { ...(execution.body as ExecutionBody), retries: 0, retryReason: null };
+  delete body.ask;
+  const next = { ...execution, body };
+  await applyOutcome(deps, run, next, "needs-person", await CLARIFY_KIND.start(contextFor(deps, run, next)));
+}
+
+/**
+ * The person agrees (§10.2 level 3 mid-way stop included): unanswered questions are recorded open; the flow host's
+ * consensus completes the step with the document. The requirement host's consensus (a split draft) is never involved.
+ */
+export async function flowClarifyConsensus(deps: FlowDeps, target: { flowRunId: string; stepKey: string }, by: string, via: string): Promise<void> {
+  const { run, step, execution, key } = waitingClarify(deps, target);
+  const round = latestRoundAt(deps.store, key);
+  if (round === null || (round.state !== "awaiting-answers" && round.state !== "answered")) throw new FlowRefusal("flow-ask-closed", "no round to agree on");
+  const at = new Date(deps.now()).toISOString();
+  let openQuestions: string[] = [];
+  if (round.state === "awaiting-answers") {
+    openQuestions = round.result!.questions.map((q) => q.id);
+    writeRoundAt(deps.store, key, { ...round, state: "answered", closedByConsensus: true, answers: [], glossaryDecisions: [], adrDecisions: [], answeredAt: at, by, via });
+  }
+  let document: unknown = null;
+  const host = flowClarifyHost(deps.store, run, step, execution.seq, (doc) => { document = doc; });
+  host.onConsensus({ roundNo: round.roundNo, at, openBranches: round.result?.openBranches ?? [], openQuestions, tag: `consensus-${execution.seq}` });
+  const body: ExecutionBody = { ...(execution.body as ExecutionBody) };
+  delete body.ask;
+  await applyOutcome(deps, run, { ...execution, body }, "needs-person", { done: { record: document } });
+}

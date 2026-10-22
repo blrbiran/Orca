@@ -1,4 +1,5 @@
 import type { BudgetAmount } from "./tokenPolicy.js";
+import { requirementHost } from "./clarifyHost.js";
 import { createHash } from "node:crypto";
 import { readGroupAgentOverrides } from "./agentFreeze.js";
 import { applyWebCommand, preflightWebCommand } from "./commandLedger.js";
@@ -283,10 +284,8 @@ export function applyRequirementConsensus(deps: RequirementCommandDeps, command:
         openQuestions = round.result!.questions.map((q) => q.id);
         writeRound(deps.store, id, { ...round, state: "answered", closedByConsensus: true, answers: [], glossaryDecisions: [], adrDecisions: [], answeredAt: now });
       }
-      group.requirement.consensus = { roundNo: round.roundNo, at: now, openBranches: understood.at(-1)!.result!.openBranches, openQuestions };
-      saveRequirementGroup(deps.store, group);
-      writeDraft(deps.store, id, newDraft(1, 0));
-      const wakeId = queueRequirementCall(deps.store, id, `consensus-${context.nextCommandRevision}`);
+      // Flow engine spec §10.1: what consensus does is the requirement host's (draft 1 and its split call, unchanged).
+      const wakeId = requirementHost(deps.store, group).onConsensus({ roundNo: round.roundNo, at: now, openBranches: understood.at(-1)!.result!.openBranches, openQuestions, tag: `consensus-${context.nextCommandRevision}` })!;
       return commandSuccess(context, { kind: "requirement-consensus", roundNo: round.roundNo, draftNo: 1, wakeId });
     },
   }).body);

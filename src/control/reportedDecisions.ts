@@ -57,3 +57,32 @@ export function reportedDebugOf(result: unknown): ReportedDebug {
   }
   return { kind: "malformed", value };
 }
+
+/**
+ * Flow engine spec §4.3 (plan Task 8): what an agent in a flow step reports beside `decisions` and `debug`, under the
+ * top-level `flow` key -- a request for a person (`needs`), choices it made that a later `ask` step offers again
+ * (`candidates`, at most three, `recommended` indexing them), and the remote id of a side effect it enacted (`effect`).
+ */
+const text = z.string().min(1);
+const flowCandidatesSchema = z.object({ items: z.array(text).min(1).max(3), recommended: z.number().int().min(0) }).strict()
+  .refine((value) => value.recommended < value.items.length, { message: "recommended must index items" });
+export const flowResultSchema = z.object({
+  needs: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("confirmation"), what: text, payloadSummary: text }).strict(),
+    z.object({ kind: z.literal("input"), question: text, candidates: z.array(text) }).strict(),
+  ]).optional(),
+  candidates: z.record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]*$/), flowCandidatesSchema).optional(),
+  effect: z.object({ remoteId: text, url: text.optional() }).strict().optional(),
+}).strict();
+export type FlowResult = z.infer<typeof flowResultSchema>;
+export type FlowNeeds = NonNullable<FlowResult["needs"]>;
+export type ReportedFlow = { kind: "absent" } | { kind: "object"; value: FlowResult } | { kind: "malformed"; value: unknown };
+
+/** Reads only the top-level `flow` key, as reportedDecisionsOf reads `decisions`; a value the schema refuses is malformed. */
+export function reportedFlowOf(result: unknown): ReportedFlow {
+  if (typeof result !== "object" || result === null || !("flow" in result)) return { kind: "absent" };
+  const value = (result as { flow?: unknown }).flow;
+  if (value === undefined) return { kind: "absent" };
+  const parsed = flowResultSchema.safeParse(value);
+  return parsed.success ? { kind: "object", value: parsed.data } : { kind: "malformed", value };
+}

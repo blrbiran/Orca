@@ -169,3 +169,54 @@ export function upsertTemplateIndex(store: ControlStore, row: { layer: string; i
     ON CONFLICT(layer,id,version) DO UPDATE SET sha256=excluded.sha256, path=excluded.path, published_by=excluded.published_by, published_at=excluded.published_at`)
     .run(row.layer, row.id, row.version, row.sha256, row.path, row.publishedBy, row.publishedAt);
 }
+
+const executionOf = (row: Record<string, unknown>): ExecutionRow => ({
+  flowRunId: String(row.flow_run_id), stepKey: String(row.step_key), seq: Number(row.seq), kind: String(row.kind), kindVersion: Number(row.kind_version),
+  state: String(row.state) as ExecutionState, definitionHash: String(row.definition_hash), baseCommit: row.base_commit === null ? null : String(row.base_commit),
+  ranOn: row.ran_on === null ? null : String(row.ran_on), fingerprint: row.fingerprint === null ? null : String(row.fingerprint),
+  outputKind: row.output_kind === null ? null : String(row.output_kind) as ExecutionRow["outputKind"], outputRef: row.output_ref === null ? null : String(row.output_ref),
+  outputHash: row.output_hash === null ? null : String(row.output_hash), readSetHash: row.read_set_hash === null ? null : String(row.read_set_hash),
+  reasons: JSON.parse(String(row.reasons)) as unknown[], planNo: row.plan_no === null ? null : Number(row.plan_no),
+  childGroupId: row.child_group_id === null ? null : String(row.child_group_id), by: String(row.by), via: String(row.via),
+  createdAt: Number(row.created_at), updatedAt: Number(row.updated_at), body: JSON.parse(String(row.body)),
+});
+
+/** Every execution of a run, by step then seq. */
+export function listExecutions(store: ControlStore, flowRunId: string): ExecutionRow[] {
+  return store.db.prepare("SELECT * FROM step_executions WHERE flow_run_id=? ORDER BY step_key, seq").all(flowRunId).map(executionOf);
+}
+
+/**
+ * Plan Task 8: an execution moves forward (as setExecutionState) and, in the same write, may take its output -- set once,
+ * never replaced -- and a new body (the kernel's own bookkeeping: retries, the prompt sent, the ask it opened).
+ */
+export function finishExecution(store: ControlStore, key: ExecutionKey, from: ExecutionState, to: ExecutionState, at: number,
+  change: { output?: { kind: "commit" | "artifact" | "none"; ref: string | null; hash: string | null }; body?: unknown; baseCommit?: string } = {}): void {
+  if (from !== to) setExecutionState(store, key, from, to, at);
+  else if (store.db.prepare("UPDATE step_executions SET updated_at=? WHERE flow_run_id=? AND step_key=? AND seq=? AND state=?").run(at, key.flowRunId, key.stepKey, key.seq, from).changes !== 1) {
+    throw new FlowStoreError("flow-execution-stale", `${key.stepKey}#${key.seq}:${from}`);
+  }
+  if (change.output !== undefined) {
+    const changed = store.db.prepare("UPDATE step_executions SET output_kind=?, output_ref=?, output_hash=? WHERE flow_run_id=? AND step_key=? AND seq=? AND output_kind IS NULL")
+      .run(change.output.kind, change.output.ref, change.output.hash, key.flowRunId, key.stepKey, key.seq).changes;
+    if (changed !== 1) throw new FlowStoreError("flow-execution-stale", `${key.stepKey}#${key.seq}:output-set`);
+  }
+  if (change.baseCommit !== undefined) store.db.prepare("UPDATE step_executions SET base_commit=? WHERE flow_run_id=? AND step_key=? AND seq=? AND base_commit IS NULL").run(change.baseCommit, key.flowRunId, key.stepKey, key.seq);
+  if (change.body !== undefined) store.db.prepare("UPDATE step_executions SET body=? WHERE flow_run_id=? AND step_key=? AND seq=?").run(json(change.body), key.flowRunId, key.stepKey, key.seq);
+}
+
+export function listHeads(store: ControlStore, flowRunId: string): Record<string, number> {
+  return Object.fromEntries(store.db.prepare("SELECT step_key, active_seq FROM step_heads WHERE flow_run_id=?").all(flowRunId).map((row) => [String(row.step_key), Number(row.active_seq)]));
+}
+
+export function listMessages(store: ControlStore, flowRunId: string): MessageRow[] {
+  return store.db.prepare("SELECT * FROM flow_messages WHERE flow_run_id=? ORDER BY seq").all(flowRunId).map(messageOf);
+}
+
+export function listFlowRunIds(store: ControlStore, state: string): string[] {
+  return store.db.prepare("SELECT id FROM flow_runs WHERE state=? ORDER BY id").all(state).map((row) => String(row.id));
+}
+
+export function setFlowRunState(store: ControlStore, id: string, from: string, to: string): void {
+  if (store.db.prepare("UPDATE flow_runs SET state=?, revision=revision+1 WHERE id=? AND state=?").run(to, id, from).changes !== 1) throw new FlowStoreError("flow-execution-stale", `run ${id}:${from}`);
+}

@@ -4,6 +4,7 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { fits, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
 import { activeChain, chainRounds } from "./clarifyChain.js";
+import { requirementHost } from "./clarifyHost.js";
 import { buildClarifyPrompt, CLARIFY_JSON_SCHEMA, classifyClarifyOutput } from "./requirementClarify.js";
 import { renderRequirementDocument } from "./requirementDocument.js";
 import { buildRepositoryOverview } from "./requirementOverview.js";
@@ -263,7 +264,7 @@ export const CLARIFY_HANDLER: SingleCallHandler = {
       return buildClarifyPrompt({ idea: group.requirement.idea, contentLanguage: group.requirement.contentLanguage, overview: built,
         earlier: chainRounds(rounds).filter((r) => r.roundNo !== target.no), retryReason: readRound(deps.store, run.groupId, target.no).lastInvalidReason,
         limits: { roundNo: position === -1 ? target.no : position + 1, classification: limits.effective, roundCap: limits.roundCap },
-        superseded: rounds.filter((r) => superseded.includes(r.roundNo) && !excluded.has(r.roundNo)) });
+        superseded: rounds.filter((r) => superseded.includes(r.roundNo) && !excluded.has(r.roundNo)), frame: requirementHost(deps.store, group).background() });
     });
   },
   classify: classifyClarifyOutput,
