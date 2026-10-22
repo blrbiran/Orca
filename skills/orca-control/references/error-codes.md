@@ -111,7 +111,9 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `flagged-decision-not-found` | 404 |
 | `flow-answer-invalid` | 400 |
 | `flow-ask-closed` | 409 |
+| `flow-child-managed` | 422 |
 | `flow-command-missing` | 422 |
+| `flow-dir-unregistered` | 422 |
 | `flow-effect-closed` | 409 |
 | `flow-effect-not-staged` | 409 |
 | `flow-group-delivery-fixed` | 422 |
