@@ -62,6 +62,16 @@ describe("requirement-revise (spec §10.3, C10)", () => {
     } finally { await x.dispose(); }
   });
 
+  it("answering a round after a revision compares the chain, not round_no, to the cap", async () => {
+    const x = await threeRounds([{ purpose: "clarify", output: LATER }]);
+    try {
+      // Revising round 1 leaves chain [4]; its next round is 5, at chain position 2 of 3.
+      expect(x.service.requirementRevise(x.command("requirement-revise", answersFor(x, 1, { 0: "GitHub-flavoured" })))).toMatchObject({ result: { roundNo: 4, nextRoundNo: 5 } });
+      await x.until(() => x.round(5).state === "awaiting-answers");
+      expect(x.service.answerRequirement(x.command("requirement-answer", answersFor(x, 5)))).toMatchObject({ result: { roundNo: 5, nextRoundNo: 6 } });
+    } finally { await x.dispose(); }
+  });
+
   it("an excluded round's answers are not carried into the next round", async () => {
     const x = await threeRounds([{ purpose: "clarify", output: LATER }]);
     try {
