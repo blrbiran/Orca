@@ -137,6 +137,46 @@ describe("schema 18: flow_feedback", () => {
   });
 });
 
+describe("the backup before a migration", () => {
+  const downgrade = (dir: string) => {
+    const raw = new DatabaseSync(join(dir, "control.sqlite"));
+    raw.exec("DROP TABLE flow_feedback");
+    raw.prepare("UPDATE meta SET value='17' WHERE key='schemaVersion'").run();
+    raw.close();
+  };
+
+  it("never skips when the name is taken: two downgrade-and-reopen cycles under one fixed clock leave two backups", async () => {
+    const { root, dir } = await v17Store();
+    try {
+      (await openControlStore({ stateDir: dir, now: () => 2000 })).close();
+      downgrade(dir);
+      (await openControlStore({ stateDir: dir, now: () => 2000 })).close();
+      const names = (await readdir(dir)).filter((name) => name.startsWith("control.sqlite.pre-")).sort();
+      expect(names).toEqual(["control.sqlite.pre-v17-2000", "control.sqlite.pre-v17-2000-1"]);
+      for (const name of names) {
+        const copy = new DatabaseSync(join(dir, name), { readOnly: true });
+        try { expect(copy.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("17"); } finally { copy.close(); }
+      }
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it("a backup that cannot be written stops the open: the store stays at 17 and the owner lock is released", async () => {
+    const { root, dir } = await v17Store();
+    try {
+      // A name longer than the file system allows makes VACUUM INTO fail before anything migrates.
+      await expect(openControlStore({ stateDir: dir, now: () => "9".repeat(400) as unknown as number })).rejects.toThrow();
+      const raw = new DatabaseSync(join(dir, "control.sqlite"));
+      try {
+        expect(raw.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("17");
+        expect(raw.prepare("SELECT name FROM sqlite_master WHERE name='flow_feedback'").get()).toBeUndefined();
+      } finally { raw.close(); }
+      expect((await readdir(dir)).filter((name) => name.startsWith("service-lock"))).toEqual([]);
+      const store = await openControlStore({ stateDir: dir, now: () => 3000 });   // not control-writer-active
+      try { expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("18"); } finally { store.close(); }
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+});
+
 describe("flow_feedback intake store", () => {
   async function withIntake(state: IntakeState, fn: (store: ControlStore) => void): Promise<void> {
     const { root, dir } = await temp();

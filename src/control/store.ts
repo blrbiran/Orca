@@ -107,10 +107,14 @@ export async function openControlStore(options:{stateDir:string;recovery?:boolea
       } else {
         const version = String(connection.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()?.value ?? "");
         if (version !== schemaVersion) {
-          // Gaps spec §12 "one control-DB backup precedes it, as every step": a consistent copy beside the database,
-          // taken before the migration transaction opens. A name already taken is kept (it is the person's data).
-          const backup = join(stateDir, `control.sqlite.pre-v${version}-${(options.now ?? Date.now)()}`);
-          if (!existsSync(backup)) { connection.exec(`VACUUM INTO '${backup.replaceAll("'", "''")}'`); chmodSync(backup, 0o600); }
+          // Gaps spec §12 "one control-DB backup precedes it, as every step" (registered in spec §21): a consistent copy
+          // beside the database, taken before the migration transaction opens. A taken name is never reused or skipped:
+          // a numeric suffix finds a free one, so a backup ALWAYS precedes the step. A failed copy throws; nothing migrates.
+          const base = join(stateDir, `control.sqlite.pre-v${version}-${(options.now ?? Date.now)()}`);
+          let backup = base;
+          for (let n = 1; existsSync(backup); n++) backup = `${base}-${n}`;
+          connection.exec(`VACUUM INTO '${backup.replaceAll("'", "''")}'`);
+          chmodSync(backup, 0o600);
           connection.exec("BEGIN IMMEDIATE");
           try { migrateSchema(connection,version); connection.exec("COMMIT"); }
           catch(error) { connection.exec("ROLLBACK"); throw error; }

@@ -857,3 +857,18 @@ cover, a draft-box enact) is a separate acceptance the human approves, not part 
    not (§6.3).
 5. **Absolute image paths only through settings** (§8.1).
 6. **Step-level pause stays out** until dogfooding (R12).
+
+---
+
+## 21. Corrections and as-built (session 0e13a9b7)
+
+Appended per Rule 13: the sections above stay as published; entries here correct or register by name.
+
+1. **Out-of-repo writer registered (Rule 17, §16's shape).** Schema step 18 added a code-level control-DB backup (§12
+   says "one control-DB backup precedes it"; before this there was no such code, only human cutover procedures).
+
+| Path (env redirect) | Writer / trigger | Modes | Failure residue |
+|---|---|---|---|
+| `control.sqlite.pre-v<from>-<ms>` (`-1`, `-2`, … when the name is taken), in the control state dir (`$ORCA_CONTROL_DIR`, default `~/.orca/control/`) | `openControlStore` (`src/control/store.ts`) when it opens an existing store whose schema version differs from the build's, before the migration transaction; a consistent `VACUUM INTO` copy | file `0600` (set explicitly, inside `privateIO`) | one full copy per version change, never pruned; a failed migration leaves its backup; a failed copy aborts the open and migrates nothing |
+
+   Criteria write it only under temp state dirs (Rule 17).
