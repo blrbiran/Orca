@@ -491,7 +491,8 @@ export type CommandTargetV1 =
   | { kind: "operator"; operatorId: string }
   | { kind: "spend" }
   | { kind: "corrections" }
-  | { kind: "orchestration" };
+  | { kind: "orchestration" }
+  | { kind: "flows" };
 
 /** What a mutation POST carries: an id the ledger dedupes on, the revision it expects, and the verb's payload. */
 export type CommandEnvelopeV1 = { commandId: string; expectedRevision: number; payload?: unknown };
@@ -584,7 +585,8 @@ export type CommandSuccessV1 = {
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw"
     | "set-check-settings" | "set-scheduled-check" | "set-check-locks" | "run-check-now" | "resume-check"
-    | "set-flow-settings" | "set-flow-locks";
+    | "set-flow-settings" | "set-flow-locks"
+    | "flow-start" | "flow-message" | "flow-plan" | "flow-rerun" | "flow-answer" | "flow-effect" | "flow-pool";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -614,6 +616,14 @@ export type CommandSuccessV1 = {
     // Flow engine spec §11.2: the flow settings layer written (repoId null = global) and the global lock list.
     | { kind: "flow-settings-set"; repoId: string | null; flows: FlowsLayerV1 }
     | { kind: "flow-locks-set"; locks: FlowLockV1[] }
+    // Flow engine spec §14.2: what each flow verb did.
+    | { kind: "flow-started"; flowRunId: string; groupId: string }
+    | { kind: "flow-message-stored"; flowRunId: string; seq: number; state: "accepted" | "applied" | "rejected" | "excluded"; reason: string | null; deduped: boolean }
+    | { kind: "flow-plan-made"; flowRunId: string; planNo: number }
+    | { kind: "flow-plan-run"; flowRunId: string; planNo: number }
+    | { kind: "flow-answered"; flowRunId: string; stepKey: string; answer: "ask" | "needs" | "clarify" | "consensus" }
+    | { kind: "flow-effect-done"; recordId: string; action: "confirm" | "enact" | "discard"; state: "running" | "restaged" | "discarded"; replacedBy?: string }
+    | { kind: "flow-pool-raised"; flowRunId: string; poolTokens: number }
     | { kind: "check-run-requested"; repoId: string; checkKind: CheckKindV1; targets: string[] }
     | { kind: "check-resumed"; repoId: string; checkKind: CheckKindV1; targets: string[] }
     | { kind: "criteria-review-set"; repoId: string; enabled: boolean }

@@ -167,7 +167,27 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca flow settings show [--global]` — the effective flow settings of this project (or --global): each value, where it comes from, and its lock
 - `orca flow settings set <field> <value> [--global]` — set one flow setting in this project (or --global); needs a person token (person token)
 - `orca flow settings clear <field>... [--global]` — remove flow settings from this project (or --global) so the next layer applies; needs a person token (person token)
-- `orca flow settings lock [--lock <lock>]` — set the global flow lock list (needs a person token); no --lock clears every lock (person token)
+- `orca flow settings lock <field>` — lock one global flow setting (needs a person token): a locked field may only be tightened in a project (person token)
+- `orca flow settings unlock <field>` — unlock one global flow setting (needs a person token): a locked field may only be tightened in a project (person token)
+- `orca flow start <template> --dir <dir> [--project <project>] [--param <param>] [--clarify <clarify>] [--pool <pool>] [--unattended]` — start a flow from a built-in template on a folder (--pool needs a person token)
+- `orca flow list` — every flow run with its template, state and pool
+- `orca flow show <run>` — one flow run: steps with their active and newest execution, open asks, plans, effect records, decisions
+- `orca flow journal <run>` — one flow run's every execution and message
+- `orca flow feedback <run> [--step <step>] [--execution <execution>] --text <text>` — feedback on a step (or one execution): the step runs again with it, and a plan says what else
+- `orca flow edit <run> --step <step> [--file <file>] [--set <set>]` — the person's own output for a step (record fields, or workspace files); the step is not re-run
+- `orca flow plan <run>` — compute and propose a re-run plan from what changed (spends one single call)
+- `orca flow rerun <run> [--skip <skip>] [--add <add>] [--plan <plan>]` — run the open plan: its candidates minus the skips (default: the model's proposed skips) plus additions; needs a person token (person token)
+- `orca flow rewind <run> --to <to> [--exclude <exclude>]` — move a step's active output back (to execution n, or to not run); later messages are re-applied unless excluded
+- `orca flow pause <run>` — pause the run at its next step boundary (a running step is never interrupted)
+- `orca flow resume <run>` — resume a paused run
+- `orca flow stop <run>` — stop the run for good at its next step boundary
+- `orca flow retry <run> --step <step>` — run a failed step again (an effect step's retry makes a new effect record)
+- `orca flow repin <run> --version <version>` — move the run to another version of its template (changed steps become plan candidates)
+- `orca flow answer <run> <step> [--set <set>] [--file <file>] [--text <text>] [--answer <answer>] [--glossary <glossary>] [--adr <adr>] [--consensus]` — answer a step that waits for the person: an ask's form, a step's question, a clarify round, or consensus; needs a person token (person token)
+- `orca flow effect confirm <record>` — confirm an effect card: its step runs now (needs a person token) (person token)
+- `orca flow effect enact <record>` — enact a staged effect record: its step runs now (needs a person token) (person token)
+- `orca flow effect discard <record>` — discard a staged effect record: the step never runs (needs a person token) (person token)
+- `orca flow pool raise <run> --tokens <tokens>` — raise a run's token pool; steps parked on an exhausted pool start again (needs a person token) (person token)
 
 ### `orca plan`
 

@@ -49,9 +49,18 @@ const zeroRound = {
 
 /** Brief → … → draft box. Returns the run id; asserts the pause crossed on the way. */
 export async function toDraftBox(world: Awaited<ReturnType<typeof wechatWorld>>): Promise<string> {
-  const { w, children, child, goalOf } = world;
-  const { flowRunId } = await w.start({ templateRef: "builtin/wechat-article", params: { idea: "Tea for engineers" } });
-  await w.advance();
+  const { flowRunId } = await world.w.start({ templateRef: "builtin/wechat-article", params: { idea: "Tea for engineers" } });
+  await world.w.advance();
+  await untilArticleAsks(world, flowRunId);
+  await answerNeeds(world.w.deps, { flowRunId, stepKey: "article" }, "plain", "ann", "cli:test");
+  await world.w.advance();
+  await articleToDraftBox(world, flowRunId);
+  return flowRunId;
+}
+
+/** From a started run to the article step asking the person a question, its parallel cover done meanwhile. */
+export async function untilArticleAsks(world: Awaited<ReturnType<typeof wechatWorld>>, flowRunId: string): Promise<void> {
+  const { w, children, child } = world;
   expect(w.calls[0]).toMatchObject({ purpose: "clarify" });
   await w.answer(0, zeroRound);
   const land = async (stepKey: string, seq: number, files: Record<string, string>, extra = {}) => {
@@ -77,14 +86,17 @@ export async function toDraftBox(world: Awaited<ReturnType<typeof wechatWorld>>)
   await land("cover", 1, { "assets/wechat/00-cover.jpg": "jpg\n", "assets/wechat/00-cover.final.txt": "assets/wechat/00-cover.jpg\n" });
   expect(w.latest(flowRunId, "cover")).toMatchObject({ state: "done" });
   expect(w.execs(flowRunId, "to-draft-box")).toHaveLength(0);
-  // The person answers; the article runs again with the answer in its prompt, then the draft box.
-  await answerNeeds(w.deps, { flowRunId, stepKey: "article" }, "plain", "ann", "cli:test");
-  await w.advance();
+}
+
+/** The person answered "plain": the article runs again with the answer in its prompt, then the draft box. */
+export async function articleToDraftBox(world: Awaited<ReturnType<typeof wechatWorld>>, flowRunId: string): Promise<void> {
+  const { w, children, child, goalOf } = world;
   expect(goalOf(child(flowRunId, "article", 2))).toContain("Answer: plain");
-  await land("article", 2, { [`${SLUG}.wechat.html`]: "<p>Tea</p>\n" });
+  children.land(child(flowRunId, "article", 2), { [`${SLUG}.wechat.html`]: "<p>Tea</p>\n" });
+  await w.advance();
   expect(goalOf(child(flowRunId, "to-draft-box", 1))).toContain("assets/wechat/00-cover.final.txt");
-  await land("to-draft-box", 1, {}, { flow: { effect: { remoteId: "media-1" } } });
-  return flowRunId;
+  children.land(child(flowRunId, "to-draft-box", 1), {}, { flow: { effect: { remoteId: "media-1" } } });
+  await w.advance();
 }
 
 export { wechatFile };

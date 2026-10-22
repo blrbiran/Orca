@@ -78,6 +78,25 @@ export const durableCommandErrorStatuses = {
   // value only the person token may set (irreversible apply-flag; refused from every channel in phase 1).
   "flow-setting-locked": 409,
   "flow-setting-needs-person-token": 422,
+  // Flow engine spec §14.2 (plan Task 15): the flow verbs' refusals, the spec's codes verbatim (a `:<detail>` suffix of the
+  // kernel's code -- role-unresolved:<role>, flow-param-invalid:<id> -- is the error's detail). `flow-refused`: any other
+  // kernel refusal, its code as the detail. `flow-unavailable`: a panel with no execution driver runs no flow.
+  "flow-run-not-found": 404,
+  "flow-step-not-found": 404,
+  "flow-message-target-missing": 404,
+  "flow-template-invalid": 422,
+  "flow-param-invalid": 400,
+  "flow-answer-invalid": 400,
+  "flow-command-missing": 422,
+  "role-unresolved": 422,
+  "flow-profiles-unresolved": 422,
+  "flow-ask-closed": 409,
+  "flow-effect-not-staged": 409,
+  "flow-effect-closed": 409,
+  "flow-plan-stale": 409,
+  "flow-run-stopped": 409,
+  "flow-refused": 409,
+  "flow-unavailable": 409,
   "check-time-zone-invalid": 400,
 
   // Optimistic concurrency, immutable identity, and ownership conflicts.

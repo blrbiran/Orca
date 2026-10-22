@@ -80,6 +80,16 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   // Flow engine spec §11.2, §14.2: run policy (effect levels, budgets, skill sources) and its admin locks are a person's.
   "set-flow-settings": "human-only",
   "set-flow-locks": "human-only",
+  // Flow engine spec §14.2, the table as written: starting a run, messages (feedback, edits, commands) and asking for a
+  // plan are any principal's; running a plan, answering an ask, an effect's confirm/enact/discard and raising the pool
+  // are the person's.
+  "flow-start": "any",
+  "flow-message": "any",
+  "flow-plan": "any",
+  "flow-rerun": "human-only",
+  "flow-answer": "human-only",
+  "flow-effect": "human-only",
+  "flow-pool": "human-only",
 };
 export const HUMAN_ONLY_VERBS: readonly CommandVerbV1[] =
   (Object.keys(VERB_ACCESS) as CommandVerbV1[]).filter((verb) => VERB_ACCESS[verb] === "human-only");
@@ -91,6 +101,8 @@ export const HUMAN_ONLY_FIELDS: Readonly<Partial<Record<CommandVerbV1, readonly 
   // Debug task plan Task 6 (controller's call 5): the undo.how the closing row records as the human's; an agent's value
   // would be recorded as the human's.
   "correction-debug-open": ["undoHow"],
+  // Flow engine spec §14.2: a run's pool is a budget amount (like requirement-open.limit).
+  "flow-start": ["pool"],
 };
 /**
  * CLI v2 spec §15.1: the control socket's tier for each human-only entry (a verb, or `verb.field`), the table's code mirror.
@@ -136,6 +148,11 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   // Flow plan Global Constraints (Access): all six human-only flow verbs are token; a dispatched run is refused them.
   "set-flow-settings": "token",
   "set-flow-locks": "token",
+  "flow-rerun": "token",
+  "flow-answer": "token",
+  "flow-effect": "token",
+  "flow-pool": "token",
+  "flow-start.pool": "token",
   "run-check-now": "open",
   "resume-check": "open",
   // R3a: confirming under the configured integration (any delivery) carries only its hash; a mismatch is refused anyway.

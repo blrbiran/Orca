@@ -27,8 +27,8 @@ export interface PositionalDef {
   variadic?: boolean;
 }
 
-/** Spec §6.1: which counter `expectedRevision` is checked against. `corrections` is always 0. */
-export type RevisionScope = "group" | "repository" | "operator" | "spend" | "orchestration" | "corrections";
+/** Spec §6.1: which counter `expectedRevision` is checked against. `corrections` and `flows` are always 0. */
+export type RevisionScope = "group" | "repository" | "operator" | "spend" | "orchestration" | "corrections" | "flows";
 
 export interface GlobalFlags {
   json: boolean;

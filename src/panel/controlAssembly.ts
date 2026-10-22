@@ -235,6 +235,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     admissionGate,
     profileRouter: router,
     trustedConfig: config,
+    // Flow engine spec §14.2: the flow verbs act through the kernel's production ports, made below with the driver.
+    flowDeps: () => flow?.deps ?? null,
     // Execution driver spec §2.1: a workspace mode means something only to a driver, so an unconfigured
     // panel knows no repository here and refuses set-workspace-mode as it did before this slice.
     knownRepository: control.executionPort === "configured"

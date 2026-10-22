@@ -1,4 +1,6 @@
 import { readRunResults, readGroupResults } from './taskResults.js';
+import { readFlowJournal, readFlowList, readFlowRun } from "../flow/views.js";
+import { asFlowControlError } from "../flow/flowCommands.js";
 import { readResultOutputBytes } from './taskResultOutputs.js';
 import { readControlOverview } from "./controlOverview.js";
 import { readGroupDecisionsView } from "./groupDecisions.js";
@@ -315,6 +317,14 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     }
     try { res.json(readFlowSettings(deps.store, repoId)); } catch (error) { sendMappedControlError(res, error); }
   });
+  // Flow engine spec §14.2: the flow reads (after flows/settings, which these would otherwise take as a run id).
+  app.get("/api/control/flows", (_req, res) => { try { res.json(readFlowList(deps.store)); } catch (error) { sendMappedControlError(res, error); } });
+  app.get("/api/control/flows/:runId", (req, res) => {
+    try { res.json(readFlowRun(deps.store, String(req.params.runId))); } catch (error) { sendMappedControlError(res, asFlowControlError(error)); }
+  });
+  app.get("/api/control/flows/:runId/journal", (req, res) => {
+    try { res.json(readFlowJournal(deps.store, String(req.params.runId))); } catch (error) { sendMappedControlError(res, asFlowControlError(error)); }
+  });
   // Spec §6.5 / §7: a model review's record by its review group's id (`orca check findings`). A read.
   app.get("/api/control/checks/reviews/:reviewGroupId", (req, res) => {
     const record = readReviewRecord(deps.store, String(req.params.reviewGroupId));
@@ -485,6 +495,8 @@ const scoped = (groupId: string) => ({ groupId, target: { kind: "group" as const
 const fromParams: RouteTarget = (params) => scoped(idSchema.parse(params.groupId));
 const spendScoped: RouteTarget = () => ({ groupId: "@spend", target: { kind: "spend" } });
 const orchestrationScoped: RouteTarget = () => ({ groupId: "@orchestration", target: { kind: "orchestration" } });
+// Flow engine spec §14.2: every flow verb's ledger key.
+const flowsScoped: RouteTarget = () => ({ groupId: "@flows", target: { kind: "flows" } });
 const repositoryScoped: RouteTarget = (params) => {
   const repoId = idSchema.parse(params.repoId);
   return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
@@ -573,6 +585,15 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/repositories/:repoId/flows/settings", verb: "set-flow-settings", target: repositoryScoped },
     { path: "/api/control/operator/flows/settings", verb: "set-flow-settings", target: orchestrationScoped },
     { path: "/api/control/operator/flows/locks", verb: "set-flow-locks", target: orchestrationScoped },
+    // Flow engine spec §14.2: the flow verbs, one `@flows` scope with revision 0 (flowCommands.ts); the run, step and record
+    // are named in the payload.
+    { path: "/api/control/flows", verb: "flow-start", target: flowsScoped },
+    { path: "/api/control/flows/messages", verb: "flow-message", target: flowsScoped },
+    { path: "/api/control/flows/plan", verb: "flow-plan", target: flowsScoped },
+    { path: "/api/control/flows/rerun", verb: "flow-rerun", target: flowsScoped },
+    { path: "/api/control/flows/answer", verb: "flow-answer", target: flowsScoped },
+    { path: "/api/control/flows/effect", verb: "flow-effect", target: flowsScoped },
+    { path: "/api/control/flows/pool", verb: "flow-pool", target: flowsScoped },
     {
       path: "/api/control/repositories/:repoId/criteria-review",
       verb: "set-criteria-review",
@@ -702,6 +723,8 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "resume-check": service.resumeCheck(command); break;
           case "set-flow-settings": service.setFlowSettings(command); break;
           case "set-flow-locks": service.setFlowLocks(command); break;
+          case "flow-start": case "flow-message": case "flow-plan": case "flow-rerun": case "flow-answer": case "flow-effect": case "flow-pool":
+            await service.flowCommand(command); break;
           case "set-criteria-review": service.setCriteriaReview(command); break;
           case "set-group-integration": await service.setGroupIntegration(command); break;
           case "retry-integration": service.retryIntegration(command); break;

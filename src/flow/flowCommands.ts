@@ -1,0 +1,170 @@
+/**
+ * Flow engine spec §14.2 (plan Task 15, C19): the flow control verbs. Every verb is one command on the `@flows` scope,
+ * whose revision is always 0 (as the corrections scope): the kernel's own checks guard each act -- a message is deduped
+ * by its command id, a plan runs only while it is the newest proposed one, an effect record moves only from `staged`, an
+ * ask is answered only while it waits. The kernel works before the ledger's transaction (it writes git and its own
+ * rows); the transaction books the outcome, so a replay answers it without acting again.
+ *
+ * `by`/`via` are CLI v2's attribution of the route (attributionOf): the person, never an agent, and the channel.
+ */
+import { routedAttributionFor } from "../control/commandClient.js";
+import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "../control/commandLedger.js";
+import { ControlError, type KnownControlErrorCode } from "../control/errors.js";
+import type { ControlStore } from "../control/store.js";
+import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import { discardEffect, enactEffect } from "./effects.js";
+import { advanceRun, answerNeeds, FlowRefusal, latestByStep, loadRun, resumeExecution, startFlowRun, stepOf, type FlowDeps } from "./kernel.js";
+import { answerAsk } from "./kinds/ask.js";
+import { answerFlowClarify, flowClarifyConsensus } from "./kinds/clarify.js";
+import type { ExecutionBody } from "./kinds/registry.js";
+import { acceptMessage } from "./messages.js";
+import { POOL_EXHAUSTED } from "./pool.js";
+import { proposePlan, runPlan } from "./rerun.js";
+import { appendMessage, getFlowRun, listExecutions } from "./store.js";
+
+export const FLOW_VERBS = ["flow-start", "flow-message", "flow-plan", "flow-rerun", "flow-answer", "flow-effect", "flow-pool"] as const;
+export type FlowVerb = (typeof FLOW_VERBS)[number];
+export type FlowCommand = Extract<RawAuthorityCommandV1, { verb: FlowVerb }>;
+type Result = Extract<CommandSuccessV1["result"], { kind: `flow-${string}` }>;
+export interface FlowCommandDeps { store: ControlStore; flow(): FlowDeps | null }
+
+/**
+ * Spec Global Constraints' refusal codes, booked under their own names (errors.ts); a refusal with a detail
+ * (`role-unresolved:<role>`, `flow-param-invalid:<id>`) keeps it as the error's detail. Any other kernel refusal is
+ * `flow-refused` with the kernel's code as the detail, never a 500.
+ */
+const BOOKED: ReadonlySet<string> = new Set([
+  "flow-run-not-found", "flow-step-not-found", "flow-template-invalid", "flow-param-invalid", "flow-command-missing", "role-unresolved",
+  "flow-profiles-unresolved", "flow-ask-closed", "flow-answer-invalid", "flow-effect-not-staged", "flow-effect-closed", "flow-plan-stale",
+  "flow-message-target-missing", "flow-run-stopped",
+]);
+
+export function asFlowControlError(error: unknown): unknown {
+  if (!(error instanceof FlowRefusal)) return error;
+  const colon = error.code.indexOf(":");
+  const base = colon === -1 ? error.code : error.code.slice(0, colon);
+  const detail = [colon === -1 ? "" : error.code.slice(colon + 1), error.message.startsWith(`${error.code}: `) ? error.message.slice(error.code.length + 2) : ""].filter((s) => s !== "").join(": ");
+  if (BOOKED.has(base)) return new ControlError(base as KnownControlErrorCode, detail === "" ? undefined : detail);
+  return new ControlError("flow-refused", detail === "" ? error.code : `${error.code}: ${detail}`);
+}
+
+function success(context: WebCommandContext, result: Result): { status: number; body: CommandSuccessV1 } {
+  return { status: 200, body: {
+    schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,
+    verb: context.rawCommand.verb, target: context.rawCommand.target,
+    // The `@flows` scope has no revision and no projection (commandLedger.ts settingRevision).
+    commandRevision: context.currentCommandRevision, projectionSeq: null,
+    effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash, result,
+  } };
+}
+
+/** A replay or a stale revision answers before anything is done; otherwise the kernel acts and its outcome is booked. */
+export async function applyFlowCommand(deps: FlowCommandDeps, command: FlowCommand): Promise<CommandSuccessV1 | CommandErrorBodyV1> {
+  const replay = preflightWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, command); if (replay) return replay.body;
+  let result: Result;
+  try {
+    const flow = deps.flow();
+    if (flow === null) throw new ControlError("flow-unavailable", "this panel runs no flow kernel (no execution driver)");
+    result = await act(flow, command);
+  } catch (failure) {
+    const error = asFlowControlError(failure);
+    return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
+  }
+  return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
+    rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }) as never, authorityChanged: false,
+    apply: (context) => success(context, result),
+  }).body;
+}
+
+async function act(flow: FlowDeps, command: FlowCommand): Promise<Result> {
+  const who = routedAttributionFor(command.commandId) ?? { by: command.actorId, via: "web" };
+  switch (command.verb) {
+    case "flow-start": {
+      const p = command.payload;
+      if (p.dir === undefined) throw new ControlError("control-argument-invalid", "phase 1 runs a flow on a folder: give dir");
+      const template = p.template.startsWith("builtin/") ? p.template : `builtin/${p.template}`;
+      const started = await startFlowRun(flow, {
+        templateRef: template, dir: p.dir, params: p.params, by: who.by, via: who.via,
+        ...(p.projectId === undefined ? {} : { projectId: p.projectId }), ...(p.clarify === undefined ? {} : { clarify: p.clarify }),
+        ...(p.pool === undefined ? {} : { pool: p.pool }), ...(p.unattended === undefined ? {} : { unattended: p.unattended }),
+        // A retry of this command (lost answer) finds the run it started instead of starting a second one.
+        idempotencyKey: command.commandId,
+      });
+      await advanceRun(flow, started.flowRunId);
+      return { kind: "flow-started", flowRunId: started.flowRunId, groupId: started.groupId };
+    }
+    case "flow-message": {
+      const p = command.payload;
+      loadRun(flow.store, p.runId);
+      const stored = await acceptMessage(flow, p.runId, { kind: p.kind, target: p.target, body: p.body, by: who.by, via: who.via, requestId: command.commandId });
+      return { kind: "flow-message-stored", flowRunId: p.runId, seq: stored.seq, state: stored.state, reason: stored.reason, deduped: stored.deduped };
+    }
+    case "flow-plan": {
+      loadRun(flow.store, command.payload.runId);
+      const planNo = await proposePlan(flow, command.payload.runId, who.by, who.via);
+      return { kind: "flow-plan-made", flowRunId: command.payload.runId, planNo };
+    }
+    case "flow-rerun": {
+      const p = command.payload;
+      await runPlan(flow, p.runId, p.planNo, { ...(p.skip === undefined ? {} : { skip: p.skip }), ...(p.add === undefined ? {} : { add: p.add }) }, who.by, who.via);
+      return { kind: "flow-plan-run", flowRunId: p.runId, planNo: p.planNo };
+    }
+    case "flow-answer": return answer(flow, command.payload, who);
+    case "flow-effect": {
+      const p = command.payload;
+      if (p.action === "discard") {
+        discardEffect(flow, p.recordId, who.by, who.via);
+        return { kind: "flow-effect-done", recordId: p.recordId, action: p.action, state: "discarded" };
+      }
+      const enacted = await enactEffect(flow, p.recordId, who.by, who.via, p.action);
+      return enacted.state === "running" ? { kind: "flow-effect-done", recordId: p.recordId, action: p.action, state: "running" }
+        : { kind: "flow-effect-done", recordId: p.recordId, action: p.action, state: "restaged", replacedBy: enacted.recordId };
+    }
+    case "flow-pool": return raisePool(flow, command.payload.runId, command.payload.raiseTokens, who, command.commandId);
+  }
+}
+
+type AnswerPayload = Extract<FlowCommand, { verb: "flow-answer" }>["payload"];
+/** §8.1 `answer`: what the waiting step asked decides how the answer is taken; exactly one form of answer is given. */
+async function answer(flow: FlowDeps, p: AnswerPayload, who: { by: string; via: string }): Promise<Result> {
+  const given = [p.values, p.text, p.clarify, p.consensus].filter((v) => v !== undefined).length;
+  if (given !== 1) throw new ControlError("flow-answer-invalid", "give exactly one of values, text, clarify, consensus");
+  const run = loadRun(flow.store, p.runId);
+  const step = stepOf(run, p.stepKey);
+  const target = { flowRunId: p.runId, stepKey: p.stepKey };
+  const done = (kind: "ask" | "needs" | "clarify" | "consensus"): Result => ({ kind: "flow-answered", flowRunId: p.runId, stepKey: p.stepKey, answer: kind });
+  if (p.clarify !== undefined) { await answerFlowClarify(flow, target, p.clarify, who.by, who.via); await advanceRun(flow, p.runId); return done("clarify"); }
+  if (p.consensus !== undefined) { await flowClarifyConsensus(flow, target, who.by, who.via); await advanceRun(flow, p.runId); return done("consensus"); }
+  if (p.values !== undefined) {
+    if (step.kind !== "ask") throw new FlowRefusal("flow-answer-invalid", `${p.stepKey} is a ${step.kind} step: answer its question with text`);
+    await answerAsk(flow, target, p.values, who.by, who.via);
+    await advanceRun(flow, p.runId);
+    return done("ask");
+  }
+  await answerNeeds(flow, target, p.text!, who.by, who.via);
+  await advanceRun(flow, p.runId);
+  return done("needs");
+}
+
+/**
+ * §6.3 `flow-pool`: the person raises the run's pool (human-only). Executions parked on an exhausted pool start again.
+ * The raise is a `command` message deduped by the command id, so a retried command raises nothing twice.
+ */
+async function raisePool(flow: FlowDeps, flowRunId: string, raise: number, who: { by: string; via: string }, requestId: string): Promise<Result> {
+  loadRun(flow.store, flowRunId);
+  const at = flow.now();
+  flow.store.transaction(() => {
+    const { deduped } = appendMessage(flow.store, {
+      flowRunId, requestId, kind: "command", target: "run", body: { command: "pool-raise", tokens: raise }, by: who.by, via: who.via, state: "applied", reason: null, at,
+    });
+    if (!deduped) flow.store.db.prepare("UPDATE flow_runs SET pool_tokens=pool_tokens+? WHERE id=?").run(raise, flowRunId);
+  });
+  const run = loadRun(flow.store, flowRunId);
+  for (const execution of latestByStep(listExecutions(flow.store, flowRunId)).values()) {
+    const body = execution.body as ExecutionBody & { needsYou?: { reason?: string } };
+    if (execution.state !== "parked" || body.needsYou?.reason !== POOL_EXHAUSTED) continue;
+    const { needsYou: _parked, ...rest } = body;
+    await resumeExecution(flow, run, { ...execution, body: rest as ExecutionBody });
+  }
+  return { kind: "flow-pool-raised", flowRunId, poolTokens: getFlowRun(flow.store, flowRunId)!.poolTokens };
+}

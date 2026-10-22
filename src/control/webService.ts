@@ -1,4 +1,6 @@
 import { join } from "node:path";
+import { applyFlowCommand, type FlowCommand } from "../flow/flowCommands.js";
+import type { FlowDeps } from "../flow/kernel.js";
 import { peerCode, peerFailure } from "./ccloopPort.js";
 import {retainSavedInterruption,readDriverRun,describeError} from "./executionDriver.js";
 import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
@@ -128,6 +130,8 @@ export interface WebServiceDeps extends AsyncImportDeps {
    */
   correctionsDir?: string;
   correctionsBy?: string;
+  /** Flow engine spec §14.2: the flow kernel's production ports (a panel with an execution driver); null: none. */
+  flowDeps?: () => FlowDeps | null;
   /** Debug task plan Task 11: what correction-record/-withdraw need from the panel (correctionCommands.ts). Absent, both refuse corrections-store-unconfigured. */
   panelCorrections?: PanelCorrections;
   /**
@@ -1050,6 +1054,12 @@ export class WebControlService {
   /** Flow engine spec §11.2: a person's flow settings of a layer and the global locks (flow/settingsCommands.ts). */
   setFlowSettings(command: FlowSettingsCommand<"set-flow-settings">): WebCommandResult { return this.mutate(() => applySetFlowSettings(this.checkDeps(), command)) as WebCommandResult; }
   setFlowLocks(command: FlowSettingsCommand<"set-flow-locks">): WebCommandResult { return this.mutate(() => applySetFlowLocks(this.checkDeps(), command)) as WebCommandResult; }
+  /** Flow engine spec §14.2: every flow verb (flowCommands.ts); the kernel acts first, the ledger books the outcome. */
+  async flowCommand(command: FlowCommand): Promise<WebCommandResult> {
+    const release = this.deps.admissionGate?.enter();
+    try { return await applyFlowCommand({ store: this.store, flow: this.deps.flowDeps ?? (() => null) }, command) as WebCommandResult; }
+    finally { release?.(); }
+  }
   private readonly checkJobs = new Map<string, Promise<void>>();
   /**
    * Checks spec 2026-10-22 §2–§5 (kanban spec §7 layer 1 on the check model): for each repository, convert the pre-16

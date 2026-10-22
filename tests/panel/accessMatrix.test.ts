@@ -52,6 +52,13 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): flow plan Global Constraints (Access) -- the human-only flow verbs are token.
   { entry: "set-flow-settings", payload: { set: { effects: { cost: "confirm" } }, clear: [] }, tier: "token", member: V },
   { entry: "set-flow-locks", payload: { locks: ["effects.cost"] }, tier: "token", member: V },
+  // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): flow engine spec §14.2 / plan Global Constraints -- the four human-only run
+  // verbs are token, and a start's pool (a budget amount) is token as requirement-open.limit.
+  { entry: "flow-rerun", payload: { runId: "fr-x", planNo: 1 }, tier: "token", member: V },
+  { entry: "flow-answer", payload: { runId: "fr-x", stepKey: "s", text: "t" }, tier: "token", member: V },
+  { entry: "flow-effect", payload: { recordId: "eff-x", action: "enact" }, tier: "token", member: V },
+  { entry: "flow-pool", payload: { runId: "fr-x", raiseTokens: 1 }, tier: "token", member: V },
+  { entry: "flow-start.pool", payload: { template: "wechat-article", params: {}, pool: 1 }, tier: "token", member: F },
   { entry: "run-check-now", payload: { kind: "model-review" }, tier: "open", member: V },
   { entry: "resume-check", payload: { kind: "model-review" }, tier: "open", member: V },
   { entry: "confirm.integrationHash", payload: { integrationHash: "d".repeat(64) }, tier: "open", member: F },

@@ -14,7 +14,7 @@
  * driver-backed port on the parent group's pool is Task 10's).
  */
 import { recordProjectionChange } from "../control/projectionJournal.js";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "../control/snapshot.js";
 import { MAX_AUTO_RETRIES } from "../control/requirementSchemas.js";
@@ -91,6 +91,12 @@ const UNATTENDED_KINDS: ReadonlySet<string> = new Set(["work", "review"]);
 export const DEFAULT_TOKENS_PER_RUN = 2_000_000;
 const POINTER_MAX_BYTES = 16 * 1024;
 
+/** A UUID-shaped id from a key (sha256), so the same key always names the same run. */
+const uuidOf = (key: string): string => {
+  const h = createHash("sha256").update(key).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+};
+
 let defaultRegistry: KindRegistry | null = null;
 const registryOf = (deps: FlowDeps): KindRegistry => deps.registry ?? (defaultRegistry ??= builtinKinds());
 
@@ -106,6 +112,8 @@ export interface StartFlowInput {
   unattended?: boolean;
   by: string;
   via: string;
+  /** The `flow-start` command's id: the run's id is derived from it, so a retried command finds the run it started. */
+  idempotencyKey?: string;
 }
 
 const TIER_RANK = { low: 0, mid: 1, high: 2 } as const;
@@ -179,6 +187,11 @@ function assetsOf(template: FlowTemplate, read: (rel: string) => string): Record
 }
 
 export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promise<{ flowRunId: string; groupId: string }> {
+  const id = input.idempotencyKey === undefined ? randomUUID() : uuidOf(input.idempotencyKey);
+  if (input.idempotencyKey !== undefined) {
+    const existing = getFlowRun(deps.store, `fr-${id}`);
+    if (existing !== null) return { flowRunId: existing.id, groupId: existing.groupId };
+  }
   const match = /^builtin\/([a-z0-9][a-z0-9-]*)(?:@\d+)?$/.exec(input.templateRef);
   if (match === null) throw new FlowRefusal("flow-template-invalid", `${input.templateRef} is not a built-in template (phase 1 ships built-ins only)`);
   let loaded: ReturnType<typeof loadBuiltin>;
@@ -193,7 +206,6 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
   }
   const projectId = input.projectId ?? null;
   const roles = resolveRoles(deps, template, projectId);
-  const id = randomUUID();
   const flowRunId = `fr-${id}`;
   const groupId = `flow-${id}`;
   // §6.3: confirmed once, before anything is written (a refusal leaves no vault import either).

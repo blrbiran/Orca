@@ -667,6 +667,14 @@ export const commandVerbSchema = z.enum([
   // Flow engine spec §11.2: the flow settings of a layer and the global locks.
   "set-flow-settings",
   "set-flow-locks",
+  // Flow engine spec §14.2: a run's start, the person's messages, plans and re-runs, answers, effects and its pool.
+  "flow-start",
+  "flow-message",
+  "flow-plan",
+  "flow-rerun",
+  "flow-answer",
+  "flow-effect",
+  "flow-pool",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -681,6 +689,9 @@ const correctionsCommandTargetSchema = z.object({ kind: z.literal("corrections")
 const orchestrationCommandTargetSchema = z.object({ kind: z.literal("orchestration") }).strict();
 // Checks spec 2026-10-22 §4.1: a check setting lives in the project layer (repository) or the global one (@orchestration).
 const checkSettingsTargetSchema = z.discriminatedUnion("kind", [repositoryCommandTargetSchema, orchestrationCommandTargetSchema]);
+// Flow engine spec §14.2 (writer's call, as the corrections scope): every flow verb is one scope with constant revision 0;
+// the kernel's own checks (a message deduped by its command id, a plan by its number, a record by its state) guard it.
+const flowsCommandTargetSchema = z.object({ kind: z.literal("flows") }).strict();
 
 export const commandTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group"), groupId: idSchema }).strict(),
@@ -692,6 +703,7 @@ export const commandTargetSchema = z.discriminatedUnion("kind", [
   spendCommandTargetSchema,
   correctionsCommandTargetSchema,
   orchestrationCommandTargetSchema,
+  flowsCommandTargetSchema,
 ]);
 
 export const emptyPayloadSchema = z.object({}).strict();
@@ -949,6 +961,38 @@ export const requirementRevisePayloadSchema = z.object({
   reason: nonemptyString.optional(), exclude: z.array(positiveSafeInteger).optional(),
 }).strict();
 
+// Flow engine spec §14.2: the flow verbs' payloads. A run, a step and a record are named by id; values are the kernel's
+// to check (a template's params, an ask's form), so they arrive as plain JSON scalars.
+const flowRunIdSchema = z.string().regex(/^fr-[0-9a-f-]{36}$/);
+const flowStepKeySchema = z.string().regex(/^[a-z0-9][a-z0-9-]*$/).max(64);
+const flowScalarSchema = z.union([z.string(), z.number(), z.boolean()]);
+export const flowStartPayloadSchema = z.object({
+  template: z.string().regex(/^(builtin\/)?[a-z0-9][a-z0-9-]*(@\d+)?$/), dir: z.string().min(1).startsWith("/").optional(), projectId: idSchema.optional(),
+  params: z.record(flowScalarSchema), clarify: z.literal("skip").optional(), pool: positiveSafeInteger.optional(), unattended: z.boolean().optional(),
+}).strict();
+const flowMessageTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("run") }).strict(),
+  z.object({ kind: z.literal("step"), stepKey: flowStepKeySchema }).strict(),
+  z.object({ kind: z.literal("execution"), stepKey: flowStepKeySchema, seq: positiveSafeInteger }).strict(),
+]);
+export const flowMessagePayloadSchema = z.object({
+  runId: flowRunIdSchema, kind: z.enum(["feedback", "edit", "command"]), target: flowMessageTargetSchema,
+  body: z.record(z.unknown()),
+}).strict();
+export const flowPlanPayloadSchema = z.object({ runId: flowRunIdSchema }).strict();
+export const flowRerunPayloadSchema = z.object({
+  runId: flowRunIdSchema, planNo: positiveSafeInteger, skip: z.array(flowStepKeySchema).optional(), add: z.array(flowStepKeySchema).optional(),
+}).strict();
+export const flowAnswerPayloadSchema = z.object({
+  runId: flowRunIdSchema, stepKey: flowStepKeySchema,
+  // Exactly one: an ask's form values, the answer to a step's own question, a clarify round's answers, or consensus.
+  values: z.record(flowScalarSchema).optional(), text: z.string().min(1).optional(),
+  clarify: z.object({ roundNo: positiveSafeInteger, answers: z.array(answerInputSchema), glossaryDecisions: z.array(decisionInputSchema), adrDecisions: z.array(decisionInputSchema) }).strict().optional(),
+  consensus: z.literal(true).optional(),
+}).strict();
+export const flowEffectPayloadSchema = z.object({ recordId: z.string().regex(/^eff-[0-9a-f-]{36}$/), action: z.enum(["confirm", "enact", "discard"]) }).strict();
+export const flowPoolPayloadSchema = z.object({ runId: flowRunIdSchema, raiseTokens: positiveSafeInteger }).strict();
+
 const groupCommandTargetSchema = z.object({ kind: z.literal("group"), groupId: idSchema }).strict();
 const taskCommandTargetSchema = z.object({ kind: z.literal("task"), groupId: idSchema, taskId: idSchema }).strict();
 const globalCommandTargetSchema = z.object({ kind: z.literal("global"), epoch: nonemptyString }).strict();
@@ -1055,6 +1099,13 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("set-check-locks"), target: checkSettingsTargetSchema, payload: setCheckLocksPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-flow-settings"), target: checkSettingsTargetSchema, payload: setFlowSettingsPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-flow-locks"), target: checkSettingsTargetSchema, payload: setFlowLocksPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("flow-start"), target: flowsCommandTargetSchema, payload: flowStartPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("flow-message"), target: flowsCommandTargetSchema, payload: flowMessagePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("flow-plan"), target: flowsCommandTargetSchema, payload: flowPlanPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("flow-rerun"), target: flowsCommandTargetSchema, payload: flowRerunPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("flow-answer"), target: flowsCommandTargetSchema, payload: flowAnswerPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("flow-effect"), target: flowsCommandTargetSchema, payload: flowEffectPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("flow-pool"), target: flowsCommandTargetSchema, payload: flowPoolPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("run-check-now"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("resume-check"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-criteria-review"), target: repositoryCommandTargetSchema, payload: setCriteriaReviewPayloadSchema }).strict(),
@@ -1134,6 +1185,13 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("set-check-locks"), target: checkSettingsTargetSchema, payload: setCheckLocksPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-flow-settings"), target: checkSettingsTargetSchema, payload: setFlowSettingsPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-flow-locks"), target: checkSettingsTargetSchema, payload: setFlowLocksPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("flow-start"), target: flowsCommandTargetSchema, payload: flowStartPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("flow-message"), target: flowsCommandTargetSchema, payload: flowMessagePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("flow-plan"), target: flowsCommandTargetSchema, payload: flowPlanPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("flow-rerun"), target: flowsCommandTargetSchema, payload: flowRerunPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("flow-answer"), target: flowsCommandTargetSchema, payload: flowAnswerPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("flow-effect"), target: flowsCommandTargetSchema, payload: flowEffectPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("flow-pool"), target: flowsCommandTargetSchema, payload: flowPoolPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("run-check-now"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resume-check"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-criteria-review"), target: repositoryCommandTargetSchema, payload: setCriteriaReviewPayloadSchema }).strict(),
@@ -1850,6 +1908,14 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   // Flow engine spec §11.2: the layer written (repoId null = the global layer) and the global lock list.
   z.object({ kind: z.literal("flow-settings-set"), repoId: idSchema.nullable(), flows: globalFlowsLayerSchema }).strict(),
   z.object({ kind: z.literal("flow-locks-set"), locks: z.array(z.enum(FLOW_LOCKABLE_PATHS)) }).strict(),
+  // Flow engine spec §14.2: what each flow verb did. A message is stored even when refused (`state` rejected, `reason`).
+  z.object({ kind: z.literal("flow-started"), flowRunId: nonemptyString, groupId: idSchema }).strict(),
+  z.object({ kind: z.literal("flow-message-stored"), flowRunId: nonemptyString, seq: positiveSafeInteger, state: z.enum(["accepted", "applied", "rejected", "excluded"]), reason: z.string().nullable(), deduped: z.boolean() }).strict(),
+  z.object({ kind: z.literal("flow-plan-made"), flowRunId: nonemptyString, planNo: positiveSafeInteger }).strict(),
+  z.object({ kind: z.literal("flow-plan-run"), flowRunId: nonemptyString, planNo: positiveSafeInteger }).strict(),
+  z.object({ kind: z.literal("flow-answered"), flowRunId: nonemptyString, stepKey: nonemptyString, answer: z.enum(["ask", "needs", "clarify", "consensus"]) }).strict(),
+  z.object({ kind: z.literal("flow-effect-done"), recordId: nonemptyString, action: z.enum(["confirm", "enact", "discard"]), state: z.enum(["running", "restaged", "discarded"]), replacedBy: nonemptyString.optional() }).strict(),
+  z.object({ kind: z.literal("flow-pool-raised"), flowRunId: nonemptyString, poolTokens: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("check-run-requested"), repoId: idSchema, checkKind: z.enum(CHECK_KINDS), targets: z.array(nonemptyString) }).strict(),
   z.object({ kind: z.literal("check-resumed"), repoId: idSchema, checkKind: z.enum(CHECK_KINDS), targets: z.array(nonemptyString) }).strict(),
   z.object({ kind: z.literal("criteria-review-set"), repoId: idSchema, enabled: z.boolean() }).strict(),
@@ -1978,7 +2044,9 @@ export const commandSuccessSchema = commandSuccessObjectSchema
       // Checks spec 2026-10-22 §4.4: repository or @orchestration settings scopes, no group projection.
       || value.verb === "set-check-settings" || value.verb === "set-scheduled-check" || value.verb === "set-check-locks" || value.verb === "run-check-now" || value.verb === "resume-check"
       // Flow engine spec §11.2: the same two settings scopes.
-      || value.verb === "set-flow-settings" || value.verb === "set-flow-locks";
+      || value.verb === "set-flow-settings" || value.verb === "set-flow-locks"
+      // Flow engine spec §14.2: the `@flows` scope has revision 0 and no group projection.
+      || value.verb.startsWith("flow-");
     if (isShutdown ? value.commandRevision !== null : value.commandRevision === null) {
       issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");
     }

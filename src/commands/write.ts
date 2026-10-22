@@ -28,7 +28,7 @@ export async function readRevision(mapping: VerbMapping, context: WriteContext):
     case "operator": return num(fieldOf(await context.read("operator/agent-preferences"), "revision"));
     case "spend": return num(fieldOf(await context.read("usage?scope=all"), "spendRevision"));
     case "orchestration": return num(fieldOf(await context.read("orchestration"), "revision"));
-    case "corrections": return 0;
+    case "corrections": case "flows": return 0;
   }
 }
 
