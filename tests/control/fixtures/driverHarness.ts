@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import type { LastFailure, RunFailureCause } from "../../../src/control/driveRecord.js";
+import type { ToolRulesReport } from "../../../src/control/toolRules.js";
 import { writeFile, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createExecutionProfileRouter, resolveProfile } from "../../../src/control/profiles.js";
@@ -52,7 +53,7 @@ export interface HarnessOptions {
   /** Debug task plan Task 8: the `debug` the synthetic ccloop reports with a terminal (driverPort.ts); absent = not reported. */
   debug?: (workItemId: string) => unknown;
   /** ccloop per-contract tool rules spec §5: the tool-rule report the synthetic ccloop answers at collect (driverPort.ts). */
-  toolRules?: (workItemId: string) => unknown;
+  toolRules?: (workItemId: string) => ToolRulesReport | undefined;
   /** Protect-acceptance-criteria spec §4.2: every contract's verification.requiredChecks (web.ts; ["true"] unless said otherwise). */
   requiredChecks?: string[];
   /** Checks spec 2026-10-22 §6.1: the terminal's budgetSnapshot the synthetic ccloop reports (driverPort.ts). */

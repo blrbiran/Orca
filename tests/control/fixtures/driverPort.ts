@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import type { LastFailure, RunFailureCause } from "../../../src/control/driveRecord.js";
+import type { ToolRulesReport } from "../../../src/control/toolRules.js";
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -61,7 +62,7 @@ export function fakeCcloopPort(input: {
   /** Checks spec 2026-10-22 §6.1: the terminal's budgetSnapshot (ccloop's remaining attempts, time and tokens); undefined = none. */
   budgetSnapshot?: (workItemId: string) => { attemptsRemaining: number; timeRemainingMs: number; tokenBudgetRemaining: number | null } | undefined;
   /** ccloop per-contract tool rules spec §5: the run's tool-rule report collect answers at the top level; undefined = absent. */
-  toolRules?: (workItemId: string) => unknown;
+  toolRules?: (workItemId: string) => ToolRulesReport | undefined;
 }): FakeCcloop {
   const calls = { accept: [] as StartEnvelope[], inspect: 0, collect: 0, handoff: [] as HandoffRequest[] };
   const handoffs = new Map<string, HandoffRequest>();
