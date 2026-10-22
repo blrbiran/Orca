@@ -345,6 +345,96 @@ function AnsweredRound(props: { round: Round }): JSX.Element {
   );
 }
 
+/**
+ * Spec §10.3: the active chain (the server's `clarify.chain`; every round when an older view has none), each round with
+ * its 1-based position, and the superseded rounds folded under the earliest later revision on the chain.
+ */
+function chainOf(view: View): Array<{ round: Round; position: number; superseded: Round[] }> {
+  const order = view.clarify?.chain ?? view.rounds.map((r) => r.roundNo);
+  const byNo = new Map(view.rounds.map((r) => [r.roundNo, r]));
+  const entries = order.flatMap((roundNo, i) => { const r = byNo.get(roundNo); return r === undefined ? [] : [{ round: r, position: i + 1, superseded: [] as Round[] }]; });
+  const onChain = new Set(order);
+  for (const r of view.rounds) {
+    if (onChain.has(r.roundNo)) continue;
+    const holder = entries.find((e) => e.round.revises !== undefined && e.round.roundNo > r.roundNo) ?? entries.at(-1);
+    holder?.superseded.push(r);
+  }
+  return entries;
+}
+
+/**
+ * Spec §10.3 (Issue #76): edit an answered round's answers and send them as a revision. It is appended as a new round,
+ * never overwriting this one; later rounds on the chain become superseded and their answers are carried into the next
+ * round as recommendations unless the person keeps them out. The dialog states the cost before anything is sent.
+ */
+function ReviseRound(props: { view: View; round: Round; position: number; later: Array<{ roundNo: number; position: number }>; onCommand: OnCommand }): JSX.Element {
+  const { t } = useTranslation();
+  const result = props.round.result!;
+  const answered = new Map((props.round.answers ?? []).map((a) => [a.id, a]));
+  const initial = (): Record<string, AnswerChoice> => Object.fromEntries(result.questions.map((q) => {
+    const a = answered.get(q.id);
+    return [q.id, a?.kind === "text" ? { kind: "text", text: a.text } : { kind: "recommended" }];
+  }));
+  const decided = new Map([...(props.round.glossaryDecisions ?? []), ...(props.round.adrDecisions ?? [])].map((d) => [d.id, d.accept]));
+  const [open, setOpen] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [choice, setChoice] = useState<Record<string, AnswerChoice>>(initial);
+  const [decisions, setDecisions] = useState<Record<string, boolean>>({});
+  const [reason, setReason] = useState("");
+  const [exclude, setExclude] = useState<number[]>([]);
+  const accepts = (id: string): boolean => decisions[id] ?? decided.get(id) ?? true;
+  const send = (): void => {
+    setAsking(false); setOpen(false);
+    props.onCommand({ verb: "requirement-revise", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: {
+      roundNo: props.round.roundNo,
+      answers: result.questions.map((q) => { const c = choice[q.id] ?? { kind: "recommended" as const }; return c.kind === "text" ? { id: q.id, kind: "text", text: c.text } : { id: q.id, kind: "recommended" }; }),
+      glossaryDecisions: result.glossary.map((entry) => ({ id: entry.id, accept: accepts(entry.id) })),
+      adrDecisions: result.adrs.map((adr) => ({ id: adr.id, accept: accepts(adr.id) })),
+      ...(reason.trim() === "" ? {} : { reason: reason.trim() }), ...(exclude.length === 0 ? {} : { exclude }),
+    } });
+  };
+  if (!open) return <button type="button" onClick={() => { setChoice(initial()); setOpen(true); }}>{t("requirements.revise")}</button>;
+  const label = t("requirements.reviseTitle", { n: props.position });
+  return (
+    <form aria-label={label} onSubmit={(event) => { event.preventDefault(); setAsking(true); }}>
+      {result.questions.map((q) => {
+        const c = choice[q.id] ?? { kind: "recommended" as const };
+        return (
+          <fieldset key={q.id} aria-label={`${q.id} ${q.question}`}>
+            <legend>{q.id} {q.question}</legend>
+            <p>{t("requirements.recommended", { answer: q.recommendedAnswer })}</p>
+            <label><input type="radio" name={`rv-${props.round.roundNo}-${q.id}`} checked={c.kind === "recommended"} onChange={() => setChoice({ ...choice, [q.id]: { kind: "recommended" } })} />{t("requirements.useRecommended")}</label>
+            <label><input type="radio" name={`rv-${props.round.roundNo}-${q.id}`} checked={c.kind === "text"} onChange={() => setChoice({ ...choice, [q.id]: { kind: "text", text: "" } })} />{t("requirements.ownAnswer")}</label>
+            {c.kind === "text" && <textarea aria-label={t("requirements.answerOf", { id: q.id })} value={c.text} onChange={(e) => setChoice({ ...choice, [q.id]: { kind: "text", text: e.currentTarget.value } })} />}
+          </fieldset>
+        );
+      })}
+      {[...result.glossary.map((e) => [e.id, e.term] as const), ...result.adrs.map((a) => [a.id, a.title] as const)].map(([id, text]) => (
+        <fieldset key={id} aria-label={`${id} ${text}`}>
+          <legend>{id} {text}</legend>
+          <label><input type="radio" name={`rvd-${props.round.roundNo}-${id}`} checked={accepts(id)} onChange={() => setDecisions({ ...decisions, [id]: true })} />{t("requirements.accept")}</label>
+          <label><input type="radio" name={`rvd-${props.round.roundNo}-${id}`} checked={!accepts(id)} onChange={() => setDecisions({ ...decisions, [id]: false })} />{t("requirements.reject")}</label>
+        </fieldset>
+      ))}
+      <label>{t("requirements.reviseReason")}<textarea aria-label={t("requirements.reviseReason")} value={reason} onChange={(e) => setReason(e.currentTarget.value)} /></label>
+      {props.later.map(({ roundNo, position }) => (
+        <label key={roundNo}><input type="checkbox" checked={exclude.includes(roundNo)}
+          onChange={(e) => { const on = e.currentTarget.checked; setExclude(on ? [...exclude, roundNo].sort((a, b) => a - b) : exclude.filter((n) => n !== roundNo)); }} />
+          {t("requirements.reviseExclude", { n: position })}</label>
+      ))}
+      <button type="submit" disabled={result.questions.some((q) => { const c = choice[q.id]; return c?.kind === "text" && c.text.trim() === ""; })}>{t("requirements.reviseSend")}</button>
+      <button type="button" onClick={() => setOpen(false)}>{t("requirements.reviseCancel")}</button>
+      {asking && (
+        <div role="dialog" aria-label={t("requirements.reviseConfirmTitle", { n: props.position })}>
+          <p>{t("requirements.reviseCost")}</p>
+          <button type="button" onClick={send}>{t("requirements.reviseConfirm")}</button>
+          <button type="button" onClick={() => setAsking(false)}>{t("requirements.reviseKeep")}</button>
+        </div>
+      )}
+    </form>
+  );
+}
+
 /** Issue #87: the time since the drafting step was asked for, ticking once a second while it is shown. */
 function Elapsed(props: { since: number }): JSX.Element {
   const { t } = useTranslation();
@@ -435,15 +525,26 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       </div>
       <section id={overviewRegionId("requirement", groupId, "answers")} tabIndex={-1} data-overview-region="answers" aria-label={t("requirements.rounds")}>
         <h4>{t("requirements.rounds")}</h4>
-        {view.rounds.map((r) => {
+        {chainOf(view).map(({ round: r, position, superseded }) => {
           // Issue #83: the round waiting on the person stands out (warn: needs action) and is open; answered ones fold.
           const pending = !archived && r.state === "awaiting-answers" && r.result !== null && view.requirement.consensus === null;
           const answered = r.state === "answered" && r.result !== null && r.answers !== null && !r.closedByConsensus;
+          // Spec §10.3: an answered round on the chain may be revised until a split is accepted (requirement-already-accepted).
+          const revisable = !archived && r.state === "answered" && r.result !== null && r.answers !== null && view.requirement.acceptedDraftNo === null && view.summary.stopState === null;
+          const later = chainOf(view).filter((entry) => entry.position > position).map((entry) => ({ roundNo: entry.round.roundNo, position: entry.position }));
           return (
             <details key={r.roundNo} className="requirement-round" open={pending || (!answered && r === round)} data-tone={pending ? "warn" : undefined}>
-              <summary>{t("requirements.round", { n: r.roundNo })} · {enumText("roundState", r.state)}{r.result !== null ? ` · ${t("requirements.questionCount", { n: r.result.questions.length })}` : ""}</summary>
+              <summary>{t(r.revises === undefined ? "requirements.round" : "requirements.roundRevised", { n: position })} · {enumText("roundState", r.state)}{r.result !== null ? ` · ${t("requirements.questionCount", { n: r.result.questions.length })}` : ""}</summary>
+              {r.reason !== undefined && <p>{t("requirements.revisedBecause", { reason: r.reason })}</p>}
               {pending && <RoundForm view={view} round={r} onCommand={props.onCommand} {...editable} />}
               {answered ? <AnsweredRound round={r} /> : !pending && r.answers?.map((a) => <p key={a.id}>{a.id}: {a.text}</p>)}
+              {revisable && <ReviseRound view={view} round={r} position={position} later={later} onCommand={props.onCommand} />}
+              {superseded.map((s) => (
+                <details key={s.roundNo} className="requirement-round">
+                  <summary>{t("requirements.superseded", { n: s.roundNo })} · {enumText("roundState", s.state)}</summary>
+                  {s.state === "answered" && s.result !== null && s.answers !== null ? <AnsweredRound round={s} /> : s.answers?.map((a) => <p key={a.id}>{a.id}: {a.text}</p>)}
+                </details>
+              ))}
             </details>
           );
         })}
