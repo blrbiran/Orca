@@ -83,12 +83,13 @@ describe("the vault (§5.2, C3)", () => {
   });
 
   it("V4: excludes: .git/, node_modules/, .DS_Store and the template's own; a person's .git is never touched", async () => {
-    const w = await vaultWorld({ "a.md": "A\n", "node_modules/x/i.js": "x", ".DS_Store": "d", ".md2publish/cache/c.bin": "c", "keep/.DS_Store": "d" }, { excludes: [".md2publish/cache/"] });
+    const w = await vaultWorld({ "a.md": "A\n", "node_modules/x/i.js": "x", ".DS_Store": "d", ".md2publish/cache/c.bin": "c", "keep/.DS_Store": "d" });
     execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: w.folder });
     execFileSync("git", ["-c", "user.name=p", "-c", "user.email=p@p", "add", "a.md"], { cwd: w.folder });
     execFileSync("git", ["-c", "user.name=p", "-c", "user.email=p@p", "commit", "-qm", "mine"], { cwd: w.folder });
     const before = digestTree(join(w.folder, ".git"));
-    const { commit } = await importSnapshot(w.vault, w.folder, { flowRunId: "run-1", caps });
+    // Review finding I5 (Ruling: 这次批准改写所有必要的判据 (b37f7ce9)): the template's own excludes are the run's snapshot's.
+    const { commit } = await importSnapshot(w.vault, w.folder, { flowRunId: "run-1", caps, excludes: [".md2publish/cache/"] });
     expect(gv(w.vault, ["ls-tree", "-r", "--name-only", commit]).split("\n")).toEqual(["a.md"]);
     expect(digestTree(join(w.folder, ".git"))).toBe(before);
   });

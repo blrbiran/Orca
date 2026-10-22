@@ -24,11 +24,12 @@ export interface SnapshotTree { tree: string; overCap: string[]; excluded: strin
 
 const byBytes = (a: string, b: string): number => Buffer.compare(Buffer.from(a), Buffer.from(b));
 
-export async function snapshotTree(vault: Vault, dir: string, caps: SnapshotCaps): Promise<SnapshotTree> {
+/** `excludes`: the run's own patterns (its template's `workspace.excludes`), on top of the vault's shared defaults. */
+export async function snapshotTree(vault: Vault, dir: string, caps: SnapshotCaps, excludes: readonly string[] = []): Promise<SnapshotTree> {
   const scratch = await mkdtemp(join(tmpdir(), "orca-vault-index-"));
   try {
     const env = { GIT_INDEX_FILE: join(scratch, "index") };
-    const listed = (await vaultGit(vault, ["ls-files", "-z", "-o", "--exclude-standard"], { workTree: dir, env })).split("\0").filter((p) => p.length > 0).sort(byBytes);
+    const listed = (await vaultGit(vault, ["ls-files", "-z", "-o", "--exclude-standard", ...excludes.map((pattern) => `--exclude=${pattern}`)], { workTree: dir, env })).split("\0").filter((p) => p.length > 0).sort(byBytes);
     const overCap: string[] = [];
     const excluded: string[] = [];
     const lines: string[] = [];
@@ -96,9 +97,9 @@ async function lastImport(vault: Vault): Promise<{ n: number; commit: string } |
   return best;
 }
 
-export async function importSnapshot(vault: Vault, dir: string, opts: { flowRunId: string; caps: SnapshotCaps }): Promise<{ commit: string; n: number; overCap: string[]; excluded: string[] }> {
+export async function importSnapshot(vault: Vault, dir: string, opts: { flowRunId: string; caps: SnapshotCaps; excludes?: readonly string[] }): Promise<{ commit: string; n: number; overCap: string[]; excluded: string[] }> {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(opts.flowRunId)) throw new Error(`orca: ${JSON.stringify(opts.flowRunId)} is not a flow run id`);
-  const snap = await snapshotTree(vault, dir, opts.caps);
+  const snap = await snapshotTree(vault, dir, opts.caps, opts.excludes ?? []);
   for (;;) {
     const previous = await lastImport(vault);
     const commit = (await vaultGit(vault, [...ORCA_IDENTITY, "commit-tree", snap.tree, ...(previous === null ? [] : ["-p", previous.commit]), "-m", "orca: import"])).trim();

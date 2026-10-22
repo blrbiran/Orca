@@ -39,8 +39,8 @@ async function treeWith(vault: Vault, onto: string, source: string, paths: reado
   }
 }
 
-export async function snapshotDrift(vault: Vault, dir: string, head: string, caps: SnapshotCaps = DEFAULT_CAPS): Promise<{ commit: string; paths: string[] } | null> {
-  const snap = await snapshotTree(vault, dir, caps);
+export async function snapshotDrift(vault: Vault, dir: string, head: string, caps: SnapshotCaps = DEFAULT_CAPS, excludes: readonly string[] = []): Promise<{ commit: string; paths: string[] } | null> {
+  const snap = await snapshotTree(vault, dir, caps, excludes);
   const left = new Set([...snap.overCap, ...snap.excluded]);
   const paths: string[] = [];
   for (const path of await changedPaths(vault, head, snap.tree)) {

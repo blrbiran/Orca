@@ -12,7 +12,7 @@ import { openVault, type Vault } from "../../../src/flow/vault/vault.js";
 export const gv = (vault: Vault, args: string[], input?: string): string =>
   execFileSync("git", ["--git-dir", vault.path, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { encoding: "utf8", ...(input === undefined ? {} : { input }) }).trim();
 
-export async function vaultWorld(files: Record<string, string> = {}, opts: { excludes?: string[] } = {}) {
+export async function vaultWorld(files: Record<string, string> = {}) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "flow-vault-")));
   const folder = join(root, "articles");
   mkdirSync(folder);
@@ -21,7 +21,7 @@ export async function vaultWorld(files: Record<string, string> = {}, opts: { exc
     writeFileSync(join(folder, path), content);
   }
   const env: NodeJS.ProcessEnv = { ORCA_VAULT_DIR: join(root, "vaults") };
-  const vault = await openVault(env, folder, opts);
+  const vault = await openVault(env, folder);
   /** A commit on `parent` with these paths set (string) or removed (null): a step's landed output. */
   const stepCommit = (parent: string, changes: Record<string, string | null>): string => {
     const index = join(root, `index-${Math.random().toString(36).slice(2)}`);

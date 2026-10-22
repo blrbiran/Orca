@@ -18,7 +18,10 @@ import { vaultDir, vaultPathFor } from "./paths.js";
 
 export interface Vault { path: string; dir: string }
 
-/** §5.2 default excludes; a template's `workspace.excludes` are added after them. */
+/**
+ * §5.2 default excludes, the vault's shared `info/exclude` (one vault per folder, shared by every run on it). A template's
+ * `workspace.excludes` are the run's own (review finding I5): passed to each snapshot of that run, never written here.
+ */
 export const DEFAULT_EXCLUDES = [".git/", "node_modules/", ".DS_Store"];
 
 /** Run git against the vault (and, with a work tree, the person's folder), quietly and without inherited GIT_* env. */
@@ -42,7 +45,7 @@ export function makePrivateDirs(path: string): void {
   chmodSync(path, 0o700);
 }
 
-export async function openVault(env: NodeJS.ProcessEnv, dir: string, opts: { excludes?: readonly string[] } = {}): Promise<Vault> {
+export async function openVault(env: NodeJS.ProcessEnv, dir: string): Promise<Vault> {
   const real = await realpath(dir);
   const root = vaultDir(env);
   makePrivateDirs(root);
@@ -55,7 +58,7 @@ export async function openVault(env: NodeJS.ProcessEnv, dir: string, opts: { exc
   await vaultGit(vault, ["config", "core.precomposeUnicode", "true"]);
   const exclude = join(path, "info", "exclude");
   makePrivateDirs(dirname(exclude));
-  writeFileSync(exclude, [...DEFAULT_EXCLUDES, ...(opts.excludes ?? [])].map((line) => `${line}\n`).join(""), { mode: 0o600 });
+  writeFileSync(exclude, DEFAULT_EXCLUDES.map((line) => `${line}\n`).join(""), { mode: 0o600 });
   chmodSync(exclude, 0o600);
   return vault;
 }

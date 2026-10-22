@@ -217,8 +217,8 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
   let vault: Vault | null = null;
   let importCommit: string | null = null;
   if (input.dir !== undefined) {
-    vault = await openVault(deps.env, input.dir, { excludes: template.workspace.excludes ?? [] });
-    importCommit = (await importSnapshot(vault, input.dir, { flowRunId, caps: DEFAULT_CAPS })).commit;
+    vault = await openVault(deps.env, input.dir);
+    importCommit = (await importSnapshot(vault, input.dir, { flowRunId, caps: DEFAULT_CAPS, excludes: template.workspace.excludes ?? [] })).commit;
     await advanceHead(vault, flowRunId, null, importCommit);
   }
   const stored = { template, assets: assetsOf(template, (rel) => loaded.assets.read(rel)) };
@@ -543,7 +543,7 @@ export async function absorbDrift(deps: FlowDeps, run: LoadedRun, vault: Vault):
   if (!(await redoPendingCopyBack(deps, run.row.id, vault))) return false;
   const head = await readHead(vault, run.row.id);
   if (head === null) return false;
-  const drift = await snapshotDrift(vault, run.body.dir, head);
+  const drift = await snapshotDrift(vault, run.body.dir, head, DEFAULT_CAPS, run.template.workspace.excludes ?? []);
   if (drift === null) return false;
   const executions = listExecutions(deps.store, run.row.id);
   const heads = listHeads(deps.store, run.row.id);
