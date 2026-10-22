@@ -24,7 +24,7 @@ import {
 } from "./kernel.js";
 import type { ExecutionBody, LoadedRun } from "./kinds/registry.js";
 import { makePlan } from "./rerun.js";
-import { applyRewind } from "./rewind.js";
+import { applyRewind, reapplyEdits } from "./rewind.js";
 import {
   appendExecution, appendMessage, getHead, listExecutions, listMessages, setFlowRunState, setFlowRunTemplate, setHead, setMessageState,
   type ExecutionRow, type MessageRow,
@@ -100,35 +100,40 @@ export async function acceptMessage(deps: FlowDeps, flowRunId: string, input: Fl
  */
 export async function consumeAtBoundary(deps: FlowDeps, flowRunId: string): Promise<boolean> {
   if (listExecutions(deps.store, flowRunId).some((e) => e.state === "running")) return false;
-  const pending = listMessages(deps.store, flowRunId).filter((m) => m.state === "accepted");
-  if (pending.length === 0) return false;
+  // §8.3: edits a rewind queued again wait for their step's next output, then apply (or turn into feedback, taken below).
+  let moved = await reapplyEdits(deps, loadRun(deps.store, flowRunId));
   const feedback: Record<string, string[]> = {};
   const edits: string[] = [];
   let plan: { by: string; via: string; trigger: string } | null = null;
-  for (const message of pending) {
-    const target = (message.body as { target: MessageTarget }).target;
-    try {
-      if (message.kind === "feedback") {
-        const key = stepKeyOf(target)!;
-        feedback[key] = [...(feedback[key] ?? []), String((message.body as { text: string }).text)];
-        plan = { by: message.by, via: message.via, trigger: "feedback" };
-      } else if (message.kind === "edit") {
-        if ((message.body as { reapply?: unknown }).reapply !== undefined) continue; // §8.3: waits for its step's re-run (rewind.ts)
-        await applyEdit(deps, loadRun(deps.store, flowRunId), message, target);
-        edits.push(stepKeyOf(target)!);
-        plan = { by: message.by, via: message.via, trigger: "edit" };
-      } else {
-        const replan = await applyCommand(deps, loadRun(deps.store, flowRunId), message, target);
-        if (replan !== null) plan = { by: message.by, via: message.via, trigger: replan };
+  // A rewind queues messages again; they are taken in the same round, so one plan carries everything.
+  for (;;) {
+    const pending = listMessages(deps.store, flowRunId).filter((m) => m.state === "accepted" && (m.body as { reapply?: unknown }).reapply === undefined);
+    if (pending.length === 0) break;
+    moved = true;
+    for (const message of pending) {
+      const target = (message.body as { target: MessageTarget }).target;
+      try {
+        if (message.kind === "feedback") {
+          const key = stepKeyOf(target)!;
+          feedback[key] = [...(feedback[key] ?? []), String((message.body as { text: string }).text)];
+          plan = { by: message.by, via: message.via, trigger: "feedback" };
+        } else if (message.kind === "edit") {
+          await applyEdit(deps, loadRun(deps.store, flowRunId), message, target);
+          edits.push(stepKeyOf(target)!);
+          plan = { by: message.by, via: message.via, trigger: "edit" };
+        } else {
+          const replan = await applyCommand(deps, loadRun(deps.store, flowRunId), message, target);
+          if (replan !== null) plan = { by: message.by, via: message.via, trigger: replan };
+        }
+        deps.store.transaction(() => setMessageState(deps.store, flowRunId, message.seq, "accepted", "applied"));
+      } catch (error) {
+        if (!(error instanceof FlowRefusal)) throw error;
+        deps.store.transaction(() => setMessageState(deps.store, flowRunId, message.seq, "accepted", "rejected", error.code));
       }
-      deps.store.transaction(() => setMessageState(deps.store, flowRunId, message.seq, "accepted", "applied"));
-    } catch (error) {
-      if (!(error instanceof FlowRefusal)) throw error;
-      deps.store.transaction(() => setMessageState(deps.store, flowRunId, message.seq, "accepted", "rejected", error.code));
     }
   }
   if (plan !== null) await makePlan(deps, flowRunId, { ...plan, feedback, edits });
-  return true;
+  return moved;
 }
 
 /** A command at its boundary; returns the plan trigger it causes, if any. */

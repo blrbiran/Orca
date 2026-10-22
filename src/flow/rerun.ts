@@ -135,16 +135,18 @@ async function requestProposal(deps: FlowDeps, run: LoadedRun, planNo: number): 
  * nothing to decide, a plan with nothing chosen carries every output onto the new basis.
  */
 export async function makePlan(deps: FlowDeps, flowRunId: string, input: { by: string; via: string; trigger: string; feedback?: Record<string, string[]>; edits?: string[] }): Promise<number> {
+  // A rewind decides itself which earlier feedback stands (§8.3): nothing is carried from the plans it replaces.
+  const carry = input.trigger !== "rewind";
   const run = loadRun(deps.store, flowRunId);
   const feedback: Record<string, string[]> = {};
   const executions = listExecutions(deps.store, flowRunId);
   const plans = listPlans(deps.store, flowRunId);
-  for (const older of plans.filter(isOpen)) {
+  for (const older of plans.filter((p) => carry && isOpen(p))) {
     for (const [key, texts] of Object.entries((older.candidates as PlanCandidates).feedback)) {
       if (!executions.some((e) => e.stepKey === key && e.planNo === older.planNo)) feedback[key] = [...(feedback[key] ?? []), ...texts];
     }
   }
-  for (const [key, texts] of Object.entries(input.feedback ?? {})) feedback[key] = [...(feedback[key] ?? []), ...texts];
+  for (const [key, texts] of Object.entries(input.feedback ?? {})) feedback[key] = [...new Set([...(feedback[key] ?? []), ...texts])];
   const edits = input.edits ?? [];
   const messages: FlowMessage[] = [...feedbackMessages(feedback), ...edits.map((stepKey) => ({ kind: "edit" as const, target: { kind: "step" as const, stepKey } }))];
   const list = currentCandidates(deps, run, messages);
