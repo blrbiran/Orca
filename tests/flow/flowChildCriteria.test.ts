@@ -52,6 +52,11 @@ describe.skipIf(!realBinary)("a flow child is not judged for criteria changes (T
       }, 180_000, "the run to complete", 100);
       expect(runtime.store.db.prepare("SELECT decision_id FROM flagged_decisions").all()).toEqual([]);
       expect(runtime.store.db.prepare("SELECT id FROM groups WHERE substr(id,1,9)='sysdebug-'").all()).toEqual([]);
+      // Nor is its check re-run against the base (the re-run would run the contract with literal skill-dir tokens).
+      const child = listExecutions(runtime.store, flowRunId).find((e) => e.stepKey === "write")!.childGroupId!;
+      const drives = runtime.store.db.prepare("SELECT body FROM runs WHERE group_id=?").all(child).map((r) => JSON.parse(String(r.body)).drive).filter((d) => d !== undefined);
+      expect(drives.length).toBeGreaterThan(0);
+      expect(drives.map((d) => d.criteriaBase ?? null)).toEqual(drives.map(() => null));
       expect(await runtime.shutdown()).toBe(true);
     } finally { await w.teardown(); }
   });
