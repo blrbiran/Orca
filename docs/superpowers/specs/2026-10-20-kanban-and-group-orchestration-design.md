@@ -323,3 +323,13 @@ with the repin to that ccloop (an older ccloop refuses the field: its start enve
 - **Not built:** the alternate agent for a role (§9 bullet 4; failure-cause spec §8.5); a separate escalation state on
   the card for level 1 (its run is simply the task's current run); the legacy `ControlService.continueTask` path never
   builds the field, so it copies nothing either.
+
+## 15. Pointer: §7 now lives in the checks spec (session b37f7ce9, 2026-10-22)
+
+§7's layer 1 (the integration check after groups land) and layer 2 (the model review of the landed groups) are specified
+and built by `docs/superpowers/specs/2026-10-22-checks-and-triggers-design.md` (plan
+`docs/superpowers/plans/2026-10-22-checks-and-triggers.md`, branch `feat/checks-triggers`): one check model — a kind, a
+trigger document, a watermark per (project, kind, target) — with project > global > built-in settings, optional locks,
+scheduled checks and a person's run now. `set-integration-check` is removed (no alias) in favour of `set-check-settings`;
+system groups no longer count toward the landed groups (checks spec §2.3). §7 and §11–§14 above are left as written
+(history, Rule 13); where they differ, the checks spec is the current one.
