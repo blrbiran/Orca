@@ -4,8 +4,9 @@ import { landedGroups, type LandedGroup } from "../integrationCheck.js";
 import { runningGroupIds } from "../orchestration.js";
 import { readArchivedPlan } from "../queries.js";
 import type { ControlStore } from "../store.js";
+import { latestSlot, parseCron } from "./cron.js";
 import { overlapGroups, rangeOf, type CheckRange, type Git, type RangeGroup } from "./range.js";
-import type { CheckKind } from "./settingsSchema.js";
+import type { CheckKind, ScheduledCheck } from "./settingsSchema.js";
 import { EMPTY_CHECK_STATE, readCheckState, writeCheckState, type CheckLast, type CheckState } from "./state.js";
 import type { RangeFacts } from "./trigger.js";
 
@@ -88,10 +89,56 @@ export function rangeFacts(store: ControlStore, repoId: string, groups: readonly
   };
 }
 
-/** A run starts: the start time and a new runSeq are recorded; the watermark does not move (§5.2). */
-export function recordCheckStarted(store: ControlStore, repoId: string, kind: CheckKind, target: string, at: number, range: { from: string; to: string; groups: readonly LandedGroup[] }, extra: Partial<CheckLast> = {}): CheckState {
+/**
+ * §2.4: what asks a (project, kind, target) to run besides its event trigger -- each enabled scheduled check of the kind
+ * with a slot after its own lastSlot (missed slots collapse to the latest), and a person's pending "run now".
+ */
+export interface Starters { slots: Record<string, number>; pendingRun: CheckState["pendingRun"] }
+export const NO_STARTERS: Starters = { slots: {}, pendingRun: null };
+export const asked = (starters: Starters): boolean => starters.pendingRun !== null || Object.keys(starters.slots).length > 0;
+
+/**
+ * §2.4: a schedule the state has no lastSlot for counts from now -- its lastSlot becomes the latest slot <= now (or now
+ * when the cron had none), and no run is started for it. Returns the state with every schedule initialised.
+ */
+export function initialiseSlots(store: ControlStore, repoId: string, kind: CheckKind, target: string, schedules: readonly ScheduledCheck[], timeZone: string, now: number): CheckState {
+  const state = readCheckState(store, repoId, kind, target) ?? EMPTY_CHECK_STATE;
+  const fresh = schedules.filter((schedule) => state.lastSlot[schedule.id] === undefined);
+  if (fresh.length === 0) return state;
+  const slots = Object.fromEntries(fresh.map((schedule) => [schedule.id, latestSlot(parseCron(schedule.cron), timeZone, Number.NEGATIVE_INFINITY, now) ?? now]));
+  return update(store, repoId, kind, target, (s) => ({ ...s, lastSlot: { ...s.lastSlot, ...slots } }));
+}
+
+/** The due starters: none while paused but a pending run (§5.4: no trigger or schedule starts a paused check). */
+export function dueStarters(state: CheckState, schedules: readonly ScheduledCheck[], timeZone: string, now: number): Starters {
+  const slots: Record<string, number> = {};
+  if (!state.paused) for (const schedule of schedules) {
+    const slot = latestSlot(parseCron(schedule.cron), timeZone, state.lastSlot[schedule.id] ?? now, now);
+    if (slot !== null) slots[schedule.id] = slot;
+  }
+  return { slots, pendingRun: state.pendingRun };
+}
+
+/** Consumes the starters: each schedule's lastSlot moves to its due slot; the pending run read is cleared (a newer one stays). */
+const consume = (s: CheckState, starters: Starters): CheckState => ({
+  ...s, lastSlot: { ...s.lastSlot, ...starters.slots },
+  pendingRun: starters.pendingRun !== null && s.pendingRun?.commandId === starters.pendingRun.commandId ? null : s.pendingRun,
+});
+
+/** §2.4: a slot or a run now over an empty range is consumed and recorded `skipped: nothing new` (no run, no spend). */
+export function recordCheckSkipped(store: ControlStore, repoId: string, kind: CheckKind, target: string, at: number, starters: Starters): CheckState {
+  return update(store, repoId, kind, target, (s) => ({ ...consume(s, starters), last: record({ state: "skipped", at, detail: "nothing new" }) }));
+}
+
+/** The first evaluation initialised the watermark: the starters that asked for it are consumed with it (§5.3). */
+export function consumeStarters(store: ControlStore, repoId: string, kind: CheckKind, target: string, starters: Starters): CheckState {
+  return update(store, repoId, kind, target, (s) => consume(s, starters));
+}
+
+/** A run starts: the start time and a new runSeq are recorded, its starters consumed; the watermark does not move (§5.2). */
+export function recordCheckStarted(store: ControlStore, repoId: string, kind: CheckKind, target: string, at: number, range: { from: string; to: string; groups: readonly LandedGroup[] }, extra: Partial<CheckLast> = {}, starters: Starters = NO_STARTERS): CheckState {
   return update(store, repoId, kind, target, (s) => ({
-    ...s, lastStartAt: at, runSeq: s.runSeq + 1,
+    ...consume(s, starters), lastStartAt: at, runSeq: s.runSeq + 1,
     last: record({ state: "running", at, from: range.from, to: range.to, groups: range.groups.map((group) => group.groupId), ...extra }),
   }));
 }
@@ -101,6 +148,7 @@ export function recordCheckStarted(store: ControlStore, repoId: string, kind: Ch
  * watermark moves to `moveTo` and the failure streak resets; `errored` ⇒ the watermark stays and the streak grows;
  * an interruption (Orca stopped) ⇒ the watermark stays and the streak does not count it (§5.4).
  */
+export const PAUSE_AFTER = 3;
 export type CheckEnd = { state: "passed" | "failed" | "completed" | "errored"; at: number; detail?: string | null; moveTo?: string; debugGroupIds?: string[]; reviewGroupId?: string | null; recordHash?: string | null; interrupted?: boolean };
 export function recordCheckEnded(store: ControlStore, repoId: string, kind: CheckKind, target: string, end: CheckEnd): CheckState {
   let next = EMPTY_CHECK_STATE;
@@ -115,10 +163,13 @@ export function applyCheckEnded(store: ControlStore, repoId: string, kind: Check
       ...(s.last ?? {}), state: end.state, at: end.at, detail: end.detail ?? null,
       debugGroupIds: end.debugGroupIds ?? s.last?.debugGroupIds ?? [], reviewGroupId: end.reviewGroupId ?? s.last?.reviewGroupId ?? null, recordHash: end.recordHash ?? s.last?.recordHash ?? null,
     });
+    const failureStreak = completed ? 0 : end.interrupted === true ? s.failureStreak : s.failureStreak + 1;
     return {
       ...s, last,
       watermark: completed && end.moveTo !== undefined ? end.moveTo : s.watermark,
-      failureStreak: completed ? 0 : end.interrupted === true ? s.failureStreak : s.failureStreak + 1,
+      failureStreak,
+      // §5.4: at PAUSE_AFTER errored ends in a row the kind pauses for the project; only resume-check clears it.
+      paused: s.paused || failureStreak >= PAUSE_AFTER,
     };
   };
   const next = change(readCheckState(store, repoId, kind, target) ?? EMPTY_CHECK_STATE);

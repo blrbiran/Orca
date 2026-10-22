@@ -23,7 +23,7 @@ import { correctionDebugOpenPayloadSchema, orchestrationViewSchema, savedResultE
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import { readIntegrationDefault } from "../control/integrationScheme.js";
-import { checksRead } from "../control/checks/settings.js";
+import { checksRead, readReviewRecord } from "../control/checks/settings.js";
 import { AgentCeilingRefusal } from "../control/spendCaps.js";
 import type { WebControlService } from "../control/webService.js";
 import type { ExecutionPort } from "../control/executionPort.js";
@@ -303,6 +303,12 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       return;
     }
     try { res.json(checksRead(deps.store, repoId)); } catch (error) { sendMappedControlError(res, error); }
+  });
+  // Spec §6.5 / §7: a model review's record by its review group's id (`orca check findings`). A read.
+  app.get("/api/control/checks/reviews/:reviewGroupId", (req, res) => {
+    const record = readReviewRecord(deps.store, String(req.params.reviewGroupId));
+    if (record === null) { sendControlError(res, 404, "group-not-found", "No model review record was found for this group."); return; }
+    res.json(record);
   });
 
   // Agent selection spec §6.8 (plan T14). The operator is the one the mutation routes act as, so only a panel that

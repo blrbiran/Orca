@@ -95,3 +95,16 @@ export type ChecksReadV1 = z.infer<typeof checksReadSchema>;
 
 export const checksRead = (store: ControlStore, repoId: string | null): ChecksReadV1 =>
   checksReadSchema.parse({ schema: "orca-checks-v1", repoId, ...effectiveChecks(store, repoId), state: repoId === null ? [] : listCheckStates(store, repoId) });
+
+/**
+ * Spec §6.5 (`orca check findings`): the model review's record written when the review settled
+ * (`orca-model-review-record-v1`), by its review group's id; null when the group has none (unknown, or not settled).
+ */
+export function readReviewRecord(store: ControlStore, reviewGroupId: string): unknown {
+  for (const row of store.db.prepare("SELECT body FROM execution_snapshots WHERE group_id=? ORDER BY rowid").all(reviewGroupId)) {
+    let body: unknown;
+    try { body = JSON.parse(String(row.body)); } catch { continue; }
+    if ((body as { schema?: unknown } | null)?.schema === "orca-model-review-record-v1") return body;
+  }
+  return null;
+}

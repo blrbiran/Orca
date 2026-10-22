@@ -61,10 +61,12 @@ import type { PartialSelection } from "./agentSelection.js";
 import { integrationCheckFacts, runIntegrationCheck } from "./integrationCheck.js";
 import { applyResumeCheck, applyRunCheckNow, applySetCheckLocks, applySetCheckSettings, applySetScheduledCheck, type CheckCommand } from "./checks/commands.js";
 import { migrateIntegrationMeta } from "./checks/migrate.js";
-import { applyCheckEnded, prepareRange, projectTargets, rangeFacts, recordCheckEnded, recordCheckStarted, type CheckEnd } from "./checks/pass.js";
-import type { RangeGroup } from "./checks/range.js";
+import { applyCheckEnded, asked, consumeStarters, dueStarters, initialiseSlots, prepareRange, projectTargets, rangeFacts, recordCheckEnded, recordCheckSkipped, recordCheckStarted, type CheckEnd, type Starters } from "./checks/pass.js";
+import type { CheckRange, RangeGroup } from "./checks/range.js";
+import type { CheckKind } from "./checks/settingsSchema.js";
+import { readUsageCalendar } from "./usageCalendar.js";
 import { effectiveChecks } from "./checks/settings.js";
-import { readCheckState } from "./checks/state.js";
+import { readCheckState, type CheckState } from "./checks/state.js";
 import { evaluateTrigger } from "./checks/trigger.js";
 import { gitChild } from "./integrationGit.js";
 import { applyCorrectionClose, applyCorrectionRecord, applyCorrectionWithdraw, type CorrectionCloseCommand, type CorrectionRecordCommand, type CorrectionWithdrawCommand, type PanelCorrections } from "./correctionCommands.js";
@@ -1066,22 +1068,19 @@ export class WebControlService {
         await migrateIntegrationMeta(this.store, gitChild, repo, repoId);
         const settings = effectiveChecks(this.store, repoId).kinds["integration-check"];
         for (const target of projectTargets(this.store, repoId)) await this.modelReviewTick(repoId, repo, target, now, out);
-        if (!settings.enabled.value) continue;
         for (const target of projectTargets(this.store, repoId)) {
           const key = `${repoId}\0integration-check\0${target}`;
-          if (this.checkJobs.has(key)) continue;
+          if (this.checkJobs.has(key)) continue; // in flight: its slots and a pending run stay pending (§2.4)
           if (readCheckState(this.store, repoId, "integration-check", target)?.last?.state === "running") {
             recordCheckEnded(this.store, repoId, "integration-check", target, { state: "errored", at: now, detail: "interrupted: Orca stopped while it ran", interrupted: true });
           }
-          const prepared = await prepareRange(this.store, gitChild, repo, repoId, "integration-check", target, now);
-          if (prepared.kind === "initialised") { if (!out.initialised.includes(repoId)) out.initialised.push(repoId); continue; }
-          if (prepared.kind !== "range" || prepared.range.groups.length === 0) continue;
-          if (!evaluateTrigger(settings.trigger.value, rangeFacts(this.store, repoId, prepared.range.groups, prepared.state, now))) continue;
-          const groups = prepared.range.groups;
+          const due = await this.dueCheck(repoId, repo, "integration-check", target, now, out);
+          if (due === null) continue;
+          const groups = due.range.groups;
           const commands = settings.command.value !== null ? [settings.command.value] : [...new Set(groups.flatMap((group) => group.checks))];
           if (commands.length === 0) continue;
-          recordCheckStarted(this.store, repoId, "integration-check", target, now, prepared.range);
-          const job = this.runIntegrationCheckJob(repoId, target, groups, prepared.range.to, commands, now)
+          recordCheckStarted(this.store, repoId, "integration-check", target, now, due.range, {}, due.starters);
+          const job = this.runIntegrationCheckJob(repoId, target, groups, due.range.to, commands, now)
             .finally(() => { this.checkJobs.delete(key); });
           this.checkJobs.set(key, job);
           out.started.push(repoId);
@@ -1099,23 +1098,50 @@ export class WebControlService {
    * the review group as orca-auto; no confirmed group in the project, or a findings path the range's denylist forbids,
    * ends the run errored without opening anything.
    */
-  private async modelReviewTick(repoId: string, repo: string, target: string, now: number, out: { initialised: string[]; opened: string[] }): Promise<void> {
+  /**
+   * Checks spec 2026-10-22 §2.4, §5.3-§5.4: whether one (project, kind, target) with no run in flight starts now, and
+   * over which range. Its starters are the kind's event trigger (only while the kind is enabled), each enabled scheduled
+   * check of the kind with a due slot, and a person's pending "run now"; a paused check is started by the last alone. A
+   * kind with none of them configured is not evaluated at all. No watermark ⇒ initialised (the starters consumed with
+   * it); an empty range asked for by a slot or a run now ⇒ consumed and recorded `skipped: nothing new`.
+   */
+  private async dueCheck(repoId: string, repo: string, kind: CheckKind, target: string, now: number, out: { initialised: string[]; skipped: string[] }): Promise<{ range: CheckRange; state: CheckState; starters: Starters } | null> {
+    const effective = effectiveChecks(this.store, repoId);
+    const enabled = effective.kinds[kind].enabled.value;
+    const schedules = effective.scheduled.map((entry) => entry.value).filter((entry) => entry.kind === kind && entry.enabled);
+    if (!enabled && schedules.length === 0 && (readCheckState(this.store, repoId, kind, target)?.pendingRun ?? null) === null) return null;
+    const timeZone = readUsageCalendar(this.store).timeZone;
+    const state = initialiseSlots(this.store, repoId, kind, target, schedules, timeZone, now);
+    const starters = dueStarters(state, schedules, timeZone, now);
+    if (state.paused && !asked(starters)) return null;
+    const prepared = await prepareRange(this.store, gitChild, repo, repoId, kind, target, now);
+    if (prepared.kind === "initialised") {
+      if (asked(starters)) consumeStarters(this.store, repoId, kind, target, starters);
+      if (!out.initialised.includes(repoId)) out.initialised.push(repoId);
+      return null;
+    }
+    if (prepared.kind === "errored") return null;
+    if (prepared.kind === "idle" || prepared.range.groups.length === 0) {
+      if (asked(starters)) { recordCheckSkipped(this.store, repoId, kind, target, now, starters); if (!out.skipped.includes(repoId)) out.skipped.push(repoId); }
+      return null;
+    }
+    const byTrigger = enabled && !state.paused && evaluateTrigger(effective.kinds[kind].trigger.value, rangeFacts(this.store, repoId, prepared.range.groups, prepared.state, now));
+    return byTrigger || asked(starters) ? { range: prepared.range, state: prepared.state, starters } : null;
+  }
+  private async modelReviewTick(repoId: string, repo: string, target: string, now: number, out: { initialised: string[]; skipped: string[]; opened: string[] }): Promise<void> {
     const settings = effectiveChecks(this.store, repoId).kinds["model-review"];
-    if (!settings.enabled.value) return;
     const last = readCheckState(this.store, repoId, "model-review", target)?.last ?? null;
     if (last?.state === "running") {
       const body = last.reviewGroupId === null ? undefined : this.store.db.prepare("SELECT body FROM groups WHERE id=?").get(last.reviewGroupId);
       if (body !== undefined) return; // its group settles it (systemDebugPass)
       recordCheckEnded(this.store, repoId, "model-review", target, { state: "errored", at: now, detail: "interrupted: Orca stopped before the review opened", interrupted: true });
     }
-    const prepared = await prepareRange(this.store, gitChild, repo, repoId, "model-review", target, now);
-    if (prepared.kind === "initialised") { if (!out.initialised.includes(repoId)) out.initialised.push(repoId); return; }
-    if (prepared.kind !== "range" || prepared.range.groups.length === 0) return;
-    if (!evaluateTrigger(settings.trigger.value, rangeFacts(this.store, repoId, prepared.range.groups, prepared.state, now))) return;
-    const { groups, to } = await cutRange(gitChild, repo, prepared.range, settings.maxGroupsPerReview.value);
-    const source = { kind: "model-review" as const, repoId, target, from: prepared.range.from, to, runSeq: prepared.state.runSeq + 1 };
+    const due = await this.dueCheck(repoId, repo, "model-review", target, now, out);
+    if (due === null) return;
+    const { groups, to } = await cutRange(gitChild, repo, due.range, settings.maxGroupsPerReview.value);
+    const source = { kind: "model-review" as const, repoId, target, from: due.range.from, to, runSeq: due.state.runSeq + 1 };
     const reviewId = systemDebugGroupId(source);
-    recordCheckStarted(this.store, repoId, "model-review", target, now, { from: source.from, to, groups }, { reviewGroupId: reviewId });
+    recordCheckStarted(this.store, repoId, "model-review", target, now, { from: source.from, to, groups }, { reviewGroupId: reviewId }, due.starters);
     const end = (detail: string) => recordCheckEnded(this.store, repoId, "model-review", target, { state: "errored", at: now, detail: detail.slice(0, 500) });
     try {
       const profileGroup = newestConfirmedGroup(this.store, repoId);
