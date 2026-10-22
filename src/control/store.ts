@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import type { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ControlError } from "./errors.js";
 import { assertRegular, privateDirectory, syncDirectory } from "./paths.js";
@@ -85,7 +85,7 @@ export async function openControlStore(options:{stateDir:string;recovery?:boolea
       const probe = new DatabaseSync(dbPath,{readOnly:true});
       try {
         const version = probe.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()?.value;
-        if (version !== schemaVersion && version !== "1" && version !== "2" && version !== "3" && version !== "4" && version !== "5" && version !== "6" && version !== "7" && version !== "8" && version !== "9" && version !== "10" && version !== "11" && version !== "12" && version !== "13" && version !== "14" && version !== "15" && version !== "16") throw new ControlError("control-schema-unsupported");
+        if (version !== schemaVersion && version !== "1" && version !== "2" && version !== "3" && version !== "4" && version !== "5" && version !== "6" && version !== "7" && version !== "8" && version !== "9" && version !== "10" && version !== "11" && version !== "12" && version !== "13" && version !== "14" && version !== "15" && version !== "16" && version !== "17") throw new ControlError("control-schema-unsupported");
         const identity = probe.prepare("SELECT value FROM meta WHERE key='identity'").get()?.value;
         if (identity !== JSON.stringify({host,path:stateDir})) throw new ControlError("control-host-mismatch");
       } finally { probe.close(); }
@@ -107,6 +107,10 @@ export async function openControlStore(options:{stateDir:string;recovery?:boolea
       } else {
         const version = String(connection.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()?.value ?? "");
         if (version !== schemaVersion) {
+          // Gaps spec §12 "one control-DB backup precedes it, as every step": a consistent copy beside the database,
+          // taken before the migration transaction opens. A name already taken is kept (it is the person's data).
+          const backup = join(stateDir, `control.sqlite.pre-v${version}-${(options.now ?? Date.now)()}`);
+          if (!existsSync(backup)) { connection.exec(`VACUUM INTO '${backup.replaceAll("'", "''")}'`); chmodSync(backup, 0o600); }
           connection.exec("BEGIN IMMEDIATE");
           try { migrateSchema(connection,version); connection.exec("COMMIT"); }
           catch(error) { connection.exec("ROLLBACK"); throw error; }

@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { canonicalBytes } from "./canonicalJson.js";
 
-export const schemaVersion = "17";
+export const schemaVersion = "18";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -182,6 +182,17 @@ CREATE TABLE IF NOT EXISTS flow_templates(layer TEXT NOT NULL, id TEXT NOT NULL,
   sha256 TEXT NOT NULL, path TEXT NOT NULL, published_by TEXT NOT NULL, published_at INTEGER NOT NULL, PRIMARY KEY(layer, id, version)) STRICT;
 `;
 
+// Gaps spec 2026-10-22 §12: one run-level feedback intake per message. STRICT, JSON body; created empty. State moves
+// forward only (src/flow/store.ts enforces it, with the one named backward edge `ready` -> `needs-location`).
+export const schema17To18 = `CREATE TABLE IF NOT EXISTS flow_feedback(
+  flow_run_id TEXT NOT NULL REFERENCES flow_runs(id), message_seq INTEGER NOT NULL CHECK(message_seq > 0),
+  state TEXT NOT NULL CHECK(state IN ('locating','needs-location','triaging','clarifying','restating','ready','planned','withdrawn','failed')),
+  body TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY(flow_run_id, message_seq),
+  FOREIGN KEY(flow_run_id, message_seq) REFERENCES flow_messages(flow_run_id, seq)) STRICT;
+`;
+
 // Flow engine spec §10.1: `requirement_rounds` keyed by step execution. Rebuilt -- create, copy, drop, rename -- inside
 // the migration's one transaction (store.ts); every existing row is the dev flow's ('clarify', 1), other columns as stored.
 const requirementRoundsKeyed = `CREATE TABLE requirement_rounds_keyed(group_id TEXT NOT NULL REFERENCES groups(id), step_key TEXT NOT NULL,
@@ -202,7 +213,7 @@ function rekeyRequirementRounds(store: DatabaseSync): void {
 
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
 export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15 + schema15To16
-  + requirementRoundsKeyed + schema16To17;
+  + requirementRoundsKeyed + schema16To17 + schema17To18;
 
 /**
  * Checks spec 2026-10-22 §4.1 "Migration (no aliases, P1)": each repository settings body's `integrationCheck
@@ -225,11 +236,17 @@ function migrate16To17(store: DatabaseSync): void {
   store.exec(schema16To17);
 }
 
-/** The steps every older version ends with: 15 → 16, 16 → 17, then the version marker. */
+/** 17 → 18 (gaps spec §12): the `flow_feedback` intake table. */
+function migrate17To18(store: DatabaseSync): void {
+  store.exec(schema17To18);
+}
+
+/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, then the version marker. */
 function finishMigration(store: DatabaseSync): void {
   store.exec(schema15To16);
   migrateSettings15To16(store);
   migrate16To17(store);
+  migrate17To18(store);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }
 
@@ -249,8 +266,14 @@ function migrate7To8(store: DatabaseSync): void {
 export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   // Saved recovery's 11→12 marker fenced older owners. The current 11/12→13 upgrade also
   // adds installation-update revision/outbox tables; it leaves old policy and accounting rows intact.
+  if (fromVersion === "17") {
+    migrate17To18(store);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "16") {
     migrate16To17(store);
+    migrate17To18(store);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }

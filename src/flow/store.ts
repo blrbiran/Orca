@@ -1,5 +1,6 @@
 import { canonicalBytes } from "../control/canonicalJson.js";
 import type { ControlStore } from "../control/store.js";
+import { IntakeBody } from "./feedback/intakeSchema.js";
 
 /**
  * Flow engine spec §6.1: typed access to the flow journal tables (schema 17). Executions and messages are append-only,
@@ -9,7 +10,7 @@ import type { ControlStore } from "../control/store.js";
 
 /** Thrown when a write would break one of the journal's rules; `code` names which. */
 export class FlowStoreError extends Error {
-  constructor(public readonly code: "flow-execution-backwards" | "flow-execution-stale" | "flow-head-stale" | "flow-effect-backwards" | "flow-effect-stale", detail: string) {
+  constructor(public readonly code: "flow-execution-backwards" | "flow-execution-stale" | "flow-head-stale" | "flow-effect-backwards" | "flow-effect-stale" | "flow-intake-backward" | "flow-intake-stale", detail: string) {
     super(`${code}:${detail}`);
     this.name = "FlowStoreError";
   }
@@ -293,4 +294,61 @@ export function getEffect(store: ControlStore, id: string): EffectRow | null {
 
 export function listEffects(store: ControlStore, flowRunId: string): EffectRow[] {
   return store.db.prepare("SELECT * FROM effect_records WHERE flow_run_id=? ORDER BY created_at, id").all(flowRunId).map(effectOf);
+}
+
+export type IntakeState = "locating" | "needs-location" | "triaging" | "clarifying" | "restating" | "ready" | "planned" | "withdrawn" | "failed";
+export interface IntakeRow { flowRunId: string; messageSeq: number; state: IntakeState; body: IntakeBody; updatedAt: number }
+
+/** Gaps spec §4.2 / §12: the live states in forward order; `withdrawn` and `failed` end an intake from any of them. */
+const INTAKE_ORDER = ["locating", "needs-location", "triaging", "clarifying", "restating", "ready", "planned"] as const;
+const intakeTerminal = (state: IntakeState): boolean => state === "planned" || state === "withdrawn" || state === "failed";
+
+/** True when `from -> to` is allowed: forward (or in place, to rewrite the body), to a terminal state, or the one named edge `ready -> needs-location`. */
+function intakeMoveAllowed(from: IntakeState, to: IntakeState): boolean {
+  if (intakeTerminal(from)) return false;
+  if (to === "withdrawn" || to === "failed") return true;
+  if (from === "ready" && to === "needs-location") return true;
+  return INTAKE_ORDER.indexOf(to as typeof INTAKE_ORDER[number]) >= INTAKE_ORDER.indexOf(from as typeof INTAKE_ORDER[number]);
+}
+
+export function insertIntake(store: ControlStore, row: { flowRunId: string; messageSeq: number; state: IntakeState; body: IntakeBody; at: number }): void {
+  store.db.prepare("INSERT INTO flow_feedback(flow_run_id,message_seq,state,body,updated_at) VALUES (?,?,?,?,?)")
+    .run(row.flowRunId, row.messageSeq, row.state, json(IntakeBody.parse(row.body)), row.at);
+}
+
+/** Compare-and-set on `from`; the body is replaced in the same write. A refused edge throws `flow-intake-backward`, a lost race `flow-intake-stale`. */
+export function moveIntake(store: ControlStore, flowRunId: string, messageSeq: number, from: IntakeState, to: IntakeState, body: IntakeBody, at: number): void {
+  if (!intakeMoveAllowed(from, to)) throw new FlowStoreError("flow-intake-backward", `intake ${messageSeq}:${from}->${to}`);
+  const changed = store.db.prepare("UPDATE flow_feedback SET state=?, body=?, updated_at=? WHERE flow_run_id=? AND message_seq=? AND state=?")
+    .run(to, json(IntakeBody.parse(body)), at, flowRunId, messageSeq, from).changes;
+  if (changed !== 1) throw new FlowStoreError("flow-intake-stale", `intake ${messageSeq}:${from}`);
+}
+
+const intakeOf = (row: Record<string, unknown>): IntakeRow => ({
+  flowRunId: String(row.flow_run_id), messageSeq: Number(row.message_seq), state: String(row.state) as IntakeState,
+  body: IntakeBody.parse(JSON.parse(String(row.body))), updatedAt: Number(row.updated_at),
+});
+
+export function getIntake(store: ControlStore, flowRunId: string, messageSeq: number): IntakeRow | null {
+  const row = store.db.prepare("SELECT * FROM flow_feedback WHERE flow_run_id=? AND message_seq=?").get(flowRunId, messageSeq);
+  return row ? intakeOf(row) : null;
+}
+
+export function listIntakes(store: ControlStore, flowRunId: string): IntakeRow[] {
+  return store.db.prepare("SELECT * FROM flow_feedback WHERE flow_run_id=? ORDER BY message_seq").all(flowRunId).map(intakeOf);
+}
+
+/**
+ * Gaps spec §4.2: the runs the kernel must pass -- `running`, or with an open intake (not planned / withdrawn / failed), an
+ * open plan (`proposed` / `running`, as rerun.ts), or a pending question (a plan whose `chosen.pending` has an item with a
+ * null `answer`). One query over `flow_runs` ∪ `flow_feedback` ∪ `rerun_plans`.
+ */
+export function listRunsWithOpenWork(store: ControlStore): string[] {
+  return store.db.prepare(`SELECT id FROM flow_runs WHERE state='running'
+    UNION SELECT flow_run_id FROM flow_feedback WHERE state NOT IN ('planned','withdrawn','failed')
+    UNION SELECT flow_run_id FROM rerun_plans WHERE state IN ('proposed','running')
+    UNION SELECT flow_run_id FROM rerun_plans WHERE state IN ('proposed','chosen','running') AND chosen IS NOT NULL AND json_valid(chosen)
+      AND json_type(chosen,'$.pending')='array'
+      AND EXISTS (SELECT 1 FROM json_each(chosen,'$.pending') AS item WHERE json_extract(item.value,'$.answer') IS NULL)
+    ORDER BY 1`).all().map((row) => String(row.id));
 }

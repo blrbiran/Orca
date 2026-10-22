@@ -14,7 +14,7 @@ const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof
  * byte, keyed as the dev flow's ('clarify', 1), and the rebuild is all-or-nothing: an upgrade that fails half-way
  * leaves the version-16 store exactly as it was. Temp stores only (Rule 17).
  */
-const FLOW_TABLES = ["flow_runs", "step_executions", "step_heads", "flow_messages", "rerun_plans", "effect_records", "flow_decisions", "flow_templates"];
+const FLOW_TABLES = ["flow_feedback", "flow_runs", "step_executions", "step_heads", "flow_messages", "rerun_plans", "effect_records", "flow_decisions", "flow_templates"];
 const roundBody = (roundNo: number, note: string) => JSON.stringify({ ...newRound(roundNo), lastInvalidReason: note });
 
 /** A version-16 store: no flow tables, `requirement_rounds` in its old shape, holding 3 rounds of 2 groups. */
@@ -38,12 +38,12 @@ async function v16Store() {
 }
 
 describe("schema 17: flow journal tables and requirement_rounds keyed by step execution", () => {
-  it("keeps every round byte-equal as ('clarify', 1), creates the flow tables empty, and moves the version to 17", async () => {
+  it("keeps every round byte-equal as ('clarify', 1), creates the flow tables empty, and moves the version to the current schema", async () => {
     const { root, dir, before } = await v16Store();
     const store = await openControlStore({ stateDir: dir });
     try {
-      expect(schemaVersion).toBe("17");
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("17");
+      expect(schemaVersion).toBe("18");
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("18");
       const after = store.db.prepare("SELECT group_id,step_key,exec_seq,round_no,state,body FROM requirement_rounds ORDER BY group_id,round_no").all();
       expect(after).toHaveLength(3);
       expect(after.map(({ step_key, exec_seq, ...rest }) => { expect([step_key, exec_seq]).toEqual(["clarify", 1]); return rest; })).toEqual(before);
