@@ -173,6 +173,12 @@ describe("run now", () => {
       runNow(w);
       expect(await w.pass()).toMatchObject({ started: [], skipped: ["repo"] });
       expect(ic(w)).toMatchObject({ pendingRun: null, runSeq: 0, last: { state: "skipped", detail: "nothing new" } });
+      // The head moved but no group landed (a person's own commit): still nothing new to check.
+      g(w.repo, "commit", "-q", "--allow-empty", "-m", "a person's own commit");
+      w.advance(60_000);
+      runNow(w);
+      expect(await w.pass()).toMatchObject({ started: [], skipped: ["repo"] });
+      expect(ic(w)).toMatchObject({ pendingRun: null, runSeq: 0, last: { state: "skipped", at: w.now() } });
       const head = await w.commitLand("g1", { "a.txt": "1\n" });
       expect((await w.pass()).started).toEqual([]); // the kind is off: nothing starts it but a person
       runNow(w);
