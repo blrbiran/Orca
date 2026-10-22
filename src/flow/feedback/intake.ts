@@ -23,9 +23,10 @@ import { advanceRun, compositionFor, driftBeforeExecution, FlowRefusal, loadRun,
 import type { LoadedRun } from "../kinds/registry.js";
 import {
   FEEDBACK_KEY, getHead, getIntake, insertIntake, listExecutions, listIntakes, listMessages, listPlans, moveIntake, putPlan, setMessageState,
-  type IntakeRow, type IntakeState, type MessageRow,
+  type IntakeRow, type IntakeState, type MessageRow, type PlanRow,
 } from "../store.js";
 import { changesBetween } from "../vault/copyBack.js";
+import type { PlanCandidates, PlanChosen } from "../rerun.js";
 import { vaultGitBytes } from "../vault/vault.js";
 import { extractAnchors, type Anchor } from "./anchors.js";
 import { FEEDBACK_CLARIFY_CAPS, feedbackClarifyHost } from "./host.js";
@@ -107,7 +108,7 @@ export function openIntake(store: ControlStore, run: LoadedRun, message: Pick<Me
     const oldMessage = listMessages(store, run.row.id).find((m) => m.seq === old.messageSeq)!;
     if (oldMessage.state === "accepted" || oldMessage.state === "applied") setMessageState(store, run.row.id, old.messageSeq, oldMessage.state, "excluded", `replaced by message ${message.seq}`);
     const plan = old.state === "planned" ? listPlans(store, run.row.id).find((p) => p.planNo === old.body.planNo) : undefined;
-    if (plan !== undefined && (plan.state === "proposed" || plan.state === "running")) putPlan(store, { ...plan, state: "abandoned" });
+    if (plan !== undefined && (plan.state === "proposed" || plan.state === "running")) putPlan(store, withoutIntake(store, run.row.id, plan, old.body));
   }
   const anchors = extractAnchors(String(body.text), givenAnchors(body));
   if (target.kind !== "run" && anchors.length === 0 && pins.length === 0) return false;
@@ -116,6 +117,35 @@ export function openIntake(store: ControlStore, run: LoadedRun, message: Pick<Me
     asIs: body.asIs === true, attachments: Array.isArray(body.attachments) ? body.attachments as string[] : [],
   } });
   return true;
+}
+
+/**
+ * §4.8 (review fix 1): a replaced intake's words leave the open plan it made; the plan stays open, so the rest of what
+ * it carries -- another feedback taken at the same boundary -- is carried by the next plan as before. A target left with
+ * no feedback, whose only reason was feedback and which has not run under the plan, leaves its candidates and its
+ * chosen steps (as dropFromOpenPlan does for a mark); a target with other reasons keeps them, minus `feedback`.
+ */
+function withoutIntake(store: ControlStore, flowRunId: string, plan: PlanRow, body: IntakeBody): PlanRow {
+  const text = feedbackTextOf(body);
+  const cands = plan.candidates as PlanCandidates;
+  const feedback: Record<string, string[]> = {};
+  for (const [key, texts] of Object.entries(cands.feedback)) {
+    const kept = texts.filter((t) => t !== text);
+    if (kept.length > 0) feedback[key] = kept;
+  }
+  const ran = (key: string) => listExecutions(store, flowRunId).some((e) => e.stepKey === key && e.planNo === plan.planNo);
+  const emptied = Object.keys(cands.feedback).filter((key) => feedback[key] === undefined && !ran(key));
+  const list = cands.list.flatMap((c) => {
+    if (!emptied.includes(c.stepKey)) return [c];
+    const reasons = c.reasons.filter((r) => r !== "feedback");
+    return reasons.length === 0 ? [] : [{ ...c, reasons }];
+  });
+  const gone = new Set(cands.list.filter((c) => !list.some((l) => l.stepKey === c.stepKey)).map((c) => c.stepKey));
+  const chosen = plan.chosen as PlanChosen | null;
+  return {
+    ...plan, candidates: { ...cands, list, feedback } satisfies PlanCandidates,
+    chosen: chosen === null ? null : { ...chosen, steps: chosen.steps.filter((key) => !gone.has(key)) } satisfies PlanChosen,
+  };
 }
 
 /** §4.2 rewind: the re-queued message reuses the stored intake -- no new triage or clarify call -- starting at `ready`. */
@@ -190,7 +220,12 @@ function locateAll(body: IntakeBody, search: SearchState): { results: LocateResu
 
 /** §4.4: the steps that may take the feedback, and the last writer the code default falls back to. */
 function candidatesOf(deps: FlowDeps, run: LoadedRun, body: IntakeBody, search: SearchState, results: readonly LocateResult[]): { T: string[]; lastWriter: string | null } {
-  const writerOf = (path: string) => search.files.find((f) => f.path === path);
+  // A located file the current search set lacks (its writer was marked meanwhile) still bounds T by its stored writer.
+  const writerOf = (path: string): SearchFile | undefined => search.files.find((f) => f.path === path) ?? (() => {
+    const stored = body.searchSet.find((f) => f.path === path);
+    const index = stored === undefined ? -1 : run.template.steps.findIndex((s) => s.id === stored.writerKey);
+    return stored === undefined || index === -1 ? undefined : { path, text: "", writerIndex: index, writerKey: stored.writerKey };
+  })();
   const located = results.flatMap((r) => ("located" in r ? [writerOf(r.located.file)] : [])).filter((f) => f !== undefined);
   const whole = body.anchors.length === 0 && body.pins.length === 0;
   const reading = whole && search.files.length > 0 ? readingFile(search.files) : null;
@@ -208,6 +243,14 @@ function candidatesOf(deps: FlowDeps, run: LoadedRun, body: IntakeBody, search: 
   return { T, lastWriter };
 }
 
+/** §4.4: no step may take it (empty T, or every candidate marked since) ⇒ failed, its message red with the code. */
+function failNoTarget(deps: FlowDeps, intake: IntakeRow, body: IntakeBody): void {
+  deps.store.transaction(() => {
+    moveIntake(deps.store, intake.flowRunId, intake.messageSeq, intake.state, "failed", { ...body, call: null, flags: [...new Set([...body.flags, FEEDBACK_NO_TARGET])] }, deps.now());
+    setMessageState(deps.store, intake.flowRunId, intake.messageSeq, "accepted", "rejected", FEEDBACK_NO_TARGET);
+  });
+}
+
 function write(deps: FlowDeps, intake: IntakeRow, to: IntakeState, body: IntakeBody): IntakeRow {
   const at = deps.now();
   deps.store.transaction(() => moveIntake(deps.store, intake.flowRunId, intake.messageSeq, intake.state, to, body, at));
@@ -223,13 +266,7 @@ async function locateIntake(deps: FlowDeps, run: LoadedRun, intake: IntakeRow): 
   if (!ok) { write(deps, intake, "needs-location", body); return; }
   if (intake.body.stepKey !== null) { write(deps, intake, "ready", { ...body, targets: [{ stepKey: intake.body.stepKey, why: "the person sent it to this step" }] }); return; }
   const { T } = candidatesOf(deps, run, body, search, results);
-  if (T.length === 0) {
-    deps.store.transaction(() => {
-      moveIntake(deps.store, run.row.id, intake.messageSeq, "locating", "failed", { ...body, flags: [...body.flags, FEEDBACK_NO_TARGET] }, deps.now());
-      setMessageState(deps.store, run.row.id, intake.messageSeq, "accepted", "rejected", FEEDBACK_NO_TARGET);
-    });
-    return;
-  }
+  if (T.length === 0) { failNoTarget(deps, intake, body); return; }
   await requestTriage(deps, run, write(deps, intake, "triaging", body), search);
 }
 
@@ -260,17 +297,26 @@ async function triageInput(deps: FlowDeps, run: LoadedRun, intake: IntakeRow, se
   return { T, lastWriter, candidates, passages, reading, ...triageRules(intake), lastInvalid };
 }
 
-async function requestTriage(deps: FlowDeps, run: LoadedRun, intake: IntakeRow, search?: SearchState): Promise<void> {
+async function requestTriage(deps: FlowDeps, run: LoadedRun, intake: IntakeRow, search?: SearchState, resend = false): Promise<void> {
   const searched = search ?? await searchSetOf(deps, run, intake.body.stepKey);
   const retries = intake.body.call?.purpose === TRIAGE_PURPOSE ? intake.body.call.retries : 0;
   const lastInvalid = intake.body.call?.purpose === TRIAGE_PURPOSE ? intake.body.call.lastInvalid : null;
   const input = await triageInput(deps, run, intake, searched, lastInvalid);
   const prompt = triagePrompt({ text: intake.body.text, passages: input.passages, reading: input.reading, candidates: input.candidates, qa: intake.body.qa, attachments: intake.body.attachments, mayBeVague: input.mayBeVague, restatedRequired: input.restatedRequired, lastInvalid });
-  write(deps, intake, intake.state, { ...intake.body, call: { purpose: TRIAGE_PURPOSE, runId: null, retries, lastInvalid, callResult: null }, calls: [...intake.body.calls, { purpose: TRIAGE_PURPOSE, at: deps.now() }] });
-  deps.calls.request({
-    key: { flowRunId: run.row.id, stepKey: FEEDBACK_KEY, seq: intake.messageSeq }, groupId: run.row.groupId, purpose: TRIAGE_PURPOSE, prompt,
-    responseSchema: TRIAGE_JSON_SCHEMA as unknown as Record<string, unknown>, maxOutputTokens: TRIAGE_MAX_OUTPUT_TOKENS,
-  });
+  const written = write(deps, intake, intake.state, { ...intake.body, call: { purpose: TRIAGE_PURPOSE, runId: null, retries, lastInvalid, callResult: null, requested: false }, calls: resend ? intake.body.calls : [...intake.body.calls, { purpose: TRIAGE_PURPOSE, at: deps.now() }] });
+  sendCall(deps, run, written, { purpose: TRIAGE_PURPOSE, prompt, responseSchema: TRIAGE_JSON_SCHEMA as unknown as Record<string, unknown>, maxOutputTokens: TRIAGE_MAX_OUTPUT_TOKENS });
+}
+
+/**
+ * The call is written onto the intake first (`requested: false`), sent, then marked sent. Review fix (minor 1): a
+ * crash between the write and the send leaves `requested: false` with no claim and no result; the next pass builds the
+ * same request again and sends it (advanceIntakes, `resend`). A call the port already claimed is only marked.
+ */
+interface IntakeRequest { purpose: string; prompt: string; responseSchema: Record<string, unknown>; maxOutputTokens: number }
+function sendCall(deps: FlowDeps, run: LoadedRun, intake: IntakeRow, request: IntakeRequest): void {
+  deps.calls.request({ key: { flowRunId: run.row.id, stepKey: FEEDBACK_KEY, seq: intake.messageSeq }, groupId: run.row.groupId, ...request });
+  const now = getIntake(deps.store, intake.flowRunId, intake.messageSeq);
+  if (now?.body.call != null && now.body.call.requested === false) write(deps, now, now.state, { ...now.body, call: { ...now.body.call, requested: true } });
 }
 
 /** A call the pool or the parent could not fund never gets better by asking again. */
@@ -295,8 +341,10 @@ async function settleTriage(deps: FlowDeps, run: LoadedRun, intake: IntakeRow, r
     return;
   }
   // §4.4: exhausted ⇒ the code default -- the last writer alone -- flagged.
-  const fallback = lastWriter === null ? [] : [{ stepKey: lastWriter, why: `code default: the triage call gave no valid answer (${verdict.why})` }];
-  write(deps, intake, "ready", { ...intake.body, call: null, ...(first ? { triage: { clarity: "concrete" as const } } : {}), targets: fallback, flags: [...new Set([...intake.body.flags, TRIAGE_DEFAULTED])] });
+  const defaulted: IntakeBody = { ...intake.body, call: null, ...(first ? { triage: { clarity: "concrete" as const } } : {}), flags: [...new Set([...intake.body.flags, TRIAGE_DEFAULTED])] };
+  // Review fix (minor 5): every candidate was marked meanwhile -- nothing may take it, as at locating.
+  if (lastWriter === null) { failNoTarget(deps, intake, defaulted); return; }
+  write(deps, intake, "ready", { ...defaulted, targets: [{ stepKey: lastWriter, why: `code default: the triage call gave no valid answer (${verdict.why})` }] });
 }
 
 // ------------------------------------------------------------------------------------------------------------ clarify
@@ -309,7 +357,7 @@ async function readingForHost(deps: FlowDeps, run: LoadedRun, intake: IntakeRow)
   return { path: reading.file.path, text: cut.text, cut: cut.cut };
 }
 
-async function requestClarify(deps: FlowDeps, run: LoadedRun, intake: IntakeRow): Promise<void> {
+async function requestClarify(deps: FlowDeps, run: LoadedRun, intake: IntakeRow, resend = false): Promise<void> {
   const key = roundsKey(run, intake.messageSeq);
   let round = latestRoundAt(deps.store, key);
   if (round === null) { round = newRound(1); deps.store.transaction(() => writeRoundAt(deps.store, key, round!)); }
@@ -318,11 +366,8 @@ async function requestClarify(deps: FlowDeps, run: LoadedRun, intake: IntakeRow)
     idea: intake.body.text, contentLanguage: run.params.language === "zh" ? "zh" : "en", overview: await host.context(), earlier: [], retryReason: round.lastInvalidReason,
     limits: { roundNo: 1, classification: null, roundCap: FEEDBACK_CLARIFY_CAPS.rounds }, frame: host.background(), caps: host.caps!(),
   });
-  write(deps, intake, intake.state, { ...intake.body, call: { purpose: "clarify", runId: null, retries: round.retries, lastInvalid: round.lastInvalidReason, callResult: null }, calls: [...intake.body.calls, { purpose: "clarify", at: deps.now() }] });
-  deps.calls.request({
-    key: { flowRunId: run.row.id, stepKey: FEEDBACK_KEY, seq: intake.messageSeq }, groupId: run.row.groupId, purpose: "clarify", prompt,
-    responseSchema: CLARIFY_JSON_SCHEMA as Record<string, unknown>, maxOutputTokens: FEEDBACK_CLARIFY_MAX_OUTPUT_TOKENS,
-  });
+  const written = write(deps, intake, intake.state, { ...intake.body, call: { purpose: "clarify", runId: null, retries: round.retries, lastInvalid: round.lastInvalidReason, callResult: null, requested: false }, calls: resend ? intake.body.calls : [...intake.body.calls, { purpose: "clarify", at: deps.now() }] });
+  sendCall(deps, run, written, { purpose: "clarify", prompt, responseSchema: CLARIFY_JSON_SCHEMA as Record<string, unknown>, maxOutputTokens: FEEDBACK_CLARIFY_MAX_OUTPUT_TOKENS });
 }
 
 /** §4.6: a clarify call that fails or is exhausted ⇒ the intake goes on as `asIs`, flagged; the second triage runs. */
@@ -334,7 +379,9 @@ async function skipClarify(deps: FlowDeps, run: LoadedRun, intake: IntakeRow): P
 async function settleClarify(deps: FlowDeps, run: LoadedRun, intake: IntakeRow, raw: unknown, failure: string | null): Promise<void> {
   const key = roundsKey(run, intake.messageSeq);
   const round = latestRoundAt(deps.store, key);
-  if (round === null || round.state !== "drafting") return;
+  // Review fix (minor 2): a result the round no longer waits on is dropped -- the call is cleared, never judged again.
+  if (round === null) { await skipClarify(deps, run, intake); return; }
+  if (round.state !== "drafting") { write(deps, intake, intake.state, { ...intake.body, call: null }); return; }
   const verdict = failure !== null ? { ok: false as const, reason: `call-failed:${failure}` }
     : classifyClarifyOutput(raw, { roundNo: 1, requirementId: `${run.row.id.replace(/^fr-/, "")}`, earlierQuestionIds: [], caps: FEEDBACK_CLARIFY_CAPS });
   if (verdict.ok) {
@@ -408,8 +455,16 @@ export async function completeIntakeCall(deps: FlowDeps, flowRunId: string, mess
 export async function advanceIntakes(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
   for (const intake of listIntakes(deps.store, run.row.id)) {
     if (intake.state === "locating") { await locateIntake(deps, run, intake); return true; }
-    const result = intake.body.call?.callResult ?? null;
+    const call = intake.body.call;
+    const result = call?.callResult ?? null;
     if (result !== null && OPEN.has(intake.state)) { await completeIntakeCall(deps, run.row.id, intake.messageSeq, result.rawOutput, result.failure); return true; }
+    // Review fix (minor 1): written but never sent (a crash between the two); one the port claimed is only marked sent.
+    if (call != null && call.requested === false && OPEN.has(intake.state)) {
+      if (call.runId !== null) write(deps, intake, intake.state, { ...intake.body, call: { ...call, requested: true } });
+      else if (call.purpose === "clarify") await requestClarify(deps, run, intake, true);
+      else await requestTriage(deps, run, intake, undefined, true);
+      return true;
+    }
   }
   return false;
 }

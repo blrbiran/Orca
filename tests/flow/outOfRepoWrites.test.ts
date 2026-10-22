@@ -38,9 +38,9 @@ describe("out-of-repo writes (C21)", { timeout: 60_000 }, () => {
   // (§4.7's copy into the attempt workspace is open for the human, spec §21 entry 2: tests/flow/attachments.test.ts todo.)
   it("feedback with two attachments writes them only to the store, never under HOME, into a commit, the head or the folder", async () => {
     const world = await wechatWorld();
+    const control = realpathSync(mkdtempSync(join(tmpdir(), "orca-g14-control-")));
     try {
       const { w, children } = world;
-      const control = realpathSync(mkdtempSync(join(tmpdir(), "orca-g14-control-")));
       w.deps.env.ORCA_CONTROL_DIR = control;
       const flowRunId = await toDraftBox(world);
       const ids = [Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]), Buffer.from([0xff, 0xd8, 0xff, 0xe0, 2])]
@@ -63,7 +63,6 @@ describe("out-of-repo writes (C21)", { timeout: 60_000 }, () => {
       expect(readdirSync(home, { recursive: true })).toEqual([]);
       expect(statSync(attachmentsDir(w.deps.env)).mode & 0o777).toBe(0o700);
       for (const id of ids) expect(statSync(attachmentPath(w.deps.env, id)).mode & 0o777).toBe(0o600);
-      rmSync(control, { recursive: true, force: true });
-    } finally { await world.w.dispose(); }
+    } finally { rmSync(control, { recursive: true, force: true }); await world.w.dispose(); }
   });
 });

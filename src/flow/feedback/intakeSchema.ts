@@ -48,6 +48,8 @@ export const IntakeBody = z.object({
   call: z.object({
     purpose: z.enum(["feedback-triage", "clarify"]), runId: z.string().nullable(), retries: z.number().int().min(0), lastInvalid: z.string().nullable(),
     callResult: z.object({ runId: z.string(), rawOutput: z.unknown(), failure: z.string().nullable() }).strict().nullable(),
+    /** Review fix: false between writing the call and sending it; a pass finding it false sends it again. */
+    requested: z.boolean(),
   }).strict().nullable(),
   /** §4.6: the clarify round's questions and the answers taken (the person's, or the recommended ones by consensus). */
   qa: z.array(z.object({ question: z.string(), answer: z.string() }).strict()),

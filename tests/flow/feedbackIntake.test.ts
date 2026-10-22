@@ -12,6 +12,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readRoundsAt } from "../../src/control/requirementRecords.js";
+import { TRIAGE_JSON_SCHEMA } from "../../src/flow/feedback/triage.js";
 import { answerFeedbackClarify } from "../../src/flow/feedback/intake.js";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { createFlowCallPort } from "../../src/flow/calls.js";
@@ -368,6 +369,86 @@ describe("feedback intake (gaps §4, G2)", { timeout: 60_000 }, () => {
       expect(intakeOf(w, id, sent.seq).state).toBe("withdrawn");
       expect(listMessages(w.store, id).find((m) => m.seq === sent.seq)!.state).toBe("excluded");
     } finally { await w.dispose(); }
+  });
+
+  // ------------------------------------------------------------------------------------------------ review fix round 1
+
+  it("replacing a planned intake keeps the other feedback its plan carries: it reaches the step, the replaced words do not", async () => {
+    const w = await world(); try {
+      const id = await run(w, undefined, "polish-running");
+      // B (a run intake) gets ready while polish runs; A (plain step feedback on draft) waits for the same boundary.
+      const b = await feedback(w, id, { text: "too sweet", anchors: [{ quote: "Tea slows you down and that is good." }] });
+      await w.answer(w.calls.length - 1, { targets: [{ stepKey: "draft", why: "the base" }] });
+      expect(intakeOf(w, id, b.seq).state).toBe("ready");
+      const a = await feedback(w, id, { text: "add a title" }, { kind: "step", stepKey: "draft" });
+      w.children.land(childGroupIdOf(id, "polish", 1), { "post.final.md": FINAL });
+      await w.advance();
+      expect(intakeOf(w, id, b.seq)).toMatchObject({ state: "planned", body: { planNo: 1 } });
+      expect(listMessages(w.store, id).find((m) => m.seq === a.seq)!.state).toBe("applied");
+      expect((listPlans(w.store, id)[0]!.candidates as { feedback: Record<string, string[]> }).feedback.draft).toHaveLength(2);
+      const replaced = await feedback(w, id, { text: "too bitter", replaces: b.seq, anchors: [{ quote: "Tea slows you down and that is good." }] });
+      // Plan 1 stays open without B's words; A is still in it.
+      expect(listPlans(w.store, id)[0]!.state).not.toBe("abandoned");
+      expect((listPlans(w.store, id)[0]!.candidates as { feedback: Record<string, string[]> }).feedback).toEqual({ draft: ["add a title"] });
+      await w.answer(w.calls.length - 1, { targets: [{ stepKey: "draft", why: "the base" }] });
+      expect(intakeOf(w, id, replaced.seq)).toMatchObject({ state: "planned", body: { planNo: 2 } });
+      const draftFeedback = (listPlans(w.store, id)[1]!.candidates as { feedback: Record<string, string[]> }).feedback.draft!;
+      expect(draftFeedback).toContain("add a title");
+      expect(draftFeedback.some((t) => t.startsWith("too bitter"))).toBe(true);
+      expect(draftFeedback.some((t) => t.includes("too sweet"))).toBe(false);
+      await w.answer(lastIndex(w, "rerun-proposal"), { skips: [] });
+      const goal = goalOf(w, childGroupIdOf(id, "draft", 2));
+      expect(goal).toContain("add a title");
+      expect(goal).toContain("too bitter");
+      expect(goal).not.toContain("too sweet");
+    } finally { await w.dispose(); }
+  });
+
+  it("a crash between writing an intake's call and sending it is healed by the next pass: the call is sent once", async () => {
+    const w = await world(); try {
+      const id = await run(w);
+      const port = w.deps.calls;
+      w.deps.calls = { request: () => { throw new Error("crash before the send"); } };
+      await expect(feedback(w, id, { text: "too sweet", anchors: [{ quote: "Engineers think better with a warm cup." }] })).rejects.toThrow(/crash before the send/);
+      const seq = listMessages(w.store, id).at(-1)!.seq;
+      expect(intakeOf(w, id, seq)).toMatchObject({ state: "triaging", body: { call: { requested: false, runId: null } } });
+      w.deps.calls = port;
+      await w.advance();
+      expect(callsOf(w, "feedback-triage")).toHaveLength(1);
+      expect(intakeOf(w, id, seq).body.call).toMatchObject({ requested: true });
+      expect(intakeOf(w, id, seq).body.calls).toHaveLength(1);
+      await w.advance();
+      expect(callsOf(w, "feedback-triage")).toHaveLength(1);
+      await w.answer(w.calls.length - 1, { targets: [{ stepKey: "polish", why: "tone" }] });
+      expect(intakeOf(w, id, seq).state).toBe("planned");
+    } finally { await w.dispose(); }
+  });
+
+  it("a clarify result whose round is gone does not spin: the intake goes on as asIs", async () => {
+    const w = await world(); try {
+      const id = await run(w);
+      const sent = await feedback(w, id, { text: "something feels off" });
+      await w.answer(w.calls.length - 1, { targets: [{ stepKey: "polish", why: "tone" }], clarity: "vague" });
+      w.store.db.prepare("DELETE FROM requirement_rounds WHERE step_key='@feedback'").run();
+      await w.answer(w.calls.length - 1, { not: "judged" });
+      expect(intakeOf(w, id, sent.seq)).toMatchObject({ state: "restating", body: { flags: ["clarify-skipped"] } });
+      expect(w.calls.at(-1)!.purpose).toBe("feedback-triage");
+    } finally { await w.dispose(); }
+  });
+
+  it("every candidate marked while the triage was out: the code default has no step and fails flow-feedback-no-target", async () => {
+    const w = await world(); try {
+      const id = await run(w);
+      const sent = await feedback(w, id, { text: "too sweet", anchors: [{ quote: "Engineers think better with a warm cup." }] });
+      for (const stepKey of ["draft", "polish", "notes", "publish"]) await acceptMessage(w.deps, id, msg({ kind: "command", target: { kind: "step", stepKey }, body: { command: "skip" } }));
+      for (let i = 0; i < 3; i += 1) await w.answer(lastIndex(w, "feedback-triage"), { targets: [{ stepKey: "publish", why: "x" }] });
+      expect(intakeOf(w, id, sent.seq)).toMatchObject({ state: "failed", body: { flags: ["triage-defaulted", "flow-feedback-no-target"], targets: [] } });
+      expect(listMessages(w.store, id).find((m) => m.seq === sent.seq)).toMatchObject({ state: "rejected", reason: "flow-feedback-no-target" });
+    } finally { await w.dispose(); }
+  });
+
+  it("the triage response schema bounds the targets to 1-3", () => {
+    expect((TRIAGE_JSON_SCHEMA.properties.targets as { minItems: number; maxItems: number })).toMatchObject({ minItems: 1, maxItems: 3 });
   });
 
   it("refuses malformed feedback fields by name", async () => {

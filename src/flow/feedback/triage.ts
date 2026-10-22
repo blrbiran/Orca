@@ -12,7 +12,7 @@ export const READING_MAX_BYTES = 32 * 1024;
 export const TRIAGE_JSON_SCHEMA = Object.freeze({
   type: "object", additionalProperties: false, required: ["targets"],
   properties: {
-    targets: { type: "array", items: { type: "object", additionalProperties: false, required: ["stepKey", "why"], properties: { stepKey: { type: "string" }, why: { type: "string" } } } },
+    targets: { type: "array", minItems: 1, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["stepKey", "why"], properties: { stepKey: { type: "string" }, why: { type: "string" } } } },
     clarity: { type: "string", enum: ["concrete", "vague"] },
     restated: { type: "string" },
   },

@@ -305,8 +305,10 @@ export interface IntakeRow { flowRunId: string; messageSeq: number; state: Intak
 const INTAKE_ORDER = ["locating", "needs-location", "triaging", "clarifying", "restating", "ready", "planned"] as const;
 const intakeTerminal = (state: IntakeState): boolean => state === "planned" || state === "withdrawn" || state === "failed";
 
-/** True when `from -> to` is allowed: forward (or in place, to rewrite the body), to a terminal state, or the one named edge `ready -> needs-location`. */
+/** True when `from -> to` is allowed: forward (or in place, to rewrite the body), to a terminal state, the named edge `ready -> needs-location`, or `planned -> withdrawn` (a replacement, §4.8). */
 function intakeMoveAllowed(from: IntakeState, to: IntakeState): boolean {
+  // Gaps spec §4.8 (plan Task 5 review fix): a `planned` intake whose plan is still open can be replaced -- withdrawn.
+  if (from === "planned" && to === "withdrawn") return true;
   if (intakeTerminal(from)) return false;
   if (to === "withdrawn" || to === "failed") return true;
   if (from === "ready" && to === "needs-location") return true;

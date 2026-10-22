@@ -119,5 +119,9 @@ describe("attachment store (gaps §4.7, G14)", () => {
     expect(bad.status).toBe(400);
     expect(await bad.json()).toMatchObject({ error: { code: "flow-attachment-invalid" } });
     expect((await post("fr-nope", PNG)).status).toBe(404);
+    // Review fix (minor 3): over the body limit is the same refusal by name, never a bare 413.
+    const big = await post(flowRunId, Buffer.concat([PNG, Buffer.alloc(ATTACHMENT_MAX_BYTES + 100)]));
+    expect(big.status).toBe(400);
+    expect(await big.json()).toMatchObject({ error: { code: "flow-attachment-invalid" } });
   });
 });

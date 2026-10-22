@@ -205,6 +205,8 @@ describe("flow_feedback intake store", () => {
   for (const from of ALL_STATES) {
     for (const to of ALL_STATES) {
       const allowed = (() => {
+        // §4.8: a planned intake whose plan is still open is replaced (Ruling: 这次批准改写所有必要的判据 (0e13a9b7)).
+        if (from === "planned" && to === "withdrawn") return true;
         if (["planned", "withdrawn", "failed"].includes(from)) return false;
         if (to === "withdrawn" || to === "failed") return true;
         if (from === "ready" && to === "needs-location") return true;
