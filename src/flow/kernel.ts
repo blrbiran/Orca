@@ -606,7 +606,7 @@ export async function absorbDrift(deps: FlowDeps, run: LoadedRun, vault: Vault):
 }
 
 /** §5.4: before an execution starts, the person's drift is taken and the head composed with it; true when there was some. */
-async function driftBeforeExecution(deps: FlowDeps, flowRunId: string): Promise<boolean> {
+export async function driftBeforeExecution(deps: FlowDeps, flowRunId: string): Promise<boolean> {
   const run = loadRun(deps.store, flowRunId);
   const vault = vaultOf(run);
   if (vault === null || !(await absorbDrift(deps, run, vault))) return false;
@@ -736,9 +736,14 @@ export interface RanOnInputs { start: string; params: string; earlier: Array<{ s
  * Then the run goes on from its boundaries.
  */
 export async function resumeExecution(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow): Promise<void> {
+  // §5.4: an execution that starts here starts as any other does -- on the person's folder as it is now (T18 enact).
+  if (await driftBeforeExecution(deps, run.row.id)) run = loadRun(deps.store, run.row.id);
   const key: ExecutionKey = { flowRunId: execution.flowRunId, stepKey: execution.stepKey, seq: execution.seq };
   const { ask: _card, ...rest } = execution.body as ExecutionBody;
-  const body = rest as ExecutionBody;
+  // It runs on the active outputs as they are now (a drift just taken moved them): that is its basis, not what it was
+  // queued on -- else the next pass would see the basis moved and run the step (an external effect) a second time.
+  const index = run.template.steps.findIndex((s) => s.id === execution.stepKey);
+  const body: ExecutionBody = { ...(rest as ExecutionBody), basis: basisOf(run, index, listHeads(deps.store, run.row.id)), ranOnInputs: ranOnInputsOf(deps.store, run, execution.stepKey) };
   deps.store.transaction(() => finishExecution(deps.store, key, execution.state, "running", deps.now(), { body }));
   const running: ExecutionRow = { ...execution, state: "running", body };
   const kind = kindFor(deps, stepOf(run, execution.stepKey));

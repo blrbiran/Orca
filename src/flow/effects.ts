@@ -17,7 +17,7 @@
 import { randomUUID } from "node:crypto";
 import { sha256Canonical } from "../control/canonicalJson.js";
 import type { ControlStore } from "../control/store.js";
-import { FlowRefusal, loadRun, ranOnInputsOf, resumeExecution, stepOf, type FlowDeps } from "./kernel.js";
+import { driftBeforeExecution, FlowRefusal, loadRun, ranOnInputsOf, resumeExecution, stepOf, type FlowDeps } from "./kernel.js";
 import type { ExecutionBody, LoadedRun } from "./kinds/registry.js";
 import { flowLayers, resolveLevel, type ResolvedLevel } from "./settings.js";
 import type { FlowEffectClass } from "./settingsSchema.js";
@@ -126,6 +126,10 @@ export type EnactResult = { state: "running"; recordId: string } | { state: "res
  * record whose inputs moved since it was staged is not enacted: a new record is staged in its place and returned.
  */
 export async function enactEffect(deps: FlowDeps, recordId: string, by: string, via: string, command: "confirm" | "enact" = "enact"): Promise<EnactResult> {
+  openRecord(deps.store, recordId);
+  // §5.4 (T18 enact): the person's folder edits are taken before the step starts, as before any execution; one that
+  // moves what the record was staged on restages it below, so the person enacts what will actually run.
+  await driftBeforeExecution(deps, getEffect(deps.store, recordId)!.flowRunId);
   const { record, execution } = openRecord(deps.store, recordId);
   const run = loadRun(deps.store, record.flowRunId);
   const step = stepOf(run, record.stepKey);
