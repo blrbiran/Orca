@@ -226,6 +226,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/requirement/accept` | requirement-draft-accept | `{"draftNo":1,"draftHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}` |
 | `POST groups/<groupId>/requirement/clarify-more` | requirement-clarify-more | `{"roundNo":1}` |
 | `POST groups/<groupId>/requirement/classify` | requirement-classify | `{"scope":"medium","clarity":"fair"}` |
+| `POST groups/<groupId>/requirement/revise` | requirement-revise | `{"roundNo":1,"answers":[{"id":"R1.Q1","kind":"text","text":"CommonMark"}],"glossaryDecisions":[],"adrDecisions":[],"reason":"we publish on GitHub"}` |
 | `POST groups/<groupId>/integration` | set-group-integration | `{"integration":{"delivery":"keep"}}` |
 | `POST groups/<groupId>/integration/retry` | retry-integration | `{}` |
 | `POST groups/<groupId>/integration/resolve` | resolve-integration-conflict | `{}` |

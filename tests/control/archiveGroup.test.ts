@@ -205,6 +205,7 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "requirement-draft-accept": { call: (s, c) => s.acceptRequirementDraft(c), target: "group", payload: { draftNo: 1, draftHash: "a".repeat(64) } },
   "requirement-clarify-more": { call: (s, c) => s.requirementClarifyMore(c), target: "group", payload: { roundNo: 1 } },
   "requirement-classify": { call: (s, c) => s.requirementClassify(c), target: "group", payload: { scope: "small", clarity: "clear" } },
+  "requirement-revise": { call: (s, c) => s.requirementRevise(c), target: "group", payload: { roundNo: 1, answers: [], glossaryDecisions: [], adrDecisions: [] } },
   "settle-unknown-usage": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.settleUnknownUsage(c)), target: "group", payload: { taskId: "a", runId: "run-a", generation: 1, acknowledge: "charge-remaining-grant" } },
   "retry-task": { call: (s, c) => s.retryTask(c), target: "group", payload: { taskId: "a" } },
   "verify-saved-result": { call: (s, c) => s.verifySavedResult(c), target: "task", payload: { sourceRunId: "run-a", sourceAttempt: 1, capsuleHash: "a".repeat(64) } },
