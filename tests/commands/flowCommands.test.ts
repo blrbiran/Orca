@@ -58,6 +58,14 @@ describe("orca flow commands: route, revision and payload (spec §14.2)", () => 
     expect({ path: posts[0]!.path, expectedRevision: posts[0]!.expectedRevision, payload: posts[0]!.payload }).toEqual({ path, expectedRevision: revision, payload });
   });
 
+  it("rerun without --plan and no plan waiting is refused before anything is sent (a running plan is not the person's to run)", async () => {
+    const w = await world({}, { ...READS, [`GET flows/${OTHER}`]: { status: 200, body: { schema: "orca-flow-run-view-v1", flowRunId: OTHER, plans: [{ planNo: 1, state: "running" }], openAsks: [] } } });
+    const out = await cli(["flow", "rerun", "fr-9f", "--json"], w.dir);
+    expect(out.code).not.toBe(0);
+    expect(out.stdout + out.stderr).toContain("has no plan waiting");
+    expect(w.posts()).toHaveLength(0);
+  });
+
   it("an ambiguous run prefix is refused before anything is sent", async () => {
     const w = await world({}, READS);
     const out = await cli(["flow", "plan", "fr-", "--json"], w.dir);
