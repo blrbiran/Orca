@@ -94,6 +94,15 @@ describe("message stream (§8)", () => {
     } finally { await w.dispose(); }
   });
 
+  it("an edited step stays out of the plan even when an earlier step re-runs (§7.2)", async () => {
+    const { w, flowRunId } = await settledRun(); try {
+      await acceptMessage(w.deps, flowRunId, msg({ kind: "feedback", target: { kind: "step", stepKey: "a" }, body: { text: "x" } }));
+      await acceptMessage(w.deps, flowRunId, msg({ kind: "edit", target: { kind: "step", stepKey: "b" }, body: { record: { content: "B by Ann" } } }));
+      expect(listPlans(w.store, flowRunId).map((p) => p.state)).toEqual(["abandoned", "proposed"]);
+      expect(listPlans(w.store, flowRunId)[1]!.candidates).toMatchObject({ list: [{ stepKey: "a", reasons: ["feedback"] }, { stepKey: "c", reasons: ["upstream-changed:a", "upstream-changed:b"] }] });
+    } finally { await w.dispose(); }
+  });
+
   it("a plan run twice, or an older plan, is refused flow-plan-stale", async () => {
     const { w, flowRunId } = await settledRun(); try {
       await acceptMessage(w.deps, flowRunId, msg({ kind: "feedback", target: { kind: "step", stepKey: "b" }, body: { text: "x" } }));

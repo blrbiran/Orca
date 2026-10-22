@@ -155,7 +155,7 @@ describe("the rerun proposal on the parent (§7.3, plan Task 11)", () => {
       w.store.db.prepare("UPDATE flow_runs SET pool_drawn=pool_tokens WHERE id=?").run(flowRunId);
       await proposePlan(w.deps, flowRunId, "ann", "cli:test");
       expect(callRuns(w, groupId)).toHaveLength(before);
-      expect(listPlans(w.store, flowRunId)[0]).toMatchObject({ state: "proposed", proposal: { skips: [], exhausted: "call-failed:flow-pool-exhausted" } });
+      expect(listPlans(w.store, flowRunId)[0]).toMatchObject({ state: "proposed", proposal: { skips: [], exhausted: "call-failed:flow-pool-exhausted", retries: 0 } });
     } finally { await w.dispose(); }
   });
 });
