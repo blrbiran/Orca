@@ -42,6 +42,14 @@ describe("the escalation ladder leaves environment causes to the person (§4)", 
       } finally { await w.t.h.dispose(); }
     });
   }
+  // ccloop per-contract tool rules spec: a tool-rule violation is terminal there (no retry), and a debug run on the same
+  // contract would break the same rule the same way -- the person decides (flow engine Task 10, controller call).
+  it("does not escalate a task that failed with tool-rule-violated", async () => {
+    const w = await world("tool-rule-violated"); try {
+      expect(ladderCandidates(w.t.h.store)).toEqual([]);
+      expect((await w.service.systemDebugPass()).opened).toEqual([]);
+    } finally { await w.t.h.dispose(); }
+  });
   it("still escalates a task that failed its required check", async () => {
     const w = await world("required-check-failed"); try {
       expect(ladderCandidates(w.t.h.store).map((c) => [c.groupId, c.taskId, c.run.runId])).toEqual([["g", "a", w.runId]]);

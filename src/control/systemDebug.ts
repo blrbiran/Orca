@@ -309,8 +309,12 @@ export function ladderCandidates(store: ControlStore): Array<{ groupId: string; 
 /** Kanban spec §6 level 1: the retry-task command that re-dispatches a task once, and is the level's record. */
 export function ladderLevelOneCommandId(taskId: string): string { return `orca-auto-ladder-l1-${taskId}`; }
 
-/** Failure-cause spec 2026-10-21 §4-§5: the causes the escalation ladder leaves to the person (or to a quota wait). */
-export const LADDER_EXEMPT_CAUSES: ReadonlySet<string> = new Set(["auth", "quota", "executable-missing"]);
+/**
+ * Failure-cause spec 2026-10-21 §4-§5: the causes the escalation ladder leaves to the person (or to a quota wait). A
+ * `tool-rule-violated` run is terminal in ccloop (per-contract tool rules spec), and a debug run held to the same rules
+ * would break them the same way.
+ */
+export const LADDER_EXEMPT_CAUSES: ReadonlySet<string> = new Set(["auth", "quota", "executable-missing", "tool-rule-violated"]);
 /** §5: how long a quota wait holds a failed task before Orca retries it (re-probe interval; no reset time is reported today). */
 export const QUOTA_REPROBE_MS = 30 * 60_000;
 
