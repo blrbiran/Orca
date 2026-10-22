@@ -6,6 +6,7 @@
  * ledger-only commit, once. Every assertion reads git or the store.
  */
 import { describe, expect, it } from "vitest";
+import { DriverCrash, createExecutionDriver } from "../../src/control/executionDriver.js";
 import { listPendingDecisions } from "../../src/control/pendingDecisions.js";
 import { insertFlowRun } from "../../src/flow/store.js";
 import { driverHarness, git } from "../control/fixtures/driverHarness.js";
@@ -59,6 +60,19 @@ describe("dir flow landings write flow_decisions, never .decisions/ (C14 part)",
       const drive = t.body(runId).drive;
       expect(git(t.repo, "rev-parse", BRANCH)).toBe(drive.base);
       expect(drive.ledgerCommit).toBe(null);
+      expect(rows(t)).toEqual([{ seq: 1, grade: "major", stepKey: "write", id: `${runId}/agent-0`, by: "orca-auto" }]);
+    } finally { await t.h.dispose(); }
+  }, 30000);
+
+  it("a death after the result was recorded replays E without writing the decisions twice (the probe reads flow_decisions)", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { files: () => ({}), decisions: () => [good()] }); try {
+      asDirFlowChild(t);
+      const runId = await t.claim();
+      const crashing = createExecutionDriver({ ...t.deps, crash: (point) => { if (point === "E-after-acceptance") throw new DriverCrash(point); } });
+      await t.until(crashing, () => crashing.crashed === "E-after-acceptance");
+      expect(t.body(runId).state).toBe("landed");
+      expect(rows(t)).toHaveLength(1);
+      await t.until(t.driver(), () => t.body(runId).drive?.cleanedUp === true);
       expect(rows(t)).toEqual([{ seq: 1, grade: "major", stepKey: "write", id: `${runId}/agent-0`, by: "orca-auto" }]);
     } finally { await t.h.dispose(); }
   }, 30000);
