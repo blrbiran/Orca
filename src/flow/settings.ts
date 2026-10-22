@@ -28,8 +28,7 @@ const RANK: Readonly<Record<FlowLevel, number>> = { "apply-flag": 0, confirm: 1,
 function levelOf(cls: FlowEffectClass, setting: FlowLevelSetting, recommended: FlowLevel | undefined): { value: FlowLevel; origin: "setting" | "template" | "builtin" } {
   if (setting !== "follow-template") return { value: setting, origin: "setting" };
   if (recommended === undefined) return { value: BUILTIN_LEVELS[cls], origin: "builtin" };
-  // §9.3: an irreversible step can never resolve to apply-flag through a template.
-  if (cls === "irreversible" && recommended === "apply-flag") return { value: BUILTIN_LEVELS.irreversible, origin: "builtin" };
+  // §9.3: an irreversible step never resolves to apply-flag through a template: resolveLevel's clamp below.
   return { value: recommended, origin: "template" };
 }
 
@@ -47,7 +46,8 @@ export function resolveLevel(cls: FlowEffectClass, step: { recommendedLevel?: Fl
   const builtin: ResolvedLevel = { value: BUILTIN_LEVELS[cls], source: "builtin", lockedBy: null };
   let mine = opts.configuredDelivery === true ? { value: "apply-flag" as const, source: "project" as const, lockedBy: null } : at("project", project?.effects?.[cls]);
   const theirs = at("global", global?.effects?.[cls]) ?? builtin;
-  // Phase 1: nothing but configured delivery reaches irreversible apply-flag (the writes are refused; this is the backstop).
+  // §9.3 and phase 1: nothing but configured delivery reaches irreversible apply-flag -- not a template's recommendation,
+  // not a stored value (the writes are refused; this is the backstop).
   const clampIrreversible = (r: ResolvedLevel): ResolvedLevel => (cls === "irreversible" && r.value === "apply-flag" && opts.configuredDelivery !== true ? builtin : r);
   if (mine !== null) mine = clampIrreversible(mine);
   const bound = clampIrreversible(theirs);
