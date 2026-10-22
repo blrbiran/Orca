@@ -63,7 +63,24 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.000000 会话 `8b1469ea`（2026-10-21 晚 → 10-22）—— **先读这一节**
+### 3.0000000 会话 `b37f7ce9`（2026-10-22）—— **先读这一节**
+
+> 唯一进度源：`.superpowers/sdd/2026-10-22-session-b37f7ce9/progress.md`（人裁原话、每条线的提交、改过的判据、变异、付费数、每个 agent 的决定与更正）。
+> 人裁（本会话）：「这个session中，尽量将这些要做的task都完整做完…暂时不要考虑context大小」「这次批准改写所有必要的判据」「这一轮允许付费真跑」「有问题先按你的建议执行，最后报给我审核」。越过 T1／T2 均已写检查点。
+
+- **合进 Orca main（`--ff-only`，依次 CLI v2 → 检查与触发器 → 流程引擎第一期；是本会话最后的 git 动作；未推——以 `ls-remote` 现测）**：
+  - **CLI v2**（spec `2026-10-21-cli-v2-design.md` §14–§16＋文末 Correction；plan `2026-10-22-cli-v2.md`）：一张命令登记表生成 CLI／单个 MCP 工具（347 B）／skill references（SKILL.md 81 行）；`orca <domain> <action>`，旧名全删无别名；开发工具在 `orca dev`（**闸门钩子串改成 `dev gate`／`dev level`**）；socket 三档（open／person token／派出的 run 一律拒）；`orca login|logout`（`$ORCA_PERSON_DIR`，accounts schema 1→2）；`by`／`via` 归属；`ORCA_DISPATCHED_RUN` 标记覆盖 ccloop、runTask、chain、集成检查、repro／criteria 复跑；`orca status|doctor|version`。
+  - **检查与触发器**（spec `2026-10-22-checks-and-triggers-design.md`；plan 同名）：控制库 schema 15→16；集成检查（默认关）＋模型审阅（默认开，只审 Orca 合进本地目标的组）＋用户定时检查，统一为「检查种类＋触发器＋水位线」；`orca check …`；`set-integration-check` 删除无别名（历史行只读可读）。
+  - **流程引擎第一期**（spec `2026-10-22-flow-engine-design.md`＋文末 §25 as-built 更正；plan `2026-10-22-flow-engine-phase-1.md`）：schema 16→17（8 张 flow 表、`requirement_rounds` 重键）；vault（`$ORCA_VAULT_DIR`，裸库＋组合＋CAS flow head＋拷回＋drift）；内核＋步骤种类 draft/check/review/clarify/ask/work；重跑规划（代码划候选、模型只能提跳过）；消息／回退；效果三档＋设置／锁；内置模板 `wechat-article`（v2，钉 runskills `e62c5f8e`、md2publish-skills `eabf4f7e`）；7 个 flow 动词；运行页／设置页／看板卡；粗粒度纠正（只给仓库＋一句话、只给一个 run）；#76 修订前面轮次；`flow-start` **只接受已登记的 `dir` 项目**（控制器决定，待人审）。
+  - **repin ccloop → `fbd3512`**（工具规则＋`debug.located`＋不透明 `flow` 答案键；ccloop 已由人推）。
+- **ccloop（已合、人已推）**：每契约工具规则、`debug.located`、`flow` 答案键——见 ccloop handoff「当前状态」。**codex 额度 2026-10-27 14:49 恢复后的第一件事**：真 codex 验收新 strict wire schema（provider 拒收 ⇒ codex execute 全坏 ⇒ 修 schema 或 pin 回 `d02b9d2`）。
+- **md2publish-skills（人的仓，已推 `eabf4f7`）**：`--confirmed-by-orca` 开关覆盖 draft／visuals／article／cover 以及重跑保护、回写 diff、超限元数据选择；cover 带开关也**另存新文件**（人裁）；内联 `python3 -c` → `_shared/scripts/query.py`。该仓 `check.sh` 的「SVG→位图降级链」一项在改动前就红（headless Chrome 环境），登记。
+- **付费（工具给的数）**：claude 工具规则探针 $0.00246504；`debug.located` claude 验收（haiku，tokens 45658／49847／48136，未报 USD）；codex 撞额度未跑；omp plan 撞既有 `omp-phase-continuation`；公众号流程沙箱验收 2,975,844 tokens（含 criteria-review 泄漏 375,057），推草稿：第一次 SVG 封面被 md2wechat 拒（286,583）、第二次撞公众号 IP 白名单 40164（259,288；人随后加了白名单）、第三次**成功**（345,804）：草稿 media_id `vZhKDV77F0rxOMkM9y3GNe1T-1yFWLJ6AEZJ-fGxv8OpwT7L26-AjJ7gtisUujYr`，人确认「我在公众号草稿箱已经看到了这篇」，发布由人。claude 的 USD 拿不到（ccloop 不保留 `total_cost_usd`）。
+- **本会话写好、未实施的 spec**：`2026-10-22-flow-phase1-gaps-design.md`（段落／模糊反馈、5 分钟「拿不准」超时＝接受为未变、跳过／先跳后补、封面挑选或预设、花费显示、项目设置页标题 bug；build 基＝流程分支，schema 17→18）。人裁：「直到原来这个session该做的task做完，我们就不继续开始做后续的spec」——syncskill 第二期等 spec 没开。
+- **改变了前提、下一位要知道的**：① **合并后先重启所有在 Orca 树里开着的 Claude Code 会话**——钩子串在会话启动时读入，旧会话还跑 `src/cli.ts gate`，合并后它 exit 1 ⇒ 包装把所有 git 命令拦死（fail closed）。② `node_modules` 加了 `yaml`（主树已 `npm ci`）。③ 子 agent 会看到 `orca level` 钩子报的是**父会话**的数，会误以为自己超支——派活时要明说。④ scratch 在 `/private/tmp/orca-b37f7ce9/`（沙箱验收全部状态在 `wechat-acceptance/`）。⑤ 一次测试曾改写 `~/.orca/agents.json.draft.json`（2026-10-22 06:27，Rule 17 事故，已修测试；`agents.json` 未动）——人看一眼是否要恢复旧草稿。
+- **下一轮的设计候选（人提，本轮只讨论、未写 spec）**：agent 输出经 ccloop 流式进 Orca、像 Claude Code 那样渲染（工具调用／文件改动默认折叠只露开头、可展开），人可以中途干预；人说实时盯着看比事后回看比重更大。只读调研结论（台账「Interjection probe」行）：今天三家都插不了话（prompt 一次写 stdin 后关闭）；建议先做「实时转录（只读）＋边界干预（handoff 带 `operatorNote`、可选保留 execute 的工作区）」，真正实时插话（claude `--input-format stream-json`、codex app-server `turn/steer`、omp `--mode rpc`）放后面按能力开放。
+
+### 3.000000 会话 `8b1469ea`（2026-10-21 晚 → 10-22）—— 已合；其四份 spec 已在会话 `b37f7ce9` 实施
 
 > 唯一进度源：`.superpowers/sdd/2026-10-21-session-8b1469ea/progress.md`（人裁原话、每条线的提交、测试数、改过的判据、变异、付费数；末尾有一条 **CORRECTION** 记录被人否掉又被替换的「读写声明」做法）。
 > 人裁（本会话）：本轮忽略上下文大小（越 T2 继续，检查点已记）；「现在是破坏性大改的最好时候…看如何做是全局最优的」——已写进 `docs/handoff/goal.md` P1。
@@ -204,6 +221,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - 之后各轮只跑相关测试。会话 `3831d12f` 最大的一次是 decisions-importance 分支 rebase 后的 `npm test`（新的按改动选测试，选中 411 个根文件＋132 个 web 文件）：根 3703 过／31 跳过、web 1142 过、typecheck 与 web tsc 都 0（台账同目录）。
 - 会话 `8b1469ea` 合入前的 `npm test`（对 pin `76b098b` 的 build；台账 R2／MERGE 行）：repin 后选中 478 文件，根 4508 过／0 红／37 跳过；最后一支（#86＋UI）选中 539 文件，根 3526 过／35 跳过、web 1195/1195、rc 0。
 - 会话 `9ec98639` 各线合入前的 `npm test`（各自台账行有数）：最大一次是失败原因分支顶端（对 pin `71d650c` 的 build），选中 540 文件，根 3553 过／35 跳过、web 1182/1182、rc 0；`schedulerBridge`「success」在负载 10–14 下单跑 3×9/9（机器全天没空闲过）。
+- 会话 `b37f7ce9` 合并前的 `npm test`（三条线 rebase 到 main 之后的流程分支顶端，`ORCA_CCLOOP_BIN`＝ccloop `fbd3512` 的 build）：选中 734 文件，根 5374 过／37 跳过／0 红、web 1255，rc 0；其后两笔修复（无改动的效果步、宽松读 effect）各跑一次 `npm test`，最后一次根 5378 过／37 跳过、web 1255，rc 0。
 - 更早的门都已被取代；flake 判别在 `known-load-flakes.md`。
 
 ---
@@ -212,27 +230,27 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.1 人做的（agent 不提醒、不代做）
 
-- **push**：人统一择时推，agent 不提醒（Orca、ccloop、ccmem 本会话都有未推的本地提交——以 `ls-remote` 现测）。
-- **删**（会话 `8b1469ea` 现核还在的）：
-  - `/private/tmp`：`ccb6-qswQ`（旧 pin build）、`rp-IPQr`（门的私有 HOME）、`omd-k84j`（**omp-config 里是凭据副本**）。
-  - 旧会话 scratchpad `/private/tmp/claude-501/-Users-biran-code-skills-orca-Orca/{f3a75a90,3831d12f,3d229487,308b874c}-*`（`308b874c` 含台账引用的付费证据 `acc-*`）。里面的 clone 先 `unlink` `node_modules`／`web/node_modules`／`web/dist` 软链再删。
-  - 作业目录 `/Users/biran/.claude/jobs/9ec98639/tmp`：L1 已合，可删；**但 `ccloop-76b098b`（当前 pin 的 build，测试的 `ORCA_CCLOOP_BIN`）在下一位重建一份到 `/private/tmp` 之前别删**。
-  - 本会话 scratch `/private/tmp/orca-8b1469ea/`（8 MB；`research/` 是九份调研原报告，结论已入库 `docs/research/`；`acc-claude-decision/` 是付费证据，台账引用）。
-  - ccloop 的 prunable 工作树 `…/ccloop-cli-scripted-*/worktrees/attempt-1`（`worktree prune` 归人）。
-  - `$TMPDIR` 下 ccmem 测试遗留 `ccmem-*`：`find "$TMPDIR" -maxdepth 1 -name 'ccmem-*' -mmin +60 -exec rm -rf {} +`。
-- **待人裁（流程引擎 spec §24）**：独立审阅把 `blrbiran/md2publish-skills` 的改动范围从人批准的「草稿上传开关」扩大到：visuals 花钱前的提问、排版覆盖已有文件的提问、把内联 `python3 -c` 换成脚本文件。都在人自己的仓库，**接受还是收窄由人定**。
-- `~/.syncskill/config.json` 的 `runskills`、`aifusion` 本地源仍指已不存在的 `/Users/biran/code/skills/runskills/…`（syncskill 是人的配置，未改）。
-- ccmem embedding 账号无额度（`429 You have no credits remaining`）。
-- 想开「纠正写回 ccmem」：读 `~/.orca/panel/service.json`，在已存参数上加 `--ccmem-corrections` 重装面板（需绝对路径 `ORCA_CCMEM_BIN`）；ccmem daemon 已在本会话前由人重启。
+- **push**：Orca main（本会话三条线已合）——以 `ls-remote` 现测。
+- **审**（会话 `b37f7ce9` 控制器替人定的、可撤回，台账有原委）：
+  1. `flow-start` 只接受已登记的 `dir` 项目，对所有人生效；`--repo` 模式的面板起不了流程（审阅 I4）。
+  2. 流程子组从判据保护里排除（验收里它把 voice 的改稿当成改测试，自动开了付费审阅）。
+  3. 检查功能的 socket 分档：多数检查设置无令牌可设，命令／预算／开启定时／锁要令牌，派出的 run 一律拒。
+  4. `~/.orca/agents.json.draft.json` 被一次测试改写（06:27）；是否要找回旧草稿。
+  5. 流程缺口 spec 里的四条控制器决定（spec §20 列出）。
+- **删**：`/private/tmp/orca-b37f7ce9/`（clone、变异副本、构建、日志；`wechat-acceptance/` 是付费验收证据，台账引用——先看再删；`ccloop-fbd3512/` 是当前 pin 的 build、测试的 `ORCA_CCLOOP_BIN`，下一位重建前别删）；前几轮的 `/private/tmp` 残留见 git 历史里上一版本节；ccloop prunable 工作树（`worktree prune` 归人）。
+- `~/.syncskill/config.json` 的 `runskills`、`aifusion` 本地源仍指已搬走的路径（沙箱验收用的是改正后的副本，人的文件未动）。
+- ccmem embedding 账号无额度。
+- 想开「纠正写回 ccmem」：同前（面板 flag `--ccmem-corrections`）。
+- 想让公众号流程真出封面：配一个图片生成 key，或按流程缺口 spec 用预设默认封面。
 
-### 4.2 agent 的活（会话 `8b1469ea` 收尾时的建议顺序；人再定）
+### 4.2 agent 的活（会话 `b37f7ce9` 收尾时的建议顺序；人再定）
 
-1. **ccloop 每契约工具规则**：按 ccloop spec `2026-10-22-per-contract-tool-rules-design.md` 写计划并实施（ccloop 规则管），合进 ccloop main，人推后 Orca repin（`node scripts/pin-ccloop.mjs`，§3.3 做法）。流程引擎第一期依赖它。
-2. **CLI v2 实施**（spec §14–§16 优先）。它不是流程引擎第一期的前置（第一期按今天的 `VERB_ACCESS` 两档），但「Orca 派出的 run 不能替人做事」的标记与人的令牌都在它里面。
-3. **检查与触发器实施**（spec `2026-10-22-checks-and-triggers-design.md`；schema 步骤与流程引擎 spec 的 schema 步骤按落地先后编号，一次备份）。
-4. **流程引擎第一期**（spec `2026-10-22-flow-engine-design.md` §17 的工作包；前置：上面 1，以及人的 `blrbiran/md2publish-skills` 加 `--confirmed-by-orca` 开关、把内联 `python3 -c` 换成脚本、排版可非交互覆盖——**改人的仓库前先问人**）。syncskill S1–S7（钉 SHA、多版本存储、清单安装、锁校验注入、保留未知键、不冲突的来源 id、管理员白名单）在第二期。
-5. 小项：其余确定性失败原因也会让需求调用卡住、面板只给无用的「重试」（台账 F88 行）；输入框／配置项里的 token 数仍是原始数字；`taskResultCollector`「flushes owned queued results…」与 `criteriaBaseRun`「a restart while the re-run…」两条负载形状登记进 `known-load-flakes.md`（n＝1，断言形状）。
-6. 欠着的付费验收（每次先问人）：debug 计划端到端；阶梯／集成检查／自动审阅员的真 agent 端到端；ccmem Codex Stop 钩子；OMP skills 真 provider；GitHub 私有库合入。
+1. **测试者反馈 #91–#96**（`/Users/biran/code/skills/orca/orca_archived_files/issue-20261008.md`；人裁「同意你的方案，具体改动等下一个session再开始做」；分诊结论在台账「Feedback triage」行）：#92 启动时说清 ccloop bin 为什么不可用＋`orca doctor` 查 bin 文件（#93 并入，**不**把路径写死进 service.json）；#94 一条坏组不让整页空白；#95 按回答类型合成一行；#96 Orca 自有 markdown 子集渲染器；#91 handoff-unresolved／partial 的停止也给「重试」。
+2. **实施流程缺口 spec** `docs/superpowers/specs/2026-10-22-flow-phase1-gaps-design.md`（先写 plan）。
+3. **codex 额度恢复（2026-10-27）后**：真 codex 验收 ccloop 的新 wire schema（付费先问人）；拒收就修或 pin 回。
+4. 公众号流程验收余项：验收 run 存的是模板 v1（前缀规则带尾空格 ⇒ `refused` 标红）；新跑一次 v2 模板确认 refused 消失（付费先问人）；技能的 `VAR=$(…)` 捕获与 claude 前缀规则的匹配仍待真跑确认。
+5. 登记未修（台账有原文）：流程的 run 级反馈分诊等五项已并入缺口 spec；诊断性检查没传给 ccloop；saved-result 恢复不填 skill 目录；reconcile 路径对 dir 组仍可能写 `.decisions/`；`omp-phase-continuation`（ccloop）；定时跑任意工作（#82 余项，需补 spec）。
+6. 欠着的付费验收（每次先问人）：同前（debug 计划端到端、阶梯／集成检查／模型审阅真 agent 端到端、ccmem Codex Stop 钩子、OMP skills 真 provider、GitHub 私有库合入）。
 
 ## 五、已经拍板过的事（**不要重开**）
 
