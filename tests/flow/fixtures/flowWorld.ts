@@ -8,13 +8,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { advanceFlowRuns, completeFlowCall, startFlowRun, type AgentCandidate, type FlowCallRequest, type FlowDeps, type StartFlowInput } from "../../../src/flow/kernel.js";
 import { listExecutions, type ExecutionRow } from "../../../src/flow/store.js";
-import type { KindRegistry } from "../../../src/flow/kinds/registry.js";
+import type { FlowChildPort, KindRegistry } from "../../../src/flow/kinds/registry.js";
+import type { ControlStore } from "../../../src/control/store.js";
 import { openTestStore } from "../../control/fixtures/store.js";
 
 export interface WorldTemplate { yaml: string; assets?: Record<string, string> }
 
 export async function flowWorld(templates: Record<string, WorldTemplate>, opts: {
-  agents?: AgentCandidate[]; files?: Record<string, string>; registry?: KindRegistry; runCommand?: FlowDeps["runCommand"];
+  agents?: AgentCandidate[]; files?: Record<string, string>; registry?: KindRegistry; runCommand?: FlowDeps["runCommand"]; children?: FlowChildPort | ((store: ControlStore) => FlowChildPort);
 } = {}) {
   const h = await openTestStore();
   const builtinRoot = join(h.root, "builtin");
@@ -35,6 +36,7 @@ export async function flowWorld(templates: Record<string, WorldTemplate>, opts: 
     agents: () => opts.agents ?? [{ agent: "claude", model: "opus", tier: "high" }, { agent: "codex", model: "gpt", tier: "high" }],
     ...(opts.registry === undefined ? {} : { registry: opts.registry }),
     ...(opts.runCommand === undefined ? {} : { runCommand: opts.runCommand }),
+    ...(opts.children === undefined ? {} : { children: typeof opts.children === "function" ? opts.children(h.store) : opts.children }),
   };
   const start = (input: Partial<StartFlowInput> & { templateRef: string }) =>
     startFlowRun(deps, { dir: folder, params: {}, by: "ann", via: "cli:test", ...input });

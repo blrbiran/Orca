@@ -191,7 +191,7 @@ export function listExecutions(store: ControlStore, flowRunId: string): Executio
  * never replaced -- and a new body (the kernel's own bookkeeping: retries, the prompt sent, the ask it opened).
  */
 export function finishExecution(store: ControlStore, key: ExecutionKey, from: ExecutionState, to: ExecutionState, at: number,
-  change: { output?: { kind: "commit" | "artifact" | "none"; ref: string | null; hash: string | null }; body?: unknown; baseCommit?: string } = {}): void {
+  change: { output?: { kind: "commit" | "artifact" | "none"; ref: string | null; hash: string | null }; body?: unknown; baseCommit?: string; childGroupId?: string } = {}): void {
   if (from !== to) setExecutionState(store, key, from, to, at);
   else if (store.db.prepare("UPDATE step_executions SET updated_at=? WHERE flow_run_id=? AND step_key=? AND seq=? AND state=?").run(at, key.flowRunId, key.stepKey, key.seq, from).changes !== 1) {
     throw new FlowStoreError("flow-execution-stale", `${key.stepKey}#${key.seq}:${from}`);
@@ -202,6 +202,9 @@ export function finishExecution(store: ControlStore, key: ExecutionKey, from: Ex
     if (changed !== 1) throw new FlowStoreError("flow-execution-stale", `${key.stepKey}#${key.seq}:output-set`);
   }
   if (change.baseCommit !== undefined) store.db.prepare("UPDATE step_executions SET base_commit=? WHERE flow_run_id=? AND step_key=? AND seq=? AND base_commit IS NULL").run(change.baseCommit, key.flowRunId, key.stepKey, key.seq);
+  // §6.2: a work execution's child group is named once; a second name for it is refused.
+  if (change.childGroupId !== undefined && store.db.prepare("UPDATE step_executions SET child_group_id=? WHERE flow_run_id=? AND step_key=? AND seq=? AND (child_group_id IS NULL OR child_group_id=?)")
+    .run(change.childGroupId, key.flowRunId, key.stepKey, key.seq, change.childGroupId).changes !== 1) throw new FlowStoreError("flow-execution-stale", `${key.stepKey}#${key.seq}:child`);
   if (change.body !== undefined) store.db.prepare("UPDATE step_executions SET body=? WHERE flow_run_id=? AND step_key=? AND seq=?").run(json(change.body), key.flowRunId, key.stepKey, key.seq);
 }
 

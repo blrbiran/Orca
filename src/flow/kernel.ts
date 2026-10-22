@@ -32,6 +32,8 @@ import { loadBuiltin } from "./template/load.js";
 import type { FlowStep, FlowTemplate } from "./template/schema.js";
 import { deriveParam, expandVars } from "./template/vars.js";
 import { evaluateWhen, type ParamValue } from "./template/when.js";
+import { returnUnspent } from "./pool.js";
+import type { FlowChildPort } from "./kinds/work.js";
 import { activeOutputs, advanceHead, advanceHeadWithRetry, compose, type ExecutionOutput } from "./vault/compose.js";
 import { changesBetween, copyBack } from "./vault/copyBack.js";
 import { DEFAULT_CAPS, importSnapshot } from "./vault/snapshot.js";
@@ -64,6 +66,8 @@ export interface FlowDeps {
   builtinRoot?: string;
   registry?: KindRegistry;
   runCommand?(command: string, cwd: string): Promise<{ exitCode: number; output: string }>;
+  /** §6.2: the driver-backed child groups `work` steps run in (absent: a `work` step fails `work-port-unavailable`). */
+  children?: FlowChildPort;
 }
 
 /** Spec §4.3: the kinds whose prompts carry the unattended fragment. */
@@ -303,6 +307,7 @@ export function contextFor(deps: FlowDeps, run: LoadedRun, execution: ExecutionR
     recordOf: (stepKey) => { const seq = getHead(deps.store, run.row.id, stepKey); return seq === null ? null : recordOfExecution(deps.store, executions().find((e) => e.stepKey === stepKey && e.seq === seq)); },
     executions,
     runCommand: deps.runCommand ?? ((command, cwd) => runShell(command, cwd)),
+    children: deps.children ?? null,
     env: deps.env,
     now: deps.now,
   };
@@ -337,6 +342,17 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
   if ("call" in outcome) {
     deps.store.transaction(() => finishExecution(deps.store, key, from, "running", at, { body: { ...body, call: { purpose: outcome.call.purpose } } }));
     deps.calls.request({ key, groupId: run.row.groupId, ...outcome.call });
+    return;
+  }
+  if ("dispatched" in outcome) {
+    deps.store.transaction(() => finishExecution(deps.store, key, from, "running", at, {
+      childGroupId: outcome.dispatched.childGroupId, baseCommit: outcome.dispatched.baseCommit, body: { ...body, child: outcome.dispatched },
+    }));
+    return;
+  }
+  if ("parked" in outcome) {
+    // §6.3: only this run waits; the needs-you item is the parked execution with its reason.
+    deps.store.transaction(() => finishExecution(deps.store, key, from, "parked", at, { body: { ...body, needsYou: outcome.parked } }));
     return;
   }
   const workspaceOutput = "done" in outcome && outcome.done.commit !== undefined ? outcome.done.commit : null;
@@ -463,6 +479,7 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
     const current = latest.get(step.id);
     const basis = basisOf(run, index, heads);
     const free = blockers.every((b) => parallel(b, step));
+    if (current?.state === "running" && step.kind === "work" && (current.body as ExecutionBody).call === undefined && await pollChild(deps, run, current)) return true;
     if (current !== undefined && (current.state === "running" || WAITING.has(current.state))) { satisfied = false; blockers.push(step); continue; }
     if (current?.state === "failed") return false;
     if (current?.state === "queued") {
@@ -489,6 +506,26 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
   }
   if (satisfied && run.row.state === "running") { deps.store.transaction(() => setFlowRunState(deps.store, run.row.id, "running", "done")); }
   return false;
+}
+
+/**
+ * §6.2: a running `work` execution. With no child named yet (a restart between the draw and the dispatch record) its
+ * start runs again -- the child id and the draw are deterministic, so nothing is opened or drawn twice. With a child,
+ * its settlement ends the step and the unspent allocation goes back to the pool. True when something moved.
+ */
+async function pollChild(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow): Promise<boolean> {
+  const kind = kindFor(deps, stepOf(run, execution.stepKey));
+  if (kind === undefined) return false;
+  if (execution.childGroupId === null) {
+    await applyOutcome(deps, run, execution, "running", await kind.start(contextFor(deps, run, execution)));
+    return true;
+  }
+  const status = deps.children?.status(execution.childGroupId) ?? null;
+  if (status === null || status.state === "running" || kind.settle === undefined) return false;
+  const outcome = kind.settle(contextFor(deps, run, execution), status, execution.baseCommit!);
+  deps.store.transaction(() => { returnUnspent(deps.store, run.row.id, execution.childGroupId!, status.spentTokens); });
+  await applyOutcome(deps, run, execution, "running", outcome);
+  return true;
 }
 
 function setExecutionStateSkipped(store: ControlStore, key: ExecutionKey, at: number): void {

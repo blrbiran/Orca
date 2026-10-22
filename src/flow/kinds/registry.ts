@@ -16,6 +16,7 @@ import { CLARIFY_KIND } from "./clarify.js";
 import { DRAFT_KIND } from "./draft.js";
 import { REVIEW_KIND } from "./review.js";
 import { ASK_KIND } from "./ask.js";
+import { WORK_KIND, type FlowChildPort, type FlowChildStatus } from "./work.js";
 
 /** Plan Task 8: the parent group's single-call purposes a flow uses (the driver-backed port registers them, Task 10). */
 export const FLOW_CALL_PURPOSES = ["clarify", "flow-draft", "flow-review", "flow-ask", "rerun-proposal"] as const;
@@ -34,6 +35,10 @@ export type KindOutcome =
       reported?: { candidates?: Record<string, { items: string[]; recommended: number }> };
     } }
   | { failed: { reason: string; record?: unknown; flags?: string[] } }
+  /** §6.2: a `work` execution's child group is open; the kernel reads how it settles through the child port. */
+  | { dispatched: { childGroupId: string; baseCommit: string } }
+  /** §6.3: the run cannot go on until a person acts (`flow-pool-exhausted`); only this run waits. */
+  | { parked: { reason: string; detail?: unknown } }
   /** The step waits for a person (an open ask, a clarify round's answers); parks itself and later steps (§8.2). */
   | { waiting: { ask: unknown } }
   /** §4.3: the agent reported `flow.needs`. */
@@ -76,6 +81,8 @@ export interface KindContext {
   /** Earlier executions of every step (the journal so far). */
   executions(): ExecutionRow[];
   runCommand(command: string, cwd: string): Promise<{ exitCode: number; output: string }>;
+  /** §6.2: the driver-backed child groups (`work`); null where no driver is wired. */
+  children: FlowChildPort | null;
   env: NodeJS.ProcessEnv;
   now(): number;
 }
@@ -86,6 +93,8 @@ export interface KindDefinition {
   readonly interactive: boolean;
   start(ctx: KindContext): Promise<KindOutcome>;
   collect?(ctx: KindContext, rawOutput: unknown, failure: string | null): KindOutcome | Promise<KindOutcome>;
+  /** A child-group kind (`work`): what its settled child means for the step. */
+  settle?(ctx: KindContext, status: Exclude<FlowChildStatus, { state: "running" }>, baseCommit: string): KindOutcome;
   /** A record's summary for later steps' pointers (§12.1). */
   projection?(record: unknown): string;
 }
@@ -106,11 +115,11 @@ export function createKindRegistry(): KindRegistry {
   };
 }
 
-/** The phase-1 kinds this module registers (Task 10 adds `work`); a fresh registry per call. */
+/** The phase-1 kinds; a fresh registry per call. */
 export function builtinKinds(): KindRegistry {
   const registry = createKindRegistry();
-  for (const kind of [CLARIFY_KIND, DRAFT_KIND, CHECK_KIND, REVIEW_KIND, ASK_KIND]) registry.register(kind);
+  for (const kind of [CLARIFY_KIND, DRAFT_KIND, WORK_KIND, CHECK_KIND, REVIEW_KIND, ASK_KIND]) registry.register(kind);
   return registry;
 }
 
-export type { FlowStep, FlowTemplate };
+export type { FlowStep, FlowTemplate, FlowChildPort, FlowChildStatus };
