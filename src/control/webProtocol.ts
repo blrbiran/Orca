@@ -366,8 +366,8 @@ export const dispatchEnvelopeSchema = z
   .object({
     schema: z.literal("orca-dispatch-envelope-v1"),
     phase: z.enum(["estimate", "work", "handoff", "single-call"]),
-    /** N1 DR1: what a `single-call` phase claim is for; an estimate's stored envelope has none. */
-    purpose: z.enum(["clarify", "split"]).optional(),
+    /** N1 DR1: what a `single-call` phase claim is for; an estimate's stored envelope has none. Flow engine §6.2: a flow run's. */
+    purpose: z.enum(["clarify", "split", "flow-draft", "flow-review", "flow-ask", "rerun-proposal"]).optional(),
     groupId: idSchema,
     workItemId: idSchema,
     runId: idSchema,

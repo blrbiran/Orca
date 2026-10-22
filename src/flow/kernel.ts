@@ -41,6 +41,7 @@ import { openVault, type Vault } from "./vault/vault.js";
 import { vaultKeyOf } from "./vault/paths.js";
 import { flowVaultRepoId } from "./groups.js";
 import { parentGroupBody, type FlowParentConfirmation } from "./parent.js";
+import type { FlowCallResult } from "./calls.js";
 
 /** A refusal by name (spec §14, Global Constraints' codes); nothing was written. */
 export class FlowRefusal extends Error {
@@ -490,6 +491,12 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
     const basis = basisOf(run, index, heads);
     const free = blockers.every((b) => parallel(b, step));
     if (current?.state === "running" && step.kind === "work" && (current.body as ExecutionBody).call === undefined && await pollChild(deps, run, current)) return true;
+    // §6.2: a call the driver settled left its raw output on the execution; the kind judges it now.
+    const callResult = current?.state === "running" ? (current.body as { callResult?: FlowCallResult }).callResult : undefined;
+    if (callResult !== undefined && (current!.body as ExecutionBody).call !== undefined) {
+      await completeFlowCall(deps, { flowRunId: run.row.id, stepKey: step.id, seq: current!.seq }, callResult.rawOutput, callResult.failure);
+      return true;
+    }
     if (current !== undefined && (current.state === "running" || WAITING.has(current.state))) { satisfied = false; blockers.push(step); continue; }
     if (current?.state === "failed") return false;
     if (current?.state === "queued") {
@@ -565,6 +572,7 @@ export async function completeFlowCall(deps: FlowDeps, key: ExecutionKey, rawOut
     : failure !== null ? { invalid: `call-failed:${failure}` } : await kind.collect(ctx, rawOutput, failure);
   const body = { ...(execution.body as ExecutionBody) };
   delete body.call;
+  delete body.callResult;
   await applyOutcome(deps, run, { ...execution, body }, "running", outcome);
 }
 

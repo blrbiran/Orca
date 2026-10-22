@@ -1,4 +1,5 @@
 import { finiteCommitment, type BudgetAmount } from "./tokenPolicy.js";
+import { interruptFlowCall, isFlowCallRun } from "../flow/calls.js";
 import { recordStarted } from "./orchestration.js";
 import { hasOptionalTaskPolicy, hasTokenPolicy } from "./fundedAllowance.js";
 import { hasValidUsageSettlement, type UsageSettlement } from "./usageSettlement.js";
@@ -782,6 +783,8 @@ function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outc
   }
   // N1 spec §5.2: a requirement call's round or draft is interrupted and its unused grant goes back to the clarifying
   // ledger (never releaseCommitment, which needs a proposal; survey S28).
+  // Flow engine spec §6.2: a flow run's call gives its grant back to the parent and the pool, and its execution learns it.
+  if (purpose !== null && purpose !== "estimate" && isFlowCallRun(run)) { interruptFlowCall(store, settled as never); return; }
   if (purpose !== null && purpose !== "estimate") { interruptRequirementCall(store, groupId, settled as never); return; }
   const work = readWork(store, groupId, run.workItemId) as unknown as { status: string; grant: { work: Amount; handoff: Amount } };
   if(hasTokenPolicy(store,groupId)&&purpose===null&&outcome!=="settled-restartable") {

@@ -1,4 +1,5 @@
 import { canonicalBytes } from "./canonicalJson.js";
+import { FLOW_CALL_HANDLER, isFlowCallRun } from "../flow/calls.js";
 import { buildEstimatePrompt, estimateResponseSchema, estimateTaskIds } from "./estimatePrompt.js";
 import { classifyEstimateOutput, readEstimateContract } from "./estimator.js";
 import { readEstimateRecord } from "./queries.js";
@@ -57,7 +58,20 @@ const ESTIMATE = {
   usageUnknownReason: "estimate-usage-unknown",
 } as const satisfies SingleCallHandler;
 
-const HANDLERS: Readonly<Record<SingleCallPurpose, SingleCallHandler>> = Object.freeze({ estimate: ESTIMATE, clarify: CLARIFY_HANDLER, split: SPLIT_HANDLER });
+/** Flow engine spec §6.2, §10.1: a `clarify` call is a requirement's or a flow clarify step's; its run row tells which. */
+const CLARIFY_ANY: SingleCallHandler = {
+  purpose: "clarify",
+  prepare: (deps, run) => (isFlowCallRun(run) ? flowHandler("clarify") : CLARIFY_HANDLER).prepare(deps, run),
+  classify: CLARIFY_HANDLER.classify,
+  complete: (deps, run, rawOutput, commitTerminal, failure) => (isFlowCallRun(run) ? flowHandler("clarify") : CLARIFY_HANDLER).complete(deps, run, rawOutput, commitTerminal, failure),
+  usageUnknownReason: CLARIFY_HANDLER.usageUnknownReason,
+};
+const flowHandler = (purpose: SingleCallPurpose): SingleCallHandler => ({ purpose, ...FLOW_CALL_HANDLER });
+
+const HANDLERS: Readonly<Record<SingleCallPurpose, SingleCallHandler>> = Object.freeze({
+  estimate: ESTIMATE, clarify: CLARIFY_ANY, split: SPLIT_HANDLER,
+  "flow-draft": flowHandler("flow-draft"), "flow-review": flowHandler("flow-review"), "flow-ask": flowHandler("flow-ask"), "rerun-proposal": flowHandler("rerun-proposal"),
+});
 
 export function singleCallHandler(purpose: SingleCallPurpose): SingleCallHandler {
   return HANDLERS[purpose];

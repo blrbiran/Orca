@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { SingleCallPurpose } from "./singleCall.js";
 import { z } from "zod";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
@@ -22,7 +23,7 @@ const same = (a: unknown, b: unknown) => canonicalBytes(a).equals(canonicalBytes
 export interface SingleCallClaimInput {
   groupId: string; workItemId: string; runId: string; ownerToken: string;
   /** DR1: an estimate is stored as phase "estimate" with no purpose; every other purpose as phase "single-call" with it. */
-  purpose: "estimate" | "clarify" | "split";
+  purpose: SingleCallPurpose;
   /** The purpose's own run fields, placed right after `taskId` (the estimate's `estimateId`). */
   identity: Record<string, unknown>;
   graphVersion: number; targetVersion: number; commandId: string;

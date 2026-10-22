@@ -8,7 +8,8 @@ import { ControlError } from "./errors.js";
  * hashed dispatch envelope, in attempt evidence and in proof artifacts -- and is read here as purpose `estimate`. Any
  * other purpose is stored as `phase: "single-call"` with `purpose`. No stored row is ever rewritten.
  */
-export const SINGLE_CALL_PURPOSES = ["estimate", "clarify", "split"] as const;
+// Flow engine spec §6.2: a flow run's calls on its parent group (a flow `clarify` step's call is `clarify`, told apart by its run row).
+export const SINGLE_CALL_PURPOSES = ["estimate", "clarify", "split", "flow-draft", "flow-review", "flow-ask", "rerun-proposal"] as const;
 export type SingleCallPurpose = (typeof SINGLE_CALL_PURPOSES)[number];
 
 export function isSingleCallPurpose(value: unknown): value is SingleCallPurpose {

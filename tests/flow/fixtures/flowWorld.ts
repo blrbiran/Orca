@@ -17,8 +17,12 @@ export interface WorldTemplate { yaml: string; assets?: Record<string, string> }
 export async function flowWorld(templates: Record<string, WorldTemplate>, opts: {
   agents?: AgentCandidate[]; files?: Record<string, string>; registry?: KindRegistry; runCommand?: FlowDeps["runCommand"]; children?: FlowChildPort | ((store: ControlStore) => FlowChildPort);
   confirmParent?: FlowDeps["confirmParent"];
+  /** A store another fixture made (webFixture's: profiles, a port, a frozen slot), instead of a fresh one. */
+  harness?: { root: string; store: ControlStore; dispose(): Promise<void> };
+  /** The production call port over this world's store, instead of the recording one. */
+  callPort?: (store: ControlStore, now: () => number) => FlowDeps["calls"];
 } = {}) {
-  const h = await openTestStore();
+  const h = opts.harness ?? await openTestStore();
   const builtinRoot = join(h.root, "builtin");
   for (const [id, tpl] of Object.entries(templates)) {
     const write = (rel: string, text: string) => { mkdirSync(dirname(join(builtinRoot, id, rel)), { recursive: true }); writeFileSync(join(builtinRoot, id, rel), text); };
@@ -34,6 +38,7 @@ export async function flowWorld(templates: Record<string, WorldTemplate>, opts: 
     store: h.store, now: () => (clock += 1), builtinRoot,
     env: { ORCA_VAULT_DIR: join(h.root, "vaults") },
     calls: { request: (req) => { calls.push(structuredClone(req)); } },
+    ...(opts.callPort === undefined ? {} : { calls: opts.callPort(h.store, () => (clock += 1)) }),
     agents: () => opts.agents ?? [{ agent: "claude", model: "opus", tier: "high" }, { agent: "codex", model: "gpt", tier: "high" }],
     ...(opts.registry === undefined ? {} : { registry: opts.registry }),
     ...(opts.runCommand === undefined ? {} : { runCommand: opts.runCommand }),
