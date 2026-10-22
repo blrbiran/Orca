@@ -58,7 +58,7 @@ describe("a scripted flow run end to end through the pump (plan Task 10)", { tim
         const failed = listExecutions(runtime.store, flowRunId).find((e) => e.state === "failed" || e.state === "parked");
         if (failed !== undefined) throw new Error(`${failed.stepKey}#${failed.seq} ${failed.state}: ${JSON.stringify(failed.body)}`);
         return getFlowRun(runtime.store, flowRunId)!.state === "done";
-      }, 360_000, "the run to complete", 100);
+      }, 180_000, "the run to complete", 100);
       const executions = ["outline", "write", "verify"].map((key) => listExecutions(runtime.store, flowRunId).find((e) => e.stepKey === key)!);
       expect(executions.map((e) => [e.stepKey, e.seq, e.state, e.outputKind])).toEqual([
         ["outline", 1, "done", "artifact"], ["write", 1, "done", "commit"], ["verify", 1, "done", "artifact"],
