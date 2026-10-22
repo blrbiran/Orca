@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { taskContractSchema, type SchedulerControlPlanSource } from "../scheduler/planFile.js";
 import type { PartialSelection } from "./agentSelection.js";
+import { flowRoleSql } from "../flow/groups.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { applyWebCommand } from "./commandLedger.js";
@@ -283,7 +284,9 @@ export function anyTaskFailed(store: ControlStore, groupId: string): boolean {
  */
 export function ladderCandidates(store: ControlStore): Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>>; repoId: string }> {
   const out: Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>>; repoId: string }> = [];
-  for (const row of store.db.prepare("SELECT g.id AS id, g.body AS body, o.body AS orchestration FROM groups g JOIN group_orchestration o ON o.group_id=g.id ORDER BY g.rowid").all()) {
+  // Flow engine spec §6.2, §9.6: a flow run's hidden child is the kernel's to settle (a failed effect is never retried
+  // on its own); orca-auto confirmed it, but no ladder level acts on it.
+  for (const row of store.db.prepare(`SELECT g.id AS id, g.body AS body, o.body AS orchestration FROM groups g JOIN group_orchestration o ON o.group_id=g.id WHERE ${flowRoleSql("g")} IS NOT 'child' ORDER BY g.rowid`).all()) {
     const groupId = String(row.id);
     let body: Record<string, unknown>;
     try {
@@ -326,7 +329,8 @@ export const QUOTA_REPROBE_MS = 30 * 60_000;
 export function quotaWaitCandidates(store: ControlStore, waiting: ReadonlySet<string>, now: number): Array<{ groupId: string; taskId: string; runId: string }> {
   if (waiting.size === 0) return [];
   const out: Array<{ groupId: string; taskId: string; runId: string }> = [];
-  for (const row of store.db.prepare("SELECT g.id AS id, o.body AS orchestration FROM groups g JOIN group_orchestration o ON o.group_id=g.id ORDER BY g.rowid").all()) {
+  // Flow engine spec §6.2, §9.6: nor a flow run's hidden child (the kernel settles it; the person retries the step).
+  for (const row of store.db.prepare(`SELECT g.id AS id, o.body AS orchestration FROM groups g JOIN group_orchestration o ON o.group_id=g.id WHERE ${flowRoleSql("g")} IS NOT 'child' ORDER BY g.rowid`).all()) {
     const groupId = String(row.id);
     try { if ((JSON.parse(String(row.orchestration)) as { mode?: unknown }).mode !== "run") continue; } catch { continue; }
     if (isGroupArchived(store, groupId)) continue;

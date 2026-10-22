@@ -20,6 +20,7 @@ import { add, groupUsageUnknown } from "./budget.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { dimensions } from "./commands.js";
 import { ControlError } from "./errors.js";
+import { refuseFlowChild } from "../flow/groups.js";
 import { readBudgetProposal, readWork, saveWork } from "./queries.js";
 import {
   ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readGroupBody, readRunBody, readStopIntent, releaseCommitment,
@@ -68,6 +69,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         const taskId = command.payload.taskId;
         // Spec §4.2(2), in the spec's order. Archived groups are refused by Part E (group-archived).
         const group = readGroupBody(store, groupId);
+        refuseFlowChild(store, groupId);
         if (group.status === "clarifying") throw new ControlError("group-state-invalid", "clarifying");
         if (group.stopped || readStopIntent(store, groupId) !== null) throw new ControlError("stop-mode-conflict");
         const work = readWork(store, groupId, taskId) as unknown as RetriedWork;

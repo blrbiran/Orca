@@ -1,5 +1,6 @@
 import { finiteCommitment, type BudgetAmount } from "./tokenPolicy.js";
 import { interruptFlowCall, isFlowCallRun } from "../flow/calls.js";
+import { refuseFlowChild } from "../flow/groups.js";
 import { recordStarted } from "./orchestration.js";
 import { hasOptionalTaskPolicy, hasTokenPolicy } from "./fundedAllowance.js";
 import { hasValidUsageSettlement, type UsageSettlement } from "./usageSettlement.js";
@@ -462,6 +463,7 @@ export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand
         // (repository, operator) instead of assuming everything else carries a groupId.
         if (target.kind !== "group" && target.kind !== "task" && target.kind !== "run") throw new ControlError("control-target-not-allowed");
         const groupId = target.groupId;
+        refuseFlowChild(store, groupId);
         const observed = target.kind === "run"
           ? retryRun(store, groupId, target.runId, context)
           : retryGroup(store, groupId, context, outputBound);

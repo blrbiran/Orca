@@ -1716,6 +1716,7 @@ export const zhErrors: Record<string, string> = {
   "loop-plan-invalid": "做法的输入不合法：{{message}}",
   "no-op-command": "这条命令不会改变任何东西。",
   "requirement-already-accepted": "这条需求的拆分草稿已被接受：请对任务组提反馈或记一条更正，而不是修改某一轮。",
+  "flow-child-managed": "这个任务组是某次流程运行里的一步，由流程自己收尾：请在流程运行页重试这一步，而不是重试这个任务组。",
   "flow-group-delivery-fixed": "这个流程任务组作用于一个文件夹：交付方式固定为保留，文件夹只通过回写更新。",
   "revision-unchanged": "修改后的回答与原来完全一样；请至少改一个回答或决定。",
   "numeric-overflow": "数值溢出：{{message}}",

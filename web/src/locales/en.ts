@@ -1793,6 +1793,7 @@ export const enErrors: Record<string, string> = {
   "loop-plan-invalid": "The loop plan's input is not valid: {{detail}}",
   "no-op-command": "This command would change nothing.",
   "requirement-already-accepted": "A split draft of this requirement was accepted: change it with feedback on the group or a correction, not by revising a round.",
+  "flow-child-managed": "This group is a step of a flow run, settled by the run itself: retry the step from the run's page, not the group.",
   "flow-group-delivery-fixed": "This flow group works on a folder: its delivery is fixed to keep, and the folder is updated by copy-back.",
   "revision-unchanged": "The revision answers the round exactly as before; change at least one answer or decision.",
   "numeric-overflow": "A number is too large: {{detail}}",

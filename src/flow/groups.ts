@@ -11,6 +11,7 @@
  * Children are hidden from the summary and the kanban, and hold no running-group slot (the parent does).
  */
 import { join } from "node:path";
+import { ControlError } from "../control/errors.js";
 import type { ControlStore } from "../control/store.js";
 import { vaultDir } from "./vault/paths.js";
 
@@ -26,6 +27,8 @@ export interface FlowGroupBlock {
 
 export const FLOW_VAULT_REPO_PREFIX = "flow-vault-";
 export const FLOW_GROUP_DELIVERY_FIXED = "flow-group-delivery-fixed";
+/** §6.2, §9.6: a hidden child is settled by the kernel; the retry verbs on it are refused (the person retries the step). */
+export const FLOW_CHILD_MANAGED = "flow-child-managed";
 
 export function flowBlockOf(body: unknown): FlowGroupBlock | null {
   const flow = (body as { flow?: unknown } | null)?.flow;
@@ -48,6 +51,11 @@ export function flowGroupOf(store: ControlStore, groupId: string): (FlowGroupBlo
   if (run === undefined) return null;
   const workspace = JSON.parse(String(run.workspace)) as { kind?: unknown };
   return { ...block, workspaceKind: String(workspace.kind), vaultId: run.vault_id === null ? null : String(run.vault_id) };
+}
+
+/** §6.2, §9.6: refuse a task-level retry or continuation on a flow run's hidden child. */
+export function refuseFlowChild(store: ControlStore, groupId: string): void {
+  if (flowBlockOf(groupBodyOf(store, groupId))?.role === "child") throw new ControlError(FLOW_CHILD_MANAGED, groupId);
 }
 
 /** §5.1: every flow group, parent and child, on a `dir` workspace. */

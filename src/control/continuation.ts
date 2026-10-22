@@ -1,4 +1,5 @@
 import { hasTokenPolicy, inheritedWorkUsage } from "./fundedAllowance.js";
+import { refuseFlowChild } from "../flow/groups.js";
 import type { Grant } from "./types.js";
 import { finiteCommitment, remainingBudget } from "./tokenPolicy.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -250,6 +251,7 @@ export function applyContinueTask(deps: ContinuationDeps, command: ContinueTaskC
         const { groupId, taskId } = command.target;
         // N1 spec §4.1 (survey S12): nor any task.
         refuseClarifying(store, groupId);
+        refuseFlowChild(store, groupId);
         const group = readGroupBody(store, groupId);
         if (group.stopped || readStopIntent(store, groupId) !== null) throw new ControlError("group-stopped");
         const registered = registerContinuation(store, groupId, { taskId, ...command.payload }, context.nextCommandRevision);

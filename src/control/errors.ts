@@ -279,6 +279,8 @@ export const durableCommandErrorStatuses = {
   "requirement-already-accepted": 422,
   // Flow engine spec §5.1 [IR-I7]: a flow group on a `dir` workspace delivers `keep`, fixed by code.
   "flow-group-delivery-fixed": 422,
+  // Flow engine spec §6.2, §9.6: a flow run's hidden child is the kernel's; retry the step through the run instead.
+  "flow-child-managed": 422,
   "revision-unchanged": 422,
   "group-stopped": 422,
   "handoff-budget-unavailable": 422,
@@ -457,6 +459,7 @@ export const v1WebErrorCodes = [
   "estimate-in-flight",
   "estimate-input-too-large",
   "execution-policy-unrepresentable",
+  "flow-child-managed",
   "flow-group-delivery-fixed",
   "grant-amendment-unsupported",
   "group-budget-unavailable",
