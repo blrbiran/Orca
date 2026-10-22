@@ -17,7 +17,7 @@ import { buildClarifyPrompt, classifyClarifyOutput } from "../../control/require
 import { latestRoundAt, newRound, readRoundsAt, writeRoundAt, type RoundsKey } from "../../control/requirementRecords.js";
 import { CLARIFY_CAPS, MAX_AUTO_RETRIES, clarifyTier, type ClassPair, type RoundBody } from "../../control/requirementSchemas.js";
 import { applyOutcome, compositionFor, contextFor, FlowRefusal, loadRun, stepOf, type FlowDeps } from "../kernel.js";
-import { listExecutions, type ExecutionRow } from "../store.js";
+import { finishExecution, listExecutions, type ExecutionRow } from "../store.js";
 import type { FlowStep } from "../template/schema.js";
 import { vaultGit } from "../vault/vault.js";
 import type { ExecutionBody, KindContext, KindDefinition, LoadedRun } from "./registry.js";
@@ -26,6 +26,8 @@ type ClarifyStep = Extract<FlowStep, { kind: "clarify" }>;
 /** The driver run whose output the kernel is judging (flow/calls.ts stores it with the output). */
 const callRunOf = (ctx: KindContext): string | undefined => (ctx.body as { callResult?: { runId?: string } }).callResult?.runId;
 const LISTING_MAX = 500;
+/** A clarify step that drafts no further round and waits for the person to agree (the run view's needsYou reason). */
+export const CLARIFY_AWAITING_CONSENSUS = "clarify-awaiting-consensus";
 export const FLOW_CLARIFY_MAX_OUTPUT_TOKENS = 64_000;
 
 const roundsKey = (run: LoadedRun, stepKey: string, execSeq: number): RoundsKey => ({ groupId: run.row.groupId, stepKey, execSeq });
@@ -207,7 +209,15 @@ export async function answerFlowClarify(deps: FlowDeps, target: { flowRunId: str
   writeRoundAt(deps.store, key, { ...round, state: "answered", answers, glossaryDecisions: payload.glossaryDecisions, adrDecisions: payload.adrDecisions, answeredAt: new Date(deps.now()).toISOString(), by, via });
   const rounds = readRoundsAt(deps.store, key);
   if (round.result!.frontierEmpty || activeChain(rounds).chain.length >= roundCap(rounds)) {
-    // Clarification stops as today: the person reaches consensus (or, later, grants one more round).
+    // Clarification stops as today: the person reaches consensus (or, later, grants one more round). T18 acceptance:
+    // stopping silently left the answered round's ask on show, so the step now says it waits for the person to agree.
+    const cause = round.result!.frontierEmpty ? "nothing-left-to-ask" : "round-cap";
+    const why = cause === "round-cap" ? `the cap is ${roundCap(rounds)} rounds` : "the clarifier has nothing left to ask";
+    const needsYou = {
+      reason: CLARIFY_AWAITING_CONSENSUS, roundNo: round.roundNo, cause,
+      text: `Round ${round.roundNo} is answered and no further round is drafted (${why}). The brief waits for you to agree with it as it stands: orca flow answer ${target.flowRunId} ${target.stepKey} --consensus`,
+    };
+    deps.store.transaction(() => finishExecution(deps.store, execution, "needs-person", "needs-person", deps.now(), { body: { ...(execution.body as ExecutionBody), needsYou } }));
     return;
   }
   writeRoundAt(deps.store, key, newRound(Math.max(...rounds.map((r) => r.roundNo)) + 1));
@@ -236,5 +246,6 @@ export async function flowClarifyConsensus(deps: FlowDeps, target: { flowRunId: 
   host.onConsensus({ roundNo: round.roundNo, at, openBranches: round.result?.openBranches ?? [], openQuestions, tag: `consensus-${execution.seq}` });
   const body: ExecutionBody = { ...(execution.body as ExecutionBody) };
   delete body.ask;
+  delete (body as { needsYou?: unknown }).needsYou;
   await applyOutcome(deps, run, { ...execution, body }, "needs-person", { done: { record: document } });
 }

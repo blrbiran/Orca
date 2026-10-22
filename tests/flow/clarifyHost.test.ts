@@ -3,6 +3,7 @@ import { readRoundsAt } from "../../src/control/requirementRecords.js";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
 import { answerFlowClarify, flowClarifyConsensus } from "../../src/flow/kinds/clarify.js";
 import { getFlowRun, getHead } from "../../src/flow/store.js";
+import { readFlowRun } from "../../src/flow/views.js";
 import { ROUND_ONE, ROUND_TWO } from "../control/fixtures/requirementOutputs.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
 
@@ -69,6 +70,33 @@ describe("flow clarify host (C8)", () => {
       expect(getFlowRun(w.store, flowRunId)!.groupId).toBe(groupId);
       expect(w.calls[2]).toMatchObject({ purpose: "flow-draft", key: { stepKey: "outline" } });
       expect(w.calls[2]!.prompt).toContain(ROUND_TWO.statement);
+    } finally { await w.dispose(); }
+  });
+
+  // T18 acceptance (fr-12b4198a): after round 2 of a two-round cap was answered nothing more was drafted, yet the run
+  // view still showed the answered round's ask -- the person could not tell it waited for them to agree. At the cap
+  // (or when the clarifier has nothing left to ask) the step says so: needsYou with the reason and what to do.
+  it("at the round cap with no consensus the step tells the person it waits for their agreement", async () => {
+    const w = await flowWorld({ t: BRIEF }); try {
+      const { flowRunId, groupId } = await w.start({ templateRef: "builtin/t", params: { idea: "Why tea" } });
+      await w.advance();
+      await w.answer(0, ROUND_ONE);
+      const rounds = () => readRoundsAt(w.store, { groupId, stepKey: "brief", execSeq: 1 });
+      const q = rounds()[0]!.result!.questions;
+      await answerFlowClarify(w.deps, { flowRunId, stepKey: "brief" }, { roundNo: 1, answers: q.map((x) => ({ id: x.id, kind: "recommended" as const })), glossaryDecisions: [], adrDecisions: [] }, "ann", "cli:test");
+      const latestNeeds = () => (readFlowRun(w.store, flowRunId) as { steps: Array<{ stepKey: string; latest: { state: string; needsYou: unknown } }> }).steps.find((s) => s.stepKey === "brief")!.latest;
+      // Round 2 waits for answers: nothing to agree on yet.
+      await w.answer(1, { ...ROUND_TWO, questions: [{ key: "links", question: "Relative or absolute image links?", recommendedAnswer: "Relative", why: "The file moves with its folder.", dependsOn: [] }], frontierEmpty: false });
+      expect(latestNeeds()).toMatchObject({ state: "needs-person", needsYou: null });
+      const q2 = rounds()[1]!.result!.questions;
+      await answerFlowClarify(w.deps, { flowRunId, stepKey: "brief" }, { roundNo: 2, answers: q2.map((x) => ({ id: x.id, kind: "recommended" as const })), glossaryDecisions: [], adrDecisions: [] }, "ann", "cli:test");
+      expect(w.calls).toHaveLength(2);
+      expect(rounds().map((r) => r.state)).toEqual(["answered", "answered"]);
+      const latest = latestNeeds();
+      expect(latest).toMatchObject({ state: "needs-person", needsYou: { reason: "clarify-awaiting-consensus", roundNo: 2, cause: "round-cap" } });
+      expect((latest.needsYou as { text: string }).text).toContain(`orca flow answer ${flowRunId} brief --consensus`);
+      await flowClarifyConsensus(w.deps, { flowRunId, stepKey: "brief" }, "ann", "cli:test");
+      expect(latestNeeds()).toMatchObject({ state: "done", needsYou: null });
     } finally { await w.dispose(); }
   });
 
