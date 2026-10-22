@@ -10,21 +10,25 @@ import { describe, expect, it } from "vitest";
 import type { FrozenSlot } from "../../src/control/agentSelection.js";
 import { singleCallHandler } from "../../src/control/singleCallPurposes.js";
 import { createFlowCallPort } from "../../src/flow/calls.js";
+import { readRoundsAt } from "../../src/control/requirementRecords.js";
 import { getFlowRun } from "../../src/flow/store.js";
+import { ROUND_ONE } from "../control/fixtures/requirementOutputs.js";
 import { profileSnapshot, webFixture } from "../control/fixtures/web.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
 
 const TEMPLATE = { yaml: "format: orca-flow-v1\nid: one\nworkspace: {kind: dir}\nbudget: {tokensPerRun: 3000000}\nsteps:\n  - {id: outline, kind: draft, prompt: p.md}\n", assets: { "p.md": "Outline the article.\n" } };
 
-async function world(pool?: number) {
+const BRIEF = { yaml: "format: orca-flow-v1\nid: brief\nparams:\n  idea: {type: longtext, required: true}\nworkspace: {kind: dir}\nsteps:\n  - {id: brief, kind: clarify, sections: [Reader]}\n" };
+
+async function world(pool?: number, template: { yaml: string; assets?: Record<string, string> } = TEMPLATE, params: Record<string, string> = {}) {
   const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]);
   const slot = (h.deps.estimatorSlot as unknown as { slot: FrozenSlot }).slot;
   const binding = { profileId: "all", profileHash: h.frozen.profileHash };
-  const w = await flowWorld({ one: TEMPLATE }, {
+  const w = await flowWorld({ one: template }, {
     harness: h, callPort: (store, now) => createFlowCallPort({ store, now }),
     confirmParent: async () => ({ call: { profile: binding, agentSlot: slot, maxOutputTokens: 8_000 }, children: null }),
   });
-  const started = await w.start({ templateRef: "builtin/one", ...(pool === undefined ? {} : { pool }) });
+  const started = await w.start({ templateRef: "builtin/one", params, ...(pool === undefined ? {} : { pool }) });
   return { h, w, ...started };
 }
 const callRuns = (w: Awaited<ReturnType<typeof world>>["w"], groupId: string) => w.store.db.prepare("SELECT id, active, body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)
@@ -81,6 +85,31 @@ describe("flow single calls on the parent (§6.2)", () => {
       expect(callRuns(w, groupId)).toEqual([]);
       expect(w.latest(flowRunId, "outline")).toMatchObject({ state: "failed", body: { failure: "flow-call-unconfirmed" } });
       expect(getFlowRun(w.store, flowRunId)!.poolDrawn).toBe(0);
+    } finally { await w.dispose(); }
+  });
+
+  it("a flow clarify round records each of its calls -- the driver run and its usage -- as a requirement round does (callOf)", async () => {
+    const { w, flowRunId, groupId } = await world(undefined, BRIEF, { idea: "Why tea" }); try {
+      const handler = singleCallHandler("clarify");
+      const settle = async (output: unknown) => {
+        await w.advance();
+        const run = callRuns(w, groupId).at(-1)!;
+        expect(run.body).toMatchObject({ purpose: "clarify", flowCall: { stepKey: "brief", seq: 1 } });
+        expect((await handler.prepare({ store: w.store } as never, { ...run.body }) as { prompt: string }).prompt).toContain("Why tea");
+        handler.complete({ store: w.store }, { ...run.body }, output, () => {
+          const row = JSON.parse(String(w.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run.id)!.body));
+          w.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...row, state: "settled-restartable" }), run.id);
+        });
+        await w.advance();
+        return run.id;
+      };
+      const invalidRun = await settle({ nonsense: true });
+      const validRun = await settle(ROUND_ONE);
+      const [round] = readRoundsAt(w.store, { groupId, stepKey: "brief", execSeq: 1 });
+      expect(round!.state).toBe("awaiting-answers");
+      expect(round!.calls.map((c) => [c.runId, c.outcome, c.usage?.tokens])).toEqual([[invalidRun, "invalid", 0], [validRun, "valid", 0]]);
+      expect(round!.calls[0]!.reason).toMatch(/^schema:/);
+      expect(w.latest(flowRunId, "brief")!.state).toBe("needs-person");
     } finally { await w.dispose(); }
   });
 });

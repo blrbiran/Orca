@@ -571,6 +571,7 @@ export async function completeFlowCall(deps: FlowDeps, key: ExecutionKey, rawOut
   if (execution === undefined || execution.state !== "running" || (execution.body as ExecutionBody).call === undefined) return;
   const kind = kindFor(deps, stepOf(run, key.stepKey));
   const ctx = contextFor(deps, run, execution);
+  if (failure !== null) kind?.callFailed?.(ctx, failure);
   const outcome: KindOutcome = kind?.collect === undefined ? { failed: { reason: "kind-has-no-collect" } }
     : failure !== null ? { invalid: `call-failed:${failure}` } : await kind.collect(ctx, rawOutput, failure);
   const body = { ...(execution.body as ExecutionBody) };

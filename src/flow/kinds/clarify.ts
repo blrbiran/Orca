@@ -9,6 +9,7 @@
  * rounds, which code accepts only for small + clear (one minor decision records the understanding); a run started with
  * `clarify: skip` records the idea as the document, marked not clarified.
  */
+import { callRecordOf } from "../calls.js";
 import { sha256Canonical, canonicalBytes } from "../../control/canonicalJson.js";
 import { activeChain, chainRounds } from "../../control/clarifyChain.js";
 import { flowClarifyInstruction, flowClarifyJsonSchema, type ClarifyHost, type ConsensusInput } from "../../control/clarifyHost.js";
@@ -22,6 +23,8 @@ import { vaultGit } from "../vault/vault.js";
 import type { ExecutionBody, KindContext, KindDefinition, LoadedRun } from "./registry.js";
 
 type ClarifyStep = Extract<FlowStep, { kind: "clarify" }>;
+/** The driver run whose output the kernel is judging (flow/calls.ts stores it with the output). */
+const callRunOf = (ctx: KindContext): string | undefined => (ctx.body as { callResult?: { runId?: string } }).callResult?.runId;
 const LISTING_MAX = 500;
 export const FLOW_CLARIFY_MAX_OUTPUT_TOKENS = 64_000;
 
@@ -123,9 +126,15 @@ export const CLARIFY_KIND: KindDefinition = {
     const round = latestRoundAt(store, key);
     if (round === null || round.state !== "drafting") throw new Error(`orca: clarify ${step.id}#${ctx.key.seq} has no round drafting`);
     const rounds = readRoundsAt(store, key);
+    // Task 8 deferral (d): the round keeps a record of each of its calls, as a requirement round does (callOf).
+    const withCall = (outcome: "valid" | "invalid", reason: string | null): RoundBody["calls"] => {
+      const call = callRecordOf(store, callRunOf(ctx), outcome, reason);
+      return call === null ? round.calls : [...round.calls, call];
+    };
     const invalid = (reason: string) => {
       const exhausted = round.retries >= MAX_AUTO_RETRIES;
-      writeRoundAt(store, key, exhausted ? { ...round, state: "failed", reasonCode: "clarify-output-invalid", lastInvalidReason: reason } : { ...round, retries: round.retries + 1, lastInvalidReason: reason });
+      const calls = withCall("invalid", reason);
+      writeRoundAt(store, key, exhausted ? { ...round, calls, state: "failed", reasonCode: "clarify-output-invalid", lastInvalidReason: reason } : { ...round, calls, retries: round.retries + 1, lastInvalidReason: reason });
       return { invalid: reason } as const;
     };
     // §10.2 level 2: the zero-round claim is read on its own, then the rest goes to the shared classifier.
@@ -150,7 +159,7 @@ export const CLARIFY_KIND: KindDefinition = {
         return invalid(`zero-round-not-allowed: zeroRound is accepted only in round 1 of a mode auto step judged small and clear with no questions (judged ${cls?.scope ?? "?"}/${cls?.clarity ?? "?"})`);
       }
       const at = new Date(ctx.now()).toISOString();
-      writeRoundAt(store, key, { ...round, state: "answered", result, answers: [], glossaryDecisions: [], adrDecisions: [], answeredAt: at, closedByConsensus: true, lastInvalidReason: null });
+      writeRoundAt(store, key, { ...round, calls: withCall("valid", null), state: "answered", result, answers: [], glossaryDecisions: [], adrDecisions: [], answeredAt: at, closedByConsensus: true, lastInvalidReason: null });
       const chain = chainRounds(readRoundsAt(store, key));
       return {
         done: {
@@ -159,8 +168,14 @@ export const CLARIFY_KIND: KindDefinition = {
         },
       };
     }
-    writeRoundAt(store, key, { ...round, state: "awaiting-answers", result, lastInvalidReason: null });
+    writeRoundAt(store, key, { ...round, calls: withCall("valid", null), state: "awaiting-answers", result, lastInvalidReason: null });
     return { waiting: { ask: { kind: "clarify-round", roundNo: round.roundNo } } };
+  },
+  callFailed(ctx, failure) {
+    const key = roundsKey(ctx.run, ctx.step.id, ctx.key.seq);
+    const round = latestRoundAt(ctx.store, key);
+    const call = callRecordOf(ctx.store, callRunOf(ctx), "failed", failure);
+    if (round !== null && round.state === "drafting" && call !== null) writeRoundAt(ctx.store, key, { ...round, calls: [...round.calls, call] });
   },
   projection: (record) => {
     const doc = record as { statement: string; acceptanceCriteria: Array<{ id: string; text: string }>; notClarified?: boolean };

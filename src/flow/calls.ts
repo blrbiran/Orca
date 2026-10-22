@@ -12,6 +12,8 @@
  *
  * A pool that cannot fund the call parks the execution with `flow-pool-exhausted`, as for a work child.
  */
+import { callOf, type SettledRun } from "../control/requirementCalls.js";
+import type { CallRecord } from "../control/requirementSchemas.js";
 import { randomUUID } from "node:crypto";
 import { add, subtract } from "../control/budget.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
@@ -163,6 +165,17 @@ export function interruptFlowCall(store: ControlStore, run: StoppedSingleCallRun
   const identity = flowCallOf(run as unknown as SingleCallRunRow);
   giveBack(store, run, identity);
   storeResult(store, identity, { runId: run.runId, rawOutput: null, failure: "interrupted" });
+}
+
+/**
+ * Task 8 deferral (d): a flow clarify round's record of one of its calls, as a requirement round keeps it (callOf):
+ * the settled run's id and usage. Null when the execution's output came from no driver run (a criterion's fake port).
+ */
+export function callRecordOf(store: ControlStore, runId: string | undefined, outcome: CallRecord["outcome"], reason: string | null): CallRecord | null {
+  if (runId === undefined) return null;
+  const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
+  if (row === undefined) return null;
+  return callOf(JSON.parse(String(row.body)) as SettledRun, outcome, reason);
 }
 
 /** Whether a single-call run row is a flow call (its purpose may be `clarify`, shared with a requirement's). */
