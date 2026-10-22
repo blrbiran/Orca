@@ -219,7 +219,8 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
   if (input.dir !== undefined) {
     vault = await openVault(deps.env, input.dir);
     importCommit = (await importSnapshot(vault, input.dir, { flowRunId, caps: DEFAULT_CAPS, excludes: template.workspace.excludes ?? [] })).commit;
-    await advanceHead(vault, flowRunId, null, importCommit);
+    // Review M1: a crashed earlier start of this same command may have set it; no run has this id, so it is replaced.
+    await advanceHead(vault, flowRunId, await readHead(vault, flowRunId), importCommit);
   }
   const stored = { template, assets: assetsOf(template, (rel) => loaded.assets.read(rel)) };
   const templateHash = sha256Canonical(stored);
