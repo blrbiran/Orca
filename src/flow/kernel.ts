@@ -39,6 +39,8 @@ import { changesBetween, copyBack } from "./vault/copyBack.js";
 import { DEFAULT_CAPS, importSnapshot } from "./vault/snapshot.js";
 import { openVault, type Vault } from "./vault/vault.js";
 import { vaultKeyOf } from "./vault/paths.js";
+import { flowVaultRepoId } from "./groups.js";
+import { parentGroupBody, type FlowParentConfirmation } from "./parent.js";
 
 /** A refusal by name (spec §14, Global Constraints' codes); nothing was written. */
 export class FlowRefusal extends Error {
@@ -68,6 +70,11 @@ export interface FlowDeps {
   runCommand?(command: string, cwd: string): Promise<{ exitCode: number; output: string }>;
   /** §6.2: the driver-backed child groups `work` steps run in (absent: a `work` step fails `work-port-unavailable`). */
   children?: FlowChildPort;
+  /**
+   * §6.2-§6.3: what the parent is confirmed with at start (the panel freezes the call profile and slot and the children's
+   * profiles; a FlowRefusal refuses the start). Absent: confirmed with neither (a criterion's fake ports serve the run).
+   */
+  confirmParent?(input: { flowRunId: string; groupId: string; projectId: string | null }): Promise<FlowParentConfirmation>;
 }
 
 /** Spec §4.3: the kinds whose prompts carry the unattended fragment. */
@@ -180,6 +187,8 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
   const id = randomUUID();
   const flowRunId = `fr-${id}`;
   const groupId = `flow-${id}`;
+  // §6.3: confirmed once, before anything is written (a refusal leaves no vault import either).
+  const confirmation: FlowParentConfirmation = deps.confirmParent === undefined ? { call: null, children: null } : await deps.confirmParent({ flowRunId, groupId, projectId });
   // §5.2: the person's folder is imported into its vault; the import is the base of every composition.
   let vault: Vault | null = null;
   let importCommit: string | null = null;
@@ -194,17 +203,18 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
     templateRef: input.templateRef, params, roles, clarify: input.clarify ?? null, unattended: input.unattended ?? false, projectId, dir: vault?.dir ?? null,
     vaultPath: vault?.path ?? null, importCommit, by: input.by, via: input.via, startedAt: deps.now(),
   };
+  const vaultId = vault === null ? null : vaultKeyOf(vault.dir);
+  const poolTokens = input.pool ?? template.budget?.tokensPerRun ?? DEFAULT_TOKENS_PER_RUN;
   deps.store.transaction(() => {
-    // The parent group (§6.2 body block `flow`). Task 10 confirms it with the run pool through the import path; until
-    // then it is a bare row no group-state machinery acts on.
-    deps.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)").run(groupId, 0, 1, JSON.stringify({
-      groupId, status: "flow", flow: { role: "parent", flowRunId, projectId, workspaceKind: template.workspace.kind, vaultId: vault === null ? null : vaultKeyOf(vault.dir) },
-    }));
+    // The parent group (§6.2 body block `flow`), confirmed once by orca-auto with the run pool (§6.3); no plan, no tasks.
+    deps.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)").run(groupId, 0, 1, JSON.stringify(parentGroupBody({
+      groupId, flowRunId, projectId, workspaceKind: template.workspace.kind, vaultId, repoId: vaultId === null ? projectId : flowVaultRepoId(vaultId),
+      poolTokens, confirmation, at: deps.now(), goal: `Flow run ${flowRunId} (${input.templateRef})`,
+    })));
     writeCanonicalRecord(deps.store, groupId, templateHash, canonicalBytes(stored).toString("utf8"));
     insertFlowRun(deps.store, {
       id: flowRunId, groupId, templateRef: input.templateRef, templateSha256: templateHash, workspace: { projectId, kind: template.workspace.kind },
-      vaultId: vault === null ? null : vaultKeyOf(vault.dir), paramsSha256: sha256Canonical(params),
-      poolTokens: input.pool ?? template.budget?.tokensPerRun ?? DEFAULT_TOKENS_PER_RUN, poolDrawn: 0, state: "running", revision: 0, body,
+      vaultId, paramsSha256: sha256Canonical(params), poolTokens, poolDrawn: 0, state: "running", revision: 0, body,
     });
   });
   return { flowRunId, groupId };

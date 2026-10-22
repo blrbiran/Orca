@@ -7,6 +7,8 @@
  */
 import { describe, expect, it } from "vitest";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
+import { FlowRefusal } from "../../src/flow/kernel.js";
+import { parentConfirmCommandId } from "../../src/flow/parent.js";
 import { getFlowRun } from "../../src/flow/store.js";
 import { fakeChildPort } from "./fixtures/childPort.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
@@ -57,6 +59,31 @@ describe("run budget pool (C15)", () => {
       expect(w.execs(poor.flowRunId, "polish")).toEqual([]);
       expect([...children.opened.keys()]).toEqual([childGroupIdOf(rich.flowRunId, "write", 1)]);
       expect(w.latest(rich.flowRunId, "write")).toMatchObject({ state: "running" });
+    } finally { await w.dispose(); }
+  });
+
+  it("the parent starts confirmed once by orca-auto with the pool and what its calls and children are confirmed with; no estimate", async () => {
+    const binding = { profileId: "all", profileHash: "a".repeat(64) };
+    const confirmation = { call: null, children: { budgetMode: "soft" as const, profiles: { estimator: null, worker: binding, handoff: binding, goalReview: binding }, contextPolicy: { handoffAtContextTokens: null } } };
+    const asked: unknown[] = [];
+    const w = await flowWorld({ w70000: template(70_000, 10_000) }, { confirmParent: async (input) => { asked.push(input); return confirmation; } }); try {
+      const { flowRunId, groupId } = await w.start({ templateRef: "builtin/w70000" });
+      expect(asked).toEqual([{ flowRunId, groupId, projectId: null }]);
+      const body = JSON.parse(String(w.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body));
+      expect(body.confirmed).toEqual({ by: "orca-auto", via: "orca", commandId: parentConfirmCommandId(flowRunId), at: expect.any(Number), poolTokens: 70_000, ...confirmation });
+      expect(body.limit.tokens).toBe(70_000);
+      expect(body.used).toEqual({ tokens: 0, activeMs: 0, attempts: 0, sessions: 0 });
+      expect(body.flow).toMatchObject({ role: "parent", flowRunId });
+      expect(w.store.db.prepare("SELECT count(*) AS n FROM estimates").get()).toMatchObject({ n: 0 });
+      expect(w.store.db.prepare("SELECT count(*) AS n FROM budget_proposals").get()).toMatchObject({ n: 0 });
+    } finally { await w.dispose(); }
+  });
+
+  it("a confirmation the panel refuses refuses the start; nothing is written", async () => {
+    const w = await flowWorld({ w70000: template(70_000, 10_000) }, { confirmParent: async () => { throw new FlowRefusal("flow-profiles-unresolved"); } }); try {
+      await expect(w.start({ templateRef: "builtin/w70000" })).rejects.toThrow("flow-profiles-unresolved");
+      expect(w.store.db.prepare("SELECT count(*) AS n FROM flow_runs").get()).toMatchObject({ n: 0 });
+      expect(w.store.db.prepare("SELECT count(*) AS n FROM groups").get()).toMatchObject({ n: 0 });
     } finally { await w.dispose(); }
   });
 });

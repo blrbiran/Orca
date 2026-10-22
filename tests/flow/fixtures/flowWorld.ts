@@ -16,6 +16,7 @@ export interface WorldTemplate { yaml: string; assets?: Record<string, string> }
 
 export async function flowWorld(templates: Record<string, WorldTemplate>, opts: {
   agents?: AgentCandidate[]; files?: Record<string, string>; registry?: KindRegistry; runCommand?: FlowDeps["runCommand"]; children?: FlowChildPort | ((store: ControlStore) => FlowChildPort);
+  confirmParent?: FlowDeps["confirmParent"];
 } = {}) {
   const h = await openTestStore();
   const builtinRoot = join(h.root, "builtin");
@@ -36,6 +37,7 @@ export async function flowWorld(templates: Record<string, WorldTemplate>, opts: 
     agents: () => opts.agents ?? [{ agent: "claude", model: "opus", tier: "high" }, { agent: "codex", model: "gpt", tier: "high" }],
     ...(opts.registry === undefined ? {} : { registry: opts.registry }),
     ...(opts.runCommand === undefined ? {} : { runCommand: opts.runCommand }),
+    ...(opts.confirmParent === undefined ? {} : { confirmParent: opts.confirmParent }),
     ...(opts.children === undefined ? {} : { children: typeof opts.children === "function" ? opts.children(h.store) : opts.children }),
   };
   const start = (input: Partial<StartFlowInput> & { templateRef: string }) =>
