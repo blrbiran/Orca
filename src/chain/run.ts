@@ -11,6 +11,7 @@ import { checkGate } from "./gateCheck.js";
 import { KILL_GRACE_MS, type LaunchRequest, type SessionResult, launchClaudeCode } from "./launch/claudeCode.js";
 import { acquireChainLock } from "./lock.js";
 import { macNotify, summaryText } from "./notify.js";
+import { dispatchedEnv } from "../control/commandClient.js";
 import { chainLogDir, chainStateDir } from "./paths.js";
 import { type PreflightDeps, type Preflighted, preflight } from "./preflight.js";
 import { chainPrompt } from "./prompt.js";
@@ -27,7 +28,8 @@ export const STOP_POLL_MS = 5_000;
 export interface ChainDeps extends PreflightDeps {
   launch: (req: LaunchRequest) => Promise<SessionResult>;
   /** In-process always (spec §2, review 1); injectable only so a criterion can make it throw (W32). */
-  resume: (opts: { repo: string }) => Promise<ResumeOutcome>;
+  /** `env`: the dispatched-run variables the checkpoint's measurements run with (review I1). */
+  resume: (opts: { repo: string; env: Record<string, string> }) => Promise<ResumeOutcome>;
   notify: (title: string, body: string) => Promise<string | null>;
   out: (text: string) => void;
   err: (text: string) => void;
@@ -159,6 +161,9 @@ export async function startChain(raw: unknown, deps: ChainDeps): Promise<number>
   return EXIT_CODES[stop.category];
 }
 
+/** CLI v2 spec §15.3 (review M1): a chain's empty person directory (created 0700 by the launch). */
+const chainPersonDir = async (repo: string, chainId: string): Promise<string> => join(await chainStateDir(repo), chainId, "person");
+
 async function runSessions(
   pre: Preflighted,
   record: ChainRecord,
@@ -184,7 +189,8 @@ async function runSessions(
     // Spec §4.4, in this process (review 1).
     let resumed: ResumeResult;
     try {
-      resumed = await deps.resume({ repo });
+      // Review I1 (session b37f7ce9): a measurement is a command a session recorded; it runs as the chain, as the sessions do.
+      resumed = await deps.resume({ repo, env: dispatchedEnv({ runId: chainId, personDir: await chainPersonDir(repo, chainId) }) });
     } catch (err) {
       resumed = { crashed: err instanceof Error ? err.message : String(err) };
     }
@@ -206,7 +212,7 @@ async function runSessions(
       // Review M1 (session b37f7ce9): beside the chain's stop request, under the git dir -- outside the worktree, so a
       // session's cleanup cannot reach it, and never the person's own ~/.orca/person. The panel's dispatched-person
       // directory is not used: `orca dev chain start` runs with no panel state in reach (the panel too starts it detached).
-      personDir: join(await chainStateDir(repo), chainId, "person"),
+      personDir: await chainPersonDir(repo, chainId),
       prompt: chainPrompt({ chainId, n, goal: record.goal, sessionId, repo, resumeText: r.text }),
       claudeBin: deps.claudeBin,
       baseEnv: deps.env,

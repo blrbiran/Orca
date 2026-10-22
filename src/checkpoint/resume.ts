@@ -16,8 +16,10 @@ import { CHAIN_RECORDS_DIR, CHECKPOINT_DIR, type Checkpoint, CheckpointRejection
  * (not `runMeasurement`'s `/bin/sh -c`, out of scope). Defaults to the plain `git` wrapper, so `orca dev resume`'s
  * own behaviour, output and exit codes are unchanged; the chain supervisor passes `chainGit` (`src/chain/git.ts`)
  * so these calls carry the same `-c core.hooksPath=/dev/null -c core.fsmonitor=false` its own git calls do.
+ * `opts.env` (review I1, session b37f7ce9): variables the measurements run with over the inherited ones -- the chain
+ * supervisor's ORCA_DISPATCHED_RUN and ORCA_PERSON_DIR; `orca dev resume` passes none.
  */
-export async function resume(opts: { repo: string; checkpointPath?: string; git?: typeof git }): Promise<{ text: string; exitCode: 0 | 2 }> {
+export async function resume(opts: { repo: string; checkpointPath?: string; git?: typeof git; env?: Record<string, string> }): Promise<{ text: string; exitCode: 0 | 2 }> {
   const runGit = opts.git ?? git;
   const repo = (await runGit(opts.repo, ["rev-parse", "--show-toplevel"])).trim();
   // An explicit --checkpoint is read as the file it names. A located checkpoint is read from its commit,
@@ -52,7 +54,7 @@ export async function resume(opts: { repo: string; checkpointPath?: string; git?
     const outputDir = await mkdtemp(join(tmpdir(), `orca-resume-${cp.runId}-`));
     for (const [index, m] of cp.measurements.entries()) {
       const outputPath = join(outputDir, `${index + 1}.txt`);
-      const now = await runMeasurement(repo, m.command, outputPath);
+      const now = await runMeasurement(repo, m.command, outputPath, opts.env);
       if (now !== m.exitCode) exitCodeChanged = true;
       out.push(`  ${now === m.exitCode ? "same" : "CHANGED"} exit ${m.exitCode} -> ${now}: ${m.command} (output ${outputPath})`);
     }
@@ -131,7 +133,7 @@ export type ResumeOutcome =
  * which would load code a session may have changed. A named refusal becomes a value the supervisor routes (§4.4);
  * anything else still throws, so the CLI keeps answering it with main()'s exit 3 exactly as before.
  */
-export async function resumeOutcome(opts: { repo: string; checkpointPath?: string; git?: typeof git }): Promise<ResumeOutcome> {
+export async function resumeOutcome(opts: { repo: string; checkpointPath?: string; git?: typeof git; env?: Record<string, string> }): Promise<ResumeOutcome> {
   try {
     const result = await resume(opts);
     return { ...result, rejection: null };

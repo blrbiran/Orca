@@ -298,6 +298,19 @@ describe("startChain: the supervisor loop (D-launch spec §2, §4, §8.2-3)", ()
     expect(await promptOf(s.fake, 2)).toContain("  CHANGED exit 0 -> 1: test -f flag.txt (output ");
   }, 30_000);
 
+  // Review I1 (session b37f7ce9): a checkpoint's measurement is a command a session recorded; the supervisor's resume runs it
+  // as the chain -- the chain's marker and its empty person directory -- as the sessions themselves run.
+  it("W19b resume runs a recorded measurement with ORCA_DISPATCHED_RUN = the chain and its person dir", async () => {
+    const s = await setup();
+    const measure = `printf '%s %s' "\${ORCA_DISPATCHED_RUN-unset}" "\${ORCA_PERSON_DIR-unset}"`;
+    await s.fake.scenario(1, { steps: [work(1), { do: "exitCheckpoint", status: "continue", measurements: [{ command: measure, exitCode: 0 }] }] });
+    await s.fake.scenario(2, { steps: [work(2), done] });
+    expect(await s.run()).toBe(0);
+    const output = /same exit 0 -> 0: .* \(output (\/[^)]+)\)/.exec(await promptOf(s.fake, 2))?.[1];
+    // Mutation "resume without the env" -> `unset unset` -> red.
+    expect(await readFile(output!, "utf8")).toBe(`${ID} ${join(dirname(await s.stopPath()), "person")}`);
+  }, 30_000);
+
   it("W20 resume refused (a gated measurement): resume-failed before session 2", async () => {
     const s = await setup();
     await s.fake.scenario(1, { steps: [work(1), { do: "exitCheckpoint", status: "continue", measurements: [{ command: "git push origin main", exitCode: 0 }] }] });

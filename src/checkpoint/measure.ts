@@ -13,14 +13,16 @@ import { CheckpointRejection } from "./schema.js";
  * `tsx … resume`, so a command recorded in a checkpoint is gated here, before it is spawned. This is the
  * single entry point for both `checkpoint write` and `resume`.
  */
-export async function runMeasurement(repo: string, command: string, outputPath: string): Promise<number> {
+export async function runMeasurement(repo: string, command: string, outputPath: string, env?: Record<string, string>): Promise<number> {
   const verdict = await classify(command, repo, gitBranchOf(Date.now() + GATE_DEADLINE_MS));
   if (verdict.kind === "block") {
     throw new CheckpointRejection("measurement-gated", `measurement ${JSON.stringify(command)} was not run: ${blockMessage(verdict)}`);
   }
   const chunks: Buffer[] = [];
   const exitCode = await new Promise<number>((resolve, reject) => {
-    const child = spawn("/bin/sh", ["-c", command], { cwd: repo, stdio: ["ignore", "pipe", "pipe"] });
+    // `env` (review I1, session b37f7ce9): set over the inherited environment -- the chain supervisor's dispatched-run marker
+    // and person dir, since the command is one a session recorded. Absent, the environment is inherited as before.
+    const child = spawn("/bin/sh", ["-c", command], { cwd: repo, stdio: ["ignore", "pipe", "pipe"], ...(env === undefined ? {} : { env: { ...process.env, ...env } }) });
     child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => chunks.push(chunk));
     child.on("error", reject);
