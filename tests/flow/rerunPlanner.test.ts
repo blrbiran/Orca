@@ -111,7 +111,7 @@ describe("proposal validation (§7.3): the model may only remove", () => {
   const targets = new Set(["voice"]);
   it("P1: skips of candidates are accepted as given", () => {
     expect(validateProposal({ skips: [{ stepKey: "cover", reason: "the cover does not show the text" }] }, list, targets))
-      .toEqual({ ok: true, skips: [{ stepKey: "cover", reason: "the cover does not show the text" }] });
+      .toEqual({ ok: true, skips: [{ stepKey: "cover", reason: "the cover does not show the text" }], unsure: [] });
   });
   it("P2: a key outside the candidates is invalid", () => {
     expect(validateProposal({ skips: [{ stepKey: "draft", reason: "x" }] }, list, targets)).toMatchObject({ ok: false });
@@ -123,7 +123,7 @@ describe("proposal validation (§7.3): the model may only remove", () => {
   it("P4: startAt becomes skips of every earlier candidate", () => {
     const noTargets = new Set<string>();
     expect(validateProposal({ skips: [], startAt: "article" }, list, noTargets))
-      .toEqual({ ok: true, skips: [{ stepKey: "voice", reason: "before startAt article" }, { stepKey: "cover", reason: "before startAt article" }] });
+      .toEqual({ ok: true, skips: [{ stepKey: "voice", reason: "before startAt article" }, { stepKey: "cover", reason: "before startAt article" }], unsure: [] });
   });
   it.each([
     ["not an object", "skip cover"],
@@ -135,6 +135,49 @@ describe("proposal validation (§7.3): the model may only remove", () => {
     ["an empty reason", { skips: [{ stepKey: "cover", reason: "" }] }],
   ])("P5: %s is invalid", (_name, raw) => {
     expect(validateProposal(raw, list, targets)).toMatchObject({ ok: false });
+  });
+});
+
+describe("unsure marks (gaps §5.1, §6.4): code validates, absence is never uncertainty", () => {
+  // voice has feedback; cover/article/publish follow by upstream; `cover` also never succeeded in the second list.
+  const list = candidates(settled(), template, [feedback("voice")], ws());
+  const targets = new Set(["voice"]);
+  const withNever = candidates(settled({ cover: { state: "failed" } }), template, [], ws());
+  const filled = candidates(settled(), template, [], ws({ filled: new Set(["voice"]) }));
+  const ask = "keep the cover?";
+
+  it("U1: a valid unsure passes through, in template order, with the skips", () => {
+    expect(validateProposal({ skips: [{ stepKey: "cover", reason: "x" }], unsure: [{ stepKey: "publish", question: "q2" }, { stepKey: "article", question: ask }] }, list, targets))
+      .toEqual({ ok: true, skips: [{ stepKey: "cover", reason: "x" }], unsure: [{ stepKey: "article", question: ask }, { stepKey: "publish", question: "q2" }] });
+  });
+  it("U2: no unsure field means an empty list", () => {
+    expect(validateProposal({ skips: [] }, list, targets)).toEqual({ ok: true, skips: [], unsure: [] });
+  });
+  it.each([
+    ["a feedback step", list, targets, { skips: [], unsure: [{ stepKey: "voice", question: ask }] }],
+    ["a fill step", filled, new Set<string>(), { skips: [], unsure: [{ stepKey: "voice", question: ask }] }],
+    ["a never-succeeded step", withNever, new Set<string>(), { skips: [], unsure: [{ stepKey: "cover", question: ask }] }],
+    ["a non-candidate key", list, targets, { skips: [], unsure: [{ stepKey: "draft", question: ask }] }],
+    ["a key that is also skipped", list, targets, { skips: [{ stepKey: "cover", reason: "x" }], unsure: [{ stepKey: "cover", question: ask }] }],
+    ["a key skipped through startAt", list, targets, { skips: [], startAt: "article", unsure: [{ stepKey: "cover", question: ask }] }],
+    ["the same key twice", list, targets, { skips: [], unsure: [{ stepKey: "cover", question: ask }, { stepKey: "cover", question: ask }] }],
+    ["an empty question", list, targets, { skips: [], unsure: [{ stepKey: "cover", question: "" }] }],
+    ["a 201-char question", list, targets, { skips: [], unsure: [{ stepKey: "cover", question: "q".repeat(201) }] }],
+    ["an extra key", list, targets, { skips: [], unsure: [{ stepKey: "cover", question: ask, why: "x" }] }],
+  ])("U3: unsure on %s is invalid", (_name, candidatesList, feedbackTargets, raw) => {
+    expect(validateProposal(raw, candidatesList, feedbackTargets)).toMatchObject({ ok: false });
+  });
+  it("U4: a 200-char question is valid", () => {
+    expect(validateProposal({ skips: [], unsure: [{ stepKey: "cover", question: "q".repeat(200) }] }, list, targets)).toMatchObject({ ok: true });
+  });
+  it("F1: fill sorts after feedback and before never-succeeded; the model may not skip it", () => {
+    const both = candidates(settled({ voice: { state: "failed" } }), template, [feedback("voice")], ws({ filled: new Set(["voice"]) }));
+    expect(both.find((c) => c.stepKey === "voice")!.reasons).toEqual(["feedback", "fill", "never-succeeded"]);
+    expect(validateProposal({ skips: [{ stepKey: "voice", reason: "x" }] }, filled, new Set())).toMatchObject({ ok: false });
+    expect(validateProposal({ skips: [], startAt: "cover" }, filled, new Set())).toMatchObject({ ok: false });
+  });
+  it("F2: a filled step's later steps are candidates by the ordinary upstream rule", () => {
+    expect(show(filled)).toEqual(["voice: fill", "cover: upstream-changed:voice", "article: upstream-changed:voice upstream-changed:cover", "publish: upstream-changed:voice upstream-changed:cover upstream-changed:article"]);
   });
 });
 

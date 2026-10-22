@@ -10,6 +10,7 @@
  *                               recorded read set every earlier change counts (unknown => include); an equal `equals`
  *                               projection, or the person's "unchanged", is no change (cutoff)
  *   feedback                    a feedback message targets it
+ *   fill                        the person filled it (gaps spec §6.4); like `feedback`, the model may not skip it
  *   never-succeeded             it has no active `done` execution (a failed or rate-limited one is never reused)
  *   compose-conflict            its active output no longer merges into the composition
  * A step targeted by an `edit` is not a candidate (its new output is the edit); a step whose `when` is false is
@@ -51,6 +52,8 @@ export interface WorkspaceState {
   changedPaths?: Readonly<Record<string, readonly string[]>>;
   /** Outputs the person accepted as unchanged (§7.4). */
   acceptedUnchanged?: ReadonlySet<string>;
+  /** Steps the person filled (gaps spec §6.4): reason `fill`, after `feedback`. */
+  filled?: ReadonlySet<string>;
 }
 export interface Candidate { stepKey: string; reasons: string[] }
 
@@ -91,6 +94,7 @@ export function candidates(journal: Journal, template: { steps: ReadonlyArray<{ 
       }
     }
     if (feedbackOn.has(stepKey)) reasons.push("feedback");
+    if (ws.filled?.has(stepKey) === true) reasons.push("fill");
     if (!done) reasons.push("never-succeeded");
     if (ws.composeConflicts.has(stepKey)) reasons.push("compose-conflict");
     if (reasons.length === 0 || editedOn.has(stepKey)) continue;

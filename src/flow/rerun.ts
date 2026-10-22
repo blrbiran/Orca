@@ -34,6 +34,7 @@ export const PROPOSAL_JSON_SCHEMA = Object.freeze({
   properties: {
     skips: { type: "array", items: { type: "object", additionalProperties: false, required: ["stepKey", "reason"], properties: { stepKey: { type: "string" }, reason: { type: "string" } } } },
     startAt: { type: "string" },
+    unsure: { type: "array", items: { type: "object", additionalProperties: false, required: ["stepKey", "question"], properties: { stepKey: { type: "string" }, question: { type: "string" } } } },
   },
 });
 
