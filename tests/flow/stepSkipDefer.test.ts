@@ -260,6 +260,24 @@ describe("skip / defer / fill on the wechat run (G5)", { timeout: 60_000 }, () =
     } finally { await w.dispose(); }
   });
 
+  it("filled but not yet re-run: a recompose meanwhile (another step skipped) does not bring the old output back", async () => {
+    const world = await wechatWorld();
+    const { w } = world; try {
+      const flowRunId = await visualsDeferred(world);
+      setLevels(world, { cost: "confirm" });
+      await command(world, flowRunId, "visuals", { command: "fill" }, "f1");
+      await w.answer(w.calls.map((c) => c.purpose).lastIndexOf("rerun-proposal"), { skips: [] });
+      expect(w.latest(flowRunId, "visuals")).toMatchObject({ seq: 3, state: "needs-person" });
+      expect(existsSync(join(w.folder, "assets/wechat/00-cover.final.txt"))).toBe(true);
+      // Skipping the cover composes the head again and copies it back: the cover's files go, visuals' old ones stay out.
+      await command(world, flowRunId, "cover", { command: "skip" }, "s1");
+      expect(existsSync(join(w.folder, "assets/wechat/00-cover.final.txt"))).toBe(false);
+      expect(existsSync(join(w.folder, ILLUSTRATED))).toBe(false);
+      expect(existsSync(join(w.folder, VISUAL))).toBe(false);
+      expect(listHeads(w.store, flowRunId).visuals).toBe(1);
+    } finally { await w.dispose(); }
+  });
+
   it("the model may neither skip a filled step nor mark it unsure: both answers are invalid and asked again", async () => {
     const world = await wechatWorld();
     const { w } = world; try {
