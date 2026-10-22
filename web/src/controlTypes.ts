@@ -583,7 +583,8 @@ export type CommandSuccessV1 = {
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw"
-    | "set-check-settings" | "set-scheduled-check" | "set-check-locks" | "run-check-now" | "resume-check";
+    | "set-check-settings" | "set-scheduled-check" | "set-check-locks" | "run-check-now" | "resume-check"
+    | "set-flow-settings" | "set-flow-locks";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -610,6 +611,9 @@ export type CommandSuccessV1 = {
     | { kind: "check-settings-set"; repoId: string | null; checks: ChecksLayerV1 }
     | { kind: "scheduled-check-set"; repoId: string | null; scheduled: ScheduledCheckV1[] }
     | { kind: "check-locks-set"; locks: CheckLockV1[] }
+    // Flow engine spec §11.2: the flow settings layer written (repoId null = global) and the global lock list.
+    | { kind: "flow-settings-set"; repoId: string | null; flows: FlowsLayerV1 }
+    | { kind: "flow-locks-set"; locks: FlowLockV1[] }
     | { kind: "check-run-requested"; repoId: string; checkKind: CheckKindV1; targets: string[] }
     | { kind: "check-resumed"; repoId: string; checkKind: CheckKindV1; targets: string[] }
     | { kind: "criteria-review-set"; repoId: string; enabled: boolean }
@@ -671,6 +675,17 @@ export type CheckConditionV1 =
 export type CheckTriggerV1 = { all: Array<{ any: CheckConditionV1[] }> };
 export type ScheduledCheckV1 = { id: string; kind: CheckKindV1; cron: string; enabled: boolean; params: Record<string, never> };
 export type CheckLockV1 = "integrationCheck.command" | "modelReview.budgetTokens";
+/** Flow engine spec §11.2: a layer's `flows` (the global one alone carries `locks`). */
+export type FlowLevelSettingV1 = "apply-flag" | "confirm" | "stage-only" | "follow-template";
+export type FlowLockV1 = "effects.local" | "effects.cost" | "effects.external" | "effects.irreversible" | "allowedSkillSources" | "budgets.tokensPerRun";
+export type FlowsLayerV1 = {
+  effects?: { local?: FlowLevelSettingV1; cost?: FlowLevelSettingV1; external?: FlowLevelSettingV1; irreversible?: FlowLevelSettingV1 };
+  rerunReview?: "auto" | "review";
+  roles?: Record<string, { agent: string; model?: string }>;
+  allowedSkillSources?: string[];
+  budgets?: { tokensPerRun?: number };
+  locks?: FlowLockV1[];
+};
 export type ChecksLayerV1 = {
   integrationCheck?: { enabled?: boolean; trigger?: CheckTriggerV1; command?: string | null };
   modelReview?: { enabled?: boolean; trigger?: CheckTriggerV1; budgetTokens?: number; maxGroupsPerReview?: number };

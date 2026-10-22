@@ -74,6 +74,10 @@ export const durableCommandErrorStatuses = {
   // than a global lock allows (the detail names the lock); a schedule evaluated in a time zone the host cannot read.
   "check-schedule-limit": 409,
   "check-setting-locked": 409,
+  // Flow engine spec §11.2: a project flow setting looser than a global lock allows (the detail names the lock), and a
+  // value only the person token may set (irreversible apply-flag; refused from every channel in phase 1).
+  "flow-setting-locked": 409,
+  "flow-setting-needs-person-token": 422,
   "check-time-zone-invalid": 400,
 
   // Optimistic concurrency, immutable identity, and ownership conflicts.

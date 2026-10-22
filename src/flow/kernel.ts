@@ -44,6 +44,7 @@ import { flowVaultRepoId } from "./groups.js";
 import { parentGroupBody, type FlowParentConfirmation } from "./parent.js";
 import type { FlowCallResult } from "./calls.js";
 import { completePlanCall, finishPlan, planOf, PLAN_KEY } from "./rerun.js";
+import { flowLayers, readFlowSettings } from "./settings.js";
 import { consumeAtBoundary } from "./messages.js";
 
 /** A refusal by name (spec §14, Global Constraints' codes); nothing was written. */
@@ -78,7 +79,7 @@ export interface FlowDeps {
    * §6.2-§6.3: what the parent is confirmed with at start (the panel freezes the call profile and slot and the children's
    * profiles; a FlowRefusal refuses the start). Absent: confirmed with neither (a criterion's fake ports serve the run).
    */
-  /** §7.4, §11.2: `flows.rerunReview` of a project (Task 12's settings; absent: the built-in `review`). */
+  /** §7.4, §11.2: `flows.rerunReview` of a project; absent: read from the settings layers. */
   rerunReview?(projectId: string | null): "auto" | "review";
   confirmParent?(input: { flowRunId: string; groupId: string; projectId: string | null; by: string }): Promise<FlowParentConfirmation>;
 }
@@ -141,7 +142,8 @@ function resolveParams(template: FlowTemplate, given: Record<string, ParamValue>
 function resolveRoles(deps: FlowDeps, template: FlowTemplate, projectId: string | null): Record<string, RoleResolution> {
   const roles = template.roles ?? {};
   const available = deps.agents();
-  const settings = deps.roleSettings?.(projectId) ?? {};
+  // §12.3: the `flows.roles` of the project and global settings layers (§11.2), unless the caller supplies them.
+  const settings = deps.roleSettings?.(projectId) ?? (() => { const layers = flowLayers(deps.store, projectId); return { project: layers.project?.roles, global: layers.global?.roles }; })();
   const out: Record<string, RoleResolution> = {};
   const order = Object.keys(roles).sort((a, b) => Number(roles[a]!.distinctFrom !== undefined) - Number(roles[b]!.distinctFrom !== undefined));
   for (const name of order) {
@@ -210,7 +212,9 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
     vaultPath: vault?.path ?? null, importCommit, by: input.by, via: input.via, startedAt: deps.now(),
   };
   const vaultId = vault === null ? null : vaultKeyOf(vault.dir);
-  const poolTokens = input.pool ?? template.budget?.tokensPerRun ?? DEFAULT_TOKENS_PER_RUN;
+  // §6.3: the pool is project ?? global ?? the template's suggestion ?? the built-in default (a start's `pool` is the person's).
+  const configured = readFlowSettings(deps.store, projectId).budgets.tokensPerRun;
+  const poolTokens = input.pool ?? (configured.source !== "builtin" ? configured.value : template.budget?.tokensPerRun ?? DEFAULT_TOKENS_PER_RUN);
   deps.store.transaction(() => {
     // The parent group (§6.2 body block `flow`), confirmed once by orca-auto with the run pool (§6.3); no plan, no tasks.
     // At revision 1 with its projection recorded, as a group its creating command leaves (a shutdown lists its versions).

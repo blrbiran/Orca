@@ -249,6 +249,7 @@ stdout is exactly one JSON line:
 | `POST repositories/<repoId>/checks/run` | run-check-now | `{"kind":"model-review"}` |
 | `POST repositories/<repoId>/checks/resume` | resume-check | `{"kind":"model-review"}` |
 | `POST repositories/<repoId>/criteria-review` | set-criteria-review | `{"enabled":false}` |
+| `POST repositories/<repoId>/flows/settings` | set-flow-settings | `{"set":{"effects":{"external":"confirm"}},"clear":[]}` |
 | `POST operator/agent-preferences` | set-agent-preferences | `{"preferences":{"perAgent":{}}}` |
 | `POST operator/set-spend-cap` | set-spend-cap | `{"scope":"all","period":"week","tokens":5000000}` |
 | `POST operator/clear-spend-cap` | clear-spend-cap | `{"scope":"all","period":"week"}` |
@@ -257,6 +258,8 @@ stdout is exactly one JSON line:
 | `POST operator/checks/settings` | set-check-settings | `{"kind":"integration-check","set":{"enabled":true,"command":null},"clear":[]}` |
 | `POST operator/checks/scheduled` | set-scheduled-check | `{"id":"weekly","remove":true}` |
 | `POST operator/checks/locks` | set-check-locks | `{"locks":["modelReview.budgetTokens"]}` |
+| `POST operator/flows/settings` | set-flow-settings | `{"set":{"budgets":{"tokensPerRun":1000000}},"clear":["rerunReview"]}` |
+| `POST operator/flows/locks` | set-flow-locks | `{"locks":["effects.irreversible"]}` |
 
 Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-stop` takes an optional `handoffDeadlineAt` (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). A spend cap's `scope` is `all` or `repo:<repoId>` and its `period` is `total`, `week` or `month` (weeks and months in the usage calendar's time zone). Examples are checked against the raw payload schemas only; the panel also judges live state, so versions, hashes and ids must be real (for example a `set-task-loop` plan must exist, and a `proposal-edit` operation with provenance `model` needs an `estimateId`). `retry-task` starts again a task whose current run ccloop ended failed (in `get groups/<groupId>`, the current run has a non-succeeded `outcome` and is either terminally `blocked`, an eligible held `settled-recoverable` failure after handoff, or an eligible released `settled-failed` failure with a valid usage settlement): the run becomes `settled-failed` and a new run starts from the group branch's current head; any other task is refused with `task-not-retryable` (409). `recovery-retry` refuses such a run with `run-terminal-failed` (409) and still resumes a run blocked for any other reason. An archived group keeps every record and refuses every command but `unarchive-group` with `group-archived` (409); reads are unchanged and it is never claimed or integrated. `archive-group` is refused while the group still has work in motion: `archive-run-active`, `archive-stop-pending` (a handoff or shutdown stop still `handoff-pending` or `handoff-unresolved`; `handoff-complete` and `handoff-partial` allow archive; a pause never blocks), `archive-integration-resolving`, `archive-call-in-flight` (an estimate or requirement call).
 
@@ -273,10 +276,12 @@ Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-
 | `repositories/<repoId>/integration` | `.revision` of `get repositories/<repoId>/integration` (`orca-repository-integration-v1`; the same revision as the workspace read: both settings share it) |
 | `repositories/<repoId>/checks/settings`, `…/checks/scheduled`, `…/checks/run`, `…/checks/resume` | the same `.revision` (the project's check settings share the repository settings revision; run and resume do not move it) |
 | `repositories/<repoId>/criteria-review` | the same `.revision` (the reviewer's switch shares the repository settings revision) |
+| `repositories/<repoId>/flows/settings` | the same `.revision` (the project's flow settings share the repository settings revision) |
 | `operator/agent-preferences` | `.revision` of `get operator/agent-preferences` (`orca-agent-preferences-v1`; `0` before the first change) |
 | `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` | `.spendRevision` of `get usage?scope=all` (one revision for all three; `0` before the first change) |
 | `operator/set-orchestration-settings` | `.revision` of `get orchestration` (`orca-orchestration-v1`; `0` before the first change) |
 | `operator/checks/settings`, `operator/checks/scheduled`, `operator/checks/locks` | the same `.revision` of `get orchestration` (the global check settings share it) |
+| `operator/flows/settings`, `operator/flows/locks` | the same `.revision` of `get orchestration` (the global flow settings share it) |
 
 Where the ids come from:
 

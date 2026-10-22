@@ -162,6 +162,13 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca check run <kind>` — run a check kind now in this project (ignores its trigger; still waits for a run in flight and skips an empty range)
 - `orca check resume <kind>` — re-arm a check kind paused after three errored runs in this project
 
+### `orca flow`
+
+- `orca flow settings show [--global]` — the effective flow settings of this project (or --global): each value, where it comes from, and its lock
+- `orca flow settings set <field> <value> [--global]` — set one flow setting in this project (or --global); needs a person token (person token)
+- `orca flow settings clear <field>... [--global]` — remove flow settings from this project (or --global) so the next layer applies; needs a person token (person token)
+- `orca flow settings lock [--lock <lock>]` — set the global flow lock list (needs a person token); no --lock clears every lock (person token)
+
 ### `orca plan`
 
 - `orca plan preview <path>` — print the plan's write sets, conflicts and layering, and the runtime preflight; execute nothing (--verbose: more)

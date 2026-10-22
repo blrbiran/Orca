@@ -77,6 +77,9 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "set-check-locks": "human-only",
   "run-check-now": "human-only",
   "resume-check": "human-only",
+  // Flow engine spec §11.2, §14.2: run policy (effect levels, budgets, skill sources) and its admin locks are a person's.
+  "set-flow-settings": "human-only",
+  "set-flow-locks": "human-only",
 };
 export const HUMAN_ONLY_VERBS: readonly CommandVerbV1[] =
   (Object.keys(VERB_ACCESS) as CommandVerbV1[]).filter((verb) => VERB_ACCESS[verb] === "human-only");
@@ -130,6 +133,9 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   },
   "set-scheduled-check": (p) => (p.remove !== true && p.enabled !== false ? "token" : "open"),
   "set-check-locks": "token",
+  // Flow plan Global Constraints (Access): all six human-only flow verbs are token; a dispatched run is refused them.
+  "set-flow-settings": "token",
+  "set-flow-locks": "token",
   "run-check-now": "open",
   "resume-check": "open",
   // R3a: confirming under the configured integration (any delivery) carries only its hash; a mismatch is refused anyway.

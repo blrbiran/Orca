@@ -6,6 +6,7 @@ import { safeInteger } from "./schema.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
 import { checksLayerSchema } from "./checks/settingsSchema.js";
+import { flowsLayerSchema } from "../flow/settingsSchema.js";
 import { integrationSchemeSchema, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
 
 export type WorkspaceMode = "worktree" | "clone";
@@ -22,6 +23,8 @@ const settingsBodySchema = z.object({
   checks: checksLayerSchema.optional(),
   // Protect-acceptance-criteria spec §5: the reviewer of flagged test changes for this repository; absent is the global default.
   criteriaReview: z.boolean().optional(),
+  // Flow engine spec §11.2: the project layer of the flow settings (never `locks`: those are global only).
+  flows: flowsLayerSchema.optional(),
 }).strict();
 export type RepositorySettingsBody = z.infer<typeof settingsBodySchema>;
 

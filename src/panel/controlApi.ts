@@ -24,6 +24,7 @@ import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } fr
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import { readIntegrationDefault } from "../control/integrationScheme.js";
 import { checksRead, readReviewRecord, reviewDismissals } from "../control/checks/settings.js";
+import { readFlowSettings } from "../flow/settings.js";
 import { AgentCeilingRefusal } from "../control/spendCaps.js";
 import type { WebControlService } from "../control/webService.js";
 import type { ExecutionPort } from "../control/executionPort.js";
@@ -304,6 +305,16 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     }
     try { res.json(checksRead(deps.store, repoId)); } catch (error) { sendMappedControlError(res, error); }
   });
+  // Flow engine spec §11.2, §14.2: the effective flow settings, each field with its source layer and lock; `?repoId=` for
+  // a project, none for the global layer alone. A read.
+  app.get("/api/control/flows/settings", (req, res) => {
+    const repoId = typeof req.query.repoId === "string" ? req.query.repoId : null;
+    if (repoId !== null && (!idSchema.safeParse(repoId).success || !deps.service?.repositoryKnown(repoId))) {
+      sendControlError(res, 404, "control-target-not-allowed", "No trusted repository has this id.");
+      return;
+    }
+    try { res.json(readFlowSettings(deps.store, repoId)); } catch (error) { sendMappedControlError(res, error); }
+  });
   // Spec §6.5 / §7: a model review's record by its review group's id (`orca check findings`). A read.
   app.get("/api/control/checks/reviews/:reviewGroupId", (req, res) => {
     const record = readReviewRecord(deps.store, String(req.params.reviewGroupId));
@@ -558,6 +569,10 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/operator/checks/settings", verb: "set-check-settings", target: orchestrationScoped },
     { path: "/api/control/operator/checks/scheduled", verb: "set-scheduled-check", target: orchestrationScoped },
     { path: "/api/control/operator/checks/locks", verb: "set-check-locks", target: orchestrationScoped },
+    // Flow engine spec §11.2: the flow settings of the project layer and of the global one, and the global locks.
+    { path: "/api/control/repositories/:repoId/flows/settings", verb: "set-flow-settings", target: repositoryScoped },
+    { path: "/api/control/operator/flows/settings", verb: "set-flow-settings", target: orchestrationScoped },
+    { path: "/api/control/operator/flows/locks", verb: "set-flow-locks", target: orchestrationScoped },
     {
       path: "/api/control/repositories/:repoId/criteria-review",
       verb: "set-criteria-review",
@@ -685,6 +700,8 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "set-check-locks": service.setCheckLocks(command); break;
           case "run-check-now": service.runCheckNow(command); break;
           case "resume-check": service.resumeCheck(command); break;
+          case "set-flow-settings": service.setFlowSettings(command); break;
+          case "set-flow-locks": service.setFlowLocks(command); break;
           case "set-criteria-review": service.setCriteriaReview(command); break;
           case "set-group-integration": await service.setGroupIntegration(command); break;
           case "retry-integration": service.retryIntegration(command); break;

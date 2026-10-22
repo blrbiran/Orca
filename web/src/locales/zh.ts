@@ -1487,6 +1487,8 @@ export const zhErrors: Record<string, string> = {
   "check-schedule-too-frequent": "定时检查最多每小时一次。",
   "check-schedule-limit": "这里已经有 8 个定时检查；先删掉一个。",
   "check-setting-locked": "全局锁定只允许这里设得更严：{{detail}}",
+  "flow-setting-locked": "全局锁定只允许这里的流程设置设得更严：{{detail}}",
+  "flow-setting-needs-person-token": "不可逆效果不弹确认卡直接执行，需要所有者的个人令牌；当前版本还没有。",
   "check-time-zone-invalid": "定时检查用的时区本机不认识：{{detail}}",
   "pending-decision-settled": "这条决定已经处理过，现在不能再改：{{detail}}",
   "decision-undo-not-executable": "撤销命令仍然无法照原样执行，请给出类似 `git revert --no-edit <commit>` 的命令：{{message}}",

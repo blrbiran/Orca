@@ -82,8 +82,9 @@ describe("the permission table (spec §3.5)", () => {
       expect(Object.keys(VERB_ACCESS).sort()).toEqual(verbs);
       // Checks spec 2026-10-22 §4.4 (plan Task 4): the two settings-layer verbs have one route per layer -- the project's
       // and the global one -- and only they. Ruling: 这次批准改写所有必要的判据 (b37f7ce9).
-      const PER_LAYER = ["set-check-settings", "set-scheduled-check"];
-      expect(PER_LAYER.map((verb) => commands.filter((route) => route.verb === verb).length)).toEqual([2, 2]);
+      // Flow engine spec §11.2 (plan Task 12): set-flow-settings likewise. Ruling: 这次批准改写所有必要的判据 (b37f7ce9).
+      const PER_LAYER = ["set-check-settings", "set-scheduled-check", "set-flow-settings"];
+      expect(PER_LAYER.map((verb) => commands.filter((route) => route.verb === verb).length)).toEqual([2, 2, 2]);
       const routed = commands.map((route) => route.verb).filter((verb, index, all) => !PER_LAYER.includes(verb) || all.indexOf(verb) === index).sort();
       expect(routed).toEqual(verbs.filter((verb) => VERB_ACCESS[verb] !== "panel"));
       expect(new Set(routed).size).toBe(routed.length);

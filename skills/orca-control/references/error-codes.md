@@ -109,6 +109,9 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `execution-identity-conflict` | 409 |
 | `execution-policy-unrepresentable` | 422 |
 | `flagged-decision-not-found` | 404 |
+| `flow-group-delivery-fixed` | 422 |
+| `flow-setting-locked` | 409 |
+| `flow-setting-needs-person-token` | 422 |
 | `grant-amendment-unsupported` | 422 |
 | `graph-change-needs-handoff` | 422 |
 | `graph-cycle` | 422 |

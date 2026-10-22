@@ -174,7 +174,9 @@ describe("archive-group and unarchive-group (issue-fixes spec §6.3)", () => {
 // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): the integration-check setter is removed; the five check verbs are
 // repository or @orchestration scoped (checks spec 2026-10-22 §4.4).
 const NOT_GROUP = ["shutdown", "set-workspace-mode", "set-integration-scheme", "set-criteria-review", "set-agent-preferences", "apply-agent-update", "set-spend-cap", "clear-spend-cap", "set-usage-calendar", "correction-record", "correction-close", "correction-withdraw", "set-orchestration-settings",
-  "set-check-settings", "set-scheduled-check", "set-check-locks", "run-check-now", "resume-check"];
+  "set-check-settings", "set-scheduled-check", "set-check-locks", "run-check-now", "resume-check",
+  // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): flow engine spec §11.2's settings verbs target a settings layer, never a group.
+  "set-flow-settings", "set-flow-locks"];
 const LOOP_PAYLOAD = { baseLoopVersion: 0, plan: "standard", inputs: { goal: "g", successCondition: "s", targetPaths: ["a.txt"], checks: ["true"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null }, work: { tokens: 1, activeMs: 1, attempts: 1 } };
 const CONFIRM_PAYLOAD = { planHash: "a".repeat(64), proposalVersion: 1, budgetMode: "soft", profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: "b".repeat(64), worker: "b".repeat(64), handoff: "b".repeat(64), goalReview: "b".repeat(64) }, contextPolicy: { handoffAtContextTokens: null }, selectionsHash: "c".repeat(64) };
 type Call = (s: WebControlService, command: never) => unknown;

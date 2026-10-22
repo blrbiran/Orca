@@ -1,3 +1,4 @@
+import { globalFlowsLayerSchema } from "../flow/settingsSchema.js";
 import { z } from "zod";
 import { flowRoleSql } from "../flow/groups.js";
 import { isGroupArchived } from "./archivedMark.js";
@@ -36,7 +37,9 @@ export type GroupOrchestration = z.infer<typeof groupOrchestrationSchema>;
 // Failure-cause spec 2026-10-21 §5: `quotaWait` names the agent installations whose quota failures wait and are retried
 // instead of going to the person; absent or empty is the default (off for every installation).
 // Checks spec 2026-10-22 §4.1: `checks` is the global layer of the check settings (with the optional admin locks).
-const settingsSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64), criteriaReview: z.boolean().optional(), quotaWait: z.array(z.string().min(1).max(200)).max(64).optional(), checks: globalChecksLayerSchema.optional() }).strict();
+const settingsSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64), criteriaReview: z.boolean().optional(), quotaWait: z.array(z.string().min(1).max(200)).max(64).optional(), checks: globalChecksLayerSchema.optional(),
+  // Flow engine spec §11.2: the global layer of the flow settings, with the locks.
+  flows: globalFlowsLayerSchema.optional() }).strict();
 export type OrchestrationSettings = z.infer<typeof settingsSchema>;
 
 export function readGroupOrchestration(store: ControlStore, groupId: string): GroupOrchestration | null {

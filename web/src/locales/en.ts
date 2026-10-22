@@ -1563,6 +1563,8 @@ export const enErrors: Record<string, string> = {
   "check-schedule-too-frequent": "A schedule may run at most once an hour.",
   "check-schedule-limit": "There are already 8 scheduled checks here; remove one first.",
   "check-setting-locked": "A global lock allows only a tighter value here: {{detail}}",
+  "flow-setting-locked": "A global lock allows only a tighter flow setting here: {{detail}}",
+  "flow-setting-needs-person-token": "Running irreversible effects without a confirm card needs the owner's person token, which this version does not have yet.",
   "check-time-zone-invalid": "The schedule's time zone is not one this host knows: {{detail}}",
   "pending-decision-settled": "This decision was already settled, so it cannot be changed now: {{detail}}",
   "decision-undo-not-executable": "The undo command still cannot be run as written; give a command such as `git revert --no-edit <commit>`: {{detail}}",

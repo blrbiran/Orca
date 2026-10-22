@@ -49,6 +49,9 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "set-scheduled-check", payload: { id: "weekly", kind: "model-review", cron: "0 9 * * 1", enabled: false }, tier: "open", member: V },
   { entry: "set-scheduled-check", payload: { id: "weekly", remove: true }, tier: "open", member: V },
   { entry: "set-check-locks", payload: { locks: [] }, tier: "token", member: V },
+  // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): flow plan Global Constraints (Access) -- the human-only flow verbs are token.
+  { entry: "set-flow-settings", payload: { set: { effects: { cost: "confirm" } }, clear: [] }, tier: "token", member: V },
+  { entry: "set-flow-locks", payload: { locks: ["effects.cost"] }, tier: "token", member: V },
   { entry: "run-check-now", payload: { kind: "model-review" }, tier: "open", member: V },
   { entry: "resume-check", payload: { kind: "model-review" }, tier: "open", member: V },
   { entry: "confirm.integrationHash", payload: { integrationHash: "d".repeat(64) }, tier: "open", member: F },

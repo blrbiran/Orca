@@ -8,6 +8,7 @@ import { CLARITIES, DRAFT_STATES, IDEA_MAX_BYTES, REQUIREMENT_WAITING, ROUND_STA
 import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema, loopSkillsSchema } from "./loopPlans.js";
 import { isTimeZone } from "./usageCalendar.js";
 import { CHECK_KINDS, LOCKABLE_PATHS, globalChecksLayerSchema, integrationCheckLayerSchema, modelReviewLayerSchema, scheduledCheckSchema } from "./checks/settingsSchema.js";
+import { FLOW_LOCKABLE_PATHS, FLOW_SETTING_FIELDS, flowsLayerSchema, globalFlowsLayerSchema } from "../flow/settingsSchema.js";
 import { WORK_ITEM_CATEGORIES } from "./workItemCategory.js";
 import { CORRECTION_KINDS } from "../corrections/schema.js";
 import { DECISION_IMPORTANCES } from "../ledger/types.js";
@@ -663,6 +664,9 @@ export const commandVerbSchema = z.enum([
   "set-check-locks",
   "run-check-now",
   "resume-check",
+  // Flow engine spec §11.2: the flow settings of a layer and the global locks.
+  "set-flow-settings",
+  "set-flow-locks",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -854,6 +858,13 @@ export const setScheduledCheckPayloadSchema = z.union([
 ]);
 // §4.2: the whole lock list of the global layer.
 export const setCheckLocksPayloadSchema = z.object({ locks: z.array(z.enum(LOCKABLE_PATHS)).max(LOCKABLE_PATHS.length).superRefine((values, ctx) => requireUnique(values, String, ctx, [])) }).strict();
+// Flow engine spec §11.2: fields of a layer's `flows` (set merges the nested objects; clear removes fields so the next
+// layer applies); the whole global lock list.
+export const setFlowSettingsPayloadSchema = z.object({
+  set: flowsLayerSchema,
+  clear: z.array(z.enum(FLOW_SETTING_FIELDS)).max(FLOW_SETTING_FIELDS.length).superRefine((values, ctx) => requireUnique(values, String, ctx, [])),
+}).strict();
+export const setFlowLocksPayloadSchema = z.object({ locks: z.array(z.enum(FLOW_LOCKABLE_PATHS)).max(FLOW_LOCKABLE_PATHS.length).superRefine((values, ctx) => requireUnique(values, String, ctx, [])) }).strict();
 // §2.4, §5.4: a person's run of one kind now (trigger ignored), and re-arming a kind paused after three errored ends.
 export const checkKindPayloadSchema = z.object({ kind: z.enum(CHECK_KINDS) }).strict();
 // Protect-acceptance-criteria spec §5: the automatic reviewer of flagged test changes, per repository (absent: the global default).
@@ -1042,6 +1053,8 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("set-check-settings"), target: checkSettingsTargetSchema, payload: setCheckSettingsPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-scheduled-check"), target: checkSettingsTargetSchema, payload: setScheduledCheckPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-check-locks"), target: checkSettingsTargetSchema, payload: setCheckLocksPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-flow-settings"), target: checkSettingsTargetSchema, payload: setFlowSettingsPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("set-flow-locks"), target: checkSettingsTargetSchema, payload: setFlowLocksPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("run-check-now"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("resume-check"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-criteria-review"), target: repositoryCommandTargetSchema, payload: setCriteriaReviewPayloadSchema }).strict(),
@@ -1119,6 +1132,8 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("set-check-settings"), target: checkSettingsTargetSchema, payload: setCheckSettingsPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-scheduled-check"), target: checkSettingsTargetSchema, payload: setScheduledCheckPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-check-locks"), target: checkSettingsTargetSchema, payload: setCheckLocksPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-flow-settings"), target: checkSettingsTargetSchema, payload: setFlowSettingsPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("set-flow-locks"), target: checkSettingsTargetSchema, payload: setFlowLocksPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("run-check-now"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resume-check"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-criteria-review"), target: repositoryCommandTargetSchema, payload: setCriteriaReviewPayloadSchema }).strict(),
@@ -1832,6 +1847,9 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("check-settings-set"), repoId: idSchema.nullable(), checks: globalChecksLayerSchema }).strict(),
   z.object({ kind: z.literal("scheduled-check-set"), repoId: idSchema.nullable(), scheduled: z.array(scheduledCheckSchema) }).strict(),
   z.object({ kind: z.literal("check-locks-set"), locks: z.array(z.enum(LOCKABLE_PATHS)) }).strict(),
+  // Flow engine spec §11.2: the layer written (repoId null = the global layer) and the global lock list.
+  z.object({ kind: z.literal("flow-settings-set"), repoId: idSchema.nullable(), flows: globalFlowsLayerSchema }).strict(),
+  z.object({ kind: z.literal("flow-locks-set"), locks: z.array(z.enum(FLOW_LOCKABLE_PATHS)) }).strict(),
   z.object({ kind: z.literal("check-run-requested"), repoId: idSchema, checkKind: z.enum(CHECK_KINDS), targets: z.array(nonemptyString) }).strict(),
   z.object({ kind: z.literal("check-resumed"), repoId: idSchema, checkKind: z.enum(CHECK_KINDS), targets: z.array(nonemptyString) }).strict(),
   z.object({ kind: z.literal("criteria-review-set"), repoId: idSchema, enabled: z.boolean() }).strict(),
@@ -1958,7 +1976,9 @@ export const commandSuccessSchema = commandSuccessObjectSchema
       // Kanban spec 2026-10-20 §3.2: the `@orchestration` scope has its own revision and no group projection.
       || value.verb === "set-orchestration-settings"
       // Checks spec 2026-10-22 §4.4: repository or @orchestration settings scopes, no group projection.
-      || value.verb === "set-check-settings" || value.verb === "set-scheduled-check" || value.verb === "set-check-locks" || value.verb === "run-check-now" || value.verb === "resume-check";
+      || value.verb === "set-check-settings" || value.verb === "set-scheduled-check" || value.verb === "set-check-locks" || value.verb === "run-check-now" || value.verb === "resume-check"
+      // Flow engine spec §11.2: the same two settings scopes.
+      || value.verb === "set-flow-settings" || value.verb === "set-flow-locks";
     if (isShutdown ? value.commandRevision !== null : value.commandRevision === null) {
       issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");
     }

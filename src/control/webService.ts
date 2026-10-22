@@ -66,6 +66,7 @@ import type { CheckRange, RangeGroup } from "./checks/range.js";
 import type { CheckKind } from "./checks/settingsSchema.js";
 import { readUsageCalendar } from "./usageCalendar.js";
 import { effectiveChecks } from "./checks/settings.js";
+import { applySetFlowLocks, applySetFlowSettings, type FlowSettingsCommand } from "../flow/settingsCommands.js";
 import { readCheckState, type CheckState } from "./checks/state.js";
 import { evaluateTrigger } from "./checks/trigger.js";
 import { gitChild } from "./integrationGit.js";
@@ -1046,6 +1047,9 @@ export class WebControlService {
   setCheckLocks(command: CheckCommand<"set-check-locks">): WebCommandResult { return this.mutate(() => applySetCheckLocks(this.checkDeps(), command)) as WebCommandResult; }
   runCheckNow(command: CheckCommand<"run-check-now">): WebCommandResult { return this.mutate(() => applyRunCheckNow(this.checkDeps(), command)) as WebCommandResult; }
   resumeCheck(command: CheckCommand<"resume-check">): WebCommandResult { return this.mutate(() => applyResumeCheck(this.checkDeps(), command)) as WebCommandResult; }
+  /** Flow engine spec §11.2: a person's flow settings of a layer and the global locks (flow/settingsCommands.ts). */
+  setFlowSettings(command: FlowSettingsCommand<"set-flow-settings">): WebCommandResult { return this.mutate(() => applySetFlowSettings(this.checkDeps(), command)) as WebCommandResult; }
+  setFlowLocks(command: FlowSettingsCommand<"set-flow-locks">): WebCommandResult { return this.mutate(() => applySetFlowLocks(this.checkDeps(), command)) as WebCommandResult; }
   private readonly checkJobs = new Map<string, Promise<void>>();
   /**
    * Checks spec 2026-10-22 §2–§5 (kanban spec §7 layer 1 on the check model): for each repository, convert the pre-16

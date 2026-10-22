@@ -3,6 +3,7 @@
  * references all read it. Rows live in `domains/*`; a row's handler loads on demand (plan Review Focus 1).
  */
 import { CHECK_ROWS } from "./domains/check.js";
+import { FLOW_ROWS } from "./domains/flow.js";
 import { COMMAND_ROWS } from "./domains/command.js";
 import { CONTROL_ROWS } from "./domains/control.js";
 import { DEV_ROWS, TOOL_ROWS } from "./domains/dev.js";
@@ -13,7 +14,7 @@ import { SETTINGS_ROWS } from "./domains/settings.js";
 import { WORK_ROWS } from "./domains/work.js";
 import type { CommandDef, FindResult } from "./types.js";
 
-export const REGISTRY: readonly CommandDef[] = [...META_ROWS, ...READ_ROWS, ...WORK_ROWS, ...PROPOSAL_ROWS, ...SETTINGS_ROWS, ...CHECK_ROWS, ...COMMAND_ROWS, ...TOOL_ROWS, ...DEV_ROWS, ...CONTROL_ROWS];
+export const REGISTRY: readonly CommandDef[] = [...META_ROWS, ...READ_ROWS, ...WORK_ROWS, ...PROPOSAL_ROWS, ...SETTINGS_ROWS, ...CHECK_ROWS, ...FLOW_ROWS, ...COMMAND_ROWS, ...TOOL_ROWS, ...DEV_ROWS, ...CONTROL_ROWS];
 
 /**
  * Spec §11: the control verbs with no command, reachable only through `orca control send` (references/escape-hatch.md).

@@ -18,6 +18,7 @@ import { validateProposal, type Skip } from "./journal/proposal.js";
 import { advanceRun, definitionOf, FlowRefusal, loadRun, recordOfExecution, stepOf, type FlowDeps, type RanOnInputs } from "./kernel.js";
 import type { ExecutionBody, LoadedRun } from "./kinds/registry.js";
 import { bounded } from "./prompt.js";
+import { readFlowSettings } from "./settings.js";
 import { appendFlowDecision, appendMessage, getFlowRun, listExecutions, listHeads, listPlans, putPlan, setFlowRunState, type PlanRow } from "./store.js";
 import { evaluateWhen } from "./template/when.js";
 import { vaultGit } from "./vault/vault.js";
@@ -175,7 +176,7 @@ export async function proposePlan(deps: FlowDeps, flowRunId: string, by: string,
 
 /** The setting `flows.rerunReview` of the run's project (global, built-in default `review`). */
 function rerunReviewOf(deps: FlowDeps, run: LoadedRun): "auto" | "review" {
-  return deps.rerunReview?.(run.body.projectId) ?? "review";
+  return deps.rerunReview?.(run.body.projectId) ?? readFlowSettings(deps.store, run.body.projectId).rerunReview.value;
 }
 
 /** Choose the steps: candidates minus the skips plus the additions, always in template order (never the proposal's). */
