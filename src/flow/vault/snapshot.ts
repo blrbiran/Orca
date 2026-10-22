@@ -105,14 +105,9 @@ export async function importSnapshot(vault: Vault, dir: string, opts: { flowRunI
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(opts.flowRunId)) throw new Error(`orca: ${JSON.stringify(opts.flowRunId)} is not a flow run id`);
   const snap = await snapshotTree(vault, dir, opts.caps, opts.excludes ?? []);
   // Review M1: a start that crashed after its import and before its run row left this run id's base. Nothing else has
-  // the id (the kernel found no run with it), so the ref is that start's: the same snapshot is adopted as it is; a
-  // different one (the folder changed meanwhile) replaces it below by compare-and-swap from the value read.
+  // the id (the kernel found no run with it), so the ref is that start's: it is replaced by compare-and-swap from the
+  // value read, with this snapshot.
   const orphan = await readRef(vault, baseRef(opts.flowRunId));
-  if (orphan !== null && (await vaultGit(vault, ["rev-parse", `${orphan}^{tree}`])).trim() === snap.tree) {
-    const numbered = (await vaultGit(vault, ["for-each-ref", "--format=%(refname)", "--points-at", orphan, "refs/orca/import/"])).split("\n").filter((l) => l.length > 0);
-    const n = Math.max(0, ...numbered.map((ref) => Number(ref.slice("refs/orca/import/".length))).filter(Number.isSafeInteger));
-    return { commit: orphan, n, overCap: snap.overCap, excluded: snap.excluded };
-  }
   for (;;) {
     const previous = await lastImport(vault);
     const commit = (await vaultGit(vault, [...ORCA_IDENTITY, "commit-tree", snap.tree, ...(previous === null ? [] : ["-p", previous.commit]), "-m", "orca: import"])).trim();

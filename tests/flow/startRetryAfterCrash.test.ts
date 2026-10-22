@@ -1,8 +1,8 @@
 /**
  * Review finding M1: a `flow-start` that crashed after its vault import and before its run row left the run id's base
  * ref (and head) in the vault. The same command sent again derives the same run id, so its import must not fail forever
- * on the create-only ref: the same snapshot is adopted as it is; a folder that changed meanwhile replaces the orphan, and
- * the run starts from what the folder holds now.
+ * on the create-only ref: the orphan is replaced (compare-and-swap from the value read), and the run starts from what the
+ * folder holds now.
  */
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
@@ -33,7 +33,7 @@ async function crashedStart(key: string) {
 }
 
 describe("a start retried after a crash between the import and the run row (M1)", () => {
-  it("the same command adopts the orphan import when the folder is unchanged", async () => {
+  it("the same command starts the run when the folder is unchanged; base and head name its import", async () => {
     const { w, input, flowRunId } = await crashedStart("cmd-same"); try {
       const started = await startFlowRun(w.deps, input);
       expect(started.flowRunId).toBe(flowRunId);
