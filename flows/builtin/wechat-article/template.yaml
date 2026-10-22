@@ -1,0 +1,197 @@
+# Built-in `wechat-article` (flow engine spec §15; H1, H2, H5, H34). The human's chain:
+# tech-writer -> tech-writer-deslop -> tech-writer-voice -> wechat-finetune -> md2publish-article -> md2publish-draft;
+# visuals before the article, the cover beside it. The run ends at the WeChat draft box: publishing is the person's
+# click in the WeChat backend (H2, human-only), never a step here.
+# Pins (H34): runskills and md2publish-skills at full commits; secrets come from the machine, never from the template.
+format: orca-flow-v1
+id: wechat-article
+version: 1
+title: {en: WeChat article, zh: 公众号文章}
+params:
+  idea: {type: longtext, required: true}
+  slug: {type: slug, derive: slug-of-idea}
+  language: {type: enum, options: [zh, en], default: zh}
+  illustrations: {type: bool, default: false}
+  coverImage: {type: path, required: false}
+workspace: {kind: dir, excludes: [".md2publish/cache/"]}
+roles:
+  writer: {tier: high, suggest: {agent: claude}}
+requires:
+  skills:
+    - source: github.com/blrbiran/runskills
+      ref: e62c5f8edaaf7d36770fc13962dad22404765adc
+      path: skills
+      skills: [tech-writer, tech-writer-deslop, tech-writer-voice]
+    - source: github.com/blrbiran/md2publish-skills
+      ref: eabf4f7e3aeec16019e55afb0ed918647580d580
+      path: skills
+      skills: [wechat-finetune, md2publish-visuals, md2publish-article, md2publish-cover, md2publish-draft]
+  commands:
+    # A check, never an installer. Passing does not prove the IP whitelist (md2publish-draft/SKILL.md step 1).
+    - {name: md2wechat, check: "md2wechat doctor --json"}
+effects:
+  image-generate: {class: cost}
+  wechat-draft: {class: external}
+steps:
+  - id: brief
+    kind: clarify
+    mode: auto
+    background: prompts/brief.md
+    focus: the reader, the purpose, the angle, the material the article must use, and its length
+    sections: [Reader, Purpose, Angle, Must-use material, Length]
+
+  - id: outline
+    kind: work
+    role: writer
+    skills: [tech-writer]
+    prompt: prompts/outline.md
+    acceptance: {checks: [{id: outline-exists, run: "test -s '{{param.slug}}.outline.md'", role: gate}]}
+    tools: {network: false}
+    hints: {equals: "headings({{param.slug}}.outline.md)"}
+
+  - id: approve-outline
+    kind: ask
+    executor: person
+    policy: review-after
+    form:
+      approve: {type: bool, default: true}
+      notes: {type: longtext, required: false, default: ""}
+
+  - id: draft
+    kind: work
+    role: writer
+    skills: [tech-writer]
+    prompt: prompts/draft.md
+    acceptance: {checks: [{id: draft-exists, run: "test -s '{{param.slug}}.md'", role: gate}]}
+    tools: {network: false}
+
+  - id: deslop
+    kind: work
+    role: writer
+    skills: [tech-writer-deslop]
+    prompt: prompts/deslop.md
+    acceptance:
+      checks:
+        - {id: draft-exists, run: "test -s '{{param.slug}}.md'", role: gate}
+        # Exits 0 by design: a report for the next execution, never a gate (R §5).
+        - {id: scan, run: "python3 '{{skill.tech-writer-deslop.dir}}/scripts/scan.py' --json '{{param.slug}}.md'", role: diagnostic}
+    tools:
+      commands:
+        - {exact: "python3 '{{skill.tech-writer-deslop.dir}}/scripts/scan.py' --json '{{param.slug}}.md'"}
+      network: false
+
+  - id: voice
+    kind: work
+    role: writer
+    skills: [tech-writer-voice]
+    prompt: prompts/voice.md
+    acceptance:
+      checks:
+        # fidelity.py takes <old> <new>: the draft as this step found it, and as it left it [IR-I10].
+        - {id: fidelity, run: "python3 '{{skill.tech-writer-voice.dir}}/scripts/fidelity.py' '{{base:{{param.slug}}.md}}' '{{param.slug}}.md'", role: gate}
+        - {id: voice-diff, run: "python3 '{{skill.tech-writer-voice.dir}}/scripts/voice.py' '{{base:{{param.slug}}.md}}' '{{param.slug}}.md' --diff", role: diagnostic}
+    tools:
+      commands:
+        - {exact: "python3 '{{skill.tech-writer-voice.dir}}/scripts/fidelity.py' '{{base:{{param.slug}}.md}}' '{{param.slug}}.md'"}
+        - {exact: "python3 '{{skill.tech-writer-voice.dir}}/scripts/voice.py' '{{base:{{param.slug}}.md}}' '{{param.slug}}.md' --diff"}
+      network: false
+
+  - id: finetune
+    kind: work
+    role: writer
+    skills: [wechat-finetune]
+    prompt: prompts/finetune.md
+    acceptance: {checks: [{id: wechat-exists, run: "test -s '{{param.slug}}.wechat.md'", role: gate}]}
+    tools:
+      commands:
+        - {exact: "cd '{{skill.wechat-finetune.dir}}'"}
+        - {prefix: "python3 scripts/verify.py"}
+      network: false
+
+  - id: pick-title
+    kind: ask
+    executor: either
+    policy: review-after
+    candidatesFrom: {step: finetune, name: title}
+    form:
+      title: {type: text}
+    writeTo: {file: "{{param.slug}}.wechat.md", frontmatter: title}
+
+  - id: visuals
+    kind: work
+    skills: [md2publish-visuals]
+    prompt: prompts/visuals.md
+    effect: image-generate
+    recommendedLevel: confirm
+    when: {param: illustrations, truthy: true}
+    acceptance: {checks: [{id: illustrated-exists, run: "test -s '{{param.slug}}.illustrated.md'", role: gate}]}
+    tools:
+      commands:
+        - {exact: "cd '{{skill.md2publish-visuals.dir}}'"}
+        - {prefix: "mkdir -p "}
+        - {prefix: "python3 shared/scripts/preflight.py"}
+        - {prefix: "python3 shared/scripts/query.py "}
+        - {prefix: "python3 shared/scripts/compose_prompt.py "}
+        - {prefix: "python3 shared/scripts/artifacts.py "}
+        - {prefix: "python3 shared/scripts/compress.py "}
+        - {prefix: "python3 shared/scripts/writeback.py "}
+        - {prefix: "bun shared/scripts/imagegen/main.ts "}
+      network: true
+      secrets: [AGNES_API_KEY, AZURE_OPENAI_API_KEY, AZURE_OPENAI_BASE_URL, DASHSCOPE_API_KEY, GOOGLE_API_KEY, GEMINI_API_KEY,
+        JIMENG_ACCESS_KEY_ID, JIMENG_SECRET_ACCESS_KEY, MINIMAX_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, REPLICATE_API_TOKEN,
+        ARK_API_KEY, ZAI_API_KEY, BIGMODEL_API_KEY]
+
+  - id: article
+    kind: work
+    skills: [md2publish-article]
+    prompt: prompts/article.md
+    acceptance:
+      checks:
+        # The HTML is named after its source: <slug>.wechat.html, or <slug>.illustrated.html after visuals.
+        - {id: html-exists, run: "test -s '{{param.slug}}.wechat.html' || test -s '{{param.slug}}.illustrated.html'", role: gate}
+    tools:
+      commands:
+        - {exact: "cd '{{skill.md2publish-article.dir}}'"}
+        - {prefix: "python3 scripts/md2html.py "}
+        - {prefix: "md2wechat inspect "}
+      network: false
+
+  - id: cover
+    kind: work
+    skills: [md2publish-cover]
+    prompt: prompts/cover.md
+    parallelWith: article
+    effect: image-generate
+    recommendedLevel: confirm
+    when: {not: {param: coverImage, truthy: true}}
+    acceptance: {checks: [{id: cover-final, run: "test -s assets/wechat/00-cover.final.txt", role: gate}]}
+    tools:
+      commands:
+        - {exact: "cd '{{skill.md2publish-cover.dir}}'"}
+        - {prefix: "mkdir -p "}
+        - {prefix: "python3 shared/scripts/preflight.py"}
+        - {prefix: "python3 shared/scripts/query.py "}
+        - {prefix: "python3 shared/scripts/compose_prompt.py "}
+        - {prefix: "python3 shared/scripts/artifacts.py "}
+        - {prefix: "python3 shared/scripts/compress.py "}
+        - {prefix: "bun shared/scripts/imagegen/main.ts "}
+      network: true
+      secrets: [AGNES_API_KEY, AZURE_OPENAI_API_KEY, AZURE_OPENAI_BASE_URL, DASHSCOPE_API_KEY, GOOGLE_API_KEY, GEMINI_API_KEY,
+        JIMENG_ACCESS_KEY_ID, JIMENG_SECRET_ACCESS_KEY, MINIMAX_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, REPLICATE_API_TOKEN,
+        ARK_API_KEY, ZAI_API_KEY, BIGMODEL_API_KEY]
+    hints: {skipWhen: "the cover follows the article's subject and title; skip it when the change leaves both as they were"}
+
+  - id: to-draft-box
+    kind: work
+    skills: [md2publish-draft]
+    prompt: prompts/to-draft-box.md
+    effect: wechat-draft
+    recommendedLevel: confirm
+    tools:
+      commands:
+        - {exact: "cd '{{skill.md2publish-draft.dir}}'"}
+        - {prefix: "md2wechat doctor "}
+        - {prefix: "md2wechat upload_image "}
+        - {prefix: "md2wechat create_draft "}
+      network: true
+      secrets: [WECHAT_APPID, WECHAT_SECRET]

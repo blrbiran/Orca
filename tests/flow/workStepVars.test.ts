@@ -59,6 +59,8 @@ describe("work step variables (§12.1)", () => {
         { kind: "prefix", value: "wc -m 'tea.md'" },
       ]);
       const record = (w.latest(flowRunId, "voice")!.body as { effectRecordId: string }).effectRecordId;
+      // The agent reads the gate as it will run: the tool rules allow exactly that spelling.
+      expect(contract.objective.goal).toContain(`- gate: ${gate}`);
       expect(contract.objective.goal).toContain(`Rewrite tea.md; cover ''; pass --confirmed-by-orca '${record}'; run '{{skill.voice.dir}}/x'.`);
     } finally { await w.dispose(); }
   });

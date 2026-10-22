@@ -1,0 +1,107 @@
+import { describe, expect, it } from "vitest";
+import { seedBuiltinTemplates } from "../../src/flow/builtins.js";
+import { checkTemplate } from "../../src/flow/template/checklist.js";
+import { BUILTIN_ROOT, directoryAssets, loadBuiltin, parseTemplateDraft } from "../../src/flow/template/load.js";
+import type { FlowStep } from "../../src/flow/template/schema.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { openTestStore } from "../control/fixtures/store.js";
+
+/**
+ * Flow engine spec §15 (H1, H2, H5, H34; plan Task 14): the built-in `wechat-article` is the human's chain as a template.
+ * Its shape is the spec's table: every step with its kind, skills, effect, `when`, gates and `tools`; the pins are the
+ * commits that carry §16.4 (md2publish-skills eabf4f7e, the `--confirmed-by-orca` switch and script files) and the
+ * measured runskills commit; no tool rule names a bare interpreter or an inline script (claude refuses rules it cannot
+ * read literally, §16.2, so `python3 -c` would leave the step unable to run the skill's own commands). The run ends at
+ * the draft box: publishing is the person's click in the WeChat backend. Each effect step's prompt passes the effect
+ * record as `--confirmed-by-orca`, and the draft box reads the cover step's FINAL file, never the sidecar default.
+ */
+const RUNSKILLS = "e62c5f8edaaf7d36770fc13962dad22404765adc";
+const MD2PUBLISH = "eabf4f7e3aeec16019e55afb0ed918647580d580";
+const dir = join(BUILTIN_ROOT, "wechat-article");
+const loaded = loadBuiltin("wechat-article");
+const steps = loaded.template.steps;
+const step = (id: string): FlowStep => steps.find((s) => s.id === id)!;
+const prompt = (id: string): string => readFileSync(join(dir, (step(id) as { prompt: string }).prompt), "utf8");
+const gates = (id: string): string[] => ("acceptance" in step(id) ? (step(id) as { acceptance?: { checks: Array<{ run: string; role: string }> } }).acceptance?.checks ?? [] : []).filter((c) => c.role === "gate").map((c) => c.run);
+const rules = (id: string): string[] => ((step(id) as { tools?: { commands?: Array<{ exact?: string; prefix?: string }> } }).tools?.commands ?? []).map((r) => r.exact ?? r.prefix!);
+
+describe("built-in wechat-article (§15)", () => {
+  it("passes the static checklist with no error and no warning", () => {
+    const draft = parseTemplateDraft(readFileSync(join(dir, "template.yaml"), "utf8"));
+    expect(draft.ok).toBe(true);
+    const effectSkills = new Set(steps.filter((s) => "effect" in s && s.effect !== undefined).flatMap((s) => ("skills" in s ? s.skills ?? [] : [])));
+    expect(checkTemplate((draft as { raw: unknown }).raw, directoryAssets(dir), { builtinEffectSkills: effectSkills })).toEqual({ errors: [], warnings: [] });
+    expect(loaded.template).toMatchObject({ id: "wechat-article", version: 1, workspace: { kind: "dir" }, effects: { "image-generate": { class: "cost" }, "wechat-draft": { class: "external" } } });
+  });
+
+  it("is the spec's table: steps in order with their kinds, skills, effects, conditions and parallel sibling", () => {
+    expect(steps.map((s) => [s.id, s.kind, "skills" in s ? s.skills ?? [] : []])).toEqual([
+      ["brief", "clarify", []], ["outline", "work", ["tech-writer"]], ["approve-outline", "ask", []], ["draft", "work", ["tech-writer"]],
+      ["deslop", "work", ["tech-writer-deslop"]], ["voice", "work", ["tech-writer-voice"]], ["finetune", "work", ["wechat-finetune"]],
+      ["pick-title", "ask", []], ["visuals", "work", ["md2publish-visuals"]], ["article", "work", ["md2publish-article"]],
+      ["cover", "work", ["md2publish-cover"]], ["to-draft-box", "work", ["md2publish-draft"]],
+    ]);
+    expect(step("brief")).toMatchObject({ mode: "auto", sections: ["Reader", "Purpose", "Angle", "Must-use material", "Length"] });
+    expect(step("approve-outline")).toMatchObject({ executor: "person", policy: "review-after", form: { approve: { type: "bool", default: true } } });
+    expect(step("pick-title")).toMatchObject({ executor: "either", policy: "review-after", candidatesFrom: { step: "finetune", name: "title" }, writeTo: { file: "{{param.slug}}.wechat.md", frontmatter: "title" } });
+    expect(step("visuals")).toMatchObject({ effect: "image-generate", recommendedLevel: "confirm", when: { param: "illustrations", truthy: true } });
+    expect(step("cover")).toMatchObject({ effect: "image-generate", recommendedLevel: "confirm", parallelWith: "article", when: { not: { param: "coverImage", truthy: true } } });
+    expect(step("to-draft-box")).toMatchObject({ effect: "wechat-draft", recommendedLevel: "confirm" });
+    expect(steps.filter((s) => "effect" in s && s.effect !== undefined).map((s) => s.id)).toEqual(["visuals", "cover", "to-draft-box"]);
+    expect(steps.at(-1)!.id).toBe("to-draft-box");
+    expect(loaded.template.requires?.commands).toEqual([{ name: "md2wechat", check: "md2wechat doctor --json" }]);
+  });
+
+  it("pins runskills and md2publish-skills at full commits", () => {
+    expect(loaded.template.requires?.skills).toEqual([
+      { source: "github.com/blrbiran/runskills", ref: RUNSKILLS, path: "skills", skills: ["tech-writer", "tech-writer-deslop", "tech-writer-voice"] },
+      { source: "github.com/blrbiran/md2publish-skills", ref: MD2PUBLISH, path: "skills", skills: ["wechat-finetune", "md2publish-visuals", "md2publish-article", "md2publish-cover", "md2publish-draft"] },
+    ]);
+  });
+
+  it("gates and tools per step; every work step declares tools; no bare interpreter, no inline script", () => {
+    expect(gates("outline")).toEqual(["test -s '{{param.slug}}.outline.md'"]);
+    expect(gates("draft")).toEqual(["test -s '{{param.slug}}.md'"]);
+    expect(gates("voice")).toEqual(["python3 '{{skill.tech-writer-voice.dir}}/scripts/fidelity.py' '{{base:{{param.slug}}.md}}' '{{param.slug}}.md'"]);
+    expect(gates("finetune")).toEqual(["test -s '{{param.slug}}.wechat.md'"]);
+    expect(gates("article")).toEqual(["test -s '{{param.slug}}.wechat.html' || test -s '{{param.slug}}.illustrated.html'"]);
+    expect(gates("to-draft-box")).toEqual([]);
+    expect((step("outline") as { hints?: { equals?: string } }).hints?.equals).toBe("headings({{param.slug}}.outline.md)");
+    for (const work of steps.filter((s) => s.kind === "work")) expect((work as { tools?: unknown }).tools, work.id).toBeDefined();
+    expect(rules("deslop")).toEqual(["python3 '{{skill.tech-writer-deslop.dir}}/scripts/scan.py' --json '{{param.slug}}.md'"]);
+    expect(rules("to-draft-box")).toEqual(["cd '{{skill.md2publish-draft.dir}}'", "md2wechat doctor ", "md2wechat upload_image ", "md2wechat create_draft "]);
+    expect((step("to-draft-box") as { tools: { network: boolean; secrets: string[] } }).tools).toMatchObject({ network: true, secrets: ["WECHAT_APPID", "WECHAT_SECRET"] });
+    for (const id of ["visuals", "cover"]) expect((step(id) as { tools: { network: boolean } }).tools.network, id).toBe(true);
+    for (const id of ["outline", "draft", "deslop", "voice", "finetune", "article"]) expect((step(id) as { tools: { network?: boolean } }).tools.network, id).toBe(false);
+    const all = steps.flatMap((s) => rules(s.id));
+    expect(all.filter((r) => /^(python3?|bash|sh|zsh|node|bun|deno)\s*$/.test(r.trim()))).toEqual([]);
+    expect(all.filter((r) => /python3? -c|python3? - /.test(r))).toEqual([]);
+    // md2publish steps run their skill's script files from the skill's directory (§16.4): `cd` exact, the scripts as prefixes.
+    for (const id of ["visuals", "article", "cover", "to-draft-box"]) {
+      expect(rules(id)[0], id).toBe(`cd '{{skill.${(step(id) as { skills: string[] }).skills[0]}.dir}}'`);
+      for (const r of rules(id).filter((r) => r.startsWith("python3"))) expect(r, id).toMatch(/^python3 (shared\/)?scripts\/[a-z0-9_]+\.py( |$)/);
+    }
+    expect(rules("cover")).toContain("python3 shared/scripts/query.py ");
+  });
+
+  it("each effect step passes its record as --confirmed-by-orca; the article passes the run id; the draft box takes the cover's FINAL path", () => {
+    for (const id of ["visuals", "cover", "to-draft-box"]) expect(prompt(id), id).toContain("--confirmed-by-orca '{{effect.recordId}}'");
+    expect(prompt("article")).toContain("--confirmed-by-orca '{{run.id}}'");
+    expect(prompt("cover")).toContain("assets/wechat/00-cover.final.txt");
+    expect(gates("cover")).toEqual(["test -s assets/wechat/00-cover.final.txt"]);
+    expect(prompt("to-draft-box")).toContain("assets/wechat/00-cover.final.txt");
+    expect(prompt("to-draft-box")).toMatch(/never the sidecar default/);
+    expect(prompt("finetune")).toContain("flow.candidates.title");
+  });
+
+  it("is seeded into flow_templates by upsert at start; seeding again changes nothing", async () => {
+    const h = await openTestStore(); try {
+      const rows = () => h.store.db.prepare("SELECT layer, id, version, sha256, published_by AS publishedBy FROM flow_templates ORDER BY id").all();
+      expect(seedBuiltinTemplates(h.store, 5)).toEqual([{ id: "wechat-article", version: 1, sha256: loaded.sha256 }]);
+      expect(rows()).toEqual([{ layer: "builtin", id: "wechat-article", version: 1, sha256: loaded.sha256, publishedBy: "orca" }]);
+      seedBuiltinTemplates(h.store, 6);
+      expect(rows()).toHaveLength(1);
+    } finally { await h.dispose(); }
+  });
+});

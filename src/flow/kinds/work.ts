@@ -108,7 +108,8 @@ async function start(ctx: KindContext): Promise<KindOutcome> {
   const role = step.role === undefined ? undefined : run.body.roles[step.role];
   const input: FlowStepPlanInput = {
     flowRunId: key.flowRunId, step: { ...step, ...(tools === undefined ? {} : { tools }) }, seq: key.seq, baseCommit: composition.commit, vaultPath: composition.vault.path,
-    promptEnvelope: ctx.prompt(), gates, effectRecordId,
+    // The agent reads the gates as they will run (the tool rules allow exactly those spellings).
+    promptEnvelope: ctx.prompt({ acceptance: gates.map((gate) => `gate: ${gate}`) }), gates, effectRecordId,
     ...(role === undefined ? {} : { agent: { agent: role.agent, ...(role.model === null ? {} : { model: role.model }) } }),
   };
   let plan: ReturnType<typeof buildFlowStepPlanSource>;

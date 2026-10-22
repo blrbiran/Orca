@@ -21,6 +21,7 @@ import { ORCHESTRATION_ACTOR } from "../control/orchestration.js";
 import { estimatorSlotFor, type ImportDeps } from "../control/planImport.js";
 import type { ExecutionProfileRouter } from "../control/profiles.js";
 import type { ControlStore } from "../control/store.js";
+import { seedBuiltinTemplates } from "../flow/builtins.js";
 import { createFlowCallPort } from "../flow/calls.js";
 import { createDriverChildPort } from "../flow/childPort.js";
 import { FlowRefusal, type AgentCandidate, type FlowDeps } from "../flow/kernel.js";
@@ -42,6 +43,8 @@ export interface PanelFlow { deps: FlowDeps; refreshAgents(): Promise<void> }
 
 export function createPanelFlow(input: PanelFlowInput): PanelFlow {
   const { store, router } = input;
+  // §11.3: the built-ins this install ships are indexed at every start (upsert by layer, id, version).
+  seedBuiltinTemplates(store, store.now());
   let agents: AgentCandidate[] = [];
   const confirmParent = async (run: { flowRunId: string; groupId: string; projectId: string | null; by?: string }): Promise<FlowParentConfirmation> => {
     const defaults = input.importDeps.defaults();
