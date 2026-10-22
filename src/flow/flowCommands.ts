@@ -14,7 +14,7 @@ import type { ControlStore } from "../control/store.js";
 import { realpath } from "node:fs/promises";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { discardEffect, enactEffect } from "./effects.js";
-import { advanceRun, answerNeeds, FlowRefusal, latestByStep, loadRun, resumeExecution, startFlowRun, stepOf, type FlowDeps } from "./kernel.js";
+import { advanceRun, answerNeeds, FlowRefusal, latestByStep, loadRun, recordRunError, resumeExecution, startFlowRun, stepOf, type FlowDeps } from "./kernel.js";
 import { answerAsk } from "./kinds/ask.js";
 import { answerFlowClarify, flowClarifyConsensus } from "./kinds/clarify.js";
 import type { ExecutionBody } from "./kinds/registry.js";
@@ -99,6 +99,15 @@ export async function applyFlowCommand(deps: FlowCommandDeps, command: FlowComma
   }).body;
 }
 
+/**
+ * Review M4: once the kernel acted (a run started, an answer taken), the command is what it did: a failure while the
+ * run is then advanced is the run's -- recorded on it (`lastError`, as the pump records one) -- not the command's.
+ */
+async function advanceAfter(flow: FlowDeps, flowRunId: string): Promise<void> {
+  try { await advanceRun(flow, flowRunId); }
+  catch (error) { recordRunError(flow, flowRunId, error instanceof Error ? error.message : String(error)); }
+}
+
 async function act(flow: FlowDeps, command: FlowCommand, projects: () => ReadonlyArray<{ repoId: string; path: string }>): Promise<Result> {
   const who = routedAttributionFor(command.commandId) ?? { by: command.actorId, via: "web" };
   switch (command.verb) {
@@ -113,7 +122,7 @@ async function act(flow: FlowDeps, command: FlowCommand, projects: () => Readonl
         // A retry of this command (lost answer) finds the run it started instead of starting a second one.
         idempotencyKey: command.commandId,
       });
-      await advanceRun(flow, started.flowRunId);
+      await advanceAfter(flow, started.flowRunId);
       return { kind: "flow-started", flowRunId: started.flowRunId, groupId: started.groupId };
     }
     case "flow-message": {
@@ -156,16 +165,16 @@ async function answer(flow: FlowDeps, p: AnswerPayload, who: { by: string; via: 
   const step = stepOf(run, p.stepKey);
   const target = { flowRunId: p.runId, stepKey: p.stepKey };
   const done = (kind: "ask" | "needs" | "clarify" | "consensus"): Result => ({ kind: "flow-answered", flowRunId: p.runId, stepKey: p.stepKey, answer: kind });
-  if (p.clarify !== undefined) { await answerFlowClarify(flow, target, p.clarify, who.by, who.via); await advanceRun(flow, p.runId); return done("clarify"); }
-  if (p.consensus !== undefined) { await flowClarifyConsensus(flow, target, who.by, who.via); await advanceRun(flow, p.runId); return done("consensus"); }
+  if (p.clarify !== undefined) { await answerFlowClarify(flow, target, p.clarify, who.by, who.via); await advanceAfter(flow, p.runId); return done("clarify"); }
+  if (p.consensus !== undefined) { await flowClarifyConsensus(flow, target, who.by, who.via); await advanceAfter(flow, p.runId); return done("consensus"); }
   if (p.values !== undefined) {
     if (step.kind !== "ask") throw new FlowRefusal("flow-answer-invalid", `${p.stepKey} is a ${step.kind} step: answer its question with text`);
     await answerAsk(flow, target, p.values, who.by, who.via);
-    await advanceRun(flow, p.runId);
+    await advanceAfter(flow, p.runId);
     return done("ask");
   }
   await answerNeeds(flow, target, p.text!, who.by, who.via);
-  await advanceRun(flow, p.runId);
+  await advanceAfter(flow, p.runId);
   return done("needs");
 }
 

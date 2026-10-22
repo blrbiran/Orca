@@ -859,7 +859,7 @@ export async function advanceFlowRuns(deps: FlowDeps): Promise<void> {
   }
 }
 
-function recordRunError(deps: FlowDeps, flowRunId: string, message: string | null): void {
+export function recordRunError(deps: FlowDeps, flowRunId: string, message: string | null): void {
   const stored = (getFlowRun(deps.store, flowRunId)?.body as FlowRunBody | undefined)?.lastError;
   if (message === null ? stored === undefined : stored?.message === message) return;
   const at = deps.now();
