@@ -1,6 +1,6 @@
 import type { Role } from "./accounts/jwt.js";
 import type { CommandVerbV1 } from "../control/webProtocol.js";
-import { humanOnlyRefusal, socketTier } from "./humanOnly.js";
+import { DISPATCHED_RUN_REFUSED, humanOnlyRefusal, socketTier } from "./humanOnly.js";
 import type { Attribution } from "../control/commandClient.js";
 
 /** Accounts spec §3.5: who sent a request. A logged-in user on the TCP app, or the control socket's agent. */
@@ -50,6 +50,8 @@ export const mayDoHumanOnly = (p: Principal): boolean => may(p, "humanOnly");
  */
 export function permissionRefusal(p: Principal, verb: CommandVerbV1, payload: unknown):
   { code: "control-verb-human-only" | "control-field-human-only" | "control-dispatched-run-refused" | "control-person-token-required"; message: string } | null {
+  if (p.kind === "agent" && p.dispatchedRun !== undefined && DISPATCHED_RUN_REFUSED.has(verb))
+    return { code: "control-dispatched-run-refused", message: `${verb} is not done by a run Orca dispatched (${p.dispatchedRun}); a person or an attended session does it.` };
   const humanOnly = humanOnlyRefusal(verb, payload);
   if (humanOnly === null) return null;
   if (p.kind === "user") return mayDoHumanOnly(p) ? null : humanOnly;

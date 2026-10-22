@@ -132,6 +132,8 @@ export interface WebServiceDeps extends AsyncImportDeps {
   correctionsBy?: string;
   /** Flow engine spec §14.2: the flow kernel's production ports (a panel with an execution driver); null: none. */
   flowDeps?: () => FlowDeps | null;
+  /** Review finding I4: the registered `dir` projects a flow may start on (their settings key and folder); absent: none. */
+  flowProjects?: () => ReadonlyArray<{ repoId: string; path: string }>;
   /** Debug task plan Task 11: what correction-record/-withdraw need from the panel (correctionCommands.ts). Absent, both refuse corrections-store-unconfigured. */
   panelCorrections?: PanelCorrections;
   /**
@@ -1057,7 +1059,7 @@ export class WebControlService {
   /** Flow engine spec §14.2: every flow verb (flowCommands.ts); the kernel acts first, the ledger books the outcome. */
   async flowCommand(command: FlowCommand): Promise<WebCommandResult> {
     const release = this.deps.admissionGate?.enter();
-    try { return await applyFlowCommand({ store: this.store, flow: this.deps.flowDeps ?? (() => null) }, command) as WebCommandResult; }
+    try { return await applyFlowCommand({ store: this.store, flow: this.deps.flowDeps ?? (() => null), projects: this.deps.flowProjects ?? (() => []) }, command) as WebCommandResult; }
     finally { release?.(); }
   }
   private readonly checkJobs = new Map<string, Promise<void>>();

@@ -11,6 +11,7 @@ import { routedAttributionFor } from "../control/commandClient.js";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "../control/commandLedger.js";
 import { ControlError, type KnownControlErrorCode } from "../control/errors.js";
 import type { ControlStore } from "../control/store.js";
+import { realpath } from "node:fs/promises";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { discardEffect, enactEffect } from "./effects.js";
 import { advanceRun, answerNeeds, FlowRefusal, latestByStep, loadRun, resumeExecution, startFlowRun, stepOf, type FlowDeps } from "./kernel.js";
@@ -26,7 +27,29 @@ export const FLOW_VERBS = ["flow-start", "flow-message", "flow-plan", "flow-reru
 export type FlowVerb = (typeof FLOW_VERBS)[number];
 export type FlowCommand = Extract<RawAuthorityCommandV1, { verb: FlowVerb }>;
 type Result = Extract<CommandSuccessV1["result"], { kind: `flow-${string}` }>;
-export interface FlowCommandDeps { store: ControlStore; flow(): FlowDeps | null }
+export interface FlowCommandDeps {
+  store: ControlStore; flow(): FlowDeps | null;
+  /** Review finding I4: the registered `dir` projects (settings key, folder); absent: none, so no start is accepted. */
+  projects?(): ReadonlyArray<{ repoId: string; path: string }>;
+}
+
+/**
+ * Review finding I4 (controller's call, flagged for the human): a flow writes into the folder it runs on (copy-back), so
+ * it starts only on a registered `dir` project's folder -- never on an arbitrary path a caller names. The run belongs to
+ * that project (its settings layer); a `projectId` that names another project is refused.
+ */
+async function registeredDirProject(projects: ReadonlyArray<{ repoId: string; path: string }>, dir: string, projectId: string | undefined): Promise<string> {
+  const real = async (path: string): Promise<string | null> => { try { return (await realpath(path)).normalize("NFC"); } catch { return null; } };
+  const wanted = await real(dir);
+  if (wanted !== null) {
+    for (const project of projects) {
+      if (await real(project.path) !== wanted) continue;
+      if (projectId !== undefined && projectId !== project.repoId) throw new ControlError("flow-dir-unregistered", `${dir} is project ${project.repoId}, not ${projectId}`);
+      return project.repoId;
+    }
+  }
+  throw new ControlError("flow-dir-unregistered", `${dir} is not a registered dir project's folder (add it with kind "dir" to the projects file)`);
+}
 
 /**
  * Spec Global Constraints' refusal codes, booked under their own names (errors.ts); a refusal with a detail
@@ -65,7 +88,7 @@ export async function applyFlowCommand(deps: FlowCommandDeps, command: FlowComma
   try {
     const flow = deps.flow();
     if (flow === null) throw new ControlError("flow-unavailable", "this panel runs no flow kernel (no execution driver)");
-    result = await act(flow, command);
+    result = await act(flow, command, deps.projects ?? (() => []));
   } catch (failure) {
     const error = asFlowControlError(failure);
     return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
@@ -76,16 +99,16 @@ export async function applyFlowCommand(deps: FlowCommandDeps, command: FlowComma
   }).body;
 }
 
-async function act(flow: FlowDeps, command: FlowCommand): Promise<Result> {
+async function act(flow: FlowDeps, command: FlowCommand, projects: () => ReadonlyArray<{ repoId: string; path: string }>): Promise<Result> {
   const who = routedAttributionFor(command.commandId) ?? { by: command.actorId, via: "web" };
   switch (command.verb) {
     case "flow-start": {
       const p = command.payload;
       if (p.dir === undefined) throw new ControlError("control-argument-invalid", "phase 1 runs a flow on a folder: give dir");
+      const projectId = await registeredDirProject(projects(), p.dir, p.projectId);
       const template = p.template.startsWith("builtin/") ? p.template : `builtin/${p.template}`;
       const started = await startFlowRun(flow, {
-        templateRef: template, dir: p.dir, params: p.params, by: who.by, via: who.via,
-        ...(p.projectId === undefined ? {} : { projectId: p.projectId }), ...(p.clarify === undefined ? {} : { clarify: p.clarify }),
+        templateRef: template, dir: p.dir, params: p.params, by: who.by, via: who.via, projectId, ...(p.clarify === undefined ? {} : { clarify: p.clarify }),
         ...(p.pool === undefined ? {} : { pool: p.pool }), ...(p.unattended === undefined ? {} : { unattended: p.unattended }),
         // A retry of this command (lost answer) finds the run it started instead of starting a second one.
         idempotencyKey: command.commandId,

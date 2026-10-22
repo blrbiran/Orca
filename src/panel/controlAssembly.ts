@@ -111,7 +111,7 @@ export interface ControlRuntime {
 
 export interface ControlAssemblyInput {
   control: ControlOptions;
-  repos: ReadonlyArray<{ projectKey: string; path: string }>;
+  repos: ReadonlyArray<{ projectKey: string; path: string; kind?: "dir" }>;
   epoch: string;
   env: NodeJS.ProcessEnv;
   /** Test-only fault injection for the execution driver (spec §7.2 R1). Never set by the CLI. */
@@ -237,6 +237,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     trustedConfig: config,
     // Flow engine spec §14.2: the flow verbs act through the kernel's production ports, made below with the driver.
     flowDeps: () => flow?.deps ?? null,
+    // Review finding I4: a flow starts only on a registered `dir` project's folder; its settings key is the project's.
+    flowProjects: () => repos.filter((repo) => repo.kind === "dir").map((repo) => ({ repoId: controlRepoKey(repo.projectKey), path: repo.path })),
     // Execution driver spec §2.1: a workspace mode means something only to a driver, so an unconfigured
     // panel knows no repository here and refuses set-workspace-mode as it did before this slice.
     knownRepository: control.executionPort === "configured"

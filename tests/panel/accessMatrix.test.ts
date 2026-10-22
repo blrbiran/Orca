@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
-import { HUMAN_ONLY_FIELDS, HUMAN_ONLY_VERBS, SOCKET_TIER, humanOnlyRefusal } from "../../src/panel/humanOnly.js";
+import { DISPATCHED_RUN_REFUSED, HUMAN_ONLY_FIELDS, HUMAN_ONLY_VERBS, SOCKET_TIER, humanOnlyRefusal } from "../../src/panel/humanOnly.js";
 import { permissionRefusal, type Principal } from "../../src/panel/permissions.js";
 import type { StartedPanel } from "../../src/panel/server.js";
 import { sessionFor } from "./fixtures/auth.js";
@@ -127,6 +127,15 @@ describe("the socket access tiers (CLI v2 spec §15.1)", () => {
     expect(permissionRefusal(PRINCIPALS.socket!, "requirement-open", { groupId: "g" })).toBe(null);
     expect(permissionRefusal(PRINCIPALS.socket!, "proposal-edit", { operations: [], proposedGroupLimit: {} })?.code).toBe("control-person-token-required");
     for (const p of Object.values(PRINCIPALS)) expect(permissionRefusal(p, "start", {})).toBe(null);
+  });
+
+  // Review finding I4 (controller's call, flagged for the human): verbs open to all that a run Orca dispatched is still
+  // refused (DISPATCHED_RUN_REFUSED), a row per verb x every principal.
+  it("refuses flow-start to a dispatched run only, token or not", () => {
+    expect([...DISPATCHED_RUN_REFUSED].sort()).toEqual(["flow-start"]);
+    expect(Object.fromEntries(Object.entries(PRINCIPALS).map(([name, p]) => [name, permissionRefusal(p, "flow-start", { template: "t", dir: "/x", params: {} })?.code ?? "accepted"]))).toEqual({
+      socket: "accepted", socketToken: "accepted", socketMarker: "control-dispatched-run-refused", socketTokenMarker: "control-dispatched-run-refused", webMember: "accepted", webOwner: "accepted",
+    });
   });
 });
 

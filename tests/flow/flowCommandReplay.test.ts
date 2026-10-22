@@ -16,7 +16,9 @@ const raw = (verb: string, payload: unknown, commandId = `cmd-${++n}`) => ({ sch
 describe("a flow command sent again after a lost answer acts once", () => {
   it("start, message and pool raise", async () => {
     const w = await flowWorld({ t: TPL }); try {
-      const service = new WebControlService({ store: w.store, port: {} as never, profileRouter: {} as never, trustedConfig: {} as never, flowDeps: () => w.deps } as never);
+      const service = new WebControlService({ store: w.store, port: {} as never, profileRouter: {} as never, trustedConfig: {} as never, flowDeps: () => w.deps,
+        // Review finding I4 (Ruling: 这次批准改写所有必要的判据 (b37f7ce9)): a flow starts only on a registered dir project.
+        flowProjects: () => [{ repoId: "articles-00000000", path: w.folder }] } as never);
       const lose = (commandId: string) => w.store.db.prepare("DELETE FROM commands WHERE id=?").run(commandId);
       const send = async (command: never) => (await service.flowCommand(command)) as { result?: Record<string, unknown>; error?: { code: string } };
 

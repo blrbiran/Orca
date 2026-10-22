@@ -91,6 +91,11 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "flow-effect": "human-only",
   "flow-pool": "human-only",
 };
+/**
+ * Review finding I4 (controller's call, flagged for the human): verbs any principal may send that a run Orca dispatched is
+ * still refused -- a dispatched run must not start a flow (it would spend and write a folder nobody attends).
+ */
+export const DISPATCHED_RUN_REFUSED: ReadonlySet<CommandVerbV1> = new Set<CommandVerbV1>(["flow-start"]);
 export const HUMAN_ONLY_VERBS: readonly CommandVerbV1[] =
   (Object.keys(VERB_ACCESS) as CommandVerbV1[]).filter((verb) => VERB_ACCESS[verb] === "human-only");
 export const HUMAN_ONLY_FIELDS: Readonly<Partial<Record<CommandVerbV1, readonly string[]>>> = {

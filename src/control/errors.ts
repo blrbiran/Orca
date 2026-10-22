@@ -281,6 +281,8 @@ export const durableCommandErrorStatuses = {
   "flow-group-delivery-fixed": 422,
   // Flow engine spec §6.2, §9.6: a flow run's hidden child is the kernel's; retry the step through the run instead.
   "flow-child-managed": 422,
+  // Review finding I4: a flow starts only on a registered `dir` project's folder.
+  "flow-dir-unregistered": 422,
   "revision-unchanged": 422,
   "group-stopped": 422,
   "handoff-budget-unavailable": 422,
@@ -460,6 +462,7 @@ export const v1WebErrorCodes = [
   "estimate-input-too-large",
   "execution-policy-unrepresentable",
   "flow-child-managed",
+  "flow-dir-unregistered",
   "flow-group-delivery-fixed",
   "grant-amendment-unsupported",
   "group-budget-unavailable",

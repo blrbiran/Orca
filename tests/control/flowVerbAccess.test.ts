@@ -66,7 +66,9 @@ describe("flow verb access (C19)", () => {
     const personDir = join(root, "person");
     mkdirSync(personDir, { mode: 0o700 });
     writeFileSync(join(personDir, "token.json"), JSON.stringify({ schema: "orca-person-token-v1", token: login.token, sid: login.sid, user: "tester", expiresAt: login.expiresAt }), { mode: 0o600 });
-    const service = new WebControlService({ store: w.store, port: {} as never, profileRouter: {} as never, trustedConfig: {} as never, knownRepository: () => false, flowDeps: () => w.deps } as never);
+    const service = new WebControlService({ store: w.store, port: {} as never, profileRouter: {} as never, trustedConfig: {} as never, knownRepository: () => false, flowDeps: () => w.deps,
+      // Review finding I4 (Ruling: 这次批准改写所有必要的判据 (b37f7ce9)): a flow starts only on a registered dir project.
+      flowProjects: () => [{ repoId: "articles-00000000", path: w.folder }] } as never);
     const bound = await bindControlSocket(buildControlSocketApp({ store: w.store, epoch: "epoch", config: { readView: async () => ({}) } as never, service }, undefined, auth), join(root, "control.sock"));
     if (!("close" in bound)) throw new Error(`socket not bound: ${bound.code}`);
     cleanups.push(() => bound.close());

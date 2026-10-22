@@ -29,7 +29,8 @@ export interface PanelOptions {
   confirmedExternal: boolean;
   correctionsDir: string;
   root?: string;
-  repos: Array<{ projectKey: string; path: string }>;
+  /** Flow engine spec §5.1: a registered `dir` project names its kind (absent: a repository). */
+  repos: Array<{ projectKey: string; path: string; kind?: "dir" }>;
   /** Absolute path to web/dist. Injected so a criterion can point at a fixture. */
   distDir?: string;
   /**
@@ -120,7 +121,7 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
     );
   }
 
-  const repos: Array<{ projectKey: string; path: string }> = [];
+  const repos: Array<{ projectKey: string; path: string; kind?: "dir" }> = [];
   for (let i = 0; i < args.length; i += 1) {
     if (args[i] !== "--repo") continue;
     const pair = args[i + 1] ?? "";
@@ -146,7 +147,7 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
     }
     const boot = readProjectsFile(file);
     if (boot.kind === "invalid") throw new PanelRejection("projects-file-invalid", `${file}: ${boot.reason}. Fix the file; the panel never rewrites it.`);
-    for (const project of boot.kind === "valid" ? boot.config.projects : []) repos.push({ projectKey: project.id, path: project.path });
+    for (const project of boot.kind === "valid" ? boot.config.projects : []) repos.push({ projectKey: project.id, path: project.path, ...(project.kind === "dir" ? { kind: "dir" as const } : {}) });
     projectsFile = { file, boot };
   }
 
