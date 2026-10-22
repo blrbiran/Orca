@@ -290,7 +290,10 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     // Flow engine spec §8.2: flow runs advance at their step boundaries before the auto-start pass, so a child a step just
     // opened and confirmed starts in the same pass.
     const autoStart = driver === null || flow === null ? Promise.resolve() : service.systemDebugPass().then(() => service.checksPass())
-      .then(() => flow!.refreshAgents()).then(() => advanceFlowRuns(flow!.deps)).then(() => service.autoStart()).then(() => service.autoResolveIntegrationConflicts()).then(() => undefined, (error: unknown) => {
+      // A flow error never skips the auto-start pass of every other group (advanceFlowRuns records a run's own error on it).
+      .then(() => flow!.refreshAgents().then(() => advanceFlowRuns(flow!.deps)).catch((error: unknown) => {
+        process.stderr.write(`orca-control: flow pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
+      })).then(() => service.autoStart()).then(() => service.autoResolveIntegrationConflicts()).then(() => undefined, (error: unknown) => {
       process.stderr.write(`orca-control: auto-start pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
     });
     const pass = autoStart.then(() => withAdmission({ admissionGate }, () => deliverSchedulerWakes(store, wakeHandlers)))

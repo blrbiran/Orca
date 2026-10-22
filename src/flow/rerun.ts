@@ -69,8 +69,13 @@ export function currentCandidates(deps: FlowDeps, run: LoadedRun, messages: read
     definitionHashes[step.id] = definitionOf(deps, run, step, (active?.body as { skillLocks?: [] } | undefined)?.skillLocks ?? []);
   }
   const whenFalse = new Set(run.template.steps.filter((s) => s.when !== undefined && !evaluateWhen(s.when, { params: run.params, classification: null })).map((s) => s.id));
+  // §5.3: a step whose active output no longer merged into a composition was flagged red there (kernel.ts).
+  const composeConflicts = new Set(run.template.steps.filter((step) => {
+    const active = rows.find((e) => e.stepKey === step.id && e.seq === journal.heads[step.id]);
+    return ((active?.body as ExecutionBody | undefined)?.flags ?? []).includes("compose-conflict");
+  }).map((step) => step.id));
   return candidates(journal, run.template, messages, {
-    definitionHashes, start: run.body.importCommit ?? "none", params: run.row.paramsSha256, whenFalse, composeConflicts: new Set(),
+    definitionHashes, start: run.body.importCommit ?? "none", params: run.row.paramsSha256, whenFalse, composeConflicts,
   });
 }
 

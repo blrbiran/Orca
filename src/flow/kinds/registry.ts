@@ -62,6 +62,8 @@ export interface RoleResolution { agent: string; model: string | null; source: "
 export interface FlowRunBody {
   templateRef: string; params: Record<string, ParamValue>; roles: Record<string, RoleResolution>; clarify: "skip" | null; unattended: boolean;
   projectId: string | null; dir: string | null; vaultPath: string | null; importCommit: string | null; by: string; via: string; startedAt: number;
+  /** The last error a pump pass met advancing this run (other runs went on); cleared by the next clean pass. */
+  lastError?: { message: string; at: number };
 }
 export interface ExecutionBody {
   basis: Record<string, number>; retries: number; retryReason: string | null; feedback: string[];

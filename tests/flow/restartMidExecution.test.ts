@@ -42,7 +42,9 @@ describe("restart mid-execution (Review Focus 3)", () => {
     const w = await flowWorld(T, { children: children.port }); try {
       const { flowRunId } = await w.start({ templateRef: "builtin/w" });
       children.failNextOpen();
-      await expect(w.advance()).rejects.toThrow(/crash after the dispatch/);
+      // The pump records a run's error on the run and goes on (review finding C2); the crash is what it recorded.
+      await w.advance();
+      expect((getFlowRun(w.store, flowRunId)!.body as { lastError?: { message: string } }).lastError?.message).toMatch(/crash after the dispatch/);
       expect(w.latest(flowRunId, "write")).toMatchObject({ state: "running", childGroupId: null });
       await advanceFlowRuns({ ...w.deps, registry: builtinKinds() });
       expect(children.counts()).toEqual({ opens: 2, dispatches: 1 });

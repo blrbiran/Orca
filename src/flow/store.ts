@@ -232,6 +232,13 @@ export function setFlowRunState(store: ControlStore, id: string, from: string, t
   if (store.db.prepare("UPDATE flow_runs SET state=?, revision=revision+1 WHERE id=? AND state=?").run(to, id, from).changes !== 1) throw new FlowStoreError("flow-execution-stale", `run ${id}:${from}`);
 }
 
+/** The run's body with `change` merged in (the kernel's own bookkeeping, e.g. the last pump error). */
+export function updateFlowRunBody(store: ControlStore, id: string, change: (body: Record<string, unknown>) => Record<string, unknown>): void {
+  const row = store.db.prepare("SELECT body FROM flow_runs WHERE id=?").get(id);
+  if (row === undefined) throw new FlowStoreError("flow-execution-stale", `run ${id}:missing`);
+  store.db.prepare("UPDATE flow_runs SET body=?, revision=revision+1 WHERE id=?").run(json(change(JSON.parse(String(row.body)) as Record<string, unknown>)), id);
+}
+
 /** Spec §7: the plans of a run, oldest first; `candidates`, `proposal` and `chosen` are the JSON the planner wrote. */
 export function listPlans(store: ControlStore, flowRunId: string): PlanRow[] {
   return store.db.prepare(`SELECT * FROM rerun_plans WHERE flow_run_id=? ORDER BY plan_no`).all(flowRunId).map((row) => ({

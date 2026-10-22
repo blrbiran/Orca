@@ -26,6 +26,7 @@ import { builtinKinds, type ExecutionBody, type FlowRunBody, type KindContext, t
 import { buildStepPrompt, bounded } from "./prompt.js";
 import {
   appendExecution, appendFlowDecision, appendMessage, finishExecution, getFlowRun, getHead, insertFlowRun, listExecutions, listFlowRunIds, listHeads, setDefinitionHash, setFlowRunState, setHead,
+  updateFlowRunBody,
   type ExecutionKey, type ExecutionRow, type ExecutionState,
 } from "./store.js";
 import { isInsidePath } from "./template/checklist.js";
@@ -50,7 +51,7 @@ import { consumeAtBoundary } from "./messages.js";
 
 /** A refusal by name (spec §14, Global Constraints' codes); nothing was written. */
 export class FlowRefusal extends Error {
-  constructor(public readonly code: string, detail = "") {
+  constructor(public readonly code: string, public readonly detail = "") {
     super(detail === "" ? code : `${code}: ${detail}`);
     this.name = "FlowRefusal";
   }
@@ -450,11 +451,19 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
  */
 export async function advanceWorkspace(deps: FlowDeps, run: LoadedRun, vault: Vault, key: ExecutionKey): Promise<void> {
   let previous: string | null = null;
-  const next = await advanceHeadWithRetry(vault, run.row.id, async (current) => {
-    previous = current;
-    const composition = await compositionFor(deps.store, run, null);
-    return composition!.commit;
-  });
+  let next: string;
+  try {
+    next = await advanceHeadWithRetry(vault, run.row.id, async (current) => {
+      previous = current;
+      const composition = await compositionFor(deps.store, run, null);
+      return composition!.commit;
+    });
+  } catch (error) {
+    // §5.3: the active outputs no longer compose: the head stays, the step that no longer merges is flagged red.
+    if (!(error instanceof FlowRefusal) || error.code !== "compose-conflict") throw error;
+    flagComposeConflict(deps, run, error.detail);
+    return;
+  }
   if (previous === null || run.body.dir === null) return;
   const result = await copyBack(vault, run.body.dir, previous, next);
   if (result.conflicts.length === 0) return;
@@ -515,6 +524,32 @@ const parallel = (a: FlowStep, b: FlowStep): boolean => a.parallelWith === b.id 
 const WAITING: ReadonlySet<ExecutionState> = new Set(["needs-person", "parked"]);
 const SETTLED: ReadonlySet<ExecutionState> = new Set(["done", "skipped", "staged"]);
 
+/**
+ * §5.3: a step whose base does not compose does not start. The earlier step whose active output no longer merges is
+ * flagged red (`compose-conflict`) and becomes a candidate of the next plan (rerun.ts reads the flag); this execution
+ * fails with that reason and no child is opened. Any other error is the caller's.
+ */
+async function guardCompose(deps: FlowDeps, run: LoadedRun, act: () => Promise<KindOutcome>): Promise<KindOutcome> {
+  try { return await act(); }
+  catch (error) {
+    if (!(error instanceof FlowRefusal) || error.code !== "compose-conflict") throw error;
+    flagComposeConflict(deps, run, error.detail);
+    return { failed: { reason: `compose-conflict:${error.detail}` } };
+  }
+}
+
+/** The active execution of `stepKey` carries `compose-conflict` among its flags (once). */
+export function flagComposeConflict(deps: FlowDeps, run: LoadedRun, stepKey: string): void {
+  const seq = getHead(deps.store, run.row.id, stepKey);
+  const active = seq === null ? undefined : listExecutions(deps.store, run.row.id).find((e) => e.stepKey === stepKey && e.seq === seq);
+  if (active === undefined) return;
+  const body = active.body as ExecutionBody;
+  if ((body.flags ?? []).includes("compose-conflict")) return;
+  deps.store.transaction(() => finishExecution(deps.store, { flowRunId: run.row.id, stepKey, seq: active.seq }, active.state, active.state, deps.now(), {
+    body: { ...body, flags: [...(body.flags ?? []), "compose-conflict"] },
+  }));
+}
+
 /** Start a queued execution: it takes its basis now and its kind's start decides the rest. */
 async function runQueued(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow, basis: Record<string, number>): Promise<void> {
   const step = stepOf(run, execution.stepKey);
@@ -535,7 +570,7 @@ async function runQueued(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow
   const running: ExecutionRow = { ...execution, state: "running", body };
   const kind = kindFor(deps, step);
   if (kind === undefined) return applyOutcome(deps, run, running, "running", { failed: { reason: `kind-not-available:${step.kind}` } });
-  return applyOutcome(deps, run, running, "running", await kind.start(contextFor(deps, run, running)));
+  return applyOutcome(deps, run, running, "running", await guardCompose(deps, run, () => kind.start(contextFor(deps, run, running))));
 }
 
 /**
@@ -568,7 +603,7 @@ export async function resumeExecution(deps: FlowDeps, run: LoadedRun, execution:
   const running: ExecutionRow = { ...execution, state: "running", body };
   const kind = kindFor(deps, stepOf(run, execution.stepKey));
   if (kind === undefined) await applyOutcome(deps, run, running, "running", { failed: { reason: `kind-not-available:${execution.kind}` } });
-  else await applyOutcome(deps, run, running, "running", await kind.start(contextFor(deps, run, running)));
+  else await applyOutcome(deps, run, running, "running", await guardCompose(deps, run, () => kind.start(contextFor(deps, run, running))));
   if (getFlowRun(deps.store, run.row.id)?.state === "done") setFlowRunState(deps.store, run.row.id, "done", "running");
   await advanceRun(deps, run.row.id);
 }
@@ -661,7 +696,7 @@ async function pollChild(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow
   const kind = kindFor(deps, stepOf(run, execution.stepKey));
   if (kind === undefined) return false;
   if (execution.childGroupId === null) {
-    await applyOutcome(deps, run, execution, "running", await kind.start(contextFor(deps, run, execution)));
+    await applyOutcome(deps, run, execution, "running", await guardCompose(deps, run, () => kind.start(contextFor(deps, run, execution))));
     return true;
   }
   const status = deps.children === undefined ? null : await deps.children.status(execution.childGroupId);
@@ -676,9 +711,29 @@ function setExecutionStateSkipped(store: ControlStore, key: ExecutionKey, at: nu
   finishExecution(store, key, "queued", "skipped", at);
 }
 
-/** Spec §8.2: called by the panel's pump after each orchestration pass; advances every running run at its boundaries. */
+/**
+ * Spec §8.2: called by the panel's pump after each orchestration pass; advances every running run at its boundaries.
+ * One run's error never stops the others or the pump: it is recorded on that run (`lastError`) and the next pass tries
+ * again; a clean pass clears it.
+ */
 export async function advanceFlowRuns(deps: FlowDeps): Promise<void> {
-  for (const flowRunId of listFlowRunIds(deps.store, "running")) await advanceRun(deps, flowRunId);
+  for (const flowRunId of listFlowRunIds(deps.store, "running")) {
+    let failed: string | null = null;
+    try { await advanceRun(deps, flowRunId); }
+    catch (error) { failed = error instanceof Error ? error.message : String(error); }
+    try { recordRunError(deps, flowRunId, failed); }
+    catch (error) { process.stderr.write(`orca-flow: run ${flowRunId}: ${failed ?? ""} (not recorded: ${error instanceof Error ? error.message : String(error)})\n`); }
+  }
+}
+
+function recordRunError(deps: FlowDeps, flowRunId: string, message: string | null): void {
+  const stored = (getFlowRun(deps.store, flowRunId)?.body as FlowRunBody | undefined)?.lastError;
+  if (message === null ? stored === undefined : stored?.message === message) return;
+  const at = deps.now();
+  deps.store.transaction(() => updateFlowRunBody(deps.store, flowRunId, (body) => {
+    const { lastError: _dropped, ...rest } = body;
+    return message === null ? rest : { ...rest, lastError: { message, at } };
+  }));
 }
 
 /** Advance one run at its boundaries (a message, a plan run or an answer moved it). */
@@ -701,7 +756,7 @@ export async function completeFlowCall(deps: FlowDeps, key: ExecutionKey, rawOut
   const ctx = contextFor(deps, run, execution);
   if (failure !== null) kind?.callFailed?.(ctx, failure);
   const outcome: KindOutcome = kind?.collect === undefined ? { failed: { reason: "kind-has-no-collect" } }
-    : failure !== null ? { invalid: `call-failed:${failure}` } : await kind.collect(ctx, rawOutput, failure);
+    : failure !== null ? { invalid: `call-failed:${failure}` } : await guardCompose(deps, run, async () => kind.collect!(ctx, rawOutput, failure));
   const body = { ...(execution.body as ExecutionBody) };
   delete body.call;
   delete body.callResult;
