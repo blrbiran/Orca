@@ -43,6 +43,8 @@ import { vaultKeyOf } from "./vault/paths.js";
 import { flowVaultRepoId } from "./groups.js";
 import { parentGroupBody, type FlowParentConfirmation } from "./parent.js";
 import type { FlowCallResult } from "./calls.js";
+import { completePlanCall, finishPlan, planOf, PLAN_KEY } from "./rerun.js";
+import { consumeAtBoundary } from "./messages.js";
 
 /** A refusal by name (spec §14, Global Constraints' codes); nothing was written. */
 export class FlowRefusal extends Error {
@@ -76,6 +78,8 @@ export interface FlowDeps {
    * §6.2-§6.3: what the parent is confirmed with at start (the panel freezes the call profile and slot and the children's
    * profiles; a FlowRefusal refuses the start). Absent: confirmed with neither (a criterion's fake ports serve the run).
    */
+  /** §7.4, §11.2: `flows.rerunReview` of a project (Task 12's settings; absent: the built-in `review`). */
+  rerunReview?(projectId: string | null): "auto" | "review";
   confirmParent?(input: { flowRunId: string; groupId: string; projectId: string | null; by: string }): Promise<FlowParentConfirmation>;
 }
 
@@ -240,7 +244,7 @@ export function stepOf(run: LoadedRun, stepKey: string): FlowStep {
   return step;
 }
 
-const latestByStep = (executions: readonly ExecutionRow[]): Map<string, ExecutionRow> => {
+export const latestByStep = (executions: readonly ExecutionRow[]): Map<string, ExecutionRow> => {
   const out = new Map<string, ExecutionRow>();
   for (const e of executions) { const seen = out.get(e.stepKey); if (seen === undefined || seen.seq < e.seq) out.set(e.stepKey, e); }
   return out;
@@ -329,7 +333,7 @@ export function contextFor(deps: FlowDeps, run: LoadedRun, execution: ExecutionR
 
 // ------------------------------------------------------------------------------------------------------------- outcomes
 
-function writeRecord(store: ControlStore, groupId: string, record: unknown): string {
+export function writeRecord(store: ControlStore, groupId: string, record: unknown): string {
   const hash = sha256Canonical(record);
   writeCanonicalRecord(store, groupId, hash, canonicalBytes(record).toString("utf8"));
   return hash;
@@ -376,6 +380,7 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
     if ("done" in outcome) {
       const extra = {
         ...(outcome.done.flags === undefined ? {} : { flags: outcome.done.flags }),
+        ...(outcome.done.skillLocks === undefined ? {} : { skillLocks: outcome.done.skillLocks }),
         ...(outcome.done.warnings === undefined ? {} : { warnings: outcome.done.warnings }),
         ...(outcome.done.reported === undefined ? {} : { reported: outcome.done.reported }),
       };
@@ -415,7 +420,7 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
  * output and the change is copied back into the person's folder; a copy-back conflict leaves the person's file as it is
  * and flags the execution red (`copy-back-conflict`).
  */
-async function advanceWorkspace(deps: FlowDeps, run: LoadedRun, vault: Vault, key: ExecutionKey): Promise<void> {
+export async function advanceWorkspace(deps: FlowDeps, run: LoadedRun, vault: Vault, key: ExecutionKey): Promise<void> {
   let previous: string | null = null;
   const next = await advanceHeadWithRetry(vault, run.row.id, async (current) => {
     previous = current;
@@ -444,7 +449,7 @@ function queueRevision(deps: FlowDeps, run: LoadedRun, stepKey: string, feedback
 }
 
 /** fp1's definition of a step (§6.4): its fields, prompt bytes, skill locks, checks, tools and kind version. */
-function definitionOf(deps: FlowDeps, run: LoadedRun, step: FlowStep, skillLocks: readonly SkillLock[]): string {
+export function definitionOf(deps: FlowDeps, run: LoadedRun, step: FlowStep, skillLocks: readonly SkillLock[]): string {
   const kind = kindFor(deps, step);
   const promptRel = "prompt" in step ? step.prompt : undefined;
   return definitionHash({
@@ -454,14 +459,14 @@ function definitionOf(deps: FlowDeps, run: LoadedRun, step: FlowStep, skillLocks
   });
 }
 
-export function appendQueued(deps: FlowDeps, run: LoadedRun, stepKey: string, seq: number, reasons: string[], extra: Record<string, unknown>, by: string, via: string, at: number): void {
+export function appendQueued(deps: FlowDeps, run: LoadedRun, stepKey: string, seq: number, reasons: string[], extra: Record<string, unknown>, by: string, via: string, at: number, planNo: number | null = null): void {
   const step = stepOf(run, stepKey);
   const kind = kindFor(deps, step);
   appendExecution(deps.store, {
     flowRunId: run.row.id, stepKey, seq, kind: step.kind, kindVersion: kind?.kindVersion ?? 0, state: "queued",
     // A step with skills is defined again with their actual locks when it ran (§12.2 phase 1); until then none.
     definitionHash: definitionOf(deps, run, step, []),
-    baseCommit: null, ranOn: null, fingerprint: null, outputKind: null, outputRef: null, outputHash: null, readSetHash: null, reasons, planNo: null, childGroupId: null,
+    baseCommit: null, ranOn: null, fingerprint: null, outputKind: null, outputRef: null, outputHash: null, readSetHash: null, reasons, planNo, childGroupId: null,
     by, via, createdAt: at, updatedAt: at, body: { basis: {}, retries: 0, retryReason: null, feedback: [], ...extra } satisfies ExecutionBody,
   });
   // A run that had finished has work again (a later answer or feedback): it is advanced again.
@@ -484,7 +489,8 @@ const WAITING: ReadonlySet<ExecutionState> = new Set(["needs-person", "parked", 
 async function runQueued(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow, basis: Record<string, number>): Promise<void> {
   const step = stepOf(run, execution.stepKey);
   const key: ExecutionKey = { flowRunId: execution.flowRunId, stepKey: execution.stepKey, seq: execution.seq };
-  const body = { ...(execution.body as ExecutionBody), basis };
+  // §6.4, §7.2: what it ran on, so a later plan can tell which of its inputs moved since.
+  const body = { ...(execution.body as ExecutionBody), basis, ranOnInputs: ranOnInputsOf(deps.store, run, step.id) };
   deps.store.transaction(() => finishExecution(deps.store, key, "queued", "running", deps.now(), { body }));
   const running: ExecutionRow = { ...execution, state: "running", body };
   const kind = kindFor(deps, step);
@@ -492,8 +498,35 @@ async function runQueued(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow
   return applyOutcome(deps, run, running, "running", await kind.start(contextFor(deps, run, running)));
 }
 
+/**
+ * §6.4, §7.2: the inputs an execution ran on -- the import, the params, and the active output of every earlier step
+ * (template order). A `parallelWith` sibling is not an input (§6.5): it is recorded as it stands when the planner reads
+ * it, so only its re-run (never its finishing later) makes this step a candidate.
+ */
+export function ranOnInputsOf(store: ControlStore, run: LoadedRun, stepKey: string): RanOnInputs {
+  const heads = listHeads(store, run.row.id);
+  const all = listExecutions(store, run.row.id);
+  const index = run.template.steps.findIndex((s) => s.id === stepKey);
+  const step = run.template.steps[index]!;
+  const earlier = run.template.steps.slice(0, index).filter((s) => !parallel(s, step)).map((s) => {
+    const active = all.find((e) => e.stepKey === s.id && e.seq === heads[s.id]);
+    return { stepKey: s.id, outputHash: active?.state === "done" ? active.outputHash : null, projection: null };
+  });
+  return { start: run.body.importCommit ?? "none", params: run.row.paramsSha256, earlier };
+}
+export interface RanOnInputs { start: string; params: string; earlier: Array<{ stepKey: string; outputHash: string | null; projection: null }> }
+
 /** One pass over a run: start at most one execution; true when something moved (the caller passes again). */
 async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
+  // §8.2: the person's messages are taken at a boundary only, never in the middle of a running step.
+  if (await consumeAtBoundary(deps, run.row.id)) return true;
+  const fresh = loadRun(deps.store, run.row.id);
+  if (fresh.row.state !== "running") return false;
+  // §7.4-§7.5: an open plan the person (or the proposal) has not settled holds the run; a running one decides what runs.
+  const planned = await planOf(deps, fresh);
+  if (planned === "moved") return true;
+  if (planned === "wait") return false;
+  const plan = planned;
   const executions = listExecutions(deps.store, run.row.id);
   const latest = latestByStep(executions);
   const heads = listHeads(deps.store, run.row.id);
@@ -517,7 +550,30 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
       await runQueued(deps, run, current, basis);
       return true;
     }
+    const executedUnderPlan = plan !== null && executions.some((e) => e.stepKey === step.id && e.planNo === plan.planNo && (e.body as ExecutionBody).carriedForward === undefined);
+    // §7.5: a chosen step runs once under the plan, in template order, with the plan's reasons and the feedback for it.
+    if (plan !== null && plan.chosen.steps.includes(step.id) && !executedUnderPlan) {
+      satisfied = false;
+      if (!free) return false;
+      const seq = (current?.seq ?? 0) + 1;
+      const at = deps.now();
+      const reasons = plan.candidates.list.find((c) => c.stepKey === step.id)?.reasons ?? ["added"];
+      const feedback = plan.candidates.feedback[step.id] ?? [];
+      deps.store.transaction(() => appendQueued(deps, run, step.id, seq, reasons, { feedback }, plan.by, plan.via, at, plan.planNo));
+      await runQueued(deps, run, listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.id && e.seq === seq)!, basis);
+      return true;
+    }
     if (current !== undefined && (current.state === "done" || current.state === "skipped") && sameBasis((current.body as ExecutionBody).basis, basis)) continue;
+    // §7.5: a step the plan does not run keeps its active output: a skipped execution carries it onto the new basis.
+    if (plan !== null && current !== undefined && (current.state === "done" || current.state === "skipped") && !executedUnderPlan) {
+      if (!free) return false;
+      const at = deps.now();
+      deps.store.transaction(() => {
+        appendQueued(deps, run, step.id, current.seq + 1, ["plan-skip"], { basis, carriedForward: getHead(deps.store, run.row.id, step.id) }, plan.by, plan.via, at, plan.planNo);
+        setExecutionStateSkipped(deps.store, { flowRunId: run.row.id, stepKey: step.id, seq: current.seq + 1 }, at);
+      });
+      return true;
+    }
     satisfied = false;
     if (!free) return false;
     const seq = (current?.seq ?? 0) + 1;
@@ -525,15 +581,16 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
     const reasons = [current === undefined ? "first-run" : "upstream-changed"];
     if (step.when !== undefined && !evaluateWhen(step.when, { params: run.params, classification: null })) {
       deps.store.transaction(() => {
-        appendQueued(deps, run, step.id, seq, reasons, { basis }, "orca-auto", "orca", at);
+        appendQueued(deps, run, step.id, seq, reasons, { basis }, "orca-auto", "orca", at, plan?.planNo ?? null);
         setExecutionStateSkipped(deps.store, { flowRunId: run.row.id, stepKey: step.id, seq }, at);
       });
       return true;
     }
-    deps.store.transaction(() => appendQueued(deps, run, step.id, seq, reasons, {}, "orca-auto", "orca", at));
+    deps.store.transaction(() => appendQueued(deps, run, step.id, seq, reasons, {}, "orca-auto", "orca", at, plan?.planNo ?? null));
     await runQueued(deps, run, listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.id && e.seq === seq)!, basis);
     return true;
   }
+  if (plan !== null && satisfied) { deps.store.transaction(() => finishPlan(deps.store, plan)); return true; }
   if (satisfied && run.row.state === "running") { deps.store.transaction(() => setFlowRunState(deps.store, run.row.id, "running", "done")); }
   return false;
 }
@@ -564,10 +621,13 @@ function setExecutionStateSkipped(store: ControlStore, key: ExecutionKey, at: nu
 
 /** Spec §8.2: called by the panel's pump after each orchestration pass; advances every running run at its boundaries. */
 export async function advanceFlowRuns(deps: FlowDeps): Promise<void> {
-  for (const flowRunId of listFlowRunIds(deps.store, "running")) {
-    for (let pass = 0; pass < 1000; pass += 1) {
-      if (!(await passRun(deps, loadRun(deps.store, flowRunId)))) break;
-    }
+  for (const flowRunId of listFlowRunIds(deps.store, "running")) await advanceRun(deps, flowRunId);
+}
+
+/** Advance one run at its boundaries (a message, a plan run or an answer moved it). */
+export async function advanceRun(deps: FlowDeps, flowRunId: string): Promise<void> {
+  for (let pass = 0; pass < 1000; pass += 1) {
+    if (!(await passRun(deps, loadRun(deps.store, flowRunId)))) break;
   }
 }
 
@@ -576,6 +636,7 @@ export async function advanceFlowRuns(deps: FlowDeps): Promise<void> {
  * The kind judges it; a call for an execution that no longer waits on one is ignored (a replay after a restart).
  */
 export async function completeFlowCall(deps: FlowDeps, key: ExecutionKey, rawOutput: unknown, failure: string | null = null): Promise<void> {
+  if (key.stepKey === PLAN_KEY) return completePlanCall(deps, key.flowRunId, key.seq, rawOutput, failure);
   const run = loadRun(deps.store, key.flowRunId);
   const execution = listExecutions(deps.store, key.flowRunId).find((e) => e.stepKey === key.stepKey && e.seq === key.seq);
   if (execution === undefined || execution.state !== "running" || (execution.body as ExecutionBody).call === undefined) return;

@@ -117,6 +117,9 @@ export function appendMessage(store: ControlStore, input: MessageInput): { row: 
   return { row: { ...input, seq }, deduped: false };
 }
 
+/** The step key a plan's rerun-proposal call is filed under (never a template step id: those are slugs). */
+export const PLAN_KEY = "@plan";
+
 export interface PlanRow {
   flowRunId: string; planNo: number; state: "proposed" | "chosen" | "running" | "done" | "abandoned";
   candidates: unknown; proposal: unknown | null; chosen: unknown | null; by: string; via: string;
@@ -227,4 +230,60 @@ export function listFlowRunIds(store: ControlStore, state: string): string[] {
 
 export function setFlowRunState(store: ControlStore, id: string, from: string, to: string): void {
   if (store.db.prepare("UPDATE flow_runs SET state=?, revision=revision+1 WHERE id=? AND state=?").run(to, id, from).changes !== 1) throw new FlowStoreError("flow-execution-stale", `run ${id}:${from}`);
+}
+
+/** Spec §7: the plans of a run, oldest first; `candidates`, `proposal` and `chosen` are the JSON the planner wrote. */
+export function listPlans(store: ControlStore, flowRunId: string): PlanRow[] {
+  return store.db.prepare(`SELECT * FROM rerun_plans WHERE flow_run_id=? ORDER BY plan_no`).all(flowRunId).map((row) => ({
+    flowRunId: String(row.flow_run_id), planNo: Number(row.plan_no), state: String(row.state) as PlanRow["state"],
+    candidates: JSON.parse(String(row.candidates)), proposal: row.proposal === null ? null : JSON.parse(String(row.proposal)),
+    chosen: row.chosen === null ? null : JSON.parse(String(row.chosen)), by: String(row.by), via: String(row.via),
+  }));
+}
+
+export function getPlan(store: ControlStore, flowRunId: string, planNo: number): PlanRow | null {
+  return listPlans(store, flowRunId).find((plan) => plan.planNo === planNo) ?? null;
+}
+
+/**
+ * Spec §8.1: a message's rows are never deleted and their content never changes; only `state` moves forward -- an
+ * accepted message is consumed (`applied`), refused at its boundary (`rejected`) or excluded by a rewind (`excluded`),
+ * and an applied one may still be excluded by a later rewind (§8.3).
+ */
+const MESSAGE_FORWARD: Record<MessageRow["state"], readonly MessageRow["state"][]> = {
+  accepted: ["applied", "rejected", "excluded"], applied: ["excluded"], rejected: [], excluded: [],
+};
+
+export function setMessageState(store: ControlStore, flowRunId: string, seq: number, from: MessageRow["state"], to: MessageRow["state"], reason: string | null = null): void {
+  if (!MESSAGE_FORWARD[from].includes(to)) throw new FlowStoreError("flow-execution-backwards", `message ${seq}:${from}->${to}`);
+  const changed = store.db.prepare("UPDATE flow_messages SET state=?, reason=COALESCE(?, reason) WHERE flow_run_id=? AND seq=? AND state=?").run(to, reason, flowRunId, seq, from).changes;
+  if (changed !== 1) throw new FlowStoreError("flow-execution-stale", `message ${seq}:${from}`);
+}
+
+/** §8.3 rewind to "not run": the step's head is removed (by CAS on the seq the caller read). */
+export function clearHead(store: ControlStore, flowRunId: string, stepKey: string, expected: number): void {
+  if (store.db.prepare("DELETE FROM step_heads WHERE flow_run_id=? AND step_key=? AND active_seq=?").run(flowRunId, stepKey, expected).changes !== 1) {
+    throw new FlowStoreError("flow-head-stale", `${stepKey}:${expected}`);
+  }
+}
+
+/** §8.1 `repin`: the run's template moves to another stored template (its bytes are already in `artifacts`). */
+export function setFlowRunTemplate(store: ControlStore, id: string, templateSha256: string, body: unknown): void {
+  store.db.prepare("UPDATE flow_runs SET template_sha256=?, body=?, revision=revision+1 WHERE id=?").run(templateSha256, json(body), id);
+}
+
+const effectOf = (row: Record<string, unknown>): EffectRow => ({
+  id: String(row.id), flowRunId: String(row.flow_run_id), stepKey: String(row.step_key), seq: Number(row.seq), effectKind: String(row.effect_kind),
+  class: String(row.class), level: String(row.level), policy: JSON.parse(String(row.policy)), state: String(row.state) as EffectState,
+  payloadHash: String(row.payload_hash), remoteRef: row.remote_ref === null ? null : String(row.remote_ref), by: String(row.by), via: String(row.via),
+  createdAt: Number(row.created_at), updatedAt: Number(row.updated_at),
+});
+
+export function getEffect(store: ControlStore, id: string): EffectRow | null {
+  const row = store.db.prepare("SELECT * FROM effect_records WHERE id=?").get(id);
+  return row ? effectOf(row) : null;
+}
+
+export function listEffects(store: ControlStore, flowRunId: string): EffectRow[] {
+  return store.db.prepare("SELECT * FROM effect_records WHERE flow_run_id=? ORDER BY created_at, id").all(flowRunId).map(effectOf);
 }

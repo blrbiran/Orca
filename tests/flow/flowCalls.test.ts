@@ -11,7 +11,8 @@ import type { FrozenSlot } from "../../src/control/agentSelection.js";
 import { singleCallHandler } from "../../src/control/singleCallPurposes.js";
 import { createFlowCallPort } from "../../src/flow/calls.js";
 import { readRoundsAt } from "../../src/control/requirementRecords.js";
-import { getFlowRun } from "../../src/flow/store.js";
+import { getFlowRun, listPlans } from "../../src/flow/store.js";
+import { proposePlan } from "../../src/flow/rerun.js";
 import { ROUND_ONE } from "../control/fixtures/requirementOutputs.js";
 import { profileSnapshot, webFixture } from "../control/fixtures/web.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
@@ -110,6 +111,51 @@ describe("flow single calls on the parent (§6.2)", () => {
       expect(round!.calls.map((c) => [c.runId, c.outcome, c.usage?.tokens])).toEqual([[invalidRun, "invalid", 0], [validRun, "valid", 0]]);
       expect(round!.calls[0]!.reason).toMatch(/^schema:/);
       expect(w.latest(flowRunId, "brief")!.state).toBe("needs-person");
+    } finally { await w.dispose(); }
+  });
+});
+
+describe("the rerun proposal on the parent (§7.3, plan Task 11)", () => {
+  async function settledWithChange() {
+    const r = await world();
+    await r.w.advance();
+    const [run] = callRuns(r.w, r.groupId);
+    singleCallHandler("flow-draft").complete({ store: r.w.store }, { ...run!.body }, { content: "An outline." }, () => {
+      const row = JSON.parse(String(r.w.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.id)!.body));
+      r.w.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...row, state: "settled-restartable" }), run!.id);
+    });
+    await r.w.advance();
+    // Something to plan: the step's definition moved (as a repin would move it).
+    r.w.store.db.prepare("UPDATE step_executions SET definition_hash='old' WHERE flow_run_id=?").run(r.flowRunId);
+    return r;
+  }
+
+  it("is claimed on the plan, prepared with its prompt, and its output waits on the plan for the kernel", async () => {
+    const { w, flowRunId, groupId } = await settledWithChange(); try {
+      await proposePlan(w.deps, flowRunId, "ann", "cli:test");
+      const run = callRuns(w, groupId).at(-1)!;
+      expect(run.body).toMatchObject({ purpose: "rerun-proposal", state: "starting", workItemId: "flow-.plan-1-1", flowCall: { flowRunId, stepKey: "@plan", seq: 1 } });
+      expect(listPlans(w.store, flowRunId)[0]!.proposal).toMatchObject({ call: { runId: run.id } });
+      const handler = singleCallHandler("rerun-proposal");
+      const prepared = await handler.prepare({ store: w.store } as never, { ...run.body });
+      expect((prepared as { prompt: string }).prompt).toContain("outline (draft): definition-changed");
+      handler.complete({ store: w.store }, { ...run.body }, { skips: [] }, () => {
+        const row = JSON.parse(String(w.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run.id)!.body));
+        w.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...row, state: "settled-restartable" }), run.id);
+      });
+      expect(listPlans(w.store, flowRunId)[0]!.proposal).toMatchObject({ callResult: { runId: run.id, rawOutput: { skips: [] } } });
+      await w.advance();
+      expect(listPlans(w.store, flowRunId)[0]).toMatchObject({ state: "proposed", proposal: { skips: [], exhausted: null } });
+    } finally { await w.dispose(); }
+  });
+
+  it("a pool that cannot fund it settles the proposal as none: every candidate stands", async () => {
+    const { w, flowRunId, groupId } = await settledWithChange(); try {
+      const before = callRuns(w, groupId).length;
+      w.store.db.prepare("UPDATE flow_runs SET pool_drawn=pool_tokens WHERE id=?").run(flowRunId);
+      await proposePlan(w.deps, flowRunId, "ann", "cli:test");
+      expect(callRuns(w, groupId)).toHaveLength(before);
+      expect(listPlans(w.store, flowRunId)[0]).toMatchObject({ state: "proposed", proposal: { skips: [], exhausted: "call-failed:flow-pool-exhausted" } });
     } finally { await w.dispose(); }
   });
 });

@@ -30,7 +30,7 @@ import type { ControlStore } from "../control/store.js";
 import type { FlowCallPort, FlowCallRequest } from "./kernel.js";
 import { readParentConfirmation } from "./parent.js";
 import { drawAllocation, POOL_EXHAUSTED, returnUnspent } from "./pool.js";
-import { finishExecution, listExecutions, type ExecutionKey } from "./store.js";
+import { finishExecution, getPlan, listExecutions, PLAN_KEY, putPlan, type ExecutionKey } from "./store.js";
 
 /** What a flow call's run row carries besides the shared single-call fields: the execution it answers. */
 export interface FlowCallIdentity { flowRunId: string; stepKey: string; seq: number }
@@ -43,10 +43,26 @@ function executionOf(store: ControlStore, key: ExecutionKey) {
 }
 
 /**
+ * Spec §7.3: a plan's rerun-proposal call answers the plan (`{flowRunId, "@plan", planNo}`), not an execution. Its
+ * waiting state is the plan's open proposal; its result goes onto the proposal for the kernel's next pass.
+ */
+type PlanCall = { call: { runId?: string } | null; callResult?: FlowCallResult; skips: unknown };
+function planCallOf(store: ControlStore, key: ExecutionKey) {
+  const plan = getPlan(store, key.flowRunId, key.seq);
+  const proposal = plan?.proposal as PlanCall | null | undefined;
+  return plan === null || plan.state !== "proposed" || proposal == null || proposal.call === null || proposal.skips !== null ? null : { plan, proposal };
+}
+function setPlanCall(store: ControlStore, key: ExecutionKey, patch: Partial<PlanCall>): void {
+  const open = planCallOf(store, key)!;
+  putPlan(store, { ...open.plan, proposal: { ...open.proposal, ...patch } });
+}
+
+/**
  * The claim, in the caller's transaction. Answers `claimed`, `exhausted` (the execution is parked) or `unconfirmed`
  * (the parent has no call profile: the execution fails `flow-call-unconfirmed`).
  */
 export function claimFlowCall(store: ControlStore, request: FlowCallRequest, at: number): "claimed" | "exhausted" | "unconfirmed" {
+  if (request.key.stepKey === PLAN_KEY) return claimPlanCall(store, request, at);
   const parent = readParentConfirmation(store, request.groupId);
   const execution = executionOf(store, request.key);
   if (execution === undefined || execution.state !== "running") throw new ControlError("recovery-blocked", `flow-call-execution-moved:${request.key.stepKey}#${request.key.seq}`);
@@ -56,15 +72,43 @@ export function claimFlowCall(store: ControlStore, request: FlowCallRequest, at:
     finishExecution(store, request.key, "running", "failed", at, { body: { ...unsent, failure: "flow-call-unconfirmed" } });
     return "unconfirmed";
   }
-  const attempt = store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id=? AND work_item_id LIKE ?").get(request.groupId, `flow-${request.key.stepKey}-${request.key.seq}-%`)!.n as number + 1;
-  const workItemId = `flow-${request.key.stepKey}-${request.key.seq}-${attempt}`;
+  const claimed = insertCallRun(store, request, parent.call);
+  if ("exhausted" in claimed) {
+    finishExecution(store, request.key, "running", "parked", at, { body: { ...unsent, needsYou: { reason: POOL_EXHAUSTED, detail: claimed.exhausted } } });
+    return "exhausted";
+  }
+  finishExecution(store, request.key, "running", "running", at, { body: { ...body, call: { purpose: request.purpose, runId: claimed.runId } } });
+  return "claimed";
+}
+
+/** The plan's proposal call: as an execution's, except that what cannot be funded settles the proposal as failed. */
+function claimPlanCall(store: ControlStore, request: FlowCallRequest, _at: number): "claimed" | "exhausted" | "unconfirmed" {
+  if (planCallOf(store, request.key) === null) throw new ControlError("recovery-blocked", `flow-call-plan-moved:${request.key.seq}`);
+  const parent = readParentConfirmation(store, request.groupId);
+  if (parent?.call == null) {
+    setPlanCall(store, request.key, { callResult: { runId: "", rawOutput: null, failure: "flow-call-unconfirmed" } });
+    return "unconfirmed";
+  }
+  const claimed = insertCallRun(store, request, parent.call);
+  if ("exhausted" in claimed) {
+    setPlanCall(store, request.key, { callResult: { runId: "", rawOutput: null, failure: POOL_EXHAUSTED } });
+    return "exhausted";
+  }
+  setPlanCall(store, request.key, { call: { runId: claimed.runId } });
+  return "claimed";
+}
+
+/** Draw the call's grant from the pool, freeze its contract and insert its single-call run on the parent's frozen slot. */
+function insertCallRun(store: ControlStore, request: FlowCallRequest, parentCall: NonNullable<NonNullable<ReturnType<typeof readParentConfirmation>>["call"]>): { runId: string } | { exhausted: { remaining: number; wanted: number } } {
+  const parent = { call: parentCall };
+  // A work item id takes no '@'; '.plan' is no step id (slugs have no '.') and no LIKE wildcard.
+  const segment = request.key.stepKey === PLAN_KEY ? ".plan" : request.key.stepKey;
+  const attempt = store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id=? AND work_item_id LIKE ?").get(request.groupId, `flow-${segment}-${request.key.seq}-%`)!.n as number + 1;
+  const workItemId = `flow-${segment}-${request.key.seq}-${attempt}`;
   const row = store.db.prepare("SELECT pool_tokens, pool_drawn FROM flow_runs WHERE id=?").get(request.key.flowRunId)!;
   const wanted = Math.min(REQUIREMENT_CALL_GRANT.tokens, Number(row.pool_tokens) - Number(row.pool_drawn));
   const draw = drawAllocation(store, request.key.flowRunId, `call:${request.groupId}:${workItemId}`, wanted);
-  if ("exhausted" in draw) {
-    finishExecution(store, request.key, "running", "parked", at, { body: { ...unsent, needsYou: { reason: POOL_EXHAUSTED, detail: draw.exhausted } } });
-    return "exhausted";
-  }
+  if ("exhausted" in draw) return draw;
   const grant = { ...REQUIREMENT_CALL_GRANT, tokens: draw.drawn };
   const contract = {
     schema: "orca-flow-call-contract-v1", groupId: request.groupId, ...request.key, purpose: request.purpose, attempt,
@@ -88,8 +132,7 @@ export function claimFlowCall(store: ControlStore, request: FlowCallRequest, at:
   const group = readGroup(store, request.groupId);
   group.reserved = add(group.reserved, grant);
   saveGroup(store, group);
-  finishExecution(store, request.key, "running", "running", at, { body: { ...body, call: { purpose: request.purpose, runId } } });
-  return "claimed";
+  return { runId };
 }
 
 /** The production call port: each request is claimed at once, in its own transaction; the pump's driver runs it. */
@@ -121,6 +164,10 @@ function giveBack(store: ControlStore, run: StoppedSingleCallRun, identity: Flow
 
 /** The output (or the failure) on the execution, for the kernel's next pass; a call the execution no longer waits on is dropped. */
 function storeResult(store: ControlStore, identity: FlowCallIdentity, result: FlowCallResult): void {
+  if (identity.stepKey === PLAN_KEY) {
+    if (planCallOf(store, identity)?.proposal.call?.runId === result.runId) setPlanCall(store, identity, { callResult: result });
+    return;
+  }
   const execution = executionOf(store, identity);
   const call = (execution?.body as { call?: { runId?: string } } | undefined)?.call;
   if (execution === undefined || execution.state !== "running" || call?.runId !== result.runId) return;
@@ -131,7 +178,7 @@ export const FLOW_CALL_HANDLER: Omit<SingleCallHandler, "purpose"> = {
   async prepare(deps, run) {
     const identity = flowCallOf(run);
     const execution = executionOf(deps.store, identity);
-    if (execution === undefined || execution.state !== "running" || (execution.body as { call?: { runId?: string } }).call?.runId !== run.runId) return { blocked: "flow-call-target-moved" };
+    if (identity.stepKey === PLAN_KEY ? planCallOf(deps.store, identity)?.proposal.call?.runId !== run.runId : execution === undefined || execution.state !== "running" || (execution.body as { call?: { runId?: string } }).call?.runId !== run.runId) return { blocked: "flow-call-target-moved" };
     const pointer = deps.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='single-call-contract'").get(contractRowOf(run.groupId, run.workItemId));
     if (pointer === undefined) return { blocked: "flow-call-contract-missing" };
     const contract = JSON.parse(readCanonicalRecord(deps.store, String(JSON.parse(String(pointer.body)).contractHash))) as { prompt: string; responseSchema: Record<string, unknown>; maxOutputTokens: number };
