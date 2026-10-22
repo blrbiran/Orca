@@ -3,7 +3,7 @@
  * whose body carries a `flow` block is a flow run's parent or one of its hidden `work` children. On a `dir` workspace:
  *
  * - the target repository is the run's vault, never the person's folder (repository resolution maps the vault's
- *   repository id `flow-vault:<vaultId>` to `$ORCA_VAULT_DIR/<vaultId>.git`);
+ *   repository id `flow-vault-<vaultId>` (an idSchema id) to `$ORCA_VAULT_DIR/<vaultId>.git`);
  * - a child's work branch starts at its composition (`flow.baseCommit`, §5.3);
  * - delivery is `keep`, fixed by code: no integration pass, `set-group-integration` refused `flow-group-delivery-fixed`;
  * - a landing writes the run's decisions to `flow_decisions`, never a `.decisions/` file (§6.2).
@@ -24,7 +24,7 @@ export interface FlowGroupBlock {
   effectRecordId?: string | null;
 }
 
-export const FLOW_VAULT_REPO_PREFIX = "flow-vault:";
+export const FLOW_VAULT_REPO_PREFIX = "flow-vault-";
 export const FLOW_GROUP_DELIVERY_FIXED = "flow-group-delivery-fixed";
 
 export function flowBlockOf(body: unknown): FlowGroupBlock | null {

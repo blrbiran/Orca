@@ -29,7 +29,7 @@ export type FlowChildStatus =
 /** The driver-backed side of a work step: open (idempotent per child id) and read how the child is doing. */
 export interface FlowChildPort {
   open(request: FlowChildOpen): Promise<void>;
-  status(childGroupId: string): FlowChildStatus | null;
+  status(childGroupId: string): Promise<FlowChildStatus | null>;
 }
 
 /** §6.2: deterministic, so a restart opens nothing twice. */
@@ -63,9 +63,12 @@ async function start(ctx: KindContext): Promise<KindOutcome> {
   if ("exhausted" in draw) return { parked: { reason: POOL_EXHAUSTED, detail: draw.exhausted } };
   const effectRecordId = typeof ctx.body.effectRecordId === "string" ? ctx.body.effectRecordId : null;
   const gates = (step.acceptance?.checks ?? []).filter((c) => c.role === "gate").map((c) => c.run);
+  // §12.3: the step's role, as resolved at run start, is the child's agent (the plan's own layer).
+  const role = step.role === undefined ? undefined : run.body.roles[step.role];
   const input: FlowStepPlanInput = {
     flowRunId: key.flowRunId, step, seq: key.seq, baseCommit: composition.commit, vaultPath: composition.vault.path,
     promptEnvelope: ctx.prompt(), gates, effectRecordId,
+    ...(role === undefined ? {} : { agent: { agent: role.agent, ...(role.model === null ? {} : { model: role.model }) } }),
   };
   let plan: ReturnType<typeof buildFlowStepPlanSource>;
   try { plan = buildFlowStepPlanSource(input); }

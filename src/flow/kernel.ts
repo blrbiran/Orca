@@ -530,7 +530,7 @@ async function pollChild(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow
     await applyOutcome(deps, run, execution, "running", await kind.start(contextFor(deps, run, execution)));
     return true;
   }
-  const status = deps.children?.status(execution.childGroupId) ?? null;
+  const status = deps.children === undefined ? null : await deps.children.status(execution.childGroupId);
   if (status === null || status.state === "running" || kind.settle === undefined) return false;
   const outcome = kind.settle(contextFor(deps, run, execution), status, execution.baseCommit!);
   deps.store.transaction(() => { returnUnspent(deps.store, run.row.id, execution.childGroupId!, status.spentTokens); });

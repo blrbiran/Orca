@@ -28,7 +28,7 @@ export function fakeChildPort() {
         opened.set(request.childGroupId, structuredClone(request)); statuses.set(request.childGroupId, { state: "running" }); dispatches += 1; }
       if (failNextOpen) { failNextOpen = false; throw new Error("crash after the dispatch, before the kernel recorded it"); }
     },
-    status: (id) => statuses.get(id) ?? null,
+    status: async (id) => statuses.get(id) ?? null,
   };
   /** Land child `id` with these files written on its base; returns the landed commit. */
   const land = (id: string, files: Record<string, string>, extra: Partial<Extract<FlowChildStatus, { state: "landed" }>> = {}): string => {

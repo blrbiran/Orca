@@ -38,6 +38,6 @@ describe("flow groups resolve to the vault (C14 part)", () => {
     const id = "0123456789abcdef".repeat(4);
     expect(vaultPathOfRepoId({ ORCA_VAULT_DIR: "/v" }, flowVaultRepoId(id))).toBe(join("/v", `${id}.git`));
     expect(vaultPathOfRepoId({ ORCA_VAULT_DIR: "/v" }, "repo-person")).toBe(null);
-    expect(vaultPathOfRepoId({ ORCA_VAULT_DIR: "/v" }, "flow-vault:../x")).toBe(null);
+    expect(vaultPathOfRepoId({ ORCA_VAULT_DIR: "/v" }, "flow-vault-../x")).toBe(null);
   });
 });
