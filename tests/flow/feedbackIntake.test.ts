@@ -221,6 +221,40 @@ describe("feedback intake (gaps §4, G2)", { timeout: 60_000 }, () => {
     } finally { await w.dispose(); }
   });
 
+  it("a clarify call exhausted on invalid answers goes on as asIs, flagged clarify-skipped; the second triage may not answer vague", async () => {
+    const w = await world(); try {
+      const id = await run(w);
+      const sent = await feedback(w, id, { text: "something feels off" });
+      await w.answer(w.calls.length - 1, { targets: [{ stepKey: "polish", why: "tone" }], clarity: "vague" });
+      for (let i = 0; i < 3; i += 1) await w.answer(w.calls.length - 1, { not: "a round" });
+      expect(callsOf(w, "clarify")).toHaveLength(3);
+      expect(intakeOf(w, id, sent.seq)).toMatchObject({ state: "restating", body: { asIs: true, flags: ["clarify-skipped"] } });
+      const second = w.calls.at(-1)!;
+      expect(second.purpose).toBe("feedback-triage");
+      expect(second.prompt).toContain("`clarity` may only be \"concrete\" or left out");
+      await w.answer(w.calls.length - 1, { targets: [{ stepKey: "polish", why: "tone" }] });
+      expect(intakeOf(w, id, sent.seq).state).toBe("planned");
+    } finally { await w.dispose(); }
+  });
+
+  it("a run whose last step settles while an intake is still triaging is not done until the intake is planned", async () => {
+    const w = await world(); try {
+      const { flowRunId: id } = await w.start({ templateRef: "builtin/fb" });
+      await w.advance();
+      w.children.land(childGroupIdOf(id, "draft", 1), { "post.md": POST });
+      await w.advance();
+      w.children.land(childGroupIdOf(id, "polish", 1), { "post.final.md": FINAL });
+      await w.advance();
+      await w.answer(lastIndex(w, "flow-draft"), { content: "notes" });
+      const sent = await feedback(w, id, { text: "too sweet", anchors: [{ quote: "Engineers think better with a warm cup." }] });
+      expect(intakeOf(w, id, sent.seq).state).toBe("triaging");
+      w.children.land(childGroupIdOf(id, "publish", 1), { "post.html": "<p>Tea</p>\n" });
+      await w.advance();
+      expect(w.latest(id, "publish")).toMatchObject({ state: "done" });
+      expect(runState(w, id)).toBe("running");
+    } finally { await w.dispose(); }
+  });
+
   it("an asIs replacement closes the round: the old intake is withdrawn, its message excluded, and the new triage may not answer vague", async () => {
     const w = await world(); try {
       const id = await run(w);
