@@ -55,6 +55,7 @@ function effectLines(recordId: string): string {
     `Orca effect record: ${recordId}. This step's side effect is confirmed by that record.`,
     `Use it as the idempotency key wherever the target API accepts one, and pass --confirmed-by-orca '${recordId}' to every skill that has that switch.`,
     "Report the remote id as flow.effect.remoteId either way. Do the side effect at most once; do not retry it.",
+    "If the side effect did not happen, never make a stand-in for it: report no flow.effect and say why; Orca then records the effect as failed.",
     "",
   ].join("\n");
 }

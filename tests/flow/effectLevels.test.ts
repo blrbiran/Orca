@@ -68,6 +68,27 @@ describe("effect levels (C13)", () => {
     } finally { await w.dispose(); }
   });
 
+  // T18 acceptance (fr-12b4198a cover): with no image provider the agent hand-wrote an SVG, landed it, reported no
+  // flow.effect -- and the record said `applied` for a spend that never happened. The record is the person's only
+  // account of what the run did outside the folder, so "applied" must mean the agent reported the effect (§9.6: it
+  // reports flow.effect.remoteId either way); a landing without that report is the effect failing (§9.6: failed, red,
+  // only the person retries), and its landed files do not become the step's output.
+  it("a landing that reports no flow.effect is effect-failed, not applied; its files do not become the output", async () => {
+    const { w, children, flowRunId, child } = await world(); try {
+      children.land(child, { "assets/wechat/00-cover.svg": "<svg/>" });
+      await w.advance();
+      expect(listEffects(w.store, flowRunId)[0]).toMatchObject({ state: "failed", remoteRef: null });
+      const upload = w.latest(flowRunId, "upload")!;
+      expect(upload).toMatchObject({ state: "failed", seq: 1 });
+      expect(upload.body as { flags?: string[]; failure?: string }).toMatchObject({ failure: "effect-not-reported" });
+      expect((upload.body as { flags?: string[] }).flags).toContain("effect-failed");
+      expect((upload.body as { flags?: string[] }).flags).not.toContain("effect-applied");
+      expect(upload.outputKind).not.toBe("commit");
+      await w.advance();
+      expect(children.counts().dispatches).toBe(1);
+    } finally { await w.dispose(); }
+  });
+
   it("confirm parks only its step behind a card while the parallel sibling finishes; the confirm runs it", async () => {
     const { w, children, flowRunId, child } = await world("confirm"); try {
       expect(children.counts().dispatches).toBe(0);

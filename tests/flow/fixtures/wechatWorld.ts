@@ -83,7 +83,8 @@ export async function untilArticleAsks(world: Awaited<ReturnType<typeof wechatWo
   // The article asks the person (flow.needs): only it and the steps after it wait; the cover finishes meanwhile.
   await land("article", 1, {}, { flow: { needs: { kind: "input", question: "Which source: the illustrated one or the plain one?", candidates: ["plain", "illustrated"] } } });
   expect(openAsks(w.store, flowRunId).map((a) => a.stepKey)).toEqual(["article"]);
-  await land("cover", 1, { "assets/wechat/00-cover.jpg": "jpg\n", "assets/wechat/00-cover.final.txt": "assets/wechat/00-cover.jpg\n" });
+  // The cover reports the image it generated (§9.6); without that report its record would end failed, not applied.
+  await land("cover", 1, { "assets/wechat/00-cover.jpg": "jpg\n", "assets/wechat/00-cover.final.txt": "assets/wechat/00-cover.jpg\n" }, { flow: { effect: { remoteId: "assets/wechat/00-cover.jpg" } } });
   expect(w.latest(flowRunId, "cover")).toMatchObject({ state: "done" });
   expect(w.execs(flowRunId, "to-draft-box")).toHaveLength(0);
 }

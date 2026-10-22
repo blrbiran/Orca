@@ -89,6 +89,17 @@ export function settleEffect(store: ControlStore, body: ExecutionBody, outcome: 
   return [outcome === "done" ? EFFECT_APPLIED : EFFECT_FAILED];
 }
 
+/**
+ * §9.6: the step ran under a confirmed record and landed, yet the agent reported no `flow.effect` -- the effect did not
+ * happen (T18 acceptance: no image provider, a hand-drawn stand-in landed instead). The kernel ends it `failed`.
+ */
+export function effectUnreported(store: ControlStore, body: ExecutionBody, reported: { remoteId: string } | undefined): boolean {
+  const id = typeof body.effectRecordId === "string" ? body.effectRecordId : null;
+  if (id === null || reported !== undefined) return false;
+  return getEffect(store, id)?.state === "confirmed";
+}
+export const EFFECT_NOT_REPORTED = "effect-not-reported";
+
 function openRecord(store: ControlStore, recordId: string): { record: EffectRow; execution: ExecutionRow } {
   const record = getEffect(store, recordId);
   if (record === null) throw new FlowRefusal("flow-message-target-missing", recordId);

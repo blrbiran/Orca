@@ -40,6 +40,8 @@ describe("effect steps execute once (C16)", () => {
     const goal = JSON.parse(build(effectStep()).tasks[0]!.originalContractCanonicalJson).objective.goal as string;
     expect(goal).toContain("--confirmed-by-orca 'eff-42'");
     expect(goal).toContain("idempotency key");
+    // T18: an effect that did not happen is reported as such (no flow.effect), never replaced by a stand-in.
+    expect(goal).toContain("report no flow.effect");
   });
   it("an effect step without a record id is refused, not run unconfirmed", () => {
     expect(() => build(effectStep(), [], null)).toThrow(/effect-record-missing/);

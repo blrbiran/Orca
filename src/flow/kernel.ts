@@ -48,7 +48,7 @@ import { parentGroupBody, type FlowParentConfirmation } from "./parent.js";
 import type { FlowCallResult } from "./calls.js";
 import { completePlanCall, finishPlan, makePlan, planOf, PLAN_KEY } from "./rerun.js";
 import { flowLayers, readFlowSettings } from "./settings.js";
-import { gateEffect, settleEffect } from "./effects.js";
+import { EFFECT_NOT_REPORTED, effectUnreported, gateEffect, settleEffect } from "./effects.js";
 import { consumeAtBoundary } from "./messages.js";
 
 /** A refusal by name (spec §14, Global Constraints' codes); nothing was written. */
@@ -403,6 +403,15 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
     // §6.3: only this run waits; the needs-you item is the parked execution with its reason.
     deps.store.transaction(() => finishExecution(deps.store, key, from, "parked", at, { body: { ...body, needsYou: outcome.parked } }));
     return;
+  }
+  // §9.6: an effect is applied only when the agent reported it (flow.effect, "either way"); a landing without that
+  // report is the effect failing -- what it landed (T18: a hand-written stand-in for the image) never becomes output.
+  if ("done" in outcome && effectUnreported(deps.store, body, outcome.done.reported?.effect)) {
+    const landed = outcome.done.commit === undefined ? {} : { landedCommit: outcome.done.commit.commit };
+    return applyOutcome(deps, run, execution, from, { failed: {
+      reason: EFFECT_NOT_REPORTED, record: { ...(outcome.done.record as Record<string, unknown> | null ?? {}), ...landed },
+      ...(outcome.done.flags === undefined ? {} : { flags: outcome.done.flags }),
+    } });
   }
   const workspaceOutput = "done" in outcome && outcome.done.commit !== undefined ? outcome.done.commit : null;
   const vault = vaultOf(run);

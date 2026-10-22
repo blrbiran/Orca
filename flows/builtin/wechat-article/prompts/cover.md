@@ -9,3 +9,7 @@ Run every command from the skill's directory (`cd '{{skill.md2publish-cover.dir}
 absolute path. When the skill reports `${FINAL}`, write its path relative to this workspace (for example
 `assets/wechat/00-cover.jpg`), on one line, into `assets/wechat/00-cover.final.txt`: the draft-box step reads the cover
 from there, never from the sidecar default.
+
+The effect is the generated image. Report the image the generator saved (its `savedImage`, as a path relative to this
+workspace) as `flow.effect.remoteId`. When no image provider is configured or the generation fails, stop there: never
+draw, write or copy a stand-in cover, and report no `flow.effect` -- Orca records the cover as failed for the person.
