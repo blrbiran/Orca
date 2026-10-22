@@ -341,6 +341,7 @@ export function contextFor(deps: FlowDeps, run: LoadedRun, execution: ExecutionR
   const acceptanceOf = (): string[] => step.kind === "work" ? (step.acceptance?.checks ?? []).filter((c) => c.role === "gate").map((c) => `gate: ${c.run}`) : [];
   return {
     store: deps.store, run, step, key: { flowRunId: execution.flowRunId, stepKey: execution.stepKey, seq: execution.seq }, execution, body,
+    agents: () => deps.agents(),
     prompt: (override = {}) => buildStepPrompt({
       role: "role" in step ? step.role ?? null : null,
       instruction: override.instruction ?? instructionOf(),

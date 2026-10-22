@@ -104,8 +104,11 @@ async function start(ctx: KindContext): Promise<KindOutcome> {
       commands: step.tools.commands.map((rule) => ("exact" in rule ? { exact: expand(rule.exact) } : { prefix: expand(rule.prefix) })) }) };
     for (const copy of copies) await writeBaseCopy(composition.vault, composition.commit, copy.path, copy.file);
   } catch (error) { return { failed: { reason: `flow-command-vars:${(error as Error).message}` } }; }
-  // §12.3: the step's role, as resolved at run start, is the child's agent (the plan's own layer).
-  const role = step.role === undefined ? undefined : run.body.roles[step.role];
+  // §12.3: the step's role, as resolved at run start, is the child's agent (the plan's own layer). A step without a role
+  // runs on today's default selection, as an unmatched role does -- the first installation -- never on the operator
+  // layer of Orca's own actor, which nobody sets (T18 acceptance: the child was never confirmed).
+  const fallback = step.role === undefined ? ctx.agents?.()[0] : undefined;
+  const role = step.role === undefined ? (fallback === undefined ? undefined : { agent: fallback.agent, model: fallback.model }) : run.body.roles[step.role];
   const input: FlowStepPlanInput = {
     flowRunId: key.flowRunId, step: { ...step, ...(tools === undefined ? {} : { tools }) }, seq: key.seq, baseCommit: composition.commit, vaultPath: composition.vault.path,
     // The agent reads the gates as they will run (the tool rules allow exactly those spellings).

@@ -90,6 +90,8 @@ export interface KindContext {
   runCommand(command: string, cwd: string): Promise<{ exitCode: number; output: string }>;
   /** §6.2: the driver-backed child groups (`work`); null where no driver is wired. */
   children: FlowChildPort | null;
+  /** §12.3: the installations the panel can run, in the table's order (the first is today's default selection). */
+  agents?(): ReadonlyArray<{ agent: string; model: string | null }>;
   env: NodeJS.ProcessEnv;
   now(): number;
 }
