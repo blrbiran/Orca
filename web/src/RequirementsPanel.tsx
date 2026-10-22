@@ -470,7 +470,8 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
   // outcome unknown) is not lifted, its retry asks for that outcome again (stopIntent.ts retryRequirementInTransaction).
   const stopped = view.summary.state === "clarifying" && (view.summary.stopState === "handoff-complete" || view.summary.stopState === "handoff-partial");
   const stopUnresolved = view.summary.state === "clarifying" && view.summary.stopState === "handoff-unresolved";
-  const retryable = (reason !== null && RETRYABLE.includes(reason)) || stalled || stopped || stopUnresolved;
+  // Review fix: only where the server says the retry can act (a frozen call's outcome unknown); the line stays either way.
+  const retryable = (reason !== null && RETRYABLE.includes(reason)) || stalled || stopped || (stopUnresolved && view.summary.requirement?.stopRetryable === true);
   // Final review finding 4: the step's call blocked by the driver, retried on its run.
   const blockedRun = view.summary.requirement?.blockedRun ?? null;
   // ccloop error codes spec (2026-10-15) §4.6: only a blocked reason that carries a ccloop code after its prefix is explained;
@@ -514,7 +515,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       </section>
       <ClarifySize view={view} onCommand={props.onCommand} editable={!archived && view.summary.state === "clarifying" && view.requirement.consensus === null} />
       <div id={overviewRegionId("requirement", groupId, "problem")} tabIndex={-1} data-overview-region="problem">
-      {!archived && (reason !== null || retryable) && (
+      {!archived && (reason !== null || retryable || stopUnresolved) && (
         <p role="alert">{reason !== null && <>{reason}{isReason(reason) ? ` · ${t(`requirements.reason.${reason}`, { groupId })}` : ""} </>}
           {stopped && <>{t("requirements.stopped")} </>}
           {stopUnresolved && <>{t("requirements.stopUnresolved")} </>}
@@ -642,6 +643,10 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
   return (
     <section aria-label={t("requirements.title")} className="requirements">
       <h2>{t("requirements.title")}</h2>
+      {/* Issue 94 review fix: an unreadable group that holds (or may hold) a requirement is named here too. */}
+      {(props.summary.unreadable ?? []).filter((row) => row.requirement !== false).map((row) => (
+        <p role="alert" data-tone="warn" key={row.groupId}>{t("control.unreadableGroup", { groupId: row.groupId, reason: row.reason })}</p>
+      ))}
       {refusal !== null && <p role="alert">{refusal.code} · {isReason(refusal.code) ? t(`requirements.reason.${refusal.code}`, { groupId: props.selected ?? "" }) : refusalWords(refusal)}</p>}
       <div className="split">
         <nav aria-label={t("requirements.list")}>

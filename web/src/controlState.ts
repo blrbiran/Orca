@@ -47,8 +47,8 @@ export interface ControlClientState {
   refetchRequired: boolean;
   dispatchBlocked: boolean;
   groups: Record<string, GroupSummaryV1>;
-  /** Issue 94: groups the server could not summarise (stored body does not parse), by id, with the parse error. */
-  unreadable: Record<string, string>;
+  /** Issue 94: groups the server could not summarise (stored body does not parse), by id, as the server listed them. */
+  unreadable: Record<string, NonNullable<ControlSummaryV1["unreadable"]>[number]>;
   canonical: Record<string, GroupViewV1>;
   recovery: RecoveryViewV1 | null;
   drafts: Record<string, string>;
@@ -96,7 +96,7 @@ export function summaryView(state: ControlClientState): ControlSummaryV1 {
     resetRequired: state.resetRequired,
     dispatchBlocked: state.dispatchBlocked,
     groups: Object.values(state.groups),
-    ...(Object.keys(state.unreadable).length === 0 ? {} : { unreadable: Object.entries(state.unreadable).map(([groupId, reason]) => ({ groupId, reason })) }),
+    ...(Object.keys(state.unreadable).length === 0 ? {} : { unreadable: Object.values(state.unreadable) }),
   };
 }
 
@@ -134,7 +134,7 @@ function reduceSummary(state: ControlClientState, event: Extract<ControlClientEv
   const gap = !purge && !reread && event.partial !== true && value.changeSeq > state.changeSeq + 1;
   const base = purge ? purged(state, value.epoch) : { ...state, epoch: value.epoch };
   const canonical = purge || gap ? {} : event.partial ? base.canonical : withoutStale(base.canonical, value.groups);
-  const unreadable = Object.fromEntries((value.unreadable ?? []).map((row) => [row.groupId, row.reason]));
+  const unreadable = Object.fromEntries((value.unreadable ?? []).map((row) => [row.groupId, row]));
   return {
     ...base,
     changeSeq: value.changeSeq,

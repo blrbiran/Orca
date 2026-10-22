@@ -1,5 +1,7 @@
+// @vitest-environment jsdom
+import { cleanup, render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { RequirementMarkdown } from "../src/RequirementMarkdown.js";
 
 /**
@@ -41,5 +43,16 @@ describe("the requirement document's markdown subset (issue 96)", () => {
     const text = "A <b>note</b> <script>x()</script> [link](javascript:alert(1)) ![i](http://e/x.png) `code` **open";
     const out = html(text);
     expect(out).toBe(`<div class="requirement-markdown"><p>A &lt;b&gt;note&lt;/b&gt; &lt;script&gt;x()&lt;/script&gt; [link](javascript:alert(1)) ![i](http://e/x.png) \`code\` **open</p></div>`);
+  });
+
+  // Review fix (minor 5): a paragraph's or a table's key was the index after its last line -- the next block's start --
+  // so "text\n- item" gave two siblings the same key.
+  it.each([["a paragraph before a list", "text\n- item"], ["a table before a heading", "| a |\n| --- |\n| 1 |\n### x"]])("gives every block its own key: %s", (_name, text) => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<RequirementMarkdown text={text} />);
+      cleanup();
+      expect(error.mock.calls.filter((call) => String(call[0]).includes("same key"))).toEqual([]);
+    } finally { error.mockRestore(); }
   });
 });

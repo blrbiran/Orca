@@ -69,13 +69,15 @@ export function RequirementMarkdown(props: { text: string }): JSX.Element {
     if (heading !== null) { blocks.push(<h6 key={i}>{inline(heading[1]!)}</h6>); i++; continue; }
     const bullet = BULLET.exec(line);
     if (bullet !== null) { const parsed = list(lines, i, bullet[1]!.length); blocks.push(parsed.node); i = parsed.next; continue; }
+    // A block's key is the index of its first line: the index after its last line is the next block's key.
+    const start = i;
     if (line.trimStart().startsWith("|") && TABLE_RULE.test(lines[i + 1] ?? "")) {
       const head = cells(line);
       const rows: string[][] = [];
       i += 2;
       while (i < lines.length && lines[i]!.trimStart().startsWith("|")) rows.push(cells(lines[i++]!));
       blocks.push(
-        <table key={i}>
+        <table key={start}>
           <thead><tr>{head.map((cell, index) => <th key={index}>{inline(cell)}</th>)}</tr></thead>
           <tbody>{rows.map((row, r) => <tr key={r}>{row.map((cell, index) => <td key={index}>{inline(cell)}</td>)}</tr>)}</tbody>
         </table>,
@@ -86,7 +88,7 @@ export function RequirementMarkdown(props: { text: string }): JSX.Element {
     const paragraph: string[] = [line];
     i++;
     while (i < lines.length && lines[i]!.trim() !== "" && !/^#{1,6} /.test(lines[i]!) && !BULLET.test(lines[i]!) && !lines[i]!.trimStart().startsWith("|")) paragraph.push(lines[i++]!);
-    blocks.push(<p key={i}>{inline(paragraph.join("\n"))}</p>);
+    blocks.push(<p key={start}>{inline(paragraph.join("\n"))}</p>);
   }
   return <div className="requirement-markdown">{blocks}</div>;
 }

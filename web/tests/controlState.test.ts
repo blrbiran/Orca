@@ -228,8 +228,8 @@ describe("unreadable groups (issue 94)", () => {
   const reason = "group-body-invalid:Expected boolean, received number";
   it("a complete summary carries its unreadable rows into the summary view", async () => {
     const { summaryView } = await import("../src/controlState.js");
-    const state = apply(initialControlState(), { type: "summary", value: summary({ unreadable: [{ groupId: "h", reason }] }) });
-    expect(summaryView(state).unreadable).toEqual([{ groupId: "h", reason }]);
+    const state = apply(initialControlState(), { type: "summary", value: summary({ unreadable: [{ groupId: "h", reason, requirement: false }] }) });
+    expect(summaryView(state).unreadable).toEqual([{ groupId: "h", reason, requirement: false }]);
     expect(summaryView(state).groups.map((group) => group.groupId)).toEqual(["g"]);
     expect("unreadable" in summaryView(apply(initialControlState(), { type: "summary", value: summary() }))).toBe(false);
   });
@@ -237,9 +237,9 @@ describe("unreadable groups (issue 94)", () => {
   it("a partial summary that names a group unreadable drops its cached summary, and a readable one lifts it", async () => {
     const { summaryView } = await import("../src/controlState.js");
     const first = apply(initialControlState(), { type: "summary", value: summary() });
-    const broken = apply(first, { type: "summary", partial: true, value: summary({ changeSeq: 2, groups: [], unreadable: [{ groupId: "g", reason }] }) });
+    const broken = apply(first, { type: "summary", partial: true, value: summary({ changeSeq: 2, groups: [], unreadable: [{ groupId: "g", reason, requirement: false }] }) });
     expect(summaryView(broken).groups).toEqual([]);
-    expect(summaryView(broken).unreadable).toEqual([{ groupId: "g", reason }]);
+    expect(summaryView(broken).unreadable).toEqual([{ groupId: "g", reason, requirement: false }]);
     const mended = apply(broken, { type: "summary", partial: true, value: summary({ changeSeq: 3 }) });
     expect(summaryView(mended).groups.map((group) => group.groupId)).toEqual(["g"]);
     expect("unreadable" in summaryView(mended)).toBe(false);

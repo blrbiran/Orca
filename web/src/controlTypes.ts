@@ -62,6 +62,8 @@ export type RequirementSummaryV1 = {
   blockedRun: { runId: string; reason: string | null } | null;
   /** Issue #75: the requirement's slug once a round named one. Optional so literal fixtures need no edit; the server always sends it. */
   slug?: string | null;
+  /** Issue 91 review fix: present only on a handoff-unresolved stop -- whether recovery-retry can act on it. */
+  stopRetryable?: boolean;
 };
 
 export type GroupSummaryV1 = {
@@ -264,7 +266,8 @@ export type ControlSummaryV1 = {
   dispatchBlocked: boolean;
   groups: GroupSummaryV1[];
   /** Issue 94: groups whose stored body does not parse, by id and parse error; absent when there are none. */
-  unreadable?: Array<{ groupId: string; reason: string }>;
+  /** `requirement`: the stored body holds a requirement (true), does not (false), or is not JSON (null). */
+  unreadable?: Array<{ groupId: string; reason: string; requirement: boolean | null }>;
 };
 
 export type FieldProvenanceV1 = { provenance: "complex-1m-default" | "model" | "human" | "system"; estimateId: string | null };

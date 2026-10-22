@@ -24,6 +24,7 @@ import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { dimensions } from "../control/commands.js";
 import { driveRecordSchema } from "../control/driveRecord.js";
 import { ControlError, nonDurableControlErrorClassifications } from "../control/errors.js";
+import { groupStopState, unresolvedStopRetryable } from "../control/stopIntent.js";
 import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
 import { effectiveTaskLabels, readTaskLabelState } from "../control/labels.js";
 import { choosePlanByLabels, loopPlanDefinition } from "../control/loopPlans.js";
@@ -405,6 +406,8 @@ function requirementSummaryFromSnapshot(store: ControlStore, groupId: string, sn
     used: group.used, reserved: group.reserved, limit: group.limit, usageUnknown: group.ledger.usageUnknown,
     blockedRun: blockedRequirementRun(store, groupId, snapshot),
     slug: group.requirement.slug,
+    // Issue 91 review fix: only on a handoff-unresolved stop -- whether recovery-retry can act on it.
+    ...(groupStopState(store, groupId) === "handoff-unresolved" ? { stopRetryable: unresolvedStopRetryable(store, groupId) } : {}),
   };
 }
 
@@ -558,6 +561,17 @@ export function readOverviewGroupSource(store: ControlStore, groupId: string) {
 function allGroupIds(store: ControlStore): string[] {
   return store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${flowRoleSql("g")} IS NULL ORDER BY g.id`).all().map(row => String(row.id));
 }
+/**
+ * Issue 94 review fix: whether an unreadable group's stored body holds a requirement, so the Requirements page can list
+ * it. Read from the body, never the id (a CLI-opened requirement is g-<uuid>); null when the body is not even JSON.
+ */
+function storedRequirementBlock(store: ControlStore, groupId: string): boolean | null {
+  try {
+    const parsed = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)?.body)) as unknown;
+    return parsed !== null && typeof parsed === "object" && hasRequirementBlock(parsed as { requirement?: unknown });
+  } catch { return null; }
+}
+
 function withoutFlowGroups(store: ControlStore, groupIds: readonly string[]): string[] {
   if (groupIds.length === 0) return [];
   const flow = new Set(store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${flowRoleSql("g")} IS NOT NULL`).all().map(row => String(row.id)));
@@ -583,12 +597,12 @@ export function readControlSummary(
   const groupIds = changes.resetRequired || forceComplete ? allGroupIds(store) : withoutFlowGroups(store, changes.groups.map(group => group.groupId));
   // Issue 94: a group whose stored body does not parse is listed by id and parse error instead of failing every
   // group's summary. Only that refusal: any other stored fact a summary cannot trust still refuses the whole read.
-  const groups: GroupSummaryV1[] = [], unreadable: Array<{ groupId: string; reason: string }> = [];
+  const groups: GroupSummaryV1[] = [], unreadable: Array<{ groupId: string; reason: string; requirement: boolean | null }> = [];
   for (const groupId of sortedUnique(groupIds)) {
     try { groups.push(readGroupSummary(store, groupId)); }
     catch (error) {
       if (!(error instanceof ControlError) || error.code !== "recovery-blocked" || !error.detail?.startsWith("group-body-invalid")) throw error;
-      unreadable.push({ groupId, reason: error.detail });
+      unreadable.push({ groupId, reason: error.detail, requirement: storedRequirementBlock(store, groupId) });
     }
   }
   const view = {

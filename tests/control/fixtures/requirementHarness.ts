@@ -42,12 +42,14 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
   const accepted = (envelope: StartEnvelope) => ({ kind: "accepted" as const, executionId: `exec-${envelope.claim.runId}`, configHash: envelope.claim.configHash });
   const resolveAgent = fixtureResolveAgent(() => profileSnapshot().profile.capabilities);
   let resolveOverride: ((partial: PartialSelection) => Promise<AgentResolution>) | null = null;
+  // Issue 91 review fix: a criterion can make a handoff delivery fail (the router keeps its own copy of the port's methods).
+  let handoffFailure: Error | null = null;
   const port: ExecutionPort = {
     resolveAgent: async (partial) => (resolveOverride ?? resolveAgent)(partial),
     listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
     async accept(envelope) { calls.accept.push(structuredClone(envelope)); return accepted(envelope); },
     async inspect(envelope) { return accepted(envelope); },
-    async requestHandoff(_envelope, request) { requested = true; return { kind: "latched", requestId: request.requestId }; },
+    async requestHandoff(_envelope, request) { if (handoffFailure !== null) throw handoffFailure; requested = true; return { kind: "latched", requestId: request.requestId }; },
     async collect(envelope): Promise<ExecutionReport> {
       calls.collect += 1;
       const { claim, work } = envelope;
@@ -80,7 +82,8 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
     },
     async readEvidence(ref) { const bytes = evidence.get(`${ref.artifactId}:${ref.hash}`); if (!bytes) throw new ControlError("control-evidence-context-missing"); return bytes; },
   };
-  return { port, calls, baseResolveAgent: resolveAgent, setResolveAgent: (fn: ((partial: PartialSelection) => Promise<AgentResolution>) | null) => { resolveOverride = fn; } };
+  return { port, calls, baseResolveAgent: resolveAgent, setResolveAgent: (fn: ((partial: PartialSelection) => Promise<AgentResolution>) | null) => { resolveOverride = fn; },
+    failHandoff: (error: Error | null) => { handoffFailure = error; } };
 }
 
 /**

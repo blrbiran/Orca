@@ -249,10 +249,31 @@ describe("a blocked or stopped requirement (final review findings 4 and 5)", () 
 
   // Issue 91: a stop whose frozen call could not hand off (partial) or whose outcome is unknown (unresolved) offered no
   // Retry, so the requirement sat stopped with nothing to press. The server lifts the first and asks again for the second.
+  // Review fix (minor 4): an unresolved stop offers Retry only when the server says it can act (stopRetryable).
   it.each(["handoff-partial", "handoff-unresolved"] as const)("offers Retry on a requirement stopped in %s", (stopState) => {
-    const view = drafting();
+    const view = withSummary(drafting(), { stopRetryable: true });
     const onCommand = mount({ ...view, summary: { ...view.summary, stopMode: "handoff", stopState } });
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "r", expectedRevision: 3, payload: { scope: "group", groupId: "r" } });
+  });
+
+  it("keeps the explanation but offers no Retry on an unresolved stop the retry cannot act on", () => {
+    const view = withSummary(drafting(), { stopRetryable: false });
+    mount({ ...view, summary: { ...view.summary, stopMode: "handoff", stopState: "handoff-unresolved" } });
+    expect(screen.getByRole("alert").textContent).toContain("a stopped call's outcome is not known yet");
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+});
+
+// Review fix (important 1, issue 94): a requirement group whose stored body does not parse is named on the Requirements
+// page too (the server says which unreadable groups hold a requirement), so the page never drops it silently.
+describe("an unreadable requirement group on the Requirements page (issue 94)", () => {
+  it("shows a row naming the requirement group's id and parse error, and not a plan group's", () => {
+    const view = requirementView("answered");
+    const reason = "group-body-invalid:Expected boolean, received number";
+    const summary = { ...summaryWith(view), unreadable: [{ groupId: "g-1e36", reason, requirement: true }, { groupId: "g-plan", reason, requirement: false }] } as ControlSummaryV1;
+    render(<RequirementsPanel config={config as ControlConfigV1} summary={summary} views={{ r: view }} selected="r" agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} />);
+    const rows = screen.getAllByRole("alert").filter((row) => row.textContent!.includes("cannot be read"));
+    expect(rows.map((row) => row.textContent)).toEqual([`g-1e36 · stored group cannot be read: ${reason}`]);
   });
 });

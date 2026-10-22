@@ -1312,6 +1312,8 @@ export const requirementSummarySchema = z.object({
   // Issue #75: the slug a round named (null before), so the requirement list can name a requirement without its view.
   // Optional on the wire so older fixtures still parse; the server always gives it.
   slug: nonemptyString.nullable().optional(),
+  // Issue 91 review fix: present only on a handoff-unresolved stop -- whether recovery-retry can act on it.
+  stopRetryable: z.boolean().optional(),
 }).strict();
 export type RequirementSummaryV1 = z.infer<typeof requirementSummarySchema>;
 
@@ -1453,7 +1455,7 @@ export const controlSummarySchema = z
     dispatchBlocked: z.boolean(),
     groups: z.array(groupSummarySchema),
     // Issue 94: groups whose stored body does not parse, by id and parse error; absent when there are none.
-    unreadable: z.array(z.object({ groupId: idSchema, reason: nonemptyString }).strict()).min(1).optional(),
+    unreadable: z.array(z.object({ groupId: idSchema, reason: nonemptyString, requirement: z.boolean().nullable() }).strict()).min(1).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

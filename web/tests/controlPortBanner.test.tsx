@@ -106,7 +106,7 @@ describe("the panel lists an unreadable group instead of going blank", () => {
     const groups = [{ groupId: "g-ok", repoId: "orca", state: "ready", commandRevision: 1, projectionSeq: 1, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 }] as ControlSummaryV1["groups"];
     const html = renderToStaticMarkup(
       <ControlPanel
-        config={config()} summary={{ ...summary, groups, unreadable: [{ groupId: "requirement-c50b", reason: "group-body-invalid:Expected boolean, received number" }] }} recovery={recovery}
+        config={config()} summary={{ ...summary, groups, unreadable: [{ groupId: "requirement-c50b", reason: "group-body-invalid:Expected boolean, received number", requirement: true }] }} recovery={recovery}
         groups={{} as Record<string, GroupViewV1>} selected={null}
         drafts={{}} uncertain={[]} refusal={null} refetchRequired={false}
         onSelect={vi.fn()} onCommand={vi.fn()} onDraft={vi.fn()}

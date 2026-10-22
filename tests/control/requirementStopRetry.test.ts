@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { groupStopState, settleHandoffRequest } from "../../src/control/stopIntent.js";
+import { groupStopState, readStopIntent, settleHandoffRequest } from "../../src/control/stopIntent.js";
+import { readControlSummary, requirementSummaryOf } from "../../src/panel/controlViews.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { ROUND_ONE } from "./fixtures/requirementOutputs.js";
 
@@ -19,10 +20,10 @@ import { ROUND_ONE } from "./fixtures/requirementOutputs.js";
  * A clarifying group whose round 1 call is in flight, stopped by handoff-stop: one frozen run with an open handoff
  * request. The driver is not advanced after the stop, so the criterion settles that request itself.
  */
-async function stoppedWhileDrafting() {
+async function stoppedWhileDrafting(stopPayload: Record<string, unknown> = {}) {
   const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }], stoppable: true });
   await x.until(() => x.runs()[0]?.state === "accepted" && x.fake.calls.collect > 0);
-  expect(await x.service.handoffStop(x.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped", frozenRunIds: [x.runs()[0]!.runId] } });
+  expect(await x.service.handoffStop(x.command("handoff-stop", stopPayload))).toMatchObject({ result: { kind: "handoff-stopped", frozenRunIds: [x.runs()[0]!.runId] } });
   const requestId = String(x.store.db.prepare("SELECT id FROM handoff_requests WHERE group_id='r'").get()!.id);
   const settle = (outcome: "settled-unrecoverable" | "outcome-unknown", reasonCode: string) =>
     settleHandoffRequest({ store: x.store, profileRouter: x.deps.router }, { requestId, outcome, reasonCode });
@@ -57,6 +58,59 @@ describe("recovery-retry on a stopped clarifying group (issue 91)", () => {
       // Not lifted: the frozen call may still be running.
       expect(groupStopState(x.store, "r")).not.toBe("none");
       expect(x.group().stopped).toBe(true);
+    } finally { await x.dispose(); }
+  });
+
+  // Review fix (minor 3): the stop's stored state -- what the summary serves -- follows the requeue, so the page no
+  // longer says handoff-unresolved once the outcome is being asked for again.
+  it("rewrites the stored stop state after the requeue, so the summary no longer says handoff-unresolved", async () => {
+    const { x, settle, retry } = await stoppedWhileDrafting();
+    try {
+      settle("outcome-unknown", "handoff-outcome-unknown");
+      expect(readStopIntent(x.store, "r")!.state).toBe("handoff-unresolved");
+      await retry();
+      expect(readStopIntent(x.store, "r")!.state).toBe("handoff-pending");
+      expect(readControlSummary(x.store, "epoch", null).groups.find((group) => group.groupId === "r")!.stopState).toBe("handoff-pending");
+    } finally { await x.dispose(); }
+  });
+
+  // Review fix (minor 4): an unresolved stop Retry can act on (a frozen run's handoff outcome unknown) is said to be
+  // retryable; one it cannot (a frozen run with no handoff request at all) is not, so no button promises what it cannot do.
+  it("says whether an unresolved stop's retry can do anything", async () => {
+    const { x, settle } = await stoppedWhileDrafting();
+    try {
+      expect("stopRetryable" in requirementSummaryOf(x.store, "r")).toBe(false);
+      settle("outcome-unknown", "handoff-outcome-unknown");
+      expect(requirementSummaryOf(x.store, "r").stopRetryable).toBe(true);
+    } finally { await x.dispose(); }
+    const other = await stoppedWhileDrafting();
+    try {
+      other.x.store.db.prepare("DELETE FROM handoff_requests WHERE group_id='r'").run();
+      expect(groupStopState(other.x.store, "r")).toBe("handoff-unresolved");
+      expect(requirementSummaryOf(other.x.store, "r").stopRetryable).toBe(false);
+    } finally { await other.x.dispose(); }
+  });
+});
+
+// Review fix (important 2): the requeued request gets a fresh deadline. With the old one -- already past, which is how
+// it became outcome-unknown -- the driver's grace check settled it outcome-unknown again on its first failed delivery.
+describe("a requeued handoff's deadline (issue 91 review fix)", () => {
+  it("is fresh: a failed delivery inside the new grace leaves it pending, and only past the new deadline is it unknown again", async () => {
+    // The stop's own deadline is long past, as it is when the driver's grace check made the outcome unknown.
+    const { x, requestId, settle, retry } = await stoppedWhileDrafting({ handoffDeadlineAt: "2020-01-01T00:00:00.000Z" });
+    try {
+      settle("outcome-unknown", "handoff-grace-elapsed");
+      await retry();
+      const request = () => JSON.parse(String(x.store.db.prepare("SELECT body FROM handoff_requests WHERE id=?").get(requestId)!.body)) as { state: string; deadlineAt: string };
+      expect(Date.parse(request().deadlineAt)).toBeGreaterThan(Date.now());
+      x.fake.failHandoff(new Error("delivery lost"));
+      x.deps.handoffGraceMs = 0;
+      await x.driver.round();
+      expect(request().state).toBe("request-pending");
+      const deadline = Date.parse(request().deadlineAt);
+      x.deps.now = () => new Date(deadline + 1);
+      await x.driver.round();
+      expect(request().state).toBe("outcome-unknown");
     } finally { await x.dispose(); }
   });
 });
