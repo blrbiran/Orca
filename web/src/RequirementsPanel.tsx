@@ -466,8 +466,11 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
   // Spec §11.1: recovery-retry re-queues a failed or interrupted round or draft -- one the person stopped carries no reason code.
   const stalled = step?.state === "failed" || step?.state === "interrupted";
   // Final review finding 5: a stop that completed with no call in flight interrupts nothing; recovery-retry lifts it (DR15).
-  const stopped = view.summary.state === "clarifying" && view.summary.stopState === "handoff-complete";
-  const retryable = (reason !== null && RETRYABLE.includes(reason)) || stalled || stopped;
+  // Issue 91: a partial stop (a frozen call could not hand off) is lifted the same way; an unresolved one (a frozen call's
+  // outcome unknown) is not lifted, its retry asks for that outcome again (stopIntent.ts retryRequirementInTransaction).
+  const stopped = view.summary.state === "clarifying" && (view.summary.stopState === "handoff-complete" || view.summary.stopState === "handoff-partial");
+  const stopUnresolved = view.summary.state === "clarifying" && view.summary.stopState === "handoff-unresolved";
+  const retryable = (reason !== null && RETRYABLE.includes(reason)) || stalled || stopped || stopUnresolved;
   // Final review finding 4: the step's call blocked by the driver, retried on its run.
   const blockedRun = view.summary.requirement?.blockedRun ?? null;
   // ccloop error codes spec (2026-10-15) §4.6: only a blocked reason that carries a ccloop code after its prefix is explained;
@@ -514,6 +517,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       {!archived && (reason !== null || retryable) && (
         <p role="alert">{reason !== null && <>{reason}{isReason(reason) ? ` · ${t(`requirements.reason.${reason}`, { groupId })}` : ""} </>}
           {stopped && <>{t("requirements.stopped")} </>}
+          {stopUnresolved && <>{t("requirements.stopUnresolved")} </>}
           {retryable && <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "group", groupId } })}>{t("requirements.retry")}</button>}
         </p>
       )}

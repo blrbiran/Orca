@@ -1057,6 +1057,7 @@ export const en = {
     exportCommit: "Commit {{commit}}",
     retry: "Retry",
     stopped: "Stopped; no call is made until Retry lifts the stop.",
+    stopUnresolved: "Stopped; a stopped call's outcome is not known yet. Retry asks for it again; the stop lifts once it is known.",
     blockedRun: "This step's call is blocked; Retry this call runs the blocked step again.",
     retryRun: "Retry this call",
     raiseLimit: "Raise the limit",

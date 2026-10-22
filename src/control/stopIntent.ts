@@ -509,15 +509,21 @@ function retryRun(store: ControlStore, groupId: string, runId: string, context: 
   // Issue-fixes spec §5.2: a blocked run resumed by recovery-retry (here, in the command's transaction).
   if (resumedDriverRun) recordActivity(store, { groupId, taskId: run.taskId, runId, kind: "run-resumed", body: {} });
   const resolved = blockers.resolved || rearm !== null || resumedDriverRun;
+  const requeued = requeueUnknownHandoff(store, groupId, runId, context.rawCommand.commandId);
+  return { resolved: resolved || requeued, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds };
+}
+
+/** A run's latest handoff request whose outcome is unknown is asked for again: back to request-pending, with a recovery row. */
+function requeueUnknownHandoff(store: ControlStore, groupId: string, runId: string, commandId: string): boolean {
   const requestId = store.db.prepare("SELECT id FROM handoff_requests WHERE group_id=? AND run_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, runId);
-  if (!requestId) return { resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds };
+  if (!requestId) return false;
   const { request } = readHandoffRequest(store, groupId, String(requestId.id));
-  if (request.state !== "outcome-unknown") return { resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds };
-  const identity = `handoff-recovery:${request.requestId}:${context.rawCommand.commandId}`;
+  if (request.state !== "outcome-unknown") return false;
+  const identity = `handoff-recovery:${request.requestId}:${commandId}`;
   store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,'handoff-recovery',?,0) ON CONFLICT(id) DO NOTHING")
-    .run(identity, canonicalBytes({ requestId: request.requestId, runId, groupId, commandId: context.rawCommand.commandId, requeuedAt: context.rawCommand.commandId }).toString("utf8"));
+    .run(identity, canonicalBytes({ requestId: request.requestId, runId, groupId, commandId, requeuedAt: commandId }).toString("utf8"));
   saveHandoffRequest(store, groupId, { ...request, state: "request-pending", failureCode: null });
-  return { resolved: true, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds };
+  return true;
 }
 
 function retryGroup(store: ControlStore, groupId: string, context: WebCommandContext, outputBound: number | null): ObservedRecovery {
@@ -525,7 +531,7 @@ function retryGroup(store: ControlStore, groupId: string, context: WebCommandCon
   // N1 DR15: a requirement's own recovery -- a completed stop lifted, a failed or interrupted call re-queued, a conflicted export retried.
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   const requirement = row !== undefined && hasRequirementBlock(JSON.parse(String(row.body)) as { requirement?: unknown })
-    ? retryRequirementInTransaction(store, groupId, context.nextCommandRevision, outputBound) : { resolved: false, wakeIds: [] };
+    ? retryRequirementInTransaction(store, groupId, context.nextCommandRevision, outputBound, context.rawCommand.commandId) : { resolved: false, wakeIds: [] };
   return { resolved: blockers.resolved || requirement.resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds: requirement.wakeIds };
 }
 
@@ -536,7 +542,7 @@ function retryGroup(store: ControlStore, groupId: string, context: WebCommandCon
  * draft is drafted with a fresh retry count (the failed or interrupted draft stays as it ended). A conflicted export is
  * set pending again with its wake undelivered.
  */
-function retryRequirementInTransaction(store: ControlStore, groupId: string, revision: number, outputBound: number | null): { resolved: boolean; wakeIds: string[] } {
+function retryRequirementInTransaction(store: ControlStore, groupId: string, revision: number, outputBound: number | null, commandId: string): { resolved: boolean; wakeIds: string[] } {
   const group = readRequirementGroup(store, groupId);
   const wakeIds: string[] = [];
   let resolved = false;
@@ -549,10 +555,17 @@ function retryRequirementInTransaction(store: ControlStore, groupId: string, rev
     resolved = true;
   }
   if (group.status === "clarifying") {
-    if (groupStopState(store, groupId) === "handoff-complete") {
+    // Issue 91: handoff-partial is lifted like handoff-complete -- every frozen call is settled (a requirement call's
+    // settlement interrupts its round whatever the outcome), so nothing is in flight. handoff-unresolved is NOT lifted:
+    // a frozen call's outcome is unknown, so its handoff is asked for again (as the run-scope retry does) and the stop
+    // stays until that answer makes it complete or partial.
+    const stop = groupStopState(store, groupId);
+    if (stop === "handoff-complete" || stop === "handoff-partial") {
       store.db.prepare("DELETE FROM stop_intents WHERE group_id=?").run(groupId);
       group.stopped = false;
       resolved = true;
+    } else if (stop === "handoff-unresolved") {
+      for (const runId of readStopIntent(store, groupId)?.frozenRunIds ?? []) if (requeueUnknownHandoff(store, groupId, runId, commandId)) resolved = true;
     }
     let requeue = false;
     if (group.requirement.consensus === null) {

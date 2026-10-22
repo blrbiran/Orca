@@ -929,6 +929,7 @@ export const zh: Translation<typeof en> = {
     exportCommit: "提交 {{commit}}",
     retry: "重试",
     stopped: "已停止；点“重试”解除停止之前不会发起调用。",
+    stopUnresolved: "已停止；被停下的调用结果还不知道。“重试”会再次查询，结果明确后才能解除停止。",
     blockedRun: "这一步的调用受阻；“重试这次调用”会重新执行受阻的那一步。",
     retryRun: "重试这次调用",
     raiseLimit: "调高上限",

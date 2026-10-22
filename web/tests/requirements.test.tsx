@@ -246,4 +246,13 @@ describe("a blocked or stopped requirement (final review findings 4 and 5)", () 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "r", expectedRevision: 3, payload: { scope: "group", groupId: "r" } });
   });
+
+  // Issue 91: a stop whose frozen call could not hand off (partial) or whose outcome is unknown (unresolved) offered no
+  // Retry, so the requirement sat stopped with nothing to press. The server lifts the first and asks again for the second.
+  it.each(["handoff-partial", "handoff-unresolved"] as const)("offers Retry on a requirement stopped in %s", (stopState) => {
+    const view = drafting();
+    const onCommand = mount({ ...view, summary: { ...view.summary, stopMode: "handoff", stopState } });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "r", expectedRevision: 3, payload: { scope: "group", groupId: "r" } });
+  });
 });
