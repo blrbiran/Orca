@@ -3,6 +3,7 @@
  * the browser originates only intents. Model-written text is shown as written (human ruling H8); the panel's own words
  * go through t.
  */
+import { RequirementMarkdown } from "./RequirementMarkdown.js";
 import { overviewRegionId } from "./overviewNavigation.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
 import { useContext, useEffect, useState, type JSX } from "react";
@@ -274,7 +275,8 @@ function DocumentText(props: { text: string }): JSX.Element {
         return (
           <section key={index} aria-label={title}>
             <h5>{title}</h5>
-            {body !== "" && <p className="requirement-text">{body}</p>}
+            {/* Issue 96: the body's markdown subset is rendered; every other construct stays text. */}
+            {body !== "" && <RequirementMarkdown text={body} />}
           </section>
         );
       })}

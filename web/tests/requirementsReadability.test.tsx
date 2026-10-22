@@ -108,7 +108,11 @@ describe("the requirement document (#77)", () => {
     expect(within(region).getByRole("region", { name: "Statement" }).textContent).toContain("A note <b>exports</b>.");
     expect(region.querySelector("b")).toBeNull();
     expect(region.textContent).toContain("# markdown-export");
-    expect(within(region).getByRole("region", { name: "Decisions" }).textContent).toContain("### R1.ADR1 One output");
+    // Issue 96 (rewritten under 0e13a9b7's ruling; was: the body keeps "### R1.ADR1 One output" as text): a section's
+    // markdown subset is rendered, so the ADR heading is a heading without its hashes.
+    const decisions = within(region).getByRole("region", { name: "Decisions" });
+    expect(within(decisions).getByRole("heading", { level: 6 }).textContent).toBe("R1.ADR1 One output");
+    expect(decisions.textContent).not.toContain("###");
   });
 
   it("stays one preformatted block when it has no ## heading", () => {

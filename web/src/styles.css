@@ -433,6 +433,9 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* Issue 96: a document section rendered from its markdown subset keeps its text's line breaks too. */
+.requirement-markdown { white-space: pre-wrap; overflow-wrap: anywhere; }
+.requirement-markdown h6 { font-size: inherit; margin: 12px 0 4px; }
 
 /* Kanban spec 2026-10-20 §4: the board tab -- columns side by side, scrolling sideways on a narrow screen. */
 .board-columns { display: flex; gap: 12px; overflow-x: auto; align-items: flex-start; }
