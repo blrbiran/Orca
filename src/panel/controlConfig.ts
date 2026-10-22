@@ -37,6 +37,8 @@ export interface TrustedControlConfigInput {
    */
   agentsTablePath: string | null;
   executionPort: "configured" | "unconfigured";
+  /** Issue 92: why there is no port, when the boot knows (the installed ccloop could not be used). */
+  executionPortReason?: string;
   archiveRoot: string;
   exportRoot: string;
   evidenceRoot: string;
@@ -81,6 +83,7 @@ const trustedControlConfigInputSchema = z.object({
   executablePath: z.string().min(1),
   agentsTablePath: z.string().min(1).nullable(),
   executionPort: z.enum(["configured", "unconfigured"]),
+  executionPortReason: z.string().min(1).optional(),
   archiveRoot: z.string().min(1),
   exportRoot: z.string().min(1),
   evidenceRoot: z.string().min(1),
@@ -308,6 +311,7 @@ export function createTrustedControlConfig(
           estimateMode: input.defaultEstimateMode,
         },
         executionPort: input.executionPort,
+        ...(input.executionPortReason === undefined ? {} : { executionPortReason: input.executionPortReason }),
         errorCatalog: Object.entries(durableCommandErrorStatuses)
           .map(([code, status]) => ({ code, status }))
           .sort((left, right) => compareText(left.code, right.code)),

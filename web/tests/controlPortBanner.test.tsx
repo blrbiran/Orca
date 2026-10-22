@@ -56,6 +56,15 @@ describe("the panel says when it has no execution port", () => {
     expect(html).not.toContain("ORCA_CCLOOP_ADAPTER_CONFIG");
   });
 
+  // Issue 92: the boot could not fill ORCA_CCLOOP_BIN from the installed ccloop; the note carries that reason, so a
+  // person reads why instead of guessing at the two variables.
+  it("carries the boot's reason when the config read has one, inside the same note", () => {
+    const reason = "ccloop-not-installed: ORCA_CCLOOP_BIN is unset and no usable ccloop package resolves";
+    const html = render({ executionPort: "unconfigured", executionPortReason: reason });
+    expect(html).toMatch(/<p role="note" data-tone="warn">no execution port configured(?:(?!<\/p>)[\s\S])*ccloop-not-installed: ORCA_CCLOOP_BIN is unset/);
+    expect(render({ executionPort: "unconfigured" })).not.toContain("ccloop-not-installed");
+  });
+
   it("stays quiet when a port is configured, so the notice means something when it appears", () => {
     expect(render()).not.toContain("no execution port configured");
   });

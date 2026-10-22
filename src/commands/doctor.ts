@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readdirSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
 import { connect } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -74,7 +74,37 @@ export async function staleSocketsCheck(ctx: CheckContext): Promise<StatusCheck>
   return { level: "fail", subject: "stale-sockets", fact: `no panel listens on ${stale.join(", ")}`, fix: `start the panel that owns it (it replaces the file), or rm ${stale.join(" ")}` };
 }
 
-export const DOCTOR_CHECKS: readonly Check[] = [...STATUS_CHECKS, agentPathCheck, orcaModesCheck, staleSocketsCheck];
+const isFile = (path: string): boolean => { try { return statSync(path).isFile(); } catch { return false; } };
+
+/**
+ * Issue 92: the ccloop bin a panel would start with exists. A panel without one boots with no execution port. The
+ * environment is the installed service's when there is one (launchd hands it that, not this shell's), and the
+ * installed package resolves from that service's entry, the way the panel process resolves it; otherwise this shell
+ * and this checkout.
+ */
+export async function ccloopBinCheck(ctx: CheckContext): Promise<StatusCheck> {
+  const { servicePaths } = await import("../service/paths.js");
+  const { readServiceConfig } = await import("../service/files.js");
+  const { CcloopNotInstalled, installedCcloopBin } = await import("../control/ccloopBin.js");
+  const paths = servicePaths(ctx.env);
+  const service = existsSync(paths.configFile) ? readServiceConfig(paths) : null;
+  const env: NodeJS.ProcessEnv = service?.env ?? ctx.env;
+  const whose = service === null ? "this shell" : `the service (${paths.configFile})`;
+  const named = env.ORCA_CCLOOP_BIN;
+  if (named !== undefined) {
+    if (named.length === 0) return { level: "fail", subject: "ccloop-bin", fact: `ORCA_CCLOOP_BIN is empty in ${whose}: its panel has no execution port`, fix: "unset ORCA_CCLOOP_BIN to use the installed ccloop, or point it at a ccloop build's dist/cli.js" };
+    if (!isFile(named)) return { level: "fail", subject: "ccloop-bin", fact: `ORCA_CCLOOP_BIN=${named} in ${whose} is not a file: its panel has no execution port`, fix: "point ORCA_CCLOOP_BIN at a ccloop build's dist/cli.js, or unset it to use the installed ccloop" };
+    return { level: "ok", subject: "ccloop-bin", fact: `${named} (ORCA_CCLOOP_BIN in ${whose})` };
+  }
+  try {
+    return { level: "ok", subject: "ccloop-bin", fact: `${installedCcloopBin(service?.entry ?? join(ctx.checkout, "package.json"))} (the installed ccloop; ORCA_CCLOOP_BIN unset in ${whose})` };
+  } catch (error) {
+    if (!(error instanceof CcloopNotInstalled)) throw error;
+    return { level: "fail", subject: "ccloop-bin", fact: error.message, fix: "npm install in the Orca checkout, then orca panel restart" };
+  }
+}
+
+export const DOCTOR_CHECKS: readonly Check[] = [...STATUS_CHECKS, agentPathCheck, orcaModesCheck, staleSocketsCheck, ccloopBinCheck];
 
 export async function runDoctor(args: ParsedArgs, io: CommandIo, checks: readonly Check[] = DOCTOR_CHECKS): Promise<number> {
   return report(await runChecks(checks, contextOf(args, io)), args, io, "orca-doctor-v1", true);

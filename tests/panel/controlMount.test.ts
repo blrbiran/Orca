@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createPanelServer, parsePanelArgs, type StartedPanel } from "../../src/panel/server.js";
+import { createPanelServer, panelEnvWithCcloop, parsePanelArgs, type PanelMode, type StartedPanel } from "../../src/panel/server.js";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { sessionFor } from "./fixtures/auth.js";
 
@@ -33,10 +33,10 @@ async function workspace() {
   return { root, repo, corrections, controlRoot };
 }
 
-async function boot(h: Awaited<ReturnType<typeof workspace>>, extra: string[] = [], overEnv: Record<string, string> = {}) {
+async function boot(h: Awaited<ReturnType<typeof workspace>>, extra: string[] = [], overEnv: Record<string, string> = {}, mode: PanelMode = {}) {
   const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: h.controlRoot, ORCA_CORRECTIONS_DIR: h.corrections, ...overEnv };
   const opts = parsePanelArgs(["--by", "tester", "--repo", `proj=${h.repo}`, ...extra], env);
-  const panel = await createPanelServer(opts, env);
+  const panel = await createPanelServer(opts, env, mode);
   panels.push(panel);
   envs.set(panel, env);
   return panel;
@@ -59,6 +59,20 @@ describe("a shipped panel mounts the control plane by default", () => {
     // The shipped process, not a fixture, is saying this about itself.
     expect(body.executionPort).toBe("unconfigured");
     expect(body.defaults).toBe(null);
+  });
+
+  // Issue 92: a panel whose ORCA_CCLOOP_BIN default could not be filled (no installed ccloop, say mid-repin) booted
+  // "unconfigured" with no reason anywhere. The reason is served in the config read, so the note can say it. With no
+  // reason (an operator who left the variables unset on purpose) the field is absent, not an empty string.
+  it("serves why the port is missing when the boot knows, and nothing when it does not", async () => {
+    const h = await workspace();
+    const reason = "ccloop-not-installed: ORCA_CCLOOP_BIN is unset and no usable ccloop package resolves from /x (MODULE_NOT_FOUND)";
+    const told = await (await get(await boot(h, [], {}, { executionPortReason: reason }), "/api/control/config")).json() as Record<string, unknown>;
+    expect(told.executionPort).toBe("unconfigured");
+    expect(told.executionPortReason).toBe(reason);
+    const h2 = await workspace();
+    const silent = await (await get(await boot(h2), "/api/control/config")).json() as Record<string, unknown>;
+    expect("executionPortReason" in silent).toBe(false);
   });
 
   it("serves the recovery read too, which is the whole reason booting without a port is allowed", async () => {
@@ -191,5 +205,25 @@ describe("a multi-repository panel", () => {
     const panel = await createPanelServer(opts, env);
     panels.push(panel);
     await expect(stat(join(named, "control.sqlite"))).resolves.toBeDefined();
+  });
+});
+
+// Issue 92: the boot boundary that fills ORCA_CCLOOP_BIN from the installed package. When that fails it used to drop
+// the reason; now it says it on stderr (never stdout, whose one ready line is the panel's machine contract) and hands
+// it on for the config read.
+describe("the panel boot names why the installed ccloop could not be used", () => {
+  it("logs the not-installed reason on stderr and returns it; an explicit ORCA_CCLOOP_BIN logs nothing", async () => {
+    const h = await workspace();
+    // A module two levels down a directory with no node_modules: nothing resolves ccloop from here.
+    const from = join(h.root, "src", "panel", "server.js");
+    const lines: string[] = [];
+    const missing = panelEnvWithCcloop({ ORCA_AGENTS_TABLE: "/t.json" }, from, (line) => lines.push(line));
+    expect(missing.executionPortReason).toMatch(/^ccloop-not-installed: /);
+    expect("ORCA_CCLOOP_BIN" in missing.env).toBe(false);
+    expect(lines).toEqual([`orca-panel: ${missing.executionPortReason}\n`]);
+    const quiet: string[] = [];
+    const explicit = panelEnvWithCcloop({ ORCA_CCLOOP_BIN: "/elsewhere/cli.js" }, from, (line) => quiet.push(line));
+    expect(explicit).toEqual({ env: { ORCA_CCLOOP_BIN: "/elsewhere/cli.js" }, executionPortReason: null });
+    expect(quiet).toEqual([]);
   });
 });

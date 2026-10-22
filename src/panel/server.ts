@@ -93,6 +93,8 @@ export interface StartedPanel {
 export interface PanelMode {
   /** `orca panel run --service` (panel service spec §5, plan D2). */
   service?: boolean;
+  /** Issue 92: why the boot could not fill ORCA_CCLOOP_BIN from the installed ccloop; served in the config read. */
+  executionPortReason?: string;
 }
 
 /** The panel's announcement, shared by the foreground panel and the service panel: one machine line on stdout. */
@@ -264,7 +266,8 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   const epoch = randomUUID();
   let control: ControlRuntime | null = null;
   if (opts.control.enabled) {
-    try { control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env, corrections: { dir: opts.correctionsDir, by: opts.by, panel: panelCorrections(opts, reviews) },
+    try { control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env,
+      ...(mode.executionPortReason === undefined ? {} : { executionPortReason: mode.executionPortReason }), corrections: { dir: opts.correctionsDir, by: opts.by, panel: panelCorrections(opts, reviews) },
       ...(opts.ccmemCorrections === true && opts.memory?.ccmemBin != null ? { ccmemCorrections: { ccmemBin: opts.memory.ccmemBin, env: opts.memory.env } } : {}) }); }
     catch (error) { auth.close(); throw error; }
   }
@@ -386,10 +389,25 @@ export function panelArgsWithDefaultProjects(args: string[], env: NodeJS.Process
   return [...args, "--projects-file", projectsFilePath(env)];
 }
 
+/**
+ * ccloop dependency plan (2026-09-29): ORCA_CCLOOP_BIN unset ⇒ the installed ccloop package. Filled at the process
+ * boundary, so resolveControlOptions and its criteria keep reading only the environment. A missing package leaves the
+ * variable unset and the panel boots without an execution port, as ruling R5 requires -- and (issue 92) says why, on
+ * stderr and in what it returns, instead of dropping the reason. Stdout is untouched: its ready line is a contract.
+ */
+export function panelEnvWithCcloop(
+  env: NodeJS.ProcessEnv,
+  from?: string,
+  log: (line: string) => void = (line) => { process.stderr.write(line); },
+): { env: NodeJS.ProcessEnv; executionPortReason: string | null } {
+  const filled = from === undefined ? withDefaultCcloopBin(env) : withDefaultCcloopBin(env, from);
+  if (filled.notInstalled === null) return { env: filled.env, executionPortReason: null };
+  log(`orca-panel: ${filled.notInstalled.message}\n`);
+  return { env: filled.env, executionPortReason: filled.notInstalled.message };
+}
+
 export async function startPanelFromArgs(args: string[], mode: PanelMode = {}): Promise<StartedPanel> {
-  // ccloop dependency plan (2026-09-29): ORCA_CCLOOP_BIN unset ⇒ the installed ccloop package. Filled here, at the
-  // process boundary, so resolveControlOptions and its criteria keep reading only the environment. A missing package
-  // leaves the variable unset and the panel boots without an execution port, as ruling R5 requires.
-  const { env } = withDefaultCcloopBin(process.env);
-  return createPanelServer(parsePanelArgs(panelArgsWithDefaultProjects(args, env), env), env, mode);
+  const { env, executionPortReason } = panelEnvWithCcloop(process.env);
+  const told = executionPortReason === null ? mode : { ...mode, executionPortReason };
+  return createPanelServer(parsePanelArgs(panelArgsWithDefaultProjects(args, env), env), env, told);
 }

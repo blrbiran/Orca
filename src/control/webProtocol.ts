@@ -1287,6 +1287,8 @@ export const controlConfigSchema = z
     // inferable from `profiles[].probeFailureCode`, which answers a per-profile, per-probe question
     // -- see §9.3: letting one stand in for the other blends two facts of different sizes.
     executionPort: z.enum(["configured", "unconfigured"]),
+    // Issue 92: present only when the boot knows why there is no port (the installed ccloop could not be used).
+    executionPortReason: nonemptyString.optional(),
     errorCatalog: z.array(z.object({ code: nonemptyString, status: safeInteger }).strict()),
   })
   .strict()

@@ -7,7 +7,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DOCTOR_CHECKS, orcaModesCheck, runDoctor, staleSocketsCheck } from "../../src/commands/doctor.js";
+import { ccloopBinCheck, DOCTOR_CHECKS, orcaModesCheck, runDoctor, staleSocketsCheck } from "../../src/commands/doctor.js";
 import { runRegistered } from "../../src/commands/run.js";
 import { runStatus, skillCheck, STATUS_CHECKS, type Check, type CheckContext } from "../../src/commands/status.js";
 import type { CommandIo, ParsedArgs } from "../../src/commands/types.js";
@@ -102,7 +102,8 @@ describe("orca status (spec §8)", () => {
     ]);
     // Doctor: the same, then the slower ones.
     expect(DOCTOR_CHECKS.slice(0, STATUS_CHECKS.length)).toEqual(STATUS_CHECKS);
-    expect(DOCTOR_CHECKS.slice(STATUS_CHECKS.length).map((check) => check.name)).toEqual(["agentPathCheck", "orcaModesCheck", "staleSocketsCheck"]);
+    // Issue 92: plus the ccloop bin the panel would start with (rewritten under 0e13a9b7's ruling to add it).
+    expect(DOCTOR_CHECKS.slice(STATUS_CHECKS.length).map((check) => check.name)).toEqual(["agentPathCheck", "orcaModesCheck", "staleSocketsCheck", "ccloopBinCheck"]);
   });
 });
 
@@ -123,6 +124,41 @@ describe("orca doctor (spec §8)", () => {
       "fail skill: installed 0.0.1, CLI 0.1.0",
       "  fix: no known fix; the fact above names what is wrong",
     ]);
+  });
+
+  // Issue 92: a panel whose ccloop bin is missing boots with no execution port, and doctor said nothing about it. The
+  // check reads the environment the panel would start with -- the installed service's, when there is one, since that
+  // is what launchd hands it -- and the package that resolves from that panel's own entry.
+  it("ccloop bin: names a missing file, an empty variable and a missing package; ok when the bin is there", async () => {
+    const { home, env } = sandbox();
+    const bin = join(home, "ccloop", "dist", "cli.js");
+    mkdirSync(join(home, "ccloop", "dist"), { recursive: true });
+    const nowhere = join(home, "no-checkout"); // no node_modules above it inside the sandbox
+    mkdirSync(nowhere);
+    const ctx = (over: NodeJS.ProcessEnv, checkout = nowhere): CheckContext => ({ env: { ...env, ...over }, checkout });
+    const gone = await ccloopBinCheck(ctx({ ORCA_CCLOOP_BIN: bin }));
+    expect(gone).toMatchObject({ level: "fail", subject: "ccloop-bin" });
+    expect(gone.fact).toContain(bin);
+    writeFileSync(bin, "#!/usr/bin/env node\n", { mode: 0o755 });
+    expect(await ccloopBinCheck(ctx({ ORCA_CCLOOP_BIN: bin }))).toMatchObject({ level: "ok", subject: "ccloop-bin" });
+    expect(await ccloopBinCheck(ctx({ ORCA_CCLOOP_BIN: "" }))).toMatchObject({ level: "fail", subject: "ccloop-bin" });
+    const unset = await ccloopBinCheck(ctx({}));
+    expect(unset).toMatchObject({ level: "fail", subject: "ccloop-bin" });
+    expect(unset.fact).toMatch(/^ccloop-not-installed: /);
+    expect(unset.fix).toContain("npm install");
+    // This checkout has ccloop installed: unset resolves to that package's bin.
+    expect(await ccloopBinCheck(ctx({}, CHECKOUT))).toMatchObject({ level: "ok", subject: "ccloop-bin" });
+    // The installed service's environment decides, not this shell's: its stored value points at the missing file.
+    const serviceDir = env.ORCA_PANEL_DIR!;
+    mkdirSync(serviceDir, { recursive: true });
+    writeFileSync(join(serviceDir, "service.json"), JSON.stringify({
+      schema: "orca-panel-service-v1", node: process.execPath, entry: join(CHECKOUT, "dist", "cli.js"), args: [],
+      env: { ORCA_CCLOOP_BIN: join(home, "gone", "cli.js") },
+    }));
+    const service = await ccloopBinCheck(ctx({ ORCA_CCLOOP_BIN: bin }));
+    expect(service).toMatchObject({ level: "fail", subject: "ccloop-bin" });
+    expect(service.fact).toContain(join(home, "gone", "cli.js"));
+    expect(service.fact).toContain("service.json");
   });
 
   it("~/.orca modes: a directory open to group or others is named with a chmod fix, and left as it is", async () => {

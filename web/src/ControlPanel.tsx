@@ -282,7 +282,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         * reads are what a person needs after a crash -- so this says why the commands will refuse.
         */}
       {config.executionPort === "unconfigured" && (
-        <p role="note" data-tone="warn">{t("control.noPort")}</p>
+        <p role="note" data-tone="warn">{t("control.noPort")}{config.executionPortReason !== undefined && ` · ${t("control.noPortReason", { reason: config.executionPortReason })}`}</p>
       )}
       {summary.resetRequired && <p role="alert" data-tone="danger">{t("control.resetRequired")}</p>}
       {refetchRequired && <p role="alert" data-tone="info">{t("control.refetchRequired")}</p>}

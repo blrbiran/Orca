@@ -39,6 +39,8 @@ export type ControlConfigV1 = {
   defaults: null | { estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft" };
   /** Ruling R6. The only authority on whether a port is configured; not probeFailureCode. */
   executionPort: "configured" | "unconfigured";
+  /** Issue 92: why there is no port, when the panel's boot knows; absent otherwise. */
+  executionPortReason?: string;
   errorCatalog: Array<{ code: string; status: number }>;
 };
 

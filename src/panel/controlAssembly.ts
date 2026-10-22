@@ -114,6 +114,8 @@ export interface ControlAssemblyInput {
   repos: ReadonlyArray<{ projectKey: string; path: string; kind?: "dir" }>;
   epoch: string;
   env: NodeJS.ProcessEnv;
+  /** Issue 92: why the boot left ORCA_CCLOOP_BIN unset (the installed ccloop could not be used); served in the config read. */
+  executionPortReason?: string;
   /** Test-only fault injection for the execution driver (spec §7.2 R1). Never set by the CLI. */
   driverCrash?: (point: CrashPoint) => void;
   /**
@@ -205,6 +207,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     executablePath: process.execPath,
     agentsTablePath: control.executionPort === "configured" ? env.ORCA_AGENTS_TABLE! : null,
     executionPort: control.executionPort,
+    ...(input.executionPortReason === undefined ? {} : { executionPortReason: input.executionPortReason }),
     archiveRoot: join(root, ARCHIVE),
     exportRoot: join(root, EXPORT),
     evidenceRoot: join(root, EVIDENCE),
