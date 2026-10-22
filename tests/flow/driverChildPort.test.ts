@@ -72,6 +72,10 @@ describe("the driver-backed child port (§6.2)", () => {
       expect(h.store.db.prepare("SELECT id, actor_id FROM commands WHERE group_id=?").all(request.childGroupId).map((r) => [String(r.id), String(r.actor_id)]))
         .toEqual([[CHILD_CONFIRM_COMMAND_ID, ORCHESTRATION_ACTOR]]);
       expect((await port.status(request.childGroupId))).toEqual({ state: "running" });
+      // Positive versions for both, as every group a command made has (a shutdown lists them).
+      for (const id of ["flow-1", request.childGroupId]) expect(h.store.db.prepare("SELECT revision, projection_seq FROM groups WHERE id=?").get(id)).toMatchObject({ revision: expect.any(Number) });
+      expect(Number(h.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(request.childGroupId)!.revision)).toBeGreaterThanOrEqual(1);
+      expect(Number(h.store.db.prepare("SELECT projection_seq FROM groups WHERE id=?").get(request.childGroupId)!.projection_seq)).toBeGreaterThanOrEqual(1);
       // A restart opens it again: nothing is added.
       await port.open(request);
       expect(count(h, "SELECT count(*) AS n FROM groups WHERE id LIKE 'flow-fr-1-%'")).toBe(1);

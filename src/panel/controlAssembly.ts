@@ -1,4 +1,6 @@
 import type { PanelCorrections } from "../control/correctionCommands.js";
+import { advanceFlowRuns } from "../flow/kernel.js";
+import { createPanelFlow, type PanelFlow } from "./flowAssembly.js";
 import { mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { createAdmissionGate, type AdmissionGate } from "../control/admissionGate.js";
@@ -86,6 +88,8 @@ export interface ControlRuntime {
   epoch: string;
   /** Execution driver spec §2.1: present only when an execution port is configured. */
   driver: ExecutionDriver | null;
+  /** Flow engine spec §8.2: the flow kernel's production ports; present only with a driver (nothing else runs a flow). */
+  flow: PanelFlow | null;
   /** spec §6: runs to completion before the server accepts anything. */
   recover(): Promise<void>;
   /** One delivery pass. Re-entrant calls while one is in flight are no-ops, not queued. */
@@ -281,7 +285,10 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     // System debug task spec 2026-10-21: Orca's own debug groups (the escalation ladder) are opened, confirmed and folded
     // first, so one that was just confirmed starts in the same pass; a due integration check (kanban §7 layer 1) is
     // started without being waited for.
-    const autoStart = driver === null ? Promise.resolve() : service.systemDebugPass().then(() => service.checksPass()).then(() => service.autoStart()).then(() => service.autoResolveIntegrationConflicts()).then(() => undefined, (error: unknown) => {
+    // Flow engine spec §8.2: flow runs advance at their step boundaries before the auto-start pass, so a child a step just
+    // opened and confirmed starts in the same pass.
+    const autoStart = driver === null || flow === null ? Promise.resolve() : service.systemDebugPass().then(() => service.checksPass())
+      .then(() => flow!.refreshAgents()).then(() => advanceFlowRuns(flow!.deps)).then(() => service.autoStart()).then(() => service.autoResolveIntegrationConflicts()).then(() => undefined, (error: unknown) => {
       process.stderr.write(`orca-control: auto-start pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
     });
     const pass = autoStart.then(() => withAdmission({ admissionGate }, () => deliverSchedulerWakes(store, wakeHandlers)))
@@ -294,7 +301,15 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
 
   // Execution driver spec §2.1: only with a configured port. Unconfigured, nothing here runs and no
   // directory is created, so the panel is what it was before this slice.
+  let flow: PanelFlow | null = null;
   if (control.executionPort === "configured") {
+    flow = createPanelFlow({
+      store, env, router, port, admissionGate, confirm: (command) => service.confirm(command as never), kick: () => driver?.kick(),
+      importDeps: { store, trustedConfig: config, profileRouter: router, defaults: () => {
+        if (estimator === null || control.estimateMode === null) return null;
+        return { estimatorProfileId: estimator.snapshot.profile.profileId, estimatorProfileHash: estimator.profileHash, estimateMode: control.estimateMode };
+      } },
+    });
     driver = createExecutionDriver({
       store, router, admissionGate, roots: controlWorkspaceRoots(store.stateDir),
       resolveRepository,
@@ -316,7 +331,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   let shutdownRun: Promise<boolean> | null = null;
 
   return Object.freeze({
-    store, config, service, router, admissionGate, port, epoch, driver,
+    store, config, service, router, admissionGate, port, epoch, driver, flow,
     recover: async () => {
       await recoverControl(store, port, { handlers: wakeHandlers }, { driverOwnsWebRuns: driver !== null });
       await service.recoverAgentUpdates();

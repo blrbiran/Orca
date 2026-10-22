@@ -13,6 +13,7 @@
  * Calls go out through `deps.calls` and come back through `completeFlowCall` (the single-call settlement's hook; the
  * driver-backed port on the parent group's pool is Task 10's).
  */
+import { recordProjectionChange } from "../control/projectionJournal.js";
 import { randomUUID } from "node:crypto";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "../control/snapshot.js";
@@ -75,7 +76,7 @@ export interface FlowDeps {
    * §6.2-§6.3: what the parent is confirmed with at start (the panel freezes the call profile and slot and the children's
    * profiles; a FlowRefusal refuses the start). Absent: confirmed with neither (a criterion's fake ports serve the run).
    */
-  confirmParent?(input: { flowRunId: string; groupId: string; projectId: string | null }): Promise<FlowParentConfirmation>;
+  confirmParent?(input: { flowRunId: string; groupId: string; projectId: string | null; by: string }): Promise<FlowParentConfirmation>;
 }
 
 /** Spec §4.3: the kinds whose prompts carry the unattended fragment. */
@@ -189,7 +190,7 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
   const flowRunId = `fr-${id}`;
   const groupId = `flow-${id}`;
   // §6.3: confirmed once, before anything is written (a refusal leaves no vault import either).
-  const confirmation: FlowParentConfirmation = deps.confirmParent === undefined ? { call: null, children: null } : await deps.confirmParent({ flowRunId, groupId, projectId });
+  const confirmation: FlowParentConfirmation = deps.confirmParent === undefined ? { call: null, children: null } : await deps.confirmParent({ flowRunId, groupId, projectId, by: input.by });
   // §5.2: the person's folder is imported into its vault; the import is the base of every composition.
   let vault: Vault | null = null;
   let importCommit: string | null = null;
@@ -208,10 +209,12 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
   const poolTokens = input.pool ?? template.budget?.tokensPerRun ?? DEFAULT_TOKENS_PER_RUN;
   deps.store.transaction(() => {
     // The parent group (§6.2 body block `flow`), confirmed once by orca-auto with the run pool (§6.3); no plan, no tasks.
-    deps.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)").run(groupId, 0, 1, JSON.stringify(parentGroupBody({
+    // At revision 1 with its projection recorded, as a group its creating command leaves (a shutdown lists its versions).
+    deps.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)").run(groupId, 1, 1, JSON.stringify(parentGroupBody({
       groupId, flowRunId, projectId, workspaceKind: template.workspace.kind, vaultId, repoId: vaultId === null ? projectId : flowVaultRepoId(vaultId),
       poolTokens, confirmation, at: deps.now(), goal: `Flow run ${flowRunId} (${input.templateRef})`,
     })));
+    recordProjectionChange(deps.store, [groupId]);
     writeCanonicalRecord(deps.store, groupId, templateHash, canonicalBytes(stored).toString("utf8"));
     insertFlowRun(deps.store, {
       id: flowRunId, groupId, templateRef: input.templateRef, templateSha256: templateHash, workspace: { projectId, kind: template.workspace.kind },

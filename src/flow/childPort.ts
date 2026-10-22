@@ -14,6 +14,7 @@
  * terminal: a person's recovery acts there), failed (a terminal other than `succeeded`), or landed with the tip of
  * `orca/<child>` in the vault as the step's output.
  */
+import { updateRevision } from "../control/commandLedger.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { isTerminallyFailedRun, type DriveRecord } from "../control/driveRecord.js";
@@ -78,6 +79,8 @@ function importChild(deps: DriverChildPortDeps, request: FlowChildOpen, repoId: 
         baseCommit: request.baseCommit, ...(request.effectRecordId === null ? {} : { effectRecordId: request.effectRecordId }),
       };
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(body), request.childGroupId);
+      // Revision 1 with its projection recorded, as the import command it stands in for would leave it.
+      updateRevision(deps.store, request.childGroupId, 1);
       recordProjectionChange(deps.store, [request.childGroupId]);
     });
   } finally { release?.(); }

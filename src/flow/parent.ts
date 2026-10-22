@@ -47,7 +47,7 @@ export function parentGroupBody(input: {
   };
   return {
     groupId: input.groupId, status: "flow", projectKey: input.repoId, goal: input.goal, successConditions: [], budgetMode: input.confirmation.children?.budgetMode ?? "soft",
-    limit, reviewReserve: zero(), deadlineAt: null, revision: 0, commandRevision: 0, graphVersion: 1, stopped: false,
+    limit, reviewReserve: zero(), deadlineAt: null, revision: 1, commandRevision: 1, graphVersion: 1, stopped: false,
     used: zero(), reserved: zero(), reviewRemaining: zero(), budgetVersion: 1,
     ledger: { groupLimit: limit, used: zero(), committedRemaining: zero(), explicitUnallocatedReserve: limit, budgetDeficit: zero(), usageUnknown: false },
     flow: { role: "parent", flowRunId: input.flowRunId, projectId: input.projectId, workspaceKind: input.workspaceKind, vaultId: input.vaultId },
