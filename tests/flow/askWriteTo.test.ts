@@ -165,6 +165,8 @@ describe("writeAnswer (§4.4, Review Focus 2)", () => {
       expect(await writeAnswer(vault, commit, { file: "../x.md", frontmatter: "title" }, "B", "ann")).toEqual({ flag: "writeTo-missing" });
       expect(await writeAnswer(vault, commit, { file: "/etc/x.md", frontmatter: "title" }, "B", "ann")).toEqual({ flag: "writeTo-missing" });
       expect(await writeAnswer(vault, commit, { file: "nope.md", frontmatter: "title" }, "B", "ann")).toEqual({ flag: "writeTo-missing" });
+      // A path git itself would normalise is refused by name, not left to git (Review Focus 2).
+      expect(await writeAnswer(vault, commit, { file: "notes/../a.md", frontmatter: "title" }, "B", "ann")).toEqual({ flag: "writeTo-missing" });
       expect(existsSync(join(w.folder, "..", "x.md"))).toBe(false);
     } finally { await w.dispose(); }
   });
