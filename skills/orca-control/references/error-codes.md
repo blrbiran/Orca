@@ -183,6 +183,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `report-commit-invalid` | 409 |
 | `report-identity-conflict` | 409 |
 | `report-path-conflict` | 409 |
+| `requirement-already-accepted` | 422 |
 | `requirement-export-pending` | 422 |
 | `requirement-not-split` | 422 |
 | `resume-artifact-conflict` | 409 |
@@ -191,6 +192,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `resume-predecessor-unrecoverable` | 422 |
 | `resume-source-dir-not-absolute` | 422 |
 | `revision-conflict` | 409 |
+| `revision-unchanged` | 422 |
 | `route-not-found` | 404 |
 | `run-already-settled` | 409 |
 | `run-generation-conflict` | 409 |

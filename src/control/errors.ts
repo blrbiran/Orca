@@ -252,6 +252,9 @@ export const durableCommandErrorStatuses = {
   "group-reserve-insufficient": 422,
   "group-review-budget-unavailable": 422,
   "group-state-invalid": 422,
+  // Flow engine spec §10.3 (W-76): a revision after a split draft was accepted, and one that changes nothing.
+  "requirement-already-accepted": 422,
+  "revision-unchanged": 422,
   "group-stopped": 422,
   "handoff-budget-unavailable": 422,
   "handoff-grant-insufficient": 422,
@@ -432,6 +435,8 @@ export const v1WebErrorCodes = [
   "grant-amendment-unsupported",
   "group-budget-unavailable",
   "group-state-invalid",
+  "requirement-already-accepted",
+  "revision-unchanged",
   "handoff-capability-unavailable",
   "handoff-grant-insufficient",
   "identity-space-exhausted",

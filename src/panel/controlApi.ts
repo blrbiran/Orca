@@ -613,6 +613,7 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/requirement/accept", verb: "requirement-draft-accept", target: fromParams },
     // Clarify caps spec 2026-10-21 §3.1, §3.3.
     { path: "/api/control/groups/:groupId/requirement/clarify-more", verb: "requirement-clarify-more", target: fromParams },
+    { path: "/api/control/groups/:groupId/requirement/revise", verb: "requirement-revise", target: fromParams },
     { path: "/api/control/groups/:groupId/requirement/classify", verb: "requirement-classify", target: fromParams },
     // Labels and progress spec §8 R9: the one new route; the ledger key is the group's, as for continue-task.
     {
@@ -710,6 +711,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "requirement-draft-feedback": service.requirementDraftFeedback(command); break;
           case "requirement-draft-accept": await service.acceptRequirementDraft(command); break;
           case "requirement-clarify-more": service.requirementClarifyMore(command); break;
+          case "requirement-revise": service.requirementRevise(command); break;
           case "requirement-classify": service.requirementClassify(command); break;
           case "set-spend-cap": service.setSpendCap(command); break;
           case "set-orchestration-settings": service.setOrchestrationSettings(command); break;

@@ -634,6 +634,7 @@ export const commandVerbSchema = z.enum([
   "requirement-draft-accept",
   "requirement-clarify-more",
   "requirement-classify",
+  "requirement-revise",
   "set-spend-cap",
   "clear-spend-cap",
   "set-usage-calendar",
@@ -928,6 +929,14 @@ export const requirementDraftAcceptPayloadSchema = z.object({ draftNo: positiveS
 // Clarify caps spec 2026-10-21 §3.1, §3.3: the person grants one more round after the latest one, or sets the class.
 export const requirementClarifyMorePayloadSchema = z.object({ roundNo: positiveSafeInteger }).strict();
 export const requirementClassifyPayloadSchema = classPairSchema;
+// Flow engine spec §10.3 (W-76): the group is the target, as for requirement-answer; stepKey/execSeq name the step
+// execution (the dev flow's is ('clarify', 1), the default); `exclude` names superseded rounds whose answers the next
+// round must not carry.
+export const requirementRevisePayloadSchema = z.object({
+  stepKey: nonemptyString.optional(), execSeq: positiveSafeInteger.optional(), roundNo: positiveSafeInteger,
+  answers: z.array(answerInputSchema), glossaryDecisions: z.array(decisionInputSchema), adrDecisions: z.array(decisionInputSchema),
+  reason: nonemptyString.optional(), exclude: z.array(positiveSafeInteger).optional(),
+}).strict();
 
 const groupCommandTargetSchema = z.object({ kind: z.literal("group"), groupId: idSchema }).strict();
 const taskCommandTargetSchema = z.object({ kind: z.literal("task"), groupId: idSchema, taskId: idSchema }).strict();
@@ -1064,6 +1073,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("requirement-draft-accept"), target: groupCommandTargetSchema, payload: requirementDraftAcceptPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-clarify-more"), target: groupCommandTargetSchema, payload: requirementClarifyMorePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-classify"), target: groupCommandTargetSchema, payload: requirementClassifyPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("requirement-revise"), target: groupCommandTargetSchema, payload: requirementRevisePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-spend-cap"), target: spendCommandTargetSchema, payload: setSpendCapPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("clear-spend-cap"), target: spendCommandTargetSchema, payload: clearSpendCapPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-usage-calendar"), target: spendCommandTargetSchema, payload: setUsageCalendarPayloadSchema }).strict(),
@@ -1140,6 +1150,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-draft-accept"), target: groupCommandTargetSchema, payload: requirementDraftAcceptPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-clarify-more"), target: groupCommandTargetSchema, payload: requirementClarifyMorePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-classify"), target: groupCommandTargetSchema, payload: requirementClassifyPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("requirement-revise"), target: groupCommandTargetSchema, payload: requirementRevisePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-spend-cap"), target: spendCommandTargetSchema, payload: setSpendCapPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("clear-spend-cap"), target: spendCommandTargetSchema, payload: clearSpendCapPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-usage-calendar"), target: spendCommandTargetSchema, payload: setUsageCalendarPayloadSchema }).strict(),
@@ -1349,6 +1360,8 @@ export const requirementViewSchema = z.object({
   clarify: z.object({
     classification: classificationSchema.nullable(), override: classPairSchema.nullable(), tier: z.enum(["small", "medium", "large"]),
     roundCap: positiveSafeInteger, questions: positiveSafeInteger, glossary: positiveSafeInteger, adrs: positiveSafeInteger, stoppedAtCap: z.boolean(),
+    // Flow engine spec §10.3: the active chain's round numbers in order; every other round is superseded.
+    chain: z.array(positiveSafeInteger),
   }).strict().optional(),
   draftingSince: safeInteger.nullable().optional(),
 }).strict();
@@ -1877,6 +1890,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("requirement-draft-rejected"), draftNo: positiveSafeInteger, nextDraftNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
   z.object({ kind: z.literal("requirement-clarify-more"), roundNo: positiveSafeInteger, nextRoundNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
   z.object({ kind: z.literal("requirement-classified"), scope: z.enum(SCOPES), clarity: z.enum(CLARITIES) }).strict(),
+  z.object({ kind: z.literal("requirement-revised"), roundNo: positiveSafeInteger, revises: positiveSafeInteger, consensusWithdrawn: z.boolean(), nextRoundNo: positiveSafeInteger.nullable(), wakeId: nonemptyString.nullable() }).strict(),
   z
     .object({
       kind: z.literal("requirement-draft-accepted"),

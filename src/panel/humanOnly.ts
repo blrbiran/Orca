@@ -37,6 +37,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   // Clarify caps spec 2026-10-21 §3.3: as answer and consensus.
   "requirement-clarify-more": "any",
   "requirement-classify": "any",
+  // Flow engine spec §10.3 (W-76): as requirement-answer -- the person answering the clarification may revise it.
+  "requirement-revise": "any",
   // Accounts spec §3.5, §6.1: the spend caps bound every group, and the calendar moves their period boundaries.
   "set-spend-cap": "human-only",
   "clear-spend-cap": "human-only",

@@ -1527,6 +1527,8 @@ export const zhErrors: Record<string, string> = {
   "login-required": "请先登录这个面板。",
   "loop-plan-invalid": "做法的输入不合法：{{message}}",
   "no-op-command": "这条命令不会改变任何东西。",
+  "requirement-already-accepted": "这条需求的拆分草稿已被接受：请对任务组提反馈或记一条更正，而不是修改某一轮。",
+  "revision-unchanged": "修改后的回答与原来完全一样；请至少改一个回答或决定。",
   "numeric-overflow": "数值溢出：{{message}}",
   "panel-draining": "面板正在关闭，请稍后重试。",
   "panel-host-not-allowed": "不允许从这个主机访问面板。",

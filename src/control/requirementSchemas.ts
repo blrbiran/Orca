@@ -69,6 +69,13 @@ export const roundBodySchema = z.object({
   answers: z.array(answerSchema).nullable(), glossaryDecisions: z.array(decisionSchema).nullable(), adrDecisions: z.array(decisionSchema).nullable(),
   answeredAt: canonicalTimestampSchema.nullable(), closedByConsensus: z.boolean(),
   reasonCode: z.literal("clarify-output-invalid").nullable(), calls: z.array(callRecordSchema),
+  /**
+   * Flow engine spec §10.3 (W-76): a revision of round `revises`, appended, never overwriting it (clarifyChain.ts): its
+   * result is round `revises`'s copied; the person's reason, who and through which channel; the superseded rounds
+   * whose answers the next round must not carry. Absent on every round that is not a revision.
+   */
+  revises: positive.optional(), reason: nonempty.optional(), by: nonempty.optional(), via: nonempty.optional(),
+  exclude: z.array(positive).optional(),
 }).strict();
 
 /** Spec §8.1: one task of a split, as the model writes it (validated in code, requirementSplit.ts). */
@@ -83,7 +90,8 @@ export const draftBodySchema = z.object({
   draftNo: positive, state: z.enum(DRAFT_STATES), autoRetry: retries, waiting: z.enum(REQUIREMENT_WAITING).nullable(),
   feedback: z.string().nullable(), output: splitOutputSchema.nullable(), plan: z.record(z.unknown()).nullable(), draftHash: hash.nullable(),
   reasons: z.array(nonempty), layers: z.array(z.array(nonempty)).nullable(), implicitEdges: z.array(implicitEdgeSchema).nullable(),
-  reasonCode: z.enum(["split-output-invalid", "split-validation-exhausted"]).nullable(), calls: z.array(callRecordSchema),
+  // `requirement-revised` (spec §10.3): an earlier clarify round was revised, so the draft no longer follows the requirement.
+  reasonCode: z.enum(["split-output-invalid", "split-validation-exhausted", "requirement-revised"]).nullable(), calls: z.array(callRecordSchema),
 }).strict();
 export const requirementExportSchema = z.object({
   state: z.enum(["not-due", "pending", "done", "conflict"]), path: z.string().nullable(), commit: commit.nullable(), parent: commit.nullable(), detail: z.string().nullable(),

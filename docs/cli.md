@@ -70,6 +70,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca requirement answer <group> [--answer <answer>] [--glossary <glossary>] [--adr <adr>]` — answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words
 - `orca requirement consensus <group>` — close clarification at the current round
 - `orca requirement continue <group>` — grant exactly one more clarification round after the cap
+- `orca requirement revise <group> --round <round> --file <file>` — revise an answered clarification round (a new round; at most one clarify call)
 - `orca requirement feedback <group> --text <text>` — ask for a new draft of the split
 - `orca requirement accept <group>` — accept the current draft: the group becomes a draft task group
 - `orca requirement classify <group> --scope <scope> --clarity <clarity>` — set the requirement's class (it sets the clarification caps)

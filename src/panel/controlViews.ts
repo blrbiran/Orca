@@ -32,6 +32,7 @@ import { readCanonicalRecord } from "../control/snapshot.js";
 import { clarifyLimits, hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
 import { CLARIFY_CAPS } from "../control/requirementSchemas.js";
 import { renderRequirementDocument } from "../control/requirementDocument.js";
+import { activeChain, chainRounds } from "../control/clarifyChain.js";
 import { readEstimateContract } from "../control/estimator.js";
 import { effectivePlanTask } from "../control/taskAmendments.js";
 import type { ControlStore } from "../control/store.js";
@@ -1118,7 +1119,7 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
 }
 
 /** Clarify caps spec 2026-10-21 §3.6: the commands that start a drafting step (a round or a draft); retries are the same wait. */
-const DRAFTING_VERBS = ["requirement-open", "requirement-answer", "requirement-clarify-more", "requirement-consensus", "requirement-draft-feedback", "recovery-retry"];
+const DRAFTING_VERBS = ["requirement-open", "requirement-answer", "requirement-clarify-more", "requirement-consensus", "requirement-draft-feedback", "recovery-retry", "requirement-revise"];
 function draftingSince(store: ControlStore, groupId: string): number | null {
   const row = store.db.prepare(`SELECT at FROM activity WHERE group_id=? AND kind='command' AND json_extract(body,'$.verb') IN (${DRAFTING_VERBS.map(() => "?").join(",")}) ORDER BY seq DESC LIMIT 1`)
     .get(groupId, ...DRAFTING_VERBS);
@@ -1134,7 +1135,9 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
   const step = requirement.consensus === null ? latest : drafts.at(-1) ?? null;
   const document = requirement.document !== null
     ? (JSON.parse(readCanonicalRecord(store, requirement.document.recordHash)) as { text: string }).text
-    : renderRequirementDocument({ groupId, requirement, rounds, acceptedSplit: null });
+    : renderRequirementDocument({ groupId, requirement, rounds: chainRounds(rounds), acceptedSplit: null });
+  // Flow engine spec §10.3: the active chain (superseded rounds are the rest); the cap counts its positions.
+  const { chain } = activeChain(rounds);
   const view = {
     schema: "orca-requirement-view-v1" as const, epoch, changeSeq: readProjectionState(store).changeSeq, summary: readGroupSummary(store, groupId),
     requirement: { requirementId: requirement.requirementId, repoId: requirement.repoId, slug: requirement.slug, contentLanguage: requirement.contentLanguage,
@@ -1146,7 +1149,7 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
       ...(({ rounds: _rounds, ...perRound }) => perRound)(CLARIFY_CAPS[limits.tier]),
       // §3.3: stopped at the cap, not at an empty frontier (requirementCommands.ts applyRequirementAnswer).
       stoppedAtCap: latest !== null && requirement.consensus === null && latest.state === "answered" && !latest.closedByConsensus
-        && latest.result !== null && !latest.result.frontierEmpty && latest.roundNo >= limits.roundCap },
+        && latest.result !== null && !latest.result.frontierEmpty && chain.length >= limits.roundCap, chain },
     draftingSince: step?.state === "drafting" ? draftingSince(store, groupId) : null,
   };
   const parsed = requirementViewSchema.safeParse(view);

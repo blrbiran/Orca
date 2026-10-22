@@ -31,6 +31,8 @@ export const requirementBlockSchema = z.object({
   /** Clarify caps spec 2026-10-21 §3.1, §3.3: the person's class, and the round number "one more round" granted up to. Absent on older blocks (§3.4). */
   classOverride: classPairSchema.optional(),
   roundsGranted: safeInteger.positive().optional(),
+  /** Flow engine spec §10.3: the last consensus a revision withdrew -- when, by whom, and which round was revised. */
+  consensusWithdrawn: z.object({ at: canonicalTimestampSchema, by: z.string().min(1), revisedRound: safeInteger.positive() }).strict().optional(),
 }).strict();
 export type RequirementBlock = z.infer<typeof requirementBlockSchema>;
 

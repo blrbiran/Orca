@@ -68,6 +68,18 @@ export const WORK_ROWS: CommandDef[] = [
     route: (c) => `groups/${group(c)}/requirement/consensus`, payload: async (c) => ({ roundNo: await roundNo(c) }) }),
   verb({ domain: "requirement", action: "continue", summary: "grant exactly one more clarification round after the cap", verb: "requirement-clarify-more", positionals: [GROUP],
     route: (c) => `groups/${group(c)}/requirement/clarify-more`, payload: async (c) => ({ roundNo: await roundNo(c) }) }),
+  // Flow engine spec §10.3 (W-76): a new round revising round --round; the file holds {answers, glossaryDecisions,
+  // adrDecisions, reason?, exclude?} as requirement-answer's payload (answers as {id, kind, text?}).
+  verb({ domain: "requirement", action: "revise", summary: "revise an answered clarification round (a new round; at most one clarify call)", verb: "requirement-revise", positionals: [GROUP],
+    flags: [{ name: "round", type: "string", required: true, summary: "the round number to revise" }, { name: "file", type: "string", required: true, summary: "the answers JSON {answers, glossaryDecisions, adrDecisions, reason?, exclude?}" }],
+    route: (c) => `groups/${group(c)}/requirement/revise`,
+    payload: (c) => {
+      const body = file(c);
+      if (body === null || typeof body !== "object" || Array.isArray(body)) throw invalid("--file wants a JSON object");
+      const roundNo = Number(str(c, "round"));
+      if (!Number.isSafeInteger(roundNo) || roundNo < 1) throw invalid("--round wants a round number");
+      return { ...(body as object), roundNo };
+    } }),
   verb({ domain: "requirement", action: "feedback", summary: "ask for a new draft of the split", verb: "requirement-draft-feedback", positionals: [GROUP],
     flags: [{ name: "text", type: "string", required: true, summary: "what to change" }],
     route: (c) => `groups/${group(c)}/requirement/feedback`, payload: async (c) => ({ draftNo: (await latestDraft(c)).draftNo, feedback: str(c, "text") }) }),

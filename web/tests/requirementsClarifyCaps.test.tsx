@@ -18,7 +18,7 @@ const mount = (view: RequirementViewV1, onCommand = vi.fn()) => {
 };
 const CLARIFY: NonNullable<RequirementViewV1["clarify"]> = {
   classification: { scope: "small", scopeReason: "One exporter.", clarity: "clear", clarityReason: "The format is named." },
-  override: null, tier: "small", roundCap: 1, questions: 3, glossary: 2, adrs: 1, stoppedAtCap: true,
+  override: null, tier: "small", roundCap: 1, questions: 3, glossary: 2, adrs: 1, stoppedAtCap: true, chain: [1],
 };
 const roundBox = (n: number) => screen.getByText(new RegExp(`^Round ${n} · `)).closest("details")!;
 

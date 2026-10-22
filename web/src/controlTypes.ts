@@ -187,6 +187,12 @@ export type RoundBodyV1 = {
   closedByConsensus: boolean;
   reasonCode: null | "clarify-output-invalid";
   calls: RequirementCallRecordV1[];
+  /** Flow engine spec §10.3 (W-76): set on a revision of round `revises` only. */
+  revises?: number;
+  reason?: string;
+  by?: string;
+  via?: string;
+  exclude?: number[];
 };
 export type SplitTaskV1 = {
   taskId: string;
@@ -212,7 +218,7 @@ export type DraftViewV1 = {
   reasons: string[];
   layers: string[][] | null;
   implicitEdges: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null;
-  reasonCode: null | "split-output-invalid" | "split-validation-exhausted";
+  reasonCode: null | "split-output-invalid" | "split-validation-exhausted" | "requirement-revised";
   calls: RequirementCallRecordV1[];
 };
 /** N1 spec §11.2: one requirement in full (src/control/webProtocol.ts requirementViewSchema, field for field). */
@@ -242,7 +248,7 @@ export type RequirementViewV1 = {
   /** Clarify caps spec §3.6: code's caps (tier from the person's class, else the model's; unclassified is large). */
   clarify?: {
     classification: RequirementClassificationV1 | null; override: { scope: RequirementScopeV1; clarity: RequirementClarityV1 } | null;
-    tier: RequirementScopeV1; roundCap: number; questions: number; glossary: number; adrs: number; stoppedAtCap: boolean;
+    tier: RequirementScopeV1; roundCap: number; questions: number; glossary: number; adrs: number; stoppedAtCap: boolean; chain: number[];
   };
   /** Epoch ms of the command that started the current drafting step; null when nothing drafts or it is not known. */
   draftingSince?: number | null;
@@ -573,7 +579,7 @@ export type CommandSuccessV1 = {
   commandId: string;
   actorId: string;
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
-    | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-clarify-more" | "requirement-classify"
+    | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw"
@@ -639,6 +645,7 @@ export type CommandSuccessV1 = {
     | { kind: "requirement-draft-rejected"; draftNo: number; nextDraftNo: number; wakeId: string }
     | { kind: "requirement-clarify-more"; roundNo: number; nextRoundNo: number; wakeId: string }
     | { kind: "requirement-classified"; scope: RequirementScopeV1; clarity: RequirementClarityV1 }
+    | { kind: "requirement-revised"; roundNo: number; revises: number; consensusWithdrawn: boolean; nextRoundNo: number | null; wakeId: string | null }
     | { kind: "requirement-draft-accepted"; draftNo: number; estimateId: string; estimateState: "queued" | "blocked-capability" | "input-too-large"; documentSha256: string; exportWakeId: string }
     | { kind: "shutdown"; groups: Array<{ groupId: string; disposition: "created" | "strengthened-pause" | "preserved-pause" | "preserved-handoff" | "preserved-shutdown" | "blocked-inconsistent" | "skipped-driver-owned" | "unchanged-idle"; changed: boolean; commandRevision: number; projectionSeq: number; frozenRunIds: string[]; requestIds: string[]; blockerCode: string | null }> };
 };

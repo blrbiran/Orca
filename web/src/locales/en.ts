@@ -1603,6 +1603,8 @@ export const enErrors: Record<string, string> = {
   "login-required": "Log in to this panel first.",
   "loop-plan-invalid": "The loop plan's input is not valid: {{detail}}",
   "no-op-command": "This command would change nothing.",
+  "requirement-already-accepted": "A split draft of this requirement was accepted: change it with feedback on the group or a correction, not by revising a round.",
+  "revision-unchanged": "The revision answers the round exactly as before; change at least one answer or decision.",
   "numeric-overflow": "A number is too large: {{detail}}",
   "panel-draining": "The panel is shutting down and accepts no commands. Start it again, then retry.",
   "panel-host-not-allowed": "The panel does not accept requests from this host.",

@@ -3,6 +3,7 @@ import { add, subtract } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { fits, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
+import { activeChain, chainRounds } from "./clarifyChain.js";
 import { buildClarifyPrompt, CLARIFY_JSON_SCHEMA, classifyClarifyOutput } from "./requirementClarify.js";
 import { renderRequirementDocument } from "./requirementDocument.js";
 import { buildRepositoryOverview } from "./requirementOverview.js";
@@ -254,9 +255,15 @@ export const CLARIFY_HANDLER: SingleCallHandler = {
   async prepare(deps, run) {
     return prepareRequirementCall(deps, run, CLARIFY_JSON_SCHEMA, (target) => readRound(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) => {
       const limits = clarifyLimits(deps.store, group);
+      // Flow engine spec §10.3: the earlier rounds are the active chain's; the round is numbered by its chain position;
+      // superseded rounds go in as earlier answers that may still apply, unless a revision excluded them.
+      const rounds = readRounds(deps.store, run.groupId), { chain, superseded } = activeChain(rounds);
+      const excluded = new Set(rounds.flatMap((r) => r.exclude ?? []));
+      const position = chain.indexOf(target.no);
       return buildClarifyPrompt({ idea: group.requirement.idea, contentLanguage: group.requirement.contentLanguage, overview: built,
-        earlier: readRounds(deps.store, run.groupId).filter((r) => r.roundNo < target.no), retryReason: readRound(deps.store, run.groupId, target.no).lastInvalidReason,
-        limits: { roundNo: target.no, classification: limits.effective, roundCap: limits.roundCap } });
+        earlier: chainRounds(rounds).filter((r) => r.roundNo !== target.no), retryReason: readRound(deps.store, run.groupId, target.no).lastInvalidReason,
+        limits: { roundNo: position === -1 ? target.no : position + 1, classification: limits.effective, roundCap: limits.roundCap },
+        superseded: rounds.filter((r) => superseded.includes(r.roundNo) && !excluded.has(r.roundNo)) });
     });
   },
   classify: classifyClarifyOutput,
@@ -284,7 +291,7 @@ async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCallRunRow,
   const overview = (run as { overview?: { commit: string } | null }).overview ?? null;
   if (overview === null) throw new ControlError("recovery-blocked", "requirement-overview-missing");
   const group = readRequirementGroup(deps.store, run.groupId);
-  const rounds = readRounds(deps.store, run.groupId);
+  const rounds = chainRounds(readRounds(deps.store, run.groupId));
   const latest = rounds.filter((round) => round.result !== null).at(-1)?.result ?? null;
   if (latest === null) throw new ControlError("recovery-blocked", "requirement-understanding-missing");
   const adrIds = rounds.flatMap((round) => (round.adrDecisions ?? []).filter((decision) => decision.accept).map((decision) => decision.id));
@@ -319,7 +326,7 @@ export const SPLIT_HANDLER: SingleCallHandler = {
   async prepare(deps, run) {
     return prepareRequirementCall(deps, run, SPLIT_JSON_SCHEMA, (target) => readDraft(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) =>
       buildSplitPrompt({
-        document: renderRequirementDocument({ groupId: run.groupId, requirement: group.requirement, rounds: readRounds(deps.store, run.groupId), acceptedSplit: null }),
+        document: renderRequirementDocument({ groupId: run.groupId, requirement: group.requirement, rounds: chainRounds(readRounds(deps.store, run.groupId)), acceptedSplit: null }),
         overview: built, earlierDrafts: readDrafts(deps.store, run.groupId).filter((draft) => draft.draftNo < target.no),
       }));
   },

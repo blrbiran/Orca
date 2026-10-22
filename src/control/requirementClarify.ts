@@ -170,16 +170,28 @@ export function limitsLine(roundNo: number, classification: ClassPair | null, ro
   return `Limits: round ${roundNo} of at most ${roundCap}; in this round at most ${caps.questions} questions, ${caps.glossary} glossary entries and ${caps.adrs} decisions.`;
 }
 
+/** Spec §10.3: how the model is to read the superseded rounds -- earlier answers that may still apply. */
+export const SUPERSEDED_NOTE = "Earlier answers that may still apply: the person revised an earlier round, so the rounds below are no longer on the requirement's path. If you ask a question one of them already answered, give that answer as the question's recommendedAnswer; do not treat anything else in them as decided.";
+
 export function buildClarifyPrompt(input: {
   idea: string; contentLanguage: "en" | "zh"; overview: { canonicalJson: string; hash: string }; earlier: RoundBody[]; retryReason: string | null;
   /** Clarify caps spec §3.5: the round, the class known before the call (null: none yet) and the round cap. */
   limits: { roundNo: number; classification: ClassPair | null; roundCap: number };
+  /**
+   * Flow engine spec §10.3 (W-76): rounds a revision superseded (minus those the person excluded). Absent or empty adds
+   * nothing, so a requirement never revised gets the prompt it always got (C7).
+   */
+  superseded?: RoundBody[];
 }): string {
   const nonce = input.overview.hash.slice(0, 16);
+  const superseded = earlierRounds(input.superseded ?? []);
   const blocks = [
     CLARIFY_INSTRUCTION_V2, limitsLine(input.limits.roundNo, input.limits.classification, input.limits.roundCap), `Write in: ${LANGUAGE_NAMES[input.contentLanguage]}`,
     fence("idea", nonce, input.idea), fence("repository-overview", nonce, input.overview.canonicalJson),
     fence("rounds", nonce, JSON.stringify(earlierRounds(input.earlier))),
+    ...(superseded.length === 0 ? [] : [
+      `${SUPERSEDED_NOTE}\n${fence("superseded-rounds", nonce, JSON.stringify(superseded))}`,
+    ]),
     ...(input.retryReason === null ? [] : [fence("retry", nonce, input.retryReason)]),
   ];
   return `${blocks.join("\n\n")}\n`;

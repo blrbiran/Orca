@@ -54,6 +54,16 @@ grant exactly one more clarification round after the cap
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 
+## `orca requirement revise <group> --round <round> --file <file>`
+
+revise an answered clarification round (a new round; at most one clarify call)
+
+- What it does: sends control verb `requirement-revise`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `--round <round>` (required): the round number to revise
+- `--file <file>` (required): the answers JSON {answers, glossaryDecisions, adrDecisions, reason?, exclude?}
+
 ## `orca requirement feedback <group> --text <text>`
 
 ask for a new draft of the split

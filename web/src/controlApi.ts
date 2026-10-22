@@ -379,6 +379,8 @@ export type ControlAction =
   // Clarify caps spec 2026-10-21 §3.1, §3.3: one more round after the latest, and the person's class.
   | { verb: "requirement-clarify-more"; groupId: string; expectedRevision: number; payload: { roundNo: number } }
   | { verb: "requirement-classify"; groupId: string; expectedRevision: number; payload: { scope: RequirementScopeV1; clarity: RequirementClarityV1 } }
+  // Flow engine spec §10.3 (W-76): revise an answered round as a new round.
+  | { verb: "requirement-revise"; groupId: string; expectedRevision: number; payload: RequirementAnswerPayloadV1 & { reason?: string; exclude?: number[] } }
   // Control run decisions plan Tasks 9-11: an owner approves a refused decision with an undo.how, or rejects it (no
   // `because` key when the person wrote no line -- the server's schema refuses an empty one).
   | { verb: "approve-pending-decision"; groupId: string; expectedRevision: number; payload: { pendingId: string; undoHow: string } }
@@ -460,6 +462,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/requirement/clarify-more`;
     case "requirement-classify":
       return `${group}/requirement/classify`;
+    case "requirement-revise":
+      return `${group}/requirement/revise`;
     case "approve-pending-decision":
       return `${group}/decisions/approve`;
     case "reject-pending-decision":

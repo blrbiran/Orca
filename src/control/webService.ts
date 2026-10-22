@@ -100,8 +100,8 @@ import { isTerminallyFailedRun } from "./driveRecord.js";
 import { hasRequirementBlock, latestDraft, latestRound, readRequirementGroup, refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall } from "./singleCallLedger.js";
 import {
-  applyRequirementAnswer, applyRequirementClarifyMore, applyRequirementClassify, applyRequirementConsensus, applyRequirementDraftAccept, applyRequirementDraftFeedback, applyRequirementOpen,
-  type RequirementAnswerCommand, type RequirementClarifyMoreCommand, type RequirementClassifyCommand, type RequirementConsensusCommand, type RequirementDraftAcceptCommand, type RequirementDraftFeedbackCommand, type RequirementOpenCommand,
+  applyRequirementAnswer, applyRequirementClarifyMore, applyRequirementRevise, applyRequirementClassify, applyRequirementConsensus, applyRequirementDraftAccept, applyRequirementDraftFeedback, applyRequirementOpen,
+  type RequirementAnswerCommand, type RequirementClarifyMoreCommand, type RequirementReviseCommand, type RequirementClassifyCommand, type RequirementConsensusCommand, type RequirementDraftAcceptCommand, type RequirementDraftFeedbackCommand, type RequirementOpenCommand,
 } from "./requirementCommands.js";
 
 export type ProposalEditCommand = Extract<RawAuthorityCommandV1, { verb: "proposal-edit" }>;
@@ -1253,6 +1253,7 @@ export class WebControlService {
   requirementDraftFeedback(command: RequirementDraftFeedbackCommand): WebCommandResult { return applyRequirementDraftFeedback(this.deps, command); }
   /** Clarify caps spec 2026-10-21 §3.1, §3.3. */
   requirementClarifyMore(command: RequirementClarifyMoreCommand): WebCommandResult { return applyRequirementClarifyMore(this.deps, command); }
+  requirementRevise(command: RequirementReviseCommand): WebCommandResult { return applyRequirementRevise(this.deps, command); }
   requirementClassify(command: RequirementClassifyCommand): WebCommandResult { return applyRequirementClassify(this.deps, command); }
   /** N1 spec §9.1. */
   acceptRequirementDraft(command: RequirementDraftAcceptCommand): Promise<WebCommandResult> { return applyRequirementDraftAccept(this.deps, command); }

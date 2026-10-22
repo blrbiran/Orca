@@ -11,6 +11,8 @@ import {
   estimatorSlotFor, normalizeControlPlan, writeImportedPlan, type AsyncImportDeps, type ImportDefaults, type ImportDeps, type PreparedEstimatorSlot,
 } from "./planImport.js";
 import type { ExecutionProfileRouter, FrozenProfile } from "./profiles.js";
+import { activeChain, chainRounds } from "./clarifyChain.js";
+import { routedAttributionFor } from "./commandClient.js";
 import { renderRequirementDocument } from "./requirementDocument.js";
 import {
   clarifyLimits, insertClarifyingGroup, latestDraft, latestRound, newDraft, newRound, queueRequirementCall, readDraft, readRequirementGroup, readRounds, saveRequirementGroup,
@@ -32,6 +34,7 @@ export type RequirementDraftFeedbackCommand = Extract<RawAuthorityCommandV1, { v
 export type RequirementDraftAcceptCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-draft-accept" }>;
 export type RequirementClarifyMoreCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-clarify-more" }>;
 export type RequirementClassifyCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-classify" }>;
+export type RequirementReviseCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-revise" }>;
 type Result = CommandLookupV1["body"];
 export interface RequirementCommandDeps {
   store: ControlStore; admissionGate?: AdmissionGate; profileRouter: ExecutionProfileRouter; defaults: () => ImportDefaults | null;
@@ -130,7 +133,9 @@ export function applyRequirementAnswer(deps: RequirementCommandDeps, command: Re
       });
       writeRound(deps.store, id, { ...round, state: "answered", answers, glossaryDecisions: payload.glossaryDecisions, adrDecisions: payload.adrDecisions, answeredAt: nowOf(deps).toISOString() });
       // Clarify caps spec §3.3: at the round cap clarification stops as at an empty frontier; requirement-clarify-more grants one more.
-      if (result.frontierEmpty || round.roundNo >= clarifyLimits(deps.store, readRequirementGroup(deps.store, id)).roundCap) {
+      // Flow engine spec §10.3: the cap counts chain positions, not round numbers (a revision appends a higher number).
+      const chainLength = activeChain(readRounds(deps.store, id)).chain.length;
+      if (result.frontierEmpty || chainLength >= clarifyLimits(deps.store, readRequirementGroup(deps.store, id)).roundCap) {
         return commandSuccess(context, { kind: "requirement-answered", roundNo: round.roundNo, nextRoundNo: null, wakeId: null });
       }
       writeRound(deps.store, id, newRound(round.roundNo + 1));
@@ -151,11 +156,87 @@ export function applyRequirementClarifyMore(deps: RequirementCommandDeps, comman
       const round = latestRound(deps.store, id);
       if (round === null || round.roundNo !== command.payload.roundNo || round.state !== "answered" || round.closedByConsensus) return invalid("round-not-stopped");
       const nextRoundNo = round.roundNo + 1;
-      group.requirement.roundsGranted = nextRoundNo;
+      // §10.3: the grant is a chain length (the cap compares chain positions), one past the current chain.
+      group.requirement.roundsGranted = activeChain(readRounds(deps.store, id)).chain.length + 1;
       saveRequirementGroup(deps.store, group);
       writeRound(deps.store, id, newRound(nextRoundNo));
       const wakeId = queueRequirementCall(deps.store, id, `clarify-more-${context.nextCommandRevision}`);
       return commandSuccess(context, { kind: "requirement-clarify-more", roundNo: round.roundNo, nextRoundNo, wakeId });
+    },
+  }).body);
+}
+
+/** The answers and decisions of a round as compared for `revision-unchanged`: answers in question order, decisions by id. */
+const answeredForm = (answers: readonly { id: string; kind: string; text: string }[], glossary: readonly { id: string; accept: boolean }[], adrs: readonly { id: string; accept: boolean }[]) =>
+  canonicalBytes({ answers, glossary: [...glossary].sort((a, b) => a.id.localeCompare(b.id)), adrs: [...adrs].sort((a, b) => a.id.localeCompare(b.id)) }).toString("utf8");
+
+/**
+ * Flow engine spec §10.3 (Issue #76, W-76): revise an answered round on the active chain. Round k is never changed: row
+ * n+1 is appended `{revises: k}` with round k's result and the new answers; a reached consensus is withdrawn and a draft
+ * awaiting review (or queued) is closed `rejected` (`requirement-revised`); below the cap one clarify call drafts the
+ * next round on the chain, carrying the superseded rounds' answers unless excluded (requirementCalls.ts).
+ */
+export function applyRequirementRevise(deps: RequirementCommandDeps, command: RequirementReviseCommand): Result {
+  return admitted(deps, () => applyWebCommand<Result>(deps.store, {
+    rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+    apply: (context) => {
+      const id = command.target.groupId, payload = command.payload;
+      const group = readRequirementGroup(deps.store, id);
+      if (group.requirement.acceptedDraftNo !== null) throw new ControlError("requirement-already-accepted");
+      if (group.status !== "clarifying") invalid("not-clarifying");
+      notStopped(deps.store, group);
+      // The requirement host keeps one clarify step execution; another step's rounds belong to the flow host (Task 8).
+      if ((payload.stepKey ?? "clarify") !== "clarify" || (payload.execSeq ?? 1) !== 1) invalid("step-execution");
+      if (deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(id)) invalid("call-in-flight");
+      const rounds = readRounds(deps.store, id);
+      const { chain, superseded } = activeChain(rounds);
+      const round = rounds.find((r) => r.roundNo === payload.roundNo);
+      if (round === undefined || !chain.includes(round.roundNo) || round.state !== "answered" || round.result === null) return invalid("round-not-revisable");
+      // `exclude` may name only rounds this revision leaves off the chain: those already superseded, round k and its successors.
+      const leftOff = [...superseded, ...chain.slice(chain.indexOf(round.roundNo))];
+      if ((payload.exclude ?? []).some((roundNo) => !leftOff.includes(roundNo))) invalid("exclude");
+      const result = round.result;
+      if (!sameIds(payload.answers.map((a) => a.id), result.questions.map((q) => q.id))) invalid("answers");
+      if (!sameIds(payload.glossaryDecisions.map((d) => d.id), result.glossary.map((e) => e.id))) invalid("glossary-decisions");
+      if (!sameIds(payload.adrDecisions.map((d) => d.id), result.adrs.map((a) => a.id))) invalid("adr-decisions");
+      const given = new Map(payload.answers.map((a) => [a.id, a]));
+      const answers = result.questions.map((q) => {
+        const a = given.get(q.id)!;
+        return { id: q.id, kind: a.kind, text: a.kind === "text" ? a.text : q.recommendedAnswer };
+      });
+      if (answeredForm(answers, payload.glossaryDecisions, payload.adrDecisions) === answeredForm(round.answers ?? [], round.glossaryDecisions ?? [], round.adrDecisions ?? [])) {
+        throw new ControlError("revision-unchanged");
+      }
+      const now = nowOf(deps).toISOString();
+      const routed = routedAttributionFor(command.commandId);
+      const by = routed?.by ?? command.actorId;
+      const revisionNo = Math.max(...rounds.map((r) => r.roundNo)) + 1;
+      writeRound(deps.store, id, {
+        ...newRound(revisionNo), state: "answered", result, answers, glossaryDecisions: payload.glossaryDecisions, adrDecisions: payload.adrDecisions, answeredAt: now,
+        revises: round.roundNo, ...(payload.reason === undefined ? {} : { reason: payload.reason }), by, ...(routed === null ? {} : { via: routed.via }),
+        ...(payload.exclude === undefined || payload.exclude.length === 0 ? {} : { exclude: [...new Set(payload.exclude)].sort((a, b) => a - b) }),
+      });
+      // A later round on the chain whose call is queued but not claimed drafts nothing now: it is superseded.
+      for (const later of rounds.filter((r) => chain.slice(chain.indexOf(round.roundNo) + 1).includes(r.roundNo) && r.state === "drafting")) {
+        writeRound(deps.store, id, { ...later, state: "interrupted", waiting: null });
+      }
+      // Re-advance: the consensus (if any) is withdrawn and the draft that followed it no longer follows the requirement.
+      const consensusWithdrawn = group.requirement.consensus !== null;
+      if (consensusWithdrawn) {
+        group.requirement = { ...group.requirement, consensus: null, consensusWithdrawn: { at: now, by, revisedRound: round.roundNo } };
+        saveRequirementGroup(deps.store, group);
+      }
+      const draft = latestDraft(deps.store, id);
+      if (draft !== null && (draft.state === "awaiting-review" || draft.state === "drafting")) {
+        writeDraft(deps.store, id, { ...draft, state: "rejected", waiting: null, reasonCode: "requirement-revised" });
+      }
+      const newChainLength = chain.indexOf(round.roundNo) + 1;
+      if (result.frontierEmpty || newChainLength >= clarifyLimits(deps.store, readRequirementGroup(deps.store, id)).roundCap) {
+        return commandSuccess(context, { kind: "requirement-revised", roundNo: revisionNo, revises: round.roundNo, consensusWithdrawn, nextRoundNo: null, wakeId: null });
+      }
+      writeRound(deps.store, id, newRound(revisionNo + 1));
+      const wakeId = queueRequirementCall(deps.store, id, `revise-${context.nextCommandRevision}`);
+      return commandSuccess(context, { kind: "requirement-revised", roundNo: revisionNo, revises: round.roundNo, consensusWithdrawn, nextRoundNo: revisionNo + 1, wakeId });
     },
   }).body);
 }
@@ -194,7 +275,7 @@ export function applyRequirementConsensus(deps: RequirementCommandDeps, command:
       // (settlement, interruption) closes the run in the same transaction. Should that ever stop holding, consensus must not start a draft
       // beside a call still in flight, so this refuses rather than trusting the round state.
       if (deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(id)) invalid("call-in-flight");
-      const understood = readRounds(deps.store, id).filter((r) => r.result !== null);
+      const understood = chainRounds(readRounds(deps.store, id)).filter((r) => r.result !== null);
       if (understood.length === 0) invalid("no-understanding-yet");
       const now = nowOf(deps).toISOString();
       let openQuestions: string[] = [];
@@ -272,7 +353,7 @@ export async function applyRequirementDraftAccept(
         if (sha256Canonical(draft.plan) !== command.payload.draftHash) throw new ControlError("plan-version-conflict", "draft-hash");
         if (deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(id) || dimensions.some((d) => group.reserved[d] !== 0)) invalid("call-in-flight");
         // 1. Freeze the document: rendered from the records now, stored once, named by its hash (spec §4.3, §10).
-        const text = renderRequirementDocument({ groupId: id, requirement: group.requirement, rounds: readRounds(deps.store, id), acceptedSplit: draft.output });
+        const text = renderRequirementDocument({ groupId: id, requirement: group.requirement, rounds: chainRounds(readRounds(deps.store, id)), acceptedSplit: draft.output });
         const record = { schema: "orca-requirement-document-v1", text }, recordHash = sha256Canonical(record);
         writeCanonicalRecord(deps.store, id, recordHash, canonicalBytes(record).toString("utf8"));
         const documentSha256 = createHash("sha256").update(text, "utf8").digest("hex");
