@@ -28,7 +28,8 @@ const standInWork: KindDefinition = {
     return { done: { record: { result: raw }, ...(flow.kind === "object" && flow.value.candidates !== undefined ? { reported: { candidates: flow.value.candidates } } : {}) } };
   },
 };
-const registry = () => { const r = builtinKinds(); r.register(standInWork); return r; };
+// The stand-in replaces the built-in work kind (Task 10 registers a real one, which needs a child port).
+const registry = () => { const base = builtinKinds(); return { register: base.register, get: (kind: string) => kind === "work" ? standInWork : base.get(kind) }; };
 
 const tpl = (ask: string) => ({
   yaml: `format: orca-flow-v1
