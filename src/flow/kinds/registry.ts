@@ -15,6 +15,7 @@ import { CHECK_KIND } from "./check.js";
 import { CLARIFY_KIND } from "./clarify.js";
 import { DRAFT_KIND } from "./draft.js";
 import { REVIEW_KIND } from "./review.js";
+import { ASK_KIND } from "./ask.js";
 
 /** Plan Task 8: the parent group's single-call purposes a flow uses (the driver-backed port registers them, Task 10). */
 export const FLOW_CALL_PURPOSES = ["clarify", "flow-draft", "flow-review", "flow-ask", "rerun-proposal"] as const;
@@ -24,8 +25,15 @@ export interface RecordOutput { record: unknown; flags?: string[] }
 /** What a kind's start or collect leads to; the kernel writes it (state, output, head) and dispatches calls. */
 export type KindOutcome =
   | { call: CallSpec }
-  | { done: RecordOutput & { revise?: { stepKey: string; feedback: string[] }; decisions?: Array<{ grade: "major" | "minor"; by: string; body: unknown }> } }
-  | { failed: { reason: string; record?: unknown } }
+  | { done: RecordOutput & {
+      revise?: { stepKey: string; feedback: string[] };
+      decisions?: Array<{ grade: "major" | "minor"; by: string; body: unknown }>;
+      /** A workspace output (§5.3): a vault commit on `parent`; the record, if any, is kept in the body. */
+      commit?: { commit: string; parent: string };
+      /** §4.3 rule 4: what the agent reported for later `ask` steps (`candidatesFrom`). */
+      reported?: { candidates?: Record<string, { items: string[]; recommended: number }> };
+    } }
+  | { failed: { reason: string; record?: unknown; flags?: string[] } }
   /** The step waits for a person (an open ask, a clarify round's answers); parks itself and later steps (§8.2). */
   | { waiting: { ask: unknown } }
   /** §4.3: the agent reported `flow.needs`. */
@@ -77,7 +85,7 @@ export interface KindDefinition {
   readonly kindVersion: number;
   readonly interactive: boolean;
   start(ctx: KindContext): Promise<KindOutcome>;
-  collect?(ctx: KindContext, rawOutput: unknown, failure: string | null): KindOutcome;
+  collect?(ctx: KindContext, rawOutput: unknown, failure: string | null): KindOutcome | Promise<KindOutcome>;
   /** A record's summary for later steps' pointers (§12.1). */
   projection?(record: unknown): string;
 }
@@ -98,10 +106,10 @@ export function createKindRegistry(): KindRegistry {
   };
 }
 
-/** The phase-1 kinds this module registers (Task 9 adds `ask`, Task 10 `work`); a fresh registry per call. */
+/** The phase-1 kinds this module registers (Task 10 adds `work`); a fresh registry per call. */
 export function builtinKinds(): KindRegistry {
   const registry = createKindRegistry();
-  for (const kind of [CLARIFY_KIND, DRAFT_KIND, CHECK_KIND, REVIEW_KIND]) registry.register(kind);
+  for (const kind of [CLARIFY_KIND, DRAFT_KIND, CHECK_KIND, REVIEW_KIND, ASK_KIND]) registry.register(kind);
   return registry;
 }
 

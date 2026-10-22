@@ -19,7 +19,7 @@ import { readCanonicalRecord, writeCanonicalRecord } from "../control/snapshot.j
 import { MAX_AUTO_RETRIES } from "../control/requirementSchemas.js";
 import type { FlowNeeds } from "../control/reportedDecisions.js";
 import type { ControlStore } from "../control/store.js";
-import { definitionHash, outputHashOfRecord } from "./journal/fingerprint.js";
+import { definitionHash, outputHashOfCommit, outputHashOfRecord } from "./journal/fingerprint.js";
 import { runShell } from "./kinds/check.js";
 import { builtinKinds, type ExecutionBody, type FlowRunBody, type KindContext, type KindDefinition, type KindOutcome, type KindRegistry, type LoadedRun, type RoleResolution } from "./kinds/registry.js";
 import { buildStepPrompt, bounded } from "./prompt.js";
@@ -32,7 +32,8 @@ import { loadBuiltin } from "./template/load.js";
 import type { FlowStep, FlowTemplate } from "./template/schema.js";
 import { deriveParam, expandVars } from "./template/vars.js";
 import { evaluateWhen, type ParamValue } from "./template/when.js";
-import { composeBase, advanceHead, type ExecutionOutput } from "./vault/compose.js";
+import { activeOutputs, advanceHead, advanceHeadWithRetry, compose, type ExecutionOutput } from "./vault/compose.js";
+import { changesBetween, copyBack } from "./vault/copyBack.js";
 import { DEFAULT_CAPS, importSnapshot } from "./vault/snapshot.js";
 import { openVault, type Vault } from "./vault/vault.js";
 import { vaultKeyOf } from "./vault/paths.js";
@@ -232,19 +233,19 @@ export function recordOfExecution(store: ControlStore, execution: ExecutionRow |
   return JSON.parse(readCanonicalRecord(store, execution.outputRef));
 }
 
-function vaultOf(run: LoadedRun): Vault | null {
+export function vaultOf(run: LoadedRun): Vault | null {
   return run.body.vaultPath === null || run.body.dir === null ? null : { path: run.body.vaultPath, dir: run.body.dir };
 }
 
 /** §5.3: the composition `stepKey` starts from -- the import plus every earlier step's active commit output. */
-export async function compositionFor(store: ControlStore, run: LoadedRun, stepKey: string): Promise<{ vault: Vault; commit: string } | null> {
+export async function compositionFor(store: ControlStore, run: LoadedRun, stepKey: string | null): Promise<{ vault: Vault; commit: string } | null> {
   const vault = vaultOf(run);
   if (vault === null || run.body.importCommit === null) return null;
   const commits: ExecutionOutput[] = listExecutions(store, run.row.id).filter((e) => e.outputKind === "commit" && e.outputRef !== null)
     .map((e) => ({ stepKey: e.stepKey, seq: e.seq, commit: e.outputRef!, parent: String((e.body as { parent?: string }).parent ?? e.baseCommit) }));
   // Record outputs (clarify, draft, check, review) are not in the workspace: only heads on commit outputs compose.
   const heads = Object.fromEntries(Object.entries(listHeads(store, run.row.id)).filter(([key, seq]) => commits.some((c) => c.stepKey === key && c.seq === seq)));
-  const composed = await composeBase(vault, run.body.importCommit, commits, heads, run.template.steps.map((s) => s.id), stepKey);
+  const composed = await compose(vault, run.body.importCommit, activeOutputs(commits, heads, run.template.steps.map((s) => s.id), stepKey));
   if ("conflict" in composed) throw new FlowRefusal("compose-conflict", composed.conflict);
   return { vault, commit: composed.commit };
 }
@@ -338,13 +339,24 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
     deps.calls.request({ key, groupId: run.row.groupId, ...outcome.call });
     return;
   }
+  const workspaceOutput = "done" in outcome && outcome.done.commit !== undefined ? outcome.done.commit : null;
+  const vault = vaultOf(run);
+  const changed = workspaceOutput === null || vault === null ? null : await changesBetween(vault, workspaceOutput.parent, workspaceOutput.commit);
   deps.store.transaction(() => {
     if ("done" in outcome) {
-      const hash = writeRecord(deps.store, run.row.groupId, outcome.done.record);
-      finishExecution(deps.store, key, from, "done", at, {
-        output: { kind: "artifact", ref: hash, hash: outputHashOfRecord(hash) },
-        body: { ...body, ...(outcome.done.flags === undefined ? {} : { flags: outcome.done.flags }) },
-      });
+      const extra = {
+        ...(outcome.done.flags === undefined ? {} : { flags: outcome.done.flags }),
+        ...(outcome.done.reported === undefined ? {} : { reported: outcome.done.reported }),
+      };
+      if (workspaceOutput !== null) {
+        finishExecution(deps.store, key, from, "done", at, {
+          output: { kind: "commit", ref: workspaceOutput.commit, hash: outputHashOfCommit((changed ?? []).map((c) => ({ path: c.path, blob: c.newBlob }))) },
+          baseCommit: workspaceOutput.parent, body: { ...body, ...extra, parent: workspaceOutput.parent, record: outcome.done.record },
+        });
+      } else {
+        const hash = writeRecord(deps.store, run.row.groupId, outcome.done.record);
+        finishExecution(deps.store, key, from, "done", at, { output: { kind: "artifact", ref: hash, hash: outputHashOfRecord(hash) }, body: { ...body, ...extra } });
+      }
       setHead(deps.store, key.flowRunId, key.stepKey, getHead(deps.store, key.flowRunId, key.stepKey), key.seq);
       for (const decision of outcome.done.decisions ?? []) appendFlowDecision(deps.store, { flowRunId: key.flowRunId, grade: decision.grade, stepKey: key.stepKey, body: decision.body, by: decision.by });
       if (outcome.done.revise !== undefined) queueRevision(deps, run, outcome.done.revise.stepKey, outcome.done.revise.feedback, { reviewedBy: key.stepKey }, at);
@@ -352,7 +364,7 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
       const hash = outcome.failed.record === undefined ? null : writeRecord(deps.store, run.row.groupId, outcome.failed.record);
       finishExecution(deps.store, key, from, "failed", at, {
         ...(hash === null ? {} : { output: { kind: "artifact" as const, ref: hash, hash: outputHashOfRecord(hash) } }),
-        body: { ...body, failure: outcome.failed.reason },
+        body: { ...body, failure: outcome.failed.reason, ...(outcome.failed.flags === undefined ? {} : { flags: outcome.failed.flags }) },
       });
     } else if ("waiting" in outcome) {
       finishExecution(deps.store, key, from, "needs-person", at, { body: { ...body, ask: outcome.waiting.ask } });
@@ -362,6 +374,29 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
       finishExecution(deps.store, key, from, "needs-person", at, { body: { ...body, ask } });
     }
   });
+  if (workspaceOutput !== null && vault !== null) await advanceWorkspace(deps, run, vault, key);
+}
+
+/**
+ * §5.3-§5.4: after a workspace output becomes active, the flow head moves by CAS to the composition of every active
+ * output and the change is copied back into the person's folder; a copy-back conflict leaves the person's file as it is
+ * and flags the execution red (`copy-back-conflict`).
+ */
+async function advanceWorkspace(deps: FlowDeps, run: LoadedRun, vault: Vault, key: ExecutionKey): Promise<void> {
+  let previous: string | null = null;
+  const next = await advanceHeadWithRetry(vault, run.row.id, async (current) => {
+    previous = current;
+    const composition = await compositionFor(deps.store, run, null);
+    return composition!.commit;
+  });
+  if (previous === null || run.body.dir === null) return;
+  const result = await copyBack(vault, run.body.dir, previous, next);
+  if (result.conflicts.length === 0) return;
+  const execution = listExecutions(deps.store, key.flowRunId).find((e) => e.stepKey === key.stepKey && e.seq === key.seq)!;
+  const body = execution.body as ExecutionBody;
+  deps.store.transaction(() => finishExecution(deps.store, key, execution.state, execution.state, deps.now(), {
+    body: { ...body, flags: [...(body.flags ?? []), "copy-back-conflict"], copyBackConflicts: result.conflicts },
+  }));
 }
 
 /** §4.2 review `revise` (and later feedback): an `orca-auto` feedback message and a queued revision of the step. */
@@ -375,7 +410,7 @@ function queueRevision(deps: FlowDeps, run: LoadedRun, stepKey: string, feedback
   appendQueued(deps, run, stepKey, seq, ["feedback"], { feedback, ...extra }, "orca-auto", "orca", at);
 }
 
-function appendQueued(deps: FlowDeps, run: LoadedRun, stepKey: string, seq: number, reasons: string[], extra: Record<string, unknown>, by: string, via: string, at: number): void {
+export function appendQueued(deps: FlowDeps, run: LoadedRun, stepKey: string, seq: number, reasons: string[], extra: Record<string, unknown>, by: string, via: string, at: number): void {
   const step = stepOf(run, stepKey);
   const kind = kindFor(deps, step);
   const promptRel = "prompt" in step ? step.prompt : undefined;
@@ -389,6 +424,8 @@ function appendQueued(deps: FlowDeps, run: LoadedRun, stepKey: string, seq: numb
     baseCommit: null, ranOn: null, fingerprint: null, outputKind: null, outputRef: null, outputHash: null, readSetHash: null, reasons, planNo: null, childGroupId: null,
     by, via, createdAt: at, updatedAt: at, body: { basis: {}, retries: 0, retryReason: null, feedback: [], ...extra } satisfies ExecutionBody,
   });
+  // A run that had finished has work again (a later answer or feedback): it is advanced again.
+  if (getFlowRun(deps.store, run.row.id)?.state === "done") setFlowRunState(deps.store, run.row.id, "done", "running");
 }
 
 // -------------------------------------------------------------------------------------------------------------- advance
@@ -478,7 +515,7 @@ export async function completeFlowCall(deps: FlowDeps, key: ExecutionKey, rawOut
   const kind = kindFor(deps, stepOf(run, key.stepKey));
   const ctx = contextFor(deps, run, execution);
   const outcome: KindOutcome = kind?.collect === undefined ? { failed: { reason: "kind-has-no-collect" } }
-    : failure !== null ? { invalid: `call-failed:${failure}` } : kind.collect(ctx, rawOutput, failure);
+    : failure !== null ? { invalid: `call-failed:${failure}` } : await kind.collect(ctx, rawOutput, failure);
   const body = { ...(execution.body as ExecutionBody) };
   delete body.call;
   await applyOutcome(deps, run, { ...execution, body }, "running", outcome);
