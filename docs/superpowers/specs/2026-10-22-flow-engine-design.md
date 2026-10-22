@@ -1061,3 +1061,7 @@ in `progress.md` (`- flow T18:` lines).
   `verify.py` never ran). Every skill script is named by its absolute path, `'{{skill.<name>.dir}}/…'`; no step has a
   `cd` rule. The static checklist (§3.3) refuses a `cd` command rule (`tools-cd`) and, in a step that has one, each
   command whose program is a relative path (`tools-depends-on-cd`).
+- **25.2 (adds to §3.3 and §16.2).** A tool command rule with leading or trailing whitespace is a checklist error
+  (`tools-whitespace`), not trimmed at load: ccloop refuses such a rule (T18: 8 rules in `cover`, 2 in `article` came back
+  `refused`), and trimming would widen it -- ccloop compiles a claude prefix `v` to `Bash(v *)`, i.e. `^v( .*)?$`, so
+  `mkdir -p ` trimmed would also allow a bare `mkdir -p`. The author removes the space; the built-in has none.

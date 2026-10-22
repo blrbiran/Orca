@@ -115,7 +115,11 @@ describe("orca-flow-v1 schema and checklist (C1)", () => {
     ["loop-check-missing", (t: any) => { t.steps[1].loop.until.check = "nope"; }],
     ["loop-check-not-gate", (t: any) => { t.steps[1].loop.until.check = "diff"; }],
     ["tools-bare-interpreter", (t: any) => { t.steps[1].tools.commands.push({ prefix: "python3" }); }],
-    ["tools-bare-interpreter", (t: any) => { t.steps[1].tools.commands.push({ prefix: "bash " }); }],
+    ["tools-bare-interpreter", (t: any) => { t.steps[1].tools.commands.push({ prefix: "sh" }); }],
+    // T18 acceptance: ccloop refuses a rule with surrounding whitespace (claude cannot hold it literally); trimming it
+    // here would widen the author's rule (prefix "mkdir -p " would also allow a bare `mkdir -p`), so it is refused.
+    ["tools-whitespace", (t: any) => { t.steps[1].tools.commands.push({ prefix: "mkdir -p " }); }],
+    ["tools-whitespace", (t: any) => { t.steps[1].tools.commands[0].exact = " wc -m '{{param.slug}}.md'"; }],
     ["tools-bare-interpreter", (t: any) => { t.steps[1].tools.commands.push({ prefix: "node" }); }],
     ["tools-bare-interpreter", (t: any) => { t.steps[1].tools.commands.push({ prefix: "bun" }); }],
     // T18 acceptance: claude resets the shell's working directory after each command, so a `cd` rule helps nothing.
@@ -151,6 +155,10 @@ describe("orca-flow-v1 schema and checklist (C1)", () => {
       ["tools-cd", "steps.1.tools.commands.0"], ["tools-depends-on-cd", "steps.1.tools.commands.1"], ["tools-depends-on-cd", "steps.1.tools.commands.2"],
     ]);
     expect(errorsOf(mutate((t) => { t.steps[1].tools.commands.push({ prefix: "python3 tools/check.py" }); }))).toEqual([]);
+  });
+
+  it("S4c: a bare interpreter with a trailing space is refused for both", () => {
+    expect(errorsOf(mutate((t) => { t.steps[1].tools.commands.push({ prefix: "bash " }); }))).toEqual(["tools-bare-interpreter", "tools-whitespace"]);
   });
 
   it("S5: every finding names where it is, so Web and CLI can point at it", () => {

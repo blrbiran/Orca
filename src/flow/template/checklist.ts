@@ -150,6 +150,9 @@ export function checkTemplate(raw: unknown, assets: AssetReader, ctx: ChecklistC
         const command = "exact" in rule ? rule.exact : rule.prefix;
         const where = `${at}.tools.commands.${i}`;
         if ("prefix" in rule && BARE_INTERPRETERS.has(rule.prefix.trim())) err("tools-bare-interpreter", where, `prefix ${JSON.stringify(rule.prefix)} allows any script; name the script (§3.2, IR-I9)`);
+        // T18 acceptance: ccloop refuses a rule with surrounding whitespace. Refused here, never trimmed: trimming would
+        // widen it (prefix "mkdir -p " compiles, trimmed, to `^mkdir -p( .*)?$`, which also allows a bare `mkdir -p`).
+        if (command !== command.trim()) err("tools-whitespace", where, `${JSON.stringify(command)} starts or ends with whitespace, which ccloop refuses; remove it`);
         // T18 acceptance: claude resets the shell's working directory after every command, so a `cd` carries nothing over.
         if (CD.test(command)) err("tools-cd", where, `${JSON.stringify(command)}: the agent's shell returns to the workspace after each command; name skill files by '{{skill.<name>.dir}}/…' instead`);
         else if (hasCd && relativeProgram(command)) err("tools-depends-on-cd", where, `${JSON.stringify(command)} names a relative path that only a cd before it would resolve; use '{{skill.<name>.dir}}/…'`);

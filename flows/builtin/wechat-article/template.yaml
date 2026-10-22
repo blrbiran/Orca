@@ -126,14 +126,14 @@ steps:
     acceptance: {checks: [{id: illustrated-exists, run: "test -s '{{param.slug}}.illustrated.md'", role: gate}]}
     tools:
       commands:
-        - {prefix: "mkdir -p "}
+        - {prefix: "mkdir -p"}
         - {prefix: "python3 '{{skill.md2publish-visuals.dir}}/shared/scripts/preflight.py'"}
-        - {prefix: "python3 '{{skill.md2publish-visuals.dir}}/shared/scripts/query.py' "}
-        - {prefix: "python3 '{{skill.md2publish-visuals.dir}}/shared/scripts/compose_prompt.py' "}
-        - {prefix: "python3 '{{skill.md2publish-visuals.dir}}/shared/scripts/artifacts.py' "}
-        - {prefix: "python3 '{{skill.md2publish-visuals.dir}}/shared/scripts/compress.py' "}
-        - {prefix: "python3 '{{skill.md2publish-visuals.dir}}/shared/scripts/writeback.py' "}
-        - {prefix: "bun '{{skill.md2publish-visuals.dir}}/shared/scripts/imagegen/main.ts' "}
+        - {prefix: "python3 '{{skill.md2publish-visuals.dir}}/shared/scripts/query.py'"}
+        - {prefix: "python3 '{{skill.md2publish-visuals.dir}}/shared/scripts/compose_prompt.py'"}
+        - {prefix: "python3 '{{skill.md2publish-visuals.dir}}/shared/scripts/artifacts.py'"}
+        - {prefix: "python3 '{{skill.md2publish-visuals.dir}}/shared/scripts/compress.py'"}
+        - {prefix: "python3 '{{skill.md2publish-visuals.dir}}/shared/scripts/writeback.py'"}
+        - {prefix: "bun '{{skill.md2publish-visuals.dir}}/shared/scripts/imagegen/main.ts'"}
       network: true
       secrets: [AGNES_API_KEY, AZURE_OPENAI_API_KEY, AZURE_OPENAI_BASE_URL, DASHSCOPE_API_KEY, GOOGLE_API_KEY, GEMINI_API_KEY,
         JIMENG_ACCESS_KEY_ID, JIMENG_SECRET_ACCESS_KEY, MINIMAX_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, REPLICATE_API_TOKEN,
@@ -149,8 +149,8 @@ steps:
         - {id: html-exists, run: "test -s '{{param.slug}}.wechat.html' || test -s '{{param.slug}}.illustrated.html'", role: gate}
     tools:
       commands:
-        - {prefix: "python3 '{{skill.md2publish-article.dir}}/scripts/md2html.py' "}
-        - {prefix: "md2wechat inspect "}
+        - {prefix: "python3 '{{skill.md2publish-article.dir}}/scripts/md2html.py'"}
+        - {prefix: "md2wechat inspect"}
       network: false
 
   - id: cover
@@ -164,13 +164,13 @@ steps:
     acceptance: {checks: [{id: cover-final, run: "test -s assets/wechat/00-cover.final.txt", role: gate}]}
     tools:
       commands:
-        - {prefix: "mkdir -p "}
+        - {prefix: "mkdir -p"}
         - {prefix: "python3 '{{skill.md2publish-cover.dir}}/shared/scripts/preflight.py'"}
-        - {prefix: "python3 '{{skill.md2publish-cover.dir}}/shared/scripts/query.py' "}
-        - {prefix: "python3 '{{skill.md2publish-cover.dir}}/shared/scripts/compose_prompt.py' "}
-        - {prefix: "python3 '{{skill.md2publish-cover.dir}}/shared/scripts/artifacts.py' "}
-        - {prefix: "python3 '{{skill.md2publish-cover.dir}}/shared/scripts/compress.py' "}
-        - {prefix: "bun '{{skill.md2publish-cover.dir}}/shared/scripts/imagegen/main.ts' "}
+        - {prefix: "python3 '{{skill.md2publish-cover.dir}}/shared/scripts/query.py'"}
+        - {prefix: "python3 '{{skill.md2publish-cover.dir}}/shared/scripts/compose_prompt.py'"}
+        - {prefix: "python3 '{{skill.md2publish-cover.dir}}/shared/scripts/artifacts.py'"}
+        - {prefix: "python3 '{{skill.md2publish-cover.dir}}/shared/scripts/compress.py'"}
+        - {prefix: "bun '{{skill.md2publish-cover.dir}}/shared/scripts/imagegen/main.ts'"}
       network: true
       secrets: [AGNES_API_KEY, AZURE_OPENAI_API_KEY, AZURE_OPENAI_BASE_URL, DASHSCOPE_API_KEY, GOOGLE_API_KEY, GEMINI_API_KEY,
         JIMENG_ACCESS_KEY_ID, JIMENG_SECRET_ACCESS_KEY, MINIMAX_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, REPLICATE_API_TOKEN,
@@ -185,8 +185,8 @@ steps:
     recommendedLevel: confirm
     tools:
       commands:
-        - {prefix: "md2wechat doctor "}
-        - {prefix: "md2wechat upload_image "}
-        - {prefix: "md2wechat create_draft "}
+        - {prefix: "md2wechat doctor"}
+        - {prefix: "md2wechat upload_image"}
+        - {prefix: "md2wechat create_draft"}
       network: true
       secrets: [WECHAT_APPID, WECHAT_SECRET]
