@@ -37,7 +37,7 @@
   "dependencies": {
     "@ast-grep/cli": "0.45.3",
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "ccloop": "github:blrbiran/ccloop#76b098befe7c075ec4bb8d4bd2f980192739578d",
+    "ccloop": "github:blrbiran/ccloop#d02b9d2c6dbb4675a6f84fa7e9a7229883f7701a",
     "express": "^5.1.0",
     "yaml": "2.9.0",
     "zod": "^3.23.8"
