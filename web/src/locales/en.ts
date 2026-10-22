@@ -408,6 +408,7 @@ export const en = {
     summaryLine: "epoch {{epoch}} · projection {{seq}} · {{dispatch}}",
     noPort: "no execution port configured · this panel serves recovery and evidence, and refuses to start work · set ORCA_CCLOOP_BIN and ORCA_AGENTS_TABLE and restart it",
     noPortReason: "why: {{reason}}",
+    unreadableGroup: "{{groupId}} · stored group cannot be read: {{reason}}",
     resetRequired: "server reset required · this page must re-read before it trusts any cached view",
     refetchRequired: "projection refetch required · re-reading the open groups",
     dispatchBlockedRecovery: "dispatch blocked · recovery must be observed",

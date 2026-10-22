@@ -99,3 +99,20 @@ describe("the panel says when no estimator was configured", () => {
     expect(html).not.toContain("No estimator profile is configured");
   });
 });
+
+// Issue 94: the panel lists a group whose stored body does not parse by its id and parse error, beside the others.
+describe("the panel lists an unreadable group instead of going blank", () => {
+  it("shows its id and the parse error as a row, and still lists the readable groups", () => {
+    const groups = [{ groupId: "g-ok", repoId: "orca", state: "ready", commandRevision: 1, projectionSeq: 1, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0 }] as ControlSummaryV1["groups"];
+    const html = renderToStaticMarkup(
+      <ControlPanel
+        config={config()} summary={{ ...summary, groups, unreadable: [{ groupId: "requirement-c50b", reason: "group-body-invalid:Expected boolean, received number" }] }} recovery={recovery}
+        groups={{} as Record<string, GroupViewV1>} selected={null}
+        drafts={{}} uncertain={[]} refusal={null} refetchRequired={false}
+        onSelect={vi.fn()} onCommand={vi.fn()} onDraft={vi.fn()}
+      />,
+    );
+    expect(html).toMatch(/requirement-c50b[^<]*group-body-invalid:Expected boolean, received number/);
+    expect(html).toContain("g-ok");
+  });
+});

@@ -47,6 +47,8 @@ export interface ControlClientState {
   refetchRequired: boolean;
   dispatchBlocked: boolean;
   groups: Record<string, GroupSummaryV1>;
+  /** Issue 94: groups the server could not summarise (stored body does not parse), by id, with the parse error. */
+  unreadable: Record<string, string>;
   canonical: Record<string, GroupViewV1>;
   recovery: RecoveryViewV1 | null;
   drafts: Record<string, string>;
@@ -78,7 +80,7 @@ export type ControlClientEvent =
 export function initialControlState(): ControlClientState {
   return {
     epoch: null, changeSeq: 0, resetRequired: false, refetchRequired: false, dispatchBlocked: false,
-    groups: {}, canonical: {}, recovery: null, drafts: {}, uncertainCommandIds: [], refusals: {}, importRefusal: null, panelRefusal: null,
+    groups: {}, unreadable: {}, canonical: {}, recovery: null, drafts: {}, uncertainCommandIds: [], refusals: {}, importRefusal: null, panelRefusal: null,
   };
 }
 
@@ -94,11 +96,12 @@ export function summaryView(state: ControlClientState): ControlSummaryV1 {
     resetRequired: state.resetRequired,
     dispatchBlocked: state.dispatchBlocked,
     groups: Object.values(state.groups),
+    ...(Object.keys(state.unreadable).length === 0 ? {} : { unreadable: Object.entries(state.unreadable).map(([groupId, reason]) => ({ groupId, reason })) }),
   };
 }
 
 function purged(state: ControlClientState, epoch: string): ControlClientState {
-  return { ...state, epoch, groups: {}, canonical: {}, recovery: null, refetchRequired: true };
+  return { ...state, epoch, groups: {}, unreadable: {}, canonical: {}, recovery: null, refetchRequired: true };
 }
 
 function keyOf(command: UncertainCommand): string {
@@ -107,6 +110,10 @@ function keyOf(command: UncertainCommand): string {
 
 function summaries(values: readonly GroupSummaryV1[]): Record<string, GroupSummaryV1> {
   return Object.fromEntries(values.map((value) => [value.groupId, value]));
+}
+
+function without<T>(entries: Record<string, T>, drop: Record<string, unknown>): Record<string, T> {
+  return Object.fromEntries(Object.entries(entries).filter(([groupId]) => !(groupId in drop)));
 }
 
 function withoutStale(canonical: Record<string, GroupViewV1>, listed: readonly GroupSummaryV1[]): Record<string, GroupViewV1> {
@@ -127,6 +134,7 @@ function reduceSummary(state: ControlClientState, event: Extract<ControlClientEv
   const gap = !purge && !reread && event.partial !== true && value.changeSeq > state.changeSeq + 1;
   const base = purge ? purged(state, value.epoch) : { ...state, epoch: value.epoch };
   const canonical = purge || gap ? {} : event.partial ? base.canonical : withoutStale(base.canonical, value.groups);
+  const unreadable = Object.fromEntries((value.unreadable ?? []).map((row) => [row.groupId, row.reason]));
   return {
     ...base,
     changeSeq: value.changeSeq,
@@ -137,7 +145,9 @@ function reduceSummary(state: ControlClientState, event: Extract<ControlClientEv
     refetchRequired: purge || gap || (event.partial === true && base.refetchRequired),
     // A complete summary lists every group there is; a `sinceChangeSeq` answer lists
     // only the ones that moved, so the rest of the cache has to stay.
-    groups: purge || !event.partial ? summaries(value.groups) : { ...base.groups, ...summaries(value.groups) },
+    groups: purge || !event.partial ? summaries(value.groups) : without({ ...base.groups, ...summaries(value.groups) }, unreadable),
+    // Issue 94: moved the same way; a group is in one list or the other, never both.
+    unreadable: purge || !event.partial ? { ...unreadable } : without({ ...base.unreadable, ...unreadable }, summaries(value.groups)),
     canonical,
   };
 }

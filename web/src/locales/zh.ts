@@ -277,6 +277,7 @@ export const zh: Translation<typeof en> = {
     summaryLine: "服务会话 {{epoch}} · 状态序号 {{seq}} · {{dispatch}}",
     noPort: "未配置执行端口 · 这个面板提供恢复和证据，但拒绝开始工作 · 设置 ORCA_CCLOOP_BIN 和 ORCA_AGENTS_TABLE 后重启它",
     noPortReason: "原因：{{reason}}",
+    unreadableGroup: "{{groupId}} · 存储的任务组无法读取：{{reason}}",
     resetRequired: "服务端要求重置 · 本页必须重新读取，才能信任任何缓存的视图",
     refetchRequired: "需要重新拉取状态序号 · 正在重新读取打开的组",
     dispatchBlockedRecovery: "调度已阻断 · 必须先观察到恢复",

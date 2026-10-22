@@ -263,6 +263,8 @@ export type ControlSummaryV1 = {
   resetRequired: boolean;
   dispatchBlocked: boolean;
   groups: GroupSummaryV1[];
+  /** Issue 94: groups whose stored body does not parse, by id and parse error; absent when there are none. */
+  unreadable?: Array<{ groupId: string; reason: string }>;
 };
 
 export type FieldProvenanceV1 = { provenance: "complex-1m-default" | "model" | "human" | "system"; estimateId: string | null };

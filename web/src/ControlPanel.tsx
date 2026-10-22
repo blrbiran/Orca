@@ -296,6 +296,10 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         {...(props.onRegisterPlan === undefined ? {} : { onRegisterPlan: props.onRegisterPlan })}
       />
       </div>
+      {/* Issue 94: a group whose stored body does not parse is named here, so the others still render. */}
+      {(summary.unreadable ?? []).map((row) => (
+        <p role="alert" data-tone="warn" key={row.groupId}>{t("control.unreadableGroup", { groupId: row.groupId, reason: row.reason })}</p>
+      ))}
       <GroupList groups={summary.groups} selected={selected} scope={scope} repoLabel={props.repoLabel} onSelect={props.onSelect}
         onSelectRequirement={props.onSelectRequirement} onAction={props.onGroupAction} refusals={props.groupRefusals} now={props.now} onOpenDispatch={props.onOpenDispatch} />
       {view !== undefined && (

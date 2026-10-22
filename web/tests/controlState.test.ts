@@ -220,3 +220,28 @@ describe("control client state machine", () => {
     expect(next.drafts).toEqual(populated.drafts);
   });
 });
+
+// Issue 94: a group whose stored body does not parse is listed by the server as unreadable instead of failing the whole
+// summary. The client carries those rows like groups: a complete summary replaces them, a partial one moves a group
+// between the two lists, so a stale summary of a now-broken group is never shown as if it were current.
+describe("unreadable groups (issue 94)", () => {
+  const reason = "group-body-invalid:Expected boolean, received number";
+  it("a complete summary carries its unreadable rows into the summary view", async () => {
+    const { summaryView } = await import("../src/controlState.js");
+    const state = apply(initialControlState(), { type: "summary", value: summary({ unreadable: [{ groupId: "h", reason }] }) });
+    expect(summaryView(state).unreadable).toEqual([{ groupId: "h", reason }]);
+    expect(summaryView(state).groups.map((group) => group.groupId)).toEqual(["g"]);
+    expect("unreadable" in summaryView(apply(initialControlState(), { type: "summary", value: summary() }))).toBe(false);
+  });
+
+  it("a partial summary that names a group unreadable drops its cached summary, and a readable one lifts it", async () => {
+    const { summaryView } = await import("../src/controlState.js");
+    const first = apply(initialControlState(), { type: "summary", value: summary() });
+    const broken = apply(first, { type: "summary", partial: true, value: summary({ changeSeq: 2, groups: [], unreadable: [{ groupId: "g", reason }] }) });
+    expect(summaryView(broken).groups).toEqual([]);
+    expect(summaryView(broken).unreadable).toEqual([{ groupId: "g", reason }]);
+    const mended = apply(broken, { type: "summary", partial: true, value: summary({ changeSeq: 3 }) });
+    expect(summaryView(mended).groups.map((group) => group.groupId)).toEqual(["g"]);
+    expect("unreadable" in summaryView(mended)).toBe(false);
+  });
+});

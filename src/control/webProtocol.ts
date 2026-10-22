@@ -1452,9 +1452,14 @@ export const controlSummarySchema = z
     resetRequired: z.boolean(),
     dispatchBlocked: z.boolean(),
     groups: z.array(groupSummarySchema),
+    // Issue 94: groups whose stored body does not parse, by id and parse error; absent when there are none.
+    unreadable: z.array(z.object({ groupId: idSchema, reason: nonemptyString }).strict()).min(1).optional(),
   })
   .strict()
-  .superRefine((value, ctx) => requireSortedUnique(value.groups, (group) => group.groupId, ctx, ["groups"]));
+  .superRefine((value, ctx) => {
+    requireSortedUnique(value.groups, (group) => group.groupId, ctx, ["groups"]);
+    if (value.unreadable !== undefined) requireSortedUnique(value.unreadable, (row) => row.groupId, ctx, ["unreadable"]);
+  });
 
 export const allocationViewSchema = z
   .object({

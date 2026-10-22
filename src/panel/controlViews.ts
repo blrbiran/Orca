@@ -581,13 +581,24 @@ export function readControlSummary(
     ? { changeSeq: state.changeSeq, resetRequired: true, groups: allGroupIds(store).map(groupId => ({ groupId })) }
     : readProjectionChanges(store, sinceChangeSeq);
   const groupIds = changes.resetRequired || forceComplete ? allGroupIds(store) : withoutFlowGroups(store, changes.groups.map(group => group.groupId));
+  // Issue 94: a group whose stored body does not parse is listed by id and parse error instead of failing every
+  // group's summary. Only that refusal: any other stored fact a summary cannot trust still refuses the whole read.
+  const groups: GroupSummaryV1[] = [], unreadable: Array<{ groupId: string; reason: string }> = [];
+  for (const groupId of sortedUnique(groupIds)) {
+    try { groups.push(readGroupSummary(store, groupId)); }
+    catch (error) {
+      if (!(error instanceof ControlError) || error.code !== "recovery-blocked" || !error.detail?.startsWith("group-body-invalid")) throw error;
+      unreadable.push({ groupId, reason: error.detail });
+    }
+  }
   const view = {
     schema: "orca-control-summary-v1" as const,
     epoch,
     changeSeq: changes.changeSeq,
     resetRequired: forceComplete || changes.resetRequired,
     dispatchBlocked: store.dispatchBlocked,
-    groups: sortedUnique(groupIds).map(groupId => readGroupSummary(store, groupId)),
+    groups,
+    ...(unreadable.length === 0 ? {} : { unreadable }),
   };
   const parsed = controlSummarySchema.safeParse(view);
   if (!parsed.success) return blocked(`control-summary:${parsed.error.issues[0]?.message ?? "invalid"}`);
