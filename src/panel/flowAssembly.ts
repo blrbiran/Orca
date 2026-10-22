@@ -8,8 +8,9 @@
  * - `confirmParent`: what a new run's parent is confirmed with (writer's call, ledgered): its single calls take the
  *   panel's estimator profile and the starting person's estimator layer (as a requirement's calls do); its children take
  *   that same profile for worker, handoff and goal review, the panel's estimate mode as their budget mode, and a context
- *   handoff at the worker profile's window. A panel with no estimator profile, or a profile that does not serve every
- *   kind, refuses the start `flow-profiles-unresolved`.
+ *   handoff at the worker profile's window. The estimator layer is the starting command's operator's (preferences live
+ *   under the operator id, not the person's name). A panel with no estimator profile, or a profile that does not serve
+ *   every kind, refuses the start `flow-profiles-unresolved`.
  * - `agents`: the installations ccloop's table names, in its order (the first is today's default selection), read at
  *   each pump pass before the kernel runs; every one is treated as `high` tier until settings carry tiers (Task 12).
  */
@@ -46,7 +47,7 @@ export function createPanelFlow(input: PanelFlowInput): PanelFlow {
   // §11.3: the built-ins this install ships are indexed at every start (upsert by layer, id, version).
   seedBuiltinTemplates(store, store.now());
   let agents: AgentCandidate[] = [];
-  const confirmParent = async (run: { flowRunId: string; groupId: string; projectId: string | null; by?: string }): Promise<FlowParentConfirmation> => {
+  const confirmParent = async (run: { flowRunId: string; groupId: string; projectId: string | null; by?: string; operatorId?: string }): Promise<FlowParentConfirmation> => {
     const defaults = input.importDeps.defaults();
     if (defaults?.estimatorProfileId == null || defaults.estimatorProfileHash === null) throw new FlowRefusal("flow-profiles-unresolved", "the panel has no estimator profile");
     let profile: ReturnType<ExecutionProfileRouter["resolve"]>, worker: ReturnType<ExecutionProfileRouter["resolve"]>;
@@ -56,7 +57,7 @@ export function createPanelFlow(input: PanelFlowInput): PanelFlow {
       router.resolve("handoff", defaults.estimatorProfileId, defaults.estimatorProfileHash);
       router.resolve("goal-review", defaults.estimatorProfileId, defaults.estimatorProfileHash);
     } catch (error) { throw new FlowRefusal("flow-profiles-unresolved", (error as Error).message); }
-    const slot = await estimatorSlotFor({ store, profileRouter: router }, run.by ?? ORCHESTRATION_ACTOR, {}, profile);
+    const slot = await estimatorSlotFor({ store, profileRouter: router }, run.operatorId ?? run.by ?? ORCHESTRATION_ACTOR, {}, profile);
     if (slot.outcome.kind !== "frozen") throw new FlowRefusal("flow-profiles-unresolved", `call agent: ${slot.outcome.code}`);
     const preflight = profile.snapshot.profile.estimatorPreflight;
     if (!preflight) throw new FlowRefusal("flow-profiles-unresolved", "the estimator profile has no single-call preflight");

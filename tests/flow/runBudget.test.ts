@@ -68,7 +68,7 @@ describe("run budget pool (C15)", () => {
     const asked: unknown[] = [];
     const w = await flowWorld({ w70000: template(70_000, 10_000) }, { confirmParent: async (input) => { asked.push(input); return confirmation; } }); try {
       const { flowRunId, groupId } = await w.start({ templateRef: "builtin/w70000" });
-      expect(asked).toEqual([{ flowRunId, groupId, projectId: null, by: "ann" }]);
+      expect(asked).toEqual([{ flowRunId, groupId, projectId: null, by: "ann", operatorId: "ann" }]);
       const body = JSON.parse(String(w.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body));
       expect(body.confirmed).toEqual({ by: "orca-auto", via: "orca", commandId: parentConfirmCommandId(flowRunId), at: expect.any(Number), poolTokens: 70_000, ...confirmation });
       expect(body.limit.tokens).toBe(70_000);

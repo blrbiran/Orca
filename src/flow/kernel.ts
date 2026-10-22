@@ -85,7 +85,8 @@ export interface FlowDeps {
    */
   /** §7.4, §11.2: `flows.rerunReview` of a project; absent: read from the settings layers. */
   rerunReview?(projectId: string | null): "auto" | "review";
-  confirmParent?(input: { flowRunId: string; groupId: string; projectId: string | null; by: string }): Promise<FlowParentConfirmation>;
+  /** `operatorId`: whose agent preferences the parent's calls take (the starting command's operator; else `by`). */
+  confirmParent?(input: { flowRunId: string; groupId: string; projectId: string | null; by: string; operatorId: string }): Promise<FlowParentConfirmation>;
 }
 
 /** Spec §4.3: the kinds whose prompts carry the unattended fragment. */
@@ -114,6 +115,8 @@ export interface StartFlowInput {
   pool?: number;
   unattended?: boolean;
   by: string;
+  /** The starting command's operator (`actorId`), where agent preferences live; absent: `by`. */
+  operatorId?: string;
   via: string;
   /** The `flow-start` command's id: the run's id is derived from it, so a retried command finds the run it started. */
   idempotencyKey?: string;
@@ -212,7 +215,7 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
   const flowRunId = `fr-${id}`;
   const groupId = `flow-${id}`;
   // §6.3: confirmed once, before anything is written (a refusal leaves no vault import either).
-  const confirmation: FlowParentConfirmation = deps.confirmParent === undefined ? { call: null, children: null } : await deps.confirmParent({ flowRunId, groupId, projectId, by: input.by });
+  const confirmation: FlowParentConfirmation = deps.confirmParent === undefined ? { call: null, children: null } : await deps.confirmParent({ flowRunId, groupId, projectId, by: input.by, operatorId: input.operatorId ?? input.by });
   // §5.2: the person's folder is imported into its vault; the import is the base of every composition.
   let vault: Vault | null = null;
   let importCommit: string | null = null;

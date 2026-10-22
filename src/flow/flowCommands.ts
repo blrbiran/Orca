@@ -117,7 +117,7 @@ async function act(flow: FlowDeps, command: FlowCommand, projects: () => Readonl
       const projectId = await registeredDirProject(projects(), p.dir, p.projectId);
       const template = p.template.startsWith("builtin/") ? p.template : `builtin/${p.template}`;
       const started = await startFlowRun(flow, {
-        templateRef: template, dir: p.dir, params: p.params, by: who.by, via: who.via, projectId, ...(p.clarify === undefined ? {} : { clarify: p.clarify }),
+        templateRef: template, dir: p.dir, params: p.params, by: who.by, operatorId: command.actorId, via: who.via, projectId, ...(p.clarify === undefined ? {} : { clarify: p.clarify }),
         ...(p.pool === undefined ? {} : { pool: p.pool }), ...(p.unattended === undefined ? {} : { unattended: p.unattended }),
         // A retry of this command (lost answer) finds the run it started instead of starting a second one.
         idempotencyKey: command.commandId,
