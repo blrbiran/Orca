@@ -19,6 +19,8 @@ export const flowGit = (cwd: string, ...args: string[]): string =>
 export async function flowRunWorld(w: World, opts: {
   templates: Record<string, WorldTemplate>; folder: Record<string, string>; gitFolder?: boolean;
   claudeQueue?: Array<{ match: string; output: unknown }>; decisions?: unknown[];
+  /** What the agent reports under the top-level `flow` key (ccloop fbd3512 on answers it at collect's top level). */
+  flow?: unknown;
 }) {
   // Fake codex in mode `reported`: its execute writes answer.txt and reports these decisions (ccloop tests/fixtures).
   const codex = w.agentsTable.installations.codex!;
@@ -26,7 +28,7 @@ export async function flowRunWorld(w: World, opts: {
   const marker = command[3]!;
   codex.command = [command[0]!, command[1]!, "reported", marker];
   writeFileSync(w.table, JSON.stringify(w.agentsTable), { mode: 0o600 });
-  writeFileSync(`${marker}.reported.json`, JSON.stringify({ decisions: opts.decisions ?? [] }));
+  writeFileSync(`${marker}.reported.json`, JSON.stringify({ decisions: opts.decisions ?? [], ...(opts.flow === undefined ? {} : { flow: opts.flow }) }));
   writeFileSync(w.claudeScriptPath, JSON.stringify({ "single-call-queue": opts.claudeQueue ?? [] }));
   const builtinRoot = join(w.root, "builtin");
   for (const [id, tpl] of Object.entries(opts.templates)) {
