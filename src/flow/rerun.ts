@@ -59,7 +59,7 @@ export interface RunningPlan { flowRunId: string; planNo: number; by: string; vi
 const isOpen = (plan: PlanRow): boolean => plan.state === "proposed" || plan.state === "running";
 export const openPlan = (store: ControlStore, flowRunId: string): PlanRow | null => listPlans(store, flowRunId).filter(isOpen).at(-1) ?? null;
 
-type StoredBody = ExecutionBody & { ranOnInputs?: RanOnInputs; carriedForward?: number };
+type StoredBody = ExecutionBody & { ranOnInputs?: RanOnInputs; carriedForward?: number; projection?: string | null };
 
 /**
  * The kernel's journal in the planner's terms (§6.4): every execution with what it ran on and what it produced. Gaps
@@ -86,7 +86,7 @@ function journalOf(store: ControlStore, run: LoadedRun): Journal {
     const siblings = run.template.steps.filter((s) => step !== undefined && order.indexOf(s.id) < order.indexOf(stepKey) && parallelSteps(s, step)
       && !inputs.earlier.some((e) => e.stepKey === s.id));
     if (siblings.length === 0) return inputs;
-    const asItStands = siblings.map((s) => ({ stepKey: s.id, outputHash: active(s.id)?.outputHash ?? null, projection: null }));
+    const asItStands = siblings.map((s) => ({ stepKey: s.id, outputHash: active(s.id)?.outputHash ?? null, projection: (active(s.id)?.body as StoredBody | undefined)?.projection ?? null }));
     return { ...inputs, earlier: [...inputs.earlier, ...asItStands] };
   };
   const executions: Execution[] = rows.map((e) => {
@@ -96,7 +96,7 @@ function journalOf(store: ControlStore, run: LoadedRun): Journal {
       stepKey: e.stepKey, seq: e.seq, state: e.state, failure: body.failure ?? null, definitionHash: e.definitionHash, fingerprint: e.fingerprint ?? "",
       // No record of what it ran on (it never started): unknown, so every input counts as moved.
       ranOnInputs: ranOnInputs === undefined ? { start: "unknown", params: "unknown", earlier: [] } : withSiblings(e.stepKey, ranOnInputs),
-      outputHash: e.outputHash, projection: null, readSet: null,
+      outputHash: e.outputHash, projection: body.projection ?? null, readSet: null,
     };
   });
   return { executions, heads };

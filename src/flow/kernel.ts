@@ -32,7 +32,8 @@ import {
 import { isInsidePath } from "./template/checklist.js";
 import { loadBuiltin } from "./template/load.js";
 import type { FlowStep, FlowTemplate } from "./template/schema.js";
-import { deriveParam, expandKeepingSkillDirs } from "./template/vars.js";
+import { deriveParam, expandKeepingSkillDirs, expandVars } from "./template/vars.js";
+import { projectionOf } from "./journal/projection.js";
 import { evaluateWhen, type ParamValue } from "./template/when.js";
 import { returnUnspent } from "./pool.js";
 import type { FlowChildPort } from "./kinds/work.js";
@@ -41,7 +42,7 @@ import { changesBetween, copyBack } from "./vault/copyBack.js";
 import { withDirLock } from "./vault/dirLock.js";
 import { commitDriftOnto, placeDrift, snapshotDrift } from "./vault/drift.js";
 import { DEFAULT_CAPS, importSnapshot } from "./vault/snapshot.js";
-import { openVault, type Vault } from "./vault/vault.js";
+import { openVault, vaultGitBytes, type Vault } from "./vault/vault.js";
 import { vaultKeyOf } from "./vault/paths.js";
 import { flowVaultRepoId } from "./groups.js";
 import { parentGroupBody, type FlowParentConfirmation } from "./parent.js";
@@ -416,6 +417,7 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
   const workspaceOutput = "done" in outcome && outcome.done.commit !== undefined ? outcome.done.commit : null;
   const vault = vaultOf(run);
   const changed = workspaceOutput === null || vault === null ? null : await changesBetween(vault, workspaceOutput.parent, workspaceOutput.commit);
+  const projection = "done" in outcome ? await projectionFor(run, step, outcome.done.record, workspaceOutput === null ? null : vault, workspaceOutput?.commit ?? null) : undefined;
   deps.store.transaction(() => {
     if ("done" in outcome) {
       // §9.2: an applied effect is flagged red for review, with the remote id the agent reported.
@@ -423,6 +425,7 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
       const flags = [...(outcome.done.flags ?? []), ...effectFlags];
       const extra = {
         ...(flags.length === 0 ? {} : { flags }),
+        ...(projection === undefined ? {} : { projection }),
         ...(outcome.done.skillLocks === undefined ? {} : { skillLocks: outcome.done.skillLocks }),
         ...(outcome.done.warnings === undefined ? {} : { warnings: outcome.done.warnings }),
         ...(outcome.done.reported === undefined ? {} : { reported: outcome.done.reported }),
@@ -458,6 +461,28 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
     }
   });
   if (workspaceOutput !== null && vault !== null) await advanceWorkspace(deps, run, vault, key);
+}
+
+/**
+ * Gaps spec §7: the `hints.equals` projection of a done output (undefined when the step has none). `{{param.*}}` is
+ * expanded first; files are read at the output commit. Anything that cannot be computed is `null` -- no cutoff, never
+ * an error (an unset param, a missing file, bad JSON, a missing pointer).
+ */
+async function projectionFor(run: LoadedRun, step: FlowStep, record: unknown, vault: Vault | null, commit: string | null): Promise<string | null | undefined> {
+  const spec = step.hints?.equals;
+  if (spec === undefined) return undefined;
+  let expanded: string;
+  try { expanded = expandVars(spec, { params: run.params, runId: run.row.id, workspace: ".", skillDirs: {} }, "prompt"); } catch { return null; }
+  const verdict = typeof (record as { verdict?: unknown } | null)?.verdict === "string" ? (record as { verdict: string }).verdict : null;
+  // The spec names its files; they are read first (git is async), then the pure projection runs over them.
+  const paths: string[] = [];
+  projectionOf(expanded, (path) => { paths.push(path); return null; }, verdict);
+  const files = new Map<string, Buffer | null>();
+  for (const path of paths) {
+    if (vault === null || commit === null || !isInsidePath(path)) { files.set(path, null); continue; }
+    try { files.set(path, await vaultGitBytes(vault, ["show", `${commit}:${path}`])); } catch { files.set(path, null); }
+  }
+  return projectionOf(expanded, (path) => files.get(path) ?? null, verdict);
 }
 
 /**
@@ -725,11 +750,13 @@ export function ranOnInputsOf(store: ControlStore, run: LoadedRun, stepKey: stri
   const step = run.template.steps[index]!;
   const earlier = run.template.steps.slice(0, index).filter((s) => !parallel(s, step)).map((s) => {
     const active = all.find((e) => e.stepKey === s.id && e.seq === heads[s.id]);
-    return { stepKey: s.id, outputHash: active?.state === "done" ? active.outputHash : null, projection: null };
+    // Gaps spec §7: with the output's `hints.equals` projection, so an equal projection is no change (the cutoff).
+    const projection = active?.state === "done" ? (active.body as { projection?: string | null }).projection ?? null : null;
+    return { stepKey: s.id, outputHash: active?.state === "done" ? active.outputHash : null, projection };
   });
   return { start: run.body.importCommit ?? "none", params: run.row.paramsSha256, earlier };
 }
-export interface RanOnInputs { start: string; params: string; earlier: Array<{ stepKey: string; outputHash: string | null; projection: null }> }
+export interface RanOnInputs { start: string; params: string; earlier: Array<{ stepKey: string; outputHash: string | null; projection: string | null }> }
 
 /**
  * §9.2: a confirmed card or an enacted staged record: the waiting execution runs now, with its record id in the prompt.
