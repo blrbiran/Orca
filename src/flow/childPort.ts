@@ -143,7 +143,8 @@ async function childStatus(deps: DriverChildPortDeps, childGroupId: string): Pro
   const vault = flowRun?.vaultId == null ? null : vaultPathOfRepoId(deps.env, flowVaultRepoId(flowRun.vaultId));
   if (vault === null) throw new ControlError("recovery-blocked", `flow-child-vault-missing:${childGroupId}`);
   const commit = (await run("/usr/bin/git", ["--git-dir", vault, "rev-parse", "--verify", "--quiet", `${workBranchRef(childGroupId)}^{commit}`])).stdout.trim();
-  // §4.3: what the agent reported under `flow` (the pinned ccloop carries only `decisions` and `debug`: absent until it does).
+  // §4.3: what the agent reported under `flow`, which ccloop (fbd3512 on) answers at collect's top level and the driver
+  // saves with the report. A codex agent cannot report `candidates` (ccloop's closed wire shape omits them).
   const reported = reportedFlowOf(await savedReport(deps.store, current.runId));
   const flow = reported.kind === "object" ? {
     ...(reported.value.needs === undefined ? {} : { needs: reported.value.needs }), ...(reported.value.candidates === undefined ? {} : { candidates: reported.value.candidates }),

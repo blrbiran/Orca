@@ -26,6 +26,8 @@ export interface ExecutionReport {
  decisions?:unknown;
  /** A debug run's reproduction and closing values: optional like `decisions`; read only through reportedDecisions.ts. */
  debug?:unknown;
+ /** A flow step's report (ccloop flow-answer-key spec §4 item 7, opaque there): read only through reportedFlowOf. */
+ flow?:unknown;
  /** ccloop per-contract tool rules spec §5: the run's tool-rule report, present iff the contract had rules and ccloop wrote it. */
  toolRules?:ToolRulesReport;
 }
