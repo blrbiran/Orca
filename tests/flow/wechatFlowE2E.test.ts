@@ -14,7 +14,8 @@ import { SLUG, TITLES, WECHAT, toDraftBox, wechatFile, wechatWorld } from "./fix
  * `cover`, the person also unticks `pick-title`; only the chosen steps run, in template order, and the skipped ones keep
  * their outputs (the picked title and the cover stay in the folder). The re-run draft box records its own remote id.
  */
-describe("wechat-article end to end (C6)", () => {
+// A whole run on the real template: every execution now takes a drift snapshot first (§5.4), which costs seconds under load.
+describe("wechat-article end to end (C6)", { timeout: 60_000 }, () => {
   it("runs to the draft box across an ask, then re-runs only what the person chose after feedback on voice", async () => {
     const world = await wechatWorld();
     const { w, children, child, goalOf } = world; try {

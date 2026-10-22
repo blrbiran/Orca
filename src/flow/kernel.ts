@@ -36,15 +36,16 @@ import { deriveParam, expandKeepingSkillDirs } from "./template/vars.js";
 import { evaluateWhen, type ParamValue } from "./template/when.js";
 import { returnUnspent } from "./pool.js";
 import type { FlowChildPort } from "./kinds/work.js";
-import { activeOutputs, advanceHead, advanceHeadWithRetry, compose, type ExecutionOutput } from "./vault/compose.js";
+import { activeOutputs, advanceHead, advanceHeadWithRetry, compose, readHead, type ExecutionOutput } from "./vault/compose.js";
 import { changesBetween, copyBack } from "./vault/copyBack.js";
+import { commitDriftOnto, placeDrift, snapshotDrift } from "./vault/drift.js";
 import { DEFAULT_CAPS, importSnapshot } from "./vault/snapshot.js";
 import { openVault, type Vault } from "./vault/vault.js";
 import { vaultKeyOf } from "./vault/paths.js";
 import { flowVaultRepoId } from "./groups.js";
 import { parentGroupBody, type FlowParentConfirmation } from "./parent.js";
 import type { FlowCallResult } from "./calls.js";
-import { completePlanCall, finishPlan, planOf, PLAN_KEY } from "./rerun.js";
+import { completePlanCall, finishPlan, makePlan, planOf, PLAN_KEY } from "./rerun.js";
 import { flowLayers, readFlowSettings } from "./settings.js";
 import { gateEffect, settleEffect } from "./effects.js";
 import { consumeAtBoundary } from "./messages.js";
@@ -449,7 +450,14 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
  * output and the change is copied back into the person's folder; a copy-back conflict leaves the person's file as it is
  * and flags the execution red (`copy-back-conflict`).
  */
-export async function advanceWorkspace(deps: FlowDeps, run: LoadedRun, vault: Vault, key: ExecutionKey): Promise<void> {
+export async function advanceWorkspace(deps: FlowDeps, run: LoadedRun, vault: Vault, key: ExecutionKey | null): Promise<void> {
+  // §5.4: what the person wrote since the last copy-back is taken first, so this copy-back never writes over it.
+  if (await absorbDrift(deps, run, vault)) run = loadRun(deps.store, run.row.id);
+  await composeHeadAndCopyBack(deps, run, vault, key);
+}
+
+/** §5.3-§5.4: the flow head moves by CAS to the composition of every active output; the change is copied back. */
+async function composeHeadAndCopyBack(deps: FlowDeps, run: LoadedRun, vault: Vault, key: ExecutionKey | null): Promise<void> {
   let previous: string | null = null;
   let next: string;
   try {
@@ -466,12 +474,81 @@ export async function advanceWorkspace(deps: FlowDeps, run: LoadedRun, vault: Va
   }
   if (previous === null || run.body.dir === null) return;
   const result = await copyBack(vault, run.body.dir, previous, next);
-  if (result.conflicts.length === 0) return;
+  if (result.conflicts.length === 0 || key === null) return;
   const execution = listExecutions(deps.store, key.flowRunId).find((e) => e.stepKey === key.stepKey && e.seq === key.seq)!;
   const body = execution.body as ExecutionBody;
   deps.store.transaction(() => finishExecution(deps.store, key, execution.state, execution.state, deps.now(), {
     body: { ...body, flags: [...(body.flags ?? []), "copy-back-conflict"], copyBackConflicts: result.conflicts },
   }));
+}
+
+/**
+ * §5.4 [IR-I6] drift: the folder is snapshotted and compared with the flow head (what the folder was last given). The
+ * paths that differ are the person's. They are placed at the earliest step whose active output wrote any of them and
+ * committed onto that output as a person-authored execution of the step (`by` = the run's owner, `via: fs`); with no such
+ * step, onto the import, which becomes the run's new start. Recorded as an `edit` message; when a step after the placement
+ * has an output, a plan is made with the edit (the planner sees it as one: the edited step is not a candidate, later
+ * steps are). The head is not moved here: the caller's next advance composes it with the drift. True when drift was taken.
+ */
+export async function absorbDrift(deps: FlowDeps, run: LoadedRun, vault: Vault): Promise<boolean> {
+  if (run.body.dir === null || run.body.importCommit === null) return false;
+  const head = await readHead(vault, run.row.id);
+  if (head === null) return false;
+  const drift = await snapshotDrift(vault, run.body.dir, head);
+  if (drift === null) return false;
+  const executions = listExecutions(deps.store, run.row.id);
+  const heads = listHeads(deps.store, run.row.id);
+  const outputs: Array<{ stepKey: string; active: ExecutionRow; parent: string; paths: string[] }> = [];
+  for (const step of run.template.steps) {
+    const active = executions.find((e) => e.stepKey === step.id && e.seq === heads[step.id]);
+    if (active?.outputKind !== "commit" || active.outputRef === null) continue;
+    const parent = String((active.body as { parent?: string }).parent ?? active.baseCommit);
+    outputs.push({ stepKey: step.id, active, parent, paths: (await changesBetween(vault, parent, active.outputRef)).map((c) => c.path) });
+  }
+  const placed = placeDrift(drift.paths, outputs);
+  const owner = run.body.by;
+  const at = deps.now();
+  const message = { flowRunId: run.row.id, requestId: `fs:drift:${drift.commit}`, kind: "edit", by: owner, via: "fs", state: "applied" as const, reason: null, at };
+  const target = outputs.find((o) => o.stepKey === placed);
+  if (target === undefined) {
+    const start = await commitDriftOnto(vault, run.body.importCommit, drift.commit, drift.paths);
+    deps.store.transaction(() => {
+      updateFlowRunBody(deps.store, run.row.id, (body) => ({ ...body, importCommit: start }));
+      appendMessage(deps.store, { ...message, target: "run", body: { target: { kind: "run" }, drift: { paths: drift.paths, placedAt: "start", commit: start } } });
+    });
+  } else {
+    const { active, parent } = target;
+    const commit = await commitDriftOnto(vault, active.outputRef!, drift.commit, drift.paths);
+    const changes = await changesBetween(vault, parent, commit);
+    const seq = Math.max(...executions.filter((e) => e.stepKey === placed).map((e) => e.seq)) + 1;
+    const activeBody = active.body as ExecutionBody;
+    deps.store.transaction(() => {
+      const appended = appendMessage(deps.store, { ...message, target: "step", body: { target: { kind: "step", stepKey: placed }, drift: { paths: drift.paths, placedAt: placed, seq } } });
+      appendExecution(deps.store, {
+        flowRunId: run.row.id, stepKey: placed, seq, kind: active.kind, kindVersion: active.kindVersion, state: "done", definitionHash: active.definitionHash,
+        baseCommit: active.baseCommit, ranOn: active.ranOn, fingerprint: active.fingerprint, outputKind: "commit", outputRef: commit,
+        outputHash: outputHashOfCommit(changes.map((c) => ({ path: c.path, blob: c.newBlob }))), readSetHash: null, reasons: ["edit"], planNo: null, childGroupId: null,
+        by: owner, via: "fs", createdAt: at, updatedAt: at,
+        body: { basis: activeBody.basis, ranOnInputs: activeBody.ranOnInputs, retries: 0, retryReason: null, feedback: [], parent, drift: { message: appended.row.seq, onto: active.seq, paths: drift.paths } },
+      });
+      setHead(deps.store, run.row.id, placed, active.seq, seq);
+    });
+  }
+  const after = placed === "start" || target === undefined ? 0 : run.template.steps.findIndex((s) => s.id === placed) + 1;
+  const fresh = listHeads(deps.store, run.row.id);
+  if (run.template.steps.slice(after).some((s) => s.id !== placed && fresh[s.id] !== undefined)) {
+    await makePlan(deps, run.row.id, { by: owner, via: "fs", trigger: "edit", edits: target === undefined ? [] : [placed] });
+  }
+  return true;
+}
+
+/** §5.4: before an execution starts, the person's drift is taken and the head composed with it; true when there was some. */
+async function driftBeforeExecution(deps: FlowDeps, flowRunId: string): Promise<boolean> {
+  const run = loadRun(deps.store, flowRunId);
+  const vault = vaultOf(run);
+  if (vault === null || !(await absorbDrift(deps, run, vault))) return false;
+  await composeHeadAndCopyBack(deps, loadRun(deps.store, flowRunId), vault, null);
+  return true;
 }
 
 /** §4.2 review `revise` (and later feedback): an `orca-auto` feedback message and a queued revision of the step. */
@@ -639,6 +716,7 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
     if (current?.state === "failed") return false;
     if (current?.state === "queued") {
       if (!free) return false;
+      if (await driftBeforeExecution(deps, run.row.id)) return true;
       await runQueued(deps, run, current, basis);
       return true;
     }
@@ -647,6 +725,7 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
     if (plan !== null && plan.chosen.steps.includes(step.id) && !executedUnderPlan) {
       satisfied = false;
       if (!free) return false;
+      if (await driftBeforeExecution(deps, run.row.id)) return true;
       const seq = (current?.seq ?? 0) + 1;
       const at = deps.now();
       const reasons = plan.candidates.list.find((c) => c.stepKey === step.id)?.reasons ?? ["added"];
@@ -678,6 +757,7 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
       });
       return true;
     }
+    if (await driftBeforeExecution(deps, run.row.id)) return true;
     deps.store.transaction(() => appendQueued(deps, run, step.id, seq, reasons, {}, "orca-auto", "orca", at, plan?.planNo ?? null));
     await runQueued(deps, run, listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.id && e.seq === seq)!, basis);
     return true;

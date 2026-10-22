@@ -16,7 +16,8 @@ let saved: string | undefined;
 beforeEach(() => { saved = process.env.HOME; home = realpathSync(mkdtempSync(join(tmpdir(), "orca-c21-home-"))); process.env.HOME = home; });
 afterEach(() => { if (saved === undefined) delete process.env.HOME; else process.env.HOME = saved; rmSync(home, { recursive: true, force: true }); });
 
-describe("out-of-repo writes (C21)", () => {
+// A whole wechat-article run: a drift snapshot before every execution (§5.4) costs seconds under load.
+describe("out-of-repo writes (C21)", { timeout: 60_000 }, () => {
   it("a whole flow run writes nothing under HOME", async () => {
     const world = await wechatWorld();
     try {
