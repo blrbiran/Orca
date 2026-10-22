@@ -43,7 +43,7 @@ async function world(withChildren = true) {
   const request: FlowChildOpen = {
     childGroupId: "flow-fr-1-write-1", parentGroupId: "flow-1", flowRunId: "fr-1", stepKey: "write", seq: 1, baseCommit: BASE, vaultPath: `${h.root}/${VAULT_ID}.git`,
     plan: buildFlowStepPlanSource({ flowRunId: "fr-1", step: STEP, seq: 1, baseCommit: BASE, vaultPath: `${h.root}/${VAULT_ID}.git`, promptEnvelope: "Write.", gates: [], agent: { agent: "codex" } }),
-    work: { tokens: 70_000, activeMs: 1, attempts: 1, sessions: 1 }, skills: [], effectRecordId: null,
+    work: { tokens: 70_000, activeMs: 1, attempts: 1, sessions: 1 }, skills: ["alpha"], effectRecordId: null,
   };
   return { h, port, request };
 }
@@ -57,7 +57,7 @@ describe("the driver-backed child port (§6.2)", () => {
       writeRepositorySettingsBody(h.store, flowVaultRepoId(VAULT_ID), { workspaceMode: "worktree", revision: 1, integration: { delivery: "local", trigger: "task", method: "merge", target: "main" } });
       await port.open(request);
       const child = body(h, request.childGroupId);
-      expect(child.flow).toEqual({ role: "child", flowRunId: "fr-1", parentGroupId: "flow-1", stepKey: "write", seq: 1, baseCommit: BASE });
+      expect(child.flow).toEqual({ role: "child", flowRunId: "fr-1", parentGroupId: "flow-1", stepKey: "write", seq: 1, baseCommit: BASE, skills: ["alpha"] });
       expect(child.plan.repoId).toBe(flowVaultRepoId(VAULT_ID));
       expect(Object.hasOwn(child, "integration")).toBe(false);
       expect(child.limit.tokens).toBe(70_000);
