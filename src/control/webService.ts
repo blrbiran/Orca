@@ -1125,7 +1125,7 @@ export class WebControlService {
       if (asked(starters)) { recordCheckSkipped(this.store, repoId, kind, target, now, starters); if (!out.skipped.includes(repoId)) out.skipped.push(repoId); }
       return null;
     }
-    const byTrigger = enabled && !state.paused && evaluateTrigger(effective.kinds[kind].trigger.value, rangeFacts(this.store, repoId, prepared.range.groups, prepared.state, now));
+    const byTrigger = enabled && evaluateTrigger(effective.kinds[kind].trigger.value, rangeFacts(this.store, repoId, prepared.range.groups, prepared.state, now));
     return byTrigger || asked(starters) ? { range: prepared.range, state: prepared.state, starters } : null;
   }
   private async modelReviewTick(repoId: string, repo: string, target: string, now: number, out: { initialised: string[]; skipped: string[]; opened: string[] }): Promise<void> {

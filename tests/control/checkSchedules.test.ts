@@ -1,7 +1,8 @@
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { readCheckState, writeCheckState } from "../../src/control/checks/state.js";
+import { recordCheckStarted } from "../../src/control/checks/pass.js";
+import { EMPTY_CHECK_STATE, readCheckState, writeCheckState } from "../../src/control/checks/state.js";
 import type { ScheduledCheck } from "../../src/control/checks/settingsSchema.js";
 import { readOrchestrationSettings, writeOrchestrationSettings } from "../../src/control/orchestration.js";
 import { readRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
@@ -197,6 +198,16 @@ describe("run now", () => {
       await w.service.checksSettled();
       expect((await w.pass()).started).toEqual(["repo"]);
       expect(ic(w)).toMatchObject({ pendingRun: null, runSeq: 2, last: { state: "passed", groups: ["g2"] } });
+    } finally { await w.h.dispose(); }
+  });
+  it("a start clears the run now it read, never a newer one a person sent meanwhile", async () => {
+    const w = await checksWorld(); try {
+      const store = w.h.store;
+      store.transaction(() => writeCheckState(store, "repo", "integration-check", "main", { ...EMPTY_CHECK_STATE, watermark: "w", pendingRun: { commandId: "newer", at: 2 } }));
+      recordCheckStarted(store, "repo", "integration-check", "main", 3, { from: "w", to: "h", groups: [] }, {}, { slots: {}, pendingRun: { commandId: "older", at: 1 } });
+      expect(ic(w).pendingRun).toEqual({ commandId: "newer", at: 2 });
+      recordCheckStarted(store, "repo", "integration-check", "main", 4, { from: "w", to: "h", groups: [] }, {}, { slots: {}, pendingRun: { commandId: "newer", at: 2 } });
+      expect(ic(w).pendingRun).toBeNull();
     } finally { await w.h.dispose(); }
   });
 });
