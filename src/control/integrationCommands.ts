@@ -1,4 +1,5 @@
 import { recordActivity } from "./activity.js";
+import { FLOW_GROUP_DELIVERY_FIXED, isDirFlowGroup } from "../flow/groups.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
@@ -85,6 +86,8 @@ export function applySetGroupIntegration(
       const row = deps.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
       if (!row) throw new ControlError("group-not-found");
       const group = JSON.parse(String(row.body)) as Record<string, unknown>;
+      // Flow engine spec §5.1 [IR-I7]: a `dir` flow group delivers by copy-back only.
+      if (isDirFlowGroup(deps.store, groupId)) throw new ControlError(FLOW_GROUP_DELIVERY_FIXED);
       // A clarifying group has no plan yet; it gets its copy when its split is accepted.
       if (group.status === "clarifying") throw new ControlError("group-state-invalid");
       refuseFailedCheck(failedCheck);

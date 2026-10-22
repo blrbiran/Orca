@@ -1,4 +1,5 @@
 import { readdirSync } from "node:fs";
+import { isDirFlowGroup } from "../flow/groups.js";
 import { flagDecision } from "./flaggedDecisions.js";
 import { ORCHESTRATION_ACTOR } from "./orchestration.js";
 import { join } from "node:path";
@@ -105,6 +106,8 @@ export async function integratePendingGroups(deps: IntegrationDeps): Promise<boo
     } catch (error) { process.stderr.write(`orca-driver: integration ${groupId}: ${describe(error)}\n`); continue; }
     // Issue-fixes spec §6.3: an archived group's landed work is not carried anywhere until it is unarchived.
     if (archived) continue;
+    // Flow engine spec §5.1 [IR-I7]: a `dir` flow group never integrates; copy-back is its only delivery.
+    if (isDirFlowGroup(deps.store, groupId)) continue;
     // spec §7: a group with no conflict on record (its integration succeeded, or its scheme changed) owns no copy.
     if (copies.has(groupId) && (integration === null || integration.conflict === null)) {
       try { for (const copy of copies.get(groupId)!) await removeOwnPath(deps.repoPathOf(groupRepoId(deps.store, groupId)), deps.roots, copy); }

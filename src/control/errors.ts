@@ -254,6 +254,8 @@ export const durableCommandErrorStatuses = {
   "group-state-invalid": 422,
   // Flow engine spec §10.3 (W-76): a revision after a split draft was accepted, and one that changes nothing.
   "requirement-already-accepted": 422,
+  // Flow engine spec §5.1 [IR-I7]: a flow group on a `dir` workspace delivers `keep`, fixed by code.
+  "flow-group-delivery-fixed": 422,
   "revision-unchanged": 422,
   "group-stopped": 422,
   "handoff-budget-unavailable": 422,
@@ -432,6 +434,7 @@ export const v1WebErrorCodes = [
   "estimate-in-flight",
   "estimate-input-too-large",
   "execution-policy-unrepresentable",
+  "flow-group-delivery-fixed",
   "grant-amendment-unsupported",
   "group-budget-unavailable",
   "group-state-invalid",
