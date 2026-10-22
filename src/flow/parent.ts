@@ -13,7 +13,8 @@
  */
 import type { FrozenSlot } from "../control/agentSelection.js";
 import type { ControlStore } from "../control/store.js";
-import type { BudgetAmount } from "../control/types.js";
+import { REQUIREMENT_LIMIT_DEFAULT } from "../control/requirementSchemas.js";
+import type { BudgetAmount } from "../control/tokenPolicy.js";
 import { flowBlockOf } from "./groups.js";
 
 export interface ProfileBinding { profileId: string; profileHash: string }
@@ -39,7 +40,8 @@ export function parentGroupBody(input: {
   groupId: string; flowRunId: string; projectId: string | null; workspaceKind: string; vaultId: string | null; repoId: string | null;
   poolTokens: number; confirmation: FlowParentConfirmation; at: number; goal: string;
 }): Record<string, unknown> {
-  const limit: BudgetAmount = { tokens: input.poolTokens, activeMs: null, attempts: null, sessions: null };
+  // The pool is the token limit; the other dimensions are a clarifying group's (the calls on the parent are its only runs).
+  const limit: BudgetAmount = { ...REQUIREMENT_LIMIT_DEFAULT, tokens: input.poolTokens };
   const confirmed: FlowParentConfirmed = {
     by: "orca-auto", via: "orca", commandId: parentConfirmCommandId(input.flowRunId), at: input.at, poolTokens: input.poolTokens, ...input.confirmation,
   };
