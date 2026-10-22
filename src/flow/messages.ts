@@ -29,7 +29,7 @@ import {
 import type { ExecutionBody, LoadedRun } from "./kinds/registry.js";
 import { dropFromOpenPlan, makePlan } from "./rerun.js";
 import { discardEffect } from "./effects.js";
-import { MARK_COMMANDS, MARKABLE_KINDS, marksOf } from "./marks.js";
+import { holdableAfter, MARK_COMMANDS, MARKABLE_KINDS, marksOf } from "./marks.js";
 import { applyRewind, reapplyEdits } from "./rewind.js";
 import {
   appendExecution, appendMessage, finishExecution, getEffect, getHead, listExecutions, listMessages, setFlowRunState, setFlowRunTemplate, setHead, setMessageState,
@@ -86,7 +86,10 @@ function shapeRefusal(store: ControlStore, run: LoadedRun, input: FlowMessageInp
       const effects = input.body.effects;
       if (effects !== undefined) {
         if (command !== "defer" || typeof effects !== "object" || effects === null || Array.isArray(effects)) return "flow-message-invalid:effects";
-        if (Object.entries(effects).some(([key, choice]) => !run.template.steps.some((s) => s.id === key) || (choice !== "proceed" && choice !== "wait"))) return "flow-message-invalid:effects";
+        // §6.3: only the effect steps this defer would hold -- external/irreversible, after it, not its parallel sibling.
+        const holdable = holdableAfter(run.template, stepKey);
+        const bad = Object.entries(effects).find(([key, choice]) => !holdable.includes(key) || (choice !== "proceed" && choice !== "wait"));
+        if (bad !== undefined) return `flow-message-invalid:effects:${bad[0]}`;
       }
     }
   }

@@ -47,7 +47,7 @@ import { vaultKeyOf } from "./vault/paths.js";
 import { flowVaultRepoId } from "./groups.js";
 import { parentGroupBody, type FlowParentConfirmation } from "./parent.js";
 import type { FlowCallResult } from "./calls.js";
-import { completePlanCall, finishPlan, makePlan, planOf, PLAN_KEY } from "./rerun.js";
+import { completePlanCall, finishPlan, isOpenQuestion, makePlan, planOf, PLAN_KEY } from "./rerun.js";
 import { flowLayers, readFlowSettings } from "./settings.js";
 import { EFFECT_NOT_REPORTED, effectUnreported, gateEffect, settleEffect } from "./effects.js";
 import { consumeAtBoundary } from "./messages.js";
@@ -841,7 +841,7 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
   let satisfied = true;
   // Gaps spec §5.4: an open question holds its step and, through it, every later step (template order is the dependency
   // in phase 1); its `parallelWith` sibling and the steps before it run.
-  const asking = new Set((plan?.chosen.pending ?? []).filter((item) => item.answer === null).map((item) => item.stepKey));
+  const asking = new Set((plan?.chosen.pending ?? []).filter(isOpenQuestion).map((item) => item.stepKey));
   for (const [index, step] of run.template.steps.entries()) {
     // Gaps spec §6.2: a skipped or deferred step is settled whatever its basis, never run, never a blocker.
     if (marks.has(step.id)) continue;

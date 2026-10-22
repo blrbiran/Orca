@@ -302,7 +302,7 @@ describe("only a pending question times out (§2.3, gaps plan Task 4 carried fro
   });
 
   it("an overdue question code can no longer accept is closed, never thrown; another overdue one still resolves", async () => {
-    const { w, clock, flowRunId, plan, decisions } = await coverPending(); try {
+    const { w, clock, flowRunId, plan, decisions, feedback } = await coverPending(); try {
       // A second question, on a step already accepted in this plan (decidePlanStep refuses it): listed first.
       const row = plan(1);
       const chosen = row.chosen as Chosen;
@@ -311,7 +311,12 @@ describe("only a pending question times out (§2.3, gaps plan Task 4 carried fro
       clock.now = T0 + 300_000;
       await w.advance();
       const pending = (plan(1).chosen as Chosen).pending!;
-      expect(pending[0]).toMatchObject({ stepKey: "voice", answer: { choice: "accept-unchanged", source: "timeout" }, closed: expect.stringContaining("already accepted") });
+      // Closed with the refusal and NO answer: nothing was decided, and no reader may show it as accepted or open.
+      expect(pending[0]).toMatchObject({ stepKey: "voice", answer: null, closed: expect.stringContaining("already accepted") });
+      await expect(planStep(w.deps, { flowRunId, planNo: 1, stepKey: "voice", choice: "run", by: "ann", via: "cli:test" })).rejects.toMatchObject({ code: "flow-plan-step-not-candidate" });
+      // A newer plan does not ask it again (§5.6 carries open questions only).
+      await feedback("voice", "cooler", "fb-9");
+      expect(((plan(2).candidates as { carried?: { pending: Array<{ stepKey: string }> } }).carried?.pending ?? []).map((p) => p.stepKey)).not.toContain("voice");
       expect(pending[1]).toMatchObject({ stepKey: "cover", answer: { choice: "accept-unchanged", by: "orca-auto", source: "timeout" } });
       expect(decisions().map((d) => [d.stepKey, d.body.kind])).toEqual([["cover", "rerun-unsure-timeout"]]);
       expect(w.latest(flowRunId, "cover")).toMatchObject({ seq: 2, state: "skipped" });

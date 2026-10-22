@@ -52,6 +52,11 @@ export type PlanStepChoice = "run" | "accept-unchanged";
 export interface PendingAnswer { choice: PlanStepChoice; by: string; via: string; at: number; source: "person" | "timeout" | "carried"; fromPlan?: number }
 /** Gaps spec §5.2: an unsure candidate under `auto` asks the person; at `deadline` it resolves to accept-unchanged. */
 export interface PendingItem { stepKey: string; question: string; askedAt: number; deadline: number; answer: PendingAnswer | null; closed?: string }
+/**
+ * A question still waiting on the person (or its deadline). One the timeout could not answer (`closed`, with the
+ * refusal) has no answer -- nothing was decided -- and is not open either.
+ */
+export const isOpenQuestion = (item: PendingItem): boolean => item.answer === null && item.closed === undefined;
 /** Gaps spec §5.5: the step's output stands for its new inputs; `ranOnInputs` is what those inputs were when decided (§5.6). */
 export interface AcceptedItem { stepKey: string; seq: number; by: string; via: string; at: number; source: "person" | "timeout" | "carried"; fromPlan?: number; ranOnInputs: RanOnInputs }
 export interface PlanChosen { steps: string[]; skips: string[]; added: string[]; pending?: PendingItem[]; accepted?: AcceptedItem[] }
@@ -209,8 +214,8 @@ function carriedFrom(store: ControlStore, run: LoadedRun, older: readonly PlanRo
     if (chosen === null) continue;
     const ranUnder = (key: string) => executions.some((e) => e.stepKey === key && e.planNo === plan.planNo && (e.body as StoredBody).carriedForward === undefined);
     for (const item of chosen.pending ?? []) {
-      if (item.answer === null) out.pending.push({ stepKey: item.stepKey, question: item.question, fromPlan: plan.planNo });
-      else if (item.answer.choice === "run" && !ranUnder(item.stepKey)) out.run.push({ stepKey: item.stepKey, question: item.question, answer: { ...item.answer, source: "carried", fromPlan: plan.planNo } });
+      if (isOpenQuestion(item)) out.pending.push({ stepKey: item.stepKey, question: item.question, fromPlan: plan.planNo });
+      else if (item.answer?.choice === "run" && !ranUnder(item.stepKey)) out.run.push({ stepKey: item.stepKey, question: item.question, answer: { ...item.answer, source: "carried", fromPlan: plan.planNo } });
     }
     for (const item of chosen.accepted ?? []) {
       const candidate = list.find((c) => c.stepKey === item.stepKey);
@@ -278,11 +283,25 @@ function rerunReviewOf(deps: FlowDeps, run: LoadedRun): "auto" | "review" {
   return deps.rerunReview?.(run.body.projectId) ?? readFlowSettings(deps.store, run.body.projectId).rerunReview.value;
 }
 
+/**
+ * Gaps spec §6.2 (Review Focus 3): when a candidate was skipped or deferred after the plan was made, its listed
+ * reasons may be stale -- a later step listed `upstream-changed:<it>` because it was about to re-run, which it no longer
+ * is. The candidates are measured again now (the plan's feedback and unmarked fills still count) and only those still
+ * live may run, as the cutoff does after an execution (§7.5). Null when nothing listed is marked: the list stands.
+ */
+function stillCandidates(deps: FlowDeps, run: LoadedRun, cands: PlanCandidates, marked: ReadonlyMap<string, unknown>): Set<string> | null {
+  if (!cands.list.some((c) => marked.has(c.stepKey))) return null;
+  const now = currentCandidates(deps, run, feedbackMessages(cands.feedback), undefined, new Set((cands.fills ?? []).filter((key) => !marked.has(key))));
+  return new Set(afterExecution({ chosen: cands.list.map((c) => c.stepKey), executed: [] }, now).chosen);
+}
+
 /** Choose the steps: candidates minus the skips plus the additions, always in template order (never the proposal's). */
-function choose(store: ControlStore, plan: PlanRow, run: LoadedRun, skips: readonly string[], add: readonly string[], proposal: PlanProposal): void {
-  const marked = marksOf(listMessages(store, run.row.id));
-  const steps = chosenPlan((plan.candidates as PlanCandidates).list, { skips, add }, run.template.steps.map((s) => s.id)).filter((key) => !marked.has(key));
-  putPlan(store, { ...plan, state: "running", proposal, chosen: { steps, skips: [...skips], added: [...add] } satisfies PlanChosen });
+function choose(deps: FlowDeps, plan: PlanRow, run: LoadedRun, skips: readonly string[], add: readonly string[], proposal: PlanProposal): void {
+  const marked = marksOf(listMessages(deps.store, run.row.id));
+  const still = stillCandidates(deps, run, plan.candidates as PlanCandidates, marked);
+  const steps = chosenPlan((plan.candidates as PlanCandidates).list, { skips, add }, run.template.steps.map((s) => s.id))
+    .filter((key) => !marked.has(key) && (still === null || still.has(key) || add.includes(key)));
+  putPlan(deps.store, { ...plan, state: "running", proposal, chosen: { steps, skips: [...skips], added: [...add] } satisfies PlanChosen });
 }
 
 /** Gaps spec §5.3: `flows.rerunAskTimeoutSeconds` of the run's project (project > global > 300), in milliseconds. */
@@ -306,7 +325,8 @@ function settleProposal(deps: FlowDeps, run: LoadedRun, plan: PlanRow, proposal:
     const carried = cands.carried ?? { pending: [], accepted: [], run: [] };
     // Gaps spec §6.2: a step the person skipped or deferred since the plan was made is no longer one of its candidates.
     const marked = marksOf(listMessages(deps.store, run.row.id));
-    const isCandidate = (key: string) => !marked.has(key) && cands.list.some((c) => c.stepKey === key);
+    const still = stillCandidates(deps, run, cands, marked);
+    const isCandidate = (key: string) => !marked.has(key) && cands.list.some((c) => c.stepKey === key) && (still === null || still.has(key));
     const now = deps.now();
     const accepted = carried.accepted.map((a) => ({ ...a, at: now }));
     const kept = new Set([...accepted.map((a) => a.stepKey), ...carried.run.map((r) => r.stepKey)]);
@@ -369,7 +389,7 @@ export async function planOf(deps: FlowDeps, run: LoadedRun): Promise<"wait" | "
   const chosen = plan.chosen as PlanChosen;
   // Gaps spec §5.3: a pending question past its deadline is accepted as unchanged by orca-auto -- never run -- once.
   const at = deps.now();
-  const overdue = (chosen.pending ?? []).filter((item) => item.answer === null && item.deadline <= at);
+  const overdue = (chosen.pending ?? []).filter((item) => isOpenQuestion(item) && item.deadline <= at);
   if (overdue.length > 0) {
     deps.store.transaction(() => {
       let row = plan;
@@ -378,10 +398,10 @@ export async function planOf(deps: FlowDeps, run: LoadedRun): Promise<"wait" | "
         try { row = decidePlanStep(deps.store, run, row, item.stepKey, answer); }
         catch (error) {
           // A question code can no longer answer that way (the step has no output to keep, or is accepted already) is
-          // closed with the refusal, nothing decided -- never thrown, so it cannot hold up the other overdue questions.
+          // closed with the refusal and no answer -- nothing decided -- never thrown, so it cannot hold up the others.
           if (!(error instanceof FlowRefusal)) throw error;
           const chosenNow = row.chosen as PlanChosen;
-          row = { ...row, chosen: { ...chosenNow, pending: (chosenNow.pending ?? []).map((p) => (p.stepKey === item.stepKey && p.answer === null ? { ...p, answer, closed: error.message } : p)) } };
+          row = { ...row, chosen: { ...chosenNow, pending: (chosenNow.pending ?? []).map((p) => (p.stepKey === item.stepKey && isOpenQuestion(p) ? { ...p, closed: error.message } : p)) } };
           putPlan(deps.store, row);
           continue;
         }
@@ -427,7 +447,7 @@ export function decidePlanStep(store: ControlStore, run: LoadedRun, plan: PlanRo
   const accepted = chosen.accepted ?? [];
   const refuse = (why: string): never => { throw new FlowRefusal("flow-plan-step-not-candidate", `${stepKey}: ${why}`); };
   if (accepted.some((a) => a.stepKey === stepKey)) refuse("already accepted as unchanged");
-  const open = pending.find((p) => p.stepKey === stepKey && p.answer === null);
+  const open = pending.find((p) => p.stepKey === stepKey && isOpenQuestion(p));
   const answerOpen = (items: PendingItem[]): PendingItem[] => items.map((p) => (p === open ? { ...p, answer } : p));
   const order = run.template.steps.map((s) => s.id);
   let next: PlanChosen;
@@ -464,7 +484,7 @@ export function dropFromOpenPlan(store: ControlStore, flowRunId: string, stepKey
   const chosen = plan?.chosen as PlanChosen | null | undefined;
   if (plan === null || plan.state !== "running" || chosen == null) return;
   if (listExecutions(store, flowRunId).some((e) => e.stepKey === stepKey && e.planNo === plan.planNo && (e.body as StoredBody).carriedForward === undefined && e.state !== "skipped")) return;
-  const pending = (chosen.pending ?? []).filter((p) => !(p.stepKey === stepKey && p.answer === null));
+  const pending = (chosen.pending ?? []).filter((p) => !(p.stepKey === stepKey && isOpenQuestion(p)));
   if (!chosen.steps.includes(stepKey) && pending.length === (chosen.pending ?? []).length) return;
   putPlan(store, { ...plan, chosen: { ...chosen, steps: chosen.steps.filter((key) => key !== stepKey), ...(chosen.pending === undefined ? {} : { pending }) } satisfies PlanChosen });
 }
@@ -492,7 +512,7 @@ export async function runPlan(deps: FlowDeps, flowRunId: string, planNo: number,
       flowRunId, requestId: `rerun:${planNo}`, kind: "command", target: "run", body: { command: "rerun", planNo, skip: skips, add: choice.add ?? [] },
       by, via, state: "applied", reason: null, at,
     });
-    choose(deps.store, plan, run, skips, choice.add ?? [], proposal);
+    choose(deps, plan, run, skips, choice.add ?? [], proposal);
   });
   await advanceRun(deps, flowRunId);
 }

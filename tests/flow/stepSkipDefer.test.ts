@@ -103,7 +103,8 @@ describe("marks are derived from the applied messages (marks.ts, pure)", () => {
   });
 });
 
-describe("skip / defer / fill on the wechat run (G5)", { timeout: 60_000 }, () => {
+// Whole runs on the real template: every execution takes a drift snapshot first, which costs seconds under load.
+describe("skip / defer / fill on the wechat run (G5)", { timeout: 180_000 }, () => {
   it("a failed cover deferred: the run continues, the draft box is held; defer … proceed starts it and its level gate applies", async () => {
     const world = await wechatWorld();
     const { w, children, child } = world; try {
@@ -129,6 +130,45 @@ describe("skip / defer / fill on the wechat run (G5)", { timeout: 60_000 }, () =
       expect((w.latest(flowRunId, "to-draft-box")!.body as { ask?: { kind?: string } }).ask?.kind).toBe("effect-confirm");
       expect(listEffects(w.store, flowRunId).filter((r) => r.stepKey === "to-draft-box").map((r) => r.state)).toEqual(["staged"]);
       expect(children.opened.has(child(flowRunId, "to-draft-box", 2))).toBe(false);
+    } finally { await w.dispose(); }
+  });
+
+  it("a defer then a skip of the same step releases the held draft box (a skip holds nothing; the newest mark wins)", async () => {
+    const world = await wechatWorld();
+    const { w, children, child } = world; try {
+      const flowRunId = await coverFailed(world);
+      await command(world, flowRunId, "cover", { command: "defer" }, "d1");
+      expect(w.latest(flowRunId, "to-draft-box")).toMatchObject({ seq: 1, state: "parked" });
+      await command(world, flowRunId, "cover", { command: "skip" }, "s1");
+      expect(w.execs(flowRunId, "to-draft-box").map((e) => e.state)).toEqual(["skipped", "running"]);
+      expect(children.opened.has(child(flowRunId, "to-draft-box", 2))).toBe(true);
+      expect(marksOf(listMessages(w.store, flowRunId)).get("cover")).toMatchObject({ kind: "skip" });
+    } finally { await w.dispose(); }
+  });
+
+  it("a draft-box card already waiting when an earlier step is deferred stays the person's: no automatic enact", async () => {
+    const world = await wechatWorld();
+    const { w, children, child } = world; try {
+      setLevels(world, { external: "confirm" });
+      const flowRunId = await untilArticleAsks(world);
+      children.land(child(flowRunId, "cover", 1), COVER_FILES, COVER_EFFECT);
+      await w.advance();
+      await answerNeeds(w.deps, { flowRunId, stepKey: "article" }, "plain", "ann", "cli:test");
+      await w.advance();
+      children.land(child(flowRunId, "article", 2), { [`${SLUG}.wechat.html`]: "<p>Tea</p>\n" });
+      await w.advance();
+      const card = w.latest(flowRunId, "to-draft-box")!;
+      expect(card).toMatchObject({ seq: 1, state: "needs-person" });
+      const [record] = listEffects(w.store, flowRunId).filter((r) => r.stepKey === "to-draft-box");
+      expect(record).toMatchObject({ state: "staged" });
+      await command(world, flowRunId, "cover", { command: "defer" }, "d1");
+      await w.advance();
+      await w.advance();
+      // Still the same card, still staged, nothing pushed: only the person's confirm runs it.
+      expect(w.execs(flowRunId, "to-draft-box").map((e) => e.state)).toEqual(["needs-person"]);
+      expect(listEffects(w.store, flowRunId).find((r) => r.id === record!.id)!.state).toBe("staged");
+      expect(children.opened.has(child(flowRunId, "to-draft-box", 1))).toBe(false);
+      expect(needsYouOf(world, flowRunId)).toBe(2);
     } finally { await w.dispose(); }
   });
 
@@ -174,6 +214,11 @@ describe("skip / defer / fill on the wechat run (G5)", { timeout: 60_000 }, () =
       world.children.land(world.child(flowRunId, "cover", 1), COVER_FILES, COVER_EFFECT);
       await w.advance();
       expect(await command(world, flowRunId, "cover", { command: "fill" }, "r3")).toMatchObject({ state: "rejected", reason: "flow-step-not-marked" });
+      // §6.3: a defer's effects name only the steps it would hold (external/irreversible, after it, not its sibling).
+      expect(await command(world, flowRunId, "cover", { command: "defer", effects: { visuals: "proceed" } }, "r4")).toMatchObject({ state: "rejected", reason: "flow-message-invalid:effects:visuals" });
+      expect(await command(world, flowRunId, "cover", { command: "defer", effects: { article: "wait" } }, "r5")).toMatchObject({ state: "rejected", reason: "flow-message-invalid:effects:article" });
+      expect(await command(world, flowRunId, "draft", { command: "defer", effects: { "to-draft-box": "maybe" } }, "r6")).toMatchObject({ state: "rejected", reason: "flow-message-invalid:effects:to-draft-box" });
+      expect(await command(world, flowRunId, "cover", { command: "skip", effects: { "to-draft-box": "proceed" } }, "r7")).toMatchObject({ state: "rejected", reason: "flow-message-invalid:effects" });
       expect(listPlans(w.store, flowRunId)).toHaveLength(0);
       expect(marksOf(listMessages(w.store, flowRunId)).size).toBe(0);
     } finally { await w.dispose(); }
@@ -302,13 +347,23 @@ describe("skip / defer / fill on the wechat run (G5)", { timeout: 60_000 }, () =
     const world = await wechatWorld();
     const { w, children, child } = world; try {
       const flowRunId = await visualsDeferred(world);
+      // The article ran without visuals meanwhile (its answer), so after the fill it is listed only because visuals re-runs.
+      await answerNeeds(w.deps, { flowRunId, stepKey: "article" }, "plain", "ann", "cli:test");
+      await w.advance();
+      children.land(child(flowRunId, "article", 2), { [`${SLUG}.wechat.html`]: "<p>Tea</p>\n" });
+      await w.advance();
       await command(world, flowRunId, "visuals", { command: "fill" }, "f1");
       expect(listPlans(w.store, flowRunId)[0]).toMatchObject({ planNo: 1, state: "proposed" });
+      expect((listPlans(w.store, flowRunId)[0]!.candidates as { list: Array<{ stepKey: string }> }).list.map((c) => c.stepKey)).toEqual(["visuals", "article", "cover", "to-draft-box"]);
       // The person defers again before the plan ran: the newer mark wins.
       await command(world, flowRunId, "visuals", { command: "defer" }, "d2");
       await w.answer(w.calls.map((c) => c.purpose).lastIndexOf("rerun-proposal"), { skips: [] });
       const chosen = listPlans(w.store, flowRunId)[0]!.chosen as { steps: string[] };
       expect(chosen.steps).not.toContain("visuals");
+      // The reasons measured while visuals was to re-run are gone: article and cover stay; only the never-run box is left.
+      expect(chosen.steps).toEqual(["to-draft-box"]);
+      expect(children.opened.has(child(flowRunId, "article", 3))).toBe(false);
+      expect(children.opened.has(child(flowRunId, "cover", 2))).toBe(false);
       expect(children.opened.has(child(flowRunId, "visuals", 3))).toBe(false);
       expect(w.execs(flowRunId, "visuals").map((e) => e.state)).toEqual(["done", "skipped", "skipped"]);
       expect(w.latest(flowRunId, "visuals")!.body).toMatchObject({ mark: { kind: "defer" } });

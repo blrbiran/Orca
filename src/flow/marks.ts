@@ -40,12 +40,22 @@ type Step = FlowTemplate["steps"][number];
 const parallel = (a: Step, b: Step): boolean => a.parallelWith === b.id || b.parallelWith === a.id;
 const HELD_CLASSES: ReadonlySet<string> = new Set(["external", "irreversible"]);
 
+const isHoldable = (template: Pick<FlowTemplate, "effects">, step: Step): boolean =>
+  step.kind === "work" && step.effect !== undefined && HELD_CLASSES.has(String(template.effects?.[step.effect]?.class));
+
+/** §6.3: the effect steps a defer of `deferredKey` would hold -- the only keys its `effects` choices may name. */
+export function holdableAfter(template: Pick<FlowTemplate, "steps" | "effects">, deferredKey: string): string[] {
+  const index = template.steps.findIndex((s) => s.id === deferredKey);
+  const deferred = template.steps[index];
+  if (deferred === undefined) return [];
+  return template.steps.slice(index + 1).filter((s) => isHoldable(template, s) && !parallel(s, deferred)).map((s) => s.id);
+}
+
 /** The deferred steps holding `stepKey` (empty: it is not held). */
 export function heldBy(template: Pick<FlowTemplate, "steps" | "effects">, marks: ReadonlyMap<string, Mark>, stepKey: string): string[] {
   const index = template.steps.findIndex((s) => s.id === stepKey);
   const step = template.steps[index];
-  if (step === undefined || marks.has(stepKey) || step.kind !== "work" || step.effect === undefined) return [];
-  if (!HELD_CLASSES.has(String(template.effects?.[step.effect]?.class))) return [];
+  if (step === undefined || marks.has(stepKey) || !isHoldable(template, step)) return [];
   return template.steps.slice(0, index).filter((s) => {
     const mark = marks.get(s.id);
     return mark?.kind === "defer" && !parallel(s, step) && mark.effects[stepKey] !== "proceed";

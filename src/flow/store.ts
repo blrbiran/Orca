@@ -341,7 +341,7 @@ export function listIntakes(store: ControlStore, flowRunId: string): IntakeRow[]
 /**
  * Gaps spec §4.2: the runs the kernel must pass -- `running`, or with an open intake (not planned / withdrawn / failed), an
  * open plan (`proposed` / `running`, as rerun.ts), or a pending question (a plan whose `chosen.pending` has an item with a
- * null `answer`). One query over `flow_runs` ∪ `flow_feedback` ∪ `rerun_plans`.
+ * null `answer` that is not `closed`). One query over `flow_runs` ∪ `flow_feedback` ∪ `rerun_plans`.
  */
 export function listRunsWithOpenWork(store: ControlStore): string[] {
   return store.db.prepare(`SELECT id FROM flow_runs WHERE state='running'
@@ -349,6 +349,6 @@ export function listRunsWithOpenWork(store: ControlStore): string[] {
     UNION SELECT flow_run_id FROM rerun_plans WHERE state IN ('proposed','running')
     UNION SELECT flow_run_id FROM rerun_plans WHERE state IN ('proposed','chosen','running') AND chosen IS NOT NULL AND json_valid(chosen)
       AND json_type(chosen,'$.pending')='array'
-      AND EXISTS (SELECT 1 FROM json_each(chosen,'$.pending') AS item WHERE json_extract(item.value,'$.answer') IS NULL)
+      AND EXISTS (SELECT 1 FROM json_each(chosen,'$.pending') AS item WHERE json_extract(item.value,'$.answer') IS NULL AND json_extract(item.value,'$.closed') IS NULL)
     ORDER BY 1`).all().map((row) => String(row.id));
 }
