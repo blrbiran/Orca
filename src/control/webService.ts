@@ -1078,7 +1078,11 @@ export class WebControlService {
           if (due === null) continue;
           const groups = due.range.groups;
           const commands = settings.command.value !== null ? [settings.command.value] : [...new Set(groups.flatMap((group) => group.checks))];
-          if (commands.length === 0) continue;
+          if (commands.length === 0) {
+            // Nothing to run: a slot or a run now that asked is consumed, not left to ask at every pass.
+            if (asked(due.starters)) { recordCheckSkipped(this.store, repoId, "integration-check", target, now, due.starters, "nothing to run"); if (!out.skipped.includes(repoId)) out.skipped.push(repoId); }
+            continue;
+          }
           recordCheckStarted(this.store, repoId, "integration-check", target, now, due.range, {}, due.starters);
           const job = this.runIntegrationCheckJob(repoId, target, groups, due.range.to, commands, now)
             .finally(() => { this.checkJobs.delete(key); });

@@ -161,6 +161,33 @@ describe("scheduled checks", () => {
   });
 });
 
+describe("an integration check with nothing to run", () => {
+  // Controller's call (session b37f7ce9): no command set and no landed group names a check of its own -- a slot or a run
+  // now that asked is consumed and recorded `skipped: nothing to run` (it would otherwise ask again at every pass). The
+  // watermark stays: once a command is set, the same range is still there to check.
+  it("consumes a run now and a due slot, recording skipped: nothing to run; the watermark stays", async () => {
+    const w = await checksWorld(); try {
+      utc(w);
+      w.setProjectChecks({ integrationCheck: { enabled: false, command: null }, scheduled: [daily("nightly", 9)] });
+      await w.pass();
+      const start = ic(w).watermark;
+      await w.commitLand("g1", { "a.txt": "1\n" });
+      // A group whose plan cannot be read adds no check of its own (integrationCheck.ts landedGroups).
+      w.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g1'").run(JSON.stringify({ ...w.groupBody("g1"), plan: { ...(w.groupBody("g1").plan as object), goal: "unreadable" } }));
+      expect(runNow(w)).toMatchObject({ result: { kind: "check-run-requested" } });
+      // mutation: drop the skip (leave the run now pending) -> skipped [], pendingRun set, red
+      expect(await w.pass()).toMatchObject({ started: [], skipped: ["repo"] });
+      expect(ic(w)).toMatchObject({ pendingRun: null, runSeq: 0, watermark: start, last: { state: "skipped", detail: "nothing to run" } });
+      advanceTo(w, "2026-10-21T09:00:00Z");
+      expect(await w.pass()).toMatchObject({ started: [], skipped: ["repo"] });
+      expect(ic(w)).toMatchObject({ runSeq: 0, watermark: start, lastSlot: { nightly: at("2026-10-21T09:00:00Z") }, last: { state: "skipped", detail: "nothing to run", at: w.now() } });
+      // Consumed: the next pass is not asked again.
+      w.advance(60_000);
+      expect(await w.pass()).toMatchObject({ started: [], skipped: [] });
+    } finally { await w.h.dispose(); }
+  });
+});
+
 describe("run now", () => {
   it("with no watermark records initialised; over an empty range records skipped; else starts though the trigger is off", async () => {
     const w = await checksWorld(); try {

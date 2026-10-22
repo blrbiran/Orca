@@ -125,9 +125,13 @@ const consume = (s: CheckState, starters: Starters): CheckState => ({
   pendingRun: starters.pendingRun !== null && s.pendingRun?.commandId === starters.pendingRun.commandId ? null : s.pendingRun,
 });
 
-/** §2.4: a slot or a run now over an empty range is consumed and recorded `skipped: nothing new` (no run, no spend). */
-export function recordCheckSkipped(store: ControlStore, repoId: string, kind: CheckKind, target: string, at: number, starters: Starters): CheckState {
-  return update(store, repoId, kind, target, (s) => ({ ...consume(s, starters), last: record({ state: "skipped", at, detail: "nothing new" }) }));
+/**
+ * §2.4: a slot or a run now over an empty range is consumed and recorded `skipped: nothing new` (no run, no spend); an
+ * integration check with no command and no landed group's own check, `skipped: nothing to run` (controller's call,
+ * session b37f7ce9). The watermark does not move.
+ */
+export function recordCheckSkipped(store: ControlStore, repoId: string, kind: CheckKind, target: string, at: number, starters: Starters, detail: "nothing new" | "nothing to run" = "nothing new"): CheckState {
+  return update(store, repoId, kind, target, (s) => ({ ...consume(s, starters), last: record({ state: "skipped", at, detail }) }));
 }
 
 /** The first evaluation initialised the watermark: the starters that asked for it are consumed with it (§5.3). */
