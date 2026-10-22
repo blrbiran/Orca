@@ -304,6 +304,15 @@ describe("dismissing a model-review finding (spec §6.5, §6.6, criterion 11, re
     expect(onCommand.mock.calls[0]![0]).toEqual({ verb: "ratify-flagged-decision", groupId: "sysreview-x", expectedRevision: 9, payload: { decisionId: FINDING.decisionId, note: "two shapes on purpose" } });
   });
 
+  it("opens the REVIEW group's detail from an involved group's finding", async () => {
+    serve((url) => (url === "/api/control/checks/reviews/sysreview-x" ? RECORD : null));
+    showGroup({ ...FINDING, ownerGroupId: "sysreview-x" });
+    fireEvent.click(within(screen.getByTestId("group-flag")).getByRole("button", { name: "Review detail" }));
+    // mutation: open the clicked group's detail -> region "Model review g", red
+    const region = await screen.findByRole("region", { name: "Model review sysreview-x" });
+    await waitFor(() => expect(within(region).getByTestId("review-finding-f1").textContent).toContain("two error shapes"));
+  });
+
   it("sends no note when none was written; on the review group itself it targets that group", () => {
     const onCommand = showGroup(FINDING);
     fireEvent.click(within(screen.getByTestId("group-flag")).getByRole("button", { name: "Dismiss" }));
@@ -339,6 +348,31 @@ describe("the review detail (spec §7)", () => {
     expect(within(region).getByTestId("review-dropped").textContent).toContain("f2: evidence-single-group");
     expect(within(region).getByTestId("review-dismissals").textContent).toContain("two shapes on purpose");
     expect(within(region).getByTestId("review-debug").textContent).toContain("sysdebug-model-review-finding-1");
+  });
+
+  // Spec §7: the review group shows as a system card, and the card opens the group's view -- which is where the review's
+  // detail must be, or a person who follows the card never reaches the findings. A finding's fix group is not a review.
+  const systemGroup = (source: NonNullable<GroupSummaryV1["systemDebug"]>["source"]) => {
+    const base = view([]);
+    return { ...base, summary: { ...base.summary, systemDebug: { source, stackOn: null, settled: null } } };
+  };
+  const showView = (v: ReturnType<typeof view>) => render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "progress", taskId: null, runId: null }}
+    view={v} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+
+  it("a review group's own view shows its review's detail", async () => {
+    serve((url) => (url === "/api/control/checks/reviews/g" ? { ...RECORD, reviewGroupId: "g" } : null));
+    // mutation: drop the review detail from the review group's view -> no region, red
+    showView(systemGroup({ kind: "model-review", repoId: "orca", target: "main", from: "a".repeat(40), to: "b".repeat(40), runSeq: 1 }));
+    const region = await screen.findByRole("region", { name: "Model review g" });
+    await waitFor(() => expect(within(region).getByTestId("review-finding-f1").textContent).toContain("two error shapes"));
+  });
+
+  it("a finding's fix group shows no review detail of its own", () => {
+    serve(() => RECORD);
+    // mutation: show it on any system group -> a region, red
+    showView(systemGroup({ kind: "model-review-finding", repoId: "orca", reviewGroupId: "sysreview-x", findingId: "f1" }));
+    expect(screen.queryByRole("region", { name: /^Model review / })).toBeNull();
+    expect(reads.filter((url) => url.startsWith("/api/control/checks/reviews/"))).toEqual([]);
   });
 });
 
