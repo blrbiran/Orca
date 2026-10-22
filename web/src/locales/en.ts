@@ -1082,6 +1082,7 @@ export const en = {
       field: { enabled: "Event trigger on", trigger: "Trigger", command: "Command (instead of the groups' own checks)", budgetTokens: "Token budget per review", maxGroupsPerReview: "Groups per review" },
       source: { project: "project", global: "global", builtin: "built-in" },
       locked: "locked",
+      overriddenByLock: "overridden by lock",
       value: { on: "on", off: "off", noCommand: "the groups' own checks" },
       commandPlaceholder: "for example: npm ci && npm test",
       save: "Save",

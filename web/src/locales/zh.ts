@@ -954,6 +954,7 @@ export const zh: Translation<typeof en> = {
       field: { enabled: "事件触发开启", trigger: "触发条件", command: "命令（代替各组自己的检查）", budgetTokens: "每次审查的 token 预算", maxGroupsPerReview: "每次审查的组数上限" },
       source: { project: "项目", global: "全局", builtin: "内置" },
       locked: "已锁定",
+      overriddenByLock: "被锁覆盖",
       value: { on: "开", off: "关", noCommand: "各组自己的检查" },
       commandPlaceholder: "例如：npm ci && npm test",
       save: "保存",

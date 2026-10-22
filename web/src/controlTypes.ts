@@ -673,7 +673,8 @@ export type ChecksLayerV1 = {
 // Checks spec §4.3: GET /api/control/checks[?repoId=] (src/control/checks/settings.ts checksReadSchema), each field with
 // the layer it came from and whether a global lock binds it; `revision` is the layer's, `nextSlots` by scheduled-check id.
 export type CheckSourceV1 = "project" | "global" | "builtin";
-export type CheckSourcedV1<T> = { value: T; source: CheckSourceV1; lockedBy: "global" | null };
+// `overriddenByLock`: the project's own value a global lock ignores (§4.2), present only then.
+export type CheckSourcedV1<T> = { value: T; source: CheckSourceV1; lockedBy: "global" | null; overriddenByLock?: T };
 export type CheckLastStateV1 = "running" | "passed" | "failed" | "completed" | "errored" | "initialised" | "skipped" | "migrated";
 export type CheckStateV1 = {
   watermark: string | null; lastStartAt: number | null; lastSlot: Record<string, number>; runSeq: number; failureStreak: number; paused: boolean;

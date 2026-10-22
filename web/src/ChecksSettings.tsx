@@ -99,9 +99,12 @@ function Field<T>(props: {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<T>(props.sourced.value);
   const ours = props.sourced.source === props.layer;
+  // Spec §4.2: this layer's own value a lock ignores -- shown struck through, and it can still be cleared from this layer.
+  const ignored = props.sourced.overriddenByLock;
   return (
     <div className="check-field" data-testid={`check-field-${props.kind}-${props.name}`}>
       <span>{t(`settings.checks.field.${props.name}` as const)}: {props.show(props.sourced.value)}</span> <SourceBadges sourced={props.sourced} />
+      {ignored !== undefined && <> <s data-testid="check-overridden">{props.show(ignored)}</s> {t("settings.checks.overriddenByLock")}</>}
       {props.may && (
         <div>
           {props.edit(draft, setDraft)}
@@ -110,7 +113,7 @@ function Field<T>(props: {
             onClick={() => props.send("set-check-settings", { kind: props.kind, set: { [props.name]: props.normalize === undefined ? draft : props.normalize(draft) }, clear: [] })}>
             {t(ours ? "settings.checks.save" : "settings.checks.override")}
           </button>
-          {ours && <button type="button" onClick={() => props.send("set-check-settings", { kind: props.kind, set: {}, clear: [props.name] })}>{t("settings.checks.reset")}</button>}
+          {(ours || ignored !== undefined) && <button type="button" onClick={() => props.send("set-check-settings", { kind: props.kind, set: {}, clear: [props.name] })}>{t("settings.checks.reset")}</button>}
         </div>
       )}
     </div>

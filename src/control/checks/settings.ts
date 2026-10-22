@@ -16,7 +16,8 @@ import { BUILTIN_TRIGGERS, triggerSchema, type Trigger } from "./trigger.js";
  * ignored and the global value is shown instead.
  */
 export type Source = "project" | "global" | "builtin";
-export interface Sourced<T> { value: T; source: Source; lockedBy: "global" | null }
+// `overriddenByLock`: the project's own value a lock ignores (§4.2: shown struck through, "overridden by lock").
+export interface Sourced<T> { value: T; source: Source; lockedBy: "global" | null; overriddenByLock?: T }
 export interface EffectiveChecks {
   kinds: {
     "integration-check": { enabled: Sourced<boolean>; trigger: Sourced<Trigger>; command: Sourced<string | null> };
@@ -41,7 +42,8 @@ function pick<T>(project: T | undefined, global: T | undefined, builtin: T): Sou
 function locked<T>(project: T | undefined, global: T | undefined, builtin: T, isLocked: boolean, allowed: (project: T, bound: T) => boolean): Sourced<T> {
   if (!isLocked) return pick(project, global, builtin);
   const bound = pick(undefined, global, builtin);
-  return project !== undefined && allowed(project, bound.value) ? { value: project, source: "project", lockedBy: "global" } : { ...bound, lockedBy: "global" };
+  if (project === undefined) return { ...bound, lockedBy: "global" };
+  return allowed(project, bound.value) ? { value: project, source: "project", lockedBy: "global" } : { ...bound, lockedBy: "global", overriddenByLock: project };
 }
 
 export function effectiveChecks(store: ControlStore, repoId: string | null): EffectiveChecks {
@@ -82,7 +84,7 @@ export function effectiveChecks(store: ControlStore, repoId: string | null): Eff
 
 // The read body (§4.3): `orca-checks-v1`. `state` carries each (kind, target)'s watermark and run facts (§5.4); the
 // global read has none.
-const sourced = <T extends z.ZodTypeAny>(value: T) => z.object({ value, source: z.enum(["project", "global", "builtin"]), lockedBy: z.literal("global").nullable() }).strict();
+const sourced = <T extends z.ZodTypeAny>(value: T) => z.object({ value, source: z.enum(["project", "global", "builtin"]), lockedBy: z.literal("global").nullable(), overriddenByLock: value.optional() }).strict();
 export const checksReadSchema = z.object({
   schema: z.literal("orca-checks-v1"),
   repoId: z.string().min(1).nullable(),
