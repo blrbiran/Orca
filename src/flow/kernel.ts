@@ -38,6 +38,7 @@ import { returnUnspent } from "./pool.js";
 import type { FlowChildPort } from "./kinds/work.js";
 import { activeOutputs, advanceHead, advanceHeadWithRetry, compose, readHead, type ExecutionOutput } from "./vault/compose.js";
 import { changesBetween, copyBack } from "./vault/copyBack.js";
+import { withDirLock } from "./vault/dirLock.js";
 import { commitDriftOnto, placeDrift, snapshotDrift } from "./vault/drift.js";
 import { DEFAULT_CAPS, importSnapshot } from "./vault/snapshot.js";
 import { openVault, type Vault } from "./vault/vault.js";
@@ -501,7 +502,8 @@ export async function redoPendingCopyBack(deps: FlowDeps, flowRunId: string, vau
   const dir = loadRun(deps.store, flowRunId).body.dir;
   if (dir === null || await readHead(vault, flowRunId) !== pending.to) { clear(); return true; }
   let result: Awaited<ReturnType<typeof copyBack>>;
-  try { result = await copyBack(vault, dir, pending.from, pending.to); }
+  // I3: one copy-back at a time per folder, whichever run it is for.
+  try { result = await withDirLock(dir, () => copyBack(vault, dir, pending.from, pending.to)); }
   catch (error) {
     const failure = { message: error instanceof Error ? error.message : String(error), at: deps.now() };
     deps.store.transaction(() => {
