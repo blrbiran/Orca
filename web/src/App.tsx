@@ -285,10 +285,12 @@ export function App(): JSX.Element {
   /** §9.4 (#47): where a correction was started from, kept with the opened decision (never in the URL). */
   const [decisionOrigin, setDecisionOrigin] = useState<DecisionOrigin | null>(null);
   /**
-   * The hashes this page itself assigned and whose hashchange has not arrived yet, each with a count (review minor 5: two
-   * quick pushes must not make the first one's event read as external); such an event applies nothing more.
+   * The hashes this page itself assigned whose hashchange has not arrived yet, oldest first (review minor 5: two quick
+   * pushes must not make the first one's event read as external). An event for one of them applies nothing more and
+   * drops it with every older one -- a browser may coalesce their events, and a stale entry must never swallow the
+   * person's own later visit to that hash.
    */
-  const selfHashes = useRef<Map<string, number>>(new Map());
+  const selfHashes = useRef<string[]>([]);
   const pendingNow = useRef<Route | null>(null);
   const applyExternalRoute = useRef<(next: Route) => void>(() => {});
   /**
@@ -308,7 +310,7 @@ export function App(): JSX.Element {
     } else {
       const was = routeNow.current.section;
       setFrom(next.section !== was ? { leftHash: leaving, pushedHash: hash, label: t(NAV_KEY[was]) } : null);
-      if (leaving !== hash) { selfHashes.current.set(hash, (selfHashes.current.get(hash) ?? 0) + 1); window.location.hash = hash; }
+      if (leaving !== hash) { selfHashes.current.push(hash); window.location.hash = hash; }
     }
     setRoute(next);
   };
@@ -329,8 +331,8 @@ export function App(): JSX.Element {
       // The event's own URL, not the location now: two quick pushes fire two events after both assignments.
       const hash = event.newURL ? new URL(event.newURL).hash : window.location.hash;
       setFrom((prior) => prior !== null && prior.pushedHash === hash ? prior : null);
-      const own = selfHashes.current.get(hash) ?? 0;
-      if (own > 0) { if (own === 1) selfHashes.current.delete(hash); else selfHashes.current.set(hash, own - 1); setPendingRoute(null); return; }
+      const own = selfHashes.current.indexOf(hash);
+      if (own !== -1) { selfHashes.current = selfHashes.current.slice(own + 1); setPendingRoute(null); return; }
       navigationSeq.current++;
       setRouteNotice(null);
       const next = parseRoute(hash);
@@ -1110,6 +1112,12 @@ export function App(): JSX.Element {
    */
   const applyRoute = (next: Route): void => {
     setRoute(next);
+    // An owner checked against the overview while it has not been read here (the page opened on another section) waits
+    // for that read, as on load.
+    if ((next.kind === "group" || next.kind === "requirement") && overview.status !== "available"
+      && !(next.kind === "group" && selectedGroup === next.groupId) && !(next.kind === "requirement" && selectedRequirement === next.groupId)) {
+      setPendingRoute(next); return;
+    }
     if (next.kind === "group") {
       if (selectedGroup === next.groupId && control.canonical[next.groupId] !== undefined) return;
       openOverviewTarget({ kind: "group", groupId: next.groupId, region: next.region ?? "progress", taskId: next.taskId, runId: null }, next);
