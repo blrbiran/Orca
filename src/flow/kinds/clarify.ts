@@ -11,13 +11,14 @@
  */
 import { callRecordOf } from "../calls.js";
 import { sha256Canonical, canonicalBytes } from "../../control/canonicalJson.js";
-import { activeChain, chainRounds } from "../../control/clarifyChain.js";
+import { activeChain, chainRounds, reviseRound, type RevisionPayload } from "../../control/clarifyChain.js";
 import { flowClarifyInstruction, flowClarifyJsonSchema, type ClarifyHost, type ConsensusInput } from "../../control/clarifyHost.js";
 import { buildClarifyPrompt, classifyClarifyOutput } from "../../control/requirementClarify.js";
 import { latestRoundAt, newRound, readRoundsAt, writeRoundAt, type RoundsKey } from "../../control/requirementRecords.js";
 import { CLARIFY_CAPS, MAX_AUTO_RETRIES, clarifyTier, type ClassPair, type RoundBody } from "../../control/requirementSchemas.js";
-import { applyOutcome, compositionFor, contextFor, FlowRefusal, loadRun, stepOf, type FlowDeps } from "../kernel.js";
-import { finishExecution, listExecutions, type ExecutionRow } from "../store.js";
+import { appendQueued, applyOutcome, basisOf, compositionFor, contextFor, FlowRefusal, loadRun, ranOnInputsOf, stepOf, type FlowDeps } from "../kernel.js";
+import { makePlan } from "../rerun.js";
+import { finishExecution, getHead, listExecutions, listHeads, type ExecutionRow, type ExecutionState } from "../store.js";
 import type { FlowStep } from "../template/schema.js";
 import { vaultGit } from "../vault/vault.js";
 import type { ExecutionBody, KindContext, KindDefinition, LoadedRun } from "./registry.js";
@@ -36,9 +37,12 @@ const clarifyStep = (step: FlowStep): ClarifyStep => {
   return step;
 };
 
-/** Round 1's class, as the classifier and the caps read it. */
+/**
+ * Round 1's class, as the classifier and the caps read it: the first position of the active chain (gaps spec §9: a
+ * revision copies only the chain into a new execution, and a revision of round 1 carries round 1's result).
+ */
 function effectiveClass(rounds: readonly RoundBody[]): ClassPair | null {
-  const c = rounds.find((r) => r.roundNo === 1)?.result?.classification;
+  const c = chainRounds(rounds)[0]?.result?.classification;
   return c === undefined ? null : { scope: c.scope, clarity: c.clarity };
 }
 const roundCap = (rounds: readonly RoundBody[]): number => CLARIFY_CAPS[clarifyTier(effectiveClass(rounds))].rounds;
@@ -95,13 +99,15 @@ function documentOf(step: ClarifyStep, chain: readonly RoundBody[], extra: Recor
 
 async function clarifyPrompt(ctx: KindContext, host: ClarifyHost, rounds: RoundBody[], drafting: RoundBody): Promise<string> {
   const context = await host.context();
-  const { chain } = activeChain(rounds);
+  const { chain, superseded } = activeChain(rounds);
   const position = chain.indexOf(drafting.roundNo);
+  // Gaps spec §9 (F §10.3): superseded rounds go in as earlier answers that may still apply, unless a revision excluded them.
+  const excluded = new Set(rounds.flatMap((r) => r.exclude ?? []));
   return buildClarifyPrompt({
     idea: String(ctx.run.params.idea ?? ""), contentLanguage: ctx.run.params.language === "zh" ? "zh" : "en", overview: context,
     earlier: chainRounds(rounds).filter((r) => r.roundNo !== drafting.roundNo), retryReason: ctx.body.retryReason,
     limits: { roundNo: position === -1 ? drafting.roundNo : position + 1, classification: effectiveClass(rounds), roundCap: roundCap(rounds) },
-    frame: host.background(),
+    superseded: rounds.filter((r) => superseded.includes(r.roundNo) && !excluded.has(r.roundNo)), frame: host.background(),
   });
 }
 
@@ -199,7 +205,7 @@ export async function answerFlowClarify(deps: FlowDeps, target: { flowRunId: str
   roundNo: number; answers: Array<{ id: string; kind: "recommended" } | { id: string; kind: "text"; text: string }>;
   glossaryDecisions: Array<{ id: string; accept: boolean }>; adrDecisions: Array<{ id: string; accept: boolean }>;
 }, by: string, via: string): Promise<void> {
-  const { run, step, execution, key } = waitingClarify(deps, target);
+  const { run, execution, key } = waitingClarify(deps, target);
   const round = latestRoundAt(deps.store, key);
   if (round === null || round.state !== "awaiting-answers" || round.roundNo !== payload.roundNo) throw new FlowRefusal("flow-ask-closed", `round ${payload.roundNo}`);
   const questions = new Map(round.result!.questions.map((q) => [q.id, q]));
@@ -207,24 +213,117 @@ export async function answerFlowClarify(deps: FlowDeps, target: { flowRunId: str
   if (new Set(ids).size !== ids.length || ids.length !== questions.size || ids.some((id) => !questions.has(id))) throw new FlowRefusal("flow-answer-invalid", "answer every question of the round once");
   const answers = payload.answers.map((a) => ({ id: a.id, kind: a.kind, text: a.kind === "text" ? a.text : questions.get(a.id)!.recommendedAnswer }));
   writeRoundAt(deps.store, key, { ...round, state: "answered", answers, glossaryDecisions: payload.glossaryDecisions, adrDecisions: payload.adrDecisions, answeredAt: new Date(deps.now()).toISOString(), by, via });
+  await advanceChain(deps, run, target, execution, key, round, "needs-person");
+}
+
+/**
+ * After a round on the chain was answered (or revised): the next round is drafted -- one clarify call -- unless the
+ * frontier is empty or the chain is at the cap; then the step waits for the person to agree with it as it stands.
+ */
+async function advanceChain(deps: FlowDeps, run: LoadedRun, target: { flowRunId: string; stepKey: string }, execution: ExecutionRow, key: RoundsKey, answered: RoundBody, from: ExecutionState): Promise<void> {
   const rounds = readRoundsAt(deps.store, key);
-  if (round.result!.frontierEmpty || activeChain(rounds).chain.length >= roundCap(rounds)) {
+  if (answered.result!.frontierEmpty || activeChain(rounds).chain.length >= roundCap(rounds)) {
     // Clarification stops as today: the person reaches consensus (or, later, grants one more round). T18 acceptance:
     // stopping silently left the answered round's ask on show, so the step now says it waits for the person to agree.
-    const cause = round.result!.frontierEmpty ? "nothing-left-to-ask" : "round-cap";
+    const cause = answered.result!.frontierEmpty ? "nothing-left-to-ask" : "round-cap";
     const why = cause === "round-cap" ? `the cap is ${roundCap(rounds)} rounds` : "the clarifier has nothing left to ask";
     const needsYou = {
-      reason: CLARIFY_AWAITING_CONSENSUS, roundNo: round.roundNo, cause,
-      text: `Round ${round.roundNo} is answered and no further round is drafted (${why}). The brief waits for you to agree with it as it stands: orca flow answer ${target.flowRunId} ${target.stepKey} --consensus`,
+      reason: CLARIFY_AWAITING_CONSENSUS, roundNo: answered.roundNo, cause,
+      text: `Round ${answered.roundNo} is answered and no further round is drafted (${why}). The brief waits for you to agree with it as it stands: orca flow answer ${target.flowRunId} ${target.stepKey} --consensus`,
     };
-    deps.store.transaction(() => finishExecution(deps.store, execution, "needs-person", "needs-person", deps.now(), { body: { ...(execution.body as ExecutionBody), needsYou } }));
+    deps.store.transaction(() => finishExecution(deps.store, execution, from, "needs-person", deps.now(), { body: { ...(execution.body as ExecutionBody), needsYou } }));
     return;
   }
   writeRoundAt(deps.store, key, newRound(Math.max(...rounds.map((r) => r.roundNo)) + 1));
   const body: ExecutionBody = { ...(execution.body as ExecutionBody), retries: 0, retryReason: null };
   delete body.ask;
   const next = { ...execution, body };
-  await applyOutcome(deps, run, next, "needs-person", await CLARIFY_KIND.start(contextFor(deps, run, next)));
+  await applyOutcome(deps, run, next, from, await CLARIFY_KIND.start(contextFor(deps, run, next)));
+}
+
+/** Gaps spec §9: a refusal of the shared revision check, under the flow's names. */
+function refused(refusal: string, roundNo: number): FlowRefusal {
+  if (refusal === "round-not-revisable") return new FlowRefusal(ROUND_NOT_REVISABLE, `round ${roundNo} is not an answered round on the active chain`);
+  if (refusal === "revision-unchanged") return new FlowRefusal("revision-unchanged", `round ${roundNo}`);
+  if (refusal === "exclude") return new FlowRefusal("flow-message-invalid:exclude", "exclude names only rounds this revision leaves off the chain");
+  return new FlowRefusal(`flow-answer-invalid:${refusal}`, `cover exactly round ${roundNo}'s ids`);
+}
+
+export const ROUND_NOT_REVISABLE = "flow-round-not-revisable";
+
+/**
+ * Gaps spec §9: the clarify execution an `edit` at a round revises -- the newest while it waits on the person (in
+ * progress), else the active one once done. A newer execution that waits keeps a done one from being revised beside it.
+ */
+function revisionTarget(deps: FlowDeps, run: LoadedRun, stepKey: string): { execution: ExecutionRow; inProgress: boolean } {
+  const step = run.template.steps.find((s) => s.id === stepKey);
+  if (step?.kind !== "clarify") throw new FlowRefusal(ROUND_NOT_REVISABLE, `${stepKey} is not a clarify step`);
+  const executions = listExecutions(deps.store, run.row.id).filter((e) => e.stepKey === stepKey);
+  const newest = executions.at(-1);
+  if (newest?.state === "needs-person") return { execution: newest, inProgress: true };
+  const active = executions.find((e) => e.seq === getHead(deps.store, run.row.id, stepKey));
+  if (active?.state === "done" && newest?.state !== "running" && newest?.state !== "queued") return { execution: active, inProgress: false };
+  throw new FlowRefusal(ROUND_NOT_REVISABLE, `${stepKey} has no clarify execution waiting on the person or done`);
+}
+
+/** Gaps spec §9: what can be told when the message arrives (the boundary checks again): null, or the refusal code. */
+export function roundRevisionRefusal(deps: FlowDeps, run: LoadedRun, stepKey: string, payload: RevisionPayload): string | null {
+  const steps = listExecutions(deps.store, run.row.id).filter((e) => e.stepKey === stepKey);
+  // A round is being drafted: what the chain will be is known only at the boundary.
+  if (steps.at(-1)?.state === "running" || steps.at(-1)?.state === "queued") return null;
+  try {
+    const { execution, inProgress } = revisionTarget(deps, run, stepKey);
+    const rounds = readRoundsAt(deps.store, roundsKey(run, stepKey, execution.seq));
+    // As reviseFlowRound checks it: the execution's rows in progress, the chain a new execution would copy once done.
+    const revision = reviseRound(inProgress ? rounds : chainRounds(rounds), payload, { at: new Date(0).toISOString(), by: "check" });
+    return "refusal" in revision ? refused(revision.refusal, payload.roundNo).code : null;
+  } catch (error) {
+    if (error instanceof FlowRefusal) return error.code;
+    throw error;
+  }
+}
+
+/**
+ * Gaps spec §9 (F §10.3 on the flow host): revise round k of a clarify step, at a boundary. Nothing is overwritten.
+ * - In progress (the newest execution waits on the person): row n+1 `{revises: k}` is appended to its rounds and the chain
+ *   re-advances there (at most one clarify call).
+ * - Done: execution seq+1 of the step takes a copy of the active execution's chain (new rows) plus the revision row and
+ *   re-advances there. The step's active output stays the old document until that execution reaches consensus
+ *   (`flowClarifyConsensus` moves the head and makes the plan).
+ */
+export async function reviseFlowRound(deps: FlowDeps, run: LoadedRun, stepKey: string, payload: RevisionPayload, by: string, via: string, messageSeq: number): Promise<void> {
+  const { execution, inProgress } = revisionTarget(deps, run, stepKey);
+  const target = { flowRunId: run.row.id, stepKey };
+  const who = { at: new Date(deps.now()).toISOString(), by, via };
+  if (inProgress) {
+    const key = roundsKey(run, stepKey, execution.seq);
+    const revision = reviseRound(readRoundsAt(deps.store, key), payload, who);
+    if ("refusal" in revision) throw refused(revision.refusal, payload.roundNo);
+    deps.store.transaction(() => writeRoundAt(deps.store, key, revision.row));
+    const body = { ...(execution.body as ExecutionBody) };
+    delete body.ask;
+    delete (body as { needsYou?: unknown }).needsYou;
+    await advanceChain(deps, run, target, { ...execution, body }, key, revision.row, "needs-person");
+    return;
+  }
+  const copied = chainRounds(readRoundsAt(deps.store, roundsKey(run, stepKey, execution.seq)));
+  const revision = reviseRound(copied, payload, who);
+  if ("refusal" in revision) throw refused(revision.refusal, payload.roundNo);
+  const seq = Math.max(...listExecutions(deps.store, run.row.id).filter((e) => e.stepKey === stepKey).map((e) => e.seq)) + 1;
+  const key = roundsKey(run, stepKey, seq);
+  const index = run.template.steps.findIndex((s) => s.id === stepKey);
+  const at = deps.now();
+  deps.store.transaction(() => {
+    // It stands on what the active execution stood on now, as any execution that starts does (runQueued).
+    appendQueued(deps, run, stepKey, seq, ["revise"], {
+      basis: basisOf(run, index, listHeads(deps.store, run.row.id)), ranOnInputs: ranOnInputsOf(deps.store, run, stepKey),
+      revision: { message: messageSeq, of: execution.seq, roundNo: payload.roundNo },
+    }, by, via, at);
+    for (const row of copied) writeRoundAt(deps.store, key, row);
+    writeRoundAt(deps.store, key, revision.row);
+  });
+  const queued = listExecutions(deps.store, run.row.id).find((e) => e.stepKey === stepKey && e.seq === seq)!;
+  await advanceChain(deps, run, target, queued, key, revision.row, "queued");
 }
 
 /**
@@ -248,4 +347,6 @@ export async function flowClarifyConsensus(deps: FlowDeps, target: { flowRunId: 
   delete body.ask;
   delete (body as { needsYou?: unknown }).needsYou;
   await applyOutcome(deps, run, { ...execution, body }, "needs-person", { done: { record: document } });
+  // Gaps spec §9: a revision's execution became the active output only now; the ordinary plan re-plans what follows.
+  if (body.revision !== undefined) await makePlan(deps, run.row.id, { by, via, trigger: "edit", edits: [step.id] });
 }

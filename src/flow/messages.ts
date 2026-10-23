@@ -8,6 +8,8 @@
  *   (feedback/intake.ts) and is taken here only once the intake is `ready`, re-verified, with its location text.
  * - `edit` makes the person's value the step's new active output (by = the person): record fields over the active
  *   record, or files committed onto the active workspace output; the edited step is not re-run, later steps are planned.
+ *   Gaps spec §9: an `edit` at a `round {stepKey, roundNo}` of a clarify step revises that round (kinds/clarify.ts); it
+ *   makes no plan itself -- the revised step's consensus does.
  * - `command`: `pause`, `resume`, `stop`, `retry` (a failed step), `rewind` (rewind.ts), `repin {version}`. A command
  *   that does not hold at its boundary is stored `rejected` with the reason; `budget` is the human-only `flow-pool` verb's.
  * - Gaps spec §6: `skip`, `defer {effects?}` and `fill` on a step (marks.ts derives the marks from the applied ones). A
@@ -19,6 +21,7 @@
  *   name then; at its boundary the run's params and `params_sha256` move in one write and a plan is made (`params`).
  */
 import { mkdtemp, rm } from "node:fs/promises";
+import { z } from "zod";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
@@ -33,7 +36,9 @@ import type { ExecutionBody, LoadedRun } from "./kinds/registry.js";
 import { dropFromOpenPlan, makePlan } from "./rerun.js";
 import { discardEffect } from "./effects.js";
 import { holdableAfter, MARK_COMMANDS, MARKABLE_KINDS, marksOf } from "./marks.js";
-import { applyRewind, reapplyEdits } from "./rewind.js";
+import { applyRewind, EDIT_NO_LONGER_APPLIES, reapplyEdits, roundRevisionNoLongerApplies } from "./rewind.js";
+import { reviseFlowRound, roundRevisionRefusal } from "./kinds/clarify.js";
+import type { RevisionPayload } from "../control/clarifyChain.js";
 import { hasAttachment } from "./feedback/attachments.js";
 import { feedbackShapeRefusal, markPlanned, openIntake, takeReadyIntake, withdrawIntakes } from "./feedback/intake.js";
 import {
@@ -55,13 +60,36 @@ export type MessageTarget =
 export interface FlowMessageInput { kind: "feedback" | "edit" | "command"; target: MessageTarget; body: Record<string, unknown>; by: string; via: string; requestId: string }
 export interface AcceptResult { state: MessageRow["state"]; reason: string | null; seq: number; deduped: boolean }
 
+/** Gaps spec §9: the body of an `edit` at a round, as `requirement-revise` carries it. */
+const roundEditSchema = z.object({
+  answers: z.array(z.union([
+    z.object({ id: z.string().min(1), kind: z.literal("recommended") }).strict(),
+    z.object({ id: z.string().min(1), kind: z.literal("text"), text: z.string().min(1) }).strict(),
+  ])),
+  glossaryDecisions: z.array(z.object({ id: z.string().min(1), accept: z.boolean() }).strict()),
+  adrDecisions: z.array(z.object({ id: z.string().min(1), accept: z.boolean() }).strict()),
+  reason: z.string().min(1).optional(), exclude: z.array(z.number().int().positive()).optional(),
+}).strict();
+/** The revision a stored round edit carries (checked when it arrived; a rewind's copy adds `reappliedFrom`). */
+const revisionOf = (body: Record<string, unknown>, roundNo: number): RevisionPayload => {
+  const { answers, glossaryDecisions, adrDecisions, reason, exclude } = body as z.infer<typeof roundEditSchema>;
+  return { roundNo, answers, glossaryDecisions, adrDecisions, ...(reason === undefined ? {} : { reason }), ...(exclude === undefined ? {} : { exclude }) };
+};
+
 const COMMANDS = ["pause", "resume", "stop", "retry", "rewind", "repin", "skip", "defer", "fill", "params"] as const;
 const stepKeyOf = (target: MessageTarget): string | null => ("stepKey" in target ? target.stepKey : null);
 
 /** What can be told at once, before any boundary: the shape and that the target exists. */
-function shapeRefusal(store: ControlStore, run: LoadedRun, input: FlowMessageInput, env: NodeJS.ProcessEnv): string | null {
+function shapeRefusal(deps: FlowDeps, run: LoadedRun, input: FlowMessageInput): string | null {
+  const { store, env } = deps;
   const target = input.target;
-  if (target.kind === "round") return "flow-message-target-missing";
+  // Gaps spec §9: a round takes only an edit (its revision); what the chain allows is checked again at the boundary.
+  if (target.kind === "round") {
+    if (input.kind !== "edit" || !run.template.steps.some((s) => s.id === target.stepKey)) return "flow-message-target-missing";
+    const parsed = roundEditSchema.safeParse(input.body);
+    if (!parsed.success) return `flow-message-invalid:${parsed.error.issues[0]?.path.join(".") || "body"}`;
+    return roundRevisionRefusal(deps, run, target.stepKey, revisionOf(input.body, target.roundNo));
+  }
   if (target.kind === "effect") {
     if (store.db.prepare("SELECT 1 FROM effect_records WHERE id=? AND flow_run_id=?").get(target.recordId, run.row.id) === undefined) return "flow-message-target-missing";
   }
@@ -113,7 +141,7 @@ function shapeRefusal(store: ControlStore, run: LoadedRun, input: FlowMessageInp
 /** §8.1: store the message, then take it if the run is at a boundary. */
 export async function acceptMessage(deps: FlowDeps, flowRunId: string, input: FlowMessageInput): Promise<AcceptResult> {
   const run = loadRun(deps.store, flowRunId);
-  let refusal = run.row.state === "stopped" ? "flow-run-stopped" : shapeRefusal(deps.store, run, input, deps.env);
+  let refusal = run.row.state === "stopped" ? "flow-run-stopped" : shapeRefusal(deps, run, input);
   // Gaps spec §8.3: a params change is checked now, as at start -- its images read once and stored -- and what it
   // resolved is kept with the message, so the boundary applies exactly what was checked.
   let resolved: ParamsChange | null = null;
@@ -176,6 +204,10 @@ export async function consumeAtBoundary(deps: FlowDeps, flowRunId: string): Prom
           if (ready === null) continue;
           for (const key of ready.targets) feedback[key] = [...(feedback[key] ?? []), ready.text];
           plan = { by: message.by, via: message.via, trigger: "feedback" };
+        } else if (message.kind === "edit" && target.kind === "round") {
+          const reason = await applyRoundEdit(deps, loadRun(deps.store, flowRunId), message, target);
+          deps.store.transaction(() => setMessageState(deps.store, flowRunId, message.seq, "accepted", "applied", reason));
+          continue;
         } else if (message.kind === "feedback") {
           const key = stepKeyOf(target)!;
           feedback[key] = [...(feedback[key] ?? []), String((message.body as { text: string }).text)];
@@ -207,6 +239,22 @@ export async function consumeAtBoundary(deps: FlowDeps, flowRunId: string): Prom
     if (planned.length > 0) markPlanned(deps, flowRunId, planned, planNo);
   }
   return moved;
+}
+
+/**
+ * Gaps spec §9: an edit at a round, at its boundary. §4.2: one a rewind queued again that no longer applies (its round
+ * is not on the chain it now meets) becomes feedback on its step, flagged red, as an edit that no longer applies does.
+ */
+async function applyRoundEdit(deps: FlowDeps, run: LoadedRun, message: MessageRow, target: Extract<MessageTarget, { kind: "round" }>): Promise<string | null> {
+  const body = message.body as Record<string, unknown> & { reappliedFrom?: number };
+  try {
+    await reviseFlowRound(deps, run, target.stepKey, revisionOf(body, target.roundNo), message.by, message.via, message.seq);
+    return null;
+  } catch (error) {
+    if (!(error instanceof FlowRefusal) || body.reappliedFrom === undefined || error.code === "revision-unchanged") throw error;
+    roundRevisionNoLongerApplies(deps, run, message, target.stepKey, target.roundNo);
+    return EDIT_NO_LONGER_APPLIES;
+  }
 }
 
 /** A command at its boundary; returns the plan trigger it causes, if any. */

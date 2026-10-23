@@ -11,6 +11,8 @@
  *   one by one (a text field by `git merge-file`), files by `git merge-file`. A step that does not run again keeps the edit
  *   as its output. An edit that no longer applies becomes feedback on that step ("the person had made this edit: ...")
  *   and the execution it would not apply to is flagged red `edit-no-longer-applies`.
+ * - Gaps spec §4.2: an edit at a clarify round (a round revision, §9) is queued again as a round revision, re-applied at
+ *   the boundary on the step's chain as it now stands; one whose round is not on that chain becomes feedback, flagged red.
  */
 import { execFile } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -61,6 +63,10 @@ export async function applyRewind(deps: FlowDeps, run: LoadedRun, message: Messa
         if (!requeued.deduped) reuseIntake(deps.store, run.row.id, m.seq, requeued.row.seq, deps.now());
         continue;
       }
+      if (target.kind === "round") {
+        appendMessage(deps.store, { flowRunId: run.row.id, requestId, kind: "edit", target: "round", body: { ...(m.body as object), reappliedFrom: m.seq }, by: m.by, via: m.via, state: "accepted", reason: null, at: deps.now() });
+        continue;
+      }
       // The newest execution of that edit (a re-applied edit keeps the original message's number).
       const edit = executions.filter((e) => (e.body as { edit?: { message?: number } }).edit?.message === m.seq).at(-1);
       if (edit === undefined) continue;
@@ -69,6 +75,28 @@ export async function applyRewind(deps: FlowDeps, run: LoadedRun, message: Messa
     }
   });
   return "rewind";
+}
+
+/**
+ * Gaps spec §4.2: a re-applied round revision that no longer applies. The step's active execution (else its newest) is
+ * flagged red and the revision becomes feedback text on the step, which the boundary takes like any feedback.
+ */
+export function roundRevisionNoLongerApplies(deps: FlowDeps, run: LoadedRun, message: MessageRow, stepKey: string, roundNo: number): void {
+  const executions = listExecutions(deps.store, run.row.id).filter((e) => e.stepKey === stepKey);
+  const flagged = executions.find((e) => e.seq === getHead(deps.store, run.row.id, stepKey)) ?? executions.at(-1);
+  const { answers, glossaryDecisions, adrDecisions } = message.body as Record<string, unknown>;
+  const reappliedFrom = (message.body as { reappliedFrom?: number }).reappliedFrom;
+  deps.store.transaction(() => {
+    if (flagged !== undefined) {
+      const body = flagged.body as ExecutionBody;
+      finishExecution(deps.store, flagged, flagged.state, flagged.state, deps.now(), { body: { ...body, flags: [...new Set([...(body.flags ?? []), EDIT_NO_LONGER_APPLIES])] } });
+    }
+    appendMessage(deps.store, {
+      flowRunId: run.row.id, requestId: `${EDIT_NO_LONGER_APPLIES}:${message.seq}`, kind: "feedback", target: "step",
+      body: { target: { kind: "step", stepKey }, text: `The person had revised round ${roundNo} of this step, which no longer applies to its rounds now: ${JSON.stringify({ answers, glossaryDecisions, adrDecisions })}`, fromEdit: reappliedFrom },
+      by: message.by, via: message.via, state: "accepted", reason: null, at: deps.now(),
+    });
+  });
 }
 
 // ------------------------------------------------------------------------------------------------- three-way re-apply

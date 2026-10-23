@@ -12,7 +12,7 @@ import {
   estimatorSlotFor, normalizeControlPlan, writeImportedPlan, type AsyncImportDeps, type ImportDefaults, type ImportDeps, type PreparedEstimatorSlot,
 } from "./planImport.js";
 import type { ExecutionProfileRouter, FrozenProfile } from "./profiles.js";
-import { activeChain, chainRounds } from "./clarifyChain.js";
+import { activeChain, chainRounds, reviseRound } from "./clarifyChain.js";
 import { routedAttributionFor } from "./commandClient.js";
 import { renderRequirementDocument } from "./requirementDocument.js";
 import {
@@ -167,10 +167,6 @@ export function applyRequirementClarifyMore(deps: RequirementCommandDeps, comman
   }).body);
 }
 
-/** The answers and decisions of a round as compared for `revision-unchanged`: answers in question order, decisions by id. */
-const answeredForm = (answers: readonly { id: string; kind: string; text: string }[], glossary: readonly { id: string; accept: boolean }[], adrs: readonly { id: string; accept: boolean }[]) =>
-  canonicalBytes({ answers, glossary: [...glossary].sort((a, b) => a.id.localeCompare(b.id)), adrs: [...adrs].sort((a, b) => a.id.localeCompare(b.id)) }).toString("utf8");
-
 /**
  * Flow engine spec §10.3 (Issue #76, W-76): revise an answered round on the active chain. Round k is never changed: row
  * n+1 is appended `{revises: k}` with round k's result and the new answers; a reached consensus is withdrawn and a draft
@@ -190,33 +186,19 @@ export function applyRequirementRevise(deps: RequirementCommandDeps, command: Re
       if ((payload.stepKey ?? "clarify") !== "clarify" || (payload.execSeq ?? 1) !== 1) invalid("step-execution");
       if (deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(id)) invalid("call-in-flight");
       const rounds = readRounds(deps.store, id);
-      const { chain, superseded } = activeChain(rounds);
-      const round = rounds.find((r) => r.roundNo === payload.roundNo);
-      if (round === undefined || !chain.includes(round.roundNo) || round.state !== "answered" || round.result === null) return invalid("round-not-revisable");
-      // `exclude` may name only rounds this revision leaves off the chain: those already superseded, round k and its successors.
-      const leftOff = [...superseded, ...chain.slice(chain.indexOf(round.roundNo))];
-      if ((payload.exclude ?? []).some((roundNo) => !leftOff.includes(roundNo))) invalid("exclude");
-      const result = round.result;
-      if (!sameIds(payload.answers.map((a) => a.id), result.questions.map((q) => q.id))) invalid("answers");
-      if (!sameIds(payload.glossaryDecisions.map((d) => d.id), result.glossary.map((e) => e.id))) invalid("glossary-decisions");
-      if (!sameIds(payload.adrDecisions.map((d) => d.id), result.adrs.map((a) => a.id))) invalid("adr-decisions");
-      const given = new Map(payload.answers.map((a) => [a.id, a]));
-      const answers = result.questions.map((q) => {
-        const a = given.get(q.id)!;
-        return { id: q.id, kind: a.kind, text: a.kind === "text" ? a.text : q.recommendedAnswer };
-      });
-      if (answeredForm(answers, payload.glossaryDecisions, payload.adrDecisions) === answeredForm(round.answers ?? [], round.glossaryDecisions ?? [], round.adrDecisions ?? [])) {
-        throw new ControlError("revision-unchanged");
-      }
       const now = nowOf(deps).toISOString();
       const routed = routedAttributionFor(command.commandId);
       const by = routed?.by ?? command.actorId;
-      const revisionNo = Math.max(...rounds.map((r) => r.roundNo)) + 1;
-      writeRound(deps.store, id, {
-        ...newRound(revisionNo), state: "answered", result, answers, glossaryDecisions: payload.glossaryDecisions, adrDecisions: payload.adrDecisions, answeredAt: now,
-        revises: round.roundNo, ...(payload.reason === undefined ? {} : { reason: payload.reason }), by, ...(routed === null ? {} : { via: routed.via }),
-        ...(payload.exclude === undefined || payload.exclude.length === 0 ? {} : { exclude: [...new Set(payload.exclude)].sort((a, b) => a - b) }),
-      });
+      // Shared with the flow host (clarifyChain.ts): the checks, in order, and the appended row.
+      const revision = reviseRound(rounds, payload, { at: now, by, ...(routed === null ? {} : { via: routed.via }) });
+      if ("refusal" in revision) {
+        if (revision.refusal === "revision-unchanged") throw new ControlError("revision-unchanged");
+        return invalid(revision.refusal);
+      }
+      const { revised: round, row, chainBefore: chain, newChainLength } = revision;
+      const result = round.result!;
+      const revisionNo = row.roundNo;
+      writeRound(deps.store, id, row);
       // A later round on the chain whose call is queued but not claimed drafts nothing now: it is superseded.
       for (const later of rounds.filter((r) => chain.slice(chain.indexOf(round.roundNo) + 1).includes(r.roundNo) && r.state === "drafting")) {
         writeRound(deps.store, id, { ...later, state: "interrupted", waiting: null });
@@ -231,7 +213,6 @@ export function applyRequirementRevise(deps: RequirementCommandDeps, command: Re
       if (draft !== null && (draft.state === "awaiting-review" || draft.state === "drafting")) {
         writeDraft(deps.store, id, { ...draft, state: "rejected", waiting: null, reasonCode: "requirement-revised" });
       }
-      const newChainLength = chain.indexOf(round.roundNo) + 1;
       if (result.frontierEmpty || newChainLength >= clarifyLimits(deps.store, readRequirementGroup(deps.store, id)).roundCap) {
         return commandSuccess(context, { kind: "requirement-revised", roundNo: revisionNo, revises: round.roundNo, consensusWithdrawn, nextRoundNo: null, wakeId: null });
       }

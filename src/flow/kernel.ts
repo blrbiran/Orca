@@ -685,7 +685,7 @@ export function appendQueued(deps: FlowDeps, run: LoadedRun, stepKey: string, se
 // -------------------------------------------------------------------------------------------------------------- advance
 
 /** The earlier active outputs a step starts from; a `parallelWith` sibling is not one of them (§6.5). */
-const basisOf = (run: LoadedRun, index: number, heads: Record<string, number>): Record<string, number> => {
+export const basisOf = (run: LoadedRun, index: number, heads: Record<string, number>): Record<string, number> => {
   const step = run.template.steps[index]!;
   return Object.fromEntries(run.template.steps.slice(0, index).filter((s) => heads[s.id] !== undefined && !parallel(s, step)).map((s) => [s.id, heads[s.id]!]));
 };

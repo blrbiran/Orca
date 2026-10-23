@@ -974,6 +974,8 @@ const flowMessageTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("run") }).strict(),
   z.object({ kind: z.literal("step"), stepKey: flowStepKeySchema }).strict(),
   z.object({ kind: z.literal("execution"), stepKey: flowStepKeySchema, seq: positiveSafeInteger }).strict(),
+  // Gaps spec §9: an `edit` at a round of a clarify step revises that round (the kernel refuses any other kind there).
+  z.object({ kind: z.literal("round"), stepKey: flowStepKeySchema, roundNo: positiveSafeInteger }).strict(),
 ]);
 export const flowMessagePayloadSchema = z.object({
   runId: flowRunIdSchema, kind: z.enum(["feedback", "edit", "command"]), target: flowMessageTargetSchema,
