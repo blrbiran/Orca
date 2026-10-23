@@ -205,6 +205,9 @@ describe("review fixes I2, I3, minor 5", () => {
     expect(window.location.hash).toBe("#tasks/g2");
     expect(screen.queryByRole("region", { name: "Control group g" })).toBeNull();
     expect(panel.requests.filter((request) => request === "GET /api/control/groups/g2").length).toBeGreaterThan(0);
+    // Neither own hash is left counted: the person's own later #tasks/g is applied, and opens g.
+    window.location.hash = "#tasks/g";
+    await groupRegion("g");
   });
 });
 

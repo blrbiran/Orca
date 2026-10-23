@@ -325,8 +325,9 @@ export function App(): JSX.Element {
   const [theme, setTheme] = useState<ThemePref>(() => readTheme(browserStorage()));
   const [showAdvanced, setShowAdvanced] = useState(() => readShowAdvanced(browserStorage()));
   useEffect(() => {
-    const onHash = (): void => {
-      const hash = window.location.hash;
+    const onHash = (event: HashChangeEvent): void => {
+      // The event's own URL, not the location now: two quick pushes fire two events after both assignments.
+      const hash = event.newURL ? new URL(event.newURL).hash : window.location.hash;
       setFrom((prior) => prior !== null && prior.pushedHash === hash ? prior : null);
       const own = selfHashes.current.get(hash) ?? 0;
       if (own > 0) { if (own === 1) selfHashes.current.delete(hash); else selfHashes.current.set(hash, own - 1); setPendingRoute(null); return; }
