@@ -4,7 +4,7 @@
  * (a commit whose parent is the base it started from).
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { openVault, type Vault } from "../../../src/flow/vault/vault.js";
@@ -20,7 +20,11 @@ export async function vaultWorld(files: Record<string, string> = {}) {
     mkdirSync(dirname(join(folder, path)), { recursive: true });
     writeFileSync(join(folder, path), content);
   }
-  const env: NodeJS.ProcessEnv = { ORCA_VAULT_DIR: join(root, "vaults") };
+  // Rule 17 (Task 9 fix round 2, O1): this world's own control root (0700), so nothing resolves to the real ~/.orca.
+  const controlDir = join(root, "flow-control");
+  mkdirSync(controlDir, { mode: 0o700 });
+  chmodSync(controlDir, 0o700);
+  const env: NodeJS.ProcessEnv = { ORCA_VAULT_DIR: join(root, "vaults"), ORCA_CONTROL_DIR: controlDir };
   const vault = await openVault(env, folder);
   /** A commit on `parent` with these paths set (string) or removed (null): a step's landed output. */
   const stepCommit = (parent: string, changes: Record<string, string | null>): string => {

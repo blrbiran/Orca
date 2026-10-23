@@ -9,6 +9,7 @@ import { acceptMessage } from "../../src/flow/messages.js";
 import { getFlowRun, getIntake, listExecutions } from "../../src/flow/store.js";
 import { toDraftBox, wechatWorld, WECHAT } from "./fixtures/wechatWorld.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
+import { vaultWorld } from "./fixtures/vaultWorld.js";
 import { controlRoot } from "../../src/panel/controlOptions.js";
 
 /**
@@ -37,6 +38,15 @@ describe("out-of-repo writes (C21)", { timeout: 60_000 }, () => {
         expect(statSync(root).mode & 0o777).toBe(0o700);
       } finally { await w.dispose(); }
     }
+    // Fix round 2 (re-review O1): the vault world too. (The ccloop driver world sets ORCA_CONTROL_DIR to its own root:
+    // tests/control/fixtures/ccloopWorld.ts, env before `...worldOptions.env`.)
+    const v = await vaultWorld();
+    try {
+      const root = controlRoot(v.env);
+      expect(root.startsWith(v.root + "/")).toBe(true);
+      for (const h of [saved, homedir()]) if (h !== undefined) expect(root.startsWith(h + "/"), `${root} under ${h}`).toBe(false);
+      expect(statSync(root).mode & 0o777).toBe(0o700);
+    } finally { rmSync(v.root, { recursive: true, force: true }); }
   });
 
   it("a whole flow run writes nothing under HOME", async () => {

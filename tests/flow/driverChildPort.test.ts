@@ -5,6 +5,8 @@
  * once by orca-auto with the parent's profiles under a deterministic command id. A second open (a restart) adds nothing.
  * Without these the child could spend past its draw, integrate, run under profiles nobody froze, or be opened twice.
  */
+import { chmodSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { resolveGroupSelections } from "../../src/control/agentFreeze.js";
 import { buildFlowStepPlanSource } from "../../src/control/flowStepPlan.js";
@@ -25,6 +27,13 @@ const VAULT_ID = "e".repeat(64);
 const BASE = "a".repeat(40);
 const STEP = { id: "write", kind: "work", prompt: "p.md" } as FlowStep;
 
+function controlRootOf(root: string): string {
+  const dir = join(root, "flow-control");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  chmodSync(dir, 0o700);
+  return dir;
+}
+
 async function world(withChildren = true) {
   const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]);
   const binding = { profileId: "all", profileHash: h.frozen.profileHash };
@@ -38,7 +47,8 @@ async function world(withChildren = true) {
   });
   const service = new WebControlService(h.deps);
   const port = createDriverChildPort({
-    store: h.store, env: { ORCA_VAULT_DIR: h.root }, importDeps: h.deps, confirm: (command) => service.confirm(command as never), admissionGate: h.deps.admissionGate,
+    // Rule 17 (Task 9 fix round 2, O1): an own control root under the fixture's temp root (0700), never ~/.orca.
+    store: h.store, env: { ORCA_VAULT_DIR: h.root, ORCA_CONTROL_DIR: controlRootOf(h.root) }, importDeps: h.deps, confirm: (command) => service.confirm(command as never), admissionGate: h.deps.admissionGate,
     selectionsHash: async (groupId) => (await resolveGroupSelections({ store: h.store, port: h.deps.port }, groupId, ORCHESTRATION_ACTOR)).selectionsHash,
   });
   const request: FlowChildOpen = {

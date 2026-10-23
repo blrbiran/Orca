@@ -51,15 +51,29 @@ export function holdableAfter(template: Pick<FlowTemplate, "steps" | "effects">,
   return template.steps.slice(index + 1).filter((s) => isHoldable(template, s) && !parallel(s, deferred)).map((s) => s.id);
 }
 
-/** The deferred steps holding `stepKey` (empty: it is not held). */
+/** The deferred steps holding `stepKey` (empty: it is not held). A marked step is never run, so it is not held. */
 export function heldBy(template: Pick<FlowTemplate, "steps" | "effects">, marks: ReadonlyMap<string, Mark>, stepKey: string): string[] {
+  return marks.has(stepKey) ? [] : holdsOn(template, marks, stepKey);
+}
+
+/**
+ * Gaps spec §6.3 (Task 9 fix round 2, controller's ruling N1): the deferred steps whose defer holds `stepKey`, whatever
+ * the effect step's own mark -- the hold is a property of the effect step that only a person lifts, so the step's own
+ * skip or fill never lifts it (heldBy, for running, adds only that a marked step does not run).
+ */
+export function holdsOn(template: Pick<FlowTemplate, "steps" | "effects">, marks: ReadonlyMap<string, Mark>, stepKey: string): string[] {
   const index = template.steps.findIndex((s) => s.id === stepKey);
   const step = template.steps[index];
-  if (step === undefined || marks.has(stepKey) || !isHoldable(template, step)) return [];
+  if (step === undefined || !isHoldable(template, step)) return [];
   return template.steps.slice(0, index).filter((s) => {
     const mark = marks.get(s.id);
     return mark?.kind === "defer" && !parallel(s, step) && mark.effects[stepKey] !== "proceed";
   }).map((s) => s.id);
+}
+
+/** N1: the effect steps some standing defer holds, their own marks ignored -- what only a person may lift. */
+export function holdTargets(template: Pick<FlowTemplate, "steps" | "effects">, marks: ReadonlyMap<string, Mark>): Set<string> {
+  return new Set(template.steps.filter((s) => holdsOn(template, marks, s.id).length > 0).map((s) => s.id));
 }
 
 /** §6.3: the effect steps a standing defer holds. */

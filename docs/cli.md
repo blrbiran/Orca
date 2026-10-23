@@ -182,9 +182,9 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca flow revise <run> --step <step> --round <round> --file <file>` — revise an answered round of a flow clarify step; later rounds are asked again from it
 - `orca flow include <run> --step <step> [--plan <plan>]` — run a step the running plan asks about (it spends); needs a person token (person token)
 - `orca flow accept <run> --step <step> [--plan <plan>]` — accept a step of the running plan as unchanged: its output stands for its new inputs (what the timeout does)
-- `orca flow skip <run> --step <step>` — skip a step in this run until filled: later steps go on without its output
-- `orca flow defer <run> --step <step> [--effects <effects>]` — defer a step (fill it later): later steps go on without its output; external effects after it wait unless --effects <step>=proceed (proceed needs a person token)
-- `orca flow fill <run> --step <step>` — fill a skipped or deferred step: a plan re-runs it and what depends on it
+- `orca flow skip <run> --step <step>` — skip a step in this run until filled: later steps go on without its output; taken at the next step boundary, so read the run (orca flow journal) to see if it applied
+- `orca flow defer <run> --step <step> [--effects <effects>]` — defer a step (fill it later): later steps go on without its output; external effects after it wait unless --effects <step>=proceed (proceed needs a person token); taken at the next step boundary, so read the run (orca flow journal) to see if it applied
+- `orca flow fill <run> --step <step>` — fill a skipped or deferred step: a plan re-runs it and what depends on it; taken at the next step boundary, so read the run (orca flow journal) to see if it applied
 - `orca flow params <run> --set <set>` — change the run's params mid-run (values folder-relative); changed steps become plan candidates
 - `orca flow pause <run>` — pause the run at its next step boundary (a running step is never interrupted)
 - `orca flow resume <run>` — resume a paused run

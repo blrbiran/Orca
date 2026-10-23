@@ -263,7 +263,7 @@ orca flow accept fr-1234 --step cover
 
 ## `orca flow skip <run> --step <step>`
 
-skip a step in this run until filled: later steps go on without its output
+skip a step in this run until filled: later steps go on without its output; taken at the next step boundary, so read the run (orca flow journal) to see if it applied
 
 - What it does: sends control verb `flow-message`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
@@ -276,7 +276,7 @@ orca flow skip fr-1234 --step cover
 
 ## `orca flow defer <run> --step <step> [--effects <effects>]`
 
-defer a step (fill it later): later steps go on without its output; external effects after it wait unless --effects <step>=proceed (proceed needs a person token)
+defer a step (fill it later): later steps go on without its output; external effects after it wait unless --effects <step>=proceed (proceed needs a person token); taken at the next step boundary, so read the run (orca flow journal) to see if it applied
 
 - What it does: sends control verb `flow-message`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
@@ -291,7 +291,7 @@ orca flow defer fr-1234 --step cover --effects to-draft-box=proceed --as-person
 
 ## `orca flow fill <run> --step <step>`
 
-fill a skipped or deferred step: a plan re-runs it and what depends on it
+fill a skipped or deferred step: a plan re-runs it and what depends on it; taken at the next step boundary, so read the run (orca flow journal) to see if it applied
 
 - What it does: sends control verb `flow-message`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).

@@ -87,8 +87,10 @@ function targetOf(c: WriteContext): Record<string, unknown> {
   return step === undefined ? { kind: "run" } : { kind: "step", stepKey: step };
 }
 /** `--step s`: a mark command (skip, defer, fill) on that step. */
+// Fix round 2 (re-review N2): a mark is taken at the next step boundary, so an `accepted` answer may still be rejected
+// then (e.g. flow-effect-needs-person); the summary says to read the run.
 const markCommand = (action: "skip" | "defer" | "fill", summary: string, body: (c: WriteContext) => Record<string, unknown>, extra: Partial<Parameters<typeof verb>[0]> = {}): CommandDef => run({
-  action, summary, verb: "flow-message", positionals: [RUN], examples: [`orca flow ${action} fr-1234 --step cover`],
+  action, summary: `${summary}; taken at the next step boundary, so read the run (orca flow journal) to see if it applied`, verb: "flow-message", positionals: [RUN], examples: [`orca flow ${action} fr-1234 --step cover`],
   flags: [{ name: "step", type: "string", required: true, summary: "the step (a work, draft, check or review step)" }], ...extra,
   route: () => "flows/messages",
   payload: async (c) => ({ runId: await runOf(c), kind: "command", target: { kind: "step", stepKey: str(c, "step")! }, body: { command: action, ...body(c) } }),

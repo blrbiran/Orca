@@ -35,7 +35,7 @@ import {
 import type { ExecutionBody, LoadedRun } from "./kinds/registry.js";
 import { dropFromOpenPlan, makePlan } from "./rerun.js";
 import { discardEffect } from "./effects.js";
-import { heldEffectSteps, holdableAfter, MARK_COMMANDS, MARKABLE_KINDS, marksOf } from "./marks.js";
+import { holdableAfter, holdTargets, MARK_COMMANDS, MARKABLE_KINDS, marksOf } from "./marks.js";
 import { applyRewind, EDIT_NO_LONGER_APPLIES, reapplyEdits, roundRevisionNoLongerApplies } from "./rewind.js";
 import { reviseFlowRound, roundRevisionRefusal } from "./kinds/clarify.js";
 import type { RevisionPayload } from "../control/clarifyChain.js";
@@ -149,9 +149,10 @@ const isMark = (input: FlowMessageInput): boolean => input.kind === "command" &&
 
 /**
  * Gaps spec §6.3 (Task 9 fix round, controller's ruling): a held external/irreversible effect is released only with person
- * authority -- a `defer` saying `proceed` for any step, and any skip/defer/fill after which an effect step held now is
- * neither held nor marked itself (a skip replacing the holding defer, a fill of it). Checked here, when the mark is
- * applied, from what the message recorded; the socket tier is only the first gate. A mark that releases nothing is open.
+ * authority -- a `defer` saying `proceed` for any step, and any skip/defer/fill that lifts a hold standing now (a skip
+ * replacing the holding defer, a fill of it). Holds are counted whatever the effect step's own mark (fix round 2, N1:
+ * marking the effect step first must not hide its hold). Checked here, when the mark is applied, from what the message
+ * recorded; the socket tier is only the first gate. A mark that lifts no hold is open.
  */
 function releaseRefusal(deps: FlowDeps, run: LoadedRun, message: MessageRow): FlowRefusal | null {
   const body = message.body as { personAuthority?: unknown; command?: unknown; effects?: unknown };
@@ -159,8 +160,8 @@ function releaseRefusal(deps: FlowDeps, run: LoadedRun, message: MessageRow): Fl
   const messages = listMessages(deps.store, run.row.id).filter((m) => m.seq !== message.seq);
   const before = marksOf(messages);
   const after = marksOf([...messages, { ...message, state: "applied" }]);
-  const heldAfter = heldEffectSteps(run.template, after);
-  const released = [...heldEffectSteps(run.template, before)].filter((key) => !heldAfter.has(key) && !after.has(key));
+  const heldAfter = holdTargets(run.template, after);
+  const released = [...holdTargets(run.template, before)].filter((key) => !heldAfter.has(key));
   const proceed = body.command === "defer" && typeof body.effects === "object" && body.effects !== null
     ? Object.entries(body.effects).filter(([, choice]) => choice === "proceed").map(([key]) => key) : [];
   const steps = [...new Set([...proceed, ...released])];
