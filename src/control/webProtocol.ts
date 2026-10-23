@@ -1805,6 +1805,10 @@ export const groupViewSchema = z
     // Issue-fixes spec §5.2 Reads: the group's newest 50 activity rows, newest first. Optional on the wire so older
     // fixtures still parse; the server always gives it.
     activity: z.array(activityEntrySchema).optional(),
+    // Tester round 2 spec §7.3: whether Orca's automatic confirm applies to this group (conditions 2, 3, 4, 6, 11), and the
+    // error code it was refused with under the current proposal version. Optional on the wire (an absent value is "not
+    // eligible": an older server never auto-confirms); the server always gives it.
+    autoConfirm: z.object({ eligible: z.boolean(), refusedCode: nonemptyString.nullable() }).strict().optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

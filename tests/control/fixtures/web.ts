@@ -11,6 +11,7 @@ import { importControlPlan, normalizeControlPlan, prepareEstimatorSlot, writeImp
 import { readSchedulerControlPlanSource } from "../../../src/scheduler/planFile.js";
 import { canonicalBytes } from "../../../src/control/canonicalJson.js";
 import { resolveGroupSelections } from "../../../src/control/agentFreeze.js";
+import { withCommandContext } from "../../../src/control/commandClient.js";
 import { readArchivedPlan, readBudgetProposal } from "../../../src/control/queries.js";
 import type { ExecutionPort } from "../../../src/control/executionPort.js";
 import type { IntegrationScheme } from "../../../src/control/integrationScheme.js";
@@ -55,6 +56,8 @@ export interface WebFixtureOptions {
   requiredChecks?: string[];
   /** Issue-fixes spec §5.2: the control store's clock (ms); absent, Date.now. */
   storeNow?: () => number;
+  /** Tester round 2 §7.2 condition 11: the routed context the import runs under (who created the group); absent, none. */
+  importContext?: { client: string; principal: string; personAuthority?: boolean };
 }
 
 /** Agent selection spec §3: the complete selection this fixture's task work items are frozen with. */
@@ -114,7 +117,8 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   const deps = { store: h.store, port, admissionGate: createAdmissionGate(), profileRouter: router, trustedConfig,
     defaults: () => ({ estimatorProfileId: "all", estimatorProfileHash: frozen.profileHash, estimateMode: "soft" as const }), estimatorSlot: prepared.outcome };
   // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
-  const imported = importControlPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null, resolution: prepared.observation.resolution }) }, importCommand);
+  const runImport = () => importControlPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null, resolution: prepared.observation.resolution }) }, importCommand);
+  const imported = options.importContext === undefined ? runImport() : withCommandContext(importCommand.commandId, options.importContext, runImport);
   if ("error" in imported || imported.result.kind !== "imported") throw new Error(JSON.stringify(imported));
   if(options.tokenPolicy!=="optional-v1")seedHistoricalFiniteBudget(h.store,"g");
   let sequence = 0;

@@ -19,7 +19,13 @@ import {
 } from "./webProtocol.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import { newGroupIntegration, readIntegrationDefault } from "./integrationScheme.js";
-import { commandPrincipalFor } from "./commandClient.js";
+import { commandPrincipalFor, routedPersonAuthorityFor } from "./commandClient.js";
+
+/** Tester round 2 spec §7.2 condition 11: the routed principal of the creating command is a person's. */
+export function createdByPerson(commandId: string): boolean {
+  const principal = commandPrincipalFor(commandId);
+  return principal === "web" || (principal !== null && principal.startsWith("user:")) || routedPersonAuthorityFor(commandId);
+}
 import { AgentCeilingRefusal, capStatuses, spendCapBlocking } from "./spendCaps.js";
 import { readSchedulerControlPlanSource, type SchedulerControlPlanSource } from "../scheduler/planFile.js";
 import type { TrustedControlConfig } from "../panel/controlConfig.js";
@@ -350,6 +356,10 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
     // (agentFreeze.ts groupSelectionPartials), below the panel's. The estimator slot is what this import froze.
     // N1 spec §9.1: an accepted requirement keeps the layers its clarifying group was opened with.
     agentOverrides: carry === null ? {} : (carry.existingBody.agentOverrides ?? {}), estimatorSlot, reconcileSlot: null,
+    // Tester round 2 spec §7.2 condition 11: whether a person created this group (import) or accepted it (requirement) --
+    // a routed `web` / `user:<id>` principal, or a routed person authority (an owner's person token on the socket);
+    // never a run Orca dispatched, never Orca's own command.
+    createdByPerson: createdByPerson(input.commandId),
   };
   // Integration spec §3.1: the group gets its copy of the repository's default where it gets its plan -- here, for
   // import-plan and a requirement's split acceptance alike. Keep is no field, so a keep group's body is unchanged.

@@ -236,6 +236,9 @@ export const durableCommandErrorStatuses = {
   "agent-selection-invalid": 422,
   // Spec §6.4 step 2 (W6-12): a slot ccloop refused; the detail is `<taskId|reconcile>:<ccloop code>`.
   "agent-selection-rejected": 422,
+  // Tester round 2 spec §7.2 condition 10 (round 2 N5): Orca's automatic confirm could not resolve every agent slot with
+  // the group's own choices (orca-auto has no operator preferences); booked once per proposal version.
+  "auto-confirm-selections-unresolved": 422,
   "cleanup-not-recoverable": 422,
   "budget-overflow": 422,
   // Loop plans spec §4.3 (C6): a loop task's work allocation is changed only by set-task-loop.

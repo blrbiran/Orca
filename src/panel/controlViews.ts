@@ -1,3 +1,4 @@
+import { autoConfirmView } from "../control/autoConfirm.js";
 import {validSavedNoDispatch} from "../control/savedResultNoDispatch.js";
 import { flowRoleSql } from "../flow/groups.js";
 import {savedDispatchSchema,recoveryOfSchema,savedRecoverySchema,savedSourceSchema} from "../control/savedResultProtocol.js";
@@ -1149,6 +1150,8 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     activity: readGroupActivity(store, groupId, 50),
     // Integration spec §4: only for a non-keep scheme, so a keep group's view is what it was.
     ...integrationView(body),
+    // Tester round 2 spec §7.3: one indexed read of the current version's automatic-confirm row.
+    autoConfirm: autoConfirmView(store, body as unknown as Record<string, unknown>, proposal.proposalVersion),
   };
   view.ledger.unmeteredRuns = view.runs.filter(run => run.unknownUsageSettlement?.settlement?.method === "owner-acknowledged-unmetered").length;
   const parsed = groupViewSchema.safeParse(view);

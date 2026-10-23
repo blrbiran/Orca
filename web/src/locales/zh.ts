@@ -1680,6 +1680,7 @@ export const zhErrors: Record<string, string> = {
   "agent-selection-changed": "agent 选择在确认时已变化，请重新读取后再确认。",
   "agent-selection-invalid": "agent 选择不合法：{{message}}",
   "agent-selection-rejected": "ccloop 拒绝了这个 agent 选择：{{message}}",
+  "auto-confirm-selections-unresolved": "Orca 用组自己的选择没能解析出每个 agent 槽位。",
   "ccloop-failed": "ccloop 执行失败：{{detail}}",
   "control-peer-exit": "ccloop 出错退出：{{detail}}",
   "agent-unselected": "有槽位没有选定 agent。",

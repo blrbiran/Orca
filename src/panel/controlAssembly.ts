@@ -298,7 +298,13 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       // A flow error never skips the auto-start pass of every other group (advanceFlowRuns records a run's own error on it).
       .then(() => flow!.refreshAgents().then(() => advanceFlowRuns(flow!.deps)).catch((error: unknown) => {
         process.stderr.write(`orca-control: flow pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
-      })).then(() => service.autoStart()).then(() => service.autoResolveIntegrationConflicts()).then(() => undefined, (error: unknown) => {
+      }))
+      // Tester round 2 spec §7.2: unlimited-token groups a person created are confirmed before the auto-start pass, so one
+      // confirmed here starts in the same pass. Refusals are booked (one per proposal version) and written here.
+      .then(() => service.autoConfirmUnlimitedPass()).then(({ refused }) => {
+        for (const { groupId, code } of refused) process.stderr.write(`orca-control: automatic confirm of ${groupId} refused: ${code}\n`);
+      })
+      .then(() => service.autoStart()).then(() => service.autoResolveIntegrationConflicts()).then(() => undefined, (error: unknown) => {
       process.stderr.write(`orca-control: auto-start pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
     });
     const pass = autoStart.then(() => withAdmission({ admissionGate }, () => deliverSchedulerWakes(store, wakeHandlers)))

@@ -1755,6 +1755,7 @@ export const enErrors: Record<string, string> = {
   "agent-selection-changed": "The agent selections changed before the confirmation. Read the group again, then confirm.",
   "agent-selection-invalid": "The agent selection is not valid: {{detail}}",
   "agent-selection-rejected": "ccloop refused this agent selection: {{detail}}",
+  "auto-confirm-selections-unresolved": "Orca could not resolve every agent slot with the group's own choices.",
   // ccloop error codes spec (2026-10-15) §4.2: ccloop exited non-zero; the detail is `<code>: <detail>` (web/src/ccloopCodes.ts explains a known code).
   "ccloop-failed": "ccloop failed: {{detail}}",
   // ccloop error codes spec §4.4: a peer exit's stored run reason; the detail is ccloop's code explained (web/src/refusalExplain.ts).

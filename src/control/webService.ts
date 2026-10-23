@@ -18,7 +18,7 @@ import { buildBudgetEstimateRequest, ESTIMATE_GRANT, estimateGrantFor, withEstim
 import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
-import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand } from "./planImport.js";
+import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand, type ImportDefaults } from "./planImport.js";
 import { readAgentPreferences } from "./agentPreferences.js";
 import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
 import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
@@ -77,6 +77,7 @@ import { recordActivity } from "./activity.js";
 import { DISPATCHED_PERSON_DIRNAME, commandClientFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
 import { applyApprovePendingDecision, applyRatifyFlaggedDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RatifyFlaggedDecisionCommand, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { readCorrections } from "../corrections/store.js";
+import { autoConfirmBlocker, autoConfirmCommandId } from "./autoConfirm.js";
 import { autoStartPass, ORCHESTRATION_ACTOR, readOrchestrationSettings, recordConfirmed, type PrerequisiteReader } from "./orchestration.js";
 import { applySetOrchestrationSettings, type SetOrchestrationSettingsCommand } from "./orchestrationCommands.js";
 import { applyAddGroupDependency, applyRemoveGroupDependency, waitingPrerequisites, type AddGroupDependencyCommand, type RemoveGroupDependencyCommand } from "./groupEdges.js";
@@ -694,6 +695,56 @@ export class WebControlService {
    */
   autoStart(prerequisites: PrerequisiteReader = waitingPrerequisites): ReturnType<typeof autoStartPass> {
     return autoStartPass({ store: this.store, now: () => (this.deps.now?.() ?? new Date()).getTime(), start: (command) => this.start(command as StartCommand), prerequisites });
+  }
+  /**
+   * Tester round 2 spec §7.2 (ruling H4): the single automatic confirmer of ordinary groups. Each group the port-free
+   * predicate `autoConfirmBlocker` (autoConfirm.ts) clears -- an unlimited-token draft a person created, nothing blocking
+   * it -- has its agent slots resolved as orca-auto (condition 10), then is confirmed through the unchanged `confirm` as
+   * orca-auto, start authorized (D7), under one command id per proposal version; an unresolved slot is booked under that
+   * id as auto-confirm-selections-unresolved (N5). Never `integrationHash`, never `hold`, never a flow effect (§2.2).
+   * The panel pump calls it after the flow pass and before `autoStart`, so a group it confirms starts in the same pass.
+   */
+  async autoConfirmUnlimitedPass(defaults: () => ImportDefaults | null = this.deps.defaults): Promise<{ confirmed: string[]; refused: Array<{ groupId: string; code: string }> }> {
+    const confirmed: string[] = [], refused: Array<{ groupId: string; code: string }> = [];
+    const current = defaults();
+    for (const row of this.store.db.prepare("SELECT id, body FROM groups ORDER BY rowid").all()) {
+      const groupId = String(row.id);
+      let command: ConfirmCommand;
+      try {
+        if (autoConfirmBlocker(this.store, JSON.parse(String(row.body)) as Record<string, unknown>, current) !== null || current === null) continue;
+        const proposal = readBudgetProposal(this.store, groupId), plan = readArchivedPlan(this.store, groupId);
+        const profileId = current.estimatorProfileId!, profileHash = current.estimatorProfileHash!;
+        // The worker profile's declared window is the handoff threshold when the proposal names none (the flow children's
+        // binding, flowAssembly.ts): confirm refuses a null threshold under a profile that declares a window.
+        const window = this.deps.profileRouter.resolve("task", profileId, profileHash).snapshot.profile.capabilities.contextWindowTokens;
+        let selectionsHash: string | null;
+        try { selectionsHash = (await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId, ORCHESTRATION_ACTOR)).selectionsHash; }
+        catch { selectionsHash = null; }
+        const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)!.revision);
+        command = {
+          schema: "orca-raw-command-v1", commandId: autoConfirmCommandId(proposal.proposalVersion), actorId: ORCHESTRATION_ACTOR, expectedRevision: revision,
+          verb: "confirm", target: { kind: "group", groupId },
+          payload: {
+            planHash: plan.planHash, proposalVersion: proposal.proposalVersion, budgetMode: current.estimateMode,
+            profileIds: { estimator: profileId, worker: profileId, handoff: profileId, goalReview: profileId },
+            profileHashes: { estimator: profileHash, worker: profileHash, handoff: profileHash, goalReview: profileHash },
+            contextPolicy: { handoffAtContextTokens: proposal.contextPolicy.handoffAtContextTokens ?? window },
+            selectionsHash: selectionsHash ?? "0".repeat(64),
+          },
+        };
+        if (selectionsHash === null) {
+          // Condition 10, booked (round 2 N5): visible without a port, and condition 9 stops the next pass re-resolving.
+          const failed = command;
+          this.mutate(() => applyWebCommand(this.store, { rawCommand: failed, expand: () => ({ ...failed, schema: "orca-authority-command-v1" }), apply: () => { throw new ControlError("auto-confirm-selections-unresolved"); } }));
+          refused.push({ groupId, code: "auto-confirm-selections-unresolved" });
+          continue;
+        }
+      } catch { continue; } // a group its own readers cannot read is named there, not here
+      const answer = await this.confirm(command);
+      const error = (answer as { error?: { code?: unknown } }).error;
+      if (error === undefined) confirmed.push(groupId); else refused.push({ groupId, code: String(error.code) });
+    }
+    return { confirmed, refused };
   }
   /**
    * Kanban spec 2026-10-20 §9a.2 (overrides integration spec 2026-10-08 §7's human-only approval for this path): a
