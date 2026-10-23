@@ -283,3 +283,38 @@ describe("the overview's git children and Orca's environment (final review triag
     expect(built.overview.docs.entries).toEqual([{ path: "README.md", text: "# Target\n", cut: false }]);
   });
 });
+
+// Dir-requirements spec §18.1, criterion D14: a repository project's overview is unchanged by the dir work. The golden
+// file was captured from the builder on `main` before any src/ change and committed on its own; this case only reads it
+// (a case that regenerated it could never go red, Rule 9 inference 2).
+describe("a repository project's overview against the committed golden (dir-requirements D14)", () => {
+  const GOLDEN = resolve("tests/fixtures/requirement-overview/repo-golden.json");
+  /** Fixed identity, dates and no user config, so every object id (and so the overview's commit) is reproducible. */
+  const fixed = (cwd: string, args: string[]) => execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], { cwd, encoding: "utf8", env: {
+    ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "golden", GIT_AUTHOR_EMAIL: "golden@orca",
+    GIT_COMMITTER_NAME: "golden", GIT_COMMITTER_EMAIL: "golden@orca", GIT_AUTHOR_DATE: "2026-10-24T00:00:00Z", GIT_COMMITTER_DATE: "2026-10-24T00:00:00Z",
+  } }).trim();
+
+  it("HEAD's overview (two commits, so HEAD is not the only commit) equals the golden byte for byte", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "orca-overview-golden-")));
+    roots.push(root);
+    const repo = join(root, "repo");
+    await mkdir(join(repo, "src", "deep"), { recursive: true });
+    fixed(repo, ["init", "-q", "-b", "main"]);
+    await writeFile(join(repo, "README.md"), "# Golden\n\nfirst\n");
+    await writeFile(join(repo, "src/a.ts"), "export const a = 1\n");
+    fixed(repo, ["add", "-A"]); fixed(repo, ["commit", "-qm", "first"]);
+    await writeFile(join(repo, "README.md"), "# Golden\n\nsecond\n");
+    await writeFile(join(repo, "CLAUDE.md"), "rules\n");
+    await writeFile(join(repo, "src/deep/b.ts"), "export const b = 2\n");
+    await writeFile(join(repo, "notes.txt"), "n\n");
+    fixed(repo, ["add", "-A"]); fixed(repo, ["commit", "-qm", "second"]);
+    const fake = await fakeBin(root, "ok");
+    const built = await buildRepositoryOverview({ repo, repoId: "repo", stateDir: join(root, "control", "repo"), runId: "run-1", astGrepBin: fake.bin });
+    const golden = JSON.parse(await readFile(GOLDEN, "utf8")) as { hash: string; canonicalJson: string };
+    expect(built.overview.commit).toBe(fixed(repo, ["rev-parse", "HEAD"]));
+    expect(JSON.parse(built.canonicalJson)).toEqual(JSON.parse(golden.canonicalJson));
+    expect(built.canonicalJson).toBe(golden.canonicalJson);
+    expect(built.hash).toBe(golden.hash);
+  });
+});

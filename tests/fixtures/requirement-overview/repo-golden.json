@@ -1,0 +1,5 @@
+{
+  "capturedAt": "unchanged builder at ca9f7fac (src/ and tests/ identical to main 6ec49411), implementer of session ffec7b28, 2026-10-24",
+  "hash": "e35924675ef1c797bcaf94fd3c034fe7aa42d1f7e2e22906e71be1e382660a7b",
+  "canonicalJson": "{\"commit\":\"0748c6d9dc2ba7a6d7dc655596660011a1edffe3\",\"docs\":{\"entries\":[{\"cut\":false,\"path\":\"CLAUDE.md\",\"text\":\"rules\\n\"},{\"cut\":false,\"path\":\"README.md\",\"text\":\"# Golden\\n\\nsecond\\n\"}],\"skipped\":[],\"status\":\"ok\"},\"files\":{\"cut\":false,\"directories\":null,\"listed\":[\"CLAUDE.md\",\"README.md\",\"notes.txt\",\"src/a.ts\",\"src/deep/b.ts\"],\"status\":\"ok\",\"total\":5},\"schema\":\"orca-repository-overview-v1\",\"structure\":{\"cut\":false,\"detail\":null,\"files\":[{\"path\":\"src/a.ts\",\"symbols\":[{\"kind\":\"function\",\"name\":\"exported_a_ts\"}]},{\"path\":\"src/deep/b.ts\",\"symbols\":[{\"kind\":\"function\",\"name\":\"exported_b_ts\"}]}],\"status\":\"ok\"}}"
+}
