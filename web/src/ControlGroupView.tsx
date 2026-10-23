@@ -273,6 +273,11 @@ function GrantBanners({ view }: { view: GroupViewV1 }): JSX.Element {
   </>;
 }
 
+/** Tester round 2 §7.4 item 3 (D6): a task slot resolves only through the person's own default agent, which Orca's automatic confirm cannot use. */
+function ownAgentOnly(preview: AgentSelectionPreviewV1 | null | undefined): boolean {
+  return (preview?.slots ?? []).some((slot) => slot.taskId !== null && slot.outcome.kind === "resolved" && slot.outcome.frozen.provenance.agent === "operator");
+}
+
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const { view, config, uncertain, drafts, onDraft, onCommand } = props;
   const { t } = useTranslation();
@@ -567,14 +572,11 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         <h3>{t("control.preparation.reviewTitle")}</h3>
         <p>{t("control.preparation.goal", { goal: view.plan.goal })}</p>
         <ul>{view.plan.successConditions.map((condition, index) => <li key={index}>{condition}</li>)}</ul>
-        <p>{t("control.preparation.agentReview")}</p>
         <p>{t("control.preparation.workspace", { mode: workspaceMode ?? t("common.unknown") })}</p>
-        <p>{t("control.preparation.integrationReview")}</p>
-        <p>{t("control.preparation.tokenPolicy")}</p>
-        <p>{t("control.preparation.sequence")}</p>
       </section>
       <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} archived={preparationReadOnly} selectionsHash={selectionsHashFor(view, props.preview)}
-        suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} />
+        suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null}
+        ownAgent={ownAgentOnly(props.preview)} />
       {props.agents !== undefined && (
         <AgentSelectionEditor
           view={view} agents={props.agents} preview={props.preview ?? null} preferences={props.agentPreferences}

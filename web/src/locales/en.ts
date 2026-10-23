@@ -401,7 +401,7 @@ export const en = {
   },
   control: {
     outputBound: { exceeded: "This agent cannot cap a call's output; this call went {{tokens}} tokens over its declared bound." },
-    preparation: { reviewTitle: "Review task plan", goal: "Goal: {{goal}}", agentReview: "Review the effective Agent and role selections below before confirming.", workspace: "Workspace: {{mode}}", integrationReview: "Review the integration target below.", tokenPolicy: "Review the optional token policy and allocations below.", sequence: "Confirm the task plan first; Start is a separate action after confirmation." },
+    preparation: { reviewTitle: "Review task plan", goal: "Goal: {{goal}}", workspace: "Workspace: {{mode}}" },
     savedResult:{notDispatched:"Verification was not started. Ordinary retry creates a new plan and execution on the current target.",verify:"Verify saved results",cost:"Execution is skipped; validation and verification may consume model usage.",unavailable:"Saved results are unavailable for verification.",lineage:"Verification source: {{runId}} · attempt {{attempt}}"},
     unavailable: "The task control plane is not available on this panel.",
     title: "Task control",
@@ -793,6 +793,9 @@ export const en = {
     reread: "Re-read",
   },
   budget: {
+    checklist: { title: "Before confirming" },
+    blocker: { profiles: "Choose a budget mode and agent profiles, or set the defaults in Global settings.", selections: "Every agent slot must resolve; see Agent selection below, or check installation and defaults in", owner: "This group has a delivery scheme (push or PR); only an owner can confirm it.", draft: "Fix the highlighted values first.", none: "Nothing blocks confirming.", estimate: "Waiting for the running estimate to finish.", ownAgent: "Orca confirms only with the group's own agent choice; your personal default agent does not count. Set the group worker below, or confirm by hand." },
+    autoConfirm: { pending: "Token use is unlimited, so Orca confirms and starts this group on its own once nothing above blocks it.", refused: "Orca's automatic confirm was refused: {{reason}}. Fix it and edit the proposal to try again, or confirm by hand.", integration: "A group with a delivery scheme needs an owner's confirm, so it is not confirmed automatically." },
     noEstimator: "no estimator configured",
     executionProfiles: "Execution profiles",
     budgetMode: "Budget mode",
@@ -826,7 +829,6 @@ export const en = {
     usageIncomplete: " · usage incomplete: {{count}} run(s) released unmetered",
     save: "Save proposal",
     reestimate: "Re-estimate",
-    confirmWaits: "Confirm waits for this proposal version's agent selections to resolve.",
     confirmDestination: "Review the Agent selections below or check installation and defaults in",
     confirm: "Confirm task plan",
     confirmStartsNote: "Confirming starts this group on its own as soon as a slot is free.",

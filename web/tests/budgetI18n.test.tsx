@@ -71,7 +71,7 @@ describe("the budget editor and the loop card in Chinese", () => {
       "归属", "桶", "活跃毫秒", "会话数", "建议", "任务 a", "草稿占用", " 在做法卡片里改", "模型 est-1", "采用 2000000", "应用整行", "应用全部建议",
       "估算理由（est-1）", "b · M · 置信度 高 · rationale-x", "组上限", "设置上限", "上下文达到多少 token 时交接（留空则不设）",
       // Issue #84 (human: 中文界面也统一用 K/M/B): was "已用 0 · 已承诺 300 万 · 余量 600 万".
-      "已用 0 · 已承诺 3M · 余量 6M", "保存提案", "重新估算", "确认要等这个提案版本的 agent 选择解析完成。", "确认任务方案",
+      "已用 0 · 已承诺 3M · 余量 6M", "保存提案", "重新估算", "每个 agent 槽位都要解析成功；请看下方 Agent 选择，或在此检查安装和默认值：", "确认任务方案",
     ]) expect(text, expected).toContain(expected);
     expect(screen.getByRole("button", { name: "对 b 工作 token 采用 2000000" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "应用整行 b 工作" })).toBeTruthy();

@@ -270,7 +270,7 @@ export const zh: Translation<typeof en> = {
   },
   control: {
     outputBound: { exceeded: "该 agent 无法限制单次调用的输出；这次调用比声明的上限多用了 {{tokens}} 个 token。" },
-    preparation: { reviewTitle: "检查任务方案", goal: "目标：{{goal}}", agentReview: "确认前请检查下方实际生效的 Agent 和角色选择。", workspace: "工作区：{{mode}}", integrationReview: "请检查下方的集成目标。", tokenPolicy: "请检查下方可选的 token 策略和分配。", sequence: "先确认任务方案；开始执行是确认后的单独操作。" },
+    preparation: { reviewTitle: "检查任务方案", goal: "目标：{{goal}}", workspace: "工作区：{{mode}}" },
     savedResult:{notDispatched:"验证尚未启动。普通重试会从当前目标创建新的计划与执行。",verify:"验证已保存成果",cost:"跳过执行；校验和验证可能消耗模型用量。",unavailable:"已保存成果暂不可验证。",lineage:"验证来源：{{runId}} · 尝试 {{attempt}}"},
     unavailable: "这个面板上没有任务控制面。",
     title: "任务控制",
@@ -670,6 +670,9 @@ export const zh: Translation<typeof en> = {
     reread: "重新读取",
   },
   budget: {
+    checklist: { title: "确认前" },
+    blocker: { profiles: "请选择预算模式和 agent 配置档，或在全局设置里设好默认值。", selections: "每个 agent 槽位都要解析成功；请看下方 Agent 选择，或在此检查安装和默认值：", owner: "这个组设了交付方式（推送或 PR），只有所有者能确认。", draft: "先修正标出的数值。", none: "没有阻止确认的项。", estimate: "正在等进行中的估算结束。", ownAgent: "Orca 自动确认只认组自己的 agent 选择，你个人的默认 agent 不算。请在下方设置组执行，或手动确认。" },
+    autoConfirm: { pending: "token 不限，所以上面各项都满足后，Orca 会自动确认并开跑这个组。", refused: "Orca 自动确认被拒：{{reason}}。处理后修改提案即可再试，或手动确认。", integration: "设了交付方式的组需要所有者确认，不会自动确认。" },
     noEstimator: "未配置估算 Agent",
     executionProfiles: "执行配置",
     budgetMode: "预算模式",
@@ -703,7 +706,6 @@ export const zh: Translation<typeof en> = {
     usageIncomplete: " · 用量不完整：{{count}} 个运行被不计量放行",
     save: "保存提案",
     reestimate: "重新估算",
-    confirmWaits: "确认要等这个提案版本的 agent 选择解析完成。",
     confirmDestination: "请检查下方 Agent 选择，或在此检查安装和默认值：",
     confirm: "确认任务方案",
     confirmStartsNote: "确认后，一有空位这个组就会自动开跑。",

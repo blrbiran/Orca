@@ -14,7 +14,7 @@ import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
-import i18n, { enumText } from "./i18n.js";
+import i18n, { enumText, refusalText } from "./i18n.js";
 import { TokenInput, parseTokens, shortTokens } from "./TokenInput.js";
 import type {
   AllocationViewV1,
@@ -216,6 +216,42 @@ function limitAmount(view: GroupViewV1, drafts: Record<string, string>): BudgetA
   return limit;
 }
 
+/** The person's own choices on a page with no control-config defaults (BudgetEditor's manual mode and profile selects). */
+export type ManualConfirmChoice = { mode: "" | "strict" | "soft"; profiles: Record<"worker" | "handoff" | "goalReview", string> };
+/** Tester round 2 §7.4: why Confirm is disabled, in this order (the four conditions of §7.1). */
+export type ConfirmBlocker = "profiles" | "selections" | "owner" | "draft";
+
+function confirmModeOf(view: GroupViewV1, config: ControlConfigV1, manual: ManualConfirmChoice): "strict" | "soft" | null {
+  return view.proposal.budgetMode ?? config.defaults?.estimateMode ?? (manual.mode || null);
+}
+function confirmProfileOf(view: GroupViewV1, config: ControlConfigV1, manual: ManualConfirmChoice, kind: "estimator" | "worker" | "handoff" | "goalReview"): ProfileBindingV1 | null {
+  if (view.proposal.profiles !== null) return view.proposal.profiles[kind];
+  const defaults = config.defaults;
+  if (defaults !== null) return { profileId: defaults.estimatorProfileId, profileHash: defaults.estimatorProfileHash };
+  if (kind === "estimator") return null;
+  const workKind = kind === "worker" ? "task" : kind === "goalReview" ? "goal-review" : "handoff";
+  const profile = config.profiles.find((candidate) => candidate.profileId === manual.profiles[kind] && candidate.allowedWorkKinds.includes(workKind));
+  return profile ? { profileId: profile.profileId, profileHash: profile.profileHash } : null;
+}
+
+/**
+ * Tester round 2 §7.4 item 1: the one function that decides both the checklist above the confirm buttons and whether they
+ * are disabled. `mayLimit`: the reader may send human-only fields (an owner); `manual`: the person's own mode and profiles.
+ */
+export function confirmBlockers(view: GroupViewV1, config: ControlConfigV1, selectionsHash: string | null | undefined, mayLimit: boolean,
+  drafts: Record<string, string>, manual: ManualConfirmChoice): ConfirmBlocker[] {
+  const blockers: ConfirmBlocker[] = [];
+  if (confirmModeOf(view, config, manual) === null || (["worker", "handoff", "goalReview"] as const).some((kind) => confirmProfileOf(view, config, manual, kind) === null)) blockers.push("profiles");
+  if (selectionsHash == null) blockers.push("selections");
+  // Integration spec §3.2, ruling R2: confirming a group Orca merges or pushes is an owner's approval of its scheme.
+  if (view.integration !== undefined && !mayLimit) blockers.push("owner");
+  if (hasBadDraft(drafts)) blockers.push("draft");
+  return blockers;
+}
+
+/** A reason sentence placed inside another sentence: its own closing full stop dropped. */
+const clause = (text: string): string => text.replace(/[.。]$/u, "");
+
 export interface BudgetEditorProps {
   view: GroupViewV1;
   config: ControlConfigV1;
@@ -237,6 +273,8 @@ export interface BudgetEditorProps {
   suggestedTarget?: string | null;
   /** Issue-fixes spec §6.3: an archived group refuses every command but the unarchive, so no action is offered (read-only). */
   archived?: boolean;
+  /** Tester round 2 §7.4 item 3: a task slot resolves only through the person's own default agent (provenance operator). */
+  ownAgent?: boolean;
 }
 
 export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
@@ -286,22 +324,15 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const defaults = config.defaults;
   const [manualMode, setManualMode] = useState<"" | "strict" | "soft">("");
   const [manualProfiles, setManualProfiles] = useState<Record<"worker" | "handoff" | "goalReview", string>>({ worker: "", handoff: "", goalReview: "" });
-  const mode = view.proposal.budgetMode ?? defaults?.estimateMode ?? (manualMode || null);
-  const explicitProfile = (kind: "worker" | "handoff" | "goalReview"): ProfileBindingV1 | null => {
-    const id = manualProfiles[kind];
-    const workKind = kind === "worker" ? "task" : kind === "goalReview" ? "goal-review" : "handoff";
-    const profile = config.profiles.find((candidate) => candidate.profileId === id && candidate.allowedWorkKinds.includes(workKind));
-    return profile ? { profileId: profile.profileId, profileHash: profile.profileHash } : null;
-  };
-  const confirmProfile = (kind: "estimator" | "worker" | "handoff" | "goalReview"): ProfileBindingV1 | null => {
-    if (view.proposal.profiles !== null) return view.proposal.profiles[kind];
-    if (kind === "estimator") return defaults === null ? null : { profileId: defaults.estimatorProfileId, profileHash: defaults.estimatorProfileHash };
-    return defaults === null ? explicitProfile(kind) : { profileId: defaults.estimatorProfileId, profileHash: defaults.estimatorProfileHash };
-  };
-  const confirmBlocked = mode === null || (["worker", "handoff", "goalReview"] as const).some((kind) => confirmProfile(kind) === null);
+  const manual: ManualConfirmChoice = { mode: manualMode, profiles: manualProfiles };
+  const mode = confirmModeOf(view, config, manual);
+  const confirmProfile = (kind: "estimator" | "worker" | "handoff" | "goalReview"): ProfileBindingV1 | null => confirmProfileOf(view, config, manual, kind);
   const shownSelectionsHash = props.selectionsHash ?? null;
-  // Integration spec §3.2, ruling R2: confirming a group Orca merges or pushes is an owner's approval of its scheme.
-  const integrationBlocked = view.integration !== undefined && !mayLimit;
+  const blockers = confirmBlockers(view, config, shownSelectionsHash, mayLimit, drafts, manual);
+  // Tester round 2 §7.3, §7.4 item 3: an unlimited-token group Orca may confirm on its own (absent autoConfirm: never).
+  const unlimitedGroup = view.ledger.groupLimit.tokens === null;
+  const autoEligible = unlimitedGroup && view.autoConfirm?.eligible === true;
+  const refusedCode = view.autoConfirm?.refusedCode ?? null;
 
   const submitEdit = (): void => {
     const operations = editedOperations(view, drafts);
@@ -319,7 +350,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   };
   /** Kanban spec 2026-10-20 §3.1: the default confirm also starts the group; `hold` is "Confirm only, don't run yet". */
   const submitConfirm = (hold = false): void => {
-    if (confirmBlocked || shownSelectionsHash === null || integrationBlocked) return;
+    if (blockers.length > 0 || shownSelectionsHash === null || mode === null) return;
     const contextDraft = drafts[CONTEXT_POLICY_KEY(groupId)];
     const tokens = contextDraft === undefined || contextDraft.trim() === "" ? null : Number(contextDraft);
     onCommand({
@@ -521,10 +552,26 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       {!archived && <button type="button" disabled={!editable || hasBadDraft(drafts) || editedOperations(view, drafts).length === 0} onClick={submitEdit}>{t("budget.save")}</button>}
       {estimator !== null && !archived && <button type="button" disabled={estimator.profile === null} onClick={submitEstimate}>{t("budget.reestimate")}</button>}
       {editable && <GroupIntegrationConfirm view={view} suggestedTarget={props.suggestedTarget ?? null} onCommand={onCommand} />}
-      {editable && shownSelectionsHash === null && <p role="note">{t("budget.confirmWaits")} {t("budget.confirmDestination")} <a href="#global-settings">{t("nav.globalSettings")}</a></p>}
-      {!archived && editable && <p role="note" data-testid="confirm-starts-note">{t("budget.confirmStartsNote")}</p>}
-      {!archived && <button type="button" disabled={confirmBlocked || shownSelectionsHash === null || integrationBlocked || hasBadDraft(drafts)} onClick={() => submitConfirm()}>{t("budget.confirm")}</button>}
-      {!archived && editable && <button type="button" disabled={confirmBlocked || shownSelectionsHash === null || integrationBlocked || hasBadDraft(drafts)} onClick={() => submitConfirm(true)}>{t("budget.confirmHold")}</button>}
+      {!archived && editable && (
+        <ul aria-label={t("budget.checklist.title")} className="confirm-checklist">
+          {blockers.map((blocker) => (
+            <li key={blocker} data-blocker={blocker}>
+              {t(`budget.blocker.${blocker}` as const)}
+              {blocker === "selections" && <> <a href="#global-settings">{t("nav.globalSettings")}</a></>}
+            </li>
+          ))}
+          {autoEligible && view.estimates.some((estimate) => estimate.state === "running" || estimate.state === "start-unknown") && <li data-testid="auto-estimate">{t("budget.blocker.estimate")}</li>}
+          {autoEligible && props.ownAgent === true && <li data-testid="auto-own-agent">{t("budget.blocker.ownAgent")}</li>}
+          {autoEligible && refusedCode !== null && <li data-testid="auto-refused">{t("budget.autoConfirm.refused", { reason: clause(refusalText({ code: refusedCode, message: refusedCode, status: null })) })}</li>}
+        </ul>
+      )}
+      {!archived && editable && blockers.length === 0 && !autoEligible && <p role="status" data-testid="blocker-none">{t("budget.blocker.none")}</p>}
+      {!archived && editable && unlimitedGroup && view.autoConfirm?.eligible === false && view.integration !== undefined && <p role="note" data-testid="auto-integration">{t("budget.autoConfirm.integration")}</p>}
+      {!archived && editable && (autoEligible
+        ? <p role="note" data-testid="auto-confirm-pending">{t("budget.autoConfirm.pending")}</p>
+        : <p role="note" data-testid="confirm-starts-note">{t("budget.confirmStartsNote")}</p>)}
+      {!archived && <button type="button" disabled={blockers.length > 0} onClick={() => submitConfirm()}>{t("budget.confirm")}</button>}
+      {!archived && editable && <button type="button" disabled={blockers.length > 0} onClick={() => submitConfirm(true)}>{t("budget.confirmHold")}</button>}
     </section>
   );
 }
