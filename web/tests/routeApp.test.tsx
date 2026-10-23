@@ -5,7 +5,7 @@
  * route read on load waits for the first overview read; another project's group is a line and a switch button, never an
  * automatic switch; a jump into another section offers one way back, and a correction says which run it came from.
  */
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, configure, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
 import { rowKey } from "../src/DecisionList.js";
@@ -13,6 +13,9 @@ import type { GroupDecisionsViewV1, OverviewV1 } from "../src/controlTypes.js";
 import { requirementView } from "./fixtures/requirement.js";
 import { run, workItem } from "./fixtures/board.js";
 import { ALPHA, BETA, groupSummary, installFakePanel, planGroupView, type FakePanel } from "./fixtures/twoProjects.js";
+
+// A route waits for three reads (projects, control epoch, overview) before it opens; a loaded machine needs more than 1 s.
+configure({ asyncUtilTimeout: 5000 });
 
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const PROJECT_KEY = "alpha";

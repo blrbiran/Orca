@@ -28,3 +28,14 @@ export function reviewKeyAction(e: KeyFacts): ReviewKeyAction {
 export function isRetryKey(e: KeyFacts): boolean {
   return !typingOrChord(e) && e.key === "r";
 }
+
+/**
+ * Tester round 2 §10.2 (ruling H12, D8): the keys this page acts on, for the list a visible button opens -- kept next to
+ * the functions above so a criterion can prove the list names exactly the letters they decide. No new binding: `?` is a
+ * printable key under WCAG 2.1.4, and Vimium's own help.
+ */
+export const SHORTCUTS = [
+  { keys: ["j", "k", "a", "c"], text: "shortcuts.decisions" },
+  { keys: ["r"], text: "shortcuts.retry" },
+  { keys: ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"], text: "shortcuts.arrows" },
+] as const;
