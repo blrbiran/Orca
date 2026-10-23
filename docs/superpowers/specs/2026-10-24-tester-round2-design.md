@@ -996,3 +996,23 @@ added one requirement (last row).
 | Minor: person-token socket imports | `createdByPerson` stamp at import via `routedPersonAuthorityFor`; fallback to `commands.principal` for older groups; D12 withdrawn | §7.2 condition 11 | C22d |
 | Minor: stale `pendingRoute` | cancelled by any `navigate`/`hashchange` before the first read | §9.3 | C33d |
 | Minor: condition 8 | stated to clear on the next pass once defaults are configured; nothing booked | §7.2 | C22c |
+
+## 20. Corrections found while building the server part (appended; earlier text unchanged)
+
+Recorded by the server implementer subagent of session `ffec7b28`, 2026-10-24, on branch `feat/tester-round2-server`
+(first built at `7726b8e6`, review fixes after it). Rule 13: the sections above stay as written; these notes correct them.
+
+1. **§16.1 C1a's refusal code.** A plain `proposal-edit` (no `proposedGroupLimit`) or a `confirm` while an estimate overrun
+   has left a token deficit is refused `group-budget-unavailable`, not `recovery-blocked`: today's
+   `assertKnownConservation` evaluates `residual(group.limit, …)` (`webService.ts`, the check §4.2.5 keeps for these
+   commands) before the deficit test, and `residual` throws `group-budget-unavailable` on a deficit. Unchanged by design
+   (§4.2.5 keeps today's check). A raise still short of the deficit is `recovery-blocked`, as C1a says. The criterion
+   (`tests/control/estimateBreachAdvisory.test.ts` C1a) pins both codes.
+2. **§7.2 the automatic confirm's `contextPolicy`.** "`contextPolicy = proposal.contextPolicy`" cannot work: an editable
+   proposal's threshold is always null (`reopenProposal`), and `confirm` refuses a null threshold under a worker profile
+   that declares a context window (`execution-policy-unrepresentable`), which the defaults' estimator profile must do to
+   estimate at all. The pass sends the proposal's threshold when it names one, else the worker profile's declared
+   `contextWindowTokens` -- the binding flow children are confirmed with (`src/panel/flowAssembly.ts:69`).
+3. **§6.2.1 the plan's group agent.** The accepted plan's group-level agent is `plan.agent?.agent` (the plan's `agent` is a
+   `PartialSelection`, `src/scheduler/planFile.ts`), not `plan.agent?.group?.agent`. The seed is written after
+   `writeImportedPlan`, whose estimator-layer check reads the layers as they were before the seed.
