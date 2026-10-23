@@ -676,7 +676,7 @@ export function appendQueued(deps: FlowDeps, run: LoadedRun, stepKey: string, se
     // A step with skills is defined again with their actual locks when it ran (§12.2 phase 1); until then none.
     definitionHash: definitionOf(deps, run, step, []),
     baseCommit: null, ranOn: null, fingerprint: null, outputKind: null, outputRef: null, outputHash: null, readSetHash: null, reasons, planNo, childGroupId: null,
-    by, via, createdAt: at, updatedAt: at, body: { basis: {}, retries: 0, retryReason: null, feedback: [], ...extra } satisfies ExecutionBody,
+    by, via, createdAt: at, updatedAt: at, body: { basis: {}, retries: 0, retryReason: null, feedback: [], calls: [], ...extra } satisfies ExecutionBody,
   });
   // A run that had finished has work again (a later answer or feedback): it is advanced again.
   if (getFlowRun(deps.store, run.row.id)?.state === "done") setFlowRunState(deps.store, run.row.id, "done", "running");

@@ -13,11 +13,11 @@
 import { describe, expect, it } from "vitest";
 import type { FrozenSlot } from "../../src/control/agentSelection.js";
 import { singleCallHandler } from "../../src/control/singleCallPurposes.js";
-import { createFlowCallPort } from "../../src/flow/calls.js";
+import { claimFlowCall, createFlowCallPort } from "../../src/flow/calls.js";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { acceptMessage } from "../../src/flow/messages.js";
 import { sumSpend, USD_REASON, type Spend } from "../../src/flow/spend.js";
-import { getIntake, listPlans } from "../../src/flow/store.js";
+import { getIntake, listPlans, moveIntake } from "../../src/flow/store.js";
 import { readFlowRun } from "../../src/flow/views.js";
 import { profileSnapshot, webFixture } from "../control/fixtures/web.js";
 import { fakeChildPort } from "./fixtures/childPort.js";
@@ -104,7 +104,8 @@ async function settledRun(): Promise<World & { draftRuns: string[] }> {
   const child = childGroupIdOf(t.flowRunId, "write", 1);
   childRun(t.w, child, "child-run-1", 30_000);
   childRun(t.w, child, "child-run-2", 12_000);
-  t.children.land(child, { "post.md": POST }, { spentTokens: 42_000 });
+  // The child status's own count differs from its runs' sum: spend reads the runs, never this number.
+  t.children.land(child, { "post.md": POST }, { spentTokens: 41_000 });
   await t.w.advance();
   expect(t.w.latest(t.flowRunId, "write")!.state).toBe("done");
   return { ...t, draftRuns: [invalid, valid] };
@@ -195,6 +196,73 @@ describe("spend: only the tool's numbers (gaps §10, G9)", { timeout: 60_000 }, 
       expect(outline.tokens).toBeNull();
       expect(outline.unknownReason).toBe("the tool reported 0 tokens");
       expect(outline.runs.map((r) => r.tokens)).toEqual([null, null]);
+    } finally { await t.w.dispose(); }
+  });
+});
+
+describe("spend fix round 1 (Task 8 review Minors 1-4)", { timeout: 60_000 }, () => {
+  const runFeedback = (t: World, body: Record<string, unknown>, requestId: string) => acceptMessage(t.w.deps, t.flowRunId, { by: "ann", via: "cli:test", requestId, kind: "feedback", target: { kind: "run" }, body } as Parameters<typeof acceptMessage>[2]);
+
+  it("a done call-kind execution from before run ids were kept is unknown, and a total over it is partial", async () => {
+    const t = await settledRun(); try {
+      report(t.w, t.draftRuns[0]!, 900);
+      report(t.w, t.draftRuns[1]!, 1_300);
+      // As stored before this change: the same done draft with no `calls` list.
+      const outline = t.w.latest(t.flowRunId, "outline")!;
+      const { calls: _kept, ...legacy } = outline.body as Record<string, unknown>;
+      t.w.store.db.prepare("UPDATE step_executions SET body=? WHERE flow_run_id=? AND step_key='outline' AND seq=?").run(JSON.stringify(legacy), t.flowRunId, outline.seq);
+      const v = view(t.w, t.flowRunId);
+      expect(step(v, "outline").executions[0]!.spend).toEqual({ tokens: null, unknownReason: "calls before run ids were kept", ...NONE, runs: [{ runId: `legacy:outline#${outline.seq}`, purpose: "draft", tokens: null }] });
+      expect(v.spend).toMatchObject({ tokens: 42_000, unknownReason: "partial: 1 runs unknown", ...NONE });
+    } finally { await t.w.dispose(); }
+  });
+
+  it("a call still out with no usage yet reads 'no usage reported yet', not a 0 the tool gave", async () => {
+    const t = await world(); try {
+      await t.w.advance();
+      const out = runRows(t.w, t.groupId).at(-1)!;
+      expect(out.body.state).toBe("starting");
+      expect(step(view(t.w, t.flowRunId), "outline").executions[0]!.spend).toEqual({ tokens: null, unknownReason: "no usage reported yet", ...NONE, runs: [{ runId: out.id, purpose: "flow-draft", tokens: null }] });
+    } finally { await t.w.dispose(); }
+  });
+
+  it("a claim for an intake call nobody requested is refused loud and draws nothing", async () => {
+    const t = await settledRun(); try {
+      const sent = await runFeedback(t, { text: "too sweet", anchors: [{ quote: "Engineers think better with a warm cup." }] }, "fb-u");
+      const intake = getIntake(t.w.store, t.flowRunId, sent.seq)!;
+      expect(intake.body.calls.every((c) => c.runId !== undefined)).toBe(true);
+      // The open call un-claimed again, but its entry already names a run: no entry was requested for a second claim.
+      moveIntake(t.w.store, t.flowRunId, sent.seq, intake.state, intake.state, { ...intake.body, call: { ...intake.body.call!, runId: null } }, 5_000);
+      const before = runRows(t.w, t.groupId).length;
+      const drawn = t.w.store.db.prepare("SELECT pool_drawn FROM flow_runs WHERE id=?").get(t.flowRunId)!.pool_drawn;
+      expect(() => claimFlowCall(t.w.store, { key: { flowRunId: t.flowRunId, stepKey: "@feedback", seq: sent.seq }, groupId: t.groupId, purpose: "feedback-triage", prompt: "p", responseSchema: {}, maxOutputTokens: 100 }, 5_001))
+        .toThrow("recovery-blocked:flow-call-intake-unrequested");
+      expect(runRows(t.w, t.groupId)).toHaveLength(before);
+      expect(t.w.store.db.prepare("SELECT pool_drawn FROM flow_runs WHERE id=?").get(t.flowRunId)!.pool_drawn).toBe(drawn);
+    } finally { await t.w.dispose(); }
+  });
+
+  it("a retried rerun proposal counts both of its runs on the plan; an intake's clarify call counts on the intake", async () => {
+    const t = await settledRun(); try {
+      const sent = await runFeedback(t, { text: "something feels off" }, "fb-v");
+      const triage = await settle(t, "feedback-triage", { targets: [{ stepKey: "write", why: "the text" }], clarity: "vague" });
+      expect(getIntake(t.w.store, t.flowRunId, sent.seq)!.state).toBe("clarifying");
+      const q = { key: "q1", question: "Which part?", recommendedAnswer: "The intro", why: "w", dependsOn: [] };
+      const clarify = await settle(t, "clarify", { slug: "fb", statement: "## What feels wrong\nx\n## Where\ny\n## What it should become\nz", acceptanceCriteria: [], questions: [q], frontierEmpty: false, openBranches: [], glossary: [], adrs: [] });
+      report(t.w, triage, 3_000);
+      report(t.w, clarify, 2_000);
+      const intakeView = view(t.w, t.flowRunId).intakes.find((i) => i.messageSeq === sent.seq)!;
+      expect(intakeView.spend).toEqual({ tokens: 5_000, unknownReason: null, ...NONE, runs: [{ runId: triage, purpose: "feedback-triage", tokens: 3_000 }, { runId: clarify, purpose: "clarify", tokens: 2_000 }] });
+      // A second, anchored feedback: its plan's proposal is answered invalid once, then valid.
+      await runFeedback(t, { text: "too sweet", anchors: [{ quote: "Engineers think better with a warm cup." }] }, "fb-p");
+      await settle(t, "feedback-triage", { targets: [{ stepKey: "write", why: "write owns the text" }] });
+      const first = await settle(t, "rerun-proposal", { nonsense: true });
+      const second = await settle(t, "rerun-proposal", { skips: [] });
+      expect(first).not.toBe(second);
+      report(t.w, first, 300);
+      report(t.w, second, 400);
+      const plan = view(t.w, t.flowRunId).plans.at(-1)!;
+      expect(plan.spend).toEqual({ tokens: 700, unknownReason: null, ...NONE, runs: [{ runId: first, purpose: "rerun-proposal", tokens: 300 }, { runId: second, purpose: "rerun-proposal", tokens: 400 }] });
     } finally { await t.w.dispose(); }
   });
 });

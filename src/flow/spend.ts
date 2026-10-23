@@ -10,6 +10,7 @@
  * - No tool reports a money amount: `usd` is always null with the fixed reason. Allocations, pool draws and budgets are
  *   never spend.
  */
+import { isTerminalRunState } from "../control/budget.js";
 import type { ControlStore } from "../control/store.js";
 import { childRuns } from "./childPort.js";
 import type { ExecutionRow, PlanRow, IntakeRow } from "./store.js";
@@ -20,7 +21,10 @@ export interface Spend { tokens: number | null; unknownReason: string | null; us
 /** What a call request leaves behind (calls.ts, at claim): the driver run that answers it. */
 export interface CallRef { runId: string; purpose: string }
 
-type RunUsage = { cumulative?: { work?: { tokens?: unknown } }; unknown?: { work?: unknown } };
+type RunUsage = { state?: unknown; cumulative?: { work?: { tokens?: unknown } }; unknown?: { work?: unknown } };
+/** The kinds whose executions finish through a single call (draft, review, ask, clarify). */
+const CALL_KINDS = new Set(["draft", "review", "ask", "clarify"]);
+export const LEGACY_CALLS_REASON = "calls before run ids were kept";
 
 const spend = (tokens: number | null, unknownReason: string | null, runs: SpendRun[]): Spend => ({ tokens, unknownReason, usd: null, usdReason: USD_REASON, runs });
 
@@ -29,6 +33,9 @@ function usageOf(body: RunUsage | null): { tokens: number | null; reason: string
   if (body === null) return { tokens: null, reason: "no run record" };
   if (body.unknown?.work === true) return { tokens: null, reason: "the tool reported no usage" };
   const tokens = body.cumulative?.work?.tokens;
+  const counted = typeof tokens === "number" && Number.isFinite(tokens) && tokens > 0;
+  // A call still out (or a child still working) has not been reported on yet: nothing the tool said, not a 0 it gave.
+  if (!counted && !isTerminalRunState(String(body.state))) return { tokens: null, reason: "no usage reported yet" };
   if (typeof tokens !== "number" || !Number.isFinite(tokens)) return { tokens: null, reason: "the tool reported no usage" };
   // goal.md P7: a tool-given 0 means the tool did not count, not that nothing was spent.
   if (tokens <= 0) return { tokens: null, reason: "the tool reported 0 tokens" };
@@ -73,7 +80,15 @@ const refsOf = (calls: unknown): CallRef[] => Array.isArray(calls)
   : [];
 
 export function executionSpend(store: ControlStore, execution: ExecutionRow): Spend {
-  const calls = callsSpend(store, refsOf((execution.body as { calls?: unknown }).calls));
+  const body = execution.body as { calls?: unknown; edit?: unknown; drift?: unknown };
+  // Every execution queued since run ids were kept starts with `calls: []` (kernel appendQueued). A done call-kind
+  // execution without the list is from before: it made calls whose runs are not named, so its spend is unknown (one
+  // entry, so a sum over it is partial) -- never left out of a total that would then look complete. A person's edit
+  // and a drift execution make no call.
+  if (body.calls === undefined && execution.state === "done" && CALL_KINDS.has(execution.kind) && body.edit === undefined && body.drift === undefined) {
+    return spend(null, LEGACY_CALLS_REASON, [{ runId: `legacy:${execution.stepKey}#${execution.seq}`, purpose: execution.kind, tokens: null }]);
+  }
+  const calls = callsSpend(store, refsOf(body.calls));
   return execution.childGroupId === null ? calls : sumSpend([calls, childGroupSpend(store, execution.childGroupId)]);
 }
 

@@ -72,20 +72,22 @@ function setIntakeCall(store: ControlStore, key: ExecutionKey, patch: Partial<No
   const open = intakeCallOf(store, key)!;
   moveIntake(store, key.flowRunId, key.seq, open.intake.state, open.intake.state, { ...open.intake.body, call: { ...open.call, ...patch } }, Date.now());
 }
-function claimIntakeCall(store: ControlStore, request: FlowCallRequest, at: number): "claimed" | "exhausted" | "unconfirmed" {
-  if (intakeCallOf(store, request.key)?.call.runId !== null) throw new ControlError("recovery-blocked", `flow-call-intake-moved:${request.key.seq}`);
+function claimIntakeCall(store: ControlStore, request: FlowCallRequest): "claimed" | "exhausted" | "unconfirmed" {
+  const open = intakeCallOf(store, request.key);
+  if (open?.call.runId !== null) throw new ControlError("recovery-blocked", `flow-call-intake-moved:${request.key.seq}`);
+  // Gaps spec §10: the intake appended the call's entry before it sent it (intake.ts); the claim names its run there.
+  // A claim with no such entry breaks that invariant: refused loud, before anything is drawn (Rule 12).
+  const calls = [...open!.intake.body.calls];
+  let entry = -1;
+  for (let i = calls.length - 1; i >= 0 && entry < 0; i -= 1) if (calls[i]!.runId === undefined && calls[i]!.purpose === request.purpose) entry = i;
+  if (entry < 0) throw new ControlError("recovery-blocked", `flow-call-intake-unrequested:${request.key.seq}:${request.purpose}`);
   const parent = readParentConfirmation(store, request.groupId);
   if (parent?.call == null) { setIntakeCall(store, request.key, { callResult: { runId: "", rawOutput: null, failure: "flow-call-unconfirmed" } }); return "unconfirmed"; }
   const claimed = insertCallRun(store, request, parent.call);
   if ("exhausted" in claimed) { setIntakeCall(store, request.key, { callResult: { runId: "", rawOutput: null, failure: POOL_EXHAUSTED } }); return "exhausted"; }
   // Gaps spec §10: the run that answers this call stays named on the intake's calls list (its spend reads it).
-  const open = intakeCallOf(store, request.key)!;
-  const calls = [...open.intake.body.calls];
-  let entry = -1;
-  for (let i = calls.length - 1; i >= 0 && entry < 0; i -= 1) if (calls[i]!.runId === undefined && calls[i]!.purpose === request.purpose) entry = i;
-  if (entry < 0) calls.push({ purpose: request.purpose, at, runId: claimed.runId });
-  else calls[entry] = { ...calls[entry]!, runId: claimed.runId };
-  moveIntake(store, request.key.flowRunId, request.key.seq, open.intake.state, open.intake.state, { ...open.intake.body, call: { ...open.call, runId: claimed.runId }, calls }, Date.now());
+  calls[entry] = { ...calls[entry]!, runId: claimed.runId };
+  moveIntake(store, request.key.flowRunId, request.key.seq, open!.intake.state, open!.intake.state, { ...open!.intake.body, call: { ...open!.call, runId: claimed.runId }, calls }, Date.now());
   return "claimed";
 }
 
@@ -95,7 +97,7 @@ function claimIntakeCall(store: ControlStore, request: FlowCallRequest, at: numb
  */
 export function claimFlowCall(store: ControlStore, request: FlowCallRequest, at: number): "claimed" | "exhausted" | "unconfirmed" {
   if (request.key.stepKey === PLAN_KEY) return claimPlanCall(store, request, at);
-  if (request.key.stepKey === FEEDBACK_KEY) return claimIntakeCall(store, request, at);
+  if (request.key.stepKey === FEEDBACK_KEY) return claimIntakeCall(store, request);
   const parent = readParentConfirmation(store, request.groupId);
   const execution = executionOf(store, request.key);
   if (execution === undefined || execution.state !== "running") throw new ControlError("recovery-blocked", `flow-call-execution-moved:${request.key.stepKey}#${request.key.seq}`);
