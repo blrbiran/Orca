@@ -164,8 +164,9 @@ describe("revise a round of a flow clarify step (G7)", () => {
       expect(rounds(w, groupId, 1).map((r) => r.state)).toEqual(["answered", "awaiting-answers"]);
       const before = raw(w, groupId, 1);
       expect(await revise(w, flowRunId, 1, revision(w, groupId, 1, 1, "GitHub-flavoured"))).toMatchObject({ state: "applied", reason: null });
-      expect(states(w, flowRunId)).toEqual([[1, "running"]]);
+      // Rounds 1 and 2 are byte-equal: the revision is row 3, never round 1 overwritten.
       expect(raw(w, groupId, 1).slice(0, 2)).toEqual(before);
+      expect(states(w, flowRunId)).toEqual([[1, "running"]]);
       expect(rounds(w, groupId, 1).map((r) => [r.roundNo, r.state, r.revises ?? null])).toEqual([[1, "answered", null], [2, "awaiting-answers", null], [3, "answered", 1], [4, "drafting", null]]);
       expect(briefCalls(w)).toHaveLength(3);
       expect(w.calls[lastIndex(w)]).toMatchObject({ purpose: "clarify", key: { stepKey: "brief", seq: 1 } });
