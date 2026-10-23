@@ -181,7 +181,8 @@ describe("frozen estimator", () => {
       service.completeEstimate("g", h.estimateId, {});
       const group = readControlGroup(h.store, "epoch", "g");
       expect(readEstimateRecord(h.store, "g", h.estimateId).state).toBe("failed");
-      expect(group.summary.state).toBe("blocked");
+      // Tester round 2 (ruling H1, spec §16.2): an estimate run's breach no longer blocks the group; the deficit stays.
+      expect(group.summary.state).toBe("draft");
       expect(group.ledger.explicitUnallocatedReserve.tokens).toBe(0);
       expect(group.ledger.budgetDeficit.tokens).toBe(group.ledger.used.tokens + group.ledger.committedRemaining.tokens - group.ledger.groupLimit.tokens!);
       expect(group.ledger.budgetDeficit.tokens).toBeGreaterThan(0);

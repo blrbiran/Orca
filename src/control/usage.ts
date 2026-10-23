@@ -8,6 +8,7 @@ import { dimensions, hashPayload } from "./commands.js";
 import { add, componentMin, isTerminalRunState, readRun, saveRun, subtract, syncWebBudget } from "./budget.js";
 import { readGroup, saveGroup } from "./queries.js";
 import { bookUsageDelta, byModelSchema } from "./usageLedger.js";
+import { growForEstimateOverrun } from "./estimateOverrun.js";
 const eventSchema=z.object({runId:idSchema,generation:safeInteger.positive(),eventSeq:safeInteger.positive(),bucket:z.enum(["work","handoff"]),cumulative:amountSchema.nullable(),source:z.object({artifactId:idSchema,hash:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),byModel:byModelSchema.nullable().optional()}).strict();
 /** Accounts spec §5.1: `appliedAt` (ms) stamps the usage-ledger rows this call books; callers with a clock pass it. */
 export function recordUsage(store:ControlStore,event:UsageEvent,appliedAt:number=Date.now()):{applied:boolean;highWater:number} {
@@ -40,7 +41,11 @@ export function recordUsage(store:ControlStore,event:UsageEvent,appliedAt:number
         if(dimensions.some(k=>run.grant[next.bucket][k]!==null && next.cumulative![k]>run.grant[next.bucket][k]!)) {
           run.breaches.push(next.eventSeq);
           // N1 DR18: on a clarifying group the claim-time fit is the cap; a breach is recorded on the run only.
-          if((group as {status?:string}).status!=="clarifying"){if("planHash" in group)group.status="blocked";else group.stopped=true;}
+          // Tester round 2 spec §4.2.1 (ruling H1): an estimate run's breach is recorded on the run only, too -- it is
+          // advice, and never changes the group's status. §4.2.5 (N3): its non-token excess grows the group's limit.
+          const estimateRun=(run as {phase?:string}).phase==="estimate";
+          if(estimateRun)growForEstimateOverrun(store,group as never,run,next.eventSeq,appliedAt);
+          if((group as {status?:string}).status!=="clarifying"&&!estimateRun){if("planHash" in group)group.status="blocked";else group.stopped=true;}
         }
       }
       run.highWater=next.eventSeq;

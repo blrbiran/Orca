@@ -1607,6 +1607,9 @@ export const runViewSchema = z
     providerAttemptOrdinal: safeInteger,
     profile: profileBindingSchema,
     used: amountSchema,
+    // Tester round 2 spec §4.2.2: the dimensions in which the run's cumulative exceeds its grant (its bucket), in
+    // `dimensions` order. Optional on the wire so older fixtures parse; the server always gives it.
+    overGrant: z.array(amountDimensionSchema).optional(),
     tokenRemainingStatus:z.enum(["known","unlimited","unknown"]).optional(),
     remaining: budgetAmountSchema,
     failureCode: nonemptyString.nullable(),

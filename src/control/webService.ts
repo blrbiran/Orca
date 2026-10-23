@@ -323,13 +323,21 @@ function withdrawEstimate(store: ControlStore, groupId: string, group: Group, pr
   clearSpendCapBlock(store, groupId, "estimate");
   saveWebAuthority(store, group, proposal); recordProjectionChange(store, [groupId]);
 }
-export function assertKnownConservation(store: ControlStore, group: Group, proposal: BudgetProposalRecord): void {
+/**
+ * `proposedLimit` (tester round 2 spec §4.2.5, review C1 / round 2 N2): a proposal-edit that raises the limit is checked
+ * against that limit -- its deficit by `budgetBalance`, which never throws -- in place of the two checks against the
+ * stored limit, and before any other use of it, so a deficit an estimate overrun left cannot refuse the raise that cures it.
+ */
+export function assertKnownConservation(store: ControlStore, group: Group, proposal: BudgetProposalRecord, proposedLimit?: BudgetAmount): void {
   if (store.dispatchBlocked || group.ledger.usageUnknown) throw new ControlError("recovery-blocked");
   for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=?").all(group.groupId)) {
     const run = JSON.parse(String(row.body));
     if (!run.unknown || run.unknown.work || run.unknown.handoff) throw new ControlError("recovery-blocked");
   }
-  if (!same(group.ledger.explicitUnallocatedReserve, proposal.explicitUnallocatedReserve)
+  if (proposedLimit !== undefined) {
+    const { deficit } = budgetBalance(proposedLimit, group.used, group.reserved);
+    if (dimensions.some(d => deficit[d] !== 0) || !same(group.ledger.explicitUnallocatedReserve, proposal.explicitUnallocatedReserve)) throw new ControlError("recovery-blocked");
+  } else if (!same(group.ledger.explicitUnallocatedReserve, proposal.explicitUnallocatedReserve)
     || !same(residual(group.limit, group.used, group.reserved), proposal.explicitUnallocatedReserve)
     || dimensions.some(d => group.ledger.budgetDeficit[d] !== 0)) throw new ControlError("recovery-blocked");
   const commitments = proposal.allocations.filter(a => a.ownerKind !== "reserve").map(allocation => {
@@ -428,6 +436,8 @@ function reopenProposal(store: ControlStore, id: string, group: Group, proposal:
   proposal.contextPolicy = { handoffAtContextTokens: null };
   proposal.allocations.forEach(a => { a.state = "draft-encumbered"; });
   group.status = "draft"; group.ledger.committedRemaining = commitments;
+  // Tester round 2 spec §4.2.5: the deficit is re-derived with the reserve (zero unless a raised limit just cured one).
+  group.ledger.budgetDeficit = budgetBalance(proposal.groupLimit, group.used, commitments).deficit;
   for (const row of store.db.prepare("SELECT id,body FROM work_items WHERE group_id=?").all(id)) {
     const work = JSON.parse(String(row.body));
     if (work.kind !== "task") continue;
@@ -479,7 +489,7 @@ export class WebControlService {
         const payload = context.effectiveCommand.payload as EffectiveProposalEditPayload;
         if (proposal.proposalVersion !== payload.baseProposalVersion) throw new ControlError("proposal-version-conflict");
         prestart(group); refuseAfterTaskStarted(this.store, id);
-        assertKnownConservation(this.store, group, proposal);
+        assertKnownConservation(this.store, group, proposal, payload.proposedGroupLimit ?? undefined);
         // Loop plans spec §4.3 (C6, Rule 7): a loop task's work allocation has one owner, set-task-loop.
         const loopTasks = new Set(readArchivedPlan(this.store, id).plan.tasks.filter(task => task.loop !== undefined).map(task => task.taskId));
         const seen = new Set<string>();

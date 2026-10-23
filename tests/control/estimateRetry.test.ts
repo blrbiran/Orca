@@ -242,16 +242,16 @@ describe("the automatic estimate retry (estimate usable-answer spec §4.3)", () 
 });
 
 describe("each condition that rules the retry out is recorded on the failed estimate (spec §4.3 Never throws)", () => {
-  // A soft overrun past the group limit leaves a deficit -- and, like any breach of a grant, blocks the group (usage.ts),
-  // which the spec's order names first. What this pins is that the decision did not throw: the settlement committed,
-  // the estimate is failed (not running, re-driven every round), and no retry was queued. budget-deficit by itself is
-  // pinned by the decideEstimateRetry criteria below.
+  // A soft overrun past the group limit leaves a deficit. Rewritten for tester round 2 (ruling H1, spec §4.2.1, §16.2;
+  // human: 「这次批准改写所有必要的判据」): an estimate run's breach no longer blocks the group, so it stays draft and the
+  // first condition in the spec's order that holds is budget-deficit. What this pins is still that the decision did not
+  // throw: the settlement committed, the estimate is failed (not running, re-driven every round), and no retry was queued.
   it("a soft overrun past the group limit (a deficit) still commits the settlement, failed and not running, with no retry", async () => {
     const x = await harness([missingTask], { tokens: 50_000_000 }); try {
       await settle(x);
       expect(readWebGroup(x.h.store, "g").ledger.budgetDeficit.tokens).toBeGreaterThan(0);
-      expect(readWebGroup(x.h.store, "g").status).toBe("blocked");
-      expectSkipped(x, "group-not-prestart");
+      expect(readWebGroup(x.h.store, "g").status).toBe("draft");
+      expectSkipped(x, "budget-deficit");
       expect(x.body().state).toBe("settled-restartable");
     } finally { await x.h.dispose(); }
   });
