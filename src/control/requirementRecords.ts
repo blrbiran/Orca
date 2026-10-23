@@ -19,6 +19,8 @@ import {
 /** N1 spec §4.1: the requirement block a clarifying group (and later the group it became) carries. */
 export const requirementBlockSchema = z.object({
   requirementId: z.string().regex(/^[a-f0-9]{32}$/), repoId: idSchema, slug: z.string().regex(SLUG_PATTERN).nullable(),
+  /** Task 10a (session 0e13a9b7): the title of the latest round that gave one; the cards show it. Absent before any did. */
+  title: z.string().min(1).optional(),
   contentLanguage: z.enum(["en", "zh"]), createdOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), idea: z.string().min(1),
   profile: profileBindingSchema, agentSlot: frozenSlotSchema,
   /** DR8: the profile's estimatorPreflight.maxOutputTokens, frozen at open; every call of this requirement asks for it.

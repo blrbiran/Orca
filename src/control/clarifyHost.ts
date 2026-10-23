@@ -1,4 +1,4 @@
-import { CLARIFY_INSTRUCTION_V2, CLARIFY_PROMPT_HEAD, deepFreeze, CLARIFY_JSON_SCHEMA } from "./requirementClarify.js";
+import { CLARIFY_INSTRUCTION_V3, CLARIFY_PROMPT_HEAD, deepFreeze, CLARIFY_JSON_SCHEMA } from "./requirementClarify.js";
 import { newDraft, queueRequirementCall, saveRequirementGroup, writeDraft, type RequirementGroup } from "./requirementRecords.js";
 import { CLARIFY_CAPS, type ClarifyCaps } from "./requirementSchemas.js";
 import type { ControlStore } from "./store.js";
@@ -30,7 +30,7 @@ export interface ClarifyHost {
   caps?(): ClarifyCaps;
 }
 
-const REQUIREMENT_FRAME: ClarifyFrame = Object.freeze({ instruction: CLARIFY_INSTRUCTION_V2, contextName: "repository-overview" });
+const REQUIREMENT_FRAME: ClarifyFrame = Object.freeze({ instruction: CLARIFY_INSTRUCTION_V3, contextName: "repository-overview" });
 
 /**
  * The dev flow's host: always ('clarify', 1); consensus is recorded on the requirement block and queues draft 1's split

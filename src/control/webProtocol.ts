@@ -1312,6 +1312,8 @@ export const requirementSummarySchema = z.object({
   // Issue #75: the slug a round named (null before), so the requirement list can name a requirement without its view.
   // Optional on the wire so older fixtures still parse; the server always gives it.
   slug: nonemptyString.nullable().optional(),
+  // Task 10a (session 0e13a9b7): the short title the latest clarify round gave; absent while none did. The cards show it.
+  title: nonemptyString.optional(),
   // Issue 91 review fix: present only on a handoff-unresolved stop -- whether recovery-retry can act on it.
   stopRetryable: z.boolean().optional(),
 }).strict();

@@ -1,4 +1,4 @@
-Orca requirement clarification, instruction version 2.
+Orca requirement clarification, instruction version 3.
 
 You help a person turn an idea into an agreed requirement for one software repository, by asking rounds of questions. You have no tools: you cannot run, open or inspect anything, and everything you may use is below. Answer with one JSON object and nothing else.
 
@@ -36,6 +36,7 @@ Write every prose field in the language the `Write in:` line names. Keep identif
 Answer with exactly this object, with no other key at any level:
 {
   "slug": in round 1 only: a short name for the requirement -- lowercase ASCII words and digits joined by single hyphens, at most eight words,
+  "title": optional, in any round: a short title naming what the work delivers, in the language the `Write in:` line names, at most 40 characters; a longer one is ignored, not a reason to discard the answer,
   "statement": the whole requirement as you now understand it; it replaces the previous statement,
   "acceptanceCriteria": [ { "id": a short unique id such as AC1, "text": one checkable criterion } ] -- the whole list; it replaces the previous one,
   "questions": [ { "key": a short key unique in this answer, "question": the question, "recommendedAnswer": your recommendation, "why": why you recommend it, "dependsOn": [ keys of questions in this answer, or ids of earlier rounds' questions, that it presupposes ] } ],
@@ -64,7 +65,7 @@ ORCA-DATA repository-overview <NONCE>>>>
 ORCA-DATA rounds <NONCE>>>>
 
 ----- ORCA C7 GOLDEN: next clarify prompt -----
-Orca requirement clarification, instruction version 2.
+Orca requirement clarification, instruction version 3.
 
 You help a person turn an idea into an agreed requirement for one software repository, by asking rounds of questions. You have no tools: you cannot run, open or inspect anything, and everything you may use is below. Answer with one JSON object and nothing else.
 
@@ -102,6 +103,7 @@ Write every prose field in the language the `Write in:` line names. Keep identif
 Answer with exactly this object, with no other key at any level:
 {
   "slug": in round 1 only: a short name for the requirement -- lowercase ASCII words and digits joined by single hyphens, at most eight words,
+  "title": optional, in any round: a short title naming what the work delivers, in the language the `Write in:` line names, at most 40 characters; a longer one is ignored, not a reason to discard the answer,
   "statement": the whole requirement as you now understand it; it replaces the previous statement,
   "acceptanceCriteria": [ { "id": a short unique id such as AC1, "text": one checkable criterion } ] -- the whole list; it replaces the previous one,
   "questions": [ { "key": a short key unique in this answer, "question": the question, "recommendedAnswer": your recommendation, "why": why you recommend it, "dependsOn": [ keys of questions in this answer, or ids of earlier rounds' questions, that it presupposes ] } ],

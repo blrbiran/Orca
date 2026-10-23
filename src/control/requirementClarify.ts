@@ -3,7 +3,7 @@ import {
   CLARIFY_CAPS, classificationSchema, clarifyTier, MAX_QUESTIONS, SLUG_PATTERN, type ClarifyCaps, type ClarifyResult, type ClassPair, type RoundBody,
 } from "./requirementSchemas.js";
 
-export const CLARIFY_PROMPT_HEAD = "Orca requirement clarification, instruction version 2.";
+export const CLARIFY_PROMPT_HEAD = "Orca requirement clarification, instruction version 3.";
 const LANGUAGE_NAMES = { en: "English", zh: "中文 (Chinese)" } as const;
 
 const capLine = (c: ClarifyCaps) => `${c.rounds} ${c.rounds === 1 ? "round" : "rounds"}; per round at most ${c.questions} questions, ${c.glossary} glossary entries and ${c.adrs} decisions.`;
@@ -11,9 +11,10 @@ const capLine = (c: ClarifyCaps) => `${c.rounds} ${c.rounds === 1 ? "round" : "r
 /**
  * N1 spec §7.1: the fixed instruction, carrying the four grilling rules of goal.md N1. Version 2 (clarify caps spec
  * 2026-10-21 §3.5): only questions that change the plan, the round-1 classification, and the cap table, stated from
- * CLARIFY_CAPS. Changing it (or that table) means version 3.
+ * CLARIFY_CAPS. Version 3 (flow gaps Task 10a, human request in session 0e13a9b7): the optional short `title` the cards
+ * show. Changing it (or that table) means version 4.
  */
-export const CLARIFY_INSTRUCTION_V2 = [
+export const CLARIFY_INSTRUCTION_V3 = [
   CLARIFY_PROMPT_HEAD,
   "",
   "You help a person turn an idea into an agreed requirement for one software repository, by asking rounds of questions. You have no tools: you cannot run, open or inspect anything, and everything you may use is below. Answer with one JSON object and nothing else.",
@@ -52,6 +53,7 @@ export const CLARIFY_INSTRUCTION_V2 = [
   "Answer with exactly this object, with no other key at any level:",
   "{",
   "  \"slug\": in round 1 only: a short name for the requirement -- lowercase ASCII words and digits joined by single hyphens, at most eight words,",
+  "  \"title\": optional, in any round: a short title naming what the work delivers, in the language the `Write in:` line names, at most 40 characters; a longer one is ignored, not a reason to discard the answer,",
   "  \"statement\": the whole requirement as you now understand it; it replaces the previous statement,",
   "  \"acceptanceCriteria\": [ { \"id\": a short unique id such as AC1, \"text\": one checkable criterion } ] -- the whole list; it replaces the previous one,",
   "  \"questions\": [ { \"key\": a short key unique in this answer, \"question\": the question, \"recommendedAnswer\": your recommendation, \"why\": why you recommend it, \"dependsOn\": [ keys of questions in this answer, or ids of earlier rounds' questions, that it presupposes ] } ],",
@@ -77,7 +79,7 @@ const object = (properties: Record<string, unknown>, required: string[]) => ({ t
  * shape are left to clarifyOutputSchema and classifyClarifyOutput.
  */
 export const CLARIFY_JSON_SCHEMA: Readonly<Record<string, unknown>> = deepFreeze(object({
-  slug: str, statement: str,
+  slug: str, title: str, statement: str,
   acceptanceCriteria: { type: "array", items: object({ id: str, text: str }, ["id", "text"]) },
   questions: { type: "array", items: object({ key: str, question: str, recommendedAnswer: str, why: str, dependsOn: strings }, ["key", "question", "recommendedAnswer", "why", "dependsOn"]) },
   frontierEmpty: { type: "boolean" }, openBranches: strings,
@@ -88,7 +90,8 @@ export const CLARIFY_JSON_SCHEMA: Readonly<Record<string, unknown>> = deepFreeze
 
 const nonempty = z.string().min(1);
 export const clarifyOutputSchema = z.object({
-  slug: z.string().optional(), statement: nonempty,
+  // Task 10a: anything here is accepted and code keeps or drops it (titleOf); a bad title never discards the answer.
+  slug: z.string().optional(), title: z.unknown().optional(), statement: nonempty,
   acceptanceCriteria: z.array(z.object({ id: nonempty, text: nonempty }).strict()),
   questions: z.array(z.object({ key: nonempty, question: nonempty, recommendedAnswer: nonempty, why: nonempty, dependsOn: z.array(nonempty) }).strict()).max(MAX_QUESTIONS),
   frontierEmpty: z.boolean(), openBranches: z.array(nonempty),
@@ -96,6 +99,15 @@ export const clarifyOutputSchema = z.object({
   adrs: z.array(z.object({ title: nonempty, context: nonempty, decision: nonempty, consequences: nonempty }).strict()),
   classification: classificationSchema.optional(),
 }).strict();
+
+/** Task 10a: the most characters a kept title has (counted as code points, so a Chinese title is held to 40 too). */
+export const TITLE_MAX_CHARS = 40;
+/** Task 10a: the model's title, trimmed, when it is one line of 1..TITLE_MAX_CHARS characters; anything else is dropped. */
+export function titleOf(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const title = value.trim();
+  return title.length > 0 && !/[\r\n]/.test(title) && Array.from(title).length <= TITLE_MAX_CHARS ? title : null;
+}
 
 export type ClarifyClass = { ok: true; result: ClarifyResult } | { ok: false; reason: string };
 
@@ -137,8 +149,9 @@ export function classifyClarifyOutput(value: unknown, context: {
   const n = context.roundNo;
   const idOf = new Map(out.questions.map((q, i) => [q.key, `R${n}.Q${i + 1}`]));
   const slug = n !== 1 ? null : out.slug !== undefined && SLUG_PATTERN.test(out.slug) ? out.slug : `requirement-${context.requirementId.slice(0, 8)}`;
+  const title = titleOf(out.title);
   return { ok: true, result: {
-    slug, statement: out.statement, acceptanceCriteria: out.acceptanceCriteria,
+    slug, ...(title === null ? {} : { title }), statement: out.statement, acceptanceCriteria: out.acceptanceCriteria,
     questions: out.questions.map((q, i) => ({ id: `R${n}.Q${i + 1}`, key: q.key, question: q.question, recommendedAnswer: q.recommendedAnswer, why: q.why, dependsOn: q.dependsOn.map((dep) => idOf.get(dep) ?? dep) })),
     frontierEmpty: out.frontierEmpty, openBranches: out.openBranches,
     glossary: out.glossary.map((entry, i) => ({ id: `R${n}.G${i + 1}`, ...entry })),
@@ -188,7 +201,7 @@ export function buildClarifyPrompt(input: {
   superseded?: RoundBody[];
   /**
    * Flow engine spec §10.1: the clarify host's frame -- its fixed instruction and the name of its context block. Absent
-   * is the requirement host's (CLARIFY_INSTRUCTION_V2 and `repository-overview`), byte for byte (C7).
+   * is the requirement host's (CLARIFY_INSTRUCTION_V3 and `repository-overview`), byte for byte (C7).
    */
   frame?: { instruction: string; contextName: string };
   /** Gaps spec §4.6: a host's fixed caps name the limits line instead of the class table. Absent: as always (C7). */
@@ -197,7 +210,7 @@ export function buildClarifyPrompt(input: {
   const nonce = input.overview.hash.slice(0, 16);
   const superseded = earlierRounds(input.superseded ?? []);
   const blocks = [
-    input.frame?.instruction ?? CLARIFY_INSTRUCTION_V2,
+    input.frame?.instruction ?? CLARIFY_INSTRUCTION_V3,
     input.caps === undefined ? limitsLine(input.limits.roundNo, input.limits.classification, input.limits.roundCap)
       : `Limits: round ${input.limits.roundNo} of at most ${input.caps.rounds}; in this round at most ${input.caps.questions} questions, ${input.caps.glossary} glossary entries and ${input.caps.adrs} decisions.`, `Write in: ${LANGUAGE_NAMES[input.contentLanguage]}`,
     fence("idea", nonce, input.idea), fence(input.frame?.contextName ?? "repository-overview", nonce, input.overview.canonicalJson),

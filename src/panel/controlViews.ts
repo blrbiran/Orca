@@ -406,6 +406,7 @@ function requirementSummaryFromSnapshot(store: ControlStore, groupId: string, sn
     used: group.used, reserved: group.reserved, limit: group.limit, usageUnknown: group.ledger.usageUnknown,
     blockedRun: blockedRequirementRun(store, groupId, snapshot),
     slug: group.requirement.slug,
+    ...(group.requirement.title === undefined ? {} : { title: group.requirement.title }),
     // Issue 91 review fix: only on a handoff-unresolved stop -- whether recovery-retry can act on it.
     ...(groupStopState(store, groupId) === "handoff-unresolved" ? { stopRetryable: unresolvedStopRetryable(store, groupId) } : {}),
   };

@@ -52,7 +52,10 @@ export function clarifyTier(c: ClassPair | null): ClarifyTier {
 }
 /** A round's classified output (spec §7.3): ids assigned by code, the slug decided by code. `classification`: round 1 only (clarify caps spec §3.1); absent on rounds written before it. */
 export const clarifyResultSchema = z.object({
-  slug: z.string().regex(SLUG_PATTERN).nullable(), statement: nonempty, acceptanceCriteria: z.array(criterionSchema),
+  slug: z.string().regex(SLUG_PATTERN).nullable(),
+  /** Task 10a (session 0e13a9b7): the short title the round's answer gave, when code kept one (titleOf); absent otherwise. */
+  title: nonempty.optional(),
+  statement: nonempty, acceptanceCriteria: z.array(criterionSchema),
   questions: z.array(questionSchema).max(MAX_QUESTIONS), frontierEmpty: z.boolean(), openBranches: z.array(nonempty),
   glossary: z.array(glossaryEntrySchema), adrs: z.array(adrSchema), classification: classificationSchema.optional(),
 }).strict();

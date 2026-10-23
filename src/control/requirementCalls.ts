@@ -202,6 +202,8 @@ function recordClarify(store: ControlStore, group: RequirementGroup, target: Req
   if (classified.ok) {
     Object.assign(round, { result: classified.result, state: "awaiting-answers", lastInvalidReason: null });
     if (round.roundNo === 1) group.requirement.slug = classified.result.slug;
+    // Task 10a: the latest round that gave a title wins; a round without one keeps the earlier title.
+    if (classified.result.title !== undefined) group.requirement.title = classified.result.title;
   } else if (round.retries < MAX_AUTO_RETRIES && (failure === null || !PRE_SPAWN_REFUSALS.has(failure))) {
     Object.assign(round, { retries: round.retries + 1, lastInvalidReason: classified.reason });
     queueRequirementCall(store, group.groupId, `retry-${run.runId}`);
