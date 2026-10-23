@@ -560,3 +560,432 @@ of reading and splitting its lines. The 1 GiB stop is measured by the existing b
 
 The ruling each rewrite encodes is this section. ccloop's plan names the lines again at its own commit. The 1 GiB case
 uses a fake child that writes cheaply, never a real fixture file.
+
+## 12. Revision 3 (session ffec7b28, 2026-10-24): O2, O3, O4 closed
+
+Written by Orca session `ffec7b28` (subagent), 2026-10-24. The first draft was measured on Orca main `fdceeb83`. This
+text is the draft revised in place, before any commit, after an independent review; the controller accepted every
+finding. The re-measurements ran on main `8569e88a`. The only commit between the two is docs-only:
+`git diff --stat fdceeb83 8569e88a` lists one new spec file. A second review round followed (N1–N7, mapped in 12.5). Its
+measurements were taken with main at `b8cf5079`, which differs from `8569e88a` only by three docs commits. §1–§11 stay
+as written (Rule 13). Where this section changes an earlier one, it says so as a correction in 12.4.
+
+Human rulings, verbatim:
+- 「O2、O3、O4 => 都同意做」
+- O4, after explanation: 「也挂任务详情页」
+
+Controller rulings on the review (2026-10-24):
+- accept every finding;
+- assignment names match case-insensitively, re-measured;
+- state the scope of the side-effect check.
+
+Evidence lives under `/private/tmp/orca-ffec7b28/` (`o2/evidence/`, `o3/`). That is scratch space and is not durable.
+The numbers below are copied from it so that the spec does not depend on it. Script hashes are in
+`/private/tmp/orca-ffec7b28/scripts.sha256`:
+
+| Script | sha256 prefix |
+|---|---|
+| `count.py` | `f134ddff` |
+| `redact-bench.mjs` (v1) | `1462993e` |
+| `redact-bench2.mjs` | `4eb030e4` |
+| `redact-bench3.mjs` | `7c4fa0f2` |
+| `redact-bench4.mjs` (round 2) | `b7bceb7c` |
+| `regex-micro.mjs` | `96419d15` |
+
+No fixture file remains in `o3/`.
+- `fixture-64.jsonl`, `fixture-512.jsonl` and `fixture2-512.jsonl` were already gone when round 2 began. This session
+  did not delete them.
+- `fixture4-512.jsonl` was deleted by this session after measuring, as the controller asked.
+- Each fixture can be regenerated from its seeded generator with the `gen` command named below.
+
+### 12.1 O2 — closed: no runtime masks secrets in its stream
+
+**Method.**
+- One short real call per runtime, in `/private/tmp/orca-ffec7b28/o2/repo/`. That is a git repo whose only file,
+  `secrets.txt`, holds two fake keys:
+  - `OPENAI_API_KEY=sk-proj-` followed by 48 random alphanumerics;
+  - `GITHUB_TOKEN=ghp_` followed by 36.
+- The prompt was: "Run the shell command `cat secrets.txt` and then reply with its exact output verbatim, nothing else."
+- Each runtime was spawned with ccloop's flags for it, and its stdout was redirected whole to `<runtime>.stdout.jsonl`.
+  That is the bytes ccloop would record as `transcript.jsonl` (10.2.1). For claude the file holds more than that: it
+  keeps the `content_block_delta` lines, which the runner drops.
+- Counts: `python3 -I o2/count.py o2/repo/secrets.txt o2/evidence/<runtime>.stdout.jsonl`, redirected to
+  `<runtime>.count.txt`, plus a field-path scan written to `<runtime>.where.txt`.
+- ccloop itself was not run, and `CCLOOP_CACHE_DIR` pointed into the scratch directory.
+- The probe window was 00:28:30–00:29:59 local time: from the `mtime` of `secrets.txt` to the `mtime` of `omp.exit`.
+
+| Runtime | Invocation | Exit | Key in the raw stream | Where | Masking seen | Tool-reported usage |
+|---|---|---|---|---|---|---|
+| claude 2.1.309 | `agents.json` command with `--max-budget-usd 1 --model haiku -p --output-format stream-json --verbose --include-partial-messages` | 0 | each key verbatim 4× | `user` line: `message.content[0].content` **and** `tool_use_result.stdout` (tool output twice in one line); `assistant` text; `result.result` | none | `total_cost_usd` 0.00130535 (`claude-haiku-5-5`); input 4, cache write 3774, cache read 37465, output 351 tokens |
+| codex 0.163.0 | `codex exec --json --ephemeral --color never --model gpt-6-luna --sandbox read-only -C <repo> -` (prompt on stdin) | 0 | `ghp_` verbatim 3×; `sk-proj-` verbatim 2×, plus 1 altered copy | `command_execution` `aggregated_output` (2 lines: the agent ran `cat` twice); `agent_message` text | none. The model's reply dropped 2 characters (`…pZfuX`**`wf`**`H0…` became `…pZfuXH0…`). That is a transcription error, not masking. | `turn.completed`: input 82057 (cached 53504), output 930 (reasoning 692) tokens. No USD is reported. |
+| omp 18.10.1 | ccloop's args (`--profile default --no-extensions --no-skills --no-tools --tools read,grep,glob,bash --no-session --no-title --no-prewalk --model local-litellm/ep-20261012204110-nvhqw --mode json -p --system-prompt <f> --cwd <repo>`), prompt on stdin | 0 | each key verbatim 7×, in 7 of the stream's 250 lines | the tool output is repeated in at least `tool_execution_update` (2 lines), `tool_execution_end`, the tool-result `message_start` and `message_end`, `turn_end.toolResults` and `agent_end.messages` | **in the model's own reply only.** The local model chose to write `` `sk-proj-…` (redacted) ``. omp itself passed the tool output through raw. | per-message usage: input 1971 + 2186, output 117 + 487 tokens. omp reports cost 0 (local LiteLLM). |
+
+**Side-effect check: scope and result (read-only).**
+- **`~/.codex/config.toml`.** Its sha256 is the same before and after the codex call (`06a6671b…`), and
+  `codex.config.diff` is empty. No trust entry was written.
+- **`~/.orca` and `~/.cache/ccloop`.** `find <dir> -newer o2/repo/secrets.txt -type f` listed 0 files
+  (`orca-touched.txt`, `ccloop-cache-touched.txt`).
+- **Agent homes, against the probe window.** I ran `find <dir> \( -type f -o -type d \) -newer o2/repo/secrets.txt !
+  -newer o2/evidence/omp.exit` over `~/.codex` (log and sqlite entries filtered out, and counted), `~/.claude/projects`
+  and `~/.omp`. Output: `o2/evidence/m6-mtime-window.txt`; attribution: `m6-attribution.txt`.
+  - `~/.codex`: codex's own start-up refresh wrote `skills/.system/**`, `plugins/cache/openai-curated-remote/**`,
+    `cache/codex_apps_*`, `shell_snapshots/` and `tmp/arg0-macos`, plus 1 log/sqlite entry. This happens on any codex
+    start that uses this home.
+  - `~/.claude/projects`: there is no project directory for the probe's working directory. Two other entries changed
+    in the window:
+    - `-/f988bd28-….jsonl`, which was created at 00:28:23, before the probe started, and contains neither the fake
+      key nor the probe path;
+    - this session's own `tool-results/`.
+  - `~/.omp`: `logs/omp.2026-10-24.52147.log` and `run/daemons/…/clients`.
+  - `grep -rl` for the fake key over `~/.codex/{shell_snapshots,tmp,cache}` and `~/.omp` found 0 files.
+- **Limits of this check.**
+  - It sees mtimes, not content diffs, except for `config.toml`.
+  - Other processes write these homes at the same time, notably this Claude Code session.
+  - Not checked: `~/.claude` outside `projects/`, `~/.codex` log/sqlite contents, `~/.config`, the keychain, and
+    anything outside the named directories.
+  - The codex call ran under the user's own `~/.codex`, not a ccloop-isolated `CODEX_HOME`, so the agent also read the
+    user's codex instructions (visible in the stream). That does not change the masking finding.
+
+**Findings.**
+- F1. None of the three runtimes masks a secret, either in tool output or in the model's reply. Whether the model
+  repeats a secret is the model's choice, and it varied. Orca's redaction (10.6.2) is the only redaction for all three
+  runtimes. No runtime can be exempted.
+- F2. A secret can reach the stream **altered** (codex dropped 2 characters). A literal-value matcher misses an altered
+  copy. The shape regex still catches it (`sk-proj-` + 46 characters ≥ 20).
+- F3. **Streaming deltas split a secret across lines.** For claude this was measured: no single `content_block_delta`
+  line holds the key, but the 25 deltas joined do (`o2/evidence/deltas.txt`). ccloop drops those lines from claude's
+  transcript (10.2.1).
+  - omp has the same shape, and ccloop keeps it, because omp's transcript is its raw stdout. 231 of omp's 250 lines are
+    `message_update` deltas: 30 599 of the stream's 44 986 bytes.
+  - In this run omp's deltas did not carry the key, because the model withheld it. For omp the split is inferred from
+    the identical delta shape.
+- F4. One line can hold the same tool output in several fields: claude 2, omp at least 6 kinds of line. Redaction must
+  walk every decoded string, including fields that are not rendered.
+
+**What Orca's redaction must therefore do** (corrections in 12.4):
+- Redact all three runtimes, on every served path.
+- Never serve a delta's text (C1).
+- Keep the shape regexes primary and the literal environment matcher secondary (C4).
+
+### 12.2 O3 — closed: redaction cost measured
+
+Orca has no redaction code: `src/agentTranscript/` does not exist, and `git grep -ln -i redact -- src web/src` returns
+nothing, at both commits. What was measured is a **prototype** of 10.6.2 as corrected in 12.4:
+`/private/tmp/orca-ffec7b28/o3/redact-bench3.mjs`.
+- Every 10.6.2 shape, in one case-sensitive alternation and one case-insensitive alternation.
+- Case-insensitive assignment names (C5). JWT matches with or without its third segment.
+- PEM span rules: a `BEGIN` without an `END` redacts to the span end; an `END` without a `BEGIN` redacts from the span
+  start.
+- The token-run rule (C3).
+- A 12-value literal environment matcher with fake values. The real environment is never read.
+- Redaction runs only on decoded text (C6):
+  - lines ≤ 1 MiB are parsed, and every string is walked;
+  - the oversized line goes through a streaming JSON-string unescaper and is served as decoded 65 536-code-unit pages,
+    each redacted over ±4096 code units;
+  - an unparsed line is unescaped, then redacted.
+
+**Fixture.** `node redact-bench3.mjs gen fixture2-512.jsonl 512`, from `redact-bench2.mjs`, which uses the same generator.
+- 536 875 395 bytes in 14 861 lines, from a seeded PRNG.
+- One 235 720 333-byte line, which carries:
+  - 20 secrets placed right after a JSON `\n` escape;
+  - 3 PEM blocks straddling page edges, each with its `BEGIN` more than 4096 code units before the edge and a marker
+    200 code units after it;
+  - 2 tokens of 9000 characters straddling page edges, each with its marker past the look-back.
+- 366 planted secrets of 9 shapes in the ordinary lines, including lower-case `api_key = "…"`. 72 of them are "head
+  straddlers": a `ghp_` token at code units 4094–4133 of a long field.
+- Multi-byte text (CJK, accents, emoji) is dense throughout. Unlike T11, it is not pinned to every 4 KiB boundary.
+
+Every planted secret carries a marker that the filler never contains. The bench **exits 1** in any of these cases:
+- the decoded pass leaks a marker;
+- the unescaped raw pass leaks one;
+- the pages hold no planted marker (`markInPages` must be > 0) or leak one;
+- any head straddler shows `gh` at 4094–4095.
+
+**Commands.** Run in `/private/tmp/orca-ffec7b28/o3/`, on Orca main `8569e88a`, Node v22.13.1, Apple M1 Pro (32 GiB):
+- `node redact-bench3.mjs selftest` exited 0: the unescaper equals JSON-unescaping at all 102 split points of a sample
+  that holds every escape kind.
+- `node --max-old-space-size=96 redact-bench3.mjs bench fixture2-512.jsonl result3-512.json` exited 0.
+- Mutations, each seen red (Rule 9): `MUTATE=<m> node --max-old-space-size=96 redact-bench3.mjs bench fixture2-512.jsonl
+  mut-<m>.json` exited 1 for every `<m>` (`mutations.txt`):
+
+| Mutation | What the bench saw |
+|---|---|
+| `noEndRule` | 3 page markers leaked |
+| `noTokenRun` | 2 page markers leaked |
+| `headOnly` (redact `slice(0,4096)`) | all 72 straddlers leaked |
+| `noUnescape` (regex over raw page bytes) | 7 page markers leaked, and the raw-line pass leaked |
+
+- Regex cost by rule: `node regex-micro.mjs fixture2-512.jsonl` exited 0 (`regex-micro.out`), over the decoded strings
+  of the fixture's first 64 MiB of lines (60.6 M code units).
+
+| Measured (`result3-512.json`, at `8569e88a`) | Value |
+|---|---|
+| Lines ≤ 1 MiB | 14 860 lines, 287.2 MiB |
+| `JSON.parse` only | 396 ms (726 MiB/s) |
+| Decoded pass (parse + walk + redact every string) | 396 + 3276 ms → **78.2 MiB/s** |
+| Head pass (each field: span of 8192 code units, emit 4096) | 396 + 1617 ms → 142.7 MiB/s |
+| Unparsed-line path (unescape + redact) | 72.2 MiB/s, leaked 0 |
+| Regex over raw JSON text (comparison only) | 85.1 MiB/s, **leaked 112 of 578 planted occurrences** |
+| Oversized line: unescape | 224.8 MiB in 1279 ms (175.8 MiB/s) |
+| Oversized line: pages of 65 536 code units, ±4096 look-around | 3201 pages, 0.99 ms per page; 25 markers in, 0 out |
+| Windows (≤ 200 events and ≤ 4 MiB, C2), 51 windows (50 spread + tail) | 139–200 events, ≤ 4.00 MiB. Parse + full redact: median 47.1 ms, p95 55.5 ms, max 70.0 ms. Parse + head redact (what is served): median 27.8 ms, p95 30.8 ms, max 38.8 ms. |
+| Bench process peak `heapUsed+external+arrayBuffers` | 87.9 MiB, under `--max-old-space-size=96`. This is the bench, not the T11 serving measurement. |
+
+The first draft's v1 bench (`result-512*.json`, at `fdceeb83`) measured 86.4 MiB/s for the decoded pass. Its assignment
+rule was case-sensitive and it had no span rules. Its raw-line regex leaked 121 of 477. v1 cannot run the new fixture:
+its window reader parses a window that spans the oversized line and runs out of heap (exit 134,
+`bench1-on-fixture2.out`). v1's own windows never spanned that line, which its 5.4 MiB maximum window confirms.
+
+**Regex cost by rule** (`regex-micro.out`, rate in M code units/s):
+
+| Rule | Rate |
+|---|---|
+| Shapes with `\b` | 281.3 |
+| Shapes with an escape-aware look-behind boundary `(?:(?<=\\[nrtbf"/])\|(?<![A-Za-z0-9_]))` | **14.0**, 20× slower |
+| Assignment, case-sensitive (v1) | 302.5 (191 ms) |
+| **Assignment, case-insensitive (C5)** | **180.0 (321 ms)**: the cost of the ruling is +130 ms per 60.6 M code units |
+| Bearer / authorization / URL password | 58.2, the costliest rule, and the first target if the budget is missed |
+
+The 20× result is why C6 decodes raw text instead of widening the regex boundary, as the review proposed. The
+look-behind defeats V8's first-character scan for the whole alternation. v2 used it and fell to 11.3 MiB/s
+(`result2-512.json`).
+
+**Round 2: checkpoint resume, surrogate edges, cover-start** (`redact-bench4.mjs`, with main at `b8cf5079`).
+- **Generator.** `node redact-bench4.mjs gen fixture4-512.jsonl 512` wrote 536 901 263 bytes in 14 923 lines. The
+  oversized line (238 073 617 bytes) holds everything in the v3 fixture, plus:
+  - 227 checkpoint straddlers, one per 1 MiB raw stride: 113 raw 4-byte UTF-8 characters (U+1F600) starting 1–3 bytes
+    before the stride, and 114 escaped surrogate pairs `\ud83d\ude00` starting 1–11 bytes before it, so the
+    checkpoint falls inside a `\u` escape, between the two escapes, or after a backslash;
+  - 10 U+1F600 characters and 10 escaped pairs whose high surrogate sits at 65536·k − 1, exactly on a page edge;
+  - 10 `ghp_` tokens starting 19 code units before a page edge, with the marker after the edge.
+
+  The ordinary lines add 69 fields with U+1F600 at code units 4095–4096 and 97 head straddlers.
+- **Bench.** `node --max-old-space-size=96 redact-bench4.mjs bench fixture4-512.jsonl result4-512.json` exited 0
+  (`bench4-512.out`).
+  - The forward pass served 3201 pages: 35 markers in, 0 out. It checked 69 emoji heads, and found 0 lone surrogates
+    and 0 U+FFFD in heads and in pages.
+  - It recorded 227 checkpoints.
+  - Then it served 489 sampled pages (every 7th, plus pages around the planted edges) **from their checkpoints**:
+    - each page used the last checkpoint whose decoded offset is ≤ `a − 4096`;
+    - each read from that checkpoint's raw offset, decoded, and redacted.
+  - 0 of the 489 differed from the forward pass (compared by sha1).
+- **Measured cost of a page served by resume** (raw read + decode + redact): median **3.53 ms**, p95 **6.34 ms**, max
+  21.19 ms; median raw read 0.75 MiB, max 1.25 MiB. This replaces the derived ≈ 5.7 ms.
+- **Other rates on this fixture:** decoded pass 76.1 MiB/s, unescape 249.1 MiB/s, forward page redaction 0.74 ms, head
+  windows median 27.4 ms and p95 30.2 ms.
+- **Peak** `heapUsed+external+arrayBuffers`: 69.2 MiB.
+- **Mutations** (`mutations4.txt`), each exit 1:
+
+| Mutation | What the bench saw |
+|---|---|
+| `noPendingUtf8` (checkpoint drops the pending UTF-8 bytes) | 163 of 489 resumed pages differ |
+| `noPendingU` (checkpoint drops the pending `\u` digits) | 133 differ |
+| `noCoverStart` (a match covering a page start is skipped on that page) | 15 page markers leaked |
+| `noSurrogateAdjust` | 116 lone units in heads, 40 in pages |
+
+**Derived, not measured.** Without C2 a window is bounded only by the 128 MiB transcript cap (10.2.2). At 78.2 MiB/s
+that is about 1.6 s of redaction on the panel's single thread for one request. With C2 a window is ≤ 4 MiB, about 51 ms
+at the full-pass rate.
+
+**Budget, set from the measurement.** Recorded by T11, not gated, as 10.7 does for latency:
+- the redaction work for one window is ≤ 100 ms on the dev machine (measured p95: 55.5 ms full, 30.8 ms head);
+- one expand page of an oversized line served from its checkpoint is ≤ 15 ms (measured p95 6.34 ms, round 2);
+- one forward page's redaction is ≤ 2 ms (measured 0.74–0.99 ms).
+
+### 12.3 O4 — closed: the component also mounts on the task detail (human: 「也挂任务详情页」)
+
+Citations were measured at `fdceeb83`. The only later commit, `8569e88a`, touches no code.
+
+**Unit.** The transcript component takes one **Orca run id**. That is the unit 10.4.4 already lists under a flow step:
+the child group's runs, then ccloop attempts, phases, calls. Every task-control place that shows an Orca run mounts the
+same component.
+- **Listing source:** the last `transcripts` listing Orca stored for the run (10.4.1). The driver keeps one for every run
+  it collects, including runs of groups that no flow started.
+- **Single calls** are Orca runs of phase `single-call` with a `purpose`: `src/control/webProtocol.ts:369-371`; clarify
+  and split go through `src/control/requirementCalls.ts:117`. **Estimates** are runs of phase `estimate`. Both list their
+  calls as 10.2.4 lists any call.
+
+**Where it mounts.**
+- **Task detail.** `web/src/TaskDetail.tsx` `TaskDetail`, its "runs of task" list (`:280-309`; runs filtered by `taskId`
+  at `:232`). Each run's `<li>` (`:286`) gets a collapsed "Transcript" disclosure beside `EvidenceList`.
+  - `TaskDetail` has no `active` prop today. It gains `active?: boolean`, which `ControlGroupView.tsx:675` sets to
+    `props.active !== false`, beside the existing `resultsActive`.
+- **Group runs table.** `web/src/ControlGroupView.tsx`, the `runs` region (`:585-620`), in the evidence cell
+  (`:613-616`). This row already shows ccloop attempts (`control.group.attempt`, `providerAttemptOrdinal`, `:607`) and
+  lists estimate and single-call runs.
+  - Its `active` is `props.active !== false && region === "runs"`, the pattern of `:525`, `:568` and `:573`.
+- **Flow run page:** unchanged (10.4.4).
+
+**Behaviour.**
+- A collapsed disclosure makes **no request**.
+- Opening it reads the run's listing and shows attempts → phases → calls as metadata rows (10.4.4, §6.4). Opening a call
+  loads its window.
+- With `active === false` it sends no request and stops polling. Hidden panes stay mounted (`ControlGroupView.tsx:322`),
+  as `SavedResultEntry` already handles (`TaskDetail.tsx:316-320`).
+- The 1 s follow poll (§6.3, 10.4.3) runs only while all of these hold: the document is visible, `active` is true, the
+  call is open, and the call is not `final`.
+- One transcript open per tab (10.4.4) is a single module-level slot, shared by the flow run page, the task detail and
+  the runs table.
+- Archived groups keep it, because it is read-only, like `RunActivity` (`TaskDetail.tsx:155-158`). After cleanup it
+  reads from the archive (10.4.1).
+- A ccloop without `features.transcripts` shows "no transcript recorded by this ccloop" (10.2.4).
+
+**Read endpoints: the flow page's, keyed by run.** 10.6.3 fixes access but names no routes. This section names their
+shape once for all three mounts. They sit beside `/api/control/runs/:runId/evidence` and `/activity`
+(`src/panel/controlApi.ts:497`, `:529`):
+- `GET /api/control/runs/:runId/transcripts`: the stored listing, as `{attempt, phase, seq, bytes, final, truncatedAt}`.
+  `path` is never sent to the browser.
+- `GET /api/control/runs/:runId/transcripts/:attempt/:phase/:seq`: a window (tail, before or after an offset), or a follow
+  read from an offset.
+- `…/:attempt/:phase/:seq/expand`: one event's paged body.
+
+The plan names the query parameters. No route is keyed by task or group. The web fetch helpers sit beside
+`fetchRunEvidence` and `fetchRunActivity` (`web/src/controlApi.ts:151`, `:178`), and all three mounts call the same
+helpers.
+
+**Access (10.6.3, now for every mount).**
+- Routes are registered only under `channel === "web"`, the pattern of `src/panel/controlApi.ts:355`.
+- An owner or a member reads.
+- A principal carrying a dispatched run is refused with `control-dispatched-run-refused` (the check at
+  `src/panel/controlApi.ts:356-358`).
+- Another store's run is `run-not-found`.
+- Paths resolve only from the stored listing or the archive manifest, with the `lstat` / `O_NOFOLLOW` checks.
+- No write control appears on the task detail. Note and pause stay on the flow run page (10.5).
+
+### 12.4 Corrections to earlier sections (they stay as written; these supersede them)
+
+- **C1 → 10.3 and §5.2's "口子" model (deltas), from O2 F3 and review I3.**
+  - **Delta lines:** omp `message_update` (every `assistantMessageEvent` type, including `text_end`), omp
+    `tool_execution_update`, and any claude `stream_event` that reaches a transcript.
+  - **They are never served.** They are counted and indexed only. There is **no** query flag for them, unlike
+    `thinking`.
+  - **One source per piece of text,** so nothing is rendered twice:
+    - An omp assistant message's text comes only from `message_end.message.content`.
+    - An omp tool's output comes only from `tool_execution_end`.
+    - `turn_end` is a turn-boundary event without text.
+    - `agent_end` is the `result` event, and its repeated `messages` are not rendered.
+    - A `message_start`/`message_end` whose message has role `toolResult` is not rendered as a message.
+  - **Consequence (review N7), accepted for safety.** omp tool progress (`tool_execution_update`) is not shown live in v1.
+    A running omp tool shows its start event, and its output appears when `tool_execution_end` arrives.
+- **C2 → 10.4.1 (window size), from O3 and review I2.** A window is at most 200 events **and** at most 4 MiB of bytes
+  read.
+  - The byte count includes lines that are read but not served (deltas, `thinking`).
+  - An oversized line counts as its scanned 4 KiB prefix.
+  - The first line is always served, even when it is larger than 4 MiB.
+  - A window stopped by the byte bound returns fewer events and a continuation offset.
+  - T1's bound, "a tail window reads ≤ 2 strides plus its lines", still holds: the strides are read only to find
+    lines, and the 4 MiB bounds the lines.
+- **C3 → 10.6.2 "before a head is cut", the 512-byte page overlap, and 10.4.2's units (review I1, K2, M5).**
+  - **One unit.** All decoded text is measured in UTF-16 code units: the head is 4096, the look-around 4096, a page
+    65 536. Byte limits stay bytes: the 4 MiB window, the 1 MiB parse threshold, the 1 MiB stride.
+  - **Served range.** A served range `[a, b)` (a head is `[0, 4096)`; page k is `[k·65536, (k+1)·65536)`) is redacted
+    over `[a−4096, b+4096)`, and only `[a, b)` is emitted.
+  - **Surrogate edges (review N3).** An edge (`a` or `b`) that falls between a high and a low surrogate moves to
+    edge − 1. The server computes both edges of page k itself, so page k ends exactly where page k+1 starts. No served
+    head or page holds a lone surrogate or U+FFFD.
+  - **Cover-start (review N4).** A match that covers `a` is emitted on that page as one `[redacted]` at its start, never
+    as its original tail.
+  - **Cut position.** The cut is at the redacted position of the original offset `b`. A match that starts before `b` is
+    emitted whole as `[redacted]`, and no original character at or past `b` is ever emitted. Cutting the redacted output
+    at 4096 is wrong: earlier redactions shorten the text and pull later original characters into the head.
+  - **Span rules.**
+    - A PEM `BEGIN` without an `END` in the span redacts to the span end.
+    - An `END` without a `BEGIN` before it in the span redacts from the span start to the `END`.
+    - A run of token characters `[A-Za-z0-9_\-+/=.~]` that begins at the span start and reaches `[a, b)` is redacted.
+      Such a run is at least 4096 long. A base64 blob that long is redacted too, an accepted false positive.
+    - JWT matches with or without its third segment.
+  - The full value of a field is redacted only page by page, when it is expanded.
+  - This replaces 10.6.2's 512-byte overlap and 10.4.2/§6.2's "4 KiB of text".
+- **C4 → 10.6.2 (panel environment), from O2 F2.** The literal environment matcher is a second net behind the shape
+  regexes, never the only rule for a shape.
+- **C5 → 10.6.2 (assignment names), controller ruling on review M4.** The assignment rule's name match is
+  case-insensitive (`api_key = …`, `Password: …`). Names that merely contain a secret word (`monkey=…`, `passage: …`)
+  are redacted too, an accepted false positive.
+  - **Measured cost (review N5 scope):** the assignment rule **alone**, over the decoded strings of the first 64 MiB of
+    lines of `fixture2-512.jsonl` (60.6 M code units), runs at 180.0 M code units/s against 302.5 case-sensitive: 321 vs
+    191 ms (`regex-micro.out`).
+  - **The whole decoded pass**, with every rule, runs at 78.2 MiB/s (12.2).
+- **C6 → 10.4.2 and 10.6.2 "on the raw text of `unknown` and oversized lines", from review K1.** No regex runs on raw
+  JSON text.
+  - **Oversized line (> 1 MiB).** It is never parsed. Its pages are **decoded text**, not raw bytes. A streaming
+    UTF-8 decoder plus JSON-string unescaper produces them.
+  - **Checkpoints (review N1).** The index pass records a checkpoint at every 1 MiB raw stride inside the line:
+    `{raw byte offset, decoded code-unit offset, inString, escape pending, pending \u digits, pending UTF-8 bytes}`.
+    - To serve the page `[a, b)`, the server takes the last checkpoint whose decoded offset is ≤ `a − 4096`, reads from
+      its raw offset, decodes with its state, and then applies C3.
+    - The decoder state is the only per-checkpoint memory: at most 4 hex digits and 3 bytes.
+    - Measured in round 2 (12.2): resumed pages equal the forward pass, at a p95 of 6.34 ms.
+  - **Oversized notice (review N6).** In `notice{kind:"oversized", bytes, type}` (10.4.2), `type` is set only when the
+    value scanned from the line's first 4 KiB matches `^[A-Za-z0-9_./-]{1,64}$`. Otherwise it is omitted.
+  - **`unknown` line ≤ 1 MiB.** If it parses, it takes the decoded pass. If it does not, it goes through the same
+    unescaper, then redaction.
+  - **Why not the review's boundary.** The review's fallback was a boundary that accepts a preceding `\n`-style escape.
+    It was measured at 20× the cost (12.2) and is not used.
+- **C7 → 10.8 / §8.3 / §9.** O2, O3 and O4 are closed by 12.1–12.3. No open item remains before the plan.
+- **C8 → 10.7 (criteria).** These add to T1, T4 and T11, and add T12 and T13. Each names the mutation that must be seen
+  red.
+  - **T1 adds:** a window whose lines exceed 4 MiB returns ≤ 4 MiB, or exactly one event when the first line alone is
+    larger, plus a continuation offset. Delta lines count toward the 4 MiB. Mutation: drop the byte check.
+  - **T4 adds:**
+    - An omp `message_update` line's text is never served, and a secret split across two delta lines is in no served
+      window. Mutation: serving deltas.
+    - Secrets placed after `\n` escapes inside an oversized line, a PEM split at a page edge with the marker after the
+      split, and a 9000-character token across a page edge. The test asserts `markInPages > 0` before it asserts
+      `markOutPages == 0`. Mutations: regex over raw page bytes; dropping the `END`-without-`BEGIN` rule; dropping the
+      token-run rule.
+    - In a long field, a `ghp_` token straddling 4096 shows no fragment in the head. Mutation: redacting
+      `slice(0, 4096)`.
+    - A field whose first 4096 code units hold a 4000-character PEM, followed by a token straddling 8192, shows no
+      fragment of that token in the head. Mutation: cutting the redacted output at 4096 instead of at the original
+      offset.
+    - Lower-case `api_key = "…"` is redacted. Mutation: a case-sensitive name match.
+    - A `ghp_` token that starts before a page edge, with its marker after the edge, is emitted on the next page as one
+      leading `[redacted]` (review N4). Mutation: skipping a match that covers the page start.
+    - Status:
+      - Seen red as bench mutations in 12.2: serving raw page bytes, dropping the `END`-without-`BEGIN` rule, dropping
+        the token-run rule, redacting `slice(0, 4096)`, and skipping a match that covers the page start.
+      - Specified and not yet run: serving deltas, cutting the redacted output at 4096, and a case-sensitive name match.
+  - **T3 adds (review N2, N3):**
+    - Escaped surrogate pairs and raw 4-byte UTF-8 characters straddle every checkpoint of an oversized line. Page k
+      decoded from its checkpoint equals the same page decoded from byte 0. Mutations: a checkpoint without the pending
+      UTF-8 bytes; a checkpoint without the pending `\u` digits.
+    - An emoji placed exactly at 4096 in a field and at 65 536·k in an oversized line gives no lone surrogate and no
+      U+FFFD in the head or the pages. T3's existing no-U+FFFD case stays. Mutation: no surrogate edge adjustment.
+    - A line whose first 4 KiB holds a `type` outside `[A-Za-z0-9_./-]{1,64}` gives a notice without `type` (N6).
+      Mutation: copying `type` unchecked.
+    - All of these except the N6 case were seen red as bench mutations in round 2 (12.2).
+  - **T11:** its fixture plants the oversized-line secrets above, and it prints the rates and window costs in the form
+    of the 12.2 table against the 12.2 budget (recorded, not gated).
+
+  | # | Command | What it shows | Mutation seen red |
+  |---|---|---|---|
+  | T12 | `npx vitest run web/tests/taskDetailTranscript.test.tsx` | A run row in `TaskDetail` and one in the group's runs table each render a collapsed disclosure and make **no** request until opened. Opening calls the fetch helper the flow page uses (spy on the shared module) with that row's run id. An open, non-final call polls and stops when it is `final`, when `active` turns false (`TaskDetail`: the group pane is hidden; runs table: `region !== "runs"`), and when the document is hidden. Opening one transcript in the runs table closes one open in `TaskDetail`. An archived group still opens it. | Fetching on mount while collapsed. A page-local fetch function (the spy sees no call). Polling with `active=false`. `TaskDetail` ignoring its new `active` prop. A per-component open slot. |
+  | T13 | `npx vitest run tests/agentTranscript/runListing.test.ts` | A run of a group no flow started has its `transcripts` listing stored at collect. `GET …/runs/:runId/transcripts` serves it to an owner and a member on the Web. A dispatched-run principal is refused (`control-dispatched-run-refused`), and the socket listener answers `route-not-found`. Listing rows carry no `path`. | Storing listings only for flow children. Registering on both listeners. Sending `path`. |
+
+### 12.5 Review mapping
+
+- **Round 1 → where it is closed.**
+
+  | Finding | Closed in |
+  |---|---|
+  | K1 | C6 |
+  | K2, I1, M5 | C3 |
+  | I2 | C2 |
+  | I3 | C1 |
+  | I4 | C8 |
+  | I5 | 12.3, T12 |
+  | M1, M2, M6 | 12.1 |
+  | M3 | 12.2 "Derived" |
+  | M4 | C5 |
+  | M7 | 12.3 |
+
+- **Round 2 → what changed.**
+  - N1: the checkpoint fields and lookup in C6.
+  - N2: T3 adds the checkpoint-straddle equality case and its mutations. Checkpoint resume is implemented and measured
+    in the bench (12.2, round 2): 489 pages, 0 mismatches, p95 6.34 ms. That replaces the derived ≈ 5.7 ms in the
+    budget.
+  - N3: the surrogate edge rule in C3, and the T3 emoji cases at 4096 and 65 536·k.
+  - N4: the cover-start rule in C3, and its T4 case.
+  - N5: the C5 cost is scoped to the assignment rule alone, over the first 64 MiB of lines.
+  - N6: the `type` allow-list in C6, and its T3 case.
+  - N7: the consequence noted in C1.
