@@ -63,7 +63,12 @@ function setup(): FakePanel {
 const gate = (): void => { overviewGate = new Promise((resolve) => { releaseOverview = resolve; }); };
 const at = (hash: string): void => { window.history.replaceState(null, "", hash); };
 const groupRegion = (groupId: string) => screen.findByRole("region", { name: `Control group ${groupId}` });
-const back = async (): Promise<void> => { await act(async () => { window.history.back(); await new Promise((resolve) => setTimeout(resolve, 20)); }); };
+// history.back() lands asynchronously (jsdom traverses on a task); wait for the hash to move rather than a fixed delay.
+const back = async (): Promise<void> => {
+  const before = window.location.hash;
+  await act(async () => { window.history.back(); });
+  await waitFor(() => expect(window.location.hash).not.toBe(before));
+};
 
 describe("a group's region and open task are in the route (C31, C35)", () => {
   it("re-mounting on #tasks/g/preparation/a restores the group, the region and the open task; a tab click replaces, opening a group pushes", async () => {
@@ -190,8 +195,7 @@ describe("the back line and the correction's origin (C34)", () => {
     const line = screen.getByRole("button", { name: "← Back to Task control" });
     expect(await screen.findByText("the routed decision's question")).toBeTruthy();
     fireEvent.click(line);
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
-    expect(window.location.hash).toBe("#tasks/g/progress/a");
+    await waitFor(() => expect(window.location.hash).toBe("#tasks/g/progress/a"));
     expect(screen.queryByRole("button", { name: /^← Back to/ })).toBeNull();
   });
 
