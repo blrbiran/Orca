@@ -349,6 +349,17 @@ export async function applyRequirementDraftAccept(
         const { estimateId, preflight } = writeImportedPlan(importDeps, { groupId: id, repoId: group.requirement.repoId, planId, plan, actorId: command.actorId, commandId: command.commandId, at: now.getTime(),
           estimatorProfileId: defaults.estimatorProfileId, estimatorProfileHash: defaults.estimatorProfileHash, estimateMode: defaults.estimateMode },
           { existingBody: { ...group }, used: group.used, usageUnknown: group.ledger.usageUnknown, traces: Object.fromEntries(draft.output.tasks.map((task) => [task.taskId, task.traces])) });
+        // Tester round 2 spec §6.2.1 (ruling H3): the agent the person picked on New requirement (the estimator override)
+        // becomes the group's worker default -- an ordinary panel layer, still editable -- unless a worker override exists
+        // or the accepted plan names a group agent (the panel layer would mask it). Seeded after the import, whose
+        // estimator slot was resolved (and is checked) against the layers as they were; requirements opened before this
+        // change get it too.
+        const overrides = readGroupAgentOverrides(group);
+        if (overrides.estimator !== undefined && overrides.worker === undefined && plan.agent?.agent === undefined) {
+          const imported = JSON.parse(String(deps.store.db.prepare("SELECT body FROM groups WHERE id=?").get(id)!.body)) as Record<string, unknown>;
+          imported.agentOverrides = { ...readGroupAgentOverrides(imported), worker: overrides.estimator };
+          deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(imported), id);
+        }
         writeDraft(deps.store, id, { ...draft, state: "accepted" });
         // 3. The export has git side effects, so the driver performs it (DR14).
         const exportWakeId = `scheduler-wake:${id}:requirement-export`;
