@@ -5,6 +5,12 @@
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import express from "express";
+import { openControlStore } from "../../src/control/store.js";
+import { registerControlReadRoutes } from "../../src/panel/controlApi.js";
 import { describe, expect, it } from "vitest";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { DISPATCHED_RUN_REFUSED, HUMAN_ONLY_FIELDS, HUMAN_ONLY_VERBS, SOCKET_TIER, VERB_ACCESS, humanOnlyRefusal } from "../../src/panel/humanOnly.js";
@@ -247,5 +253,57 @@ describe("the flow tiers over the socket (gaps spec §13, G10)", () => {
     expect(await send("t-wait-run", "messages", defer({ "to-draft-box": "wait" }), MARKER)).toEqual([409, "flow-unavailable"]);
     expect(await send("t-accept", "plan-step", step("accept-unchanged"))).toEqual([409, "flow-unavailable"]);
     expect(ids(w.state).filter((id) => id.startsWith("t-")).sort()).toEqual(["t-accept", "t-wait", "t-wait-run"]);
+  });
+});
+
+/**
+ * Gaps plan Task 10-B fix I1 (controller ruling): the start dialog's folder listing (GET /api/control/flows/images) lists
+ * the image names of any absolute folder, so it is served to the Web only -- never on the control socket -- and, like
+ * flow-start (DISPATCHED_RUN_REFUSED), refused to a run Orca dispatched should such a principal ever reach it.
+ */
+describe("the folder-image read's access (gaps plan Task 10-B, I1)", () => {
+  it("is not served on the control socket, marker or not", async () => {
+    const w = await workspace();
+    await mkdir(join(w.root, "folder"), { recursive: true });
+    await writeFile(join(w.root, "folder", "a.png"), "x");
+    const panel = await boot(w);
+    const socketPath = (panel as StartedPanel).socketPath!;
+    const path = `/api/control/flows/images?dir=${encodeURIComponent(join(w.root, "folder"))}&template=wechat-article`;
+    for (const headers of [{ "x-orca-client": "cli:test" }, { "x-orca-client": "cli:test", "x-orca-dispatched-run": "run-1" }] as Array<Record<string, string>>) {
+      const answer = await overSocket(socketPath, "GET", path, headers);
+      // mutation: register the route on both channels -> 200 with the folder's files, red
+      expect(answer.status, JSON.stringify(headers)).toBe(404);
+      expect(answer.text).not.toContain("a.png");
+    }
+  });
+
+  it("refuses a dispatched run's principal on the Web channel, and answers a Web owner or member", async () => {
+    const w = await workspace();
+    await mkdir(join(w.root, "folder"), { recursive: true });
+    await writeFile(join(w.root, "folder", "a.png"), "x");
+    const store = await openControlStore({ stateDir: w.state });
+    const server = createServer((() => {
+      const app = express();
+      let principal: Principal = PRINCIPALS.webOwner!;
+      app.use((req, res, next) => { principal = PRINCIPALS[String(req.headers["x-test-principal"])]!; res.locals.orcaPrincipal = principal; next(); });
+      registerControlReadRoutes(app, { store, epoch: "epoch", config: { readView: async () => ({}) } as never }, "web");
+      return app;
+    })());
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const get = async (who: string) => {
+        const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/control/flows/images?dir=${encodeURIComponent(join(w.root, "folder"))}&template=wechat-article`, { headers: { "x-test-principal": who } });
+        const body = await response.json() as { files?: string[]; error?: { code: string } };
+        return [response.status, body.error?.code ?? body.files];
+      };
+      // mutation: drop the dispatched-run check -> 200 with ["a.png"], red
+      expect(await get("socketMarker")).toEqual([403, "control-dispatched-run-refused"]);
+      expect(await get("socketTokenMarker")).toEqual([403, "control-dispatched-run-refused"]);
+      expect(await get("webOwner")).toEqual([200, ["a.png"]]);
+      expect(await get("webMember")).toEqual([200, ["a.png"]]);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      store.close();
+    }
   });
 });

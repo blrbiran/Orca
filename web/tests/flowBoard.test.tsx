@@ -63,7 +63,9 @@ const PRESET = { value: "/covers/default.png", source: "global", lockedBy: null 
 describe("the board reads flow runs and opens them (§14.1, P6)", () => {
   let reads: string[] = [];
   function serve(answer: { status: number; body: unknown } = { status: 200, body: { schema: "orca-command-success-v1", result: { kind: "flow-started", flowRunId: RUN_B, groupId: "flow-parent-b" } } },
-    images: { files: string[]; truncated: boolean } = { files: ["covers/a.png", "covers/b.jpg"], truncated: false }): Array<{ url: string; body: { payload: unknown } }> {
+    images: { files: string[]; truncated: boolean } = { files: ["covers/a.png", "covers/b.jpg"], truncated: false },
+    // Task 10-B fix round 1: a read answered by the test (the settings or images read), else the defaults above.
+    custom: (url: string) => Promise<Response> | null = () => null): Array<{ url: string; body: { payload: unknown } }> {
     const posts: Array<{ url: string; body: { payload: unknown } }> = [];
     reads = [];
     document.cookie = "orca_csrf=t";
@@ -76,6 +78,8 @@ describe("the board reads flow runs and opens them (§14.1, P6)", () => {
       reads.push(url);
       if (url === "/api/control/flows") return new Response(JSON.stringify({ schema: "orca-flow-list-v1", runs: [run({})] }), { status: 200 });
       if (url === "/api/control/flows/templates") return new Response(JSON.stringify(TEMPLATES), { status: 200 });
+      const answered = custom(url);
+      if (answered !== null) return answered;
       if (url === "/api/control/flows/settings") return new Response(JSON.stringify({ paramDefaults: { "wechat-article": { coverImage: PRESET } } }), { status: 200 });
       if (url.startsWith("/api/control/flows/images?")) return new Response(JSON.stringify({ schema: "orca-flow-folder-images-v1", dir: "/home/o/tea", ...images, limit: 200 }), { status: 200 });
       return new Response(JSON.stringify({ error: { code: "flow-run-not-found", message: url } }), { status: 404 });
@@ -211,5 +215,77 @@ describe("the board reads flow runs and opens them (§14.1, P6)", () => {
     // mutation: close the dialog on a refusal -> no alert in it, red
     await waitFor(() => expect(within(screen.getByRole("dialog", { name: "Start a flow" })).getByTestId("refusal-code").textContent).toBe("flow-param-invalid:coverImage"));
     expect(screen.queryByRole("article")).toBeNull();
+  });
+
+  describe("fix round 1 (Task 10-B review I2, minors)", () => {
+    const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }));
+    it("a start from a project's board names the project and shows that project's presets with their source", async () => {
+      const posts = serve(undefined, undefined, (url) => url === "/api/control/flows/settings?repoId=articles-1"
+        ? json({ paramDefaults: { "wechat-article": { coverImage: { value: "/covers/mine.png", source: "project", lockedBy: null } } } }) : null);
+      render(<FlowBoard groups={[]} scope={{ kind: "project", repoId: "articles-1" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+      const dialog = await openDialog();
+      // mutation: read the global layer in a project's scope -> "/covers/default.png (global preset)", red
+      await waitFor(() => expect(within(param(dialog, "coverImage")).getByTestId("flow-start-default").textContent).toBe("default: /covers/mine.png (project preset)"));
+      fireEvent.change(within(dialog).getByRole("textbox", { name: "Folder (absolute path)" }), { target: { value: "/home/o/tea" } });
+      fireEvent.change(within(param(dialog, "idea")).getByRole("textbox", { name: "idea (required)" }), { target: { value: "Tea" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Start" }));
+      await waitFor(() => expect(posts).toHaveLength(1));
+      // mutation: omit projectId -> payload without it, red
+      expect(posts[0]!.body.payload).toEqual({ template: "wechat-article", dir: "/home/o/tea", projectId: "articles-1", params: { idea: "Tea" } });
+    });
+
+    it("says the default is not available when the presets cannot be read, never a source it did not read", async () => {
+      serve(undefined, undefined, (url) => url.startsWith("/api/control/flows/settings") ? json({ error: { code: "panel-internal-error", message: "" } }, 500) : null);
+      render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+      const dialog = await openDialog();
+      // mutation: treat a failed read as no presets -> "default: zh (template)", red
+      await waitFor(() => expect(within(param(dialog, "language")).getByTestId("flow-start-default").textContent).toBe("default: not available (the presets could not be read)"));
+      expect(within(param(dialog, "coverImage")).getByTestId("flow-start-default").textContent).toBe("default: not available (the presets could not be read)");
+    });
+
+    it("holds Start back for an int param that is not an integer", async () => {
+      const posts = serve();
+      render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+      const dialog = await openDialog();
+      fireEvent.change(within(dialog).getByRole("combobox", { name: "Built-in template" }), { target: { value: "demo" } });
+      fireEvent.change(within(dialog).getByRole("textbox", { name: "Folder (absolute path)" }), { target: { value: "/home/o/tea" } });
+      fireEvent.change(within(param(dialog, "count")).getByRole("spinbutton", { name: "count (required)" }), { target: { value: "3.5" } });
+      // mutation: typed() takes any number -> Start enabled, red
+      expect((within(dialog).getByRole("button", { name: "Start" }) as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(within(dialog).getByRole("button", { name: "Start" }));
+      expect(posts).toEqual([]);
+    });
+
+    it("drops the picker's answer for a folder the person has since changed", async () => {
+      let releaseOld: () => void = () => undefined;
+      serve(undefined, undefined, (url) => {
+        if (url.startsWith(`/api/control/flows/images?dir=${encodeURIComponent("/old")}&`))
+          return new Promise((resolve) => { releaseOld = () => resolve(new Response(JSON.stringify({ schema: "orca-flow-folder-images-v1", dir: "/old", files: ["old.png"], truncated: false, limit: 200 }), { status: 200 })); });
+        if (url.startsWith(`/api/control/flows/images?dir=${encodeURIComponent("/new")}&`)) return json({ schema: "orca-flow-folder-images-v1", dir: "/new", files: ["new.png"], truncated: false, limit: 200 });
+        return null;
+      });
+      render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+      const dialog = await openDialog();
+      const folder = within(dialog).getByRole("textbox", { name: "Folder (absolute path)" });
+      fireEvent.change(folder, { target: { value: "/old" } });
+      await waitFor(() => expect(reads.some((r) => r.includes(encodeURIComponent("/old")))).toBe(true));
+      fireEvent.change(folder, { target: { value: "/new" } });
+      const picker = await waitFor(() => within(param(dialog, "coverImage")).getByRole("combobox", { name: "coverImage: an image in the folder" }) as HTMLSelectElement);
+      expect([...picker.options].map((o) => o.value)).toEqual(["", "new.png"]);
+      releaseOld();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // mutation: apply every answer -> the old folder's list replaces the new one, red
+      expect([...(within(param(dialog, "coverImage")).getByRole("combobox", { name: "coverImage: an image in the folder" }) as HTMLSelectElement).options].map((o) => o.value)).toEqual(["", "new.png"]);
+    });
+
+    it("says a folder is too large to list, not that it cannot be listed", async () => {
+      serve(undefined, undefined, (url) => url.startsWith("/api/control/flows/images?")
+        ? json({ error: { code: "flow-folder-too-large", message: "/home/o holds more than 20000 files", commandRevision: null, evidenceIds: [], retryable: false } }, 400) : null);
+      render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+      const dialog = await openDialog();
+      fireEvent.change(within(dialog).getByRole("textbox", { name: "Folder (absolute path)" }), { target: { value: "/home/o" } });
+      // mutation: show every failure as "could not be listed" -> red
+      await waitFor(() => expect(param(dialog, "coverImage").textContent).toContain("This folder is too large to list its images; type the path instead."));
+    });
   });
 });

@@ -20,9 +20,13 @@ import { Refusal } from "./Refusal.js";
 type ParamValue = string | number | boolean;
 type Template = FlowTemplatesV1["templates"][number];
 /** Where a param's value comes from when the start gives none (gaps spec §8.2): a preset, else the template. */
-type EffectiveDefault = { value: ParamValue; source: "project" | "global" } | { value: ParamValue | null; source: "template"; derive?: string } | null;
+type EffectiveDefault = { value: ParamValue; source: "project" | "global" } | { value: ParamValue | null; source: "template"; derive?: string }
+  /** Task 10-B fix: the presets could not be read, so a preset may stand in front of any template default. */
+  | { source: "unread"; templateHas: boolean } | null;
+type Presets = FlowSettingsReadV1["paramDefaults"][string];
 
-function effectiveDefault(param: FlowTemplateParamV1, presets: Record<string, { value: ParamValue; source: "project" | "global" | "builtin" }> | undefined): EffectiveDefault {
+function effectiveDefault(param: FlowTemplateParamV1, presets: Presets | undefined | "unread"): EffectiveDefault {
+  if (presets === "unread") return { source: "unread", templateHas: param.derive !== undefined || param.default !== undefined };
   const preset = presets?.[param.id];
   if (preset !== undefined && preset.source !== "builtin") return { value: preset.value, source: preset.source };
   if (param.derive !== undefined) return { value: null, source: "template", derive: param.derive };
@@ -44,7 +48,7 @@ function ParamField(props: { param: FlowTemplateParamV1; value: ParamValue | und
   const field = ((): JSX.Element => {
     switch (param.type) {
       case "bool": {
-        const checked = props.value === undefined ? fallback?.value === true : props.value === true;
+        const checked = props.value === undefined ? fallback !== null && fallback.source !== "unread" && fallback.value === true : props.value === true;
         return <label><input type="checkbox" checked={checked} onChange={(event) => props.onChange(event.currentTarget.checked)} />{label}</label>;
       }
       case "enum":
@@ -60,13 +64,14 @@ function ParamField(props: { param: FlowTemplateParamV1; value: ParamValue | und
     }
   })();
   const derived = fallback?.source === "template" && fallback.value === null ? fallback.derive : undefined;
-  const shown = fallback === null ? null : fallback.value !== null ? String(fallback.value)
+  const shown = fallback === null || fallback.source === "unread" ? null : fallback.value !== null ? String(fallback.value)
     : derived === "slug-of-idea" ? t("flow.start.derive.slug-of-idea") : derived === "today" ? t("flow.start.derive.today") : null;
   return (
     <div className="check-field" data-testid={`flow-start-param-${param.id}`}>
       {field}
       {param.type === "image" && <FolderImagePicker dir={props.dir} template={props.template} paramId={param.id} value={text} onPick={set} />}
-      {fallback !== null && shown !== null && <p className="detail-note" data-testid="flow-start-default">{t("flow.start.default", { value: shown, source: t(`flow.start.source.${fallback.source}`) })}</p>}
+      {fallback?.source === "unread" && <p className="detail-note" data-testid="flow-start-default">{t("flow.start.defaultUnread")}</p>}
+      {fallback !== null && fallback.source !== "unread" && shown !== null && <p className="detail-note" data-testid="flow-start-default">{t("flow.start.default", { value: shown, source: t(`flow.start.source.${fallback.source}`) })}</p>}
     </div>
   );
 }
@@ -86,10 +91,10 @@ function typed(param: FlowTemplateParamV1, value: ParamValue): ParamValue | null
  * absolute. Start sends `flow-start` and, on success, opens the new run; a refusal stays in the dialog. Cancel and Escape
  * close it and send nothing.
  */
-function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClose: () => void }): JSX.Element {
+function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClose: () => void; /** Task 10-B fix I2: the board's project. */ projectId: string | null }): JSX.Element {
   const { t } = useTranslation();
   const [templates, setTemplates] = useState<Template[] | null | "failed">(null);
-  const [presets, setPresets] = useState<FlowSettingsReadV1["paramDefaults"]>({});
+  const [presets, setPresets] = useState<FlowSettingsReadV1["paramDefaults"] | "unread">({});
   const [templateId, setTemplateId] = useState("");
   const [dir, setDir] = useState("");
   const [values, setValues] = useState<Record<string, ParamValue>>({});
@@ -106,12 +111,16 @@ function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClos
         setTemplateId((current) => current !== "" ? current : answer.templates[0]?.id ?? "");
       } catch { setTemplates("failed"); }
     })();
-    // A start names no project, so its presets are the global layer's (kernel.ts startFlowRun, flowLayers(store, null)).
+    // Task 10-B fix I2: a start from a project's board names that project, so its presets are the project's over the
+    // global ones (kernel.ts startFlowRun, flowLayers(store, projectId)); from "all projects", the global layer's.
     void (async () => {
-      try { const read = await controlGet<FlowSettingsReadV1>("/api/control/flows/settings"); setPresets(typeof read?.paramDefaults === "object" && read.paramDefaults !== null ? read.paramDefaults : {}); }
-      catch { setPresets({}); }
+      try {
+        const read = await controlGet<FlowSettingsReadV1>(props.projectId === null ? "/api/control/flows/settings" : `/api/control/flows/settings?repoId=${encodeURIComponent(props.projectId)}`);
+        if (typeof read?.paramDefaults !== "object" || read.paramDefaults === null) throw new TypeError("flow-settings-shape");
+        setPresets(read.paramDefaults);
+      } catch { setPresets("unread"); }
     })();
-  }, []);
+  }, [props.projectId]);
   useEffect(() => {
     const escape = (event: KeyboardEvent): void => { if (event.key === "Escape") onClose(); };
     document.addEventListener("keydown", escape);
@@ -123,7 +132,8 @@ function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClos
   for (const param of template?.params ?? []) {
     const value = values[param.id];
     if (value === undefined) {
-      if (param.required && effectiveDefault(param, presets[template!.id]) === null) paramsOk = false;
+      const fallback = effectiveDefault(param, presets === "unread" ? "unread" : presets[template!.id]);
+      if (param.required && (fallback === null || (fallback.source === "unread" && !fallback.templateHas))) paramsOk = false;
       continue;
     }
     const sent = typed(param, value);
@@ -136,7 +146,7 @@ function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClos
       setRefusal(null); setSending(true);
       try {
         const answer = await sendControlCommand("/api/control/flows", { commandId: nextCommandId(), expectedRevision: 0, payload: {
-          template: template!.id, dir: dir.trim(), params, ...(unattended ? { unattended: true } : {}),
+          template: template!.id, dir: dir.trim(), params, ...(props.projectId === null ? {} : { projectId: props.projectId }), ...(unattended ? { unattended: true } : {}),
         } });
         if (answer.kind === "uncertain") { setRefusal({ status: null, code: "command-outcome-unknown", message: t("panelErrors.noOutcome") }); return; }
         if (answer.status >= 400) { setRefusal(refusalFromAnswer(answer)); return; }
@@ -165,7 +175,7 @@ function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClos
           <fieldset>
             <legend>{t("flow.start.params")}</legend>
             {template.params.map((param) => (
-              <ParamField key={`${template.id}.${param.id}`} param={param} value={values[param.id]} fallback={effectiveDefault(param, presets[template.id])} dir={dir} template={template.id}
+              <ParamField key={`${template.id}.${param.id}`} param={param} value={values[param.id]} fallback={effectiveDefault(param, presets === "unread" ? "unread" : presets[template.id])} dir={dir} template={template.id}
                 onChange={(value) => setValues((current) => { const next = { ...current }; if (value === undefined) delete next[param.id]; else next[param.id] = value; return next; })} />
             ))}
           </fieldset>
@@ -197,7 +207,7 @@ export function FlowBoard(props: BoardViewProps): JSX.Element {
   const toolbar = (
     <>
       <button type="button" className={starting ? undefined : "btn-primary"} aria-haspopup="dialog" aria-expanded={starting} onClick={() => setStarting(true)}>{t("flow.start.title")}</button>
-      {starting && <FlowStartDialog onStarted={(flowRunId) => { setStarting(false); setOpen(flowRunId); }} onClose={closeStart} />}
+      {starting && <FlowStartDialog projectId={props.scope.kind === "project" ? props.scope.repoId : null} onStarted={(flowRunId) => { setStarting(false); setOpen(flowRunId); }} onClose={closeStart} />}
     </>
   );
   return <BoardView {...props} flows={flows} onOpenFlow={setOpen} toolbar={toolbar} />;

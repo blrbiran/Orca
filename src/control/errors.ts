@@ -401,6 +401,7 @@ export const nonDurableControlErrorClassifications = {
   "handoff-outcome-unknown": "internal",
   "landing-outcome-unknown": "internal",
   "panel-draining": "transient",
+  "flow-folder-too-large": "internal",
   "query-invalid": "internal",
   "resume-bundle-hash-mismatch": "internal",
   "resume-bundle-unsafe-file": "internal",

@@ -6,14 +6,14 @@
  * name a start refuses (a quote) is not offered, and the list is bounded at 200 -- saying when it was cut, so the
  * person knows to type the path of a file past the bound.
  */
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
-import { FOLDER_IMAGE_LIMIT, listFolderImages, readBuiltinTemplates } from "../../src/flow/startForm.js";
+import { FOLDER_ENTRY_LIMIT, FOLDER_IMAGE_LIMIT, FOLDER_LIST_MS, listFolderImages, readBuiltinTemplates } from "../../src/flow/startForm.js";
 import { registerControlReadRoutes } from "../../src/panel/controlApi.js";
 import { openControlStore } from "../../src/control/store.js";
 
@@ -58,16 +58,43 @@ describe("the folder-image read (§8.4)", () => {
     expect(read.files).toHaveLength(200);
     expect(read.files.at(-1)).toBe("img-199.png");
     expect(read.truncated).toBe(true);
-    expect((await listFolderImages(dir, [], 205)).truncated).toBe(false);
+    expect((await listFolderImages(dir, [], { images: 205 })).truncated).toBe(false);
   });
 
   it("writes nothing into the folder and refuses a path that is not a folder", async () => {
     const dir = tempRoot();
     put(dir, "a.png");
-    await listFolderImages(dir, []);
+    put(dir, "notes/b.md");
+    // Task 10-B fix (review minor 4): measured on the folder itself, not through the listing under test (which would
+    // hide a `.git/` or a non-image it wrote).
+    const tree = (): string[] => (readdirSync(dir, { recursive: true }) as string[]).map((p) => `${p}:${statSync(join(dir, p)).mtimeMs}`).sort();
+    const before = tree();
+    // mutation: init the scratch repo inside the folder -> a .git entry appears, red
     expect((await listFolderImages(dir, [])).files).toEqual(["a.png"]);
+    expect(tree()).toEqual(before);
     await expect(listFolderImages(join(dir, "a.png"), [])).rejects.toThrow();
     await expect(listFolderImages(join(dir, "missing"), [])).rejects.toThrow();
+  });
+});
+
+describe("the folder-image read is bounded on work (Task 10-B fix I1)", () => {
+  it("refuses a folder past the entry cap as too large -- by name, never as not a folder", async () => {
+    const dir = tempRoot();
+    for (let i = 0; i < 12; i++) put(dir, `doc-${i}.md`);
+    put(dir, "a.png");
+    // mutation: no entry cap -> the listing answers ["a.png"], red
+    await expect(listFolderImages(dir, [], { entries: 10 })).rejects.toMatchObject({ name: "FolderTooLarge", code: "flow-folder-too-large", why: "entries" });
+    expect((await listFolderImages(dir, [], { entries: 13 })).files).toEqual(["a.png"]);
+  });
+
+  it("refuses a listing past the time cap as too large", async () => {
+    const dir = tempRoot();
+    put(dir, "a.png");
+    // A cap of 0 ms passes before git can answer (the timer is armed before the child's first output can be read).
+    // mutation: no time cap -> the listing answers, red
+    await expect(listFolderImages(dir, [], { ms: 0 })).rejects.toMatchObject({ name: "FolderTooLarge", why: "time" });
+    expect(FOLDER_ENTRY_LIMIT).toBe(20_000);
+    expect(FOLDER_LIST_MS).toBe(5_000);
   });
 });
 
@@ -95,5 +122,11 @@ describe("the start dialog's routes (§8.4)", () => {
     expect((await get(`/api/control/flows/images?dir=relative&template=wechat-article`)).body).toMatchObject({ error: { code: "query-invalid" } });
     expect(await get(`/api/control/flows/images?dir=${encodeURIComponent(dir)}&template=no-such`)).toMatchObject({ status: 422, body: { error: { code: "flow-template-invalid" } } });
     expect(await get(`/api/control/flows/images?dir=${encodeURIComponent(join(dir, "covers/one.png"))}&template=wechat-article`)).toMatchObject({ status: 400, body: { error: { code: "query-invalid" } } });
+    // Task 10-B fix I1: a folder past the entry cap is named too large, not "not a folder".
+    const big = join(root, "big");
+    mkdirSync(big);
+    for (let i = 0; i <= FOLDER_ENTRY_LIMIT; i++) writeFileSync(join(big, `f${i}`), "");
+    // mutation: map every failure to query-invalid -> "query-invalid", red
+    expect(await get(`/api/control/flows/images?dir=${encodeURIComponent(big)}&template=wechat-article`)).toMatchObject({ status: 400, body: { error: { code: "flow-folder-too-large" } } });
   });
 });

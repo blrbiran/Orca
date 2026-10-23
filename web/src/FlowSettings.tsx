@@ -66,7 +66,10 @@ function Field<T>(props: {
 
 type Preset = string | number | boolean;
 /** A preset's draft as the editor holds it: text for every type but bool (a choice) -- parsed on Save. */
-function presetParse(param: FlowTemplateParamV1 | null, draft: string): Preset | null {
+function presetParse(param: FlowTemplateParamV1 | null, draft: string, current?: Preset): Preset | null {
+  // Task 10-B fix: a preset no listed param has (an orphan) keeps the type of its stored value.
+  if (param === null && typeof current === "boolean") return draft === "true" ? true : draft === "false" ? false : null;
+  if (param === null && typeof current === "number") return draft.trim() !== "" && Number.isFinite(Number(draft.trim())) ? Number(draft.trim()) : null;
   if (param?.type === "bool") return draft === "true" ? true : draft === "false" ? false : null;
   if (param?.type === "int") return /^-?\d+$/.test(draft.trim()) && Number.isSafeInteger(Number(draft.trim())) ? Number(draft.trim()) : null;
   return draft.trim() === "" ? null : draft.trim();
@@ -80,8 +83,10 @@ function presetParse(param: FlowTemplateParamV1 | null, draft: string): Preset |
 function PresetField(props: { template: string; paramId: string; param: FlowTemplateParamV1 | null; sourced: FlowSourcedV1<Preset> | undefined; layer: Layer; may: boolean; send: Send }): JSX.Element {
   const { t } = useTranslation();
   const name = `paramDefaults.${props.template}.${props.paramId}`;
-  const [draft, setDraft] = useState(props.sourced === undefined ? (props.param?.type === "bool" ? "true" : "") : String(props.sourced.value));
-  const parsed = presetParse(props.param, draft);
+  // An unset choice starts at its first option (the one the select shows), so that option can be saved in one step.
+  const first = props.param?.type === "bool" ? "true" : props.param?.type === "enum" ? props.param.options?.[0] ?? "" : "";
+  const [draft, setDraft] = useState(props.sourced === undefined ? first : String(props.sourced.value));
+  const parsed = presetParse(props.param, draft, props.sourced?.value);
   const ours = props.sourced?.source === props.layer;
   const label = t("settings.flows.preset.field", { template: props.template, param: props.paramId });
   const type = props.param?.type;

@@ -29,7 +29,7 @@ import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import { readIntegrationDefault } from "../control/integrationScheme.js";
 import { checksRead, readReviewRecord, reviewDismissals } from "../control/checks/settings.js";
 import { readFlowSettings } from "../flow/settings.js";
-import { listFolderImages, readBuiltinTemplates } from "../flow/startForm.js";
+import { FolderTooLarge, listFolderImages, readBuiltinTemplates } from "../flow/startForm.js";
 import { loadBuiltin } from "../flow/template/load.js";
 import { AgentCeilingRefusal } from "../control/spendCaps.js";
 import type { WebControlService } from "../control/webService.js";
@@ -327,7 +327,14 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   app.get("/api/control/flows/templates", (_req, res) => {
     try { res.json(readBuiltinTemplates(builtinRoot())); } catch (error) { sendMappedControlError(res, new ControlError("flow-template-invalid", (error as Error).message)); }
   });
-  app.get("/api/control/flows/images", asyncRoute(async (req, res) => {
+  // Task 10-B fix I1 (controller ruling): the folder listing is served to the Web only -- never on the control socket --
+  // and refused to a run Orca dispatched, as flow-start is (humanOnly.ts DISPATCHED_RUN_REFUSED).
+  if (channel === "web") app.get("/api/control/flows/images", asyncRoute(async (req, res) => {
+    const principal = res.locals.orcaPrincipal as Principal | undefined;
+    if (principal?.kind === "agent" && principal.dispatchedRun !== undefined) {
+      sendControlError(res, 403, "control-dispatched-run-refused", `listing a folder is not done by a run Orca dispatched (${principal.dispatchedRun}); a person does it, from the Web UI.`);
+      return;
+    }
     const dir = req.query.dir, template = req.query.template;
     if (typeof dir !== "string" || !dir.startsWith("/") || typeof template !== "string" || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(template)) {
       sendControlError(res, 400, "query-invalid", "dir must be an absolute folder and template a built-in template id");
@@ -337,10 +344,13 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     try { excludes = [...(loadBuiltin(template, builtinRoot()).template.workspace.excludes ?? [])]; }
     catch (error) { sendMappedControlError(res, new ControlError("flow-template-invalid", (error as Error).message)); return; }
     try { res.json(await listFolderImages(dir, excludes)); }
-    catch { sendControlError(res, 400, "query-invalid", `${dir} is not a folder that can be listed`); }
+    catch (error) {
+      if (error instanceof FolderTooLarge) sendControlError(res, 400, error.code, error.message);
+      else sendControlError(res, 400, "query-invalid", `${dir} is not a folder that can be listed`);
+    }
   }));
   // Flow engine spec §14.2: the flow reads (after flows/settings, which these would otherwise take as a run id).
-  app.get("/api/control/flows",(_req, res) => { try { res.json(readFlowList(deps.store)); } catch (error) { sendMappedControlError(res, error); } });
+  app.get("/api/control/flows", (_req, res) => { try { res.json(readFlowList(deps.store)); } catch (error) { sendMappedControlError(res, error); } });
   app.get("/api/control/flows/:runId", (req, res) => {
     try { res.json(readFlowRun(deps.store, String(req.params.runId))); } catch (error) { sendMappedControlError(res, asFlowControlError(error)); }
   });

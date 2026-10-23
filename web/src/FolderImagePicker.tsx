@@ -8,10 +8,10 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
-import { controlGet } from "./controlApi.js";
+import { ControlRequestError, controlGet } from "./controlApi.js";
 import type { FlowFolderImagesV1 } from "./controlTypes.js";
 
-type Listing = { kind: "reading" } | { kind: "failed" } | { kind: "read"; files: string[]; truncated: boolean; limit: number };
+type Listing = { kind: "reading" } | { kind: "failed" } | { kind: "too-large" } | { kind: "read"; files: string[]; truncated: boolean; limit: number };
 /** The wait after the last keystroke in the folder field before the folder is listed. */
 export const LIST_DELAY_MS = 250;
 
@@ -29,13 +29,17 @@ export function FolderImagePicker(props: { dir: string; template: string; paramI
           const answer = await controlGet<FlowFolderImagesV1>(`/api/control/flows/images?dir=${encodeURIComponent(dir)}&template=${encodeURIComponent(props.template)}`);
           if (!live) return;
           setListing(Array.isArray(answer?.files) ? { kind: "read", files: answer.files, truncated: answer.truncated === true, limit: answer.limit } : { kind: "failed" });
-        } catch { if (live) setListing({ kind: "failed" }); }
+        } catch (error) {
+          // Task 10-B fix I1: a folder past the server's entry or time cap is said to be too large, not unlistable.
+          if (live) setListing(error instanceof ControlRequestError && error.refusal.code === "flow-folder-too-large" ? { kind: "too-large" } : { kind: "failed" });
+        }
       })();
     }, LIST_DELAY_MS);
     return () => { live = false; clearTimeout(timer); };
   }, [dir, props.template]);
   if (!dir.startsWith("/")) return <p className="detail-note">{t("flow.start.image.needsFolder")}</p>;
   if (listing.kind === "reading") return <p className="detail-note" role="status">{t("flow.start.image.reading")}</p>;
+  if (listing.kind === "too-large") return <p className="detail-note" role="status">{t("flow.start.image.tooLarge")}</p>;
   if (listing.kind === "failed") return <p className="detail-note" role="status">{t("flow.start.image.failed")}</p>;
   if (listing.files.length === 0) return <p className="detail-note">{t("flow.start.image.empty")}</p>;
   return (

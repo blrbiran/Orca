@@ -182,3 +182,29 @@ describe("the re-run question wait and the parameter presets (gaps §5.3, §8.2;
     expect(screen.getByRole("region", { name: "Flow settings" })).toBeTruthy();
   });
 });
+
+describe("preset editors, fix round 1 (Task 10-B review minors 2 and 5)", () => {
+  const ok = { status: 200, body: { schema: "orca-command-success-v1" } };
+  it("sets an unset enum preset to its first option in one step", async () => {
+    serve(ok, READ);
+    await mount(owner, "global");
+    await waitFor(() => expect(screen.getByTestId("flow-setting-paramDefaults.wechat-article.language")).toBeTruthy());
+    const language = field("paramDefaults.wechat-article.language");
+    // mutation: start the draft empty -> Override disabled, nothing sent, red
+    fireEvent.click(within(language).getByRole("button", { name: "Override here" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(posts[0]!.body.payload).toEqual({ set: { paramDefaults: { "wechat-article": { language: "zh" } } }, clear: [] });
+  });
+
+  it("re-saves a preset no listed param has with its stored type", async () => {
+    serve(ok, { ...READ, paramDefaults: { "old-template": { count: S(3, "global") } } });
+    await mount(owner, "global");
+    await waitFor(() => expect(screen.getByTestId("flow-setting-paramDefaults.old-template.count")).toBeTruthy());
+    const count = field("paramDefaults.old-template.count");
+    fireEvent.change(within(count).getByRole("textbox", { name: "old-template · count" }), { target: { value: "4" } });
+    fireEvent.click(within(count).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    // mutation: save an orphan preset as text -> "4", red
+    expect(posts[0]!.body.payload).toEqual({ set: { paramDefaults: { "old-template": { count: 4 } } }, clear: [] });
+  });
+});

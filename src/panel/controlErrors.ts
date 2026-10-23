@@ -36,6 +36,8 @@ const panelOnlyErrorStatuses = {
 const readErrorStatuses = {
   "query-invalid": 400,
   "usage-query-invalid": 400,
+  // Gaps plan Task 10-B fix I1: a folder whose image listing passed its entry or time cap (src/flow/startForm.ts).
+  "flow-folder-too-large": 400,
   // Web recoverable control spec §6: same command id, different canonical raw request (commandLedger.ts) -- a named
   // refusal, not control-internal-error; nothing is booked under the id by the second request.
   "command-id-conflict": 409,
