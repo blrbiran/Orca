@@ -3,7 +3,7 @@ import type { TokenPolicy } from "./tokenPolicy.js";
 import type { ToolRulesReport } from "./toolRules.js";
 import type { Candidate, Claim, StopProof, UsageEvent, ArtifactRef, HandoffRequest, HandoffAck } from "./types.js";
 import type { TaskResultCollectionV1 } from './taskResultProtocol.js';
-import type { PriorFailure, RunProgress } from "./schema.js";
+import type { OperatorNote, PriorFailure, RunProgress, TranscriptEntry } from "./schema.js";
 import type { InputCheckpointV1 } from "./resumeBundle.js";
 import { ControlError } from "./errors.js";
 import type { LastFailure, RunFailureCause } from "./driveRecord.js";
@@ -13,7 +13,7 @@ import type { AgentApplyRequest, AgentObservation, AgentPreview, AgentReceipt } 
 import type { VersionRefresh } from "../agents/versionRefresh.js";
 /** Single-call estimate spec §4.1: protocol 3's two kinds of work. */
 // Syncskill integration spec §10.6: skillPluginDir only for a run with skills (ccloop protocol 3, additive).
-export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string;ompSkillsDir?:string;priorFailures?:PriorFailure[] }
+export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string;ompSkillsDir?:string;priorFailures?:PriorFailure[];operatorNote?:OperatorNote }
 export interface SingleCallWork { kind:"single-call";prompt:string;responseSchema:Record<string,unknown>;maxOutputTokens:number;sourceDir:string }
 export interface StartEnvelope { protocol:3|4;mode?:"verify-saved-result";savedResultRecovery?:{packagePath:string;packageHash:string;admissionHash:string;recoveryOf:RecoveryOf};tokenPolicy?:TokenPolicy;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:LoopWork|SingleCallWork }
 export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown"}|{kind:"stopped";proof:StopProof};
@@ -30,12 +30,14 @@ export interface ExecutionReport {
  flow?:unknown;
  /** ccloop per-contract tool rules spec §5: the run's tool-rule report, present iff the contract had rules and ccloop wrote it. */
  toolRules?:ToolRulesReport;
+ /** Live transcript spec §10.2.4: one entry per agent call, present iff ccloop listed at least one; no consumer yet. */
+ transcripts?:TranscriptEntry[];
 }
 /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
 export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }
 /** Spec 2026-10-15 §5 (part C): `control models` -- one installation's models, as ccloop's catalog cache or probe answers them. */
 export interface AgentModelsView { installation: string; kind: string; source: "cache" | "probe" | "none"; observedAt: string | null; models: Array<{ model: string; contextWindowTokens: number | null; maxOutputTokens: number | null; singleCallExecution: "v1" | "v1-soft" | null }> }
-export interface ControlFeatures { protocol:1;tokenPolicy?:"optional-v1";savedResultRecovery?:"v1";agentInstallationUpdate?:"v1" }
+export interface ControlFeatures { protocol:1;tokenPolicy?:"optional-v1";savedResultRecovery?:"v1";agentInstallationUpdate?:"v1";transcripts?:"v1" }
 export interface ExecutionPort {
   readFeatures?():Promise<ControlFeatures>;
   observeAgentInstallations?():Promise<AgentObservation>;
