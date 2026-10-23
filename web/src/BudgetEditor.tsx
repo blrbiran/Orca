@@ -219,7 +219,8 @@ function limitAmount(view: GroupViewV1, drafts: Record<string, string>): BudgetA
 /** The person's own choices on a page with no control-config defaults (BudgetEditor's manual mode and profile selects). */
 export type ManualConfirmChoice = { mode: "" | "strict" | "soft"; profiles: Record<"worker" | "handoff" | "goalReview", string> };
 /** Tester round 2 §7.4: why Confirm is disabled, in this order (the four conditions of §7.1). */
-export type ConfirmBlocker = "profiles" | "selections" | "owner" | "draft";
+/** Spec §21 (review I1): "deficit" -- a limited group over its limit; the server refuses confirm until the limit is raised. */
+export type ConfirmBlocker = "profiles" | "selections" | "owner" | "draft" | "deficit";
 
 function confirmModeOf(view: GroupViewV1, config: ControlConfigV1, manual: ManualConfirmChoice): "strict" | "soft" | null {
   return view.proposal.budgetMode ?? config.defaults?.estimateMode ?? (manual.mode || null);
@@ -246,6 +247,7 @@ export function confirmBlockers(view: GroupViewV1, config: ControlConfigV1, sele
   // Integration spec §3.2, ruling R2: confirming a group Orca merges or pushes is an owner's approval of its scheme.
   if (view.integration !== undefined && !mayLimit) blockers.push("owner");
   if (hasBadDraft(drafts)) blockers.push("draft");
+  if (view.ledger.groupLimit.tokens !== null && DIMENSIONS.some((dimension) => view.ledger.budgetDeficit[dimension] > 0)) blockers.push("deficit");
   return blockers;
 }
 
@@ -333,6 +335,20 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const unlimitedGroup = view.ledger.groupLimit.tokens === null;
   const autoEligible = unlimitedGroup && view.autoConfirm?.eligible === true;
   const refusedCode = view.autoConfirm?.refusedCode ?? null;
+  const toLimit = (): void => { document.getElementById(`group-limit-${groupId}`)?.querySelector<HTMLInputElement>("input")?.focus(); };
+  // The checklist's lines; the list is rendered only when it has one (an empty <ul> names nothing).
+  const checklist = [
+    ...blockers.map((blocker) => (
+      <li key={blocker} data-blocker={blocker}>
+        {t(`budget.blocker.${blocker}` as const)}
+        {blocker === "selections" && <> <a href="#global-settings">{t("nav.globalSettings")}</a></>}
+        {blocker === "deficit" && <> <button type="button" onClick={toLimit}>{t("budget.blocker.toLimit")}</button></>}
+      </li>
+    )),
+    ...(autoEligible && view.estimates.some((estimate) => estimate.state === "running" || estimate.state === "start-unknown") ? [<li key="estimate" data-testid="auto-estimate">{t("budget.blocker.estimate")}</li>] : []),
+    ...(autoEligible && props.ownAgent === true ? [<li key="own-agent" data-testid="auto-own-agent">{t("budget.blocker.ownAgent")}</li>] : []),
+    ...(autoEligible && refusedCode !== null ? [<li key="refused" data-testid="auto-refused">{t("budget.autoConfirm.refused", { reason: clause(refusalText({ code: refusedCode, message: refusedCode, status: null })) })}</li>] : []),
+  ];
 
   const submitEdit = (): void => {
     const operations = editedOperations(view, drafts);
@@ -506,7 +522,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
           </ul>
         </details>
       )}
-      <fieldset>
+      <fieldset id={`group-limit-${groupId}`}>
         <legend>{t("budget.groupLimit")}</legend>
         {DIMENSIONS.map((dimension) => dimension === "tokens" ? (
           <TokenInput
@@ -552,19 +568,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       {!archived && <button type="button" disabled={!editable || hasBadDraft(drafts) || editedOperations(view, drafts).length === 0} onClick={submitEdit}>{t("budget.save")}</button>}
       {estimator !== null && !archived && <button type="button" disabled={estimator.profile === null} onClick={submitEstimate}>{t("budget.reestimate")}</button>}
       {editable && <GroupIntegrationConfirm view={view} suggestedTarget={props.suggestedTarget ?? null} onCommand={onCommand} />}
-      {!archived && editable && (
-        <ul aria-label={t("budget.checklist.title")} className="confirm-checklist">
-          {blockers.map((blocker) => (
-            <li key={blocker} data-blocker={blocker}>
-              {t(`budget.blocker.${blocker}` as const)}
-              {blocker === "selections" && <> <a href="#global-settings">{t("nav.globalSettings")}</a></>}
-            </li>
-          ))}
-          {autoEligible && view.estimates.some((estimate) => estimate.state === "running" || estimate.state === "start-unknown") && <li data-testid="auto-estimate">{t("budget.blocker.estimate")}</li>}
-          {autoEligible && props.ownAgent === true && <li data-testid="auto-own-agent">{t("budget.blocker.ownAgent")}</li>}
-          {autoEligible && refusedCode !== null && <li data-testid="auto-refused">{t("budget.autoConfirm.refused", { reason: clause(refusalText({ code: refusedCode, message: refusedCode, status: null })) })}</li>}
-        </ul>
-      )}
+      {!archived && editable && checklist.length > 0 && <ul aria-label={t("budget.checklist.title")} className="confirm-checklist">{checklist}</ul>}
       {!archived && editable && blockers.length === 0 && !autoEligible && <p role="status" data-testid="blocker-none">{t("budget.blocker.none")}</p>}
       {!archived && editable && unlimitedGroup && view.autoConfirm?.eligible === false && view.integration !== undefined && <p role="note" data-testid="auto-integration">{t("budget.autoConfirm.integration")}</p>}
       {!archived && editable && (autoEligible

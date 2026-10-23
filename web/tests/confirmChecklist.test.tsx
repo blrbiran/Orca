@@ -24,7 +24,8 @@ const draft = (over: Partial<GroupViewV1> = {}): GroupViewV1 => {
   return {
     ...base, summary: { ...base.summary, state: "draft" },
     proposal: { ...base.proposal, state: "editable", profiles: null, budgetMode: null, executionSnapshotHash: null },
-    ledger: { ...base.ledger, groupLimit: amount(9_000_000) }, ...over,
+    // board.ts's amount(0) has attempts/sessions 1; a ledger with no deficit has 0 in every dimension.
+    ledger: { ...base.ledger, groupLimit: amount(9_000_000), budgetDeficit: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } }, ...over,
   };
 };
 const unlimited = (over: Partial<GroupViewV1> = {}): GroupViewV1 => {
@@ -42,8 +43,13 @@ function editor(v: GroupViewV1, options: { config?: ControlConfigV1; hash?: stri
   return onCommand;
 }
 const buttons = (): HTMLButtonElement[] => [screen.getByRole("button", { name: "Confirm task plan" }), screen.getByRole("button", { name: "Confirm only, don't run yet" })] as HTMLButtonElement[];
+const reactOnClick = (element: Element): (() => void) => {
+  const key = Object.keys(element).find((name) => name.startsWith("__reactProps$"))!;
+  return (element as unknown as Record<string, { onClick: () => void }>)[key]!.onClick;
+};
 const checklist = (): HTMLElement => screen.getByRole("list", { name: "Before confirming" });
-const blockerLines = (): string[] => within(checklist()).queryAllByRole("listitem").map((li) => li.getAttribute("data-blocker") ?? "").filter((name) => name !== "");
+// An empty checklist is not rendered at all (review minor 7).
+const blockerLines = (): string[] => screen.queryByRole("list", { name: "Before confirming" }) === null ? [] : within(checklist()).queryAllByRole("listitem").map((li) => li.getAttribute("data-blocker") ?? "").filter((name) => name !== "");
 
 describe("the confirm checklist (C27)", () => {
   it.each([
@@ -51,6 +57,8 @@ describe("the confirm checklist (C27)", () => {
     ["selections", { hash: null }, "Every agent slot must resolve; see Agent selection below, or check installation and defaults in Global settings"],
     ["owner", { me: member, view: { integration } }, "This group has a delivery scheme (push or PR); only an owner can confirm it."],
     ["draft", { drafts: { "g:group-limit:tokens": "invalid" } }, "Fix the highlighted values first."],
+    // Spec §21 (review I1): a limited group over its limit; the server refuses confirm until the limit is raised.
+    ["deficit", { view: { ledger: { ...draft().ledger, budgetDeficit: { tokens: 5_000, activeMs: 0, attempts: 0, sessions: 0 } } } }, "This group is over its limit; raise the group limit before confirming. Go to the group limit"],
   ] as const)("the %s blocker alone shows its line and disables both buttons", (name, options, text) => {
     const v = draft("view" in options ? options.view : {});
     const onCommand = editor(v, options as Parameters<typeof editor>[1]);
@@ -59,8 +67,22 @@ describe("the confirm checklist (C27)", () => {
     expect(line.textContent).toBe(text);
     expect(buttons().map((button) => button.disabled)).toEqual([true, true]);
     for (const button of buttons()) fireEvent.click(button);
+    // A disabled button's click never reaches React, so submitConfirm's own guard is driven directly through each
+    // button's onClick (review minor 12): one function decides both the buttons and the send.
+    for (const button of buttons()) reactOnClick(button)();
     expect(onCommand).not.toHaveBeenCalled();
     expect(confirmBlockers(v, "config" in options ? options.config : config, "hash" in options ? options.hash : HASH, !("me" in options), "drafts" in options ? options.drafts : {}, { mode: "", profiles: { worker: "", handoff: "", goalReview: "" } })).toEqual([name]);
+  });
+
+  it("the deficit blocker's button moves focus to the group limit field", () => {
+    editor(draft({ ledger: { ...draft().ledger, budgetDeficit: { tokens: 5_000, activeMs: 0, attempts: 0, sessions: 0 } } }));
+    fireEvent.click(within(checklist()).getByRole("button", { name: "Go to the group limit" }));
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "tokens" }));
+  });
+
+  it("an unlimited group's token figures never raise the deficit blocker", () => {
+    const v = unlimited({ autoConfirm: { eligible: false, refusedCode: null } });
+    expect(confirmBlockers({ ...v, ledger: { ...v.ledger, budgetDeficit: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } } }, config, HASH, true, {}, { mode: "", profiles: { worker: "", handoff: "", goalReview: "" } })).toEqual([]);
   });
 
   it("links the selections blocker to Global settings", () => {
@@ -73,6 +95,7 @@ describe("the confirm checklist (C27)", () => {
     expect(blockerLines()).toEqual([]);
     expect(screen.getByTestId("blocker-none").textContent).toBe("Nothing blocks confirming.");
     expect(screen.getByTestId("blocker-none").getAttribute("role")).toBe("status");
+    expect(screen.queryByRole("list", { name: "Before confirming" })).toBeNull();
     expect(screen.getByTestId("confirm-starts-note")).toBeTruthy();
     expect(buttons().map((button) => button.disabled)).toEqual([false, false]);
     fireEvent.click(buttons()[0]!);

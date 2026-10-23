@@ -1016,3 +1016,16 @@ Recorded by the server implementer subagent of session `ffec7b28`, 2026-10-24, o
 3. **§6.2.1 the plan's group agent.** The accepted plan's group-level agent is `plan.agent?.agent` (the plan's `agent` is a
    `PartialSelection`, `src/scheduler/planFile.ts`), not `plan.agent?.group?.agent`. The seed is written after
    `writeImportedPlan`, whose estimator-layer check reads the layers as they were before the seed.
+
+## 21. Corrections found while building the web part (appended; earlier text unchanged)
+
+Recorded by the web implementer subagent of session `ffec7b28`, 2026-10-24, on branch `feat/tester-round2-web`, after the
+independent code review of that branch (finding I1, controller's choice). Rule 13: the sections above stay as written.
+
+1. **§7.4 item 1 — a fifth confirm blocker, `deficit`.** While a limited group's ledger carries a deficit in any dimension
+   (`view.ledger.groupLimit.tokens !== null` and some `view.ledger.budgetDeficit[d] > 0`), the server refuses `confirm`
+   (`assertKnownConservation`, §4.2.5; §20 item 1 for the code). `confirmBlockers` therefore returns
+   `"profiles" | "selections" | "owner" | "draft" | "deficit"`, in that order; the `deficit` line
+   (`budget.blocker.deficit`) carries a button (`budget.blocker.toLimit`) that moves focus to the group limit field, the
+   one way out. An unlimited-token group never shows it. Criterion: C27's `deficit` row (`web/tests/confirmChecklist.test.tsx`).
+2. **§7.4 item 2 — an empty checklist is not rendered.** The `<ul>` appears only when it has a line.

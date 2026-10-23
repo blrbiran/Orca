@@ -674,7 +674,7 @@ export const zh: Translation<typeof en> = {
   },
   budget: {
     checklist: { title: "确认前" },
-    blocker: { profiles: "请选择预算模式和 agent 配置档，或在全局设置里设好默认值。", selections: "每个 agent 槽位都要解析成功；请看下方 Agent 选择，或在此检查安装和默认值：", owner: "这个组设了交付方式（推送或 PR），只有所有者能确认。", draft: "先修正标出的数值。", none: "没有阻止确认的项。", estimate: "正在等进行中的估算结束。", ownAgent: "Orca 自动确认只认组自己的 agent 选择，你个人的默认 agent 不算。请在下方设置组执行，或手动确认。" },
+    blocker: { deficit: "本组已超出上限；确认前请先提高组上限。", toLimit: "转到组上限", profiles: "请选择预算模式和 agent 配置档，或在全局设置里设好默认值。", selections: "每个 agent 槽位都要解析成功；请看下方 Agent 选择，或在此检查安装和默认值：", owner: "这个组设了交付方式（推送或 PR），只有所有者能确认。", draft: "先修正标出的数值。", none: "没有阻止确认的项。", estimate: "正在等进行中的估算结束。", ownAgent: "Orca 自动确认只认组自己的 agent 选择，你个人的默认 agent 不算。请在下方设置组执行，或手动确认。" },
     autoConfirm: { pending: "token 不限，所以上面各项都满足后，Orca 会自动确认并开跑这个组。", refused: "Orca 自动确认被拒：{{reason}}。处理后修改提案即可再试，或手动确认。", integration: "设了交付方式的组需要所有者确认，不会自动确认。" },
     noEstimator: "未配置估算 Agent",
     executionProfiles: "执行配置",
@@ -709,7 +709,6 @@ export const zh: Translation<typeof en> = {
     usageIncomplete: " · 用量不完整：{{count}} 个运行被不计量放行",
     save: "保存提案",
     reestimate: "重新估算",
-    confirmDestination: "请检查下方 Agent 选择，或在此检查安装和默认值：",
     confirm: "确认任务方案",
     confirmStartsNote: "确认后，一有空位这个组就会自动开跑。",
     confirmHold: "只确认，先不跑",
