@@ -530,3 +530,33 @@ the repo root named in the heading.
 - §8.1: stands (raw on disk). Its reason is replaced by 10.6.1. §8.2: replaced by 10.6.2. §8.3: O2 stands, and O3
   stands as widened in 10.8. 10.6.3 is new.
 - §9: replaced by 10.8.
+
+## 11. Revision 2 (human rulings, session 0e13a9b7, 2026-10-23)
+
+Rulings, verbatim:
+
+- O5: 「同意。但是我们这里可能要定一下最大能支持多大的输出。作为一个hard limit ，比如1G？」
+- Landing order (§10): 「同意」.
+
+11.1 **A hard output limit of 1 GiB per call.** §10.2 removes the 16 MiB stop on stdout. In its place, a call whose stdout
+passes 1 GiB (1,073,741,824 bytes, counted as the bytes read from the child) is stopped with the existing
+`output-limit` reason, as a runaway guard. Below that limit the agent is never stopped for its output size. The three
+layers are then:
+
+| Layer | Limit per call | Past the limit |
+|---|---|---|
+| `transcript.jsonl` (what the live view reads) | 128 MiB | recording stops at the last complete line, a truncation marker is written, the agent runs on |
+| `events.jsonl` evidence (handoff packet) | 16 MiB | recording stops at the last complete line, the agent runs on |
+| stdout read from the child | 1 GiB | `stop("output-limit")` |
+
+Memory does not grow with the limit, because §10.2 decodes incrementally. The cost of a call near the limit is the CPU
+of reading and splitting its lines. The 1 GiB stop is measured by the existing byte counter, so it needs no new state.
+
+11.2 **O5 is settled as follows.** Rewrite `tests/runtime/codex/runCodexPhase.test.ts:57-60` and
+`tests/runtime/omp/ompPhase.test.ts:225-226` so that they assert:
+
+- (a) a call printing past 16 MiB and under 1 GiB completes, and its evidence and transcript are capped as in 11.1;
+- (b) a call printing past 1 GiB is stopped with `output-limit`.
+
+The ruling each rewrite encodes is this section. ccloop's plan names the lines again at its own commit. The 1 GiB case
+uses a fake child that writes cheaply, never a real fixture file.
