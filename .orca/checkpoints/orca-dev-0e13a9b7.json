@@ -1,0 +1,65 @@
+{
+  "v": 1,
+  "runId": "orca-dev-0e13a9b7",
+  "runtime": "claude-code",
+  "sessionRef": "0e13a9b7-9d9b-4d24-a6d6-cb7225711835",
+  "writtenAt": "2026-10-23T14:30:30.535Z",
+  "head": "3c745335f9c97271ef66857a7b30cd121237d19c",
+  "level": {
+    "kind": "reading",
+    "level": 339744,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Final-review fix dispatch (agent running; brief .superpowers/sdd/2026-10-23-flow-phase1-gaps/final-fix-brief.md): when it reports, read its src diff, npm test rc, ledger",
+    "T11: rebase feat/flow-gaps onto main (main has 2 spec-only commits 37168f0a, 3c745335), npm test, git merge --ff-only, back up ~/.orca/control/panel/control.sqlite, install into panel service, confirm schema 18, visual check (card clamp light/dark, top-left start dialog, run page), minimal paid wechat-article v3 acceptance stopping before draft-box enact, confirm claude attempt reads the absolute store path",
+    "Add known-load-flakes rows: taskResultCollector 'caches only old command refusal…', web settingsScopes 'default saves preserve…', web controlCommandRecovery 'parks a missing group once…'",
+    "Handoffs: Orca/ccloop/ccmem docs/handoff/handoff.md (ccloop/ccmem: replace the single Orca section; no hard HEAD); Chinese review report + <=10-line executive summary in chat"
+  ],
+  "open": [
+    "Tester round 2 (next session): P0 #8/#9 estimate breach blocks group forever; P1 #3/#6/#12 agent inheritance, #10/#14/#19 confirm checklist; .sr-only CSS; rulings H1-H5 recorded in session ledger",
+    "childPort spentTokens ?? 0 — first task after merge, needs spec line",
+    "Live-transcript spec rev 1 (3c745335): open items O2 (paid secret-masking probe), O3, O4, O5 (ccloop test rewrites need human ruling)"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "Delete 5 test-residue files in ~/.orca/control/flow-attachments (12-20 B)"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "Accept the rule: releasing a held external effect needs person authority on every path (exception to gaps spec §13 'fill allowed for a dispatched run')"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "Review ~60 new en/zh strings (task-9/10-A/10-B/final-fix reports), triage.ts/host.ts prompts, v3 template diff, clarify title prompt line, to-draft-box.md wording"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "H11 hash route scheme, H12 shortcuts; H6-H10 product directions"
+    },
+    {
+      "kind": "ccloop-change",
+      "what": "Live transcript ccloop changes and O5 test rewrites; codex acceptance after 2026-10-27 quota (paid, ask first)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /private/tmp/orca-0e13a9b7/orca-gaps log --oneline -3",
+      "exitCode": 0,
+      "commit": "3c745335f9c97271ef66857a7b30cd121237d19c",
+      "observedAt": "2026-10-23T14:30:30.402Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-0e13a9b7-sF054r/1.txt"
+    },
+    {
+      "command": "cat /private/tmp/orca-0e13a9b7/logs/gaps/t-final-npmtest.rc",
+      "exitCode": 1,
+      "commit": "3c745335f9c97271ef66857a7b30cd121237d19c",
+      "observedAt": "2026-10-23T14:30:30.419Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-0e13a9b7-sF054r/2.txt"
+    }
+  ]
+}
