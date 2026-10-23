@@ -25,6 +25,12 @@ describe("styles.css", () => {
     expect(q).toContain("-webkit-line-clamp: 2");
   });
 
+  // Flow gaps Task 10a: a card's title or goal summary never runs past two lines (CardGoal.tsx, web/tests/cardGoal.test.tsx).
+  it("clamps a card's goal to two lines with an ellipsis, wrapping unbroken text", () => {
+    const r = rule(".card-goal");
+    for (const part of ["-webkit-line-clamp: 2", "line-clamp: 2", "-webkit-box-orient: vertical", "overflow: hidden", "overflow-wrap: anywhere"]) expect(r).toContain(part);
+  });
+
   it("hides inactive panes by class, the only thing allowed to hide one (spec §5.1)", () => {
     expect(rule('.section-pane:not([data-active="true"])')).toContain("display: none");
   });

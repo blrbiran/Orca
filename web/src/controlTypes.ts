@@ -62,6 +62,8 @@ export type RequirementSummaryV1 = {
   blockedRun: { runId: string; reason: string | null } | null;
   /** Issue #75: the requirement's slug once a round named one. Optional so literal fixtures need no edit; the server always sends it. */
   slug?: string | null;
+  /** Task 10a: the short title the latest clarify round gave; absent while none did. Cards show it before the goal. */
+  title?: string;
   /** Issue 91 review fix: present only on a handoff-unresolved stop -- whether recovery-retry can act on it. */
   stopRetryable?: boolean;
 };

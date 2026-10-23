@@ -7,6 +7,7 @@ import { useId, useState } from "react";
 import type { JSX } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import { CardGoal } from "./CardGoal.js";
 import { useClock } from "./clock.js";
 import type { GroupSummaryV1 } from "./controlTypes.js";
 import {
@@ -64,7 +65,7 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
         {group.recoveryBlockerCount > 0 ? t("control.groupBlockers", { n: group.recoveryBlockerCount }) : ""}
       </span>
       <span id={`${base}-detail`} className="group-card-detail">
-        {group.goal !== undefined && <span className="group-card-goal">{group.goal}</span>}
+        <CardGoal group={group} className="group-card-goal" />
         {group.completion !== undefined && group.completion.total > 0 && (
           <progress value={group.completion.done} max={group.completion.total}
             aria-label={t("control.groupCard.progress", { done: group.completion.done, total: group.completion.total })} />

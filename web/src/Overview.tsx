@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
+import { CardGoal } from "./CardGoal.js";
 import { enumText } from "./i18n.js";
 import { explainRunReason } from "./refusalExplain.js";
 import { reasonCode } from "./runFacts.js";
@@ -34,7 +35,7 @@ export function Overview(props: { model: OverviewModel; onOpen: (target: Overvie
     {model.issues.map((issue, i) => <p role="alert" data-tone="warn" key={JSON.stringify([issue.groupId, issue.reason, i])}>{issue.groupId ?? t("overview.global")} · {issue.reason}</p>)}
     {model.progress.length === 0 && model.complete && <p>{t("overview.noProgress")}</p>}
     <ul className="overview-progress">{model.progress.map(({ group, owner, ownerUnknown, target }) => <li key={group.groupId}>
-     <div><button type="button" onClick={() => props.onOpen(target)}>{group.goal || group.groupId}</button><span>{owner || t("overview.global")}{ownerUnknown ? ` · ${t("overview.ownerUnknown")}` : ""}</span></div>
+     <div><button type="button" onClick={() => props.onOpen(target)}><CardGoal group={group} fallback={group.groupId} /></button><span>{owner || t("overview.global")}{ownerUnknown ? ` · ${t("overview.ownerUnknown")}` : ""}</span></div>
      <p>{enumText("groupState", group.state)}{group.state === "review" ? ` · ${t("overview.goalReview")}` : group.state === "done" ? ` · ${t("overview.deliverySeparate")}` : ""}</p>
      {group.completion ? <><p>{t("overview.tasks", { done: group.completion.done, total: group.completion.total })}</p>{group.completion.total > 0 && <progress value={group.completion.done} max={group.completion.total} aria-label={t("overview.taskProgress")} />}</> : group.requirement ? <p>{t("overview.requirementProgress", { round: group.requirement.roundNo ?? "—", questions: group.requirement.openQuestions })}</p> : <p>{t("overview.taskCountsUnavailable")}</p>}
      {group.counts && <p className="overview-counts">{Object.entries(group.counts).map(([kind, n]) => <span key={kind}>{t(`control.graph.category.${kind as WorkItemCategoryV1}`)} {n}</span>)}</p>}

@@ -8,6 +8,7 @@ import { useState } from "react";
 import type { DragEvent, JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
+import { CardGoal } from "./CardGoal.js";
 import type { FlowListV1, GroupSummaryV1 } from "./controlTypes.js";
 import { BOARD_COLUMNS, boardColumn, boardDrop, needsAttention, type BoardColumn } from "./groupCategory.js";
 import { GroupGraph } from "./GroupGraph.js";
@@ -75,7 +76,7 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; onOpen: () 
       <button type="button" className="board-card-open" onClick={props.onOpen}>
         {group.groupId} · {enumText("groupState", group.state)}{props.repoText}
       </button>
-      {group.goal !== undefined && <p className="board-card-goal">{group.goal}</p>}
+      <CardGoal group={group} as="p" className="board-card-goal" />
       {group.completion !== undefined && group.completion.total > 0 && (
         <progress value={group.completion.done} max={group.completion.total}
           aria-label={t("control.groupCard.progress", { done: group.completion.done, total: group.completion.total })} />

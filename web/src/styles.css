@@ -258,6 +258,11 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .group-card-name { color: var(--text-strong); font-weight: 600; overflow-wrap: anywhere; }
 .group-card-detail { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: var(--text-xs); color: var(--muted); }
 .group-card-goal { flex-basis: 100%; color: var(--text); font-size: var(--text-sm); overflow-wrap: anywhere; }
+/* Task 10a: a card's title or goal summary (CardGoal.tsx) never runs past two lines; the whole goal is in its tooltip. */
+.card-goal {
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
 .group-card progress { flex-basis: 100%; height: 6px; accent-color: var(--ok); }
 .group-chip { padding: 0 8px; border-radius: 999px; background: var(--bg-hover); color: var(--text-strong); }
 .group-chip[data-category="attention"] { background: var(--danger-subtle); color: var(--danger); }
