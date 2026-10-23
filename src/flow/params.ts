@@ -13,10 +13,11 @@
  * import (as a `path` param's file does); an absolute value -- only a settings preset may carry one -- cannot reach it,
  * so a step that would use it is refused before it starts (`unreachableImageParam`).
  */
-import { lstatSync, readFileSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { createHash } from "node:crypto";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { sha256Canonical } from "../control/canonicalJson.js";
-import { storeImage, type ImageExt } from "./feedback/attachments.js";
+import { sniffImage, storeImage, type ImageExt } from "./feedback/attachments.js";
 import { FlowRefusal } from "./kernel.js";
 import type { LoadedRun } from "./kinds/registry.js";
 import { isInsidePath } from "./template/checklist.js";
@@ -58,25 +59,68 @@ export function checkParamValue(id: string, param: FlowParam, value: ParamValue)
   }
 }
 
-/** §8.1: read the file once, refuse it unless its bytes are an image, store the bytes; what the run records. */
-export function resolveImage(env: NodeJS.ProcessEnv, id: string, value: ParamValue, folder: string | null, source: ParamSource): ResolvedImage {
+/** An image read and checked, not yet stored: `storeImages` writes it once every other check has passed. */
+export interface ReadImage extends ResolvedImage { bytes: Buffer }
+
+/**
+ * Open a folder-relative file without passing through a link: every parent directory is lstat'ed (a link or a
+ * non-directory is refused, as copy-back refuses them, vault/copyBack.ts), the file itself is opened O_NOFOLLOW, and the
+ * opened file must be the one the folder's real path holds (closes a parent swapped between the walk and the open).
+ */
+function openInsideFolder(id: string, folder: string, rel: string): number {
+  let cursor = folder;
+  for (const part of rel.split("/").slice(0, -1)) {
+    cursor = join(cursor, part);
+    let stat;
+    try { stat = lstatSync(cursor); } catch { return refuse(id, `${rel} does not exist`); }
+    if (!stat.isDirectory()) refuse(id, `${rel} passes through ${stat.isSymbolicLink() ? "a link" : "a non-directory"} (${relative(folder, cursor)})`);
+  }
+  let fd: number;
+  try { fd = openSync(join(folder, rel), constants.O_RDONLY | constants.O_NOFOLLOW); }
+  catch (error) { return refuse(id, (error as NodeJS.ErrnoException).code === "ELOOP" ? `${rel} is a link` : `${rel} does not exist`); }
+  try {
+    const real = realpathSync(join(folder, rel));
+    const opened = fstatSync(fd), there = statSync(real);
+    if (!real.startsWith(`${realpathSync(folder)}${sep}`) || opened.ino !== there.ino || opened.dev !== there.dev) refuse(id, `${rel} is not a file inside the folder`);
+  } catch (error) { closeSync(fd); throw error instanceof FlowRefusal ? error : new FlowRefusal(`flow-param-invalid:${id}`, `${rel} is not a file inside the folder`); }
+  return fd;
+}
+
+/**
+ * §8.1: read the file once and refuse it unless it is a regular file of at most 20 MiB whose bytes are an image. Nothing
+ * is written here (a later refusal must leave nothing behind); `storeImages` stores what passed.
+ */
+export function readImage(id: string, value: ParamValue, folder: string | null, source: ParamSource): ReadImage {
   const problem = imageValueProblem(value, source === "project" || source === "global");
   if (problem !== null) refuse(id, problem);
   const path = value as string;
-  const file = isAbsolute(path) ? path : folder === null ? refuse(id, "a folder-relative image needs the run's folder") : join(folder, path);
+  let fd: number;
+  if (isAbsolute(path)) {
+    // Only a settings preset (the person's own write) names an absolute file; it is read where it is.
+    try { fd = openSync(path, constants.O_RDONLY); } catch { return refuse(id, `${path} does not exist`); }
+  } else {
+    if (folder === null) refuse(id, "a folder-relative image needs the run's folder");
+    fd = openInsideFolder(id, folder!, path);
+  }
   let bytes: Buffer;
   try {
-    const stat = lstatSync(file);
-    // A link is not followed: the folder's import keeps it as a link, so the step would not see the bytes checked here.
+    const stat = fstatSync(fd);
     if (!stat.isFile()) refuse(id, `${path} is not a file`);
     if (stat.size > IMAGE_PARAM_MAX_BYTES) refuse(id, `larger than ${IMAGE_PARAM_MAX_BYTES} bytes`);
-    bytes = readFileSync(file);
-  } catch (error) {
-    if (error instanceof FlowRefusal) throw error;
-    return refuse(id, `${path} does not exist`);
-  }
-  const stored = storeImage(env, bytes, { maxBytes: IMAGE_PARAM_MAX_BYTES, exts: IMAGE_EXTS, refusal: `flow-param-invalid:${id}` });
-  return { source: path, sha256: stored.sha256, ext: stored.ext };
+    bytes = readFileSync(fd);
+  } finally { closeSync(fd); }
+  if (bytes.length > IMAGE_PARAM_MAX_BYTES) refuse(id, `larger than ${IMAGE_PARAM_MAX_BYTES} bytes`);
+  const ext = sniffImage(bytes);
+  if (ext === null || !IMAGE_EXTS.includes(ext)) refuse(id, "not a png, jpg, gif or webp image by its bytes");
+  return { source: path, sha256: createHash("sha256").update(bytes).digest("hex"), ext: ext!, bytes };
+}
+
+/** Store what `readImage` read (the §4.7 store); what the run records. */
+export function storeImages(env: NodeJS.ProcessEnv, read: Readonly<Record<string, ReadImage>>): Record<string, ResolvedImage> {
+  return Object.fromEntries(Object.entries(read).map(([id, image]) => {
+    const stored = storeImage(env, image.bytes, { maxBytes: IMAGE_PARAM_MAX_BYTES, exts: IMAGE_EXTS, refusal: `flow-param-invalid:${id}` });
+    return [id, { source: image.source, sha256: stored.sha256, ext: stored.ext }];
+  }));
 }
 
 /** §8.1 item 2: the params identity, with each image's bytes hash in place of its path. */
@@ -87,16 +131,17 @@ export function paramsIdentity(params: Readonly<Record<string, ParamValue>>, ima
 
 /**
  * §8.2: the start's params. A value given > the project's default > the global default > the template's `derive` or
- * `default`. Each value is checked against its type; an image is read and stored (§8.1).
+ * `default`. Each value is checked against its type; an image is read and checked (§8.1) -- the caller stores it
+ * (`storeImages`) after its own remaining checks, so a refused start writes nothing.
  */
 export function resolveStartParams(template: FlowTemplate, given: Record<string, ParamValue>, opts: {
-  now: Date; env: NodeJS.ProcessEnv; folder: string | null; project: ParamDefaults; global: ParamDefaults;
+  now: Date; folder: string | null; project: ParamDefaults; global: ParamDefaults;
   derive(kind: "slug-of-idea" | "today", params: Readonly<Record<string, ParamValue | undefined>>, now: Date): string;
-}): { params: Record<string, ParamValue>; images: Record<string, ResolvedImage> } {
+}): { params: Record<string, ParamValue>; images: Record<string, ReadImage> } {
   const declared = template.params ?? {};
   for (const id of Object.keys(given)) if (!(id in declared)) refuse(id, "not a parameter of the template");
   const params: Record<string, ParamValue> = {};
-  const images: Record<string, ResolvedImage> = {};
+  const images: Record<string, ReadImage> = {};
   for (const [id, param] of Object.entries(declared)) {
     const picked: Array<[ParamSource, ParamValue | undefined]> = [
       ["given", given[id]], ["project", opts.project[id]], ["global", opts.global[id]],
@@ -108,7 +153,7 @@ export function resolveStartParams(template: FlowTemplate, given: Record<string,
       continue;
     }
     const [source, value] = found as [ParamSource, ParamValue];
-    if (param.type === "image") images[id] = resolveImage(opts.env, id, value, opts.folder, source);
+    if (param.type === "image") images[id] = readImage(id, value, opts.folder, source);
     params[id] = param.type === "image" ? value : checkParamValue(id, param, value);
   }
   return { params, images };
@@ -119,6 +164,7 @@ export interface ParamsChange { set: Record<string, ParamValue>; unset: string[]
 export function resolveParamsChange(env: NodeJS.ProcessEnv, run: LoadedRun, set: Record<string, unknown>): ParamsChange {
   const declared = run.template.params ?? {};
   const out: ParamsChange = { set: {}, unset: [], images: {} };
+  const read: Record<string, ReadImage> = {};
   for (const [id, value] of Object.entries(set)) {
     const param = declared[id];
     if (param === undefined) refuse(id, "not a parameter of the template");
@@ -128,9 +174,11 @@ export function resolveParamsChange(env: NodeJS.ProcessEnv, run: LoadedRun, set:
       continue;
     }
     if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") refuse(id, "must be text, a number or true/false");
-    if (param!.type === "image") out.images[id] = resolveImage(env, id, value as ParamValue, run.body.dir, "given");
+    if (param!.type === "image") read[id] = readImage(id, value as ParamValue, run.body.dir, "given");
     out.set[id] = param!.type === "image" ? value as ParamValue : checkParamValue(id, param!, value as ParamValue);
   }
+  // Stored only once every key of the change passed.
+  out.images = storeImages(env, read);
   return out;
 }
 
@@ -142,7 +190,7 @@ export function applyParamsChange(params: Readonly<Record<string, ParamValue>>, 
   return { params: nextParams, images: nextImages };
 }
 
-/** Every text of a step that may carry a variable: its prompt-like assets, `vars`, checks and tool rules. */
+/** Every text of a step that may carry a variable: its prompt-like assets, `vars`, checks, tool rules, writeTo, hints. */
 function stepTexts(run: LoadedRun, step: FlowStep): string[] {
   const texts: string[] = [];
   const asset = (rel: string | undefined): void => { if (rel !== undefined && run.assets[rel] !== undefined) texts.push(run.assets[rel]!); };
@@ -152,6 +200,10 @@ function stepTexts(run: LoadedRun, step: FlowStep): string[] {
   if ("vars" in step && step.vars !== undefined) texts.push(...Object.values(step.vars));
   if ("acceptance" in step && step.acceptance !== undefined) texts.push(...step.acceptance.checks.map((c) => c.run));
   if ("tools" in step && step.tools?.commands !== undefined) texts.push(...step.tools.commands.map((r) => ("exact" in r ? r.exact : r.prefix)));
+  // Every other field a variable is expanded in (checklist.ts checkVars): an ask's prompt and writeTo file, hints.equals.
+  if (step.kind === "ask" && step.prompt !== undefined && run.assets[step.prompt] === undefined) texts.push(step.prompt);
+  if (step.kind === "ask" && step.writeTo !== undefined) texts.push(step.writeTo.file);
+  if (step.hints?.equals !== undefined) texts.push(step.hints.equals);
   return texts;
 }
 

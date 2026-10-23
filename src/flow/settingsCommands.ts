@@ -20,7 +20,9 @@ import { BUILTIN_LEVELS, BUILTIN_TOKENS_PER_RUN, settingNotLooser } from "./sett
 import { FLOW_EFFECT_CLASSES, type FlowsLayer, type FlowSettingField, type GlobalFlowsLayer } from "./settingsSchema.js";
 import { FlowRefusal } from "./kernel.js";
 import { checkParamValue } from "./params.js";
-import { loadBuiltin } from "./template/load.js";
+import { BUILTIN_ROOT, loadBuiltin, TEMPLATE_FILE } from "./template/load.js";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 type Verb = "set-flow-settings" | "set-flow-locks";
 export type FlowSettingsCommand<V extends Verb> = Extract<RawAuthorityCommandV1, { verb: V }>;
@@ -79,6 +81,8 @@ const same = (a: unknown, b: unknown): boolean => canonicalBytes(a ?? null).equa
 /** Drop empty nested objects, so a cleared field leaves no `{}` behind. */
 function tidy(layer: GlobalFlowsLayer): GlobalFlowsLayer {
   const out: Record<string, unknown> = { ...layer };
+  // A template with no preset left is dropped, then an empty paramDefaults with it.
+  if (out.paramDefaults !== undefined) out.paramDefaults = Object.fromEntries(Object.entries(out.paramDefaults as Record<string, object>).filter(([, values]) => Object.keys(values).length > 0));
   for (const key of ["effects", "budgets", "roles", "paramDefaults"] as const) if (out[key] !== undefined && Object.keys(out[key] as object).length === 0) delete out[key];
   return out as GlobalFlowsLayer;
 }
@@ -90,7 +94,10 @@ function tidy(layer: GlobalFlowsLayer): GlobalFlowsLayer {
 function presetRefusal(builtinRoot: string | undefined, presets: NonNullable<FlowsLayer["paramDefaults"]>): string | null {
   for (const [templateId, values] of Object.entries(presets)) {
     let declared: NonNullable<ReturnType<typeof loadBuiltin>["template"]["params"]>;
-    try { declared = loadBuiltin(templateId, builtinRoot).template.params ?? {}; } catch { continue; }
+    // Only "no such built-in" defers the check to start; a built-in that fails to load is refused by name.
+    if (!existsSync(join(builtinRoot ?? BUILTIN_ROOT, templateId, TEMPLATE_FILE))) continue;
+    try { declared = loadBuiltin(templateId, builtinRoot).template.params ?? {}; }
+    catch (error) { throw new ControlError("flow-template-invalid", (error as Error).message); }
     for (const [paramId, value] of Object.entries(values)) {
       const param = declared[paramId];
       if (param === undefined) return `${templateId}.${paramId}: not a parameter of the template`;

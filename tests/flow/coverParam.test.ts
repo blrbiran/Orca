@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +10,11 @@ import { readRepositorySettingsBody, writeRepositorySettingsBody } from "../../s
 import { attachmentPath, attachmentsDir } from "../../src/flow/feedback/attachments.js";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { acceptMessage } from "../../src/flow/messages.js";
-import { IMAGE_PARAM_MAX_BYTES } from "../../src/flow/params.js";
+import { IMAGE_PARAM_MAX_BYTES, unreachableImageParam } from "../../src/flow/params.js";
+import type { LoadedRun } from "../../src/flow/kinds/registry.js";
+import type { FlowStep } from "../../src/flow/template/schema.js";
+import { seedBuiltinTemplates } from "../../src/flow/builtins.js";
+import { loadRun } from "../../src/flow/kernel.js";
 import { readFlowSettings } from "../../src/flow/settings.js";
 import { applySetFlowSettings } from "../../src/flow/settingsCommands.js";
 import { FLOW_LOCKABLE_PATHS } from "../../src/flow/settingsSchema.js";
@@ -27,6 +31,8 @@ import { SLUG, TITLES, WECHAT, wechatFile, wechatWorld, zeroRound } from "./fixt
  * Only a settings preset may name an absolute image; as built (spec §21 entry 3) such a path cannot reach a step's
  * workspace, so the step that would use it is refused by name before it starts.
  */
+/** Version 2 of the built-in as it shipped at 9170f9ed (a fixture copy: the repository now ships version 3). */
+const V2_YAML = join(import.meta.dirname, "fixtures", "wechat-article-v2.template.yaml");
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46]);
 const GIF = Buffer.from("GIF89a\x01\x00\x01\x00", "latin1");
@@ -62,6 +68,10 @@ describe("the image param type (§8.1)", () => {
     put("a.gif", GIF);
     mkdirSync(join(w.folder, "dir.png"));
     symlinkSync(join(w.folder, "a.gif"), join(w.folder, "link.gif"));
+    // A parent directory that is a link reaches outside the folder (review fix 1, Important 1).
+    const elsewhere = tempRoot();
+    writeFileSync(join(elsewhere, "a.gif"), GIF);
+    symlinkSync(elsewhere, join(w.folder, "linkdir"));
     const start = (pic: string) => refusalOf(w.start({ templateRef: "builtin/t", params: { pic } }));
     expect(await start("cover.bmp")).toBe("flow-param-invalid:pic");
     expect(await start("missing.png")).toBe("flow-param-invalid:pic");
@@ -71,10 +81,22 @@ describe("the image param type (§8.1)", () => {
     expect(await start("dir.png")).toBe("flow-param-invalid:pic");
     expect(await start("link.gif")).toBe("flow-param-invalid:pic");
     expect(await start("../outside.png")).toBe("flow-param-invalid:pic");
+    expect(await start("linkdir/a.gif")).toBe("flow-param-invalid:pic");
     expect(await start("edge.png")).toBe("started");
     expect(await start("a.gif")).toBe("started");
-    // Only refusals so far wrote nothing but the two accepted images to the store.
+    // The refusals stored nothing: the store holds exactly the two accepted images.
+    const edge = readFileSync(join(w.folder, "edge.png"));
+    expect(readdirSync(attachmentsDir(w.deps.env)).sort()).toEqual([`${sha(edge)}.png`, `${sha(GIF)}.gif`].sort());
     expect(readFileSync(attachmentPath(w.deps.env, `${sha(GIF)}.gif`))).toEqual(GIF);
+  });
+
+  it("a start refused after its image was read (here: no agent for its role) stores nothing", async () => {
+    const w = await flowWorld({ t: { yaml: TPL.yaml.replace("steps:\n", "roles:\n  writer: {tier: high}\nsteps:\n").replace("{id: use, kind: draft, prompt: u.md}", "{id: use, kind: draft, role: writer, prompt: u.md}"), assets: TPL.assets } }, { agents: [] });
+    cleanups.push(() => w.dispose());
+    w.deps.env.ORCA_CONTROL_DIR = join(w.root, "control");
+    writeFileSync(join(w.folder, "pic.png"), PNG);
+    expect(await refusalOf(w.start({ templateRef: "builtin/t", params: { pic: "pic.png" } }))).toBe("role-unresolved:writer");
+    expect(existsSync(attachmentsDir(w.deps.env)) ? readdirSync(attachmentsDir(w.deps.env)) : []).toEqual([]);
   });
 
   it("an absolute value at start is refused; the same value from a settings preset is accepted", async () => {
@@ -113,6 +135,22 @@ describe("the image param type (§8.1)", () => {
   });
 });
 
+describe("an absolute image at the point of use (§21 entry 3)", () => {
+  it("is found in every step field a variable expands in: prompt asset, checks, tool rules, an ask's prompt and writeTo, hints.equals", () => {
+    const run = (step: FlowStep, assets: Record<string, string> = {}) => ({
+      template: { params: { pic: { type: "image" }, note: { type: "text" } }, steps: [step] }, assets, params: { pic: "/abs/cover.png", note: "/abs/not-an-image" },
+    }) as unknown as LoadedRun;
+    const uses = (step: FlowStep, assets?: Record<string, string>) => unreachableImageParam(run(step, assets), step);
+    expect(uses({ id: "w", kind: "work", prompt: "p.md" } as FlowStep, { "p.md": "Upload {{param.pic}}." })).toBe("pic");
+    expect(uses({ id: "w", kind: "work", prompt: "p.md" } as FlowStep, { "p.md": "Note {{param.note}}." })).toBeNull();
+    expect(uses({ id: "c", kind: "check", acceptance: { checks: [{ run: "test -s '{{param.pic}}'", role: "gate" }] } } as FlowStep)).toBe("pic");
+    expect(uses({ id: "w", kind: "work", prompt: "p.md", tools: { commands: [{ prefix: "cp '{{param.pic}}'" }] } } as FlowStep, { "p.md": "x" })).toBe("pic");
+    expect(uses({ id: "a", kind: "ask", prompt: "Is {{param.pic}} right?", form: {} } as unknown as FlowStep)).toBe("pic");
+    expect(uses({ id: "a", kind: "ask", form: {}, writeTo: { file: "{{param.pic}}.md", frontmatter: "t" } } as unknown as FlowStep)).toBe("pic");
+    expect(uses({ id: "w", kind: "work", prompt: "p.md", hints: { equals: "headings({{param.pic}})" } } as FlowStep, { "p.md": "x" })).toBe("pic");
+  });
+});
+
 describe("preset defaults (§8.2)", () => {
   it("given > project > global > template, for every param type", async () => {
     const w = await smallWorld();
@@ -144,12 +182,19 @@ describe("preset defaults (§8.2)", () => {
     // An absolute image is the shape a preset may have; the file is read only at start (§16).
     expect(set(GLOBAL, { t: { pic: "/covers/default-cover.png", tone: "warm" } })).toBe("accepted");
     expect(set(REPO, { t: { tone: "project" } })).toBe("accepted");
+    // A built-in that fails to load is refused by name, not skipped as if it were absent.
+    mkdirSync(join(w.builtinRoot, "broken"));
+    writeFileSync(join(w.builtinRoot, "broken", "template.yaml"), "format: orca-flow-v1\nid: broken\nsteps: []\n");
+    expect(set(GLOBAL, { broken: { x: 1 } })).toMatch(/^flow-template-invalid: /);
     // A template that is not a built-in is checked at start instead.
     expect(set(GLOBAL, { other: { anything: 1 } })).toBe("accepted");
     expect(readFlowSettings(w.store, "repo").paramDefaults).toEqual({
       other: { anything: { value: 1, source: "global", lockedBy: null } },
       t: { pic: { value: "/covers/default-cover.png", source: "global", lockedBy: null }, tone: { value: "project", source: "project", lockedBy: null } },
     });
+    // A template with no preset leaves no empty entry behind (here: nothing changes at all).
+    expect(set(GLOBAL, { zzz: {} })).toMatch(/^no-op-command/);
+    expect(Object.keys(readFlowSettings(w.store, null).paramDefaults)).toEqual(["other", "t"]);
     expect(FLOW_LOCKABLE_PATHS.some((path) => path.startsWith("paramDefaults"))).toBe(false);
   });
 });
@@ -288,6 +333,36 @@ describe("a params change mid-run (§8.3)", { timeout: 60_000 }, () => {
     expect(listPlans(w.store, flowRunId).filter((p) => (p.candidates as PlanCandidates).trigger === "params")).toEqual([]);
   });
 
+  it("a params change through a linked parent directory is refused; a change refused at a later key stores nothing", async () => {
+    const world = await wechat();
+    const { w } = world;
+    const flowRunId = await wechatRun(world, {});
+    const elsewhere = tempRoot();
+    writeFileSync(join(elsewhere, "c.png"), PNG);
+    symlinkSync(elsewhere, join(w.folder, "linkdir"));
+    expect(await params(world, flowRunId, { coverImage: "linkdir/c.png" }, "link")).toMatchObject({ state: "rejected", reason: "flow-param-invalid:coverImage" });
+    writeFileSync(join(w.folder, "good.png"), PNG);
+    expect(await params(world, flowRunId, { coverImage: "good.png", nope: 1 }, "later")).toMatchObject({ state: "rejected", reason: "flow-param-invalid:nope" });
+    expect(existsSync(attachmentsDir(w.deps.env)) ? readdirSync(attachmentsDir(w.deps.env)) : []).toEqual([]);
+  });
+
+  it("params {coverImage: null} on a run that took the person's cover makes `cover` run again", async () => {
+    const world = await wechat();
+    const { w } = world;
+    writeFileSync(join(w.folder, "cover.png"), PNG);
+    const flowRunId = await wechatRun(world, { coverImage: "cover.png" });
+    world.children.land(childGroupIdOf(flowRunId, "to-draft-box", 1), {}, { flow: { effect: { remoteId: "media-1" } } });
+    await w.advance();
+    expect(w.latest(flowRunId, "cover")).toMatchObject({ state: "skipped" });
+    expect(await params(world, flowRunId, { coverImage: null }, "clear")).toMatchObject({ state: "applied" });
+    expect(bodyOf(w.store, flowRunId).images).toBeUndefined();
+    for (let open = lastPlan(world, flowRunId); open.state === "proposed"; open = lastPlan(world, flowRunId)) {
+      const others = (open.candidates as PlanCandidates).list.map((c) => c.stepKey).filter((k) => k !== "cover" && k !== "to-draft-box");
+      await w.answer(w.calls.length - 1, { skips: others.map((stepKey) => ({ stepKey, reason: "unchanged" })) });
+    }
+    expect(world.children.opened.has(childGroupIdOf(flowRunId, "cover", 2))).toBe(true);
+  });
+
   it("is checked as at start: folder-relative only, declared params, null unsets a param that is not required", async () => {
     const world = await wechat();
     const { w } = world;
@@ -307,5 +382,27 @@ describe("a params change mid-run (§8.3)", { timeout: 60_000 }, () => {
     expect(w.store.db.prepare("SELECT state FROM flow_messages WHERE flow_run_id=? AND request_id='ok'").get(flowRunId)).toEqual({ state: "applied" });
     expect(bodyOf(w.store, flowRunId).params).toMatchObject({ language: "en", illustrations: true });
     expect(bodyOf(w.store, flowRunId).params).not.toHaveProperty("coverImage");
+  });
+});
+
+describe("a run started on built-in version 2 (§8.5)", { timeout: 60_000 }, () => {
+  it("still loads and advances on its own stored template after version 3 is seeded", async () => {
+    const v2 = readFileSync(V2_YAML, "utf8");
+    const world = await wechatWorld();
+    cleanups.push(() => world.w.dispose());
+    const { w } = world;
+    const v3 = readFileSync(join(w.builtinRoot, "wechat-article", "template.yaml"), "utf8");
+    writeFileSync(join(w.builtinRoot, "wechat-article", "template.yaml"), v2);
+    writeFileSync(join(w.folder, "cover.png"), PNG);
+    const { flowRunId } = await w.start({ templateRef: "builtin/wechat-article", params: { idea: "Tea for engineers", coverImage: "cover.png" } });
+    expect(loadRun(w.store, flowRunId).template).toMatchObject({ version: 2, params: { coverImage: { type: "path", required: false } } });
+    writeFileSync(join(w.builtinRoot, "wechat-article", "template.yaml"), v3);
+    expect(seedBuiltinTemplates(w.store, 9, w.builtinRoot)).toEqual([expect.objectContaining({ id: "wechat-article", version: 3 })]);
+    const run = loadRun(w.store, flowRunId);
+    expect(run.template).toMatchObject({ version: 2, params: { coverImage: { type: "path", required: false } } });
+    expect(run.params.coverImage).toBe("cover.png");
+    await w.advance();
+    await w.answer(0, zeroRound);
+    expect(world.children.opened.has(childGroupIdOf(flowRunId, "outline", 1))).toBe(true);
   });
 });

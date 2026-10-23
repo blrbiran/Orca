@@ -53,7 +53,7 @@ import { EFFECT_NOT_REPORTED, effectUnreported, gateEffect, settleEffect } from 
 import { consumeAtBoundary } from "./messages.js";
 import { heldBy, markPointer, marksOf, suppressedSteps, type Mark } from "./marks.js";
 import { advanceIntakes, completeIntakeCall, hasBusyIntake } from "./feedback/intake.js";
-import { paramsIdentity, resolveStartParams, unreachableImageParam } from "./params.js";
+import { paramsIdentity, resolveStartParams, storeImages, unreachableImageParam } from "./params.js";
 
 /** A refusal by name (spec §14, Global Constraints' codes); nothing was written. */
 export class FlowRefusal extends Error {
@@ -184,8 +184,8 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
   const template = loaded.template;
   // Gaps spec §8.2: the settings' presets for this template (project > global) fill what the start did not give.
   const presets = flowLayers(deps.store, input.projectId ?? null);
-  const { params, images } = resolveStartParams(template, input.params, {
-    now: new Date(deps.now()), env: deps.env, folder: input.dir ?? null, derive: deriveParam,
+  const { params, images: read } = resolveStartParams(template, input.params, {
+    now: new Date(deps.now()), folder: input.dir ?? null, derive: deriveParam,
     project: presets.project?.paramDefaults?.[template.id] ?? {}, global: presets.global?.paramDefaults?.[template.id] ?? {},
   });
   const run = deps.runCommand ?? ((command: string, cwd: string) => runShell(command, cwd, deps.env.PATH === undefined ? process.env : { ...process.env, ...deps.env }));
@@ -199,6 +199,8 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
   const groupId = `flow-${id}`;
   // §6.3: confirmed once, before anything is written (a refusal leaves no vault import either).
   const confirmation: FlowParentConfirmation = deps.confirmParent === undefined ? { call: null, children: null } : await deps.confirmParent({ flowRunId, groupId, projectId, by: input.by, operatorId: input.operatorId ?? input.by });
+  // Gaps spec §8.1: image params are stored only now, after every check that can refuse the start.
+  const images = storeImages(deps.env, read);
   // §5.2: the person's folder is imported into its vault; the import is the base of every composition.
   let vault: Vault | null = null;
   let importCommit: string | null = null;
