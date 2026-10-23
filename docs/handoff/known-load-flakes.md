@@ -150,3 +150,14 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 | Orca › `tests/control/taskResultCollector.test.ts` › 「caches only old command refusal…」 | `control-peer-timeout`（与上表同文件同形状，另一条用例）；全量负载约 24–32 时红，单跑 30/30 |
 | Orca › web `tests/settingsScopes.test.tsx` › 「default saves preserve…」 | 一次读取里多出一行「decisions could not be read (route-not-found)」；与变异跑同机时红，单跑 12/12 |
 | Orca › web `tests/controlCommandRecovery.test.tsx` › 「parks a missing group once…」 | 断言形状（不是超时），n＝1；单跑 3/3，同提交第二次全量绿 |
+
+## 会话 `ffec7b28`（2026-10-24）新见形状（未满足「个位数负载 3/3」，**下次红先对照，不豁免**）
+
+> 出处：`.superpowers/sdd/2026-10-24-session-ffec7b28/progress.md`（R2 server／web、repin 三条分支的全量；三条分支互不相干却红同一组文件）。
+
+| 仓 › 文件 › 现象 | 观测 |
+|---|---|
+| Orca › `tests/flow/startForm.test.ts` › 「answers the templates and a folder's images…」 | `fetch failed`／ECONNRESET 或约 14 s 超时；全量负载 28–80 时红（R2 server、R2 web、repin 三条分支都见过）；分支单跑 3/3（负载 8–16），未改动 main 单跑绿 |
+| Orca › `driverReconcileN`、`handoffE2E`、`schedulerBridge`、`taskResultPaired`、`criteriaBaseRun`、`driverReconcileDecisions` | 22–113 s 超时，全量负载约 50–80 时红；R2 web 分支单跑全绿，未改动 main 同 6 文件单跑 48/48（负载 10–17） |
+| Orca › 全量里一批文件级失败「~/.orca write guard」 | 测试期间**真面板**往 `~/.orca/panel/logs/panel.err.log` 追加（9453 → 10764 B），不是测试写的；那 13 个文件单跑全绿。全量跑时面板在线就会撞上 |
+| ccloop › `tests/runtime/taskResults` 「pages at most 64…」、`ompUpdates`、`savedResultRecovery.native`、`skillsController` 等 | 负载 49–102 时红；单跑绿或未改动 `f4de340` 同形；明细在 `/private/tmp/orca-ffec7b28/lt/flake-table.txt` 与 ccloop 分支报告 |
