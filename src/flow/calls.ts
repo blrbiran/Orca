@@ -32,6 +32,7 @@ import { readParentConfirmation } from "./parent.js";
 import { drawAllocation, POOL_EXHAUSTED, returnUnspent } from "./pool.js";
 import { FEEDBACK_KEY, finishExecution, getIntake, getPlan, listExecutions, moveIntake, PLAN_KEY, putPlan, type ExecutionKey } from "./store.js";
 import type { IntakeBody } from "./feedback/intakeSchema.js";
+import type { CallRef } from "./spend.js";
 
 /** What a flow call's run row carries besides the shared single-call fields: the execution it answers. */
 export interface FlowCallIdentity { flowRunId: string; stepKey: string; seq: number }
@@ -47,7 +48,7 @@ function executionOf(store: ControlStore, key: ExecutionKey) {
  * Spec §7.3: a plan's rerun-proposal call answers the plan (`{flowRunId, "@plan", planNo}`), not an execution. Its
  * waiting state is the plan's open proposal; its result goes onto the proposal for the kernel's next pass.
  */
-type PlanCall = { call: { runId?: string } | null; callResult?: FlowCallResult; skips: unknown };
+type PlanCall = { call: { runId?: string } | null; callResult?: FlowCallResult; skips: unknown; calls?: CallRef[] };
 function planCallOf(store: ControlStore, key: ExecutionKey) {
   const plan = getPlan(store, key.flowRunId, key.seq);
   const proposal = plan?.proposal as PlanCall | null | undefined;
@@ -71,13 +72,20 @@ function setIntakeCall(store: ControlStore, key: ExecutionKey, patch: Partial<No
   const open = intakeCallOf(store, key)!;
   moveIntake(store, key.flowRunId, key.seq, open.intake.state, open.intake.state, { ...open.intake.body, call: { ...open.call, ...patch } }, Date.now());
 }
-function claimIntakeCall(store: ControlStore, request: FlowCallRequest): "claimed" | "exhausted" | "unconfirmed" {
+function claimIntakeCall(store: ControlStore, request: FlowCallRequest, at: number): "claimed" | "exhausted" | "unconfirmed" {
   if (intakeCallOf(store, request.key)?.call.runId !== null) throw new ControlError("recovery-blocked", `flow-call-intake-moved:${request.key.seq}`);
   const parent = readParentConfirmation(store, request.groupId);
   if (parent?.call == null) { setIntakeCall(store, request.key, { callResult: { runId: "", rawOutput: null, failure: "flow-call-unconfirmed" } }); return "unconfirmed"; }
   const claimed = insertCallRun(store, request, parent.call);
   if ("exhausted" in claimed) { setIntakeCall(store, request.key, { callResult: { runId: "", rawOutput: null, failure: POOL_EXHAUSTED } }); return "exhausted"; }
-  setIntakeCall(store, request.key, { runId: claimed.runId });
+  // Gaps spec §10: the run that answers this call stays named on the intake's calls list (its spend reads it).
+  const open = intakeCallOf(store, request.key)!;
+  const calls = [...open.intake.body.calls];
+  let entry = -1;
+  for (let i = calls.length - 1; i >= 0 && entry < 0; i -= 1) if (calls[i]!.runId === undefined && calls[i]!.purpose === request.purpose) entry = i;
+  if (entry < 0) calls.push({ purpose: request.purpose, at, runId: claimed.runId });
+  else calls[entry] = { ...calls[entry]!, runId: claimed.runId };
+  moveIntake(store, request.key.flowRunId, request.key.seq, open.intake.state, open.intake.state, { ...open.intake.body, call: { ...open.call, runId: claimed.runId }, calls }, Date.now());
   return "claimed";
 }
 
@@ -87,7 +95,7 @@ function claimIntakeCall(store: ControlStore, request: FlowCallRequest): "claime
  */
 export function claimFlowCall(store: ControlStore, request: FlowCallRequest, at: number): "claimed" | "exhausted" | "unconfirmed" {
   if (request.key.stepKey === PLAN_KEY) return claimPlanCall(store, request, at);
-  if (request.key.stepKey === FEEDBACK_KEY) return claimIntakeCall(store, request);
+  if (request.key.stepKey === FEEDBACK_KEY) return claimIntakeCall(store, request, at);
   const parent = readParentConfirmation(store, request.groupId);
   const execution = executionOf(store, request.key);
   if (execution === undefined || execution.state !== "running") throw new ControlError("recovery-blocked", `flow-call-execution-moved:${request.key.stepKey}#${request.key.seq}`);
@@ -102,7 +110,9 @@ export function claimFlowCall(store: ControlStore, request: FlowCallRequest, at:
     finishExecution(store, request.key, "running", "parked", at, { body: { ...unsent, needsYou: { reason: POOL_EXHAUSTED, detail: claimed.exhausted } } });
     return "exhausted";
   }
-  finishExecution(store, request.key, "running", "running", at, { body: { ...body, call: { purpose: request.purpose, runId: claimed.runId } } });
+  // Gaps spec §10: `calls` keeps every run this execution's calls were answered by; completeFlowCall deletes only `call`.
+  const calls = [...((body.calls as CallRef[] | undefined) ?? []), { runId: claimed.runId, purpose: request.purpose }];
+  finishExecution(store, request.key, "running", "running", at, { body: { ...body, call: { purpose: request.purpose, runId: claimed.runId }, calls } });
   return "claimed";
 }
 
@@ -119,7 +129,7 @@ function claimPlanCall(store: ControlStore, request: FlowCallRequest, _at: numbe
     setPlanCall(store, request.key, { callResult: { runId: "", rawOutput: null, failure: POOL_EXHAUSTED } });
     return "exhausted";
   }
-  setPlanCall(store, request.key, { call: { runId: claimed.runId } });
+  setPlanCall(store, request.key, { call: { runId: claimed.runId }, calls: [...(planCallOf(store, request.key)!.proposal.calls ?? []), { runId: claimed.runId, purpose: request.purpose }] });
   return "claimed";
 }
 

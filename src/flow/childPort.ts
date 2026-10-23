@@ -115,9 +115,10 @@ async function selectionsHashOf(deps: DriverChildPortDeps, groupId: string): Pro
   return hash;
 }
 
-type RunBody = { runId: string; state: string; drive?: DriveRecord; cumulative?: { work?: { tokens?: number } }; recoverable?: boolean; checkpointId?: string };
+type RunBody = { runId: string; state: string; drive?: DriveRecord; cumulative?: { work?: { tokens?: number } }; unknown?: { work?: boolean }; recoverable?: boolean; checkpointId?: string };
 
-function childRuns(store: ControlStore, groupId: string): RunBody[] {
+/** A child group's driver runs (phase `work`), oldest first: its pool return here and its spend (spend.ts, gaps §10). */
+export function childRuns(store: ControlStore, groupId: string): RunBody[] {
   return store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId).map((row) => JSON.parse(String(row.body)) as RunBody)
     .filter((body) => (body as { phase?: unknown }).phase === "work");
 }

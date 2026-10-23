@@ -12,7 +12,8 @@ import type { ToolRulesReport } from "../control/toolRules.js";
 import { FlowRefusal, latestByStep, loadRun, openAsks, recordOfExecution } from "./kernel.js";
 import { marksOf } from "./marks.js";
 import { waitingIntakes } from "./feedback/intake.js";
-import { getFlowRun, listEffects, listExecutions, listHeads, listMessages, listPlans, type ExecutionRow } from "./store.js";
+import { executionSpend, intakeSpend, planSpend, sumSpend, type Spend } from "./spend.js";
+import { getFlowRun, listEffects, listExecutions, listHeads, listIntakes, listMessages, listPlans, type ExecutionRow } from "./store.js";
 
 /**
  * One execution as the run page shows it (Task 16): its state, why it ran, its output, red flags and -- for a `work`
@@ -24,6 +25,8 @@ export interface FlowExecutionViewV1 {
   flags: string[]; failure: string | null;
   output: { kind: "commit" | "artifact" | "none"; ref: string | null; hash: string | null } | null;
   toolRules: ToolRulesReport | null; ask: unknown; needsYou: unknown; reported: unknown; warnings: string[]; effectRecordId: string | null;
+  /** Gaps spec §10: the tool-reported tokens of its calls and child group; never an allocation. */
+  spend: Spend;
 }
 
 /** Task 16: the run list (`orca flow list`, the kanban's flow cards); paired with the Web's copy (webParity). */
@@ -54,7 +57,7 @@ export function readFlowList(store: ControlStore): FlowListV1 {
   };
 }
 
-function executionView(execution: ExecutionRow): FlowExecutionViewV1 {
+function executionView(store: ControlStore, execution: ExecutionRow): FlowExecutionViewV1 {
   const body = execution.body as Record<string, unknown>;
   const record = (body.record ?? null) as { toolRules?: ToolRulesReport | null } | null;
   return {
@@ -63,6 +66,7 @@ function executionView(execution: ExecutionRow): FlowExecutionViewV1 {
     output: execution.outputKind === null ? null : { kind: execution.outputKind, ref: execution.outputRef, hash: execution.outputHash },
     toolRules: record?.toolRules ?? null, ask: body.ask ?? null, needsYou: body.needsYou ?? null, reported: body.reported ?? null,
     warnings: (body.warnings as string[] | undefined) ?? [], effectRecordId: typeof body.effectRecordId === "string" ? body.effectRecordId : null,
+    spend: executionSpend(store, execution),
   };
 }
 
@@ -78,6 +82,11 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
   const executions = listExecutions(store, flowRunId);
   const latest = latestByStep(executions);
   const heads = listHeads(store, flowRunId);
+  const plans = listPlans(store, flowRunId).map((plan) => ({ ...plan, spend: planSpend(store, plan) }));
+  // Gaps spec §10: each feedback intake's single calls (triage, its clarify round).
+  const intakes = listIntakes(store, flowRunId).map((intake) => ({ messageSeq: intake.messageSeq, state: intake.state, spend: intakeSpend(store, intake) }));
+  const views = new Map(executions.map((e) => [`${e.stepKey}#${e.seq}`, withArtifactRules(store, e, executionView(store, e))]));
+  const viewOf = (e: ExecutionRow) => views.get(`${e.stepKey}#${e.seq}`)!;
   const decisions = store.db.prepare(`SELECT seq, grade, step_key AS stepKey, body, "by" FROM flow_decisions WHERE flow_run_id=? ORDER BY seq`).all(flowRunId)
     .map((d) => ({ ...d, body: JSON.parse(String(d.body)) as unknown }));
   return {
@@ -94,14 +103,18 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
       return {
         stepKey: step.id, kind: step.kind, head: heads[step.id] ?? null,
         executor: "executor" in step ? step.executor ?? null : null, parallelWith: step.parallelWith ?? null, effect,
-        latest: newest === undefined ? null : withArtifactRules(store, newest, executionView(newest)),
-        executions: mine.map((e) => withArtifactRules(store, e, executionView(e))),
+        latest: newest === undefined ? null : viewOf(newest),
+        executions: mine.map(viewOf),
+        spend: sumSpend(mine.map((e) => viewOf(e).spend)),
         // §10.3: a clarify step's rounds of its newest execution, and the active chain over them.
         clarify: step.kind !== "clarify" || newest === undefined ? null : clarifyOf(readRoundsAt(store, { groupId: run.row.groupId, stepKey: step.id, execSeq: newest.seq })),
       };
     }),
     openAsks: openAsks(store, flowRunId),
-    plans: listPlans(store, flowRunId),
+    plans,
+    intakes,
+    // Gaps spec §10: every execution, intake and plan of the run; tool-reported tokens only.
+    spend: sumSpend([...executions.map((e) => viewOf(e).spend), ...intakes.map((i) => i.spend), ...plans.map((p) => p.spend)]),
     effects: listEffects(store, flowRunId),
     decisions,
   };

@@ -47,7 +47,8 @@ export const PROPOSAL_JSON_SCHEMA = Object.freeze({
  */
 export interface CarriedDecisions { pending: Array<{ stepKey: string; question: string; fromPlan: number }>; accepted: AcceptedItem[]; run: Array<{ stepKey: string; question: string; answer: PendingAnswer }> }
 export interface PlanCandidates { list: Candidate[]; feedback: Record<string, string[]>; edits: string[]; trigger: string; carried?: CarriedDecisions; fills?: string[] }
-export interface PlanProposal { retries: number; lastInvalid: string | null; call: { runId?: string } | null; callResult?: FlowCallResult; skips: Skip[] | null; unsure?: Unsure[] | null; exhausted: string | null }
+/** `calls`: every run a proposal call of this plan was answered by (calls.ts, at claim; gaps spec §10 spend). */
+export interface PlanProposal { retries: number; lastInvalid: string | null; call: { runId?: string } | null; callResult?: FlowCallResult; skips: Skip[] | null; unsure?: Unsure[] | null; exhausted: string | null; calls?: Array<{ runId: string; purpose: string }> }
 export type PlanStepChoice = "run" | "accept-unchanged";
 export interface PendingAnswer { choice: PlanStepChoice; by: string; via: string; at: number; source: "person" | "timeout" | "carried"; fromPlan?: number }
 /** Gaps spec §5.2: an unsure candidate under `auto` asks the person; at `deadline` it resolves to accept-unchanged. */

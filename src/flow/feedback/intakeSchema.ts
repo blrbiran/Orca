@@ -28,8 +28,8 @@ export const IntakeBody = z.object({
   planNo: z.number().int().min(1).nullable(),
   /** `triage-defaulted`, `clarify-skipped`, ... */
   flags: z.array(z.string()),
-  /** The single calls spent on this intake (at most 3, §4.6). */
-  calls: z.array(z.object({ purpose: z.string(), at: z.number().int() }).strict()),
+  /** The single calls spent on this intake (at most 3, §4.6); `runId` once claimed: the driver run whose usage is its spend (§10). */
+  calls: z.array(z.object({ purpose: z.string(), at: z.number().int(), runId: z.string().optional() }).strict()),
   /** Rewind (§4.2): the message seq whose stored intake this one reuses. */
   reusedFrom: z.number().int().min(1).nullable(),
   /** Gaps plan Task 5 (schema extended by the intake driver): the step a step-targeted intake is on (null: the run). */
