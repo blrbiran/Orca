@@ -926,3 +926,36 @@ Appended per Rule 13: the sections above stay as published; entries here correct
      `to-draft-box` workspace at `.orca/params/coverImage.<ext>`", "`{{param.coverImage}}` expands to that path", "the copy
      is absent from the attempt commit and the folder", and a preset cover reaching md2publish-draft — the same choice as
      entry 2: (a) an absolute path outside the workspace plus ccloop read access, or (b) a ccloop seeding change (Rule 16).
+
+4. **Attachments and `image` params: the human chose (a), absolute paths outside the workspace (gaps plan Task 6b,
+   implementer of session `0e13a9b7`, 2026-10-23, on `b05fc6d0`; answers the question entries 2 and 3 left open).**
+   - **The human's choice (verbatim):** "附件选 (a)，继续做完剩下的任务".
+   - **The measurement it rests on (controller, session `0e13a9b7`, paid under the round's authorisation; ledger
+     `.superpowers/sdd/2026-10-23-session-0e13a9b7/progress.md`).** Command:
+     `claude -p --permission-mode acceptEdits --model haiku --output-format json "Use the Read tool to read the file <abs>/outside/note.txt …"`,
+     run from a git directory that does not contain the file, with no `--add-dir`. Version: claude 2.1.309. Result: the
+     file's line (`"result": "SECRET-LINE-42"`), `permission_denials: []`, `is_error: false`. Cost as the tool reported
+     it: `total_cost_usd` 0.00782816 (a second run with `--add-dir`: the same result, 0.00844611). Evidence:
+     `/private/tmp/orca-0e13a9b7/measure-read/r1-noadd.json` (and `r2-adddir.json`). This was a bare `claude -p` run, not
+     an attempt opened by ccloop; it shows claude under `acceptEdits` reads an absolute path outside its working
+     directory without a grant, nothing more.
+   - **What is built now.**
+     - A `work` execution that takes feedback with attachments gets each one in its prompt as the absolute path of its
+       stored file, `$ORCA_CONTROL_DIR/flow-attachments/<sha256>.<ext>` (the root resolved from the passed environment,
+       as the store resolves it). The plan stores the feedback text with the ids; the work prompt's last feedback line is
+       rewritten to the paths when the prompt is built (`feedbackForWork`, `src/flow/feedback/intake.ts`). Single calls
+       -- triage, the feedback clarify round, and a `draft` step that takes the feedback -- keep the ids only.
+     - `{{param.<id>}}` of an `image` param expands, in prompts and in commands (check commands, a work step's gates and
+       tool rules), to the absolute path of its stored copy, for a folder-relative value and a preset alike: the step
+       sees exactly the bytes that were hashed (§8.1 "always a copy"; `expansionParams`, `src/flow/params.ts`). An ask's
+       `writeTo` and `hints.equals` name workspace files and keep the value as written.
+     - `flow-param-unreachable` (entry 3) is removed: a preset cover now reaches the draft box. It had no en/zh copy.
+     - Nothing is copied into a workspace and `.orca/` is not excluded: the files stay in the store, so the attempt
+       commit, the vault head and the folder never hold them (guards kept in `tests/flow/attachments.test.ts`,
+       `tests/flow/coverParam.test.ts`, `tests/flow/outOfRepoWrites.test.ts`). §16's store row is unchanged (dir `0700`,
+       files `0600`, explicit); §16's `.orca/attachments/` and `.orca/params/` row is not built.
+     - The named todos of entries 2 and 3 are real tests now. `prompts/to-draft-box.md` is unchanged: it passes
+       `{{param.coverImage}}` as given and does not call it a workspace path.
+   - **Unmeasured.** Read access for **codex** and **omp** to a path outside the workspace has not been measured (codex
+     quota returns 2026-10-27). A work step on either runtime may not see the image or screenshot. To be measured next
+     session.

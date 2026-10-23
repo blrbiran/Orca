@@ -7,22 +7,20 @@
  * (`storeImage`, the §4.7 store). The run records `{source, sha256, ext}`; the params identity (`params_sha256`) takes the
  * bytes' hash in place of the path, so other bytes at the same path move it and the same bytes under a new path do not.
  *
- * ⚠️ §8.1 items 3-4 (a copy into each attempt workspace at `.orca/params/<id>.<ext>`, the variable expanding to it) are NOT
- * built: the premise failed with the real driver (spec §21 entries 2 and 3). `{{param.<id>}}` of an image expands to its
- * value as written. A folder-relative value names a file of the person's folder, which reaches the attempt through the
- * import (as a `path` param's file does); an absolute value -- only a settings preset may carry one -- cannot reach it,
- * so a step that would use it is refused before it starts (`unreachableImageParam`).
+ * §8.1 items 3-4 as built after the human's choice (a) (spec §21 entry 4; the workspace copy's premise failed, entries 2
+ * and 3): `{{param.<id>}}` of an image expands, in prompts and commands, to the absolute path of its stored copy
+ * `$ORCA_CONTROL_DIR/flow-attachments/<sha256>.<ext>` -- the bytes that were hashed, outside the workspace, so never
+ * committed -- whether the value was folder-relative or a preset (`expansionParams`).
  */
 import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { sha256Canonical } from "../control/canonicalJson.js";
-import { sniffImage, storeImage, type ImageExt } from "./feedback/attachments.js";
+import { attachmentPath, sniffImage, storeImage, type ImageExt } from "./feedback/attachments.js";
 import { FlowRefusal } from "./kernel.js";
 import type { LoadedRun } from "./kinds/registry.js";
 import { isInsidePath } from "./template/checklist.js";
-import type { FlowParam, FlowStep, FlowTemplate } from "./template/schema.js";
-import { varRefs } from "./template/vars.js";
+import type { FlowParam, FlowTemplate } from "./template/schema.js";
 import type { ParamValue } from "./template/when.js";
 
 export const IMAGE_PARAM_MAX_BYTES = 20 * 1024 * 1024;
@@ -192,36 +190,13 @@ export function applyParamsChange(params: Readonly<Record<string, ParamValue>>, 
   return { params: nextParams, images: nextImages };
 }
 
-/** Every text of a step that may carry a variable: its prompt-like assets, `vars`, checks, tool rules, writeTo, hints. */
-function stepTexts(run: LoadedRun, step: FlowStep): string[] {
-  const texts: string[] = [];
-  const asset = (rel: string | undefined): void => { if (rel !== undefined && run.assets[rel] !== undefined) texts.push(run.assets[rel]!); };
-  if ("prompt" in step) asset(step.prompt);
-  if (step.kind === "clarify") asset(step.background);
-  if (step.kind === "review") asset(step.rubric);
-  if ("vars" in step && step.vars !== undefined) texts.push(...Object.values(step.vars));
-  if ("acceptance" in step && step.acceptance !== undefined) texts.push(...step.acceptance.checks.map((c) => c.run));
-  if ("tools" in step && step.tools?.commands !== undefined) texts.push(...step.tools.commands.map((r) => ("exact" in r ? r.exact : r.prefix)));
-  // Every other field a variable is expanded in (checklist.ts checkVars): an ask's prompt and writeTo file, hints.equals.
-  if (step.kind === "ask" && step.prompt !== undefined && run.assets[step.prompt] === undefined) texts.push(step.prompt);
-  if (step.kind === "ask" && step.writeTo !== undefined) texts.push(step.writeTo.file);
-  if (step.hints?.equals !== undefined) texts.push(step.hints.equals);
-  return texts;
-}
-
 /**
- * Controller ruling (Task 6, spec §21 entry 3): an absolute image value (a settings preset) is a path outside the step's
- * workspace, which the step cannot be shown -- the id of the first such param the step uses, else null. The kernel
- * refuses the step before it starts (`flow-param-unreachable:<id>`): no effect gate, no draw, no child.
+ * §8.1 "always a copy" (spec §21 entry 4): the params a prompt or a command expands -- each stored image as the absolute
+ * path of its copy in the run's file store, never the path as given. Fields that name a file of the workspace (an ask's
+ * `writeTo`, `hints.equals`) keep the value as written.
  */
-export function unreachableImageParam(run: LoadedRun, step: FlowStep): string | null {
-  const declared = run.template.params ?? {};
-  for (const text of stepTexts(run, step)) {
-    for (const ref of varRefs(text)) {
-      if (ref.kind !== "param" || declared[ref.id]?.type !== "image") continue;
-      const value = run.params[ref.id];
-      if (typeof value === "string" && isAbsolute(value)) return ref.id;
-    }
-  }
-  return null;
+export function expansionParams(env: NodeJS.ProcessEnv, run: Pick<LoadedRun, "params" | "body">): Record<string, ParamValue> {
+  const out: Record<string, ParamValue> = { ...run.params };
+  for (const [id, image] of Object.entries(run.body.images ?? {})) if (id in out) out[id] = attachmentPath(env, `${image.sha256}.${image.ext}`);
+  return out;
 }

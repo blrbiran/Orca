@@ -52,8 +52,8 @@ import { flowLayers, readFlowSettings } from "./settings.js";
 import { EFFECT_NOT_REPORTED, effectUnreported, gateEffect, settleEffect } from "./effects.js";
 import { consumeAtBoundary } from "./messages.js";
 import { heldBy, markPointer, marksOf, suppressedSteps, type Mark } from "./marks.js";
-import { advanceIntakes, completeIntakeCall, hasBusyIntake } from "./feedback/intake.js";
-import { paramsIdentity, resolveStartParams, storeImages, unreachableImageParam } from "./params.js";
+import { advanceIntakes, completeIntakeCall, feedbackForWork, hasBusyIntake } from "./feedback/intake.js";
+import { expansionParams, paramsIdentity, resolveStartParams, storeImages } from "./params.js";
 
 /** A refusal by name (spec §14, Global Constraints' codes); nothing was written. */
 export class FlowRefusal extends Error {
@@ -332,10 +332,11 @@ export function contextFor(deps: FlowDeps, run: LoadedRun, execution: ExecutionR
   const instructionOf = (): string => {
     if (!("prompt" in step) || step.prompt === undefined) return "";
     // §12.1: a declared parameter the run left unset reads empty in a prompt (never in a command); the workspace is the
-    // agent's working directory; a skill's directory is filled when its copy is injected (the driver's A2).
+    // agent's working directory; a skill's directory is filled when its copy is injected (the driver's A2). Gaps §8.1
+    // (spec §21 entry 4): an image reads as its stored copy's absolute path.
     const unset = Object.fromEntries(Object.keys(run.template.params ?? {}).map((id) => [id, ""]));
     return expandKeepingSkillDirs(asset(step.prompt), {
-      params: { ...unset, ...run.params }, runId: run.row.id, workspace: ".",
+      params: { ...unset, ...expansionParams(deps.env, run) }, runId: run.row.id, workspace: ".",
       ...(typeof body.effectRecordId === "string" ? { effectRecordId: body.effectRecordId } : {}),
     }, "prompt", "skills" in step ? step.skills ?? [] : []);
   };
@@ -348,7 +349,9 @@ export function contextFor(deps: FlowDeps, run: LoadedRun, execution: ExecutionR
       instruction: override.instruction ?? instructionOf(),
       pointers: pointers(),
       acceptance: override.acceptance ?? acceptanceOf(),
-      feedback: body.feedback,
+      // Gaps §4.7 (spec §21 entry 4): a work agent reads the feedback's screenshots at their store paths; a single call
+      // keeps their ids.
+      feedback: step.kind === "work" && body.feedback !== undefined ? feedbackForWork(body.feedback, deps.env) : body.feedback,
       retryReason: body.retryReason,
       unattended: UNATTENDED_KINDS.has(step.kind),
     }),
@@ -720,8 +723,6 @@ export function flagComposeConflict(deps: FlowDeps, run: LoadedRun, stepKey: str
 
 /** Gaps spec §6.3: what a held effect step's parked execution waits on. */
 export const DEFERRED_UPSTREAM = "deferred-upstream";
-/** Gaps spec §21 entry 3: the reason a step that would use an unreachable (absolute) image param fails with. */
-export const PARAM_UNREACHABLE = "flow-param-unreachable";
 const isDeferredPark = (execution: ExecutionRow): boolean =>
   execution.state === "parked" && (execution.body as { needsYou?: { kind?: unknown } }).needsYou?.kind === DEFERRED_UPSTREAM;
 
@@ -739,10 +740,6 @@ async function runQueued(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow
   }
   // §6.4, §7.2: what it ran on, so a later plan can tell which of its inputs moved since.
   const body: ExecutionBody = { ...(execution.body as ExecutionBody), basis, ranOnInputs: ranOnInputsOf(deps.store, run, step.id) };
-  // Gaps spec §8.1 as built (§21 entry 3): an absolute image preset cannot reach the step's workspace; the step is
-  // refused by name before its effect gate, its draw or its child -- never run with a dangling path.
-  const unreachable = unreachableImageParam(run, step);
-  if (unreachable !== null) return applyOutcome(deps, run, { ...execution, body }, "queued", { failed: { reason: `${PARAM_UNREACHABLE}:${unreachable}` } });
   // §9.2: an effect-classed step is gated on its level before it starts (its record is written with the move).
   const gate = deps.store.transaction(() => {
     const gated = (execution.body as ExecutionBody).effectRecordId === undefined ? gateEffect(deps, run, execution, step) : null;

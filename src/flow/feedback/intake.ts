@@ -29,6 +29,7 @@ import { changesBetween } from "../vault/copyBack.js";
 import type { PlanCandidates, PlanChosen } from "../rerun.js";
 import { vaultGitBytes } from "../vault/vault.js";
 import { extractAnchors, type Anchor } from "./anchors.js";
+import { ATTACHMENT_ID, attachmentPath } from "./attachments.js";
 import { FEEDBACK_CLARIFY_CAPS, feedbackClarifyHost } from "./host.js";
 import { emptyIntakeBody, type IntakeBody } from "./intakeSchema.js";
 import { locate, paragraphTexts, readingFile, type Hit, type LocateResult, type SearchFile } from "./locate.js";
@@ -496,6 +497,7 @@ export function markPlanned(deps: FlowDeps, flowRunId: string, seqs: readonly nu
   });
 }
 
+const ATTACHED_LINE = "The person attached screenshots (not available to you): ";
 /** §4.5: the person's text, where it points, the restated feedback and the round's Q&A, the attachment ids. */
 export function feedbackTextOf(body: IntakeBody): string {
   const lines = [body.text.trimEnd()];
@@ -506,9 +508,27 @@ export function feedbackTextOf(body: IntakeBody): string {
   }
   if (body.restated !== null) lines.push(`Restated: ${body.restated}`);
   if (body.qa.length > 0) lines.push("The person's answers to a short clarifying round:", ...body.qa.map((qa) => `- Q: ${qa.question}\n  A: ${qa.answer}`));
-  // §4.7 is open (spec §21 entry 2): the screenshots are named, not given to the agent.
-  if (body.attachments.length > 0) lines.push(`The person attached screenshots (not available to you): ${body.attachments.join(", ")}`);
+  // §4.7: the screenshots are named by id here (the text a plan stores); a work prompt reads them as paths (feedbackForWork).
+  if (body.attachments.length > 0) lines.push(`${ATTACHED_LINE}${body.attachments.join(", ")}`);
   return lines.join("\n");
+}
+
+/**
+ * §4.7 as built after the human's choice (a) (spec §21 entry 4): a `work` execution that takes the feedback gets each
+ * attachment as the absolute path of its stored file `$ORCA_CONTROL_DIR/flow-attachments/<id>` (outside the workspace,
+ * so never committed). Only the last line `feedbackTextOf` wrote is rewritten, and only when every id on it is an
+ * attachment id; every other kind (a single call) keeps the ids.
+ */
+export function feedbackForWork(feedback: readonly string[], env: NodeJS.ProcessEnv): string[] {
+  return feedback.map((text) => {
+    const cut = text.lastIndexOf("\n");
+    const last = text.slice(cut + 1);
+    if (!last.startsWith(ATTACHED_LINE)) return text;
+    const ids = last.slice(ATTACHED_LINE.length).split(", ");
+    if (!ids.every((id) => ATTACHMENT_ID.test(id))) return text;
+    return [text.slice(0, cut + 1) + "The person attached screenshots. Read each image file at its absolute path (outside your workspace; do not copy it into the workspace):",
+      ...ids.map((id) => `- ${attachmentPath(env, id)}`)].join("\n");
+  });
 }
 
 /** Whether an intake keeps the run from turning `done` (§4.2). */

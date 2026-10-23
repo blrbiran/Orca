@@ -10,8 +10,9 @@
  * ⚠️ Spec §4.7's copy into the child's attempt workspace (`.orca/attachments/`) is NOT built: the premise failed with the
  * real driver -- ccloop opens attempt worktrees from the run workspace's HEAD, so nothing Orca writes reaches them, and
  * ccloop's live-workspace copy bypasses the vault's `info/exclude` (spec §21 entry 2; evidence
- * logs/gaps/t5-g14-premise.{sh,log}). Until the human decides -- an absolute path outside the workspace plus ccloop's
- * read access, or a ccloop seeding change -- every call and work prompt names attachments by id only.
+ * logs/gaps/t5-g14-premise.{sh,log}). The human chose (a) (spec §21 entry 4): a work prompt names each attachment, and
+ * an image param expands, by its absolute path in this store (`attachmentPath`), read by the agent where it is; single
+ * calls name attachments by id only.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, existsSync, renameSync, rmSync, writeFileSync } from "node:fs";

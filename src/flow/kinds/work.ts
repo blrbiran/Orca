@@ -19,6 +19,7 @@ import type { KindContext, KindDefinition, KindOutcome } from "./registry.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { expandKeepingSkillDirs } from "../template/vars.js";
+import { expansionParams } from "../params.js";
 import { vaultGitBytes, type Vault } from "../vault/vault.js";
 
 /**
@@ -90,7 +91,7 @@ async function start(ctx: KindContext): Promise<KindOutcome> {
     const bases = join(composition.vault.path, "orca-base", key.flowRunId, `${key.stepKey}-${key.seq}`);
     const copies: Array<{ file: string; path: string }> = [];
     const scope = {
-      params: run.params, runId: run.row.id, workspace: ".", ...(effectRecordId === null ? {} : { effectRecordId }),
+      params: expansionParams(ctx.env, run), runId: run.row.id, workspace: ".", ...(effectRecordId === null ? {} : { effectRecordId }),
       base: (path: string): string => {
         const known = copies.find((copy) => copy.path === path);
         if (known !== undefined) return known.file;

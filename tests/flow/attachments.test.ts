@@ -1,11 +1,12 @@
 /**
  * Gaps spec §4.7, §16 (G14, Rule 17): the feedback attachment store `$ORCA_CONTROL_DIR/flow-attachments/<sha256>.<ext>`
  * -- images by their magic bytes only, at most 5 MiB, at most 4 per message, directory 0700 and files 0600 set
- * explicitly, an existing file never rewritten or re-moded -- and the upload route that answers the id. Single calls and
- * work prompts name attachments by id only: §4.7's copy into the attempt workspace is open for the human (spec §21
- * entry 2), pinned below as a todo that names the question rather than left out.
+ * explicitly, an existing file never rewritten or re-moded -- and the upload route that answers the id. Single calls
+ * name attachments by id only; a work execution that takes the feedback gets each one's absolute store path (spec §21
+ * entry 4: the human's choice (a) in place of §4.7's copy into the attempt workspace).
  */
-import { chmodSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync, utimesSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -67,7 +68,7 @@ describe("attachment store (gaps §4.7, G14)", () => {
     expect(statSync(file).mtimeMs).toBe(1_000_000);
   });
 
-  it("a message takes at most 4 attachments, each a stored id; the triage call and the work prompt name them by id only", { timeout: 60_000 }, async () => {
+  it("a message takes at most 4 attachments, each a stored id; the triage call names them by id only, the work prompt by their absolute store paths", { timeout: 60_000 }, async () => {
     const children = fakeChildPort();
     const w = await flowWorld({ t: { yaml: "format: orca-flow-v1\nid: t\nversion: 1\nworkspace: {kind: dir}\nsteps:\n  - {id: write, kind: work, prompt: w.md}\n", assets: { "w.md": "Write post.md.\n" } } }, { children: children.port });
     cleanups.push(() => w.dispose());
@@ -88,11 +89,37 @@ describe("attachment store (gaps §4.7, G14)", () => {
     await w.answer(w.calls.length - 1, { targets: [{ stepKey: "write", why: "only step" }] });
     await w.answer(w.calls.length - 1, { skips: [] });
     const goal = JSON.parse(children.opened.get(childGroupIdOf(flowRunId, "write", 2))!.plan.tasks[0]!.originalContractCanonicalJson).objective.goal as string;
-    expect(goal).toContain(`The person attached screenshots (not available to you): ${ids[0]}, ${ids[1]}`);
+    // The human's choice (a) (spec §21 entry 4): the work agent reads each screenshot where the store keeps it.
+    for (const id of ids.slice(0, 2)) {
+      const path = attachmentPath(w.deps.env, id);
+      expect(path.startsWith(join(w.deps.env.ORCA_CONTROL_DIR!, "flow-attachments") + "/")).toBe(true);
+      expect(goal).toContain(`- ${path}`);
+      expect(createHash("sha256").update(readFileSync(path)).digest("hex")).toBe(id.split(".")[0]);
+    }
+    expect(goal).not.toContain("not available to you");
     expect(goal).not.toContain(".orca/attachments");
   });
 
-  it.todo("an attachment is present in the child's attempt workspace (.orca/attachments/<id>) -- OPEN for the human (spec §21 entry 2): ccloop opens attempts from the run workspace's HEAD, so Orca cannot place it there; decide (a) an absolute path outside the workspace, which needs ccloop read access for the agent, or (b) a ccloop change that seeds files into each attempt (Rule 16). Evidence: logs/gaps/t5-g14-premise.{sh,log}");
+  it("a single-call step that takes the feedback (here a draft) gets the attachment ids only, never a path", { timeout: 60_000 }, async () => {
+    const children = fakeChildPort();
+    const w = await flowWorld({ t: { yaml: "format: orca-flow-v1\nid: t\nversion: 1\nworkspace: {kind: dir}\nsteps:\n  - {id: note, kind: draft, prompt: n.md}\n  - {id: write, kind: work, prompt: w.md}\n", assets: { "w.md": "Write post.md.\n", "n.md": "Note it.\n" } } }, { children: children.port });
+    cleanups.push(() => w.dispose());
+    w.deps.env.ORCA_CONTROL_DIR = join(w.root, "control");
+    const { flowRunId } = await w.start({ templateRef: "builtin/t" });
+    await w.advance();
+    await w.answer(w.calls.length - 1, { content: "a note" });
+    children.land(childGroupIdOf(flowRunId, "write", 1), { "post.md": "# Tea\n\nTea is warm.\n" });
+    await w.advance();
+    const stored = storeAttachment(w.deps.env, PNG);
+    const id = `${stored.sha256}.${stored.ext}`;
+    expect(await acceptMessage(w.deps, flowRunId, { kind: "feedback", target: { kind: "run" }, body: { text: "see it", attachments: [id] }, by: "ann", via: "cli:test", requestId: "r-draft" })).toMatchObject({ state: "accepted" });
+    await w.answer(w.calls.length - 1, { targets: [{ stepKey: "note", why: "the note" }] });
+    await w.answer(w.calls.length - 1, { skips: [] });
+    const draft = w.calls.at(-1)!;
+    expect(draft).toMatchObject({ purpose: "flow-draft", key: { stepKey: "note" } });
+    expect(draft.prompt).toContain(`The person attached screenshots (not available to you): ${id}`);
+    expect(draft.prompt).not.toContain(w.deps.env.ORCA_CONTROL_DIR!);
+  });
 
   it("the upload route stores the raw body and answers the id; a non-image is refused flow-attachment-invalid", async () => {
     const root = tempRoot();

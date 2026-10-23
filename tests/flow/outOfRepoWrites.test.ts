@@ -35,7 +35,8 @@ describe("out-of-repo writes (C21)", { timeout: 60_000 }, () => {
 
   // Gaps spec §4.7, §16 (G14): feedback with two screenshots on a finished run. The store is under ORCA_CONTROL_DIR
   // (0700/0600), nothing lands under HOME, and no attachment reaches the attempt commit, the vault head or the folder.
-  // (§4.7's copy into the attempt workspace is open for the human, spec §21 entry 2: tests/flow/attachments.test.ts todo.)
+  // The work agent is given each attachment's absolute store path (spec §21 entry 4, the human's choice (a)): under
+  // ORCA_CONTROL_DIR, never under HOME.
   it("feedback with two attachments writes them only to the store, never under HOME, into a commit, the head or the folder", async () => {
     const world = await wechatWorld();
     const control = realpathSync(mkdtempSync(join(tmpdir(), "orca-g14-control-")));
@@ -51,6 +52,9 @@ describe("out-of-repo writes (C21)", { timeout: 60_000 }, () => {
       expect(getIntake(w.store, flowRunId, sent.seq)!.state).toBe("planned");
       await w.answer(w.calls.length - 1, { skips: [] });
       const finetune = childGroupIdOf(flowRunId, "finetune", 2);
+      const goal = JSON.parse(children.opened.get(finetune)!.plan.tasks[0]!.originalContractCanonicalJson).objective.goal as string;
+      for (const id of ids) expect(goal).toContain(`- ${join(control, "flow-attachments", id)}`);
+      expect(goal).not.toContain(home);
       const landed = children.land(finetune, { [WECHAT]: "---\ntitle: T\n---\n\nTea.\n" });
       await w.advance();
       expect(listExecutions(w.store, flowRunId).find((e) => e.stepKey === "finetune" && e.seq === 2)!.state).toBe("done");

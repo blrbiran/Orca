@@ -10,9 +10,7 @@ import { readRepositorySettingsBody, writeRepositorySettingsBody } from "../../s
 import { attachmentPath, attachmentsDir } from "../../src/flow/feedback/attachments.js";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { acceptMessage } from "../../src/flow/messages.js";
-import { IMAGE_PARAM_MAX_BYTES, unreachableImageParam } from "../../src/flow/params.js";
-import type { LoadedRun } from "../../src/flow/kinds/registry.js";
-import type { FlowStep } from "../../src/flow/template/schema.js";
+import { IMAGE_PARAM_MAX_BYTES } from "../../src/flow/params.js";
 import { seedBuiltinTemplates } from "../../src/flow/builtins.js";
 import { loadRun } from "../../src/flow/kernel.js";
 import { readFlowSettings } from "../../src/flow/settings.js";
@@ -20,6 +18,7 @@ import { applySetFlowSettings } from "../../src/flow/settingsCommands.js";
 import { FLOW_LOCKABLE_PATHS } from "../../src/flow/settingsSchema.js";
 import { getFlowRun, listEffects, listPlans } from "../../src/flow/store.js";
 import type { PlanCandidates } from "../../src/flow/rerun.js";
+import { fakeChildPort } from "./fixtures/childPort.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
 import { SLUG, TITLES, WECHAT, wechatFile, wechatWorld, zeroRound } from "./fixtures/wechatWorld.js";
 
@@ -28,8 +27,8 @@ import { SLUG, TITLES, WECHAT, wechatFile, wechatWorld, zeroRound } from "./fixt
  * built-in `wechat-article` (version 3) over fake agents. An image is checked by its extension, size, existence and --
  * what a name cannot fake -- its bytes; it is stored content-addressed (the §4.7 store) and the params identity takes the
  * bytes' hash, so other bytes at the same path make dependants candidates and the same bytes under a new path do not.
- * Only a settings preset may name an absolute image; as built (spec §21 entry 3) such a path cannot reach a step's
- * workspace, so the step that would use it is refused by name before it starts.
+ * Only a settings preset may name an absolute image. Whatever the value, a step sees the stored copy's absolute path
+ * (spec §21 entry 4, the human's choice (a)), never the path as given.
  */
 /** Version 2 of the built-in as it shipped at 9170f9ed (a fixture copy: the repository now ships version 3). */
 const V2_YAML = join(import.meta.dirname, "fixtures", "wechat-article-v2.template.yaml");
@@ -157,19 +156,65 @@ describe("the image param type (§8.1)", () => {
   });
 });
 
-describe("an absolute image at the point of use (§21 entry 3)", () => {
-  it("is found in every step field a variable expands in: prompt asset, checks, tool rules, an ask's prompt and writeTo, hints.equals", () => {
-    const run = (step: FlowStep, assets: Record<string, string> = {}) => ({
-      template: { params: { pic: { type: "image" }, note: { type: "text" } }, steps: [step] }, assets, params: { pic: "/abs/cover.png", note: "/abs/not-an-image" },
-    }) as unknown as LoadedRun;
-    const uses = (step: FlowStep, assets?: Record<string, string>) => unreachableImageParam(run(step, assets), step);
-    expect(uses({ id: "w", kind: "work", prompt: "p.md" } as FlowStep, { "p.md": "Upload {{param.pic}}." })).toBe("pic");
-    expect(uses({ id: "w", kind: "work", prompt: "p.md" } as FlowStep, { "p.md": "Note {{param.note}}." })).toBeNull();
-    expect(uses({ id: "c", kind: "check", acceptance: { checks: [{ run: "test -s '{{param.pic}}'", role: "gate" }] } } as FlowStep)).toBe("pic");
-    expect(uses({ id: "w", kind: "work", prompt: "p.md", tools: { commands: [{ prefix: "cp '{{param.pic}}'" }] } } as FlowStep, { "p.md": "x" })).toBe("pic");
-    expect(uses({ id: "a", kind: "ask", prompt: "Is {{param.pic}} right?", form: {} } as unknown as FlowStep)).toBe("pic");
-    expect(uses({ id: "a", kind: "ask", form: {}, writeTo: { file: "{{param.pic}}.md", frontmatter: "t" } } as unknown as FlowStep)).toBe("pic");
-    expect(uses({ id: "w", kind: "work", prompt: "p.md", hints: { equals: "headings({{param.pic}})" } } as FlowStep, { "p.md": "x" })).toBe("pic");
+/**
+ * §8.1 "always a copy", as built after the human's choice (a) (spec §21 entry 4): `{{param.<id>}}` of an image expands to
+ * the absolute path of its stored copy, `$ORCA_CONTROL_DIR/flow-attachments/<sha256>.<ext>` -- the bytes that were
+ * hashed -- whether the value was folder-relative or a preset, in prompts and in commands. The step never sees the path
+ * as given: a later change to the person's file cannot reach it without a `params` change.
+ */
+describe("{{param.<id>}} of an image is its stored copy's absolute path (§8.1, §21 entry 4)", () => {
+  const storedOf = (env: NodeJS.ProcessEnv, bytes: Buffer, ext: string) => attachmentPath(env, `${sha(bytes)}.${ext}`);
+
+  it("a folder value and a preset value both expand to the store path in a prompt; the file there holds the hashed bytes", async () => {
+    const w = await smallWorld();
+    writeFileSync(join(w.folder, "cover.png"), PNG);
+    await w.start({ templateRef: "builtin/t", params: { pic: "cover.png" } });
+    await w.advance();
+    const folderPrompt = w.calls.at(-1)!.prompt;
+    const fromFolder = storedOf(w.deps.env, PNG, "png");
+    expect(fromFolder.startsWith(join(w.deps.env.ORCA_CONTROL_DIR!, "flow-attachments") + "/")).toBe(true);
+    expect(folderPrompt).toContain(`Use '${fromFolder}' in a plain tone.`);
+    expect(folderPrompt).not.toContain("'cover.png'");
+    expect(sha(readFileSync(fromFolder))).toBe(sha(PNG));
+    // The person's file changes after the start: the step still reads the bytes the run took.
+    writeFileSync(join(w.folder, "cover.png"), JPG);
+    expect(readFileSync(fromFolder)).toEqual(PNG);
+
+    const preset = join(tempRoot(), "default-cover.jpg");
+    writeFileSync(preset, JPG);
+    global(w.store, { paramDefaults: { t: { pic: preset } } });
+    await w.start({ templateRef: "builtin/t" });
+    await w.advance();
+    const presetPrompt = w.calls.at(-1)!.prompt;
+    const fromPreset = storedOf(w.deps.env, JPG, "jpg");
+    expect(presetPrompt).toContain(`Use '${fromPreset}' in a plain tone.`);
+    expect(presetPrompt).not.toContain(preset);
+    expect(sha(readFileSync(fromPreset))).toBe(sha(JPG));
+  });
+
+  it("a check command and a work step's gates and tool rules expand to the store path too", async () => {
+    const commands: string[] = [];
+    const yaml = "format: orca-flow-v1\nid: t\nversion: 1\nworkspace: {kind: dir}\nparams:\n  pic: {type: image, required: false}\nsteps:\n"
+      + "  - id: look\n    kind: check\n    acceptance:\n      checks:\n        - {id: there, run: \"test -s '{{param.pic}}'\", role: gate}\n"
+      + "  - id: up\n    kind: work\n    prompt: up.md\n    tools: {commands: [{prefix: \"cp '{{param.pic}}'\"}]}\n    acceptance:\n      checks:\n        - {run: \"test -s '{{param.pic}}'\", role: gate}\n";
+    const children = fakeChildPort();
+    const w = await flowWorld({ t: { yaml, assets: { "up.md": "Upload {{param.pic}}.\n" } } }, {
+      children: children.port, runCommand: async (command) => { commands.push(command); return { exitCode: 0, output: "" }; },
+    });
+    cleanups.push(() => w.dispose());
+    w.deps.env.ORCA_CONTROL_DIR = join(w.root, "control");
+    writeFileSync(join(w.folder, "pic.gif"), GIF);
+    const { flowRunId } = await w.start({ templateRef: "builtin/t", params: { pic: "pic.gif" } });
+    await w.advance();
+    const stored = storedOf(w.deps.env, GIF, "gif");
+    expect(commands).toEqual([`test -s '${stored}'`]);
+    const opened = children.opened.get(childGroupIdOf(flowRunId, "up", 1))!;
+    const goal = JSON.parse(opened.plan.tasks[0]!.originalContractCanonicalJson).objective.goal as string;
+    expect(goal).toContain(`Upload ${stored}.`);
+    expect(goal).toContain(`gate: test -s '${stored}'`);
+    expect(JSON.stringify(opened.plan)).toContain(`cp '${stored}'`);
+    expect(JSON.stringify(opened.plan)).not.toContain("'pic.gif'");
+    expect(readFileSync(stored)).toEqual(GIF);
   });
 });
 
@@ -250,23 +295,37 @@ async function wechat() {
 }
 
 describe("the cover image on wechat-article v3 (§8.1, §8.5)", { timeout: 60_000 }, () => {
-  it("a folder cover skips `cover` by its when; the draft box's prompt names the folder-relative path, and the file is in the base the attempt opens from", async () => {
+  /** The draft box landed; neither its attempt commit, the vault head nor the folder holds the stored copy (§2.3). */
+  async function landBoxAndGuard(world: Awaited<ReturnType<typeof wechatWorld>>, flowRunId: string, stored: string): Promise<void> {
+    const { w } = world;
+    const landed = world.children.land(childGroupIdOf(flowRunId, "to-draft-box", 1), {}, { flow: { effect: { remoteId: "media-1" } } });
+    await w.advance();
+    expect(w.latest(flowRunId, "to-draft-box")).toMatchObject({ state: "done" });
+    const vault = (getFlowRun(w.store, flowRunId)!.body as { vaultPath: string }).vaultPath;
+    const git = (...args: string[]) => execFileSync("/usr/bin/git", ["--git-dir", vault, ...args], { encoding: "utf8" });
+    const name = stored.split("/").at(-1)!;
+    const holds = (listing: string) => listing.includes(name) || listing.includes("flow-attachments") || listing.includes(".orca/");
+    expect(holds(git("ls-tree", "-r", "--name-only", landed))).toBe(false);
+    expect(holds(git("ls-tree", "-r", "--name-only", `refs/orca/${flowRunId}/head`))).toBe(false);
+    expect(holds(readdirSync(w.folder, { recursive: true }).map(String).join("\n"))).toBe(false);
+  }
+
+  it("a folder cover skips `cover` by its when; the draft box's prompt names the stored copy's absolute path, never the folder path", async () => {
     const world = await wechat();
     const { w } = world;
     writeFileSync(join(w.folder, "cover.png"), PNG);
     const flowRunId = await wechatRun(world, { coverImage: "cover.png" });
     expect(w.latest(flowRunId, "cover")).toMatchObject({ state: "skipped", seq: 1 });
     expect(world.children.opened.has(childGroupIdOf(flowRunId, "cover", 1))).toBe(false);
-    const box = childGroupIdOf(flowRunId, "to-draft-box", 1);
-    expect(goalOf(world, box)).toContain("the person's cover 'cover.png'");
-    // ccloop builds the attempt from the run workspace's HEAD, which is this base: the cover reaches the agent as a file
-    // of the person's folder, as a `path` param's file did in version 2.
-    const base = world.children.opened.get(box)!.baseCommit;
-    const vault = (getFlowRun(w.store, flowRunId)!.body as { vaultPath: string }).vaultPath;
-    expect(execFileSync("/usr/bin/git", ["--git-dir", vault, "cat-file", "blob", `${base}:cover.png`])).toEqual(PNG);
+    const stored = attachmentPath(w.deps.env, `${sha(PNG)}.png`);
+    const goal = goalOf(world, childGroupIdOf(flowRunId, "to-draft-box", 1));
+    expect(goal).toContain(`the person's cover '${stored}'`);
+    expect(goal).not.toContain("'cover.png'");
+    expect(sha(readFileSync(stored))).toBe(sha(PNG));
+    await landBoxAndGuard(world, flowRunId, stored);
   });
 
-  it("an absolute preset cover is refused at the draft box by name: no effect record, no child, the path never in a prompt", async () => {
+  it("an absolute preset cover reaches md2publish-draft at the draft box as the stored copy: effect gated, child opened, the preset path never in a prompt", async () => {
     const world = await wechat();
     const { w } = world;
     const preset = join(tempRoot(), "default-cover.png");
@@ -275,15 +334,14 @@ describe("the cover image on wechat-article v3 (§8.1, §8.5)", { timeout: 60_00
     const flowRunId = await wechatRun(world, {});
     expect(bodyOf(w.store, flowRunId).images).toEqual({ coverImage: { source: preset, sha256: sha(PNG), ext: "png" } });
     expect(w.latest(flowRunId, "cover")).toMatchObject({ state: "skipped" });
-    expect(w.latest(flowRunId, "to-draft-box")).toMatchObject({ state: "failed", body: expect.objectContaining({ failure: "flow-param-unreachable:coverImage" }) });
-    expect(world.children.opened.has(childGroupIdOf(flowRunId, "to-draft-box", 1))).toBe(false);
-    expect(listEffects(w.store, flowRunId).filter((e) => e.stepKey === "to-draft-box")).toEqual([]);
+    expect(w.latest(flowRunId, "to-draft-box")).toMatchObject({ state: "running" });
+    expect(listEffects(w.store, flowRunId).filter((e) => e.stepKey === "to-draft-box")).toHaveLength(1);
+    const stored = attachmentPath(w.deps.env, `${sha(PNG)}.png`);
+    expect(goalOf(world, childGroupIdOf(flowRunId, "to-draft-box", 1))).toContain(`the person's cover '${stored}'`);
     expect([...world.children.opened.values()].map((o) => JSON.stringify(o.plan)).some((plan) => plan.includes(preset))).toBe(false);
+    expect(readFileSync(stored)).toEqual(PNG);
+    await landBoxAndGuard(world, flowRunId, stored);
   });
-
-  it.todo("an image param is copied into the attempt workspace at .orca/params/<id>.<ext>, absent from the attempt commit and the folder -- OPEN for the human (spec §21 entries 2-3): ccloop opens attempts from the run workspace's HEAD, so Orca cannot place an untracked copy there; decide (a) an absolute path outside the workspace, which needs ccloop read access for the agent, or (b) a ccloop change that seeds files into each attempt (Rule 16). Evidence: logs/gaps/t5-g14-premise.{sh,log}");
-  it.todo("{{param.coverImage}} expands to the workspace copy .orca/params/coverImage.<ext> in prompts and check commands -- OPEN for the human, same question (spec §21 entry 3)");
-  it.todo("an absolute preset cover reaches md2publish-draft at the draft box (today refused flow-param-unreachable:coverImage) -- OPEN for the human, same question (spec §21 entry 3)");
 });
 
 describe("a params change mid-run (§8.3)", { timeout: 60_000 }, () => {
@@ -339,7 +397,8 @@ describe("a params change mid-run (§8.3)", { timeout: 60_000 }, () => {
       await w.answer(w.calls.length - 1, { skips: others.map((stepKey) => ({ stepKey, reason: "unchanged by a cover" })) });
     }
     expect(w.latest(flowRunId, "cover")).toMatchObject({ state: "skipped" });
-    expect(goalOf(world, childGroupIdOf(flowRunId, "to-draft-box", 2))).toContain("the person's cover 'mine.webp'");
+    const webp = readFileSync(join(w.folder, "mine.webp"));
+    expect(goalOf(world, childGroupIdOf(flowRunId, "to-draft-box", 2))).toContain(`the person's cover '${attachmentPath(w.deps.env, `${sha(webp)}.webp`)}'`);
   });
 
   it("refuses a params change whose image file is not an image by its bytes", async () => {

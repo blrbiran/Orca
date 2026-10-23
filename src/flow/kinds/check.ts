@@ -10,6 +10,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expandVars } from "../template/vars.js";
+import { expansionParams } from "../params.js";
 import { bounded } from "../prompt.js";
 import { vaultGit, vaultGitBytes, type Vault } from "../vault/vault.js";
 import type { KindDefinition } from "./registry.js";
@@ -71,7 +72,7 @@ export const CHECK_KIND: KindDefinition = {
           })());
           return file;
         };
-        const command = expandVars(check.run, { params: ctx.run.params, runId: ctx.run.row.id, workspace: work, skillDirs: {}, base }, "command");
+        const command = expandVars(check.run, { params: expansionParams(ctx.env, ctx.run), runId: ctx.run.row.id, workspace: work, skillDirs: {}, base }, "command");
         await Promise.all(pending);
         const ran = await ctx.runCommand(command, work);
         const out = bounded(ran.output, CHECK_OUTPUT_MAX_BYTES);
