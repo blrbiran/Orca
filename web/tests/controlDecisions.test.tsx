@@ -102,7 +102,8 @@ describe("decision rows (control run decisions Task 11)", () => {
     const onCorrect = showGroup(groupDecisions([decisionRun({ decisions: [decision("working-tree")] })]));
     fireEvent.click(screen.getByRole("button", { name: "a", expanded: false }));
     fireEvent.click(screen.getByRole("button", { name: "纠正" }));
-    expect(onCorrect.mock.calls).toEqual([["github.com/example/orca", "run-a/agent-1"]]);
+    // Tester round 2 §9.4 (#47): the run the correction starts from travels with it (group, task, run).
+    expect(onCorrect.mock.calls).toEqual([["github.com/example/orca", "run-a/agent-1", { groupId: "g", taskId: "a", runId: "run-a" }]]);
   });
 
   it("the 纠正 action is disabled, with a note, for a not-yet-integrated decision", () => {

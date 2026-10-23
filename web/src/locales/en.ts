@@ -225,7 +225,7 @@ export const en = {
   }
 },
   detail: { regions: "Group detail", progress: "Progress", preparation: "Preparation", problem: "Problems", results: "Results", runs: "Runs and evidence", technical: "Technical details", resultsMissing: "Work is completed; its explanation is missing.", resultsNotProduced: "A result explanation has not been produced here yet.", resultsEvidence: "Existing run evidence remains available. Task completion, goal review and Git delivery are separate facts.", openRun: "Open run controls and evidence · {{runId}}", goalReview: "The group is in goal review; task completion does not establish goal acceptance.", nextAction: "Review progress, preparation or problems; each region keeps the actions allowed by the current read." },
-  nav: { overview: "Overview", sections: "Sections", decisions: "Decisions", chains: "Continuous improvement (advanced)", tasks: "Task control", board: "Board", requirements: "Requirements", memory: "Memory", metrics: "Metrics", globalSettings: "Global settings", projectSettings: "Project settings" },
+  nav: { overview: "Overview", sections: "Sections", decisions: "Decisions", chains: "Continuous improvement (advanced)", tasks: "Task control", board: "Board", requirements: "Requirements", memory: "Memory", metrics: "Metrics", globalSettings: "Global settings", projectSettings: "Project settings", back: "← Back to {{label}}", routeMissing: "{{id}} was not found; showing {{section}}.", otherProject: "{{id}} belongs to project {{project}}.", switchProject: "Switch to {{project}}" },
   overview: {
     title: "Overview", progress: "Progress", queue: "Needs your attention", newRequirement: "New requirement", import: "Import plan",
     global: "Global control", ownerUnknown: "owner not in registry", ownerRequired: "An owner must take this action.",
@@ -312,6 +312,7 @@ export const en = {
   },
   common: { none: "none", na: "n/a", unknown: "unknown", dispatchBlocked: "dispatch blocked", dispatchLive: "dispatch live" },
   decisions: {
+    origin: "From {{group}} / {{task}} / {{run}}",
     title: "Unreviewed high-tier decisions",
     count: "{{shown}} of {{total}}",
     reviewedThisSession: "Reviewed this session: {{n}}",

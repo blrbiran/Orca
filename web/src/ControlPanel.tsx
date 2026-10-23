@@ -13,6 +13,7 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { nextCommandId, type ControlAction } from "./controlApi.js";
 import { ControlGroupView } from "./ControlGroupView.js";
+import type { DetailRegion } from "./detailRegion.js";
 import type { GroupDecisionsRead } from "./RunDecisions.js";
 import { RecoveryView } from "./RecoveryView.js";
 import { RefusalNotice } from "./RefusalNotice.js";
@@ -76,7 +77,11 @@ export interface ControlPanelProps {
   integrationFor?: (repoId: string) => RepositoryIntegrationV1 | null;
   /** Control run decisions plan Task 11: a group's decisions as last read, and opening one in Decisions to correct it. */
   decisionsFor?: (groupId: string) => GroupDecisionsRead | null;
-  onCorrectDecision?: (projectKey: string, decisionId: string) => void;
+  onCorrectDecision?: (projectKey: string, decisionId: string, origin?: { groupId: string; taskId: string | null; runId: string }) => void;
+  /** Tester round 2 §9.3: the group route, when the URL names one; the open group takes its region and task from it. */
+  route?: { groupId: string; region: DetailRegion | null; taskId: string | null } | null;
+  /** §9.3: a region tab or an opened / closed task, written back to the URL by a replace. */
+  onRouteChange?: (groupId: string, region: DetailRegion, taskId: string | null) => void;
   /** Agent selection spec §6.8: the installation table and this operator's defaults, once read. */
   agents?: AgentsViewV1 | null;
   preferences?: AgentPreferencesViewV1 | null;
@@ -331,6 +336,8 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           decisions={props.decisionsFor?.(view.summary.groupId) ?? null}
           revisionOf={(groupId) => summary.groups.find((group) => group.groupId === groupId)?.commandRevision ?? null}
           onCorrectDecision={props.onCorrectDecision}
+          route={props.route?.groupId === view.summary.groupId ? props.route : null}
+          onRouteChange={props.onRouteChange && ((region, taskId) => props.onRouteChange?.(view.summary.groupId, region, taskId))}
           refusal={props.groupRefusals?.[view.summary.groupId] ?? null}
         />
       )}

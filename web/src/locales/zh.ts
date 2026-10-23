@@ -95,7 +95,7 @@ export const zh: Translation<typeof en> = {
   }
 },
   detail: { regions: "任务组详情", progress: "进度", preparation: "准备", problem: "问题", results: "结果", runs: "运行与证据", technical: "技术详情", resultsMissing: "工作已完成，但缺少结果说明。", resultsNotProduced: "此处尚未产出结果说明。", resultsEvidence: "已有运行证据仍可查看。任务完成、目标评审与 Git 交付是独立的事实。", openRun: "查看运行操作与证据 · {{runId}}", goalReview: "任务组正在评审目标；任务完成不代表目标已被接受。", nextAction: "查看进度、准备或问题；各区域保留当前读取状态允许的操作。" },
-  nav: { overview: "概览", sections: "分区", decisions: "决策", chains: "链（高级）", tasks: "任务控制", board: "看板", requirements: "需求", memory: "记忆", metrics: "指标", globalSettings: "全局设置", projectSettings: "项目设置" },
+  nav: { overview: "概览", sections: "分区", decisions: "决策", chains: "链（高级）", tasks: "任务控制", board: "看板", requirements: "需求", memory: "记忆", metrics: "指标", globalSettings: "全局设置", projectSettings: "项目设置", back: "← 返回{{label}}", routeMissing: "没有找到 {{id}}，显示{{section}}。", otherProject: "{{id}} 属于项目 {{project}}。", switchProject: "切换到 {{project}}" },
   overview: {
     title: "概览", progress: "进展", queue: "需要你处理", newRequirement: "新建需求", import: "导入计划",
     global: "全局控制", ownerUnknown: "所属项目未登记", ownerRequired: "这一步需要所有者处理。",
@@ -181,6 +181,7 @@ export const zh: Translation<typeof en> = {
   },
   common: { none: "无", na: "不适用", unknown: "未知", dispatchBlocked: "调度已阻断", dispatchLive: "调度正常" },
   decisions: {
+    origin: "来自 {{group}} / {{task}} / {{run}}",
     title: "未评审的高层级决策",
     count: "{{shown}} / {{total}}",
     reviewedThisSession: "本次已审 {{n}} 条",

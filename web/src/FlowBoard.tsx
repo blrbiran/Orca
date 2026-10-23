@@ -198,10 +198,17 @@ function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClos
   );
 }
 
-export function FlowBoard(props: BoardViewProps): JSX.Element {
+/**
+ * Tester round 2 §9.3 (H11): the open flow run is the route's (`#board/flow/<id>`) when App routes the board -- opening one
+ * pushes it, the run page's Back pushes `#board` -- so it survives leaving the board; without App it is page memory.
+ */
+export function FlowBoard(props: BoardViewProps & { openFlowRunId?: string | null; onOpenFlowRun?: (flowRunId: string | null) => void }): JSX.Element {
   const [flows, setFlows] = useState<FlowListV1["runs"]>([]);
   const { t } = useTranslation();
-  const [open, setOpen] = useState<string | null>(null);
+  const [localOpen, setLocalOpen] = useState<string | null>(null);
+  const routed = props.onOpenFlowRun !== undefined;
+  const open = routed ? props.openFlowRunId ?? null : localOpen;
+  const setOpen = (flowRunId: string | null): void => { if (props.onOpenFlowRun !== undefined) props.onOpenFlowRun(flowRunId); else setLocalOpen(flowRunId); };
   const [starting, setStarting] = useState(false);
   const read = useCallback(async (): Promise<void> => {
     // No flow runs readable (an older panel, a failed read): the board shows its groups alone.

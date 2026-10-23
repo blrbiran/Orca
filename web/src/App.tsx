@@ -137,11 +137,14 @@ import { Refusal } from "./Refusal.js";
 import { RequirementsPanel } from "./RequirementsPanel.js";
 import { labelsDraftKey } from "./TaskDetail.js";
 import { loopDraftKey } from "./LoopPlanCard.js";
-import { DEFAULT_SECTION, sectionFromHash } from "./sections.js";
+import { DEFAULT_SECTION, formatRoute, parseRoute } from "./sections.js";
+import type { Route } from "./sections.js";
+import { DETAIL_REGIONS, type DetailRegion } from "./detailRegion.js";
+import { BackLine } from "./BackLine.js";
 import type { Section } from "./sections.js";
 import { GlobalSettings } from "./GlobalSettings.js";
 import { ProjectSettings } from "./ProjectSettings.js";
-import { SectionPane, Shell, controlAlert } from "./Shell.js";
+import { NAV_KEY, SectionPane, Shell, controlAlert } from "./Shell.js";
 import { FlowBoard } from "./FlowBoard.js";
 import { applyTheme, readTheme, writeTheme } from "./theme.js";
 import type { ThemePref } from "./theme.js";
@@ -150,6 +153,20 @@ import { recoveryRetryAction } from "./recoveryTarget.js";
 import type { ChainRepoView, DecisionListRow, DecisionStatusRow, MetricsReport, PanelCoverage } from "./types.js";
 
 type DecisionIdentity = Pick<DecisionListRow, "projectKey" | "id">;
+/** Tester round 2 §9.4 (#47): the run a correction was started from. */
+export type DecisionOrigin = { groupId: string; taskId: string | null; runId: string };
+type RouteNoticeState =
+  | { kind: "missing"; section: Section; id: string }
+  | { kind: "other-project"; section: Section; id: string; projectKey: string; route: Route };
+/** The owner id a route names, for the routeMissing line. */
+function routeOwnerId(route: Route): string {
+  switch (route.kind) {
+    case "group": case "requirement": return route.groupId;
+    case "decision": return route.decisionId;
+    case "flow-run": return route.flowRunId;
+    default: return route.section;
+  }
+}
 
 /** localStorage, or undefined where touching it throws. */
 function browserStorage(): Storage | undefined {
@@ -239,8 +256,6 @@ export function App(): JSX.Element {
    * named no correction could not be followed by an open at all, and says so.
    */
   const [debugOpens, setDebugOpens] = useState<Record<string, CorrectionAttempt | { refusal: ControlRefusal }>>({});
-  /** Ruling C12: the Decisions page's two tabs; the Corrections list lives here, not in a section of its own. */
-  const [decisionsTab, setDecisionsTab] = useState<"decisions" | "corrections">("decisions");
   /** The row whose answer may still be applied; read by `acceptArrival` when one arrives. */
   const wanted = useRef<DecisionIdentity | null>(null);
 
@@ -248,9 +263,50 @@ export function App(): JSX.Element {
   const [chainOutcome, setChainOutcome] = useState<ChainOutcome | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(() => readDismissed(browserStorage()));
   // Panel UI redesign spec §5.1: the active section lives in the URL hash; the theme choice in this browser only.
-  const [section, setSection] = useState<Section>(() =>
-    typeof window === "undefined" ? DEFAULT_SECTION : sectionFromHash(window.location.hash),
-  );
+  // Tester round 2 §9 (H11): the whole hash is a route -- the section and, inside it, the owner open there.
+  const [route, setRoute] = useState<Route>(() => typeof window === "undefined" ? { kind: "section", section: DEFAULT_SECTION } : parseRoute(window.location.hash));
+  const section: Section = route.section;
+  const routeNow = useRef(route); routeNow.current = route;
+  /** Ruling C12: the Decisions page's two tabs, now a route (§9.3: the toggle replaces the history entry). */
+  const decisionsTab: "decisions" | "corrections" = route.kind === "corrections" ? "corrections" : "decisions";
+  /**
+   * §9.3 (review I6): a route naming an owner, read on load, waits for the first overview read before it is checked and
+   * opened; any navigate or hashchange before then cancels it (the newest route wins).
+   */
+  const [pendingRoute, setPendingRoute] = useState<Route | null>(() => {
+    if (typeof window === "undefined") return null;
+    const first = parseRoute(window.location.hash);
+    return first.kind === "group" || first.kind === "requirement" || first.kind === "decision" ? first : null;
+  });
+  /** §9.3: a route whose owner was not found, or belongs to another project (a line, and a button that switches). */
+  const [routeNotice, setRouteNotice] = useState<RouteNoticeState | null>(null);
+  /** §9.4: the shared back line -- set by an in-app push into another section, shown while its hash is current. */
+  const [from, setFrom] = useState<{ leftHash: string; pushedHash: string; label: string } | null>(null);
+  /** §9.4 (#47): where a correction was started from, kept with the opened decision (never in the URL). */
+  const [decisionOrigin, setDecisionOrigin] = useState<DecisionOrigin | null>(null);
+  /** The hash this page itself just assigned; its hashchange applies nothing more (the caller already did). */
+  const selfHash = useRef<string | null>(null);
+  const applyExternalRoute = useRef<(next: Route) => void>(() => {});
+  /**
+   * §9.3: the one way the page moves. Push (a history entry) for a section change and for opening a group, requirement,
+   * decision or flow run; replace for a region tab, a task opened or closed in the group view, the Decisions/Corrections
+   * toggle. The caller sets its own selection; this writes the URL, the route and the back line.
+   */
+  const navigate = (next: Route, options: { replace?: boolean } = {}): void => {
+    setPendingRoute(null); setRouteNotice(null);
+    const hash = formatRoute(next);
+    const leaving = window.location.hash;
+    if (options.replace === true) {
+      window.history.replaceState(null, "", hash);
+      setFrom((prior) => prior !== null && prior.pushedHash === leaving ? { ...prior, pushedHash: hash } : prior);
+    } else {
+      const was = routeNow.current.section;
+      setFrom(next.section !== was ? { leftHash: leaving, pushedHash: hash, label: t(NAV_KEY[was]) } : null);
+      if (leaving !== hash) { selfHash.current = hash; window.location.hash = hash; }
+    }
+    setRoute(next);
+  };
+  const navigateNow = useRef(navigate); navigateNow.current = navigate;
   const [filter, setFilter] = useState<DecisionFilter>(NO_FILTER);
   // Reported-decisions spec 2026-10-20 §6: minor decisions are listed only once asked for; j / k walks what is listed.
   const [showMinor, setShowMinor] = useState(false);
@@ -263,7 +319,16 @@ export function App(): JSX.Element {
   const [theme, setTheme] = useState<ThemePref>(() => readTheme(browserStorage()));
   const [showAdvanced, setShowAdvanced] = useState(() => readShowAdvanced(browserStorage()));
   useEffect(() => {
-    const onHash = (): void => { navigationSeq.current++; setSection(sectionFromHash(window.location.hash)); };
+    const onHash = (): void => {
+      const hash = window.location.hash;
+      setPendingRoute(null);
+      setFrom((prior) => prior !== null && prior.pushedHash === hash ? prior : null);
+      if (selfHash.current === hash) { selfHash.current = null; return; }
+      selfHash.current = null;
+      navigationSeq.current++;
+      setRouteNotice(null);
+      applyExternalRoute.current(parseRoute(hash));
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -815,12 +880,15 @@ export function App(): JSX.Element {
   // Project switcher spec D2, project registry spec §7: the stored (or current) choice while it is still listed, else
   // the first project. Re-read after an add or rename and whenever the window regains focus (another tab may have
   // added one). A failed read leaves no choice: every section acts on the first repository as before.
+  /** §9.3: a route waits for the project list too (its scope decides "another project"); true once the first read settled. */
+  const [projectsRead, setProjectsRead] = useState(false);
   const readProjects = useCallback((): Promise<void> => fetchProjects().then(
     (answer) => {
       setProjectsAnswer(answer);
       setProject((current) => pickProject(answer.projects, current ?? readProject(browserStorage())));
+      setProjectsRead(true);
     },
-    () => { setProjectsAnswer(null); setProject(null); },
+    () => { setProjectsAnswer(null); setProject(null); setProjectsRead(true); },
   ), []);
   useEffect(() => { void readProjects(); }, [readProjects]);
   useEffect(() => {
@@ -833,6 +901,7 @@ export function App(): JSX.Element {
     try { setControlConfig(await fetchControlConfig()); } catch { /* keep the config already on screen */ }
   };
   const chooseProject = (projectKey: string): void => {
+    setFrom(null);
     setProject(projectKey);
     setProjectView("project");
     writeProject(browserStorage(), projectKey);
@@ -923,29 +992,49 @@ export function App(): JSX.Element {
     && (overviewDecisionRead === null || acceptedDecision.request === overviewDecisionRead.request)
     ? acceptedDecision.body : null;
   const decisionReview = decision !== null ? acceptedDecision?.review : undefined;
-  const openDecisionRow = (row: DecisionIdentity): void => {
-    navigationSeq.current++; setOverviewFocus(null); setOverviewDecisionRead(null); setSelected(row);
+  /** §9.3: a list click pushes the decision's route; j / k and the review advance replace it (Back is not flooded). */
+  const openDecisionRow = (row: DecisionIdentity, how: "push" | "replace" | "none" = "none", origin: DecisionOrigin | null = null): void => {
+    navigationSeq.current++; setOverviewFocus(null); setOverviewDecisionRead(null); setSelected(row); setDecisionOrigin(origin);
+    if (how !== "none") navigate({ kind: "decision", section: "decisions", projectKey: row.projectKey, decisionId: row.id }, { replace: how === "replace" });
   };
   /**
    * Control run decisions plan Task 11: a group's 纠正 opens that decision's detail in Decisions, as a list row does. The
    * detail is read by projectKey and id; a decision no list row carries yet is opened by that identity alone, and the
    * pane says it is not in the list.
    */
-  const openDecisionById = (projectKey: string, decisionId: string): void => {
-    openDecisionRow({ projectKey, id: decisionId });
-    setSection("decisions"); window.location.hash = "decisions";
+  const openDecisionById = (projectKey: string, decisionId: string, origin?: DecisionOrigin): void => {
+    openDecisionRow({ projectKey, id: decisionId }, "push", origin ?? null);
   };
   const overviewModel = deriveOverview({ projection: overview, todo, recovery: overviewRecovery, uncertain: control.uncertainCommandIds,
     scope, projectKey: project, projects, roles: account?.user.roles ?? [] });
   const overviewModelNow = useRef(overviewModel); overviewModelNow.current = overviewModel;
   const overviewNow = useRef(overview); overviewNow.current = overview;
-  const openOverviewTarget = (target: OverviewTarget): void => {
+  /**
+   * Opens an overview destination. `fromRoute` (§9.3): the URL already names it (on load, Back, a typed hash), so the
+   * route is not pushed again and the region and task come from the route; a target not found is the routeMissing line,
+   * and one in another project the switch line, instead of the Overview's failure line.
+   */
+  const openOverviewTarget = (target: OverviewTarget, fromRoute: Route | null = null): void => {
     const request = ++navigationSeq.current, identity = sourceIdentityNow.current;
     setOverviewNavigationFailure(null);
     const current = (): boolean => navigationSeq.current === request && identity === sourceIdentityNow.current;
-    const unavailable = (): void => { if (current()) { setOverviewNavigationFailure(t("overview.navigationUnavailable")); void readProjects(); void readOverview(); void readTodo(); } };
+    const missing = (): void => {
+      if (!current() || fromRoute === null) return;
+      const bare: Route = { kind: "section", section: fromRoute.section };
+      window.history.replaceState(null, "", formatRoute(bare)); setRoute(bare);
+      setRouteNotice({ kind: "missing", section: fromRoute.section, id: routeOwnerId(fromRoute) });
+    };
+    const unavailable = (): void => {
+      if (fromRoute !== null) { missing(); return; }
+      if (current()) { setOverviewNavigationFailure(t("overview.navigationUnavailable")); void readProjects(); void readOverview(); void readTodo(); }
+    };
     const finish = (section: Section): void => {
-      setSection(section); window.location.hash = section;
+      if (fromRoute !== null) return;
+      navigate(target.kind === "group"
+        ? { kind: "group", section: "tasks", groupId: target.groupId, region: (DETAIL_REGIONS as readonly string[]).includes(target.region) ? target.region as DetailRegion : null, taskId: target.taskId }
+        : target.kind === "requirement" ? { kind: "requirement", section: "requirements", groupId: target.groupId }
+        : target.kind === "decision" ? { kind: "decision", section: "decisions", projectKey: target.projectKey, decisionId: target.id }
+        : { kind: "section", section });
       setOverviewFocus({ target, request });
     };
     if (target.kind === "global-control") { void readControlTick(); finish("tasks"); return; }
@@ -972,8 +1061,13 @@ export function App(): JSX.Element {
       return;
     }
     const owner = overview.data?.groups.find((g) => g.groupId === target.groupId && g.archived !== true);
-    if (overview.status !== "available" || owner === undefined
-      || (scope.kind === "project" && owner.repoId !== scope.repoId)) { unavailable(); return; }
+    if (overview.status !== "available" || owner === undefined) { unavailable(); return; }
+    if (scope.kind === "project" && owner.repoId !== scope.repoId) {
+      // §9.3 (H11 sub-ruling): a route to another project's group never switches the project; it says so, with a button.
+      const holder = fromRoute === null ? undefined : projects?.find((entry) => entry.controlRepoId === owner.repoId);
+      if (fromRoute !== null && holder !== undefined) { setRouteNotice({ kind: "other-project", section: fromRoute.section, id: target.groupId, projectKey: holder.projectKey, route: fromRoute }); return; }
+      unavailable(); return;
+    }
     void (async () => {
       try {
         if (target.kind === "requirement") {
@@ -981,7 +1075,7 @@ export function App(): JSX.Element {
           if (!current()) return;
           if (value.summary.groupId !== target.groupId || value.summary.repoId !== owner.repoId || value.summary.archived === true
             || value.epoch !== overviewNow.current.data?.epoch || value.changeSeq < Math.max(overviewNow.current.data?.changeSeq ?? 0, controlNow.current.changeSeq)) { unavailable(); return; }
-          if (!overviewModelNow.current.progress.some((p) => p.group.groupId === target.groupId)) { unavailable(); return; }
+          if (fromRoute === null && !overviewModelNow.current.progress.some((p) => p.group.groupId === target.groupId)) { unavailable(); return; }
           setRequirementViews((all) => ({ ...all, [target.groupId]: value })); setSelectedRequirement(target.groupId); finish("requirements");
         } else {
           const value = await fetchControlGroup(target.groupId);
@@ -990,12 +1084,60 @@ export function App(): JSX.Element {
             || value.epoch !== overviewNow.current.data?.epoch || value.changeSeq < Math.max(overviewNow.current.data?.changeSeq ?? 0, controlNow.current.changeSeq)
             || (target.taskId !== null && !value.workItems.some((item) => item.taskId === target.taskId))
             || (target.runId !== null && !value.runs.some((run) => run.runId === target.runId))) { unavailable(); return; }
-          if (!overviewModelNow.current.progress.some((p) => p.group.groupId === target.groupId)) { unavailable(); return; }
+          if (fromRoute === null && !overviewModelNow.current.progress.some((p) => p.group.groupId === target.groupId)) { unavailable(); return; }
           dispatchControl({ type: "group", value }); setSelectedGroup(target.groupId); finish("tasks");
         }
       } catch { unavailable(); }
     })();
   };
+  /**
+   * §9.3: apply a route the URL names. The section is set at once; an owner is checked and opened as an Overview target
+   * (a group, a requirement), or fetched by its id (a decision: no list row needed). A bare section keeps what is open.
+   */
+  const applyRoute = (next: Route): void => {
+    setRoute(next);
+    if (next.kind === "group") {
+      if (selectedGroup === next.groupId && control.canonical[next.groupId] !== undefined) return;
+      openOverviewTarget({ kind: "group", groupId: next.groupId, region: next.region ?? "progress", taskId: next.taskId, runId: null }, next);
+    } else if (next.kind === "requirement") {
+      if (selectedRequirement === next.groupId) return;
+      openOverviewTarget({ kind: "requirement", groupId: next.groupId, region: "answers" } as OverviewTarget, next);
+    } else if (next.kind === "decision") {
+      if (selected !== null && selected.projectKey === next.projectKey && selected.id === next.decisionId) return;
+      if (scope.kind === "project" && projects !== null && next.projectKey !== project && projects.some((entry) => entry.projectKey === next.projectKey)) {
+        setRouteNotice({ kind: "other-project", section: "decisions", id: next.decisionId, projectKey: next.projectKey, route: next }); return;
+      }
+      const request = navigationSeq.current;
+      void fetchDecision(next.projectKey, next.decisionId).then(
+        () => { if (navigationSeq.current === request) openDecisionRow({ projectKey: next.projectKey, id: next.decisionId }); },
+        () => {
+          if (navigationSeq.current !== request) return;
+          const bare: Route = { kind: "section", section: "decisions" };
+          window.history.replaceState(null, "", formatRoute(bare)); setRoute(bare);
+          setRouteNotice({ kind: "missing", section: "decisions", id: next.decisionId });
+        },
+      );
+    }
+  };
+  applyExternalRoute.current = applyRoute;
+  // §9.3 (review I6): a pending route waits for the project list, the control epoch and the first overview read.
+  const routeReady = pendingRoute !== null && projectsRead && control.epoch !== null && overview.status !== "loading";
+  useEffect(() => {
+    if (pendingRoute === null || section === "overview" || overview.status !== "loading") return;
+    void readOverview();
+  }, [pendingRoute, sourceIdentity]);
+  useEffect(() => {
+    if (!routeReady || pendingRoute === null) return;
+    const next = pendingRoute;
+    setPendingRoute(null);
+    if (overview.status !== "available") {
+      const bare: Route = { kind: "section", section: next.section };
+      window.history.replaceState(null, "", formatRoute(bare)); setRoute(bare);
+      setRouteNotice({ kind: "missing", section: next.section, id: routeOwnerId(next) });
+      return;
+    }
+    applyRoute(next);
+  }, [routeReady]);
   useEffect(() => {
     if (overviewFocus === null || focusedRequest.current === overviewFocus.request) return;
     if (overviewFocus.target.kind === "decision" && (
@@ -1333,7 +1475,7 @@ export function App(): JSX.Element {
     setPendingAdvance(null);
     if (selected === null || rowKey(selected) !== rowKey(pendingAdvance.reviewed)) return;
     const next = nextAfterReview(pendingAdvance.before, pendingAdvance.reviewed, visibleDecisionRows);
-    if (next !== null) openDecisionRow(next);
+    if (next !== null) openDecisionRow(next, "replace");
   }, [pendingAdvance, visibleDecisionRows]);
 
   // Taste refinement P1-3: j / k move, a agrees, c starts a correction -- on the Decisions pane only, never while
@@ -1355,7 +1497,7 @@ export function App(): JSX.Element {
         const to = visibleDecisionRows[action === "next" ? at + 1 : Math.max(at - 1, 0)];
         // Final review M5: j on the last row / k on the first resolves to the open row itself; do not re-open (re-fetch) it.
         if (to !== undefined && (selected === null || rowKey(to) !== rowKey(selected))) {
-          event.preventDefault(); openDecisionRow(to);
+          event.preventDefault(); openDecisionRow(to, "replace");
           requestAnimationFrame(() => document.querySelector('.decision-row[aria-current="true"]')?.scrollIntoView?.({ block: "nearest" }));
         }
       } else if (action === "agree" && selected !== null && decision !== null) {
@@ -1491,6 +1633,20 @@ export function App(): JSX.Element {
         </>
       }
     >
+      {routeNotice !== null && routeNotice.section === section && (
+        <p role="status" data-testid="route-notice">
+          {routeNotice.kind === "missing"
+            ? t("nav.routeMissing", { id: routeNotice.id, section: t(NAV_KEY[routeNotice.section]) })
+            : <>{t("nav.otherProject", { id: routeNotice.id, project: nameOf(routeNotice.projectKey) })}{" "}
+              <button type="button" onClick={() => { const again = routeNotice.route; chooseProject(routeNotice.projectKey); setRouteNotice(null); setPendingRoute(again); }}>
+                {t("nav.switchProject", { project: nameOf(routeNotice.projectKey) })}
+              </button></>}
+        </p>
+      )}
+      {section === "decisions" && decisionOrigin !== null && selected !== null && (
+        <p data-testid="decision-origin">{t("decisions.origin", { group: decisionOrigin.groupId, task: decisionOrigin.taskId ?? "—", run: decisionOrigin.runId })}</p>
+      )}
+      {from !== null && formatRoute(route) === from.pushedHash && <BackLine label={from.label} />}
       <SectionPane section="global-settings" active={section}>
         <GlobalSettings
           theme={theme}
@@ -1539,7 +1695,7 @@ export function App(): JSX.Element {
         <Overview model={overviewModel} onOpen={openOverviewTarget}
           onImport={() => openOverviewTarget({ kind: "global-control", region: "import" })}
           onViewDecisions={() => { setStatus("unreviewed"); setFilter(NO_FILTER); setSelected(null); }}
-          onRequirement={() => { navigationSeq.current++; setSelectedRequirement(null); setSection("requirements"); window.location.hash = "requirements"; }} />
+          onRequirement={() => { navigationSeq.current++; setSelectedRequirement(null); navigate({ kind: "section", section: "requirements" }); }} />
       </SectionPane>
       <SectionPane section="chains" active={section}>
       {chains === null && <p className="empty">{t("chains.notLoaded")}</p>}
@@ -1601,11 +1757,13 @@ export function App(): JSX.Element {
           targets={targets}
           focusRequest={overviewFocus?.request}
           focus={overviewFocus?.target.kind === "group" ? overviewFocus.target : null}
-          onSelect={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedGroup(id); }}
-          onSelectRequirement={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedRequirement(id); setSection("requirements"); window.location.hash = "requirements"; void readRequirement(id); }}
-          onSourceRequirement={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedRequirement(id); setSection("requirements"); window.location.hash = "requirements"; void readRequirement(id); }}
+          onSelect={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedGroup(id); navigate({ kind: "group", section: "tasks", groupId: id, region: null, taskId: null }); }}
+          route={route.kind === "group" ? route : null}
+          onRouteChange={(groupId, region, taskId) => navigate({ kind: "group", section: "tasks", groupId, region, taskId }, { replace: true })}
+          onSelectRequirement={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedRequirement(id); navigate({ kind: "requirement", section: "requirements", groupId: id }); void readRequirement(id); }}
+          onSourceRequirement={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedRequirement(id); navigate({ kind: "requirement", section: "requirements", groupId: id }); void readRequirement(id); }}
           onGroupAction={(groupId, verb, repoId) => { void sendGroupCardAction(groupId, verb, repoId); }}
-          onOpenDispatch={(groupId) => { const request = ++navigationSeq.current; setSelectedGroup(groupId); setOverviewFocus({ target: { kind: "group", groupId, region: "dispatch", taskId: null, runId: null }, request }); }}
+          onOpenDispatch={(groupId) => { navigate({ kind: "group", section: "tasks", groupId, region: null, taskId: null }); const request = ++navigationSeq.current; setSelectedGroup(groupId); setOverviewFocus({ target: { kind: "group", groupId, region: "dispatch", taskId: null, runId: null }, request }); }}
           onDraft={(key, text) => dispatchControl({ type: "draft", key, text })}
           onCommand={(action) => {
             void sendControl(action);
@@ -1640,10 +1798,12 @@ export function App(): JSX.Element {
         {/* Mounted only while shown: its cards would otherwise duplicate the Task control list's buttons in every pane. */}
         {section !== "board" ? null : controlConfig === null || control.recovery === null ? <p className="empty">{t("control.unavailable")}</p> : (
           <FlowBoard groups={summaryView(control).groups} scope={scope} repoLabel={repoLabel}
+            openFlowRunId={route.kind === "flow-run" ? route.flowRunId : null}
+            onOpenFlowRun={(flowRunId) => navigate(flowRunId === null ? { kind: "section", section: "board" } : { kind: "flow-run", section: "board", flowRunId })}
             onOpen={(group) => {
               navigationSeq.current++; setOverviewFocus(null);
-              if (group.state === "clarifying") { setSelectedRequirement(group.groupId); setSection("requirements"); window.location.hash = "requirements"; void readRequirement(group.groupId); return; }
-              setSelectedGroup(group.groupId); setSection("tasks"); window.location.hash = "tasks";
+              if (group.state === "clarifying") { setSelectedRequirement(group.groupId); navigate({ kind: "requirement", section: "requirements", groupId: group.groupId }); void readRequirement(group.groupId); return; }
+              setSelectedGroup(group.groupId); navigate({ kind: "group", section: "tasks", groupId: group.groupId, region: null, taskId: null });
             }}
             onCommand={(action) => { void sendControl(action); }} />
         )}
@@ -1651,7 +1811,7 @@ export function App(): JSX.Element {
       <SectionPane section="requirements" active={section}>
         {controlConfig !== null && control.recovery !== null && (
           <RequirementsPanel config={controlConfig} summary={summaryView(control)} views={requirementViews} selected={selectedRequirement} agents={agents}
-            onPrepare={(groupId) => { const request = ++navigationSeq.current; setOverviewFocus({ target: { kind: "group", groupId, region: "preparation", taskId: null, runId: null }, request }); setSelectedGroup(groupId); setSection("tasks"); window.location.hash = "tasks"; void readControlGroup(groupId); }}
+            onPrepare={(groupId) => { const request = ++navigationSeq.current; setOverviewFocus({ target: { kind: "group", groupId, region: "preparation", taskId: null, runId: null }, request }); setSelectedGroup(groupId); navigate({ kind: "group", section: "tasks", groupId, region: "preparation", taskId: null }); void readControlGroup(groupId); }}
             onGroupAction={(groupId, verb, repoId) => { void sendGroupCardAction(groupId, verb, repoId); }}
             groupRefusals={control.refusals}
             focus={overviewFocus?.target.kind === "requirement" ? overviewFocus.target : null}
@@ -1672,7 +1832,7 @@ export function App(): JSX.Element {
         {/* Toggle buttons, not ARIA tabs: the group view's region tabs are the page's one tablist. */}
         <div role="group" aria-label={t("corrections.tabs")} className="detail-region-tabs">
           {(["decisions", "corrections"] as const).map((tab) => (
-            <button key={tab} type="button" aria-pressed={decisionsTab === tab} onClick={() => setDecisionsTab(tab)}>
+            <button key={tab} type="button" aria-pressed={decisionsTab === tab} onClick={() => navigate(tab === "corrections" ? { kind: "corrections", section: "decisions" } : { kind: "section", section: "decisions" }, { replace: true })}>
               {t(tab === "decisions" ? "corrections.tabDecisions" : "corrections.tabCorrections")}
             </button>
           ))}
@@ -1681,7 +1841,7 @@ export function App(): JSX.Element {
         {todo.status !== "available" && <p role="status">{t("overview.source.decisions")} · {t(`overview.status.${todo.status}`)}{todo.error ? ` · ${todo.error}` : ""}</p>}
         {projects === null ? (
           // Plan decision P2: without a project list the rows keep today's repository filter.
-          <DecisionsView rows={scopedDecisionRows} status={status} onStatus={setStatus} loading={statusLoading} sourceStatus={status === "unreviewed" ? todo.status : undefined} filter={effectiveDecisionFilter} onFilter={setFilter} selected={selected} onOpen={openDecisionRow} detail={detail} reviewedCount={reviewedThisSession} showMinor={showMinor} onShowMinor={setShowMinor} />
+          <DecisionsView rows={scopedDecisionRows} status={status} onStatus={setStatus} loading={statusLoading} sourceStatus={status === "unreviewed" ? todo.status : undefined} filter={effectiveDecisionFilter} onFilter={setFilter} selected={selected} onOpen={(row) => openDecisionRow(row, "push")} detail={detail} reviewedCount={reviewedThisSession} showMinor={showMinor} onShowMinor={setShowMinor} />
         ) : (
           // With one, the pane follows the global scope: rows are restricted here, and its repository select is the sidebar's.
           <DecisionsView
@@ -1692,7 +1852,7 @@ export function App(): JSX.Element {
             filter={effectiveDecisionFilter}
             onFilter={setFilter}
             selected={selected}
-            onOpen={openDecisionRow}
+            onOpen={(row) => openDecisionRow(row, "push")}
             detail={detail}
             reviewedCount={reviewedThisSession}
             showMinor={showMinor}

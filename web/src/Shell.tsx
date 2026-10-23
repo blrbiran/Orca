@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { SECTIONS, hashFor } from "./sections.js";
 import type { Section } from "./sections.js";
 
-const NAV_KEY = { overview: "nav.overview", decisions: "nav.decisions", chains: "nav.chains", tasks: "nav.tasks", board: "nav.board", requirements: "nav.requirements", memory: "nav.memory", metrics: "nav.metrics", "global-settings": "nav.globalSettings", "project-settings": "nav.projectSettings" } as const satisfies Record<Section, string>;
+export const NAV_KEY = { overview: "nav.overview", decisions: "nav.decisions", chains: "nav.chains", tasks: "nav.tasks", board: "nav.board", requirements: "nav.requirements", memory: "nav.memory", metrics: "nav.metrics", "global-settings": "nav.globalSettings", "project-settings": "nav.projectSettings" } as const satisfies Record<Section, string>;
 
 /**
  * The four conditions that light the red nav dot. "No execution port" is a note, and "projection refetch

@@ -189,7 +189,11 @@ workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
   /** Control run decisions plan Task 11: this group's decisions as last read (or its failed read); absent or null shows no badge and no section. */
   decisions?: GroupDecisionsRead | null;
   /** Open a decision's detail, where it is corrected (App.tsx). */
-  onCorrectDecision?: (projectKey: string, decisionId: string) => void;
+  onCorrectDecision?: (projectKey: string, decisionId: string, origin?: { groupId: string; taskId: string | null; runId: string }) => void;
+  /** Tester round 2 §9.3 (H11): the route naming this group; its region and open task come from it. */
+  route?: { region: DetailRegion | null; taskId: string | null } | null;
+  /** §9.3: a region tab, an opened or closed task -- reported up so App writes it to the URL (replace). */
+  onRouteChange?: (region: DetailRegion, taskId: string | null) => void;
   /** Checks spec 2026-10-22 §6.6: another group's command revision (a review group's, to dismiss its finding); null if unknown. */
   revisionOf?: (groupId: string) => number | null;
 }
@@ -306,14 +310,22 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
     continuable.map(({ run, checkpointId }) => ({ taskId: String(run.taskId), predecessorRunId: run.runId, checkpointId }));
   // Labels and progress spec §4.2: the label filter (any of) and the open task live in page memory only.
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
-  const [openTask, setOpenTask] = useState<string | null>(props.focus?.groupId === groupId ? props.focus.taskId : null);
+  const [openTask, setOpenTask] = useState<string | null>(props.route != null ? props.route.taskId : props.focus?.groupId === groupId ? props.focus.taskId : null);
   useLayoutEffect(() => { if (props.focus?.groupId === groupId && props.focus.taskId !== null) setOpenTask(props.focus.taskId); }, [props.focus, props.focusRequest]);
-  const [region, setRegion] = useState<DetailRegion>(() => props.focus?.groupId === groupId ? focusedDetailRegion(view, props.focus.region) : defaultDetailRegion(view));
+  const [region, setRegion] = useState<DetailRegion>(() => props.route?.region != null ? props.route.region : props.focus?.groupId === groupId ? focusedDetailRegion(view, props.focus.region) : defaultDetailRegion(view));
+  // Tester round 2 §9.3: a route that names this group (Back, a typed hash) sets the region and the open task.
+  useLayoutEffect(() => {
+    if (props.route == null) return;
+    if (props.route.region !== null) setRegion(props.route.region);
+    setOpenTask(props.route.taskId);
+  }, [props.route?.region, props.route?.taskId]);
+  const selectRegion = (next: DetailRegion): void => { setRegion(next); props.onRouteChange?.(next, openTask); };
+  const toggleTask = (taskId: string): void => { const next = openTask === taskId ? null : taskId; setOpenTask(next); props.onRouteChange?.(region, next); };
   // Only explicit navigation selects a region; projection changes keep the person's current choice.
   useLayoutEffect(() => { if (props.focus?.groupId === groupId) setRegion(focusedDetailRegion(view, props.focus.region)); }, [props.focus, props.focusRequest]);
   const [requestedRun, setRequestedRun] = useState<string | null>(null);
   useLayoutEffect(() => { if (region === "runs" && requestedRun !== null) document.getElementById(runRegionId(groupId, requestedRun))?.focus(); }, [region, requestedRun]);
-  const openRun = (runId: string): void => { setRequestedRun(runId); setRegion("runs"); };
+  const openRun = (runId: string): void => { setRequestedRun(runId); selectRegion("runs"); };
   const allLabels = [...new Set(view.workItems.flatMap((item) => item.labels ?? []))].sort();
   // A checked label no task carries any more (removed in the detail editor, or by another read) has no checkbox left to
   // uncheck, so it must stop filtering -- otherwise the table stays empty with no way out.
@@ -523,9 +535,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <p>{t(view.summary.state === "review" ? "detail.goalReview" : "detail.nextAction")}</p>
       {/* Issue #47: the execution controls are one bar above the region tabs, shown whatever tab is open. */}
       {dispatchControls}
-      <GroupDetailRegions groupId={groupId} selected={region} onSelect={setRegion} regions={{
+      <GroupDetailRegions groupId={groupId} selected={region} onSelect={selectRegion} regions={{
         progress: <>
-      <DependencyGraph items={view.workItems} runs={view.runs} now={props.now} openTask={openTask} onOpen={(taskId) => setOpenTask(openTask === taskId ? null : taskId)} />
+      <DependencyGraph items={view.workItems} runs={view.runs} now={props.now} openTask={openTask} onOpen={toggleTask} />
       <h3>{t("control.group.workItems")}</h3>
       {allLabels.length > 0 && (
         <fieldset aria-label={t("control.group.filterRegion")}>
@@ -550,7 +562,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           {shownItems.map((item) => (
             <tr key={item.taskId}>
               <td>
-                <button type="button" aria-expanded={openTask === item.taskId} onClick={() => setOpenTask(openTask === item.taskId ? null : item.taskId)}>
+                <button type="button" aria-expanded={openTask === item.taskId} onClick={() => toggleTask(item.taskId)}>
                   {item.taskId}
                 </button>
                 {/* Tester round 2 §8.2 (H5): what the task is for, one line; the whole goal in the title. */}

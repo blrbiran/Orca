@@ -202,7 +202,7 @@ export interface TaskDetailProps {
   decisions?: GroupDecisionsViewV1 | null;
   /** Fix round 1 (Rule 12): the code the group's decisions read failed with; said in place of its decisions. */
   decisionsFailed?: string | null;
-  onCorrectDecision?: (projectKey: string, decisionId: string) => void;
+  onCorrectDecision?: (projectKey: string, decisionId: string, origin?: { groupId: string; taskId: string | null; runId: string }) => void;
 }
 
 export function TaskDetail(props: TaskDetailProps): JSX.Element {
@@ -242,7 +242,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       {props.decisionsFailed != null && <p data-testid="decisions-read-failed">{t("control.decisions.readFailed", { code: props.decisionsFailed })}</p>}
       {props.decisions?.tasks.find((task) => task.taskId === item.taskId)?.runs.map((run) => (
         <RunDecisions key={run.runId} groupId={groupId} revision={view.summary.commandRevision} run={run} projectKey={props.decisions?.projectKey ?? null}
-          onCommand={onCommand} onCorrect={props.onCorrectDecision} archived={archived} />
+          onCommand={onCommand} onCorrect={props.onCorrectDecision && ((projectKey, decisionId) => props.onCorrectDecision?.(projectKey, decisionId, { groupId, taskId: item.taskId, runId: run.runId }))} archived={archived} />
       ))}
       {draft !== null && draft.base !== current && (
         <p role="status">

@@ -32,7 +32,8 @@ function setup() {
 }
 async function open() { await flush(); fireEvent.click(screen.getByRole("button",{name:/^g ·/})); await flush(); }
 function task() { return within(screen.getByRole("region",{name:"Task a"})); }
-async function openTask() { fireEvent.click(screen.getByRole("tab",{name:"Progress"})); fireEvent.click(screen.getByRole("button",{name:"a"})); await flush(); fireEvent.click(screen.getByRole("tab",{name:"Results"})); await flush(); }
+// Tester round 2 §9.3 (C31): the route keeps the open task across a remount of the group view, so it is opened only when closed.
+async function openTask() { fireEvent.click(screen.getByRole("tab",{name:"Progress"})); if(screen.queryByRole("region",{name:"Task a"})===null) fireEvent.click(screen.getByRole("button",{name:"a"})); await flush(); fireEvent.click(screen.getByRole("tab",{name:"Results"})); await flush(); }
 it("real App completed missing results retain actual success and independent source unsupported",async()=>{
  const s=setup();s.result=savedRun({source:{status:"unsupported",reason:"old-peer"},availability:"missing",currentExplanation:{status:"missing",reason:null,content:null},attempts:[]});render(<App/>);await open();
  expect(screen.getByRole("tab",{selected:true}).textContent).toBe("Results");const current=screen.getByRole("region",{name:"Current result · run-a"});expect(current.textContent).toContain("succeeded");expect(current.textContent).toContain("missing");expect(screen.getByText(/Source: unsupported/)).toBeTruthy();expect(s.reads.map(r=>r.path)).toEqual(["/api/control/groups/g/results"]);expect(s.panel.posts).toHaveLength(0);
