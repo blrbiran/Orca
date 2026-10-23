@@ -99,6 +99,7 @@ import type { ControlStore } from "./store.js";
 import type { BudgetEstimateV1, CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, RawAuthorityCommandV1, ProfileBindingV1 } from "./webProtocol.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { budgetBalance, isTerminalRunState } from "./budget.js";
+import { mirrorWebAuthority, reopenProposalBodies, type Body } from "./proposalReopen.js";
 import { isTerminallyFailedRun } from "./driveRecord.js";
 import { hasRequirementBlock, latestDraft, latestRound, readRequirementGroup, refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall } from "./singleCallLedger.js";
@@ -367,17 +368,11 @@ export function assertKnownConservation(store: ControlStore, group: Group, propo
   if (!same(expected, group.reserved)) throw new ControlError("recovery-blocked");
 }
 export function saveWebAuthority(store: ControlStore, group: Group, proposal: BudgetProposalRecord): void {
-  const review = proposal.allocations.find(a => a.ownerKind === "goal-review");
-  if (!review) throw new ControlError("recovery-blocked");
-  group.reviewReserve = review.amount;
-  if (["draft", "ready"].includes(group.status)) group.reviewRemaining = review.amount;
-  group.proposal = { state: proposal.state, proposalVersion: proposal.proposalVersion, planHash: proposal.planHash, budgetMode: proposal.budgetMode, contextPolicy: proposal.contextPolicy, profiles: proposal.profiles, executionSnapshotHash: proposal.executionSnapshotHash };
-  group.limit = proposal.groupLimit;
+  if (!proposal.allocations.some(a => a.ownerKind === "goal-review")) throw new ControlError("recovery-blocked");
   const optionalPolicy=hasTokenPolicy(store,group.groupId);
+  mirrorWebAuthority(group as unknown as Body, proposal as unknown as Body);
   saveTokenPolicy(store,group.groupId,"",proposal.groupLimit.tokens,optionalPolicy?"optional-v1":"finite-legacy");
   if(optionalPolicy)for(const a of proposal.allocations)if(a.ownerKind==="task"&&a.bucket==="work")saveTokenPolicy(store,group.groupId,a.ownerId,a.amount.tokens);
-  group.reserved = group.ledger.committedRemaining;
-  group.ledger = { ...group.ledger, groupLimit: proposal.groupLimit, used: group.used, explicitUnallocatedReserve: proposal.explicitUnallocatedReserve };
   store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), group.groupId);
   store.db.prepare("UPDATE budget_proposals SET proposal_version=?,body=? WHERE group_id=?").run(proposal.proposalVersion, canonicalBytes(proposal).toString("utf8"), group.groupId);
 }
@@ -429,29 +424,15 @@ function resetDraftReserve(store: ControlStore, id: string, group: Group, propos
   return commitments;
 }
 
-/** Any proposal change returns it to editable: the version advances and every confirmation-time fact is dropped. */
+/**
+ * Any proposal change returns it to editable: the version advances and every confirmation-time fact is dropped. The body
+ * transformation is `reopenProposalBodies` (proposalReopen.ts), shared with the schema 18 → 19 repair (tester round 2 §4.3.1).
+ */
 function reopenProposal(store: ControlStore, id: string, group: Group, proposal: BudgetProposalRecord, commitments: Amount): void {
-  proposal.proposalVersion = safeNumber(BigInt(proposal.proposalVersion) + 1n);
-  proposal.state = "editable"; proposal.budgetMode = null; proposal.profiles = null; proposal.executionSnapshotHash = null;
-  proposal.contextPolicy = { handoffAtContextTokens: null };
-  proposal.allocations.forEach(a => { a.state = "draft-encumbered"; });
-  group.status = "draft"; group.ledger.committedRemaining = commitments;
-  // Tester round 2 spec §4.2.5: the deficit is re-derived with the reserve (zero unless a raised limit just cured one).
-  group.ledger.budgetDeficit = budgetBalance(proposal.groupLimit, group.used, commitments).deficit;
-  for (const row of store.db.prepare("SELECT id,body FROM work_items WHERE group_id=?").all(id)) {
-    const work = JSON.parse(String(row.body));
-    if (work.kind !== "task") continue;
-    work.status = "draft"; work.derivedContractHash = null;
-    // Agent selection spec §6.4: a reopened proposal has no frozen selection; the next confirmation freezes one.
-    work.configHash = null;
-    for (const key of ["agent", "agentProvenance", "timeoutMs", "killGraceMs", "agentCapabilities"]) delete work[key];
-    work.grant = { work: proposal.allocations.find(a => a.ownerId === row.id && a.bucket === "work")!.amount, handoff: proposal.allocations.find(a => a.ownerId === row.id && a.bucket === "handoff")!.amount };
-    store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, row.id);
-  }
-  (group as Record<string, unknown>).reconcileSlot = null;
-  // Integration spec §3.2: the approval was the confirmation; the next one approves the scheme again.
-  const integration = readGroupIntegration(group);
-  if (integration !== null) (group as Record<string, unknown>).integration = { ...integration, frozen: false };
+  readGroupIntegration(group); // a scheme that does not parse refuses by name, as before
+  const works = store.db.prepare("SELECT id,body FROM work_items WHERE group_id=?").all(id).map(row => ({ id: String(row.id), body: JSON.parse(String(row.body)) as Record<string, unknown> }));
+  reopenProposalBodies(group as unknown as Body, proposal as unknown as Body, works.map(work => work.body), commitments);
+  for (const work of works) if (work.body.kind === "task") store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work.body), id, work.id);
   saveWebAuthority(store, group, proposal);
 }
 

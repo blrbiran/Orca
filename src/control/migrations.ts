@@ -1,7 +1,8 @@
 import type { DatabaseSync } from "node:sqlite";
 import { canonicalBytes } from "./canonicalJson.js";
+import { mirrorWebAuthority, reopenProposalBodies, type Body } from "./proposalReopen.js";
 
-export const schemaVersion = "18";
+export const schemaVersion = "19";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -241,12 +242,79 @@ function migrate17To18(store: DatabaseSync): void {
   store.exec(schema17To18);
 }
 
-/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, then the version marker. */
-function finishMigration(store: DatabaseSync): void {
+/**
+ * 18 → 19 (tester round 2 spec §4.3, ruling H1): a one-time data repair, no DDL. A Web group stuck `blocked` whose only
+ * blocking-capable breach is an estimate run's, and that never started, goes back to `draft`; a confirmed proposal is
+ * reopened exactly as `reopenProposal` does (proposalReopen.ts) and its `group_orchestration` row deleted. Never throws
+ * (round 2 N1): every new body is computed before any write, and a group any of whose bodies cannot be read or reopened
+ * is left as it is. The group's revision is not moved (as migrateSettings15To16 does not move a settings revision).
+ */
+export function repairEstimateBreachedGroups(store: DatabaseSync, now: () => number): void {
+  for (const row of store.prepare("SELECT id, body FROM groups ORDER BY rowid").all()) {
+    const groupId = String(row.id);
+    try {
+      const planned = repairOf(store, groupId, JSON.parse(String(row.body)) as Body, now);
+      if (planned === null) continue;
+      for (const write of planned) write();
+    } catch { /* left as it is: not repaired, not thrown */ }
+  }
+}
+
+function repairOf(store: DatabaseSync, groupId: string, group: Body, now: () => number): Array<() => void> | null {
+  if (typeof group !== "object" || group === null || group.status !== "blocked" || !Object.hasOwn(group, "planHash")) return null;
+  const estimateBreaches: string[] = [];
+  for (const runRow of store.prepare("SELECT id, body FROM runs WHERE group_id=?").all(groupId)) {
+    const run = JSON.parse(String(runRow.body)) as Body;
+    // Condition 5: the group never started.
+    if (run.phase === "work" || run.phase === "handoff") return null;
+    if (!Array.isArray(run.breaches) || run.breaches.length === 0) continue;
+    if (run.phase === "estimate") { estimateBreaches.push(String(runRow.id)); continue; }
+    // Review I1: a clarify or split call ran while the group was clarifying, where DR18 records a breach without blocking.
+    if (run.phase === "single-call" && (run.purpose === "clarify" || run.purpose === "split")) continue;
+    return null; // condition 4: a blocking-capable breach
+  }
+  if (estimateBreaches.length === 0) return null; // condition 3
+  const proposalRow = store.prepare("SELECT body FROM budget_proposals WHERE group_id=?").get(groupId);
+  if (proposalRow === undefined) return null;
+  const proposal = JSON.parse(String(proposalRow.body)) as Body;
+  if (typeof proposal !== "object" || proposal === null || typeof proposal.state !== "string") return null;
+  const reopened = proposal.state === "confirmed";
+  const writes: Array<() => void> = [];
+  if (reopened) {
+    const works = store.prepare("SELECT id, body FROM work_items WHERE group_id=?").all(groupId).map(work => ({ id: String(work.id), body: JSON.parse(String(work.body)) as Body }));
+    // The reservation is kept (committedRemaining unchanged); the reserve and deficit come from budgetBalance.
+    reopenProposalBodies(group, proposal, works.map(work => work.body), group.ledger.committedRemaining);
+    mirrorWebAuthority(group, proposal);
+    const proposalJson = canonicalBytes(proposal).toString("utf8");
+    writes.push(() => store.prepare("UPDATE budget_proposals SET proposal_version=?, body=? WHERE group_id=?").run(proposal.proposalVersion, proposalJson, groupId));
+    for (const work of works) if (work.body.kind === "task") { const json = JSON.stringify(work.body); writes.push(() => store.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(json, groupId, work.id)); }
+    // saveWebAuthority's token-policy writes, with the values the rows hold (only rows that exist; their mode kept).
+    const policy = store.prepare("SELECT mode FROM token_policies WHERE group_id=? AND work_item_id=''").get(groupId);
+    if (policy !== undefined) {
+      const limitTokens = (proposal.groupLimit as { tokens: number | null }).tokens;
+      writes.push(() => store.prepare("UPDATE token_policies SET tokens=? WHERE group_id=? AND work_item_id=''").run(limitTokens, groupId));
+      if (policy.mode === "optional-v1") for (const allocation of proposal.allocations as Body[]) if (allocation.ownerKind === "task" && allocation.bucket === "work") {
+        const tokens = (allocation.amount as { tokens: number | null }).tokens;
+        writes.push(() => store.prepare("UPDATE token_policies SET tokens=? WHERE group_id=? AND work_item_id=?").run(tokens, groupId, String(allocation.ownerId)));
+      }
+    }
+    writes.push(() => store.prepare("DELETE FROM group_orchestration WHERE group_id=?").run(groupId));
+  }
+  group.status = "draft";
+  const statusRepairs = Array.isArray(group.statusRepairs) ? group.statusRepairs : [];
+  group.statusRepairs = [...statusRepairs, { from: "blocked", to: "draft", reopened, cause: "estimate-breach", runIds: [...estimateBreaches].sort(), by: "migration-18-to-19", at: now() }];
+  const groupJson = JSON.stringify(group);
+  writes.push(() => store.prepare("UPDATE groups SET body=? WHERE id=?").run(groupJson, groupId));
+  return writes;
+}
+
+/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, 18 → 19, then the version marker. */
+function finishMigration(store: DatabaseSync, now: () => number): void {
   store.exec(schema15To16);
   migrateSettings15To16(store);
   migrate16To17(store);
   migrate17To18(store);
+  repairEstimateBreachedGroups(store, now);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }
 
@@ -263,42 +331,49 @@ function migrate7To8(store: DatabaseSync): void {
   if (!ledgerExisted) store.exec(schema7To8PreLedger);
 }
 
-export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
+export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () => number = Date.now): void {
   // Saved recovery's 11→12 marker fenced older owners. The current 11/12→13 upgrade also
   // adds installation-update revision/outbox tables; it leaves old policy and accounting rows intact.
+  if (fromVersion === "18") {
+    repairEstimateBreachedGroups(store, now);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "17") {
     migrate17To18(store);
+    repairEstimateBreachedGroups(store, now);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "16") {
     migrate16To17(store);
     migrate17To18(store);
+    repairEstimateBreachedGroups(store, now);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "15") {
-    finishMigration(store);
+    finishMigration(store, now);
     return;
   }
   if (fromVersion === "14") {
     store.exec(schema14To15);
-    finishMigration(store);
+    finishMigration(store, now);
     return;
   }
   if (fromVersion === "13") {
     store.exec(schema13To14 + schema14To15);
-    finishMigration(store);
+    finishMigration(store, now);
     return;
   }
   if (fromVersion === "12") {
     store.exec(schema12To13 + schema13To14 + schema14To15);
-    finishMigration(store);
+    finishMigration(store, now);
     return;
   }
   if (fromVersion === "11") {
     store.exec(schema12To13 + schema13To14 + schema14To15);
-    finishMigration(store);
+    finishMigration(store, now);
     return;
   }
   if (fromVersion === "1") store.exec(schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7);
@@ -311,5 +386,5 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string): void {
   // Every version before 8 goes through 7 to 8 first; 8 itself only gains the activity table (spec §5.2).
   if (fromVersion !== "8" && fromVersion !== "9" && fromVersion !== "10") migrate7To8(store);
   store.exec(schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15);
-  finishMigration(store);
+  finishMigration(store, now);
 }
