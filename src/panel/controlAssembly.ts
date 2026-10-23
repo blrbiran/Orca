@@ -301,9 +301,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       }))
       // Tester round 2 spec §7.2: unlimited-token groups a person created are confirmed before the auto-start pass, so one
       // confirmed here starts in the same pass. Refusals are booked (one per proposal version) and written here.
-      .then(() => service.autoConfirmUnlimitedPass()).then(({ refused }) => {
-        for (const { groupId, code } of refused) process.stderr.write(`orca-control: automatic confirm of ${groupId} refused: ${code}\n`);
-      })
+      .then(() => autoConfirmStep(service))
       .then(() => service.autoStart()).then(() => service.autoResolveIntegrationConflicts()).then(() => undefined, (error: unknown) => {
       process.stderr.write(`orca-control: auto-start pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
     });
@@ -382,4 +380,18 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     // start a second, un-awaited stop behind it.
     close: () => { stopTimer(); if (shutdownRun === null) void driver?.stop(); store.close(); },
   });
+}
+
+/**
+ * Tester round 2 spec §7.2 (review M1): the pump's automatic-confirm step. Refusals (booked, one per proposal version) are
+ * written one line each; a pass that fails is written and swallowed, so the auto-start and integration-conflict passes
+ * chained after it still run.
+ */
+export function autoConfirmStep(
+  service: { autoConfirmUnlimitedPass(): Promise<{ refused: Array<{ groupId: string; code: string }> }> },
+  write: (line: string) => void = (line) => { process.stderr.write(line); },
+): Promise<void> {
+  return service.autoConfirmUnlimitedPass().then(({ refused }) => {
+    for (const { groupId, code } of refused) write(`orca-control: automatic confirm of ${groupId} refused: ${code}\n`);
+  }, (error: unknown) => { write(`orca-control: automatic confirm pass failed: ${error instanceof Error ? error.message : String(error)}\n`); });
 }
