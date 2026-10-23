@@ -718,8 +718,10 @@ export class WebControlService {
         // binding, flowAssembly.ts): confirm refuses a null threshold under a profile that declares a window.
         const window = this.deps.profileRouter.resolve("task", profileId, profileHash).snapshot.profile.capabilities.contextWindowTokens;
         let selectionsHash: string | null;
+        // Review I1: only a resolution that answers "unresolved" is booked; a thrown one (a transient port failure) books
+        // nothing, so the next pass tries again.
         try { selectionsHash = (await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId, ORCHESTRATION_ACTOR)).selectionsHash; }
-        catch { selectionsHash = null; }
+        catch (error) { process.stderr.write(`orca-control: automatic confirm of ${groupId} skipped: ${describeError(error)}\n`); continue; }
         const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)!.revision);
         command = {
           schema: "orca-raw-command-v1", commandId: autoConfirmCommandId(proposal.proposalVersion), actorId: ORCHESTRATION_ACTOR, expectedRevision: revision,

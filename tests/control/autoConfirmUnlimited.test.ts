@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { ControlError } from "../../src/control/errors.js";
 import { autoConfirmBlocker, autoConfirmCommandId } from "../../src/control/autoConfirm.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { readGroupOrchestration } from "../../src/control/orchestration.js";
@@ -238,6 +239,24 @@ describe("H4: the automatic confirm of unlimited-token groups", () => {
       const { blocker, result } = await passWithPredicate(h, service);
       expect(blocker).toEqual({ condition: 3, code: "stop-intent" });
       expect(result).toEqual({ confirmed: [], refused: [] });
+    } finally { await h.dispose(); }
+  });
+
+  it("review I1: a slot resolution that throws (a transient port failure) books nothing and is retried next pass", async () => {
+    const h = await unlimited(); try {
+      const port = h.deps.port as { resolveAgent: (partial: unknown) => Promise<unknown> };
+      const real = port.resolveAgent;
+      port.resolveAgent = async () => { throw new ControlError("control-peer-timeout"); };
+      const lines: string[] = [];
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => { lines.push(String(chunk)); return true; });
+      const service = new WebControlService(h.deps);
+      try {
+        expect(await service.autoConfirmUnlimitedPass(() => defaultsOf(h))).toEqual({ confirmed: [], refused: [] });
+      } finally { stderr.mockRestore(); }
+      expect(attemptRow(h)).toBeUndefined();
+      expect(lines.filter(line => line.includes("automatic confirm"))).toEqual(["orca-control: automatic confirm of g skipped: control-peer-timeout\n"]);
+      port.resolveAgent = real;
+      expect((await service.autoConfirmUnlimitedPass(() => defaultsOf(h))).confirmed).toEqual(["g"]);
     } finally { await h.dispose(); }
   });
 
