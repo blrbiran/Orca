@@ -140,3 +140,13 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 | Orca › `tests/control/agentSelectionE2E.test.ts`、`driverReconcile*`、`schedulerBridge`、`driverSettle`、`handoffE2E` | 已登记形状在本会话多次再见，单跑全绿 |
 | ccloop › `tests/runtime/codex/abortedUsage.test.ts` | 断言形状「expected null to be a CodexPhaseAborted」，n＝1；单跑 3/3 绿 |
 | ccloop › `phasesCompleted`、`savedResultRecovery.native` | 在未改动的 main 上同样红（负载 37–66）；负载约 13 时两边各 3/3 绿 |
+
+## 会话 `0e13a9b7`（2026-10-23）新见形状（同样未满足「个位数负载 3/3」，**下次红先对照，不豁免**）
+
+> 出处：`.superpowers/sdd/2026-10-23-flow-phase1-gaps/progress.md` 同名行（flow-gaps 分支各任务的全量）。每条都是全量里红、改动不涉及该文件、单跑绿。
+
+| 仓 › 文件 › 现象 | 观测 |
+|---|---|
+| Orca › `tests/control/taskResultCollector.test.ts` › 「caches only old command refusal…」 | `control-peer-timeout`（与上表同文件同形状，另一条用例）；全量负载约 24–32 时红，单跑 30/30 |
+| Orca › web `tests/settingsScopes.test.tsx` › 「default saves preserve…」 | 一次读取里多出一行「decisions could not be read (route-not-found)」；与变异跑同机时红，单跑 12/12 |
+| Orca › web `tests/controlCommandRecovery.test.tsx` › 「parks a missing group once…」 | 断言形状（不是超时），n＝1；单跑 3/3，同提交第二次全量绿 |
