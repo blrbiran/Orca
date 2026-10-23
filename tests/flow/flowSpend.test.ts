@@ -73,11 +73,14 @@ async function settle(t: World, purpose: string, output: unknown): Promise<strin
   return run.id;
 }
 
-/** The tool's usage report on a run row: a token count, or `unknown` (the tool reported none). */
+/**
+ * The tool's usage report on a run row: a token count, or `unknown` -- its last event carried no usage (usage.ts sets
+ * `unknown.work` and keeps the earlier cumulative, here 700, which is then not the run's spend).
+ */
 function report(w: World["w"], runId: string, usage: number | "unknown"): void {
   const body = JSON.parse(String(w.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body)) as { cumulative: { work: { tokens: number } }; unknown: { work: boolean } };
   if (usage === "unknown") body.unknown = { ...body.unknown, work: true };
-  else body.cumulative = { ...body.cumulative, work: { ...body.cumulative.work, tokens: usage } };
+  body.cumulative = { ...body.cumulative, work: { ...body.cumulative.work, tokens: usage === "unknown" ? 700 : usage } };
   w.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), runId);
 }
 
@@ -173,12 +176,15 @@ describe("spend: only the tool's numbers (gaps §10, G9)", { timeout: 60_000 }, 
       const [invalid, valid] = t.draftRuns;
       report(t.w, invalid!, "unknown");
       report(t.w, valid!, 1_300);
-      childRun(t.w, childGroupIdOf(t.flowRunId, "write", 1), "child-run-x", 0, true);
+      childRun(t.w, childGroupIdOf(t.flowRunId, "write", 1), "child-run-x", 5_000, true);
       const v = view(t.w, t.flowRunId);
       const outline = step(v, "outline").executions[0]!.spend;
       expect(outline).toEqual({ tokens: 1_300, unknownReason: "partial: 1 runs unknown", ...NONE, runs: [{ runId: invalid, purpose: "flow-draft", tokens: null }, { runId: valid, purpose: "flow-draft", tokens: 1_300 }] });
       expect(step(v, "write").spend).toMatchObject({ tokens: 42_000, unknownReason: "partial: 1 runs unknown" });
       expect(v.spend).toMatchObject({ tokens: 1_300 + 42_000, unknownReason: "partial: 2 runs unknown", ...NONE });
+      // Every run of the execution unknown: no number at all, with the tool's reason.
+      report(t.w, valid!, "unknown");
+      expect(step(view(t.w, t.flowRunId), "outline").spend).toMatchObject({ tokens: null, unknownReason: "the tool reported no usage", ...NONE });
     } finally { await t.w.dispose(); }
   });
 
