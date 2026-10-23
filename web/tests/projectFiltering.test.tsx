@@ -21,7 +21,8 @@ import type { FakePanel } from "./fixtures/twoProjects.js";
 
 let panel: FakePanel;
 beforeEach(() => { panel = installFakePanel(); });
-afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); });
+// Tester round 2 §9.3: an opened decision is now in the URL and a remounted App opens it again, so each test starts at "/".
+afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); window.history.replaceState(null, "", "/"); });
 
 const projectSelect = (): HTMLSelectElement => screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement;
 const optionNames = (): string[] => Array.from(projectSelect().options).map((option) => option.textContent ?? "");
