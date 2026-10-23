@@ -169,7 +169,11 @@ describe("the folder's project presets (Task 10-B fix round 2)", () => {
     };
     // mutation: resolve nothing from dir (always the global layer) -> source global, red
     expect(await tone(`?dir=${encodeURIComponent(w.folder)}`)).toEqual({ value: "project", source: "project", lockedBy: null });
-    expect(await tone(`?dir=${encodeURIComponent(join(w.folder, "."))}`)).toEqual({ value: "project", source: "project", lockedBy: null });
+    // The folder by another spelling (a trailing slash, a link to it) is the same project, as for the start.
+    // mutation: compare the path as written instead of its real path -> source global, red
+    symlinkSync(w.folder, join(w.root, "link-to-articles"));
+    expect(await tone(`?dir=${encodeURIComponent(`${w.folder}/`)}`)).toEqual({ value: "project", source: "project", lockedBy: null });
+    expect(await tone(`?dir=${encodeURIComponent(join(w.root, "link-to-articles"))}`)).toEqual({ value: "project", source: "project", lockedBy: null });
     expect(await tone(`?dir=${encodeURIComponent(elsewhere)}`)).toEqual({ value: "global", source: "global", lockedBy: null });
     expect(await tone(`?dir=${encodeURIComponent(join(w.root, "missing"))}`)).toEqual({ value: "global", source: "global", lockedBy: null });
     expect(await tone("?dir=relative")).toEqual([400, "query-invalid"]);
