@@ -26,6 +26,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `archive-stop-pending` | 409 |
 | `artifact-id-conflict` | 409 |
 | `artifact-not-found` | 404 |
+| `auto-confirm-selections-unresolved` | 422 |
 | `budget-overflow` | 422 |
 | `budget-owned-by-loop-plan` | 422 |
 | `ccloop-failed` | 424 |

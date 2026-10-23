@@ -7,7 +7,10 @@ it("finite optional task ceiling can exceed free group reserve",async()=>{
  const h=await webFixture(undefined,[{taskId:"a",loop:{goal:"ship",successCondition:"passes",targetPaths:["a"],checks:["true"],tokenBudget:99000}}],{tokenPolicy:"optional-v1"});
  try {
   const service=new WebControlService(h.deps);let view=readControlGroup(h.store,"epoch","g");
-  expect(service.editProposal(h.command("proposal-edit",{baseProposalVersion:view.proposal.proposalVersion,operations:[],proposedGroupLimit:{...view.ledger.groupLimit,tokens:1500000}}))).not.toHaveProperty("error");
+  // Tester round 2 (ruling H2, spec §5.2.2; 「这次批准改写所有必要的判据」): the queued estimate now commits the 1,000,000-token
+  // cap (was 250,000), so the finite limit is 2,500,000 (was 1,500,000) to leave the same kind of small free reserve
+  // (500,000) that the 1,000,000-token task ceiling below exceeds.
+  expect(service.editProposal(h.command("proposal-edit",{baseProposalVersion:view.proposal.proposalVersion,operations:[],proposedGroupLimit:{...view.ledger.groupLimit,tokens:2500000}}))).not.toHaveProperty("error");
   view=readControlGroup(h.store,"epoch","g");expect(view.workItems[0]).toMatchObject({tokenAccountingMode:"optional-v1"});
   const current=view.allocations.find(a=>a.ownerId==="a"&&a.bucket==="work")!.amount;
   const result=await service.setTaskLoop(h.taskCommand("set-task-loop","a",{baseLoopVersion:0,plan:"standard",inputs:view.workItems[0]!.loopPlan!.inputs,work:{tokens:1000000,activeMs:current.activeMs,attempts:current.attempts}}));
