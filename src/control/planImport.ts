@@ -20,16 +20,16 @@ import {
 import { writeCanonicalRecord } from "./snapshot.js";
 import { newGroupIntegration, readIntegrationDefault } from "./integrationScheme.js";
 import { commandPrincipalFor, routedPersonAuthorityFor } from "./commandClient.js";
+import { AgentCeilingRefusal, capStatuses, spendCapBlocking } from "./spendCaps.js";
+import { readSchedulerControlPlanSource, type SchedulerControlPlanSource } from "../scheduler/planFile.js";
+import type { TrustedControlConfig } from "../panel/controlConfig.js";
+import { buildBudgetEstimateRequest, estimateGrantFor, persistEstimateArtifacts, withEstimateGrant, TASK_WORK, TASK_HANDOFF, GOAL_REVIEW, ESTIMATE_GRANT, type FrozenEstimateRequest } from "./estimator.js";
 
 /** Tester round 2 spec §7.2 condition 11: the routed principal of the creating command is a person's. */
 export function createdByPerson(commandId: string): boolean {
   const principal = commandPrincipalFor(commandId);
   return principal === "web" || (principal !== null && principal.startsWith("user:")) || routedPersonAuthorityFor(commandId);
 }
-import { AgentCeilingRefusal, capStatuses, spendCapBlocking } from "./spendCaps.js";
-import { readSchedulerControlPlanSource, type SchedulerControlPlanSource } from "../scheduler/planFile.js";
-import type { TrustedControlConfig } from "../panel/controlConfig.js";
-import { buildBudgetEstimateRequest, estimateGrantFor, persistEstimateArtifacts, withEstimateGrant, TASK_WORK, TASK_HANDOFF, GOAL_REVIEW, ESTIMATE_GRANT, type FrozenEstimateRequest } from "./estimator.js";
 
 export type AllowlistedPlanSource = SchedulerControlPlanSource & { repoId: string; planId: string };
 export type ImportCommand = Extract<RawAuthorityCommandV1, { verb: "import-plan" }>;
