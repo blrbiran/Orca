@@ -703,6 +703,8 @@ export type FlowsLayerV1 = {
   roles?: Record<string, { agent: string; model?: string }>;
   allowedSkillSources?: string[];
   budgets?: { tokensPerRun?: number };
+  /** Gaps spec §8.2: presets per template and param. */
+  paramDefaults?: Record<string, Record<string, string | number | boolean>>;
   locks?: FlowLockV1[];
 };
 export type ChecksLayerV1 = {
@@ -1025,6 +1027,7 @@ export type FlowSettingsReadV1 = {
   roles: FlowSourcedV1<Record<string, { agent: string; model?: string }>>;
   allowedSkillSources: FlowSourcedV1<string[] | null>;
   budgets: { tokensPerRun: FlowSourcedV1<number> };
+  paramDefaults: Record<string, Record<string, FlowSourcedV1<string | number | boolean>>>;
   locks: FlowLockablePathV1[];
 };
 export type FlowListV1 = {

@@ -278,6 +278,11 @@ export function clearHead(store: ControlStore, flowRunId: string, stepKey: strin
 }
 
 /** §8.1 `repin`: the run's template moves to another stored template (its bytes are already in `artifacts`). */
+/** Gaps spec §8.3: a params change moves the run's params (body) and their identity (row) in the same write. */
+export function setFlowRunParams(store: ControlStore, id: string, paramsSha256: string, body: unknown): void {
+  store.db.prepare("UPDATE flow_runs SET params_sha256=?, body=?, revision=revision+1 WHERE id=?").run(paramsSha256, json(body), id);
+}
+
 export function setFlowRunTemplate(store: ControlStore, id: string, templateSha256: string, body: unknown): void {
   store.db.prepare("UPDATE flow_runs SET template_sha256=?, body=?, revision=revision+1 WHERE id=?").run(templateSha256, json(body), id);
 }

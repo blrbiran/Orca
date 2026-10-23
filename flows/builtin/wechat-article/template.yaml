@@ -5,14 +5,16 @@
 # Pins (H34): runskills and md2publish-skills at full commits; secrets come from the machine, never from the template.
 format: orca-flow-v1
 id: wechat-article
-version: 2
+version: 3
 title: {en: WeChat article, zh: 公众号文章}
 params:
   idea: {type: longtext, required: true}
   slug: {type: slug, derive: slug-of-idea}
   language: {type: enum, options: [zh, en], default: zh}
   illustrations: {type: bool, default: false}
-  coverImage: {type: path, required: false}
+  # Version 3 (gaps spec §8.1, §8.5): the person's cover is an image -- its bytes are checked and stored at start or at a
+  # `params` change, and may come from a settings preset (paramDefaults.wechat-article.coverImage).
+  coverImage: {type: image, required: false}
 workspace: {kind: dir, excludes: [".md2publish/cache/"]}
 roles:
   writer: {tier: high, suggest: {agent: claude}}
@@ -52,7 +54,8 @@ steps:
     prompt: prompts/outline.md
     acceptance: {checks: [{id: outline-exists, run: "test -s '{{param.slug}}.outline.md'", role: gate}]}
     tools: {network: false}
-    hints: {equals: "headings({{param.slug}}.outline.md)"}
+    # Version 3 (gaps spec §4.4, §8.5): `owns` labels name what feedback on the article this step takes.
+    hints: {equals: "headings({{param.slug}}.outline.md)", owns: [结构, 提纲]}
 
   - id: approve-outline
     kind: ask
@@ -70,6 +73,7 @@ steps:
     prompt: prompts/draft.md
     acceptance: {checks: [{id: draft-exists, run: "test -s '{{param.slug}}.md'", role: gate}]}
     tools: {network: false}
+    hints: {owns: [内容, 论证, 啰嗦]}
 
   - id: deslop
     kind: work
@@ -86,6 +90,7 @@ steps:
       commands:
         - {exact: "python3 '{{skill.tech-writer-deslop.dir}}/scripts/scan.py' --json '{{param.slug}}.md'"}
       network: false
+    hints: {owns: [AI 味, 套路句式]}
 
   - id: voice
     kind: work
@@ -103,6 +108,7 @@ steps:
         - {exact: "python3 '{{skill.tech-writer-voice.dir}}/scripts/fidelity.py' '{{base:{{param.slug}}.md}}' '{{param.slug}}.md'"}
         - {exact: "python3 '{{skill.tech-writer-voice.dir}}/scripts/voice.py' '{{base:{{param.slug}}.md}}' '{{param.slug}}.md' --diff"}
       network: false
+    hints: {owns: [语气, 口语, 生硬]}
 
   - id: finetune
     kind: work
@@ -115,6 +121,7 @@ steps:
       commands:
         - {prefix: "python3 '{{skill.wechat-finetune.dir}}/scripts/verify.py'"}
       network: false
+    hints: {owns: [公众号风格, 标题]}
 
   - id: pick-title
     kind: ask

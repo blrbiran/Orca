@@ -14,6 +14,9 @@
  *   skip/defer closes the step's open effect record (discarded by the person), follows its newest execution with a
  *   `skipped` one carrying `body.mark`, takes it out of a running plan that had not run it, and recomposes the flow head
  *   (the folder loses its output); `fill` makes a plan (trigger `fill`) with the step a candidate for reason `fill`.
+ * - Gaps spec §8.3: `params {set: {<id>: value | null}}` on the run. Checked as at start when it arrives (an image read
+ *   once and stored, params.ts; folder-relative values only; `null` unsets a param that is not required) and refused by
+ *   name then; at its boundary the run's params and `params_sha256` move in one write and a plan is made (`params`).
  */
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -34,9 +37,10 @@ import { applyRewind, reapplyEdits } from "./rewind.js";
 import { hasAttachment } from "./feedback/attachments.js";
 import { feedbackShapeRefusal, markPlanned, openIntake, takeReadyIntake, withdrawIntakes } from "./feedback/intake.js";
 import {
-  appendExecution, appendMessage, finishExecution, getEffect, getHead, getIntake, listExecutions, listMessages, setFlowRunState, setFlowRunTemplate, setHead, setMessageState,
+  appendExecution, appendMessage, finishExecution, getEffect, getHead, getIntake, listExecutions, listMessages, setFlowRunParams, setFlowRunState, setFlowRunTemplate, setHead, setMessageState,
   type ExecutionRow, type MessageRow,
 } from "./store.js";
+import { applyParamsChange, paramsIdentity, resolveParamsChange, type ParamsChange } from "./params.js";
 import { isInsidePath } from "./template/checklist.js";
 import { loadBuiltin } from "./template/load.js";
 import { changesBetween } from "./vault/copyBack.js";
@@ -51,7 +55,7 @@ export type MessageTarget =
 export interface FlowMessageInput { kind: "feedback" | "edit" | "command"; target: MessageTarget; body: Record<string, unknown>; by: string; via: string; requestId: string }
 export interface AcceptResult { state: MessageRow["state"]; reason: string | null; seq: number; deduped: boolean }
 
-const COMMANDS = ["pause", "resume", "stop", "retry", "rewind", "repin", "skip", "defer", "fill"] as const;
+const COMMANDS = ["pause", "resume", "stop", "retry", "rewind", "repin", "skip", "defer", "fill", "params"] as const;
 const stepKeyOf = (target: MessageTarget): string | null => ("stepKey" in target ? target.stepKey : null);
 
 /** What can be told at once, before any boundary: the shape and that the target exists. */
@@ -84,6 +88,11 @@ function shapeRefusal(store: ControlStore, run: LoadedRun, input: FlowMessageInp
     if (command === "budget") return "flow-command-budget:the pool is raised by flow-pool (human-only)";
     if (!COMMANDS.includes(command as never)) return `flow-command-unknown:${String(command)}`;
     if (command === "retry" && stepKey === null) return "flow-message-target-missing";
+    if (command === "params") {
+      if (target.kind !== "run") return "flow-message-target-missing";
+      const set = input.body.set;
+      if (Object.keys(input.body).some((key) => key !== "command" && key !== "set") || typeof set !== "object" || set === null || Array.isArray(set) || Object.keys(set).length === 0) return "flow-message-invalid:set";
+    }
     if (MARK_COMMANDS.has(String(command))) {
       if (stepKey === null) return "flow-message-target-missing";
       // Gaps spec §6.1: a clarify step takes consensus (or the run's `clarify: skip`), an ask step its answer or default.
@@ -104,11 +113,18 @@ function shapeRefusal(store: ControlStore, run: LoadedRun, input: FlowMessageInp
 /** §8.1: store the message, then take it if the run is at a boundary. */
 export async function acceptMessage(deps: FlowDeps, flowRunId: string, input: FlowMessageInput): Promise<AcceptResult> {
   const run = loadRun(deps.store, flowRunId);
-  const refusal = run.row.state === "stopped" ? "flow-run-stopped" : shapeRefusal(deps.store, run, input, deps.env);
+  let refusal = run.row.state === "stopped" ? "flow-run-stopped" : shapeRefusal(deps.store, run, input, deps.env);
+  // Gaps spec §8.3: a params change is checked now, as at start -- its images read once and stored -- and what it
+  // resolved is kept with the message, so the boundary applies exactly what was checked.
+  let resolved: ParamsChange | null = null;
+  if (refusal === null && input.kind === "command" && input.body.command === "params") {
+    try { resolved = resolveParamsChange(deps.env, run, input.body.set as Record<string, unknown>); }
+    catch (error) { if (!(error instanceof FlowRefusal)) throw error; refusal = error.code; }
+  }
   const at = deps.now();
   const { row, deduped } = deps.store.transaction(() => {
     const appended = appendMessage(deps.store, {
-      flowRunId, requestId: input.requestId, kind: input.kind, target: input.target.kind, body: { ...input.body, target: input.target },
+      flowRunId, requestId: input.requestId, kind: input.kind, target: input.target.kind, body: { ...input.body, ...(resolved === null ? {} : { resolved }), target: input.target },
       by: input.by, via: input.via, state: refusal === null ? "accepted" : "rejected", reason: refusal, at,
     });
     // Gaps spec §4.2: run-level or anchored feedback opens its intake with the message (and withdraws what it replaces).
@@ -215,6 +231,16 @@ async function applyCommand(deps: FlowDeps, run: LoadedRun, message: MessageRow,
     case "repin": return repin(deps, run, body.version);
     case "rewind": return applyRewind(deps, run, message);
     case "skip": case "defer": markStep(deps, run, message, stepKeyOf(target)!, body.command); return null;
+    case "params": {
+      // §8.3: the params and their identity move together (row and body, one write); `when` is read from them again.
+      const change = body.resolved as ParamsChange;
+      const next = applyParamsChange(run.params, run.body.images ?? {}, change);
+      const { images: _old, ...rest } = run.body;
+      deps.store.transaction(() => setFlowRunParams(deps.store, run.row.id, paramsIdentity(next.params, next.images), {
+        ...rest, params: next.params, ...(Object.keys(next.images).length === 0 ? {} : { images: next.images }),
+      }));
+      return "params";
+    }
     case "fill": {
       const stepKey = stepKeyOf(target)!;
       if (!marksOf(listMessages(deps.store, run.row.id)).has(stepKey)) throw new FlowRefusal("flow-step-not-marked", stepKey);

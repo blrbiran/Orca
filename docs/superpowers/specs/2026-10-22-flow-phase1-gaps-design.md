@@ -899,3 +899,30 @@ Appended per Rule 13: the sections above stay as published; entries here correct
      Rule 16). §8.1's `.orca/params/coverImage.<ext>` copy (Task 6) rests on the same mechanism.
    - **Moved.** G2's case "a later clarify-round revision is re-applied as a round revision" on rewind moves to Task 7
      (round edits are built there); Task 5 builds rewind's reuse of the stored intake only.
+
+3. **§8's `image` param: built without the workspace copy (gaps plan Task 6, implementer of session `0e13a9b7`,
+   2026-10-23, on `9170f9ed`; controller ruling: the same premise failure as entry 2).**
+   - **Not built.** §8.1 items 3–4: no copy into the attempt workspace at `.orca/params/<id>.<ext>`, and
+     `{{param.<id>}}` of an `image` does not expand to such a copy. It rests on the mechanism entry 2 found broken (ccloop
+     opens attempts from the run workspace's HEAD; its live-workspace copy bypasses `info/exclude`).
+   - **What was built.** Param type `image` (png/jpg/jpeg/gif/webp by name, ≤ 20 MiB, a file that exists — a link is
+     refused — and whose bytes are an image); at start and at a `params` change the file is read once and stored in the
+     §4.7 store (`storeImage`, the one writer `storeAttachment` now uses; the feedback attachment limits stay 5 MiB and
+     png/jpg/webp, an image param takes 20 MiB and gif), the run body records `images.<id> = {source, sha256, ext}`, and
+     `params_sha256` takes the bytes' hash in place of the path (`src/flow/params.ts`). `flows.paramDefaults` (§8.2: given >
+     project > global > template; not lockable; a preset for a built-in is checked against its param's type at write
+     time, an `image` by its shape only — the file is read at start, §16). The `params {set}` command (§8.3: checked when
+     it arrives, as at start, folder-relative only, `null` unsets a param that is not required; applied at the boundary,
+     row and body in one write; plan trigger `params`). A params change that turns a done step's `when` false records it
+     `skipped` (`when-false`, output carried). Built-in `wechat-article` version 3 (§8.5: `coverImage: {type: image,
+     required: false}`, the `owns` labels; prompts unchanged).
+   - **As built, `{{param.<id>}}` of an image** expands to its value as written. A folder-relative value names a file of
+     the person's folder, which reaches the attempt through the folder's import (the base the attempt opens from), as
+     version 2's `path` param did (`tests/flow/coverParam.test.ts` reads it from the attempt's base commit). An absolute
+     value — only a settings preset may carry one — cannot reach the attempt: a step whose prompt, checks or tool rules use
+     it fails before its effect gate, its draw or its child with `flow-param-unreachable:<id>` (controller-recommended
+     refusal at the point of use; the person can set a folder cover by `params`, clear it with `null`, or skip the step).
+   - **Awaiting the human** (named todos in `tests/flow/coverParam.test.ts`): G8's rows "copied into the
+     `to-draft-box` workspace at `.orca/params/coverImage.<ext>`", "`{{param.coverImage}}` expands to that path", "the copy
+     is absent from the attempt commit and the folder", and a preset cover reaching md2publish-draft — the same choice as
+     entry 2: (a) an absolute path outside the workspace plus ccloop read access, or (b) a ccloop seeding change (Rule 16).

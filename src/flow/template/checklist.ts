@@ -19,7 +19,7 @@ export interface ChecklistContext {
   builtinEffectSkills: ReadonlySet<string>;
 }
 
-const COMMAND_PARAM_TYPES: ReadonlySet<ParamType> = new Set(["slug", "int", "enum", "path"]);
+const COMMAND_PARAM_TYPES: ReadonlySet<ParamType> = new Set(["slug", "int", "enum", "path", "image"]);
 /** [IR-I9]: a prefix rule naming only an interpreter allows any script. */
 const BARE_INTERPRETERS = new Set(["python3", "python", "bash", "sh", "zsh", "node", "bun", "deno"]);
 const CD = /^\s*cd(\s|$)/;
@@ -55,8 +55,8 @@ export function checkTemplate(raw: unknown, assets: AssetReader, ctx: ChecklistC
   const stepIds = new Set<string>();
 
   for (const [id, param] of Object.entries(params)) {
-    if (param.type === "path" && typeof param.default === "string" && (!isInsidePath(param.default) || param.default.includes("'"))) {
-      err("param-path-invalid", `params.${id}.default`, `path param ${id}'s default ${JSON.stringify(param.default)} must stay inside the workspace and hold no quote, NUL or newline`);
+    if ((param.type === "path" || param.type === "image") && typeof param.default === "string" && (!isInsidePath(param.default) || param.default.includes("'"))) {
+      err("param-path-invalid", `params.${id}.default`, `${param.type} param ${id}'s default ${JSON.stringify(param.default)} must stay inside the workspace and hold no quote, NUL or newline`);
     }
   }
   for (const [name, role] of Object.entries(roles)) {
@@ -81,7 +81,7 @@ export function checkTemplate(raw: unknown, assets: AssetReader, ctx: ChecklistC
         const param = params[ref.id];
         if (param === undefined) return unknown(`{{param.${ref.id}}}`);
         if (where === "command" && !COMMAND_PARAM_TYPES.has(param.type)) {
-          return { code: "param-type-not-allowed-in-command", message: `param ${ref.id} is ${param.type}; a command may only carry slug, int, enum or path params` };
+          return { code: "param-type-not-allowed-in-command", message: `param ${ref.id} is ${param.type}; a command may only carry slug, int, enum, path or image params` };
         }
         return null;
       }

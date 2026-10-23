@@ -15,7 +15,7 @@ export type FlowLevelSetting = (typeof FLOW_LEVEL_SETTINGS)[number];
 export const FLOW_LOCKABLE_PATHS = ["effects.local", "effects.cost", "effects.external", "effects.irreversible", "allowedSkillSources", "budgets.tokensPerRun"] as const;
 export type FlowLockablePath = (typeof FLOW_LOCKABLE_PATHS)[number];
 /** The fields a `set-flow-settings` may clear (the next layer applies again). */
-export const FLOW_SETTING_FIELDS = ["effects.local", "effects.cost", "effects.external", "effects.irreversible", "rerunReview", "rerunAskTimeoutSeconds", "roles", "allowedSkillSources", "budgets.tokensPerRun"] as const;
+export const FLOW_SETTING_FIELDS = ["effects.local", "effects.cost", "effects.external", "effects.irreversible", "rerunReview", "rerunAskTimeoutSeconds", "roles", "allowedSkillSources", "budgets.tokensPerRun", "paramDefaults"] as const;
 export type FlowSettingField = (typeof FLOW_SETTING_FIELDS)[number];
 
 const level = z.enum(FLOW_LEVEL_SETTINGS);
@@ -27,6 +27,11 @@ export const flowsLayerSchema = z.object({
   roles: z.record(z.string().regex(/^[a-z0-9][a-z0-9-]*$/).max(64), z.object({ agent: z.string().min(1).max(200), model: z.string().min(1).max(200).optional() }).strict()).optional(),
   allowedSkillSources: z.array(z.string().min(1).max(500)).max(64).optional(),
   budgets: z.object({ tokensPerRun: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional() }).strict().optional(),
+  /**
+   * Gaps spec §8.2: preset values per template and param, `{<templateId>: {<paramId>: value}}`; a start's own value wins,
+   * then the project's, then the global one, then the template's. Not lockable. Only here may an `image` be absolute.
+   */
+  paramDefaults: z.record(z.string().regex(/^[a-z0-9][a-z0-9-]*$/).max(64), z.record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]*$/).max(64), z.union([z.string().max(4096), z.number(), z.boolean()]))).optional(),
 }).strict();
 export const globalFlowsLayerSchema = flowsLayerSchema.extend({
   locks: z.array(z.enum(FLOW_LOCKABLE_PATHS)).max(FLOW_LOCKABLE_PATHS.length).optional(),

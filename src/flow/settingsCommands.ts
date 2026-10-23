@@ -18,10 +18,13 @@ import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from
 import { readRepositorySettingsBody, writeRepositorySettingsBody } from "../control/workspaceSettings.js";
 import { BUILTIN_LEVELS, BUILTIN_TOKENS_PER_RUN, settingNotLooser } from "./settings.js";
 import { FLOW_EFFECT_CLASSES, type FlowsLayer, type FlowSettingField, type GlobalFlowsLayer } from "./settingsSchema.js";
+import { FlowRefusal } from "./kernel.js";
+import { checkParamValue } from "./params.js";
+import { loadBuiltin } from "./template/load.js";
 
 type Verb = "set-flow-settings" | "set-flow-locks";
 export type FlowSettingsCommand<V extends Verb> = Extract<RawAuthorityCommandV1, { verb: V }>;
-export interface FlowSettingsDeps { store: ControlStore; admissionGate?: AdmissionGate; knownRepository(repoId: string): boolean }
+export interface FlowSettingsDeps { store: ControlStore; admissionGate?: AdmissionGate; knownRepository(repoId: string): boolean; builtinRoot?: string }
 type Result = Extract<CommandSuccessV1["result"], { kind: "flow-settings-set" | "flow-locks-set" }>;
 
 export const FLOW_SETTING_LOCKED = "flow-setting-locked";
@@ -76,8 +79,26 @@ const same = (a: unknown, b: unknown): boolean => canonicalBytes(a ?? null).equa
 /** Drop empty nested objects, so a cleared field leaves no `{}` behind. */
 function tidy(layer: GlobalFlowsLayer): GlobalFlowsLayer {
   const out: Record<string, unknown> = { ...layer };
-  for (const key of ["effects", "budgets", "roles"] as const) if (out[key] !== undefined && Object.keys(out[key] as object).length === 0) delete out[key];
+  for (const key of ["effects", "budgets", "roles", "paramDefaults"] as const) if (out[key] !== undefined && Object.keys(out[key] as object).length === 0) delete out[key];
   return out as GlobalFlowsLayer;
+}
+
+/**
+ * Gaps spec §8.2: a preset for a built-in template is checked against its param's type now (an `image` by its shape:
+ * the file is read only at start, §16); a preset for any other template is checked at start.
+ */
+function presetRefusal(builtinRoot: string | undefined, presets: NonNullable<FlowsLayer["paramDefaults"]>): string | null {
+  for (const [templateId, values] of Object.entries(presets)) {
+    let declared: NonNullable<ReturnType<typeof loadBuiltin>["template"]["params"]>;
+    try { declared = loadBuiltin(templateId, builtinRoot).template.params ?? {}; } catch { continue; }
+    for (const [paramId, value] of Object.entries(values)) {
+      const param = declared[paramId];
+      if (param === undefined) return `${templateId}.${paramId}: not a parameter of the template`;
+      try { checkParamValue(paramId, param, value); }
+      catch (error) { if (error instanceof FlowRefusal) return `${templateId}.${paramId}: ${error.detail}`; throw error; }
+    }
+  }
+  return null;
 }
 
 /** The project value a global lock refuses, by the lock's path; null when none. */
@@ -105,8 +126,19 @@ export function applySetFlowSettings(deps: FlowSettingsDeps, command: FlowSettin
       const locked = lockRefusal(set, readOrchestrationSettings(deps.store).flows ?? {});
       if (locked !== null) throw new ControlError(FLOW_SETTING_LOCKED, locked);
     }
+    if (set.paramDefaults !== undefined) {
+      const refused = presetRefusal(deps.builtinRoot, set.paramDefaults);
+      if (refused !== null) throw new ControlError("flow-param-invalid", refused);
+    }
     const next: Record<string, unknown> = { ...layer };
     for (const [key, value] of Object.entries(set)) {
+      if (key === "paramDefaults") {
+        // Per template, per param: a preset set for one param leaves the others of that template as they were.
+        const merged: Record<string, Record<string, unknown>> = { ...(layer.paramDefaults ?? {}) };
+        for (const [templateId, values] of Object.entries(value as Record<string, Record<string, unknown>>)) merged[templateId] = { ...(merged[templateId] ?? {}), ...values };
+        next[key] = merged;
+        continue;
+      }
       next[key] = (key === "effects" || key === "budgets" || key === "roles") ? { ...(layer[key] ?? {}), ...(value as object) } : value;
     }
     for (const field of payload.clear as FlowSettingField[]) {

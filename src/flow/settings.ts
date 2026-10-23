@@ -89,7 +89,20 @@ export interface FlowSettingsRead {
   roles: Sourced<Record<string, { agent: string; model?: string }>>;
   allowedSkillSources: Sourced<string[] | null>;
   budgets: { tokensPerRun: Sourced<number> };
+  /** Gaps spec §8.2: every preset either layer names, per template and param (no built-in layer: absent is none). */
+  paramDefaults: Record<string, Record<string, Sourced<string | number | boolean>>>;
   locks: FlowLockablePath[];
+}
+
+function paramDefaultsRead(project: FlowsLayer | null, global: GlobalFlowsLayer | null): FlowSettingsRead["paramDefaults"] {
+  const out: FlowSettingsRead["paramDefaults"] = {};
+  const templates = [...new Set([...Object.keys(project?.paramDefaults ?? {}), ...Object.keys(global?.paramDefaults ?? {})])].sort();
+  for (const template of templates) {
+    const mine = project?.paramDefaults?.[template] ?? {}, theirs = global?.paramDefaults?.[template] ?? {};
+    out[template] = Object.fromEntries([...new Set([...Object.keys(mine), ...Object.keys(theirs)])].sort()
+      .map((param) => [param, mine[param] !== undefined ? { value: mine[param]!, source: "project" as const, lockedBy: null } : { value: theirs[param]!, source: "global" as const, lockedBy: null }]));
+  }
+  return out;
 }
 
 /** §11.2: what Web and `--json` render, per field `{value, source, lockedBy}`. */
@@ -107,6 +120,7 @@ export function readFlowSettings(store: ControlStore, repoId: string | null): Fl
     allowedSkillSources: locked<string[] | null>(project?.allowedSkillSources, global?.allowedSkillSources, null, isLocked("allowedSkillSources"),
       (mine, bound) => bound === null || mine!.every((source) => bound.includes(source))),
     budgets: { tokensPerRun: locked(project?.budgets?.tokensPerRun, global?.budgets?.tokensPerRun, BUILTIN_TOKENS_PER_RUN, isLocked("budgets.tokensPerRun"), (mine, bound) => mine <= bound) },
+    paramDefaults: paramDefaultsRead(project, global),
     locks,
   };
 }

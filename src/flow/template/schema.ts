@@ -14,8 +14,11 @@ export const PHASE1_KINDS = ["clarify", "draft", "work", "check", "review", "ask
 export type StepKind = (typeof PHASE1_KINDS)[number];
 export const EFFECT_CLASSES = ["local", "cost", "external", "irreversible", "human-only"] as const;
 export const EFFECT_LEVELS = ["apply-flag", "confirm", "stage-only"] as const;
-export const PARAM_TYPES = ["text", "longtext", "enum", "bool", "int", "path", "slug"] as const;
+/** Gaps spec §8.1: `image` is additive (a file path whose bytes are an image, copied into the run's store at start). */
+export const PARAM_TYPES = ["text", "longtext", "enum", "bool", "int", "path", "slug", "image"] as const;
 export type ParamType = (typeof PARAM_TYPES)[number];
+/** An ask's form takes a value typed by the person: no `image` (its bytes are read and stored only at start, §8.1). */
+export const FORM_FIELD_TYPES = ["text", "longtext", "enum", "bool", "int", "path", "slug"] as const satisfies readonly ParamType[];
 
 /** Step ids, check ids, template ids, param ids, role and effect names: one slug rule. */
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
@@ -106,7 +109,7 @@ const reviewStep = z.object({
   maxRounds: z.number().int().min(1).optional(), loop: loopSchema.optional(),
 }).strict();
 const formFieldSchema = z.object({
-  type: z.enum(PARAM_TYPES), options: z.array(text).min(1).optional(), required: z.boolean().optional(), default: scalar.optional(),
+  type: z.enum(FORM_FIELD_TYPES), options: z.array(text).min(1).optional(), required: z.boolean().optional(), default: scalar.optional(),
 }).strict();
 const askStep = z.object({
   ...common, kind: z.literal("ask"),

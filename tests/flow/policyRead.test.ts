@@ -48,6 +48,7 @@ describe("flow settings read (C18)", () => {
       roles: { value: {}, source: "builtin", lockedBy: null },
       allowedSkillSources: { value: null, source: "builtin", lockedBy: null },
       budgets: { tokensPerRun: { value: 2_000_000, source: "builtin", lockedBy: null } },
+      paramDefaults: {},
       locks: [],
     });
     expect(codeOf(settings(store, GLOBAL, { effects: { cost: "stage-only" }, rerunReview: "review", rerunAskTimeoutSeconds: 120, budgets: { tokensPerRun: 900_000 } }))).toBe("accepted");

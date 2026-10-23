@@ -53,6 +53,7 @@ import { EFFECT_NOT_REPORTED, effectUnreported, gateEffect, settleEffect } from 
 import { consumeAtBoundary } from "./messages.js";
 import { heldBy, markPointer, marksOf, suppressedSteps, type Mark } from "./marks.js";
 import { advanceIntakes, completeIntakeCall, hasBusyIntake } from "./feedback/intake.js";
+import { paramsIdentity, resolveStartParams, unreachableImageParam } from "./params.js";
 
 /** A refusal by name (spec §14, Global Constraints' codes); nothing was written. */
 export class FlowRefusal extends Error {
@@ -127,32 +128,6 @@ export interface StartFlowInput {
 
 const TIER_RANK = { low: 0, mid: 1, high: 2 } as const;
 
-/** Spec §3.2 param types, checked at start; `derive` and `default` fill what was not given. */
-function resolveParams(template: FlowTemplate, given: Record<string, ParamValue>, now: Date): Record<string, ParamValue> {
-  const declared = template.params ?? {};
-  for (const id of Object.keys(given)) if (!(id in declared)) throw new FlowRefusal(`flow-param-invalid:${id}`, "not a parameter of the template");
-  const out: Record<string, ParamValue> = {};
-  for (const [id, param] of Object.entries(declared)) {
-    let value = given[id] ?? (param.derive === undefined ? undefined : deriveParam(param.derive, { ...given, ...out }, now)) ?? param.default;
-    if (value === undefined) {
-      if (param.required === true) throw new FlowRefusal(`flow-param-invalid:${id}`, "required");
-      continue;
-    }
-    const bad = (why: string): never => { throw new FlowRefusal(`flow-param-invalid:${id}`, why); };
-    switch (param.type) {
-      case "text": case "longtext": if (typeof value !== "string") bad("must be text"); break;
-      case "bool": if (typeof value !== "boolean") bad("must be true or false"); break;
-      case "int": if (typeof value !== "number" || !Number.isInteger(value)) bad("must be an integer"); break;
-      case "enum": if (!param.options!.includes(String(value))) bad(`must be one of ${param.options!.join(", ")}`); value = String(value); break;
-      case "slug": if (typeof value !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(value)) bad("must be a slug"); break;
-      // Review Focus 1-2: a path stays inside the workspace and holds no quote, NUL or newline.
-      case "path": if (typeof value !== "string" || !isInsidePath(value) || value.includes("'")) bad("must be a workspace-relative path"); break;
-    }
-    out[id] = value;
-  }
-  return out;
-}
-
 /**
  * Spec §12.3: project → global → template `suggest` → today's default selection, each filtered by `tier` and
  * `distinctFrom`; nothing matching ⇒ `role-unresolved:<role>`, never a borrowed agent. Roles without `distinctFrom` first.
@@ -207,7 +182,12 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
   try { loaded = loadBuiltin(match[1]!, deps.builtinRoot); }
   catch (error) { throw new FlowRefusal("flow-template-invalid", (error as Error).message); }
   const template = loaded.template;
-  const params = resolveParams(template, input.params, new Date(deps.now()));
+  // Gaps spec §8.2: the settings' presets for this template (project > global) fill what the start did not give.
+  const presets = flowLayers(deps.store, input.projectId ?? null);
+  const { params, images } = resolveStartParams(template, input.params, {
+    now: new Date(deps.now()), env: deps.env, folder: input.dir ?? null, derive: deriveParam,
+    project: presets.project?.paramDefaults?.[template.id] ?? {}, global: presets.global?.paramDefaults?.[template.id] ?? {},
+  });
   const run = deps.runCommand ?? ((command: string, cwd: string) => runShell(command, cwd, deps.env.PATH === undefined ? process.env : { ...process.env, ...deps.env }));
   for (const command of template.requires?.commands ?? []) {
     const result = await run(command.check, input.dir ?? process.cwd());
@@ -233,6 +213,7 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
   const body: FlowRunBody = {
     templateRef: input.templateRef, params, roles, clarify: input.clarify ?? null, unattended: input.unattended ?? false, projectId, dir: vault?.dir ?? null,
     vaultPath: vault?.path ?? null, importCommit, by: input.by, via: input.via, startedAt: deps.now(),
+    ...(Object.keys(images).length === 0 ? {} : { images }),
   };
   const vaultId = vault === null ? null : vaultKeyOf(vault.dir);
   // §6.3: the pool is project ?? global ?? the template's suggestion ?? the built-in default (a start's `pool` is the person's).
@@ -249,7 +230,7 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
     writeCanonicalRecord(deps.store, groupId, templateHash, canonicalBytes(stored).toString("utf8"));
     insertFlowRun(deps.store, {
       id: flowRunId, groupId, templateRef: input.templateRef, templateSha256: templateHash, workspace: { projectId, kind: template.workspace.kind },
-      vaultId, paramsSha256: sha256Canonical(params), poolTokens, poolDrawn: 0, state: "running", revision: 0, body,
+      vaultId, paramsSha256: paramsIdentity(params, images), poolTokens, poolDrawn: 0, state: "running", revision: 0, body,
     });
   });
   return { flowRunId, groupId };
@@ -737,6 +718,8 @@ export function flagComposeConflict(deps: FlowDeps, run: LoadedRun, stepKey: str
 
 /** Gaps spec §6.3: what a held effect step's parked execution waits on. */
 export const DEFERRED_UPSTREAM = "deferred-upstream";
+/** Gaps spec §21 entry 3: the reason a step that would use an unreachable (absolute) image param fails with. */
+export const PARAM_UNREACHABLE = "flow-param-unreachable";
 const isDeferredPark = (execution: ExecutionRow): boolean =>
   execution.state === "parked" && (execution.body as { needsYou?: { kind?: unknown } }).needsYou?.kind === DEFERRED_UPSTREAM;
 
@@ -754,6 +737,10 @@ async function runQueued(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow
   }
   // §6.4, §7.2: what it ran on, so a later plan can tell which of its inputs moved since.
   const body: ExecutionBody = { ...(execution.body as ExecutionBody), basis, ranOnInputs: ranOnInputsOf(deps.store, run, step.id) };
+  // Gaps spec §8.1 as built (§21 entry 3): an absolute image preset cannot reach the step's workspace; the step is
+  // refused by name before its effect gate, its draw or its child -- never run with a dangling path.
+  const unreachable = unreachableImageParam(run, step);
+  if (unreachable !== null) return applyOutcome(deps, run, { ...execution, body }, "queued", { failed: { reason: `${PARAM_UNREACHABLE}:${unreachable}` } });
   // §9.2: an effect-classed step is gated on its level before it starts (its record is written with the move).
   const gate = deps.store.transaction(() => {
     const gated = (execution.body as ExecutionBody).effectRecordId === undefined ? gateEffect(deps, run, execution, step) : null;
@@ -903,6 +890,17 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
       const feedback = plan.candidates.feedback[step.id] ?? [];
       deps.store.transaction(() => appendQueued(deps, run, step.id, seq, reasons, { feedback }, plan.by, plan.via, at, plan.planNo));
       await runQueued(deps, run, listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.id && e.seq === seq)!, basis, held(step.id));
+      return true;
+    }
+    // Gaps spec §8.3: a params change that turns a done step's `when` false records it skipped -- its output carried, as
+    // a plan-skipped step's is; it is never a candidate (F §7.2).
+    if (current?.state === "done" && step.when !== undefined && !evaluateWhen(step.when, { params: run.params, classification: null })) {
+      if (!free) return false;
+      const at = deps.now();
+      deps.store.transaction(() => {
+        appendQueued(deps, run, step.id, current.seq + 1, ["when-false"], { basis, carriedForward: getHead(deps.store, run.row.id, step.id), ranOnInputs: ranOnInputsOf(deps.store, run, step.id) }, "orca-auto", "orca", at, plan?.planNo ?? null);
+        setExecutionStateSkipped(deps.store, { flowRunId: run.row.id, stepKey: step.id, seq: current.seq + 1 }, at);
+      });
       return true;
     }
     if (current !== undefined && SETTLED.has(current.state) && sameBasis((current.body as ExecutionBody).basis, basis)) continue;

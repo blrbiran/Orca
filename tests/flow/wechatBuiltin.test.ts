@@ -37,7 +37,18 @@ describe("built-in wechat-article (§15)", () => {
     expect(draft.ok).toBe(true);
     const effectSkills = new Set(steps.filter((s) => "effect" in s && s.effect !== undefined).flatMap((s) => ("skills" in s ? s.skills ?? [] : [])));
     expect(checkTemplate((draft as { raw: unknown }).raw, directoryAssets(dir), { builtinEffectSkills: effectSkills })).toEqual({ errors: [], warnings: [] });
-    expect(loaded.template).toMatchObject({ id: "wechat-article", version: 2, workspace: { kind: "dir" }, effects: { "image-generate": { class: "cost" }, "wechat-draft": { class: "external" } } });
+    expect(loaded.template).toMatchObject({ id: "wechat-article", version: 3, workspace: { kind: "dir" }, effects: { "image-generate": { class: "cost" }, "wechat-draft": { class: "external" } } });
+  });
+
+  // Gaps spec §8.1, §8.5 (version 3): the person's cover is an `image` param (checked by its bytes, storable as a preset);
+  // `hints.owns` labels tell feedback triage which step takes what (§4.4). The person reviews the text as a diff (F §22).
+  it("version 3: coverImage is an optional image; the writing steps carry their owns labels", () => {
+    expect(loaded.template.params?.coverImage).toEqual({ type: "image", required: false });
+    const owns = Object.fromEntries(steps.filter((s) => s.hints?.owns !== undefined).map((s) => [s.id, s.hints!.owns]));
+    expect(owns).toEqual({
+      outline: ["结构", "提纲"], draft: ["内容", "论证", "啰嗦"], deslop: ["AI 味", "套路句式"], voice: ["语气", "口语", "生硬"], finetune: ["公众号风格", "标题"],
+    });
+    expect((step("outline") as { hints?: { equals?: string } }).hints?.equals).toBe("headings({{param.slug}}.outline.md)");
   });
 
   it("is the spec's table: steps in order with their kinds, skills, effects, conditions and parallel sibling", () => {
@@ -153,8 +164,8 @@ describe("built-in wechat-article (§15)", () => {
   it("is seeded into flow_templates by upsert at start; seeding again changes nothing", async () => {
     const h = await openTestStore(); try {
       const rows = () => h.store.db.prepare("SELECT layer, id, version, sha256, published_by AS publishedBy FROM flow_templates ORDER BY id").all();
-      expect(seedBuiltinTemplates(h.store, 5)).toEqual([{ id: "wechat-article", version: 2, sha256: loaded.sha256 }]);
-      expect(rows()).toEqual([{ layer: "builtin", id: "wechat-article", version: 2, sha256: loaded.sha256, publishedBy: "orca" }]);
+      expect(seedBuiltinTemplates(h.store, 5)).toEqual([{ id: "wechat-article", version: 3, sha256: loaded.sha256 }]);
+      expect(rows()).toEqual([{ layer: "builtin", id: "wechat-article", version: 3, sha256: loaded.sha256, publishedBy: "orca" }]);
       seedBuiltinTemplates(h.store, 6);
       expect(rows()).toHaveLength(1);
     } finally { await h.dispose(); }
