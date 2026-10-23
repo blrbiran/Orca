@@ -333,7 +333,7 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .dep-node { cursor: pointer; }
 .dep-node rect { fill: var(--card); stroke: var(--border-strong); stroke-width: 1.5; }
 .dep-node text { fill: var(--text-strong); font-size: var(--text-sm); font-family: var(--mono); }
-.dep-node text.dep-status, .dep-node text.dep-detail { fill: var(--text); font-family: var(--font); font-size: var(--text-xs); }
+.dep-node text.dep-goal, .dep-node text.dep-status, .dep-node text.dep-detail { fill: var(--text); font-family: var(--font); font-size: var(--text-xs); }
 .dep-node text.dep-stall { fill: var(--stall); font-family: var(--font); font-size: var(--text-xs); }
 /* Issue-fixes spec §6.5: the fill is the §6.1 category; the stroke repeats it. */
 .dep-idle rect { fill: var(--cat-idle); stroke: var(--border-strong); }
@@ -462,3 +462,6 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .group-graph-layers { display: flex; gap: 24px; overflow-x: auto; }
 /* Gaps spec §5.3, §10 (plan Task 10-A): a deadline that ticks and token counts sit in rows; digits keep their width. */
 .flow-remaining, .flow-spend { font-variant-numeric: tabular-nums; }
+
+/* Tester round 2 §8.2 (H5): a task's goal summary beside its id in the task table, one line. */
+.task-goal { display: inline-block; max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }

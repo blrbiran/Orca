@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import { AgentSelectionEditor, selectionsHashFor } from "./AgentSelectionEditor.js";
 import { BudgetEditor } from "./BudgetEditor.js";
+import { goalSummary } from "./CardGoal.js";
 import { DependencyGraph } from "./DependencyGraph.js";
 import { EvidenceLink } from "./EvidenceLink.js";
 import { GitScheme } from "./GitScheme.js";
@@ -552,6 +553,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 <button type="button" aria-expanded={openTask === item.taskId} onClick={() => setOpenTask(openTask === item.taskId ? null : item.taskId)}>
                   {item.taskId}
                 </button>
+                {/* Tester round 2 §8.2 (H5): what the task is for, one line; the whole goal in the title. */}
+                {item.objective !== undefined && <> <span className="task-goal" title={item.objective.goal}>{goalSummary(item.objective.goal)}</span></>}
                 {taskNeedsHuman(item.taskId) && <> <NeedsHumanBadge /></>}
               </td>
               <td>{enumText("workStatus", item.status)}{view.runs.filter(run => run.runId === item.currentRunId).map(run => <RunReason key={run.runId} run={run} />)}

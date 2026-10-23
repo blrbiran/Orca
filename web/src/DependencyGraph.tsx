@@ -9,13 +9,15 @@
 import type { JSX, KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useClock } from "./clock.js";
+import { goalSummary } from "./CardGoal.js";
 import { WEB_WORK_ITEM_CATEGORIES } from "./controlTypes.js";
 import type { RunViewV1, WorkItemViewV1 } from "./controlTypes.js";
 import { layoutDependencies } from "./dependencyLayout.js";
 import i18n, { enumText } from "./i18n.js";
 import { lineageRunNumber } from "./runFacts.js";
 
-const NODE_W = 180, NODE_H = 88, GAP_X = 56, GAP_Y = 16, PAD = 8;
+// Tester round 2 §8.2 (D10): one height for every node, with room for the goal line under the id.
+const NODE_W = 180, NODE_H = 104, GAP_X = 56, GAP_Y = 16, PAD = 8;
 /** Spec §6.5: a current run quiet for longer than this is shown as making no progress. */
 const STALL_MS = 10 * 60_000;
 
@@ -91,6 +93,8 @@ export function DependencyGraph(props: { items: WorkItemViewV1[]; runs: readonly
             const item = byId.get(node.taskId)!;
             const word = enumText("workStatus", item.status);
             const lines = nodeLines(item, props.runs, now);
+            const goal = item.objective?.goal;
+            const clip = `dep-goal-clip-${encodeURIComponent(node.taskId)}`;
             return (
               <g
                 key={node.taskId}
@@ -103,12 +107,18 @@ export function DependencyGraph(props: { items: WorkItemViewV1[]; runs: readonly
                 onClick={() => props.onOpen(node.taskId)}
                 onKeyDown={key(node.taskId)}
               >
+                {/* Tester round 2 §8.2 (H5): the goal's summary under the id, clipped to the node; the whole goal in <title>. */}
+                {goal !== undefined && <title>{goal}</title>}
                 <rect width={NODE_W} height={NODE_H} rx={6} />
                 <text x={8} y={16}>{node.taskId}</text>
-                <text x={8} y={32} className="dep-status">{word}</text>
-                {lines.progress !== null && <text x={8} y={48} className="dep-detail">{lines.progress}</text>}
-                {lines.run !== null && <text x={8} y={64} className="dep-detail">{lines.run}</text>}
-                {lines.stalled !== null && <text x={8} y={80} className="dep-stall">{lines.stalled}</text>}
+                {goal !== undefined && <>
+                  <clipPath id={clip}><rect width={NODE_W - 16} height={NODE_H} x={8} /></clipPath>
+                  <text x={8} y={32} className="dep-goal" clipPath={`url(#${clip})`}>{goalSummary(goal)}</text>
+                </>}
+                <text x={8} y={48} className="dep-status">{word}</text>
+                {lines.progress !== null && <text x={8} y={64} className="dep-detail">{lines.progress}</text>}
+                {lines.run !== null && <text x={8} y={80} className="dep-detail">{lines.run}</text>}
+                {lines.stalled !== null && <text x={8} y={96} className="dep-stall">{lines.stalled}</text>}
               </g>
             );
           })}
