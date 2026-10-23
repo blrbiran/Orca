@@ -199,8 +199,6 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
   const groupId = `flow-${id}`;
   // §6.3: confirmed once, before anything is written (a refusal leaves no vault import either).
   const confirmation: FlowParentConfirmation = deps.confirmParent === undefined ? { call: null, children: null } : await deps.confirmParent({ flowRunId, groupId, projectId, by: input.by, operatorId: input.operatorId ?? input.by });
-  // Gaps spec §8.1: image params are stored only now, after every check that can refuse the start.
-  const images = storeImages(deps.env, read);
   // §5.2: the person's folder is imported into its vault; the import is the base of every composition.
   let vault: Vault | null = null;
   let importCommit: string | null = null;
@@ -210,6 +208,8 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
     // Review M1: a crashed earlier start of this same command may have set it; no run has this id, so it is replaced.
     await advanceHead(vault, flowRunId, await readHead(vault, flowRunId), importCommit);
   }
+  // Gaps spec §8.1: image params are stored only now, after every check and the import that can refuse the start.
+  const images = storeImages(deps.env, read);
   const stored = { template, assets: assetsOf(template, (rel) => loaded.assets.read(rel)) };
   const templateHash = sha256Canonical(stored);
   const body: FlowRunBody = {

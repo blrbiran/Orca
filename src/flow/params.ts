@@ -64,7 +64,8 @@ export interface ReadImage extends ResolvedImage { bytes: Buffer }
 
 /**
  * Open a folder-relative file without passing through a link: every parent directory is lstat'ed (a link or a
- * non-directory is refused, as copy-back refuses them, vault/copyBack.ts), the file itself is opened O_NOFOLLOW, and the
+ * non-directory is refused, as copy-back refuses them, vault/copyBack.ts), the file itself is opened O_NOFOLLOW (and
+ * O_NONBLOCK, so a FIFO opens at once and fails the regular-file check instead of blocking the thread), and the
  * opened file must be the one the folder's real path holds (closes a parent swapped between the walk and the open).
  */
 function openInsideFolder(id: string, folder: string, rel: string): number {
@@ -76,7 +77,7 @@ function openInsideFolder(id: string, folder: string, rel: string): number {
     if (!stat.isDirectory()) refuse(id, `${rel} passes through ${stat.isSymbolicLink() ? "a link" : "a non-directory"} (${relative(folder, cursor)})`);
   }
   let fd: number;
-  try { fd = openSync(join(folder, rel), constants.O_RDONLY | constants.O_NOFOLLOW); }
+  try { fd = openSync(join(folder, rel), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
   catch (error) { return refuse(id, (error as NodeJS.ErrnoException).code === "ELOOP" ? `${rel} is a link` : `${rel} does not exist`); }
   try {
     const real = realpathSync(join(folder, rel));
@@ -96,8 +97,9 @@ export function readImage(id: string, value: ParamValue, folder: string | null, 
   const path = value as string;
   let fd: number;
   if (isAbsolute(path)) {
-    // Only a settings preset (the person's own write) names an absolute file; it is read where it is.
-    try { fd = openSync(path, constants.O_RDONLY); } catch { return refuse(id, `${path} does not exist`); }
+    // Only a settings preset (the person's own write) names an absolute file; it is read where it is. O_NONBLOCK: a FIFO
+    // opens at once and fails the regular-file check below instead of blocking the panel's thread in open().
+    try { fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK); } catch { return refuse(id, `${path} does not exist`); }
   } else {
     if (folder === null) refuse(id, "a folder-relative image needs the run's folder");
     fd = openInsideFolder(id, folder!, path);

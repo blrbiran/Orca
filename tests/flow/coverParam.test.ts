@@ -99,6 +99,28 @@ describe("the image param type (§8.1)", () => {
     expect(existsSync(attachmentsDir(w.deps.env)) ? readdirSync(attachmentsDir(w.deps.env)) : []).toEqual([]);
   });
 
+  // Re-review fix 2: open() runs before the regular-file check; a FIFO must not block the panel's thread there.
+  it.skipIf(!existsSync("/usr/bin/mkfifo"))("a FIFO, in the folder or as a preset, is refused without blocking (needs /usr/bin/mkfifo)", async () => {
+    const w = await smallWorld();
+    execFileSync("/usr/bin/mkfifo", [join(w.folder, "pipe.png")]);
+    expect(await refusalOf(w.start({ templateRef: "builtin/t", params: { pic: "pipe.png" } }))).toBe("flow-param-invalid:pic");
+    const preset = join(tempRoot(), "preset.png");
+    execFileSync("/usr/bin/mkfifo", [preset]);
+    global(w.store, { paramDefaults: { t: { pic: preset } } });
+    expect(await refusalOf(w.start({ templateRef: "builtin/t" }))).toBe("flow-param-invalid:pic");
+  });
+
+  it("a start whose folder import refuses stores nothing", async () => {
+    const w = await smallWorld();
+    writeFileSync(join(w.folder, "pic.png"), PNG);
+    // The vault root is a file: openVault refuses after every param check passed.
+    const notADir = join(w.root, "vault-is-a-file");
+    writeFileSync(notADir, "x");
+    w.deps.env.ORCA_VAULT_DIR = notADir;
+    expect(await refusalOf(w.start({ templateRef: "builtin/t", params: { pic: "pic.png" } }))).not.toBe("started");
+    expect(existsSync(attachmentsDir(w.deps.env)) ? readdirSync(attachmentsDir(w.deps.env)) : []).toEqual([]);
+  });
+
   it("an absolute value at start is refused; the same value from a settings preset is accepted", async () => {
     const w = await smallWorld();
     const outside = join(tempRoot(), "preset.png");
