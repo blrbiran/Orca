@@ -120,6 +120,9 @@ describe("the start dialog's routes (§8.4)", () => {
     const images = await get(`/api/control/flows/images?dir=${encodeURIComponent(dir)}&template=wechat-article`);
     expect(images).toEqual({ status: 200, body: { schema: "orca-flow-folder-images-v1", dir, files: ["covers/one.png"], truncated: false, limit: 200 } });
     expect((await get(`/api/control/flows/images?dir=relative&template=wechat-article`)).body).toMatchObject({ error: { code: "query-invalid" } });
+    // A relative folder that exists (from the panel's own working directory) is still refused: only absolute folders.
+    // mutation: drop the absolute-path check -> "." listed, 200, red
+    expect(await get(`/api/control/flows/images?dir=.&template=wechat-article`)).toMatchObject({ status: 400, body: { error: { code: "query-invalid" } } });
     expect(await get(`/api/control/flows/images?dir=${encodeURIComponent(dir)}&template=no-such`)).toMatchObject({ status: 422, body: { error: { code: "flow-template-invalid" } } });
     expect(await get(`/api/control/flows/images?dir=${encodeURIComponent(join(dir, "covers/one.png"))}&template=wechat-article`)).toMatchObject({ status: 400, body: { error: { code: "query-invalid" } } });
     // Task 10-B fix I1: a folder past the entry cap is named too large, not "not a folder".
