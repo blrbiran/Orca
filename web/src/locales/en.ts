@@ -1880,6 +1880,7 @@ export const enErrors: Record<string, string> = {
   "flow-feedback-already-applied": "The feedback you are replacing has already been acted on. Send new feedback instead: {{detail}}",
   "flow-round-not-revisable": "This round cannot be revised (only an answered round of a clarify step can): {{detail}}",
   "flow-step-waiting": "This step is still waiting or running. Answer, agree to or discard it first, then rewind: {{detail}}",
+  "flow-step-parked": "This step is parked (waiting for the pool or a held effect). Raise the pool, or settle the hold, before rewinding: {{detail}}",
   "flow-effect-needs-person": "This would let a held external step go ahead, which only the person can allow. Log in as the person (owner) and send it again: {{detail}}",
   "flow-attachment-invalid": "The attachment was not taken: {{detail}}",
   "flow-run-stopped": "The flow run is stopped: {{detail}}",

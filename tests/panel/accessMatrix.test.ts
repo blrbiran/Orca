@@ -259,7 +259,8 @@ describe("the flow tiers over the socket (gaps spec §13, G10)", () => {
 /**
  * Gaps plan Task 10-B fix I1 (controller ruling): the start dialog's folder listing (GET /api/control/flows/images) lists
  * the image names of any absolute folder, so it is served to the Web only -- never on the control socket -- and, like
- * flow-start (DISPATCHED_RUN_REFUSED), refused to a run Orca dispatched should such a principal ever reach it.
+ * flow-start (DISPATCHED_RUN_REFUSED), refused to a run Orca dispatched should such a principal ever reach it; and (final
+ * review M4) it lists only a registered dir project's folder, refusing any other as a start does (flow-dir-unregistered).
  */
 describe("the folder-image read's access (gaps plan Task 10-B, I1)", () => {
   it("is not served on the control socket, marker or not", async () => {
@@ -281,18 +282,22 @@ describe("the folder-image read's access (gaps plan Task 10-B, I1)", () => {
     const w = await workspace();
     await mkdir(join(w.root, "folder"), { recursive: true });
     await writeFile(join(w.root, "folder", "a.png"), "x");
+    await mkdir(join(w.root, "other"), { recursive: true });
+    await writeFile(join(w.root, "other", "b.png"), "x");
     const store = await openControlStore({ stateDir: w.state });
     const server = createServer((() => {
       const app = express();
       let principal: Principal = PRINCIPALS.webOwner!;
       app.use((req, res, next) => { principal = PRINCIPALS[String(req.headers["x-test-principal"])]!; res.locals.orcaPrincipal = principal; next(); });
-      registerControlReadRoutes(app, { store, epoch: "epoch", config: { readView: async () => ({}) } as never }, "web");
+      // Final review M4: the folder is a registered dir project's (only such a folder is listed); "other" is not.
+      registerControlReadRoutes(app, { store, epoch: "epoch", config: { readView: async () => ({}) } as never,
+        flowProjects: () => [{ repoId: "folder-00000000", path: join(w.root, "folder") }] }, "web");
       return app;
     })());
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     try {
-      const get = async (who: string) => {
-        const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/control/flows/images?dir=${encodeURIComponent(join(w.root, "folder"))}&template=wechat-article`, { headers: { "x-test-principal": who } });
+      const get = async (who: string, folder = "folder") => {
+        const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/control/flows/images?dir=${encodeURIComponent(join(w.root, folder))}&template=wechat-article`, { headers: { "x-test-principal": who } });
         const body = await response.json() as { files?: string[]; error?: { code: string } };
         return [response.status, body.error?.code ?? body.files];
       };
@@ -301,6 +306,10 @@ describe("the folder-image read's access (gaps plan Task 10-B, I1)", () => {
       expect(await get("socketTokenMarker")).toEqual([403, "control-dispatched-run-refused"]);
       expect(await get("webOwner")).toEqual([200, ["a.png"]]);
       expect(await get("webMember")).toEqual([200, ["a.png"]]);
+      // Final review M4: a folder no start may run on is refused as the start refuses it, and nothing of it is listed.
+      // mutation: drop the registered-folder check -> 200 with ["b.png"], red
+      expect(await get("webOwner", "other")).toEqual([422, "flow-dir-unregistered"]);
+      expect(await get("webMember", "other")).toEqual([422, "flow-dir-unregistered"]);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       store.close();

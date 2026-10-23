@@ -199,4 +199,31 @@ describe("attachment store (gaps §4.7, G14)", () => {
     expect(big.status).toBe(400);
     expect(await big.json()).toMatchObject({ error: { code: "flow-attachment-invalid" } });
   });
+
+  it("the upload route refuses a run Orca dispatched before it reads the body, and stores nothing (final review M5)", async () => {
+    const root = tempRoot();
+    const w = await flowWorld({ t: { yaml: "format: orca-flow-v1\nid: t\nversion: 1\nworkspace: {kind: dir}\nsteps:\n  - {id: a, kind: draft, prompt: a.md}\n", assets: { "a.md": "a\n" } } });
+    cleanups.push(() => w.dispose());
+    w.deps.env.ORCA_CONTROL_DIR = join(root, "control");
+    const { flowRunId } = await w.start({ templateRef: "builtin/t" });
+    const service = new WebControlService({ store: w.store, port: {} as never, profileRouter: {} as never, trustedConfig: {} as never, knownRepository: () => false, flowDeps: () => w.deps } as never);
+    const app = express();
+    app.use((req, res, next) => {
+      res.locals.orcaPrincipal = req.headers["x-test-marker"] === undefined ? { kind: "agent", client: "cli" } : { kind: "agent", client: "cli", dispatchedRun: "run-1" };
+      next();
+    });
+    registerControlMutationRoutes(app, w.store, service, "socket");
+    const server = app.listen(0, "127.0.0.1");
+    await new Promise((resolve) => server.once("listening", resolve));
+    cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+    const post = (headers: Record<string, string>) => fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/control/flows/${flowRunId}/attachments`,
+      { method: "POST", headers: { "content-type": "application/octet-stream", ...headers }, body: new Uint8Array(PNG) });
+    const refused = await post({ "x-test-marker": "1" });
+    // mutation: drop the dispatched-run check in the upload route -> 200 and one stored file, red
+    expect([refused.status, ((await refused.json()) as { error?: { code: string } }).error?.code]).toEqual([403, "control-dispatched-run-refused"]);
+    expect(existsSync(attachmentsDir(w.deps.env)) ? readdirSync(attachmentsDir(w.deps.env)) : []).toEqual([]);
+    // The same upload by a principal no run marks (a person's session) is stored.
+    expect((await post({})).status).toBe(200);
+    expect(readdirSync(attachmentsDir(w.deps.env))).toHaveLength(1);
+  });
 });

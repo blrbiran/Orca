@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { orchestrationRevision, writeOrchestrationSettings } from "../../src/control/orchestration.js";
 import { answerNeeds, loadRun, vaultOf } from "../../src/flow/kernel.js";
-import { heldBy, heldEffectSteps, marksOf } from "../../src/flow/marks.js";
+import { heldBy, holdTargets, marksOf } from "../../src/flow/marks.js";
 import { acceptMessage } from "../../src/flow/messages.js";
 import type { FlowTemplate } from "../../src/flow/template/schema.js";
 import { getFlowRun, listEffects, listHeads, listMessages, listPlans, type MessageRow } from "../../src/flow/store.js";
@@ -98,10 +98,10 @@ describe("marks are derived from the applied messages (marks.ts, pure)", () => {
       ],
     } as unknown as FlowTemplate;
     const both = marksOf([msg(1, "defer", "a"), msg(2, "defer", "b", { effects: { push2: "proceed" } })]);
-    expect([...heldEffectSteps(template, both)]).toEqual(["push2", "burn"]);
+    expect([...holdTargets(template, both)]).toEqual(["push2", "burn"]);
     expect(heldBy(template, both, "push2")).toEqual(["a"]);
     expect(heldBy(template, both, "burn")).toEqual(["a", "b"]);
-    expect([...heldEffectSteps(template, marksOf([msg(1, "skip", "a")]))]).toEqual([]);
+    expect([...holdTargets(template, marksOf([msg(1, "skip", "a")]))]).toEqual([]);
   });
 });
 
@@ -120,10 +120,11 @@ describe("skip / defer / fill on the wechat run (G5)", { timeout: 180_000 }, () 
       expect(w.execs(flowRunId, "to-draft-box").map((e) => e.state)).toEqual(["parked"]);
       expect((w.latest(flowRunId, "to-draft-box")!.body as { needsYou?: unknown }).needsYou).toEqual({ kind: "deferred-upstream", deferred: ["cover"] });
       expect(children.opened.has(child(flowRunId, "to-draft-box", 1))).toBe(false);
-      // While it is held the run is not done: running, with the held step and the owed cover under needs-you.
+      // While it is held the run is not done: running, with the owed cover under needs-you -- once: the held step is
+      // owed through that defer (final review M6, one item per thing the person owes).
       await w.advance();
       expect(getFlowRun(w.store, flowRunId)!.state).toBe("running");
-      expect(needsYouOf(world, flowRunId)).toBe(2);
+      expect(needsYouOf(world, flowRunId)).toBe(1);
 
       // proceed: it starts afresh, so its own gate applies -- external at `confirm` is a card, nothing pushed yet.
       setLevels(world, { external: "confirm" });

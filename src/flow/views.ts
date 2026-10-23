@@ -9,12 +9,12 @@ import { latestRoundAt, readRoundsAt } from "../control/requirementRecords.js";
 import type { RoundBody } from "../control/requirementSchemas.js";
 import type { ControlStore } from "../control/store.js";
 import type { ToolRulesReport } from "../control/toolRules.js";
-import { FlowRefusal, latestByStep, loadRun, openAsks, recordOfExecution } from "./kernel.js";
+import { FlowRefusal, isDeferredPark, latestByStep, loadRun, openAsks, recordOfExecution } from "./kernel.js";
 import { heldBy, holdableAfter, marksOf } from "./marks.js";
 import { whenParams } from "./template/checklist.js";
 import { waitingIntakes } from "./feedback/intake.js";
 import { executionSpend, intakeSpend, planSpend, sumSpend, type Spend } from "./spend.js";
-import { FEEDBACK_KEY, getFlowRun, listEffects, listExecutions, listHeads, listIntakes, listMessages, listPlans, type ExecutionRow } from "./store.js";
+import { FEEDBACK_KEY, getFlowRun, listEffects, listExecutions, listHeads, listIntakes, listMessages, listPlans, REVISING, type ExecutionRow } from "./store.js";
 
 /**
  * One execution as the run page shows it (Task 16): its state, why it ran, its output, red flags and -- for a `work`
@@ -47,9 +47,10 @@ export function readFlowList(store: ControlStore): FlowListV1 {
         flowRunId: row.id, groupId: row.groupId, templateRef: row.templateRef, state: row.state, poolTokens: row.poolTokens, poolDrawn: row.poolDrawn,
         // Task 16: the kanban card's project scope (a run's settings layer) and its folder.
         projectId: body.projectId ?? null, dir: body.dir ?? null,
-        // Steps whose newest execution waits on the person (an ask, a confirm card, a question, an exhausted pool, an
-        // effect a deferral holds), plus each deferred step: owed, "fill when ready" (gaps spec §6.2). A skip owes nothing.
-        needsYou: [...latestByStep(listExecutions(store, row.id)).values()].filter((e) => e.state === "needs-person" || e.state === "parked").length
+        // Steps whose newest execution waits on the person (an ask, a confirm card, a question, an exhausted pool), plus
+        // each deferred step: owed, "fill when ready" (gaps spec §6.2). A skip owes nothing. An effect step a deferral
+        // holds is owed through that defer, so it is not counted again (final review M6: one item per thing owed).
+        needsYou: [...latestByStep(listExecutions(store, row.id)).values()].filter((e) => e.state === "needs-person" || (e.state === "parked" && !isDeferredPark(e))).length
           + [...marksOf(listMessages(store, row.id)).values()].filter((m) => m.kind === "defer").length
           // Gaps spec §4.2: a feedback intake waiting on the person (a location to pick, a clarify round to answer).
           + waitingIntakes(store, row.id),
@@ -143,9 +144,6 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
     decisions,
   };
 }
-
-/** An execution of a clarify step still working on its rounds (a revision in progress); rewind.ts refuses on the same four. */
-const REVISING: ReadonlySet<string> = new Set(["queued", "running", "needs-person", "parked"]);
 
 function clarifyOf(rounds: RoundBody[]): { rounds: RoundBody[]; chain: number[] } {
   return { rounds, chain: activeChain(rounds.map((r) => ({ roundNo: r.roundNo, ...(r.revises === undefined ? {} : { revises: r.revises }) }))).chain };

@@ -71,6 +71,8 @@ const VIEW_REASONS = [
  */
 const FLOW_MESSAGE_REASONS = [
   "flow-step-not-skippable", "flow-step-not-marked", "flow-feedback-no-target", "flow-feedback-already-applied", "flow-round-not-revisable", "flow-step-waiting",
+  // Final review M9: a rewind refused while a newer execution of the step is parked (src/flow/rewind.ts STEP_PARKED).
+  "flow-step-parked",
   // Task 9 fix round (controller's ruling): a mark that would release a held effect without the person.
   "flow-effect-needs-person",
 ];

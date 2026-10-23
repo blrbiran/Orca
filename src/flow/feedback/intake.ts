@@ -109,7 +109,12 @@ export function openIntake(store: ControlStore, run: LoadedRun, message: Pick<Me
     const oldMessage = listMessages(store, run.row.id).find((m) => m.seq === old.messageSeq)!;
     if (oldMessage.state === "accepted" || oldMessage.state === "applied") setMessageState(store, run.row.id, old.messageSeq, oldMessage.state, "excluded", `replaced by message ${message.seq}`);
     const plan = old.state === "planned" ? listPlans(store, run.row.id).find((p) => p.planNo === old.body.planNo) : undefined;
-    if (plan !== undefined && (plan.state === "proposed" || plan.state === "running")) putPlan(store, withoutIntake(store, run.row.id, plan, old.body));
+    if (plan !== undefined && (plan.state === "proposed" || plan.state === "running")) {
+      const kept = withoutIntake(store, run.row.id, plan, old.body);
+      // Final review M1: a proposed plan left with no candidate decides nothing -- abandoned here, so no empty checklist
+      // waits on the person and no proposal call is made on an empty list. A running one finishes at its next pass.
+      putPlan(store, kept.state === "proposed" && (kept.candidates as PlanCandidates).list.length === 0 ? { ...kept, state: "abandoned" } : kept);
+    }
   }
   const anchors = extractAnchors(String(body.text), givenAnchors(body));
   // §4.8 (Task 10-A fix round 1): a replacement is the same feedback adjusted -- retargeted at a step with nothing to

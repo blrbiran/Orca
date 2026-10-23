@@ -1803,6 +1803,7 @@ export const zhErrors: Record<string, string> = {
   "flow-feedback-already-applied": "要替换的那条反馈已经处理过了，请另发一条新反馈：{{detail}}",
   "flow-round-not-revisable": "这一轮不能修改（只有澄清步骤里已回答的轮次可以改）：{{detail}}",
   "flow-step-waiting": "这一步还在等待或运行中。请先回答、确认或放弃它，再回退：{{detail}}",
+  "flow-step-parked": "这一步停着（在等预算池，或是一个被挂起的对外步骤）。请先给预算池加 token，或处理挂起，再回退：{{detail}}",
   "flow-effect-needs-person": "这样会放行一个被挂起的对外步骤，只有本人才能放行。请以本人（所有者）身份登录后再发一次：{{detail}}",
   "flow-attachment-invalid": "附件没有收下：{{detail}}",
   "flow-run-stopped": "流程运行已停止：{{detail}}",

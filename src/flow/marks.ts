@@ -76,11 +76,6 @@ export function holdTargets(template: Pick<FlowTemplate, "steps" | "effects">, m
   return new Set(template.steps.filter((s) => holdsOn(template, marks, s.id).length > 0).map((s) => s.id));
 }
 
-/** §6.3: the effect steps a standing defer holds. */
-export function heldEffectSteps(template: Pick<FlowTemplate, "steps" | "effects">, marks: ReadonlyMap<string, Mark>): Set<string> {
-  return new Set(template.steps.filter((s) => heldBy(template, marks, s.id).length > 0).map((s) => s.id));
-}
-
 /** The journal as this module reads it: an execution's step, number, state and body. */
 export interface MarkedExecution { stepKey: string; seq: number; state: string; body: unknown }
 

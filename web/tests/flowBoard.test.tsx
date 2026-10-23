@@ -321,5 +321,15 @@ describe("the board reads flow runs and opens them (§14.1, P6)", () => {
       // mutation: show every failure as "could not be listed" -> red
       await waitFor(() => expect(param(dialog, "coverImage").textContent).toContain("This folder is too large to list its images; type the path instead."));
     });
+
+    it("shows the start's refusal for a folder that is no registered dir project's (final review M4)", async () => {
+      serve(undefined, undefined, (url) => url.startsWith("/api/control/flows/images?")
+        ? json({ error: { code: "flow-dir-unregistered", message: "/home/o is not a registered dir project's folder", commandRevision: null, evidenceIds: [], retryable: false } }, 422) : null);
+      render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+      const dialog = await openDialog();
+      fireEvent.change(within(dialog).getByRole("textbox", { name: "Folder (absolute path)" }), { target: { value: "/home/o" } });
+      // mutation: show the refusal as "could not be listed" -> red
+      await waitFor(() => expect(param(dialog, "coverImage").textContent).toContain("A flow runs only on the folder of a registered folder project"));
+    });
   });
 });

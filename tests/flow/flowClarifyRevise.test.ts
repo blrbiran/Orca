@@ -6,7 +6,7 @@ import { flowMessagePayloadSchema } from "../../src/control/webProtocol.js";
 import { answerFlowClarify, flowClarifyConsensus } from "../../src/flow/kinds/clarify.js";
 import { appendQueued, loadRun } from "../../src/flow/kernel.js";
 import { acceptMessage, consumeAtBoundary } from "../../src/flow/messages.js";
-import { EDIT_NO_LONGER_APPLIES, STEP_WAITING } from "../../src/flow/rewind.js";
+import { EDIT_NO_LONGER_APPLIES, STEP_PARKED, STEP_WAITING } from "../../src/flow/rewind.js";
 import { appendMessage, getFlowRun, getHead, listMessages, listPlans } from "../../src/flow/store.js";
 import { readFlowRun } from "../../src/flow/views.js";
 import { ROUND_ONE, ROUND_TWO } from "../control/fixtures/requirementOutputs.js";
@@ -266,14 +266,15 @@ describe("the run view after a plain rewind (Task 10-A fix round 1, M3)", () => 
     } finally { await w.dispose(); }
   });
 
-  it("a parked newer execution of the step refuses the rewind, as a waiting or running one does", async () => {
+  it("a parked newer execution of the step refuses the rewind, as a waiting or running one does, by its own reason (flow-step-parked)", async () => {
     const { w, flowRunId, groupId } = await doneRun(); try {
       expect(await revise(w, flowRunId, 2, revision(w, groupId, 1, 2, "Absolute"))).toMatchObject({ state: "applied" });
       // A parked execution (an exhausted pool, a hold) resumes later and would move the head past the rewind.
       w.store.db.prepare("UPDATE step_executions SET state='parked' WHERE flow_run_id=? AND step_key='brief' AND seq=2").run(flowRunId);
       expect(states(w, flowRunId)).toEqual([[1, "done"], [2, "parked"]]);
-      // mutation: leave `parked` out of the rewind guard -> applied, red
-      expect(await rewindTo(w, flowRunId, 1)).toMatchObject({ state: "rejected", reason: STEP_WAITING });
+      // mutation: leave `parked` out of the rewind guard -> applied, red. Final review M9: its own reason, so the page
+      // does not ask the person to answer or agree to a parked step (mutation: refuse it as STEP_WAITING -> red).
+      expect(await rewindTo(w, flowRunId, 1)).toMatchObject({ state: "rejected", reason: STEP_PARKED });
       expect(briefOf(w, flowRunId).clarifyRevision).toMatchObject({ seq: 2, state: "parked" });
     } finally { await w.dispose(); }
   });

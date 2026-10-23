@@ -66,6 +66,13 @@ export function getExecutionState(store: ControlStore, key: ExecutionKey): Execu
  * Spec §6.1 "state moves forward only": nothing returns to `queued`; `running` ends or waits (`needs-person`, `parked`,
  * `staged`); a waiting execution resumes or ends; `done`, `failed` and `skipped` are final.
  */
+/**
+ * The states of an execution still working toward an output (gaps plan Task 7 / 10-A): the run view shows a clarify
+ * revision in one of them as at work (views.ts), and a rewind refuses while a newer execution of its step is in one
+ * (rewind.ts) -- one list, so the two never disagree (final review M7).
+ */
+export const REVISING: ReadonlySet<ExecutionState> = new Set<ExecutionState>(["queued", "running", "needs-person", "parked"]);
+
 const EXECUTION_FORWARD: Record<ExecutionState, readonly ExecutionState[]> = {
   queued: ["running", "skipped", "needs-person", "parked", "staged", "failed"],
   running: ["done", "failed", "needs-person", "parked", "staged"],

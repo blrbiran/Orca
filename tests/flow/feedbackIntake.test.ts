@@ -18,7 +18,7 @@ import { storeAttachment } from "../../src/flow/feedback/attachments.js";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { createFlowCallPort } from "../../src/flow/calls.js";
 import { acceptMessage } from "../../src/flow/messages.js";
-import { getFlowRun, getIntake, listMessages, listPlans } from "../../src/flow/store.js";
+import { getFlowRun, getIntake, listMessages, listPlans, moveIntake } from "../../src/flow/store.js";
 import { readFlowList } from "../../src/flow/views.js";
 import { fakeChildPort } from "./fixtures/childPort.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
@@ -481,6 +481,73 @@ describe("feedback intake (gaps §4, G2)", { timeout: 60_000 }, () => {
       // A plain step feedback with no anchor behaves as before: no intake.
       const plain = await feedback(w, id, { text: "shorter" }, { kind: "step", stepKey: "polish" });
       expect(getIntake(w.store, id, plain.seq)).toBeNull();
+    } finally { await w.dispose(); }
+  });
+  it("a replacement that leaves its proposed plan with no candidate abandons that plan: no empty checklist waits on the person (final review M1)", async () => {
+    // One step, so the feedback's target has no later step: its words are the plan's only candidate.
+    const one = { yaml: "format: orca-flow-v1\nid: one\nversion: 1\nworkspace: {kind: dir}\nsteps:\n  - {id: draft, kind: work, prompt: draft.md}\n", assets: { "draft.md": "Write post.md.\n" } };
+    const children = fakeChildPort();
+    const w = Object.assign(await flowWorld({ one }, { children: children.port }), { children }); try {
+      // The person's checklist: under `review` an empty proposed plan would wait on the person to run or discard nothing.
+      w.deps.rerunReview = () => "review";
+      const { flowRunId: id } = await w.start({ templateRef: "builtin/one" });
+      await w.advance();
+      children.land(childGroupIdOf(id, "draft", 1), { "post.md": POST });
+      await w.advance();
+      expect(runState(w, id)).toBe("done");
+      const sent = await feedback(w, id, { text: "too sweet", anchors: [{ quote: "Tea slows you down and that is good." }] });
+      await w.answer(w.calls.length - 1, { targets: [{ stepKey: "draft", why: "the base" }] });
+      expect(intakeOf(w, id, sent.seq)).toMatchObject({ state: "planned", body: { planNo: 1 } });
+      expect(listPlans(w.store, id).map((p) => [p.planNo, p.state, (p.candidates as { list: unknown[] }).list.length])).toEqual([[1, "proposed", 1]]);
+      const replaced = await feedback(w, id, { text: "too bitter", replaces: sent.seq, anchors: [{ quote: "Tea slows you down and that is good." }] });
+      // The sole feedback's words left plan 1: nothing is left to decide. mutation: drop the abandon -> [1, "proposed", 0], red
+      expect(listPlans(w.store, id).map((p) => [p.planNo, p.state, (p.candidates as { list: unknown[] }).list.length])).toEqual([[1, "abandoned", 0]]);
+      // The replacement makes its own plan, which is the only open one.
+      await w.answer(w.calls.length - 1, { targets: [{ stepKey: "draft", why: "the base" }] });
+      expect(intakeOf(w, id, replaced.seq)).toMatchObject({ state: "planned", body: { planNo: 2 } });
+      expect(listPlans(w.store, id).map((p) => `${p.planNo}:${p.state}`)).toEqual(["1:abandoned", "2:proposed"]);
+      expect((listPlans(w.store, id)[1]!.candidates as { feedback: Record<string, string[]> }).feedback.draft!.some((t) => t.startsWith("too bitter"))).toBe(true);
+    } finally { await w.dispose(); }
+  });
+
+  it("a call the port already claimed but was never marked sent is only marked sent, not sent again (final review M2)", async () => {
+    const w = await world(); try {
+      const id = await run(w);
+      const sent = await feedback(w, id, { text: "too sweet", anchors: [{ quote: "Engineers think better with a warm cup." }] });
+      const before = intakeOf(w, id, sent.seq);
+      expect(before).toMatchObject({ state: "triaging", body: { call: { purpose: "feedback-triage", requested: true } } });
+      const triages = callsOf(w, "feedback-triage").length;
+      // The crash window after the port claimed the call (a run id) and before the intake was marked sent.
+      moveIntake(w.store, id, sent.seq, "triaging", "triaging", { ...before.body, call: { ...before.body.call!, runId: "run-claimed", requested: false } }, w.deps.now());
+      await w.advance();
+      expect(intakeOf(w, id, sent.seq).body.call).toMatchObject({ runId: "run-claimed", requested: true });
+      // mutation: drop the runId !== null branch (always resend) -> one more feedback-triage call, red
+      expect(callsOf(w, "feedback-triage")).toHaveLength(triages);
+      expect(intakeOf(w, id, sent.seq).body.calls).toHaveLength(1);
+    } finally { await w.dispose(); }
+  });
+
+  it("a clarify result for a round no longer drafting is dropped: the call is cleared, the round and the intake are unchanged (final review M2)", async () => {
+    const w = await world(); try {
+      const id = await run(w);
+      const sent = await feedback(w, id, { text: "something feels off" });
+      await w.answer(w.calls.length - 1, { targets: [{ stepKey: "polish", why: "tone" }], clarity: "vague" });
+      const q = { key: "q1", question: "Which part?", recommendedAnswer: "The start", why: "focus", dependsOn: [] };
+      await w.answer(w.calls.length - 1, { slug: "fb", statement: "## What feels wrong\nx\n## Where\ny\n## What it should become\nz", acceptanceCriteria: [], questions: [q], frontierEmpty: false, openBranches: [], glossary: [], adrs: [] });
+      const key = { groupId: getFlowRun(w.store, id)!.groupId, stepKey: "@feedback", execSeq: sent.seq };
+      const round = readRoundsAt(w.store, key)[0]!;
+      expect(round).toMatchObject({ state: "awaiting-answers", retries: 0 });
+      const intake = intakeOf(w, id, sent.seq);
+      expect(intake).toMatchObject({ state: "clarifying", body: { call: null } });
+      const calls = w.calls.length;
+      // A late result (a duplicate delivery) for the round, which already waits on the person's answers.
+      moveIntake(w.store, id, sent.seq, "clarifying", "clarifying", { ...intake.body, call: { purpose: "clarify", runId: "run-late", retries: 0, lastInvalid: null, requested: true,
+        callResult: { runId: "run-late", rawOutput: { not: "judged" }, failure: null } } }, w.deps.now());
+      await w.advance();
+      expect(intakeOf(w, id, sent.seq)).toMatchObject({ state: "clarifying", body: { call: null } });
+      // mutation: drop the round-not-drafting drop -> the result is judged invalid, retried: a new clarify call and retries 1, red
+      expect(w.calls.length).toBe(calls);
+      expect(readRoundsAt(w.store, key)[0]).toEqual(round);
     } finally { await w.dispose(); }
   });
 });

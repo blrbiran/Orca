@@ -2,7 +2,8 @@
  * Gaps spec §8.4 (plan Task 10-B): an `image` param's picker -- the image files of the chosen folder, as the server lists
  * them (GET /api/control/flows/images: excludes applied, at most 200, links never offered), each a folder-relative path a
  * start or a `params` change accepts. The picker only fills the param's path field beside it; the person may always type
- * a path instead (a file past the bound, or when the folder cannot be listed). A later answer for an older folder or
+ * a path instead (a file past the bound, or when the folder cannot be listed). A folder that is no registered dir
+ * project's is refused (flow-dir-unregistered), and that refusal is shown. A later answer for an older folder or
  * template is dropped, never shown.
  */
 import { useEffect, useState } from "react";
@@ -10,8 +11,9 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { ControlRequestError, controlGet } from "./controlApi.js";
 import type { FlowFolderImagesV1 } from "./controlTypes.js";
+import { refusalText } from "./i18n.js";
 
-type Listing = { kind: "reading" } | { kind: "failed" } | { kind: "too-large" } | { kind: "read"; files: string[]; truncated: boolean; limit: number };
+type Listing = { kind: "reading" } | { kind: "failed" } | { kind: "too-large" } | { kind: "refused"; text: string } | { kind: "read"; files: string[]; truncated: boolean; limit: number };
 /** The wait after the last keystroke in the folder field before the folder is listed. */
 export const LIST_DELAY_MS = 250;
 
@@ -31,7 +33,11 @@ export function FolderImagePicker(props: { dir: string; template: string; paramI
           setListing(Array.isArray(answer?.files) ? { kind: "read", files: answer.files, truncated: answer.truncated === true, limit: answer.limit } : { kind: "failed" });
         } catch (error) {
           // Task 10-B fix I1: a folder past the server's entry or time cap is said to be too large, not unlistable.
-          if (live) setListing(error instanceof ControlRequestError && error.refusal.code === "flow-folder-too-large" ? { kind: "too-large" } : { kind: "failed" });
+          // Final review M4: a folder that is no registered dir project's is refused as a start on it is -- shown so.
+          if (!live) return;
+          if (error instanceof ControlRequestError && error.refusal.code === "flow-folder-too-large") setListing({ kind: "too-large" });
+          else if (error instanceof ControlRequestError && error.refusal.code === "flow-dir-unregistered") setListing({ kind: "refused", text: refusalText(error.refusal) });
+          else setListing({ kind: "failed" });
         }
       })();
     }, LIST_DELAY_MS);
@@ -41,6 +47,7 @@ export function FolderImagePicker(props: { dir: string; template: string; paramI
   if (listing.kind === "reading") return <p className="detail-note" role="status">{t("flow.start.image.reading")}</p>;
   if (listing.kind === "too-large") return <p className="detail-note" role="status">{t("flow.start.image.tooLarge")}</p>;
   if (listing.kind === "failed") return <p className="detail-note" role="status">{t("flow.start.image.failed")}</p>;
+  if (listing.kind === "refused") return <p className="detail-note" role="status">{listing.text}</p>;
   if (listing.files.length === 0) return <p className="detail-note">{t("flow.start.image.empty")}</p>;
   return (
     <>

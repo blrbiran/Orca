@@ -1,6 +1,6 @@
 import { readRunResults, readGroupResults } from './taskResults.js';
 import { readFlowJournal, readFlowList, readFlowRun } from "../flow/views.js";
-import { asFlowControlError, dirProjectOf } from "../flow/flowCommands.js";
+import { asFlowControlError, dirProjectOf, registeredDirProject } from "../flow/flowCommands.js";
 import { readResultOutputBytes } from './taskResultOutputs.js';
 import { readControlOverview } from "./controlOverview.js";
 import { readGroupDecisionsView } from "./groupDecisions.js";
@@ -350,7 +350,8 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     try { res.json(readBuiltinTemplates(builtinRoot())); } catch (error) { sendMappedControlError(res, new ControlError("flow-template-invalid", (error as Error).message)); }
   });
   // Task 10-B fix I1 (controller ruling): the folder listing is served to the Web only -- never on the control socket --
-  // and refused to a run Orca dispatched, as flow-start is (humanOnly.ts DISPATCHED_RUN_REFUSED).
+  // and refused to a run Orca dispatched, as flow-start is (humanOnly.ts DISPATCHED_RUN_REFUSED); and (final review M4)
+  // only for a registered dir project's folder.
   if (channel === "web") app.get("/api/control/flows/images", asyncRoute(async (req, res) => {
     const principal = res.locals.orcaPrincipal as Principal | undefined;
     if (principal?.kind === "agent" && principal.dispatchedRun !== undefined) {
@@ -362,6 +363,10 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       sendControlError(res, 400, "query-invalid", "dir must be an absolute folder and template a built-in template id");
       return;
     }
+    // Final review M4: only a folder a start may run on is listed -- a registered dir project's, by the start's own
+    // resolver; any other path is refused as a start on it is (flow-dir-unregistered), so no member probes arbitrary paths.
+    try { await registeredDirProject(deps.flowProjects?.() ?? deps.service?.deps.flowProjects?.() ?? [], dir, undefined); }
+    catch (error) { sendMappedControlError(res, error); return; }
     let excludes: string[];
     try { excludes = [...(loadBuiltin(template, builtinRoot()).template.workspace.excludes ?? [])]; }
     catch (error) { sendMappedControlError(res, new ControlError("flow-template-invalid", (error as Error).message)); return; }
@@ -840,6 +845,13 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
   const knownRun = (req: Request, res: Response, next: NextFunction): void => {
     try {
       if (res.locals.orcaPrincipal === undefined) throw new Error("control request carries no principal (res.locals.orcaPrincipal)");
+      // Final review M5: the store has no quota and no pruning (spec §21), so a run Orca dispatched adds nothing to it --
+      // refused as flow-start is (humanOnly.ts DISPATCHED_RUN_REFUSED); a person or an attended session uploads.
+      const principal = res.locals.orcaPrincipal as Principal;
+      if (principal.kind === "agent" && principal.dispatchedRun !== undefined) {
+        sendControlError(res, 403, "control-dispatched-run-refused", `adding an attachment is not done by a run Orca dispatched (${principal.dispatchedRun}); a person or an attended session does it.`);
+        return;
+      }
       if ((service.deps.flowDeps?.() ?? null) === null) throw new ControlError("flow-unavailable");
       loadRun(store, String(req.params.runId));
       next();

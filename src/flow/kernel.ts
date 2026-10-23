@@ -25,7 +25,7 @@ import { runShell } from "./kinds/check.js";
 import { builtinKinds, type ExecutionBody, type FlowRunBody, type KindContext, type KindDefinition, type KindOutcome, type KindRegistry, type LoadedRun, type RoleResolution } from "./kinds/registry.js";
 import { buildStepPrompt, bounded } from "./prompt.js";
 import {
-  appendExecution, appendFlowDecision, appendMessage, FEEDBACK_KEY, finishExecution, getFlowRun, getHead, insertFlowRun, listExecutions, listHeads, listMessages, listRunsWithOpenWork, setDefinitionHash, setFlowRunState, setHead,
+  appendExecution, appendFlowDecision, appendMessage, FEEDBACK_KEY, finishExecution, getEffect, getFlowRun, getHead, insertFlowRun, listExecutions, listHeads, listMessages, listRunsWithOpenWork, setDefinitionHash, setEffectState, setFlowRunState, setHead,
   updateFlowRunBody,
   type ExecutionKey, type ExecutionRow, type ExecutionState,
 } from "./store.js";
@@ -724,7 +724,7 @@ export function flagComposeConflict(deps: FlowDeps, run: LoadedRun, stepKey: str
 
 /** Gaps spec §6.3: what a held effect step's parked execution waits on. */
 export const DEFERRED_UPSTREAM = "deferred-upstream";
-const isDeferredPark = (execution: ExecutionRow): boolean =>
+export const isDeferredPark = (execution: ExecutionRow): boolean =>
   execution.state === "parked" && (execution.body as { needsYou?: { kind?: unknown } }).needsYou?.kind === DEFERRED_UPSTREAM;
 
 /**
@@ -766,6 +766,28 @@ export async function startQueued(deps: FlowDeps, run: LoadedRun, execution: Exe
   const index = run.template.steps.findIndex((s) => s.id === execution.stepKey);
   const { marks } = markStateOf(deps.store, run.row.id);
   await runQueued(deps, run, execution, basisOf(run, index, listHeads(deps.store, run.row.id)), heldBy(run.template, marks, execution.stepKey));
+}
+
+/**
+ * Gaps spec §6.3 (final review I1): a parked execution a standing defer now holds -- one parked on an exhausted pool
+ * before the person deferred an earlier step -- is parked `deferred-upstream` instead of resumed, by the same `heldBy`
+ * the run-time park uses, so the release path starts it afresh through its own level gate once a person lifts the hold.
+ * The `confirmed` record it passed its gate with is closed (`discarded`), so the release's new record is the only live
+ * one. False (nothing written): nothing holds it.
+ */
+export function parkIfHeld(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow): boolean {
+  const deferred = heldBy(run.template, markStateOf(deps.store, run.row.id).marks, execution.stepKey);
+  if (deferred.length === 0) return false;
+  const body = execution.body as ExecutionBody;
+  const record = typeof body.effectRecordId === "string" ? getEffect(deps.store, body.effectRecordId) : null;
+  const at = deps.now();
+  deps.store.transaction(() => {
+    if (record?.state === "confirmed") setEffectState(deps.store, record.id, "confirmed", "discarded", at);
+    finishExecution(deps.store, execution, "parked", "parked", at, { body: {
+      ...body, needsYou: { kind: DEFERRED_UPSTREAM, deferred }, ...(record?.state === "confirmed" ? { effectDiscarded: record.id } : {}),
+    } });
+  });
+  return true;
 }
 
 /**

@@ -23,12 +23,14 @@ import { FlowRefusal, recordOfExecution, stepOf, vaultOf, type FlowDeps } from "
 import { openPlan } from "./rerun.js";
 import { reuseIntake } from "./feedback/intake.js";
 import type { ExecutionBody, LoadedRun } from "./kinds/registry.js";
-import { appendMessage, clearHead, finishExecution, getHead, listExecutions, listMessages, setHead, setMessageState, type ExecutionRow, type MessageRow } from "./store.js";
+import { appendMessage, clearHead, finishExecution, getHead, listExecutions, listMessages, REVISING, setHead, setMessageState, type ExecutionRow, type MessageRow } from "./store.js";
 import { vaultGitBytes, type Vault } from "./vault/vault.js";
 
 export const EDIT_NO_LONGER_APPLIES = "edit-no-longer-applies";
 /** Review Important 1 (Task 7): a rewind of a step with an execution newer than its head still waiting or under way. */
 export const STEP_WAITING = "flow-step-waiting";
+/** Final review M9: the same refusal when that newer execution is parked (on the pool, or held by a defer). */
+export const STEP_PARKED = "flow-step-parked";
 
 interface RewindBody { command: "rewind"; toStep?: unknown; toSeq?: unknown; exclude?: unknown }
 /** What a re-queued edit carries: the original message and the person's edit execution (made onto `onto`). */
@@ -48,9 +50,11 @@ export async function applyRewind(deps: FlowDeps, run: LoadedRun, message: Messa
   const head = getHead(deps.store, run.row.id, toStep);
   // Review Important 1 (Task 7): an execution newer than the head that waits on the person or is under way (a clarify
   // revision, an answer, a queued re-run) would later move the head past the rewind; the person settles it first.
-  // `parked` too (Task 10-A fix round 1): a parked execution resumes later and would move the head just the same; the
-  // run view counts the same four states as a revision at work (views.ts REVISING).
-  const waiting = ofStep.find((e) => e.seq > (head ?? 0) && (e.state === "needs-person" || e.state === "queued" || e.state === "running" || e.state === "parked"));
+  // `parked` too (Task 10-A fix round 1): a parked execution resumes later and would move the head just the same. The
+  // run view counts the same states as a revision at work (store.ts REVISING, shared). A parked one has its own reason
+  // (final review M9): nothing there is answered or agreed; the person raises the pool or settles the hold.
+  const waiting = ofStep.find((e) => e.seq > (head ?? 0) && REVISING.has(e.state));
+  if (waiting?.state === "parked") throw new FlowRefusal(STEP_PARKED, `${toStep}#${waiting.seq} is parked: raise the pool, or settle the hold, before rewinding ${toStep}`);
   if (waiting !== undefined) throw new FlowRefusal(STEP_WAITING, `${toStep}#${waiting.seq} is ${waiting.state}: answer, agree or discard it before rewinding ${toStep}`);
   // The rewound point: when the step moved past `toSeq` (for "not run": when it first ran).
   const past = ofStep.filter((e) => toSeq === null || e.seq > toSeq).map((e) => e.createdAt);

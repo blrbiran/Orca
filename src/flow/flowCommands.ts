@@ -14,7 +14,7 @@ import type { ControlStore } from "../control/store.js";
 import { realpath } from "node:fs/promises";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { discardEffect, enactEffect } from "./effects.js";
-import { advanceRun, answerNeeds, FlowRefusal, latestByStep, loadRun, recordRunError, resumeExecution, startFlowRun, stepOf, type FlowDeps } from "./kernel.js";
+import { advanceRun, answerNeeds, FlowRefusal, latestByStep, loadRun, parkIfHeld, recordRunError, resumeExecution, startFlowRun, stepOf, type FlowDeps } from "./kernel.js";
 import { answerAsk } from "./kinds/ask.js";
 import { answerFlowClarify, flowClarifyConsensus } from "./kinds/clarify.js";
 import type { ExecutionBody } from "./kinds/registry.js";
@@ -41,7 +41,7 @@ export interface FlowCommandDeps {
  * it starts only on a registered `dir` project's folder -- never on an arbitrary path a caller names. The run belongs to
  * that project (its settings layer); a `projectId` that names another project is refused.
  */
-async function registeredDirProject(projects: ReadonlyArray<{ repoId: string; path: string }>, dir: string, projectId: string | undefined): Promise<string> {
+export async function registeredDirProject(projects: ReadonlyArray<{ repoId: string; path: string }>, dir: string, projectId: string | undefined): Promise<string> {
   const found = await dirProjectOf(projects, dir);
   if (found === null) throw new ControlError("flow-dir-unregistered", `${dir} is not a registered dir project's folder (add it with kind "dir" to the projects file)`);
   if (projectId !== undefined && projectId !== found) throw new ControlError("flow-dir-unregistered", `${dir} is project ${found}, not ${projectId}`);
@@ -227,7 +227,8 @@ async function answer(flow: FlowDeps, p: AnswerPayload, who: { by: string; via: 
 }
 
 /**
- * §6.3 `flow-pool`: the person raises the run's pool (human-only). Executions parked on an exhausted pool start again.
+ * §6.3 `flow-pool`: the person raises the run's pool (human-only). Executions parked on an exhausted pool start again,
+ * except one a standing defer holds: it is parked as held (kernel parkIfHeld, gaps §6.3).
  * The raise is a `command` message deduped by the command id, so a retried command raises nothing twice.
  */
 async function raisePool(flow: FlowDeps, flowRunId: string, raise: number, who: { by: string; via: string }, requestId: string): Promise<Result> {
@@ -243,6 +244,8 @@ async function raisePool(flow: FlowDeps, flowRunId: string, raise: number, who: 
   for (const execution of latestByStep(listExecutions(flow.store, flowRunId)).values()) {
     const body = execution.body as ExecutionBody & { needsYou?: { reason?: string } };
     if (execution.state !== "parked" || body.needsYou?.reason !== POOL_EXHAUSTED) continue;
+    // Final review I1: a raise is a budget act, not a release -- an effect step a standing defer holds stays held.
+    if (parkIfHeld(flow, run, execution)) continue;
     const { needsYou: _parked, ...rest } = body;
     await resumeExecution(flow, run, { ...execution, body: rest as ExecutionBody });
   }
