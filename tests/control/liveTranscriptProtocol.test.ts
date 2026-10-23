@@ -62,6 +62,10 @@ describe("collect's transcripts listing through the real port (spec §10.2.4)", 
       const h = await fixture({ collectExtra: { transcripts } });
       await expect(h.port.collect(h.envelope, 0), JSON.stringify(transcripts)).rejects.toThrow("control-response-invalid");
     }
+    // Protocol 4 parses with its own extended schema. mutation: collectionV4Schema overrides transcripts with
+    // z.array(z.unknown()) -> the malformed v4 entry is accepted, red
+    const v4 = await fixture({ features: FEATURES, terminal: { ...FAILED_TERMINAL, budgetSnapshot: { ...FAILED_TERMINAL.budgetSnapshot, tokenRemainingStatus: "known" } }, collectExtra: { transcripts: [{ ...ENTRY, extra: 1 }] } });
+    await expect(v4.port.collect({ ...v4.envelope, protocol: 4 }, 0)).rejects.toThrow("control-response-invalid");
   });
   it("still refuses an unknown top-level key beside a valid listing, on protocol 3 and 4", async () => {
     const v3 = await fixture({ collectExtra: { transcripts: [ENTRY], extra: 1 } });
@@ -82,7 +86,8 @@ describe("work.operatorNote on the loop envelope (spec §10.2.6)", () => {
   const envelope = (note?: unknown, extra: Record<string, unknown> = {}) => ({ protocol: 3, claim, contractHash: hx("b"), inputCheckpoint: null, ...extra,
     work: note === undefined ? work : { ...work, operatorNote: note } });
   const ok = (value: unknown) => startEnvelopeSchema.safeParse(value).success;
-  // Recorded by sha256Canonical of exactly this literal envelope at b225f664, before operatorNote existed.
+  // sha256Canonical of this literal envelope, unparsed (canonicalJson.ts is untouched by this change): the parsed envelope
+  // must hash to the very bytes Orca built, so parsing adds nothing to an envelope without the note.
   const GOLDEN_WITHOUT_NOTE = "0a28575da64d3aebc16f2f617b9a5bdd7f6e4b9c96b5c6c0db7bdd2a73c53ca1";
 
   // mutation: operatorNoteSchema.default(...) / .nullable().default(null) -> the parsed envelope gains a key and a new hash, red
@@ -90,7 +95,6 @@ describe("work.operatorNote on the loop envelope (spec §10.2.6)", () => {
     const parsed = startEnvelopeSchema.parse(envelope());
     expect(Object.keys(parsed.work).sort()).toEqual(["base", "contract", "kind", "sourceDir", "targetRepo"]);
     expect(sha256Canonical(parsed)).toBe(GOLDEN_WITHOUT_NOTE);
-    expect(sha256Canonical(envelope())).toBe(GOLDEN_WITHOUT_NOTE);
   });
   // mutation: drop operatorNote from loopWorkSchema -> the strict work refuses it, red
   it("accepts a note of either scope and keeps it exactly", () => {
