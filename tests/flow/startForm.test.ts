@@ -111,7 +111,12 @@ describe("the start dialog's routes (§8.4)", () => {
     const dir = join(root, "folder");
     put(dir, "covers/one.png");
     const app = express();
-    registerControlReadRoutes(app, { store, epoch: "epoch", config: { readView: async () => ({}) } as never }, "web");
+    // Final review M4: only a registered dir project's folder is listed. The folder and the big folder are registered;
+    // so is the image file's path, so the non-folder row below still reaches the listing (a registered path that is
+    // no longer a folder), and "relative" / "." stop at the absolute-path check first.
+    const big = join(root, "big");
+    const projects = [{ repoId: "folder-1", path: dir }, { repoId: "big-1", path: big }, { repoId: "file-1", path: join(dir, "covers/one.png") }];
+    registerControlReadRoutes(app, { store, epoch: "epoch", config: { readView: async () => ({}) } as never, flowProjects: () => projects }, "web");
     const server = createServer(app);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -131,7 +136,6 @@ describe("the start dialog's routes (§8.4)", () => {
     expect(await get(`/api/control/flows/images?dir=${encodeURIComponent(dir)}&template=no-such`)).toMatchObject({ status: 422, body: { error: { code: "flow-template-invalid" } } });
     expect(await get(`/api/control/flows/images?dir=${encodeURIComponent(join(dir, "covers/one.png"))}&template=wechat-article`)).toMatchObject({ status: 400, body: { error: { code: "query-invalid" } } });
     // Task 10-B fix I1: a folder past the entry cap is named too large, not "not a folder".
-    const big = join(root, "big");
     mkdirSync(big);
     for (let i = 0; i <= FOLDER_ENTRY_LIMIT; i++) writeFileSync(join(big, `f${i}`), "");
     // mutation: map every failure to query-invalid -> "query-invalid", red
