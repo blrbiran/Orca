@@ -4,7 +4,7 @@
  * (the driver-backed port is Task 10's). A criterion answers a call with `answer(n, output)`, the seam the driver's
  * single-call settlement uses.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { advanceFlowRuns, completeFlowCall, startFlowRun, type AgentCandidate, type FlowCallRequest, type FlowDeps, type StartFlowInput } from "../../../src/flow/kernel.js";
 import { listExecutions, type ExecutionRow } from "../../../src/flow/store.js";
@@ -32,11 +32,17 @@ export async function flowWorld(templates: Record<string, WorldTemplate>, opts: 
   const folder = join(h.root, "articles");
   mkdirSync(folder);
   for (const [rel, text] of Object.entries(opts.files ?? {})) { mkdirSync(dirname(join(folder, rel)), { recursive: true }); writeFileSync(join(folder, rel), text); }
+  // Rule 17 (gaps Task 9 fix round, I2): the flow env is its own object, so the global relocation of process.env never
+  // reaches it -- a world without ORCA_CONTROL_DIR would store attachments and images under the real ~/.orca. Default it
+  // to this world's own directory (0700, set explicitly); a test that sets its own still wins.
+  const controlDir = join(h.root, "flow-control");
+  mkdirSync(controlDir, { mode: 0o700 });
+  chmodSync(controlDir, 0o700);
   const calls: FlowCallRequest[] = [];
   let clock = 1_000;
   const deps: FlowDeps = {
     store: h.store, now: () => (clock += 1), builtinRoot,
-    env: { ORCA_VAULT_DIR: join(h.root, "vaults") },
+    env: { ORCA_VAULT_DIR: join(h.root, "vaults"), ORCA_CONTROL_DIR: controlDir },
     calls: { request: (req) => { calls.push(structuredClone(req)); } },
     ...(opts.callPort === undefined ? {} : { calls: opts.callPort(h.store, () => (clock += 1)) }),
     agents: () => opts.agents ?? [{ agent: "claude", model: "opus", tier: "high" }, { agent: "codex", model: "gpt", tier: "high" }],

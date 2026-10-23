@@ -28,10 +28,16 @@ export const dispatchedRunHeaders = (env: NodeJS.ProcessEnv): Record<string, str
 /** CLI v2 spec §16: `by` the accountable person, `via` the channel (web, cli:<c>, mcp:<c>); two fields, never one string. */
 export interface Attribution { by: string; via: string }
 
-const current = new AsyncLocalStorage<{ commandId: string; client: string; principal: string; attribution?: Attribution }>();
+/**
+ * Gaps spec §6.3 (Task 9 fix round, controller's ruling): `personAuthority` -- the permission layer established that a
+ * person with the authority `flow-effect` needs sent it (an owner on the Web, or an owner's person token on the socket,
+ * never a run Orca dispatched). Absent: no such authority.
+ */
+type CommandContext = { client: string; principal: string; attribution?: Attribution; personAuthority?: boolean };
+const current = new AsyncLocalStorage<{ commandId: string } & CommandContext>();
 
 /** Accounts spec §3.5, D3: client (spec §6) and principal ride beside the command, outside the raw command, so in neither hash. */
-export function withCommandContext<T>(commandId: string, context: { client: string; principal: string; attribution?: Attribution }, fn: () => T): T {
+export function withCommandContext<T>(commandId: string, context: CommandContext, fn: () => T): T {
   return current.run({ commandId, ...context }, fn);
 }
 
@@ -56,5 +62,7 @@ export function commandAttributionFor(commandId: string, fallbackBy: string): At
 }
 /** The routed attribution only, or null: for a store whose rows predate `via` and stay as they were when none is known. */
 export function routedAttributionFor(commandId: string): Attribution | null { return forCommand(commandId)?.attribution ?? null; }
+/** Gaps spec §6.3: whether the routed principal of this command has person authority; false when none was routed. */
+export function routedPersonAuthorityFor(commandId: string): boolean { return forCommand(commandId)?.personAuthority === true; }
 /** CLI v2 spec §16: the attribution where a store holds one line of text. */
 export const attributionText = (a: Attribution): string => `by ${a.by} via ${a.via}`;

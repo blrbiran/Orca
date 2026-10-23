@@ -6,6 +6,7 @@
  * carries each step's mark and the steps holding it, and each intake's waiting clarify round.
  */
 import { describe, expect, it } from "vitest";
+import { withCommandContext } from "../../src/control/commandClient.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { acceptMessage } from "../../src/flow/messages.js";
@@ -78,6 +79,10 @@ describe("a defer through the control service names what it holds (gaps ยง6.3, ย
       const { flowRunId } = await w.start({ templateRef: "builtin/e" });
       await w.advance();
       const defer = (effects?: Record<string, string>) => send(w, "flow-message", { runId: flowRunId, kind: "command", target: { kind: "step", stepKey: "write" }, body: { command: "defer", ...(effects === undefined ? {} : { effects }) } });
+      // A refused defer holds nothing, so it names no hold.
+      const refused = await defer({ nope: "wait" });
+      expect(refused.result).toMatchObject({ kind: "flow-message-stored", state: "rejected", reason: "flow-message-invalid:effects:nope" });
+      expect(refused.result!.held).toBeUndefined();
       const held = await defer();
       expect(held.result).toMatchObject({ kind: "flow-message-stored", held: ["push"], release: `orca flow defer ${flowRunId} --step write --effects push=proceed --as-person` });
       await w.answer(0, { content: "w 1" });
@@ -86,8 +91,14 @@ describe("a defer through the control service names what it holds (gaps ยง6.3, ย
         ["write", { kind: "defer", messageSeq: held.result!.seq, effects: {} }, []],
         ["push", null, ["write"]],
       ]);
-      const released = await defer({ push: "proceed" });
-      expect(released.result).toMatchObject({ kind: "flow-message-stored" });
+      // Without person authority a proceed is rejected (Task 9 fix round) and names no hold; the person's is applied.
+      const agent = await defer({ push: "proceed" });
+      expect(agent.result).toMatchObject({ kind: "flow-message-stored", state: "rejected", reason: "flow-effect-needs-person" });
+      expect(agent.result!.held).toBeUndefined();
+      const released = await withCommandContext(`gv-${++n}-person`, { client: "web", principal: "web", attribution: { by: "ann", via: "web" }, personAuthority: true },
+        () => serviceOf(w).flowCommand({ schema: "orca-raw-command-v1", commandId: `gv-${n}-person`, actorId: "owner", expectedRevision: 0, verb: "flow-message", target: { kind: "flows" },
+          payload: { runId: flowRunId, kind: "command", target: { kind: "step", stepKey: "write" }, body: { command: "defer", effects: { push: "proceed" } } } } as never)) as Answer;
+      expect(released.result).toMatchObject({ kind: "flow-message-stored", state: "applied" });
       expect(released.result!.held).toBeUndefined();
       // A skip holds nothing either: the result carries no hold.
       const skipped = await send(w, "flow-message", { runId: flowRunId, kind: "command", target: { kind: "step", stepKey: "write" }, body: { command: "skip" } });

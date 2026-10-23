@@ -71,6 +71,8 @@ const VIEW_REASONS = [
  */
 const FLOW_MESSAGE_REASONS = [
   "flow-step-not-skippable", "flow-step-not-marked", "flow-feedback-no-target", "flow-feedback-already-applied", "flow-round-not-revisable", "flow-step-waiting",
+  // Task 9 fix round (controller's ruling): a mark that would release a held effect without the person.
+  "flow-effect-needs-person",
 ];
 const TABLES = { zh: zhErrors, en: enErrors } as const;
 const has = (table: Record<string, string>, code: string): boolean => Object.prototype.hasOwnProperty.call(table, code);

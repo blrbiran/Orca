@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runRegistered } from "../../src/commands/run.js";
 import type { CommandIo } from "../../src/commands/types.js";
-import { DISPATCHED_RUN_ENV } from "../../src/control/commandClient.js";
+import { DISPATCHED_RUN_ENV, withCommandContext } from "../../src/control/commandClient.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { getFlowRun, listEffects, listMessages, listPlans } from "../../src/flow/store.js";
 import { bindControlSocket, buildControlSocketApp } from "../../src/panel/controlSocket.js";
@@ -11,7 +11,11 @@ import { HUMAN_ONLY_FIELDS, SOCKET_TIER, VERB_ACCESS } from "../../src/panel/hum
 import { REGISTRY } from "../../src/commands/registry.js";
 import { commandPath } from "../../src/commands/parse.js";
 import { flowAnswerPayloadSchema, flowMessagePayloadSchema, flowPlanStepPayloadSchema, setFlowSettingsPayloadSchema } from "../../src/control/webProtocol.js";
-import { permissionRefusal, type Principal } from "../../src/panel/permissions.js";
+import { hasPersonAuthority, permissionRefusal, type Principal } from "../../src/panel/permissions.js";
+import { marksOf } from "../../src/flow/marks.js";
+import { childGroupIdOf } from "../../src/flow/kinds/work.js";
+import { fakeChildPort } from "../flow/fixtures/childPort.js";
+import { flowWorld } from "../flow/fixtures/flowWorld.js";
 import { quietPanelAuth, seedUser, TEST_PASSWORD } from "../panel/fixtures/auth.js";
 import { overSocket } from "../panel/fixtures/socketPanel.js";
 import { articleToDraftBox, SLUG, untilArticleAsks, WECHAT, wechatWorld } from "../flow/fixtures/wechatWorld.js";
@@ -222,5 +226,102 @@ describe("flow verb access (C19)", () => {
     const stored = listMessages(w.store, flowRunId).at(-1)!;
     expect(stored.body).toMatchObject({ text: "this bit", anchors: [{ quote: "Tea, gently" }], attachments: [expect.stringMatching(/^[0-9a-f]{64}\.png$/)] });
     expect(readdirSync(join(root, "control", "flow-attachments"))).toEqual([(stored.body as { attachments: string[] }).attachments[0]]);
+  });
+
+  it("person authority (Task 9 fix round): an owner on the Web or an owner's token on the socket; never a member, an agent without a token, or a dispatched run", () => {
+    const MEMBER = { userId: "m", name: "mia", roles: ["member"] as const };
+    expect({
+      webOwner: hasPersonAuthority({ kind: "user", ...OWNER }), webMember: hasPersonAuthority({ kind: "user", ...MEMBER }),
+      socket: hasPersonAuthority(SOCKET), ownerToken: hasPersonAuthority(WITH_TOKEN), memberToken: hasPersonAuthority({ kind: "agent", client: "cli", person: MEMBER }),
+      dispatchedWithToken: hasPersonAuthority(DISPATCHED), dispatched: hasPersonAuthority({ kind: "agent", client: "cli", dispatchedRun: "run-1" }),
+    }).toEqual({ webOwner: true, webMember: false, socket: false, ownerToken: true, memberToken: false, dispatchedWithToken: false, dispatched: false });
+  });
+
+  /**
+   * Task 9 fix round (controller's ruling; review C1, I1, M2, M3): a held external effect is released only by the person,
+   * on every path -- a skip replacing the holding defer, a fill of it, a defer saying proceed. Over the real socket an
+   * agent without a token, a dispatched run (token or not) and a member's token are each rejected
+   * `flow-effect-needs-person` and the effect stays parked; the owner's token releases it (`defer --effects push=proceed`).
+   * The Web: an owner's command succeeds, a member's is rejected (the routes record hasPersonAuthority).
+   */
+  it("releasing a held effect over the socket: skip and fill refused to an agent, a dispatched run and a member; the owner's proceed releases it", { timeout: 120_000 }, async () => {
+    const TPL = { yaml: "format: orca-flow-v1\nid: e\nworkspace: {kind: dir}\neffects:\n  wechat-draft: {class: external}\nsteps:\n  - {id: write, kind: draft, prompt: write.md}\n  - {id: push, kind: work, prompt: push.md, effect: wechat-draft}\n",
+      assets: { "write.md": "Write.\n", "push.md": "Push it.\n" } };
+    const children = fakeChildPort();
+    const w = await flowWorld({ e: TPL }, { children: children.port });
+    cleanups.push(() => w.dispose());
+    const root = realpathSync(mkdtempSync("/tmp/fvr-"));
+    cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+    const auth = quietPanelAuth(root);
+    const personDir = (name: string, role: "owner" | "member") => {
+      seedUser(root, name, role);
+      const login = auth.personLogin(name, TEST_PASSWORD, auth.nowMs());
+      if (!login.ok) throw new Error("person login failed");
+      const dir = join(root, `person-${name}`);
+      mkdirSync(dir, { mode: 0o700 });
+      writeFileSync(join(dir, "token.json"), JSON.stringify({ schema: "orca-person-token-v1", token: login.token, sid: login.sid, user: name, expiresAt: login.expiresAt }), { mode: 0o600 });
+      return dir;
+    };
+    const owner = personDir("tester", "owner"), member = personDir("mia", "member");
+    const service = new WebControlService({ store: w.store, port: {} as never, profileRouter: {} as never, trustedConfig: {} as never, knownRepository: () => false, flowDeps: () => w.deps } as never);
+    const bound = await bindControlSocket(buildControlSocketApp({ store: w.store, epoch: "epoch", config: { readView: async () => ({}) } as never, service }, undefined, auth), join(root, "control.sock"));
+    if (!("close" in bound)) throw new Error(`socket not bound: ${bound.code}`);
+    cleanups.push(() => bound.close());
+    const orca = async (argv: string[], env: NodeJS.ProcessEnv = {}): Promise<{ code: number | null; body: { result?: Record<string, unknown>; error?: { code: string } } }> => {
+      const out: string[] = [];
+      const io: CommandIo = { stdout: (t) => out.push(t), stderr: () => undefined, env: { ...process.env, ORCA_PERSON_DIR: owner, ...env }, cwd: root, stdinIsTTY: false };
+      const code = await runRegistered([...argv, "--json", "--control-state-dir", root], io);
+      return { code, body: (JSON.parse(out.join("").trim()) as { body: { result?: Record<string, unknown>; error?: { code: string } } }).body };
+    };
+    const { flowRunId } = await w.start({ templateRef: "builtin/e" });
+    await w.advance();
+    // The agent defers `write` (wait: open) while its call is out; at the boundary the push is held, parked when reached.
+    expect((await orca(["flow", "defer", flowRunId, "--step", "write"])).body.result).toMatchObject({ kind: "flow-message-stored", held: ["push"] });
+    await w.answer(0, { content: "w 1" });
+    const push = () => w.execs(flowRunId, "push").map((e) => e.state);
+    expect(push()).toEqual(["parked"]);
+    const rejected = async (argv: string[], env: NodeJS.ProcessEnv = {}) => {
+      const answer = await orca(argv, env);
+      expect(answer.body.result, argv.join(" ")).toMatchObject({ kind: "flow-message-stored", state: "rejected", reason: "flow-effect-needs-person" });
+      expect(push()).toEqual(["parked"]);
+      expect(marksOf(listMessages(w.store, flowRunId)).get("write")).toMatchObject({ kind: "defer" });
+    };
+    const DISPATCHED_ENV = { [DISPATCHED_RUN_ENV]: "run-1" };
+    for (const action of ["skip", "fill"]) {
+      await rejected(["flow", action, flowRunId, "--step", "write"]);
+      await rejected(["flow", action, flowRunId, "--step", "write"], DISPATCHED_ENV);
+      await rejected(["flow", action, flowRunId, "--step", "write", "--as-person"], { ORCA_PERSON_DIR: member });
+    }
+    // A member's token passes the socket gate for proceed (an `any` verb) but the kernel rejects it; a dispatched run is refused at the gate.
+    await rejected(["flow", "defer", flowRunId, "--step", "write", "--effects", "push=proceed", "--as-person"], { ORCA_PERSON_DIR: member });
+    expect((await orca(["flow", "defer", flowRunId, "--step", "write", "--effects", "push=proceed", "--as-person"], DISPATCHED_ENV)).code).not.toBe(0);
+    // The Web: a member's skip is rejected, as on the socket (the route records hasPersonAuthority).
+    const web = async (p: Principal, id: string, body: Record<string, unknown>) => withCommandContext(id, { client: "web", principal: "web", attribution: { by: "x", via: "web" }, personAuthority: hasPersonAuthority(p) },
+      () => service.flowCommand({ schema: "orca-raw-command-v1", commandId: id, actorId: "owner", expectedRevision: 0, verb: "flow-message", target: { kind: "flows" },
+        payload: { runId: flowRunId, kind: "command", target: { kind: "step", stepKey: "write" }, body } } as never)) as Promise<{ result?: Record<string, unknown> }>;
+    expect((await web({ kind: "user", userId: "m", name: "mia", roles: ["member"] }, "web-member-skip", { command: "skip" })).result).toMatchObject({ state: "rejected", reason: "flow-effect-needs-person" });
+    expect(push()).toEqual(["parked"]);
+    // M3: the person's token over the socket releases it -- it starts afresh and its own level gate applies (apply-flag).
+    expect((await orca(["flow", "defer", flowRunId, "--step", "write", "--effects", "push=proceed", "--as-person"])).body.result).toMatchObject({ state: "applied" });
+    expect(push()).toEqual(["skipped", "running"]);
+    expect(children.opened.has(childGroupIdOf(flowRunId, "push", 2))).toBe(true);
+  });
+
+  it("a Web owner releases a held effect with a skip (person authority recorded by the route)", { timeout: 60_000 }, async () => {
+    const TPL = { yaml: "format: orca-flow-v1\nid: e\nworkspace: {kind: dir}\neffects:\n  wechat-draft: {class: external}\nsteps:\n  - {id: write, kind: draft, prompt: write.md}\n  - {id: push, kind: work, prompt: push.md, effect: wechat-draft}\n",
+      assets: { "write.md": "Write.\n", "push.md": "Push it.\n" } };
+    const w = await flowWorld({ e: TPL }, { children: fakeChildPort().port });
+    cleanups.push(() => w.dispose());
+    const service = new WebControlService({ store: w.store, port: {} as never, profileRouter: {} as never, trustedConfig: {} as never, flowDeps: () => w.deps } as never);
+    const { flowRunId } = await w.start({ templateRef: "builtin/e" });
+    await w.advance();
+    const send = (id: string, body: Record<string, unknown>) => withCommandContext(id, { client: "web", principal: "web", attribution: { by: "tester", via: "web" }, personAuthority: hasPersonAuthority({ kind: "user", ...OWNER }) },
+      () => service.flowCommand({ schema: "orca-raw-command-v1", commandId: id, actorId: "owner", expectedRevision: 0, verb: "flow-message", target: { kind: "flows" },
+        payload: { runId: flowRunId, kind: "command", target: { kind: "step", stepKey: "write" }, body } } as never)) as Promise<{ result?: Record<string, unknown> }>;
+    await send("o-defer", { command: "defer" });
+    await w.answer(0, { content: "w 1" });
+    expect(w.execs(flowRunId, "push").map((e) => e.state)).toEqual(["parked"]);
+    expect((await send("o-skip", { command: "skip" })).result).toMatchObject({ state: "applied" });
+    expect(w.execs(flowRunId, "push").map((e) => e.state)).toEqual(["skipped", "running"]);
   });
 });

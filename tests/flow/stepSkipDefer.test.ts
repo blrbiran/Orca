@@ -54,8 +54,10 @@ async function untilArticleAsks(world: World, params: Record<string, unknown> = 
   return flowRunId;
 }
 
-const command = (world: World, flowRunId: string, stepKey: string, body: Record<string, unknown>, requestId: string) =>
-  acceptMessage(world.w.deps, flowRunId, { kind: "command", target: { kind: "step", stepKey }, body, by: "ann", via: "cli:test", requestId });
+// Task 9 fix round (controller's ruling): the person's marks carry person authority (the control route records it); a
+// call with `asPerson: false` is an agent's or a dispatched run's.
+const command = (world: World, flowRunId: string, stepKey: string, body: Record<string, unknown>, requestId: string, asPerson = true) =>
+  acceptMessage(world.w.deps, flowRunId, { kind: "command", target: { kind: "step", stepKey }, body, by: "ann", via: "cli:test", requestId, personAuthority: asPerson });
 const needsYouOf = (world: World, flowRunId: string) => readFlowList(world.w.store).runs.find((r) => r.flowRunId === flowRunId)!.needsYou;
 const lsTree = (vaultPath: string, commit: string): string[] =>
   execFileSync("/usr/bin/git", ["--git-dir", vaultPath, "ls-tree", "-r", "--name-only", commit], { encoding: "utf8" }).trim().split("\n");
@@ -133,16 +135,44 @@ describe("skip / defer / fill on the wechat run (G5)", { timeout: 180_000 }, () 
     } finally { await w.dispose(); }
   });
 
-  it("a defer then a skip of the same step releases the held draft box (a skip holds nothing; the newest mark wins)", async () => {
+  // Ruling: 这次批准改写所有必要的判据 (0e13a9b7) -- Task 9 fix round, controller's ruling (C1): the newest mark still
+  // decides the mark, but a skip that replaces a defer holding an effect releases it, so it needs the person; without
+  // person authority it is rejected `flow-effect-needs-person` and the draft box stays held.
+  it("a skip replacing a defer that holds the draft box needs the person: rejected without, releases with", async () => {
     const world = await wechatWorld();
     const { w, children, child } = world; try {
       const flowRunId = await coverFailed(world);
       await command(world, flowRunId, "cover", { command: "defer" }, "d1");
       expect(w.latest(flowRunId, "to-draft-box")).toMatchObject({ seq: 1, state: "parked" });
+      expect(await command(world, flowRunId, "cover", { command: "skip" }, "s0", false)).toMatchObject({ state: "rejected", reason: "flow-effect-needs-person" });
+      // A body cannot claim the authority itself: the recorded value is the route's.
+      expect(await command(world, flowRunId, "cover", { command: "skip", personAuthority: true }, "s0b", false)).toMatchObject({ state: "rejected", reason: "flow-effect-needs-person" });
+      expect(w.execs(flowRunId, "to-draft-box").map((e) => e.state)).toEqual(["parked"]);
+      expect(marksOf(listMessages(w.store, flowRunId)).get("cover")).toMatchObject({ kind: "defer" });
       await command(world, flowRunId, "cover", { command: "skip" }, "s1");
       expect(w.execs(flowRunId, "to-draft-box").map((e) => e.state)).toEqual(["skipped", "running"]);
       expect(children.opened.has(child(flowRunId, "to-draft-box", 2))).toBe(true);
       expect(marksOf(listMessages(w.store, flowRunId)).get("cover")).toMatchObject({ kind: "skip" });
+    } finally { await w.dispose(); }
+  });
+
+  it("releasing needs the person on every path: proceed and fill without authority are rejected; a mark that releases nothing stays open", async () => {
+    const world = await wechatWorld();
+    const { w } = world; try {
+      const flowRunId = await coverFailed(world);
+      expect(await command(world, flowRunId, "cover", { command: "defer", effects: { "to-draft-box": "proceed" } }, "p0", false)).toMatchObject({ state: "rejected", reason: "flow-effect-needs-person" });
+      // The agent's own defer (wait) holds; it may defer again with wait, and skip and defer a step whose marks hold nothing.
+      expect(await command(world, flowRunId, "cover", { command: "defer" }, "d1", false)).toMatchObject({ state: "applied" });
+      expect(w.latest(flowRunId, "to-draft-box")).toMatchObject({ state: "parked" });
+      expect(await command(world, flowRunId, "cover", { command: "defer", effects: { "to-draft-box": "wait" } }, "d2", false)).toMatchObject({ state: "applied" });
+      expect(await command(world, flowRunId, "visuals", { command: "skip" }, "v1", false)).toMatchObject({ state: "applied" });
+      expect(await command(world, flowRunId, "visuals", { command: "fill" }, "v2", false)).toMatchObject({ state: "applied" });
+      // Fill of the holding defer releases the draft box: the person's only.
+      expect(await command(world, flowRunId, "cover", { command: "fill" }, "f0", false)).toMatchObject({ state: "rejected", reason: "flow-effect-needs-person" });
+      expect(marksOf(listMessages(w.store, flowRunId)).get("cover")).toMatchObject({ kind: "defer" });
+      expect(w.latest(flowRunId, "to-draft-box")).toMatchObject({ state: "parked" });
+      expect(await command(world, flowRunId, "cover", { command: "fill" }, "f1")).toMatchObject({ state: "applied" });
+      expect(marksOf(listMessages(w.store, flowRunId)).has("cover")).toBe(false);
     } finally { await w.dispose(); }
   });
 

@@ -44,6 +44,14 @@ export const may = (p: Principal, permission: Permission): boolean =>
 export const mayDoHumanOnly = (p: Principal): boolean => may(p, "humanOnly");
 
 /**
+ * Gaps spec §6.3 (Task 9 fix round, controller's ruling): the authority `flow-effect` needs, as a fact about the sender --
+ * an owner on the Web, or the socket agent carrying an owner's person token and not running for a run Orca dispatched.
+ * The control routes put it beside the command (withCommandContext); the flow kernel requires it to release a held effect.
+ */
+export const hasPersonAuthority = (p: Principal): boolean =>
+  p.kind === "user" ? mayDoHumanOnly(p) : p.dispatchedRun === undefined && p.person !== undefined && mayDoHumanOnly({ kind: "user", ...p.person });
+
+/**
  * The refusal a control command gets from this principal, or null. A member: today's human-only codes (I3). The socket
  * agent (CLI v2 spec §15.1): an `open` entry passes; a `token` entry wants a verified person token,
  * `control-person-token-required` without one; a run Orca dispatched is refused every entry (§15.4), token or not.

@@ -35,7 +35,7 @@ import {
 import type { ExecutionBody, LoadedRun } from "./kinds/registry.js";
 import { dropFromOpenPlan, makePlan } from "./rerun.js";
 import { discardEffect } from "./effects.js";
-import { holdableAfter, MARK_COMMANDS, MARKABLE_KINDS, marksOf } from "./marks.js";
+import { heldEffectSteps, holdableAfter, MARK_COMMANDS, MARKABLE_KINDS, marksOf } from "./marks.js";
 import { applyRewind, EDIT_NO_LONGER_APPLIES, reapplyEdits, roundRevisionNoLongerApplies } from "./rewind.js";
 import { reviseFlowRound, roundRevisionRefusal } from "./kinds/clarify.js";
 import type { RevisionPayload } from "../control/clarifyChain.js";
@@ -57,7 +57,14 @@ export type MessageTarget =
   | { kind: "execution"; stepKey: string; seq: number }
   | { kind: "round"; stepKey: string; roundNo: number }
   | { kind: "effect"; recordId: string };
-export interface FlowMessageInput { kind: "feedback" | "edit" | "command"; target: MessageTarget; body: Record<string, unknown>; by: string; via: string; requestId: string }
+/**
+ * `personAuthority` (gaps spec §6.3, Task 9 fix round): the control route established that a person with `flow-effect`'s
+ * authority sent it (commandClient.ts). Recorded on a skip/defer/fill -- over anything the body says -- and required when
+ * applying one that releases a held effect. Absent: no such authority.
+ */
+export interface FlowMessageInput { kind: "feedback" | "edit" | "command"; target: MessageTarget; body: Record<string, unknown>; by: string; via: string; requestId: string; personAuthority?: boolean }
+/** Gaps spec §6.3: the reason a mark that would release a held external/irreversible effect without a person is rejected with. */
+export const EFFECT_NEEDS_PERSON = "flow-effect-needs-person";
 export interface AcceptResult { state: MessageRow["state"]; reason: string | null; seq: number; deduped: boolean }
 
 /** Gaps spec §9: the body of an `edit` at a round, as `requirement-revise` carries it. */
@@ -138,6 +145,28 @@ function shapeRefusal(deps: FlowDeps, run: LoadedRun, input: FlowMessageInput): 
   return null;
 }
 
+const isMark = (input: FlowMessageInput): boolean => input.kind === "command" && MARK_COMMANDS.has(String(input.body.command));
+
+/**
+ * Gaps spec §6.3 (Task 9 fix round, controller's ruling): a held external/irreversible effect is released only with person
+ * authority -- a `defer` saying `proceed` for any step, and any skip/defer/fill after which an effect step held now is
+ * neither held nor marked itself (a skip replacing the holding defer, a fill of it). Checked here, when the mark is
+ * applied, from what the message recorded; the socket tier is only the first gate. A mark that releases nothing is open.
+ */
+function releaseRefusal(deps: FlowDeps, run: LoadedRun, message: MessageRow): FlowRefusal | null {
+  const body = message.body as { personAuthority?: unknown; command?: unknown; effects?: unknown };
+  if (body.personAuthority === true) return null;
+  const messages = listMessages(deps.store, run.row.id).filter((m) => m.seq !== message.seq);
+  const before = marksOf(messages);
+  const after = marksOf([...messages, { ...message, state: "applied" }]);
+  const heldAfter = heldEffectSteps(run.template, after);
+  const released = [...heldEffectSteps(run.template, before)].filter((key) => !heldAfter.has(key) && !after.has(key));
+  const proceed = body.command === "defer" && typeof body.effects === "object" && body.effects !== null
+    ? Object.entries(body.effects).filter(([, choice]) => choice === "proceed").map(([key]) => key) : [];
+  const steps = [...new Set([...proceed, ...released])];
+  return steps.length === 0 ? null : new FlowRefusal(EFFECT_NEEDS_PERSON, steps.join(","));
+}
+
 /** §8.1: store the message, then take it if the run is at a boundary. */
 export async function acceptMessage(deps: FlowDeps, flowRunId: string, input: FlowMessageInput): Promise<AcceptResult> {
   const run = loadRun(deps.store, flowRunId);
@@ -152,7 +181,8 @@ export async function acceptMessage(deps: FlowDeps, flowRunId: string, input: Fl
   const at = deps.now();
   const { row, deduped } = deps.store.transaction(() => {
     const appended = appendMessage(deps.store, {
-      flowRunId, requestId: input.requestId, kind: input.kind, target: input.target.kind, body: { ...input.body, ...(resolved === null ? {} : { resolved }), target: input.target },
+      flowRunId, requestId: input.requestId, kind: input.kind, target: input.target.kind,
+      body: { ...input.body, ...(resolved === null ? {} : { resolved }), ...(isMark(input) ? { personAuthority: input.personAuthority === true } : {}), target: input.target },
       by: input.by, via: input.via, state: refusal === null ? "accepted" : "rejected", reason: refusal, at,
     });
     // Gaps spec §4.2: run-level or anchored feedback opens its intake with the message (and withdraws what it replaces).
@@ -278,7 +308,12 @@ async function applyCommand(deps: FlowDeps, run: LoadedRun, message: MessageRow,
     }
     case "repin": return repin(deps, run, body.version);
     case "rewind": return applyRewind(deps, run, message);
-    case "skip": case "defer": markStep(deps, run, message, stepKeyOf(target)!, body.command); return null;
+    case "skip": case "defer": {
+      const refusal = releaseRefusal(deps, run, message);
+      if (refusal !== null) throw refusal;
+      markStep(deps, run, message, stepKeyOf(target)!, body.command);
+      return null;
+    }
     case "params": {
       // §8.3: the params and their identity move together (row and body, one write); `when` is read from them again.
       const change = body.resolved as ParamsChange;
@@ -292,6 +327,8 @@ async function applyCommand(deps: FlowDeps, run: LoadedRun, message: MessageRow,
     case "fill": {
       const stepKey = stepKeyOf(target)!;
       if (!marksOf(listMessages(deps.store, run.row.id)).has(stepKey)) throw new FlowRefusal("flow-step-not-marked", stepKey);
+      const refusal = releaseRefusal(deps, run, message);
+      if (refusal !== null) throw refusal;
       return "fill";
     }
     default: throw new FlowRefusal("flow-command-unknown", String(body.command));

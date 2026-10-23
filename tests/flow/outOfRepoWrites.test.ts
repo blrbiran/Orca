@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { attachmentPath, attachmentsDir, storeAttachment } from "../../src/flow/feedback/attachments.js";
@@ -8,6 +8,8 @@ import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { acceptMessage } from "../../src/flow/messages.js";
 import { getFlowRun, getIntake, listExecutions } from "../../src/flow/store.js";
 import { toDraftBox, wechatWorld, WECHAT } from "./fixtures/wechatWorld.js";
+import { flowWorld } from "./fixtures/flowWorld.js";
+import { controlRoot } from "../../src/panel/controlOptions.js";
 
 /**
  * Flow engine spec §20, §21 C21 (CLAUDE.md Rule 17, IR-C4): a whole flow run -- the built-in article flow from the brief
@@ -22,6 +24,21 @@ afterEach(() => { if (saved === undefined) delete process.env.HOME; else process
 
 // A whole wechat-article run: a drift snapshot before every execution (§5.4) costs seconds under load.
 describe("out-of-repo writes (C21)", { timeout: 60_000 }, () => {
+  // Gaps Task 9 fix round (review I2, Rule 17): every flow world's env names its own control root (0700) -- never one
+  // under a home directory -- so a test that stores an attachment or an image without setting ORCA_CONTROL_DIR cannot
+  // reach the person's ~/.orca (it did once: t9-green1).
+  it("a flow world's control root is its own temp directory, 0700, never under the real or the test HOME", async () => {
+    for (const make of [() => flowWorld({}), async () => (await wechatWorld()).w]) {
+      const w = await make();
+      try {
+        const root = controlRoot(w.deps.env);
+        expect(root.startsWith(w.root + "/")).toBe(true);
+        for (const h of [saved, homedir()]) if (h !== undefined) expect(root.startsWith(h + "/"), `${root} under ${h}`).toBe(false);
+        expect(statSync(root).mode & 0o777).toBe(0o700);
+      } finally { await w.dispose(); }
+    }
+  });
+
   it("a whole flow run writes nothing under HOME", async () => {
     const world = await wechatWorld();
     try {
