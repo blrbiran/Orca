@@ -201,6 +201,25 @@ describe("schema 19: the one-time repair of estimate-stuck groups", () => {
     } finally { await dispose(s, store); }
   });
 
+  it("review I2: a group whose repair fails part-way is left byte-equal in every table, and the store opens at 19", async () => {
+    // A confirmed stuck group under the optional token policy whose task work allocation holds tokens "x": the proposal
+    // and work-item writes succeed, then the task's token_policies write (an INTEGER column) throws.
+    const s = await stuck({ confirm: true, finite: false, before: raw => {
+      const proposal = JSON.parse(String(raw.prepare("SELECT body FROM budget_proposals WHERE group_id='g'").get()!.body));
+      proposal.allocations.find((a: { ownerId: string; bucket: string }) => a.ownerId === "a" && a.bucket === "work").amount.tokens = "x";
+      raw.prepare("UPDATE budget_proposals SET body=? WHERE group_id='g'").run(JSON.stringify(proposal));
+    } }); let store: ControlStore | null = null; try {
+      const before = new DatabaseSync(s.dbPath, { readOnly: true });
+      const names = (before.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as Array<{ name: string }>).map(row => row.name);
+      const rows = Object.fromEntries(names.map(name => [name, rowsOf(before, name)]));
+      before.close();
+      store = await reopen(s);
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("19");
+      for (const name of names.filter(n => n !== "meta")) expect([name, rowsOf(store.db, name)]).toEqual([name, rows[name]]);
+      expect(group(store).status).toBe("blocked");
+    } finally { await dispose(s, store); }
+  });
+
   it("C10: every other table's rows are byte-equal", async () => {
     const s = await stuck({ confirm: true }); let store: ControlStore | null = null; try {
       const before = new DatabaseSync(s.dbPath, { readOnly: true });

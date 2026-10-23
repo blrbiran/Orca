@@ -252,11 +252,13 @@ function migrate17To18(store: DatabaseSync): void {
 export function repairEstimateBreachedGroups(store: DatabaseSync, now: () => number): void {
   for (const row of store.prepare("SELECT id, body FROM groups ORDER BY rowid").all()) {
     const groupId = String(row.id);
+    // Review I2: each group's writes are one savepoint, so a write that fails part-way leaves no half-repaired group.
+    store.exec("SAVEPOINT repair_g");
     try {
       const planned = repairOf(store, groupId, JSON.parse(String(row.body)) as Body, now);
-      if (planned === null) continue;
-      for (const write of planned) write();
-    } catch { /* left as it is: not repaired, not thrown */ }
+      for (const write of planned ?? []) write();
+      store.exec("RELEASE repair_g");
+    } catch { store.exec("ROLLBACK TO repair_g"); store.exec("RELEASE repair_g"); /* left as it is: not repaired, not thrown */ }
   }
 }
 
