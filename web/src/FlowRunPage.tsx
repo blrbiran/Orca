@@ -17,16 +17,21 @@ import { useCallback, useContext, useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import type { PanelRefusal } from "./api.js";
+import { csrfHeader, type PanelRefusal } from "./api.js";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { controlGet, nextCommandId, refusalFromAnswer, sendControlCommand } from "./controlApi.js";
-import type { FlowAskV1, FlowEffectV1, FlowExecutionViewV1, FlowJournalV1, FlowPlanV1, FlowRunViewV1, FlowToolRulesReportV1, RoundBodyV1 } from "./controlTypes.js";
+import type {
+  FlowAnchorV1, FlowAskV1, FlowEffectV1, FlowExecutionViewV1, FlowIntakeV1, FlowJournalV1, FlowPlanV1, FlowRunViewV1, FlowSpendV1, FlowToolRulesReportV1, RoundBodyV1,
+} from "./controlTypes.js";
 import { currentLanguage } from "./i18n.js";
 import { Refusal } from "./Refusal.js";
+import { ReviseRound, chainEntries } from "./RequirementsPanel.js";
 import { formatTokens, shortTokens } from "./TokenInput.js";
 
-type Verb = "messages" | "plan" | "rerun" | "answer" | "effect" | "pool";
+type Verb = "messages" | "plan" | "rerun" | "answer" | "effect" | "pool" | "plan-step";
 type Send = (verb: Verb, payload: Record<string, unknown>) => void;
+/** Gaps spec §4.7: stores one image in the run's attachment store and answers its id, or null (the refusal is shown). */
+type Upload = (file: File) => Promise<string | null>;
 type Step = FlowRunViewV1["steps"][number];
 type Rule = FlowToolRulesReportV1["rules"][number];
 const segment = (value: string): string => encodeURIComponent(value);
@@ -50,6 +55,44 @@ function ruleText(row: Rule, t: TFunction): string {
 const stateTone = (state: string): "ok" | "warn" | "danger" | "info" | undefined =>
   state === "done" || state === "applied" ? "ok" : state === "failed" ? "danger" : state === "running" || state === "queued" ? "info"
   : state === "needs-person" || state === "parked" || state === "staged" || state === "paused" ? "warn" : undefined;
+
+/** Gaps spec §10: the tool's tokens, or why there is none -- never 0 for unknown; money is never reported. */
+export function spendText(spend: FlowSpendV1, t: TFunction): string {
+  const tokens = spend.tokens === null ? t("flow.spend.notAvailable", { reason: spend.unknownReason ?? "" })
+    : spend.unknownReason === null ? t("flow.spend.tokens", { tokens: formatTokens(spend.tokens, currentLanguage()) })
+    : t("flow.spend.partial", { tokens: formatTokens(spend.tokens, currentLanguage()), reason: spend.unknownReason });
+  return t("flow.spend.line", { tokens, money: t("flow.spend.money") });
+}
+
+function SpendLine(props: { spend: FlowSpendV1 }): JSX.Element {
+  const { t } = useTranslation();
+  return <p className="flow-spend" data-testid="flow-spend">{spendText(props.spend, t)}</p>;
+}
+
+/** Gaps spec §4.1: a quote, and a heading and/or paragraph number -- each part one anchor, as the CLI builds them. */
+type AnchorDraft = { quote: string; heading: string; paragraph: string };
+const NO_ANCHOR: AnchorDraft = { quote: "", heading: "", paragraph: "" };
+function anchorsOf(draft: AnchorDraft): FlowAnchorV1[] {
+  const out: FlowAnchorV1[] = [];
+  if (draft.quote.trim() !== "") out.push({ quote: draft.quote.trim() });
+  const paragraph = Number(draft.paragraph);
+  const hasParagraph = draft.paragraph.trim() !== "" && Number.isSafeInteger(paragraph) && paragraph >= 1;
+  if (draft.heading.trim() !== "" || hasParagraph) out.push({ ...(draft.heading.trim() === "" ? {} : { heading: draft.heading.trim() }), ...(hasParagraph ? { paragraph } : {}) });
+  return out;
+}
+
+function AnchorFields(props: { draft: AnchorDraft; onChange: (draft: AnchorDraft) => void }): JSX.Element {
+  const { t } = useTranslation();
+  const { draft } = props;
+  return (
+    <fieldset className="flow-anchors">
+      <legend>{t("flow.feedback.where")}</legend>
+      <input type="text" aria-label={t("flow.feedback.quote")} value={draft.quote} onChange={(event) => props.onChange({ ...draft, quote: event.currentTarget.value })} />{" "}
+      <input type="text" aria-label={t("flow.feedback.heading")} value={draft.heading} onChange={(event) => props.onChange({ ...draft, heading: event.currentTarget.value })} />{" "}
+      <input type="number" min={1} aria-label={t("flow.feedback.paragraph")} value={draft.paragraph} onChange={(event) => props.onChange({ ...draft, paragraph: event.currentTarget.value })} />
+    </fieldset>
+  );
+}
 
 function ToolRules(props: { report: FlowToolRulesReportV1 }): JSX.Element {
   const { t } = useTranslation();
@@ -95,6 +138,7 @@ function ExecutionFacts(props: { execution: FlowExecutionViewV1; active: boolean
       {e.reported?.effect !== undefined && <p>{t("flow.remoteId", { id: e.reported.effect.remoteId })}</p>}
       {e.needsYou?.reason !== undefined && <p data-tone="warn">{t("flow.parked", { reason: e.needsYou.reason })}</p>}
       {e.toolRules !== null && <ToolRules report={e.toolRules} />}
+      <SpendLine spend={e.spend} />
     </div>
   );
 }
@@ -106,6 +150,7 @@ function MessageBox(props: { step: Step; runId: string; send: Send }): JSX.Eleme
   const [mode, setMode] = useState<"feedback" | "edit-record" | "edit-file">("feedback");
   const [text, setText] = useState("");
   const [path, setPath] = useState("");
+  const [anchor, setAnchor] = useState<AnchorDraft>(NO_ANCHOR);
   const targetOf = (): Record<string, unknown> => (target === "step" ? { kind: "step", stepKey: props.step.stepKey } : { kind: "execution", stepKey: props.step.stepKey, seq: Number(target) });
   const record = (): Record<string, string> | null => {
     const out: Record<string, string> = {};
@@ -118,9 +163,10 @@ function MessageBox(props: { step: Step; runId: string; send: Send }): JSX.Eleme
   };
   const ready = mode === "feedback" ? text.trim() !== "" : mode === "edit-record" ? record() !== null : path.trim() !== "";
   const submit = (): void => {
-    if (mode === "feedback") props.send("messages", { runId: props.runId, kind: "feedback", target: targetOf(), body: { text: text.trim() } });
+    const anchors = anchorsOf(anchor);
+    if (mode === "feedback") props.send("messages", { runId: props.runId, kind: "feedback", target: targetOf(), body: { text: text.trim(), ...(anchors.length === 0 ? {} : { anchors }) } });
     else props.send("messages", { runId: props.runId, kind: "edit", target: { kind: "step", stepKey: props.step.stepKey }, body: mode === "edit-record" ? { record: record()! } : { files: { [path.trim()]: text } } });
-    setText(""); setPath("");
+    setText(""); setPath(""); setAnchor(NO_ANCHOR);
   };
   return (
     <form className="flow-message" aria-label={t("flow.message.title", { step: props.step.stepKey })} onSubmit={(event) => { event.preventDefault(); if (ready) submit(); }}>
@@ -137,6 +183,7 @@ function MessageBox(props: { step: Step; runId: string; send: Send }): JSX.Eleme
       )}
       {mode === "edit-file" && <input type="text" aria-label={t("flow.message.path")} value={path} onChange={(event) => setPath(event.currentTarget.value)} />}
       <textarea aria-label={t(mode === "feedback" ? "flow.message.text" : mode === "edit-record" ? "flow.message.recordText" : "flow.message.fileText")} value={text} onChange={(event) => setText(event.currentTarget.value)} />
+      {mode === "feedback" && <AnchorFields draft={anchor} onChange={setAnchor} />}
       <button type="submit" disabled={!ready}>{t(mode === "feedback" ? "flow.message.sendFeedback" : "flow.message.sendEdit")}</button>
     </form>
   );
@@ -188,21 +235,20 @@ function NeedsForm(props: { ask: Extract<FlowAskV1, { kind: "input" | "confirmat
   );
 }
 
-/** §10: a flow clarify round waiting on the person -- recommended answers or their own, then the round or consensus. */
-function ClarifyForm(props: { round: RoundBodyV1; stepKey: string; runId: string; send: Send }): JSX.Element {
+type ClarifyAnswer = { id: string; kind: "recommended" } | { id: string; kind: "text"; text: string };
+/**
+ * §10, gaps spec §4.6: a clarify round waiting on the person -- recommended answers or their own, then the round or
+ * consensus. One form for a flow clarify step's round and a feedback intake's round; `extra` holds what only one has.
+ */
+function QuestionsForm(props: { label: string; statement: string | null; questions: Array<{ id: string; question: string; recommendedAnswer: string }>;
+  onAnswer: (answers: ClarifyAnswer[]) => void; onConsensus: () => void; extra?: JSX.Element }): JSX.Element {
   const { t } = useTranslation();
-  const result = props.round.result;
   const [own, setOwn] = useState<Record<string, string>>({});
-  if (result === null) return <p>{t("flow.clarify.drafting", { n: props.round.roundNo })}</p>;
-  const answers = result.questions.map((q) => (own[q.id] ?? "").trim() === "" ? { id: q.id, kind: "recommended" } : { id: q.id, kind: "text", text: own[q.id]!.trim() });
+  const answers = props.questions.map((q): ClarifyAnswer => (own[q.id] ?? "").trim() === "" ? { id: q.id, kind: "recommended" } : { id: q.id, kind: "text", text: own[q.id]!.trim() });
   return (
-    <form aria-label={t("flow.clarify.title", { step: props.stepKey, n: props.round.roundNo })} onSubmit={(event) => {
-      event.preventDefault();
-      props.send("answer", { runId: props.runId, stepKey: props.stepKey, clarify: { roundNo: props.round.roundNo, answers,
-        glossaryDecisions: result.glossary.map((g) => ({ id: g.id, accept: true })), adrDecisions: result.adrs.map((a) => ({ id: a.id, accept: true })) } });
-    }}>
-      <p>{result.statement}</p>
-      {result.questions.map((q) => (
+    <form aria-label={props.label} onSubmit={(event) => { event.preventDefault(); props.onAnswer(answers); }}>
+      {props.statement !== null && <p>{props.statement}</p>}
+      {props.questions.map((q) => (
         <fieldset key={q.id}>
           <legend>{q.id} {q.question}</legend>
           <p>{t("requirements.recommended", { answer: q.recommendedAnswer })}</p>
@@ -210,8 +256,53 @@ function ClarifyForm(props: { round: RoundBodyV1; stepKey: string; runId: string
         </fieldset>
       ))}
       <button type="submit">{t("flow.clarify.send")}</button>
-      <button type="button" onClick={() => props.send("answer", { runId: props.runId, stepKey: props.stepKey, consensus: true })}>{t("flow.clarify.consensus")}</button>
+      <button type="button" onClick={props.onConsensus}>{t("flow.clarify.consensus")}</button>
+      {props.extra}
     </form>
+  );
+}
+
+function ClarifyForm(props: { round: RoundBodyV1; stepKey: string; runId: string; send: Send }): JSX.Element {
+  const { t } = useTranslation();
+  const result = props.round.result;
+  if (result === null) return <p>{t("flow.clarify.drafting", { n: props.round.roundNo })}</p>;
+  return (
+    <QuestionsForm label={t("flow.clarify.title", { step: props.stepKey, n: props.round.roundNo })} statement={result.statement} questions={result.questions}
+      onAnswer={(answers) => props.send("answer", { runId: props.runId, stepKey: props.stepKey, clarify: { roundNo: props.round.roundNo, answers,
+        glossaryDecisions: result.glossary.map((g) => ({ id: g.id, accept: true })), adrDecisions: result.adrs.map((a) => ({ id: a.id, accept: true })) } })}
+      onConsensus={() => props.send("answer", { runId: props.runId, stepKey: props.stepKey, consensus: true })} />
+  );
+}
+
+/**
+ * Gaps spec §9: a flow clarify step's rounds on its active chain, each answered one revisable with the Requirements
+ * revise form (one UI, Rule 7); the revision is sent as an `edit` at that round. While a revision is at work on a newer
+ * execution, its rounds are listed as such and they are the ones revised.
+ */
+function ClarifyRounds(props: { step: Step; runId: string; open: boolean; send: Send }): JSX.Element | null {
+  const { t } = useTranslation();
+  const { step } = props;
+  const shown = step.clarifyRevision ?? step.clarify;
+  if (shown === null || shown.rounds.length === 0) return null;
+  const entries = chainEntries(shown.rounds, shown.chain);
+  return (
+    <details className="flow-rounds" data-testid="flow-rounds">
+      <summary>{step.clarifyRevision !== null ? t("flow.clarify.revising", { seq: step.clarifyRevision.seq }) : t("flow.clarify.rounds", { count: entries.length })}</summary>
+      {step.clarifyRevision !== null && step.clarify !== null && <p role="note">{t("flow.clarify.activeStays", { seq: step.head ?? 0 })}</p>}
+      <ul>
+        {entries.map(({ round: r, position }) => {
+          const revisable = props.open && r.state === "answered" && r.result !== null && r.answers !== null;
+          const later = entries.filter((e) => e.position > position).map((e) => ({ roundNo: e.round.roundNo, position: e.position }));
+          return (
+            <li key={r.roundNo} data-testid={`flow-round-${r.roundNo}`}>
+              {t(r.revises === undefined ? "requirements.round" : "requirements.roundRevised", { n: position })} · {r.state}
+              {revisable && <ReviseRound round={r} position={position} later={later} onRevise={({ roundNo, ...body }) =>
+                props.send("messages", { runId: props.runId, kind: "edit", target: { kind: "round", stepKey: step.stepKey, roundNo }, body })} />}
+            </li>
+          );
+        })}
+      </ul>
+    </details>
   );
 }
 
@@ -285,11 +376,13 @@ function PlanChecklist(props: { plan: FlowPlanV1; steps: Step[]; runId: string; 
           <ul>
             {candidates.map((c) => {
               const skip = skips.find((s) => s.stepKey === c.stepKey);
+              const unsure = plan.proposal?.unsure?.find((u) => u.stepKey === c.stepKey);
               return (
                 <li key={c.stepKey} data-testid={`flow-plan-${c.stepKey}`}>
                   <label><input type="checkbox" checked={ticked.has(c.stepKey)} disabled={!props.may} onChange={(event) => toggle(c.stepKey, event.currentTarget.checked)} />
                     {c.stepKey}</label> · {t("flow.reasons", { reasons: c.reasons.join(", ") })}
                   {skip !== undefined && <p>{t("flow.plan.proposedSkip", { reason: skip.reason })}</p>}
+                  {unsure !== undefined && <p>{t("flow.plan.unsure", { question: unsure.question })}</p>}
                 </li>
               );
             })}
@@ -306,7 +399,255 @@ function PlanChecklist(props: { plan: FlowPlanV1; steps: Step[]; runId: string; 
       )}
       {/* T18 enact: the person may withdraw the plan instead of running it; its feedback is excluded. */}
       {props.may && <button type="button" onClick={() => props.send("rerun", { runId: props.runId, planNo: plan.planNo, discard: true })}>{t("flow.plan.discard")}</button>}
+      <SpendLine spend={plan.spend} />
     </section>
+  );
+}
+
+/** HH:MM in the viewer's clock. */
+const clock = (ms: number): string => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+
+/** The time left before a deadline, ticking once a second while shown. */
+function Remaining(props: { deadline: number }): JSX.Element {
+  const { t } = useTranslation();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
+  const left = Math.max(0, Math.ceil((props.deadline - now) / 1000));
+  return <span data-testid="flow-remaining" className="flow-remaining">{t("flow.plan.left", { left: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` })}</span>;
+}
+
+/**
+ * Gaps spec §5.2-§5.5, §14.3: the running plan's open questions (each with its deadline and the two answers), the steps
+ * it ran (each may be accepted as unchanged, so later steps whose only reason it was are dropped), and the accepts made
+ * (by the person, by the timeout, or carried from an earlier plan). Both answers are the human-only `flow-plan-step`.
+ */
+function RunningPlan(props: { plan: FlowPlanV1; steps: Step[]; runId: string; may: boolean; send: Send }): JSX.Element {
+  const { t } = useTranslation();
+  const { plan } = props;
+  const pending = (plan.chosen?.pending ?? []).filter((p) => p.answer === null && p.closed === undefined);
+  const accepted = plan.chosen?.accepted ?? [];
+  const acceptedKeys = new Set(accepted.map((a) => a.stepKey));
+  const ran = (plan.chosen?.steps ?? []).filter((key) => !acceptedKeys.has(key)
+    && (props.steps.find((s) => s.stepKey === key)?.executions ?? []).some((e) => e.planNo === plan.planNo && e.state === "done"));
+  const answer = (stepKey: string, choice: "run" | "accept-unchanged"): void => props.send("plan-step", { runId: props.runId, planNo: plan.planNo, stepKey, choice });
+  const source = (a: (typeof accepted)[number]): string => a.source === "carried" ? t("flow.plan.byCarried", { n: a.fromPlan ?? 0 }) : t(a.source === "person" ? "flow.plan.byYou" : "flow.plan.byTimeout");
+  return (
+    <section aria-label={t("flow.plan.title", { n: plan.planNo })} data-tone={pending.length > 0 ? "warn" : undefined}>
+      <h4>{t("flow.plan.title", { n: plan.planNo })} <span className="badge" data-tone="info">{t(`flow.planState.${plan.state}`)}</span></h4>
+      {pending.length > 0 && <>
+        <ul>
+          {pending.map((p) => (
+            <li key={p.stepKey} data-testid={`flow-pending-${p.stepKey}`}>
+              <p><strong>{p.stepKey}</strong>: {p.question}</p>
+              <p>{t("flow.plan.keepsAt", { time: clock(p.deadline) })} · <Remaining deadline={p.deadline} /></p>
+              {props.may ? <>
+                <button type="button" onClick={() => answer(p.stepKey, "run")}>{t("flow.plan.runIt")}</button>{" "}
+                <button type="button" onClick={() => answer(p.stepKey, "accept-unchanged")}>{t("flow.plan.accept")}</button>
+              </> : <p role="note">{t("flow.ownerOnly")}</p>}
+            </li>
+          ))}
+        </ul>
+        <p role="note" data-testid="flow-plan-depends">{t("flow.plan.depends")}</p>
+      </>}
+      {ran.length > 0 && (
+        <ul>{ran.map((key) => (
+          <li key={key} data-testid={`flow-plan-ran-${key}`}>
+            {t("flow.plan.ran", { step: key })}
+            {props.may && <>{" "}<button type="button" onClick={() => answer(key, "accept-unchanged")}>{t("flow.plan.accept")}</button></>}
+          </li>
+        ))}</ul>
+      )}
+      {accepted.length > 0 && <ul>{accepted.map((a) => <li key={a.stepKey} data-testid={`flow-plan-accepted-${a.stepKey}`}>{t("flow.plan.accepted", { step: a.stepKey, source: source(a) })}</li>)}</ul>}
+      <SpendLine spend={plan.spend} />
+    </section>
+  );
+}
+
+/** Gaps spec §4.1, §4.7: feedback on the whole run -- where it is (optional), screenshots, and "use my words as they are". */
+function RunFeedback(props: { runId: string; send: Send; upload: Upload }): JSX.Element {
+  const { t } = useTranslation();
+  const [text, setText] = useState("");
+  const [anchor, setAnchor] = useState<AnchorDraft>(NO_ANCHOR);
+  const [files, setFiles] = useState<File[]>([]);
+  const [asIs, setAsIs] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const tooMany = files.length > 4;
+  const submit = async (): Promise<void> => {
+    setBusy(true);
+    const ids: string[] = [];
+    for (const file of files) {
+      const id = await props.upload(file);
+      if (id === null) { setBusy(false); return; }
+      ids.push(id);
+    }
+    const anchors = anchorsOf(anchor);
+    props.send("messages", { runId: props.runId, kind: "feedback", target: { kind: "run" }, body: {
+      text: text.trim(), ...(anchors.length === 0 ? {} : { anchors }), ...(ids.length === 0 ? {} : { attachments: ids }), ...(asIs ? { asIs: true } : {}),
+    } });
+    setText(""); setAnchor(NO_ANCHOR); setFiles([]); setAsIs(false); setBusy(false);
+  };
+  return (
+    <form className="flow-message" aria-label={t("flow.feedback.title")} onSubmit={(event) => { event.preventDefault(); if (text.trim() !== "" && !tooMany && !busy) void submit(); }}>
+      <h4>{t("flow.feedback.title")}</h4>
+      <textarea aria-label={t("flow.message.text")} value={text} onChange={(event) => setText(event.currentTarget.value)} />
+      <AnchorFields draft={anchor} onChange={setAnchor} />
+      <label>{t("flow.feedback.attach")} <input type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label={t("flow.feedback.attach")}
+        onChange={(event) => setFiles([...(event.currentTarget.files ?? [])])} /></label>
+      {tooMany && <p data-tone="warn" role="status">{t("flow.feedback.tooMany")}</p>}
+      <label><input type="checkbox" checked={asIs} onChange={(event) => setAsIs(event.currentTarget.checked)} />{t("flow.feedback.asIs")}</label>
+      <button type="submit" disabled={text.trim() === "" || tooMany || busy}>{t("flow.message.sendFeedback")}</button>
+    </form>
+  );
+}
+
+const intakeTone = (state: FlowIntakeV1["state"]): "warn" | "info" | "danger" | undefined =>
+  state === "needs-location" || state === "clarifying" ? "warn" : state === "failed" ? "danger" : state === "planned" || state === "withdrawn" ? undefined : "info";
+
+/**
+ * Gaps spec §4.2-§4.8, §14.2: one open feedback intake -- where it was found; when the quote is found more than once,
+ * the places to pick from ("this one" replaces the message with that hit) or a rewrite; its clarify round with "use my
+ * words as they are"; the steps it went to and why, with "change target"; and what its single calls cost.
+ */
+function IntakeCard(props: { intake: FlowIntakeV1; steps: Step[]; runId: string; may: boolean; send: Send }): JSX.Element {
+  const { t } = useTranslation();
+  const { intake } = props;
+  const [rewriting, setRewriting] = useState(false);
+  const [text, setText] = useState(intake.text);
+  const [anchor, setAnchor] = useState<AnchorDraft>(NO_ANCHOR);
+  const [retarget, setRetarget] = useState("");
+  const target = intake.stepKey === null ? { kind: "run" } : { kind: "step", stepKey: intake.stepKey };
+  const replace = (body: Record<string, unknown>, to: Record<string, unknown> = target): void =>
+    props.send("messages", { runId: props.runId, kind: "feedback", target: to, body: { text: intake.text, replaces: intake.messageSeq, ...body } });
+  const hits = intake.results.flatMap((r) => ("hits" in r ? r.hits : []));
+  const located = intake.results.flatMap((r) => ("located" in r ? [r.located] : []));
+  const where = (h: { file: string; paragraph: number; headingPath: string[] }): string =>
+    [t("flow.intake.where", { file: h.file, paragraph: h.paragraph }), ...(h.headingPath.length === 0 ? [] : [h.headingPath.join(" › ")])].join(" · ");
+  const asIsButton = <button type="button" onClick={() => replace({ asIs: true })}>{t("flow.feedback.asIs")}</button>;
+  return (
+    <section className="flow-intake" aria-label={t("flow.intake.title", { seq: intake.messageSeq })} data-testid={`flow-intake-${intake.messageSeq}`} data-tone={intakeTone(intake.state)}>
+      <h4>{t("flow.intake.title", { seq: intake.messageSeq })} <span className="badge" data-tone={intakeTone(intake.state)}>{t(`flow.intakeState.${intake.state}`)}</span></h4>
+      <p>{intake.text}</p>
+      {intake.restated !== null && <p>{t("flow.intake.restated", { text: intake.restated })}</p>}
+      {located.map((h, i) => <blockquote key={i}><p>{h.excerpt}</p><p>{where(h)}</p></blockquote>)}
+      {intake.state === "needs-location" && <>
+        {hits.length > 0 ? <ol>{hits.map((h, i) => (
+          <li key={i} data-testid="flow-intake-hit">
+            <blockquote><p>{h.excerpt}</p><p>{where(h)}</p></blockquote>
+            <button type="button" onClick={() => replace({ hit: i + 1 })}>{t("flow.intake.thisOne")}</button>
+          </li>
+        ))}</ol> : <p data-tone="warn">{intake.ambiguousFiles.length > 0 ? t("flow.intake.ambiguous", { files: intake.ambiguousFiles.join(", ") }) : t("flow.intake.notFound")}</p>}
+        {rewriting ? (
+          <form aria-label={t("flow.intake.rewrite")} onSubmit={(event) => { event.preventDefault(); if (text.trim() === "") return; const anchors = anchorsOf(anchor); setRewriting(false);
+            props.send("messages", { runId: props.runId, kind: "feedback", target, body: { text: text.trim(), replaces: intake.messageSeq, ...(anchors.length === 0 ? {} : { anchors }) } }); }}>
+            <textarea aria-label={t("flow.message.text")} value={text} onChange={(event) => setText(event.currentTarget.value)} />
+            <AnchorFields draft={anchor} onChange={setAnchor} />
+            <button type="submit" disabled={text.trim() === ""}>{t("flow.message.sendFeedback")}</button>
+          </form>
+        ) : <button type="button" onClick={() => setRewriting(true)}>{t("flow.intake.rewrite")}</button>}
+      </>}
+      {intake.state === "clarifying" && intake.clarify !== null && (props.may ? (
+        <QuestionsForm label={t("flow.intake.clarify", { seq: intake.messageSeq })} statement={null} questions={intake.clarify.questions}
+          onAnswer={(answers) => props.send("answer", { runId: props.runId, feedback: intake.messageSeq, clarify: { roundNo: intake.clarify!.roundNo, answers, glossaryDecisions: [], adrDecisions: [] } })}
+          onConsensus={() => props.send("answer", { runId: props.runId, feedback: intake.messageSeq, consensus: true })} extra={asIsButton} />
+      ) : <p>{t("flow.ownerOnly")} {asIsButton}</p>)}
+      {intake.targets.length > 0 && (
+        <ul>{intake.targets.map((g) => <li key={g.stepKey} data-testid="flow-intake-target">{t("flow.intake.target", { step: g.stepKey, why: g.why })}</li>)}</ul>
+      )}
+      {intake.flags.length > 0 && <p>{intake.flags.map((flag) => <span key={flag} className="badge" data-tone="warn" data-testid="flow-intake-flag">{flag}</span>)}</p>}
+      {intake.state !== "failed" && (
+        <p>
+          <select aria-label={t("flow.intake.changeTarget")} value={retarget} onChange={(event) => setRetarget(event.currentTarget.value)}>
+            <option value="">{t("flow.intake.pickStep")}</option>
+            {props.steps.map((s) => <option key={s.stepKey} value={s.stepKey}>{s.stepKey}</option>)}
+          </select>{" "}
+          <button type="button" disabled={retarget === ""} onClick={() => { replace({}, { kind: "step", stepKey: retarget }); setRetarget(""); }}>{t("flow.intake.changeTarget")}</button>
+        </p>
+      )}
+      <SpendLine spend={intake.spend} />
+    </section>
+  );
+}
+
+/** The step kinds a person may skip or defer (gaps spec §6.1: clarify takes consensus, ask its answer). */
+const MARKABLE = new Set(["work", "draft", "check", "review"]);
+
+/**
+ * Gaps spec §6.1-§6.3: skip, defer or fill a step. A defer asks, in a dialog, what each external/irreversible effect
+ * step after it should do (preselected: wait) -- only when there is such a step; otherwise it is sent at once.
+ */
+function StepMarks(props: { step: Step; runId: string; send: Send }): JSX.Element | null {
+  const { t } = useTranslation();
+  const { step } = props;
+  const [asking, setAsking] = useState<Record<string, "proceed" | "wait"> | null>(null);
+  if (!MARKABLE.has(step.kind)) return null;
+  const command = (body: Record<string, unknown>): void => props.send("messages", { runId: props.runId, kind: "command", target: { kind: "step", stepKey: step.stepKey }, body });
+  if (step.mark !== null) return <p><button type="button" onClick={() => command({ command: "fill" })}>{t("flow.mark.fill")}</button></p>;
+  return (
+    <div className="flow-marks">
+      <button type="button" onClick={() => command({ command: "skip" })}>{t("flow.mark.skip")}</button>{" "}
+      <button type="button" onClick={() => (step.deferHolds.length === 0 ? command({ command: "defer" }) : setAsking(Object.fromEntries(step.deferHolds.map((key) => [key, "wait" as const]))))}>{t("flow.mark.defer")}</button>
+      {asking !== null && (
+        <div role="dialog" aria-label={t("flow.mark.deferTitle", { step: step.stepKey })}>
+          <p>{t("flow.mark.deferAsk")}</p>
+          {step.deferHolds.map((key) => (
+            <fieldset key={key}>
+              <legend>{key}</legend>
+              <label><input type="radio" name={`defer-${step.stepKey}-${key}`} checked={asking[key] === "wait"} onChange={() => setAsking({ ...asking, [key]: "wait" })} />{t("flow.mark.wait")}</label>
+              <label><input type="radio" name={`defer-${step.stepKey}-${key}`} checked={asking[key] === "proceed"} onChange={() => setAsking({ ...asking, [key]: "proceed" })} />{t("flow.mark.proceed")}</label>
+            </fieldset>
+          ))}
+          <button type="button" onClick={() => { command({ command: "defer", effects: asking }); setAsking(null); }}>{t("flow.mark.defer")}</button>{" "}
+          <button type="button" onClick={() => setAsking(null)}>{t("flow.mark.cancel")}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Gaps spec §6.3: an effect step a deferral holds. "Push now without <step>" re-sends that step's defer with `proceed`
+ * for this effect (its other choices kept) -- only the person may (a member's is refused, and the refusal is shown);
+ * "Wait" keeps it held, which needs no message.
+ */
+function HeldCard(props: { step: Step; steps: Step[]; runId: string; send: Send }): JSX.Element {
+  const { t } = useTranslation();
+  const [waiting, setWaiting] = useState(false);
+  const { step } = props;
+  return (
+    <div className="flow-held" role="group" aria-label={t("flow.held.title", { step: step.stepKey })} data-tone="warn">
+      <p>{t("flow.held.what", { step: step.stepKey, deferred: step.heldBy.join(", ") })}</p>
+      {waiting ? <p>{t("flow.held.waiting")}</p> : <>
+        {step.heldBy.map((deferred) => {
+          const effects = props.steps.find((s) => s.stepKey === deferred)?.mark?.effects ?? {};
+          return <span key={deferred}><button type="button" onClick={() => props.send("messages", { runId: props.runId, kind: "command", target: { kind: "step", stepKey: deferred },
+            body: { command: "defer", effects: { ...effects, [step.stepKey]: "proceed" } } })}>{t("flow.held.push", { step: deferred })}</button>{" "}</span>;
+        })}
+        <button type="button" onClick={() => setWaiting(true)}>{t("flow.held.wait")}</button>
+      </>}
+    </div>
+  );
+}
+
+/** Gaps spec §8.4: on a failed or deferred step whose `when` reads a param, set that param instead (a `params` command). */
+function SetParam(props: { param: { id: string; type: string | null }; current: string | number | boolean | undefined; runId: string; send: Send }): JSX.Element {
+  const { t } = useTranslation();
+  const { param } = props;
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState<string>(props.current === undefined || typeof props.current === "boolean" ? "" : String(props.current));
+  const [flag, setFlag] = useState<boolean>(props.current === true);
+  if (!open) return <button type="button" onClick={() => setOpen(true)}>{t("flow.param.instead", { param: param.id })}</button>;
+  const typed = param.type === "bool" ? flag : param.type === "int" ? Number(value) : value.trim();
+  const ready = param.type === "bool" || (param.type === "int" ? Number.isSafeInteger(Number(value)) && value.trim() !== "" : value.trim() !== "");
+  return (
+    <form aria-label={t("flow.param.instead", { param: param.id })} onSubmit={(event) => { event.preventDefault(); if (!ready) return; setOpen(false);
+      props.send("messages", { runId: props.runId, kind: "command", target: { kind: "run" }, body: { command: "params", set: { [param.id]: typed } } }); }}>
+      {param.type === "bool"
+        ? <label><input type="checkbox" checked={flag} onChange={(event) => setFlag(event.currentTarget.checked)} />{param.id}</label>
+        : <input type={param.type === "int" ? "number" : "text"} aria-label={param.type === "image" || param.type === "path" ? t("flow.param.path", { param: param.id }) : param.id}
+          value={value} onChange={(event) => setValue(event.currentTarget.value)} />}{" "}
+      <button type="submit" disabled={!ready}>{t("flow.param.set")}</button>{" "}
+      <button type="button" onClick={() => setOpen(false)}>{t("flow.mark.cancel")}</button>
+    </form>
   );
 }
 
@@ -358,7 +699,9 @@ function StepCard(props: { step: Step; view: FlowRunViewV1; may: boolean; send: 
   const latest = step.latest;
   const older = step.executions.filter((e) => e.seq !== latest?.seq);
   const ask = latest?.state === "needs-person" ? latest.ask : null;
-  const round = ask?.kind === "clarify-round" ? step.clarify?.rounds.find((r) => r.roundNo === ask.roundNo) ?? null : null;
+  // Gaps spec §9: the waiting round of a revision in progress is the revision's, not the active execution's.
+  const round = ask?.kind === "clarify-round" ? (step.clarifyRevision ?? step.clarify)?.rounds.find((r) => r.roundNo === ask.roundNo) ?? null : null;
+  const open = view.state !== "stopped";
   return (
     <section className="flow-step" aria-label={step.stepKey} data-testid={`flow-step-${step.stepKey}`}>
       <h4>
@@ -366,6 +709,7 @@ function StepCard(props: { step: Step; view: FlowRunViewV1; may: boolean; send: 
         <span className="badge" data-tone={stateTone(latest?.state ?? "")} data-testid="flow-step-state">{latest === null ? t("flow.notRun") : t(`flow.execState.${latest.state}`, { defaultValue: latest.state })}</span>
         {step.effect !== null && <>{" "}<span className="badge">{t("flow.effectClass", { kind: step.effect.kind, cls: step.effect.class ?? "" })}</span></>}
         {step.parallelWith !== null && <>{" "}<span className="badge">{t("flow.parallelWith", { step: step.parallelWith })}</span></>}
+        {step.mark !== null && <>{" "}<span className="badge" data-tone={step.mark.kind === "defer" ? "warn" : undefined} data-testid="flow-mark">{t(step.mark.kind === "skip" ? "flow.mark.skipped" : "flow.mark.deferred")}</span></>}
       </h4>
       {step.executor !== null && step.executor !== "agent" && <p>{t(`flow.executor.${step.executor}`)}</p>}
       {latest !== null && <ExecutionFacts execution={latest} active={step.head === latest.seq} />}
@@ -375,13 +719,20 @@ function StepCard(props: { step: Step; view: FlowRunViewV1; may: boolean; send: 
       {ask !== null && ask.kind === "effect-confirm" && <ConfirmCard ask={ask} may={props.may} send={props.send} />}
       {round !== null && (props.may ? <ClarifyForm round={round} stepKey={step.stepKey} runId={view.flowRunId} send={props.send} /> : <p role="note">{t("flow.ownerOnly")}</p>)}
       {latest?.state === "failed" && <button type="button" onClick={() => props.send("messages", { runId: view.flowRunId, kind: "command", target: { kind: "step", stepKey: step.stepKey }, body: { command: "retry" } })}>{t("flow.retry")}</button>}
+      {open && (latest?.state === "failed" || step.mark?.kind === "defer") && step.whenParams.map((param) => (
+        <SetParam key={param.id} param={param} current={view.params[param.id]} runId={view.flowRunId} send={props.send} />
+      ))}
+      {open && step.heldBy.length > 0 && <HeldCard step={step} steps={view.steps} runId={view.flowRunId} send={props.send} />}
+      {open && <StepMarks step={step} runId={view.flowRunId} send={props.send} />}
+      {step.kind === "clarify" && <ClarifyRounds step={step} runId={view.flowRunId} open={open} send={props.send} />}
       {older.length > 0 && (
         <details>
           <summary>{t("flow.earlier", { count: older.length })}</summary>
           {older.map((e) => <ExecutionFacts key={e.seq} execution={e} active={step.head === e.seq} />)}
         </details>
       )}
-      {view.state !== "stopped" && <MessageBox step={step} runId={view.flowRunId} send={props.send} />}
+      {step.executions.length > 0 && <SpendLine spend={step.spend} />}
+      {open && <MessageBox step={step} runId={view.flowRunId} send={props.send} />}
     </section>
   );
 }
@@ -442,15 +793,34 @@ export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): 
     void (async () => {
       const answer = await sendControlCommand(`/api/control/flows/${verb}`, { commandId: nextCommandId(), expectedRevision: 0, payload });
       setRefusal(null);
+      // Gaps spec §6.3 (Task 9): a flow message is stored even when refused -- the verb answers 200 with the message
+      // `rejected` (e.g. flow-effect-needs-person for a member's "push now") -- so a refusal there is shown as one too.
+      const stored = answer.kind === "answered" && answer.status < 400 ? (answer.body as { result?: { kind?: string; state?: string; reason?: string | null } }).result : undefined;
+      const rejected = stored?.kind === "flow-message-stored" && stored.state === "rejected" && typeof stored.reason === "string"
+        ? { status: answer.kind === "answered" ? answer.status : null, code: stored.reason.split(":")[0]!, message: stored.reason } : null;
       const failure = answer.kind === "uncertain" ? { status: null, code: "command-outcome-unknown", message: t("panelErrors.noOutcome") }
-        : answer.status >= 400 ? refusalFromAnswer(answer) : null;
+        : answer.status >= 400 ? refusalFromAnswer(answer) : rejected;
       await read();
       if (failure !== null) setRefusal(failure);
     })();
   };
+  const upload: Upload = async (file) => {
+    try {
+      const res = await fetch(`${base}/attachments`, { method: "POST", headers: { "content-type": file.type || "application/octet-stream", ...csrfHeader() }, body: file });
+      const body = await res.json().catch(() => undefined) as { id?: unknown; error?: { code?: unknown; message?: unknown } } | undefined;
+      if (res.ok && typeof body?.id === "string") return body.id;
+      const code = typeof body?.error?.code === "string" ? body.error.code : `http-${res.status}`;
+      setRefusal({ status: res.status, code, message: typeof body?.error?.message === "string" ? body.error.message : code });
+    } catch (error) {
+      setRefusal({ status: null, code: "command-outcome-unknown", message: error instanceof Error ? error.message : t("panelErrors.noOutcome") });
+    }
+    return null;
+  };
   const lang = currentLanguage();
   const title = view?.template.title?.[lang] ?? view?.template.title?.en ?? view?.template.id ?? props.flowRunId;
   const plan = view?.plans.filter((p) => p.state === "proposed").at(-1) ?? null;
+  const running = view?.plans.filter((p) => p.state === "running").at(-1) ?? null;
+  const intakes = (view?.intakes ?? []).filter((i) => i.state !== "planned" && i.state !== "withdrawn");
   return (
     <article className="flow-run" aria-label={t("flow.page", { title })}>
       {props.onBack !== undefined && <button type="button" onClick={props.onBack}>{t("flow.back")}</button>}
@@ -464,7 +834,12 @@ export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): 
           {view.template.id === "wechat-article" && <p role="note" data-testid="flow-publish-note">{t("flow.wechatPublish")}</p>}
           {!may && <p role="note">{t("flow.ownerOnlyAll")}</p>}
           <RunControls view={view} may={may} send={send} />
+          {/* Gaps spec §10: the run's spend, the tool's numbers only. */}
+          <p data-testid="flow-run-spend">{spendText(view.spend, t)} · <span role="note">{t("flow.spend.note")}</span></p>
           {plan !== null && <PlanChecklist plan={plan} steps={view.steps} runId={view.flowRunId} may={may} send={send} />}
+          {running !== null && <RunningPlan plan={running} steps={view.steps} runId={view.flowRunId} may={may} send={send} />}
+          {intakes.map((intake) => <IntakeCard key={intake.messageSeq} intake={intake} steps={view.steps} runId={view.flowRunId} may={may} send={send} />)}
+          {view.state !== "stopped" && <RunFeedback runId={view.flowRunId} send={send} upload={upload} />}
           <section aria-label={t("flow.steps")}>
             <h4>{t("flow.steps")}</h4>
             {view.steps.map((step) => <StepCard key={step.stepKey} step={step} view={view} may={may} send={send} />)}

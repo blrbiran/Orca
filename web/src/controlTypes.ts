@@ -1062,12 +1062,39 @@ export type FlowExecutionViewV1 = {
   toolRules: FlowToolRulesReportV1 | null; ask: FlowAskV1 | null; needsYou: { reason?: string } | null;
   reported: { candidates?: Record<string, { items: string[]; recommended: number }>; effect?: { remoteId: string; url?: string } } | null;
   warnings: string[]; effectRecordId: string | null;
+  spend: FlowSpendV1;
+};
+/**
+ * Gaps spec §10 (src/flow/spend.ts): the tool-reported tokens of an execution, step, intake, plan or run. `tokens` null
+ * means the tool gave no number (never 0); a sum over a mix keeps the known part with `unknownReason` "partial: …". No
+ * tool reports money. A `legacy:<step>#<seq>` run id names no run record.
+ */
+export type FlowSpendV1 = { tokens: number | null; unknownReason: string | null; usd: null; usdReason: string; runs: Array<{ runId: string; purpose: string; tokens: number | null }> };
+/** Gaps spec §6 (marks.ts): a step's standing skip or defer, with a defer's effect choices. */
+export type FlowMarkV1 = { kind: "skip" | "defer"; messageSeq: number; effects: Record<string, "proceed" | "wait"> };
+/** Gaps spec §5.2-§5.5 (rerun.ts): an unsure step's question, and a step accepted as unchanged. */
+export type FlowPendingAnswerV1 = { choice: "run" | "accept-unchanged"; by: string; via: string; at: number; source: "person" | "timeout" | "carried"; fromPlan?: number };
+export type FlowPendingItemV1 = { stepKey: string; question: string; askedAt: number; deadline: number; answer: FlowPendingAnswerV1 | null; closed?: string };
+export type FlowAcceptedItemV1 = { stepKey: string; seq: number; by: string; via: string; at: number; source: "person" | "timeout" | "carried"; fromPlan?: number };
+/** Gaps spec §4 (views.ts `intakes`): one feedback intake -- where its quote was found, which steps take it, its clarify round. */
+export type FlowAnchorV1 = { quote?: string; heading?: string; paragraph?: number };
+export type FlowHitV1 = { file: string; paragraph: number; headingPath: string[]; excerpt: string };
+export type FlowIntakeV1 = {
+  messageSeq: number;
+  state: "locating" | "needs-location" | "triaging" | "clarifying" | "restating" | "ready" | "planned" | "withdrawn" | "failed";
+  text: string; stepKey: string | null; anchors: FlowAnchorV1[];
+  results: Array<{ anchor: FlowAnchorV1; located: FlowHitV1 } | { anchor: FlowAnchorV1; hits: FlowHitV1[]; more: number }>;
+  ambiguousFiles: string[]; targets: Array<{ stepKey: string; why: string }>; restated: string | null; flags: string[]; planNo: number | null;
+  asIs: boolean; attachments: string[];
+  clarify: { roundNo: number; questions: Array<{ id: string; question: string; recommendedAnswer: string }> } | null;
+  spend: FlowSpendV1;
 };
 export type FlowPlanV1 = {
   flowRunId: string; planNo: number; state: "proposed" | "chosen" | "running" | "done" | "abandoned";
   candidates: { list: Array<{ stepKey: string; reasons: string[] }>; feedback: Record<string, string[]>; edits: string[]; trigger: string };
-  proposal: { retries: number; lastInvalid: string | null; skips: Array<{ stepKey: string; reason: string }> | null; exhausted: string | null } | null;
-  chosen: { steps: string[]; skips: string[]; added: string[] } | null; by: string; via: string;
+  proposal: { retries: number; lastInvalid: string | null; skips: Array<{ stepKey: string; reason: string }> | null; unsure?: Array<{ stepKey: string; question: string }> | null; exhausted: string | null } | null;
+  chosen: { steps: string[]; skips: string[]; added: string[]; pending?: FlowPendingItemV1[]; accepted?: FlowAcceptedItemV1[] } | null; by: string; via: string;
+  spend: FlowSpendV1;
 };
 export type FlowEffectV1 = {
   id: string; flowRunId: string; stepKey: string; seq: number; effectKind: string; class: string; level: string; policy: FlowResolvedLevelV1;
@@ -1082,9 +1109,18 @@ export type FlowRunViewV1 = {
     effect: { kind: string; class: string | null } | null;
     latest: FlowExecutionViewV1 | null; executions: FlowExecutionViewV1[];
     clarify: { rounds: RoundBodyV1[]; chain: number[] } | null;
+    /** Gaps spec §9: a newer execution still working on a revision of this clarify step (`clarify` is the active one's). */
+    clarifyRevision: { seq: number; state: string; rounds: RoundBodyV1[]; chain: number[] } | null;
+    /** Gaps spec §6: the step's standing mark, the deferred steps holding it, the effect steps a defer of it would hold. */
+    mark: FlowMarkV1 | null; heldBy: string[]; deferHolds: string[];
+    /** Gaps spec §8.4: the params its `when` reads. */
+    whenParams: Array<{ id: string; type: string | null }>;
+    spend: FlowSpendV1;
   }>;
   openAsks: Array<{ stepKey: string; seq: number; ask: FlowAskV1 }>;
   plans: FlowPlanV1[];
+  intakes: FlowIntakeV1[];
+  spend: FlowSpendV1;
   effects: FlowEffectV1[];
   decisions: Array<{ seq: number; grade: "major" | "minor"; stepKey: string | null; body: Record<string, unknown>; by: string }>;
 };

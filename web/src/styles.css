@@ -450,3 +450,5 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .board-card-open { all: unset; cursor: pointer; font-weight: 600; }
 .board-card-goal { margin: 4px 0; }
 .group-graph-layers { display: flex; gap: 24px; overflow-x: auto; }
+/* Gaps spec §5.3, §10 (plan Task 10-A): a deadline that ticks and token counts sit in rows; digits keep their width. */
+.flow-remaining, .flow-spend { font-variant-numeric: tabular-nums; }

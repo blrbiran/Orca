@@ -180,7 +180,8 @@ export function checkTemplate(raw: unknown, assets: AssetReader, ctx: ChecklistC
   return { errors, warnings };
 }
 
-function whenParams(pred: NonNullable<FlowStep["when"]>): string[] {
+/** The params a step's `when` reads (gaps spec §8.4: the run page offers "set <param> instead" on them). */
+export function whenParams(pred: NonNullable<FlowStep["when"]>): string[] {
   if ("and" in pred) return pred.and.flatMap(whenParams);
   if ("or" in pred) return pred.or.flatMap(whenParams);
   if ("not" in pred) return whenParams(pred.not);

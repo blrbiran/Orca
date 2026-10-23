@@ -12,11 +12,11 @@ import type { JSX } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AccountContext } from "../src/AuthGate.js";
 import type { Me } from "../src/auth.js";
-import type { FlowExecutionViewV1, FlowJournalV1, FlowRunViewV1, FlowToolRulesReportV1 } from "../src/controlTypes.js";
+import type { FlowExecutionViewV1, FlowIntakeV1, FlowJournalV1, FlowRunViewV1, FlowSpendV1, FlowToolRulesReportV1, RoundBodyV1 } from "../src/controlTypes.js";
 import { FlowRunPage } from "../src/FlowRunPage.js";
 import "../src/i18n.js";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); answerWith = () => ({ schema: "orca-command-success-v1" }); });
 const owner: Me = { user: { id: "u1", name: "olga", roles: ["owner"], mustChangePassword: false }, expiresAt: 0, sessionDays: 15 };
 const member: Me = { user: { id: "u2", name: "amy", roles: ["member"], mustChangePassword: false }, expiresAt: 0, sessionDays: 15 };
 const as = (me: Me, node: JSX.Element): JSX.Element => <AccountContext.Provider value={me}>{node}</AccountContext.Provider>;
@@ -30,13 +30,14 @@ const REPORT: FlowToolRulesReportV1 = { schema: "ccloop-tool-rules-report-v1", a
   { rule: { kind: "prefix", value: "bun x" }, status: "refused", reason: "not expressible", phases: ["execute"] },
   { rule: { kind: "secretEnv", name: "WECHAT_SECRET" }, status: "recorded-only", reason: null, phases: ["execute"], present: false },
 ] };
+const spent = (tokens: number | null, unknownReason: string | null = null): FlowSpendV1 => ({ tokens, unknownReason, usd: null, usdReason: "the tool reports no money amount", runs: [] });
 const exec = (seq: number, over: Partial<FlowExecutionViewV1> = {}): FlowExecutionViewV1 => ({
   seq, state: "done", reasons: ["never-succeeded"], planNo: null, childGroupId: null, by: "orca-auto", via: "orca", flags: [], failure: null,
-  output: { kind: "commit", ref: "c".repeat(40), hash: "h".repeat(64) }, toolRules: null, ask: null, needsYou: null, reported: null, warnings: [], effectRecordId: null, ...over,
+  output: { kind: "commit", ref: "c".repeat(40), hash: "h".repeat(64) }, toolRules: null, ask: null, needsYou: null, reported: null, warnings: [], effectRecordId: null, spend: spent(1200), ...over,
 });
 const step = (stepKey: string, kind: string, executions: FlowExecutionViewV1[], over: Partial<FlowRunViewV1["steps"][number]> = {}): FlowRunViewV1["steps"][number] => ({
   stepKey, kind, head: executions.filter((e) => e.state === "done").at(-1)?.seq ?? null, executor: null, parallelWith: null, effect: null,
-  latest: executions.at(-1) ?? null, executions, clarify: null, ...over,
+  latest: executions.at(-1) ?? null, executions, clarify: null, clarifyRevision: null, mark: null, heldBy: [], deferHolds: [], whenParams: [], spend: spent(1200), ...over,
 });
 const policy = { value: "confirm" as const, source: "project" as const, lockedBy: null };
 const CONFIRM_ASK = { kind: "effect-confirm" as const, recordId: "eff-00000000-0000-4000-8000-00000000000a", stepKey: "to-draft-box", effectKind: "wechat-draft", class: "external", policy, summary: "title: Tea, slowly" };
@@ -63,8 +64,9 @@ function runView(over: Partial<FlowRunViewV1> = {}): FlowRunViewV1 {
       flowRunId: RUN, planNo: 1, state: "proposed",
       candidates: { list: [{ stepKey: "voice", reasons: ["feedback"] }, { stepKey: "pick-title", reasons: ["upstream-changed:voice"] }, { stepKey: "cover", reasons: ["upstream-changed:voice"] }], feedback: { voice: ["warmer"] }, edits: [], trigger: "feedback" },
       proposal: { retries: 0, lastInvalid: null, skips: [{ stepKey: "cover", reason: "the cover does not depend on the wording" }], exhausted: null },
-      chosen: null, by: "olga", via: "web",
+      chosen: null, by: "olga", via: "web", spend: spent(300),
     }],
+    intakes: [], spend: spent(9000),
     effects: [
       { id: "eff-00000000-0000-4000-8000-00000000000a", flowRunId: RUN, stepKey: "to-draft-box", seq: 1, effectKind: "wechat-draft", class: "external", level: "confirm", policy, state: "staged", payloadHash: "p", remoteRef: null, by: "orca-auto", via: "orca", createdAt: 1, updatedAt: 1 },
       { id: "eff-00000000-0000-4000-8000-00000000000b", flowRunId: RUN, stepKey: "cover", seq: 1, effectKind: "image-generate", class: "cost", level: "stage-only", policy: { value: "stage-only", source: "global", lockedBy: "global" }, state: "staged", payloadHash: "p", remoteRef: null, by: "orca-auto", via: "orca", createdAt: 2, updatedAt: 2 },
@@ -84,12 +86,21 @@ const JOURNAL: FlowJournalV1 = { schema: "orca-flow-journal-v1", flowRunId: RUN,
 
 let posts: Array<{ url: string; body: { expectedRevision: number; payload: Record<string, unknown> } }>;
 let reads: string[];
+/** Gaps spec §4.7: the attachment uploads (raw bytes, one per screenshot), in order. */
+let uploads: Array<{ url: string; type: string | null; name: string }>;
+/** What a command POST answers (default: a plain success); a test may answer a flow message as stored `rejected`. */
+let answerWith: (url: string) => unknown = () => ({ schema: "orca-command-success-v1" });
 function serve(view: FlowRunViewV1 = runView()): void {
-  posts = []; reads = [];
+  posts = []; reads = []; uploads = [];
   document.cookie = "orca_csrf=t";
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
-    if ((init?.method ?? "GET") === "POST") { posts.push({ url, body: JSON.parse(String(init!.body)) }); return new Response(JSON.stringify({ schema: "orca-command-success-v1" }), { status: 200 }); }
+    if ((init?.method ?? "GET") === "POST" && url.endsWith("/attachments")) {
+      const file = init!.body as File;
+      uploads.push({ url, type: new Headers(init!.headers).get("content-type"), name: file.name });
+      return new Response(JSON.stringify({ schema: "orca-flow-attachment-v1", id: `${"a".repeat(63)}${uploads.length}.png` }), { status: 200 });
+    }
+    if ((init?.method ?? "GET") === "POST") { posts.push({ url, body: JSON.parse(String(init!.body)) }); return new Response(JSON.stringify(answerWith(url)), { status: 200 }); }
     reads.push(url);
     return new Response(JSON.stringify(url.endsWith("/journal") ? JOURNAL : view), { status: 200 });
   }) as typeof fetch;
@@ -293,5 +304,289 @@ describe("a step that asks the person (§4.3, §10)", () => {
     fireEvent.click(within(stepBox("brief")).getByRole("button", { name: "We agree" }));
     await waitFor(() => expect(posts.length).toBe(3));
     expect(lastPost().body.payload).toEqual({ runId: RUN, stepKey: "brief", consensus: true });
+  });
+});
+
+/**
+ * Gaps spec §14 (G12, plan Task 10-A): the run page surfaces of the phase-1 gaps. Each act is the one flow verb the
+ * server takes for it; what the page must never do is guess -- show 0 for a spend the tool did not give, pick a hit for
+ * the person, push a held external step on its own, or ask about effects a defer does not hold.
+ */
+const intake = (over: Partial<FlowIntakeV1> = {}): FlowIntakeV1 => ({
+  messageSeq: 7, state: "needs-location", text: "this sentence drags", stepKey: null, anchors: [{ quote: "Tea slows you down" }],
+  results: [{ anchor: { quote: "Tea slows you down" }, hits: [
+    { file: "tea.md", paragraph: 2, headingPath: ["Why"], excerpt: "Tea slows you down, they say." },
+    { file: "tea.md", paragraph: 9, headingPath: [], excerpt: "Tea slows you down again." },
+  ], more: 0 }],
+  ambiguousFiles: [], targets: [], restated: null, flags: [], planNo: null, asIs: false, attachments: [], clarify: null, spend: spent(null, "no tool runs"), ...over,
+});
+
+describe("feedback on the whole run and its intake (§4, §14.1-§14.2)", () => {
+  it("sends run-level feedback with its anchors, the uploaded screenshots' ids and 'use my words as they are'", async () => {
+    await mount();
+    const box = screen.getByRole("form", { name: "Feedback on the whole run" });
+    fireEvent.change(within(box).getByRole("textbox", { name: "Your feedback" }), { target: { value: " too slow here " } });
+    fireEvent.change(within(box).getByRole("textbox", { name: "A passage as it reads in the article" }), { target: { value: "Tea slows you down" } });
+    fireEvent.change(within(box).getByRole("textbox", { name: "Under the heading" }), { target: { value: "Why" } });
+    fireEvent.change(within(box).getByRole("spinbutton", { name: "Paragraph number" }), { target: { value: "2" } });
+    const shots = [new File([new Uint8Array([0x89, 0x50])], "one.png", { type: "image/png" }), new File([new Uint8Array([0xff, 0xd8])], "two.jpg", { type: "image/jpeg" })];
+    fireEvent.change(within(box).getByLabelText("Screenshots (png, jpg or webp, at most 4)"), { target: { files: shots } });
+    fireEvent.click(within(box).getByRole("checkbox", { name: "Use my words as they are" }));
+    fireEvent.click(within(box).getByRole("button", { name: "Send feedback" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    // mutation: send the feedback without uploading -> no uploads, no attachments, red
+    expect(uploads).toEqual([{ url: `/api/control/flows/${RUN}/attachments`, type: "image/png", name: "one.png" }, { url: `/api/control/flows/${RUN}/attachments`, type: "image/jpeg", name: "two.jpg" }]);
+    // mutation: drop the anchors from the body -> red
+    expect(lastPost()).toEqual({ url: "/api/control/flows/messages", body: expect.objectContaining({ payload: { runId: RUN, kind: "feedback", target: { kind: "run" }, body: {
+      text: "too slow here", anchors: [{ quote: "Tea slows you down" }, { heading: "Why", paragraph: 2 }], attachments: [`${"a".repeat(63)}1.png`, `${"a".repeat(63)}2.png`], asIs: true,
+    } } }) });
+  });
+
+  it("refuses to send five screenshots, and a step's feedback box carries the same anchors", async () => {
+    await mount();
+    const box = screen.getByRole("form", { name: "Feedback on the whole run" });
+    fireEvent.change(within(box).getByRole("textbox", { name: "Your feedback" }), { target: { value: "x" } });
+    fireEvent.change(within(box).getByLabelText("Screenshots (png, jpg or webp, at most 4)"), { target: { files: [1, 2, 3, 4, 5].map((i) => new File(["x"], `${i}.png`, { type: "image/png" })) } });
+    expect((within(box).getByRole("button", { name: "Send feedback" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(box).getByRole("status").textContent).toBe("At most 4 screenshots per message.");
+    const step = within(stepBox("voice")).getByRole("form", { name: "Message about voice" });
+    fireEvent.change(within(step).getByRole("textbox", { name: "Your feedback" }), { target: { value: "warmer" } });
+    fireEvent.change(within(step).getByRole("textbox", { name: "A passage as it reads in the article" }), { target: { value: "Tea slows you down" } });
+    fireEvent.click(within(step).getByRole("button", { name: "Send feedback" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "feedback", target: { kind: "step", stepKey: "voice" }, body: { text: "warmer", anchors: [{ quote: "Tea slows you down" }] } });
+    expect(uploads).toEqual([]);
+  });
+
+  it("a quote found twice lists both places; 'this one' replaces the message with that hit, never a guess", async () => {
+    await mount(owner, runView({ intakes: [intake(), intake({ messageSeq: 3, state: "planned" })] }));
+    // Only open intakes have cards.
+    expect(screen.queryByTestId("flow-intake-3")).toBeNull();
+    const card = screen.getByRole("region", { name: "Feedback #7" });
+    expect(within(card).getByText("needs a location").getAttribute("data-tone")).toBe("warn");
+    const hits = within(card).getAllByTestId("flow-intake-hit");
+    expect(hits.map((h) => h.textContent)).toEqual([expect.stringContaining("tea.md · paragraph 2 · Why"), expect.stringContaining("tea.md · paragraph 9")]);
+    expect(posts).toEqual([]);
+    fireEvent.click(within(hits[1]!).getByRole("button", { name: "This one" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    // mutation: send the hit 0-based -> hit 1, red
+    expect(lastPost()).toEqual({ url: "/api/control/flows/messages", body: expect.objectContaining({ payload: { runId: RUN, kind: "feedback", target: { kind: "run" }, body: { text: "this sentence drags", replaces: 7, hit: 2 } } }) });
+    fireEvent.click(within(card).getByRole("button", { name: "Rewrite" }));
+    const rewrite = within(card).getByRole("form", { name: "Rewrite" });
+    fireEvent.change(within(rewrite).getByRole("textbox", { name: "A passage as it reads in the article" }), { target: { value: "they say" } });
+    fireEvent.click(within(rewrite).getByRole("button", { name: "Send feedback" }));
+    await waitFor(() => expect(posts.length).toBe(2));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "feedback", target: { kind: "run" }, body: { text: "this sentence drags", replaces: 7, anchors: [{ quote: "they say" }] } });
+    expect(within(card).getByTestId("flow-spend").textContent).toBe("Spend: not available (no tool runs) · money: not available — the tool reports none");
+  });
+
+  it("a vague intake's clarify round is answered by feedback number; 'use my words' and 'change target' replace it", async () => {
+    const clarifying = intake({ state: "clarifying", results: [], targets: [{ stepKey: "voice", why: "the tone" }], flags: ["triage-defaulted"],
+      clarify: { roundNo: 1, questions: [{ id: "R1.Q1", question: "What feels wrong?", recommendedAnswer: "too stiff" }] } });
+    await mount(owner, runView({ intakes: [clarifying] }));
+    const card = screen.getByRole("region", { name: "Feedback #7" });
+    expect(within(card).getByTestId("flow-intake-target").textContent).toBe("Goes to voice: the tone");
+    expect(within(card).getByTestId("flow-intake-flag").textContent).toBe("triage-defaulted");
+    const form = within(card).getByRole("form", { name: "Feedback #7: questions" });
+    fireEvent.click(within(form).getByRole("button", { name: "Send this round" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost()).toEqual({ url: "/api/control/flows/answer", body: expect.objectContaining({ payload: { runId: RUN, feedback: 7, clarify: { roundNo: 1, answers: [{ id: "R1.Q1", kind: "recommended" }], glossaryDecisions: [], adrDecisions: [] } } }) });
+    fireEvent.click(within(form).getByRole("button", { name: "Use my words as they are" }));
+    await waitFor(() => expect(posts.length).toBe(2));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "feedback", target: { kind: "run" }, body: { text: "this sentence drags", replaces: 7, asIs: true } });
+    fireEvent.change(within(card).getByRole("combobox", { name: "Change target" }), { target: { value: "outline" } });
+    fireEvent.click(within(card).getByRole("button", { name: "Change target" }));
+    await waitFor(() => expect(posts.length).toBe(3));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "feedback", target: { kind: "step", stepKey: "outline" }, body: { text: "this sentence drags", replaces: 7 } });
+  });
+});
+
+describe("a running plan's questions and accepts (§5, §14.3)", () => {
+  const DEADLINE = new Date(2026, 9, 23, 14, 5, 0).getTime();
+  const runningPlan = (): FlowRunViewV1["plans"][number] => ({
+    flowRunId: RUN, planNo: 2, state: "running", by: "olga", via: "web", spend: spent(null, "partial: 1 runs unknown"),
+    candidates: { list: [{ stepKey: "cover", reasons: ["upstream-changed:voice"] }, { stepKey: "outline", reasons: ["feedback"] }], feedback: {}, edits: [], trigger: "feedback" },
+    proposal: { retries: 0, lastInvalid: null, skips: [], unsure: [{ stepKey: "cover", question: "Does the new tone change the cover?" }], exhausted: null },
+    chosen: { steps: ["outline"], skips: [], added: [],
+      pending: [{ stepKey: "cover", question: "Does the new tone change the cover?", askedAt: DEADLINE - 300_000, deadline: DEADLINE, answer: null }],
+      accepted: [{ stepKey: "voice", seq: 1, by: "orca-auto", via: "orca", at: 1, source: "timeout" }, { stepKey: "brief", seq: 1, by: "olga", via: "web", at: 1, source: "person" }] },
+  });
+  const withPlan = () => {
+    const view = runView({ plans: [runningPlan()] });
+    view.steps[1] = step("outline", "work", [exec(1), exec(2, { planNo: 2 })]);
+    return view;
+  };
+
+  it("asks the pending question with its deadline and sends 'run it' or 'accept as unchanged' as flow-plan-step", async () => {
+    await mount(owner, withPlan());
+    const plan = screen.getByRole("region", { name: "Re-run plan 2" });
+    const item = within(plan).getByTestId("flow-pending-cover");
+    expect(item.textContent).toContain("Does the new tone change the cover?");
+    // mutation: show the asked time instead of the deadline -> 14:00, red
+    expect(item.textContent).toContain("keeps the current output at 14:05");
+    expect(within(item).getByTestId("flow-remaining")).toBeTruthy();
+    expect(within(plan).getByTestId("flow-plan-depends").textContent).toContain("steps after it depend on it in this template");
+    fireEvent.click(within(item).getByRole("button", { name: "Run it" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost()).toEqual({ url: "/api/control/flows/plan-step", body: expect.objectContaining({ expectedRevision: 0, payload: { runId: RUN, planNo: 2, stepKey: "cover", choice: "run" } }) });
+    fireEvent.click(within(item).getByRole("button", { name: "Accept as unchanged" }));
+    await waitFor(() => expect(posts.length).toBe(2));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, planNo: 2, stepKey: "cover", choice: "accept-unchanged" });
+    // A step the plan ran may be accepted as unchanged too; accepts made are labelled with who made them.
+    fireEvent.click(within(within(plan).getByTestId("flow-plan-ran-outline")).getByRole("button", { name: "Accept as unchanged" }));
+    await waitFor(() => expect(posts.length).toBe(3));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, planNo: 2, stepKey: "outline", choice: "accept-unchanged" });
+    expect(within(plan).getByTestId("flow-plan-accepted-voice").textContent).toBe("voice: accepted as unchanged (by the timeout)");
+    expect(within(plan).getByTestId("flow-plan-accepted-brief").textContent).toBe("brief: accepted as unchanged (by you)");
+  });
+
+  it("offers a member neither answer (flow-plan-step is the person's)", async () => {
+    await mount(member, withPlan());
+    const plan = screen.getByRole("region", { name: "Re-run plan 2" });
+    expect(within(plan).getByTestId("flow-pending-cover").textContent).toContain("keeps the current output at 14:05");
+    expect(within(plan).queryByRole("button", { name: "Run it" })).toBeNull();
+    expect(within(plan).queryByRole("button", { name: "Accept as unchanged" })).toBeNull();
+  });
+
+  it("a proposed plan under review shows the unsure question beside its ticked candidate", async () => {
+    const view = runView();
+    view.plans[0]!.proposal!.unsure = [{ stepKey: "pick-title", question: "Does the title still fit?" }];
+    await mount(owner, view);
+    const plan = screen.getByRole("region", { name: "Re-run plan 1" });
+    expect(within(plan).getByTestId("flow-plan-pick-title").textContent).toContain("The model is not sure it needs to run: Does the title still fit?");
+    expect((within(within(plan).getByTestId("flow-plan-pick-title")).getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
+  });
+});
+
+describe("skip, defer, fill and held effects (§6, §14.4)", () => {
+  it("defers at once when nothing after it would be held; asks in a dialog, preselected wait, when an external step would be", async () => {
+    const view = runView();
+    view.steps[2] = step("voice", "work", [exec(1)], { deferHolds: ["to-draft-box"] });
+    await mount(owner, view);
+    // outline holds nothing (deferHolds empty): no dialog.
+    fireEvent.click(within(stepBox("outline")).getByRole("button", { name: "Defer" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "command", target: { kind: "step", stepKey: "outline" }, body: { command: "defer" } });
+    fireEvent.click(within(stepBox("voice")).getByRole("button", { name: "Defer" }));
+    // mutation: never show the defer dialog (send at once) -> no dialog, a second post, red
+    const dialog = within(stepBox("voice")).getByRole("dialog", { name: "Defer voice" });
+    expect(posts.length).toBe(1);
+    expect((within(dialog).getByRole("radio", { name: "Wait" }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Defer" }));
+    await waitFor(() => expect(posts.length).toBe(2));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "command", target: { kind: "step", stepKey: "voice" }, body: { command: "defer", effects: { "to-draft-box": "wait" } } });
+    fireEvent.click(within(stepBox("voice")).getByRole("button", { name: "Defer" }));
+    fireEvent.click(within(within(stepBox("voice")).getByRole("dialog")).getByRole("radio", { name: "Go ahead without it" }));
+    fireEvent.click(within(within(stepBox("voice")).getByRole("dialog")).getByRole("button", { name: "Defer" }));
+    await waitFor(() => expect(posts.length).toBe(3));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "command", target: { kind: "step", stepKey: "voice" }, body: { command: "defer", effects: { "to-draft-box": "proceed" } } });
+  });
+
+  it("skips a step, badges a marked one and fills it; a clarify or ask step offers neither", async () => {
+    const view = runView();
+    view.steps[2] = step("voice", "work", [exec(1), exec(2, { state: "skipped", output: null })], { mark: { kind: "defer", messageSeq: 4, effects: {} } });
+    await mount(owner, view);
+    fireEvent.click(within(stepBox("outline")).getByRole("button", { name: "Skip" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "command", target: { kind: "step", stepKey: "outline" }, body: { command: "skip" } });
+    expect(within(stepBox("voice")).getByTestId("flow-mark").textContent).toBe("deferred: fill when ready");
+    expect(within(stepBox("voice")).queryByRole("button", { name: "Skip" })).toBeNull();
+    fireEvent.click(within(stepBox("voice")).getByRole("button", { name: "Fill" }));
+    await waitFor(() => expect(posts.length).toBe(2));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "command", target: { kind: "step", stepKey: "voice" }, body: { command: "fill" } });
+    for (const key of ["brief", "pick-title"]) for (const name of ["Skip", "Defer"]) expect(within(stepBox(key)).queryByRole("button", { name })).toBeNull();
+  });
+
+  it("a held effect card pushes now by re-sending the defer with proceed; a member's push is refused and shown, not taken for done", async () => {
+    const view = runView();
+    view.steps[4] = step("cover", "work", [exec(1, { state: "failed", failure: "no image key", output: null }), exec(2, { state: "skipped", output: null })],
+      { effect: { kind: "image-generate", class: "cost" }, parallelWith: "article", mark: { kind: "defer", messageSeq: 5, effects: { other: "wait" } } });
+    view.steps[5] = step("to-draft-box", "work", [exec(1, { state: "parked", output: null, needsYou: { reason: "deferred-upstream" } })], { effect: { kind: "wechat-draft", class: "external" }, heldBy: ["cover"] });
+    answerWith = () => ({ schema: "orca-command-success-v1", result: { kind: "flow-message-stored", flowRunId: RUN, seq: 9, state: "rejected", reason: "flow-effect-needs-person:to-draft-box", deduped: false } });
+    await mount(member, view);
+    const card = within(stepBox("to-draft-box")).getByRole("group", { name: "to-draft-box is held" });
+    expect(card.getAttribute("data-tone")).toBe("warn");
+    fireEvent.click(within(card).getByRole("button", { name: "Push now without cover" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    // The deferred step's own defer, its other choices kept, now saying proceed for this effect.
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "command", target: { kind: "step", stepKey: "cover" }, body: { command: "defer", effects: { other: "wait", "to-draft-box": "proceed" } } });
+    // mutation: ignore a 200 answer whose message was rejected -> no refusal shown, red
+    await waitFor(() => expect(screen.getByTestId("refusal-code").textContent).toBe("flow-effect-needs-person"));
+    expect(screen.getByTestId("refusal-message").textContent).toContain("only the person can allow");
+    fireEvent.click(within(card).getByRole("button", { name: "Wait" }));
+    expect(within(card).queryByRole("button", { name: "Push now without cover" })).toBeNull();
+    expect(posts.length).toBe(1);
+  });
+
+  it("offers 'set coverImage instead' on the failed cover and sends a params command; not on a step that did not fail", async () => {
+    const view = runView();
+    view.steps[4] = step("cover", "work", [exec(1, { state: "failed", failure: "no image key", output: null })],
+      { effect: { kind: "image-generate", class: "cost" }, whenParams: [{ id: "coverImage", type: "image" }] });
+    view.steps[2] = step("voice", "work", [exec(1)], { whenParams: [{ id: "language", type: "enum" }] });
+    await mount(owner, view);
+    expect(within(stepBox("voice")).queryByRole("button", { name: "Set language instead" })).toBeNull();
+    fireEvent.click(within(stepBox("cover")).getByRole("button", { name: "Set coverImage instead" }));
+    const form = within(stepBox("cover")).getByRole("form", { name: "Set coverImage instead" });
+    fireEvent.change(within(form).getByRole("textbox", { name: "coverImage: a file in the folder (relative path)" }), { target: { value: "covers/tea.png" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Set" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost()).toEqual({ url: "/api/control/flows/messages", body: expect.objectContaining({ payload: { runId: RUN, kind: "command", target: { kind: "run" }, body: { command: "params", set: { coverImage: "covers/tea.png" } } } }) });
+  });
+});
+
+describe("spend, the tool's numbers only (§10, §14.7)", () => {
+  it("renders a null spend as not available with its reason, never 0; money is never a number; the run's note says whose numbers they are", async () => {
+    const view = runView({ spend: spent(null, "partial: 2 runs unknown") });
+    view.steps[2] = step("voice", "work", [exec(1, { spend: spent(null, "the tool reported 0 tokens") })], { spend: spent(null, "the tool reported 0 tokens") });
+    view.steps[1] = step("outline", "work", [exec(1, { spend: spent(4200, "partial: 1 runs unknown") })], { spend: spent(4200, "partial: 1 runs unknown") });
+    await mount(owner, view);
+    // mutation: render null spend as 0 -> "0 tokens", red
+    expect(within(within(stepBox("voice")).getByTestId("flow-execution-1")).getByTestId("flow-spend").textContent)
+      .toBe("Spend: not available (the tool reported 0 tokens) · money: not available — the tool reports none");
+    expect(within(stepBox("voice")).getAllByTestId("flow-spend").map((e) => e.textContent)).not.toContain(expect.stringContaining("0 tokens"));
+    // A partial sum keeps the known part and says how much is unknown.
+    expect(within(within(stepBox("outline")).getByTestId("flow-execution-1")).getByTestId("flow-spend").textContent).toBe("Spend: 4,200 tokens (partial: 1 runs unknown) · money: not available — the tool reports none");
+    expect(screen.getByTestId("flow-run-spend").textContent).toBe("Spend: not available (partial: 2 runs unknown) · money: not available — the tool reports none · tool-reported, not an estimate");
+  });
+});
+
+describe("revise a round of a flow clarify step (§9, §14.6)", () => {
+  const result = { slug: "tea", statement: "An article on tea.", acceptanceCriteria: [], frontierEmpty: true, openBranches: [], glossary: [], adrs: [],
+    questions: [{ id: "R1.Q1", key: "reader", question: "Who reads it?", recommendedAnswer: "engineers", why: "the account's readers", dependsOn: [] }] };
+  const answered = (roundNo: number, over: Partial<RoundBodyV1> = {}): RoundBodyV1 => ({ roundNo, state: "answered", retries: 0, lastInvalidReason: null, waiting: null, result,
+    answers: [{ id: "R1.Q1", kind: "recommended", text: "engineers" }], glossaryDecisions: [], adrDecisions: [], answeredAt: "t", closedByConsensus: false, reasonCode: null, calls: [], ...over });
+
+  it("revises an answered round with the Requirements revise form and sends it as an edit at that round", async () => {
+    const view = runView();
+    view.steps[0] = step("brief", "clarify", [exec(1, { output: { kind: "artifact", ref: "a".repeat(64), hash: "b".repeat(64) } })], { clarify: { rounds: [answered(1)], chain: [1] } });
+    await mount(owner, view);
+    const rounds = within(stepBox("brief")).getByTestId("flow-rounds");
+    fireEvent.click(within(rounds).getByRole("button", { name: "Revise this round" }));
+    const form = within(rounds).getByRole("form", { name: "Revise round 1" });
+    fireEvent.click(within(form).getByRole("radio", { name: "Own answer" }));
+    fireEvent.change(within(form).getByRole("textbox", { name: "R1.Q1: your own answer" }), { target: { value: "designers" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Send revision" }));
+    // The cost is stated before anything is sent (the Requirements dialog).
+    expect(posts).toEqual([]);
+    fireEvent.click(within(within(form).getByRole("dialog")).getByRole("button", { name: "Revise and spend one call" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost()).toEqual({ url: "/api/control/flows/messages", body: expect.objectContaining({ payload: { runId: RUN, kind: "edit", target: { kind: "round", stepKey: "brief", roundNo: 1 },
+      body: { answers: [{ id: "R1.Q1", kind: "text", text: "designers" }], glossaryDecisions: [], adrDecisions: [] } } }) });
+  });
+
+  it("while a revision is at work, its rounds are shown as the revision and its waiting round is the one answered", async () => {
+    const view = runView();
+    const waiting: RoundBodyV1 = { ...answered(3), state: "awaiting-answers", answers: null, answeredAt: null };
+    view.steps[0] = step("brief", "clarify", [exec(1), exec(2, { state: "needs-person", output: null, ask: { kind: "clarify-round", roundNo: 3 } })], {
+      head: 1, clarify: { rounds: [answered(1)], chain: [1] }, clarifyRevision: { seq: 2, state: "needs-person", rounds: [answered(1), answered(2, { revises: 1 }), waiting], chain: [2, 3] } });
+    await mount(owner, view);
+    const brief = stepBox("brief");
+    expect(within(brief).getByTestId("flow-rounds").textContent).toContain("A revision is in progress (execution #2)");
+    expect(within(brief).getByTestId("flow-rounds").textContent).toContain("The active output stays execution #1 until the revision reaches agreement.");
+    // mutation: look the waiting round up in the active execution's rounds -> no round 3 there, no form, red
+    fireEvent.click(within(within(brief).getByRole("form", { name: "brief: round 3" })).getByRole("button", { name: "Send this round" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost().body.payload).toMatchObject({ runId: RUN, stepKey: "brief", clarify: { roundNo: 3 } });
   });
 });

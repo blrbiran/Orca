@@ -352,11 +352,16 @@ function AnsweredRound(props: { round: Round }): JSX.Element {
  * its 1-based position, and the superseded rounds folded under the earliest later revision on the chain.
  */
 function chainOf(view: View): Array<{ round: Round; position: number; superseded: Round[] }> {
-  const order = view.clarify?.chain ?? view.rounds.map((r) => r.roundNo);
-  const byNo = new Map(view.rounds.map((r) => [r.roundNo, r]));
+  return chainEntries(view.rounds, view.clarify?.chain);
+}
+
+/** The same over any host's rounds (gaps spec §9: a flow clarify step's rounds take this UI, not a fork of it). */
+export function chainEntries(rounds: Round[], chain: number[] | undefined): Array<{ round: Round; position: number; superseded: Round[] }> {
+  const order = chain ?? rounds.map((r) => r.roundNo);
+  const byNo = new Map(rounds.map((r) => [r.roundNo, r]));
   const entries = order.flatMap((roundNo, i) => { const r = byNo.get(roundNo); return r === undefined ? [] : [{ round: r, position: i + 1, superseded: [] as Round[] }]; });
   const onChain = new Set(order);
-  for (const r of view.rounds) {
+  for (const r of rounds) {
     if (onChain.has(r.roundNo)) continue;
     const holder = entries.find((e) => e.round.revises !== undefined && e.round.roundNo > r.roundNo) ?? entries.at(-1);
     holder?.superseded.push(r);
@@ -369,7 +374,13 @@ function chainOf(view: View): Array<{ round: Round; position: number; superseded
  * never overwriting this one; later rounds on the chain become superseded and their answers are carried into the next
  * round as recommendations unless the person keeps them out. The dialog states the cost before anything is sent.
  */
-function ReviseRound(props: { view: View; round: Round; position: number; later: Array<{ roundNo: number; position: number }>; onCommand: OnCommand }): JSX.Element {
+/** What a revision sends (`requirement-revise`'s payload; a flow clarify step's round edit carries the same body). */
+export type RoundRevision = {
+  roundNo: number; answers: Array<{ id: string; kind: "recommended" } | { id: string; kind: "text"; text: string }>;
+  glossaryDecisions: Array<{ id: string; accept: boolean }>; adrDecisions: Array<{ id: string; accept: boolean }>; reason?: string; exclude?: number[];
+};
+
+export function ReviseRound(props: { round: Round; position: number; later: Array<{ roundNo: number; position: number }>; onRevise: (revision: RoundRevision) => void }): JSX.Element {
   const { t } = useTranslation();
   const result = props.round.result!;
   const answered = new Map((props.round.answers ?? []).map((a) => [a.id, a]));
@@ -387,13 +398,13 @@ function ReviseRound(props: { view: View; round: Round; position: number; later:
   const accepts = (id: string): boolean => decisions[id] ?? decided.get(id) ?? true;
   const send = (): void => {
     setAsking(false); setOpen(false);
-    props.onCommand({ verb: "requirement-revise", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: {
+    props.onRevise({
       roundNo: props.round.roundNo,
-      answers: result.questions.map((q) => { const c = choice[q.id] ?? { kind: "recommended" as const }; return c.kind === "text" ? { id: q.id, kind: "text", text: c.text } : { id: q.id, kind: "recommended" }; }),
+      answers: result.questions.map((q) => { const c = choice[q.id] ?? { kind: "recommended" as const }; return c.kind === "text" ? { id: q.id, kind: "text" as const, text: c.text } : { id: q.id, kind: "recommended" as const }; }),
       glossaryDecisions: result.glossary.map((entry) => ({ id: entry.id, accept: accepts(entry.id) })),
       adrDecisions: result.adrs.map((adr) => ({ id: adr.id, accept: accepts(adr.id) })),
       ...(reason.trim() === "" ? {} : { reason: reason.trim() }), ...(exclude.length === 0 ? {} : { exclude }),
-    } });
+    });
   };
   if (!open) return <button type="button" onClick={() => { setChoice(initial()); setOpen(true); }}>{t("requirements.revise")}</button>;
   const label = t("requirements.reviseTitle", { n: props.position });
@@ -545,7 +556,8 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
               {r.reason !== undefined && <p>{t("requirements.revisedBecause", { reason: r.reason })}</p>}
               {pending && <RoundForm view={view} round={r} onCommand={props.onCommand} {...editable} />}
               {answered ? <AnsweredRound round={r} /> : !pending && r.answers?.map((a) => <p key={a.id}>{a.id}: {a.text}</p>)}
-              {revisable && <ReviseRound view={view} round={r} position={position} later={later} onCommand={props.onCommand} />}
+              {revisable && <ReviseRound round={r} position={position} later={later}
+                onRevise={(payload) => props.onCommand({ verb: "requirement-revise", groupId: view.summary.groupId, expectedRevision: revisionOf(view), payload })} />}
               {superseded.map((s) => (
                 <details key={s.roundNo} className="requirement-round">
                   <summary>{t("requirements.superseded", { n: s.roundNo })} · {enumText("roundState", s.state)}</summary>

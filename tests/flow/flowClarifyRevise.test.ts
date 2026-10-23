@@ -8,6 +8,7 @@ import { appendQueued, loadRun } from "../../src/flow/kernel.js";
 import { acceptMessage, consumeAtBoundary } from "../../src/flow/messages.js";
 import { EDIT_NO_LONGER_APPLIES, STEP_WAITING } from "../../src/flow/rewind.js";
 import { appendMessage, getFlowRun, getHead, listMessages, listPlans } from "../../src/flow/store.js";
+import { readFlowRun } from "../../src/flow/views.js";
 import { ROUND_ONE, ROUND_TWO } from "../control/fixtures/requirementOutputs.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
 
@@ -187,6 +188,39 @@ describe("revise a round of a flow clarify step (G7)", () => {
       expect(await reason(3, { answers: "all" })).toMatch(/^flow-message-invalid:/);
       expect(rounds(w, groupId, 1)).toHaveLength(4);
       expect(briefCalls(w)).toHaveLength(3);
+    } finally { await w.dispose(); }
+  });
+});
+
+/**
+ * Gaps plan Task 10-A (the run page's read): while a revision of a done clarify step is at work, the run view's `clarify`
+ * is the active (head) execution's rounds -- the document the later steps use -- and the revision is `clarifyRevision`,
+ * shown as waiting. Reading the newest execution's rounds as the step's would show a revision in progress as the step's
+ * output, and after a rewind the rounds of the execution the rewind stepped back from.
+ */
+describe("the run view shows the active execution's rounds and a revision in progress apart (Task 10-A)", () => {
+  type ClarifyView = { rounds: Array<{ roundNo: number }>; chain: number[] };
+  type BriefView = { clarify: ClarifyView | null; clarifyRevision: (ClarifyView & { seq: number; state: string }) | null };
+  const briefView = (w: World, flowRunId: string) =>
+    (readFlowRun(w.store, flowRunId) as { steps: Array<BriefView & { stepKey: string }> }).steps.find((s) => s.stepKey === "brief")!;
+
+  it("a revision of a done brief is the waiting revision; the step's rounds stay execution 1's until consensus", async () => {
+    const { w, flowRunId, groupId } = await doneRun(); try {
+      expect(briefView(w, flowRunId)).toMatchObject({ clarify: { chain: [1, 2] }, clarifyRevision: null });
+      await revise(w, flowRunId, 1, revision(w, groupId, 1, 1, "GitHub-flavoured"));
+      await w.answer(lastIndex(w), roundWith(false));
+      const waiting = briefView(w, flowRunId);
+      // mutation: read the newest execution's rounds as the step's -> clarify is execution 2's (4 rounds), red
+      expect(waiting.clarify!.rounds.map((r) => r.roundNo)).toEqual([1, 2]);
+      expect(waiting.clarify!.chain).toEqual([1, 2]);
+      // mutation: drop clarifyRevision -> null, red
+      expect(waiting.clarifyRevision).toMatchObject({ seq: 2, state: "needs-person", chain: [3, 4] });
+      expect(waiting.clarifyRevision!.rounds.map((r) => r.roundNo)).toEqual([1, 2, 3, 4]);
+      await answerRound(w, flowRunId, groupId, 2, 4);
+      await flowClarifyConsensus(w.deps, { flowRunId, stepKey: "brief" }, "ann", "cli:test");
+      await w.advance();
+      // The head moved: the revision is the step's rounds now, and nothing waits.
+      expect(briefView(w, flowRunId)).toMatchObject({ clarify: { chain: [3, 4] }, clarifyRevision: null });
     } finally { await w.dispose(); }
   });
 });

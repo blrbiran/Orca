@@ -10,7 +10,8 @@ import type { RoundBody } from "../control/requirementSchemas.js";
 import type { ControlStore } from "../control/store.js";
 import type { ToolRulesReport } from "../control/toolRules.js";
 import { FlowRefusal, latestByStep, loadRun, openAsks, recordOfExecution } from "./kernel.js";
-import { heldBy, marksOf } from "./marks.js";
+import { heldBy, holdableAfter, marksOf } from "./marks.js";
+import { whenParams } from "./template/checklist.js";
 import { waitingIntakes } from "./feedback/intake.js";
 import { executionSpend, intakeSpend, planSpend, sumSpend, type Spend } from "./spend.js";
 import { FEEDBACK_KEY, getFlowRun, listEffects, listExecutions, listHeads, listIntakes, listMessages, listPlans, type ExecutionRow } from "./store.js";
@@ -107,6 +108,7 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
     template: { id: run.template.id, version: run.template.version ?? null, title: run.template.title ?? null },
     steps: run.template.steps.map((step) => {
       const newest = latest.get(step.id);
+      const roundsOf = (execSeq: number) => clarifyOf(readRoundsAt(store, { groupId: run.row.groupId, stepKey: step.id, execSeq }));
       const mine = executions.filter((e) => e.stepKey === step.id);
       const effect = "effect" in step && typeof step.effect === "string" ? { kind: step.effect, class: run.template.effects?.[step.effect]?.class ?? null } : null;
       return {
@@ -116,8 +118,17 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
         latest: newest === undefined ? null : viewOf(newest),
         executions: mine.map(viewOf),
         spend: sumSpend(mine.map((e) => viewOf(e).spend)),
-        // §10.3: a clarify step's rounds of its newest execution, and the active chain over them.
-        clarify: step.kind !== "clarify" || newest === undefined ? null : clarifyOf(readRoundsAt(store, { groupId: run.row.groupId, stepKey: step.id, execSeq: newest.seq })),
+        // §10.3, gaps spec §9: a clarify step's rounds of its active (head) execution -- the newest when none is active yet
+        // -- and the active chain over them. A newer execution still at work on a revision (§9: after a done step was
+        // revised, or a rewind) is `clarifyRevision`, its rounds and chain, so the page shows the active rounds as the
+        // output and the revision as waiting, never the one in place of the other.
+        clarify: step.kind !== "clarify" || newest === undefined ? null : roundsOf(heads[step.id] ?? newest.seq),
+        clarifyRevision: step.kind !== "clarify" || newest === undefined || heads[step.id] === undefined || heads[step.id] === newest.seq
+          || !REVISING.has(newest.state) ? null : { seq: newest.seq, state: newest.state, ...roundsOf(newest.seq) },
+        // Gaps spec §6.3: the external/irreversible effect steps a defer of this step would hold (the defer dialog's rows).
+        deferHolds: holdableAfter(run.template, step.id),
+        // Gaps spec §8.4: the params this step's `when` reads, with their types ("set <param> instead").
+        whenParams: step.when === undefined ? [] : [...new Set(whenParams(step.when))].map((id) => ({ id, type: run.template.params?.[id]?.type ?? null })),
       };
     }),
     openAsks: openAsks(store, flowRunId),
@@ -129,6 +140,9 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
     decisions,
   };
 }
+
+/** An execution of a clarify step still working on its rounds (a revision in progress). */
+const REVISING: ReadonlySet<string> = new Set(["queued", "running", "needs-person", "parked"]);
 
 function clarifyOf(rounds: RoundBody[]): { rounds: RoundBody[]; chain: number[] } {
   return { rounds, chain: activeChain(rounds.map((r) => ({ roundNo: r.roundNo, ...(r.revises === undefined ? {} : { revises: r.revises }) }))).chain };
