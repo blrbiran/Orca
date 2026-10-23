@@ -1034,6 +1034,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       used: run.cumulative[bucket], remaining: run.remaining[bucket], failureCode: run.failureCode,
       // Tester round 2 spec §4.2.2: the dimensions over the grant (an unlimited grant is never over).
       overGrant: (["tokens", "activeMs", "attempts", "sessions"] as const).filter(d => run.grant[bucket][d] !== null && run.cumulative[bucket][d] > run.grant[bucket][d]!),
+      grant: run.grant[bucket],
       diagnosis: readRunDiagnosis(store, run),
       blockedReason: run.drive?.blockedReason ?? null,
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.

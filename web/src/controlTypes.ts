@@ -335,6 +335,10 @@ export type RunViewV1 = {
   profile: ProfileBindingV1;
   used: Amount;
   remaining: BudgetAmount;
+  /** Tester round 2 §4.2.2: the dimensions in which the run went over its grant; absent from older servers. */
+  overGrant?: AmountDimensionV1[];
+  /** Tester round 2, web part: the run's grant in its bucket (`remaining` is clamped at 0); absent from older servers. */
+  grant?: BudgetAmount;
   tokenRemainingStatus?:"known"|"unlimited"|"unknown";
   failureCode: string | null;
   diagnosis?: { phase: "estimate" | "work" | "handoff" | "single-call"; step: "planning" | "executing" | "verifying" | null; cause: "execution-format-invalid" | "execution-format-ambiguous-or-hidden" | "usage-unsettled" | "unknown"; attempt: number };
@@ -440,6 +444,8 @@ export type GroupViewV1 = {
   integration?: GroupIntegrationViewV1;
   /** Issue-fixes spec §5.2: the group's newest 50 activity rows, newest first. Optional so literal fixtures need no edit. */
   activity?: ActivityEntryV1[];
+  /** Tester round 2 §7.3: whether Orca confirms this group on its own; absent reads as not eligible (an older server). */
+  autoConfirm?: { eligible: boolean; refusedCode: string | null };
 };
 
 export type SpendPeriodV1 = "total" | "week" | "month";

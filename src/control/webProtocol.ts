@@ -1610,6 +1610,9 @@ export const runViewSchema = z
     // Tester round 2 spec §4.2.2: the dimensions in which the run's cumulative exceeds its grant (its bucket), in
     // `dimensions` order. Optional on the wire so older fixtures parse; the server always gives it.
     overGrant: z.array(amountDimensionSchema).optional(),
+    // Tester round 2 web part: the run's grant in its bucket, so a banner can name what an over-grant run went past
+    // (`remaining` is clamped at 0). Optional on the wire like `overGrant`; the server always gives it.
+    grant: budgetAmountSchema.optional(),
     tokenRemainingStatus:z.enum(["known","unlimited","unknown"]).optional(),
     remaining: budgetAmountSchema,
     failureCode: nonemptyString.nullable(),
