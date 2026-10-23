@@ -465,6 +465,9 @@ export const en = {
       refusedPersistent: "Needs you: the automatic start was refused {{count}} times in a row ({{code}}). Other groups keep running.",
     },
     group: {
+      estimateOverGrant: "Estimate run {{runId}} used {{used}} {{dimension}}, over its grant of {{grant}}. It was not stopped and the group was not blocked; the estimate is advice only.",
+      estimateDeficit: "An estimate run went over this group's token limit by {{deficit}}. Raise the limit (proposed group limit) to continue; other changes are refused until then.",
+      blockedBanner: "This group is blocked: run {{runId}} went over its {{dimension}} grant ({{used}} of {{grant}}). No new step starts in it, and preparation changes are refused.",
       region: "Control group {{groupId}}",
       heading: "{{groupId}} · {{state}} · revision {{revision}} · projection {{projection}}",
       claimBlocked: "claim blocked · new runs are not being started",

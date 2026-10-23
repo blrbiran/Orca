@@ -26,7 +26,7 @@ import { UsageSettlement } from "./UsageSettlement.js";
 import { SkillsGiven } from "./SkillsGiven.js";
 import { NeedsHumanBadge, runNeedsHuman, type GroupDecisionsRead } from "./RunDecisions.js";
 import type {
-  AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ContinuationSelectionV1, GroupOrchestrationV1, GroupViewV1, ModelListState, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
+  AgentSelectionPreviewV1, AgentsViewV1, AmountDimensionV1, ControlConfigV1, ContinuationSelectionV1, GroupOrchestrationV1, GroupViewV1, ModelListState, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
   RunViewV1,
 } from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
@@ -248,6 +248,31 @@ function OrchestrationLine(props: { orchestration: GroupOrchestrationV1 | undefi
   return <p role="status" data-testid="orchestration-line">{text}</p>;
 }
 
+/** Tester round 2 §4.2.3: a run figure as the banners write it -- tokens short (K/M/B), any other dimension as is. */
+const figure = (dimension: AmountDimensionV1, n: number | null | undefined): string => n == null ? "—" : dimension === "tokens" ? shortTokens(n) : String(n);
+
+/**
+ * Tester round 2 §4.2.3 (H1) and §4.2.5: an estimate over its grant is a warning, one line per over dimension; a blocked
+ * group names the first non-estimate run that went over; a token deficit an estimate left names the limit raise.
+ */
+function GrantBanners({ view }: { view: GroupViewV1 }): JSX.Element {
+  const { t } = useTranslation();
+  const over = (run: RunViewV1): AmountDimensionV1[] => run.overGrant ?? [];
+  const estimates = view.runs.filter((run) => run.phase === "estimate" && over(run).length > 0);
+  const blocker = view.summary.state === "blocked" ? view.runs.find((run) => run.phase !== "estimate" && over(run).length > 0) : undefined;
+  const line = (run: RunViewV1, dimension: AmountDimensionV1) => ({ runId: run.runId, dimension: enumText("dimension", dimension), used: figure(dimension, run.used[dimension]), grant: figure(dimension, run.grant?.[dimension]) });
+  const deficit = view.ledger.budgetDeficit.tokens;
+  return <>
+    {estimates.flatMap((run) => over(run).map((dimension) => (
+      <p key={`${run.runId}:${dimension}`} role="status" data-testid="estimate-over-grant">{t("control.group.estimateOverGrant", line(run, dimension))}</p>
+    )))}
+    {estimates.length > 0 && deficit > 0 && view.ledger.groupLimit.tokens !== null && (
+      <p role="alert" data-testid="estimate-deficit">{t("control.group.estimateDeficit", { deficit: shortTokens(deficit) })}</p>
+    )}
+    {blocker !== undefined && <p role="alert" data-testid="blocked-banner">{t("control.group.blockedBanner", line(blocker, over(blocker)[0]!))}</p>}
+  </>;
+}
+
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const { view, config, uncertain, drafts, onDraft, onCommand } = props;
   const { t } = useTranslation();
@@ -259,6 +284,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const handoffActive = stopMode === "handoff" || stopMode === "shutdown";
   // Issue-fixes spec §6.3: the server refuses every command of an archived group but the unarchive (group-archived).
   const archived = view.summary.archived === true;
+  // Tester round 2 §4.2.3: the server refuses every prestart command of a blocked group, so its editors are read-only.
+  const preparationReadOnly = archived || view.summary.state === "blocked";
   const continuable = continuableRuns(view);
   const retryableCount = view.runs.filter((run) => retryRunOpen(view, run)).length;
   const unresolvedWork = new Set(view.workItems.filter((item) => item.status === "start-unknown").map((item) => `task:${item.taskId}`));
@@ -442,6 +469,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <OrchestrationLine orchestration={view.summary.orchestration} />
       {/* Spec 2026-10-08 §2.2(d), §6.5: the group's refusal is among the alerts at the top, above every action. */}
       {props.refusal ? <RefusalNotice refusal={props.refusal} testId="group-refusal" /> : null}
+      <GrantBanners view={view} />
       {/* Issue-fixes spec §3.2 (4): one banner for any stop intent -- how it stopped, its state, and the one way out. */}
       {view.stop !== null && (
         <div role="status" data-testid="stop-banner">
@@ -545,7 +573,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         <p>{t("control.preparation.tokenPolicy")}</p>
         <p>{t("control.preparation.sequence")}</p>
       </section>
-      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} archived={archived} selectionsHash={selectionsHashFor(view, props.preview)}
+      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} archived={preparationReadOnly} selectionsHash={selectionsHashFor(view, props.preview)}
         suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} />
       {props.agents !== undefined && (
         <AgentSelectionEditor
@@ -554,7 +582,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           agentsFailure={props.agentsFailure}
           retryNotice={props.retryNotice}
           models={props.models} onRefreshModels={props.onRefreshModels}
-          archived={archived}
+          archived={preparationReadOnly}
           drafts={drafts} onDraft={onDraft} onCommand={onCommand}
         />
       )}

@@ -333,6 +333,9 @@ export const zh: Translation<typeof en> = {
       refusedPersistent: "需要你处理：自动开跑连续被拒 {{count}} 次（{{code}}）。其它组照常运行。",
     },
     group: {
+      estimateOverGrant: "估算运行 {{runId}} 用了 {{used}} {{dimension}}，超过了它的额度 {{grant}}。运行没有被停止，任务组也没有被阻塞；估算只作参考。",
+      estimateDeficit: "估算运行使本组超出 token 上限 {{deficit}}。请先提高上限（提议的组上限）才能继续；在此之前其它修改都会被拒绝。",
+      blockedBanner: "任务组已阻塞：运行 {{runId}} 超出了 {{dimension}} 额度（{{used}} / {{grant}}）。组里不会再开始新的步骤，准备阶段的修改也会被拒绝。",
       region: "控制组 {{groupId}}",
       heading: "{{groupId}} · {{state}} · 版本 {{revision}} · 状态序号 {{projection}}",
       claimBlocked: "认领已阻断 · 不再启动新的运行",
