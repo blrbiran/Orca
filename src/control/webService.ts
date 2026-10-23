@@ -18,6 +18,7 @@ import { buildBudgetEstimateRequest, ESTIMATE_GRANT, estimateGrantFor, withEstim
 import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
+import type { DirProjectOf } from "./dirGroup.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand, type ImportDefaults } from "./planImport.js";
 import { readAgentPreferences } from "./agentPreferences.js";
 import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
@@ -137,6 +138,12 @@ export interface WebServiceDeps extends AsyncImportDeps {
   flowDeps?: () => FlowDeps | null;
   /** Review finding I4: the registered `dir` projects a flow may start on (their settings key and folder); absent: none. */
   flowProjects?: () => ReadonlyArray<{ repoId: string; path: string }>;
+  /**
+   * Dir-requirements spec §5.1-§5.2: the registered `dir` project a repo id names (the panel builds it from the same
+   * projects-file entries as flowProjects); absent, every project is a repository. Read by requirement-open (the frozen
+   * dir workspace), import-plan and the debug opens (refused), and the route's dispatched-run payload check.
+   */
+  dirProjectOf?: DirProjectOf;
   /** Debug task plan Task 11: what correction-record/-withdraw need from the panel (correctionCommands.ts). Absent, both refuse corrections-store-unconfigured. */
   panelCorrections?: PanelCorrections;
   /**

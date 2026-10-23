@@ -2,6 +2,7 @@ import type { Role } from "./accounts/jwt.js";
 import type { CommandVerbV1 } from "../control/webProtocol.js";
 import { DISPATCHED_RUN_REFUSED, humanOnlyRefusal, socketTier } from "./humanOnly.js";
 import type { Attribution } from "../control/commandClient.js";
+import type { DirProjectOf } from "../control/dirGroup.js";
 
 /** Accounts spec §3.5: who sent a request. A logged-in user on the TCP app, or the control socket's agent. */
 export type Principal = { kind: "user"; userId: string; name: string; roles: readonly Role[] }
@@ -55,11 +56,16 @@ export const hasPersonAuthority = (p: Principal): boolean =>
  * The refusal a control command gets from this principal, or null. A member: today's human-only codes (I3). The socket
  * agent (CLI v2 spec §15.1): an `open` entry passes; a `token` entry wants a verified person token,
  * `control-person-token-required` without one; a run Orca dispatched is refused every entry (§15.4), token or not.
+ * Dir-requirements spec §5.1, §12: a run Orca dispatched may not open a requirement on a `dir` project (it would make the
+ * folder a write target); `dirProjectOf` is the panel's (controlAssembly.ts). On a repository project it may, as before.
  */
-export function permissionRefusal(p: Principal, verb: CommandVerbV1, payload: unknown):
+export function permissionRefusal(p: Principal, verb: CommandVerbV1, payload: unknown, dirProjectOf?: DirProjectOf):
   { code: "control-verb-human-only" | "control-field-human-only" | "control-dispatched-run-refused" | "control-person-token-required"; message: string } | null {
   if (p.kind === "agent" && p.dispatchedRun !== undefined && DISPATCHED_RUN_REFUSED.has(verb))
     return { code: "control-dispatched-run-refused", message: `${verb} is not done by a run Orca dispatched (${p.dispatchedRun}); a person or an attended session does it.` };
+  const repoId = (payload as { repoId?: unknown } | null | undefined)?.repoId;
+  if (p.kind === "agent" && p.dispatchedRun !== undefined && verb === "requirement-open" && typeof repoId === "string" && (dirProjectOf?.(repoId) ?? null) !== null)
+    return { code: "control-dispatched-run-refused", message: `${verb} on a folder project (${repoId}) is not done by a run Orca dispatched (${p.dispatchedRun}); a person or an attended session does it.` };
   const humanOnly = humanOnlyRefusal(verb, payload);
   // Gaps spec §6.3, §13: an `any` verb whose SOCKET_TIER predicate calls this payload `token` (a `defer` releasing a held
   // effect): the socket agent needs a person token (any person's: the verb is not human-only), and a run Orca dispatched

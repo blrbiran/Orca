@@ -8,6 +8,8 @@ import { requirementHost } from "./clarifyHost.js";
 import { buildClarifyPrompt, CLARIFY_JSON_SCHEMA, classifyClarifyOutput } from "./requirementClarify.js";
 import { renderRequirementDocument } from "./requirementDocument.js";
 import { buildRepositoryOverview } from "./requirementOverview.js";
+import { dirWorkspaceOf, groupRepoId } from "./dirGroup.js";
+import { DirFolderMissing, importFolder, openDirWorkspace } from "./dirWorkspace.js";
 import {
   clarifyingLedger, clarifyLimits, latestDraft, latestRound, newDraft, queueRequirementCall, readDraft, readDrafts, readRequirementGroup, readRound, readRounds,
   saveRequirementGroup, writeDraft, writeRound, type RequirementGroup,
@@ -138,10 +140,20 @@ export async function claimRequirementCall(deps: { store: ControlStore; admissio
  * Task 5: overview builds are safe only one at a time (the builder sweeps every tmp-* directory). This runs only from
  * the driver's A2 (executionDriver.ts stepA2SingleCall), and the driver's pass visits its runs one after another and a
  * re-entrant round joins the pass in flight (createExecutionDriver), so no two builds overlap.
+ * Dir-requirements spec §6.1-§6.2: the target is the group's (groupRepoId); a dir group's is its folder's vault, and its
+ * overview is of an import of the folder (the newest one while the folder is unchanged, so the cache hits) -- HEAD is
+ * never read, and the folder's own `.decisions/` is left out (importFolder).
  */
 async function buildOverviewFor(deps: SingleCallPrepareDeps, run: SingleCallRunRow, group: RequirementGroup) {
-  const repo = deps.resolveRepository(group.requirement.repoId);
-  return buildRepositoryOverview({ repo, repoId: group.requirement.repoId, stateDir: deps.store.stateDir, runId: run.runId, astGrepBin: deps.astGrepBin ?? null });
+  const repoId = groupRepoId(deps.store, run.groupId);
+  const repo = deps.resolveRepository(repoId);
+  const frozen = dirWorkspaceOf(group);
+  let commit: string | undefined;
+  if (frozen !== null) {
+    if (deps.env === undefined) throw new Error("orca: a dir group's call needs the driver's env ($ORCA_VAULT_DIR)");
+    ({ commit } = await importFolder(await openDirWorkspace(deps.env, frozen), { reuseUnchanged: true, baseRef: null }));
+  }
+  return buildRepositoryOverview({ repo, repoId, stateDir: deps.store.stateDir, runId: run.runId, astGrepBin: deps.astGrepBin ?? null, ...(commit === undefined ? {} : { commit }) });
 }
 
 /** The overview stored with the group and named on the run, before the prompt is built. A store fault here is not the repository's. */
@@ -247,7 +259,9 @@ async function prepareRequirementCall(
   if (group.status !== "clarifying" || !stillDrafting(target)) return { blocked: "requirement-call-target-moved" };
   // A resolveRepository refusal or a failed build is repository-shaped and named on the run; recovery-retry re-runs A2.
   let built: Awaited<ReturnType<typeof buildOverviewFor>>;
-  try { built = await buildOverviewFor(deps, run, group); } catch { return { blocked: "repository-path" }; }
+  // Dir-requirements spec §6.2: a dir group's folder that is gone or moved is named as such (`dir-folder-missing:<detail>`).
+  try { built = await buildOverviewFor(deps, run, group); }
+  catch (error) { return { blocked: error instanceof DirFolderMissing ? `dir-folder-missing:${error.message}` : "repository-path" }; }
   // Outside the catch: a draining panel or a store fault ends the round as any other step's does.
   storeOverview(deps, run, built);
   return { prompt: promptOf(group, target, built), responseSchema: responseSchema as Record<string, unknown>, maxOutputTokens: group.requirement.maxOutputTokens };
@@ -292,12 +306,13 @@ async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCallRunRow,
   }
   const overview = (run as { overview?: { commit: string } | null }).overview ?? null;
   if (overview === null) throw new ControlError("recovery-blocked", "requirement-overview-missing");
-  const group = readRequirementGroup(deps.store, run.groupId);
+  readRequirementGroup(deps.store, run.groupId);
   const rounds = chainRounds(readRounds(deps.store, run.groupId));
   const latest = rounds.filter((round) => round.result !== null).at(-1)?.result ?? null;
   if (latest === null) throw new ControlError("recovery-blocked", "requirement-understanding-missing");
   const adrIds = rounds.flatMap((round) => (round.adrDecisions ?? []).filter((decision) => decision.accept).map((decision) => decision.id));
-  const repo = deps.resolveRepository(group.requirement.repoId);
+  // Dir-requirements spec §6.3: the group's target -- a dir group's vault, so targetRepo and the path check are the vault's.
+  const repo = deps.resolveRepository(groupRepoId(deps.store, run.groupId));
   const plan = expandSplitDraft(parsed.data, { targetRepo: repo, ccloopBin: deps.ccloopBin, runsDir: deps.roots.runsRoot, groupId: run.groupId, statement: latest.statement, acceptanceCriteria: latest.acceptanceCriteria });
   const validated = await validateSplitDraft({ output: parsed.data, plan, repo, commit: overview.commit, criterionIds: latest.acceptanceCriteria.map((criterion) => criterion.id), adrIds });
   // DR12: the hash is of the expanded plan, the bytes the person reviews.

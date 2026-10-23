@@ -22,6 +22,11 @@ export interface SingleCallPrepareDeps {
   store: ControlStore; roots: WorkspaceRoots; resolveRepository(repoId: string): string; ccloopBin: string; astGrepBin?: string | null;
   /** N1 spec §6: A2 of a requirement call stores its overview in its own admitted transaction. */
   admissionGate?: AdmissionGate;
+  /**
+   * Dir-requirements spec §6.1 (Rule 17): the environment a dir group's vault is found by ($ORCA_VAULT_DIR), the panel's
+   * own -- never os.homedir() at a call site. A dir group's call without it is blocked (repository-path).
+   */
+  env?: NodeJS.ProcessEnv;
 }
 export interface SingleCallHandler {
   readonly purpose: SingleCallPurpose;

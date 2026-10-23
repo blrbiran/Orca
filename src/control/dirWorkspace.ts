@@ -32,6 +32,20 @@ export class DirFolderMissing extends Error {
   }
 }
 
+/**
+ * §5.1: the frozen workspace for a dir project's folder, at requirement-open. The same `realpath` `openVault` uses, NFC,
+ * and that path's vault key, so any spelling of the folder names the vault a flow run on it names. A read only: no
+ * vault is created here.
+ */
+export async function freezeDirWorkspace(path: string): Promise<FrozenDirWorkspace> {
+  let real: string;
+  try { real = await realpath(path); }
+  catch (error) { throw new DirFolderMissing(path, (error as NodeJS.ErrnoException).code ?? String(error)); }
+  if (!(await stat(real)).isDirectory()) throw new DirFolderMissing(path, "not a directory");
+  const dir = real.normalize("NFC");
+  return { dir, vaultId: vaultKeyOf(dir) };
+}
+
 export async function openDirWorkspace(env: NodeJS.ProcessEnv, frozen: FrozenDirWorkspace): Promise<DirWorkspace> {
   let real: string;
   try { real = await realpath(frozen.dir); }

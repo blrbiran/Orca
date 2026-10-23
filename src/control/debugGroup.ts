@@ -159,6 +159,8 @@ async function prepare(deps: DebugOpenDeps, command: CorrectionDebugOpenCommand)
   if (withdrawnIds(await readWithdrawals(dir)).has(correctionId)) throw new ControlError("correction-withdrawn");
   const repository = await repositoryOf(deps, correction.projectKey);
   if (repository === null) throw new ControlError("correction-repository-unknown", correction.projectKey);
+  // Dir-requirements spec §5.2, §6.5: a debug group imports a plan; on a `dir` project that is refused as import-plan is.
+  if ((deps.dirProjectOf?.(repository.repoId) ?? null) !== null) throw new ControlError("dir-project-plan-import-unsupported", repository.repoId);
   const input = await collectDebugInput({ store: deps.store, repoPath: repository.path, repoId: repository.repoId }, correction);
   const checks = command.payload.checks === undefined ? undefined : [...new Set(command.payload.checks)];
   // Ruling C1: closed means the integration target of the original run's group (HEAD without one) holds the closing row.

@@ -1876,6 +1876,9 @@ export const zhErrors: Record<string, string> = {
   "flow-dir-unregistered": "流程只能在已登记的文件夹项目上运行：先把这个文件夹以 kind \"dir\" 加进项目文件，再在那里启动流程。",
   "flow-child-managed": "这个任务组是某次流程运行里的一步，由流程自己收尾：请在流程运行页重试这一步，而不是重试这个任务组。",
   "flow-group-delivery-fixed": "这个流程任务组作用于一个文件夹：交付方式固定为保留，文件夹只通过回写更新。",
+  // Dir-requirements spec §9.3.
+  "dir-folder-missing": "这个任务组的文件夹不见了或被移走了（{{detail}}）。把它放回原路径，然后选「重新检查」。",
+  "dir-project-plan-import-unsupported": "这个项目是文件夹，不是 git 仓库。请在它上面开需求，而不是导入计划。",
   "revision-unchanged": "修改后的回答与原来完全一样；请至少改一个回答或决定。",
   "numeric-overflow": "数值溢出：{{message}}",
   "panel-draining": "面板正在关闭，请稍后重试。",

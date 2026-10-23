@@ -754,7 +754,8 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
       const client = channel === "web" ? "web" : principal.kind === "agent" ? principal.client : undefined;
       if (client === undefined) throw new Error("socket channel request carries no agent principal");
       // The human-only surface is refused by name before anything is parsed further or booked: an agent or a member.
-      const refusal = permissionRefusal(principal, route.verb, (req.body as { payload?: unknown } | undefined)?.payload);
+      // Dir-requirements spec §5.1: the payload check of requirement-open reads the panel's registered dir projects.
+      const refusal = permissionRefusal(principal, route.verb, (req.body as { payload?: unknown } | undefined)?.payload, service.deps.dirProjectOf);
       if (refusal !== null) { sendControlError(res, 403, refusal.code, refusal.message); return; }
       const envelope = commandEnvelopeSchema.parse(req.body);
       const resolved = route.target(req.params, envelope.payload, store, envelope.commandId);

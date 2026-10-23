@@ -6,6 +6,8 @@ import { applyWebCommand, preflightWebCommand } from "./commandLedger.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions } from "./commands.js";
 import { ControlError } from "./errors.js";
+import type { DirProjectOf } from "./dirGroup.js";
+import { DirFolderMissing, freezeDirWorkspace, type FrozenDirWorkspace } from "./dirWorkspace.js";
 import { estimatorCompatibility } from "./estimatorCompatibility.js";
 import { singleCallOutputBound } from "./estimator.js";
 import {
@@ -40,6 +42,8 @@ type Result = CommandLookupV1["body"];
 export interface RequirementCommandDeps {
   store: ControlStore; admissionGate?: AdmissionGate; profileRouter: ExecutionProfileRouter; defaults: () => ImportDefaults | null;
   knownRepository?: (repoId: string) => boolean; now?: () => Date;
+  /** Dir-requirements spec §5.1: the registered `dir` project a repo id names; absent, every project is a repository. */
+  dirProjectOf?: DirProjectOf;
 }
 type EffectiveOpenPayload = { groupId: string; repoId: string; idea: string; limit: BudgetAmount; agent: Record<string, unknown> | null; contentLanguage: "en" | "zh" };
 
@@ -72,7 +76,14 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
     const replay = preflightWebCommand<Result>(deps.store, command);
     if (replay) return replay.body;
     let profile: FrozenProfile, slot: PreparedEstimatorSlot, estimateMode: "strict" | "soft";
+    let dirWorkspace: FrozenDirWorkspace | undefined;
     try {
+      // Dir-requirements spec §5.1: on a `dir` project the folder is frozen now (a realpath: a read, no vault yet).
+      const dirProject = deps.dirProjectOf?.(command.payload.repoId) ?? null;
+      if (dirProject !== null) {
+        try { dirWorkspace = await freezeDirWorkspace(dirProject.path); }
+        catch (error) { throw error instanceof DirFolderMissing ? new ControlError("dir-folder-missing", error.message) : error; }
+      }
       const defaults = deps.defaults();
       if (!defaults?.estimatorProfileId || !defaults.estimatorProfileHash) throw new ControlError("control-estimator-unconfigured");
       estimateMode = defaults.estimateMode;
@@ -104,6 +115,7 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
           groupId: payload.groupId, repoId: payload.repoId, idea: payload.idea, limit: payload.limit, contentLanguage: payload.contentLanguage,
           createdOn: now.toISOString().slice(0, 10), requirementId, profile: { profileId: profile.snapshot.profile.profileId, profileHash: profile.profileHash },
           agentSlot: slot.outcome.slot, agentOverrides: payload.agent === null ? {} : { estimator: payload.agent }, maxOutputTokens: singleCallOutputBound(preflight.maxOutputTokens, slot.observation.resolution),
+          ...(dirWorkspace === undefined ? {} : { dirWorkspace }),
         });
         writeRound(deps.store, payload.groupId, newRound(1));
         const wakeId = queueRequirementCall(deps.store, payload.groupId, `open-${context.nextCommandRevision}`);

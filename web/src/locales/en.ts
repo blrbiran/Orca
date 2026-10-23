@@ -1953,6 +1953,9 @@ export const enErrors: Record<string, string> = {
   "flow-dir-unregistered": "A flow runs only on the folder of a registered folder project: add the folder to the projects file with kind \"dir\", then start the flow there.",
   "flow-child-managed": "This group is a step of a flow run, settled by the run itself: retry the step from the run's page, not the group.",
   "flow-group-delivery-fixed": "This flow group works on a folder: its delivery is fixed to keep, and the folder is updated by copy-back.",
+  // Dir-requirements spec §9.3.
+  "dir-folder-missing": "The group's folder is gone or has moved ({{detail}}). Put it back at that path, then choose \"Check again\".",
+  "dir-project-plan-import-unsupported": "This project is a folder, not a git repository. Open a requirement on it instead of importing a plan.",
   "revision-unchanged": "The revision answers the round exactly as before; change at least one answer or decision.",
   "numeric-overflow": "A number is too large: {{detail}}",
   "panel-draining": "The panel is shutting down and accepts no commands. Start it again, then retry.",

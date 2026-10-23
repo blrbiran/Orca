@@ -11,6 +11,7 @@ import type { ControlStore } from "./store.js";
 import type { Amount } from "./types.js";
 import { frozenSlotSchema, profileBindingSchema } from "./webProtocol.js";
 import type { FrozenSlot } from "./agentSelection.js";
+import type { FrozenDirWorkspace } from "./dirWorkspace.js";
 import {
   CLARIFY_CAPS, classPairSchema, clarifyTier, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema, SLUG_PATTERN,
   type ClarifyTier, type Classification, type ClassPair, type DraftBody, type RoundBody,
@@ -42,6 +43,8 @@ export interface ClarifyingGroupInput {
   groupId: string; repoId: string; idea: string; limit: BudgetAmount; contentLanguage: "en" | "zh"; createdOn: string; requirementId: string;
   profile: { profileId: string; profileHash: string }; agentSlot: FrozenSlot; agentOverrides: { estimator?: z.infer<typeof panelPartialSelectionSchema> };
   maxOutputTokens: number;
+  /** Dir-requirements spec §5.1: the folder a requirement on a `dir` project was opened on, frozen; absent on a repository project. */
+  dirWorkspace?: FrozenDirWorkspace;
 }
 type Ledger = { groupLimit: BudgetAmount; used: Amount; committedRemaining: Amount; explicitUnallocatedReserve: BudgetAmount; budgetDeficit: Amount; usageUnknown: boolean };
 /** The fields of a group body this module reads and writes; the rest passes through untouched. */
@@ -81,6 +84,8 @@ export function insertClarifyingGroup(store: ControlStore, input: ClarifyingGrou
     used: zero(), reserved: zero(), reviewRemaining: zero(), budgetVersion: 1,
     ledger: clarifyingLedger(input.limit),
     agentOverrides: input.agentOverrides, estimatorSlot: null, reconcileSlot: null, requirement,
+    // Dir-requirements spec §5.1: top level, beside (never inside) the strict requirement block.
+    ...(input.dirWorkspace === undefined ? {} : { dirWorkspace: input.dirWorkspace }),
   };
   store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)").run(input.groupId, 0, 1, JSON.stringify(group));
   saveTokenPolicy(store,input.groupId,"",input.limit.tokens);

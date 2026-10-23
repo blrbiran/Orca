@@ -290,6 +290,10 @@ export const durableCommandErrorStatuses = {
   "flow-child-managed": 422,
   // Review finding I4: a flow starts only on a registered `dir` project's folder.
   "flow-dir-unregistered": 422,
+  // Dir-requirements spec §5.1, §9.3: a dir project's folder is gone (or not a directory) when a requirement is opened on it.
+  "dir-folder-missing": 422,
+  // Dir-requirements spec §5.2: import-plan and the debug opens on a `dir` project (only a requirement gets a dir workspace).
+  "dir-project-plan-import-unsupported": 422,
   "revision-unchanged": 422,
   "group-stopped": 422,
   "handoff-budget-unavailable": 422,

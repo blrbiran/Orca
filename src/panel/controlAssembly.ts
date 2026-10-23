@@ -242,6 +242,12 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     flowDeps: () => flow?.deps ?? null,
     // Review finding I4: a flow starts only on a registered `dir` project's folder; its settings key is the project's.
     flowProjects: () => repos.filter((repo) => repo.kind === "dir").map((repo) => ({ repoId: controlRepoKey(repo.projectKey), path: repo.path })),
+    // Dir-requirements spec §5.1: the same `dir` entries, by repo id -- a requirement on one is a dir group (its folder frozen
+    // at open), import-plan and the debug opens on one are refused, and a dispatched run may not open a requirement on one.
+    dirProjectOf: (repoId: string) => {
+      const found = repos.find((repo) => repo.kind === "dir" && controlRepoKey(repo.projectKey) === repoId);
+      return found === undefined ? null : { path: found.path };
+    },
     // Execution driver spec §2.1: a workspace mode means something only to a driver, so an unconfigured
     // panel knows no repository here and refuses set-workspace-mode as it did before this slice.
     knownRepository: control.executionPort === "configured"
@@ -327,6 +333,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     driver = createExecutionDriver({
       store, router, admissionGate, roots: controlWorkspaceRoots(store.stateDir),
       resolveRepository,
+      // Dir-requirements spec §6.1 (Rule 17): a dir group's vault is found from this environment, never os.homedir().
+      env,
       ccloopBin: env.ORCA_CCLOOP_BIN!, agentsTablePath: env.ORCA_AGENTS_TABLE!, dispatchedPersonDir, astGrepBin: resolveAstGrepBin(env),
       // Handoff grace: the run's frozen killGraceMs + 60 s (driverHandoff.handoffGraceMsOf, agent selection spec §6.6).
       // *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** the grace is max(killGraceMs, frozen recovery window + 5 s) + 60 s.

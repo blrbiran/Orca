@@ -1,6 +1,7 @@
 import {hasValidUsageSettlement,settlementArtifact as settlementArtifactBytes} from "./usageSettlement.js";
 import { stackBaseOf } from "./groupEdges.js";
-import { flowChildSkills, flowGroupRepoId, isFlowChildGroup } from "../flow/groups.js";
+import { flowChildSkills, isFlowChildGroup } from "../flow/groups.js";
+import { groupRepoId } from "./dirGroup.js";
 import { withSkillDirs } from "../flow/template/vars.js";
 import {assertCurrentSavedRecovery,savedRecoveryAccounting} from "./savedResultRecovery.js";
 import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,recoveryClosure} from "./savedResultRecoveryPackage.js";
@@ -113,6 +114,8 @@ export interface ExecutionDriverDeps {
   syncskill?: SyncskillOptions;
   /** Test seam only (debug task plan Task 8): replaces checkReproduction, so a criterion can see it is never called. */
   checkReproduction?: typeof checkReproduction;
+  /** Dir-requirements spec §6.1 (Rule 17): the panel's environment, where a dir group's vault is found ($ORCA_VAULT_DIR). */
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface DriverRun {
@@ -215,14 +218,9 @@ export function integrationDepsOf(deps: ExecutionDriverDeps, context: DriverCont
   };
 }
 
-export function groupRepoId(store: ControlStore, groupId: string): string {
-  const group = readGroup(store, groupId) as unknown as { plan?: { repoId: string }; requirement?: { repoId: string } };
-  // Flow engine spec §6.2: a `dir` flow group (parent or child) targets its run's vault, whatever else it names.
-  // N1 plan F16: a clarifying group has no plan yet; its requirement names the repository.
-  const repoId = flowGroupRepoId(store, groupId) ?? group.plan?.repoId ?? group.requirement?.repoId;
-  if (repoId === undefined) throw new ControlError("recovery-blocked", `group-repository-missing:${groupId}`);
-  return repoId;
-}
+// Dir-requirements spec §6.1: the one target resolution lives in dirGroup.ts (requirementCalls.ts reads it there, outside
+// this module's import cycle); re-exported for its existing callers.
+export { groupRepoId } from "./dirGroup.js";
 
 export function groupStopped(store: ControlStore, groupId: string): boolean {
   return readGroup(store, groupId).stopped || store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id=?").get(groupId) !== undefined;

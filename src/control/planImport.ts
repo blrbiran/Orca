@@ -8,6 +8,7 @@ import { readAgentPreferences } from "./agentPreferences.js";
 import { readGroupAgentOverrides } from "./agentFreeze.js";
 import { descriptorProvenance, estimatorLayerAuthority, frozenSlotOf, resolveSelection, slotLayers, type FrozenSlot, type GroupAgentOverrides, type PartialSelection } from "./agentSelection.js";
 import { unavailableCapabilities, type ExecutionProfileRouter, type FrozenProfile, type ObservedProfile } from "./profiles.js";
+import type { DirProjectOf } from "./dirGroup.js";
 import type { ControlStore } from "./store.js";
 import type { Amount } from "./types.js";
 import {
@@ -458,7 +459,7 @@ function persistAsyncPreparationFailure(store: ControlStore, command: ImportComm
  * identity/CAS preflight happens before dynamic defaults or I/O; applyWebCommand
  * repeats both checks after the await to close concurrent commit races.
  */
-export async function importControlPlanAsync(deps: AsyncImportDeps, command: ImportCommand): Promise<ImportResult> {
+export async function importControlPlanAsync(deps: AsyncImportDeps & { dirProjectOf?: DirProjectOf }, command: ImportCommand): Promise<ImportResult> {
   const preflight = preflightWebCommand(deps.store, command);
   if (preflight) return preflight.body;
 
@@ -467,6 +468,9 @@ export async function importControlPlanAsync(deps: AsyncImportDeps, command: Imp
   let prepared: PreparedEstimatorSlot | null;
   try {
     const raw = command.payload;
+    // Dir-requirements spec §5.2: only a requirement gets a dir workspace; a plan on a `dir` project is refused by name,
+    // before its plan file is looked up (a folder has none).
+    if ((deps.dirProjectOf?.(raw.repoId) ?? null) !== null) throw new ControlError("dir-project-plan-import-unsupported", raw.repoId);
     const currentDefaults = deps.defaults();
     frozenDefaults = {
       estimatorProfileId: raw.estimatorProfileId ?? currentDefaults?.estimatorProfileId ?? null,
