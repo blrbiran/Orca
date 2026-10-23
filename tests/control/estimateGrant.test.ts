@@ -84,6 +84,15 @@ describe("the grant where an estimate is created", () => {
       expect(small.result).toMatchObject({ estimateState: "input-too-large", reasonCode: "estimate-input-too-large" });
     } finally { await h.dispose(); }
   });
+  it("C12: a request past the 1,000,000-token cap but inside a 2,000,000 window queues (the grant bounds no input)", async () => {
+    const snapshot = withOutputBound(1_100_000); snapshot.profile.capabilities.contextWindowTokens = 2_000_000;
+    const { h, service } = await fixture({ tokenPolicy: "optional-v1" }, snapshot); try {
+      const created = await estimate(h, service);
+      if ("error" in created || created.result.kind !== "estimate-created") throw new Error(JSON.stringify(created));
+      expect(created.result.estimateState).toBe("queued");
+      expect(readEstimateRecord(h.store, "g", created.result.estimateId).grant.tokens).toBe(1_000_000);
+    } finally { await h.dispose(); }
+  });
   it("C14: 0 tokens remaining refuses the estimate; 1 token remaining queues it with a 1-token grant", async () => {
     const { h, service } = await fixture(); try {
       setRemaining(h, service, 0);
