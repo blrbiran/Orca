@@ -741,7 +741,10 @@ export class WebControlService {
           refused.push({ groupId, code: "auto-confirm-selections-unresolved" });
           continue;
         }
-      } catch { continue; } // a group its own readers cannot read is named there, not here
+      } catch (error) { // review M2: a group the pass cannot read is skipped, named once per pass
+        process.stderr.write(`orca-control: automatic confirm of ${groupId} skipped: ${describeError(error)}\n`);
+        continue;
+      }
       const answer = await this.confirm(command);
       const error = (answer as { error?: { code?: unknown } }).error;
       if (error === undefined) confirmed.push(groupId); else refused.push({ groupId, code: String(error.code) });

@@ -260,6 +260,19 @@ describe("H4: the automatic confirm of unlimited-token groups", () => {
     } finally { await h.dispose(); }
   });
 
+  it("review M2: a group the pass cannot read is skipped with one stderr line naming it and the code", async () => {
+    const h = await unlimited(); try {
+      patch(h, { archived: "not a mark" });
+      const lines: string[] = [];
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => { lines.push(String(chunk)); return true; });
+      try {
+        expect(await new WebControlService(h.deps).autoConfirmUnlimitedPass(() => defaultsOf(h))).toEqual({ confirmed: [], refused: [] });
+      } finally { stderr.mockRestore(); }
+      expect(lines.filter(line => line.includes("automatic confirm"))).toEqual(["orca-control: automatic confirm of g skipped: recovery-blocked:group-archived-invalid\n"]);
+      expect(attemptRow(h)).toBeUndefined();
+    } finally { await h.dispose(); }
+  });
+
   it("§7.3: an eligible group's view says so; an absent attempt has no refused code", async () => {
     const h = await unlimited(); try {
       expect(readControlGroup(h.store, "epoch", "g").autoConfirm).toEqual({ eligible: true, refusedCode: null });
