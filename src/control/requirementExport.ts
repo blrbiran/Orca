@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { isGroupArchived } from "./archivedMark.js";
+import { dirWorkspaceOf, groupRepoId, initialPlacement } from "./dirGroup.js";
+import { importFolder, openDirWorkspace } from "./dirWorkspace.js";
 import { ControlError } from "./errors.js";
+import { waitingPrerequisites } from "./groupEdges.js";
 import { documentPathOf } from "./requirementDocument.js";
 import { readRequirementGroup, saveRequirementGroup, type RequirementBlock } from "./requirementRecords.js";
 import { readCanonicalRecord } from "./snapshot.js";
@@ -24,11 +27,35 @@ export interface ExportDeps {
   store: ControlStore; admissionGate?: AdmissionGate; resolveRepository(repoId: string): string;
   /** Criteria lower it; production never passes one. */
   gitTimeoutMs?: number;
+  /** Dir-requirements spec §6.1 (Rule 17): where a dir group's vault is found ($ORCA_VAULT_DIR). */
+  env?: NodeJS.ProcessEnv;
 }
 
 function write<T>(deps: ExportDeps, action: () => T): T { const release = deps.admissionGate?.enter(); try { return deps.store.transaction(action); } finally { release?.(); } }
-function record(deps: ExportDeps, groupId: string, exported: RequirementBlock["export"]): void {
-  write(deps, () => { const group = readRequirementGroup(deps.store, groupId); group.requirement.export = exported; saveRequirementGroup(deps.store, group); });
+/** Dir-requirements spec §6.4 step 3: a dir group's `done` is recorded with its first placement record, in one transaction. */
+function record(deps: ExportDeps, groupId: string, exported: RequirementBlock["export"], dirBase: string | null = null): void {
+  write(deps, () => {
+    const group = readRequirementGroup(deps.store, groupId);
+    group.requirement.export = exported;
+    if (dirBase !== null && exported.state === "done") group.placement = initialPlacement({ base: dirBase, landedTip: exported.commit!, at: deps.store.now() });
+    saveRequirementGroup(deps.store, group);
+  });
+}
+
+/**
+ * Dir-requirements spec §6.4 step 2: the dir group's base. An existing `refs/orca/group/<g>/base` is the answer as it is
+ * (never replaced, no import made); else a fresh import of the folder (reused while unchanged) becomes it, create-only.
+ * `placed` is then created equal to the base, create-only: a replay finds both and makes neither.
+ */
+async function dirBaseOf(deps: ExportDeps, groupId: string, run: ExportGit, frozen: NonNullable<ReturnType<typeof dirWorkspaceOf>>): Promise<string> {
+  if (deps.env === undefined) throw new Error("orca: a dir group's export needs the driver's env ($ORCA_VAULT_DIR)");
+  const baseRef = `refs/orca/group/${groupId}/base`, placedRef = `refs/orca/group/${groupId}/placed`;
+  const base = await tipOf(run, baseRef) ?? (await importFolder(await openDirWorkspace(deps.env, frozen), { reuseUnchanged: true, baseRef })).commit;
+  if (await tipOf(run, placedRef) === null) {
+    try { await run(["update-ref", placedRef, base, ""]); }
+    catch (error) { if (await tipOf(run, placedRef) === null) throw error; }
+  }
+  return base;
 }
 
 /**
@@ -103,14 +130,20 @@ async function documentCommitPath(run: ExportGit, commit: string, requirement: R
  * or written. A branch that already exists with anything else blocks (requirement-export-conflict) and is never moved;
  * a .orca or .orca/requirements in HEAD that is not a directory blocks (requirement-export-path-blocked).
  */
-export async function exportRequirementDocument(deps: ExportDeps, groupId: string): Promise<"done" | "conflict" | "nothing"> {
+export async function exportRequirementDocument(deps: ExportDeps, groupId: string): Promise<"done" | "conflict" | "nothing" | "waiting"> {
   const group = readRequirementGroup(deps.store, groupId);
   const requirement = group.requirement;
   if (requirement.document === null || requirement.export.state !== "pending" || requirement.slug === null) return "nothing";
+  // Dir-requirements spec §6.4 step 1: a dir group's base must hold what its prerequisites placed in the folder, so it
+  // waits for them -- a DB read only, before any git child or vault access.
+  const frozen = dirWorkspaceOf(group);
+  if (frozen !== null && waitingPrerequisites(deps.store, groupId).length > 0) return "waiting";
   const text = (JSON.parse(readCanonicalRecord(deps.store, requirement.document.recordHash)) as { text: string }).text;
   if (createHash("sha256").update(text, "utf8").digest("hex") !== requirement.document.sha256) throw new ControlError("recovery-blocked", "requirement-document-hash");
-  const repo = deps.resolveRepository(requirement.repoId);
+  // Dir-requirements spec §6.1: the target repository (a dir group's is its folder's vault).
+  const repo = deps.resolveRepository(groupRepoId(deps.store, groupId));
   const run = exportGit(deps, repo);
+  const dirBase = frozen === null ? null : await dirBaseOf(deps, groupId, run, frozen);
   const ref = workBranchRef(groupId);
   const existing = await tipOf(run, ref);
   if (existing !== null) {
@@ -119,10 +152,11 @@ export async function exportRequirementDocument(deps: ExportDeps, groupId: strin
       record(deps, groupId, { ...requirement.export, state: "conflict", detail: `${EXPORT_CONFLICT}:${ref} is at ${existing}` });
       return "conflict";
     }
-    record(deps, groupId, { state: "done", path, commit: existing, parent: await revParse(run, `${existing}^`), detail: null });
+    record(deps, groupId, { state: "done", path, commit: existing, parent: await revParse(run, `${existing}^`), detail: null }, dirBase);
     return "done";
   }
-  const head = await revParse(run, "HEAD");
+  // Dir-requirements spec §6.4 step 3: a dir group's document goes on its base (the vault's HEAD is never read).
+  const head = dirBase ?? await revParse(run, "HEAD");
   // Controller ruling (Task 11 review): no temporary index and nothing written outside the repository. HEAD's three
   // levels are read with ls-tree, and each changed level is written bottom-up with mktree, every child under the
   // target's own umask, so the objects get the modes git gives them there.
@@ -159,7 +193,7 @@ export async function exportRequirementDocument(deps: ExportDeps, groupId: strin
     if ((await tipOf(run, ref)) === null) throw error;
     return exportRequirementDocument(deps, groupId);
   }
-  record(deps, groupId, { state: "done", path, commit, parent: head, detail: null });
+  record(deps, groupId, { state: "done", path, commit, parent: head, detail: null }, dirBase);
   return "done";
 }
 
@@ -171,6 +205,9 @@ export async function exportPendingRequirements(deps: ExportDeps): Promise<boole
       // Issue-fixes spec §6.3 (Part E ruling 2): an archived group's export waits, its wake undelivered, until unarchived.
       if (isGroupArchived(deps.store, String(row.group_id))) continue;
       const outcome = await exportRequirementDocument(deps, String(row.group_id));
+      // Dir-requirements spec §6.4 step 1: a waiting export keeps its wake and is not progress (it never starts a round by
+      // itself); the round some other progress starts looks at it again.
+      if (outcome === "waiting") continue;
       write(deps, () => deps.store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id=? AND delivered=0").run(String(row.id)));
       moved = moved || outcome !== "nothing";
     } catch (error) {

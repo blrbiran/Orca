@@ -51,6 +51,8 @@ const VIEW_REASONS = [
   "agent-unfrozen", "repository-path", "continuation-registration", "skills-unsupported-agent", "skills-inject-failed",
   "config-hash-mismatch", "stop-proof-generation", "inspect-unknown", "accept-refused", "candidate-without-terminal", "terminal",
   "out-of-bounds", "single-call-record-invalid", "single-call-prompt-mismatch", "settle-incomplete",
+  // Dir-requirements spec §6.5, §9.3: a dir group with no work branch in its vault.
+  "dir-base-missing",
   // Debug task plan Task 8: the reproduce-first check (debug-repro:<reason>).
   "debug-repro",
   // ccloop error codes spec (2026-10-15) §4.4, §4.7: a peer exit's stored run reason.

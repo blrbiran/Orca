@@ -1,7 +1,7 @@
 import {hasValidUsageSettlement,settlementArtifact as settlementArtifactBytes} from "./usageSettlement.js";
 import { stackBaseOf } from "./groupEdges.js";
 import { flowChildSkills, isFlowChildGroup } from "../flow/groups.js";
-import { groupRepoId } from "./dirGroup.js";
+import { groupRepoId, isDirGroup } from "./dirGroup.js";
 import { withSkillDirs } from "../flow/template/vars.js";
 import {assertCurrentSavedRecovery,savedRecoveryAccounting} from "./savedResultRecovery.js";
 import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,recoveryClosure} from "./savedResultRecoveryPackage.js";
@@ -41,7 +41,7 @@ import { singleCallPurposeOf } from "./singleCall.js";
 import { noteTranscriptListing } from "../agentTranscript/listing.js";
 import { singleCallHandler } from "./singleCallPurposes.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
-import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, makeReadOnly, removeSkillsSnapshot, skillsPathOf, sourceDirOf, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
+import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, makeReadOnly, removeSkillsSnapshot, revParse, skillsPathOf, sourceDirOf, workBranchRef, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { recordEmptyResultDecisions, stepD, stepR } from "./driverLanding.js";
 import { readDebugMark } from "./debugChecks.js";
@@ -326,6 +326,13 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   if((run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&continued!==null)throw new ControlError("resume-handoff-invalid","saved-result-explicit-command-required");
   const recovery=run.savedRecovery===undefined?null:savedRecoverySchema.parse(run.savedRecovery);
   const original=recovery?JSON.parse((await readArtifact(store,recovery.sourceEnvelope)).toString()) as StartEnvelope:null;
+  // Dir-requirements spec §6.5: a dir group's work branch is made by its export, on its base; ensureWorkBranch would read
+  // the vault's unborn HEAD instead. Unreachable while start waits for the export: named so a broken invariant is loud.
+  if (original?.work.kind !== "loop" && continued === null && isDirGroup(store, run.groupId)
+    && await revParse(targetRepo, workBranchRef(run.groupId)).then(() => false, () => true)) {
+    blockRun(deps, runId, "A2", "dir-base-missing");
+    return true;
+  }
   const base = original?.work.kind==="loop"?original.work.base:continued !== null ? continued.base : await ensureWorkBranch(targetRepo, run.groupId, stackBaseOf(store, run.groupId));
   privateDirectory(drive.sourceDir);
   await ensureWorkspace(targetRepo, drive.workspaceMode, workspaceOf(drive), base, deps.roots);

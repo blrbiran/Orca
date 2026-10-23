@@ -2087,6 +2087,8 @@ export const zhErrors: Record<string, string> = {
   "requirement-usage-unknown": "这次需求调用的用量未知，所以它的预算无法结算。",
   "estimate-usage-unknown": "这次估算调用的用量未知，所以它的预算无法结算。",
   "repository-path": "解析不到这个组的仓库路径；确认仓库仍已登记并且存在，然后重试运行。",
+  // Dir-requirements spec §9.3: a dir group's A2 found no work branch in the vault.
+  "dir-base-missing": "这个任务组的文件夹起始快照缺失（Orca 的故障），任务没有启动。",
   "debug-repro": "Orca 的先复现检查没有通过：{{detail}}。请重试任务。",
 };
 

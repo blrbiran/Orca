@@ -4,6 +4,7 @@
  * field; the folder workspace itself is dirWorkspace.ts. This spec stores one object (Rule 2); the multi-dir spec (H7)
  * replaces it with a list and keeps a reader for the single object.
  */
+import { z } from "zod";
 import { flowGroupRepoId, flowVaultRepoId } from "../flow/groups.js";
 import type { FrozenDirWorkspace } from "./dirWorkspace.js";
 import { ControlError } from "./errors.js";
@@ -51,4 +52,39 @@ export function groupRepoId(store: ControlStore, groupId: string): string {
   const repoId = flowGroupRepoId(store, groupId) ?? dirGroupRepoId(store, groupId) ?? group.plan?.repoId ?? group.requirement?.repoId;
   if (repoId === undefined) throw new ControlError("recovery-blocked", `group-repository-missing:${groupId}`);
   return repoId;
+}
+
+const sha = z.string().regex(/^[0-9a-f]{40,64}$/);
+/**
+ * §8.2: a dir group's placement record. Read and written as a plain record (never through the group body here), so the
+ * multi-dir spec (H7) can keep one per folder elsewhere. The export makes the first one (§6.4 step 3); placement (§8)
+ * moves it.
+ */
+export const placementSchema = z.object({
+  state: z.enum(["idle", "folder-changed", "folder-unwritable", "folder-missing", "failed"]),
+  tip: sha.nullable(),
+  landedTip: sha.nullable(),
+  pending: z.object({ from: sha, to: sha, tip: sha, tmp: z.array(z.string()), aside: z.array(z.string()), dirs: z.array(z.string()) }).strict().nullable(),
+  changed: z.array(z.string()), changedTotal: z.number().int().nonnegative(),
+  unwritable: z.array(z.object({ path: z.string(), reason: z.string() }).strict()),
+  withheld: z.array(z.object({ path: z.string(), reason: z.string(), toEntry: z.string() }).strict()),
+  watch: z.string().nullable(),
+  detail: z.string().nullable(),
+  resolution: z.object({ id: z.string(), action: z.enum(["take-folder", "recheck", "withhold"]), by: z.string(), at: z.number() }).strict().nullable(),
+  at: z.number(),
+}).strict();
+export type PlacementRecord = z.infer<typeof placementSchema>;
+
+/** A stored placement record, or null when there is none yet; one that is there but malformed is loud (Rule 12). */
+export function readPlacement(value: unknown): PlacementRecord | null {
+  if (value === undefined || value === null) return null;
+  const parsed = placementSchema.safeParse(value);
+  if (!parsed.success) throw new ControlError("recovery-blocked", `dir-placement-invalid:${parsed.error.issues[0]?.path.join(".") ?? "invalid"}`);
+  return parsed.data;
+}
+
+/** §6.4 step 3: the record the export writes: nothing placed beyond the base, the document commit landed. */
+export function initialPlacement(input: { base: string; landedTip: string; at: number }): PlacementRecord {
+  return placementSchema.parse({ state: "idle", tip: input.base, landedTip: input.landedTip, pending: null, changed: [], changedTotal: 0, unwritable: [], withheld: [],
+    watch: null, detail: null, resolution: null, at: input.at });
 }

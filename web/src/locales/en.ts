@@ -2164,6 +2164,8 @@ export const enErrors: Record<string, string> = {
   "requirement-usage-unknown": "This requirement call's usage is unknown, so its budget cannot be settled.",
   "estimate-usage-unknown": "This estimate call's usage is unknown, so its budget cannot be settled.",
   "repository-path": "The group's repository path could not be resolved. Check that the repository is still registered and exists, then choose \"Retry run\".",
+  // Dir-requirements spec §9.3: a dir group's A2 found no work branch in the vault.
+  "dir-base-missing": "The group's starting snapshot of the folder is missing (an Orca fault), so the task was not started.",
   // Debug task plan Task 8: the detail is the check's reason, explained through debugRepro (web/src/refusalExplain.ts).
   "debug-repro": "Orca's reproduce-first check did not pass: {{detail}}. Retry the task.",
 };
