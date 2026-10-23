@@ -139,7 +139,7 @@ import { labelsDraftKey } from "./TaskDetail.js";
 import { loopDraftKey } from "./LoopPlanCard.js";
 import { DEFAULT_SECTION, formatRoute, parseRoute } from "./sections.js";
 import type { Route } from "./sections.js";
-import { DETAIL_REGIONS, type DetailRegion } from "./detailRegion.js";
+import { DETAIL_REGIONS, focusedDetailRegion, type DetailRegion } from "./detailRegion.js";
 import { BackLine } from "./BackLine.js";
 import type { Section } from "./sections.js";
 import { GlobalSettings } from "./GlobalSettings.js";
@@ -284,15 +284,21 @@ export function App(): JSX.Element {
   const [from, setFrom] = useState<{ leftHash: string; pushedHash: string; label: string } | null>(null);
   /** §9.4 (#47): where a correction was started from, kept with the opened decision (never in the URL). */
   const [decisionOrigin, setDecisionOrigin] = useState<DecisionOrigin | null>(null);
-  /** The hash this page itself just assigned; its hashchange applies nothing more (the caller already did). */
-  const selfHash = useRef<string | null>(null);
+  /**
+   * The hashes this page itself assigned and whose hashchange has not arrived yet, each with a count (review minor 5: two
+   * quick pushes must not make the first one's event read as external); such an event applies nothing more.
+   */
+  const selfHashes = useRef<Map<string, number>>(new Map());
+  const pendingNow = useRef<Route | null>(null);
   const applyExternalRoute = useRef<(next: Route) => void>(() => {});
   /**
    * §9.3: the one way the page moves. Push (a history entry) for a section change and for opening a group, requirement,
    * decision or flow run; replace for a region tab, a task opened or closed in the group view, the Decisions/Corrections
    * toggle. The caller sets its own selection; this writes the URL, the route and the back line.
    */
-  const navigate = (next: Route, options: { replace?: boolean } = {}): void => {
+  const navigate = (asked: Route, options: { replace?: boolean } = {}): void => {
+    // Review minor 4: the route kept is the one its hash reads back as (a task with no region is not written, so not kept).
+    const next = parseRoute(formatRoute(asked));
     setPendingRoute(null); setRouteNotice(null);
     const hash = formatRoute(next);
     const leaving = window.location.hash;
@@ -302,7 +308,7 @@ export function App(): JSX.Element {
     } else {
       const was = routeNow.current.section;
       setFrom(next.section !== was ? { leftHash: leaving, pushedHash: hash, label: t(NAV_KEY[was]) } : null);
-      if (leaving !== hash) { selfHash.current = hash; window.location.hash = hash; }
+      if (leaving !== hash) { selfHashes.current.set(hash, (selfHashes.current.get(hash) ?? 0) + 1); window.location.hash = hash; }
     }
     setRoute(next);
   };
@@ -321,13 +327,19 @@ export function App(): JSX.Element {
   useEffect(() => {
     const onHash = (): void => {
       const hash = window.location.hash;
-      setPendingRoute(null);
       setFrom((prior) => prior !== null && prior.pushedHash === hash ? prior : null);
-      if (selfHash.current === hash) { selfHash.current = null; return; }
-      selfHash.current = null;
+      const own = selfHashes.current.get(hash) ?? 0;
+      if (own > 0) { if (own === 1) selfHashes.current.delete(hash); else selfHashes.current.set(hash, own - 1); setPendingRoute(null); return; }
       navigationSeq.current++;
       setRouteNotice(null);
-      applyExternalRoute.current(parseRoute(hash));
+      const next = parseRoute(hash);
+      // Review I3: before the first reads settle, the newest route replaces the pending one (it is applied once they do).
+      if (pendingNow.current !== null) {
+        setRoute(next);
+        setPendingRoute(next.kind === "group" || next.kind === "requirement" || next.kind === "decision" ? next : null);
+        return;
+      }
+      applyExternalRoute.current(next);
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
@@ -1028,10 +1040,10 @@ export function App(): JSX.Element {
       if (fromRoute !== null) { missing(); return; }
       if (current()) { setOverviewNavigationFailure(t("overview.navigationUnavailable")); void readProjects(); void readOverview(); void readTodo(); }
     };
-    const finish = (section: Section): void => {
+    const finish = (section: Section, resolved: DetailRegion | null = null): void => {
       if (fromRoute !== null) return;
       navigate(target.kind === "group"
-        ? { kind: "group", section: "tasks", groupId: target.groupId, region: (DETAIL_REGIONS as readonly string[]).includes(target.region) ? target.region as DetailRegion : null, taskId: target.taskId }
+        ? { kind: "group", section: "tasks", groupId: target.groupId, region: resolved ?? ((DETAIL_REGIONS as readonly string[]).includes(target.region) ? target.region as DetailRegion : null), taskId: target.taskId }
         : target.kind === "requirement" ? { kind: "requirement", section: "requirements", groupId: target.groupId }
         : target.kind === "decision" ? { kind: "decision", section: "decisions", projectKey: target.projectKey, decisionId: target.id }
         : { kind: "section", section });
@@ -1085,7 +1097,8 @@ export function App(): JSX.Element {
             || (target.taskId !== null && !value.workItems.some((item) => item.taskId === target.taskId))
             || (target.runId !== null && !value.runs.some((run) => run.runId === target.runId))) { unavailable(); return; }
           if (fromRoute === null && !overviewModelNow.current.progress.some((p) => p.group.groupId === target.groupId)) { unavailable(); return; }
-          dispatchControl({ type: "group", value }); setSelectedGroup(target.groupId); finish("tasks");
+          // Review minor 4: the task goes into the URL under the region it opens in (dispatch / integration resolve to one).
+          dispatchControl({ type: "group", value }); setSelectedGroup(target.groupId); finish("tasks", focusedDetailRegion(value, target.region));
         }
       } catch { unavailable(); }
     })();
@@ -1120,17 +1133,20 @@ export function App(): JSX.Element {
     }
   };
   applyExternalRoute.current = applyRoute;
-  // §9.3 (review I6): a pending route waits for the project list, the control epoch and the first overview read.
-  const routeReady = pendingRoute !== null && projectsRead && control.epoch !== null && overview.status !== "loading";
+  pendingNow.current = pendingRoute;
+  // §9.3 (review I6): a pending route waits for the project list, the control epoch and the first overview read; a decision
+  // (fetched by its id, review I2) waits only for the project list, so it opens without the control plane.
+  const routeReady = pendingRoute !== null && projectsRead
+    && (pendingRoute.kind === "decision" || (control.epoch !== null && overview.status !== "loading"));
   useEffect(() => {
-    if (pendingRoute === null || section === "overview" || overview.status !== "loading") return;
+    if (pendingRoute === null || pendingRoute.kind === "decision" || section === "overview" || overview.status !== "loading") return;
     void readOverview();
   }, [pendingRoute, sourceIdentity]);
   useEffect(() => {
     if (!routeReady || pendingRoute === null) return;
     const next = pendingRoute;
     setPendingRoute(null);
-    if (overview.status !== "available") {
+    if (next.kind !== "decision" && overview.status !== "available") {
       const bare: Route = { kind: "section", section: next.section };
       window.history.replaceState(null, "", formatRoute(bare)); setRoute(bare);
       setRouteNotice({ kind: "missing", section: next.section, id: routeOwnerId(next) });

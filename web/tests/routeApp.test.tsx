@@ -133,13 +133,15 @@ describe("a route read on load waits for the first overview read (C33a, C33d)", 
     await waitFor(() => expect(document.getElementById("overview-requirement-r-answers")).not.toBeNull());
   });
 
-  it("#decisions/<pk>/<id> fetches that decision by id and opens it with no list row, after the overview answers", async () => {
-    const panel = setup(); gate(); at(`#decisions/${PROJECT_KEY}/${encodeURIComponent(DECISION_ID)}`);
+  it("#decisions/<pk>/<id> fetches that decision by id and opens it with no list row, after the project list answers (review I2)", async () => {
+    const panel = setup(); let releaseProjects = (): void => {};
+    panel.holdProjects = new Promise<void>((resolve) => { releaseProjects = resolve; });
+    at(`#decisions/${PROJECT_KEY}/${encodeURIComponent(DECISION_ID)}`);
     render(<App />);
-    await waitFor(() => expect(panel.requests).toContain("GET /api/control/overview"));
+    await waitFor(() => expect(panel.requests).toContain("GET /api/projects"));
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(panel.requests.some((request) => request.startsWith("GET /api/decision?"))).toBe(false);
-    await act(async () => { releaseOverview(); });
+    await act(async () => { releaseProjects(); });
     expect(await screen.findByText("the routed decision's question")).toBeTruthy();
     expect(panel.todo).toEqual([]);
   });
@@ -153,6 +155,56 @@ describe("a route read on load waits for the first overview read (C33a, C33d)", 
     await act(async () => { releaseOverview(); await new Promise((resolve) => setTimeout(resolve, 50)); });
     expect(panel.requests).not.toContain("GET /api/control/groups/g");
     expect(screen.getByRole("link", { name: "Metrics" }).getAttribute("aria-current")).toBe("page");
+  });
+});
+
+describe("review minor 4: an Overview target's task is written under the region it opens in", () => {
+  it("a dispatch destination naming task a opens #tasks/g/problem/a with the task open", async () => {
+    const panel = setup();
+    overview.steps = [{ key: "k", groupId: "g", repoId: ALPHA, taskId: "a", runId: null, kind: "task-attention", reason: "r", ownerRequired: false, destination: { kind: "group", groupId: "g", region: "dispatch", taskId: "a", runId: null } }];
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /task problem.*g|g.*task problem/i }));
+    await groupRegion("g");
+    await waitFor(() => expect(window.location.hash).toBe("#tasks/g/problem/a"));
+    expect(screen.getByRole("region", { name: "Task a" })).toBeTruthy();
+    expect(panel.posts).toHaveLength(0);
+  });
+});
+
+describe("review fixes I2, I3, minor 5", () => {
+  it("I2: a decision route opens with no control plane on the panel (it waits only for the project list)", async () => {
+    setup(); gate();
+    const base = globalThis.fetch;
+    globalThis.fetch = (async (input, init) => String(input) === "/api/control/config" ? json({ error: { code: "route-not-found", message: "no control", commandRevision: null, evidenceIds: [], retryable: false } }, 404) : base(input, init)) as typeof fetch;
+    at(`#decisions/${PROJECT_KEY}/${encodeURIComponent(DECISION_ID)}`);
+    render(<App />);
+    expect(await screen.findByText("the routed decision's question")).toBeTruthy();
+  });
+
+  it("I3: a hashchange before the first read settles replaces the pending route; that newest route opens once it does", async () => {
+    const panel = setup(); gate(); at("#tasks/g");
+    render(<App />);
+    await waitFor(() => expect(panel.requests).toContain("GET /api/control/overview"));
+    window.location.hash = "#tasks/g2";
+    await waitFor(() => expect(window.location.hash).toBe("#tasks/g2"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(panel.requests).not.toContain("GET /api/control/groups/g2");
+    await act(async () => { releaseOverview(); });
+    await groupRegion("g2");
+    expect(panel.requests).not.toContain("GET /api/control/groups/g");
+  });
+
+  it("minor 5: two quick pushes are both the page's own; the first one's hashchange does not reopen its group", async () => {
+    const panel = setup(); at("#tasks");
+    render(<App />);
+    const first = await screen.findByRole("button", { name: /^g ·/ });
+    fireEvent.click(first);
+    fireEvent.click(screen.getByRole("button", { name: /^g2 ·/ }));
+    await groupRegion("g2");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(window.location.hash).toBe("#tasks/g2");
+    expect(screen.queryByRole("region", { name: "Control group g" })).toBeNull();
+    expect(panel.requests.filter((request) => request === "GET /api/control/groups/g2").length).toBeGreaterThan(0);
   });
 });
 

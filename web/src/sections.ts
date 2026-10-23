@@ -29,7 +29,8 @@ function decodeParts(parts: readonly string[]): string[] | null {
   for (const part of parts) {
     let decoded: string;
     try { decoded = decodeURIComponent(part); } catch { return null; }
-    if (decoded === "") return null;
+    // Review minor 6: "." and ".." are path steps, never an id; a hash carrying one is malformed.
+    if (decoded === "" || decoded === "." || decoded === "..") return null;
     out.push(decoded);
   }
   return out;

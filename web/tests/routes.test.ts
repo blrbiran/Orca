@@ -38,6 +38,7 @@ describe("route codec (C30)", () => {
     ["#tasks/", "tasks"], ["#tasks/g/nowhere", "tasks"], ["#tasks/g/runs/t/extra", "tasks"], ["#tasks/%E0%A4%A", "tasks"],
     ["#tasks//runs", "tasks"], ["#requirements/a/b", "requirements"], ["#decisions/only", "decisions"], ["#decisions/a/b/c", "decisions"],
     ["#board/flow", "board"], ["#board/other/f", "board"], ["#board/flow/%ZZ", "board"], ["#metrics/x", "metrics"],
+    ["#tasks/.", "tasks"], ["#tasks/g/runs/..", "tasks"], ["#requirements/..", "requirements"], ["#board/flow/%2E%2E", "board"], ["#decisions/p/.", "decisions"],
   ] as const)("falls back for %j to the bare %s section, without throwing", (hash, section) => {
     expect(parseRoute(hash)).toEqual({ kind: "section", section });
     expect(sectionFromHash(hash)).toBe(section);
