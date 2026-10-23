@@ -30,6 +30,8 @@ interface SingleCallOptions {
   errorCode?: string | null;
   /** Spec 2026-10-15 §6.2: the event's per-model breakdown (absent: none, as before). */
   byModel?: Array<{ model: string; input: number; output: number; cacheRead: number; cacheWrite: number }>;
+  /** Tester round 2 §4.2.5 (review M4): the event's non-token cumulative (absent: activeMs 5, attempts 1, sessions 1, as before). */
+  usage?: { activeMs?: number; attempts?: number; sessions?: number };
 }
 const AMOUNT = { tokens: 100, activeMs: 100, attempts: 1, sessions: 1 };
 export const estimateOutput = (planHash: string) => ({ schema: "budget-estimate-v1", planHash,
@@ -55,7 +57,7 @@ function singleCallPort(options: SingleCallOptions, planHash: () => string) {
       const outcome: Outcome = options.stoppable && requested ? "aborted" : options.outcome ?? "complete";
       const tokens = options.tokens === undefined ? 777 : options.tokens;
       const events = [{ runId: claim.runId, generation: claim.generation, eventSeq: 1, bucket: "work" as const,
-        cumulative: tokens === null ? null : { tokens, activeMs: 5, attempts: 1, sessions: 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`usage ${claim.runId}`)),
+        cumulative: tokens === null ? null : { tokens, activeMs: options.usage?.activeMs ?? 5, attempts: options.usage?.attempts ?? 1, sessions: options.usage?.sessions ?? 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`usage ${claim.runId}`)),
         ...(options.byModel === undefined ? {} : { byModel: options.byModel }) }];
       if (options.stoppable && !requested) return { events, candidate: null, terminal: null };
       if (!hookRan && options.duringCollect) { hookRan = true; await options.duringCollect(); }

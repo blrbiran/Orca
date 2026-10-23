@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ControlError } from "../../src/control/errors.js";
+import { hasPersonAuthority, principalLabel, type Principal } from "../../src/panel/permissions.js";
 import { autoConfirmBlocker, autoConfirmCommandId } from "../../src/control/autoConfirm.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { readGroupOrchestration } from "../../src/control/orchestration.js";
@@ -110,6 +111,22 @@ describe("H4: the automatic confirm of unlimited-token groups", () => {
       expect(result.confirmed).toEqual(confirmed ? ["g"] : []);
       if (!confirmed) expect(attemptRow(h)).toBeUndefined();
     } finally { await h.dispose(); }
+  });
+
+  it("C22d (review M4): through the routes' own context, a dispatched run carrying an owner's person token is not a person", async () => {
+    // The context controlApi.ts builds for a socket command (withCommandContext with principalLabel / hasPersonAuthority).
+    const owner = { userId: "owner", name: "Owner", roles: ["owner"] as const };
+    for (const [principal, person] of [
+      [{ kind: "agent", client: "cli", dispatchedRun: "run-dispatched", person: owner }, false],
+      [{ kind: "agent", client: "cli", person: owner }, true],
+    ] as const) {
+      const p = principal as unknown as Principal;
+      const h = await unlimited({ importContext: { client: "cli", principal: principalLabel(p), personAuthority: hasPersonAuthority(p) } }); try {
+        expect(body(h).createdByPerson).toBe(person);
+        const { result } = await passWithPredicate(h, new WebControlService(h.deps));
+        expect(result.confirmed).toEqual(person ? ["g"] : []);
+      } finally { await h.dispose(); }
+    }
   });
 
   it("C22a: a group a person's schedule fired (origin.kind = schedule), imported by orca-auto, is confirmed", async () => {

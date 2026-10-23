@@ -6,6 +6,8 @@ import { readControlGroup } from "../../src/panel/controlViews.js";
 import type { Amount } from "../../src/control/types.js";
 import { FIXTURE_AGENT_ID } from "./fixtures/agents.js";
 import { webFixture, type WebFixtureOptions } from "./fixtures/web.js";
+import { estimateHarness } from "./fixtures/estimateHarness.js";
+import { ESTIMATE_GRANT } from "../../src/control/estimator.js";
 
 /**
  * Tester round 2 spec §4.2 (ruling H1): an estimate run over its grant is recorded on the run only -- it never changes
@@ -137,18 +139,23 @@ describe("§4.2.5: no deficit-induced refusal from an estimate overrun", () => {
     } finally { await h.dispose(); }
   });
 
-  it("C1c: an estimate run being recovered (start-unknown) grows through the same booking", async () => {
-    const { h, runId, grant } = await claimed({ tokenPolicy: "optional-v1" }); try {
-      // The recovery path re-collects the run's events and books them through recordUsage, as the driver does.
-      h.store.db.prepare("UPDATE estimates SET state='start-unknown' WHERE group_id='g' AND id=?").run(h.estimateId);
-      const before = groupBody(h).limit.attempts;
-      book(h, runId, 1, { ...grant, tokens: 1, attempts: grant.attempts + 2 });
-      const body = groupBody(h);
-      expect(body.limit.attempts).toBe(before + 2);
+  it("C1c (review M4): the driver's own collect books an estimate's activeMs overrun, which grows the three limits", async () => {
+    // The real booking path: the execution driver collects the single call's events and books them (executionDriver.ts
+    // recordUsage call). A run recovered after a restart re-enters this same collect, so it books the same way. The
+    // estimate state `start-unknown` that §4.2.5 also names has no writer in src/ (grep: only readers), so there is no
+    // separate start-unknown recovery to drive.
+    const x = await estimateHarness({ usage: { activeMs: ESTIMATE_GRANT.activeMs + 3_000_000 } }); try {
+      const before = { group: groupBody(x.h).limit.activeMs, proposal: readBudgetProposal(x.h.store, "g").groupLimit.activeMs };
+      await x.rounds(() => x.estimate().state !== "running");
+      expect(x.estimate().state).toBe("ready");
+      const body = groupBody(x.h);
+      expect(body.status).toBe("draft");
+      expect(body.estimateOverrunGrowth).toEqual([{ runId: x.runId, eventSeq: 1, dimension: "activeMs", amount: 3_000_000, at: expect.any(Number) }]);
+      expect(body.limit.activeMs).toBe(before.group + 3_000_000);
       expect(body.ledger.groupLimit).toEqual(body.limit);
-      expect(readBudgetProposal(h.store, "g").groupLimit).toEqual(body.limit);
+      expect(readBudgetProposal(x.h.store, "g").groupLimit.activeMs).toBe(before.proposal + 3_000_000);
       expect(body.ledger.budgetDeficit).toEqual({ tokens: 0, activeMs: 0, attempts: 0, sessions: 0 });
-    } finally { await h.dispose(); }
+    } finally { await x.h.dispose(); }
   });
 
   it("C1c: settle-unknown-usage cannot book an estimate run (so it has no overrun to grow)", async () => {
