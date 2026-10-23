@@ -168,6 +168,11 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
     scope.kind === "task" ? preview.planLayers.tasks[scope.taskId] ?? undefined
       : scope.slot === "estimator" ? undefined : preview.planLayers.group[scope.slot];
 
+  // Tester round 2 §6.2.4: the task slots that resolved through a layer other than their own (task or task-plan).
+  const workerRole = preview.rolePreviews?.worker;
+  const inheriting = preview.slots.filter((entry) => entry.taskId !== null && entry.outcome.kind === "resolved"
+    && entry.outcome.frozen.provenance.agent !== "task" && entry.outcome.frozen.provenance.agent !== "task-plan").length;
+
   return (
     <section aria-label={t("agents.region")}>
       <h3>{t("agents.proposalTitle", { version: view.proposal.proposalVersion })}</h3>
@@ -187,6 +192,10 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
             <SelectionFields agents={agents} prefix={prefix} label={t("agents.groupSlot", { slot: enumText("agentSlot", slot) })} current={preview.groupOverrides[slot]} planned={plannedFor(scope)} inheritedAgent={inheritedAgent} inheritance={inheritance} drafts={drafts} onDraft={onDraft} models={props.models} onRefreshModels={props.onRefreshModels} />
             <button type="button" disabled={invalid || Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>{t("agents.setGroup", { slot: enumText("agentSlot", slot) })}</button>
             <button type="button" disabled={preview.groupOverrides[slot] === undefined} onClick={() => send(scope, null)}>{t("agents.clearGroup", { slot: enumText("agentSlot", slot) })}</button>
+            {/* Tester round 2 §6.2.5: no layer names an agent for the group worker. */}
+            {slot === "worker" && workerRole?.kind === "rejected" && workerRole.code === "agent-unselected" && (
+              <p role="note" data-testid="agents-no-worker">{t("agents.noWorker")} <a href="#global-settings">{t("nav.globalSettings")}</a></p>
+            )}
             {slot === "estimator" && (
               // Wave 3 review M-7 / ruling R7: the estimator is not part of the confirm; it is used at the next re-estimate.
               <small>{t("agents.estimatorNote")}</small>
@@ -194,6 +203,9 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
           </div>
         );
       })}
+      {workerRole?.kind === "resolved" && (
+        <p data-testid="agents-inherit-line">{t("agents.inheritLine", { count: inheriting, agent: `${workerRole.frozen.selection.agent} · ${workerRole.frozen.selection.model}` })}</p>
+      )}
       <table>
         <thead><tr><th>{t("agents.th.slot")}</th><th>{t("agents.th.agent")}</th><th>{t("agents.th.model")}</th><th>{t("agents.th.context")}</th><th>{t("agents.th.ownLayer")}</th></tr></thead>
         <tbody>
@@ -212,11 +224,14 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
                   : <FailedCell outcome={entry.outcome} />}
                 <td>
                   {scope !== null && !archived && (
-                    <>
+                    // Tester round 2 §6.2.3 (#6): a task inherits the group worker unless it says otherwise, so its own
+                    // fields fold away -- open only for a task with its own override or a slot that did not resolve.
+                    <details open={own != null || entry.outcome.kind !== "resolved"} data-task-override={taskId}>
+                      <summary>{t("agents.overrideTask", { taskId: String(taskId) })}</summary>
                       <SelectionFields agents={agents} prefix={prefix} label={t("agents.taskLayer", { taskId: String(taskId) })} current={own} planned={plannedFor(scope)} inheritedAgent={inherited(scope) ?? (entry.outcome.kind === "resolved" ? entry.outcome.frozen.selection.agent : undefined)} inheritance={entry.outcome.kind === "resolved" ? entry.outcome.frozen : undefined} drafts={drafts} onDraft={onDraft} models={props.models} onRefreshModels={props.onRefreshModels} />
                       <button type="button" disabled={invalid || Object.keys(partial).length === 0} onClick={() => send(scope, partial)}>{t("agents.setTask", { taskId: String(taskId) })}</button>
                       <button type="button" disabled={own === undefined} onClick={() => send(scope, null)}>{t("agents.clearTask", { taskId: String(taskId) })}</button>
-                    </>
+                    </details>
                   )}
                 </td>
               </tr>

@@ -917,6 +917,9 @@ export const en = {
     unchanged: "Budget unchanged",
   },
   agents: {
+    inheritLine: "{{count}} tasks use the group worker: {{agent}}",
+    overrideTask: "Override task {{taskId}}",
+    noWorker: "No agent is chosen for the group worker. Choose one here, or set a default agent in",
     retryWaiting: "Reading again in {{seconds}} s (retry {{attempt}}/{{total}}).",
     retryPaused: "Retrying is paused while the page is hidden; it resumes when you come back.",
     retryStopped: "Stopped after {{total}} retries; Re-read asks again.",
