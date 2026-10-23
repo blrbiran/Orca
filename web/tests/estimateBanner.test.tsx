@@ -36,7 +36,7 @@ describe("estimate over its grant (C4)", () => {
     for (const line of lines) expect(line.getAttribute("role")).toBe("status");
     // An estimate overrun is never the blocked banner, and leaves the confirm offered.
     expect(screen.queryByTestId("blocked-banner")).toBeNull();
-    expect(screen.getByRole("button", { name: "Confirm task plan" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Confirm task plan", hidden: true })).toBeTruthy();
   });
 
   it("shows nothing for an estimate run within its grant, or a work run over it", () => {
@@ -51,18 +51,19 @@ describe("a blocked group (C4)", () => {
       estimateRun({ overGrant: ["tokens"], grant: amount(100) }),
       run({ runId: "run-w", used: amount(150), grant: amount(100), overGrant: ["tokens"] }),
     ]);
+    // A blocked group opens on Progress, so the Preparation panel is hidden: the queries below include hidden nodes.
     show({ ...v, summary: { ...v.summary, state: "blocked" } });
     const alert = screen.getByTestId("blocked-banner");
     expect(alert.getAttribute("role")).toBe("alert");
     expect(alert.textContent).toBe("This group is blocked: run run-w went over its tokens grant (150 of 100). No new step starts in it, and preparation changes are refused.");
-    expect(screen.queryByRole("button", { name: "Confirm task plan" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Set group worker agent" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirm task plan", hidden: true })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Set group worker agent", hidden: true })).toBeNull();
   });
 
   it("keeps both editors open for the same group while it is a draft", () => {
     show(draft([run({ runId: "run-w", used: amount(150), grant: amount(100), overGrant: ["tokens"] })]));
-    expect(screen.getByRole("button", { name: "Confirm task plan" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Set group worker agent" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Confirm task plan", hidden: true })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set group worker agent", hidden: true })).toBeTruthy();
   });
 });
 
