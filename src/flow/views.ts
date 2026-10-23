@@ -122,7 +122,10 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
         // -- and the active chain over them. A newer execution still at work on a revision (§9: after a done step was
         // revised, or a rewind) is `clarifyRevision`, its rounds and chain, so the page shows the active rounds as the
         // output and the revision as waiting, never the one in place of the other.
-        clarify: step.kind !== "clarify" || newest === undefined ? null : roundsOf(heads[step.id] ?? newest.seq),
+        // With no head, the newest execution's rounds are shown only while it is not settled done/skipped (the step's
+        // first rounds, or a failed attempt); a rewind to "not run" leaves no active rounds, so none are shown as if they were.
+        clarify: step.kind !== "clarify" || newest === undefined ? null
+          : heads[step.id] !== undefined ? roundsOf(heads[step.id]!) : newest.state !== "done" && newest.state !== "skipped" ? roundsOf(newest.seq) : null,
         clarifyRevision: step.kind !== "clarify" || newest === undefined || heads[step.id] === undefined || heads[step.id] === newest.seq
           || !REVISING.has(newest.state) ? null : { seq: newest.seq, state: newest.state, ...roundsOf(newest.seq) },
         // Gaps spec §6.3: the external/irreversible effect steps a defer of this step would hold (the defer dialog's rows).
@@ -141,7 +144,7 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
   };
 }
 
-/** An execution of a clarify step still working on its rounds (a revision in progress). */
+/** An execution of a clarify step still working on its rounds (a revision in progress); rewind.ts refuses on the same four. */
 const REVISING: ReadonlySet<string> = new Set(["queued", "running", "needs-person", "parked"]);
 
 function clarifyOf(rounds: RoundBody[]): { rounds: RoundBody[]; chain: number[] } {

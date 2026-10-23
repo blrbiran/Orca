@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import { readRoundsAt } from "../../src/control/requirementRecords.js";
 import { TRIAGE_JSON_SCHEMA } from "../../src/flow/feedback/triage.js";
 import { answerFeedbackClarify } from "../../src/flow/feedback/intake.js";
+import { storeAttachment } from "../../src/flow/feedback/attachments.js";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { createFlowCallPort } from "../../src/flow/calls.js";
 import { acceptMessage } from "../../src/flow/messages.js";
@@ -145,6 +146,25 @@ describe("feedback intake (gaps §4, G2)", { timeout: 60_000 }, () => {
       expect(intakeOf(w, id, picked.seq)).toMatchObject({ state: "planned", body: { results: [{ located: { file: "post.md", paragraph: 3 } }], targets: [{ stepKey: "draft" }] } });
       expect(callsOf(w, "feedback-triage")).toHaveLength(0);
       expect(listPlans(w.store, id)[0]!.candidates).toMatchObject({ feedback: { draft: [expect.stringContaining("paragraph 3")] } });
+    } finally { await w.dispose(); }
+  });
+
+  // Task 10-A fix round 1 (I1): "change target" on the page replaces whole-article feedback with the same words sent to
+  // a step. Nothing is left to locate, yet it is a replacement: it opens an intake that keeps the screenshots and goes
+  // straight to that step -- without one, the step feedback would be taken plainly and the screenshots dropped.
+  it("a replacement retargeted at a step with no anchor still opens an intake, keeps its screenshots and goes to that step", async () => {
+    const w = await world(); try {
+      const id = await run(w);
+      const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+      const shot = storeAttachment(w.deps.env, png);
+      const attachment = `${shot.sha256}.${shot.ext}`;
+      const sent = await feedback(w, id, { text: "something feels off", attachments: [attachment] });
+      expect(intakeOf(w, id, sent.seq).state).toBe("triaging");
+      const moved = await feedback(w, id, { text: "something feels off", replaces: sent.seq, attachments: [attachment] }, { kind: "step", stepKey: "polish" });
+      expect(intakeOf(w, id, sent.seq).state).toBe("withdrawn");
+      // mutation: open no intake for an unanchored step replacement -> getIntake null, red
+      expect(intakeOf(w, id, moved.seq)).toMatchObject({ state: "planned", body: { attachments: [attachment], stepKey: "polish", targets: [{ stepKey: "polish" }] } });
+      expect(listPlans(w.store, id).at(-1)!.candidates).toMatchObject({ feedback: { polish: [expect.stringContaining("something feels off")] } });
     } finally { await w.dispose(); }
   });
 

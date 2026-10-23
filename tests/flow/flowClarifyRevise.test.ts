@@ -225,6 +225,60 @@ describe("the run view shows the active execution's rounds and a revision in pro
   });
 });
 
+describe("the run view after a plain rewind (Task 10-A fix round 1, M3)", () => {
+  type ClarifyView = { rounds: Array<{ roundNo: number }>; chain: number[] } | null;
+  const briefOf = (w: World, flowRunId: string) =>
+    (readFlowRun(w.store, flowRunId) as { steps: Array<{ stepKey: string; clarify: ClarifyView; clarifyRevision: unknown }> }).steps.find((s) => s.stepKey === "brief")!;
+  const rewindTo = (w: World, flowRunId: string, toSeq?: number) =>
+    acceptMessage(w.deps, flowRunId, { kind: "command", target: { kind: "run" }, body: { command: "rewind", toStep: "brief", ...(toSeq === undefined ? {} : { toSeq }) }, by: "ann", via: "cli:test", requestId: `rwv-${(n += 1)}` });
+  /** brief revised once and agreed: execution 2 (chain [3, 4]) is the head, execution 1 (chain [1, 2]) is done. */
+  async function revisedAndAgreed() {
+    const { w, flowRunId, groupId } = await doneRun();
+    await revise(w, flowRunId, 1, revision(w, groupId, 1, 1, "GitHub-flavoured"));
+    await w.answer(lastIndex(w), roundWith(false));
+    await answerRound(w, flowRunId, groupId, 2, 4);
+    await flowClarifyConsensus(w.deps, { flowRunId, stepKey: "brief" }, "ann", "cli:test");
+    await w.advance();
+    expect(getHead(w.store, flowRunId, "brief")).toBe(2);
+    return { w, flowRunId, groupId };
+  }
+
+  it("rewound to execution 1 while execution 2 is done, the step's rounds are execution 1's, nothing shown as a revision", async () => {
+    const { w, flowRunId } = await revisedAndAgreed(); try {
+      expect(await rewindTo(w, flowRunId, 1)).toMatchObject({ state: "applied" });
+      expect(getHead(w.store, flowRunId, "brief")).toBe(1);
+      const brief = briefOf(w, flowRunId);
+      // mutation: read the newest execution's rounds as the step's -> execution 2's chain [3, 4], red
+      expect(brief.clarify!.chain).toEqual([1, 2]);
+      expect(brief.clarify!.rounds.map((r) => r.roundNo)).toEqual([1, 2]);
+      expect(brief.clarifyRevision).toBeNull();
+    } finally { await w.dispose(); }
+  });
+
+  it("rewound to 'not run', no execution's rounds are shown as the step's active ones", async () => {
+    const { w, flowRunId } = await doneRun(); try {
+      expect(await rewindTo(w, flowRunId)).toMatchObject({ state: "applied" });
+      expect(getHead(w.store, flowRunId, "brief")).toBeNull();
+      const brief = briefOf(w, flowRunId);
+      // mutation: fall back to the newest execution's rounds with no head -> execution 1's chain [1, 2], red
+      expect(brief.clarify?.chain ?? []).not.toEqual([1, 2]);
+      expect((brief.clarify?.rounds ?? []).map((r) => r.roundNo)).not.toContain(2);
+    } finally { await w.dispose(); }
+  });
+
+  it("a parked newer execution of the step refuses the rewind, as a waiting or running one does", async () => {
+    const { w, flowRunId, groupId } = await doneRun(); try {
+      expect(await revise(w, flowRunId, 2, revision(w, groupId, 1, 2, "Absolute"))).toMatchObject({ state: "applied" });
+      // A parked execution (an exhausted pool, a hold) resumes later and would move the head past the rewind.
+      w.store.db.prepare("UPDATE step_executions SET state='parked' WHERE flow_run_id=? AND step_key='brief' AND seq=2").run(flowRunId);
+      expect(states(w, flowRunId)).toEqual([[1, "done"], [2, "parked"]]);
+      // mutation: leave `parked` out of the rewind guard -> applied, red
+      expect(await rewindTo(w, flowRunId, 1)).toMatchObject({ state: "rejected", reason: STEP_WAITING });
+      expect(briefOf(w, flowRunId).clarifyRevision).toMatchObject({ seq: 2, state: "parked" });
+    } finally { await w.dispose(); }
+  });
+});
+
 describe("the flow-message verb carries a round target (§9: access any, like requirement-revise)", () => {
   it("accepts an edit at a round and nothing but a step key and a round number in it", () => {
     const runId = "fr-00000000-0000-4000-8000-000000000000";

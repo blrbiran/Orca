@@ -7,16 +7,16 @@
  * re-run plan with the model's proposed skips the person can overrule, answers, confirm cards, enact / discard, the pool.
  * The human-only verbs are not offered to someone who may not send them (§14.2).
  */
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { JSX } from "react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountContext } from "../src/AuthGate.js";
 import type { Me } from "../src/auth.js";
 import type { FlowExecutionViewV1, FlowIntakeV1, FlowJournalV1, FlowRunViewV1, FlowSpendV1, FlowToolRulesReportV1, RoundBodyV1 } from "../src/controlTypes.js";
-import { FlowRunPage } from "../src/FlowRunPage.js";
-import "../src/i18n.js";
+import { FlowRunPage, spendText } from "../src/FlowRunPage.js";
+import i18n from "../src/i18n.js";
 
-afterEach(() => { cleanup(); answerWith = () => ({ schema: "orca-command-success-v1" }); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); answerWith = () => ({ schema: "orca-command-success-v1" }); laterViews = []; journals = []; uploadFails = false; });
 const owner: Me = { user: { id: "u1", name: "olga", roles: ["owner"], mustChangePassword: false }, expiresAt: 0, sessionDays: 15 };
 const member: Me = { user: { id: "u2", name: "amy", roles: ["member"], mustChangePassword: false }, expiresAt: 0, sessionDays: 15 };
 const as = (me: Me, node: JSX.Element): JSX.Element => <AccountContext.Provider value={me}>{node}</AccountContext.Provider>;
@@ -90,6 +90,10 @@ let reads: string[];
 let uploads: Array<{ url: string; type: string | null; name: string }>;
 /** What a command POST answers (default: a plain success); a test may answer a flow message as stored `rejected`. */
 let answerWith: (url: string) => unknown = () => ({ schema: "orca-command-success-v1" });
+/** Fix round 1: the view the server holds after the n-th POST (the last one stays), the journal at the n-th journal read. */
+let laterViews: FlowRunViewV1[] = [];
+let journals: FlowJournalV1[] = [];
+let uploadFails = false;
 function serve(view: FlowRunViewV1 = runView()): void {
   posts = []; reads = []; uploads = [];
   document.cookie = "orca_csrf=t";
@@ -98,11 +102,15 @@ function serve(view: FlowRunViewV1 = runView()): void {
     if ((init?.method ?? "GET") === "POST" && url.endsWith("/attachments")) {
       const file = init!.body as File;
       uploads.push({ url, type: new Headers(init!.headers).get("content-type"), name: file.name });
+      if (uploadFails) return new Response(JSON.stringify({ error: { code: "flow-attachment-invalid", message: "flow-attachment-invalid:larger than 5242880 bytes" } }), { status: 400 });
       return new Response(JSON.stringify({ schema: "orca-flow-attachment-v1", id: `${"a".repeat(63)}${uploads.length}.png` }), { status: 200 });
     }
     if ((init?.method ?? "GET") === "POST") { posts.push({ url, body: JSON.parse(String(init!.body)) }); return new Response(JSON.stringify(answerWith(url)), { status: 200 }); }
     reads.push(url);
-    return new Response(JSON.stringify(url.endsWith("/journal") ? JOURNAL : view), { status: 200 });
+    const views = [view, ...laterViews];
+    const journalReads = reads.filter((r) => r.endsWith("/journal")).length;
+    const journal = journals.length === 0 ? JOURNAL : journals[Math.min(journalReads - 1, journals.length - 1)]!;
+    return new Response(JSON.stringify(url.endsWith("/journal") ? journal : views[Math.min(posts.length, views.length - 1)]), { status: 200 });
   }) as typeof fetch;
 }
 const mount = async (me: Me = owner, view?: FlowRunViewV1): Promise<void> => {
@@ -312,13 +320,15 @@ describe("a step that asks the person (§4.3, §10)", () => {
  * server takes for it; what the page must never do is guess -- show 0 for a spend the tool did not give, pick a hit for
  * the person, push a held external step on its own, or ask about effects a defer does not hold.
  */
+/** A screenshot the feedback carried (fix round 1, I1: every replacement must keep it). */
+const SHOT = `${"b".repeat(64)}.png`;
 const intake = (over: Partial<FlowIntakeV1> = {}): FlowIntakeV1 => ({
   messageSeq: 7, state: "needs-location", text: "this sentence drags", stepKey: null, anchors: [{ quote: "Tea slows you down" }],
   results: [{ anchor: { quote: "Tea slows you down" }, hits: [
     { file: "tea.md", paragraph: 2, headingPath: ["Why"], excerpt: "Tea slows you down, they say." },
     { file: "tea.md", paragraph: 9, headingPath: [], excerpt: "Tea slows you down again." },
   ], more: 0 }],
-  ambiguousFiles: [], targets: [], restated: null, flags: [], planNo: null, asIs: false, attachments: [], clarify: null, spend: spent(null, "no tool runs"), ...over,
+  ambiguousFiles: [], targets: [], restated: null, flags: [], planNo: null, asIs: false, attachments: [SHOT], clarify: null, spend: spent(null, "no tool runs"), ...over,
 });
 
 describe("feedback on the whole run and its intake (§4, §14.1-§14.2)", () => {
@@ -369,14 +379,15 @@ describe("feedback on the whole run and its intake (§4, §14.1-§14.2)", () => 
     expect(posts).toEqual([]);
     fireEvent.click(within(hits[1]!).getByRole("button", { name: "This one" }));
     await waitFor(() => expect(posts.length).toBe(1));
-    // mutation: send the hit 0-based -> hit 1, red
-    expect(lastPost()).toEqual({ url: "/api/control/flows/messages", body: expect.objectContaining({ payload: { runId: RUN, kind: "feedback", target: { kind: "run" }, body: { text: "this sentence drags", replaces: 7, hit: 2 } } }) });
+    // mutation: send the hit 0-based -> hit 1, red. The picked hit replaces the anchors; the screenshot stays (I1).
+    // mutation: replacement drops attachments -> no `attachments`, red
+    expect(lastPost()).toEqual({ url: "/api/control/flows/messages", body: expect.objectContaining({ payload: { runId: RUN, kind: "feedback", target: { kind: "run" }, body: { text: "this sentence drags", replaces: 7, attachments: [SHOT], hit: 2 } } }) });
     fireEvent.click(within(card).getByRole("button", { name: "Rewrite" }));
     const rewrite = within(card).getByRole("form", { name: "Rewrite" });
     fireEvent.change(within(rewrite).getByRole("textbox", { name: "A passage as it reads in the article" }), { target: { value: "they say" } });
     fireEvent.click(within(rewrite).getByRole("button", { name: "Send feedback" }));
     await waitFor(() => expect(posts.length).toBe(2));
-    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "feedback", target: { kind: "run" }, body: { text: "this sentence drags", replaces: 7, anchors: [{ quote: "they say" }] } });
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "feedback", target: { kind: "run" }, body: { text: "this sentence drags", replaces: 7, attachments: [SHOT], anchors: [{ quote: "they say" }] } });
     expect(within(card).getByTestId("flow-spend").textContent).toBe("Spend: not available (no tool runs) · money: not available — the tool reports none");
   });
 
@@ -393,11 +404,12 @@ describe("feedback on the whole run and its intake (§4, §14.1-§14.2)", () => 
     expect(lastPost()).toEqual({ url: "/api/control/flows/answer", body: expect.objectContaining({ payload: { runId: RUN, feedback: 7, clarify: { roundNo: 1, answers: [{ id: "R1.Q1", kind: "recommended" }], glossaryDecisions: [], adrDecisions: [] } } }) });
     fireEvent.click(within(form).getByRole("button", { name: "Use my words as they are" }));
     await waitFor(() => expect(posts.length).toBe(2));
-    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "feedback", target: { kind: "run" }, body: { text: "this sentence drags", replaces: 7, asIs: true } });
+    // I1: the replacement keeps the location and the screenshot; it only adds "as they are".
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "feedback", target: { kind: "run" }, body: { text: "this sentence drags", replaces: 7, attachments: [SHOT], anchors: [{ quote: "Tea slows you down" }], asIs: true } });
     fireEvent.change(within(card).getByRole("combobox", { name: "Change target" }), { target: { value: "outline" } });
     fireEvent.click(within(card).getByRole("button", { name: "Change target" }));
     await waitFor(() => expect(posts.length).toBe(3));
-    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "feedback", target: { kind: "step", stepKey: "outline" }, body: { text: "this sentence drags", replaces: 7 } });
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "feedback", target: { kind: "step", stepKey: "outline" }, body: { text: "this sentence drags", replaces: 7, attachments: [SHOT], anchors: [{ quote: "Tea slows you down" }] } });
   });
 });
 
@@ -425,7 +437,7 @@ describe("a running plan's questions and accepts (§5, §14.3)", () => {
     // mutation: show the asked time instead of the deadline -> 14:00, red
     expect(item.textContent).toContain("keeps the current output at 14:05");
     expect(within(item).getByTestId("flow-remaining")).toBeTruthy();
-    expect(within(plan).getByTestId("flow-plan-depends").textContent).toContain("steps after it depend on it in this template");
+    expect(within(plan).getByTestId("flow-plan-depends").textContent).toContain("the steps after cover depend on it in this template");
     fireEvent.click(within(item).getByRole("button", { name: "Run it" }));
     await waitFor(() => expect(posts.length).toBe(1));
     expect(lastPost()).toEqual({ url: "/api/control/flows/plan-step", body: expect.objectContaining({ expectedRevision: 0, payload: { runId: RUN, planNo: 2, stepKey: "cover", choice: "run" } }) });
@@ -490,9 +502,9 @@ describe("skip, defer, fill and held effects (§6, §14.4)", () => {
     fireEvent.click(within(stepBox("outline")).getByRole("button", { name: "Skip" }));
     await waitFor(() => expect(posts.length).toBe(1));
     expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "command", target: { kind: "step", stepKey: "outline" }, body: { command: "skip" } });
-    expect(within(stepBox("voice")).getByTestId("flow-mark").textContent).toBe("deferred: fill when ready");
+    expect(within(stepBox("voice")).getByTestId("flow-mark").textContent).toBe("deferred: fill it in when ready");
     expect(within(stepBox("voice")).queryByRole("button", { name: "Skip" })).toBeNull();
-    fireEvent.click(within(stepBox("voice")).getByRole("button", { name: "Fill" }));
+    fireEvent.click(within(stepBox("voice")).getByRole("button", { name: "Fill it in" }));
     await waitFor(() => expect(posts.length).toBe(2));
     expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "command", target: { kind: "step", stepKey: "voice" }, body: { command: "fill" } });
     for (const key of ["brief", "pick-title"]) for (const name of ["Skip", "Defer"]) expect(within(stepBox(key)).queryByRole("button", { name })).toBeNull();
@@ -544,7 +556,8 @@ describe("spend, the tool's numbers only (§10, §14.7)", () => {
     // mutation: render null spend as 0 -> "0 tokens", red
     expect(within(within(stepBox("voice")).getByTestId("flow-execution-1")).getByTestId("flow-spend").textContent)
       .toBe("Spend: not available (the tool reported 0 tokens) · money: not available — the tool reports none");
-    expect(within(stepBox("voice")).getAllByTestId("flow-spend").map((e) => e.textContent)).not.toContain(expect.stringContaining("0 tokens"));
+    // Fix round 1 (M1): a check that can fail -- no spend line of the step shows a token number (its spend is unknown).
+    expect(within(stepBox("voice")).getAllByTestId("flow-spend").map((e) => e.textContent).filter((text) => /^Spend: [\d,]+ tokens/.test(text ?? ""))).toEqual([]);
     // A partial sum keeps the known part and says how much is unknown.
     expect(within(within(stepBox("outline")).getByTestId("flow-execution-1")).getByTestId("flow-spend").textContent).toBe("Spend: 4,200 tokens (partial: 1 runs unknown) · money: not available — the tool reports none");
     expect(screen.getByTestId("flow-run-spend").textContent).toBe("Spend: not available (partial: 2 runs unknown) · money: not available — the tool reports none · tool-reported, not an estimate");
@@ -588,5 +601,216 @@ describe("revise a round of a flow clarify step (§9, §14.6)", () => {
     fireEvent.click(within(within(brief).getByRole("form", { name: "brief: round 3" })).getByRole("button", { name: "Send this round" }));
     await waitFor(() => expect(posts.length).toBe(1));
     expect(lastPost().body.payload).toMatchObject({ runId: RUN, stepKey: "brief", clarify: { roundNo: 3 } });
+  });
+});
+
+/**
+ * Task 10-A fix round 1 (review M2-M7): the branches the first round left without a criterion, the bounded re-reads,
+ * what survives a re-mount, re-marking, and spend reasons.
+ */
+describe("fix round 1: replacements keep the feedback (I1)", () => {
+  it("an as-is intake picked by hit keeps both its screenshot and as-is", async () => {
+    await mount(owner, runView({ intakes: [intake({ asIs: true })] }));
+    fireEvent.click(within(screen.getAllByTestId("flow-intake-hit")[0]!).getByRole("button", { name: "This one" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "feedback", target: { kind: "run" }, body: { text: "this sentence drags", replaces: 7, attachments: [SHOT], asIs: true, hit: 1 } });
+  });
+});
+
+describe("fix round 1: branches with a criterion now (M2)", () => {
+  it("an upload the server refuses shows the refusal and sends no feedback (the screenshots are not dropped silently)", async () => {
+    uploadFails = true;
+    await mount();
+    const box = screen.getByRole("form", { name: "Feedback on the whole run" });
+    fireEvent.change(within(box).getByRole("textbox", { name: "Your feedback" }), { target: { value: "see the picture" } });
+    fireEvent.change(within(box).getByLabelText("Screenshots (png, jpg or webp, at most 4)"), { target: { files: [new File(["x"], "big.png", { type: "image/png" })] } });
+    fireEvent.click(within(box).getByRole("button", { name: "Send feedback" }));
+    await waitFor(() => expect(screen.getByTestId("refusal-code").textContent).toBe("flow-attachment-invalid"));
+    expect(uploads).toHaveLength(1);
+    // mutation: upload failure still sends -> a messages post without the screenshot, red
+    expect(posts).toEqual([]);
+    // The person's words are still in the box, to send again.
+    expect((within(box).getByRole("textbox", { name: "Your feedback" }) as HTMLTextAreaElement).value).toBe("see the picture");
+  });
+
+  it("the countdown shows the time left to the deadline", async () => {
+    const now = new Date(2026, 9, 23, 14, 0, 0).getTime();
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    const view = runView({ plans: [{ flowRunId: RUN, planNo: 2, state: "running", by: "olga", via: "web", spend: spent(null, "no tool runs"),
+      candidates: { list: [{ stepKey: "cover", reasons: ["upstream-changed:voice"] }], feedback: {}, edits: [], trigger: "feedback" },
+      proposal: { retries: 0, lastInvalid: null, skips: [], exhausted: null },
+      chosen: { steps: [], skips: [], added: [], pending: [{ stepKey: "cover", question: "Keep the cover?", askedAt: now - 175_000, deadline: now + 125_000, answer: null }] } }] });
+    await mount(owner, view);
+    // mutation: count the whole timeout instead of the time left -> "5:00 left", red
+    expect(screen.getByTestId("flow-remaining").textContent).toBe("2:05 left");
+    expect(screen.getByTestId("flow-pending-cover").textContent).toContain("keeps the current output at 14:02");
+  });
+
+  it("a needs-location intake says why: an ambiguous reading file names its files, otherwise the passage was not found; a located one shows its excerpt", async () => {
+    await mount(owner, runView({ intakes: [
+      intake({ messageSeq: 7, results: [], ambiguousFiles: ["tea.md", "tea.wechat.md"] }),
+      intake({ messageSeq: 8, results: [] }),
+      intake({ messageSeq: 9, state: "triaging", results: [{ anchor: { quote: "Tea slows you down" }, located: { file: "tea.md", paragraph: 2, headingPath: ["Why"], excerpt: "Tea slows you down, they say." } }] }),
+    ] }));
+    // mutation: swap the ambiguous and not-found lines -> red
+    expect(screen.getByTestId("flow-intake-7").textContent).toContain("so this cannot be placed: tea.md, tea.wechat.md");
+    expect(screen.getByTestId("flow-intake-8").textContent).toContain("The passage was not found in the article.");
+    // mutation: drop the located excerpt -> red
+    expect(within(screen.getByTestId("flow-intake-9")).getByText("Tea slows you down, they say.").closest("blockquote")!.textContent).toContain("tea.md · paragraph 2 · Why");
+  });
+
+  it("an accept carried from an earlier plan says which plan", async () => {
+    const view = runView({ plans: [{ flowRunId: RUN, planNo: 3, state: "running", by: "olga", via: "web", spend: spent(null, "no tool runs"),
+      candidates: { list: [], feedback: {}, edits: [], trigger: "feedback" }, proposal: { retries: 0, lastInvalid: null, skips: [], exhausted: null },
+      chosen: { steps: [], skips: [], added: [], accepted: [{ stepKey: "cover", seq: 1, by: "olga", via: "web", at: 1, source: "carried", fromPlan: 2 }] } }] });
+    await mount(owner, view);
+    // mutation: label a carried accept as the timeout's -> red
+    expect(screen.getByTestId("flow-plan-accepted-cover").textContent).toBe("cover: accepted as unchanged (carried from plan 2)");
+  });
+
+  it("'set <param> instead' on a deferred step sends a bool as a bool and an int as a number", async () => {
+    const view = runView();
+    view.steps[2] = step("voice", "work", [exec(1), exec(2, { state: "skipped", output: null })], { mark: { kind: "defer", messageSeq: 4, effects: {} },
+      whenParams: [{ id: "illustrations", type: "bool" }, { id: "words", type: "int" }] });
+    await mount(owner, view);
+    // mutation: offer it only on a failed step -> no button on the deferred voice, red
+    fireEvent.click(within(stepBox("voice")).getByRole("button", { name: "Set illustrations instead" }));
+    const flag = within(stepBox("voice")).getByRole("form", { name: "Set illustrations instead" });
+    fireEvent.click(within(flag).getByRole("checkbox", { name: "illustrations" }));
+    fireEvent.click(within(flag).getByRole("button", { name: "Set" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "command", target: { kind: "run" }, body: { command: "params", set: { illustrations: true } } });
+    fireEvent.click(within(stepBox("voice")).getByRole("button", { name: "Set words instead" }));
+    const words = within(stepBox("voice")).getByRole("form", { name: "Set words instead" });
+    fireEvent.change(within(words).getByRole("spinbutton", { name: "words" }), { target: { value: "800" } });
+    fireEvent.click(within(words).getByRole("button", { name: "Set" }));
+    await waitFor(() => expect(posts.length).toBe(2));
+    // mutation: send an int param as its text -> "800", red
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "command", target: { kind: "run" }, body: { command: "params", set: { words: 800 } } });
+  });
+
+  it("a member sees an intake's clarify questions as the owner's to answer, and may still send the words as they are", async () => {
+    await mount(member, runView({ intakes: [intake({ state: "clarifying", results: [], clarify: { roundNo: 1, questions: [{ id: "R1.Q1", question: "What feels wrong?", recommendedAnswer: "too stiff" }] } })] }));
+    const card = screen.getByRole("region", { name: "Feedback #7" });
+    // mutation: give a member the clarify form -> the form exists, red
+    expect(within(card).queryByRole("form", { name: "Feedback #7: questions" })).toBeNull();
+    expect(card.textContent).toContain("Only the panel owner can do this here.");
+    fireEvent.click(within(card).getByRole("button", { name: "Use my words as they are" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost().body.payload).toMatchObject({ kind: "feedback", body: { replaces: 7, asIs: true } });
+  });
+
+  it("a stopped run offers no marks, no feedback box, no params change and no held card", async () => {
+    const view = runView({ state: "stopped" });
+    view.steps[4] = step("cover", "work", [exec(1, { state: "failed", failure: "no image key", output: null })], { whenParams: [{ id: "coverImage", type: "image" }] });
+    view.steps[5] = step("to-draft-box", "work", [exec(1, { state: "parked", output: null })], { effect: { kind: "wechat-draft", class: "external" }, heldBy: ["cover"] });
+    await mount(owner, view);
+    // mutation: drop the `open` gate -> these appear, red
+    for (const name of ["Skip", "Defer", "Set coverImage instead", "Push now without cover"]) expect(screen.queryByRole("button", { name })).toBeNull();
+    expect(screen.queryByRole("form", { name: "Feedback on the whole run" })).toBeNull();
+  });
+});
+
+describe("fix round 1: bounded re-reads (M4)", () => {
+  it("a member's push-now at a running step comes back accepted; the later rejection is read and shown on the card", async () => {
+    const view = runView();
+    view.steps[4] = step("cover", "work", [exec(1, { state: "skipped", output: null })], { mark: { kind: "defer", messageSeq: 5, effects: {} } });
+    view.steps[5] = step("to-draft-box", "work", [exec(1, { state: "parked", output: null })], { effect: { kind: "wechat-draft", class: "external" }, heldBy: ["cover"] });
+    const push = { flowRunId: RUN, seq: 9, requestId: "r9", kind: "command", target: "step", by: "amy", via: "web", reason: null, at: 9,
+      body: { command: "defer", effects: { "to-draft-box": "proceed" }, target: { kind: "step", stepKey: "cover" } } };
+    answerWith = () => ({ schema: "orca-command-success-v1", result: { kind: "flow-message-stored", flowRunId: RUN, seq: 9, state: "accepted", reason: null, deduped: false } });
+    journals = [JOURNAL, { ...JOURNAL, messages: [...JOURNAL.messages, { ...push, state: "accepted" as const }] },
+      { ...JOURNAL, messages: [...JOURNAL.messages, { ...push, state: "rejected" as const, reason: "flow-effect-needs-person:to-draft-box" }] }];
+    await mount(member, view);
+    fireEvent.click(within(stepBox("to-draft-box")).getByRole("button", { name: "Push now without cover" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    // Accepted for now: no refusal yet, nothing shown as done either.
+    expect(screen.queryByTestId("refusal-code")).toBeNull();
+    // mutation: no follow-up read while a sent message waits -> the rejection is never read, red
+    await waitFor(() => expect(screen.getByTestId("refusal-code").textContent).toBe("flow-effect-needs-person"), { timeout: 5000 });
+    // mutation: drop the card's refused line -> red
+    expect(within(stepBox("to-draft-box")).getByTestId("flow-held-refused").textContent).toBe("Not let through: only the person (the panel owner) can let to-draft-box go ahead.");
+  });
+
+  it("reads once more just after a shown deadline passes", async () => {
+    const view = runView({ plans: [{ flowRunId: RUN, planNo: 2, state: "running", by: "olga", via: "web", spend: spent(null, "no tool runs"),
+      candidates: { list: [{ stepKey: "cover", reasons: ["upstream-changed:voice"] }], feedback: {}, edits: [], trigger: "feedback" },
+      proposal: { retries: 0, lastInvalid: null, skips: [], exhausted: null },
+      chosen: { steps: [], skips: [], added: [], pending: [{ stepKey: "cover", question: "Keep the cover?", askedAt: Date.now() - 299_800, deadline: Date.now() + 200, answer: null }] } }] });
+    await mount(owner, view);
+    const before = reads.filter((r) => !r.endsWith("/journal")).length;
+    // mutation: no re-read at the deadline -> the count stays, red
+    await waitFor(() => expect(reads.filter((r) => !r.endsWith("/journal")).length).toBe(before + 1), { timeout: 3000 });
+  });
+
+  it("while an intake locates it reads again a bounded number of times, each later than the last, then stops", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await mount(owner, runView({ intakes: [intake({ state: "locating", results: [] })] }));
+    const views = () => reads.filter((r) => !r.endsWith("/journal")).length;
+    const start = views();
+    const advance = async (ms: number) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); };
+    await advance(1600);
+    expect(views()).toBe(start + 1);
+    // 1.5 s, then 3, 6, 12 and 24 s later: five follow-ups in all.
+    for (let i = 0; i < 40; i += 1) await advance(5_000);
+    // mutation: follow up without a bound -> more than 5, red
+    expect(views()).toBe(start + 5);
+    for (let i = 0; i < 40; i += 1) await advance(15_000);
+    expect(views()).toBe(start + 5);
+  });
+});
+
+describe("fix round 1: what survives a re-mount (M5), re-marking (M6), spend reasons (M7)", () => {
+  it("a half-written run feedback and a held card's 'wait' survive an act that re-mounts the run's body", async () => {
+    const view = runView();
+    view.steps[5] = step("to-draft-box", "work", [exec(1, { state: "parked", output: null })], { effect: { kind: "wechat-draft", class: "external" }, heldBy: ["cover"] });
+    const after = runView();
+    after.steps[5] = view.steps[5]!;
+    after.steps[1] = step("outline", "work", [exec(1), exec(2), exec(3, { state: "skipped", output: null })]);
+    laterViews = [after];
+    await mount(owner, view);
+    const box = screen.getByRole("form", { name: "Feedback on the whole run" });
+    fireEvent.change(within(box).getByRole("textbox", { name: "Your feedback" }), { target: { value: "half a thought" } });
+    fireEvent.click(within(stepBox("to-draft-box")).getByRole("button", { name: "Wait" }));
+    fireEvent.click(within(stepBox("outline")).getByRole("button", { name: "Skip" }));
+    await waitFor(() => expect(within(stepBox("outline")).getByTestId("flow-step-state").textContent).toBe("skipped"));
+    // mutation: keep the feedback box inside the re-mount key -> its text is gone, red
+    expect((within(screen.getByRole("form", { name: "Feedback on the whole run" })).getByRole("textbox", { name: "Your feedback" }) as HTMLTextAreaElement).value).toBe("half a thought");
+    // mutation: keep "wait" in the card's own state -> the push button is back, red
+    expect(within(stepBox("to-draft-box")).getByText("It keeps waiting.")).toBeTruthy();
+  });
+
+  it("a marked step may be marked again: a skip becomes a defer, a defer a skip, and a defer's choices change", async () => {
+    const view = runView();
+    view.steps[1] = step("outline", "work", [exec(1)], { mark: { kind: "skip", messageSeq: 3, effects: {} }, deferHolds: ["to-draft-box"] });
+    view.steps[2] = step("voice", "work", [exec(1)], { mark: { kind: "defer", messageSeq: 4, effects: { "to-draft-box": "proceed" } }, deferHolds: ["to-draft-box"] });
+    await mount(owner, view);
+    // mutation: offer only Fill on a marked step -> no "Defer instead", red
+    fireEvent.click(within(stepBox("outline")).getByRole("button", { name: "Defer instead" }));
+    const dialog = within(stepBox("outline")).getByRole("dialog", { name: "Defer outline" });
+    expect((within(dialog).getByRole("radio", { name: "Wait" }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(within(stepBox("voice")).getByRole("button", { name: "Skip instead" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "command", target: { kind: "step", stepKey: "voice" }, body: { command: "skip" } });
+    fireEvent.click(within(stepBox("voice")).getByRole("button", { name: "Change what waits" }));
+    const choices = within(stepBox("voice")).getByRole("dialog", { name: "Defer voice" });
+    // The standing choice is preselected, not reset to wait.
+    expect((within(choices).getByRole("radio", { name: "Go ahead without it" }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(within(choices).getByRole("radio", { name: "Wait" }));
+    fireEvent.click(within(choices).getByRole("button", { name: "Defer" }));
+    await waitFor(() => expect(posts.length).toBe(2));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "command", target: { kind: "step", stepKey: "voice" }, body: { command: "defer", effects: { "to-draft-box": "wait" } } });
+  });
+
+  it("a spend with no reason reads 'not available', and the server's reasons read in the page's language", () => {
+    const en = i18n.getFixedT("en"), zh = i18n.getFixedT("zh");
+    // mutation: no fallback for a missing reason -> "not available ()", red
+    expect(spendText(spent(null), en)).toBe("Spend: not available · money: not available — the tool reports none");
+    // mutation: show the server's English reason in zh -> red
+    expect(spendText(spent(null, "the tool reported 0 tokens"), zh)).toBe("花费：不可用（工具报告了 0 token） · 金额：不可用——工具不报告金额");
+    expect(spendText(spent(null, "3 runs unknown"), zh)).toBe("花费：不可用（3 次运行用量未知） · 金额：不可用——工具不报告金额");
+    expect(spendText(spent(1200, "partial: 1 runs unknown"), en)).toContain("(partial: 1 runs unknown)");
+    // A reason the page does not know is shown as the server sent it.
+    expect(spendText(spent(null, "something new"), zh)).toContain("不可用（something new）");
   });
 });

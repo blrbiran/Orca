@@ -106,6 +106,26 @@ export async function controlGet<T>(path: string, signal?: AbortSignal): Promise
   return body as T;
 }
 
+/**
+ * Gaps spec §4.7: POST /api/control/flows/:runId/attachments -- one screenshot's raw bytes into the run's attachment
+ * store; the answer names its id (`<sha256>.<ext>`). A refusal (`flow-attachment-invalid`, too large, no answer) comes
+ * back as one, never as an id.
+ */
+export async function uploadFlowAttachment(runId: string, file: File): Promise<{ ok: true; id: string } | { ok: false; refusal: ControlRefusal }> {
+  const path = `/api/control/flows/${encodeURIComponent(runId)}/attachments`;
+  let res: Response;
+  try {
+    res = await fetch(path, { method: "POST", headers: { "content-type": file.type || "application/octet-stream", ...csrfHeader() }, body: file });
+  } catch (err) {
+    return { ok: false, refusal: refusalOf(`POST ${path}`, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.neverAnswered")) };
+  }
+  const body: unknown = await res.json().catch(() => undefined);
+  noteAnswer(res.status, body);
+  const id = (body as { id?: unknown } | undefined)?.id;
+  if (res.ok && typeof id === "string") return { ok: true, id };
+  return { ok: false, refusal: refusalOf(`POST ${path}`, res.status, body, i18n.t("panelErrors.answered", { status: res.status })) };
+}
+
 /** GET /api/control/config -- src/panel/controlApi.ts. */
 export const fetchControlConfig = (): Promise<ControlConfigV1> => controlGet<ControlConfigV1>("/api/control/config");
 /** GET /api/control/summary -- with `sinceChangeSeq` the answer lists only the groups that moved. */

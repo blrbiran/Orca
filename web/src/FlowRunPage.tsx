@@ -17,11 +17,11 @@ import { useCallback, useContext, useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { csrfHeader, type PanelRefusal } from "./api.js";
+import type { PanelRefusal } from "./api.js";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
-import { controlGet, nextCommandId, refusalFromAnswer, sendControlCommand } from "./controlApi.js";
+import { controlGet, nextCommandId, refusalFromAnswer, sendControlCommand, uploadFlowAttachment } from "./controlApi.js";
 import type {
-  FlowAnchorV1, FlowAskV1, FlowEffectV1, FlowExecutionViewV1, FlowIntakeV1, FlowJournalV1, FlowPlanV1, FlowRunViewV1, FlowSpendV1, FlowToolRulesReportV1, RoundBodyV1,
+  FlowAnchorV1, FlowAskV1, FlowEffectV1, FlowExecutionViewV1, FlowIntakeV1, FlowJournalV1, FlowMessageV1, FlowPlanV1, FlowRunViewV1, FlowSpendV1, FlowToolRulesReportV1, RoundBodyV1,
 } from "./controlTypes.js";
 import { currentLanguage } from "./i18n.js";
 import { Refusal } from "./Refusal.js";
@@ -32,6 +32,9 @@ type Verb = "messages" | "plan" | "rerun" | "answer" | "effect" | "pool" | "plan
 type Send = (verb: Verb, payload: Record<string, unknown>) => void;
 /** Gaps spec §4.7: stores one image in the run's attachment store and answers its id, or null (the refusal is shown). */
 type Upload = (file: File) => Promise<string | null>;
+/** Fix round 1 (M4): follow-up reads while something moves on the server by itself, each twice as late, then none. */
+export const FOLLOW_UP_MS = 1500;
+const FOLLOW_UPS = 5;
 type Step = FlowRunViewV1["steps"][number];
 type Rule = FlowToolRulesReportV1["rules"][number];
 const segment = (value: string): string => encodeURIComponent(value);
@@ -58,10 +61,26 @@ const stateTone = (state: string): "ok" | "warn" | "danger" | "info" | undefined
 
 /** Gaps spec §10: the tool's tokens, or why there is none -- never 0 for unknown; money is never reported. */
 export function spendText(spend: FlowSpendV1, t: TFunction): string {
-  const tokens = spend.tokens === null ? t("flow.spend.notAvailable", { reason: spend.unknownReason ?? "" })
+  const tokens = spend.tokens === null
+    ? (spend.unknownReason === null ? t("flow.spend.notAvailablePlain") : t("flow.spend.notAvailable", { reason: spendReason(spend.unknownReason, t) }))
     : spend.unknownReason === null ? t("flow.spend.tokens", { tokens: formatTokens(spend.tokens, currentLanguage()) })
-    : t("flow.spend.partial", { tokens: formatTokens(spend.tokens, currentLanguage()), reason: spend.unknownReason });
+    : t("flow.spend.partial", { tokens: formatTokens(spend.tokens, currentLanguage()), reason: spendReason(spend.unknownReason, t) });
   return t("flow.spend.line", { tokens, money: t("flow.spend.money") });
+}
+
+/** src/flow/spend.ts's reasons, in the page's language; one it does not know is shown as the server sent it. */
+const SPEND_REASONS: Record<string, string> = {
+  "no tool runs": "noRuns", "the tool reported no usage": "noUsage", "the tool reported 0 tokens": "zero", "no run record": "noRecord",
+  "no usage reported yet": "notYet", "calls before run ids were kept": "legacy",
+};
+export function spendReason(reason: string, t: TFunction): string {
+  const known = SPEND_REASONS[reason];
+  if (known !== undefined) return t(`flow.spend.reason.${known}` as "flow.spend.reason.noRuns");
+  const partial = /^partial: (\d+) runs unknown$/.exec(reason);
+  if (partial !== null) return t("flow.spend.reason.partial", { n: Number(partial[1]) });
+  const some = /^(\d+) runs unknown$/.exec(reason);
+  if (some !== null) return t("flow.spend.reason.some", { n: Number(some[1]) });
+  return reason;
 }
 
 function SpendLine(props: { spend: FlowSpendV1 }): JSX.Element {
@@ -447,7 +466,7 @@ function RunningPlan(props: { plan: FlowPlanV1; steps: Step[]; runId: string; ma
             </li>
           ))}
         </ul>
-        <p role="note" data-testid="flow-plan-depends">{t("flow.plan.depends")}</p>
+        <p role="note" data-testid="flow-plan-depends">{t("flow.plan.depends", { step: props.steps.find((s) => pending.some((p) => p.stepKey === s.stepKey))?.stepKey ?? pending[0]!.stepKey })}</p>
       </>}
       {ran.length > 0 && (
         <ul>{ran.map((key) => (
@@ -516,13 +535,17 @@ function IntakeCard(props: { intake: FlowIntakeV1; steps: Step[]; runId: string;
   const [anchor, setAnchor] = useState<AnchorDraft>(NO_ANCHOR);
   const [retarget, setRetarget] = useState("");
   const target = intake.stepKey === null ? { kind: "run" } : { kind: "step", stepKey: intake.stepKey };
+  // §4.8 (fix round 1, I1): a replacement is the same feedback adjusted -- it keeps the screenshots, "use my words as they
+  // are" and the location, except what the replacement itself gives (a picked hit pins the place; a rewrite gives new anchors).
+  const kept = { ...(intake.attachments.length === 0 ? {} : { attachments: intake.attachments }), ...(intake.asIs ? { asIs: true } : {}) };
+  const keptAnchors = intake.anchors.length === 0 ? {} : { anchors: intake.anchors };
   const replace = (body: Record<string, unknown>, to: Record<string, unknown> = target): void =>
-    props.send("messages", { runId: props.runId, kind: "feedback", target: to, body: { text: intake.text, replaces: intake.messageSeq, ...body } });
+    props.send("messages", { runId: props.runId, kind: "feedback", target: to, body: { text: intake.text, replaces: intake.messageSeq, ...kept, ...body } });
   const hits = intake.results.flatMap((r) => ("hits" in r ? r.hits : []));
   const located = intake.results.flatMap((r) => ("located" in r ? [r.located] : []));
   const where = (h: { file: string; paragraph: number; headingPath: string[] }): string =>
     [t("flow.intake.where", { file: h.file, paragraph: h.paragraph }), ...(h.headingPath.length === 0 ? [] : [h.headingPath.join(" › ")])].join(" · ");
-  const asIsButton = <button type="button" onClick={() => replace({ asIs: true })}>{t("flow.feedback.asIs")}</button>;
+  const asIsButton = <button type="button" onClick={() => replace({ ...keptAnchors, asIs: true })}>{t("flow.feedback.asIs")}</button>;
   return (
     <section className="flow-intake" aria-label={t("flow.intake.title", { seq: intake.messageSeq })} data-testid={`flow-intake-${intake.messageSeq}`} data-tone={intakeTone(intake.state)}>
       <h4>{t("flow.intake.title", { seq: intake.messageSeq })} <span className="badge" data-tone={intakeTone(intake.state)}>{t(`flow.intakeState.${intake.state}`)}</span></h4>
@@ -538,7 +561,7 @@ function IntakeCard(props: { intake: FlowIntakeV1; steps: Step[]; runId: string;
         ))}</ol> : <p data-tone="warn">{intake.ambiguousFiles.length > 0 ? t("flow.intake.ambiguous", { files: intake.ambiguousFiles.join(", ") }) : t("flow.intake.notFound")}</p>}
         {rewriting ? (
           <form aria-label={t("flow.intake.rewrite")} onSubmit={(event) => { event.preventDefault(); if (text.trim() === "") return; const anchors = anchorsOf(anchor); setRewriting(false);
-            props.send("messages", { runId: props.runId, kind: "feedback", target, body: { text: text.trim(), replaces: intake.messageSeq, ...(anchors.length === 0 ? {} : { anchors }) } }); }}>
+            props.send("messages", { runId: props.runId, kind: "feedback", target, body: { text: text.trim(), replaces: intake.messageSeq, ...kept, ...(anchors.length === 0 ? {} : { anchors }) } }); }}>
             <textarea aria-label={t("flow.message.text")} value={text} onChange={(event) => setText(event.currentTarget.value)} />
             <AnchorFields draft={anchor} onChange={setAnchor} />
             <button type="submit" disabled={text.trim() === ""}>{t("flow.message.sendFeedback")}</button>
@@ -560,7 +583,7 @@ function IntakeCard(props: { intake: FlowIntakeV1; steps: Step[]; runId: string;
             <option value="">{t("flow.intake.pickStep")}</option>
             {props.steps.map((s) => <option key={s.stepKey} value={s.stepKey}>{s.stepKey}</option>)}
           </select>{" "}
-          <button type="button" disabled={retarget === ""} onClick={() => { replace({}, { kind: "step", stepKey: retarget }); setRetarget(""); }}>{t("flow.intake.changeTarget")}</button>
+          <button type="button" disabled={retarget === ""} onClick={() => { replace(keptAnchors, { kind: "step", stepKey: retarget }); setRetarget(""); }}>{t("flow.intake.changeTarget")}</button>
         </p>
       )}
       <SpendLine spend={intake.spend} />
@@ -581,14 +604,24 @@ function StepMarks(props: { step: Step; runId: string; send: Send }): JSX.Elemen
   const [asking, setAsking] = useState<Record<string, "proceed" | "wait"> | null>(null);
   if (!MARKABLE.has(step.kind)) return null;
   const command = (body: Record<string, unknown>): void => props.send("messages", { runId: props.runId, kind: "command", target: { kind: "step", stepKey: step.stepKey }, body });
-  if (step.mark !== null) return <p><button type="button" onClick={() => command({ command: "fill" })}>{t("flow.mark.fill")}</button></p>;
+  // §6.1: a repeated skip/defer replaces the mark -- how a skip becomes a defer, or a defer's effect choices change later.
+  const ask = (): void => setAsking(Object.fromEntries(step.deferHolds.map((key) => [key, step.mark?.kind === "defer" ? step.mark.effects[key] ?? "wait" : "wait" as const])));
+  const defer = (): void => (step.deferHolds.length === 0 ? command({ command: "defer" }) : ask());
   return (
     <div className="flow-marks">
-      <button type="button" onClick={() => command({ command: "skip" })}>{t("flow.mark.skip")}</button>{" "}
-      <button type="button" onClick={() => (step.deferHolds.length === 0 ? command({ command: "defer" }) : setAsking(Object.fromEntries(step.deferHolds.map((key) => [key, "wait" as const]))))}>{t("flow.mark.defer")}</button>
+      {step.mark === null ? <>
+        <button type="button" onClick={() => command({ command: "skip" })}>{t("flow.mark.skip")}</button>{" "}
+        <button type="button" onClick={defer}>{t("flow.mark.defer")}</button>
+      </> : <>
+        <button type="button" onClick={() => command({ command: "fill" })}>{t("flow.mark.fill")}</button>{" "}
+        {step.mark.kind === "skip"
+          ? <button type="button" onClick={defer}>{t("flow.mark.deferInstead")}</button>
+          : <button type="button" onClick={() => command({ command: "skip" })}>{t("flow.mark.skipInstead")}</button>}
+        {step.mark.kind === "defer" && step.deferHolds.length > 0 && <>{" "}<button type="button" onClick={ask}>{t("flow.mark.changeEffects")}</button></>}
+      </>}
       {asking !== null && (
         <div role="dialog" aria-label={t("flow.mark.deferTitle", { step: step.stepKey })}>
-          <p>{t("flow.mark.deferAsk")}</p>
+          <p>{t("flow.mark.deferAsk", { step: step.stepKey })}</p>
           {step.deferHolds.map((key) => (
             <fieldset key={key}>
               <legend>{key}</legend>
@@ -609,20 +642,26 @@ function StepMarks(props: { step: Step; runId: string; send: Send }): JSX.Elemen
  * for this effect (its other choices kept) -- only the person may (a member's is refused, and the refusal is shown);
  * "Wait" keeps it held, which needs no message.
  */
-function HeldCard(props: { step: Step; steps: Step[]; runId: string; send: Send }): JSX.Element {
+function HeldCard(props: { step: Step; steps: Step[]; runId: string; send: Send; messages: FlowMessageV1[]; waiting: boolean; onWait: () => void }): JSX.Element {
   const { t } = useTranslation();
-  const [waiting, setWaiting] = useState(false);
-  const { step } = props;
+  const { step, waiting } = props;
+  // A push the server refused (a member's; flow-effect-needs-person), newer than the defer that holds now -- read from
+  // the journal, so a rejection that lands at a later boundary shows here too, not only one answered at once.
+  const refused = props.messages.filter((m) => m.state === "rejected" && (m.reason ?? "").startsWith("flow-effect-needs-person") && m.kind === "command"
+    && step.heldBy.includes(String((m.body.target as { stepKey?: unknown } | undefined)?.stepKey))
+    && (m.body.effects as Record<string, unknown> | undefined)?.[step.stepKey] === "proceed"
+    && m.seq > (props.steps.find((s) => s.stepKey === (m.body.target as { stepKey: string }).stepKey)?.mark?.messageSeq ?? 0));
   return (
     <div className="flow-held" role="group" aria-label={t("flow.held.title", { step: step.stepKey })} data-tone="warn">
       <p>{t("flow.held.what", { step: step.stepKey, deferred: step.heldBy.join(", ") })}</p>
+      {refused.length > 0 && <p data-tone="danger" data-testid="flow-held-refused">{t("flow.held.refused", { step: step.stepKey })}</p>}
       {waiting ? <p>{t("flow.held.waiting")}</p> : <>
         {step.heldBy.map((deferred) => {
           const effects = props.steps.find((s) => s.stepKey === deferred)?.mark?.effects ?? {};
           return <span key={deferred}><button type="button" onClick={() => props.send("messages", { runId: props.runId, kind: "command", target: { kind: "step", stepKey: deferred },
             body: { command: "defer", effects: { ...effects, [step.stepKey]: "proceed" } } })}>{t("flow.held.push", { step: deferred })}</button>{" "}</span>;
         })}
-        <button type="button" onClick={() => setWaiting(true)}>{t("flow.held.wait")}</button>
+        <button type="button" onClick={props.onWait}>{t("flow.held.wait")}</button>
       </>}
     </div>
   );
@@ -693,7 +732,7 @@ function Messages(props: { journal: FlowJournalV1 | null }): JSX.Element {
   );
 }
 
-function StepCard(props: { step: Step; view: FlowRunViewV1; may: boolean; send: Send }): JSX.Element {
+function StepCard(props: { step: Step; view: FlowRunViewV1; may: boolean; send: Send; messages: FlowMessageV1[]; waiting: boolean; onWait: () => void }): JSX.Element {
   const { t } = useTranslation();
   const { step, view } = props;
   const latest = step.latest;
@@ -722,7 +761,7 @@ function StepCard(props: { step: Step; view: FlowRunViewV1; may: boolean; send: 
       {open && (latest?.state === "failed" || step.mark?.kind === "defer") && step.whenParams.map((param) => (
         <SetParam key={param.id} param={param} current={view.params[param.id]} runId={view.flowRunId} send={props.send} />
       ))}
-      {open && step.heldBy.length > 0 && <HeldCard step={step} steps={view.steps} runId={view.flowRunId} send={props.send} />}
+      {open && step.heldBy.length > 0 && <HeldCard step={step} steps={view.steps} runId={view.flowRunId} send={props.send} messages={props.messages} waiting={props.waiting} onWait={props.onWait} />}
       {open && <StepMarks step={step} runId={view.flowRunId} send={props.send} />}
       {step.kind === "clarify" && <ClarifyRounds step={step} runId={view.flowRunId} open={open} send={props.send} />}
       {older.length > 0 && (
@@ -773,6 +812,9 @@ function RunControls(props: { view: FlowRunViewV1; may: boolean; send: Send }): 
   );
 }
 
+/** The run's body re-mounts when its shape moves (forms reset to the new state); what must survive sits outside it. */
+const remountKey = (view: FlowRunViewV1): string => JSON.stringify([view.state, view.plans.length, view.effects.map((e) => e.state), view.steps.map((s) => s.latest?.seq ?? 0)]);
+
 export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): JSX.Element {
   const { t } = useTranslation();
   const may = mayHumanOnly(useContext(AccountContext));
@@ -780,6 +822,11 @@ export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): 
   const [journal, setJournal] = useState<FlowJournalV1 | null>(null);
   const [refusal, setRefusal] = useState<PanelRefusal | null>(null);
   const [unread, setUnread] = useState(false);
+  // Fix round 1: what must outlive a re-mount of the run's body (M5), the messages this page sent that the server has
+  // not taken yet (M4: a later rejection is shown), and how many follow-up reads were made since the last act.
+  const [waitingHeld, setWaitingHeld] = useState<ReadonlySet<string>>(new Set());
+  const [tracked, setTracked] = useState<readonly number[]>([]);
+  const [followUps, setFollowUps] = useState(0);
   const base = `/api/control/flows/${segment(props.flowRunId)}`;
   const read = useCallback(async (): Promise<void> => {
     try {
@@ -798,6 +845,9 @@ export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): 
       const stored = answer.kind === "answered" && answer.status < 400 ? (answer.body as { result?: { kind?: string; state?: string; reason?: string | null } }).result : undefined;
       const rejected = stored?.kind === "flow-message-stored" && stored.state === "rejected" && typeof stored.reason === "string"
         ? { status: answer.kind === "answered" ? answer.status : null, code: stored.reason.split(":")[0]!, message: stored.reason } : null;
+      const seq = (stored as { seq?: unknown } | undefined)?.seq;
+      if (stored?.kind === "flow-message-stored" && stored.state === "accepted" && typeof seq === "number") setTracked((now) => [...now, seq]);
+      setFollowUps(0);
       const failure = answer.kind === "uncertain" ? { status: null, code: "command-outcome-unknown", message: t("panelErrors.noOutcome") }
         : answer.status >= 400 ? refusalFromAnswer(answer) : rejected;
       await read();
@@ -805,17 +855,34 @@ export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): 
     })();
   };
   const upload: Upload = async (file) => {
-    try {
-      const res = await fetch(`${base}/attachments`, { method: "POST", headers: { "content-type": file.type || "application/octet-stream", ...csrfHeader() }, body: file });
-      const body = await res.json().catch(() => undefined) as { id?: unknown; error?: { code?: unknown; message?: unknown } } | undefined;
-      if (res.ok && typeof body?.id === "string") return body.id;
-      const code = typeof body?.error?.code === "string" ? body.error.code : `http-${res.status}`;
-      setRefusal({ status: res.status, code, message: typeof body?.error?.message === "string" ? body.error.message : code });
-    } catch (error) {
-      setRefusal({ status: null, code: "command-outcome-unknown", message: error instanceof Error ? error.message : t("panelErrors.noOutcome") });
-    }
+    const answer = await uploadFlowAttachment(props.flowRunId, file);
+    if (answer.ok) return answer.id;
+    setRefusal(answer.refusal);
     return null;
   };
+  // M4: a message this page sent that the server took later -- refused (a member's push, at the next boundary) is shown.
+  useEffect(() => {
+    if (journal === null || tracked.length === 0) return;
+    const settled = journal.messages.filter((m) => tracked.includes(m.seq) && m.state !== "accepted");
+    if (settled.length === 0) return;
+    const refused = settled.find((m) => m.state === "rejected" && m.reason !== null);
+    if (refused !== undefined) setRefusal({ status: null, code: refused.reason!.split(":")[0]!, message: refused.reason! });
+    setTracked((now) => now.filter((s) => !settled.some((m) => m.seq === s)));
+  }, [journal, tracked]);
+  // M4: one read just after a shown deadline passes, and a few spaced reads while an intake locates or triages or a message
+  // waits for its boundary -- bounded, not a poll.
+  useEffect(() => {
+    if (view === null) return;
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    const now = Date.now();
+    const deadlines = view.plans.filter((p) => p.state === "running").flatMap((p) => (p.chosen?.pending ?? [])
+      .filter((q) => q.answer === null && q.closed === undefined).map((q) => q.deadline)).filter((d) => d > now);
+    if (deadlines.length > 0) timers.push(setTimeout(() => void read(), Math.min(...deadlines) - now + 1000));
+    const moving = view.intakes.some((i) => i.state === "locating" || i.state === "triaging") || tracked.length > 0
+      || (journal?.messages ?? []).some((m) => m.state === "accepted");
+    if (moving && followUps < FOLLOW_UPS) timers.push(setTimeout(() => { setFollowUps((n) => n + 1); void read(); }, FOLLOW_UP_MS * 2 ** followUps));
+    return () => { for (const timer of timers) clearTimeout(timer); };
+  }, [view, journal, tracked, followUps, read]);
   const lang = currentLanguage();
   const title = view?.template.title?.[lang] ?? view?.template.title?.en ?? view?.template.id ?? props.flowRunId;
   const plan = view?.plans.filter((p) => p.state === "proposed").at(-1) ?? null;
@@ -827,8 +894,8 @@ export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): 
       <h3>{title} · <code>{props.flowRunId}</code>{view !== null && <>{" "}<span className="badge" data-tone={stateTone(view.state)} data-testid="flow-run-state">{t(`flow.state.${view.state}`, { defaultValue: view.state })}</span></>}</h3>
       {refusal !== null && <Refusal refusal={refusal} />}
       {unread && <p data-testid="flow-unread">{t("flow.unread")}</p>}
-      {view !== null && (
-        <div key={JSON.stringify([view.state, view.plans.length, view.effects.map((e) => e.state), view.steps.map((s) => s.latest?.seq ?? 0)])}>
+      {view !== null && (<>
+        <div key={remountKey(view)}>
           <p>{t("flow.facts", { template: view.templateRef, dir: view.dir ?? "", by: view.by, via: view.via })}</p>
           {/* Spec §15 (H2): the article flow ends at the draft box; publishing stays the person's own act. */}
           {view.template.id === "wechat-article" && <p role="note" data-testid="flow-publish-note">{t("flow.wechatPublish")}</p>}
@@ -839,10 +906,14 @@ export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): 
           {plan !== null && <PlanChecklist plan={plan} steps={view.steps} runId={view.flowRunId} may={may} send={send} />}
           {running !== null && <RunningPlan plan={running} steps={view.steps} runId={view.flowRunId} may={may} send={send} />}
           {intakes.map((intake) => <IntakeCard key={intake.messageSeq} intake={intake} steps={view.steps} runId={view.flowRunId} may={may} send={send} />)}
-          {view.state !== "stopped" && <RunFeedback runId={view.flowRunId} send={send} upload={upload} />}
+        </div>
+        {/* M5: outside the re-mount key, so a half-written feedback and its chosen screenshots survive another act. */}
+        {view.state !== "stopped" && <RunFeedback runId={view.flowRunId} send={send} upload={upload} />}
+        <div key={`steps:${remountKey(view)}`}>
           <section aria-label={t("flow.steps")}>
             <h4>{t("flow.steps")}</h4>
-            {view.steps.map((step) => <StepCard key={step.stepKey} step={step} view={view} may={may} send={send} />)}
+            {view.steps.map((step) => <StepCard key={step.stepKey} step={step} view={view} may={may} send={send} messages={journal?.messages ?? []}
+              waiting={waitingHeld.has(step.stepKey)} onWait={() => setWaitingHeld((now) => new Set([...now, step.stepKey]))} />)}
           </section>
           <Effects effects={view.effects} may={may} send={send} />
           <Decisions decisions={view.decisions} />
@@ -854,7 +925,7 @@ export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): 
             </details>
           )}
         </div>
-      )}
+      </>)}
     </article>
   );
 }

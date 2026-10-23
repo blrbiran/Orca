@@ -112,7 +112,9 @@ export function openIntake(store: ControlStore, run: LoadedRun, message: Pick<Me
     if (plan !== undefined && (plan.state === "proposed" || plan.state === "running")) putPlan(store, withoutIntake(store, run.row.id, plan, old.body));
   }
   const anchors = extractAnchors(String(body.text), givenAnchors(body));
-  if (target.kind !== "run" && anchors.length === 0 && pins.length === 0) return false;
+  // §4.8 (Task 10-A fix round 1): a replacement is the same feedback adjusted -- retargeted at a step with nothing to
+  // locate, it still opens an intake, so its screenshots and its standing as a replacement are kept.
+  if (target.kind !== "run" && anchors.length === 0 && pins.length === 0 && typeof body.replaces !== "number") return false;
   insertIntake(store, { flowRunId: run.row.id, messageSeq: message.seq, state: "locating", at, body: {
     ...emptyIntakeBody(), anchors, pins, text: String(body.text), stepKey: target.kind === "run" ? null : target.stepKey ?? null,
     asIs: body.asIs === true, attachments: Array.isArray(body.attachments) ? body.attachments as string[] : [],
@@ -261,6 +263,10 @@ function write(deps: FlowDeps, intake: IntakeRow, to: IntakeState, body: IntakeB
 async function locateIntake(deps: FlowDeps, run: LoadedRun, intake: IntakeRow): Promise<void> {
   // §4.3, Review Focus 4: what the person changed in their folder is taken first, as before any execution.
   if (await driftBeforeExecution(deps, run.row.id)) run = loadRun(deps.store, run.row.id);
+  // A step-targeted intake with nothing to locate (a retargeting replacement) goes to that step as sent.
+  if (intake.body.stepKey !== null && intake.body.anchors.length === 0 && intake.body.pins.length === 0) {
+    write(deps, intake, "ready", { ...intake.body, targets: [{ stepKey: intake.body.stepKey, why: "the person sent it to this step" }] }); return;
+  }
   const search = await searchSetOf(deps, run, intake.body.stepKey);
   const { results, ambiguousFiles, ok } = locateAll(intake.body, search);
   const body: IntakeBody = { ...intake.body, results, ambiguousFiles, searchSet: search.files.map((f) => ({ path: f.path, writerKey: f.writerKey })) };

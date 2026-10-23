@@ -48,7 +48,9 @@ export async function applyRewind(deps: FlowDeps, run: LoadedRun, message: Messa
   const head = getHead(deps.store, run.row.id, toStep);
   // Review Important 1 (Task 7): an execution newer than the head that waits on the person or is under way (a clarify
   // revision, an answer, a queued re-run) would later move the head past the rewind; the person settles it first.
-  const waiting = ofStep.find((e) => e.seq > (head ?? 0) && (e.state === "needs-person" || e.state === "queued" || e.state === "running"));
+  // `parked` too (Task 10-A fix round 1): a parked execution resumes later and would move the head just the same; the
+  // run view counts the same four states as a revision at work (views.ts REVISING).
+  const waiting = ofStep.find((e) => e.seq > (head ?? 0) && (e.state === "needs-person" || e.state === "queued" || e.state === "running" || e.state === "parked"));
   if (waiting !== undefined) throw new FlowRefusal(STEP_WAITING, `${toStep}#${waiting.seq} is ${waiting.state}: answer, agree or discard it before rewinding ${toStep}`);
   // The rewound point: when the step moved past `toSeq` (for "not run": when it first ran).
   const past = ofStep.filter((e) => toSeq === null || e.seq > toSeq).map((e) => e.createdAt);
