@@ -3,13 +3,76 @@
 // its tasks run (tasks), their choices are reviewed (decisions); memory and metrics read across; chains, which develop
 // Orca itself, come last. The first section is the default.
 // Kanban spec 2026-10-20 §4: the board is its own tab, right after Task control (the list stays; decide later from usage).
+import { DETAIL_REGIONS, type DetailRegion } from "./detailRegion.js";
+
 export const SECTIONS = ["overview", "requirements", "tasks", "board", "decisions", "memory", "metrics", "chains", "global-settings", "project-settings"] as const;
 export type Section = (typeof SECTIONS)[number];
 export const DEFAULT_SECTION: Section = "overview";
 
+/**
+ * Tester round 2 spec §9.2 (ruling H11): the parsed URL hash. A section alone, or one owner inside it: a group (with its
+ * detail region and open task), a requirement, a decision, the Corrections list, or a flow run.
+ */
+export type Route =
+  | { kind: "section"; section: Section }
+  | { kind: "group"; section: "tasks"; groupId: string; region: DetailRegion | null; taskId: string | null }
+  | { kind: "requirement"; section: "requirements"; groupId: string }
+  | { kind: "decision"; section: "decisions"; projectKey: string; decisionId: string }
+  | { kind: "corrections"; section: "decisions" }
+  | { kind: "flow-run"; section: "board"; flowRunId: string };
+
+const bare = (section: Section): Route => ({ kind: "section", section });
+
+/** Each part of the hash, decoded; null when one is empty or does not decode (a malformed tail). */
+function decodeParts(parts: readonly string[]): string[] | null {
+  const out: string[] = [];
+  for (const part of parts) {
+    let decoded: string;
+    try { decoded = decodeURIComponent(part); } catch { return null; }
+    if (decoded === "") return null;
+    out.push(decoded);
+  }
+  return out;
+}
+
+/** Never throws: an unknown section is Overview, a known section with a malformed tail is that section alone. */
+export function parseRoute(hash: string): Route {
+  const [head = "", ...rest] = hash.replace(/^#/, "").split("/");
+  if (!(SECTIONS as readonly string[]).includes(head)) return bare(DEFAULT_SECTION);
+  const section = head as Section;
+  if (rest.length === 0) return bare(section);
+  const parts = decodeParts(rest);
+  if (parts === null) return bare(section);
+  if (section === "tasks" && parts.length <= 3) {
+    const [groupId, region = null, taskId = null] = parts;
+    if (region !== null && !(DETAIL_REGIONS as readonly string[]).includes(region)) return bare(section);
+    return { kind: "group", section, groupId: groupId!, region: region as DetailRegion | null, taskId };
+  }
+  if (section === "requirements" && parts.length === 1) return { kind: "requirement", section, groupId: parts[0]! };
+  if (section === "decisions" && parts.length === 1 && rest[0] === "corrections") return { kind: "corrections", section };
+  if (section === "decisions" && parts.length === 2) return { kind: "decision", section, projectKey: parts[0]!, decisionId: parts[1]! };
+  if (section === "board" && parts.length === 2 && rest[0] === "flow") return { kind: "flow-run", section, flowRunId: parts[1]! };
+  return bare(section);
+}
+
+export function formatRoute(route: Route): string {
+  const e = encodeURIComponent;
+  switch (route.kind) {
+    case "section": return `#${route.section}`;
+    case "group": {
+      // A task needs a region before it in the grammar; with none, the task is not written.
+      const tail = route.region === null ? [] : route.taskId === null ? [route.region] : [route.region, route.taskId];
+      return ["#tasks", e(route.groupId), ...tail.map(e)].join("/");
+    }
+    case "requirement": return `#requirements/${e(route.groupId)}`;
+    case "decision": return `#decisions/${e(route.projectKey)}/${e(route.decisionId)}`;
+    case "corrections": return "#decisions/corrections";
+    case "flow-run": return `#board/flow/${e(route.flowRunId)}`;
+  }
+}
+
 export function sectionFromHash(hash: string): Section {
-  const name = hash.replace(/^#/, "");
-  return (SECTIONS as readonly string[]).includes(name) ? (name as Section) : DEFAULT_SECTION;
+  return parseRoute(hash).section;
 }
 
 export const hashFor = (section: Section): string => `#${section}`;
