@@ -333,10 +333,11 @@ export function contextFor(deps: FlowDeps, run: LoadedRun, execution: ExecutionR
     if (!("prompt" in step) || step.prompt === undefined) return "";
     // §12.1: a declared parameter the run left unset reads empty in a prompt (never in a command); the workspace is the
     // agent's working directory; a skill's directory is filled when its copy is injected (the driver's A2). Gaps §8.1
-    // (spec §21 entry 4): an image reads as its stored copy's absolute path.
+    // (spec §21 entry 4): in a work step an image reads as its stored copy's absolute path; a single call (draft, review,
+    // ask) keeps names only -- the value as given (controller ruling, Task 6b fix 1).
     const unset = Object.fromEntries(Object.keys(run.template.params ?? {}).map((id) => [id, ""]));
     return expandKeepingSkillDirs(asset(step.prompt), {
-      params: { ...unset, ...expansionParams(deps.env, run) }, runId: run.row.id, workspace: ".",
+      params: { ...unset, ...(step.kind === "work" ? expansionParams(deps.env, run) : run.params) }, runId: run.row.id, workspace: ".",
       ...(typeof body.effectRecordId === "string" ? { effectRecordId: body.effectRecordId } : {}),
     }, "prompt", "skills" in step ? step.skills ?? [] : []);
   };

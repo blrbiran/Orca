@@ -16,7 +16,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, existsSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { controlRoot } from "../../panel/controlOptions.js";
 import { FlowRefusal } from "../kernel.js";
 import { makePrivateDirs } from "../vault/vault.js";
@@ -33,7 +33,8 @@ export const ATTACHMENT_LIMITS: StoreLimits = { maxBytes: ATTACHMENT_MAX_BYTES, 
 export const ATTACHMENT_ID = /^[0-9a-f]{64}\.(png|jpg|webp)$/;
 
 export const attachmentsDir = (env: NodeJS.ProcessEnv): string => join(controlRoot(env), "flow-attachments");
-export const attachmentPath = (env: NodeJS.ProcessEnv, id: string): string => join(attachmentsDir(env), id);
+/** Absolute even when ORCA_CONTROL_DIR is relative (a foreground panel): a work prompt names the file by this path. */
+export const attachmentPath = (env: NodeJS.ProcessEnv, id: string): string => resolve(attachmentsDir(env), id);
 export const hasAttachment = (env: NodeJS.ProcessEnv, id: string): boolean => ATTACHMENT_ID.test(id) && existsSync(attachmentPath(env, id));
 
 /** The image type by its first bytes; the name or a declared type is never trusted. */

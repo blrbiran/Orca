@@ -8,7 +8,7 @@
  * bytes' hash in place of the path, so other bytes at the same path move it and the same bytes under a new path do not.
  *
  * §8.1 items 3-4 as built after the human's choice (a) (spec §21 entry 4; the workspace copy's premise failed, entries 2
- * and 3): `{{param.<id>}}` of an image expands, in prompts and commands, to the absolute path of its stored copy
+ * and 3): `{{param.<id>}}` of an image expands, in a work step's prompt and in commands, to the absolute path of its stored copy
  * `$ORCA_CONTROL_DIR/flow-attachments/<sha256>.<ext>` -- the bytes that were hashed, outside the workspace, so never
  * committed -- whether the value was folder-relative or a preset (`expansionParams`).
  */

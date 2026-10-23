@@ -9,12 +9,13 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebControlService } from "../../src/control/webService.js";
 import { ATTACHMENT_MAX_BYTES, attachmentPath, attachmentsDir, storeAttachment } from "../../src/flow/feedback/attachments.js";
 import { feedbackForWork } from "../../src/flow/feedback/intake.js";
+import { expansionParams } from "../../src/flow/params.js";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { acceptMessage } from "../../src/flow/messages.js";
 import { registerControlMutationRoutes } from "../../src/panel/controlApi.js";
@@ -122,7 +123,7 @@ describe("attachment store (gaps §4.7, G14)", () => {
     expect(draft.prompt).not.toContain(w.deps.env.ORCA_CONTROL_DIR!);
   });
 
-  it("a work prompt rewrites only the attachment line feedbackTextOf wrote: the person's own look-alike lines stay as typed", () => {
+  it("a work prompt rewrites a last line in the attachment format only when its ids are valid; invalid ids and other prefixes stay as typed", () => {
     const env = { ORCA_CONTROL_DIR: "/c" };
     const id = `${"a".repeat(64)}.png`;
     const line = "The person attached screenshots (not available to you): ";
@@ -132,6 +133,40 @@ describe("attachment store (gaps §4.7, G14)", () => {
     // Not the line's prefix, though as long and ending in an id: kept.
     expect(feedbackForWork([`fix it\n${"x".repeat(line.length)}${id}`], env)).toEqual([`fix it\n${"x".repeat(line.length)}${id}`]);
     expect(feedbackForWork(["no screenshots"], env)).toEqual(["no screenshots"]);
+  });
+
+  it("a relative ORCA_CONTROL_DIR (a foreground panel) still names absolute paths: the store path, a work prompt's line, an image expansion", () => {
+    const root = tempRoot();
+    const env = { ORCA_CONTROL_DIR: relative(process.cwd(), join(root, "control")) };
+    expect(isAbsolute(env.ORCA_CONTROL_DIR)).toBe(false);
+    const stored = storeAttachment(env, PNG);
+    const id = `${stored.sha256}.${stored.ext}`;
+    const abs = join(root, "control", "flow-attachments", id);
+    expect(attachmentPath(env, id)).toBe(abs);
+    expect(existsSync(abs)).toBe(true);
+    expect(feedbackForWork([`x\nThe person attached screenshots (not available to you): ${id}`], env)[0]).toContain(`\n- ${abs}`);
+    const run = { params: { pic: "a.png" }, body: { images: { pic: { source: "a.png", sha256: stored.sha256, ext: "png" } } } };
+    expect(expansionParams(env, run as never).pic).toBe(abs);
+  });
+
+  it("the feedback clarify round (a single call) names attachments by id only, never a path", { timeout: 60_000 }, async () => {
+    const children = fakeChildPort();
+    const w = await flowWorld({ t: { yaml: "format: orca-flow-v1\nid: t\nversion: 1\nworkspace: {kind: dir}\nsteps:\n  - {id: write, kind: work, prompt: w.md}\n", assets: { "w.md": "Write post.md.\n" } } }, { children: children.port });
+    cleanups.push(() => w.dispose());
+    w.deps.env.ORCA_CONTROL_DIR = join(w.root, "control");
+    const { flowRunId } = await w.start({ templateRef: "builtin/t" });
+    await w.advance();
+    children.land(childGroupIdOf(flowRunId, "write", 1), { "post.md": "# Tea\n\nTea is warm.\n" });
+    await w.advance();
+    const stored = storeAttachment(w.deps.env, PNG);
+    const id = `${stored.sha256}.${stored.ext}`;
+    const sent = await acceptMessage(w.deps, flowRunId, { kind: "feedback", target: { kind: "run" }, body: { text: "something feels off", attachments: [id] }, by: "ann", via: "cli:test", requestId: "r-vague" });
+    expect(sent).toMatchObject({ state: "accepted" });
+    await w.answer(w.calls.length - 1, { targets: [{ stepKey: "write", why: "only step" }], clarity: "vague" });
+    const clarify = w.calls.at(-1)!;
+    expect(clarify).toMatchObject({ purpose: "clarify", key: { stepKey: "@feedback", seq: sent.seq } });
+    expect(clarify.prompt).toContain(id);
+    expect(clarify.prompt).not.toContain(w.deps.env.ORCA_CONTROL_DIR!);
   });
 
   it("the upload route stores the raw body and answers the id; a non-image is refused flow-attachment-invalid", async () => {

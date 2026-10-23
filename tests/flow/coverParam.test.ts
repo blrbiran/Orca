@@ -157,28 +157,26 @@ describe("the image param type (§8.1)", () => {
 });
 
 /**
- * §8.1 "always a copy", as built after the human's choice (a) (spec §21 entry 4): `{{param.<id>}}` of an image expands to
- * the absolute path of its stored copy, `$ORCA_CONTROL_DIR/flow-attachments/<sha256>.<ext>` -- the bytes that were
- * hashed -- whether the value was folder-relative or a preset, in prompts and in commands. The step never sees the path
- * as given: a later change to the person's file cannot reach it without a `params` change.
+ * §8.1 "always a copy", as built after the human's choice (a) (spec §21 entry 4): in a `work` step's prompt and in
+ * commands, `{{param.<id>}}` of an image expands to the absolute path of its stored copy,
+ * `$ORCA_CONTROL_DIR/flow-attachments/<sha256>.<ext>` -- the bytes that were hashed -- whether the value was
+ * folder-relative or a preset. Single calls (draft, review, ask) keep names only (controller ruling, Task 6b fix 1):
+ * their prompts carry the value as given, never the store path.
  */
 describe("{{param.<id>}} of an image is its stored copy's absolute path (§8.1, §21 entry 4)", () => {
   const storedOf = (env: NodeJS.ProcessEnv, bytes: Buffer, ext: string) => attachmentPath(env, `${sha(bytes)}.${ext}`);
 
-  it("a folder value and a preset value both expand to the store path in a prompt; the file there holds the hashed bytes", async () => {
+  it("a single call (draft) gets the value as given, folder-relative or preset -- never the store path", async () => {
     const w = await smallWorld();
     writeFileSync(join(w.folder, "cover.png"), PNG);
     await w.start({ templateRef: "builtin/t", params: { pic: "cover.png" } });
     await w.advance();
     const folderPrompt = w.calls.at(-1)!.prompt;
-    const fromFolder = storedOf(w.deps.env, PNG, "png");
-    expect(fromFolder.startsWith(join(w.deps.env.ORCA_CONTROL_DIR!, "flow-attachments") + "/")).toBe(true);
-    expect(folderPrompt).toContain(`Use '${fromFolder}' in a plain tone.`);
-    expect(folderPrompt).not.toContain("'cover.png'");
-    expect(sha(readFileSync(fromFolder))).toBe(sha(PNG));
-    // The person's file changes after the start: the step still reads the bytes the run took.
-    writeFileSync(join(w.folder, "cover.png"), JPG);
-    expect(readFileSync(fromFolder)).toEqual(PNG);
+    expect(w.calls.at(-1)!.purpose).toBe("flow-draft");
+    expect(folderPrompt).toContain("Use 'cover.png' in a plain tone.");
+    expect(folderPrompt).not.toContain(w.deps.env.ORCA_CONTROL_DIR!);
+    // The bytes are stored all the same.
+    expect(sha(readFileSync(storedOf(w.deps.env, PNG, "png")))).toBe(sha(PNG));
 
     const preset = join(tempRoot(), "default-cover.jpg");
     writeFileSync(preset, JPG);
@@ -186,13 +184,11 @@ describe("{{param.<id>}} of an image is its stored copy's absolute path (§8.1, 
     await w.start({ templateRef: "builtin/t" });
     await w.advance();
     const presetPrompt = w.calls.at(-1)!.prompt;
-    const fromPreset = storedOf(w.deps.env, JPG, "jpg");
-    expect(presetPrompt).toContain(`Use '${fromPreset}' in a plain tone.`);
-    expect(presetPrompt).not.toContain(preset);
-    expect(sha(readFileSync(fromPreset))).toBe(sha(JPG));
+    expect(presetPrompt).toContain(`Use '${preset}' in a plain tone.`);
+    expect(presetPrompt).not.toContain(w.deps.env.ORCA_CONTROL_DIR!);
   });
 
-  it("a check command and a work step's gates and tool rules expand to the store path too", async () => {
+  it("a work step's prompt, gates and tool rules, and a check command, expand to the store path", async () => {
     const commands: string[] = [];
     const yaml = "format: orca-flow-v1\nid: t\nversion: 1\nworkspace: {kind: dir}\nparams:\n  pic: {type: image, required: false}\nsteps:\n"
       + "  - id: look\n    kind: check\n    acceptance:\n      checks:\n        - {id: there, run: \"test -s '{{param.pic}}'\", role: gate}\n"

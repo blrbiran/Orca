@@ -959,3 +959,10 @@ Appended per Rule 13: the sections above stay as published; entries here correct
    - **Unmeasured.** Read access for **codex** and **omp** to a path outside the workspace has not been measured (codex
      quota returns 2026-10-27). A work step on either runtime may not see the image or screenshot. To be measured next
      session.
+
+5. **Correction to entry 4 (gaps plan Task 6b fix round 1, implementer of session `0e13a9b7`, 2026-10-23, on
+   `0ada44f8`; controller ruling after review).** Entry 4 says `{{param.<id>}}` of an image expands to the store path
+   "in prompts and in commands". As corrected: it expands to the store path in a **`work`** step's prompt and in
+   commands (check commands, a work step's gates and tool rules). A single call's prompt (`draft`, `review`, `ask`)
+   keeps names only and gets the value as given, never the store path, as attachments do. The store path is always
+   absolute: `attachmentPath` resolves a relative `ORCA_CONTROL_DIR` (a foreground panel); `controlRoot` is unchanged.

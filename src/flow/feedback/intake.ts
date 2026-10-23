@@ -517,7 +517,8 @@ export function feedbackTextOf(body: IntakeBody): string {
  * §4.7 as built after the human's choice (a) (spec §21 entry 4): a `work` execution that takes the feedback gets each
  * attachment as the absolute path of its stored file `$ORCA_CONTROL_DIR/flow-attachments/<id>` (outside the workspace,
  * so never committed). Only the last line `feedbackTextOf` wrote is rewritten, and only when every id on it is an
- * attachment id; every other kind (a single call) keeps the ids.
+ * attachment id; every other kind (a single call) keeps the ids. A last line in exactly that format with valid ids is
+ * rewritten whoever wrote it (the person could type one): the result is a path inside the store, nothing else.
  */
 export function feedbackForWork(feedback: readonly string[], env: NodeJS.ProcessEnv): string[] {
   return feedback.map((text) => {
