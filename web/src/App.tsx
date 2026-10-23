@@ -137,7 +137,7 @@ import { Refusal } from "./Refusal.js";
 import { RequirementsPanel } from "./RequirementsPanel.js";
 import { labelsDraftKey } from "./TaskDetail.js";
 import { loopDraftKey } from "./LoopPlanCard.js";
-import { DEFAULT_SECTION, formatRoute, parseRoute } from "./sections.js";
+import { DEFAULT_SECTION, consumeOwnHash, formatRoute, parseRoute, rememberOwnHash } from "./sections.js";
 import type { Route } from "./sections.js";
 import { DETAIL_REGIONS, focusedDetailRegion, type DetailRegion } from "./detailRegion.js";
 import { BackLine } from "./BackLine.js";
@@ -310,7 +310,7 @@ export function App(): JSX.Element {
     } else {
       const was = routeNow.current.section;
       setFrom(next.section !== was ? { leftHash: leaving, pushedHash: hash, label: t(NAV_KEY[was]) } : null);
-      if (leaving !== hash) { selfHashes.current.push(hash); window.location.hash = hash; }
+      if (leaving !== hash) { selfHashes.current = rememberOwnHash(selfHashes.current, hash); window.location.hash = hash; }
     }
     setRoute(next);
   };
@@ -331,8 +331,8 @@ export function App(): JSX.Element {
       // The event's own URL, not the location now: two quick pushes fire two events after both assignments.
       const hash = event.newURL ? new URL(event.newURL).hash : window.location.hash;
       setFrom((prior) => prior !== null && prior.pushedHash === hash ? prior : null);
-      const own = selfHashes.current.indexOf(hash);
-      if (own !== -1) { selfHashes.current = selfHashes.current.slice(own + 1); setPendingRoute(null); return; }
+      const left = consumeOwnHash(selfHashes.current, hash);
+      if (left !== null) { selfHashes.current = left; setPendingRoute(null); return; }
       navigationSeq.current++;
       setRouteNotice(null);
       const next = parseRoute(hash);

@@ -77,3 +77,14 @@ export function sectionFromHash(hash: string): Section {
 }
 
 export const hashFor = (section: Section): string => `#${section}`;
+
+/**
+ * Review minor 5: the hashes the page itself assigned, oldest first. `rememberOwnHash` adds one; `consumeOwnHash` answers,
+ * for a hashchange to `hash`, the list left after it when the hash is the page's own (that entry and every older one are
+ * dropped: a browser may coalesce their events), or null when it is not (a person's own navigation).
+ */
+export const rememberOwnHash = (own: readonly string[], hash: string): string[] => [...own, hash];
+export function consumeOwnHash(own: readonly string[], hash: string): string[] | null {
+  const at = own.indexOf(hash);
+  return at === -1 ? null : own.slice(at + 1);
+}

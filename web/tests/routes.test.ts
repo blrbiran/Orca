@@ -4,7 +4,7 @@
  * section with a malformed tail to that section alone -- and parsing never throws.
  */
 import { describe, expect, it } from "vitest";
-import { formatRoute, parseRoute, sectionFromHash, type Route } from "../src/sections.js";
+import { consumeOwnHash, formatRoute, parseRoute, rememberOwnHash, sectionFromHash, type Route } from "../src/sections.js";
 
 const odd = "a/b c#d任务";
 const ROUTES: Route[] = [
@@ -42,5 +42,21 @@ describe("route codec (C30)", () => {
   ] as const)("falls back for %j to the bare %s section, without throwing", (hash, section) => {
     expect(parseRoute(hash)).toEqual({ kind: "section", section });
     expect(sectionFromHash(hash)).toBe(section);
+  });
+});
+
+describe("the page's own hashes (review minor 5)", () => {
+  const two = rememberOwnHash(rememberOwnHash([], "#tasks/g"), "#tasks/g2");
+  it("two quick pushes: each event drops its own hash, and the first one's event is the page's own", () => {
+    expect(consumeOwnHash(two, "#tasks/g")).toEqual(["#tasks/g2"]);
+    expect(consumeOwnHash(consumeOwnHash(two, "#tasks/g")!, "#tasks/g2")).toEqual([]);
+  });
+  it("a coalesced event for the newer hash drops the older one too, so the person's later visit to it is theirs", () => {
+    const left = consumeOwnHash(two, "#tasks/g2")!;
+    expect(left).toEqual([]);
+    expect(consumeOwnHash(left, "#tasks/g")).toBeNull();
+  });
+  it("a hash the page did not write is the person's", () => {
+    expect(consumeOwnHash(two, "#metrics")).toBeNull();
   });
 });
