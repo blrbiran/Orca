@@ -108,13 +108,11 @@ export function GroupList(props: GroupListProps): JSX.Element {
         {shown.map((group) => group.state === "clarifying" ? (
           // N1 spec §11.2: a clarifying group has no group view (DR25); it is operated in Requirements until accept.
           <GroupActionsMenu key={group.groupId} group={group} onOpen={() => props.onSelectRequirement?.(group.groupId)} onAction={props.onAction} refusal={props.refusals?.[group.groupId]}>{(onContextMenu) => (
-            <a className="group-card" href={hashFor("requirements")} onClick={() => props.onSelectRequirement?.(group.groupId)} onContextMenu={onContextMenu}>
-              <span className="group-card-name">{group.groupId} · {enumText("groupState", group.state)}{label(group.repoId)}</span>
+            <a className="group-card" href={hashFor("requirements")} onClick={() => props.onSelectRequirement?.(group.groupId)} onContextMenu={onContextMenu}
+              aria-labelledby={`req-name-${group.groupId}`} aria-describedby={`req-goal-${group.groupId}`}>
+              <span id={`req-name-${group.groupId}`} className="group-card-name">{group.groupId} · {enumText("groupState", group.state)} · {t("control.requirementBadge")}{label(group.repoId)}</span>
               {/* Task 11 acceptance (session ffec7b28): the card names its requirement the way every other card does. */}
-              <span className="group-card-detail">
-                <CardGoal group={group} className="group-card-goal" />
-                <span className="group-chip">{t("control.requirementBadge")}</span>
-              </span>
+              <span id={`req-goal-${group.groupId}`} className="group-card-detail"><CardGoal group={group} className="group-card-goal" /></span>
             </a>
           )}</GroupActionsMenu>
         ) : (
