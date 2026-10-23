@@ -966,3 +966,70 @@ Appended per Rule 13: the sections above stay as published; entries here correct
    commands (check commands, a work step's gates and tool rules). A single call's prompt (`draft`, `review`, `ask`)
    keeps names only and gets the value as given, never the store path, as attachments do. The store path is always
    absolute: `attachmentPath` resolves a relative `ORCA_CONTROL_DIR` (a foreground panel); `controlRoot` is unchanged.
+
+6. **A rewind refuses while a newer execution of its step is still at work (gaps plan Task 7 fix round 1, Task 10-A
+   fix round 1, final-review fix; implementer of session `0e13a9b7`, 2026-10-23, recorded on `0c08cf69`).** Not in §9
+   or F §8.3: a rewind of a step one of whose executions newer than its head is `needs-person`, `queued`, `running` or
+   `parked` is rejected. Otherwise that execution later moves the head past the rewind (a clarify revision's consensus
+   did, in the Task 7 review). The reason is `flow-step-waiting`. For a `parked` execution it is `flow-step-parked`
+   (an exhausted pool or a held effect: nothing to answer or agree to; the person raises the pool or settles the hold).
+   Both have en/zh copy. The four states are one constant (`REVISING`, `src/flow/store.ts`), which the run view's
+   `clarifyRevision` uses too. Ledger: `.superpowers/sdd/2026-10-23-flow-phase1-gaps/progress.md:88` (the ruling),
+   `:120` (`parked` added), and this fix round's lines in `.superpowers/sdd/2026-10-23-session-0e13a9b7/progress.md`
+   (prefix `gaps Tfinal:`).
+
+7. **§10's spend sum: the known part plus "partial: n runs unknown" (gaps plan Task 8; controller ruling).** §10 says
+   both that `tokens` is `null` "when any summed run has unknown usage" and that "a sum over a mix shows the known part
+   and `"partial: n runs unknown"`". These contradict. As built, a sum over a mix of runs gives the known runs' tokens and
+   names the gap as `partial: n runs unknown`. A sum whose runs are all unknown is `null` with its reason. No estimate is
+   made either way (Rule 14). Ledger: `.superpowers/sdd/2026-10-23-flow-phase1-gaps/progress.md:96`.
+
+8. **Releasing a held external/irreversible effect needs person authority on every path (gaps plan Task 9 fix
+   rounds 1–2, final-review fix I1; controller rulings) — FOR HUMAN REVIEW.** §6.3 gates only `defer … proceed` (the
+   `SOCKET_TIER` predicate). As built, a held effect is released only with the authority `flow-effect` requires: the
+   person token over the socket, or the owner on the Web. Members and runs Orca dispatched are refused. The kernel
+   enforces this when it applies the message (`releaseRefusal`, `src/flow/messages.ts`) and rejects a release without
+   that authority as `flow-effect-needs-person`. Every release path is covered:
+   - a `defer` with any `proceed`;
+   - a `skip` that replaces a defer which currently holds an effect;
+   - a `fill` whose application would release a held effect. The hold belongs to the effect step, so the step's own
+     skip or fill by a non-person does not lift it (`holdsOn`/`holdTargets`, `src/flow/marks.ts`);
+   - a **pool raise** (final review I1). An effect step parked on an exhausted pool that a standing defer has come to
+     hold is not resumed by `flow-pool`. It is parked `deferred-upstream` (`parkIfHeld`, `src/flow/kernel.ts`), and the
+     `confirmed` record from its gate is closed as `discarded`. When the hold is lifted, the step starts as a new
+     execution through its own level gate. A raise is a budget act, not a release.
+
+   This is an **exception to §13's "fill … allowed" for a dispatched run**: a fill that would release a held effect is
+   rejected for one. A fill, skip or defer that releases nothing stays open as §13 says. The `flow-effect confirm|enact`
+   path (the other caller that resumes an execution) is unchanged. A confirm card already at `needs-person` when an
+   upstream step is deferred stays live, because confirming it is the person's explicit act
+   (`.superpowers/sdd/2026-10-23-flow-phase1-gaps/progress.md:44`). Ledger: `progress.md:103` (the ruling), `:109`
+   (N1: the hold is the effect step's), `:112` (R2-O1 carried), `:136` (final review), and this round's
+   `gaps Tfinal:` lines.
+
+9. **The Web start and the folder reads (gaps plan Task 10-B fix rounds 1–2, final-review fix M4; controller rulings).**
+   - **The Web start sends no `projectId`.** The server derives the run's project from the folder, using the start's
+     own resolver (`dirProjectOf`, `src/flow/flowCommands.ts`, by real path). A start runs only on a registered dir
+     project's folder (`flow-dir-unregistered`). The start dialog's presets read takes `?dir=<absolute folder>` and
+     resolves it with the same function, so the dialog shows the defaults the start will apply. Before a folder is
+     chosen, it shows the global layer, labelled as such.
+   - **Folder reads are Web-only and refuse dispatched runs.** `GET /api/control/flows/images` (the image picker) and
+     `GET /api/control/flows/settings?dir=` are not served on the control socket (404). On the Web they refuse a run Orca
+     dispatched (403 `control-dispatched-run-refused`). The image walk is bounded (`flow-folder-too-large`).
+   - **The image list covers only a folder a start may run on (final review M4).** `GET /api/control/flows/images`
+     refuses a folder that `dirProjectOf` does not resolve to a registered dir project, with the start's own refusal,
+     `flow-dir-unregistered` (422), and the start dialog shows that refusal. This stops members probing arbitrary paths.
+     `flows/settings?dir=` still answers the global layer for such a folder, as before: it reveals only whether the path
+     is a registered project, and the dialog needs that answer.
+
+   Ledger: `.superpowers/sdd/2026-10-23-flow-phase1-gaps/progress.md:127`, `:130`, and this round's `gaps Tfinal:`
+   lines.
+
+10. **The attachment store: refused to dispatched runs; no quota or pruning, a known limit (final-review fix M5).**
+   `POST /api/control/flows/:runId/attachments` refuses a principal that a run Orca dispatched (403
+   `control-dispatched-run-refused`, as `flow-start`), before the body is read. A dispatched run can still send feedback,
+   but without attachments. Any other admitted principal can still add files of at most 5 MiB each. **There is no
+   per-run or total quota and no pruning:** files under `$ORCA_CONTROL_DIR/flow-attachments/` stay until a person
+   deletes them. Each is content-addressed, so the same bytes are stored once. §16's store row is otherwise unchanged.
+   Ledger: this round's `gaps Tfinal:` lines; final review `.superpowers/sdd/2026-10-23-flow-phase1-gaps/final-review.md`
+   (Minor 5).
