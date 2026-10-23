@@ -267,8 +267,9 @@ function repairOf(store: DatabaseSync, groupId: string, group: Body, now: () => 
   const estimateBreaches: string[] = [];
   for (const runRow of store.prepare("SELECT id, body FROM runs WHERE group_id=?").all(groupId)) {
     const run = JSON.parse(String(runRow.body)) as Body;
-    // Condition 5: the group never started.
-    if (run.phase === "work" || run.phase === "handoff") return null;
+    // Condition 5: the group never started -- every run is an estimate or a single call (review M3: any other phase,
+    // or none, keeps the group as it is).
+    if (run.phase !== "estimate" && run.phase !== "single-call") return null;
     if (!Array.isArray(run.breaches) || run.breaches.length === 0) continue;
     if (run.phase === "estimate") { estimateBreaches.push(String(runRow.id)); continue; }
     // Review I1: a clarify or split call ran while the group was clarifying, where DR18 records a breach without blocking.

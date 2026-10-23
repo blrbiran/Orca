@@ -137,6 +137,15 @@ describe("schema 19: the one-time repair of estimate-stuck groups", () => {
     } finally { await dispose(s, store); }
   });
 
+  it("review M3: a run of any phase other than estimate or single-call (not breached) keeps the group blocked", async () => {
+    for (const phase of ["reconcile", "goal-review", undefined]) {
+      const s = await stuck({ extraRuns: [{ phase, breaches: [] }] }); let store: ControlStore | null = null; try {
+        store = await reopen(s);
+        expect([phase, group(store).status]).toEqual([phase, "blocked"]);
+      } finally { await dispose(s, store); }
+    }
+  });
+
   it("C9: one backup of the v18 store; a second open adds none and changes no group byte", async () => {
     const s = await stuck(); let store: ControlStore | null = null; try {
       store = await reopen(s);
