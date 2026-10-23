@@ -102,6 +102,8 @@ const ALLOWED = [
   "web/src/controlApi.ts\t`POST ${path}`",
   // Agent-installation preview refusal uses the same technical method/path prefix as command refusals.
   "web/src/controlApi.ts\t`POST ${path}`",
+  // Gaps plan Task 10-A fix round 1: the flow attachment upload's refusal carries the same method/path prefix.
+  "web/src/controlApi.ts\t`POST ${path}`",
   'web/src/main.tsx\t"orca panel: #root is missing from index.html"',
 ];
 

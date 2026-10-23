@@ -113,17 +113,18 @@ export async function controlGet<T>(path: string, signal?: AbortSignal): Promise
  */
 export async function uploadFlowAttachment(runId: string, file: File): Promise<{ ok: true; id: string } | { ok: false; refusal: ControlRefusal }> {
   const path = `/api/control/flows/${encodeURIComponent(runId)}/attachments`;
+  const what = `POST ${path}`;
   let res: Response;
   try {
     res = await fetch(path, { method: "POST", headers: { "content-type": file.type || "application/octet-stream", ...csrfHeader() }, body: file });
   } catch (err) {
-    return { ok: false, refusal: refusalOf(`POST ${path}`, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.neverAnswered")) };
+    return { ok: false, refusal: refusalOf(what, null, undefined, err instanceof Error ? err.message : i18n.t("panelErrors.neverAnswered")) };
   }
   const body: unknown = await res.json().catch(() => undefined);
   noteAnswer(res.status, body);
   const id = (body as { id?: unknown } | undefined)?.id;
   if (res.ok && typeof id === "string") return { ok: true, id };
-  return { ok: false, refusal: refusalOf(`POST ${path}`, res.status, body, i18n.t("panelErrors.answered", { status: res.status })) };
+  return { ok: false, refusal: refusalOf(what, res.status, body, i18n.t("panelErrors.answered", { status: res.status })) };
 }
 
 /** GET /api/control/config -- src/panel/controlApi.ts. */
