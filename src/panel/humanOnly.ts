@@ -90,6 +90,9 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "flow-answer": "human-only",
   "flow-effect": "human-only",
   "flow-pool": "human-only",
+  // Gaps spec §5.5, §13: answering a step of the running plan is the person's (like running the plan); `accept-unchanged`
+  // is open on the socket (SOCKET_TIER), `run` spends and wants a person token.
+  "flow-plan-step": "human-only",
 };
 /**
  * Review finding I4 (controller's call, flagged for the human): verbs any principal may send that a run Orca dispatched is
@@ -116,6 +119,10 @@ export const HUMAN_ONLY_FIELDS: Readonly<Partial<Record<CommandVerbV1, readonly 
  * update. A predicate reads the raw payload: what it cannot read is `token` (the stricter tier; the schema refuses it
  * later). Web members are not tiered (I3): they keep the refusals above. A run Orca dispatched is refused every entry
  * (§15.4, permissions.ts). tests/panel/accessMatrix.test.ts fails when an entry above has no row here.
+ *
+ * Gaps spec §6.3, §13: a row may also be a predicate on an `any` verb (`flow-message`, the first): what it calls `token`
+ * wants a person token on the socket and is refused to a run Orca dispatched, exactly as a human-only entry; what it calls
+ * `open` is the verb as before. Web members are not tiered: an `any` verb stays theirs.
  */
 export type SocketTier = "open" | "token";
 type Payload = Readonly<Record<string, unknown>>;
@@ -158,6 +165,18 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "flow-effect": "token",
   "flow-pool": "token",
   "flow-start.pool": "token",
+  // Gaps spec §13: running a step the plan asked about spends (as flow-rerun); accepting it unchanged does what the
+  // timeout would do.
+  "flow-plan-step": (p) => (p.choice === "accept-unchanged" ? "open" : "token"),
+  // Gaps spec §6.3: a `defer` whose `effects` says `proceed` for any step releases a held external effect (as flow-effect);
+  // any other message is open. Effects it cannot read are token.
+  "flow-message": (p) => {
+    const body = typeof p.body === "object" && p.body !== null ? p.body as Payload : null;
+    if (p.kind !== "command" || body?.command !== "defer" || body.effects === undefined) return "open";
+    const effects = body.effects;
+    if (typeof effects !== "object" || effects === null || Array.isArray(effects)) return "token";
+    return Object.values(effects).some((choice) => choice !== "wait") ? "token" : "open";
+  },
   "run-check-now": "open",
   "resume-check": "open",
   // R3a: confirming under the configured integration (any delivery) carries only its hash; a mismatch is refused anyway.
@@ -178,7 +197,8 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
 export function socketTier(verb: CommandVerbV1, payload: unknown): SocketTier | null {
   const object: Payload = typeof payload === "object" && payload !== null && !Array.isArray(payload) ? payload as Payload : {};
   const entries = [
-    ...(HUMAN_ONLY_VERBS.includes(verb) ? [verb as string] : []),
+    // A human-only verb, or (gaps spec §13) an `any` verb with a predicate row.
+    ...(HUMAN_ONLY_VERBS.includes(verb) || (VERB_ACCESS[verb] === "any" && Object.hasOwn(SOCKET_TIER, verb)) ? [verb as string] : []),
     ...(HUMAN_ONLY_FIELDS[verb] ?? []).filter((field) => Object.hasOwn(object, field)).map((field) => `${verb}.${field}`),
   ];
   if (entries.length === 0) return null;

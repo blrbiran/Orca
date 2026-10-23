@@ -64,9 +64,17 @@ const VIEW_REASONS = [
   // Feedback #62: Codex answered HTTP 429 and ccloop's backoff ran out (ccloop 3069dbf codexAdapter.ts).
   "codex-rate-limited",
 ];
+/**
+ * Gaps spec §13 (plan Task 9): a flow message's rejection reason, and a feedback intake's failure, is a code (with a
+ * `:<detail>` suffix) the run page shows by its prefix (explainRunReason). Not control errors: the message is stored
+ * `rejected` with the reason (src/flow/messages.ts, src/flow/feedback/intake.ts, src/flow/rewind.ts, kinds/clarify.ts).
+ */
+const FLOW_MESSAGE_REASONS = [
+  "flow-step-not-skippable", "flow-step-not-marked", "flow-feedback-no-target", "flow-feedback-already-applied", "flow-round-not-revisable", "flow-step-waiting",
+];
 const TABLES = { zh: zhErrors, en: enErrors } as const;
 const has = (table: Record<string, string>, code: string): boolean => Object.prototype.hasOwnProperty.call(table, code);
-const required = (): string[] => [...controlErrorCatalog().map((entry) => entry.code), ...WEB_MADE, ...BY_HAND, ...VIEW_REASONS];
+const required = (): string[] => [...controlErrorCatalog().map((entry) => entry.code), ...WEB_MADE, ...BY_HAND, ...VIEW_REASONS, ...FLOW_MESSAGE_REASONS];
 
 describe("refusal coverage in both languages (panel i18n spec §6.4; spec 2026-10-08 §2.2(a))", () => {
   it.each(Object.keys(TABLES) as Array<keyof typeof TABLES>)("has a %s entry for every catalog code, web-made code, hand-listed code and view-shown reason", (lang) => {

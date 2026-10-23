@@ -5,7 +5,7 @@
 import { dispatchedRunHeaders } from "../control/commandClient.js";
 import { discoverSocketPath } from "../entry/discovery.js";
 import { EntryRejection, localError, type CliResponseV1 } from "../entry/envelope.js";
-import { controlGet } from "../entry/operations.js";
+import { controlGet, controlUpload } from "../entry/operations.js";
 import { printResponse } from "./output.js";
 import { personTokenHeaders } from "./person.js";
 import { resolveId, resolveProject, type ProjectRef } from "./resolve.js";
@@ -27,6 +27,8 @@ export interface PanelSession {
   fresh(path: string): Promise<CliResponseV1>;
   /** Forget what was read, so the next read of a path asks the panel again. */
   forget(): void;
+  /** POST raw bytes (gaps spec §4.7: an attachment); a non-2xx answer throws PanelAnswer, a local refusal EntryRejection. */
+  upload(path: string, bytes: Buffer): Promise<unknown>;
 }
 
 export function openSession(args: ParsedArgs, io: CommandIo): PanelSession {
@@ -54,6 +56,15 @@ export function openSession(args: ParsedArgs, io: CommandIo): PanelSession {
       return pending;
     },
     forget() { memo.clear(); },
+    async upload(path, bytes) {
+      const response = await controlUpload({ socketPath, client, path, bytes, headers });
+      if (response.status === 0) {
+        const error = (response.body as { error: { code: string; message: string; retryable: boolean } }).error;
+        throw new EntryRejection(error.code, error.message, error.retryable);
+      }
+      if (response.status < 200 || response.status >= 300) throw new PanelAnswer(response);
+      return response.body;
+    },
   };
 }
 
@@ -80,7 +91,7 @@ interface ProjectsBody { projects: Array<{ projectKey: string; path: string; con
 export function contextFor(args: ParsedArgs, io: CommandIo, session: PanelSession, ids: Record<string, string>): WriteContext {
   let project: Promise<ProjectRef> | null = null;
   return {
-    args, ids, io, read: (path) => session.read(path),
+    args, ids, io, read: (path) => session.read(path), upload: (path, bytes) => session.upload(path, bytes),
     project() {
       project ??= session.read("projects").then((body) => {
         const refs = (body as ProjectsBody).projects

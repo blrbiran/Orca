@@ -29,6 +29,18 @@ export async function controlGet(input: { socketPath: string; client: string; pa
   }
 }
 
+/** Gaps spec §4.7: a raw upload (an attachment's bytes) to a control route; the panel answers JSON. */
+export async function controlUpload(input: { socketPath: string; client: string; path: string; bytes: Buffer; headers?: Record<string, string> }): Promise<CliResponseV1> {
+  try {
+    checkPath(input.path, false);
+    const { status, body } = await requestOverSocket({ socketPath: input.socketPath, method: "POST", path: input.path, client: input.client, headers: input.headers, bytes: input.bytes });
+    return { schema: "orca-cli-response-v1", status, body };
+  } catch (error) {
+    if (error instanceof EntryRejection) return localError(error);
+    throw error;
+  }
+}
+
 /** D9: the owner-only settlement route is recognized by the panel; socket/MCP senders receive its 403 permission refusal. */
 export async function controlSend(input: { socketPath: string; client: string; route: string; expectedRevision: number; payload: unknown; commandId?: string; commandIdPrefix?: "cli" | "mcp"; headers?: Record<string, string> }): Promise<CliResponseV1> {
   const commandId = input.commandId ?? `${input.commandIdPrefix ?? "cli"}-${randomUUID()}`;

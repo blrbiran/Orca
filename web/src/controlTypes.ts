@@ -595,7 +595,7 @@ export type CommandSuccessV1 = {
     | "correction-record" | "correction-close" | "correction-withdraw"
     | "set-check-settings" | "set-scheduled-check" | "set-check-locks" | "run-check-now" | "resume-check"
     | "set-flow-settings" | "set-flow-locks"
-    | "flow-start" | "flow-message" | "flow-plan" | "flow-rerun" | "flow-answer" | "flow-effect" | "flow-pool";
+    | "flow-start" | "flow-message" | "flow-plan" | "flow-rerun" | "flow-answer" | "flow-effect" | "flow-pool" | "flow-plan-step";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -627,13 +627,16 @@ export type CommandSuccessV1 = {
     | { kind: "flow-locks-set"; locks: FlowLockV1[] }
     // Flow engine spec §14.2: what each flow verb did.
     | { kind: "flow-started"; flowRunId: string; groupId: string }
-    | { kind: "flow-message-stored"; flowRunId: string; seq: number; state: "accepted" | "applied" | "rejected" | "excluded"; reason: string | null; deduped: boolean }
+    | { kind: "flow-message-stored"; flowRunId: string; seq: number; state: "accepted" | "applied" | "rejected" | "excluded"; reason: string | null; deduped: boolean; held?: string[]; release?: string }
     | { kind: "flow-plan-made"; flowRunId: string; planNo: number }
     | { kind: "flow-plan-run"; flowRunId: string; planNo: number }
     | { kind: "flow-plan-discarded"; flowRunId: string; planNo: number }
     | { kind: "flow-answered"; flowRunId: string; stepKey: string; answer: "ask" | "needs" | "clarify" | "consensus" }
     | { kind: "flow-effect-done"; recordId: string; action: "confirm" | "enact" | "discard"; state: "running" | "restaged" | "discarded"; replacedBy?: string }
     | { kind: "flow-pool-raised"; flowRunId: string; poolTokens: number }
+    // Gaps spec §4.6, §5.5: a feedback intake's clarify round answered; a step of the running plan answered.
+    | { kind: "flow-feedback-answered"; flowRunId: string; messageSeq: number; answer: "clarify" | "consensus" }
+    | { kind: "flow-plan-step-applied"; flowRunId: string; planNo: number; stepKey: string; choice: "run" | "accept-unchanged" }
     | { kind: "check-run-requested"; repoId: string; checkKind: CheckKindV1; targets: string[] }
     | { kind: "check-resumed"; repoId: string; checkKind: CheckKindV1; targets: string[] }
     | { kind: "criteria-review-set"; repoId: string; enabled: boolean }

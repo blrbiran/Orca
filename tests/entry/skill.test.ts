@@ -8,7 +8,7 @@ import {
   requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementClarifyMorePayloadSchema, requirementClassifyPayloadSchema, requirementOpenPayloadSchema, requirementRevisePayloadSchema, resumeFromHandoffPayloadSchema,
   setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema, setCriteriaReviewPayloadSchema,
-  setCheckSettingsPayloadSchema, setScheduledCheckPayloadSchema, setCheckLocksPayloadSchema, checkKindPayloadSchema, setFlowSettingsPayloadSchema, setFlowLocksPayloadSchema, flowStartPayloadSchema, flowMessagePayloadSchema, flowPlanPayloadSchema, flowRerunPayloadSchema, flowAnswerPayloadSchema, flowEffectPayloadSchema, flowPoolPayloadSchema,
+  setCheckSettingsPayloadSchema, setScheduledCheckPayloadSchema, setCheckLocksPayloadSchema, checkKindPayloadSchema, setFlowSettingsPayloadSchema, setFlowLocksPayloadSchema, flowStartPayloadSchema, flowMessagePayloadSchema, flowPlanPayloadSchema, flowRerunPayloadSchema, flowAnswerPayloadSchema, flowEffectPayloadSchema, flowPoolPayloadSchema, flowPlanStepPayloadSchema,
   verifySavedResultPayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
   correctionRecordPayloadSchema, correctionClosePayloadSchema, correctionWithdrawPayloadSchema,
 } from "../../src/control/webProtocol.js";
@@ -47,6 +47,8 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): flow engine spec §14.2's run verbs (plan Task 15).
   "flow-start": flowStartPayloadSchema, "flow-message": flowMessagePayloadSchema, "flow-plan": flowPlanPayloadSchema, "flow-rerun": flowRerunPayloadSchema,
   "flow-answer": flowAnswerPayloadSchema, "flow-effect": flowEffectPayloadSchema, "flow-pool": flowPoolPayloadSchema,
+  // Gaps spec §13 (plan Task 9): a step of the running re-run plan.
+  "flow-plan-step": flowPlanStepPayloadSchema,
   "set-criteria-review": setCriteriaReviewPayloadSchema,
   "retry-integration": emptyPayloadSchema,
   "resolve-integration-conflict": emptyPayloadSchema,

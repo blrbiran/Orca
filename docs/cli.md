@@ -173,18 +173,25 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca flow list` — every flow run with its template, state and pool
 - `orca flow show <run>` — one flow run: steps with their active and newest execution, open asks, plans, effect records, decisions
 - `orca flow journal <run>` — one flow run's every execution and message
-- `orca flow feedback <run> [--step <step>] [--execution <execution>] --text <text>` — feedback on a step (or one execution): the step runs again with it, and a plan says what else
+- `orca flow feedback <run> [--step <step>] [--execution <execution>] [--quote <quote>] [--heading <heading>] [--paragraph <paragraph>] [--attach <attach>] [--replaces <replaces>] [--hit <hit>] [--as-is] --text <text>` — feedback on the run, a step or one execution: code locates the passage, the model picks the steps that take it, a plan says what re-runs
 - `orca flow edit <run> --step <step> [--file <file>] [--set <set>]` — the person's own output for a step (record fields, or workspace files); the step is not re-run
 - `orca flow plan <run>` — compute and propose a re-run plan from what changed (spends one single call)
 - `orca flow rerun <run> [--skip <skip>] [--add <add>] [--plan <plan>]` — run the open plan: its candidates minus the skips (default: the model's proposed skips) plus additions; needs a person token (person token)
 - `orca flow discard-plan <run> [--plan <plan>]` — withdraw the open plan instead of running it: nothing re-runs, the feedback that made it is excluded; needs a person token (person token)
 - `orca flow rewind <run> --to <to> [--exclude <exclude>]` — move a step's active output back (to execution n, or to not run); later messages are re-applied unless excluded
+- `orca flow revise <run> --step <step> --round <round> --file <file>` — revise an answered round of a flow clarify step; later rounds are asked again from it
+- `orca flow include <run> --step <step> [--plan <plan>]` — run a step the running plan asks about (it spends); needs a person token (person token)
+- `orca flow accept <run> --step <step> [--plan <plan>]` — accept a step of the running plan as unchanged: its output stands for its new inputs (what the timeout does)
+- `orca flow skip <run> --step <step>` — skip a step in this run until filled: later steps go on without its output
+- `orca flow defer <run> --step <step> [--effects <effects>]` — defer a step (fill it later): later steps go on without its output; external effects after it wait unless --effects <step>=proceed (proceed needs a person token)
+- `orca flow fill <run> --step <step>` — fill a skipped or deferred step: a plan re-runs it and what depends on it
+- `orca flow params <run> --set <set>` — change the run's params mid-run (values folder-relative); changed steps become plan candidates
 - `orca flow pause <run>` — pause the run at its next step boundary (a running step is never interrupted)
 - `orca flow resume <run>` — resume a paused run
 - `orca flow stop <run>` — stop the run for good at its next step boundary
 - `orca flow retry <run> --step <step>` — run a failed step again (an effect step's retry makes a new effect record)
 - `orca flow repin <run> --version <version>` — move the run to another version of its template (changed steps become plan candidates)
-- `orca flow answer <run> <step> [--set <set>] [--file <file>] [--text <text>] [--answer <answer>] [--glossary <glossary>] [--adr <adr>] [--consensus]` — answer a step that waits for the person: an ask's form, a step's question, a clarify round, or consensus; needs a person token (person token)
+- `orca flow answer <run> [<step>] [--feedback <feedback>] [--set <set>] [--file <file>] [--text <text>] [--answer <answer>] [--glossary <glossary>] [--adr <adr>] [--consensus]` — answer a step that waits for the person (an ask's form, a step's question, a clarify round, or consensus) or a feedback's clarify round; needs a person token (person token)
 - `orca flow effect confirm <record>` — confirm an effect card: its step runs now (needs a person token) (person token)
 - `orca flow effect enact <record>` — enact a staged effect record: its step runs now (needs a person token) (person token)
 - `orca flow effect discard <record>` — discard a staged effect record: the step never runs (needs a person token) (person token)

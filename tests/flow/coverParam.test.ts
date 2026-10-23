@@ -260,6 +260,28 @@ describe("preset defaults (§8.2)", () => {
     expect(Object.keys(readFlowSettings(w.store, null).paramDefaults)).toEqual(["other", "t"]);
     expect(FLOW_LOCKABLE_PATHS.some((path) => path.startsWith("paramDefaults"))).toBe(false);
   });
+
+  it("clears one preset entry (paramDefaults.<template>.<param>) and keeps the others; a template left with none is dropped", async () => {
+    const w = await smallWorld();
+    let n = 0;
+    const write = (payload: { set: unknown; clear: string[] }) => {
+      const body = applySetFlowSettings({ store: w.store, knownRepository: () => false, builtinRoot: w.builtinRoot }, {
+        schema: "orca-raw-command-v1", commandId: `g9-${++n}`, actorId: "owner", verb: "set-flow-settings", target: { kind: "orchestration" }, payload, expectedRevision: orchestrationRevision(w.store),
+      } as never) as { error?: { code: string } };
+      return body.error?.code ?? "accepted";
+    };
+    expect(write({ set: { paramDefaults: { t: { pic: "/covers/default-cover.png", tone: "warm" }, other: { x: 1 } } }, clear: [] })).toBe("accepted");
+    expect(write({ set: {}, clear: ["paramDefaults.t.tone"] })).toBe("accepted");
+    expect(readFlowSettings(w.store, null).paramDefaults).toEqual({
+      other: { x: { value: 1, source: "global", lockedBy: null } }, t: { pic: { value: "/covers/default-cover.png", source: "global", lockedBy: null } },
+    });
+    expect(write({ set: {}, clear: ["paramDefaults.t.pic"] })).toBe("accepted");
+    expect(Object.keys(readFlowSettings(w.store, null).paramDefaults)).toEqual(["other"]);
+    // Clearing a preset that is not there changes nothing; the whole field still clears every preset.
+    expect(write({ set: {}, clear: ["paramDefaults.t.pic"] })).toBe("no-op-command");
+    expect(write({ set: {}, clear: ["paramDefaults"] })).toBe("accepted");
+    expect(readFlowSettings(w.store, null).paramDefaults).toEqual({});
+  });
 });
 
 /** The built-in run with a cover image given (or preset): `cover` is skipped by its `when`; returns the run id. */

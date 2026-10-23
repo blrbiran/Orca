@@ -19,11 +19,14 @@ import { answerAsk } from "./kinds/ask.js";
 import { answerFlowClarify, flowClarifyConsensus } from "./kinds/clarify.js";
 import type { ExecutionBody } from "./kinds/registry.js";
 import { acceptMessage } from "./messages.js";
+import { answerFeedbackClarify } from "./feedback/intake.js";
+import { holdableAfter } from "./marks.js";
+import { planStep } from "./planStep.js";
 import { POOL_EXHAUSTED } from "./pool.js";
 import { discardPlan, proposePlan, runPlan } from "./rerun.js";
 import { appendMessage, getFlowRun, listExecutions } from "./store.js";
 
-export const FLOW_VERBS = ["flow-start", "flow-message", "flow-plan", "flow-rerun", "flow-answer", "flow-effect", "flow-pool"] as const;
+export const FLOW_VERBS = ["flow-start", "flow-message", "flow-plan", "flow-rerun", "flow-answer", "flow-effect", "flow-pool", "flow-plan-step"] as const;
 export type FlowVerb = (typeof FLOW_VERBS)[number];
 export type FlowCommand = Extract<RawAuthorityCommandV1, { verb: FlowVerb }>;
 type Result = Extract<CommandSuccessV1["result"], { kind: `flow-${string}` }>;
@@ -60,6 +63,8 @@ const BOOKED: ReadonlySet<string> = new Set([
   "flow-run-not-found", "flow-step-not-found", "flow-template-invalid", "flow-param-invalid", "flow-command-missing", "role-unresolved",
   "flow-profiles-unresolved", "flow-ask-closed", "flow-answer-invalid", "flow-effect-not-staged", "flow-effect-closed", "flow-plan-stale",
   "flow-message-target-missing", "flow-run-stopped", "flow-attachment-invalid",
+  // Gaps spec §13: a plan step the choice cannot answer.
+  "flow-plan-step-not-candidate",
 ]);
 
 export function asFlowControlError(error: unknown): unknown {
@@ -129,7 +134,7 @@ async function act(flow: FlowDeps, command: FlowCommand, projects: () => Readonl
       const p = command.payload;
       loadRun(flow.store, p.runId);
       const stored = await acceptMessage(flow, p.runId, { kind: p.kind, target: p.target, body: p.body, by: who.by, via: who.via, requestId: command.commandId });
-      return { kind: "flow-message-stored", flowRunId: p.runId, seq: stored.seq, state: stored.state, reason: stored.reason, deduped: stored.deduped };
+      return { kind: "flow-message-stored", flowRunId: p.runId, seq: stored.seq, state: stored.state, reason: stored.reason, deduped: stored.deduped, ...deferHolds(flow, p, stored.state) };
     }
     case "flow-plan": {
       loadRun(flow.store, command.payload.runId);
@@ -158,22 +163,53 @@ async function act(flow: FlowDeps, command: FlowCommand, projects: () => Readonl
         : { kind: "flow-effect-done", recordId: p.recordId, action: p.action, state: "restaged", replacedBy: enacted.recordId };
     }
     case "flow-pool": return raisePool(flow, command.payload.runId, command.payload.raiseTokens, who, command.commandId);
+    case "flow-plan-step": {
+      const p = command.payload;
+      await planStep(flow, { flowRunId: p.runId, planNo: p.planNo, stepKey: p.stepKey, choice: p.choice, by: who.by, via: who.via });
+      return { kind: "flow-plan-step-applied", flowRunId: p.runId, planNo: p.planNo, stepKey: p.stepKey, choice: p.choice };
+    }
   }
 }
 
+type MessagePayload = Extract<FlowCommand, { verb: "flow-message" }>["payload"];
+/**
+ * Gaps spec §6.3: a `defer` (not refused) names the effect steps it holds -- those after it it may hold that it did not
+ * say `proceed` for -- and the command that releases them (a person's: `proceed` needs the token).
+ */
+function deferHolds(flow: FlowDeps, p: MessagePayload, state: string): { held?: string[]; release?: string } {
+  if (state === "rejected" || p.kind !== "command" || p.body.command !== "defer" || p.target.kind !== "step") return {};
+  const effects = typeof p.body.effects === "object" && p.body.effects !== null ? p.body.effects as Record<string, unknown> : {};
+  const held = holdableAfter(loadRun(flow.store, p.runId).template, p.target.stepKey).filter((key) => effects[key] !== "proceed");
+  if (held.length === 0) return {};
+  return { held, release: `orca flow defer ${p.runId} --step ${p.target.stepKey} ${held.map((key) => `--effects ${key}=proceed`).join(" ")} --as-person` };
+}
+
 type AnswerPayload = Extract<FlowCommand, { verb: "flow-answer" }>["payload"];
-/** §8.1 `answer`: what the waiting step asked decides how the answer is taken; exactly one form of answer is given. */
+/**
+ * §8.1 `answer`: what the waiting step asked decides how the answer is taken; exactly one form of answer is given. Gaps
+ * spec §4.6: `feedback` (instead of a step) answers that feedback intake's clarify round, by `clarify` or `consensus`.
+ */
 async function answer(flow: FlowDeps, p: AnswerPayload, who: { by: string; via: string }): Promise<Result> {
   const given = [p.values, p.text, p.clarify, p.consensus].filter((v) => v !== undefined).length;
   if (given !== 1) throw new ControlError("flow-answer-invalid", "give exactly one of values, text, clarify, consensus");
+  if ((p.stepKey === undefined) === (p.feedback === undefined)) throw new ControlError("flow-answer-invalid", "give exactly one of stepKey, feedback");
+  if (p.feedback !== undefined) {
+    if (p.clarify === undefined && p.consensus === undefined) throw new ControlError("flow-answer-invalid", "a feedback round takes clarify or consensus");
+    loadRun(flow.store, p.runId);
+    const target = { flowRunId: p.runId, messageSeq: p.feedback };
+    await answerFeedbackClarify(flow, target, p.clarify === undefined ? "consensus" : { roundNo: p.clarify.roundNo, answers: p.clarify.answers }, who.by, who.via);
+    await advanceAfter(flow, p.runId);
+    return { kind: "flow-feedback-answered", flowRunId: p.runId, messageSeq: p.feedback, answer: p.clarify === undefined ? "consensus" : "clarify" };
+  }
+  const stepKey = p.stepKey!;
   const run = loadRun(flow.store, p.runId);
-  const step = stepOf(run, p.stepKey);
-  const target = { flowRunId: p.runId, stepKey: p.stepKey };
-  const done = (kind: "ask" | "needs" | "clarify" | "consensus"): Result => ({ kind: "flow-answered", flowRunId: p.runId, stepKey: p.stepKey, answer: kind });
+  const step = stepOf(run, stepKey);
+  const target = { flowRunId: p.runId, stepKey };
+  const done = (kind: "ask" | "needs" | "clarify" | "consensus"): Result => ({ kind: "flow-answered", flowRunId: p.runId, stepKey, answer: kind });
   if (p.clarify !== undefined) { await answerFlowClarify(flow, target, p.clarify, who.by, who.via); await advanceAfter(flow, p.runId); return done("clarify"); }
   if (p.consensus !== undefined) { await flowClarifyConsensus(flow, target, who.by, who.via); await advanceAfter(flow, p.runId); return done("consensus"); }
   if (p.values !== undefined) {
-    if (step.kind !== "ask") throw new FlowRefusal("flow-answer-invalid", `${p.stepKey} is a ${step.kind} step: answer its question with text`);
+    if (step.kind !== "ask") throw new FlowRefusal("flow-answer-invalid", `${stepKey} is a ${step.kind} step: answer its question with text`);
     await answerAsk(flow, target, p.values, who.by, who.via);
     await advanceAfter(flow, p.runId);
     return done("ask");

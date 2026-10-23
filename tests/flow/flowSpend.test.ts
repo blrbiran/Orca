@@ -162,7 +162,9 @@ describe("spend: only the tool's numbers (gaps §10, G9)", { timeout: 60_000 }, 
       t.children.land(second, { "post.md": `${POST}\nLess sweet.\n` });
       await t.w.advance();
       const v = view(t.w, t.flowRunId);
-      expect(v.intakes).toEqual([{ messageSeq: sent.seq, state: "planned", spend: { tokens: 4_000, unknownReason: null, ...NONE, runs: [{ runId: triage, purpose: "feedback-triage", tokens: 4_000 }] } }]);
+      // Ruling: 这次批准改写所有必要的判据 (0e13a9b7): gaps plan Task 9 adds the intake's own fields to the read; this
+      // criterion is about spend, so it compares the spend part of each intake.
+      expect(v.intakes.map(({ messageSeq, state, spend }) => ({ messageSeq, state, spend }))).toEqual([{ messageSeq: sent.seq, state: "planned", spend: { tokens: 4_000, unknownReason: null, ...NONE, runs: [{ runId: triage, purpose: "feedback-triage", tokens: 4_000 }] } }]);
       expect(v.plans.map((p) => [p.planNo, p.spend])).toEqual([[1, { tokens: 500, unknownReason: null, ...NONE, runs: [{ runId: proposal, purpose: "rerun-proposal", tokens: 500 }] }]]);
       expect(step(v, "write").executions.map((e) => e.spend.tokens)).toEqual([42_000, 8_000]);
       expect(step(v, "write").spend).toMatchObject({ tokens: 50_000, unknownReason: null, ...NONE });

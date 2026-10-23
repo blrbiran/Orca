@@ -23,13 +23,15 @@ set one flow setting in this project (or --global); needs a person token
 
 - What it does: sends control verb `set-flow-settings`.
 - Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
-- `<field>`: effects.local|effects.cost|effects.external|effects.irreversible|rerunReview|roles|allowedSkillSources|budgets.tokensPerRun
-- `<value>`: a level (apply-flag|confirm|stage-only|follow-template), auto|review, an integer, or JSON
+- `<field>`: effects.local|effects.cost|effects.external|effects.irreversible|rerunReview|rerunAskTimeoutSeconds|roles|allowedSkillSources|budgets.tokensPerRun|paramDefaults.<template>.<param>
+- `<value>`: a level (apply-flag|confirm|stage-only|follow-template), auto|review, an integer, JSON, or a preset's value
 - `--global`: the global layer (every project without its own value) instead of this project's
 
 ```
 orca flow settings set effects.external confirm --as-person
 orca flow settings set budgets.tokensPerRun 1000000 --global --as-person
+orca flow settings set rerunAskTimeoutSeconds 600 --global --as-person
+orca flow settings set paramDefaults.wechat-article.coverImage /covers/tea.png --global --as-person
 ```
 
 ## `orca flow settings clear <field>... [--global]`
@@ -38,11 +40,12 @@ remove flow settings from this project (or --global) so the next layer applies; 
 
 - What it does: sends control verb `set-flow-settings`.
 - Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
-- `<field>` (one or more): effects.local|effects.cost|effects.external|effects.irreversible|rerunReview|roles|allowedSkillSources|budgets.tokensPerRun
+- `<field>` (one or more): effects.local|effects.cost|effects.external|effects.irreversible|rerunReview|rerunAskTimeoutSeconds|roles|allowedSkillSources|budgets.tokensPerRun|paramDefaults.<template>.<param>|paramDefaults
 - `--global`: the global layer (every project without its own value) instead of this project's
 
 ```
 orca flow settings clear effects.cost rerunReview --as-person
+orca flow settings clear paramDefaults.wechat-article.coverImage --global --as-person
 ```
 
 ## `orca flow settings lock <field>`
@@ -122,19 +125,28 @@ one flow run's every execution and message
 orca flow journal fr-1234
 ```
 
-## `orca flow feedback <run> [--step <step>] [--execution <execution>] --text <text>`
+## `orca flow feedback <run> [--step <step>] [--execution <execution>] [--quote <quote>] [--heading <heading>] [--paragraph <paragraph>] [--attach <attach>] [--replaces <replaces>] [--hit <hit>] [--as-is] --text <text>`
 
-feedback on a step (or one execution): the step runs again with it, and a plan says what else
+feedback on the run, a step or one execution: code locates the passage, the model picks the steps that take it, a plan says what re-runs
 
 - What it does: sends control verb `flow-message`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<run>`: a flow run id (fr-…) or a unique prefix
-- `--step <step>`: the step it is about
+- `--step <step>`: the step it is about (default: the whole run)
 - `--execution <execution>`: <step>#<n>: one execution
+- `--quote <quote>` (repeatable): a passage as it reads in the article (repeatable; each is one anchor)
+- `--heading <heading>`: the heading the passage is under (one anchor with --paragraph)
+- `--paragraph <n>`: the paragraph number (under --heading, else in the article)
+- `--attach <attach>` (repeatable): a png, jpg or webp screenshot (repeatable, at most 4); uploaded first
+- `--replaces <n>`: the message number of earlier feedback this replaces (before its plan ran)
+- `--hit <n>`: with --replaces: pick hit k of that feedback's locations
+- `--as-is`: use my words as they are: no clarify round
 - `--text <text>` (required): the feedback
 
 ```
 orca flow feedback fr-1234 --step voice --text 'warmer, please'
+orca flow feedback fr-1234 --quote 'Tea slows you down' --text 'too slow here'
+orca flow feedback fr-1234 --replaces 7 --hit 2 --text 'this one'
 ```
 
 ## `orca flow edit <run> --step <step> [--file <file>] [--set <set>]`
@@ -206,6 +218,103 @@ move a step's active output back (to execution n, or to not run); later messages
 orca flow rewind fr-1234 --to draft#1
 ```
 
+## `orca flow revise <run> --step <step> --round <round> --file <file>`
+
+revise an answered round of a flow clarify step; later rounds are asked again from it
+
+- What it does: sends control verb `flow-message`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<run>`: a flow run id (fr-…) or a unique prefix
+- `--step <step>` (required): the clarify step
+- `--round <n>` (required): the round number
+- `--file <file>` (required): a JSON document {"answers":[…],"glossaryDecisions":[…],"adrDecisions":[…],"reason"?:…,"exclude"?:[…]}
+
+```
+orca flow revise fr-1234 --step brief --round 1 --file revise.json
+```
+
+## `orca flow include <run> --step <step> [--plan <plan>]`
+
+run a step the running plan asks about (it spends); needs a person token
+
+- What it does: sends control verb `flow-plan-step`.
+- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- `<run>`: a flow run id (fr-…) or a unique prefix
+- `--step <step>` (required): the step
+- `--plan <n>`: the plan number (default: the running one)
+
+```
+orca flow include fr-1234 --step cover --as-person
+```
+
+## `orca flow accept <run> --step <step> [--plan <plan>]`
+
+accept a step of the running plan as unchanged: its output stands for its new inputs (what the timeout does)
+
+- What it does: sends control verb `flow-plan-step`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<run>`: a flow run id (fr-…) or a unique prefix
+- `--step <step>` (required): the step
+- `--plan <n>`: the plan number (default: the running one)
+
+```
+orca flow accept fr-1234 --step cover
+```
+
+## `orca flow skip <run> --step <step>`
+
+skip a step in this run until filled: later steps go on without its output
+
+- What it does: sends control verb `flow-message`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<run>`: a flow run id (fr-…) or a unique prefix
+- `--step <step>` (required): the step (a work, draft, check or review step)
+
+```
+orca flow skip fr-1234 --step cover
+```
+
+## `orca flow defer <run> --step <step> [--effects <effects>]`
+
+defer a step (fill it later): later steps go on without its output; external effects after it wait unless --effects <step>=proceed (proceed needs a person token)
+
+- What it does: sends control verb `flow-message`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<run>`: a flow run id (fr-…) or a unique prefix
+- `--step <step>` (required): the step (a work, draft, check or review step)
+- `--effects <effects>` (repeatable): <effect step>=proceed|wait for an external effect after it (default wait; proceed needs a person token)
+
+```
+orca flow defer fr-1234 --step cover
+orca flow defer fr-1234 --step cover --effects to-draft-box=proceed --as-person
+```
+
+## `orca flow fill <run> --step <step>`
+
+fill a skipped or deferred step: a plan re-runs it and what depends on it
+
+- What it does: sends control verb `flow-message`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<run>`: a flow run id (fr-…) or a unique prefix
+- `--step <step>` (required): the step (a work, draft, check or review step)
+
+```
+orca flow fill fr-1234 --step cover
+```
+
+## `orca flow params <run> --set <set>`
+
+change the run's params mid-run (values folder-relative); changed steps become plan candidates
+
+- What it does: sends control verb `flow-message`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<run>`: a flow run id (fr-…) or a unique prefix
+- `--set <set>` (required) (repeatable): a param as key=value (repeatable)
+
+```
+orca flow params fr-1234 --set coverImage=covers/tea.png
+```
+
 ## `orca flow pause <run>`
 
 pause the run at its next step boundary (a running step is never interrupted)
@@ -268,16 +377,17 @@ move the run to another version of its template (changed steps become plan candi
 orca flow repin fr-1234 --version 2
 ```
 
-## `orca flow answer <run> <step> [--set <set>] [--file <file>] [--text <text>] [--answer <answer>] [--glossary <glossary>] [--adr <adr>] [--consensus]`
+## `orca flow answer <run> [<step>] [--feedback <feedback>] [--set <set>] [--file <file>] [--text <text>] [--answer <answer>] [--glossary <glossary>] [--adr <adr>] [--consensus]`
 
-answer a step that waits for the person: an ask's form, a step's question, a clarify round, or consensus; needs a person token
+answer a step that waits for the person (an ask's form, a step's question, a clarify round, or consensus) or a feedback's clarify round; needs a person token
 
 - What it does: sends control verb `flow-answer`.
 - Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
 - `<run>`: a flow run id (fr-…) or a unique prefix
-- `<step>`: the waiting step
+- `<step>` (optional): the waiting step (not with --feedback)
+- `--feedback <n>`: the message number of feedback whose clarify round waits (with --file or --consensus)
 - `--set <set>` (repeatable): an ask's form field as key=value (repeatable)
-- `--file <file>`: an ask's form values as a JSON object
+- `--file <file>`: an ask's form values as a JSON object; with --feedback, {"answers":[{"id":…,"kind":"recommended"|"text","text"?:…}]}
 - `--text <text>`: the answer to the question the step asked (flow.needs)
 - `--answer <answer>` (repeatable): clarify: <question id> (take the recommended answer) or <id>=<text>
 - `--glossary <glossary>` (repeatable): clarify: <entry id>=accept|reject
@@ -287,6 +397,7 @@ answer a step that waits for the person: an ask's form, a step's question, a cla
 ```
 orca flow answer fr-1234 pick-title --set title='Tea, slowly' --as-person
 orca flow answer fr-1234 article --text plain --as-person
+orca flow answer fr-1234 --feedback 7 --consensus --as-person
 ```
 
 ## `orca flow effect confirm <record>`

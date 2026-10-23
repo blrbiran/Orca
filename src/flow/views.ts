@@ -5,15 +5,15 @@
  * `orca flow show|list|journal` read them.
  */
 import { activeChain } from "../control/clarifyChain.js";
-import { readRoundsAt } from "../control/requirementRecords.js";
+import { latestRoundAt, readRoundsAt } from "../control/requirementRecords.js";
 import type { RoundBody } from "../control/requirementSchemas.js";
 import type { ControlStore } from "../control/store.js";
 import type { ToolRulesReport } from "../control/toolRules.js";
 import { FlowRefusal, latestByStep, loadRun, openAsks, recordOfExecution } from "./kernel.js";
-import { marksOf } from "./marks.js";
+import { heldBy, marksOf } from "./marks.js";
 import { waitingIntakes } from "./feedback/intake.js";
 import { executionSpend, intakeSpend, planSpend, sumSpend, type Spend } from "./spend.js";
-import { getFlowRun, listEffects, listExecutions, listHeads, listIntakes, listMessages, listPlans, type ExecutionRow } from "./store.js";
+import { FEEDBACK_KEY, getFlowRun, listEffects, listExecutions, listHeads, listIntakes, listMessages, listPlans, type ExecutionRow } from "./store.js";
 
 /**
  * One execution as the run page shows it (Task 16): its state, why it ran, its output, red flags and -- for a `work`
@@ -83,8 +83,17 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
   const latest = latestByStep(executions);
   const heads = listHeads(store, flowRunId);
   const plans = listPlans(store, flowRunId).map((plan) => ({ ...plan, spend: planSpend(store, plan) }));
-  // Gaps spec §10: each feedback intake's single calls (triage, its clarify round).
-  const intakes = listIntakes(store, flowRunId).map((intake) => ({ messageSeq: intake.messageSeq, state: intake.state, spend: intakeSpend(store, intake) }));
+  // Gaps spec §4, §10: each feedback intake -- what the person sent, where it was located (hits to pick from), which steps
+  // take it, its waiting clarify round (answered with `flow-answer {feedback}`) -- and its single calls' spend.
+  const intakes = listIntakes(store, flowRunId).map((intake) => {
+    const { text, stepKey, anchors, results, ambiguousFiles, targets, restated, flags, planNo, asIs, attachments } = intake.body;
+    const round = intake.state === "clarifying" ? latestRoundAt(store, { groupId: run.row.groupId, stepKey: FEEDBACK_KEY, execSeq: intake.messageSeq }) : null;
+    const clarify = round?.state === "awaiting-answers" && round.result !== null && round.result !== undefined
+      ? { roundNo: round.roundNo, questions: round.result.questions.map((q) => ({ id: q.id, question: q.question, recommendedAnswer: q.recommendedAnswer })) } : null;
+    return { messageSeq: intake.messageSeq, state: intake.state, text, stepKey, anchors, results, ambiguousFiles, targets, restated, flags, planNo, asIs, attachments, clarify, spend: intakeSpend(store, intake) };
+  });
+  // Gaps spec §6: each step's standing mark (skip / defer, with a defer's effect choices) and the deferred steps holding it.
+  const marks = marksOf(listMessages(store, flowRunId));
   const views = new Map(executions.map((e) => [`${e.stepKey}#${e.seq}`, withArtifactRules(store, e, executionView(store, e))]));
   const viewOf = (e: ExecutionRow) => views.get(`${e.stepKey}#${e.seq}`)!;
   const decisions = store.db.prepare(`SELECT seq, grade, step_key AS stepKey, body, "by" FROM flow_decisions WHERE flow_run_id=? ORDER BY seq`).all(flowRunId)
@@ -102,6 +111,7 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
       const effect = "effect" in step && typeof step.effect === "string" ? { kind: step.effect, class: run.template.effects?.[step.effect]?.class ?? null } : null;
       return {
         stepKey: step.id, kind: step.kind, head: heads[step.id] ?? null,
+        mark: marks.get(step.id) ?? null, heldBy: heldBy(run.template, marks, step.id),
         executor: "executor" in step ? step.executor ?? null : null, parallelWith: step.parallelWith ?? null, effect,
         latest: newest === undefined ? null : viewOf(newest),
         executions: mine.map(viewOf),

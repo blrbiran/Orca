@@ -148,9 +148,13 @@ export function applySetFlowSettings(deps: FlowSettingsDeps, command: FlowSettin
       }
       next[key] = (key === "effects" || key === "budgets" || key === "roles") ? { ...(layer[key] ?? {}), ...(value as object) } : value;
     }
-    for (const field of payload.clear as FlowSettingField[]) {
-      const [head, tail] = field.split(".") as [string, string | undefined];
-      if (tail === undefined) delete next[head];
+    for (const field of payload.clear as string[]) {
+      const [head, tail, param] = field.split(".") as [string, string | undefined, string | undefined];
+      // Gaps spec §8.2, §13: `paramDefaults.<template>.<param>` removes that one preset; tidy drops an emptied template.
+      if (param !== undefined) {
+        const templates = next[head] as Record<string, Record<string, unknown>> | undefined;
+        if (templates?.[tail!] !== undefined) { const values = { ...templates[tail!] }; delete values[param]; next[head] = { ...templates, [tail!]: values }; }
+      } else if (tail === undefined) delete next[head];
       else if (next[head] !== undefined) { const inner = { ...(next[head] as Record<string, unknown>) }; delete inner[tail]; next[head] = inner; }
     }
     const tidied = tidy(next as GlobalFlowsLayer);

@@ -596,6 +596,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/flows/answer", verb: "flow-answer", target: flowsScoped },
     { path: "/api/control/flows/effect", verb: "flow-effect", target: flowsScoped },
     { path: "/api/control/flows/pool", verb: "flow-pool", target: flowsScoped },
+    // Gaps spec §5.5, §13: one step of the running re-run plan.
+    { path: "/api/control/flows/plan-step", verb: "flow-plan-step", target: flowsScoped },
     {
       path: "/api/control/repositories/:repoId/criteria-review",
       verb: "set-criteria-review",
@@ -725,7 +727,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "resume-check": service.resumeCheck(command); break;
           case "set-flow-settings": service.setFlowSettings(command); break;
           case "set-flow-locks": service.setFlowLocks(command); break;
-          case "flow-start": case "flow-message": case "flow-plan": case "flow-rerun": case "flow-answer": case "flow-effect": case "flow-pool":
+          case "flow-start": case "flow-message": case "flow-plan": case "flow-rerun": case "flow-answer": case "flow-effect": case "flow-pool": case "flow-plan-step":
             await service.flowCommand(command); break;
           case "set-criteria-review": service.setCriteriaReview(command); break;
           case "set-group-integration": await service.setGroupIntegration(command); break;

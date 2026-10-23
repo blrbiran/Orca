@@ -121,6 +121,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `flow-message-target-missing` | 404 |
 | `flow-param-invalid` | 400 |
 | `flow-plan-stale` | 409 |
+| `flow-plan-step-not-candidate` | 409 |
 | `flow-profiles-unresolved` | 422 |
 | `flow-refused` | 409 |
 | `flow-run-not-found` | 404 |

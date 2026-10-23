@@ -53,7 +53,16 @@ export function permissionRefusal(p: Principal, verb: CommandVerbV1, payload: un
   if (p.kind === "agent" && p.dispatchedRun !== undefined && DISPATCHED_RUN_REFUSED.has(verb))
     return { code: "control-dispatched-run-refused", message: `${verb} is not done by a run Orca dispatched (${p.dispatchedRun}); a person or an attended session does it.` };
   const humanOnly = humanOnlyRefusal(verb, payload);
-  if (humanOnly === null) return null;
+  // Gaps spec §6.3, §13: an `any` verb whose SOCKET_TIER predicate calls this payload `token` (a `defer` releasing a held
+  // effect): the socket agent needs a person token (any person's: the verb is not human-only), and a run Orca dispatched
+  // is refused it with one or without. A Web user is not tiered.
+  if (humanOnly === null) {
+    if (p.kind === "user" || socketTier(verb, payload) !== "token") return null;
+    if (p.dispatchedRun !== undefined)
+      return { code: "control-dispatched-run-refused", message: `${verb}, as sent, is not done by a run Orca dispatched (${p.dispatchedRun}); a person does it, from the Web UI or an attended session.` };
+    if (p.person !== undefined) return null;
+    return { code: "control-person-token-required", message: `${verb}, as sent, wants a person: log in with \`orca login\` and resend it with --as-person, or do it from the Web UI.` };
+  }
   if (p.kind === "user") return mayDoHumanOnly(p) ? null : humanOnly;
   // The classification is the verb's and fields', not the principal's: it holds whatever tier an entry is in.
   if (p.dispatchedRun !== undefined)

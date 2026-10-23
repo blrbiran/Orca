@@ -14,10 +14,12 @@ function transportRejection(error: unknown): EntryRejection {
 
 /** Spec §4: HTTP over the panel's socket. Connection: close, so the panel's shutdown never waits on an idle client. */
 /** `headers`: extra request headers (CLI v2 spec §15.5: the dispatched-run marker); the client header is always set. */
-export function requestOverSocket(input: { socketPath: string; method: "GET" | "POST"; path: string; client: string; body?: unknown; timeoutMs?: number; headers?: Record<string, string> }): Promise<{ status: number; body: unknown }> {
+/** `bytes` (gaps spec §4.7: an attachment upload) is sent as is, `application/octet-stream`, instead of a JSON `body`. */
+export function requestOverSocket(input: { socketPath: string; method: "GET" | "POST"; path: string; client: string; body?: unknown; bytes?: Buffer; timeoutMs?: number; headers?: Record<string, string> }): Promise<{ status: number; body: unknown }> {
   if (socketPathTooLong(input.socketPath)) return Promise.reject(new EntryRejection("control-socket-path-too-long", `${Buffer.byteLength(input.socketPath)} bytes: ${input.socketPath}`));
   return new Promise((resolve, reject) => {
-    const payload = input.body === undefined ? undefined : JSON.stringify(input.body);
+    const payload = input.bytes ?? (input.body === undefined ? undefined : JSON.stringify(input.body));
+    const contentType = input.bytes === undefined ? "application/json" : "application/octet-stream";
     const onResponse = (res: IncomingMessage): void => {
       const chunks: Buffer[] = [];
       res.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -32,7 +34,7 @@ export function requestOverSocket(input: { socketPath: string; method: "GET" | "
     try {
       req = request({
         socketPath: input.socketPath, method: input.method, path: `/api/control/${input.path}`,
-        headers: { ...input.headers, connection: "close", [CLIENT_HEADER]: input.client, ...(payload === undefined ? {} : { "content-type": "application/json", "content-length": Buffer.byteLength(payload) }) },
+        headers: { ...input.headers, connection: "close", [CLIENT_HEADER]: input.client, ...(payload === undefined ? {} : { "content-type": contentType, "content-length": Buffer.byteLength(payload) }) },
       }, onResponse);
     } catch (error) {
       // http.request throws synchronously for a path it cannot send (ERR_UNESCAPED_CHARACTERS).

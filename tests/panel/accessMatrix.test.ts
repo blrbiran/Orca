@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
-import { DISPATCHED_RUN_REFUSED, HUMAN_ONLY_FIELDS, HUMAN_ONLY_VERBS, SOCKET_TIER, humanOnlyRefusal } from "../../src/panel/humanOnly.js";
+import { DISPATCHED_RUN_REFUSED, HUMAN_ONLY_FIELDS, HUMAN_ONLY_VERBS, SOCKET_TIER, VERB_ACCESS, humanOnlyRefusal } from "../../src/panel/humanOnly.js";
 import { permissionRefusal, type Principal } from "../../src/panel/permissions.js";
 import type { StartedPanel } from "../../src/panel/server.js";
 import { sessionFor } from "./fixtures/auth.js";
@@ -59,6 +59,11 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "flow-effect", payload: { recordId: "eff-x", action: "enact" }, tier: "token", member: V },
   { entry: "flow-pool", payload: { runId: "fr-x", raiseTokens: 1 }, tier: "token", member: V },
   { entry: "flow-start.pool", payload: { template: "wechat-article", params: {}, pool: 1 }, tier: "token", member: F },
+  // Gaps spec §13 (G10): answering a plan's question by running the step spends (token); accepting it unchanged does what
+  // the timeout would do (open). A payload the predicate cannot read is token.
+  { entry: "flow-plan-step", payload: { runId: "fr-x", planNo: 1, stepKey: "s", choice: "run" }, tier: "token", member: V },
+  { entry: "flow-plan-step", payload: { runId: "fr-x", planNo: 1, stepKey: "s", choice: "accept-unchanged" }, tier: "open", member: V },
+  { entry: "flow-plan-step", payload: {}, tier: "token", member: V },
   { entry: "run-check-now", payload: { kind: "model-review" }, tier: "open", member: V },
   { entry: "resume-check", payload: { kind: "model-review" }, tier: "open", member: V },
   { entry: "confirm.integrationHash", payload: { integrationHash: "d".repeat(64) }, tier: "open", member: F },
@@ -78,6 +83,27 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "apply-agent-update", payload: {}, tier: "token", member: V },
 ];
 
+/** Gaps spec §6.3, §13: the `any` verbs whose socket tier is a predicate on the payload (written out, not read back). */
+const ANY_VERB_PREDICATES = ["flow-message"] as const;
+const RUN_ID = "fr-00000000-0000-4000-8000-000000000001";
+const defer = (effects?: unknown) => ({ runId: RUN_ID, kind: "command", target: { kind: "step", stepKey: "visuals" }, body: { command: "defer", ...(effects === undefined ? {} : { effects }) } });
+/**
+ * Gaps spec §6.3, §13 (G10): `flow-message` stays `any` (no HUMAN_ONLY_FIELDS entry); a `defer` whose `effects` holds any
+ * `proceed` releases a held external effect, so it is token on the socket and refused to a dispatched run. Everything
+ * else is open. Web members and owners are not tiered (an `any` verb: accepted).
+ */
+const ANY_ROWS: ReadonlyArray<{ name: string; payload: Record<string, unknown>; tier: "open" | "token" }> = [
+  { name: "defer, proceed", payload: defer({ "to-draft-box": "proceed" }), tier: "token" },
+  { name: "defer, wait and proceed", payload: defer({ "to-draft-box": "wait", publish: "proceed" }), tier: "token" },
+  { name: "defer, wait", payload: defer({ "to-draft-box": "wait" }), tier: "open" },
+  { name: "defer, no effects", payload: defer(), tier: "open" },
+  // What the predicate cannot read is the stricter tier (the kernel refuses the shape anyway).
+  { name: "defer, effects not an object", payload: defer("proceed"), tier: "token" },
+  { name: "skip", payload: { runId: RUN_ID, kind: "command", target: { kind: "step", stepKey: "visuals" }, body: { command: "skip" } }, tier: "open" },
+  { name: "fill", payload: { runId: RUN_ID, kind: "command", target: { kind: "step", stepKey: "visuals" }, body: { command: "fill" } }, tier: "open" },
+  { name: "feedback", payload: { runId: RUN_ID, kind: "feedback", target: { kind: "run" }, body: { text: "warmer" } }, tier: "open" },
+];
+
 const PERSON = { userId: "u9", name: "ana", roles: ["owner" as const] };
 const PRINCIPALS: Record<string, Principal> = {
   socket: { kind: "agent", client: "cli:claude" },
@@ -94,10 +120,16 @@ const allEntries = (): string[] => [
 ].sort();
 
 describe("the socket access tiers (CLI v2 spec §15.1)", () => {
-  it("has a SOCKET_TIER row for every human-only verb and field, and no other row (the build-time check)", () => {
+  // Ruling: 这次批准改写所有必要的判据 (0e13a9b7) -- gaps spec §6.3, §13: the table also holds a predicate on an `any`
+  // verb (`flow-message`, the first); every other row is still a human-only entry.
+  it("has a SOCKET_TIER row for every human-only verb and field, the any-verb predicates, and no other row (the build-time check)", () => {
     // Non-vacuous: today's table has the entries the spec names.
-    expect(allEntries()).toEqual(expect.arrayContaining(["set-limit", "correction-withdraw", "confirm.integrationHash", "requirement-open.limit"]));
-    expect(Object.keys(SOCKET_TIER).sort()).toEqual(allEntries());
+    expect(allEntries()).toEqual(expect.arrayContaining(["set-limit", "correction-withdraw", "confirm.integrationHash", "requirement-open.limit", "flow-plan-step"]));
+    expect(Object.keys(SOCKET_TIER).sort()).toEqual([...allEntries(), ...ANY_VERB_PREDICATES].sort());
+    for (const verb of ANY_VERB_PREDICATES) {
+      expect(VERB_ACCESS[verb], verb).toBe("any");
+      expect(typeof SOCKET_TIER[verb], verb).toBe("function");
+    }
     // And every row is exercised below.
     expect([...new Set(ROWS.map((row) => row.entry))].sort()).toEqual(allEntries());
   });
@@ -127,6 +159,21 @@ describe("the socket access tiers (CLI v2 spec §15.1)", () => {
     expect(permissionRefusal(PRINCIPALS.socket!, "requirement-open", { groupId: "g" })).toBe(null);
     expect(permissionRefusal(PRINCIPALS.socket!, "proposal-edit", { operations: [], proposedGroupLimit: {} })?.code).toBe("control-person-token-required");
     for (const p of Object.values(PRINCIPALS)) expect(permissionRefusal(p, "start", {})).toBe(null);
+  });
+
+  it("answers every flow-message row x every principal by its predicate (gaps spec §6.3, §13, G10)", () => {
+    expect(HUMAN_ONLY_FIELDS["flow-message"]).toBeUndefined();
+    const answers = ANY_ROWS.map(({ name, payload }) => ({ name, answer: Object.fromEntries(Object.entries(PRINCIPALS).map(([who, p]) => [who, permissionRefusal(p, "flow-message", payload)?.code ?? "accepted"])) }));
+    expect(answers).toEqual(ANY_ROWS.map(({ name, tier }) => ({
+      name, answer: {
+        socket: tier === "open" ? "accepted" : "control-person-token-required",
+        socketToken: "accepted",
+        socketMarker: tier === "open" ? "accepted" : "control-dispatched-run-refused",
+        socketTokenMarker: tier === "open" ? "accepted" : "control-dispatched-run-refused",
+        webMember: "accepted",
+        webOwner: "accepted",
+      },
+    })));
   });
 
   // Review finding I4 (controller's call, flagged for the human): verbs open to all that a run Orca dispatched is still
@@ -169,5 +216,36 @@ describe("R3a over the socket (CLI v2 spec §15.6 criterion 9)", () => {
     const group = await overSocket(socketPath, "POST", "/api/control/groups/nogroup/integration", { "x-orca-client": "cli:test" }, { commandId: "gi-a", expectedRevision: 0, payload: { integration: LOCAL } });
     expect([group.status, JSON.parse(group.text).error.code]).toEqual([403, "control-person-token-required"]);
     expect(ids(w.state).filter((id) => id.startsWith("gi-"))).toEqual([]);
+  });
+});
+
+/**
+ * Gaps spec §6.3, §13 (G10, and G5's socket mutation): over the real socket, the tier gate refuses before anything is
+ * parsed further or booked -- a `proceed` defer and a plan step `run` without a person token, and both from a run Orca
+ * dispatched -- while a `wait` defer and `accept-unchanged` (open) pass the gate to the service (this panel runs no flow
+ * kernel, so the service answers `flow-unavailable`, booked).
+ */
+describe("the flow tiers over the socket (gaps spec §13, G10)", () => {
+  it("refuses a proceed defer and a plan step run without a token and from a dispatched run; passes wait and accept-unchanged", async () => {
+    const w = await workspace();
+    const panel = await boot(w);
+    const socketPath = (panel as StartedPanel).socketPath!;
+    const send = async (id: string, route: string, payload: unknown, headers: Record<string, string> = {}) => {
+      const answer = await overSocket(socketPath, "POST", `/api/control/flows/${route}`, { "x-orca-client": "cli:test", ...headers }, { commandId: id, expectedRevision: 0, payload });
+      return [answer.status, (JSON.parse(answer.text) as { error?: { code: string } }).error?.code ?? "ok"];
+    };
+    const MARKER = { "x-orca-dispatched-run": "run-1" };
+    const step = (choice: string) => ({ runId: RUN_ID, planNo: 1, stepKey: "visuals", choice });
+    expect(await send("t-proceed", "messages", defer({ "to-draft-box": "proceed" }))).toEqual([403, "control-person-token-required"]);
+    expect(await send("t-proceed-run", "messages", defer({ "to-draft-box": "proceed" }), MARKER)).toEqual([403, "control-dispatched-run-refused"]);
+    expect(await send("t-include", "plan-step", step("run"))).toEqual([403, "control-person-token-required"]);
+    expect(await send("t-include-run", "plan-step", step("run"), MARKER)).toEqual([403, "control-dispatched-run-refused"]);
+    expect(await send("t-accept-run", "plan-step", step("accept-unchanged"), MARKER)).toEqual([403, "control-dispatched-run-refused"]);
+    expect(ids(w.state).filter((id) => id.startsWith("t-"))).toEqual([]);
+    // Past the gate: the service answers.
+    expect(await send("t-wait", "messages", defer({ "to-draft-box": "wait" }))).toEqual([409, "flow-unavailable"]);
+    expect(await send("t-wait-run", "messages", defer({ "to-draft-box": "wait" }), MARKER)).toEqual([409, "flow-unavailable"]);
+    expect(await send("t-accept", "plan-step", step("accept-unchanged"))).toEqual([409, "flow-unavailable"]);
+    expect(ids(w.state).filter((id) => id.startsWith("t-")).sort()).toEqual(["t-accept", "t-wait", "t-wait-run"]);
   });
 });

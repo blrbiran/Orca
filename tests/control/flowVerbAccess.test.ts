@@ -1,13 +1,16 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runRegistered } from "../../src/commands/run.js";
 import type { CommandIo } from "../../src/commands/types.js";
 import { DISPATCHED_RUN_ENV } from "../../src/control/commandClient.js";
 import { WebControlService } from "../../src/control/webService.js";
-import { getFlowRun, listEffects, listPlans } from "../../src/flow/store.js";
+import { getFlowRun, listEffects, listMessages, listPlans } from "../../src/flow/store.js";
 import { bindControlSocket, buildControlSocketApp } from "../../src/panel/controlSocket.js";
-import { HUMAN_ONLY_FIELDS, VERB_ACCESS } from "../../src/panel/humanOnly.js";
+import { HUMAN_ONLY_FIELDS, SOCKET_TIER, VERB_ACCESS } from "../../src/panel/humanOnly.js";
+import { REGISTRY } from "../../src/commands/registry.js";
+import { commandPath } from "../../src/commands/parse.js";
+import { flowAnswerPayloadSchema, flowMessagePayloadSchema, flowPlanStepPayloadSchema, setFlowSettingsPayloadSchema } from "../../src/control/webProtocol.js";
 import { permissionRefusal, type Principal } from "../../src/panel/permissions.js";
 import { quietPanelAuth, seedUser, TEST_PASSWORD } from "../panel/fixtures/auth.js";
 import { overSocket } from "../panel/fixtures/socketPanel.js";
@@ -26,6 +29,8 @@ const TABLE = {
   "flow-start": "any", "flow-message": "any", "flow-plan": "any",
   "flow-rerun": "human-only", "flow-answer": "human-only", "flow-effect": "human-only", "flow-pool": "human-only",
   "set-flow-settings": "human-only", "set-flow-locks": "human-only", "requirement-revise": "any", "correction-record": "human-only",
+  // Gaps spec §13 (G10).
+  "flow-plan-step": "human-only",
 } as const;
 const HUMAN_ONLY = ["flow-effect", "flow-answer", "flow-rerun", "flow-pool", "set-flow-settings", "set-flow-locks"] as const;
 const OWNER = { userId: "u", name: "tester", roles: ["owner"] as const };
@@ -52,6 +57,63 @@ describe("flow verb access (C19)", () => {
     expect(permissionRefusal(SOCKET, "flow-start", { pool: 1 })?.code).toBe("control-person-token-required");
   });
 
+  it("G10: flow-plan-step is human-only, token for run and open for accept-unchanged; a dispatched run is refused it either way", () => {
+    const step = (choice: string) => ({ runId: "fr-x", planNo: 1, stepKey: "visuals", choice });
+    expect(VERB_ACCESS["flow-plan-step"]).toBe("human-only");
+    expect(permissionRefusal(SOCKET, "flow-plan-step", step("run"))?.code).toBe("control-person-token-required");
+    expect(permissionRefusal(SOCKET, "flow-plan-step", step("accept-unchanged"))).toBe(null);
+    for (const choice of ["run", "accept-unchanged"]) {
+      expect(permissionRefusal(WITH_TOKEN, "flow-plan-step", step(choice)), choice).toBe(null);
+      expect(permissionRefusal(DISPATCHED, "flow-plan-step", step(choice))?.code, choice).toBe("control-dispatched-run-refused");
+      expect(permissionRefusal({ kind: "agent", client: "cli", dispatchedRun: "run-1" }, "flow-plan-step", step(choice))?.code, choice).toBe("control-dispatched-run-refused");
+    }
+  });
+
+  it("G10: flow-message stays any with a predicate -- a defer releasing an effect (proceed) wants the person token and is refused to a dispatched run; wait is open", () => {
+    const defer = (effects: Record<string, string>) => ({ runId: "fr-x", kind: "command", target: { kind: "step", stepKey: "visuals" }, body: { command: "defer", effects } });
+    expect(VERB_ACCESS["flow-message"]).toBe("any");
+    expect(HUMAN_ONLY_FIELDS["flow-message"]).toBeUndefined();
+    expect(typeof SOCKET_TIER["flow-message"]).toBe("function");
+    expect(permissionRefusal(SOCKET, "flow-message", defer({ "to-draft-box": "proceed" }))?.code).toBe("control-person-token-required");
+    expect(permissionRefusal(WITH_TOKEN, "flow-message", defer({ "to-draft-box": "proceed" }))).toBe(null);
+    expect(permissionRefusal(DISPATCHED, "flow-message", defer({ "to-draft-box": "proceed" }))?.code).toBe("control-dispatched-run-refused");
+    expect(permissionRefusal({ kind: "agent", client: "cli", dispatchedRun: "run-1" }, "flow-message", defer({ "to-draft-box": "proceed" }))?.code).toBe("control-dispatched-run-refused");
+    for (const p of [SOCKET, WITH_TOKEN, DISPATCHED]) expect(permissionRefusal(p, "flow-message", defer({ "to-draft-box": "wait" }))).toBe(null);
+  });
+
+  it("G10: every §13 command has its registry row, verb and access; its payload is one the verb's schema accepts", () => {
+    const row = (path: string) => REGISTRY.find((def) => commandPath(def) === path);
+    const RUN = "fr-00000000-0000-4000-8000-000000000001";
+    const rows: Array<[string, string, "open" | "token", string[]]> = [
+      ["flow feedback", "flow-message", "open", ["step", "quote", "heading", "paragraph", "attach", "replaces", "hit", "as-is", "text"]],
+      ["flow answer", "flow-answer", "token", ["feedback", "file", "consensus"]],
+      ["flow include", "flow-plan-step", "token", ["step", "plan"]],
+      ["flow accept", "flow-plan-step", "open", ["step", "plan"]],
+      ["flow skip", "flow-message", "open", ["step"]],
+      ["flow defer", "flow-message", "open", ["step", "effects"]],
+      ["flow fill", "flow-message", "open", ["step"]],
+      ["flow params", "flow-message", "open", ["set"]],
+      ["flow revise", "flow-message", "open", ["step", "round", "file"]],
+      ["flow settings set", "set-flow-settings", "token", []],
+    ];
+    for (const [path, verb, access, flags] of rows) {
+      const def = row(path);
+      expect(def, path).toBeDefined();
+      expect(def!.mapsTo.kind === "verb" ? def!.mapsTo.verb : null, path).toBe(verb);
+      expect(def!.access, path).toBe(access);
+      expect(def!.flags.map((f) => f.name), path).toEqual(expect.arrayContaining(flags));
+    }
+    expect(row("flow settings set")!.positionals[0]!.summary).toContain("rerunAskTimeoutSeconds");
+    expect(row("flow settings set")!.positionals[0]!.summary).toContain("paramDefaults.<template>.<param>");
+    expect(flowPlanStepPayloadSchema.safeParse({ runId: RUN, planNo: 2, stepKey: "visuals", choice: "run" }).success).toBe(true);
+    expect(flowPlanStepPayloadSchema.safeParse({ runId: RUN, planNo: 2, stepKey: "visuals", choice: "accept-unchanged" }).success).toBe(true);
+    expect(flowPlanStepPayloadSchema.safeParse({ runId: RUN, planNo: 2, stepKey: "visuals", choice: "skip" }).success).toBe(false);
+    expect(flowAnswerPayloadSchema.safeParse({ runId: RUN, feedback: 3, consensus: true }).success).toBe(true);
+    expect(flowAnswerPayloadSchema.safeParse({ runId: RUN, feedback: 3, clarify: { roundNo: 1, answers: [{ id: "R1.Q1", kind: "recommended" }], glossaryDecisions: [], adrDecisions: [] } }).success).toBe(true);
+    expect(flowMessagePayloadSchema.safeParse({ runId: RUN, kind: "edit", target: { kind: "round", stepKey: "brief", roundNo: 1 }, body: {} }).success).toBe(true);
+    expect(setFlowSettingsPayloadSchema.safeParse({ set: { rerunAskTimeoutSeconds: 600, paramDefaults: { "wechat-article": { coverImage: "/c.png" } } }, clear: ["paramDefaults.wechat-article.coverImage"] }).success).toBe(true);
+  });
+
   it("an agent's walk on orca flow commands drives the article flow to its first human-only act; the person's token carries it on", { timeout: 120_000 }, async () => {
     const world = await wechatWorld();
     cleanups.push(() => world.w.dispose());
@@ -61,6 +123,8 @@ describe("flow verb access (C19)", () => {
     // A short root: the socket path is capped at ~104 bytes.
     const root = realpathSync(mkdtempSync("/tmp/fva-"));
     cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+    // Rule 17: the attachment store (gaps §4.7) is under the flow env's ORCA_CONTROL_DIR; never the real ~/.orca.
+    w.deps.env.ORCA_CONTROL_DIR = join(root, "control");
     const auth = quietPanelAuth(root);
     seedUser(root, "tester");
     const login = auth.personLogin("tester", TEST_PASSWORD, auth.nowMs());
@@ -144,5 +208,19 @@ describe("flow verb access (C19)", () => {
     expect(listEffects(w.store, flowRunId).find((r) => r.id === staged.id)).toMatchObject({ state: "applied", remoteRef: "media-2" });
     await refused(["flow", "effect", "enact", staged.id, "--as-person"], "flow-effect-closed");
     expect(getFlowRun(w.store, flowRunId)!.state).toBe("done");
+
+    // Gaps spec §4.7, §13: the agent's feedback with a screenshot -- the CLI uploads it over the socket first, then sends
+    // the message naming it; a file that is not an image is refused before any message is sent.
+    writeFileSync(join(root, "shot.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]));
+    writeFileSync(join(root, "notes.txt"), "not an image\n");
+    const messages = () => listMessages(w.store, flowRunId).length;
+    const before = messages();
+    await refused(["flow", "feedback", flowRunId, "--attach", join(root, "notes.txt"), "--text", "this bit"], "flow-attachment-invalid");
+    expect(messages()).toBe(before);
+    const sent = await ok(["flow", "feedback", flowRunId, "--attach", join(root, "shot.png"), "--quote", "Tea, gently", "--text", "this bit"]);
+    expect(sent.result).toMatchObject({ kind: "flow-message-stored", state: "accepted" });
+    const stored = listMessages(w.store, flowRunId).at(-1)!;
+    expect(stored.body).toMatchObject({ text: "this bit", anchors: [{ quote: "Tea, gently" }], attachments: [expect.stringMatching(/^[0-9a-f]{64}\.png$/)] });
+    expect(readdirSync(join(root, "control", "flow-attachments"))).toEqual([(stored.body as { attachments: string[] }).attachments[0]]);
   });
 });

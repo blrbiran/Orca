@@ -675,6 +675,8 @@ export const commandVerbSchema = z.enum([
   "flow-answer",
   "flow-effect",
   "flow-pool",
+  // Gaps spec §5.5, §13: the person's answer on one step of the running re-run plan (run it, or accept it unchanged).
+  "flow-plan-step",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -872,9 +874,11 @@ export const setScheduledCheckPayloadSchema = z.union([
 export const setCheckLocksPayloadSchema = z.object({ locks: z.array(z.enum(LOCKABLE_PATHS)).max(LOCKABLE_PATHS.length).superRefine((values, ctx) => requireUnique(values, String, ctx, [])) }).strict();
 // Flow engine spec §11.2: fields of a layer's `flows` (set merges the nested objects; clear removes fields so the next
 // layer applies); the whole global lock list.
+// Gaps spec §8.2, §13: `paramDefaults.<template>.<param>` clears one preset entry (`paramDefaults` clears them all).
+const flowPresetEntrySchema = z.string().regex(/^paramDefaults\.[a-z0-9][a-z0-9-]{0,63}\.[a-zA-Z][a-zA-Z0-9_]{0,63}$/);
 export const setFlowSettingsPayloadSchema = z.object({
   set: flowsLayerSchema,
-  clear: z.array(z.enum(FLOW_SETTING_FIELDS)).max(FLOW_SETTING_FIELDS.length).superRefine((values, ctx) => requireUnique(values, String, ctx, [])),
+  clear: z.array(z.union([z.enum(FLOW_SETTING_FIELDS), flowPresetEntrySchema])).max(64).superRefine((values, ctx) => requireUnique(values, String, ctx, [])),
 }).strict();
 export const setFlowLocksPayloadSchema = z.object({ locks: z.array(z.enum(FLOW_LOCKABLE_PATHS)).max(FLOW_LOCKABLE_PATHS.length).superRefine((values, ctx) => requireUnique(values, String, ctx, [])) }).strict();
 // §2.4, §5.4: a person's run of one kind now (trigger ignored), and re-arming a kind paused after three errored ends.
@@ -988,7 +992,9 @@ export const flowRerunPayloadSchema = z.object({
   discard: z.literal(true).optional(),
 }).strict();
 export const flowAnswerPayloadSchema = z.object({
-  runId: flowRunIdSchema, stepKey: flowStepKeySchema,
+  // Gaps spec §4.6, §13: exactly one of a waiting step, or a feedback intake by its message number (its clarify round:
+  // `clarify` or `consensus`).
+  runId: flowRunIdSchema, stepKey: flowStepKeySchema.optional(), feedback: positiveSafeInteger.optional(),
   // Exactly one: an ask's form values, the answer to a step's own question, a clarify round's answers, or consensus.
   values: z.record(flowScalarSchema).optional(), text: z.string().min(1).optional(),
   clarify: z.object({ roundNo: positiveSafeInteger, answers: z.array(answerInputSchema), glossaryDecisions: z.array(decisionInputSchema), adrDecisions: z.array(decisionInputSchema) }).strict().optional(),
@@ -996,6 +1002,8 @@ export const flowAnswerPayloadSchema = z.object({
 }).strict();
 export const flowEffectPayloadSchema = z.object({ recordId: z.string().regex(/^eff-[0-9a-f-]{36}$/), action: z.enum(["confirm", "enact", "discard"]) }).strict();
 export const flowPoolPayloadSchema = z.object({ runId: flowRunIdSchema, raiseTokens: positiveSafeInteger }).strict();
+// Gaps spec §5.5, §13: one step of the running plan -- `run` takes an open question into it, `accept-unchanged` keeps its output.
+export const flowPlanStepPayloadSchema = z.object({ runId: flowRunIdSchema, planNo: positiveSafeInteger, stepKey: flowStepKeySchema, choice: z.enum(["run", "accept-unchanged"]) }).strict();
 
 const groupCommandTargetSchema = z.object({ kind: z.literal("group"), groupId: idSchema }).strict();
 const taskCommandTargetSchema = z.object({ kind: z.literal("task"), groupId: idSchema, taskId: idSchema }).strict();
@@ -1110,6 +1118,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("flow-answer"), target: flowsCommandTargetSchema, payload: flowAnswerPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("flow-effect"), target: flowsCommandTargetSchema, payload: flowEffectPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("flow-pool"), target: flowsCommandTargetSchema, payload: flowPoolPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("flow-plan-step"), target: flowsCommandTargetSchema, payload: flowPlanStepPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("run-check-now"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("resume-check"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-criteria-review"), target: repositoryCommandTargetSchema, payload: setCriteriaReviewPayloadSchema }).strict(),
@@ -1196,6 +1205,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("flow-answer"), target: flowsCommandTargetSchema, payload: flowAnswerPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("flow-effect"), target: flowsCommandTargetSchema, payload: flowEffectPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("flow-pool"), target: flowsCommandTargetSchema, payload: flowPoolPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("flow-plan-step"), target: flowsCommandTargetSchema, payload: flowPlanStepPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("run-check-now"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resume-check"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-criteria-review"), target: repositoryCommandTargetSchema, payload: setCriteriaReviewPayloadSchema }).strict(),
@@ -1925,13 +1935,18 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("flow-locks-set"), locks: z.array(z.enum(FLOW_LOCKABLE_PATHS)) }).strict(),
   // Flow engine spec §14.2: what each flow verb did. A message is stored even when refused (`state` rejected, `reason`).
   z.object({ kind: z.literal("flow-started"), flowRunId: nonemptyString, groupId: idSchema }).strict(),
-  z.object({ kind: z.literal("flow-message-stored"), flowRunId: nonemptyString, seq: positiveSafeInteger, state: z.enum(["accepted", "applied", "rejected", "excluded"]), reason: z.string().nullable(), deduped: z.boolean() }).strict(),
+  // Gaps spec §6.3: a `defer` names the effect steps it holds and the command that releases them.
+  z.object({ kind: z.literal("flow-message-stored"), flowRunId: nonemptyString, seq: positiveSafeInteger, state: z.enum(["accepted", "applied", "rejected", "excluded"]), reason: z.string().nullable(), deduped: z.boolean(),
+    held: z.array(nonemptyString).optional(), release: nonemptyString.optional() }).strict(),
   z.object({ kind: z.literal("flow-plan-made"), flowRunId: nonemptyString, planNo: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("flow-plan-run"), flowRunId: nonemptyString, planNo: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("flow-plan-discarded"), flowRunId: nonemptyString, planNo: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("flow-answered"), flowRunId: nonemptyString, stepKey: nonemptyString, answer: z.enum(["ask", "needs", "clarify", "consensus"]) }).strict(),
   z.object({ kind: z.literal("flow-effect-done"), recordId: nonemptyString, action: z.enum(["confirm", "enact", "discard"]), state: z.enum(["running", "restaged", "discarded"]), replacedBy: nonemptyString.optional() }).strict(),
   z.object({ kind: z.literal("flow-pool-raised"), flowRunId: nonemptyString, poolTokens: positiveSafeInteger }).strict(),
+  // Gaps spec §4.6, §5.5: a feedback intake's clarify round answered; a step of the running plan answered.
+  z.object({ kind: z.literal("flow-feedback-answered"), flowRunId: nonemptyString, messageSeq: positiveSafeInteger, answer: z.enum(["clarify", "consensus"]) }).strict(),
+  z.object({ kind: z.literal("flow-plan-step-applied"), flowRunId: nonemptyString, planNo: positiveSafeInteger, stepKey: nonemptyString, choice: z.enum(["run", "accept-unchanged"]) }).strict(),
   z.object({ kind: z.literal("check-run-requested"), repoId: idSchema, checkKind: z.enum(CHECK_KINDS), targets: z.array(nonemptyString) }).strict(),
   z.object({ kind: z.literal("check-resumed"), repoId: idSchema, checkKind: z.enum(CHECK_KINDS), targets: z.array(nonemptyString) }).strict(),
   z.object({ kind: z.literal("criteria-review-set"), repoId: idSchema, enabled: z.boolean() }).strict(),
