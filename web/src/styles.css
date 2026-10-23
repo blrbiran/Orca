@@ -237,6 +237,12 @@ th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 
 /* Task control */
 nav[aria-label="Control groups"] button[aria-current="true"] { background: var(--accent-subtle); border-color: var(--accent); }
+/* Tester #2/#11/#18 and the Task 11 acceptance (session ffec7b28): text for assistive technology only. Without this rule
+   the card menu's owner line showed on screen, took a flex row beside the card and squeezed it to ~130 px. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 /* Issue-fixes spec §6.4: the group list as cards; the whole card is the button. */
 .group-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .group-filter button[aria-pressed="true"] { background: var(--accent-subtle); border-color: var(--accent); color: var(--text-strong); }

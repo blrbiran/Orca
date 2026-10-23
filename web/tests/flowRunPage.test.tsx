@@ -832,3 +832,34 @@ describe("fix round 1: what survives a re-mount (M5), re-marking (M6), spend rea
     expect(spendText(spent(null, "something new"), zh)).toContain("不可用（something new）");
   });
 });
+
+// Task 11 acceptance (session ffec7b28) on the run page: the spend line twice, marks on a finished run, unlabelled inputs.
+describe("run page details from the Task 11 acceptance", () => {
+  // Mutation "always render the step's spend": a one-execution step shows the same line twice.
+  it("shows a step's own spend line only when it has more than one execution", async () => {
+    const view = runView();
+    view.steps[2] = step("voice", "work", [exec(1, { spend: spent(92_842, null) })], { spend: spent(92_842, null) });
+    await mount(owner, view);
+    expect(within(stepBox("voice")).getAllByTestId("flow-spend")).toHaveLength(1);
+    // outline has two executions: each execution's line, then the step's sum.
+    expect(within(stepBox("outline")).getAllByTestId("flow-spend").length).toBeGreaterThan(stepBox("outline").querySelectorAll(".flow-execution").length);
+  });
+  // Mutation "marks on a done run": Skip and Defer come back on the finished run's steps.
+  it("offers no skip or defer once the run is done, but a marked step can still be filled", async () => {
+    const view = runView({ state: "done" });
+    view.steps[2] = step("voice", "work", [exec(1), exec(2, { state: "skipped", output: null })], { mark: { kind: "skip", messageSeq: 4, effects: {} } });
+    await mount(owner, view);
+    for (const name of ["Skip", "Defer"]) expect(within(stepBox("outline")).queryByRole("button", { name })).toBeNull();
+    expect(within(stepBox("voice")).getByRole("button", { name: "Fill it in" })).toBeTruthy();
+  });
+  // Mutation "aria-label only": the inputs keep their names but show no text beside them.
+  it("gives the rewind, pool and location inputs visible labels", async () => {
+    await mount(owner, runView());
+    for (const name of ["Rewind to step or step#n", "Tokens to add to the pool"]) expect(screen.getByLabelText(name).closest("label")?.textContent).toContain(name);
+    for (const name of ["A passage as it reads in the article", "Under the heading", "Paragraph number"]) {
+      const inputs = screen.getAllByLabelText(name);
+      expect(inputs.length).toBeGreaterThan(0);
+      for (const input of inputs) expect(input.closest("label")?.textContent).toContain(name);
+    }
+  });
+});

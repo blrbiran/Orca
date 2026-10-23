@@ -985,6 +985,7 @@ export const zh: Translation<typeof en> = {
         empty: "这个文件夹里没有图片文件。",
         pick: "{{param}}：文件夹里的图片",
         none: "不选（用默认值）",
+        choose: "选一张图片",
         truncated: "只列出前 {{limit}} 个图片文件；其他的请直接填路径。",
       },
       unattended: "无人值守：没人回答；取默认值并记成决定",

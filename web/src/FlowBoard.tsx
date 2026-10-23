@@ -69,7 +69,7 @@ function ParamField(props: { param: FlowTemplateParamV1; value: ParamValue | und
   return (
     <div className="check-field" data-testid={`flow-start-param-${param.id}`}>
       {field}
-      {param.type === "image" && <FolderImagePicker dir={props.dir} template={props.template} paramId={param.id} value={text} onPick={set} />}
+      {param.type === "image" && <FolderImagePicker dir={props.dir} template={props.template} paramId={param.id} value={text} hasDefault={fallback !== null} onPick={set} />}
       {fallback?.source === "unread" && <p className="detail-note" data-testid="flow-start-default">{t("flow.start.defaultUnread")}</p>}
       {fallback !== null && fallback.source !== "unread" && shown !== null && <p className="detail-note" data-testid="flow-start-default">{t("flow.start.default", { value: shown, source: t(`flow.start.source.${fallback.source}`) })}</p>}
     </div>

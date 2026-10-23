@@ -195,6 +195,24 @@ describe("the board reads flow runs and opens them (§14.1, P6)", () => {
     expect(posts[0]!.body.payload).toEqual({ template: "wechat-article", dir: "/home/o/tea", params: { idea: "Tea", coverImage: "covers/b.jpg" } });
   });
 
+  // Task 11 acceptance (session ffec7b28): an image param with no default offered "none picked (use the default)".
+  // Mutation "one empty-option text": the no-default picker says "use the default" again.
+  it("offers 'use the default' in the picker only when the param has one", async () => {
+    serve(undefined, undefined, (url) => url.startsWith("/api/control/flows/settings") ? Promise.resolve(new Response(JSON.stringify({ paramDefaults: {} }), { status: 200 })) : null);
+    render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    const dialog = await openDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Folder (absolute path)" }), { target: { value: "/home/o/tea" } });
+    const picker = await waitFor(() => within(param(dialog, "coverImage")).getByRole("combobox", { name: "coverImage: an image in the folder" }) as HTMLSelectElement);
+    expect(picker.options[0]!.textContent).toBe("choose an image");
+    cleanup();
+    serve();
+    render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    const again = await openDialog();
+    fireEvent.change(within(again).getByRole("textbox", { name: "Folder (absolute path)" }), { target: { value: "/home/o/tea" } });
+    const withDefault = await waitFor(() => within(param(again, "coverImage")).getByRole("combobox", { name: "coverImage: an image in the folder" }) as HTMLSelectElement);
+    expect(withDefault.options[0]!.textContent).toBe("none picked (use the default)");
+  });
+
   it("says when the folder's images were cut at 200", async () => {
     serve(undefined, { files: ["a.png"], truncated: true });
     render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);

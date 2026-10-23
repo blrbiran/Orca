@@ -48,17 +48,19 @@ const cardGoal = (): HTMLElement => {
   return found[0]!;
 };
 
-describe("a goal's card summary (Task 10a)", () => {
-  it("is the first non-empty line, unchanged when it is short", () => {
-    expect(goalSummary("\n\n  Ship the export  \nmore")).toBe("Ship the export");
+describe("a goal's card summary (Task 10a; acceptance fix, session ffec7b28)", () => {
+  it("is the goal's non-empty lines joined, unchanged when short", () => {
+    expect(goalSummary("\n\n  Ship the export  \nmore")).toBe("Ship the export more");
     expect(goalSummary("x".repeat(CARD_SUMMARY_MAX))).toBe("x".repeat(CARD_SUMMARY_MAX));
   });
-  // Mutation "summary not cut": the first line would come back whole.
-  it("ends a long first line at its first sentence end within the limit, else cuts it there with an ellipsis", () => {
+  // Task 11 acceptance: a 1,175-character goal showed only its first sentence, with nothing saying more was cut.
+  // Mutation "stop at the first sentence": the zh case below would come back as its 41-character first sentence.
+  it("fills the limit, ends at the last sentence end past half of it, and always marks a cut with an ellipsis", () => {
     const zh = `${"界面审查".repeat(10)}。${"后续".repeat(80)}`;
-    expect(goalSummary(zh)).toBe(`${"界面审查".repeat(10)}。`);
-    const en = `${"Review the web UI. ".repeat(3)}${"word ".repeat(40)}`;
-    expect(goalSummary(en)).toBe("Review the web UI.");
+    expect(goalSummary(zh)).toBe(`${Array.from(zh).slice(0, CARD_SUMMARY_MAX).join("")}…`);
+    const en = "Review the web UI. ".repeat(8);
+    expect(goalSummary(en)).toBe(`${"Review the web UI. ".repeat(6).trimEnd()}…`);
+    expect(goalSummary("界面审查。".repeat(40))).toBe(`${"界面审查。".repeat(24)}…`);
     expect(goalSummary(`v1.2 ${"a".repeat(200)}`)).toBe(`v1.2 ${"a".repeat(CARD_SUMMARY_MAX - 5)}…`);
     expect(Array.from(goalSummary(FIRST_LINE + FIRST_LINE))).toHaveLength(CARD_SUMMARY_MAX + 1);
   });
@@ -80,6 +82,18 @@ describe.each(CARDS)("the %s card (Task 10a)", (_name, mount) => {
     expect(Array.from(shown.textContent!)).toHaveLength(CARD_SUMMARY_MAX + 1);
     expect(shown.getAttribute("title")).toBe(LONG_GOAL);
     expect(document.body.textContent).not.toContain("第二段");
+  });
+});
+
+// Task 11 acceptance: a clarifying group's Tasks card showed only its id and state, never its goal or title.
+describe("a clarifying group's Tasks card (acceptance fix, session ffec7b28)", () => {
+  it("shows the round's title, else the goal's summary, and still links to Requirements", () => {
+    render(<GroupList groups={[g({ state: "clarifying", requirement: { ...REQUIREMENT, title: "Web 界面可用性审查" } })]} selected={null} onSelect={vi.fn()} now={0} />);
+    expect(cardGoal().textContent).toBe("Web 界面可用性审查");
+    expect(cardGoal().closest("a")?.getAttribute("href")).toBe("#requirements");
+    cleanup();
+    render(<GroupList groups={[g({ state: "clarifying", requirement: REQUIREMENT })]} selected={null} onSelect={vi.fn()} now={0} />);
+    expect(cardGoal().textContent).toBe(goalSummary(LONG_GOAL));
   });
 });
 

@@ -1,21 +1,25 @@
 import type { JSX } from "react";
 import type { GroupSummaryV1 } from "./controlTypes.js";
 
-/** Task 10a: past this many characters a goal's first line is cut for a card (the CSS clamp then holds it to two lines). */
+/** Task 10a: past this many characters a goal is cut for a card (the CSS clamp then holds it to two lines). */
 export const CARD_SUMMARY_MAX = 120;
-const SENTENCE_END = /[。！？]|[.!?](?=\s|$)/u;
+const SENTENCE_END = /[。！？]|[.!?](?=\s|$)/gu;
 
 /**
- * Task 10a (human request, session 0e13a9b7): what a card shows of a long goal -- its first non-empty line; a line over
- * CARD_SUMMARY_MAX characters ends at its first sentence end within them, else is cut there with an ellipsis.
+ * Task 10a (human request, session 0e13a9b7), changed after the Task 11 acceptance (session ffec7b28: a 1,175-character
+ * goal showed only its 30-character first sentence): what a card shows of a goal -- its non-empty lines joined by a
+ * space; past CARD_SUMMARY_MAX characters it ends at the last sentence end within them when that keeps at least half,
+ * else it is cut there, and either way an ellipsis says more was cut.
  */
 export function goalSummary(goal: string): string {
-  const line = goal.split(/\r?\n/).map((part) => part.trim()).find((part) => part.length > 0) ?? "";
-  const chars = Array.from(line);
-  if (chars.length <= CARD_SUMMARY_MAX) return line;
+  const text = goal.split(/\r?\n/).map((part) => part.trim()).filter((part) => part.length > 0).join(" ");
+  const chars = Array.from(text);
+  if (chars.length <= CARD_SUMMARY_MAX) return text;
   const head = chars.slice(0, CARD_SUMMARY_MAX).join("");
-  const end = SENTENCE_END.exec(head);
-  return end === null ? `${head}…` : head.slice(0, end.index + end[0].length);
+  let end = -1;
+  for (const match of head.matchAll(SENTENCE_END)) end = match.index + match[0].length;
+  const kept = end !== -1 && Array.from(head.slice(0, end)).length >= CARD_SUMMARY_MAX / 2 ? head.slice(0, end) : head;
+  return `${kept}…`;
 }
 
 /**

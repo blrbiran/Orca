@@ -1115,6 +1115,7 @@ export const en = {
         empty: "No image files in this folder.",
         pick: "{{param}}: an image in the folder",
         none: "none picked (use the default)",
+        choose: "choose an image",
         truncated: "Only the first {{limit}} image files are listed; type the path of another.",
       },
       unattended: "Unattended: nobody answers; defaults are taken and recorded as decisions",

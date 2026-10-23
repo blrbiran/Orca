@@ -17,7 +17,8 @@ type Listing = { kind: "reading" } | { kind: "failed" } | { kind: "too-large" } 
 /** The wait after the last keystroke in the folder field before the folder is listed. */
 export const LIST_DELAY_MS = 250;
 
-export function FolderImagePicker(props: { dir: string; template: string; paramId: string; value: string; onPick: (path: string) => void }): JSX.Element {
+/** `hasDefault` (Task 11 acceptance, session ffec7b28): only a param with a default offers "none picked (use the default)". */
+export function FolderImagePicker(props: { dir: string; template: string; paramId: string; value: string; hasDefault: boolean; onPick: (path: string) => void }): JSX.Element {
   const { t } = useTranslation();
   const dir = props.dir.trim();
   const [listing, setListing] = useState<Listing>({ kind: "reading" });
@@ -53,7 +54,7 @@ export function FolderImagePicker(props: { dir: string; template: string; paramI
     <>
       <select aria-label={t("flow.start.image.pick", { param: props.paramId })} value={listing.files.includes(props.value) ? props.value : ""}
         onChange={(event) => props.onPick(event.currentTarget.value)}>
-        <option value="">{t("flow.start.image.none")}</option>
+        <option value="">{t(props.hasDefault ? "flow.start.image.none" : "flow.start.image.choose")}</option>
         {listing.files.map((file) => <option key={file} value={file}>{file}</option>)}
       </select>
       {listing.truncated && <p className="detail-note">{t("flow.start.image.truncated", { limit: listing.limit })}</p>}

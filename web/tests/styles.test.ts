@@ -55,6 +55,14 @@ describe("styles.css", () => {
     }
   });
 
+  // Task 11 acceptance (session ffec7b28): the menu's sr-only owner line showed and squeezed a group card.
+  // Mutation "drop the .sr-only rule": rule() throws.
+  it("hides sr-only text from sight but not from assistive technology", () => {
+    const r = rule(".sr-only");
+    for (const part of ["position: absolute", "width: 1px", "height: 1px", "overflow: hidden", "clip: rect(0, 0, 0, 0)"]) expect(r).toContain(part);
+    expect(r).not.toContain("display: none");
+  });
+
   // Issue-fixes spec §6.4: the whole card is the button, with a border, a hover and a focus style of its own.
   it("gives a group card a border, a hover and a visible focus", () => {
     expect(rule(".group-card")).toContain("border: 1px solid var(--border)");

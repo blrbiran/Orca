@@ -107,9 +107,9 @@ function AnchorFields(props: { draft: AnchorDraft; onChange: (draft: AnchorDraft
   return (
     <fieldset className="flow-anchors">
       <legend>{t("flow.feedback.where")}</legend>
-      <input type="text" aria-label={t("flow.feedback.quote")} value={draft.quote} onChange={(event) => props.onChange({ ...draft, quote: event.currentTarget.value })} />{" "}
-      <input type="text" aria-label={t("flow.feedback.heading")} value={draft.heading} onChange={(event) => props.onChange({ ...draft, heading: event.currentTarget.value })} />{" "}
-      <input type="number" min={1} aria-label={t("flow.feedback.paragraph")} value={draft.paragraph} onChange={(event) => props.onChange({ ...draft, paragraph: event.currentTarget.value })} />
+      <label>{t("flow.feedback.quote")}<input type="text" value={draft.quote} onChange={(event) => props.onChange({ ...draft, quote: event.currentTarget.value })} /></label>{" "}
+      <label>{t("flow.feedback.heading")}<input type="text" value={draft.heading} onChange={(event) => props.onChange({ ...draft, heading: event.currentTarget.value })} /></label>{" "}
+      <label>{t("flow.feedback.paragraph")}<input type="number" min={1} value={draft.paragraph} onChange={(event) => props.onChange({ ...draft, paragraph: event.currentTarget.value })} /></label>
     </fieldset>
   );
 }
@@ -685,7 +685,7 @@ function SetParam(props: { param: { id: string; type: string | null }; current: 
         ? <label><input type="checkbox" checked={flag} onChange={(event) => setFlag(event.currentTarget.checked)} />{param.id}</label>
         : <input type={param.type === "int" ? "number" : "text"} aria-label={param.type === "image" || param.type === "path" ? t("flow.param.path", { param: param.id }) : param.id}
           value={value} onChange={(event) => setValue(event.currentTarget.value)} />}{" "}
-      {param.type === "image" && props.dir !== null && <FolderImagePicker dir={props.dir} template={props.template} paramId={param.id} value={value} onPick={setValue} />}
+      {param.type === "image" && props.dir !== null && <FolderImagePicker dir={props.dir} template={props.template} paramId={param.id} value={value} hasDefault={false} onPick={setValue} />}
       <button type="submit" disabled={!ready}>{t("flow.param.set")}</button>{" "}
       <button type="button" onClick={() => setOpen(false)}>{t("flow.mark.cancel")}</button>
     </form>
@@ -764,7 +764,8 @@ function StepCard(props: { step: Step; view: FlowRunViewV1; may: boolean; send: 
         <SetParam key={param.id} param={param} current={view.params[param.id]} runId={view.flowRunId} send={props.send} dir={view.dir} template={view.template.id} />
       ))}
       {open && step.heldBy.length > 0 && <HeldCard step={step} steps={view.steps} runId={view.flowRunId} send={props.send} messages={props.messages} waiting={props.waiting} onWait={props.onWait} />}
-      {open && <StepMarks step={step} runId={view.flowRunId} send={props.send} />}
+      {/* Task 11 acceptance (session ffec7b28): a finished run offers no new skip or defer; a standing mark can still be filled. */}
+      {open && (view.state !== "done" || step.mark !== null) && <StepMarks step={step} runId={view.flowRunId} send={props.send} />}
       {step.kind === "clarify" && <ClarifyRounds step={step} runId={view.flowRunId} open={open} send={props.send} />}
       {older.length > 0 && (
         <details>
@@ -772,7 +773,8 @@ function StepCard(props: { step: Step; view: FlowRunViewV1; may: boolean; send: 
           {older.map((e) => <ExecutionFacts key={e.seq} execution={e} active={step.head === e.seq} />)}
         </details>
       )}
-      {step.executions.length > 0 && <SpendLine spend={step.spend} />}
+      {/* Task 11 acceptance (session ffec7b28): with one execution the step's sum is that execution's line again. */}
+      {step.executions.length > 1 && <SpendLine spend={step.spend} />}
       {open && <MessageBox step={step} runId={view.flowRunId} send={props.send} />}
     </section>
   );
@@ -796,7 +798,7 @@ function RunControls(props: { view: FlowRunViewV1; may: boolean; send: Send }): 
       </p>
       {view.state !== "stopped" && (
         <p>
-          <input type="text" aria-label={t("flow.rewindTo")} value={to} onChange={(event) => setTo(event.currentTarget.value)} />{" "}
+          <label>{t("flow.rewindTo")}<input type="text" value={to} onChange={(event) => setTo(event.currentTarget.value)} /></label>{" "}
           <button type="button" disabled={rewind === null} onClick={() => { if (rewind !== null) { command({ command: "rewind", toStep: rewind[1], ...(rewind[2] === undefined ? {} : { toSeq: Number(rewind[2]) }) }); setTo(""); } }}>{t("flow.rewind")}</button>
         </p>
       )}
@@ -806,7 +808,7 @@ function RunControls(props: { view: FlowRunViewV1; may: boolean; send: Send }): 
       </p>
       {props.may && view.state !== "stopped" && (
         <p>
-          <input type="number" min={1} aria-label={t("flow.raiseBy")} value={raise} onChange={(event) => setRaise(event.currentTarget.value)} />{" "}
+          <label>{t("flow.raiseBy")}<input type="number" min={1} value={raise} onChange={(event) => setRaise(event.currentTarget.value)} /></label>{" "}
           <button type="button" disabled={!Number.isSafeInteger(raiseBy) || raiseBy < 1} onClick={() => { props.send("pool", { runId: view.flowRunId, raiseTokens: raiseBy }); setRaise(""); }}>{t("flow.raise")}</button>
         </p>
       )}
