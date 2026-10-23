@@ -14,6 +14,7 @@ import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebControlService } from "../../src/control/webService.js";
 import { ATTACHMENT_MAX_BYTES, attachmentPath, attachmentsDir, storeAttachment } from "../../src/flow/feedback/attachments.js";
+import { feedbackForWork } from "../../src/flow/feedback/intake.js";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { acceptMessage } from "../../src/flow/messages.js";
 import { registerControlMutationRoutes } from "../../src/panel/controlApi.js";
@@ -119,6 +120,18 @@ describe("attachment store (gaps §4.7, G14)", () => {
     expect(draft).toMatchObject({ purpose: "flow-draft", key: { stepKey: "note" } });
     expect(draft.prompt).toContain(`The person attached screenshots (not available to you): ${id}`);
     expect(draft.prompt).not.toContain(w.deps.env.ORCA_CONTROL_DIR!);
+  });
+
+  it("a work prompt rewrites only the attachment line feedbackTextOf wrote: the person's own look-alike lines stay as typed", () => {
+    const env = { ORCA_CONTROL_DIR: "/c" };
+    const id = `${"a".repeat(64)}.png`;
+    const line = "The person attached screenshots (not available to you): ";
+    expect(feedbackForWork([`fix it\n${line}${id}`], env)).toEqual([`fix it\nThe person attached screenshots. Read each image file at its absolute path (outside your workspace; do not copy it into the workspace):\n- /c/flow-attachments/${id}`]);
+    // Not an attachment id (a path the person typed): kept as typed, no path is made of it.
+    expect(feedbackForWork([`fix it\n${line}../secret.png`], env)).toEqual([`fix it\n${line}../secret.png`]);
+    // Not the line's prefix, though as long and ending in an id: kept.
+    expect(feedbackForWork([`fix it\n${"x".repeat(line.length)}${id}`], env)).toEqual([`fix it\n${"x".repeat(line.length)}${id}`]);
+    expect(feedbackForWork(["no screenshots"], env)).toEqual(["no screenshots"]);
   });
 
   it("the upload route stores the raw body and answers the id; a non-image is refused flow-attachment-invalid", async () => {
