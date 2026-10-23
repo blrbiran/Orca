@@ -79,6 +79,17 @@ describe("per-task agent fields fold away (C18)", () => {
     expect(screen.getByTestId("agents-inherit-line").textContent).toBe("2 tasks use the group worker: claude · claude-opus-5-5");
   });
 
+  it("says one task in the singular, and shows no line when no task inherits (review minor 8)", () => {
+    const worker = { kind: "resolved", frozen: frozen(claude, { agent: "group", model: "descriptor", contextWindow: "descriptor" }) } as const;
+    show(withRole(resolvedPreview(), worker));
+    expect(screen.getByTestId("agents-inherit-line").textContent).toBe("1 task uses the group worker: claude · claude-opus-5-5");
+    cleanup();
+    const own = resolvedPreview();
+    own.slots = own.slots.map((slot) => slot.taskId !== null && slot.outcome.kind === "resolved" ? { ...slot, outcome: { kind: "resolved", frozen: frozen(claude, { agent: "task", model: "descriptor", contextWindow: "descriptor" }) } } : slot);
+    show(withRole(own, worker));
+    expect(screen.queryByTestId("agents-inherit-line")).toBeNull();
+  });
+
   it("a worker no layer names says so, with a link to Global settings", () => {
     show(withRole(resolvedPreview(), { kind: "rejected", code: "agent-unselected" }));
     const note = screen.getByTestId("agents-no-worker");

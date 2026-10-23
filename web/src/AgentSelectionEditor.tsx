@@ -101,6 +101,8 @@ export interface AgentSelectionEditorProps {
   retryNotice?: string | null;
   /** Issue-fixes spec §6.3: an archived group refuses every command but the unarchive, so no action is offered (read-only). */
   archived?: boolean;
+  /** Tester round 2 §4.2.3: a blocked group -- no edit is offered (the server refuses them), but the preview may be re-read. */
+  blocked?: boolean;
   /** Spec 2026-10-15 §5 (R3): each installation's model list as last read, and (owner only) re-probing one. */
   models?: (installationId: string) => ModelListState | undefined;
   onRefreshModels?: (installationId: string) => void;
@@ -108,7 +110,9 @@ export interface AgentSelectionEditorProps {
 
 export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Element {
   const { view, agents, preview, drafts, onDraft, onCommand } = props;
-  const archived = props.archived === true;
+  // Tester round 2 §4.2.3: a blocked group's editors are read-only like an archived one's, but Re-read stays (review minor 11).
+  const archived = props.archived === true || props.blocked === true;
+  const trulyArchived = props.archived === true;
   const groupId = view.summary.groupId;
   const { t } = useTranslation();
 
@@ -138,7 +142,7 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
 
   const reread = (
     <>
-      {props.onReread && !archived && <button type="button" onClick={props.onReread}>{t("agents.reread")}</button>}
+      {props.onReread && !trulyArchived && <button type="button" onClick={props.onReread}>{t("agents.reread")}</button>}
       {props.retryNotice ? <p role="status" data-retry="">{props.retryNotice}</p> : null}
     </>
   );
@@ -203,7 +207,8 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
           </div>
         );
       })}
-      {workerRole?.kind === "resolved" && (
+      {/* Review minor 8: plural forms; no line when no task inherits. */}
+      {workerRole?.kind === "resolved" && inheriting > 0 && (
         <p data-testid="agents-inherit-line">{t("agents.inheritLine", { count: inheriting, agent: `${workerRole.frozen.selection.agent} · ${workerRole.frozen.selection.model}` })}</p>
       )}
       <table>

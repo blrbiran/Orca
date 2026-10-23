@@ -599,7 +599,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           agentsFailure={props.agentsFailure}
           retryNotice={props.retryNotice}
           models={props.models} onRefreshModels={props.onRefreshModels}
-          archived={preparationReadOnly}
+          archived={archived} blocked={view.summary.state === "blocked"}
           drafts={drafts} onDraft={onDraft} onCommand={onCommand}
         />
       )}

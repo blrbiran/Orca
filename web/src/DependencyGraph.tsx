@@ -7,6 +7,7 @@
  * run, and -- after 10 quiet minutes -- how long it has made no progress.
  */
 import type { JSX, KeyboardEvent } from "react";
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { useClock } from "./clock.js";
 import { goalSummary } from "./CardGoal.js";
@@ -57,6 +58,7 @@ export function DependencyGraph(props: { items: WorkItemViewV1[]; runs: readonly
   const { t } = useTranslation();
   const ticking = useClock(30_000);
   const now = props.now ?? ticking;
+  const clipBase = `dep-goal-clip${useId().replace(/[^A-Za-z0-9_-]/g, "")}`;
   if (props.items.length === 0) return null;
   const layout = layoutDependencies(props.items);
   const byId = new Map(props.items.map((item) => [item.taskId, item]));
@@ -94,7 +96,8 @@ export function DependencyGraph(props: { items: WorkItemViewV1[]; runs: readonly
             const word = enumText("workStatus", item.status);
             const lines = nodeLines(item, props.runs, now);
             const goal = item.objective?.goal;
-            const clip = `dep-goal-clip-${encodeURIComponent(node.taskId)}`;
+            // Review minor 10: unique per graph instance (two graphs of one group may be on a page), safe in an id.
+            const clip = `${clipBase}-${encodeURIComponent(node.taskId).replace(/%/g, "_")}`;
             return (
               <g
                 key={node.taskId}

@@ -33,7 +33,9 @@ function setup() {
 async function open() { await flush(); fireEvent.click(screen.getByRole("button",{name:/^g ·/})); await flush(); }
 function task() { return within(screen.getByRole("region",{name:"Task a"})); }
 // Tester round 2 §9.3 (C31): the route keeps the open task across a remount of the group view, so it is opened only when closed.
-async function openTask() { fireEvent.click(screen.getByRole("tab",{name:"Progress"})); if(screen.queryByRole("region",{name:"Task a"})===null) fireEvent.click(screen.getByRole("button",{name:"a"})); await flush(); fireEvent.click(screen.getByRole("tab",{name:"Results"})); await flush(); }
+// `kept` (review minor 12): the route kept the open task across a remount of the group view, so it must already be open;
+// otherwise it must be closed and is opened here. Either way the expectation is asserted, never guessed.
+async function openTask(kept = false) { fireEvent.click(screen.getByRole("tab",{name:"Progress"})); if(kept) expect(screen.queryByRole("region",{name:"Task a"})).not.toBeNull(); else { expect(screen.queryByRole("region",{name:"Task a"})).toBeNull(); fireEvent.click(screen.getByRole("button",{name:"a"})); } await flush(); fireEvent.click(screen.getByRole("tab",{name:"Results"})); await flush(); }
 it("real App completed missing results retain actual success and independent source unsupported",async()=>{
  const s=setup();s.result=savedRun({source:{status:"unsupported",reason:"old-peer"},availability:"missing",currentExplanation:{status:"missing",reason:null,content:null},attempts:[]});render(<App/>);await open();
  expect(screen.getByRole("tab",{selected:true}).textContent).toBe("Results");const current=screen.getByRole("region",{name:"Current result · run-a"});expect(current.textContent).toContain("succeeded");expect(current.textContent).toContain("missing");expect(screen.getByText(/Source: unsupported/)).toBeTruthy();expect(s.reads.map(r=>r.path)).toEqual(["/api/control/groups/g/results"]);expect(s.panel.posts).toHaveLength(0);
@@ -163,7 +165,7 @@ it.each(["task", "group"] as const)("real App %s resets capture authority for ac
  expect(screen.queryByRole("region", { name: "Control group g" })).toBeNull();
  fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "alpha" } }); await flush(); await openResults(consumer); admitted();
  await raise(); s.group.epoch = "epoch-b"; s.panel.summary.epoch = "epoch-b"; s.panel.recovery.epoch = "epoch-b"; s.group.changeSeq = 5; s.panel.summary.changeSeq = 5;
- s.result = { ...capture(7, "lower capture in new owner"), epoch: "epoch-b", changeSeq: 5 }; await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); await flush(); if (consumer === "task") await openTask(); admitted();
+ s.result = { ...capture(7, "lower capture in new owner"), epoch: "epoch-b", changeSeq: 5 }; await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); await flush(); if (consumer === "task") await openTask(true); admitted();
  await raise(); s.group.changeSeq = 6; s.panel.summary.changeSeq = 6; s.group.runs = [run({ runId: "run-b" })]; s.group.workItems[0]!.currentRunId = "run-b"; s.group.workItems[0]!.lineageRunIds = ["run-b"];
  s.result = { ...capture(7, "lower capture in new owner"), epoch: "epoch-b", changeSeq: 6, runId: "run-b", executionId: "execution-b", run: { ...run({ runId: "run-b" }), blockedReason: null, continuable: false } };
  await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); await flush(); admitted("run-b");

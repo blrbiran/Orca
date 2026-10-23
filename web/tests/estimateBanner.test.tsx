@@ -22,7 +22,7 @@ const preview = (v: GroupViewV1): AgentSelectionPreviewV1 => ({
   schema: "orca-agent-selection-preview-v1", groupId: "g", proposalVersion: v.proposal.proposalVersion, groupOverrides: {}, taskOverrides: {},
   planLayers: { group: {}, tasks: {} }, slots: [], selectionsHash: "9".repeat(64),
 } as unknown as AgentSelectionPreviewV1);
-const show = (v: GroupViewV1) => render(<ControlGroupView view={v} config={config} uncertain={[]} drafts={{}} onDraft={() => {}} onCommand={() => {}} agents={agents} preview={preview(v)} />);
+const show = (v: GroupViewV1) => render(<ControlGroupView view={v} config={config} uncertain={[]} drafts={{}} onDraft={() => {}} onCommand={() => {}} agents={agents} preview={preview(v)} onRereadPreview={() => {}} />);
 
 describe("estimate over its grant (C4)", () => {
   it("shows one status line per over dimension naming the run, the dimension, used and grant", () => {
@@ -58,6 +58,8 @@ describe("a blocked group (C4)", () => {
     expect(alert.textContent).toBe("This group is blocked: run run-w went over its tokens grant (150 of 100). No new step starts in it, and preparation changes are refused.");
     expect(screen.queryByRole("button", { name: "Confirm task plan", hidden: true })).toBeNull();
     expect(screen.queryByRole("button", { name: "Set group worker agent", hidden: true })).toBeNull();
+    // Review minor 11: reading the preview again is not an edit, so it stays offered.
+    expect(screen.getByRole("button", { name: "Re-read agent selections", hidden: true })).toBeTruthy();
   });
 
   it("keeps both editors open for the same group while it is a draft", () => {

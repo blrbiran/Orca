@@ -794,7 +794,8 @@ export const zh: Translation<typeof en> = {
     unchanged: "预算不变",
   },
   agents: {
-    inheritLine: "{{count}} 个任务沿用组执行：{{agent}}",
+    inheritLine_one: "{{count}} 个任务沿用组执行：{{agent}}",
+    inheritLine_other: "{{count}} 个任务沿用组执行：{{agent}}",
     overrideTask: "覆盖任务 {{taskId}}",
     noWorker: "组执行还没有选定 agent。请在这里选择，或在此设置默认 agent：",
     retryWaiting: "{{seconds}} 秒后重新读取（第 {{attempt}}/{{total}} 次重试）。",

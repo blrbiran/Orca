@@ -42,4 +42,12 @@ describe("task goal summary (C29)", () => {
     expect(nodeB!.querySelector("text.dep-goal")).toBeNull();
     for (const node of [nodeA!, nodeB!]) expect(node.querySelector("rect")!.getAttribute("height")).toBe("104");
   });
+
+  it("two graphs on one page never share a clip id (review minor 10)", () => {
+    const { container } = render(<><DependencyGraph items={items} runs={[]} openTask={null} onOpen={() => {}} now={0} /><DependencyGraph items={items} runs={[]} openTask={null} onOpen={() => {}} now={0} /></>);
+    const ids = [...container.querySelectorAll("clipPath")].map((clip) => clip.id);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    for (const line of container.querySelectorAll("text.dep-goal")) expect(container.querySelector(line.getAttribute("clip-path")!.replace(/^url\((.*)\)$/, "$1"))).not.toBeNull();
+  });
 });
