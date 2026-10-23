@@ -759,6 +759,16 @@ async function runQueued(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow
 }
 
 /**
+ * Start a queued execution as a pass does (gaps spec §9: a clarify revision's execution): on the active outputs as they
+ * stand now, held while a standing defer holds it.
+ */
+export async function startQueued(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow): Promise<void> {
+  const index = run.template.steps.findIndex((s) => s.id === execution.stepKey);
+  const { marks } = markStateOf(deps.store, run.row.id);
+  await runQueued(deps, run, execution, basisOf(run, index, listHeads(deps.store, run.row.id)), heldBy(run.template, marks, execution.stepKey));
+}
+
+/**
  * §6.4, §7.2: the inputs an execution ran on -- the import, the params, and the active output of every earlier step
  * (template order). A `parallelWith` sibling is not an input (§6.5): it is recorded as it stands when the planner reads
  * it, so only its re-run (never its finishing later) makes this step a candidate.

@@ -11,14 +11,14 @@
  */
 import { callRecordOf } from "../calls.js";
 import { sha256Canonical, canonicalBytes } from "../../control/canonicalJson.js";
-import { activeChain, chainRounds, reviseRound, type RevisionPayload } from "../../control/clarifyChain.js";
+import { activeChain, chainRounds, reviseRound, supersededForPrompt, type RevisionPayload } from "../../control/clarifyChain.js";
 import { flowClarifyInstruction, flowClarifyJsonSchema, type ClarifyHost, type ConsensusInput } from "../../control/clarifyHost.js";
 import { buildClarifyPrompt, classifyClarifyOutput } from "../../control/requirementClarify.js";
 import { latestRoundAt, newRound, readRoundsAt, writeRoundAt, type RoundsKey } from "../../control/requirementRecords.js";
 import { CLARIFY_CAPS, MAX_AUTO_RETRIES, clarifyTier, type ClassPair, type RoundBody } from "../../control/requirementSchemas.js";
-import { appendQueued, applyOutcome, basisOf, compositionFor, contextFor, FlowRefusal, loadRun, ranOnInputsOf, stepOf, type FlowDeps } from "../kernel.js";
+import { appendQueued, applyOutcome, compositionFor, contextFor, FlowRefusal, loadRun, startQueued, stepOf, type FlowDeps } from "../kernel.js";
 import { makePlan } from "../rerun.js";
-import { finishExecution, getHead, listExecutions, listHeads, type ExecutionRow, type ExecutionState } from "../store.js";
+import { finishExecution, getHead, listExecutions, type ExecutionRow, type ExecutionState } from "../store.js";
 import type { FlowStep } from "../template/schema.js";
 import { vaultGit } from "../vault/vault.js";
 import type { ExecutionBody, KindContext, KindDefinition, LoadedRun } from "./registry.js";
@@ -99,15 +99,14 @@ function documentOf(step: ClarifyStep, chain: readonly RoundBody[], extra: Recor
 
 async function clarifyPrompt(ctx: KindContext, host: ClarifyHost, rounds: RoundBody[], drafting: RoundBody): Promise<string> {
   const context = await host.context();
-  const { chain, superseded } = activeChain(rounds);
+  const { chain } = activeChain(rounds);
   const position = chain.indexOf(drafting.roundNo);
-  // Gaps spec §9 (F §10.3): superseded rounds go in as earlier answers that may still apply, unless a revision excluded them.
-  const excluded = new Set(rounds.flatMap((r) => r.exclude ?? []));
   return buildClarifyPrompt({
     idea: String(ctx.run.params.idea ?? ""), contentLanguage: ctx.run.params.language === "zh" ? "zh" : "en", overview: context,
     earlier: chainRounds(rounds).filter((r) => r.roundNo !== drafting.roundNo), retryReason: ctx.body.retryReason,
     limits: { roundNo: position === -1 ? drafting.roundNo : position + 1, classification: effectiveClass(rounds), roundCap: roundCap(rounds) },
-    superseded: rounds.filter((r) => superseded.includes(r.roundNo) && !excluded.has(r.roundNo)), frame: host.background(),
+    // Gaps spec §9 (F §10.3): superseded rounds go in as earlier answers that may still apply, unless a revision excluded them.
+    superseded: supersededForPrompt(rounds), frame: host.background(),
   });
 }
 
@@ -122,6 +121,9 @@ export const CLARIFY_KIND: KindDefinition = {
     const key = roundsKey(ctx.run, step.id, ctx.key.seq);
     let drafting = latestRoundAt(ctx.store, key);
     if (drafting === null) { drafting = newRound(1); writeRoundAt(ctx.store, key, drafting); }
+    // Gaps spec §9: a revision whose chain re-advances to "waits for consensus" starts waiting on the person; the reviser
+    // then says why (advanceChain).
+    if (drafting.state === "answered" && ctx.body.revision !== undefined) return { waiting: { ask: { kind: "clarify-round", roundNo: drafting.roundNo } } };
     if (drafting.state !== "drafting") throw new Error(`orca: clarify ${step.id}#${ctx.key.seq} has no round drafting`);
     const host = flowClarifyHost(ctx.store, ctx.run, step, ctx.key.seq);
     const prompt = await clarifyPrompt(ctx, host, readRoundsAt(ctx.store, key), drafting);
@@ -222,7 +224,7 @@ export async function answerFlowClarify(deps: FlowDeps, target: { flowRunId: str
  */
 async function advanceChain(deps: FlowDeps, run: LoadedRun, target: { flowRunId: string; stepKey: string }, execution: ExecutionRow, key: RoundsKey, answered: RoundBody, from: ExecutionState): Promise<void> {
   const rounds = readRoundsAt(deps.store, key);
-  if (answered.result!.frontierEmpty || activeChain(rounds).chain.length >= roundCap(rounds)) {
+  if (stopsHere(rounds, answered)) {
     // Clarification stops as today: the person reaches consensus (or, later, grants one more round). T18 acceptance:
     // stopping silently left the answered round's ask on show, so the step now says it waits for the person to agree.
     const cause = answered.result!.frontierEmpty ? "nothing-left-to-ask" : "round-cap";
@@ -240,6 +242,10 @@ async function advanceChain(deps: FlowDeps, run: LoadedRun, target: { flowRunId:
   const next = { ...execution, body };
   await applyOutcome(deps, run, next, from, await CLARIFY_KIND.start(contextFor(deps, run, next)));
 }
+
+/** No further round after `answered`: the frontier is empty or the chain is at the cap. */
+const stopsHere = (rounds: readonly RoundBody[], answered: RoundBody): boolean =>
+  answered.result!.frontierEmpty || activeChain(rounds).chain.length >= roundCap(rounds);
 
 /** Gaps spec §9: a refusal of the shared revision check, under the flow's names. */
 function refused(refusal: string, roundNo: number): FlowRefusal {
@@ -311,19 +317,18 @@ export async function reviseFlowRound(deps: FlowDeps, run: LoadedRun, stepKey: s
   if ("refusal" in revision) throw refused(revision.refusal, payload.roundNo);
   const seq = Math.max(...listExecutions(deps.store, run.row.id).filter((e) => e.stepKey === stepKey).map((e) => e.seq)) + 1;
   const key = roundsKey(run, stepKey, seq);
-  const index = run.template.steps.findIndex((s) => s.id === stepKey);
-  const at = deps.now();
+  const stops = stopsHere([...copied, revision.row], revision.row);
   deps.store.transaction(() => {
-    // It stands on what the active execution stood on now, as any execution that starts does (runQueued).
-    appendQueued(deps, run, stepKey, seq, ["revise"], {
-      basis: basisOf(run, index, listHeads(deps.store, run.row.id)), ranOnInputs: ranOnInputsOf(deps.store, run, stepKey),
-      revision: { message: messageSeq, of: execution.seq, roundNo: payload.roundNo },
-    }, by, via, at);
+    appendQueued(deps, run, stepKey, seq, ["revise"], { revision: { message: messageSeq, of: execution.seq, roundNo: payload.roundNo } }, by, via, deps.now());
     for (const row of copied) writeRoundAt(deps.store, key, row);
     writeRoundAt(deps.store, key, revision.row);
+    if (!stops) writeRoundAt(deps.store, key, newRound(revision.row.roundNo + 1));
   });
-  const queued = listExecutions(deps.store, run.row.id).find((e) => e.stepKey === stepKey && e.seq === seq)!;
-  await advanceChain(deps, run, target, queued, key, revision.row, "queued");
+  // It starts as any queued execution does (review Minor 2): its basis and inputs recorded, a standing defer's hold, the
+  // effect gate and the compose guard -- then the clarify kind drafts the next round, or waits for consensus.
+  await startQueued(deps, run, listExecutions(deps.store, run.row.id).find((e) => e.stepKey === stepKey && e.seq === seq)!);
+  const started = listExecutions(deps.store, run.row.id).find((e) => e.stepKey === stepKey && e.seq === seq)!;
+  if (stops && started.state === "needs-person") await advanceChain(deps, run, target, started, key, revision.row, "needs-person");
 }
 
 /**

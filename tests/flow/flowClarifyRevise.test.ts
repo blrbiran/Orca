@@ -4,9 +4,10 @@ import { SUPERSEDED_NOTE } from "../../src/control/requirementClarify.js";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
 import { flowMessagePayloadSchema } from "../../src/control/webProtocol.js";
 import { answerFlowClarify, flowClarifyConsensus } from "../../src/flow/kinds/clarify.js";
-import { acceptMessage } from "../../src/flow/messages.js";
-import { EDIT_NO_LONGER_APPLIES } from "../../src/flow/rewind.js";
-import { getFlowRun, getHead, listMessages, listPlans } from "../../src/flow/store.js";
+import { appendQueued, loadRun } from "../../src/flow/kernel.js";
+import { acceptMessage, consumeAtBoundary } from "../../src/flow/messages.js";
+import { EDIT_NO_LONGER_APPLIES, STEP_WAITING } from "../../src/flow/rewind.js";
+import { appendMessage, getFlowRun, getHead, listMessages, listPlans } from "../../src/flow/store.js";
 import { ROUND_ONE, ROUND_TWO } from "../control/fixtures/requirementOutputs.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
 
@@ -106,6 +107,7 @@ describe("revise a round of a flow clarify step (G7)", () => {
       expect(w.calls[lastIndex(w)]).toMatchObject({ purpose: "clarify", key: { stepKey: "brief", seq: 2 } });
       expect(w.calls[lastIndex(w)]!.prompt).toContain("GitHub-flavoured");
       expect(w.calls[lastIndex(w)]!.prompt).toContain(SUPERSEDED_NOTE);
+      expect(w.calls[lastIndex(w)]!.prompt).toContain(LINKS.question);
       // The active output stays the old document while the revision is in progress.
       expect(getHead(w.store, flowRunId, "brief")).toBe(1);
       await w.answer(lastIndex(w), roundWith(false));
@@ -253,6 +255,118 @@ describe("rewind re-applies a later round revision (G2, §4.2)", () => {
       expect((feedback.body as { text: string }).text).toContain("Inline");
       expect((w.execs(flowRunId, "brief").find((e) => e.seq === 1)!.body as { flags?: string[] }).flags).toContain(EDIT_NO_LONGER_APPLIES);
       expect(rounds(w, groupId, 4)).toEqual([]);
+    } finally { await w.dispose(); }
+  });
+});
+
+const PRE = {
+  yaml: `format: orca-flow-v1
+id: t
+params:
+  idea: {type: longtext, required: true}
+workspace: {kind: dir}
+steps:
+  - {id: pre, kind: draft, prompt: prompts/pre.md}
+  - {id: brief, kind: clarify, background: prompts/brief.md, sections: [Reader, Purpose]}
+  - {id: outline, kind: draft, prompt: prompts/outline.md}
+`,
+  assets: { "prompts/pre.md": "Notes.\n", "prompts/brief.md": "You are briefing a WeChat article for engineers.\n", "prompts/outline.md": "Outline.\n" },
+};
+const rewindBrief = (w: World, flowRunId: string, toSeq: number) =>
+  acceptMessage(w.deps, flowRunId, { kind: "command", target: { kind: "run" }, body: { command: "rewind", toStep: "brief", toSeq }, by: "ann", via: "cli:test", requestId: `rw-${(n += 1)}` });
+
+describe("Task 7 review fix round 1", () => {
+  // Review Important 1: a waiting revision would later move the head past the rewind (its consensus) and catch the
+  // revisions the rewind queues again; the rewind is refused until the person settles it.
+  it("refuses a rewind of a step whose newer execution still waits on the person (flow-step-waiting)", async () => {
+    const { w, flowRunId, groupId } = await doneRun(); try {
+      expect(await revise(w, flowRunId, 2, revision(w, groupId, 1, 2, "Absolute"))).toMatchObject({ state: "applied" });
+      expect(states(w, flowRunId)).toEqual([[1, "done"], [2, "needs-person"]]);
+      const sent = await rewindBrief(w, flowRunId, 1);
+      expect(sent).toMatchObject({ state: "rejected", reason: STEP_WAITING });
+      expect(getHead(w.store, flowRunId, "brief")).toBe(1);
+      expect(states(w, flowRunId)).toEqual([[1, "done"], [2, "needs-person"]]);
+      expect(listMessages(w.store, flowRunId).filter((m) => (m.body as { reappliedFrom?: unknown }).reappliedFrom !== undefined)).toEqual([]);
+      // Agreed first, the same rewind is taken.
+      await flowClarifyConsensus(w.deps, { flowRunId, stepKey: "brief" }, "ann", "cli:test");
+      expect(await rewindBrief(w, flowRunId, 1)).toMatchObject({ state: "applied" });
+      expect(getHead(w.store, flowRunId, "brief")).toBe(1);
+    } finally { await w.dispose(); }
+  });
+
+  it("a round takes only an edit: feedback or a command there is a missing target", async () => {
+    const { w, flowRunId } = await doneRun(); try {
+      const at = (kind: "feedback" | "command", body: Record<string, unknown>) =>
+        acceptMessage(w.deps, flowRunId, { kind, target: { kind: "round", stepKey: "brief", roundNo: 1 }, body, by: "ann", via: "cli:test", requestId: `t-${(n += 1)}` });
+      expect(await at("feedback", { text: "the format question was wrong" })).toMatchObject({ state: "rejected", reason: "flow-message-target-missing" });
+      expect(await at("command", { command: "retry" })).toMatchObject({ state: "rejected", reason: "flow-message-target-missing" });
+    } finally { await w.dispose(); }
+  });
+
+  it("exclude names only rounds the revision leaves off the chain; an excluded round is not carried into the prompt", async () => {
+    const { w, flowRunId, groupId } = await doneRun(); try {
+      // Revising round 2 leaves round 1 on the chain: it cannot be excluded.
+      expect(await revise(w, flowRunId, 2, { ...revision(w, groupId, 1, 2, "Absolute"), exclude: [1] })).toMatchObject({ state: "rejected", reason: "flow-message-invalid:exclude" });
+      expect(w.execs(flowRunId, "brief")).toHaveLength(1);
+      // Revising round 1 supersedes rounds 1 and 2; round 2 excluded, its question is not offered as an earlier answer.
+      expect(await revise(w, flowRunId, 1, { ...revision(w, groupId, 1, 1, "GitHub-flavoured"), exclude: [2] })).toMatchObject({ state: "applied" });
+      expect(rounds(w, groupId, 2)[2]).toMatchObject({ revises: 1, exclude: [2] });
+      const prompt = w.calls[lastIndex(w)]!.prompt;
+      expect(w.calls[lastIndex(w)]).toMatchObject({ purpose: "clarify", key: { stepKey: "brief", seq: 2 } });
+      expect(prompt).toContain(SUPERSEDED_NOTE);
+      expect(prompt).not.toContain(LINKS.question);
+    } finally { await w.dispose(); }
+  });
+
+  it("a re-applied revision already in effect is refused revision-unchanged, not turned into feedback", async () => {
+    const { w, flowRunId, groupId } = await doneRun(); try {
+      const result = rounds(w, groupId, 1)[1]!.result!;
+      const asBefore = { answers: result.questions.map((q) => ({ id: q.id, kind: "recommended" as const })), ...decisionsOf(w, groupId, 1, 2) };
+      // As a rewind queues it again (rewind.ts): the stored body with `reappliedFrom`.
+      const queued = w.store.transaction(() => appendMessage(w.store, {
+        flowRunId, requestId: "rewind:test", kind: "edit", target: "round", body: { ...asBefore, target: { kind: "round", stepKey: "brief", roundNo: 2 }, reappliedFrom: 99 },
+        by: "ann", via: "cli:test", state: "accepted", reason: null, at: w.deps.now(),
+      }));
+      await consumeAtBoundary(w.deps, flowRunId);
+      expect(listMessages(w.store, flowRunId).find((m) => m.seq === queued.row.seq)).toMatchObject({ state: "rejected", reason: "revision-unchanged" });
+      expect(listMessages(w.store, flowRunId).filter((m) => m.kind === "feedback")).toEqual([]);
+      expect((w.execs(flowRunId, "brief")[0]!.body as { flags?: string[] }).flags ?? []).not.toContain(EDIT_NO_LONGER_APPLIES);
+    } finally { await w.dispose(); }
+  });
+
+  it("a done step with a newer execution queued is not revised beside it (checked at the boundary)", async () => {
+    const { w, flowRunId, groupId } = await doneRun(); try {
+      w.store.transaction(() => appendQueued(w.deps, loadRun(w.store, flowRunId), "brief", 2, ["test"], {}, "ann", "cli:test", w.deps.now()));
+      const sent = await revise(w, flowRunId, 1, revision(w, groupId, 1, 1, "GitHub-flavoured"));
+      expect(sent).toMatchObject({ state: "rejected", reason: "flow-round-not-revisable" });
+      expect(w.execs(flowRunId, "brief").map((e) => e.seq)).toEqual([1, 2]);
+      expect(rounds(w, groupId, 3)).toEqual([]);
+    } finally { await w.dispose(); }
+  });
+
+  // Review Minors 1 and 2: the revision execution starts through the kernel's own start path. A clarify step is never
+  // held by a defer (§6.3 holds external/irreversible effect steps only), so it is not parked; it records what it stood on.
+  it("a revision execution starts as any queued one: not parked by a deferred upstream, its basis and inputs recorded", async () => {
+    const w = await flowWorld({ t: PRE }); try {
+      w.deps.rerunReview = () => "review";
+      const { flowRunId, groupId } = await w.start({ templateRef: "builtin/t", params: { idea: "Why tea" } });
+      await w.advance();
+      await w.answer(0, { content: "P1" });
+      await w.answer(1, ROUND_ONE);
+      await answerRound(w, flowRunId, groupId, 1, 1);
+      await w.answer(2, roundWith(true));
+      await answerRound(w, flowRunId, groupId, 1, 2);
+      await flowClarifyConsensus(w.deps, { flowRunId, stepKey: "brief" }, "ann", "cli:test");
+      await w.advance();
+      await w.answer(3, { content: "O1" });
+      const firstInputs = (w.execs(flowRunId, "brief")[0]!.body as { ranOnInputs: { earlier: Array<{ stepKey: string; outputHash: string | null }> } }).ranOnInputs;
+      expect(firstInputs.earlier[0]).toMatchObject({ stepKey: "pre" });
+      expect(firstInputs.earlier[0]!.outputHash).not.toBeNull();
+      expect(await acceptMessage(w.deps, flowRunId, { kind: "command", target: { kind: "step", stepKey: "pre" }, body: { command: "defer" }, by: "ann", via: "cli:test", requestId: `d-${(n += 1)}` })).toMatchObject({ state: "applied" });
+      expect(await revise(w, flowRunId, 2, revision(w, groupId, 1, 2, "Absolute"))).toMatchObject({ state: "applied" });
+      const second = w.latest(flowRunId, "brief")!;
+      expect(second).toMatchObject({ seq: 2, state: "needs-person", body: { basis: { pre: 1 }, needsYou: { reason: "clarify-awaiting-consensus" } } });
+      expect((second.body as { ranOnInputs: { earlier: unknown[] } }).ranOnInputs.earlier).toEqual([{ stepKey: "pre", outputHash: null, projection: null }]);
     } finally { await w.dispose(); }
   });
 });

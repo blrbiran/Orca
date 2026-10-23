@@ -3,7 +3,7 @@ import { add, subtract } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { fits, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
-import { activeChain, chainRounds } from "./clarifyChain.js";
+import { activeChain, chainRounds, supersededForPrompt } from "./clarifyChain.js";
 import { requirementHost } from "./clarifyHost.js";
 import { buildClarifyPrompt, CLARIFY_JSON_SCHEMA, classifyClarifyOutput } from "./requirementClarify.js";
 import { renderRequirementDocument } from "./requirementDocument.js";
@@ -260,13 +260,12 @@ export const CLARIFY_HANDLER: SingleCallHandler = {
       const limits = clarifyLimits(deps.store, group);
       // Flow engine spec §10.3: the earlier rounds are the active chain's; the round is numbered by its chain position;
       // superseded rounds go in as earlier answers that may still apply, unless a revision excluded them.
-      const rounds = readRounds(deps.store, run.groupId), { chain, superseded } = activeChain(rounds);
-      const excluded = new Set(rounds.flatMap((r) => r.exclude ?? []));
+      const rounds = readRounds(deps.store, run.groupId), { chain } = activeChain(rounds);
       const position = chain.indexOf(target.no);
       return buildClarifyPrompt({ idea: group.requirement.idea, contentLanguage: group.requirement.contentLanguage, overview: built,
         earlier: chainRounds(rounds).filter((r) => r.roundNo !== target.no), retryReason: readRound(deps.store, run.groupId, target.no).lastInvalidReason,
         limits: { roundNo: position === -1 ? target.no : position + 1, classification: limits.effective, roundCap: limits.roundCap },
-        superseded: rounds.filter((r) => superseded.includes(r.roundNo) && !excluded.has(r.roundNo)), frame: requirementHost(deps.store, group).background() });
+        superseded: supersededForPrompt(rounds), frame: requirementHost(deps.store, group).background() });
     });
   },
   classify: classifyClarifyOutput,

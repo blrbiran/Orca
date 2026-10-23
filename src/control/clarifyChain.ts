@@ -23,6 +23,16 @@ export function activeChain(rows: readonly { roundNo: number; revises?: number }
   return { chain, superseded };
 }
 
+/**
+ * Spec §10.3: the rounds a next round's prompt carries as "earlier answers that may still apply" -- the superseded ones,
+ * minus any a revision excluded. Shared by both hosts.
+ */
+export function supersededForPrompt<T extends { roundNo: number; revises?: number; exclude?: readonly number[] }>(rounds: readonly T[]): T[] {
+  const { superseded } = activeChain(rounds);
+  const excluded = new Set(rounds.flatMap((r) => r.exclude ?? []));
+  return rounds.filter((r) => superseded.includes(r.roundNo) && !excluded.has(r.roundNo));
+}
+
 /** The rounds on the active chain, in chain order. */
 export function chainRounds<T extends { roundNo: number; revises?: number }>(rows: readonly T[]): T[] {
   const byNo = new Map(rows.map((row) => [row.roundNo, row]));
