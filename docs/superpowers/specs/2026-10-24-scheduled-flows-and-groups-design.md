@@ -839,3 +839,34 @@ package as this repo's plans do).
 | Round 2 M-2 | `state.tz` written with `lastSlot` at create/enable/resume/cron edit; C2 assertion and mutation |
 | Round 2 M-3 | the waiting group joins the control overview's `budget-review` needs-you step with reason `scheduled-waiting:<reason>` (`src/panel/controlOverview.ts:94`), not the flow board's rule; C13 |
 | Round 2 M-4 | §20 item 9 states the kernel version check's effect on hand starts |
+
+## 22. Correction (session ffec7b28, round-2 of tester-round2)
+
+Appended after commit `8569e88a`; the sections above stay as committed (Rule 13). Where this section and §6.2, §9.2,
+§17 C7a or C10 disagree, this section holds.
+
+1. **`autoConfirmBlocker`'s real shape and the booked condition 10.** R2 exports
+   `autoConfirmBlocker(store, group): null | {condition, code}`, evaluated over R2's **port-free** conditions only.
+   Condition 10 (agent selections do not resolve for `orca-auto`) needs the port, so it is **not** returned by
+   `autoConfirmBlocker`: R2's `autoConfirmUnlimitedPass` books it under `orca-auto-confirm-unlimited-v<N>` with result
+   `selections-unresolved`. Step 9 (§7.2, §9.2) therefore:
+   - reads `autoConfirmBlocker`; `{condition: 8, …}` (no control-config defaults) ⇒ `outcome := waiting`,
+     `reason = "auto-confirm-ineligible:8"`; any other returned condition is transient (nothing recorded);
+   - reads the booked `commands` row `(sgrp-…, orca-auto-confirm-unlimited-v<N>)`; a result `selections-unresolved` ⇒
+     `outcome := waiting`, `reason = "auto-confirm-ineligible:10"` (not `auto-confirm-refused:<code>`); any other error
+     result ⇒ `auto-confirm-refused:<code>` as §9.2 says; success ⇒ `confirm = auto-confirmed`.
+2. **A `waiting` from condition 8 is not write-once.** Defaults can be configured later, after which R2's pass
+   confirms the group. For a fire whose outcome is `waiting` with reason `auto-confirm-ineligible:8`, step 9
+   re-evaluates each pass: when a success row `orca-auto-confirm-unlimited-v<N>` appears it moves `outcome` back
+   `waiting → started` and sets `confirm = auto-confirmed` (copied from that row); while the group stays `draft` and
+   condition 8 still holds, nothing changes. This is the **only** `waiting → started` move; every other `waiting`
+   reason (limited, delivery scheme, `auto-confirm-ineligible:10`, `auto-confirm-refused:<code>`, `estimate-failed:<code>`)
+   stays write-once. The single writer (§12) allows exactly this extra move; C10's mutation "allow `waiting → started`"
+   becomes "allow `waiting → started` for a reason other than `auto-confirm-ineligible:8`".
+3. **C7a, adjusted.** The null-defaults case becomes: `defaults()` null, `tokenLimit: null`, `integration: null` ⇒ fire
+   `waiting: auto-confirm-ineligible:8`; then defaults are configured ⇒ R2's pass confirms in a later pump and the fire
+   row reads `started` with `confirm = auto-confirmed` (R2's command id). New case: selections that do not resolve for
+   `orca-auto` ⇒ R2 books `selections-unresolved` ⇒ fire `waiting: auto-confirm-ineligible:10`, and it stays so after
+   defaults change. Mutations that must turn it red: drop the condition-8 row (the case stays open); **keep a condition-8
+   `waiting` write-once** (after defaults are configured the fire still reads `waiting` although the group was confirmed:
+   red); map `selections-unresolved` to `auto-confirm-refused` (red on the condition-10 case).
