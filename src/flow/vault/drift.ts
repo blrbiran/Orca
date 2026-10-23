@@ -22,7 +22,7 @@ async function changedPaths(vault: Vault, from: string, to: string): Promise<str
 }
 
 /** `onto`'s tree with `paths` taken from `source` (removed where `source` has none). */
-async function treeWith(vault: Vault, onto: string, source: string, paths: readonly string[]): Promise<string> {
+export async function treeWith(vault: Vault, onto: string, source: string, paths: readonly string[]): Promise<string> {
   const scratch = await mkdtemp(join(tmpdir(), "orca-vault-index-"));
   try {
     const env = { GIT_INDEX_FILE: join(scratch, "index") };

@@ -254,15 +254,17 @@ async function cachedOverview(cacheFile: string, commit: string): Promise<Reposi
 /**
  * N1 spec §6: the canonical overview of HEAD's commit, cached per (repository, commit) under the state directory.
  * Only an `ok` structure is reused; any other status is built again on the next call, over the cached files and docs.
+ * Dir-requirements spec §6.2: with `commit` (a dir group's import commit in its bare vault), that commit is verified and
+ * used, and HEAD is never read; without it, HEAD's commit as before.
  */
 export async function buildRepositoryOverview(input: {
-  repo: string; repoId: string; stateDir: string; runId: string; astGrepBin: string | null; limits?: Partial<OverviewLimits>;
+  repo: string; repoId: string; stateDir: string; runId: string; astGrepBin: string | null; limits?: Partial<OverviewLimits>; commit?: string;
 }): Promise<{ overview: RepositoryOverview; canonicalJson: string; hash: string }> {
   const limits: OverviewLimits = { ...OVERVIEW_LIMITS, ...input.limits };
   const root = privateDirectory(`${input.stateDir}.overview`);
   // Spec §13: a crashed build's export directory is removed by the next build (the driver builds one overview at a time).
   for (const name of readdirSync(root)) if (name.startsWith("tmp-")) await rm(join(root, name), { recursive: true, force: true });
-  const commit = (await run(input.repo, ["rev-parse", "--verify", "HEAD^{commit}"])).trim();
+  const commit = (await run(input.repo, ["rev-parse", "--verify", `${input.commit ?? "HEAD"}^{commit}`])).trim();
   const cacheFile = join(privateDirectory(join(root, input.repoId, commit)), "overview.json");
   const finish = (overview: RepositoryOverview) => ({ overview, canonicalJson: canonicalBytes(overview).toString("utf8"), hash: sha256Canonical(overview) });
   const cached = await cachedOverview(cacheFile, commit);

@@ -101,16 +101,46 @@ async function lastImport(vault: Vault): Promise<{ n: number; commit: string } |
   return best;
 }
 
-export async function importSnapshot(vault: Vault, dir: string, opts: { flowRunId: string; caps: SnapshotCaps; excludes?: readonly string[] }): Promise<{ commit: string; n: number; overCap: string[]; excluded: string[] }> {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(opts.flowRunId)) throw new Error(`orca: ${JSON.stringify(opts.flowRunId)} is not a flow run id`);
+/**
+ * Two forms. `flowRunId` is the flow's (unchanged): the base ref `refs/orca/<flowRunId>/base` is derived and an orphan
+ * left by a crashed start is replaced. `baseRef` is a dir group's (dir-requirements spec §6.1): the named ref, or none
+ * (null), is written create-only and an existing one is answered as it is, never replaced; with `reuseUnchanged` the
+ * newest import is answered when its tree is this snapshot's tree. `commit` is what the base ref names when one is
+ * given; `n` is the import this call made or reused.
+ */
+export type ImportOptions = { caps: SnapshotCaps; excludes?: readonly string[] } & ({ flowRunId: string } | { baseRef: string | null; reuseUnchanged?: boolean });
+
+export async function importSnapshot(vault: Vault, dir: string, opts: ImportOptions): Promise<{ commit: string; n: number; overCap: string[]; excluded: string[] }> {
+  if ("flowRunId" in opts && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(opts.flowRunId)) throw new Error(`orca: ${JSON.stringify(opts.flowRunId)} is not a flow run id`);
   const snap = await snapshotTree(vault, dir, opts.caps, opts.excludes ?? []);
-  // Review M1: a start that crashed after its import and before its run row left this run id's base. Nothing else has
-  // the id (the kernel found no run with it), so the ref is that start's: it is replaced by compare-and-swap from the
-  // value read, with this snapshot.
-  const orphan = await readRef(vault, baseRef(opts.flowRunId));
+  const answer = (commit: string, n: number) => ({ commit, n, overCap: snap.overCap, excluded: snap.excluded });
+  if ("flowRunId" in opts) {
+    // Review M1: a start that crashed after its import and before its run row left this run id's base. Nothing else has
+    // the id (the kernel found no run with it), so the ref is that start's: it is replaced by compare-and-swap from the
+    // value read, with this snapshot.
+    const orphan = await readRef(vault, baseRef(opts.flowRunId));
+    const made = await newImport(vault, snap.tree);
+    await vaultGit(vault, ["update-ref", baseRef(opts.flowRunId), made.commit, orphan ?? ""]);
+    return answer(made.commit, made.n);
+  }
+  const last = opts.reuseUnchanged === true ? await lastImport(vault) : null;
+  const made = last !== null && (await vaultGit(vault, ["rev-parse", `${last.commit}^{tree}`])).trim() === snap.tree ? last : await newImport(vault, snap.tree);
+  if (opts.baseRef === null) return answer(made.commit, made.n);
+  try { await vaultGit(vault, ["update-ref", opts.baseRef, made.commit, ""]); }
+  catch (error) {
+    // A group base is never replaced: one already there (a replay, or a racing pass) is the answer.
+    const existing = await readRef(vault, opts.baseRef);
+    if (existing === null) throw error;
+    return answer(existing, made.n);
+  }
+  return answer(made.commit, made.n);
+}
+
+/** A new import commit of `tree` on top of the newest import, numbered by a create-only `update-ref`. */
+async function newImport(vault: Vault, tree: string): Promise<{ commit: string; n: number }> {
   for (;;) {
     const previous = await lastImport(vault);
-    const commit = (await vaultGit(vault, [...ORCA_IDENTITY, "commit-tree", snap.tree, ...(previous === null ? [] : ["-p", previous.commit]), "-m", "orca: import"])).trim();
+    const commit = (await vaultGit(vault, [...ORCA_IDENTITY, "commit-tree", tree, ...(previous === null ? [] : ["-p", previous.commit]), "-m", "orca: import"])).trim();
     const n = (previous?.n ?? 0) + 1;
     try { await vaultGit(vault, ["update-ref", importRef(n), commit, ""]); }
     catch (error) {
@@ -118,7 +148,6 @@ export async function importSnapshot(vault: Vault, dir: string, opts: { flowRunI
       if (((await lastImport(vault))?.n ?? 0) >= n) continue;
       throw error;
     }
-    await vaultGit(vault, ["update-ref", baseRef(opts.flowRunId), commit, orphan ?? ""]);
-    return { commit, n, overCap: snap.overCap, excluded: snap.excluded };
+    return { commit, n };
   }
 }
