@@ -125,7 +125,7 @@ import { nextAfterReview } from "./reviewFlow.js";
 import { reviewKeyAction } from "./reviewKeys.js";
 import type { DecisionFilter, DecisionStatus } from "./DecisionsView.js";
 import { MemoryView } from "./MemoryView.js";
-import { pickProject, projectKindForRepo, projectName, readProject, writeProject } from "./project.js";
+import { pickProject, projectKindForRepo, projectName, readProject, repoLabelOf, repoPathOf, writeProject } from "./project.js";
 import type { ProjectsAnswerV1 } from "./project.js";
 import { ProjectControl } from "./ProjectControl.js";
 import { ALL_PROJECTS, allowsAll, groupScope, readProjectView, writeProjectView } from "./projectScope.js";
@@ -1017,11 +1017,7 @@ export function App(): JSX.Element {
   const controlRepoId = chosen === undefined ? undefined : chosen.controlRepoId;
   // Plan decision P5: a repository's name is its project's, else the config's display name, else the repoId itself --
   // never the selected project's name.
-  const repoLabel = useMemo(() => (repoId: string): string => {
-    const owner = projects?.find((entry) => entry.controlRepoId === repoId);
-    if (owner !== undefined) return projectName(owner);
-    return controlConfig?.repositories.find((entry) => entry.repoId === repoId)?.displayName ?? repoId;
-  }, [projects, controlConfig]);
+  const repoLabel = useMemo(() => (repoId: string): string => repoLabelOf(projects, controlConfig?.repositories ?? [], repoId), [projects, controlConfig]);
   // Spec §6: what an All-projects import or new requirement may target -- a registered project's control repository.
   const targets = useMemo(() => (projects ?? []).flatMap((entry) => (entry.controlRepoId === null ? [] : [entry.controlRepoId])), [projects]);
   /** Read one repository's workspace mode; only the newest read of that repository is applied (spec §8). */
@@ -1529,6 +1525,7 @@ export function App(): JSX.Element {
       </SectionPane>
       <SectionPane section="project-settings" active={section}>
         <ProjectSettings key={panelRepoId ?? "unresolved"} repoId={panelRepoId} repoLabel={panelRepoId === null ? null : repoLabel(panelRepoId)}
+          repoPath={repoPathOf(projects, panelRepoId)}
           dir={projectKindForRepo(projects ?? [], panelRepoId) === "dir"}
           refusal={panelRepoId === null ? null : settingsRefusal(`@repository:${panelRepoId}`)}
           workspace={panelRepoId === null ? null : workspaces[panelRepoId] ?? null}

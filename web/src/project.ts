@@ -31,6 +31,21 @@ export const projectName = (project: ProjectV1): string => project.name ?? proje
 export const projectKindForRepo = (projects: readonly ProjectV1[], repoId: string | null): "repo" | "dir" =>
   projects.find((project) => project.controlRepoId !== null && project.controlRepoId === repoId)?.kind === "dir" ? "dir" : "repo";
 
+/**
+ * Plan decision P5 (moved here from App.tsx for gaps spec §11, G11): a control repository's name is its project's, else
+ * the config's display name, else the repoId itself -- never the selected project's name. A `dir` project is listed
+ * like a repository, so it resolves to its project name too.
+ */
+export function repoLabelOf(projects: readonly ProjectV1[] | null | undefined, repositories: ReadonlyArray<{ repoId: string; displayName: string }>, repoId: string): string {
+  const owner = projects?.find((entry) => entry.controlRepoId === repoId);
+  if (owner !== undefined) return projectName(owner);
+  return repositories.find((entry) => entry.repoId === repoId)?.displayName ?? repoId;
+}
+
+/** Gaps spec §11: the path (repository or folder) of the project a control repository belongs to; null when unknown. */
+export const repoPathOf = (projects: readonly ProjectV1[] | null | undefined, repoId: string | null): string | null =>
+  (repoId === null ? undefined : projects?.find((entry) => entry.controlRepoId === repoId)?.path) ?? null;
+
 export function readProject(storage: Pick<Storage, "getItem"> | undefined): string | null {
   try {
     return storage?.getItem(PROJECT_KEY) ?? null;

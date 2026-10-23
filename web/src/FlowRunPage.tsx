@@ -16,6 +16,7 @@
 import { useCallback, useContext, useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
+import { FolderImagePicker } from "./FolderImagePicker.js";
 import type { TFunction } from "i18next";
 import type { PanelRefusal } from "./api.js";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
@@ -668,7 +669,7 @@ function HeldCard(props: { step: Step; steps: Step[]; runId: string; send: Send;
 }
 
 /** Gaps spec §8.4: on a failed or deferred step whose `when` reads a param, set that param instead (a `params` command). */
-function SetParam(props: { param: { id: string; type: string | null }; current: string | number | boolean | undefined; runId: string; send: Send }): JSX.Element {
+function SetParam(props: { param: { id: string; type: string | null }; current: string | number | boolean | undefined; runId: string; send: Send; /** Plan Task 10-B: the run's folder and template, for an image param's picker. */ dir: string | null; template: string }): JSX.Element {
   const { t } = useTranslation();
   const { param } = props;
   const [open, setOpen] = useState(false);
@@ -684,6 +685,7 @@ function SetParam(props: { param: { id: string; type: string | null }; current: 
         ? <label><input type="checkbox" checked={flag} onChange={(event) => setFlag(event.currentTarget.checked)} />{param.id}</label>
         : <input type={param.type === "int" ? "number" : "text"} aria-label={param.type === "image" || param.type === "path" ? t("flow.param.path", { param: param.id }) : param.id}
           value={value} onChange={(event) => setValue(event.currentTarget.value)} />}{" "}
+      {param.type === "image" && props.dir !== null && <FolderImagePicker dir={props.dir} template={props.template} paramId={param.id} value={value} onPick={setValue} />}
       <button type="submit" disabled={!ready}>{t("flow.param.set")}</button>{" "}
       <button type="button" onClick={() => setOpen(false)}>{t("flow.mark.cancel")}</button>
     </form>
@@ -759,7 +761,7 @@ function StepCard(props: { step: Step; view: FlowRunViewV1; may: boolean; send: 
       {round !== null && (props.may ? <ClarifyForm round={round} stepKey={step.stepKey} runId={view.flowRunId} send={props.send} /> : <p role="note">{t("flow.ownerOnly")}</p>)}
       {latest?.state === "failed" && <button type="button" onClick={() => props.send("messages", { runId: view.flowRunId, kind: "command", target: { kind: "step", stepKey: step.stepKey }, body: { command: "retry" } })}>{t("flow.retry")}</button>}
       {open && (latest?.state === "failed" || step.mark?.kind === "defer") && step.whenParams.map((param) => (
-        <SetParam key={param.id} param={param} current={view.params[param.id]} runId={view.flowRunId} send={props.send} />
+        <SetParam key={param.id} param={param} current={view.params[param.id]} runId={view.flowRunId} send={props.send} dir={view.dir} template={view.template.id} />
       ))}
       {open && step.heldBy.length > 0 && <HeldCard step={step} steps={view.steps} runId={view.flowRunId} send={props.send} messages={props.messages} waiting={props.waiting} onWait={props.onWait} />}
       {open && <StepMarks step={step} runId={view.flowRunId} send={props.send} />}

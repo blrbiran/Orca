@@ -1039,6 +1039,14 @@ export type FlowListV1 = {
   schema: "orca-flow-list-v1";
   runs: Array<{ flowRunId: string; groupId: string; templateRef: string; state: string; poolTokens: number; poolDrawn: number; projectId: string | null; dir: string | null; needsYou: number }>;
 };
+/** Gaps spec §8.4 (plan Task 10-B): the start dialog's reads, paired with src/flow/startForm.ts (webParity.test.ts). */
+export type FlowParamTypeV1 = "text" | "longtext" | "enum" | "bool" | "int" | "path" | "slug" | "image";
+export type FlowTemplateParamV1 = { id: string; type: FlowParamTypeV1; required: boolean; options?: string[]; default?: string | number | boolean; derive?: "slug-of-idea" | "today" };
+export type FlowTemplatesV1 = {
+  schema: "orca-flow-templates-v1";
+  templates: Array<{ id: string; version: number | null; title: { en?: string; zh?: string } | null; params: FlowTemplateParamV1[]; excludes: string[] }>;
+};
+export type FlowFolderImagesV1 = { schema: "orca-flow-folder-images-v1"; dir: string; files: string[]; truncated: boolean; limit: number };
 export type FlowToolRuleStatusV1 = "enforced" | "detected" | "recorded-only" | "refused";
 export type FlowToolRulesReportV1 = {
   schema: "ccloop-tool-rules-report-v1"; agentKind: "claude" | "codex" | "omp"; baseline: string;

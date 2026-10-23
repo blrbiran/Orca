@@ -15,7 +15,7 @@ import type { PanelRefusal } from "./api.js";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { controlGet, nextCommandId, refusalFromAnswer, sendControlCommand } from "./controlApi.js";
 import { WEB_FLOW_EFFECT_CLASSES, WEB_FLOW_LOCKABLE_PATHS } from "./controlTypes.js";
-import type { FlowEffectClassV1, FlowLevelSettingV1, FlowLockablePathV1, FlowSettingsReadV1, FlowSourcedV1 } from "./controlTypes.js";
+import type { FlowEffectClassV1, FlowLevelSettingV1, FlowLockablePathV1, FlowSettingsReadV1, FlowSourcedV1, FlowTemplateParamV1, FlowTemplatesV1 } from "./controlTypes.js";
 import { Refusal } from "./Refusal.js";
 
 export type FlowSettingsScope = "global" | { repoId: string };
@@ -64,6 +64,59 @@ function Field<T>(props: {
   );
 }
 
+type Preset = string | number | boolean;
+/** A preset's draft as the editor holds it: text for every type but bool (a choice) -- parsed on Save. */
+function presetParse(param: FlowTemplateParamV1 | null, draft: string): Preset | null {
+  if (param?.type === "bool") return draft === "true" ? true : draft === "false" ? false : null;
+  if (param?.type === "int") return /^-?\d+$/.test(draft.trim()) && Number.isSafeInteger(Number(draft.trim())) ? Number(draft.trim()) : null;
+  return draft.trim() === "" ? null : draft.trim();
+}
+
+/**
+ * Gaps spec §8.2, §8.4: one preset `paramDefaults.<template>.<param>` -- its value and layer (presets are never locked;
+ * the lock badge shows if a read ever says otherwise), an editor typed by the param (a path field for an `image`), and
+ * "Clear this preset", which removes this one entry from this layer only (the server's per-entry clear, Task 9).
+ */
+function PresetField(props: { template: string; paramId: string; param: FlowTemplateParamV1 | null; sourced: FlowSourcedV1<Preset> | undefined; layer: Layer; may: boolean; send: Send }): JSX.Element {
+  const { t } = useTranslation();
+  const name = `paramDefaults.${props.template}.${props.paramId}`;
+  const [draft, setDraft] = useState(props.sourced === undefined ? (props.param?.type === "bool" ? "true" : "") : String(props.sourced.value));
+  const parsed = presetParse(props.param, draft);
+  const ours = props.sourced?.source === props.layer;
+  const label = t("settings.flows.preset.field", { template: props.template, param: props.paramId });
+  const type = props.param?.type;
+  return (
+    <div className="check-field" data-testid={`flow-setting-${name}`}>
+      <span>{label}: {props.sourced === undefined ? t("settings.flows.preset.none") : String(props.sourced.value)}</span>
+      {props.sourced !== undefined && <> <Badges sourced={props.sourced} /></>}
+      {props.may && (
+        <div>
+          {type === "bool" || type === "enum" ? (
+            <select aria-label={label} value={draft} onChange={(event) => setDraft(event.currentTarget.value)}>
+              {(type === "bool" ? ["true", "false"] : props.param!.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          ) : <input type={type === "int" ? "number" : "text"} aria-label={label} value={draft} onChange={(event) => setDraft(event.currentTarget.value)} />}
+          {type === "image" && <p className="detail-note">{t("settings.flows.preset.imageHint")}</p>}
+          <button type="button" disabled={parsed === null || (ours && parsed === props.sourced?.value)}
+            onClick={() => { if (parsed !== null) props.send("settings", { set: { paramDefaults: { [props.template]: { [props.paramId]: parsed } } }, clear: [] }); }}>
+            {t(ours ? "settings.flows.save" : "settings.flows.override")}
+          </button>
+          {ours && <button type="button" onClick={() => props.send("settings", { set: {}, clear: [name] })}>{t("settings.flows.preset.clear")}</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Every preset to show: each built-in template's params, then any preset the read names that no listed param has. */
+function presetRows(templates: FlowTemplatesV1["templates"], read: FlowSettingsReadV1["paramDefaults"]): Array<{ template: string; paramId: string; param: FlowTemplateParamV1 | null }> {
+  const rows: Array<{ template: string; paramId: string; param: FlowTemplateParamV1 | null }> = templates.flatMap((template) => template.params.map((param) => ({ template: template.id, paramId: param.id, param })));
+  for (const [template, values] of Object.entries(read)) for (const paramId of Object.keys(values)) {
+    if (!rows.some((row) => row.template === template && row.paramId === paramId)) rows.push({ template, paramId, param: null });
+  }
+  return rows;
+}
+
 function Locks(props: { locks: FlowLockablePathV1[]; send: Send }): JSX.Element {
   const { t } = useTranslation();
   const initial = WEB_FLOW_LOCKABLE_PATHS.filter((path) => props.locks.includes(path));
@@ -84,7 +137,7 @@ function Locks(props: { locks: FlowLockablePathV1[]; send: Send }): JSX.Element 
   );
 }
 
-export function FlowSettings(props: { scope: FlowSettingsScope }): JSX.Element {
+export function FlowSettings(props: { scope: FlowSettingsScope; /** Gaps spec §11: a project's name, for the region label. */ projectName?: string }): JSX.Element {
   const { t } = useTranslation();
   const may = mayHumanOnly(useContext(AccountContext));
   const scope = props.scope;
@@ -101,6 +154,14 @@ export function FlowSettings(props: { scope: FlowSettingsScope }): JSX.Element {
     } catch { setUnread(true); }
   }, [readPath]);
   useEffect(() => { void read(); }, [read]);
+  // Gaps spec §8.4: the built-in templates' params, for the presets; none listed (an older panel) leaves only the read's.
+  const [templates, setTemplates] = useState<FlowTemplatesV1["templates"]>([]);
+  useEffect(() => {
+    void (async () => {
+      try { const answer = await controlGet<FlowTemplatesV1>("/api/control/flows/templates"); setTemplates(Array.isArray(answer?.templates) ? answer.templates : []); }
+      catch { setTemplates([]); }
+    })();
+  }, []);
 
   const send: Send = (leaf, payload) => {
     void (async () => {
@@ -131,7 +192,7 @@ export function FlowSettings(props: { scope: FlowSettingsScope }): JSX.Element {
   );
   const lines = (value: string[] | null): string => (value ?? []).join("\n");
   return (
-    <section aria-label={t("settings.flows.region")}>
+    <section aria-label={props.projectName === undefined ? t("settings.flows.region") : t("settings.flows.regionFor", { project: props.projectName })}>
       <h3>{t("settings.flows.region")}</h3>
       <p>{t("settings.flows.explain")}</p>
       {refusal !== null && <Refusal refusal={refusal} />}
@@ -153,6 +214,10 @@ export function FlowSettings(props: { scope: FlowSettingsScope }): JSX.Element {
                 <option value="auto">{t("settings.flows.review.auto")}</option>
               </select>
             )} />
+          <Field name="rerunAskTimeoutSeconds" label={t("settings.flows.rerunAskTimeout")} sourced={view.rerunAskTimeoutSeconds} layer={layer} may={may} send={send}
+            show={(value) => t("settings.flows.seconds", { n: value })} set={(value) => ({ rerunAskTimeoutSeconds: value })}
+            parse={(draft) => (Number.isInteger(draft) && draft >= 30 && draft <= 86_400 ? draft : null)}
+            edit={(draft, set) => <input type="number" min={30} max={86_400} aria-label={t("settings.flows.rerunAskTimeout")} value={draft} onChange={(event) => set(Number(event.currentTarget.value))} />} />
           <Field name="budgets.tokensPerRun" label={t("settings.flows.tokensPerRun")} sourced={view.budgets.tokensPerRun} layer={layer} may={may} send={send}
             show={String} set={(value) => ({ budgets: { tokensPerRun: value } })} parse={(draft) => (Number.isSafeInteger(draft) && draft >= 1 ? draft : null)}
             edit={(draft, set) => <input type="number" min={1} aria-label={t("settings.flows.tokensPerRun")} value={draft} onChange={(event) => set(Number(event.currentTarget.value))} />} />
@@ -162,6 +227,12 @@ export function FlowSettings(props: { scope: FlowSettingsScope }): JSX.Element {
           <Field<Record<string, { agent: string; model?: string }>> name="roles" label={t("settings.flows.roles")} sourced={view.roles} layer={layer} may={may} send={send}
             show={(value) => (Object.keys(value).length === 0 ? t("settings.flows.noRoles") : JSON.stringify(value))} set={(value) => ({ roles: value })}
             edit={(draft, set) => <RolesEditor value={draft} onChange={set} />} />
+          <h4>{t("settings.flows.preset.title")}</h4>
+          <p>{t("settings.flows.preset.explain")}</p>
+          {presetRows(templates, view.paramDefaults ?? {}).map((row) => (
+            <PresetField key={`${row.template}.${row.paramId}`} template={row.template} paramId={row.paramId} param={row.param}
+              sourced={view.paramDefaults?.[row.template]?.[row.paramId]} layer={layer} may={may} send={send} />
+          ))}
           {scope === "global" && may && <Locks locks={view.locks} send={send} />}
         </div>
       )}

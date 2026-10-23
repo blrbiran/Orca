@@ -26,6 +26,8 @@ export interface BoardViewProps {
   /** Flow engine spec §14.1: flow runs, each a card for its parent with a template badge (children are never cards). */
   flows?: FlowListV1["runs"];
   onOpenFlow?: (flowRunId: string) => void;
+  /** Plan Task 10-B: what the board shows first, top left under its title (the flow start button). */
+  toolbar?: JSX.Element;
 }
 
 type FlowRun = FlowListV1["runs"][number];
@@ -137,6 +139,7 @@ export function BoardView(props: BoardViewProps): JSX.Element {
   return (
     <section className="board" aria-label={t("board.title")}>
       <h2>{t("board.title")}</h2>
+      {props.toolbar !== undefined && <div className="board-toolbar">{props.toolbar}</div>}
       <div role="group" aria-label={t("board.viewChoice")}>
         <button type="button" aria-pressed={view === "board"} onClick={() => setView("board")}>{t("board.viewBoard")}</button>
         <button type="button" aria-pressed={view === "graph"} onClick={() => setView("graph")}>{t("board.viewGraph")}</button>

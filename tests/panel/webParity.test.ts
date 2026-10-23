@@ -21,6 +21,8 @@ import { WORK_ITEM_CATEGORIES } from "../../src/control/workItemCategory.js";
 import type { FlowSettingsRead as ServerFlowSettingsRead } from "../../src/flow/settings.js";
 import { FLOW_EFFECT_CLASSES, FLOW_LOCKABLE_PATHS } from "../../src/flow/settingsSchema.js";
 import type { FlowListV1 as ServerFlowListV1 } from "../../src/flow/views.js";
+import type { FlowTemplatesRead as ServerFlowTemplatesRead, FolderImagesRead as ServerFolderImagesRead } from "../../src/flow/startForm.js";
+import type { FlowFolderImagesV1 as WebFlowFolderImagesV1, FlowTemplatesV1 as WebFlowTemplatesV1 } from "../../web/src/controlTypes.js";
 import type { FlowListV1 as WebFlowListV1, FlowSettingsReadV1 as WebFlowSettingsReadV1 } from "../../web/src/controlTypes.js";
 import { WEB_FLOW_EFFECT_CLASSES, WEB_FLOW_LOCKABLE_PATHS } from "../../web/src/controlTypes.js";
 import type {
@@ -162,7 +164,13 @@ function flowSettingsServerToWeb(x: ServerFlowSettingsRead): WebFlowSettingsRead
 function flowSettingsWebToServer(x: WebFlowSettingsReadV1): ServerFlowSettingsRead { return x; }
 function flowListServerToWeb(x: ServerFlowListV1): WebFlowListV1 { return x; }
 function flowListWebToServer(x: WebFlowListV1): ServerFlowListV1 { return x; }
-export const __flowParityChecks__ = [flowSettingsServerToWeb, flowSettingsWebToServer, flowListServerToWeb, flowListWebToServer];
+// Gaps spec §8.4 (plan Task 10-B): the start dialog's template and folder-image reads, both ways.
+function flowTemplatesServerToWeb(x: ServerFlowTemplatesRead): WebFlowTemplatesV1 { return x; }
+function flowTemplatesWebToServer(x: WebFlowTemplatesV1): ServerFlowTemplatesRead { return x; }
+function folderImagesServerToWeb(x: ServerFolderImagesRead): WebFlowFolderImagesV1 { return x; }
+function folderImagesWebToServer(x: WebFlowFolderImagesV1): ServerFolderImagesRead { return x; }
+export const __flowParityChecks__ = [flowSettingsServerToWeb, flowSettingsWebToServer, flowListServerToWeb, flowListWebToServer,
+  flowTemplatesServerToWeb, flowTemplatesWebToServer, folderImagesServerToWeb, folderImagesWebToServer];
 
 function reportServerToWeb(x: ServerMetricsReport): WebMetricsReport {
   return x;

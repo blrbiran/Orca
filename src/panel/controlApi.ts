@@ -29,6 +29,8 @@ import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import { readIntegrationDefault } from "../control/integrationScheme.js";
 import { checksRead, readReviewRecord, reviewDismissals } from "../control/checks/settings.js";
 import { readFlowSettings } from "../flow/settings.js";
+import { listFolderImages, readBuiltinTemplates } from "../flow/startForm.js";
+import { loadBuiltin } from "../flow/template/load.js";
 import { AgentCeilingRefusal } from "../control/spendCaps.js";
 import type { WebControlService } from "../control/webService.js";
 import type { ExecutionPort } from "../control/executionPort.js";
@@ -319,8 +321,26 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     }
     try { res.json(readFlowSettings(deps.store, repoId)); } catch (error) { sendMappedControlError(res, error); }
   });
+  // Gaps spec §8.4 (plan Task 10-B): the start dialog's reads -- the built-in templates with their params, and the image
+  // files of a folder for an `image` param's picker (excludes applied, at most FOLDER_IMAGE_LIMIT). Reads.
+  const builtinRoot = (): string | undefined => deps.service?.deps.flowDeps?.()?.builtinRoot;
+  app.get("/api/control/flows/templates", (_req, res) => {
+    try { res.json(readBuiltinTemplates(builtinRoot())); } catch (error) { sendMappedControlError(res, new ControlError("flow-template-invalid", (error as Error).message)); }
+  });
+  app.get("/api/control/flows/images", asyncRoute(async (req, res) => {
+    const dir = req.query.dir, template = req.query.template;
+    if (typeof dir !== "string" || !dir.startsWith("/") || typeof template !== "string" || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(template)) {
+      sendControlError(res, 400, "query-invalid", "dir must be an absolute folder and template a built-in template id");
+      return;
+    }
+    let excludes: string[];
+    try { excludes = [...(loadBuiltin(template, builtinRoot()).template.workspace.excludes ?? [])]; }
+    catch (error) { sendMappedControlError(res, new ControlError("flow-template-invalid", (error as Error).message)); return; }
+    try { res.json(await listFolderImages(dir, excludes)); }
+    catch { sendControlError(res, 400, "query-invalid", `${dir} is not a folder that can be listed`); }
+  }));
   // Flow engine spec §14.2: the flow reads (after flows/settings, which these would otherwise take as a run id).
-  app.get("/api/control/flows", (_req, res) => { try { res.json(readFlowList(deps.store)); } catch (error) { sendMappedControlError(res, error); } });
+  app.get("/api/control/flows",(_req, res) => { try { res.json(readFlowList(deps.store)); } catch (error) { sendMappedControlError(res, error); } });
   app.get("/api/control/flows/:runId", (req, res) => {
     try { res.json(readFlowRun(deps.store, String(req.params.runId))); } catch (error) { sendMappedControlError(res, asFlowControlError(error)); }
   });

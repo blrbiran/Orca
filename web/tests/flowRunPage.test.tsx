@@ -107,6 +107,8 @@ function serve(view: FlowRunViewV1 = runView()): void {
     }
     if ((init?.method ?? "GET") === "POST") { posts.push({ url, body: JSON.parse(String(init!.body)) }); return new Response(JSON.stringify(answerWith(url)), { status: 200 }); }
     reads.push(url);
+    // Plan Task 10-B: the folder's images, for an image param's picker.
+    if (url.startsWith("/api/control/flows/images?")) return new Response(JSON.stringify({ schema: "orca-flow-folder-images-v1", dir: "/home/o/tea", files: ["covers/a.png", "covers/tea.png"], truncated: false, limit: 200 }), { status: 200 });
     const views = [view, ...laterViews];
     const journalReads = reads.filter((r) => r.endsWith("/journal")).length;
     const journal = journals.length === 0 ? JOURNAL : journals[Math.min(journalReads - 1, journals.length - 1)]!;
@@ -544,6 +546,22 @@ describe("skip, defer, fill and held effects (§6, §14.4)", () => {
     fireEvent.click(within(form).getByRole("button", { name: "Set" }));
     await waitFor(() => expect(posts.length).toBe(1));
     expect(lastPost()).toEqual({ url: "/api/control/flows/messages", body: expect.objectContaining({ payload: { runId: RUN, kind: "command", target: { kind: "run" }, body: { command: "params", set: { coverImage: "covers/tea.png" } } } }) });
+  });
+
+  it("'set coverImage instead' reuses the start dialog's picker over the run's folder (plan Task 10-B)", async () => {
+    const view = runView();
+    view.steps[4] = step("cover", "work", [exec(1, { state: "failed", failure: "no image key", output: null })],
+      { effect: { kind: "image-generate", class: "cost" }, whenParams: [{ id: "coverImage", type: "image" }] });
+    await mount(owner, view);
+    fireEvent.click(within(stepBox("cover")).getByRole("button", { name: "Set coverImage instead" }));
+    const form = within(stepBox("cover")).getByRole("form", { name: "Set coverImage instead" });
+    const picker = await waitFor(() => within(form).getByRole("combobox", { name: "coverImage: an image in the folder" }));
+    // mutation: list another folder or template -> url differs, red
+    expect(reads).toContain(`/api/control/flows/images?dir=${encodeURIComponent("/home/o/tea")}&template=wechat-article`);
+    fireEvent.change(picker, { target: { value: "covers/a.png" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Set" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost()!.body).toEqual(expect.objectContaining({ payload: { runId: RUN, kind: "command", target: { kind: "run" }, body: { command: "params", set: { coverImage: "covers/a.png" } } } }));
   });
 });
 
