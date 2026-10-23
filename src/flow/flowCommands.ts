@@ -42,16 +42,22 @@ export interface FlowCommandDeps {
  * that project (its settings layer); a `projectId` that names another project is refused.
  */
 async function registeredDirProject(projects: ReadonlyArray<{ repoId: string; path: string }>, dir: string, projectId: string | undefined): Promise<string> {
+  const found = await dirProjectOf(projects, dir);
+  if (found === null) throw new ControlError("flow-dir-unregistered", `${dir} is not a registered dir project's folder (add it with kind "dir" to the projects file)`);
+  if (projectId !== undefined && projectId !== found) throw new ControlError("flow-dir-unregistered", `${dir} is project ${found}, not ${projectId}`);
+  return found;
+}
+
+/**
+ * The registered `dir` project whose folder `dir` is (by real path, NFC), or null. The one resolver a start and the start
+ * dialog's presets read share (gaps plan Task 10-B fix round 2), so the dialog shows the presets the start applies.
+ */
+export async function dirProjectOf(projects: ReadonlyArray<{ repoId: string; path: string }>, dir: string): Promise<string | null> {
   const real = async (path: string): Promise<string | null> => { try { return (await realpath(path)).normalize("NFC"); } catch { return null; } };
   const wanted = await real(dir);
-  if (wanted !== null) {
-    for (const project of projects) {
-      if (await real(project.path) !== wanted) continue;
-      if (projectId !== undefined && projectId !== project.repoId) throw new ControlError("flow-dir-unregistered", `${dir} is project ${project.repoId}, not ${projectId}`);
-      return project.repoId;
-    }
-  }
-  throw new ControlError("flow-dir-unregistered", `${dir} is not a registered dir project's folder (add it with kind "dir" to the projects file)`);
+  if (wanted === null) return null;
+  for (const project of projects) if (await real(project.path) === wanted) return project.repoId;
+  return null;
 }
 
 /**

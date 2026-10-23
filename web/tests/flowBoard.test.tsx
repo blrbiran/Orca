@@ -80,7 +80,7 @@ describe("the board reads flow runs and opens them (§14.1, P6)", () => {
       if (url === "/api/control/flows/templates") return new Response(JSON.stringify(TEMPLATES), { status: 200 });
       const answered = custom(url);
       if (answered !== null) return answered;
-      if (url === "/api/control/flows/settings") return new Response(JSON.stringify({ paramDefaults: { "wechat-article": { coverImage: PRESET } } }), { status: 200 });
+      if (url === "/api/control/flows/settings" || url.startsWith("/api/control/flows/settings?dir=")) return new Response(JSON.stringify({ paramDefaults: { "wechat-article": { coverImage: PRESET } } }), { status: 200 });
       if (url.startsWith("/api/control/flows/images?")) return new Response(JSON.stringify({ schema: "orca-flow-folder-images-v1", dir: "/home/o/tea", ...images, limit: 200 }), { status: 200 });
       return new Response(JSON.stringify({ error: { code: "flow-run-not-found", message: url } }), { status: 404 });
     }) as typeof fetch;
@@ -219,19 +219,53 @@ describe("the board reads flow runs and opens them (§14.1, P6)", () => {
 
   describe("fix round 1 (Task 10-B review I2, minors)", () => {
     const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }));
-    it("a start from a project's board names the project and shows that project's presets with their source", async () => {
-      const posts = serve(undefined, undefined, (url) => url === "/api/control/flows/settings?repoId=articles-1"
-        ? json({ paramDefaults: { "wechat-article": { coverImage: { value: "/covers/mine.png", source: "project", lockedBy: null } } } }) : null);
-      render(<FlowBoard groups={[]} scope={{ kind: "project", repoId: "articles-1" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    // Fix round 2 (the controller's corrected ruling): the start names no project; the server derives it from the folder.
+    it("a start from a repository project's board on a registered dir folder sends no projectId", async () => {
+      const posts = serve();
+      render(<FlowBoard groups={[]} scope={{ kind: "project", repoId: "orca-22222222" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
       const dialog = await openDialog();
-      // mutation: read the global layer in a project's scope -> "/covers/default.png (global preset)", red
-      await waitFor(() => expect(within(param(dialog, "coverImage")).getByTestId("flow-start-default").textContent).toBe("default: /covers/mine.png (project preset)"));
       fireEvent.change(within(dialog).getByRole("textbox", { name: "Folder (absolute path)" }), { target: { value: "/home/o/tea" } });
       fireEvent.change(within(param(dialog, "idea")).getByRole("textbox", { name: "idea (required)" }), { target: { value: "Tea" } });
       fireEvent.click(within(dialog).getByRole("button", { name: "Start" }));
       await waitFor(() => expect(posts).toHaveLength(1));
-      // mutation: omit projectId -> payload without it, red
-      expect(posts[0]!.body.payload).toEqual({ template: "wechat-article", dir: "/home/o/tea", projectId: "articles-1", params: { idea: "Tea" } });
+      // mutation: send the board's repoId -> projectId "orca-22222222" (the server refuses it flow-dir-unregistered), red
+      expect(posts[0]!.body.payload).toEqual({ template: "wechat-article", dir: "/home/o/tea", params: { idea: "Tea" } });
+      await waitFor(() => expect(screen.getByRole("article").getAttribute("aria-label")).toContain(RUN_B));
+    });
+
+    it("shows the global presets until a folder is chosen, then the presets of the folder's dir project", async () => {
+      serve(undefined, undefined, (url) => url === `/api/control/flows/settings?dir=${encodeURIComponent("/home/o/tea")}`
+        ? json({ paramDefaults: { "wechat-article": { coverImage: { value: "/covers/mine.png", source: "project", lockedBy: null } } } }) : null);
+      render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+      const dialog = await openDialog();
+      await waitFor(() => expect(within(param(dialog, "coverImage")).getByTestId("flow-start-default").textContent).toBe("default: /covers/default.png (global preset)"));
+      fireEvent.change(within(dialog).getByRole("textbox", { name: "Folder (absolute path)" }), { target: { value: "/home/o/tea" } });
+      // mutation: never read by folder -> stays "(global preset)", red
+      await waitFor(() => expect(within(param(dialog, "coverImage")).getByTestId("flow-start-default").textContent).toBe("default: /covers/mine.png (project preset)"));
+      expect(reads).toContain(`/api/control/flows/settings?dir=${encodeURIComponent("/home/o/tea")}`);
+    });
+
+    it("drops a presets answer for a folder the person has since changed", async () => {
+      let releaseOld: () => void = () => undefined;
+      const preset = (value: string) => ({ paramDefaults: { "wechat-article": { coverImage: { value, source: "project", lockedBy: null } } } });
+      serve(undefined, undefined, (url) => {
+        if (url === `/api/control/flows/settings?dir=${encodeURIComponent("/old")}`)
+          return new Promise((resolve) => { releaseOld = () => resolve(new Response(JSON.stringify(preset("/covers/old.png")), { status: 200 })); });
+        if (url === `/api/control/flows/settings?dir=${encodeURIComponent("/new")}`) return json(preset("/covers/new.png"));
+        return null;
+      });
+      render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+      const dialog = await openDialog();
+      const folder = within(dialog).getByRole("textbox", { name: "Folder (absolute path)" });
+      fireEvent.change(folder, { target: { value: "/old" } });
+      await waitFor(() => expect(reads).toContain(`/api/control/flows/settings?dir=${encodeURIComponent("/old")}`));
+      fireEvent.change(folder, { target: { value: "/new" } });
+      const line = () => within(param(dialog, "coverImage")).getByTestId("flow-start-default").textContent;
+      await waitFor(() => expect(line()).toBe("default: /covers/new.png (project preset)"));
+      releaseOld();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // mutation: apply every answer -> the old folder's preset replaces the new one, red
+      expect(line()).toBe("default: /covers/new.png (project preset)");
     });
 
     it("says the default is not available when the presets cannot be read, never a source it did not read", async () => {

@@ -12,7 +12,7 @@ import type { PanelRefusal } from "./api.js";
 import { BoardView, type BoardViewProps } from "./BoardView.js";
 import { controlGet, nextCommandId, refusalFromAnswer, sendControlCommand } from "./controlApi.js";
 import type { FlowListV1, FlowSettingsReadV1, FlowTemplateParamV1, FlowTemplatesV1 } from "./controlTypes.js";
-import { FolderImagePicker } from "./FolderImagePicker.js";
+import { FolderImagePicker, LIST_DELAY_MS } from "./FolderImagePicker.js";
 import { currentLanguage } from "./i18n.js";
 import { FlowRunPage } from "./FlowRunPage.js";
 import { Refusal } from "./Refusal.js";
@@ -91,7 +91,7 @@ function typed(param: FlowTemplateParamV1, value: ParamValue): ParamValue | null
  * absolute. Start sends `flow-start` and, on success, opens the new run; a refusal stays in the dialog. Cancel and Escape
  * close it and send nothing.
  */
-function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClose: () => void; /** Task 10-B fix I2: the board's project. */ projectId: string | null }): JSX.Element {
+function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClose: () => void }): JSX.Element {
   const { t } = useTranslation();
   const [templates, setTemplates] = useState<Template[] | null | "failed">(null);
   const [presets, setPresets] = useState<FlowSettingsReadV1["paramDefaults"] | "unread">({});
@@ -111,16 +111,26 @@ function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClos
         setTemplateId((current) => current !== "" ? current : answer.templates[0]?.id ?? "");
       } catch { setTemplates("failed"); }
     })();
-    // Task 10-B fix I2: a start from a project's board names that project, so its presets are the project's over the
-    // global ones (kernel.ts startFlowRun, flowLayers(store, projectId)); from "all projects", the global layer's.
-    void (async () => {
-      try {
-        const read = await controlGet<FlowSettingsReadV1>(props.projectId === null ? "/api/control/flows/settings" : `/api/control/flows/settings?repoId=${encodeURIComponent(props.projectId)}`);
-        if (typeof read?.paramDefaults !== "object" || read.paramDefaults === null) throw new TypeError("flow-settings-shape");
-        setPresets(read.paramDefaults);
-      } catch { setPresets("unread"); }
-    })();
-  }, [props.projectId]);
+  }, []);
+  // Task 10-B fix round 2 (controller's corrected ruling): the start names no project -- the server derives it from the
+  // folder (flowCommands.ts registeredDirProject) -- so the presets shown are those of the folder's dir project over the
+  // global ones, read with `?dir=` by the same resolver; before a folder is chosen, the global layer's. Re-read when
+  // the folder changes, after a pause; an answer for an older folder is dropped.
+  const folder = dir.trim();
+  useEffect(() => {
+    let live = true;
+    const path = folder.startsWith("/") ? `/api/control/flows/settings?dir=${encodeURIComponent(folder)}` : "/api/control/flows/settings";
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const read = await controlGet<FlowSettingsReadV1>(path);
+          if (typeof read?.paramDefaults !== "object" || read.paramDefaults === null) throw new TypeError("flow-settings-shape");
+          if (live) setPresets(read.paramDefaults);
+        } catch { if (live) setPresets("unread"); }
+      })();
+    }, folder.startsWith("/") ? LIST_DELAY_MS : 0);
+    return () => { live = false; clearTimeout(timer); };
+  }, [folder]);
   useEffect(() => {
     const escape = (event: KeyboardEvent): void => { if (event.key === "Escape") onClose(); };
     document.addEventListener("keydown", escape);
@@ -146,7 +156,7 @@ function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClos
       setRefusal(null); setSending(true);
       try {
         const answer = await sendControlCommand("/api/control/flows", { commandId: nextCommandId(), expectedRevision: 0, payload: {
-          template: template!.id, dir: dir.trim(), params, ...(props.projectId === null ? {} : { projectId: props.projectId }), ...(unattended ? { unattended: true } : {}),
+          template: template!.id, dir: dir.trim(), params, ...(unattended ? { unattended: true } : {}),
         } });
         if (answer.kind === "uncertain") { setRefusal({ status: null, code: "command-outcome-unknown", message: t("panelErrors.noOutcome") }); return; }
         if (answer.status >= 400) { setRefusal(refusalFromAnswer(answer)); return; }
@@ -207,7 +217,7 @@ export function FlowBoard(props: BoardViewProps): JSX.Element {
   const toolbar = (
     <>
       <button type="button" className={starting ? undefined : "btn-primary"} aria-haspopup="dialog" aria-expanded={starting} onClick={() => setStarting(true)}>{t("flow.start.title")}</button>
-      {starting && <FlowStartDialog projectId={props.scope.kind === "project" ? props.scope.repoId : null} onStarted={(flowRunId) => { setStarting(false); setOpen(flowRunId); }} onClose={closeStart} />}
+      {starting && <FlowStartDialog onStarted={(flowRunId) => { setStarting(false); setOpen(flowRunId); }} onClose={closeStart} />}
     </>
   );
   return <BoardView {...props} flows={flows} onOpenFlow={setOpen} toolbar={toolbar} />;

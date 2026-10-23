@@ -1,6 +1,6 @@
 import { readRunResults, readGroupResults } from './taskResults.js';
 import { readFlowJournal, readFlowList, readFlowRun } from "../flow/views.js";
-import { asFlowControlError } from "../flow/flowCommands.js";
+import { asFlowControlError, dirProjectOf } from "../flow/flowCommands.js";
 import { readResultOutputBytes } from './taskResultOutputs.js';
 import { readControlOverview } from "./controlOverview.js";
 import { readGroupDecisionsView } from "./groupDecisions.js";
@@ -44,6 +44,8 @@ export interface ControlReadApiDeps {
   epoch: string;
   config: Pick<TrustedControlConfig, "readView">;
   service?: WebControlService;
+  /** Gaps plan Task 10-B fix round 2: the registered dir projects (default: the service's `flowProjects`). */
+  flowProjects?: () => ReadonlyArray<{ repoId: string; path: string }>;
   /** Agent selection spec §6.8 (W6-10): the reads that ask ccloop about agents. Absent, those routes 404. */
   port?: Pick<ExecutionPort, "listAgents" | "resolveAgent" | "listModels" | "refreshAgentVersions">;
 }
@@ -313,14 +315,34 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   });
   // Flow engine spec §11.2, §14.2: the effective flow settings, each field with its source layer and lock; `?repoId=` for
   // a project, none for the global layer alone. A read.
-  app.get("/api/control/flows/settings", (req, res) => {
+  app.get("/api/control/flows/settings", asyncRoute(async (req, res) => {
+    // Gaps plan Task 10-B fix round 2: `?dir=` reads the settings of the dir project that folder is -- resolved by the
+    // start's own resolver (flowCommands.ts dirProjectOf) -- else the global layer alone, so the start dialog shows the
+    // presets a start on that folder applies. It tells whether a path is a registered project, so like the folder
+    // image list it is served to the Web only and refused to a run Orca dispatched.
+    if (req.query.dir !== undefined) {
+      const dir = req.query.dir;
+      if (channel !== "web") { sendControlError(res, 404, "route-not-found", "flows/settings?dir= is served to the Web UI only."); return; }
+      const principal = res.locals.orcaPrincipal as Principal | undefined;
+      if (principal?.kind === "agent" && principal.dispatchedRun !== undefined) {
+        sendControlError(res, 403, "control-dispatched-run-refused", `reading a folder's project is not done by a run Orca dispatched (${principal.dispatchedRun}); a person does it, from the Web UI.`);
+        return;
+      }
+      if (typeof dir !== "string" || !dir.startsWith("/") || req.query.repoId !== undefined) {
+        sendControlError(res, 400, "query-invalid", "dir must be an absolute folder, and is not given with repoId");
+        return;
+      }
+      try { res.json(readFlowSettings(deps.store, await dirProjectOf(deps.flowProjects?.() ?? deps.service?.deps.flowProjects?.() ?? [], dir))); }
+      catch (error) { sendMappedControlError(res, error); }
+      return;
+    }
     const repoId = typeof req.query.repoId === "string" ? req.query.repoId : null;
     if (repoId !== null && (!idSchema.safeParse(repoId).success || !deps.service?.repositoryKnown(repoId))) {
       sendControlError(res, 404, "control-target-not-allowed", "No trusted repository has this id.");
       return;
     }
     try { res.json(readFlowSettings(deps.store, repoId)); } catch (error) { sendMappedControlError(res, error); }
-  });
+  }));
   // Gaps spec §8.4 (plan Task 10-B): the start dialog's reads -- the built-in templates with their params, and the image
   // files of a folder for an `image` param's picker (excludes applied, at most FOLDER_IMAGE_LIMIT). Reads.
   const builtinRoot = (): string | undefined => deps.service?.deps.flowDeps?.()?.builtinRoot;

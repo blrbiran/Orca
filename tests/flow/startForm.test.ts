@@ -15,7 +15,12 @@ import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
 import { FOLDER_ENTRY_LIMIT, FOLDER_IMAGE_LIMIT, FOLDER_LIST_MS, listFolderImages, readBuiltinTemplates } from "../../src/flow/startForm.js";
 import { registerControlReadRoutes } from "../../src/panel/controlApi.js";
-import { openControlStore } from "../../src/control/store.js";
+import { openControlStore, type ControlStore } from "../../src/control/store.js";
+import { orchestrationRevision, writeOrchestrationSettings } from "../../src/control/orchestration.js";
+import { WebControlService } from "../../src/control/webService.js";
+import { readRepositorySettingsBody, writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
+import { getFlowRun } from "../../src/flow/store.js";
+import { flowWorld } from "./fixtures/flowWorld.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => { for (const c of cleanups.splice(0).reverse()) await c(); });
@@ -131,5 +136,72 @@ describe("the start dialog's routes (§8.4)", () => {
     for (let i = 0; i <= FOLDER_ENTRY_LIMIT; i++) writeFileSync(join(big, `f${i}`), "");
     // mutation: map every failure to query-invalid -> "query-invalid", red
     expect(await get(`/api/control/flows/images?dir=${encodeURIComponent(big)}&template=wechat-article`)).toMatchObject({ status: 400, body: { error: { code: "flow-folder-too-large" } } });
+  });
+});
+
+/**
+ * Task 10-B fix round 2 (the controller's corrected ruling): the start names no project -- the server derives it from
+ * the folder (flowCommands.ts registeredDirProject) -- and the dialog's presets read `?dir=` resolves the same folder's
+ * dir project by the same resolver (dirProjectOf), so what the dialog shows is what the start applies.
+ */
+describe("the folder's project presets (Task 10-B fix round 2)", () => {
+  const TPL = { yaml: "format: orca-flow-v1\nid: t\nparams:\n  tone: {type: text, default: plain}\nworkspace: {kind: dir}\nsteps:\n  - {id: write, kind: draft, prompt: p.md}\n", assets: { "p.md": "Write.\n" } };
+  const global = (store: ControlStore, flows: Record<string, unknown>) => store.transaction(() => writeOrchestrationSettings(store, { maxRunningGroups: 3, flows } as never, orchestrationRevision(store) + 1));
+  const project = (store: ControlStore, repoId: string, flows: Record<string, unknown>) => store.transaction(() => writeRepositorySettingsBody(store, repoId, { workspaceMode: "worktree", revision: (readRepositorySettingsBody(store, repoId)?.revision ?? 0) + 1, flows } as never));
+
+  it("reads the folder's dir project presets over the global ones, which the start then applies; another folder reads the global layer", async () => {
+    const w = await flowWorld({ t: TPL });
+    cleanups.push(() => w.dispose());
+    const projects = [{ repoId: "posts-1a2b3c4d", path: w.folder }];
+    global(w.store, { paramDefaults: { t: { tone: "global" } } });
+    project(w.store, "posts-1a2b3c4d", { paramDefaults: { t: { tone: "project" } } });
+    const elsewhere = join(w.root, "elsewhere");
+    mkdirSync(elsewhere);
+    const app = express();
+    registerControlReadRoutes(app, { store: w.store, epoch: "epoch", config: { readView: async () => ({}) } as never, flowProjects: () => projects }, "web");
+    const server = createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+    const tone = async (query: string) => {
+      const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/control/flows/settings${query}`);
+      const body = await response.json() as { paramDefaults?: Record<string, Record<string, { value: unknown; source: string }>>; error?: { code: string } };
+      return response.status === 200 ? body.paramDefaults!.t!.tone : [response.status, body.error?.code];
+    };
+    // mutation: resolve nothing from dir (always the global layer) -> source global, red
+    expect(await tone(`?dir=${encodeURIComponent(w.folder)}`)).toEqual({ value: "project", source: "project", lockedBy: null });
+    expect(await tone(`?dir=${encodeURIComponent(join(w.folder, "."))}`)).toEqual({ value: "project", source: "project", lockedBy: null });
+    expect(await tone(`?dir=${encodeURIComponent(elsewhere)}`)).toEqual({ value: "global", source: "global", lockedBy: null });
+    expect(await tone(`?dir=${encodeURIComponent(join(w.root, "missing"))}`)).toEqual({ value: "global", source: "global", lockedBy: null });
+    expect(await tone("?dir=relative")).toEqual([400, "query-invalid"]);
+    expect(await tone(`?dir=${encodeURIComponent(w.folder)}&repoId=posts-1a2b3c4d`)).toEqual([400, "query-invalid"]);
+    // The start on that folder, with no projectId, applies the same project preset.
+    const service = new WebControlService({ store: w.store, port: {} as never, profileRouter: {} as never, trustedConfig: {} as never, flowDeps: () => w.deps, flowProjects: () => projects } as never);
+    const started = await service.flowCommand({ schema: "orca-raw-command-v1", commandId: "start-presets", actorId: "owner", expectedRevision: 0, verb: "flow-start", target: { kind: "flows" },
+      payload: { template: "t", dir: w.folder, params: {} } } as never) as { result?: { flowRunId: string }; error?: unknown };
+    expect(started.error).toBeUndefined();
+    const body = getFlowRun(w.store, started.result!.flowRunId)!.body as { projectId: string | null; params: Record<string, unknown> };
+    expect(body).toMatchObject({ projectId: "posts-1a2b3c4d", params: { tone: "project" } });
+  });
+
+  it("serves ?dir= to the Web only, and refuses it to a run Orca dispatched", async () => {
+    const root = tempRoot();
+    const store = await openControlStore({ stateDir: join(root, "control") });
+    cleanups.push(() => store.close());
+    const serve = async (channel: "web" | "socket", principal: unknown) => {
+      const app = express();
+      app.use((_req, res, next) => { res.locals.orcaPrincipal = principal; next(); });
+      registerControlReadRoutes(app, { store, epoch: "epoch", config: { readView: async () => ({}) } as never, flowProjects: () => [{ repoId: "posts-1", path: root }] }, channel);
+      const server = createServer(app);
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/control/flows/settings?dir=${encodeURIComponent(root)}`);
+        return [response.status, ((await response.json()) as { error?: { code: string } }).error?.code ?? "ok"];
+      } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
+    };
+    // mutation: serve ?dir= on the socket -> 200, red
+    expect(await serve("socket", { kind: "agent", client: "cli:claude" })).toEqual([404, "route-not-found"]);
+    // mutation: drop the dispatched-run check -> 200, red
+    expect(await serve("web", { kind: "agent", client: "cli:claude", dispatchedRun: "run-1" })).toEqual([403, "control-dispatched-run-refused"]);
+    expect(await serve("web", { kind: "user", userId: "u1", name: "o", roles: ["owner"] })).toEqual([200, "ok"]);
   });
 });
