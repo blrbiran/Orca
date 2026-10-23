@@ -40,7 +40,8 @@ it("imports advisory forecasts without authoring a cumulative task or group ceil
   expect(proposal.allocations.find(a=>a.ownerId==="a"&&a.bucket==="work")!.amount.tokens).toBeNull();
   expect(group.reserved.tokens).toBe(ESTIMATE_GRANT.tokens+GOAL_REVIEW.tokens);
   expect(work.grant.handoff).toEqual(TASK_HANDOFF);
-  expect(group.reserved.activeMs).toBe(20_700_000);
+  // Tester round 2 (ruling H2, spec §5.2.2, §16.2; 「这次批准改写所有必要的判据」): the queued estimate reserves the cap's 1,800,000 ms (was 900,000).
+  expect(group.reserved.activeMs).toBe(21_600_000);
  }finally{await h.dispose();}
 });
 
@@ -102,7 +103,8 @@ it("edits a task ceiling finite then unlimited without changing its finite usage
  for(const value of [500,null]) {
   const result=service.editProposal(h.command("proposal-edit",{baseProposalVersion:readBudgetProposal(h.store,"g").proposalVersion,operations:[{target:{scope:"task",taskId:"a",allocation:"work",dimension:"tokens"},value,provenance:"human"}]} as never));
   expect(result).not.toHaveProperty("error");expect(readWork(h.store,"g","a").grant.work.tokens).toBe(value);
-  expect(readGroup(h.store,"g").reserved.tokens).toBe(1_250_000);
+  // Tester round 2 (ruling H2, spec §5.2.2, §16.2; 「这次批准改写所有必要的判据」): review 1,000,000 + the estimate's 1,000,000-token cap.
+  expect(readGroup(h.store,"g").reserved.tokens).toBe(2_000_000);
  }
  }finally{await h.dispose();}
 });
@@ -155,7 +157,8 @@ it("an explicit pre-start task ceiling removal converts only mutable funding boo
   const service=new WebControlService(h.deps);
   expect(service.editProposal(h.command("proposal-edit",{baseProposalVersion:1,operations:[{target:{scope:"task",taskId:"a",allocation:"work",dimension:"tokens"},value:null,provenance:"human"}]}))).not.toHaveProperty("error");
   expect(readWork(h.store,"g","a").grant.work.tokens).toBeNull();
-  expect(readGroup(h.store,"g").reserved.tokens).toBe(1_250_000);
+  // Tester round 2 (ruling H2, spec §5.2.2, §16.2; 「这次批准改写所有必要的判据」): review 1,000,000 + the estimate's 1,000,000-token cap.
+  expect(readGroup(h.store,"g").reserved.tokens).toBe(2_000_000);
  }finally{await h.dispose();}
 });
 

@@ -10,7 +10,7 @@ import { lookupCommandResult } from "../../src/control/commandLedger.js";
 import { collectDebugInput, DEBUG_INPUT_SCHEMA, type DebugInputV1 } from "../../src/control/debugInput.js";
 import { archiveUnstartedDebugGroups, debugGroupIdFor, debugGroupIds, liveDebugGroups, readDebugMark } from "../../src/control/debugGroup.js";
 import { ControlError, durableCommandErrorStatuses } from "../../src/control/errors.js";
-import { ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK } from "../../src/control/estimator.js";
+import { GOAL_REVIEW, TASK_HANDOFF, TASK_WORK } from "../../src/control/estimator.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
 import { newGroupIntegration } from "../../src/control/integrationScheme.js";
 import { insertPendingDecisions } from "../../src/control/pendingDecisions.js";
@@ -204,8 +204,10 @@ describe("correction-debug-open (debug task Task 6)", () => {
       // The non-queued reserve: the goal review and the one task, no estimate grant.
       const committed = (w.body(gid).ledger as { committedRemaining: Record<string, number> }).committedRemaining;
       expect(committed.tokens).toBe(GOAL_REVIEW.tokens);
+      // Tester round 2 (spec §16.2, Rule 9 consequence 2; 「这次批准改写所有必要的判据」): the `.not.toBe(… + ESTIMATE_GRANT…)`
+      // that followed could never be red on its own (the exact value above is pinned first); deleted. "No estimate grant
+      // reserved" is measured by the 0 estimate rows above and this exact committed value.
       expect(committed.activeMs).toBe(GOAL_REVIEW.activeMs + TASK_WORK.activeMs + TASK_HANDOFF.activeMs);
-      expect(committed.activeMs).not.toBe(GOAL_REVIEW.activeMs + TASK_WORK.activeMs + TASK_HANDOFF.activeMs + ESTIMATE_GRANT.activeMs);
     } finally { await w.dispose(); }
   });
 

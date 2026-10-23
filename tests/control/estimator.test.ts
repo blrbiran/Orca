@@ -12,7 +12,8 @@ import { webFixture, profileSnapshot } from "./fixtures/web.js";
 
 describe("frozen estimator", () => {
   it("builds the five-task complex-1m ledger exactly and rejects aggregate overflow", () => {
-    expect(complex1mDefaults(5)).toEqual({ base: { tokens: 17750000, activeMs: 85500000, attempts: 17, sessions: 17 }, reserve: { tokens: 3550000, activeMs: 17100000, attempts: 4, sessions: 4 }, limit: { tokens: 21300000, activeMs: 102600000, attempts: 21, sessions: 21 } });
+    // Tester round 2 (ruling H2, spec §5.2.2, §16.2; 「这次批准改写所有必要的判据」): ESTIMATE_GRANT is now the 1,000,000-token / 30-minute cap.
+    expect(complex1mDefaults(5)).toEqual({ base: { tokens: 18500000, activeMs: 86400000, attempts: 17, sessions: 17 }, reserve: { tokens: 3700000, activeMs: 17280000, attempts: 4, sessions: 4 }, limit: { tokens: 22200000, activeMs: 103680000, attempts: 21, sessions: 21 } });
     expect(() => complex1mDefaults(Number.MAX_SAFE_INTEGER)).toThrow("numeric-overflow");
   });
   it("claims an explicitly soft estimate when its unchanged declaration has no proof", async () => {
@@ -55,7 +56,9 @@ describe("frozen estimator", () => {
       expect(result).toMatchObject({ result: { kind: "estimate-created", estimateState: "queued", estimateVersion: 2 } });
       expect(lookupCommandResult(h.store, "g", command.commandId)?.originalStatus).toBe(202);
       expect(await service.createEstimate(command)).toEqual(result);
-      expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! - 250000);
+      // Tester round 2 (ruling H2, spec §5.2.2, §16.2; 「这次批准改写所有必要的判据」): the reserve holds more than the cap, so the grant reserved is the 1,000,000-token cap.
+      expect(readEstimateRecord(h.store, "g", (result as { result: { estimateId: string } }).result.estimateId).grant.tokens).toBe(1_000_000);
+      expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! - 1_000_000);
       h.setObserved({ ...h.frozen.snapshot.profile.capabilities, contextWindowTokens: 999999 });
       // Spec correction 2026-10-20: the newer estimate is claimed (the import's v1 is now superseded and would be withdrawn).
       const newer = (result as { result: { estimateId: string } }).result.estimateId;
@@ -76,7 +79,8 @@ describe("frozen estimator", () => {
       h.setObserved({ ...h.frozen.snapshot.profile.capabilities, handoffExecution });
       expect(await service.claimEstimate("g", h.estimateId)).toBeNull();
       expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: "blocked-capability", reasonCode: "estimate-capability-degraded" });
-      expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! + 250000);
+      // Tester round 2 (ruling H2, spec §5.2.2, §16.2; 「这次批准改写所有必要的判据」): the import's grant returned is the 1,000,000-token cap.
+      expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! + 1_000_000);
       expect(h.store.db.prepare("SELECT count(*) AS n FROM runs").get()!.n).toBe(0);
       expect(h.store.db.prepare("SELECT count(*) AS n FROM outbox WHERE kind='estimate-claim'").get()!.n).toBe(0);
     } finally { await h.dispose(); }
@@ -100,7 +104,8 @@ describe("frozen estimator", () => {
       expect(readEstimateRecord(h.store, "g", h.estimateId)).toMatchObject({ state: invalid ? "failed" : "ready", outputHash: invalid ? null : sha256Canonical(output) });
       const after = readBudgetProposal(h.store, "g");
       expect(after.allocations.filter(a => a.ownerKind !== "reserve")).toEqual(before.allocations.filter(a => a.ownerKind !== "reserve"));
-      expect(after.explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! + 250000);
+      // Tester round 2 (ruling H2, spec §5.2.2, §16.2; 「这次批准改写所有必要的判据」): the unspent grant returned is the 1,000,000-token cap.
+      expect(after.explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! + 1_000_000);
       service.completeEstimate("g", h.estimateId, output);
       expect(readBudgetProposal(h.store, "g")).toEqual(after);
       expect(h.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision).toBe(revision);
@@ -221,7 +226,8 @@ describe("frozen estimator", () => {
       // keeps this criterion about the refund alone: only the settled remainder returns to the reserve.
       service.completeEstimate("g", h.estimateId, null);
       expect(readEstimateRecord(h.store, "g", h.estimateId).retriedAs).toBeUndefined();
-      expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! + 249000);
+      // Tester round 2 (ruling H2, spec §5.2.2, §16.2; 「这次批准改写所有必要的判据」): the settled remainder is the 1,000,000-token cap less the 1,000 used.
+      expect(readBudgetProposal(h.store, "g").explicitUnallocatedReserve.tokens).toBe(before.explicitUnallocatedReserve.tokens! + 999_000);
       expect(readControlGroup(h.store, "epoch", "g").ledger.used.tokens).toBe(1000);
     } finally { await h.dispose(); }
   });

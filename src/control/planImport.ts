@@ -20,10 +20,10 @@ import {
 import { writeCanonicalRecord } from "./snapshot.js";
 import { newGroupIntegration, readIntegrationDefault } from "./integrationScheme.js";
 import { commandPrincipalFor } from "./commandClient.js";
-import { AgentCeilingRefusal, spendCapBlocking } from "./spendCaps.js";
+import { AgentCeilingRefusal, capStatuses, spendCapBlocking } from "./spendCaps.js";
 import { readSchedulerControlPlanSource, type SchedulerControlPlanSource } from "../scheduler/planFile.js";
 import type { TrustedControlConfig } from "../panel/controlConfig.js";
-import { buildBudgetEstimateRequest, persistEstimateArtifacts, TASK_WORK, TASK_HANDOFF, GOAL_REVIEW, ESTIMATE_GRANT, type FrozenEstimateRequest } from "./estimator.js";
+import { buildBudgetEstimateRequest, estimateGrantFor, persistEstimateArtifacts, withEstimateGrant, TASK_WORK, TASK_HANDOFF, GOAL_REVIEW, ESTIMATE_GRANT, type FrozenEstimateRequest } from "./estimator.js";
 
 export type AllowlistedPlanSource = SchedulerControlPlanSource & { repoId: string; planId: string };
 export type ImportCommand = Extract<RawAuthorityCommandV1, { verb: "import-plan" }>;
@@ -290,6 +290,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   const preflight = deferred ? null : estimatorProfile === null ? rejectedEstimatorRequest("control-estimator-unconfigured") : deps.estimatorSlot.kind === "rejected"
     ? rejectedEstimatorRequest(deps.estimatorSlot.code)
     : preflightEstimate(deps, planHash, planCanonicalJson, estimatorProfile, input.estimateMode);
+  let preflightFrozen = preflight;
   const estimateId = deferred ? null : `estimate-${sha256Canonical({ groupId: input.groupId, planHash, version: 1 }).slice(0, 24)}`;
   const queued = preflight?.state === "queued";
   const legacyCarry=carry!==null&&!hasTokenPolicy(deps.store,input.groupId);
@@ -314,8 +315,18 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   const limit:BudgetAmount = {...checkedAdd(groupLimit, used),tokens:stripped!==null?groupLimit.tokens:carry===null?null:legacyCarry?checkedAdd(groupLimit,used).tokens:(carry.existingBody.limit as BudgetAmount).tokens};
   let committedRemaining = checkedAdd(reviewAmount, zero());
   for (const _task of plan.tasks) committedRemaining = checkedAdd(committedRemaining, stripped === null ? checkedAdd(TASK_WORK, TASK_HANDOFF) : TASK_WORK);
-  if (queued) committedRemaining = checkedAdd(committedRemaining, ESTIMATE_GRANT);
-  if(!legacyCarry)committedRemaining.tokens=reviewAmount.tokens+(queued?ESTIMATE_GRANT.tokens:0);
+  if(!legacyCarry)committedRemaining.tokens=reviewAmount.tokens;
+  // Tester round 2 spec §5.2.3: the queued estimate's grant from the group's remaining tokens before it (a limited group
+  // with none left refuses, D3) and the binding cap's headroom; the contract is re-frozen with it.
+  let estimateGrant: Amount = cloneAmount(ESTIMATE_GRANT);
+  if (queued) {
+    const remainingTokens = limit.tokens === null ? null : limit.tokens - used.tokens - committedRemaining.tokens;
+    if (remainingTokens !== null && remainingTokens <= 0) throw new ControlError("group-budget-unavailable");
+    const capHeadroom = capStatuses(deps.store, input.repoId, input.at ?? Date.now())[0]?.headroom ?? null;
+    estimateGrant = estimateGrantFor({ limitTokens: limit.tokens, remainingTokens, capHeadroom, requiredRequestTokens: preflight!.requiredRequestTokens! });
+    preflightFrozen = withEstimateGrant(preflight!, estimateGrant);
+    committedRemaining = checkedAdd(committedRemaining, estimateGrant);
+  }
   explicitUnallocatedReserve.tokens=limit.tokens===null?null:limit.tokens-used.tokens-committedRemaining.tokens;
   if(explicitUnallocatedReserve.tokens!==null&&explicitUnallocatedReserve.tokens<0)throw new ControlError("group-budget-unavailable");
   const allocations = [
@@ -375,23 +386,24 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   };
   deps.store.db.prepare("INSERT INTO budget_proposals(group_id,proposal_version,body) VALUES (?,?,?)")
     .run(input.groupId, 1, canonicalBytes(proposal).toString("utf8"));
-  if (preflight === null || estimateId === null) return { estimateId: null, preflight: null };
+  if (preflightFrozen === null || estimateId === null) return { estimateId: null, preflight: null };
+  const frozen = preflightFrozen;
   const estimate = {
-    estimateId, estimateVersion: 1, state: preflight.state,
+    estimateId, estimateVersion: 1, state: frozen.state,
     profile: estimatorProfile === null ? null : { profileId: input.estimatorProfileId, profileHash: input.estimatorProfileHash }, mode: input.estimateMode,
-    requestHash: preflight.requestHash, request: preflight.request, outputHash: null, output: null, reasonCode: preflight.reasonCode,
-    ...(preflight.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: preflight.compatibilityReasonCodes }),
-    grant: cloneAmount(ESTIMATE_GRANT), estimatorSlot, proposalVersion: 1,
+    requestHash: frozen.requestHash, request: frozen.request, outputHash: null, output: null, reasonCode: frozen.reasonCode,
+    ...(frozen.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: frozen.compatibilityReasonCodes }),
+    grant: estimateGrant, estimatorSlot, proposalVersion: 1,
   };
   deps.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)")
-    .run(input.groupId, estimateId, 1, preflight.state, canonicalBytes(estimate).toString("utf8"));
-  persistEstimateArtifacts(deps.store, input.groupId, estimateId, preflight);
+    .run(input.groupId, estimateId, 1, frozen.state, canonicalBytes(estimate).toString("utf8"));
+  persistEstimateArtifacts(deps.store, input.groupId, estimateId, frozen);
   if (queued) {
     const wakeId = `scheduler-wake:${input.groupId}:estimate:${estimateId}`;
     deps.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?, 'budget-estimate', ?, 0)")
       .run(wakeId, input.groupId, JSON.stringify({ groupId: input.groupId, estimateId, planHash }));
   }
-  return { estimateId, preflight };
+  return { estimateId, preflight: frozen };
 }
 
 export function importControlPlan(deps: ImportDeps, command: ImportCommand): ImportResult {

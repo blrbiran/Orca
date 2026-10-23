@@ -16,7 +16,23 @@ import { budgetEstimateRequestSchema, budgetEstimateSchema, controlPlanSchema, e
 export const TASK_WORK: Amount = Object.freeze({ tokens: 3_000_000, activeMs: 14_400_000, attempts: 3, sessions: 3 });
 export const TASK_HANDOFF: Amount = Object.freeze({ tokens: 300_000, activeMs: 1_800_000, attempts: 0, sessions: 0 });
 export const GOAL_REVIEW: Amount = Object.freeze({ tokens: 1_000_000, activeMs: 3_600_000, attempts: 1, sessions: 1 });
-export const ESTIMATE_GRANT: Amount = Object.freeze({ tokens: 250_000, activeMs: 900_000, attempts: 1, sessions: 1 });
+/**
+ * Tester round 2 spec §5.2.2 (ruling H2): the estimate grant's cap -- 1,000,000 tokens / 30 minutes. It is no longer the
+ * preflight's input bound (the model's context window is); an estimate's own grant is `estimateGrantFor`.
+ */
+export const ESTIMATE_GRANT: Amount = Object.freeze({ tokens: 1_000_000, activeMs: 1_800_000, attempts: 1, sessions: 1 });
+/**
+ * Spec §5.2.2: an estimate's grant. Tokens: the cap, the group's remaining tokens in a limited group, and the binding
+ * spend cap's headroom -- that last term only when it covers the request (controller, round 2 N4), so the estimate runs
+ * now instead of waiting; a smaller headroom is left out and the claim gate holds the estimate as before. The other
+ * dimensions are the cap's in every group. A breach past the grant is advice only (§5.2.5).
+ */
+export function estimateGrantFor(input: { limitTokens: number | null; remainingTokens: number | null; capHeadroom: number | null; requiredRequestTokens: number }): Amount {
+  let tokens = ESTIMATE_GRANT.tokens;
+  if (input.limitTokens !== null && input.remainingTokens !== null) tokens = Math.min(tokens, Math.max(input.remainingTokens, 0));
+  if (input.capHeadroom !== null && input.capHeadroom >= input.requiredRequestTokens) tokens = Math.min(tokens, input.capHeadroom);
+  return { ...ESTIMATE_GRANT, tokens };
+}
 export const safeNumber = (value: bigint): number => {
   if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) throw new ControlError("numeric-overflow");
   return Number(value);
@@ -118,9 +134,19 @@ export function buildBudgetEstimateRequest(input: EstimateInput): FrozenEstimate
   const contract = estimateExecutionContractSchema.parse({ schema: "orca-estimate-execution-contract-v1", requestHash, grant: ESTIMATE_GRANT,
     profile: request.estimatorProfile, estimatorCapabilities: request.estimatorCapabilities, instructionVersion: preflight.instructionVersion,
     responseSchemaVersion: preflight.schemaVersion, tokenizer: preflight.tokenizer, framingTokenOverhead: preflight.framingTokenOverhead, maxOutputTokens: bound });
-  const tooLarge = requiredRequestTokens > observed.contextWindowTokens || requiredRequestTokens > ESTIMATE_GRANT.tokens;
+  // Tester round 2 spec §5.2.1: the input bound is the selected model's context window, and nothing else.
+  const tooLarge = requiredRequestTokens > observed.contextWindowTokens;
   return { state: tooLarge ? "input-too-large" : "queued", reasonCode: tooLarge ? "estimate-input-too-large" : null,
     request, requestHash, contract, contractHash: sha256Canonical(contract), inputTokens, requiredRequestTokens };
+}
+/**
+ * Spec §5.2.3: the grant an estimate is queued with is decided where it is reserved (the group's remaining tokens and the
+ * cap headroom, read in that transaction); this re-freezes the prepared contract with it.
+ */
+export function withEstimateGrant(prepared: FrozenEstimateRequest, grant: Amount): FrozenEstimateRequest {
+  if (prepared.contract === null) return prepared;
+  const contract = estimateExecutionContractSchema.parse({ ...prepared.contract, grant });
+  return { ...prepared, contract, contractHash: sha256Canonical(contract) };
 }
 export function estimateCapabilityDegraded(request: BudgetEstimateRequestV1, observation: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">, mode: "strict" | "soft" = "strict"): boolean {
   return estimateCapabilityDegradationReasons(request, observation, mode).length > 0;

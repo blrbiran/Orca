@@ -53,7 +53,9 @@ export function decideEstimateRetry(input: RetryInput): RetryDecision {
   if (dimensions.some(d => group.ledger.budgetDeficit[d] !== 0)) return skip("budget-deficit");
   if (group.ledger.usageUnknown) return skip("usage-unknown");
   if (input.dispatchBlocked) return skip("dispatch-blocked");
-  if (dimensions.some(d => { const left = input.reserveAfterSettlement[d]; return left !== null && left < ESTIMATE_GRANT[d]; })) return skip("reserve-insufficient");
+  // Tester round 2 spec §5.2.3: the retry's grant follows the reserve in tokens (estimateGrantFor), so only a finite
+  // non-token dimension below the cap's, or a limited group's token reserve of 0, rules it out.
+  if (dimensions.some(d => { const left = input.reserveAfterSettlement[d]; return left !== null && (d === "tokens" ? left <= 0 : left < ESTIMATE_GRANT[d]); })) return skip("reserve-insufficient");
   if (estimate.proposalVersion === undefined) return skip("proposal-unknown");
   if (estimate.proposalVersion !== input.proposalVersion) return skip("proposal-changed");
   if (input.newestEstimateVersion > estimate.estimateVersion) return skip("superseded");
@@ -71,16 +73,22 @@ export function decideEstimateRetry(input: RetryInput): RetryDecision {
  * same arithmetic as buildBudgetEstimateRequest's queue-time check.
  */
 export function retryPromptFits(contract: EstimateExecutionContractV1, request: BudgetEstimateRequestV1, problems: readonly string[]): boolean {
-  if (contract.tokenizer.kind !== "utf8-upper-bound") return false;
+  const required = retryPromptRequired(contract, request, problems);
+  // Tester round 2 spec §5.2.1: the window bounds the input; the grant does not.
+  return required !== null && required <= BigInt(contract.estimatorCapabilities.contextWindowTokens);
+}
+
+/** The retry request's input + output bound in tokens (the `required` of the size re-check), or null when it cannot be sized. */
+export function retryPromptRequired(contract: EstimateExecutionContractV1, request: BudgetEstimateRequestV1, problems: readonly string[]): bigint | null {
+  if (contract.tokenizer.kind !== "utf8-upper-bound") return null;
   // Final-review M4: estimateTaskIds parses the request's plan snapshot; a snapshot it cannot read must not throw inside
   // the settlement's decision, so it counts as a prompt that does not fit (`input-too-large`).
   let taskIds: string[];
-  try { taskIds = estimateTaskIds(request); } catch { return false; }
+  try { taskIds = estimateTaskIds(request); } catch { return null; }
   const prompt = buildEstimatePrompt(contract.instructionVersion, canonicalBytes(request).toString("utf8"), { taskIds, retryProblems: problems });
   const { numerator, denominator } = contract.tokenizer;
   const serialized = (BigInt(Buffer.byteLength(prompt, "utf8")) * BigInt(numerator) + BigInt(denominator) - 1n) / BigInt(denominator);
-  const required = serialized + BigInt(contract.framingTokenOverhead) + BigInt(contract.maxOutputTokens);
-  return required <= BigInt(contract.estimatorCapabilities.contextWindowTokens) && required <= BigInt(ESTIMATE_GRANT.tokens);
+  return serialized + BigInt(contract.framingTokenOverhead) + BigInt(contract.maxOutputTokens);
 }
 
 /** Spec §4.3: the retry's id is derived from the failed estimate, so a replayed settlement names the same row. */
@@ -94,15 +102,15 @@ export function estimateRetryId(groupId: string, failedEstimateId: string): stri
  * `budget-estimate` wake. Called only after decideEstimateRetry said `retry`, inside the settlement transaction; the
  * caller reserves the grant. Not a command-ledger entry: the settlement's `estimate-result` receipt keeps it to one.
  */
-export function writeEstimateRetry(store: ControlStore, groupId: string, failed: EstimateRecord, contract: EstimateExecutionContractV1, problems: string[]): string {
+export function writeEstimateRetry(store: ControlStore, groupId: string, failed: EstimateRecord, contract: EstimateExecutionContractV1, problems: string[], grant: Amount): string {
   const estimateId = estimateRetryId(groupId, failed.estimateId);
   const max = Number(store.db.prepare("SELECT MAX(estimate_version) AS n FROM estimates WHERE group_id=?").get(groupId)?.n ?? 0);
   const estimateVersion = max + 1;
-  const retryContract = estimateExecutionContractSchema.parse({ ...contract, grant: ESTIMATE_GRANT, retryProblems: problems });
+  const retryContract = estimateExecutionContractSchema.parse({ ...contract, grant, retryProblems: problems });
   const estimate: EstimateRecord = {
     estimateId, estimateVersion, state: "queued", profile: failed.profile, mode: failed.mode,
     requestHash: failed.requestHash, request: failed.request, outputHash: null, output: null, reasonCode: null,
-    grant: { ...ESTIMATE_GRANT }, estimatorSlot: failed.estimatorSlot,
+    grant: { ...grant }, estimatorSlot: failed.estimatorSlot,
     ...(failed.proposalVersion === undefined ? {} : { proposalVersion: failed.proposalVersion }),
     origin: { kind: "auto-retry", of: failed.estimateId, problems: [...problems] },
   };

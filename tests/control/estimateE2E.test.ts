@@ -79,7 +79,9 @@ describe.skipIf(!realBinary)("the estimate chain against real ccloop and fake cl
       expect(estimateRun(runtime)!.active).toBe(0);
       expect(groupStopState(runtime.store, "g")).toBe("handoff-complete");
       const after = readControlGroup(runtime.store, runtime.epoch, "g").ledger;
-      expect(after.committedRemaining.tokens).toBe(atImport.committedRemaining.tokens - 250_000);
+      // Tester round 2 (ruling H2, spec §16.2; 「这次批准改写所有必要的判据」): the returned commitment is the estimate's own
+      // grant (estimateGrantFor), read from its row instead of the old fixed 250,000.
+      expect(after.committedRemaining.tokens).toBe(atImport.committedRemaining.tokens - readEstimateRecord(runtime.store, "g", estimateId).grant.tokens);
       expect(after.used.tokens).toBe(estimateRun(runtime)!.body.cumulative.work.tokens);
       expect(w.worktrees()).toEqual(worktreesBefore);
     } finally { await w.teardown(); }

@@ -14,7 +14,7 @@ import { applyWebCommand, lookupWebCommandReplay, preflightWebCommand, type WebC
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
-import { buildBudgetEstimateRequest, ESTIMATE_GRANT, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegradationReasons, classifyEstimateOutput, readEstimateContract, singleCallOutputBound } from "./estimator.js";
+import { buildBudgetEstimateRequest, ESTIMATE_GRANT, estimateGrantFor, withEstimateGrant, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegradationReasons, classifyEstimateOutput, readEstimateContract, singleCallOutputBound } from "./estimator.js";
 import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
@@ -28,7 +28,7 @@ import { agentSelectionSchema, amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
 import { budgetEstimateSchema, estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
 import { problemsFromRefusal, repairEstimateOutput } from "./estimateRepair.js";
-import { decideEstimateRetry, estimateRetryId, writeEstimateRetry } from "./estimateRetry.js";
+import { decideEstimateRetry, estimateRetryId, retryPromptRequired, writeEstimateRetry } from "./estimateRetry.js";
 import { parkEstimate } from "./estimateParking.js";
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, readStopIntent, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
@@ -88,7 +88,8 @@ import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./age
 import { applyAgentUpdate, hasPendingAgentUpdate, pendingAgentUpdateCommand, readAgentUpdateRevision, reconcilePendingAgentUpdates, type ApplyAgentUpdateCommand } from "./agentUpdates.js";
 import type { AgentObservation, AgentPreview } from "./agentInstallationProtocol.js";
 import { recordProjectionChange } from "./projectionJournal.js";
-import { claimCapBlocking, clearSpendCapBlock, gateClaim } from "./spendCaps.js";
+import { capStatuses, claimCapBlocking, clearSpendCapBlock, gateClaim } from "./spendCaps.js";
+import { groupRepoIdOf } from "./usageLedger.js";
 import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from "./labels.js";
 import { TASK_AMENDMENT_SCHEMA, effectivePlanTask, workBodyOf, writeTaskAmendment } from "./taskAmendments.js";
 import { expandLoopPlan, expandRecipe, normalizeLoopSkills, type LoopRecipe, type LoopSkills, type LoopTaskExpansion } from "./loopPlans.js";
@@ -329,6 +330,17 @@ function withdrawEstimate(store: ControlStore, groupId: string, group: Group, pr
  * against that limit -- its deficit by `budgetBalance`, which never throws -- in place of the two checks against the
  * stored limit, and before any other use of it, so a deficit an estimate overrun left cannot refuse the raise that cures it.
  */
+/**
+ * Tester round 2 spec §5.2.2-§5.2.4: a queued estimate's grant in `group`, read now -- the group's remaining tokens
+ * (`limit - used - committedRemaining`, before this grant is reserved) and the binding spend cap's headroom. A limited group
+ * with no token left refuses with group-budget-unavailable (writer's decision D3).
+ */
+export function estimateGrantInStore(store: ControlStore, group: { limit: BudgetAmount; used: Amount; reserved: Amount } & Record<string, unknown>, requiredRequestTokens: number, at: number): Amount {
+  const remainingTokens = group.limit.tokens === null ? null : group.limit.tokens - group.used.tokens - group.reserved.tokens;
+  if (remainingTokens !== null && remainingTokens <= 0) throw new ControlError("group-budget-unavailable");
+  const capHeadroom = capStatuses(store, groupRepoIdOf(group), at)[0]?.headroom ?? null;
+  return estimateGrantFor({ limitTokens: group.limit.tokens, remainingTokens, capHeadroom, requiredRequestTokens });
+}
 export function assertKnownConservation(store: ControlStore, group: Group, proposal: BudgetProposalRecord, proposedLimit?: BudgetAmount): void {
   if (store.dispatchBlocked || group.ledger.usageUnknown) throw new ControlError("recovery-blocked");
   for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=?").all(group.groupId)) {
@@ -571,14 +583,20 @@ export class WebControlService {
           this.deps.profileRouter.resolve("budget-estimate", command.payload.estimatorProfileId, command.payload.estimatorProfileHash);
           const estimateVersion = safeNumber(BigInt(Number(this.store.db.prepare("SELECT MAX(estimate_version) AS n FROM estimates WHERE group_id=?").get(id)?.n ?? 0)) + 1n);
           const estimateId = `estimate-${sha256Canonical({ groupId: id, planHash: proposal.planHash, version: estimateVersion }).slice(0, 24)}`;
+          let grant: Amount = ESTIMATE_GRANT;
           if (prepared.state === "queued") {
             assertKnownConservation(this.store, group, proposal);
-            group.ledger.committedRemaining = sumAmounts([group.reserved, ESTIMATE_GRANT]);
+            // Tester round 2 spec §5.2.2-§5.2.4: the grant from the group's remaining tokens and the binding cap's headroom,
+            // read in this transaction; a limited group with no token left refuses (D3).
+            const at = (this.deps.now?.() ?? new Date()).getTime();
+            grant = estimateGrantInStore(this.store, group, prepared.requiredRequestTokens!, at);
+            prepared = withEstimateGrant(prepared, grant);
+            group.ledger.committedRemaining = sumAmounts([group.reserved, grant]);
             setReserve(proposal, residual(group.limit, group.used, group.ledger.committedRemaining));
           }
           const estimate = { estimateId, estimateVersion, state: prepared.state, profile: { profileId: command.payload.estimatorProfileId, profileHash: command.payload.estimatorProfileHash }, mode: command.payload.estimateMode,
             requestHash: prepared.requestHash, request: prepared.request, outputHash: null, output: null, reasonCode: prepared.reasonCode,
-            ...(prepared.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: prepared.compatibilityReasonCodes }), grant: ESTIMATE_GRANT, estimatorSlot, proposalVersion: proposal.proposalVersion };
+            ...(prepared.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: prepared.compatibilityReasonCodes }), grant, estimatorSlot, proposalVersion: proposal.proposalVersion };
           this.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)").run(id, estimateId, estimateVersion, prepared.state, canonicalBytes(estimate).toString("utf8"));
           persistEstimateArtifacts(this.store, id, estimateId, prepared);
           const wakeId = prepared.state === "queued" ? `scheduler-wake:${id}:estimate:${estimateId}` : null;
@@ -2008,9 +2026,16 @@ export function completeEstimateInStore(
       if (decision.kind === "retry") estimate.retriedAs = estimateRetryId(id, estimateId);
       deps.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run(estimate.state, canonicalBytes(estimate).toString("utf8"), id, estimateId);
       if (decision.kind === "retry") {
-        writeEstimateRetry(deps.store, id, estimate, contract, decision.problems);
-        // The retry's grant is reserved like any queued estimate's (createEstimate).
-        group.ledger.committedRemaining = sumAmounts([group.ledger.committedRemaining, ESTIMATE_GRANT]);
+        // Tester round 2 spec §5.2.3: the retry's grant from the reserve after this settlement and the cap headroom read in
+        // this transaction, reserved like any queued estimate's (createEstimate).
+        const required = retryPromptRequired(contract, estimate.request!, decision.problems)!;
+        // The settlement never throws for the retry (spec §4.3): a cap reading that fails leaves the cap term out, and the
+        // claim gate then decides with the frozen grant.
+        let capHeadroom: number | null;
+        try { capHeadroom = capStatuses(deps.store, groupRepoIdOf(group as unknown as Record<string, unknown>), deps.store.now())[0]?.headroom ?? null; } catch { capHeadroom = null; }
+        const grant = estimateGrantFor({ limitTokens: group.limit.tokens, remainingTokens: settledBalance.reserve.tokens, capHeadroom, requiredRequestTokens: Number(required) });
+        writeEstimateRetry(deps.store, id, estimate, contract, decision.problems, grant);
+        group.ledger.committedRemaining = sumAmounts([group.ledger.committedRemaining, grant]);
         setReserve(proposal, residual(group.limit, group.used, group.ledger.committedRemaining));
       }
       closeSingleCall(deps.store, run.runId, { id: receiptId, kind: "estimate-result", body: { groupId: id, estimateId, runId: run.runId, rawHash, rawIdentity } });

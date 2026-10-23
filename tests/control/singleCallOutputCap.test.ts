@@ -85,11 +85,14 @@ describe("the estimate's output bound (criteria 8 and 9)", () => {
     } finally { await h.dispose(); }
   });
 
-  it("C9: a cap of 250 001 with a small input is input-too-large, though the input alone fits", async () => {
+  // Tester round 2 (ruling H2, spec §5.2.2, §16.2; 「这次批准改写所有必要的判据」): the input bound is the model's context window only (§5.2.1), so a cap of 250 001 with a small input now queues,
+  // and the window (1,000,000 here) is what a cap past it runs into.
+  it("C9: a cap past the context window with a small input is input-too-large, though the input alone fits; the grant bounds nothing", async () => {
     const h = await webFixture(); try {
-      const result = await build(h, 250_001);
+      expect(await build(h, 250_001)).toMatchObject({ state: "queued", reasonCode: null });
+      const result = await build(h, 1_000_001);
       expect(result.inputTokens!).toBeLessThan(ESTIMATE_GRANT.tokens);
-      expect(result).toMatchObject({ state: "input-too-large", reasonCode: "estimate-input-too-large", requiredRequestTokens: result.inputTokens! + 250_001 });
+      expect(result).toMatchObject({ state: "input-too-large", reasonCode: "estimate-input-too-large", requiredRequestTokens: result.inputTokens! + 1_000_001 });
     } finally { await h.dispose(); }
   });
 

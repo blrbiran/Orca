@@ -18,7 +18,8 @@ describe("Task 0 item 4: an estimate run after A1 and booked usage (single-call 
       expect(stepA1(x.deps, x.runId)).toBe(true);
       expect(x.body()).toMatchObject({ state: "start-pending", providerAttemptOrdinal: 1 });
       recordUsage(x.h.store, { runId: x.runId, generation: 1, eventSeq: 1, bucket: "work", cumulative: { tokens: 1_234, activeMs: 50, attempts: 1, sessions: 1 }, source: { artifactId: "usage-t0", hash: "e".repeat(64) } });
-      expect(x.body().remaining.work).toEqual({ tokens: 250_000 - 1_234, activeMs: 900_000 - 50, attempts: 0, sessions: 0 });
+      // Tester round 2 (ruling H2, spec §5.2.2, §16.2; 「这次批准改写所有必要的判据」): the grant is the 1,000,000-token / 30-minute cap.
+      expect(x.body().remaining.work).toEqual({ tokens: 1_000_000 - 1_234, activeMs: 1_800_000 - 50, attempts: 0, sessions: 0 });
       // The call gave nothing (null): completeEstimate must still get past every conservation check to record that.
       x.service.completeEstimate("g", x.h.estimateId, null, () => {
         const row = x.body(); row.state = "settled-restartable";

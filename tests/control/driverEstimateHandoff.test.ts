@@ -40,7 +40,8 @@ describe("an estimate run under a stop (single-call estimate spec §6.5)", () =>
       expect(x.active()).toBe(0);
       expect(groupStopState(x.h.store, "g")).toBe("handoff-complete");
       const after = readControlGroup(x.h.store, "epoch", "g").ledger;
-      expect(after.committedRemaining.tokens).toBe(atImport.committedRemaining.tokens - 250_000);
+      // Tester round 2 (ruling H2, spec §5.2.2, §16.2; 「这次批准改写所有必要的判据」): the returned commitment is the 1,000,000-token cap.
+      expect(after.committedRemaining.tokens).toBe(atImport.committedRemaining.tokens - 1_000_000);
       expect(after.used.tokens).toBe(40);
       expect(x.fake.calls.handoff).toBe(1);
     } finally { await x.h.dispose(); }
@@ -58,7 +59,8 @@ describe("an estimate run under a stop (single-call estimate spec §6.5)", () =>
       // commitment (nothing was spent) is back in the reserve.
       expect(x.body().state).toBe("settled-restartable");
       expect(x.active()).toBe(0);
-      expect(readControlGroup(x.h.store, "epoch", "g").ledger.committedRemaining.tokens).toBe(atImport.committedRemaining.tokens - 250_000);
+      // Tester round 2 (ruling H2, spec §5.2.2, §16.2; 「这次批准改写所有必要的判据」): the returned commitment is the 1,000,000-token cap.
+      expect(readControlGroup(x.h.store, "epoch", "g").ledger.committedRemaining.tokens).toBe(atImport.committedRemaining.tokens - 1_000_000);
       expect(groupStopState(x.h.store, "g")).toBe("handoff-complete");
       expect(x.body().drive).toMatchObject({ workspacePath: null, cleanedUp: true, cleanupError: null });
       expect(x.fake.calls.accept).toHaveLength(0);

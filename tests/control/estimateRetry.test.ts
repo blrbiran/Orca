@@ -83,6 +83,19 @@ function widenBudget(x: Harness): void {
   x.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(group));
 }
 
+/** Moves the group's whole unallocated reserve of one dimension out of its limit (a group imported with a smaller limit). */
+function emptyReserve(x: Harness, dimension: "tokens" | "activeMs" | "attempts" | "sessions"): void {
+  const proposal = readBudgetProposal(x.h.store, "g");
+  const group = JSON.parse(String(x.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+  const reserveRow = proposal.allocations.find(a => a.ownerKind === "reserve")!;
+  const less = proposal.explicitUnallocatedReserve[dimension]!;
+  proposal.groupLimit[dimension]! -= less; proposal.explicitUnallocatedReserve[dimension] = 0; reserveRow.amount[dimension] = 0;
+  group.limit[dimension] -= less; group.ledger.groupLimit[dimension] -= less; group.ledger.explicitUnallocatedReserve[dimension] = 0;
+  x.h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id='g'").run(canonicalBytes(proposal).toString("utf8"));
+  x.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(group));
+  if (dimension === "tokens") x.h.store.db.prepare("UPDATE token_policies SET tokens=? WHERE group_id='g' AND work_item_id=''").run(group.limit.tokens);
+}
+
 /** The settlement committed, the estimate failed with the skip recorded, and no retry row or wake was written. */
 function expectSkipped(x: Harness, code: string): void {
   expect(x.estimate()).toMatchObject({ state: "failed", retrySkipped: code });
@@ -267,18 +280,35 @@ describe("each condition that rules the retry out is recorded on the failed esti
     } finally { await x.h.dispose(); }
   });
 
-  it("reserve-insufficient: the reserve left after settlement cannot hold another grant", async () => {
+  // Rewritten for tester round 2 (ruling H2, spec §5.2.3, §16.2; 「这次批准改写所有必要的判据」): the retry's grant now
+  // follows the reserve in tokens, so a token reserve below the cap no longer rules it out. What still does: a limited
+  // group's token reserve of 0, or a finite non-token reserve below the cap's (activeMs < 1,800,000, attempts or
+  // sessions < 1). The reserve is set during the call by moving the unallocated reserve of `dimension` out of the limit,
+  // so after the settlement it is exactly the call's unused grant in that dimension.
+  it.each([
+    { dimension: "tokens" as const, tokens: 1_000_000, why: "a limited group's token reserve of 0" },
+    { dimension: "activeMs" as const, tokens: 777, why: "an activeMs reserve below 1,800,000" },
+    { dimension: "attempts" as const, tokens: 777, why: "an attempts reserve of 0" },
+    { dimension: "sessions" as const, tokens: 777, why: "a sessions reserve of 0" },
+  ])("reserve-insufficient: $why", async ({ dimension, tokens }) => {
     let x!: Harness;
-    x = await harness([missingTask], { duringCollect: async () => {
-      const reserve = readBudgetProposal(x.h.store, "g").explicitUnallocatedReserve.tokens!;
-      const review = readBudgetProposal(x.h.store, "g").allocations.find(a => a.ownerKind === "goal-review")!.amount.tokens!;
-      expect(x.service.editProposal(x.h.command("proposal-edit", { baseProposalVersion: 1, operations: [{ target: { scope: "goal-review", dimension: "tokens" }, value: review + reserve, provenance: "human" }] })))
-        .toMatchObject({ result: { proposalVersion: 2 } });
-    } }); try {
+    x = await harness([missingTask], { tokens, duringCollect: async () => { emptyReserve(x, dimension); } }); try {
       await settle(x);
-      // The settlement returned only the call's unused grant, which is less than a whole grant.
-      expect(readBudgetProposal(x.h.store, "g").explicitUnallocatedReserve.tokens).toBeLessThan(ESTIMATE_GRANT.tokens);
+      const left = readBudgetProposal(x.h.store, "g").explicitUnallocatedReserve[dimension]!;
+      expect(left).toBeLessThan(dimension === "tokens" ? 1 : ESTIMATE_GRANT[dimension]);
       expectSkipped(x, "reserve-insufficient");
+    } finally { await x.h.dispose(); }
+  });
+
+  it("a token reserve of 1 after the settlement queues a retry with a 1-token grant", async () => {
+    let x!: Harness;
+    x = await harness([missingTask], { tokens: 999_999, duringCollect: async () => { emptyReserve(x, "tokens"); } }); try {
+      const failed = await settle(x);
+      expect(failed.retrySkipped).toBeUndefined();
+      const [, retry] = estimates(x);
+      expect(retry).toMatchObject({ estimateId: expectedRetryId(x.h.estimateId), state: "queued", grant: { ...ESTIMATE_GRANT, tokens: 1 } });
+      expect(readEstimateContract(x.h.store, "g", retry!.estimateId).grant).toEqual({ ...ESTIMATE_GRANT, tokens: 1 });
+      expect(readBudgetProposal(x.h.store, "g").explicitUnallocatedReserve.tokens).toBe(0);
     } finally { await x.h.dispose(); }
   });
 
