@@ -37,6 +37,7 @@ import type { ExecutionPort } from "../control/executionPort.js";
 import type { ControlStore } from "../control/store.js";
 import type { TrustedControlConfig } from "./controlConfig.js";
 import { controlErrorCatalog, sendControlError, sendMappedControlError } from "./controlErrors.js";
+import { registerTranscriptRoutes } from "../agentTranscript/routes.js";
 import { readControlGroup, readControlRecovery, readControlSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview } from "./controlViews.js";
 
 export interface ControlReadApiDeps {
@@ -47,7 +48,7 @@ export interface ControlReadApiDeps {
   /** Gaps plan Task 10-B fix round 2: the registered dir projects (default: the service's `flowProjects`). */
   flowProjects?: () => ReadonlyArray<{ repoId: string; path: string }>;
   /** Agent selection spec §6.8 (W6-10): the reads that ask ccloop about agents. Absent, those routes 404. */
-  port?: Pick<ExecutionPort, "listAgents" | "resolveAgent" | "listModels" | "refreshAgentVersions">;
+  port?: Pick<ExecutionPort, "listAgents" | "resolveAgent" | "listModels" | "refreshAgentVersions" | "readFeatures">;
 }
 
 /** Agent version auto-refresh spec 2026-10-20 §3.3: the agents view probes the installed CLIs at most this often. */
@@ -534,6 +535,9 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       sendMappedControlError(res, error, run ? readErrorContext(deps.store, String(run.group_id)) : undefined);
     }
   });
+
+  // Live transcript spec §10.6.3 / §12.3: the transcript reads, on the Web listener only (registers nothing otherwise).
+  registerTranscriptRoutes(app, { store: deps.store, ...(deps.port === undefined ? {} : { port: deps.port }) }, channel);
 
   app.use("/api/control", (_req, res) => {
     sendControlError(res, 404, "route-not-found", "No control route matches this request.");

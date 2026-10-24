@@ -37,6 +37,7 @@ import { runTask } from "../scheduler/ccloopRunner.js";
 import { integratePendingGroups, type IntegrationCrashPoint, type IntegrationDeps } from "./integrationPass.js";
 import { isSingleCallRun, isWebWorkRun, nextClaimableTask, readSingleCallClaimEnvelope, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
 import { singleCallPurposeOf } from "./singleCall.js";
+import { noteTranscriptListing } from "../agentTranscript/listing.js";
 import { singleCallHandler } from "./singleCallPurposes.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
 import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, makeReadOnly, removeSkillsSnapshot, skillsPathOf, sourceDirOf, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
@@ -605,6 +606,8 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
   if (candidate && (candidate.runId !== runId || candidate.generation !== run.generation || candidate.workItemId !== run.workItemId)) {
     throw new ControlError("report-identity-conflict");
   }
+  // Live transcript spec §10.4.1 / §12.3: keep the last transcripts listing of every run collected (agentTranscript/listing.ts).
+  if (report.transcripts !== undefined) write(deps, () => noteTranscriptListing(store, runId, readStartEnvelope(store, run).work.sourceDir, report.transcripts));
   deps.taskResults?.schedule(runId);
   return report;
 }

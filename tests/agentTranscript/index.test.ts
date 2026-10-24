@@ -42,13 +42,15 @@ describe("T2: the index cache", () => {
     const after = jsonl(newTexts.map((text) => claude.text(text)));
     expect(before.length).toBe(after.length);
     writeFileSync(file, before);
-    const mtime = statSync(file).mtime;
+    // Whole seconds, so both files carry exactly the same mtime (mtimeMs included).
+    const mtime = new Date(Math.floor(Date.now() / 1000) * 1000 - 60_000);
+    utimesSync(file, mtime, mtime);
     expect((await texts(cache, sourceDir)).slice(-2)).toEqual(oldTexts.slice(-2));
     writeFileSync(file + ".new", after);
     utimesSync(file + ".new", mtime, mtime);
     renameSync(file + ".new", file);
     expect(statSync(file).size).toBe(before.length);
-    expect(statSync(file).mtime.getTime()).toBe(mtime.getTime());
+    expect(statSync(file).mtimeMs).toBe(mtime.getTime());
     expect(await texts(cache, sourceDir)).toEqual(newTexts.slice(-200));
   });
 

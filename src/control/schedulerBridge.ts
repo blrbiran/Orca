@@ -19,6 +19,7 @@ import { cleanupCommittedRun } from "./cleanup.js";
 import { publishPending } from "./projection.js";
 import { privateDirectory } from "./paths.js";
 import { ControlError } from "./errors.js";
+import { noteTranscriptListing } from "../agentTranscript/listing.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 
 function claimOnly(c:Claim):Claim {
@@ -45,6 +46,8 @@ export async function collectControlled(service:ControlService,runId:string,sele
   if(event.runId!==runId || event.generation!==envelope.claim.generation) throw new ControlError("report-identity-conflict");
   service.write(()=>recordUsage(store,event));
  }
+ // Live transcript spec §10.4.1 / §12.3: keep the last transcripts listing of every run collected (agentTranscript/listing.ts).
+ if(report.transcripts!==undefined) service.write(()=>store.transaction(()=>noteTranscriptListing(store,runId,envelope.work.sourceDir,report.transcripts)));
  if(report.candidate) {
   if(hashPayload(identity(report.candidate))!==hashPayload(identity(envelope.claim))) throw new ControlError("report-identity-conflict");
  }
