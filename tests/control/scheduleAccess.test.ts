@@ -57,3 +57,47 @@ describe("plan library access (§11.1, C9 library rows)", () => {
     ]);
   });
 });
+
+/** §11.1's schedule rows (plan Task 5): a verb, a payload, the socket agent's tier with no token, and a Web member's answer. */
+const SCHEDULE_ROWS: ReadonlyArray<{ name: string; verb: "schedule-set" | "schedule-enable" | "schedule-remove" | "schedule-resume" | "schedule-from-group"; payload: Record<string, unknown>; socket: string; member: string; dispatched: string }> = [
+  { name: "set", verb: "schedule-set", payload: { projectId: "repo", name: "weekly", cron: "0 9 * * 1", enabled: false, start: { kind: "flow", template: "wechat-article", params: { idea: "t" } } }, socket: "control-person-token-required", member: "control-verb-human-only", dispatched: "control-dispatched-run-refused" },
+  { name: "enable, true", verb: "schedule-enable", payload: { enabled: true }, socket: "control-person-token-required", member: "control-verb-human-only", dispatched: "control-dispatched-run-refused" },
+  { name: "enable, false", verb: "schedule-enable", payload: { enabled: false }, socket: "accepted", member: "control-verb-human-only", dispatched: "control-dispatched-run-refused" },
+  { name: "remove", verb: "schedule-remove", payload: {}, socket: "accepted", member: "control-verb-human-only", dispatched: "control-dispatched-run-refused" },
+  { name: "resume", verb: "schedule-resume", payload: {}, socket: "accepted", member: "control-verb-human-only", dispatched: "control-dispatched-run-refused" },
+  { name: "from a group", verb: "schedule-from-group", payload: { scheduleId: "sch-a", name: "weekly", cron: "0 9 * * 1", enabled: false }, socket: "control-person-token-required", member: "control-verb-human-only", dispatched: "control-dispatched-run-refused" },
+];
+
+describe("schedule access (§11.1, C9 schedule rows)", () => {
+  it("classifies all five schedule verbs human-only, with the table's socket tiers", () => {
+    expect(SCHEDULE_ROWS.map(({ verb }) => VERB_ACCESS[verb])).toEqual(Array(6).fill("human-only"));
+    const tier = (verb: string, payload: Record<string, unknown>): unknown => {
+      const rule = SOCKET_TIER[verb];
+      return typeof rule === "function" ? rule(payload) : rule;
+    };
+    expect([tier("schedule-set", {}), tier("schedule-enable", { enabled: true }), tier("schedule-enable", { enabled: false }),
+      tier("schedule-remove", {}), tier("schedule-resume", {}), tier("schedule-from-group", {})])
+      .toEqual(["token", "token", "open", "open", "open", "token"]);
+  });
+
+  it.each(SCHEDULE_ROWS)("$name: answers each principal as the table says", ({ verb, payload, socket, member, dispatched }) => {
+    // §11.1: a dispatched run is refused every row by the existing rule, because the row is a human-only entry.
+    expect(VERB_ACCESS[verb], verb).toBe("human-only");
+    const answer = (p: Principal) => permissionRefusal(p, verb, payload)?.code ?? "accepted";
+    expect(Object.fromEntries(Object.entries(PRINCIPALS).map(([name, p]) => [name, answer(p)]))).toEqual({
+      socket, socketToken: "accepted", dispatched, dispatchedToken: dispatched, webMember: member, webOwner: "accepted",
+    });
+  });
+
+  it("routes the four own-scope verbs to @schedule:<id> and schedule-from-group to its group", () => {
+    const routes = controlCommandRoutes("operator").filter((r) => r.verb.startsWith("schedule-"));
+    const params = { scheduleId: "sch-a", groupId: "g-1" };
+    expect(routes.map((r) => [r.path, r.verb, r.target(params as never, {}, undefined as never, "c")])).toEqual([
+      ["/api/control/schedules/:scheduleId", "schedule-set", { groupId: "@schedule:sch-a", target: { kind: "schedule", scheduleId: "sch-a" } }],
+      ["/api/control/schedules/:scheduleId/enable", "schedule-enable", { groupId: "@schedule:sch-a", target: { kind: "schedule", scheduleId: "sch-a" } }],
+      ["/api/control/schedules/:scheduleId/remove", "schedule-remove", { groupId: "@schedule:sch-a", target: { kind: "schedule", scheduleId: "sch-a" } }],
+      ["/api/control/schedules/:scheduleId/resume", "schedule-resume", { groupId: "@schedule:sch-a", target: { kind: "schedule", scheduleId: "sch-a" } }],
+      ["/api/control/groups/:groupId/schedule", "schedule-from-group", { groupId: "g-1", target: { kind: "group", groupId: "g-1" } }],
+    ]);
+  });
+});

@@ -72,12 +72,17 @@ export const durableCommandErrorStatuses = {
   // which. A schedule whose cron fires more often than once an hour (spends review budget unattended).
   "control-argument-invalid": 400,
   "check-schedule-too-frequent": 400,
+  // Scheduled flows and groups spec 2026-10-24 §6.1: a schedule start's image param is an absolute path; a fire reads it
+  // inside the folder, so only a folder-relative value is storable (the detail names the param).
+  "schedule-param-absolute": 400,
   // Checks spec 2026-10-22 §2.4: a 9th scheduled check in one layer (project or global); §4.2: a project value looser
   // than a global lock allows (the detail names the lock); a schedule evaluated in a time zone the host cannot read.
   "check-schedule-limit": 409,
   "check-setting-locked": 409,
   // Scheduled flows and groups spec §5.6: archiving an entry a schedule (enabled or not) still pins.
   "plan-library-entry-in-use": 409,
+  // Scheduled flows and groups spec §6.3: a project already has the most schedules it may (8); the detail is the limit.
+  "schedule-limit": 409,
   // Flow engine spec §11.2: a project flow setting looser than a global lock allows (the detail names the lock), and a
   // value only the person token may set (irreversible apply-flag; refused from every channel in phase 1).
   "flow-setting-locked": 409,

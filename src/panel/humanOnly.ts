@@ -101,6 +101,13 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "plan-library-save": "human-only",
   "plan-library-import": "human-only",
   "plan-library-archive": "human-only",
+  // Scheduled flows and groups spec 2026-10-24 §11.1: a schedule starts paid work unattended and its pool, token limit and
+  // scheme are budget/delivery choices, so all five writes are the owner's, as the checks' schedules are.
+  "schedule-set": "human-only",
+  "schedule-enable": "human-only",
+  "schedule-remove": "human-only",
+  "schedule-resume": "human-only",
+  "schedule-from-group": "human-only",
 };
 /**
  * Review finding I4 (controller's call, flagged for the human): verbs any principal may send that a run Orca dispatched is
@@ -210,6 +217,14 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "plan-library-save": (p) => (p.entryId === undefined ? "open" : "token"),
   "plan-library-import": "token",
   "plan-library-archive": "open",
+  // Scheduled flows and groups spec 2026-10-24 §11.1: setting a schedule (its pool and token limit are budgets, its scheme
+  // a delivery choice) and making one from a group are token; enabling is token as set-scheduled-check; disabling,
+  // removing and resuming stop spending (open).
+  "schedule-set": "token",
+  "schedule-enable": (p) => (p.enabled === false ? "open" : "token"),
+  "schedule-remove": "open",
+  "schedule-resume": "open",
+  "schedule-from-group": "token",
   "import-plan.tokenLimit": "token",
   "import-plan.integration": "token",
 };

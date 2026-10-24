@@ -684,6 +684,13 @@ export const commandVerbSchema = z.enum([
   "plan-library-save",
   "plan-library-import",
   "plan-library-archive",
+  // Scheduled flows and groups spec 2026-10-24 §6, §11.1: a schedule's own verbs (its `@schedule:<id>` scope, revision the
+  // row's), and the one write that also saves a new library version from a group, in the group's transaction.
+  "schedule-set",
+  "schedule-enable",
+  "schedule-remove",
+  "schedule-resume",
+  "schedule-from-group",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -1058,6 +1065,29 @@ export const flowEffectPayloadSchema = z.object({ recordId: z.string().regex(/^e
 export const flowPoolPayloadSchema = z.object({ runId: flowRunIdSchema, raiseTokens: positiveSafeInteger }).strict();
 // Gaps spec §5.5, §13: one step of the running plan -- `run` takes an open question into it, `accept-unchanged` keeps its output.
 export const flowPlanStepPayloadSchema = z.object({ runId: flowRunIdSchema, planNo: positiveSafeInteger, stepKey: flowStepKeySchema, choice: z.enum(["run", "accept-unchanged"]) }).strict();
+// Scheduled flows and groups spec 2026-10-24 §6.1, plan B4: a schedule's start is a flow's (minus dir/projectId, so a
+// version and its params) or a group's pinned entry version, token limit and integration scheme; a group start always
+// names the version's sha256. A create names the project; an edit replaces the start whole, same kind.
+const scheduleNameSchema = z.string().min(1).max(80);
+const scheduleFlowStartSchema = z.object({
+  kind: z.literal("flow"), template: z.string().regex(/^(builtin\/)?[a-z0-9][a-z0-9-]*(@\d+)?$/), params: z.record(flowScalarSchema),
+  clarify: z.literal("skip").optional(), unattended: z.boolean().optional(), pool: positiveSafeInteger.optional(),
+}).strict();
+const scheduleGroupStartSchema = z.object({
+  kind: z.literal("group"), entryId: idSchema, sha256: hashSchema,
+  tokenLimit: safeInteger.positive().nullable(), integration: z.lazy(() => integrationSchemeSchema).nullable(),
+}).strict();
+const scheduleStartPayloadSchema = z.discriminatedUnion("kind", [scheduleFlowStartSchema, scheduleGroupStartSchema]);
+export const scheduleSetPayloadSchema = z.union([
+  z.object({ projectId: idSchema, name: scheduleNameSchema, cron: nonemptyString, enabled: z.boolean(), start: scheduleStartPayloadSchema }).strict(),
+  z.object({ set: z.object({ name: scheduleNameSchema.optional(), cron: nonemptyString.optional(), start: scheduleStartPayloadSchema.optional() }).strict() }).strict(),
+]);
+export const scheduleEnablePayloadSchema = z.object({ enabled: z.boolean() }).strict();
+export const scheduleRemovePayloadSchema = emptyPayloadSchema;
+export const scheduleResumePayloadSchema = emptyPayloadSchema;
+export const scheduleFromGroupPayloadSchema = z.object({
+  scheduleId: idSchema, name: scheduleNameSchema, cron: nonemptyString, enabled: z.boolean(), tokenLimit: safeInteger.positive().nullable().optional(),
+}).strict();
 
 const groupCommandTargetSchema = z.object({ kind: z.literal("group"), groupId: idSchema }).strict();
 const taskCommandTargetSchema = z.object({ kind: z.literal("task"), groupId: idSchema, taskId: idSchema }).strict();
@@ -1175,6 +1205,11 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("plan-library-save"), target: planLibraryCommandTargetSchema, payload: planLibrarySavePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("plan-library-import"), target: planLibraryCommandTargetSchema, payload: planLibraryImportPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("plan-library-archive"), target: planLibraryCommandTargetSchema, payload: planLibraryArchivePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("schedule-set"), target: scheduleCommandTargetSchema, payload: scheduleSetPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("schedule-enable"), target: scheduleCommandTargetSchema, payload: scheduleEnablePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("schedule-remove"), target: scheduleCommandTargetSchema, payload: scheduleRemovePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("schedule-resume"), target: scheduleCommandTargetSchema, payload: scheduleResumePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("schedule-from-group"), target: groupCommandTargetSchema, payload: scheduleFromGroupPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("flow-plan-step"), target: flowsCommandTargetSchema, payload: flowPlanStepPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("run-check-now"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("resume-check"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
@@ -1267,6 +1302,11 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("plan-library-save"), target: planLibraryCommandTargetSchema, payload: planLibrarySavePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("plan-library-import"), target: planLibraryCommandTargetSchema, payload: planLibraryImportPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("plan-library-archive"), target: planLibraryCommandTargetSchema, payload: planLibraryArchivePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("schedule-set"), target: scheduleCommandTargetSchema, payload: scheduleSetPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("schedule-enable"), target: scheduleCommandTargetSchema, payload: scheduleEnablePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("schedule-remove"), target: scheduleCommandTargetSchema, payload: scheduleRemovePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("schedule-resume"), target: scheduleCommandTargetSchema, payload: scheduleResumePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("schedule-from-group"), target: groupCommandTargetSchema, payload: scheduleFromGroupPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("flow-plan-step"), target: flowsCommandTargetSchema, payload: flowPlanStepPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("run-check-now"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resume-check"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
@@ -2039,6 +2079,12 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   // entry already held these bytes), and an archive.
   z.object({ kind: z.literal("plan-library-saved"), entryId: idSchema, version: positiveSafeInteger, sha256: hashSchema, appended: z.boolean() }).strict(),
   z.object({ kind: z.literal("plan-library-archived"), entryId: idSchema }).strict(),
+  // Scheduled flows and groups spec §6, §11.1: a schedule set (created or edited, or made from a group), enabled, removed
+  // or resumed; the id names it.
+  z.object({ kind: z.literal("schedule-set"), scheduleId: idSchema }).strict(),
+  z.object({ kind: z.literal("schedule-enabled"), scheduleId: idSchema, enabled: z.boolean() }).strict(),
+  z.object({ kind: z.literal("schedule-removed"), scheduleId: idSchema }).strict(),
+  z.object({ kind: z.literal("schedule-resumed"), scheduleId: idSchema }).strict(),
   // Gaps spec §4.6, §5.5: a feedback intake's clarify round answered; a step of the running plan answered.
   z.object({ kind: z.literal("flow-feedback-answered"), flowRunId: nonemptyString, messageSeq: positiveSafeInteger, answer: z.enum(["clarify", "consensus"]) }).strict(),
   z.object({ kind: z.literal("flow-plan-step-applied"), flowRunId: nonemptyString, planNo: positiveSafeInteger, stepKey: nonemptyString, choice: z.enum(["run", "accept-unchanged"]) }).strict(),
@@ -2176,7 +2222,10 @@ export const commandSuccessSchema = commandSuccessObjectSchema
       // Flow engine spec §14.2: the `@flows` scope has revision 0 and no group projection.
       || value.verb.startsWith("flow-")
       // Scheduled flows and groups plan B2: the `@plan-library` scope, likewise.
-      || value.verb.startsWith("plan-library-");
+      || value.verb.startsWith("plan-library-")
+      // Scheduled flows and groups plan B2: a schedule is its own scope (no group projection); `schedule-from-group`
+      // targets the source group, whose projection the answer carries.
+      || value.verb === "schedule-set" || value.verb === "schedule-enable" || value.verb === "schedule-remove" || value.verb === "schedule-resume";
     if (isShutdown ? value.commandRevision !== null : value.commandRevision === null) {
       issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");
     }

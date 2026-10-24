@@ -1806,6 +1806,9 @@ export const enErrors: Record<string, string> = {
   "plan-library-target-mismatch": "The plan file names another repository than this project.",
   "plan-library-project-mismatch": "This plan belongs to another project.",
   "plan-library-contract-path-refused": "A contract file is outside the plan's repository or reached through a link.",
+  // Scheduled flows and groups spec 2026-10-24 §6.1, §6.3, §14: the schedule refusals.
+  "schedule-limit": "This project already has the most schedules it may ({{detail}}).",
+  "schedule-param-absolute": "An image must be inside the project folder, not an absolute path: {{detail}}",
   // ccloop error codes spec (2026-10-15) §4.2: ccloop exited non-zero; the detail is `<code>: <detail>` (web/src/ccloopCodes.ts explains a known code).
   "ccloop-failed": "ccloop failed: {{detail}}",
   // ccloop error codes spec §4.4: a peer exit's stored run reason; the detail is ccloop's code explained (web/src/refusalExplain.ts).

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { applyFlowCommand, type FlowCommand } from "../flow/flowCommands.js";
 import { applyPlanLibraryCommand, type PlanLibraryCommand } from "./planLibrary/commands.js";
+import { applyScheduleCommand, type ScheduleCommand } from "./schedules/commands.js";
 import type { FlowDeps } from "../flow/kernel.js";
 import { peerCode, peerFailure } from "./ccloopPort.js";
 import {retainSavedInterruption,readDriverRun,describeError} from "./executionDriver.js";
@@ -1139,6 +1140,13 @@ export class WebControlService {
   /** Scheduled flows and groups spec §5.3, §5.6: the plan library's writes (planLibrary/commands.ts), one transaction each. */
   planLibraryCommand(command: PlanLibraryCommand): WebCommandResult {
     return this.mutate(() => applyPlanLibraryCommand({ store: this.store, ...(this.deps.resolveRepository === undefined ? {} : { resolveRepository: this.deps.resolveRepository }), ...(this.deps.now === undefined ? {} : { now: this.deps.now }) }, command)) as WebCommandResult;
+  }
+  /** Scheduled flows and groups spec §6, §11.1: a schedule's writes (schedules/commands.ts), one transaction each. */
+  scheduleCommand(command: ScheduleCommand): WebCommandResult {
+    return this.mutate(() => applyScheduleCommand({
+      store: this.store, flowProjects: this.deps.flowProjects ?? (() => []), knownRepository: this.deps.knownRepository ?? (() => false),
+      ...(this.deps.resolveRepository === undefined ? {} : { resolveRepository: this.deps.resolveRepository }), ...(this.deps.now === undefined ? {} : { now: this.deps.now }),
+    }, command)) as WebCommandResult;
   }
   private readonly checkJobs = new Map<string, Promise<void>>();
   /**

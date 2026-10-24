@@ -8,6 +8,7 @@ import { readGroupDecisionsView } from "./groupDecisions.js";
 import { groupRepoId } from "../control/executionDriver.js";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { planLibraryEntryView, planLibraryListView, planLibraryVersionBytes } from "../control/planLibrary/views.js";
+import { scheduleDetailView, scheduleFiresView, scheduleListView } from "../control/schedules/views.js";
 import { ATTACHMENT_MAX_BYTES, storeAttachment } from "../flow/feedback/attachments.js";
 import { loadRun } from "../flow/kernel.js";
 import { randomUUID } from "node:crypto";
@@ -279,6 +280,26 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       const { bytes, fileName } = planLibraryVersionBytes(deps.store, String(req.params.entryId), String(req.params.sha256));
       res.status(200).type("application/json").setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
       res.send(bytes);
+    } catch (error) { sendMappedControlError(res, error); }
+  });
+
+  // Scheduled flows and groups spec §13.1, §13.3: a project's schedules, one schedule's body and fires, and its fire list,
+  // open to every principal (§11.1); here, so the socket (agents) reads them too.
+  app.get("/api/control/schedules", (req, res) => {
+    try {
+      const repoId = idSchema.safeParse(req.query.repoId);
+      if (!repoId.success) throw new ControlError("control-argument-invalid", "repoId is required");
+      res.json(scheduleListView(deps.store, repoId.data, Date.now()));
+    } catch (error) { sendMappedControlError(res, error); }
+  });
+  app.get("/api/control/schedules/:scheduleId", (req, res) => {
+    try { res.json(scheduleDetailView(deps.store, String(req.params.scheduleId), Date.now())); } catch (error) { sendMappedControlError(res, error); }
+  });
+  app.get("/api/control/schedules/:scheduleId/fires", (req, res) => {
+    try {
+      const limit = req.query.limit === undefined ? 50 : Number(req.query.limit);
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new ControlError("control-argument-invalid", "limit");
+      res.json(scheduleFiresView(deps.store, String(req.params.scheduleId), limit));
     } catch (error) { sendMappedControlError(res, error); }
   });
 
@@ -598,6 +619,11 @@ const orchestrationScoped: RouteTarget = () => ({ groupId: "@orchestration", tar
 const flowsScoped: RouteTarget = () => ({ groupId: "@flows", target: { kind: "flows" } });
 // Scheduled flows and groups plan B2: every library verb's ledger key.
 const planLibraryScoped: RouteTarget = () => ({ groupId: "@plan-library", target: { kind: "plan-library" } });
+// Scheduled flows and groups plan B2: a schedule's own ledger key `@schedule:<id>`, its revision the row's (0 while none).
+const scheduleScoped: RouteTarget = (params) => {
+  const scheduleId = idSchema.parse(params.scheduleId);
+  return { groupId: `@schedule:${scheduleId}`, target: { kind: "schedule", scheduleId } };
+};
 const repositoryScoped: RouteTarget = (params) => {
   const repoId = idSchema.parse(params.repoId);
   return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
@@ -702,6 +728,13 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     // The import route is PLAN_LIBRARY_IMPORT_ROUTE (its larger body parser); written out so the route table reads whole.
     { path: "/api/control/plan-library/import", verb: "plan-library-import", target: planLibraryScoped },
     { path: "/api/control/plan-library/archive", verb: "plan-library-archive", target: planLibraryScoped },
+    // Scheduled flows and groups spec §6, §11.1, §13.3: a schedule's writes on its own `@schedule:<id>` scope (the id is
+    // the client-named path, so a create and an edit share it), and the one that also saves a library version from a group.
+    { path: "/api/control/schedules/:scheduleId", verb: "schedule-set", target: scheduleScoped },
+    { path: "/api/control/schedules/:scheduleId/enable", verb: "schedule-enable", target: scheduleScoped },
+    { path: "/api/control/schedules/:scheduleId/remove", verb: "schedule-remove", target: scheduleScoped },
+    { path: "/api/control/schedules/:scheduleId/resume", verb: "schedule-resume", target: scheduleScoped },
+    { path: "/api/control/groups/:groupId/schedule", verb: "schedule-from-group", target: fromParams },
     {
       path: "/api/control/repositories/:repoId/criteria-review",
       verb: "set-criteria-review",
@@ -837,6 +870,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "flow-start": case "flow-message": case "flow-plan": case "flow-rerun": case "flow-answer": case "flow-effect": case "flow-pool": case "flow-plan-step":
             await service.flowCommand(command); break;
           case "plan-library-save": case "plan-library-import": case "plan-library-archive": service.planLibraryCommand(command); break;
+          case "schedule-set": case "schedule-enable": case "schedule-remove": case "schedule-resume": case "schedule-from-group": service.scheduleCommand(command); break;
           case "set-criteria-review": service.setCriteriaReview(command); break;
           case "set-group-integration": await service.setGroupIntegration(command); break;
           case "retry-integration": service.retryIntegration(command); break;

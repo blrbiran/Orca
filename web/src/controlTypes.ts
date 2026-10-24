@@ -633,7 +633,8 @@ export type CommandSuccessV1 = {
     | "set-flow-settings" | "set-flow-locks"
     | "flow-start" | "flow-message" | "flow-plan" | "flow-rerun" | "flow-answer" | "flow-effect" | "flow-pool" | "flow-plan-step"
     | "resolve-folder-change"
-    | "plan-library-save" | "plan-library-import" | "plan-library-archive";
+    | "plan-library-save" | "plan-library-import" | "plan-library-archive"
+    | "schedule-set" | "schedule-enable" | "schedule-remove" | "schedule-resume" | "schedule-from-group";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -675,6 +676,11 @@ export type CommandSuccessV1 = {
     // Scheduled flows and groups spec §5.3, §5.6: a library save or import, and an archive.
     | { kind: "plan-library-saved"; entryId: string; version: number; sha256: string; appended: boolean }
     | { kind: "plan-library-archived"; entryId: string }
+    // Scheduled flows and groups spec §6, §11.1: a schedule's writes.
+    | { kind: "schedule-set"; scheduleId: string }
+    | { kind: "schedule-enabled"; scheduleId: string; enabled: boolean }
+    | { kind: "schedule-removed"; scheduleId: string }
+    | { kind: "schedule-resumed"; scheduleId: string }
     // Gaps spec §4.6, §5.5: a feedback intake's clarify round answered; a step of the running plan answered.
     | { kind: "flow-feedback-answered"; flowRunId: string; messageSeq: number; answer: "clarify" | "consensus" }
     | { kind: "flow-plan-step-applied"; flowRunId: string; planNo: number; stepKey: string; choice: "run" | "accept-unchanged" }

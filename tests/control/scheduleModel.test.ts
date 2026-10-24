@@ -1,0 +1,230 @@
+// Scheduled flows and groups spec 2026-10-24 §6, §7.2, criterion C1 (plan Task 5: the schedule model and its verbs; the
+// `schedule-from-group` integration/sha rows are Task 9's) and C10's schedule rows: every write's checks and the person it
+// stamps. Temp stores only (Rule 17).
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { withCommandContext } from "../../src/control/commandClient.js";
+import { libraryEntryId } from "../../src/control/planLibrary/commands.js";
+import { appendVersion, insertEntry } from "../../src/control/planLibrary/store.js";
+import { applyScheduleCommand, type ScheduleCommand } from "../../src/control/schedules/commands.js";
+import { firedGroupId, scheduleIdFor } from "../../src/control/schedules/model.js";
+import { readSchedule } from "../../src/control/schedules/store.js";
+import { idSchema } from "../../src/control/schema.js";
+import { openControlStore, type ControlStore } from "../../src/control/store.js";
+import { rawAuthorityCommandSchema } from "../../src/control/webProtocol.js";
+import { loadBuiltin } from "../../src/flow/template/load.js";
+
+const REPO = "repo";
+const FOLDER = "/repos/proj";
+const NOW = Date.UTC(2026, 9, 24, 12, 0, 0);
+const ANA = { client: "web", principal: "web", attribution: { by: "ana", via: "web" } };
+type Who = { client: string; principal: string; attribution: { by: string; via: string } };
+type Answer = { result?: { kind: string; scheduleId?: string; enabled?: boolean }; error?: { code: string; message: string } };
+
+const roots: string[] = [];
+afterEach(async () => { while (roots.length) await rm(roots.pop()!, { recursive: true, force: true }); });
+async function store(): Promise<ControlStore> {
+  const root = await mkdtemp(join(tmpdir(), "schedule-model-"));
+  roots.push(root);
+  return openControlStore({ stateDir: join(root, "s") });
+}
+
+const depsFor = (s: ControlStore, clock: { at: number }) => ({
+  store: s,
+  flowProjects: () => [{ repoId: REPO, path: FOLDER }],
+  knownRepository: (repoId: string) => repoId === REPO,
+  now: () => new Date(clock.at),
+});
+
+/** One raw schedule command; the target names the schedule (a create and an edit share it). */
+const command = (commandId: string, verb: ScheduleCommand["verb"], payload: unknown,
+  options: { scheduleId?: string; expectedRevision?: number; actorId?: string } = {}): ScheduleCommand =>
+  ({ schema: "orca-raw-command-v1", commandId, actorId: options.actorId ?? "human", expectedRevision: options.expectedRevision ?? 0, verb,
+    target: { kind: "schedule", scheduleId: options.scheduleId ?? "sch-a" }, payload }) as unknown as ScheduleCommand;
+
+const run = (s: ControlStore, cmd: ScheduleCommand, who: Who = ANA, clock: { at: number } = { at: NOW }): Answer =>
+  withCommandContext(cmd.commandId, who, () => applyScheduleCommand(depsFor(s, clock), cmd)) as Answer;
+
+/** The refusal the write books, or a failure naming the outcome when it was not refused. */
+const refused = (s: ControlStore, cmd: ScheduleCommand, who?: Who, clock?: { at: number }): { code: string; message: string } => {
+  const answer = run(s, cmd, who, clock);
+  if (answer.error === undefined) throw new Error(`not refused: ${JSON.stringify(answer.result)}`);
+  return answer.error;
+};
+
+const flowCreate = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+  projectId: REPO, name: "weekly", cron: "0 9 * * *", enabled: false,
+  start: { kind: "flow", template: "wechat-article", params: { idea: "a topic" } }, ...overrides,
+});
+const groupCreate = (start: Record<string, unknown>, overrides: Record<string, unknown> = {}): Record<string, unknown> => flowCreate({ start, ...overrides });
+
+const VERSION_ORIGIN = { kind: "import" as const, fileName: "p.json", fileSha256: "f".repeat(64), format: "orca-plan-v1" as const };
+const version = (s: ControlStore, entryId: string, projectId: string, doc = `{"entry":"${entryId}"}`): string =>
+  s.transaction(() => {
+    insertEntry(s, { id: entryId, projectId, name: "p", by: "ana", via: "web", at: NOW });
+    return appendVersion(s, { entryId, doc, origin: VERSION_ORIGIN, by: "ana", via: "web", at: NOW }).sha256;
+  });
+
+describe("the schedule model's write checks (§6, C1)", () => {
+  it("refuses a cron that fires twice an hour (check-schedule-too-frequent) and writes nothing", async () => {
+    const s = await store();
+    try {
+      const answer = refused(s, command("c1", "schedule-set", flowCreate({ cron: "0,30 9 * * *" })));
+      expect(answer.code).toBe("check-schedule-too-frequent");
+      expect(readSchedule(s, "sch-a")).toBeNull();
+    } finally { s.close(); }
+  });
+
+  it("refuses a zone the host cannot read (check-time-zone-invalid) and writes nothing", async () => {
+    const s = await store();
+    try {
+      s.db.prepare("INSERT INTO usage_calendar(singleton,time_zone,week_start) VALUES (1,?,1)").run("Mars/Olympus");
+      const answer = refused(s, command("c1", "schedule-set", flowCreate()));
+      expect(answer.code).toBe("check-time-zone-invalid");
+      expect(readSchedule(s, "sch-a")).toBeNull();
+    } finally { s.close(); }
+  });
+
+  it("refuses a 9th live schedule (schedule-limit); a removed one frees a place", async () => {
+    const s = await store();
+    try {
+      for (let i = 0; i < 8; i += 1) {
+        expect(run(s, command(`new-${i}`, "schedule-set", flowCreate(), { scheduleId: `sch-s${i}` })).error, `create ${i}`).toBeUndefined();
+      }
+      const ninth = refused(s, command("new-8", "schedule-set", flowCreate(), { scheduleId: "sch-s8" }));
+      expect(ninth.code).toBe("schedule-limit");
+      expect(ninth.message).toContain("schedule-limit:8");
+      expect(readSchedule(s, "sch-s8")).toBeNull();
+      // A removed schedule does not count: the ninth place is free again.
+      expect(run(s, command("rm-0", "schedule-remove", {}, { scheduleId: "sch-s0", expectedRevision: 1 })).error).toBeUndefined();
+      expect(run(s, command("new-8-retry", "schedule-set", flowCreate(), { scheduleId: "sch-s8" })).error).toBeUndefined();
+      expect(readSchedule(s, "sch-s8")).not.toBeNull();
+    } finally { s.close(); }
+  });
+
+  it("refuses a flow schedule on a project that is not a registered dir project (flow-dir-unregistered)", async () => {
+    const s = await store();
+    try {
+      const answer = refused(s, command("c1", "schedule-set", flowCreate({ projectId: "other" })));
+      expect(answer.code).toBe("flow-dir-unregistered");
+      expect(readSchedule(s, "sch-a")).toBeNull();
+    } finally { s.close(); }
+  });
+
+  it("refuses a param that is not the template's type and an absolute image param", async () => {
+    const s = await store();
+    try {
+      const wrongType = refused(s, command("c1", "schedule-set",
+        flowCreate({ start: { kind: "flow", template: "wechat-article", params: { idea: "a topic", illustrations: "yes" } } })));
+      expect(wrongType.code).toBe("flow-param-invalid");
+      expect(wrongType.message).toContain("illustrations");
+      // The image param is a folder-relative path at every fire, so a preset-style absolute one is refused at write.
+      const absolute = refused(s, command("c2", "schedule-set",
+        flowCreate({ start: { kind: "flow", template: "wechat-article", params: { idea: "a topic", coverImage: "/tmp/cover.png" } } })));
+      expect(absolute.code).toBe("schedule-param-absolute");
+      expect(absolute.message).toContain("coverImage");
+      expect(readSchedule(s, "sch-a")).toBeNull();
+    } finally { s.close(); }
+  });
+
+  it("stores a template named without a version at the version the build ships", async () => {
+    const s = await store();
+    try {
+      const shipped = loadBuiltin("wechat-article").template.version;
+      expect(run(s, command("c1", "schedule-set", flowCreate())).error).toBeUndefined();
+      expect(readSchedule(s, "sch-a")!.body.start).toMatchObject({ kind: "flow", template: `builtin/wechat-article@${shipped}` });
+    } finally { s.close(); }
+  });
+
+  it("refuses a group start with no sha256 (schema), an unknown entry or version, and another project's entry", async () => {
+    const s = await store();
+    try {
+      const entryId = "pl-0123456789abcdef";
+      const sha256 = version(s, entryId, REPO);
+      // §6.1: a group start always names the version's sha256; the raw command schema refuses one without it.
+      const noSha = command("g0", "schedule-set", groupCreate({ kind: "group", entryId, tokenLimit: null, integration: null }));
+      expect(rawAuthorityCommandSchema.safeParse(noSha).success).toBe(false);
+      const complete = groupCreate({ kind: "group", entryId, sha256, tokenLimit: null, integration: null });
+      expect(rawAuthorityCommandSchema.safeParse(command("g0b", "schedule-set", complete)).success).toBe(true);
+      // An entry no row names, and a version the entry does not have.
+      const unknownEntry = refused(s, command("g1", "schedule-set",
+        groupCreate({ kind: "group", entryId: "pl-0000000000000000", sha256, tokenLimit: null, integration: null })));
+      expect(unknownEntry.code).toBe("plan-library-entry-not-found");
+      expect(unknownEntry.message).toContain("pl-0000000000000000");
+      const unknownVersion = refused(s, command("g2", "schedule-set",
+        groupCreate({ kind: "group", entryId, sha256: "0".repeat(64), tokenLimit: null, integration: null })));
+      expect(unknownVersion.code).toBe("plan-library-entry-not-found");
+      expect(unknownVersion.message).toContain(`${entryId}@${"0".repeat(64)}`);
+      // An entry of another project.
+      const otherId = "pl-fedcba9876543210";
+      const otherSha = version(s, otherId, "other");
+      const mismatch = refused(s, command("g3", "schedule-set",
+        groupCreate({ kind: "group", entryId: otherId, sha256: otherSha, tokenLimit: null, integration: null })));
+      expect(mismatch.code).toBe("plan-library-project-mismatch");
+      expect(mismatch.message).toContain(otherId);
+      // The same start of this project's entry is stored with its version.
+      expect(run(s, command("g4", "schedule-set", complete)).error).toBeUndefined();
+      expect(readSchedule(s, "sch-a")!.body.start).toMatchObject({ kind: "group", entryId, sha256 });
+    } finally { s.close(); }
+  });
+
+  it("names a schedule sch-, a fired group sgrp- and a library entry pl-, each a valid id", () => {
+    const scheduleId = scheduleIdFor("Weekly Article");
+    const fired = firedGroupId(scheduleId, NOW);
+    const entry = libraryEntryId("cmd-1");
+    expect(scheduleId).toMatch(/^sch-/);
+    expect(fired).toMatch(/^sgrp-/);
+    expect(entry).toMatch(/^pl-/);
+    for (const id of [scheduleId, fired, entry]) expect(idSchema.safeParse(id).success, id).toBe(true);
+  });
+});
+
+describe("C10: every schedule write stamps the routed person, never the actor", () => {
+  it("stamps the creator on create and the editor on edit", async () => {
+    const s = await store();
+    const clock = { at: NOW };
+    try {
+      const bo = { client: "cli:claude", principal: "agent:cli:claude", attribution: { by: "bo", via: "cli:claude" } };
+      expect(run(s, command("c1", "schedule-set", flowCreate(), { actorId: "human" }), ANA, clock).error).toBeUndefined();
+      let body = readSchedule(s, "sch-a")!.body;
+      expect([body.createdBy, body.createdVia, body.createdAt, body.updatedBy, body.updatedVia, body.enabledBy, body.enabledVia])
+        .toEqual(["ana", "web", NOW, "ana", "web", "ana", "web"]);
+      clock.at = NOW + 1_000;
+      expect(run(s, command("e1", "schedule-set", { set: { name: "renamed" } }, { expectedRevision: 1 }), bo, clock).error).toBeUndefined();
+      body = readSchedule(s, "sch-a")!.body;
+      expect([body.name, body.createdBy, body.createdVia, body.updatedBy, body.updatedVia, body.updatedAt])
+        .toEqual(["renamed", "ana", "web", "bo", "cli:claude", NOW + 1_000]);
+      expect([body.enabledBy, body.enabledVia]).toEqual(["ana", "web"]);
+    } finally { s.close(); }
+  });
+
+  it("stamps the person who enabled, removed and resumed", async () => {
+    const s = await store();
+    const clock = { at: NOW };
+    try {
+      const cy = { client: "mcp:orca", principal: "agent:mcp:orca", attribution: { by: "cy", via: "mcp:orca" } };
+      const di = { client: "web", principal: "web", attribution: { by: "di", via: "web" } };
+      expect(run(s, command("c1", "schedule-set", flowCreate())).error).toBeUndefined();
+      clock.at = NOW + 1_000;
+      expect(run(s, command("en1", "schedule-enable", { enabled: true }, { expectedRevision: 1 }), cy, clock).error).toBeUndefined();
+      let body = readSchedule(s, "sch-a")!.body;
+      expect([body.enabled, body.enabledBy, body.enabledVia, body.enabledAt, body.updatedBy, body.updatedVia])
+        .toEqual([true, "cy", "mcp:orca", NOW + 1_000, "cy", "mcp:orca"]);
+      clock.at = NOW + 2_000;
+      expect(run(s, command("rm1", "schedule-remove", {}, { expectedRevision: 2 }), di, clock).error).toBeUndefined();
+      body = readSchedule(s, "sch-a")!.body;
+      expect([body.updatedBy, body.updatedVia, body.updatedAt, body.enabledBy]).toEqual(["di", "web", NOW + 2_000, "cy"]);
+      // A paused schedule, resumed by another person.
+      expect(run(s, command("c2", "schedule-set", flowCreate(), { scheduleId: "sch-p" })).error).toBeUndefined();
+      const paused = readSchedule(s, "sch-p")!;
+      s.db.prepare("UPDATE schedules SET body=? WHERE id=?").run(
+        JSON.stringify({ ...paused.body, state: { ...paused.body.state, paused: true, pausedReason: "flow-param-invalid" } }), "sch-p");
+      clock.at = NOW + 3_000;
+      expect(run(s, command("res1", "schedule-resume", {}, { scheduleId: "sch-p", expectedRevision: 1 }), ANA, clock).error).toBeUndefined();
+      body = readSchedule(s, "sch-p")!.body;
+      expect([body.state.paused, body.updatedBy, body.updatedVia, body.updatedAt]).toEqual([false, "ana", "web", NOW + 3_000]);
+    } finally { s.close(); }
+  });
+});

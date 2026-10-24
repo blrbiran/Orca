@@ -1731,6 +1731,9 @@ export const zhErrors: Record<string, string> = {
   "plan-library-target-mismatch": "计划文件指向的仓库不是本项目。",
   "plan-library-project-mismatch": "这个计划属于另一个项目。",
   "plan-library-contract-path-refused": "某个契约文件在计划所属仓库之外，或经由链接访问。",
+  // Scheduled flows and groups spec 2026-10-24 §6.1, §6.3, §14: the schedule refusals.
+  "schedule-limit": "这个项目已有最多的定时任务数（{{detail}}）。",
+  "schedule-param-absolute": "图片必须在项目文件夹内，不能是绝对路径：{{detail}}",
   "ccloop-failed": "ccloop 执行失败：{{detail}}",
   "control-peer-exit": "ccloop 出错退出：{{detail}}",
   "agent-unselected": "有槽位没有选定 agent。",

@@ -96,6 +96,15 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "plan-library-archive", payload: { entryId: "pl-0123456789abcdef" }, tier: "open", member: V },
   { entry: "import-plan.tokenLimit", payload: { groupId: "g", repoId: "repo", libraryEntry: {}, tokenLimit: 5 }, tier: "token", member: F },
   { entry: "import-plan.integration", payload: { groupId: "g", repoId: "repo", libraryEntry: {}, integration: { delivery: "keep" } }, tier: "token", member: F },
+  // Scheduled flows and groups spec 2026-10-24 §11.1 (Task 5): setting a schedule (its pool and token limit are budgets, its
+  // scheme a delivery choice) and making one from a group are token; enabling is token, and disabling, removing and
+  // resuming stop spending (open).
+  { entry: "schedule-set", payload: { projectId: "repo", name: "n", cron: "0 9 * * 1", enabled: false, start: { kind: "flow", template: "wechat-article", params: {} } }, tier: "token", member: V },
+  { entry: "schedule-enable", payload: { enabled: true }, tier: "token", member: V },
+  { entry: "schedule-enable", payload: { enabled: false }, tier: "open", member: V },
+  { entry: "schedule-remove", payload: {}, tier: "open", member: V },
+  { entry: "schedule-resume", payload: {}, tier: "open", member: V },
+  { entry: "schedule-from-group", payload: { scheduleId: "sch-a", name: "n", cron: "0 9 * * 1", enabled: false }, tier: "token", member: V },
 ];
 
 /** Gaps spec §6.3, §13: the `any` verbs whose socket tier is a predicate on the payload (written out, not read back). */
