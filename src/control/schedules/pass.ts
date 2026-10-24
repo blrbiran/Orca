@@ -2,15 +2,16 @@
  * Scheduled flows and groups spec 2026-10-24 §7.2, plan Task 6: one scheduler pass. Resume every unsettled start first
  * (§7.5), then evaluate each live schedule: the zone-change re-initialisation, the newest due slot, the overlap skip,
  * T1, the start, T2. Every decision is pure over stored facts; each write is one transaction (the fire row with the
- * schedules row's revision). A starter is idempotent by `fire.commandId`; a `ControlError` from it is a failed start,
- * any other throw is a crash that leaves the `starting` row for the next pass (C5).
+ * schedules row's revision). A starter is idempotent by `fire.commandId`; a refusal from it (`ControlError` or the flow
+ * kernel's `FlowRefusal`) is a failed start, any other throw is a crash that leaves the `starting` row for the next
+ * pass (C5).
  */
 import { PAUSE_AFTER } from "../checks/pass.js";
 import { cronSlotsBetween, latestSlot, parseCron } from "../checks/cron.js";
 import { ControlError } from "../errors.js";
 import type { ControlStore } from "../store.js";
 import { canonicalTimeZone, readUsageCalendar } from "../usageCalendar.js";
-import { uuidOf } from "../../flow/kernel.js";
+import { FlowRefusal, uuidOf } from "../../flow/kernel.js";
 import { firedGroupId, type ScheduleBody, type ScheduleState } from "./model.js";
 import {
   insertFire, listActiveFires, listSchedules, listStartingFires, readSchedule, settleFire, writeScheduleState,
@@ -80,6 +81,12 @@ function alreadyStarted(store: ControlStore, fire: ScheduleFire, schedule: Sched
   return { ok: false, code };
 }
 
+/** §7.6: a start that refused by name is a failed fire; any other throw is a crash (C5). */
+function refusalCode(error: unknown): string | null {
+  if (error instanceof ControlError || error instanceof FlowRefusal) return error.code;
+  return null;
+}
+
 /** §7 step 7: the schedule's own starter; a kind without one fails `control-target-not-allowed`. */
 async function startOf(deps: SchedulePassDeps, fire: ScheduleFire, schedule: ScheduleBody): Promise<{ flowRunId?: string; groupId?: string }> {
   if (schedule.kind === "flow") {
@@ -137,8 +144,9 @@ export async function resumeStartingFires(deps: SchedulePassDeps, _now: number):
     try {
       settleStarted(deps.store, fire, await startOf(deps, fire, row.body));
     } catch (error) {
-      if (!(error instanceof ControlError)) throw error;
-      settleFailed(deps.store, fire, error.code);
+      const code = refusalCode(error);
+      if (code === null) throw error;
+      settleFailed(deps.store, fire, code);
     }
   }
 }
@@ -182,12 +190,13 @@ export async function evaluateSchedule(deps: SchedulePassDeps, row: ScheduleRow,
       scheduleId: row.id, slot, at: now, lastSlot: slot, outcome: "starting",
       commandId: `orca-auto-schedule-${row.id}-${slot}`, lateMs, missed, creditedTo,
     });
-    // §7.2 steps 7-8: the start is idempotent; a ControlError settles `failed`, any other throw stays a crash.
+    // §7.2 steps 7-8: the start is idempotent; a refusal settles `failed`, any other throw stays a crash.
     try {
       settleStarted(store, fire, await startOf(deps, fire, body));
     } catch (error) {
-      if (!(error instanceof ControlError)) throw error;
-      settleFailed(store, fire, error.code);
+      const code = refusalCode(error);
+      if (code === null) throw error;
+      settleFailed(store, fire, code);
     }
   } catch (error) {
     if (error instanceof ControlError && error.detail === "schedule-slot-taken") return;

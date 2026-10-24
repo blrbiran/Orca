@@ -125,6 +125,8 @@ export function insertFire(store: ControlStore, input: FireInsertInput): Schedul
   return store.transaction(() => {
     const row = readSchedule(store, input.scheduleId);
     if (row === null) throw new ControlError("recovery-blocked", "schedule-missing");
+    // §10: the attribution is the schedule's enabler; a different name never writes a fire.
+    if (input.creditedTo !== row.body.enabledBy) throw new ControlError("recovery-blocked", "fire-credited-to");
     if (store.db.prepare("SELECT 1 FROM schedule_fires WHERE schedule_id=? AND slot=?").get(input.scheduleId, input.slot) !== undefined) {
       throw new ControlError("recovery-blocked", "schedule-slot-taken");
     }

@@ -13,7 +13,7 @@ import { firedGroupId } from "../../src/control/schedules/model.js";
 import { insertFire, readFire, readSchedule, settleFire, writeScheduleState, type ScheduleFire } from "../../src/control/schedules/store.js";
 import { applyScheduleCommand, type ScheduleCommand } from "../../src/control/schedules/commands.js";
 import { openControlStore, type ControlStore } from "../../src/control/store.js";
-import { uuidOf } from "../../src/flow/kernel.js";
+import { uuidOf, FlowRefusal } from "../../src/flow/kernel.js";
 
 const REPO = "repo";
 const FOLDER = "/repos/proj";
@@ -430,6 +430,35 @@ describe("C4 failure streak", () => {
       expect(fireRows(s, "sch-a")[1]!.outcome).toBe("failed");
     } finally { s.close(); }
   });
+
+  it("a FlowRefusal is a failed fire that counts, and the pass still starts the next schedule", async () => {
+    const { s, clock } = await openStore();
+    try {
+      setZone(s, "UTC");
+      createFlow(s, clock, {}, "sch-a");
+      createFlow(s, clock, {}, "sch-b");
+      const calls: string[] = [];
+      const started = flowStarter(s, calls);
+      const starter = async (fire: ScheduleFire): Promise<{ flowRunId: string }> => {
+        if (fire.scheduleId === "sch-a") throw new FlowRefusal("flow-param-invalid:idea", "the idea");
+        return started(fire);
+      };
+      await passAt(s, clock, at(1, 9, 0), { startFlow: starter });
+      const refused = fireRows(s, "sch-a");
+      expect(refused).toHaveLength(1);
+      expect(refused[0]!.outcome).toBe("failed");
+      expect(refused[0]!.reason).toBe("flow-param-invalid:idea");
+      expect(readSchedule(s, "sch-a")!.body.state.failureStreak).toBe(1);
+      expect(fireRows(s, "sch-b")[0]!.outcome).toBe("started");
+      expect(calls).toHaveLength(1);
+      await passAt(s, clock, at(2, 9, 0), { startFlow: starter });
+      await passAt(s, clock, at(3, 9, 0), { startFlow: starter });
+      const state = readSchedule(s, "sch-a")!.body.state;
+      expect(state.failureStreak).toBe(3);
+      expect(state.paused).toBe(true);
+      expect(state.pausedReason).toBe("flow-param-invalid:idea");
+    } finally { s.close(); }
+  });
 });
 
 describe("C10 fire rows", () => {
@@ -463,6 +492,47 @@ describe("C10 fire rows", () => {
       const second = fireRows(s, "sch-a")[1]!;
       settleFire(s, { scheduleId: "sch-a", seq: Number(second.seq), outcome: "waiting", reason: "auto-confirm-refused:x" });
       expect(() => settleFire(s, { scheduleId: "sch-a", seq: Number(second.seq), outcome: "started" })).toThrowError(ControlError);
+    } finally { s.close(); }
+  });
+
+  it("waiting → started is accepted only for auto-confirm-ineligible:8", async () => {
+    const { s, clock } = await openStore();
+    try {
+      setZone(s, "UTC");
+      createFlow(s, clock, {}, "sch-a");
+      await passAt(s, clock, at(1, 9, 0), { startFlow: flowStarter(s) });
+      const first = fireRows(s, "sch-a")[0]!;
+      const seq = Number(first.seq);
+      settleFire(s, { scheduleId: "sch-a", seq, outcome: "waiting", reason: "auto-confirm-ineligible:8" });
+      expect(() => settleFire(s, { scheduleId: "sch-a", seq, outcome: "started" })).not.toThrow();
+      expect(readFire(s, "sch-a", seq)!.outcome).toBe("started");
+      expect(readFire(s, "sch-a", seq)!.reason).toBe("auto-confirm-ineligible:8");
+      flowRunState(s, String(first.flow_run_id), "done");
+      await passAt(s, clock, at(2, 9, 0), { startFlow: flowStarter(s) });
+      const second = fireRows(s, "sch-a")[1]!;
+      const otherSeq = Number(second.seq);
+      settleFire(s, { scheduleId: "sch-a", seq: otherSeq, outcome: "waiting", reason: "auto-confirm-refused:x" });
+      expect(() => settleFire(s, { scheduleId: "sch-a", seq: otherSeq, outcome: "started" })).toThrowError(ControlError);
+    } finally { s.close(); }
+  });
+
+  it("insertFire refuses a creditedTo that is not the schedule's enabler and writes no fire", async () => {
+    const { s, clock } = await openStore();
+    try {
+      setZone(s, "UTC");
+      createFlow(s, clock, {}, "sch-a");
+      const slot = at(1, 9, 0);
+      let error: unknown;
+      try {
+        insertFire(s, {
+          scheduleId: "sch-a", slot, at: slot, lastSlot: slot, outcome: "starting",
+          commandId: `orca-auto-schedule-sch-a-${slot}`, lateMs: 0, missed: 0, creditedTo: "bo",
+        });
+      } catch (thrown) { error = thrown; }
+      expect(error).toBeInstanceOf(ControlError);
+      expect((error as ControlError).code).toBe("recovery-blocked");
+      expect((error as ControlError).detail).toBe("fire-credited-to");
+      expect(fireRows(s, "sch-a")).toHaveLength(0);
     } finally { s.close(); }
   });
 });

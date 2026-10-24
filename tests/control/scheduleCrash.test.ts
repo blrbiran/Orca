@@ -12,7 +12,7 @@ import { schedulesPass, type SchedulePassDeps } from "../../src/control/schedule
 import { readSchedule } from "../../src/control/schedules/store.js";
 import { applyScheduleCommand, type ScheduleCommand } from "../../src/control/schedules/commands.js";
 import { openControlStore, type ControlStore } from "../../src/control/store.js";
-import { uuidOf } from "../../src/flow/kernel.js";
+import { FlowRefusal, uuidOf } from "../../src/flow/kernel.js";
 import type { ScheduleFire } from "../../src/control/schedules/store.js";
 
 const REPO = "repo";
@@ -42,10 +42,10 @@ const flowCreate = (overrides: Record<string, unknown> = {}) => ({
   projectId: REPO, name: "daily", cron: "0 9 * * *", enabled: true,
   start: { kind: "flow" as const, template: "wechat-article", params: { idea: "a topic" } }, ...overrides,
 });
-function createFlow(s: ControlStore, clock: Clock): void {
+function createFlow(s: ControlStore, clock: Clock, scheduleId = "sch-a"): void {
   mustRun(s, clock, {
-    schema: "orca-raw-command-v1", commandId: "create-a", actorId: "human", expectedRevision: 0, verb: "schedule-set",
-    target: { kind: "schedule", scheduleId: "sch-a" }, payload: flowCreate(),
+    schema: "orca-raw-command-v1", commandId: `create-${scheduleId}`, actorId: "human", expectedRevision: 0, verb: "schedule-set",
+    target: { kind: "schedule", scheduleId }, payload: flowCreate(),
   } as ScheduleCommand);
 }
 const VERSION_ORIGIN = { kind: "import" as const, fileName: "p.json", fileSha256: "f".repeat(64), format: "orca-plan-v1" as const };
@@ -135,8 +135,10 @@ describe("C5 crash resume", () => {
     try {
       createGroup(s, clock);
       let calls = 0;
+      const commandIds: string[] = [];
       const starter = async (fire: ScheduleFire): Promise<{ groupId: string }> => {
         calls += 1;
+        commandIds.push(fire.body.commandId!);
         if (calls === 1) throw new Error("crash after T1");
         return writeBookedImport(s, fire);
       };
@@ -146,8 +148,38 @@ describe("C5 crash resume", () => {
       const fires = fireRows(s, "sch-g");
       expect(fires).toHaveLength(1);
       expect(fires[0]!.outcome).toBe("started");
-      expect(String(fires[0]!.group_id)).toBe(firedGroupId("sch-g", at(1, 9)));
+      const groupId = firedGroupId("sch-g", at(1, 9));
+      expect(groupId.startsWith("sgrp-")).toBe(true);
+      expect(String(fires[0]!.group_id)).toBe(groupId);
+      // The re-run is T1's own command: the same commandId and the same sgrp- group.
+      expect(commandIds).toHaveLength(2);
+      expect(commandIds[1]).toBe(commandIds[0]);
+      expect(commandIds[1]).toBe(`orca-auto-schedule-sch-g-${at(1, 9)}`);
+      expect(s.db.prepare("SELECT group_id FROM commands WHERE id=?").get(commandIds[1]!)!.group_id).toBe(groupId);
       expect(bookedCount(s, "sch-g", at(1, 9))).toBe(1);
+    } finally { s.close(); }
+  });
+
+  it("(a) a refused re-run after a crash settles failed and counts; the pass starts the next schedule", async () => {
+    const { s, clock } = await openStore();
+    try {
+      createFlow(s, clock);
+      createFlow(s, clock, "sch-b");
+      const crash = async (): Promise<{ flowRunId: string }> => { throw new Error("crash after T1"); };
+      await expect(passAt(s, clock, at(1, 9), { startFlow: crash })).rejects.toThrow("crash after T1");
+      expect(fireRows(s, "sch-a")[0]!.outcome).toBe("starting");
+      const starter = async (fire: ScheduleFire): Promise<{ flowRunId: string }> => {
+        if (fire.scheduleId === "sch-a") throw new FlowRefusal("flow-param-invalid:idea", "the idea");
+        return writeFlowRun(s, fire);
+      };
+      await passAt(s, clock, at(1, 9), { startFlow: starter });
+      const fires = fireRows(s, "sch-a");
+      expect(fires).toHaveLength(1);
+      expect(fires[0]!.outcome).toBe("failed");
+      expect(fires[0]!.reason).toBe("flow-param-invalid:idea");
+      expect(readSchedule(s, "sch-a")!.body.state.failureStreak).toBe(1);
+      expect(fireRows(s, "sch-b")[0]!.outcome).toBe("started");
+      expect(count(s, "flow_runs")).toBe(1);
     } finally { s.close(); }
   });
 
