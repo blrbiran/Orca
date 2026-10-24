@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { canonicalBytes } from "./canonicalJson.js";
 import { mirrorWebAuthority, reopenProposalBodies, type Body } from "./proposalReopen.js";
 
-export const schemaVersion = "19";
+export const schemaVersion = "20";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -206,6 +206,26 @@ DROP TABLE requirement_rounds;
 ALTER TABLE requirement_rounds_keyed RENAME TO requirement_rounds;
 `;
 
+// Scheduled flows and groups spec 2026-10-24 §12: the plan library and the schedules, four STRICT tables created empty.
+// Nothing existing is touched. Append-only rules (versions; fire rows' forward moves) live in their single writers.
+export const schema19To20 = `CREATE TABLE IF NOT EXISTS plan_library(id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('active','archived')), body TEXT NOT NULL) STRICT;
+CREATE TABLE IF NOT EXISTS plan_library_versions(entry_id TEXT NOT NULL REFERENCES plan_library(id),
+  version INTEGER NOT NULL CHECK(version > 0), sha256 TEXT NOT NULL, doc TEXT NOT NULL, origin TEXT NOT NULL,
+  "by" TEXT NOT NULL, via TEXT NOT NULL, at INTEGER NOT NULL,
+  PRIMARY KEY(entry_id, version), UNIQUE(entry_id, sha256)) STRICT;
+CREATE TABLE IF NOT EXISTS schedules(id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('flow','group')), revision INTEGER NOT NULL CHECK(revision >= 0),
+  removed INTEGER NOT NULL DEFAULT 0 CHECK(removed IN (0,1)), body TEXT NOT NULL) STRICT;
+CREATE TABLE IF NOT EXISTS schedule_fires(schedule_id TEXT NOT NULL REFERENCES schedules(id),
+  seq INTEGER NOT NULL CHECK(seq > 0), slot INTEGER NOT NULL, at INTEGER NOT NULL,
+  outcome TEXT NOT NULL CHECK(outcome IN ('starting','started','waiting','skipped','failed')), reason TEXT,
+  flow_run_id TEXT, group_id TEXT, "by" TEXT NOT NULL, via TEXT NOT NULL, body TEXT NOT NULL,
+  PRIMARY KEY(schedule_id, seq), UNIQUE(schedule_id, slot)) STRICT;
+CREATE INDEX IF NOT EXISTS schedules_by_project ON schedules(project_id);
+CREATE INDEX IF NOT EXISTS plan_library_by_project ON plan_library(project_id);
+`;
+
 /** Re-keys `requirement_rounds` once: a store whose table already has `step_key` (a fresh one, or a re-run step) is left as it is. */
 function rekeyRequirementRounds(store: DatabaseSync): void {
   if (store.prepare("PRAGMA table_info(requirement_rounds)").all().some((row) => row.name === "step_key")) return;
@@ -214,7 +234,7 @@ function rekeyRequirementRounds(store: DatabaseSync): void {
 
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
 export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15 + schema15To16
-  + requirementRoundsKeyed + schema16To17 + schema17To18;
+  + requirementRoundsKeyed + schema16To17 + schema17To18 + schema19To20;
 
 /**
  * Checks spec 2026-10-22 §4.1 "Migration (no aliases, P1)": each repository settings body's `integrationCheck
@@ -311,13 +331,14 @@ function repairOf(store: DatabaseSync, groupId: string, group: Body, now: () => 
   return writes;
 }
 
-/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, 18 → 19, then the version marker. */
+/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, 18 → 19, 19 → 20, then the version marker. */
 function finishMigration(store: DatabaseSync, now: () => number): void {
   store.exec(schema15To16);
   migrateSettings15To16(store);
   migrate16To17(store);
   migrate17To18(store);
   repairEstimateBreachedGroups(store, now);
+  store.exec(schema19To20);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }
 
@@ -337,14 +358,21 @@ function migrate7To8(store: DatabaseSync): void {
 export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () => number = Date.now): void {
   // Saved recovery's 11→12 marker fenced older owners. The current 11/12→13 upgrade also
   // adds installation-update revision/outbox tables; it leaves old policy and accounting rows intact.
+  if (fromVersion === "19") {
+    store.exec(schema19To20);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "18") {
     repairEstimateBreachedGroups(store, now);
+    store.exec(schema19To20);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "17") {
     migrate17To18(store);
     repairEstimateBreachedGroups(store, now);
+    store.exec(schema19To20);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -352,6 +380,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate16To17(store);
     migrate17To18(store);
     repairEstimateBreachedGroups(store, now);
+    store.exec(schema19To20);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }

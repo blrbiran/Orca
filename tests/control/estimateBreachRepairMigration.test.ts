@@ -64,7 +64,7 @@ describe("schema 19: the one-time repair of estimate-stuck groups", () => {
     const s = await stuck(); let store: ControlStore | null = null; try {
       const revisionBefore = Number(new DatabaseSync(s.dbPath, { readOnly: true }).prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision);
       store = await reopen(s);
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("19");
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("20");
       const body = group(store);
       expect(body.status).toBe("draft");
       expect(body.statusRepairs).toEqual([{ from: "blocked", to: "draft", reopened: false, cause: "estimate-breach", runIds: [s.runId], by: "migration-18-to-19", at: REPAIR_AT }]);
@@ -210,7 +210,7 @@ describe("schema 19: the one-time repair of estimate-stuck groups", () => {
     } finally { await dispose(s, store); }
   });
 
-  it("review I2: a group whose repair fails part-way is left byte-equal in every table, and the store opens at 19", async () => {
+  it("review I2: a group whose repair fails part-way is left byte-equal in every table, and the store opens at 20", async () => {
     // A confirmed stuck group under the optional token policy whose task work allocation holds tokens "x": the proposal
     // and work-item writes succeed, then the task's token_policies write (an INTEGER column) throws.
     const s = await stuck({ confirm: true, finite: false, before: raw => {
@@ -223,7 +223,7 @@ describe("schema 19: the one-time repair of estimate-stuck groups", () => {
       const rows = Object.fromEntries(names.map(name => [name, rowsOf(before, name)]));
       before.close();
       store = await reopen(s);
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("19");
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("20");
       for (const name of names.filter(n => n !== "meta")) expect([name, rowsOf(store.db, name)]).toEqual([name, rows[name]]);
       expect(group(store).status).toBe("blocked");
     } finally { await dispose(s, store); }

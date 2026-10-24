@@ -46,8 +46,8 @@ describe("schema 16", () => {
     const root = await mkdtemp(join(tmpdir(), "s16f-"));
     const store = await openControlStore({ stateDir: join(root, "s") });
     try {
-      expect(schemaVersion).toBe("19");
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("19");
+      expect(schemaVersion).toBe("20");
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("20");
       expect(store.db.prepare("SELECT count(*) AS n FROM check_state").get()!.n).toBe(0);
       expect(store.db.prepare("SELECT sql FROM sqlite_master WHERE name='check_state'").get()!.sql).toContain("PRIMARY KEY(repo_id, kind, target)");
     } finally { store.close(); await rm(root, { recursive: true, force: true }); }
@@ -61,7 +61,7 @@ describe("schema 16", () => {
     });
     const store = await openControlStore({ stateDir: dir });
     try {
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("19");
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("20");
       const raw = (repoId: string) => String(store.db.prepare("SELECT body FROM repository_settings WHERE repo_id=?").get(repoId)!.body);
       // Canonical bytes: sorted keys, no old field.
       expect(raw("on")).toBe('{"checks":{"integrationCheck":{"command":"npm ci && npm test","enabled":true}},"criteriaReview":false,"revision":4,"workspaceMode":"clone"}');
