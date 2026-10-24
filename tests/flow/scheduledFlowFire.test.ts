@@ -7,11 +7,15 @@
  */
 import { describe, expect, it } from "vitest";
 import { writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
+import { createAdmissionGate } from "../../src/control/admissionGate.js";
+import type { ScheduleBody } from "../../src/control/schedules/model.js";
+import type { ScheduleFire } from "../../src/control/schedules/store.js";
 import type { ControlStore } from "../../src/control/store.js";
 import { enactEffect } from "../../src/flow/effects.js";
 import { openAsks, startFlowRun, type FlowDeps } from "../../src/flow/kernel.js";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { getFlowRun, listEffects } from "../../src/flow/store.js";
+import { flowScheduleStarter } from "../../src/panel/controlAssembly.js";
 import { permissionRefusal } from "../../src/panel/permissions.js";
 import { fakeChildPort } from "./fixtures/childPort.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
@@ -112,6 +116,41 @@ describe("C6 a scheduled flow fire", () => {
       await w.advance();
       expect(listEffects(w.store, flowRunId)[0]).toMatchObject({ state: "applied", remoteRef: "image-1" });
       expect((w.latest(flowRunId, "act")!.body as { flags?: string[] }).flags).toContain("effect-applied");
+    } finally { await w.dispose(); }
+  });
+
+  // `flowScheduleStarter` is the only production visitor of the origin field; this drives it, so deleting its origin line
+  // fails here instead of leaving every real fire unclamped in silence.
+  it("the production starter writes the fire's origin, so the clamp applies to the run it starts", async () => {
+    const children = fakeChildPort();
+    const asked: Array<{ by: string; operatorId: string }> = [];
+    const w = await flowWorld({ t: template("external") }, {
+      children: children.port,
+      confirmParent: async (input) => { asked.push({ by: input.by, operatorId: input.operatorId }); return { call: null, children: null }; },
+    }); try {
+      projectEffects(w.store, { external: "apply-flag" });
+      const schedule: ScheduleBody = {
+        id: "sch-a", projectId: REPO, name: "daily", kind: "flow", cron: "0 9 * * *", enabled: true,
+        start: { kind: "flow", template: "builtin/t@3", params: {} },
+        createdBy: "ana", createdVia: "web", createdAt: SLOT,
+        updatedBy: "ana", updatedVia: "web", updatedAt: SLOT,
+        enabledBy: "ana", enabledVia: "web", enabledAt: SLOT,
+        state: { lastSlot: null, tz: null, failureStreak: 0, paused: false, pausedReason: null },
+      };
+      const fire: ScheduleFire = {
+        scheduleId: "sch-a", seq: 1, slot: SLOT, at: SLOT, outcome: "starting", reason: null,
+        flowRunId: null, groupId: null, by: "orca-auto", via: "schedule:sch-a", body: { commandId: "fire-cmd-1" },
+      };
+      const starter = flowScheduleStarter({ deps: w.deps, refreshAgents: async () => {} }, () => [{ repoId: REPO, path: w.folder }], createAdmissionGate());
+      const { flowRunId } = await starter(fire, schedule);
+      await w.advance();
+      expect(getFlowRun(w.store, flowRunId)!.body).toMatchObject({ by: "orca-auto", via: "schedule:sch-a", origin: ORIGIN });
+      expect(asked).toEqual([{ by: "orca-auto", operatorId: "ana" }]);
+      expect(listEffects(w.store, flowRunId)).toMatchObject([
+        { state: "staged", level: "confirm", policy: { value: "confirm", source: "schedule", lockedBy: null } },
+      ]);
+      expect(children.counts().dispatches).toBe(0);
+      expect((await starter(fire, schedule)).flowRunId).toBe(flowRunId);
     } finally { await w.dispose(); }
   });
 });
