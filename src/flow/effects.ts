@@ -69,7 +69,7 @@ export function gateEffect(deps: FlowDeps, run: LoadedRun, execution: ExecutionR
   const effect = effectOf(run, step);
   if (effect === null) return null;
   const { project, global } = flowLayers(deps.store, run.body.projectId);
-  const level = resolveLevel(effect.cls, "recommendedLevel" in step ? step : {}, project, global);
+  const level = resolveLevel(effect.cls, "recommendedLevel" in step ? step : {}, project, global, { scheduled: run.body.origin?.kind === "schedule" });
   const at = deps.now();
   if (level.value === "apply-flag") return { run: newRecord(deps.store, run, execution, effect, level, "confirmed", at).id };
   const record = newRecord(deps.store, run, execution, effect, level, "staged", at);

@@ -94,6 +94,7 @@ export const durableCommandErrorStatuses = {
   "flow-step-not-found": 404,
   "flow-message-target-missing": 404,
   "flow-template-invalid": 422,
+  "flow-template-version-missing": 422,
   "flow-param-invalid": 400,
   "flow-answer-invalid": 400,
   "flow-command-missing": 422,

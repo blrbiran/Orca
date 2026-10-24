@@ -49,4 +49,19 @@ describe("effect level resolution (C18)", () => {
     // Configured delivery is a project choice: a lock still bounds it.
     expect(resolveLevel("irreversible", step(), null, G({ irreversible: "stage-only" }, ["effects.irreversible"]), { configuredDelivery: true }).value).toBe("stage-only");
   });
+
+  it("a scheduled run clamps external and irreversible to confirm last, after configured delivery and the lock", () => {
+    expect(resolveLevel("external", step(), P({ external: "apply-flag" }), null, { scheduled: true })).toEqual({ value: "confirm", source: "schedule", lockedBy: null });
+    expect(resolveLevel("external", step(), null, null, { configuredDelivery: true, scheduled: true })).toEqual({ value: "confirm", source: "schedule", lockedBy: null });
+    expect(resolveLevel("irreversible", step(), null, null, { configuredDelivery: true, scheduled: true })).toEqual({ value: "confirm", source: "schedule", lockedBy: null });
+    // The lock's state is kept on the clamped result.
+    expect(resolveLevel("external", step(), null, G({ external: "apply-flag" }, ["effects.external"]), { scheduled: true })).toEqual({ value: "confirm", source: "schedule", lockedBy: "global" });
+    // Already at least confirm: unchanged.
+    expect(resolveLevel("irreversible", step(), null, null, { scheduled: true })).toEqual({ value: "confirm", source: "builtin", lockedBy: null });
+    expect(resolveLevel("external", step(), P({ external: "stage-only" }), null, { scheduled: true })).toEqual({ value: "stage-only", source: "project", lockedBy: null });
+    // local and cost are not clamped; a hand start keeps its setting.
+    expect(resolveLevel("cost", step(), P({ cost: "apply-flag" }), null, { scheduled: true })).toEqual({ value: "apply-flag", source: "project", lockedBy: null });
+    expect(resolveLevel("local", step(), null, null, { scheduled: true })).toEqual({ value: "apply-flag", source: "builtin", lockedBy: null });
+    expect(resolveLevel("external", step(), P({ external: "apply-flag" }), null)).toEqual({ value: "apply-flag", source: "project", lockedBy: null });
+  });
 });

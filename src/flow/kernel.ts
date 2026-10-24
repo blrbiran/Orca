@@ -124,6 +124,8 @@ export interface StartFlowInput {
   via: string;
   /** The `flow-start` command's id: the run's id is derived from it, so a retried command finds the run it started. */
   idempotencyKey?: string;
+  /** §8 step 2: a scheduled fire's schedule and slot, written into the run body (the effect clamp reads it). */
+  origin?: { kind: "schedule"; scheduleId: string; slot: number };
 }
 
 const TIER_RANK = { low: 0, mid: 1, high: 2 } as const;
@@ -176,12 +178,17 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
     const existing = getFlowRun(deps.store, `fr-${id}`);
     if (existing !== null) return { flowRunId: existing.id, groupId: existing.groupId };
   }
-  const match = /^builtin\/([a-z0-9][a-z0-9-]*)(?:@\d+)?$/.exec(input.templateRef);
+  const match = /^builtin\/([a-z0-9][a-z0-9-]*)(?:@(\d+))?$/.exec(input.templateRef);
   if (match === null) throw new FlowRefusal("flow-template-invalid", `${input.templateRef} is not a built-in template (phase 1 ships built-ins only)`);
   let loaded: ReturnType<typeof loadBuiltin>;
   try { loaded = loadBuiltin(match[1]!, deps.builtinRoot); }
   catch (error) { throw new FlowRefusal("flow-template-invalid", (error as Error).message); }
   const template = loaded.template;
+  // §8 step 2 (I-1, M-4): every start runs the version it names or none; the comparison is before any write.
+  const shipped = template.version ?? 1;
+  if (match[2] !== undefined && Number(match[2]) !== shipped) {
+    throw new FlowRefusal("flow-template-version-missing", `builtin/${match[1]}@${match[2]} was requested, but version ${shipped} is installed`);
+  }
   // Gaps spec §8.2: the settings' presets for this template (project > global) fill what the start did not give.
   const presets = flowLayers(deps.store, input.projectId ?? null);
   const { params, images: read } = resolveStartParams(template, input.params, {
@@ -215,6 +222,7 @@ export async function startFlowRun(deps: FlowDeps, input: StartFlowInput): Promi
   const body: FlowRunBody = {
     templateRef: input.templateRef, params, roles, clarify: input.clarify ?? null, unattended: input.unattended ?? false, projectId, dir: vault?.dir ?? null,
     vaultPath: vault?.path ?? null, importCommit, by: input.by, via: input.via, startedAt: deps.now(),
+    ...(input.origin === undefined ? {} : { origin: input.origin }),
     ...(Object.keys(images).length === 0 ? {} : { images }),
   };
   const vaultId = vault === null ? null : vaultKeyOf(vault.dir);

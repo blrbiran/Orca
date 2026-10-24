@@ -436,6 +436,7 @@ export function flowScheduleStarter(
         ...(start.unattended === undefined ? {} : { unattended: start.unattended }),
         ...(start.pool === undefined ? {} : { pool: start.pool }),
         by: "orca-auto", via: `schedule:${schedule.id}`, operatorId: schedule.enabledBy, idempotencyKey: commandId,
+        origin: { kind: "schedule", scheduleId: schedule.id, slot: fire.slot },
       }));
     } catch (error) {
       // The gate refuses by throwing `panel-draining`; rethrown as a plain error it is a crash, never a booked refusal.

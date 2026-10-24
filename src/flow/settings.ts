@@ -16,7 +16,7 @@ import { FLOW_EFFECT_CLASSES, type FlowEffectClass, type FlowLevel, type FlowLev
 
 export type SettingSource = "project" | "global" | "builtin";
 export interface Sourced<T> { value: T; source: SettingSource; lockedBy: "global" | null; overriddenByLock?: T }
-export interface ResolvedLevel { value: FlowLevel; source: "project" | "global" | "template" | "builtin"; lockedBy: "global" | null; overriddenByLock?: FlowLevel }
+export interface ResolvedLevel { value: FlowLevel; source: "project" | "global" | "template" | "builtin" | "schedule"; lockedBy: "global" | null; overriddenByLock?: FlowLevel }
 
 /** §9.1: the class defaults. */
 export const BUILTIN_LEVELS: Readonly<Record<FlowEffectClass, FlowLevel>> = { local: "apply-flag", cost: "apply-flag", external: "apply-flag", irreversible: "confirm" };
@@ -37,8 +37,10 @@ function levelOf(cls: FlowEffectClass, setting: FlowLevelSetting, recommended: F
 /**
  * §9.3: the level an effect-classed step runs at. `configuredDelivery`: the step is the delivery the person configured
  * (push/PR from the Web UI), which runs `apply-flag` as their explicit project choice (still under any lock).
+ * `scheduled` (§10 item 2, I-6): nobody is at the keyboard, so external and irreversible clamp to at least `confirm`,
+ * last -- after configured delivery, the irreversible clamp and the lock.
  */
-export function resolveLevel(cls: FlowEffectClass, step: { recommendedLevel?: FlowLevel }, project: FlowsLayer | null, global: GlobalFlowsLayer | null, opts: { configuredDelivery?: boolean } = {}): ResolvedLevel {
+export function resolveLevel(cls: FlowEffectClass, step: { recommendedLevel?: FlowLevel }, project: FlowsLayer | null, global: GlobalFlowsLayer | null, opts: { configuredDelivery?: boolean; scheduled?: boolean } = {}): ResolvedLevel {
   const rec = step.recommendedLevel;
   const at = (layer: "project" | "global", setting: FlowLevelSetting | undefined): ResolvedLevel | null => {
     if (setting === undefined) return null;
@@ -53,9 +55,12 @@ export function resolveLevel(cls: FlowEffectClass, step: { recommendedLevel?: Fl
   const clampIrreversible = (r: ResolvedLevel): ResolvedLevel => (cls === "irreversible" && r.value === "apply-flag" && opts.configuredDelivery !== true ? builtin : r);
   if (mine !== null) mine = clampIrreversible(mine);
   const bound = clampIrreversible(theirs);
-  if (!(global?.locks ?? []).includes(`effects.${cls}` as FlowLockablePath)) return mine ?? bound;
-  if (mine === null) return { ...bound, lockedBy: "global" };
-  return RANK[mine.value] >= RANK[bound.value] ? { ...mine, lockedBy: "global" } : { ...bound, lockedBy: "global", overriddenByLock: mine.value };
+  const resolved = !(global?.locks ?? []).includes(`effects.${cls}` as FlowLockablePath) ? mine ?? bound
+    : mine === null ? { ...bound, lockedBy: "global" as const }
+    : RANK[mine.value] >= RANK[bound.value] ? { ...mine, lockedBy: "global" as const } : { ...bound, lockedBy: "global" as const, overriddenByLock: mine.value };
+  return opts.scheduled === true && (cls === "external" || cls === "irreversible") && resolved.value === "apply-flag"
+    ? { ...resolved, value: "confirm", source: "schedule" }
+    : resolved;
 }
 
 /** The two layers of a project (null: the global layer only). */

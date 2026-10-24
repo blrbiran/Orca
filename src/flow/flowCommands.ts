@@ -66,7 +66,7 @@ export async function dirProjectOf(projects: ReadonlyArray<{ repoId: string; pat
  * `flow-refused` with the kernel's code as the detail, never a 500.
  */
 const BOOKED: ReadonlySet<string> = new Set([
-  "flow-run-not-found", "flow-step-not-found", "flow-template-invalid", "flow-param-invalid", "flow-command-missing", "role-unresolved",
+  "flow-run-not-found", "flow-step-not-found", "flow-template-invalid", "flow-template-version-missing", "flow-param-invalid", "flow-command-missing", "role-unresolved",
   "flow-profiles-unresolved", "flow-ask-closed", "flow-answer-invalid", "flow-effect-not-staged", "flow-effect-closed", "flow-plan-stale",
   "flow-message-target-missing", "flow-run-stopped", "flow-attachment-invalid",
   // Gaps spec §13: a plan step the choice cannot answer.

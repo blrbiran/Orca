@@ -1918,6 +1918,7 @@ export const enErrors: Record<string, string> = {
   "flow-message-target-missing": "The message names a step, execution or record this run does not have: {{detail}}",
   "flow-folder-too-large": "The folder is too large to list its images: {{detail}}",
   "flow-template-invalid": "The flow template is not valid: {{detail}}",
+  "flow-template-version-missing": "This version of the template is not installed.",
   "flow-param-invalid": "A flow parameter is not valid: {{detail}}",
   "flow-answer-invalid": "The answer does not fit what the step asked: {{detail}}",
   "flow-command-missing": "A command the template needs is not available on this machine: {{detail}}",

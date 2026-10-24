@@ -1841,6 +1841,7 @@ export const zhErrors: Record<string, string> = {
   "flow-message-target-missing": "消息指向的步骤、执行或记录在这次运行里不存在：{{detail}}",
   "flow-folder-too-large": "文件夹太大，列不出里面的图片：{{detail}}",
   "flow-template-invalid": "流程模板不合法：{{detail}}",
+  "flow-template-version-missing": "这个模板版本未安装。",
   "flow-param-invalid": "流程参数不合法：{{detail}}",
   "flow-answer-invalid": "这个回答和步骤问的不对应：{{detail}}",
   "flow-command-missing": "模板需要的命令在这台机器上不可用：{{detail}}",

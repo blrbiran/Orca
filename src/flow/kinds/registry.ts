@@ -64,6 +64,8 @@ export interface FlowRunBody {
   projectId: string | null; dir: string | null; vaultPath: string | null; importCommit: string | null; by: string; via: string; startedAt: number;
   /** Gaps spec §8.1: each `image` param as stored at start or at its last `params` change (absent: none). */
   images?: Record<string, { source: string; sha256: string; ext: "png" | "jpg" | "gif" | "webp" }>;
+  /** §8 step 2: a scheduled fire's schedule and slot (absent: a hand start). */
+  origin?: { kind: "schedule"; scheduleId: string; slot: number };
   /** The last error a pump pass met advancing this run (other runs went on); cleared by the next clean pass. */
   lastError?: { message: string; at: number };
 }
