@@ -36,8 +36,8 @@ async function predecessorStore() {
   first.db.prepare("INSERT INTO repository_settings(repo_id, body) VALUES (?,?)").run("repo1", JSON.stringify({ checks: {} }));
   first.close();
   const raw = new DatabaseSync(join(dir, "control.sqlite"));
-  for (const index of NEW_INDEXES) raw.exec(`DROP INDEX ${index}`);
-  for (const table of ["schedule_fires", "schedules", "plan_library_versions", "plan_library"]) raw.exec(`DROP TABLE ${table}`);
+  for (const index of NEW_INDEXES) raw.exec(`DROP INDEX IF EXISTS ${index}`);
+  for (const table of ["schedule_fires", "schedules", "plan_library_versions", "plan_library"]) raw.exec(`DROP TABLE IF EXISTS ${table}`);
   raw.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(predecessor);
   const sql = tableSql(raw);
   const rows = Object.fromEntries(sql.map(({ name }) => [name, raw.prepare(`SELECT * FROM "${name}"`).all()]));
