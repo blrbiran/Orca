@@ -135,6 +135,8 @@ describe("C2 slots", () => {
       expect(fires).toHaveLength(1);
       expect(fires[0]!.outcome).toBe("started");
       expect(Number(fires[0]!.slot)).toBe(at(1, 9, 0));
+      expect((JSON.parse(String(fires[0]!.body)) as { commandId: string }).commandId)
+        .toBe(`orca-auto-schedule-sch-a-${at(1, 9, 0)}`);
       expect(calls).toHaveLength(1);
     } finally { s.close(); }
   });
@@ -245,6 +247,10 @@ describe("C2u one fire per slot", () => {
       s.db.prepare(`INSERT INTO schedule_fires(schedule_id,seq,slot,at,outcome,reason,flow_run_id,group_id,"by",via,body)
         VALUES ('sch-a',1,?,?,'skipped','previous-active:x',NULL,NULL,'orca-auto','schedule:sch-a',?)`)
         .run(slot, slot, JSON.stringify({ creditedTo: "ana" }));
+      expect(() => s.db.prepare(`INSERT INTO schedule_fires(schedule_id,seq,slot,at,outcome,reason,flow_run_id,group_id,"by",via,body)
+        VALUES ('sch-a',2,?,?,'starting',NULL,NULL,NULL,'orca-auto','schedule:sch-a',?)`)
+        .run(slot, slot, JSON.stringify({ commandId: `orca-auto-schedule-sch-a-${slot}` })))
+        .toThrowError(/UNIQUE|constraint/i);
       const before = readSchedule(s, "sch-a")!.body.state.lastSlot;
       await passAt(s, clock, at(0, 9, 30), { startFlow: flowStarter(s) });
       expect(fireRows(s, "sch-a")).toHaveLength(1);
@@ -280,7 +286,8 @@ describe("C3 overlap", () => {
           expect(second.outcome, state).toBe("started");
           expect(calls, state).toHaveLength(2);
         }
-        // The skip consumed the slot: a third pass in the same day records nothing.
+        // The slot is consumed either way: lastSlot moves onto it, so a third pass in the same day records nothing.
+        expect(readSchedule(s, "sch-a")!.body.state.lastSlot, state).toBe(at(2, 9, 0));
         const count = fireRows(s, "sch-a").length;
         await passAt(s, clock, at(2, 12, 0), { startFlow: flowStarter(s, calls) });
         expect(fireRows(s, "sch-a").length, state).toBe(count);
