@@ -93,3 +93,28 @@
 `npx vitest run tests/agentTranscript tests/control/ccloopTranscriptsSchema.test.ts`;
 `(cd web && npx vitest run tests/agentTranscript.test.tsx tests/taskDetailTranscript.test.tsx)`; `npm run typecheck`;
 `(cd web && npx tsc --noEmit -p tsconfig.json)`; `npm test` (selection quoted in the report).
+
+## Review round 1 disposition (independent review of `origin/main...d2358995`)
+
+- 1 (should-fix, `split` decoded a doomed UTF-8 lead with the next byte) — **fixed**: `validPrefix`/`continues` decode
+  a doomed prefix alone; covered by the seeded stream-equivalence fuzz and the dangling-lead case.
+- 2 (should-fix, `countBytes` lost a low-surrogate unit completing a `\u` escape mid-astral) — **fixed**: the `extra`
+  counter keeps `feedCount` equal to `feed().length`; covered by the fuzz's per-chunk unit assertion.
+- 3 (`expandOversized`'s `endUnits` unclamped) — **fixed**: `b` is raised to `a` when a short/truncated text would put
+  it first.
+- 4 (`windowBefore` materializes a whole checkpoint segment) — **deferred**: a segment is at most 1 MiB / 256 lines
+  (checkpoint stride), heads are capped at 4 KiB per field, and T11 measures 49.6 / 48.7 MiB peak under the 64 MiB gate;
+  reading backwards would trade those parsed heads for a copied segment, not clearly less.
+- 5 (>200 events in one line drops the tail silently) — **deferred**: C2 bounds the count only, and a notice or a
+  line-internal continuation needs a response-shape addition; a single line normalises to more than 200 events only for
+  a message with >200 content blocks. v2.
+- 6 (`FlowRunPage` passes `active` unconditionally) — **deferred, not reachable**: `FlowBoard.tsx:221` renders the run
+  page only while the run is open (`open !== null` replaces the board), so it is never backgrounded; the prop there is
+  `ExecutionFacts`'s head flag, not polling state.
+- 7 (`archivedRef` scans the outbox) — **deferred**: correct in this version, and a listing is cached on the run body
+  (D1), so the scan is one per run, not one per poll.
+- 8 (a range read can overshoot the 4 MiB budget by one chunk) — **deferred**: `counted` (the spec's measure, asserted
+  by T1 and printed by T11) stays ≤ 4 MiB; the overshoot is the chunk that discovers the length of the one line the
+  budget refuses, and that line becomes the next window's first line.
+- 9 (fixtures only valid UTF-8; no `feedCount === feed().length` assertion) — **fixed**: seeded random-byte fuzz over
+  1–6-byte chunks, plus the dangling-lead and split-surrogate regressions.
