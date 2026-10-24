@@ -8,7 +8,7 @@ import { readAgentPreferences } from "./agentPreferences.js";
 import { readGroupAgentOverrides } from "./agentFreeze.js";
 import { descriptorProvenance, estimatorLayerAuthority, frozenSlotOf, resolveSelection, slotLayers, type FrozenSlot, type GroupAgentOverrides, type PartialSelection } from "./agentSelection.js";
 import { unavailableCapabilities, type ExecutionProfileRouter, type FrozenProfile, type ObservedProfile } from "./profiles.js";
-import type { DirProjectOf } from "./dirGroup.js";
+import { dirWorkspaceOf, type DirProjectOf } from "./dirGroup.js";
 import type { ControlStore } from "./store.js";
 import type { Amount } from "./types.js";
 import {
@@ -364,7 +364,8 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   };
   // Integration spec §3.1: the group gets its copy of the repository's default where it gets its plan -- here, for
   // import-plan and a requirement's split acceptance alike. Keep is no field, so a keep group's body is unchanged.
-  const integration = newGroupIntegration(readIntegrationDefault(deps.store, input.repoId).scheme);
+  // Dir-requirements spec §7: a dir group (its body carries `dirWorkspace`) never has a record; it delivers by placement.
+  const integration = dirWorkspaceOf(group) !== null ? null : newGroupIntegration(readIntegrationDefault(deps.store, input.repoId).scheme);
   if (integration !== null) Object.assign(group, { integration });
   if (carry === null) {
     deps.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)")

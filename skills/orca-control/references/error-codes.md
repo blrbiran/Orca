@@ -103,6 +103,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `decision-undo-not-executable` | 400 |
 | `dependency-not-done` | 422 |
 | `dir-folder-missing` | 422 |
+| `dir-group-delivery-fixed` | 422 |
 | `dir-project-plan-import-unsupported` | 422 |
 | `duplicate-correction-id` | 409 |
 | `duplicate-proposal-target` | 422 |

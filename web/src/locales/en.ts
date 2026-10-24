@@ -1956,6 +1956,7 @@ export const enErrors: Record<string, string> = {
   // Dir-requirements spec §9.3.
   "dir-folder-missing": "The group's folder is gone or has moved ({{detail}}). Put it back at that path, then choose \"Check again\".",
   "dir-project-plan-import-unsupported": "This project is a folder, not a git repository. Open a requirement on it instead of importing a plan.",
+  "dir-group-delivery-fixed": "This group works on a folder: its finished work is written into the folder, and its delivery cannot be changed.",
   "revision-unchanged": "The revision answers the round exactly as before; change at least one answer or decision.",
   "numeric-overflow": "A number is too large: {{detail}}",
   "panel-draining": "The panel is shutting down and accepts no commands. Start it again, then retry.",

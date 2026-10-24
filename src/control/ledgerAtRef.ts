@@ -1,6 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { git, gitBytes } from "../scheduler/gitExec.js";
+import { isDirGroup } from "./dirGroup.js";
+import { ControlError } from "./errors.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { readGroup } from "./queries.js";
 import type { ControlStore } from "./store.js";
@@ -78,8 +80,22 @@ export async function integrationTargetRef(store: ControlStore, groupId: string)
   return scheme.delivery === "local" ? `refs/heads/${scheme.target}` : `refs/remotes/${scheme.remote}/${scheme.target}`;
 }
 
-/** Where a group's decision can be, in the order the first holder wins: working tree, integration target, group branch. */
-export async function ledgerSources(store: ControlStore, _repo: string, groupId: string): Promise<LedgerSource[]> {
+/**
+ * Where a group's decision can be, in the order the first holder wins: working tree, integration target, group branch.
+ * Dir-requirements spec §10: a dir group's ledger lives only on its work branch in the (bare) vault -- no working tree,
+ * no integration target. Its base is an import with `.decisions/` left out, so every ledger line on the branch was added
+ * by a landing of the group; a base that holds one is a broken invariant (Rule 12).
+ */
+export async function ledgerSources(store: ControlStore, repo: string, groupId: string): Promise<LedgerSource[]> {
+  if (isDirGroup(store, groupId)) {
+    let base: string | null;
+    try { base = (await git(repo, [...QUIET_GIT, "rev-parse", "--verify", "--quiet", `refs/orca/group/${groupId}/base^{commit}`])).trim(); }
+    catch { base = null; } // not exported yet: no base, and no branch to read either
+    if (base !== null && (await git(repo, [...QUIET_GIT, "ls-tree", base, "--", ".decisions/"])).trim() !== "") {
+      throw new ControlError("recovery-blocked", `dir-base-holds-decisions:${groupId}`);
+    }
+    return [{ where: "group-branch", ref: `refs/heads/orca/${groupId}` }];
+  }
   const target = await integrationTargetRef(store, groupId);
   return [
     { where: "working-tree", ref: null },

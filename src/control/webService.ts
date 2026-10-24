@@ -18,7 +18,7 @@ import { buildBudgetEstimateRequest, ESTIMATE_GRANT, estimateGrantFor, withEstim
 import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
-import type { DirProjectOf } from "./dirGroup.js";
+import { isDirGroup, type DirProjectOf } from "./dirGroup.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand, type ImportDefaults } from "./planImport.js";
 import { readAgentPreferences } from "./agentPreferences.js";
 import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
@@ -1357,11 +1357,13 @@ export class WebControlService {
   async setIntegrationScheme(command: SetIntegrationSchemeCommand): Promise<WebCommandResult> {
     const knownRepository = this.deps.knownRepository ?? (() => false);
     // The git checks run before the admission gate is entered: a drain never waits on a git child.
-    const failedCheck = knownRepository(command.target.repoId) ? await this.schemeCheck(command.target.repoId, command.payload.integration) : null;
+    // Dir-requirements spec §7: a `dir` project's folder is not checked (the transaction refuses it dir-group-delivery-fixed).
+    const dirProject = (this.deps.dirProjectOf?.(command.target.repoId) ?? null) !== null;
+    const failedCheck = knownRepository(command.target.repoId) && !dirProject ? await this.schemeCheck(command.target.repoId, command.payload.integration) : null;
     const release = this.deps.admissionGate?.enter();
     try {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
-      return applySetIntegrationScheme({ store: this.store, knownRepository }, command, failedCheck) as WebCommandResult;
+      return applySetIntegrationScheme({ store: this.store, knownRepository, dirProjectOf: this.deps.dirProjectOf }, command, failedCheck) as WebCommandResult;
     } finally { release?.(); }
   }
   /**
@@ -1370,7 +1372,8 @@ export class WebControlService {
    * checked, and the transaction refuses it by name.
    */
   async setGroupIntegration(command: SetGroupIntegrationCommand): Promise<WebCommandResult> {
-    const repoId = this.planRepository(command.target.groupId);
+    // Dir-requirements spec §7: a dir group's folder is not checked (the transaction refuses it dir-group-delivery-fixed).
+    const repoId = isDirGroup(this.store, command.target.groupId) ? null : this.planRepository(command.target.groupId);
     const failedCheck = repoId === null ? null : await this.schemeCheck(repoId, command.payload.integration);
     const release = this.deps.admissionGate?.enter();
     try {

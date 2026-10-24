@@ -89,7 +89,12 @@ export interface WorldOptions { tokenPolicy?:"optional-v1"; claudeScript?: Recor
    * that commit as the explicit start point. The plan file is written into the bare directory (control config trusts
    * a plan file only inside its repository); it is no object of the repository.
    */
-  bareTarget?: boolean }
+  bareTarget?: boolean;
+  /**
+   * Dir-requirements plan Task 4 (D5): more registered projects beside the world's repository, e.g. a `dir` project. With
+   * two projects there is no default state directory, so the control state goes under `<root>/control/panel`.
+   */
+  extraRepos?: Array<{ projectKey: string; path: string; kind?: "dir" }> }
 // *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) *** on `declaredContextWindowTokens`
 // above ("null otherwise, so the estimate stays blocked-capability"): measured on 06f15c53 (ccloop codex/every-agent-chain
 // efcd5b3 built), a codex world's import-time estimate is blocked first by
@@ -198,9 +203,10 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     const profilePath = join(root, "profile.json");
     await writeFile(profilePath, JSON.stringify(snapshot));
     const repoId = controlRepoKey("e2e");
-    const repos = [{ projectKey: "e2e", path: repo }];
+    const repos: Array<{ projectKey: string; path: string; kind?: "dir" }> = [{ projectKey: "e2e", path: repo }, ...(worldOptions.extraRepos ?? [])];
     const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CCLOOP_BIN: realBinary!, ORCA_AGENTS_TABLE: table, ...worldOptions.env };
-    const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", worldOptions.estimateMode ?? "soft", "--control-wake-ms", "50"], env, repos);
+    const stateDir = worldOptions.extraRepos === undefined ? [] : ["--control-state-dir", join(root, "control", "panel")];
+    const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", worldOptions.estimateMode ?? "soft", "--control-wake-ms", "50", ...stateDir], env, repos);
     if (rejection !== null) throw new Error(rejection);
     let epoch = 0;
     // Every runtime this world booted and has not closed; `teardown` shuts each down and closes it, so a

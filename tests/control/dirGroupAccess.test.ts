@@ -8,9 +8,15 @@
  *   the folder a write target); the same run may open one on a repository project. The check reads the `dirProjectOf`
  *   the panel builds from the projects file's `kind: "dir"` entries (controlAssembly.ts).
  *
+ * - Delivery is fixed (§7, plan Task 4): `set-group-integration` on a dir group and `set-integration-scheme` on a dir
+ *   project's repo id are refused `dir-group-delivery-fixed`, nothing written; a dir group's accepted split gets no
+ *   integration record even under a non-keep repository default; the integration pass never looks at a dir group, even
+ *   one with a frozen record on its body.
+ *
  * Rule 17: every path is under a temporary root; HOME, ORCA_VAULT_DIR, ORCA_CONTROL_DIR, ORCA_PROJECTS_FILE and
  * ORCA_CORRECTIONS_DIR point there.
  */
+import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -18,6 +24,12 @@ import { join, resolve } from "node:path";
 import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { lookupCommandResult } from "../../src/control/commandLedger.js";
+import { integratePendingGroups } from "../../src/control/integrationPass.js";
+import { newGroupIntegration, type IntegrationScheme } from "../../src/control/integrationScheme.js";
+import { readDraft } from "../../src/control/requirementRecords.js";
+import { controlWorkspaceRoots } from "../../src/control/workspace.js";
+import { readRepositorySettingsBody, writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
+import { vaultKeyOf } from "../../src/flow/vault/paths.js";
 import { debugGroupIdFor } from "../../src/control/debugGroup.js";
 import { systemDebugGroupId } from "../../src/control/systemDebug.js";
 import { WebControlService } from "../../src/control/webService.js";
@@ -27,7 +39,9 @@ import { registerControlMutationRoutes, verifyControlJsonBody } from "../../src/
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { permissionRefusal, type Principal } from "../../src/panel/permissions.js";
 import { parsePanelArgs } from "../../src/panel/server.js";
+import { dirRequirementHarness } from "./fixtures/dirRequirement.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
+import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 
 const REFUSED = "dir-project-plan-import-unsupported";
 const errorCode = (answer: unknown): string | undefined => (answer as { error?: { code?: string } }).error?.code;
@@ -170,3 +184,87 @@ describe("requirement-open by a run Orca dispatched (D10, §5.1, §12)", () => {
     } finally { await new Promise<void>((done) => server.close(() => done())); await x.dispose(); p.close(); }
   });
 });
+
+const LOCAL: IntegrationScheme = { delivery: "local", trigger: "task", method: "merge", target: "main" };
+const FIXED = "dir-group-delivery-fixed";
+
+/**
+ * Group "r" with its split accepted under a non-keep default of its project's repo id -- a dir group (its folder frozen,
+ * as requirement-open freezes it) or, with `dir: false`, the same requirement on a repository project.
+ */
+async function acceptedUnderLocalDefault(dir: boolean) {
+  const x = await dirRequirementHarness({ answers: [{ purpose: "split", output: VALID_SPLIT }], startAt: "split" });
+  if (dir) {
+    const real = realpathSync(x.folder).normalize("NFC");
+    x.store.db.prepare("UPDATE groups SET body=? WHERE id='r'").run(JSON.stringify({ ...x.body(), dirWorkspace: { dir: real, vaultId: vaultKeyOf(real) } }));
+  } else {
+    // A repository project: the folder is the repository the calls read (the harness resolves it to the folder).
+    const f = (...args: string[]) => execFileSync("git", ["-c", "user.name=p", "-c", "user.email=p@p", "-c", "core.hooksPath=/dev/null", ...args], { cwd: x.folder });
+    f("init", "-q", "-b", "main"); f("add", "-A"); f("commit", "-qm", "base");
+  }
+  writeRepositorySettingsBody(x.store, "repo", { workspaceMode: "worktree", revision: 1, integration: LOCAL });
+  await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+  const done = await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: readDraft(x.store, "r", 1).draftHash! }));
+  if ("error" in done) throw new Error(JSON.stringify(done));
+  return x;
+}
+
+describe("a dir group's delivery is fixed (D10 delivery rows, §7)", () => {
+  it("an accepted split gets no integration record under a non-keep default; a repository group gets the default", async () => {
+    const dir = await acceptedUnderLocalDefault(true);
+    try { expect(Object.hasOwn(dir.body(), "integration")).toBe(false); } finally { await dir.dispose(); }
+    const repo = await acceptedUnderLocalDefault(false);
+    try { expect(repo.body().integration).toMatchObject({ scheme: LOCAL }); } finally { await repo.dispose(); }
+  });
+
+  it("set-group-integration on a dir group is refused dir-group-delivery-fixed and booked; a repository group gets past it", async () => {
+    for (const dir of [true, false]) {
+      const x = await acceptedUnderLocalDefault(dir); try {
+        const before = x.body().integration;
+        const answer = await x.service.setGroupIntegration(x.command("set-group-integration", { integration: { ...LOCAL, target: "other" } }));
+        if (dir) {
+          expect(errorCode(answer)).toBe(FIXED);
+          expect(Object.hasOwn(x.body(), "integration")).toBe(false);
+          expect(lookupCommandResult(x.store, "r", lookupLast(x.store))!.body).toMatchObject({ error: { code: FIXED } });
+        } else {
+          // The harness's service resolves no repository path, so the setter's check refuses it -- by another name.
+          expect(errorCode(answer)).not.toBe(FIXED);
+          expect(x.body().integration).toEqual(before);
+        }
+      } finally { await x.dispose(); }
+    }
+  });
+
+  it("set-integration-scheme on a dir project's repo id is refused dir-group-delivery-fixed; a repository project gets past it", async () => {
+    const w = await world(); try {
+      const command = (commandId: string) => ({ schema: "orca-raw-command-v1", commandId, actorId: "human", expectedRevision: 0, verb: "set-integration-scheme",
+        target: { kind: "repository", repoId: "repo" }, payload: { integration: LOCAL } }) as never;
+      expect(errorCode(await w.dirService.setIntegrationScheme(command("scheme-dir")))).toBe(FIXED);
+      expect(readRepositorySettingsBody(w.store, "repo")).toBeNull();
+      // On a repository project the setter checks the repository's path (none resolves in this harness): another refusal.
+      const other = errorCode(await w.repoService.setIntegrationScheme(command("scheme-repo")));
+      expect(other).toBeDefined();
+      expect(other).not.toBe(FIXED);
+    } finally { await w.dispose(); }
+  });
+
+  it("the integration pass never looks at a dir group, even with a frozen record on its body", async () => {
+    const x = await acceptedUnderLocalDefault(true); try {
+      const record = { ...newGroupIntegration(LOCAL)!, frozen: true };
+      x.store.db.prepare("UPDATE groups SET body=? WHERE id='r'").run(JSON.stringify({ ...x.body(), integration: record }));
+      const asked: string[] = [];
+      const moved = await integratePendingGroups({
+        store: x.store, roots: controlWorkspaceRoots(x.store.stateDir), now: () => 0, ghBin: "gh", stopped: () => false,
+        repoPathOf: (repoId) => { asked.push(repoId); throw new Error("no repository in this criterion"); },
+      });
+      expect(moved).toBe(false);
+      expect(asked).toEqual([]);
+      expect(x.body().integration).toEqual(record);
+    } finally { await x.dispose(); }
+  });
+});
+
+/** The id of the newest command booked for group "r". */
+function lookupLast(store: { db: { prepare(sql: string): { get(...args: unknown[]): unknown } } }): string {
+  return String((store.db.prepare("SELECT id FROM commands WHERE group_id='r' ORDER BY rowid DESC LIMIT 1").get() as { id: string }).id);
+}

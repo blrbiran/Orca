@@ -1,6 +1,7 @@
 import { readRunResults, readGroupResults } from './taskResults.js';
 import { readFlowJournal, readFlowList, readFlowRun } from "../flow/views.js";
 import { asFlowControlError, dirProjectOf, registeredDirProject } from "../flow/flowCommands.js";
+import { FLOW_VAULT_REPO_PREFIX } from "../flow/groups.js";
 import { readResultOutputBytes } from './taskResultOutputs.js';
 import { readControlOverview } from "./controlOverview.js";
 import { readGroupDecisionsView } from "./groupDecisions.js";
@@ -229,7 +230,9 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     const groupId = String(req.params.groupId);
     try {
       const repoId = groupRepoId(deps.store, groupId);
-      const repo = deps.service?.repositoryKnown(repoId) ? deps.service.repositoryPathOf(repoId) : null;
+      // Dir-requirements spec §10: a vault id (a dir group's, a dir flow group's) is resolved by the panel's resolver; it
+      // is no trusted repository. Every other id keeps the trusted-repository check.
+      const repo = repoId.startsWith(FLOW_VAULT_REPO_PREFIX) || deps.service?.repositoryKnown(repoId) ? deps.service?.repositoryPathOf(repoId) ?? null : null;
       if (repo === null) { sendControlError(res, 404, "control-target-not-allowed", "No trusted repository has this id."); return; }
       res.json(await readGroupDecisionsView(deps.store, repo, groupId, await deps.service!.correctedDecisionIds()));
     } catch (error) {

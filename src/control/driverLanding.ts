@@ -15,6 +15,7 @@ import { ORCHESTRATION_ACTOR } from "./orchestration.js";
 import { reportedDecisionsOf, type ReportedDecisions } from "./reportedDecisions.js";
 import { ccloopEvidenceString, runEvidence, runLedgerEvents, writeRunLedger, type PendingEntry } from "./runLedger.js";
 import { flowGroupOf, isDirFlowGroup, isFlowChildGroup } from "../flow/groups.js";
+import { recordLandedTip } from "./dirGroup.js";
 import { appendFlowDecision } from "../flow/store.js";
 import { commitLedgerOnGroupBranch, exportLedgerDir, treeWithLedgerFiles } from "./ledgerTree.js";
 import { readDebugMark, type ClosingRecord } from "./debugChecks.js";
@@ -59,6 +60,8 @@ export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommi
     if (run.state !== "collected" && run.state !== "reconciling") return;
     run.state = "landed";
     landedWithPending(deps.store, run);
+    // Dir-requirements spec §6.5: a dir group's landed tip, in the write that records the move.
+    recordLandedTip(deps.store, run.groupId, landedCommit);
     run.drive = { ...run.drive!, landedCommit };
     saveDriverRun(deps.store, run);
   });
@@ -164,6 +167,8 @@ export async function recordEmptyResultDecisions(deps: ExecutionDriverDeps, runI
     const current = readDriverRun(store, runId);
     if (current.state !== "landed") return;
     landedWithPending(store, current);
+    // Dir-requirements spec §6.5: the ledger commit moved a dir group's work branch (no commit: nothing moved).
+    if (ledgerCommit !== null) recordLandedTip(store, current.groupId, ledgerCommit);
     current.drive = { ...current.drive!, ledgerCommit };
     saveDriverRun(store, current);
   });
@@ -629,6 +634,8 @@ async function finishReconcile(
     } else {
       current.state = "landed";
       landedWithPending(store, current);
+      // Dir-requirements spec §6.5: a dir group's landed tip, in the write that records the move.
+      recordLandedTip(store, current.groupId, merged);
       if (reconcileFlag !== null) {
         flagDecision(store, { ...reconcileFlag, groupId: current.groupId, runId, source: "reconcile", by: ORCHESTRATION_ACTOR, at: new Date(store.now()).toISOString() });
       }

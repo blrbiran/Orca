@@ -294,6 +294,8 @@ export const durableCommandErrorStatuses = {
   "dir-folder-missing": 422,
   // Dir-requirements spec §5.2: import-plan and the debug opens on a `dir` project (only a requirement gets a dir workspace).
   "dir-project-plan-import-unsupported": 422,
+  // Dir-requirements spec §7, §9.3: a dir group's delivery is placement into its folder; no integration setter applies.
+  "dir-group-delivery-fixed": 422,
   "revision-unchanged": 422,
   "group-stopped": 422,
   "handoff-budget-unavailable": 422,

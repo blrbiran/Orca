@@ -5,6 +5,7 @@ import { ORCHESTRATION_ACTOR } from "./orchestration.js";
 import { join } from "node:path";
 import { z } from "zod";
 import { recordActivity } from "./activity.js";
+import { isDirGroup } from "./dirGroup.js";
 import { ControlError } from "./errors.js";
 import { groupRepoId, groupStopped, write } from "./executionDriver.js";
 import {
@@ -108,6 +109,8 @@ export async function integratePendingGroups(deps: IntegrationDeps): Promise<boo
     if (archived) continue;
     // Flow engine spec §5.1 [IR-I7]: a `dir` flow group never integrates; copy-back is its only delivery.
     if (isDirFlowGroup(deps.store, groupId)) continue;
+    // Dir-requirements spec §7: nor does a dir group; placement is its delivery, and a stale record never integrates.
+    if (isDirGroup(deps.store, groupId)) continue;
     // spec §7: a group with no conflict on record (its integration succeeded, or its scheme changed) owns no copy.
     if (copies.has(groupId) && (integration === null || integration.conflict === null)) {
       try { for (const copy of copies.get(groupId)!) await removeOwnPath(deps.repoPathOf(groupRepoId(deps.store, groupId)), deps.roots, copy); }

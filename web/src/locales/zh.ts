@@ -1879,6 +1879,7 @@ export const zhErrors: Record<string, string> = {
   // Dir-requirements spec §9.3.
   "dir-folder-missing": "这个任务组的文件夹不见了或被移走了（{{detail}}）。把它放回原路径，然后选「重新检查」。",
   "dir-project-plan-import-unsupported": "这个项目是文件夹，不是 git 仓库。请在它上面开需求，而不是导入计划。",
+  "dir-group-delivery-fixed": "这个任务组作用于一个文件夹：完成的工作会写回文件夹，交付方式不能更改。",
   "revision-unchanged": "修改后的回答与原来完全一样；请至少改一个回答或决定。",
   "numeric-overflow": "数值溢出：{{message}}",
   "panel-draining": "面板正在关闭，请稍后重试。",

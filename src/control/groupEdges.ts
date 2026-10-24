@@ -1,4 +1,5 @@
 import { applyWebCommand } from "./commandLedger.js";
+import { dirWorkspaceOf, readPlacement } from "./dirGroup.js";
 import { ControlError } from "./errors.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import { readGroupIntegration } from "./integrationScheme.js";
@@ -39,14 +40,27 @@ function tasksAllDone(store: ControlStore, groupId: string): boolean {
   return statuses.length > 0 && statuses.every((status) => status === "done" || status === "completed");
 }
 
-/** Delivered locally: a non-keep record whose scheme delivers into a local target branch. */
+/**
+ * Delivered locally: a non-keep record whose scheme delivers into a local target branch. Dir-requirements spec §7: a dir
+ * group too -- its work reaches its folder by placement, so a dependent never stacks on its work branch.
+ */
 function deliversLocally(group: Record<string, unknown>): boolean {
-  return readGroupIntegration(group)?.scheme.delivery === "local";
+  return dirWorkspaceOf(group) !== null || readGroupIntegration(group)?.scheme.delivery === "local";
+}
+
+/**
+ * Dir-requirements spec §7, §6.5: a dir group's placement has caught up with its landings -- idle, nothing owed, the
+ * placed tip is the landed tip. Read from the DB only (the landings record `landedTip`), never from git.
+ */
+function dirPlacementCaughtUp(group: Record<string, unknown>): boolean {
+  const placement = readPlacement(group.placement);
+  return placement !== null && placement.state === "idle" && placement.pending === null && placement.tip === placement.landedTip;
 }
 
 export function prerequisiteDone(store: ControlStore, groupId: string): boolean {
   const group = groupBody(store, groupId);
   if (group === null || !tasksAllDone(store, groupId)) return false;
+  if (dirWorkspaceOf(group) !== null) return dirPlacementCaughtUp(group);
   if (!deliversLocally(group)) return true;
   const integration = readGroupIntegration(group)!;
   return integration.lastIntegrated !== null && integration.pending === null && integration.conflict === null && integration.state === "idle";

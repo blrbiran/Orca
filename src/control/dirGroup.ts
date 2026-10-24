@@ -88,3 +88,17 @@ export function initialPlacement(input: { base: string; landedTip: string; at: n
   return placementSchema.parse({ state: "idle", tip: input.base, landedTip: input.landedTip, pending: null, changed: [], changedTotal: 0, unwritable: [], withheld: [],
     watch: null, detail: null, resolution: null, at: input.at });
 }
+
+/**
+ * §6.5: a landing that moved a dir group's work branch records the new tip as `placement.landedTip`, inside the caller's
+ * write transaction -- markLanded (D), finishReconcile's landed write (R), recordEmptyResultDecisions's ledger-commit
+ * write (E) -- so prerequisiteDone reads it with no git child (§7). Any other group is left as it is. A dir group with no
+ * placement record (the export writes the first one) is a broken invariant (Rule 12).
+ */
+export function recordLandedTip(store: ControlStore, groupId: string, tip: string): void {
+  const body = bodyOf(store, groupId) as Record<string, unknown> | null;
+  if (body === null || dirWorkspaceOf(body) === null) return;
+  const placement = readPlacement(body.placement);
+  if (placement === null) throw new ControlError("recovery-blocked", `dir-placement-missing:${groupId}`);
+  store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, placement: { ...placement, landedTip: tip } }), groupId);
+}

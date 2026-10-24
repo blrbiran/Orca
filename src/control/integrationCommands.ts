@@ -2,6 +2,7 @@ import { recordActivity } from "./activity.js";
 import { FLOW_GROUP_DELIVERY_FIXED, isDirFlowGroup } from "../flow/groups.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { canonicalBytes } from "./canonicalJson.js";
+import { dirWorkspaceOf, type DirProjectOf } from "./dirGroup.js";
 import { ControlError } from "./errors.js";
 import { approveResolution, type ResolutionPrepared } from "./integrationResolve.js";
 import { ENVIRONMENT_CHECKS, newGroupIntegration, readGroupIntegration, readIntegrationDefault, schemeHash, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
@@ -30,7 +31,7 @@ function refuseFailedCheck(failedCheck: string | null): void {
  * refused here as integration-invalid naming the check. Setting keep removes the field (ruling R5).
  */
 export function applySetIntegrationScheme(
-  deps: { store: ControlStore; admissionGate?: AdmissionGate; knownRepository(repoId: string): boolean },
+  deps: { store: ControlStore; admissionGate?: AdmissionGate; knownRepository(repoId: string): boolean; dirProjectOf?: DirProjectOf },
   command: SetIntegrationSchemeCommand,
   failedCheck: string | null = null,
 ): CommandSuccessV1 | CommandErrorBodyV1 {
@@ -45,6 +46,8 @@ export function applySetIntegrationScheme(
       apply: (context) => {
         const target = context.rawCommand.target;
         if (target.kind !== "repository" || !deps.knownRepository(target.repoId)) throw new ControlError("control-target-not-allowed");
+        // Dir-requirements spec §7: a `dir` project's groups deliver by placement; its default is never read, so never set.
+        if ((deps.dirProjectOf?.(target.repoId) ?? null) !== null) throw new ControlError("dir-group-delivery-fixed");
         refuseFailedCheck(failedCheck);
         const integration = (context.effectiveCommand.payload as { integration: IntegrationScheme }).integration;
         if (canonicalBytes(readIntegrationDefault(deps.store, target.repoId).scheme).equals(canonicalBytes(integration))) throw new ControlError("no-op-command");
@@ -88,6 +91,8 @@ export function applySetGroupIntegration(
       const group = JSON.parse(String(row.body)) as Record<string, unknown>;
       // Flow engine spec §5.1 [IR-I7]: a `dir` flow group delivers by copy-back only.
       if (isDirFlowGroup(deps.store, groupId)) throw new ControlError(FLOW_GROUP_DELIVERY_FIXED);
+      // Dir-requirements spec §7: a dir group delivers by placement into its folder only.
+      if (dirWorkspaceOf(group) !== null) throw new ControlError("dir-group-delivery-fixed");
       // A clarifying group has no plan yet; it gets its copy when its split is accepted.
       if (group.status === "clarifying") throw new ControlError("group-state-invalid");
       refuseFailedCheck(failedCheck);
