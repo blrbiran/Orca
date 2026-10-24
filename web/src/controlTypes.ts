@@ -529,7 +529,10 @@ export type CommandTargetV1 =
   | { kind: "spend" }
   | { kind: "corrections" }
   | { kind: "orchestration" }
-  | { kind: "flows" };
+  | { kind: "flows" }
+  // Scheduled flows and groups plan B2: the plan library scope and a schedule's own scope.
+  | { kind: "plan-library" }
+  | { kind: "schedule"; scheduleId: string };
 
 /** What a mutation POST carries: an id the ledger dedupes on, the revision it expects, and the verb's payload. */
 export type CommandEnvelopeV1 = { commandId: string; expectedRevision: number; payload?: unknown };
@@ -563,7 +566,12 @@ export type SetLimitPayloadV1 = { limit: BudgetAmount };
 export type ImportPlanPayloadV1 = {
   groupId: string;
   repoId: string;
-  planId: string;
+  /** Scheduled flows and groups spec §5.5: exactly one of a registered plan and a pinned library version. */
+  planId?: string;
+  libraryEntry?: { entryId: string; sha256: string };
+  /** Only with libraryEntry: the new group's token limit (null = unlimited) and its scheme (null = keep). */
+  tokenLimit?: number | null;
+  integration?: IntegrationSchemeV1 | null;
   estimatorProfileId?: string;
   estimatorProfileHash?: string;
   estimateMode?: "strict" | "soft";
@@ -624,7 +632,8 @@ export type CommandSuccessV1 = {
     | "set-check-settings" | "set-scheduled-check" | "set-check-locks" | "run-check-now" | "resume-check"
     | "set-flow-settings" | "set-flow-locks"
     | "flow-start" | "flow-message" | "flow-plan" | "flow-rerun" | "flow-answer" | "flow-effect" | "flow-pool" | "flow-plan-step"
-    | "resolve-folder-change";
+    | "resolve-folder-change"
+    | "plan-library-save" | "plan-library-import" | "plan-library-archive";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
@@ -663,6 +672,9 @@ export type CommandSuccessV1 = {
     | { kind: "flow-answered"; flowRunId: string; stepKey: string; answer: "ask" | "needs" | "clarify" | "consensus" }
     | { kind: "flow-effect-done"; recordId: string; action: "confirm" | "enact" | "discard"; state: "running" | "restaged" | "discarded"; replacedBy?: string }
     | { kind: "flow-pool-raised"; flowRunId: string; poolTokens: number }
+    // Scheduled flows and groups spec §5.3, §5.6: a library save or import, and an archive.
+    | { kind: "plan-library-saved"; entryId: string; version: number; sha256: string; appended: boolean }
+    | { kind: "plan-library-archived"; entryId: string }
     // Gaps spec §4.6, §5.5: a feedback intake's clarify round answered; a step of the running plan answered.
     | { kind: "flow-feedback-answered"; flowRunId: string; messageSeq: number; answer: "clarify" | "consensus" }
     | { kind: "flow-plan-step-applied"; flowRunId: string; planNo: number; stepKey: string; choice: "run" | "accept-unchanged" }

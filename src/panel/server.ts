@@ -8,7 +8,7 @@ import { buildApi, panelCorrections } from "./api.js";
 import { createPanelAuth } from "./auth.js";
 import { PANEL_HOST_NOT_ALLOWED, assertBindAllowed, isHostAllowed } from "./bindGuard.js";
 import { controlErrorBody } from "./controlErrors.js";
-import { verifyControlJsonBody } from "./controlApi.js";
+import { verifyControlJsonBody, planLibraryImportBody } from "./controlApi.js";
 import { bindControlSocket, buildControlSocketApp, controlSocketPath, type ControlSocketHandle } from "./controlSocket.js";
 import { projectsDepsOf } from "./projects.js";
 import { randomUUID } from "node:crypto";
@@ -252,6 +252,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
       ? controlErrorBody(PANEL_HOST_NOT_ALLOWED, message)
       : { code: PANEL_HOST_NOT_ALLOWED, message });
   });
+  app.use(planLibraryImportBody);
   app.use(express.json({ limit: "64kb", verify: verifyControlJsonBody }));
   // Accounts spec §3.2-§3.3: opened before the control plane, so a refused accounts store takes no lock with it.
   const clock = opts.now ?? (() => new Date());

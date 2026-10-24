@@ -88,6 +88,14 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "set-usage-calendar", payload: {}, tier: "token", member: V },
   { entry: "settle-unknown-usage", payload: {}, tier: "token", member: V },
   { entry: "apply-agent-update", payload: {}, tier: "token", member: V },
+  // Scheduled flows and groups spec §11.1 (I-3): a new library entry copies Orca's own data (open); appending a version to
+  // one, importing outside bytes, and a library import's token limit or scheme are token; archiving is open.
+  { entry: "plan-library-save", payload: { source: { kind: "group", groupId: "g" }, name: "n" }, tier: "open", member: V },
+  { entry: "plan-library-save", payload: { source: { kind: "group", groupId: "g" }, name: "n", entryId: "pl-0123456789abcdef" }, tier: "token", member: V },
+  { entry: "plan-library-import", payload: { projectId: "repo", name: "n", doc: {}, provenance: {} }, tier: "token", member: V },
+  { entry: "plan-library-archive", payload: { entryId: "pl-0123456789abcdef" }, tier: "open", member: V },
+  { entry: "import-plan.tokenLimit", payload: { groupId: "g", repoId: "repo", libraryEntry: {}, tokenLimit: 5 }, tier: "token", member: F },
+  { entry: "import-plan.integration", payload: { groupId: "g", repoId: "repo", libraryEntry: {}, integration: { delivery: "keep" } }, tier: "token", member: F },
 ];
 
 /** Gaps spec §6.3, §13: the `any` verbs whose socket tier is a predicate on the payload (written out, not read back). */

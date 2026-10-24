@@ -197,6 +197,13 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `pending-decision-entry-invalid` | 400 |
 | `pending-decision-not-found` | 404 |
 | `pending-decision-settled` | 409 |
+| `plan-library-contract-path-refused` | 422 |
+| `plan-library-doc-too-large` | 422 |
+| `plan-library-entry-in-use` | 409 |
+| `plan-library-entry-not-found` | 404 |
+| `plan-library-hash-mismatch` | 422 |
+| `plan-library-project-mismatch` | 422 |
+| `plan-library-target-mismatch` | 422 |
 | `plan-version-conflict` | 409 |
 | `profile-changed` | 409 |
 | `proposal-version-conflict` | 409 |

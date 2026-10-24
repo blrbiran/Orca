@@ -19,7 +19,9 @@ import {
   type RawAuthorityCommandV1,
 } from "./webProtocol.js";
 import { writeCanonicalRecord } from "./snapshot.js";
-import { newGroupIntegration, readIntegrationDefault } from "./integrationScheme.js";
+import { newGroupIntegration, readIntegrationDefault, type IntegrationScheme } from "./integrationScheme.js";
+import { canonicalPlanDoc } from "./planLibrary/codec.js";
+import { readEntry, readVersion } from "./planLibrary/store.js";
 import { commandPrincipalFor, routedPersonAuthorityFor } from "./commandClient.js";
 import { AgentCeilingRefusal, capStatuses, spendCapBlocking } from "./spendCaps.js";
 import { readSchedulerControlPlanSource, type SchedulerControlPlanSource } from "../scheduler/planFile.js";
@@ -51,6 +53,8 @@ export interface PreparedEstimatorSlot { outcome: EstimatorSlotOutcome; observat
 export interface ImportDeps {
   store: ControlStore;
   trustedConfig: Pick<TrustedControlConfig, "resolveTarget">;
+  /** Scheduled flows and groups spec §5.5: a known repository's path, which a library entry's loop tasks expand with. */
+  resolveRepository?: (repoId: string) => string;
   profileRouter: ExecutionProfileRouter;
   defaults: () => ImportDefaults | null;
   estimatorObservation: (profile: FrozenProfile) => Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">;
@@ -212,6 +216,12 @@ export async function prepareEstimatorSlot(
   command: ImportCommand,
   profile: FrozenProfile,
 ): Promise<PreparedEstimatorSlot> {
+  // Scheduled flows and groups spec §5.5: a library import's plan agent is the pinned version's (no file is read).
+  if (command.payload.libraryEntry !== undefined) {
+    const version = readVersion(deps.store, command.payload.libraryEntry.entryId, command.payload.libraryEntry.sha256);
+    const agent = version === null ? undefined : (JSON.parse(version.doc) as { agent?: PartialSelection }).agent;
+    return estimatorSlotFor(deps, command.actorId, {}, profile, agent);
+  }
   const target = deps.trustedConfig?.resolveTarget({ repoId: command.payload.repoId, planId: command.payload.planId });
   const source = target ? readSchedulerControlPlanSource(target) : null;
   return estimatorSlotFor(deps, command.actorId, {}, profile, source?.agent);
@@ -253,7 +263,15 @@ export interface ImportedPlanWrite {
   estimatorProfileId: string | null; estimatorProfileHash: string | null; estimateMode: "strict" | "soft";
   /** The command writing it: its principal (commandClient.ts) decides the agent ceiling. `at` (epoch ms) dates the caps' periods. */
   commandId: string; at?: number;
+  /**
+   * Scheduled flows and groups spec §9.1 (a fresh import only): `tokenLimit` is the group limit's tokens (absent or null:
+   * unlimited, as today); `integration` the group's scheme instead of the repository default (null: keep); `origin` is
+   * written on the group body. Absent, each adds no byte (tests/control/fixtures/importPlanStoredBytes.golden.json).
+   */
+  tokenLimit?: number | null; integration?: IntegrationScheme | null; origin?: ImportOrigin;
 }
+/** Spec §9.1, §15: what started a group a schedule fired; passed in-process by the fire, never a payload field. */
+export interface ImportOrigin { kind: "schedule"; scheduleId: string; slot: number }
 /** N1 spec §9.1: what a requirement brings into the plan group it becomes. */
 export interface RequirementCarryOver { existingBody: Record<string, unknown>; used: Amount; usageUnknown: boolean; traces: Readonly<Record<string, readonly string[]>> }
 
@@ -319,7 +337,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
     if (blocking !== null) throw new AgentCeilingRefusal(blocking, groupLimit.tokens);
   }
   const used = carry === null ? zero() : { ...carry.used };
-  const limit:BudgetAmount = {...checkedAdd(groupLimit, used),tokens:stripped!==null?groupLimit.tokens:carry===null?null:legacyCarry?checkedAdd(groupLimit,used).tokens:(carry.existingBody.limit as BudgetAmount).tokens};
+  const limit:BudgetAmount = {...checkedAdd(groupLimit, used),tokens:stripped!==null?groupLimit.tokens:carry===null?input.tokenLimit??null:legacyCarry?checkedAdd(groupLimit,used).tokens:(carry.existingBody.limit as BudgetAmount).tokens};
   let committedRemaining = checkedAdd(reviewAmount, zero());
   for (const _task of plan.tasks) committedRemaining = checkedAdd(committedRemaining, stripped === null ? checkedAdd(TASK_WORK, TASK_HANDOFF) : TASK_WORK);
   if(!legacyCarry)committedRemaining.tokens=reviewAmount.tokens;
@@ -365,8 +383,12 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   // Integration spec §3.1: the group gets its copy of the repository's default where it gets its plan -- here, for
   // import-plan and a requirement's split acceptance alike. Keep is no field, so a keep group's body is unchanged.
   // Dir-requirements spec §7: a dir group (its body carries `dirWorkspace`) never has a record; it delivers by placement.
-  const integration = dirWorkspaceOf(group) !== null ? null : newGroupIntegration(readIntegrationDefault(deps.store, input.repoId).scheme);
+  // Scheduled flows and groups spec §9.1: a library import may carry its own scheme (null: keep) instead.
+  const integration = dirWorkspaceOf(group) !== null ? null
+    : input.integration === undefined ? newGroupIntegration(readIntegrationDefault(deps.store, input.repoId).scheme)
+      : input.integration === null ? null : newGroupIntegration(input.integration);
   if (integration !== null) Object.assign(group, { integration });
+  if (input.origin !== undefined) Object.assign(group, { origin: input.origin });
   if (carry === null) {
     deps.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)")
       .run(input.groupId, 0, 1, JSON.stringify(group));
@@ -418,7 +440,22 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   return { estimateId, preflight: frozen };
 }
 
-export function importControlPlan(deps: ImportDeps, command: ImportCommand): ImportResult {
+/**
+ * Scheduled flows and groups spec §5.5: the plan source of a pinned library version -- its bytes re-hashed
+ * (plan-library-hash-mismatch), revalidated as every library write is, its loop tasks expanded with the repository's
+ * path -- and the plan id `lib-<entryId>-<sha256[:12]>` (plan B3).
+ */
+function librarySource(deps: ImportDeps, repoId: string, ref: { entryId: string; sha256: string }): { planId: string; source: SchedulerControlPlanSource } {
+  const entry = readEntry(deps.store, ref.entryId);
+  if (entry === null) throw new ControlError("plan-library-entry-not-found", ref.entryId);
+  if (entry.projectId !== repoId) throw new ControlError("plan-library-project-mismatch", `${ref.entryId} belongs to ${entry.projectId}`);
+  const version = readVersion(deps.store, ref.entryId, ref.sha256);
+  if (version === null) throw new ControlError("plan-library-entry-not-found", `${ref.entryId}@${ref.sha256}`);
+  if (deps.resolveRepository === undefined) throw new ControlError("control-target-not-allowed");
+  return { planId: `lib-${ref.entryId}-${ref.sha256.slice(0, 12)}`, source: canonicalPlanDoc(JSON.parse(version.doc), deps.resolveRepository(repoId)).source };
+}
+
+export function importControlPlan(deps: ImportDeps, command: ImportCommand, opts: { origin?: ImportOrigin } = {}): ImportResult {
   const outcome = applyWebCommand<CommandSuccessV1>(deps.store, {
     rawCommand: command,
     expand: () => {
@@ -431,14 +468,18 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand): Imp
       return { ...command, schema: "orca-authority-command-v1", payload: { ...payload, estimatorProfileId, estimatorProfileHash, estimateMode } };
     },
     apply: context => {
-      const payload = context.effectiveCommand.payload as ImportDefaults & { groupId: string; repoId: string; planId: string };
+      const payload = context.effectiveCommand.payload as ImportDefaults & { groupId: string; repoId: string; planId?: string;
+        libraryEntry?: { entryId: string; sha256: string }; tokenLimit?: number | null; integration?: IntegrationScheme | null };
       // N1 plan F8: an id that names any group -- a clarifying one included -- is refused by name, not by SQLite.
       if (deps.store.db.prepare("SELECT id FROM groups WHERE id=?").get(payload.groupId)) throw new ControlError("group-already-exists");
-      const target = deps.trustedConfig.resolveTarget({ repoId: payload.repoId, planId: payload.planId });
-      const source = readSchedulerControlPlanSource(target);
-      const plan = normalizeControlPlan({ ...source, repoId: payload.repoId, planId: payload.planId });
-      const { estimateId, preflight } = writeImportedPlan(deps, { groupId: payload.groupId, repoId: payload.repoId, planId: payload.planId, plan, actorId: context.rawCommand.actorId, commandId: context.rawCommand.commandId,
-        estimatorProfileId: payload.estimatorProfileId, estimatorProfileHash: payload.estimatorProfileHash, estimateMode: payload.estimateMode }, null);
+      // The payload schema admits exactly one of planId and libraryEntry.
+      const { planId, source } = payload.libraryEntry !== undefined ? librarySource(deps, payload.repoId, payload.libraryEntry)
+        : { planId: payload.planId!, source: readSchedulerControlPlanSource(deps.trustedConfig.resolveTarget({ repoId: payload.repoId, planId: payload.planId })) };
+      const plan = normalizeControlPlan({ ...source, repoId: payload.repoId, planId });
+      const { estimateId, preflight } = writeImportedPlan(deps, { groupId: payload.groupId, repoId: payload.repoId, planId, plan, actorId: context.rawCommand.actorId, commandId: context.rawCommand.commandId,
+        estimatorProfileId: payload.estimatorProfileId, estimatorProfileHash: payload.estimatorProfileHash, estimateMode: payload.estimateMode,
+        ...(payload.tokenLimit === undefined ? {} : { tokenLimit: payload.tokenLimit }), ...(payload.integration === undefined ? {} : { integration: payload.integration }),
+        ...(opts.origin === undefined ? {} : { origin: opts.origin }) }, null);
       deps.beforeCommit?.();
       return success(context, payload.groupId, estimateId, preflight.state, preflight.reasonCode);
     },
@@ -460,7 +501,7 @@ function persistAsyncPreparationFailure(store: ControlStore, command: ImportComm
  * identity/CAS preflight happens before dynamic defaults or I/O; applyWebCommand
  * repeats both checks after the await to close concurrent commit races.
  */
-export async function importControlPlanAsync(deps: AsyncImportDeps & { dirProjectOf?: DirProjectOf }, command: ImportCommand): Promise<ImportResult> {
+export async function importControlPlanAsync(deps: AsyncImportDeps & { dirProjectOf?: DirProjectOf }, command: ImportCommand, opts: { origin?: ImportOrigin } = {}): Promise<ImportResult> {
   const preflight = preflightWebCommand(deps.store, command);
   if (preflight) return preflight.body;
 
@@ -494,5 +535,5 @@ export async function importControlPlanAsync(deps: AsyncImportDeps & { dirProjec
       if (prepared === null) throw new ControlError("control-estimator-unconfigured");
       return prepared.observation;
     },
-  }, command);
+  }, command, opts);
 }

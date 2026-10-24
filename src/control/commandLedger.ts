@@ -43,7 +43,7 @@ type CommandRow = { raw_request_hash: unknown; original_status: unknown; body_js
 type CommandBody = CommandLookupV1["body"];
 
 type CommandScope = {
-  key: string; kind: "group" | "global" | "repository" | "operator" | "spend" | "corrections" | "orchestration" | "flows"; id: string;
+  key: string; kind: "group" | "global" | "repository" | "operator" | "spend" | "corrections" | "orchestration" | "flows" | "plan-library" | "schedule"; id: string;
   groupId: string | null; repoId: string | null; operatorId: string | null;
 };
 
@@ -58,6 +58,10 @@ function scope(command: RawAuthorityCommandV1): CommandScope {
   if (command.target.kind === "orchestration") return { key: "@orchestration", kind: "orchestration", id: "orchestration", groupId: null, repoId: null, operatorId: null };
   // Flow engine spec §14.2: every flow verb shares one scope with constant revision 0, as the corrections scope.
   if (command.target.kind === "flows") return { key: "@flows", kind: "flows", id: "flows", groupId: null, repoId: null, operatorId: null };
+  // Scheduled flows and groups plan B2: the plan library is one scope with constant revision 0, as `@flows`; a schedule
+  // is its own scope, checked against its `schedules` row's revision.
+  if (command.target.kind === "plan-library") return { key: "@plan-library", kind: "plan-library", id: "plan-library", groupId: null, repoId: null, operatorId: null };
+  if (command.target.kind === "schedule") return { key: `@schedule:${command.target.scheduleId}`, kind: "schedule", id: command.target.scheduleId, groupId: null, repoId: null, operatorId: null };
   if (command.target.kind === "operator") {
     return { key: `@operator:${command.target.operatorId}`, kind: "operator", id: command.target.operatorId, groupId: null, repoId: null, operatorId: command.target.operatorId };
   }
@@ -95,12 +99,23 @@ export function spendRevision(store: ControlStore): number {
   return revision;
 }
 
+/** Scheduled flows and groups plan B2 (spec §11.1): a schedule's own revision, 0 while it has no row. */
+function scheduleRevision(store: ControlStore, scheduleId: string): number {
+  const row = store.db.prepare("SELECT revision FROM schedules WHERE id=?").get(scheduleId);
+  if (!row) return 0;
+  const revision = Number(row.revision);
+  if (!Number.isSafeInteger(revision) || revision < 0) throw new ControlError("recovery-blocked", "schedule-revision-invalid");
+  return revision;
+}
+
 /** A settings scope carries its own revision; null means the scope is a group or global one. */
 function settingRevision(store: ControlStore, commandScope: CommandScope, verb?: RawAuthorityCommandV1["verb"]): number | null {
   if (commandScope.kind === "spend") return spendRevision(store);
   // Constant: the corrections store has no revision; a duplicate is its own `again` check (controller's call 6).
   if (commandScope.kind === "corrections") return 0;
   if (commandScope.kind === "flows") return 0;
+  if (commandScope.kind === "plan-library") return 0;
+  if (commandScope.kind === "schedule") return scheduleRevision(store, commandScope.id);
   // Kanban spec §3.2: orchestration_settings.revision (0 with no row), like the spend scope's.
   if (commandScope.kind === "orchestration") return orchestrationRevision(store);
   if (commandScope.repoId !== null) return repositoryRevision(store, commandScope.repoId);

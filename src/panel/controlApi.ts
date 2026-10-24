@@ -7,6 +7,7 @@ import { readControlOverview } from "./controlOverview.js";
 import { readGroupDecisionsView } from "./groupDecisions.js";
 import { groupRepoId } from "../control/executionDriver.js";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
+import { planLibraryEntryView, planLibraryListView, planLibraryVersionBytes } from "../control/planLibrary/views.js";
 import { ATTACHMENT_MAX_BYTES, storeAttachment } from "../flow/feedback/attachments.js";
 import { loadRun } from "../flow/kernel.js";
 import { randomUUID } from "node:crypto";
@@ -58,6 +59,18 @@ export const AGENT_VERSION_REFRESH_MS = 60_000;
 function asyncRoute(handler: (req: Request, res: Response) => Promise<void> | void) {
   return (req: Request, res: Response, next: NextFunction): void => { void Promise.resolve(handler(req, res)).catch(next); };
 }
+
+/**
+ * Scheduled flows and groups spec §5.2, §13.3: a plan-library import carries the document itself (up to 2 MiB canonical),
+ * past the control routes' 64 kb body limit. Mounted before that parser (server.ts, controlSocket.ts), it parses only this
+ * one route's JSON; the 64 kb parser then skips the already-read body.
+ */
+export const PLAN_LIBRARY_IMPORT_ROUTE = "/api/control/plan-library/import";
+export const planLibraryImportBody: (req: Request, res: Response, next: NextFunction) => void = express.json({
+  limit: "3mb", verify: (req, res, bytes) => verifyControlJsonBody(req, res, bytes),
+  type: (req) => req.method === "POST" && (req.url ?? "").split("?")[0] === PLAN_LIBRARY_IMPORT_ROUTE
+    && String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json"),
+});
 
 /** Validate control JSON before the parser discards duplicate object keys. */
 export function verifyControlJsonBody(req: { url?: string; method?: string }, _res: unknown, bytes: Buffer): void {
@@ -246,6 +259,26 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     try {
       const { running, cap } = slotUse(deps.store);
       res.json(orchestrationViewSchema.parse({ schema: "orca-orchestration-v1", revision: orchestrationRevision(deps.store), maxRunningGroups: cap, runningGroups: running }));
+    } catch (error) { sendMappedControlError(res, error); }
+  });
+
+  // Scheduled flows and groups spec §13.1, §13.3: the plan library's reads, open to every principal (§11.1); here, so the
+  // socket (agents) reads them too. A version's download is its canonical orca-plan-v1 bytes, re-hashed on read.
+  app.get("/api/control/plan-library", (req, res) => {
+    try {
+      const repoId = idSchema.safeParse(req.query.repoId);
+      if (!repoId.success) throw new ControlError("control-argument-invalid", "repoId is required");
+      res.json(planLibraryListView(deps.store, repoId.data, req.query.archived === "1" || req.query.archived === "true"));
+    } catch (error) { sendMappedControlError(res, error); }
+  });
+  app.get("/api/control/plan-library/:entryId", (req, res) => {
+    try { res.json(planLibraryEntryView(deps.store, String(req.params.entryId))); } catch (error) { sendMappedControlError(res, error); }
+  });
+  app.get("/api/control/plan-library/:entryId/versions/:sha256", (req, res) => {
+    try {
+      const { bytes, fileName } = planLibraryVersionBytes(deps.store, String(req.params.entryId), String(req.params.sha256));
+      res.status(200).type("application/json").setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      res.send(bytes);
     } catch (error) { sendMappedControlError(res, error); }
   });
 
@@ -563,6 +596,8 @@ const spendScoped: RouteTarget = () => ({ groupId: "@spend", target: { kind: "sp
 const orchestrationScoped: RouteTarget = () => ({ groupId: "@orchestration", target: { kind: "orchestration" } });
 // Flow engine spec §14.2: every flow verb's ledger key.
 const flowsScoped: RouteTarget = () => ({ groupId: "@flows", target: { kind: "flows" } });
+// Scheduled flows and groups plan B2: every library verb's ledger key.
+const planLibraryScoped: RouteTarget = () => ({ groupId: "@plan-library", target: { kind: "plan-library" } });
 const repositoryScoped: RouteTarget = (params) => {
   const repoId = idSchema.parse(params.repoId);
   return { groupId: `@repository:${repoId}`, target: { kind: "repository", repoId } };
@@ -662,6 +697,10 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/flows/pool", verb: "flow-pool", target: flowsScoped },
     // Gaps spec §5.5, §13: one step of the running re-run plan.
     { path: "/api/control/flows/plan-step", verb: "flow-plan-step", target: flowsScoped },
+    // Scheduled flows and groups spec §11.1, §13.3: the library's writes, one `@plan-library` scope with revision 0.
+    { path: "/api/control/plan-library/save", verb: "plan-library-save", target: planLibraryScoped },
+    { path: PLAN_LIBRARY_IMPORT_ROUTE, verb: "plan-library-import", target: planLibraryScoped },
+    { path: "/api/control/plan-library/archive", verb: "plan-library-archive", target: planLibraryScoped },
     {
       path: "/api/control/repositories/:repoId/criteria-review",
       verb: "set-criteria-review",
@@ -796,6 +835,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "set-flow-locks": service.setFlowLocks(command); break;
           case "flow-start": case "flow-message": case "flow-plan": case "flow-rerun": case "flow-answer": case "flow-effect": case "flow-pool": case "flow-plan-step":
             await service.flowCommand(command); break;
+          case "plan-library-save": case "plan-library-import": case "plan-library-archive": service.planLibraryCommand(command); break;
           case "set-criteria-review": service.setCriteriaReview(command); break;
           case "set-group-integration": await service.setGroupIntegration(command); break;
           case "retry-integration": service.retryIntegration(command); break;

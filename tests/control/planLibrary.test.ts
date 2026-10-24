@@ -10,6 +10,20 @@ import { ControlError } from "../../src/control/errors.js";
 import { canonicalPlanDoc, PLAN_DOC_MAX_BYTES } from "../../src/control/planLibrary/codec.js";
 import { appendVersion, archiveEntry, insertEntry, listEntries, listVersions, pinningSchedules, readVersion } from "../../src/control/planLibrary/store.js";
 import { openControlStore, type ControlStore } from "../../src/control/store.js";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import express from "express";
+import { withCommandContext } from "../../src/control/commandClient.js";
+import { applyPlanLibraryCommand, libraryEntryId, type PlanLibraryCommand } from "../../src/control/planLibrary/commands.js";
+import { importControlPlanAsync, type ImportCommand } from "../../src/control/planImport.js";
+import { readArchivedPlan } from "../../src/control/queries.js";
+import { readDraft } from "../../src/control/requirementRecords.js";
+import { idSchema } from "../../src/control/schema.js";
+import { rawAuthorityCommandSchema } from "../../src/control/webProtocol.js";
+import { registerControlReadRoutes } from "../../src/panel/controlApi.js";
+import { profileSnapshot, webFixture } from "./fixtures/web.js";
+import { requirementHarness } from "./fixtures/requirementHarness.js";
+import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 
 const REPO = "/repos/proj";
 const contract = (taskId: string) => ({
@@ -111,5 +125,224 @@ describe("the library's single writer (§5.6, C8, C10 version rows)", () => {
       expect(listEntries(s, "repo", false)).toEqual([]);
       expect(listEntries(s, "repo", true).map((e) => [e.id, e.state, e.body.archivedBy])).toEqual([["pl-1", "archived", "ana"]]);
     } finally { s.close(); }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Plan Task 3: the library verbs and `import-plan` from an entry (§5.3, §5.5, §5.6, §9.1's import fields), C8.
+// ---------------------------------------------------------------------------------------------------------------------
+const LOOP = { plan: "standard", goal: "loop goal", successCondition: "loop done", targetPaths: ["src/**"], checks: ["true"] };
+const lib = <V extends PlanLibraryCommand["verb"]>(commandId: string, verb: V, payload: Extract<PlanLibraryCommand, { verb: V }>["payload"]) =>
+  ({ schema: "orca-raw-command-v1", commandId, actorId: "human", expectedRevision: 0, verb, target: { kind: "plan-library" }, payload }) as PlanLibraryCommand;
+const PERSON = { client: "web", principal: "web", attribution: { by: "ana", via: "web" } };
+type Answer = { result?: { kind: string; entryId?: string; version?: number; sha256?: string; appended?: boolean }; error?: { code: string; message: string } };
+const libraryRows = (store: ControlStore) => ({
+  entries: Number(store.db.prepare("SELECT COUNT(*) AS n FROM plan_library").get()!.n),
+  versions: Number(store.db.prepare("SELECT COUNT(*) AS n FROM plan_library_versions").get()!.n),
+});
+
+async function groupWorld() {
+  const f = await webFixture(profileSnapshot(), [{ taskId: "a" }, { taskId: "b", dependsOn: ["a"], loop: LOOP, labels: ["feature"] }]);
+  const repo = join(f.root, "repo");
+  const deps = { store: f.store, resolveRepository: (repoId: string) => { if (repoId !== "repo") throw new ControlError("control-target-not-allowed"); return repo; } };
+  const run = (command: PlanLibraryCommand): Answer => withCommandContext(command.commandId, PERSON, () => applyPlanLibraryCommand(deps, command)) as Answer;
+  const importFrom = (groupId: string, extra: Record<string, unknown>, opts: Parameters<typeof importControlPlanAsync>[2] = {}) =>
+    importControlPlanAsync({ ...f.deps, resolveRepository: deps.resolveRepository } as never, {
+      schema: "orca-raw-command-v1", commandId: `import-${groupId}`, actorId: "human", expectedRevision: 0, verb: "import-plan",
+      target: { kind: "group", groupId }, payload: { groupId, repoId: "repo", ...extra },
+    } as ImportCommand, opts) as Promise<Answer>;
+  return { f, repo, deps, run, importFrom };
+}
+
+describe("plan-library-save from a group, then import-plan from the entry (§5.3 (b), §5.5, C8 round trip)", () => {
+  it("the new group has the source's task ids, dependencies, contract hashes and loop recipes, under lib-<entry>-<sha[:12]>", async () => {
+    const w = await groupWorld();
+    try {
+      // The planId import the fixture made works as before.
+      expect(w.f.imported).toMatchObject({ result: { kind: "imported", groupId: "g" } });
+      const saved = w.run(lib("save-1", "plan-library-save", { source: { kind: "group", groupId: "g" }, name: "weekly" }));
+      expect(saved.result).toMatchObject({ kind: "plan-library-saved", entryId: libraryEntryId("save-1"), version: 1, appended: true });
+      const entryId = saved.result!.entryId!, sha256 = saved.result!.sha256!;
+      expect(entryId).toMatch(/^pl-[0-9a-f]{16}$/);
+      expect(idSchema.safeParse(entryId).success).toBe(true);
+      // The version records the person and channel, and where it came from.
+      const version = readVersion(w.f.store, entryId, sha256)!;
+      expect([version.by, version.via, version.origin]).toEqual(["ana", "web", { kind: "group", groupId: "g", planHash: readArchivedPlan(w.f.store, "g").planHash }]);
+      const imported = await w.importFrom("g2", { libraryEntry: { entryId, sha256 } });
+      expect(imported.result).toMatchObject({ kind: "imported", groupId: "g2" });
+      const shape = (groupId: string) => readArchivedPlan(w.f.store, groupId).plan.tasks.map((t) => ({ taskId: t.taskId, deps: t.dependencyTaskIds, hash: t.originalContractHash, loop: t.loop ?? null, labels: t.labels ?? null }));
+      expect(shape("g2")).toEqual(shape("g"));
+      expect(shape("g").find((t) => t.taskId === "b")!.loop).not.toBeNull();
+      expect(readArchivedPlan(w.f.store, "g2").plan.planId).toBe(`lib-${entryId}-${sha256.slice(0, 12)}`);
+    } finally { await w.f.dispose(); }
+  });
+
+  it("an import with the fields adds them; without them the group body has no origin, an unlimited limit and the project default", async () => {
+    const w = await groupWorld();
+    try {
+      const saved = w.run(lib("save-1", "plan-library-save", { source: { kind: "group", groupId: "g" }, name: "weekly" }));
+      const libraryEntry = { entryId: saved.result!.entryId!, sha256: saved.result!.sha256! };
+      const body = (groupId: string) => JSON.parse(String(w.f.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body));
+      await w.importFrom("g2", { libraryEntry });
+      expect(body("g2").limit.tokens).toBeNull();
+      expect(Object.hasOwn(body("g2"), "origin")).toBe(false);
+      expect(Object.hasOwn(body("g2"), "integration")).toBe(false);
+      const local = { delivery: "local", trigger: "group", method: "merge", target: "main" };
+      const answer = await w.importFrom("g3", { libraryEntry, tokenLimit: 5_000_000, integration: local }, { origin: { kind: "schedule", scheduleId: "sch-x", slot: 1234 } });
+      expect(answer.result).toMatchObject({ kind: "imported" });
+      expect(body("g3").limit.tokens).toBe(5_000_000);
+      expect(body("g3").integration.scheme).toEqual(local);
+      expect(body("g3").origin).toEqual({ kind: "schedule", scheduleId: "sch-x", slot: 1234 });
+      expect(w.f.store.db.prepare("SELECT tokens FROM token_policies WHERE group_id='g3' AND work_item_id=''").get()).toEqual({ tokens: 5_000_000 });
+      // A limit the import's own commitments do not fit is refused, and no group is written.
+      expect((await w.importFrom("g4", { libraryEntry, tokenLimit: 1 })).error?.code).toBe("group-budget-unavailable");
+      expect(w.f.store.db.prepare("SELECT id FROM groups WHERE id='g4'").get()).toBeUndefined();
+    } finally { await w.f.dispose(); }
+  });
+
+  it("refuses a version whose stored bytes were altered (plan-library-hash-mismatch) and another project's entry", async () => {
+    const w = await groupWorld();
+    try {
+      const saved = w.run(lib("save-1", "plan-library-save", { source: { kind: "group", groupId: "g" }, name: "weekly" }));
+      const libraryEntry = { entryId: saved.result!.entryId!, sha256: saved.result!.sha256! };
+      w.f.store.db.prepare("UPDATE plan_library SET project_id='other' WHERE id=?").run(libraryEntry.entryId);
+      expect((await w.importFrom("g2", { libraryEntry })).error?.code).toBe("plan-library-project-mismatch");
+      w.f.store.db.prepare("UPDATE plan_library SET project_id='repo' WHERE id=?").run(libraryEntry.entryId);
+      w.f.store.db.prepare("UPDATE plan_library_versions SET doc=replace(doc,'ship','sh1p') WHERE entry_id=?").run(libraryEntry.entryId);
+      expect((await w.importFrom("g3", { libraryEntry })).error?.code).toBe("plan-library-hash-mismatch");
+    } finally { await w.f.dispose(); }
+  });
+
+  it("import-plan takes exactly one of planId and libraryEntry; tokenLimit and integration only with libraryEntry", () => {
+    const command = (payload: Record<string, unknown>) => ({ schema: "orca-raw-command-v1", commandId: "c", actorId: "human", expectedRevision: 0, verb: "import-plan",
+      target: { kind: "group", groupId: "g" }, payload: { groupId: "g", repoId: "repo", ...payload } });
+    const libraryEntry = { entryId: "pl-0123456789abcdef", sha256: "a".repeat(64) };
+    expect(rawAuthorityCommandSchema.safeParse(command({ planId: "plan" })).success).toBe(true);
+    expect(rawAuthorityCommandSchema.safeParse(command({ libraryEntry })).success).toBe(true);
+    expect(rawAuthorityCommandSchema.safeParse(command({ libraryEntry, tokenLimit: null, integration: null })).success).toBe(true);
+    expect(rawAuthorityCommandSchema.safeParse(command({ planId: "plan", libraryEntry })).success).toBe(false);
+    expect(rawAuthorityCommandSchema.safeParse(command({})).success).toBe(false);
+    expect(rawAuthorityCommandSchema.safeParse(command({ planId: "plan", tokenLimit: 5 })).success).toBe(false);
+    expect(rawAuthorityCommandSchema.safeParse(command({ planId: "plan", integration: { delivery: "keep" } })).success).toBe(false);
+  });
+});
+
+describe("plan-library-save from a requirement split (§5.3 (a), C8)", () => {
+  async function reviewed() {
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: VALID_SPLIT }], startAt: "split" });
+    await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+    const run = (command: PlanLibraryCommand): Answer => withCommandContext(command.commandId, PERSON, () => applyPlanLibraryCommand({ store: x.store, resolveRepository: () => x.repo }, command)) as Answer;
+    return { x, run };
+  }
+
+  it("saves the stored split with its draftHash; the draft stays awaiting review", async () => {
+    const { x, run } = await reviewed();
+    try {
+      const draftHash = readDraft(x.store, "r", 1).draftHash!;
+      const saved = run(lib("save-r", "plan-library-save", { source: { kind: "requirement-draft", groupId: "r", draftNo: 1, draftHash }, name: "split" }));
+      expect(saved.result).toMatchObject({ kind: "plan-library-saved", version: 1 });
+      expect(readDraft(x.store, "r", 1).state).toBe("awaiting-review");
+      const version = readVersion(x.store, saved.result!.entryId!, saved.result!.sha256!)!;
+      expect(version.origin).toEqual({ kind: "requirement-draft", groupId: "r", draftNo: 1, draftHash });
+      expect(listEntries(x.store, "repo", false).map((e) => e.id)).toEqual([saved.result!.entryId]);
+      expect((JSON.parse(version.doc) as { tasks: Array<{ loop?: unknown }> }).tasks.every((t) => t.loop !== undefined)).toBe(true);
+    } finally { await x.dispose(); }
+  });
+
+  it("refuses a wrong draftHash (plan-version-conflict) and stores nothing", async () => {
+    const { x, run } = await reviewed();
+    try {
+      const answer = run(lib("save-r", "plan-library-save", { source: { kind: "requirement-draft", groupId: "r", draftNo: 1, draftHash: "0".repeat(64) }, name: "split" }));
+      expect(answer.error?.code).toBe("plan-version-conflict");
+      expect(libraryRows(x.store)).toEqual({ entries: 0, versions: 0 });
+    } finally { await x.dispose(); }
+  });
+});
+
+describe("plan-library-import and -archive (§5.3 (c), §5.6, C8)", () => {
+  const PROVENANCE = { fileName: "plan.json", fileSha256: "f".repeat(64), format: "orca-plan-v1" as const };
+
+  it("an upload with an unknown key, a dangling dependency, a cycle, a mismatched objective.taskId or over 2 MiB is refused and nothing is stored", async () => {
+    const w = await groupWorld();
+    try {
+      const big = { ...contract("a"), context: { ...contract("a").context, constraints: ["x".repeat(PLAN_DOC_MAX_BYTES)] } };
+      const bad: Array<[unknown, string]> = [
+        [{ ...doc(), extra: 1 }, "control-plan-rejected"],
+        [doc([{ taskId: "a", dependsOn: ["zz"], targetVersion: 1, contract: contract("a") }]), "control-plan-rejected"],
+        [doc([{ taskId: "a", dependsOn: ["b"], targetVersion: 1, contract: contract("a") }, { taskId: "b", dependsOn: ["a"], targetVersion: 1, contract: contract("b") }]), "control-plan-rejected"],
+        [doc([{ taskId: "a", dependsOn: [], targetVersion: 1, contract: contract("other") }]), "control-plan-rejected"],
+        [doc([{ taskId: "a", dependsOn: [], targetVersion: 1, contract: big }]), "plan-library-doc-too-large"],
+      ];
+      for (const [i, [raw, code]] of bad.entries()) {
+        expect(w.run(lib(`imp-${i}`, "plan-library-import", { projectId: "repo", name: "p", doc: raw, provenance: PROVENANCE })).error?.code, String(i)).toBe(code);
+      }
+      expect(libraryRows(w.f.store)).toEqual({ entries: 0, versions: 0 });
+      // An unknown project is refused; a good document is stored with its file provenance.
+      expect(w.run(lib("imp-x", "plan-library-import", { projectId: "nope", name: "p", doc: doc(), provenance: PROVENANCE })).error?.code).toBe("control-target-not-allowed");
+      const ok = w.run(lib("imp-ok", "plan-library-import", { projectId: "repo", name: "p", doc: doc(), provenance: PROVENANCE }));
+      expect(ok.result).toMatchObject({ kind: "plan-library-saved", version: 1 });
+      expect(readVersion(w.f.store, ok.result!.entryId!, ok.result!.sha256!)!.origin).toEqual({ kind: "import", ...PROVENANCE });
+    } finally { await w.f.dispose(); }
+  });
+
+  it("a second save with entryId appends version 2 and leaves version 1 byte-identical; another project's entry is refused", async () => {
+    const w = await groupWorld();
+    try {
+      const first = w.run(lib("imp-1", "plan-library-import", { projectId: "repo", name: "p", doc: doc(), provenance: PROVENANCE }));
+      const entryId = first.result!.entryId!;
+      const v1 = w.f.store.db.prepare("SELECT * FROM plan_library_versions WHERE entry_id=? AND version=1").get(entryId);
+      const second = w.run(lib("save-2", "plan-library-save", { source: { kind: "group", groupId: "g" }, name: "p", entryId }));
+      expect(second.result).toMatchObject({ kind: "plan-library-saved", entryId, version: 2, appended: true });
+      expect(w.f.store.db.prepare("SELECT * FROM plan_library_versions WHERE entry_id=? AND version=1").get(entryId)).toEqual(v1);
+      w.f.store.db.prepare("UPDATE plan_library SET project_id='other' WHERE id=?").run(entryId);
+      expect(w.run(lib("save-3", "plan-library-save", { source: { kind: "group", groupId: "g" }, name: "p", entryId })).error?.code).toBe("plan-library-project-mismatch");
+    } finally { await w.f.dispose(); }
+  });
+
+  it("archive is refused while a disabled schedule pins the entry (plan-library-entry-in-use)", async () => {
+    const w = await groupWorld();
+    try {
+      const saved = w.run(lib("imp-1", "plan-library-import", { projectId: "repo", name: "p", doc: doc(), provenance: PROVENANCE }));
+      const entryId = saved.result!.entryId!;
+      // A schedule row inserted directly until P2 builds the schedule writer (plan Task 3).
+      w.f.store.db.prepare("INSERT INTO schedules(id,project_id,kind,revision,removed,body) VALUES ('sch-a','repo','group',1,0,?)")
+        .run(JSON.stringify({ enabled: false, start: { kind: "group", entryId, sha256: saved.result!.sha256, tokenLimit: null, integration: null } }));
+      expect(w.run(lib("arc-1", "plan-library-archive", { entryId })).error?.code).toBe("plan-library-entry-in-use");
+      expect(listEntries(w.f.store, "repo", false).map((e) => e.state)).toEqual(["active"]);
+      w.f.store.db.prepare("UPDATE schedules SET removed=1").run();
+      expect(w.run(lib("arc-2", "plan-library-archive", { entryId })).result).toEqual({ kind: "plan-library-archived", entryId });
+      expect(listEntries(w.f.store, "repo", false)).toEqual([]);
+    } finally { await w.f.dispose(); }
+  });
+});
+
+describe("the library reads (§13.3 API)", () => {
+  it("lists a project's entries, shows an entry's versions with provenance, and downloads a version's canonical bytes as an attachment", async () => {
+    const w = await groupWorld();
+    const server = createServer((() => {
+      const app = express();
+      app.use((_req, res, next) => { res.locals.orcaPrincipal = { kind: "user", userId: "u2", name: "m", roles: ["member"] }; next(); });
+      registerControlReadRoutes(app, { store: w.f.store, epoch: "epoch", config: { readView: async () => ({}) } as never }, "web");
+      return app;
+    })());
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const saved = w.run(lib("save-1", "plan-library-save", { source: { kind: "group", groupId: "g" }, name: "weekly" }));
+      const { entryId, sha256 } = saved.result as { entryId: string; sha256: string };
+      const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/control/plan-library`;
+      const list = await (await fetch(`${base}?repoId=repo`)).json() as { entries: Array<{ entryId: string; name: string; head: { sha256: string; by: string; via: string } }> };
+      expect(list.entries.map((e) => [e.entryId, e.name, e.head.sha256, e.head.by, e.head.via])).toEqual([[entryId, "weekly", sha256, "ana", "web"]]);
+      const entry = await (await fetch(`${base}/${entryId}`)).json() as { versions: Array<{ version: number; origin: { kind: string } }> };
+      expect(entry.versions.map((v) => [v.version, v.origin.kind])).toEqual([[1, "group"]]);
+      const download = await fetch(`${base}/${entryId}/versions/${sha256}`);
+      expect(download.headers.get("content-disposition")).toContain("attachment");
+      const bytes = await download.text();
+      expect(bytes).toBe(readVersion(w.f.store, entryId, sha256)!.doc);
+      expect(sha256Canonical(JSON.parse(bytes))).toBe(sha256);
+      expect((await fetch(`${base}/${entryId}/versions/${"0".repeat(64)}`)).status).toBe(404);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await w.f.dispose();
+    }
   });
 });

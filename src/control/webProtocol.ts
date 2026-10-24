@@ -679,6 +679,11 @@ export const commandVerbSchema = z.enum([
   "flow-plan-step",
   // Dir-requirements spec §9.2: the person's answer to a folder change that stopped a dir group's placement.
   "resolve-folder-change",
+  // Scheduled flows and groups spec 2026-10-24 §11.1: the plan library's writes (save from Orca's data, import a file,
+  // archive), one `@plan-library` scope with constant revision 0.
+  "plan-library-save",
+  "plan-library-import",
+  "plan-library-archive",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -696,6 +701,11 @@ const checkSettingsTargetSchema = z.discriminatedUnion("kind", [repositoryComman
 // Flow engine spec §14.2 (writer's call, as the corrections scope): every flow verb is one scope with constant revision 0;
 // the kernel's own checks (a message deduped by its command id, a plan by its number, a record by its state) guard it.
 const flowsCommandTargetSchema = z.object({ kind: z.literal("flows") }).strict();
+// Scheduled flows and groups plan B2: the plan library is one scope with constant revision 0 (as `@flows`); its writes are
+// guarded by their own checks (an entry id is unique, versions are append-only). A schedule is its own scope, its
+// revision the `schedules` row's (0 while there is none).
+const planLibraryCommandTargetSchema = z.object({ kind: z.literal("plan-library") }).strict();
+const scheduleCommandTargetSchema = z.object({ kind: z.literal("schedule"), scheduleId: idSchema }).strict();
 
 export const commandTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group"), groupId: idSchema }).strict(),
@@ -708,14 +718,30 @@ export const commandTargetSchema = z.discriminatedUnion("kind", [
   correctionsCommandTargetSchema,
   orchestrationCommandTargetSchema,
   flowsCommandTargetSchema,
+  planLibraryCommandTargetSchema,
+  scheduleCommandTargetSchema,
 ]);
 
 export const emptyPayloadSchema = z.object({}).strict();
+// Scheduled flows and groups spec §5.5, §9.1 (plan B4): a registered plan (`planId`) or a pinned library version
+// (`libraryEntry`), exactly one; `tokenLimit` (the group limit's tokens; null = unlimited) and `integration` (the group's
+// scheme; null = keep) only with `libraryEntry`. Absent fields add no bytes, so a planId import hashes as before.
+const libraryEntryRefSchema = z.object({ entryId: idSchema, sha256: hashSchema }).strict();
+const importSourceFields = {
+  planId: idSchema.optional(),
+  libraryEntry: libraryEntryRefSchema.optional(),
+  tokenLimit: safeInteger.positive().nullable().optional(),
+  integration: z.lazy(() => integrationSchemeSchema).nullable().optional(),
+};
+function refineImportSource(value: { planId?: unknown; libraryEntry?: unknown; tokenLimit?: unknown; integration?: unknown }, ctx: z.RefinementCtx): void {
+  if ((value.planId === undefined) === (value.libraryEntry === undefined)) issue(ctx, ["planId"], "plan-id-or-library-entry-required");
+  if (value.libraryEntry === undefined && (value.tokenLimit !== undefined || value.integration !== undefined)) issue(ctx, ["libraryEntry"], "library-entry-required");
+}
 export const importPlanPayloadSchema = z
   .object({
     groupId: idSchema,
     repoId: idSchema,
-    planId: idSchema,
+    ...importSourceFields,
     estimatorProfileId: idSchema.optional(),
     estimatorProfileHash: hashSchema.optional(),
     estimateMode: z.enum(["strict", "soft"]).optional(),
@@ -725,7 +751,28 @@ export const importPlanPayloadSchema = z
     if ((value.estimatorProfileId === undefined) !== (value.estimatorProfileHash === undefined)) {
       issue(ctx, ["estimatorProfileHash"], "estimator-profile-id-hash-pair-required");
     }
+    refineImportSource(value, ctx);
   });
+// Scheduled flows and groups spec §5.3, §11.1: the library verbs' payloads. A save names Orca's own data (a group's
+// archived plan, or a requirement's stored split with the hash the person saw); an import carries the document itself
+// (the panel never reads a path) and where it came from.
+const libraryNameSchema = z.string().min(1).max(200);
+export const planLibrarySavePayloadSchema = z.object({
+  source: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("group"), groupId: idSchema }).strict(),
+    z.object({ kind: z.literal("requirement-draft"), groupId: idSchema, draftNo: safeInteger.positive(), draftHash: hashSchema }).strict(),
+  ]),
+  name: libraryNameSchema,
+  entryId: idSchema.optional(),
+}).strict();
+export const planLibraryImportPayloadSchema = z.object({
+  projectId: idSchema,
+  name: libraryNameSchema,
+  entryId: idSchema.optional(),
+  doc: z.unknown(),
+  provenance: z.object({ fileName: z.string().min(1).max(255), fileSha256: hashSchema, format: z.enum(["orca-plan-v1", "scheduler-plan-file"]) }).strict(),
+}).strict();
+export const planLibraryArchivePayloadSchema = z.object({ entryId: idSchema }).strict();
 export const handoffStopPayloadSchema = z.object({ handoffDeadlineAt: canonicalTimestampSchema.optional() }).strict();
 export const resumeFromHandoffPayloadSchema = z
   .object({
@@ -811,12 +858,13 @@ const effectiveImportPlanPayloadSchema = z
   .object({
     groupId: idSchema,
     repoId: idSchema,
-    planId: idSchema,
+    ...importSourceFields,
     estimatorProfileId: idSchema.nullable(),
     estimatorProfileHash: hashSchema.nullable(),
     estimateMode: z.enum(["strict", "soft"]),
   })
-  .strict();
+  .strict()
+  .superRefine(refineImportSource);
 const effectiveProposalOperationSchema = z
   .object({
     target: proposalTargetSchema,
@@ -1124,6 +1172,9 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("flow-answer"), target: flowsCommandTargetSchema, payload: flowAnswerPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("flow-effect"), target: flowsCommandTargetSchema, payload: flowEffectPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("flow-pool"), target: flowsCommandTargetSchema, payload: flowPoolPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("plan-library-save"), target: planLibraryCommandTargetSchema, payload: planLibrarySavePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("plan-library-import"), target: planLibraryCommandTargetSchema, payload: planLibraryImportPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("plan-library-archive"), target: planLibraryCommandTargetSchema, payload: planLibraryArchivePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("flow-plan-step"), target: flowsCommandTargetSchema, payload: flowPlanStepPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("run-check-now"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("resume-check"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
@@ -1213,6 +1264,9 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("flow-answer"), target: flowsCommandTargetSchema, payload: flowAnswerPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("flow-effect"), target: flowsCommandTargetSchema, payload: flowEffectPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("flow-pool"), target: flowsCommandTargetSchema, payload: flowPoolPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("plan-library-save"), target: planLibraryCommandTargetSchema, payload: planLibrarySavePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("plan-library-import"), target: planLibraryCommandTargetSchema, payload: planLibraryImportPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("plan-library-archive"), target: planLibraryCommandTargetSchema, payload: planLibraryArchivePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("flow-plan-step"), target: flowsCommandTargetSchema, payload: flowPlanStepPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("run-check-now"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resume-check"), target: repositoryCommandTargetSchema, payload: checkKindPayloadSchema }).strict(),
@@ -1981,6 +2035,10 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("flow-answered"), flowRunId: nonemptyString, stepKey: nonemptyString, answer: z.enum(["ask", "needs", "clarify", "consensus"]) }).strict(),
   z.object({ kind: z.literal("flow-effect-done"), recordId: nonemptyString, action: z.enum(["confirm", "enact", "discard"]), state: z.enum(["running", "restaged", "discarded"]), replacedBy: nonemptyString.optional() }).strict(),
   z.object({ kind: z.literal("flow-pool-raised"), flowRunId: nonemptyString, poolTokens: positiveSafeInteger }).strict(),
+  // Scheduled flows and groups spec §5.3, §5.6: the version a save or an import made (or found: `appended` false when the
+  // entry already held these bytes), and an archive.
+  z.object({ kind: z.literal("plan-library-saved"), entryId: idSchema, version: positiveSafeInteger, sha256: hashSchema, appended: z.boolean() }).strict(),
+  z.object({ kind: z.literal("plan-library-archived"), entryId: idSchema }).strict(),
   // Gaps spec §4.6, §5.5: a feedback intake's clarify round answered; a step of the running plan answered.
   z.object({ kind: z.literal("flow-feedback-answered"), flowRunId: nonemptyString, messageSeq: positiveSafeInteger, answer: z.enum(["clarify", "consensus"]) }).strict(),
   z.object({ kind: z.literal("flow-plan-step-applied"), flowRunId: nonemptyString, planNo: positiveSafeInteger, stepKey: nonemptyString, choice: z.enum(["run", "accept-unchanged"]) }).strict(),
@@ -2116,7 +2174,9 @@ export const commandSuccessSchema = commandSuccessObjectSchema
       // Flow engine spec §11.2: the same two settings scopes.
       || value.verb === "set-flow-settings" || value.verb === "set-flow-locks"
       // Flow engine spec §14.2: the `@flows` scope has revision 0 and no group projection.
-      || value.verb.startsWith("flow-");
+      || value.verb.startsWith("flow-")
+      // Scheduled flows and groups plan B2: the `@plan-library` scope, likewise.
+      || value.verb.startsWith("plan-library-");
     if (isShutdown ? value.commandRevision !== null : value.commandRevision === null) {
       issue(ctx, ["commandRevision"], "command-revision-nullability-mismatch");
     }

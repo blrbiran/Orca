@@ -1798,6 +1798,14 @@ export const enErrors: Record<string, string> = {
   "agent-selection-invalid": "The agent selection is not valid: {{detail}}",
   "agent-selection-rejected": "ccloop refused this agent selection: {{detail}}",
   "auto-confirm-selections-unresolved": "Orca could not resolve every agent slot with the group's own choices.",
+  // Scheduled flows and groups spec 2026-10-24 §14: the plan library's refusals.
+  "plan-library-doc-too-large": "The plan is larger than 2 MiB.",
+  "plan-library-hash-mismatch": "The plan's stored bytes no longer match the pinned version.",
+  "plan-library-entry-in-use": "A schedule still uses this plan.",
+  "plan-library-entry-not-found": "No plan in the library has this id or version: {{detail}}",
+  "plan-library-target-mismatch": "The plan file names another repository than this project.",
+  "plan-library-project-mismatch": "This plan belongs to another project.",
+  "plan-library-contract-path-refused": "A contract file is outside the plan's repository or reached through a link.",
   // ccloop error codes spec (2026-10-15) §4.2: ccloop exited non-zero; the detail is `<code>: <detail>` (web/src/ccloopCodes.ts explains a known code).
   "ccloop-failed": "ccloop failed: {{detail}}",
   // ccloop error codes spec §4.4: a peer exit's stored run reason; the detail is ccloop's code explained (web/src/refusalExplain.ts).

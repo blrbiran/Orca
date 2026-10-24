@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import { chmodSync, lstatSync, unlinkSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { registerControlReadRoutes, verifyControlJsonBody, type ControlReadApiDeps } from "./controlApi.js";
+import { planLibraryImportBody, registerControlReadRoutes, verifyControlJsonBody, type ControlReadApiDeps } from "./controlApi.js";
 import { sendControlError } from "./controlErrors.js";
 import { registerSocketProjectRoutes, type ProjectsDeps } from "./projects.js";
 import { CLIENT_HEADER, CLIENT_PATTERN, DISPATCHED_RUN_HEADER } from "../control/commandClient.js";
@@ -51,6 +51,7 @@ export function buildControlSocketApp(deps: ControlReadApiDeps, projects?: Proje
     res.locals.orcaPrincipal = { kind: "agent", client, ...(dispatchedRun === undefined ? {} : { dispatchedRun }), ...(person === undefined ? {} : { person }) } satisfies Principal;
     next();
   });
+  app.use(planLibraryImportBody);
   app.use(express.json({ limit: "64kb", verify: verifyControlJsonBody }));
   if (auth !== undefined) registerPersonRoutes(app, auth);
   // CLI v2 spec §14 R4: plan registration over the socket, by the HTTP route's own handler (projects.ts).

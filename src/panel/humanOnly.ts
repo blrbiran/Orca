@@ -96,6 +96,11 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   // Gaps spec §5.5, §13: answering a step of the running plan is the person's (like running the plan); `accept-unchanged`
   // is open on the socket (SOCKET_TIER), `run` spends and wants a person token.
   "flow-plan-step": "human-only",
+  // Scheduled flows and groups spec §11.1, §11.2: an entry becomes importable and schedulable, so every library write is
+  // the owner's (a trust act, as registering a plan is). Members read and import into a group only.
+  "plan-library-save": "human-only",
+  "plan-library-import": "human-only",
+  "plan-library-archive": "human-only",
 };
 /**
  * Review finding I4 (controller's call, flagged for the human): verbs any principal may send that a run Orca dispatched is
@@ -114,6 +119,9 @@ export const HUMAN_ONLY_FIELDS: Readonly<Partial<Record<CommandVerbV1, readonly 
   "correction-debug-open": ["undoHow"],
   // Flow engine spec §14.2: a run's pool is a budget amount (like requirement-open.limit).
   "flow-start": ["pool"],
+  // Scheduled flows and groups spec §9.1, §11.1: a library import's token limit is a budget amount and its scheme a
+  // delivery choice (what confirm.integrationHash guards today).
+  "import-plan": ["tokenLimit", "integration"],
 };
 /**
  * CLI v2 spec §15.1: the control socket's tier for each human-only entry (a verb, or `verb.field`), the table's code mirror.
@@ -196,6 +204,14 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "resolve-folder-change": "token",
   "settle-unknown-usage": "token",
   "apply-agent-update": "token",
+  // Scheduled flows and groups spec §11.1 (I-3): a new entry copies data Orca already holds (open); appending a version
+  // changes what an existing entry offers every repin and one-off import (token). Importing outside bytes is the owner's
+  // act of trust (token); archiving only hides (open).
+  "plan-library-save": (p) => (p.entryId === undefined ? "open" : "token"),
+  "plan-library-import": "token",
+  "plan-library-archive": "open",
+  "import-plan.tokenLimit": "token",
+  "import-plan.integration": "token",
 };
 
 /** The socket tier of a command: `token` when any human-only entry it carries is (an entry with no row is `token`); null when it carries none. */

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { applyFlowCommand, type FlowCommand } from "../flow/flowCommands.js";
+import { applyPlanLibraryCommand, type PlanLibraryCommand } from "./planLibrary/commands.js";
 import type { FlowDeps } from "../flow/kernel.js";
 import { peerCode, peerFailure } from "./ccloopPort.js";
 import {retainSavedInterruption,readDriverRun,describeError} from "./executionDriver.js";
@@ -1134,6 +1135,10 @@ export class WebControlService {
     const release = this.deps.admissionGate?.enter();
     try { return await applyFlowCommand({ store: this.store, flow: this.deps.flowDeps ?? (() => null), projects: this.deps.flowProjects ?? (() => []) }, command) as WebCommandResult; }
     finally { release?.(); }
+  }
+  /** Scheduled flows and groups spec §5.3, §5.6: the plan library's writes (planLibrary/commands.ts), one transaction each. */
+  planLibraryCommand(command: PlanLibraryCommand): WebCommandResult {
+    return this.mutate(() => applyPlanLibraryCommand({ store: this.store, ...(this.deps.resolveRepository === undefined ? {} : { resolveRepository: this.deps.resolveRepository }), ...(this.deps.now === undefined ? {} : { now: this.deps.now }) }, command)) as WebCommandResult;
   }
   private readonly checkJobs = new Map<string, Promise<void>>();
   /**
