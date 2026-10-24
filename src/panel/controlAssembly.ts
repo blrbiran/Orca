@@ -1,5 +1,7 @@
 import type { PanelCorrections } from "../control/correctionCommands.js";
-import { advanceFlowRuns } from "../flow/kernel.js";
+import { advanceFlowRuns, startFlowRun } from "../flow/kernel.js";
+import { registeredDirProject } from "../flow/flowCommands.js";
+import type { SchedulePassDeps } from "../control/schedules/pass.js";
 import { createPanelFlow, type PanelFlow } from "./flowAssembly.js";
 import { mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
@@ -229,6 +231,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   const resolveRepository = (repoId: string): string => vaultPathOfRepoId(env, repoId) ?? config.resolveRepository(repoId);
 
   const admissionGate = createAdmissionGate();
+  // Review finding I4: a flow starts only on a registered `dir` project's folder; its settings key is the project's.
+  const flowProjects = () => repos.filter((repo) => repo.kind === "dir").map((repo) => ({ repoId: controlRepoKey(repo.projectKey), path: repo.path }));
   const service = new WebControlService({
     store,
     // Agent selection W6-19: confirm resolves selections through the very port the profiles probe.
@@ -241,7 +245,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     // Flow engine spec §14.2: the flow verbs act through the kernel's production ports, made below with the driver.
     flowDeps: () => flow?.deps ?? null,
     // Review finding I4: a flow starts only on a registered `dir` project's folder; its settings key is the project's.
-    flowProjects: () => repos.filter((repo) => repo.kind === "dir").map((repo) => ({ repoId: controlRepoKey(repo.projectKey), path: repo.path })),
+    flowProjects,
     // Dir-requirements spec §5.1: the same `dir` entries, by repo id -- a requirement on one is a dir group (its folder frozen
     // at open), import-plan and the debug opens on one are refused, and a dispatched run may not open a requirement on one.
     dirProjectOf: (repoId: string) => {
@@ -301,6 +305,9 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     // Flow engine spec §8.2: flow runs advance at their step boundaries before the auto-start pass, so a child a step just
     // opened and confirmed starts in the same pass.
     const autoStart = driver === null || flow === null ? Promise.resolve() : service.systemDebugPass().then(() => service.checksPass())
+      // Scheduled flows and groups spec §7.1: fires are decided after the checks and before the flow pass, so a flow run a
+      // fire just started advances in this same pump. Its own catch keeps a bad schedule from skipping the flow pass.
+      .then(() => schedulesStep(service, { startFlow: flowScheduleStarter(flow!, flowProjects) }))
       // A flow error never skips the auto-start pass of every other group (advanceFlowRuns records a run's own error on it).
       .then(() => flow!.refreshAgents().then(() => advanceFlowRuns(flow!.deps)).catch((error: unknown) => {
         process.stderr.write(`orca-control: flow pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -402,4 +409,44 @@ export function autoConfirmStep(
   return service.autoConfirmUnlimitedPass().then(({ refused }) => {
     for (const { groupId, code } of refused) write(`orca-control: automatic confirm of ${groupId} refused: ${code}\n`);
   }, (error: unknown) => { write(`orca-control: automatic confirm pass failed: ${error instanceof Error ? error.message : String(error)}\n`); });
+}
+
+/**
+ * Scheduled flows and groups spec §7, §8 step 7: a flow fire's starter. The project's folder is resolved through the
+ * registry at fire time; the run is started by `orca-auto` through `schedule:<id>`, its id derived from the fire's
+ * commandId so a re-run after a crash finds the same run. The template-version check and the effect clamp are Task 7's.
+ */
+export function flowScheduleStarter(
+  flow: PanelFlow, projects: () => ReadonlyArray<{ repoId: string; path: string }>,
+): NonNullable<SchedulePassDeps["startFlow"]> {
+  return async (fire, schedule) => {
+    const start = schedule.start;
+    const commandId = fire.body.commandId;
+    if (schedule.kind !== "flow" || start.kind !== "flow" || commandId === undefined) throw new ControlError("control-target-not-allowed");
+    const project = projects().find((entry) => entry.repoId === schedule.projectId);
+    if (project === undefined) throw new ControlError("flow-dir-unregistered", schedule.projectId);
+    const projectId = await registeredDirProject(projects(), project.path, schedule.projectId);
+    const started = await startFlowRun(flow.deps, {
+      templateRef: start.template, dir: project.path, projectId, params: start.params,
+      ...(start.clarify === undefined ? {} : { clarify: start.clarify }),
+      ...(start.unattended === undefined ? {} : { unattended: start.unattended }),
+      ...(start.pool === undefined ? {} : { pool: start.pool }),
+      by: "orca-auto", via: `schedule:${schedule.id}`, operatorId: schedule.enabledBy, idempotencyKey: commandId,
+    });
+    return { flowRunId: started.flowRunId };
+  };
+}
+
+/**
+ * Scheduled flows and groups spec §7.1: the pump's scheduler step, with the same swallow-and-write shape as
+ * `autoConfirmStep`, so the flow pass chained after it still runs when one schedule is unreadable.
+ */
+export function schedulesStep(
+  service: { schedulesPass(starters?: Omit<SchedulePassDeps, "store" | "now">): Promise<void> },
+  starters: Omit<SchedulePassDeps, "store" | "now">,
+  write: (line: string) => void = (line) => { process.stderr.write(line); },
+): Promise<void> {
+  return service.schedulesPass(starters).catch((error: unknown) => {
+    write(`orca-control: schedules pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
+  });
 }

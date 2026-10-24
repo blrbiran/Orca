@@ -99,8 +99,8 @@ const UNATTENDED_KINDS: ReadonlySet<string> = new Set(["work", "review"]);
 export const DEFAULT_TOKENS_PER_RUN = 2_000_000;
 const POINTER_MAX_BYTES = 16 * 1024;
 
-/** A UUID-shaped id from a key (sha256), so the same key always names the same run. */
-const uuidOf = (key: string): string => {
+/** A UUID-shaped id from a key (sha256), so the same key always names the same run. A scheduled fire derives its run's id from the fire's commandId (§7.5). */
+export const uuidOf = (key: string): string => {
   const h = createHash("sha256").update(key).digest("hex");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 };

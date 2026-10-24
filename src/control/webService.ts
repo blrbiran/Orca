@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { applyFlowCommand, type FlowCommand } from "../flow/flowCommands.js";
 import { applyPlanLibraryCommand, type PlanLibraryCommand } from "./planLibrary/commands.js";
 import { applyScheduleCommand, type ScheduleCommand } from "./schedules/commands.js";
+import { schedulesPass, type SchedulePassDeps } from "./schedules/pass.js";
 import type { FlowDeps } from "../flow/kernel.js";
 import { peerCode, peerFailure } from "./ccloopPort.js";
 import {retainSavedInterruption,readDriverRun,describeError} from "./executionDriver.js";
@@ -1147,6 +1148,14 @@ export class WebControlService {
       store: this.store, flowProjects: this.deps.flowProjects ?? (() => []), knownRepository: this.deps.knownRepository ?? (() => false),
       ...(this.deps.resolveRepository === undefined ? {} : { resolveRepository: this.deps.resolveRepository }), ...(this.deps.now === undefined ? {} : { now: this.deps.now }),
     }, command)) as WebCommandResult;
+  }
+  /**
+   * Scheduled flows and groups spec §7.2: one scheduler pass (schedules/pass.ts), the pump's step after `checksPass` and
+   * before the flow pass. The starters are the caller's -- a panel with no execution driver passes none, so a flow fire
+   * fails `control-target-not-allowed` as any other unnamed target would.
+   */
+  async schedulesPass(starters: Omit<SchedulePassDeps, "store" | "now"> = {}): Promise<void> {
+    await schedulesPass({ store: this.store, now: () => (this.deps.now?.() ?? new Date()).getTime(), ...starters });
   }
   private readonly checkJobs = new Map<string, Promise<void>>();
   /**
