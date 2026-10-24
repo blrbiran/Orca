@@ -13,16 +13,18 @@
 import type { RawEvent } from "./events.js";
 import { longLineAt, STRIDE_BYTES, type LineIndex, type LongLine, type OversizedIndex } from "./lineIndex.js";
 import { normalizeLine, PARSE_LIMIT, type Runtime } from "./normalize.js";
-import type { RangeReader } from "./reader.js";
+import { giveScratch, takeScratch, type RangeReader } from "./reader.js";
 import { edge, headOf, LOOK, PAGE, pageOf, redactFull, redactValue, render, slicePage, sliceHead, type FieldHead, type Page, type Redactor } from "./redact.js";
 import { TranscriptRefusal } from "./refusal.js";
-import { createDecoder, initialDecoderState, scanType } from "./unescape.js";
+import { createDecoder, initialDecoderState, scanType, type StreamDecoder } from "./unescape.js";
 
 export const WINDOW_EVENTS = 200;
 export const WINDOW_BYTES = 4 * 1024 * 1024;
 /** An oversized line is read only for its first 4 KiB (§10.4.2) and counts as that much toward the window (C2). */
 export const PREFIX_BYTES = 4096;
 const CHUNK = PARSE_LIMIT + 1;
+/** The count-only reads (a checkpoint pass, the skipped text before a page): no strings, so large chunks cost no heap. */
+const COUNT_CHUNK = 256 * 1024;
 const META_LIMIT = 256;
 
 export interface ServedEvent {
@@ -59,25 +61,31 @@ type Line = { start: number; bytes: Buffer } | { start: number; long: LongLine; 
 async function* linesIn(index: LineIndex, reader: RangeReader, from: number, to: number): AsyncGenerator<Line> {
   const longs = index.long.filter((line) => line.start >= from && line.start < to);
   let pos = from;
-  for (let li = 0; pos < to; li++) {
-    const long = longs[li];
-    const regionEnd = long === undefined ? to : long.start;
-    while (pos < regionEnd) {
-      const bytes = await reader.read(pos, Math.min(CHUNK, regionEnd - pos));
-      const last = bytes.lastIndexOf(10);
-      if (last === -1) throw new TranscriptRefusal("transcript-offset-invalid", "index");
-      let s = 0;
-      while (s <= last) {
-        const nl = bytes.indexOf(10, s);
-        yield { start: pos + s, bytes: bytes.subarray(s, nl) };
-        s = nl + 1;
+  // The chunk buffer is borrowed: a yielded line's bytes are only valid until the generator resumes.
+  const scratch = takeScratch(Math.min(CHUNK, to - from));
+  try {
+    for (let li = 0; pos < to; li++) {
+      const long = longs[li];
+      const regionEnd = long === undefined ? to : long.start;
+      while (pos < regionEnd) {
+        const bytes = await reader.read(pos, Math.min(CHUNK, regionEnd - pos), scratch);
+        const last = bytes.lastIndexOf(10);
+        if (last === -1) throw new TranscriptRefusal("transcript-offset-invalid", "index");
+        let s = 0;
+        while (s <= last) {
+          const nl = bytes.indexOf(10, s);
+          yield { start: pos + s, bytes: bytes.subarray(s, nl) };
+          s = nl + 1;
+        }
+        pos += last + 1;
       }
-      pos += last + 1;
+      if (long !== undefined) {
+        yield { start: long.start, long, prefix: await reader.read(long.start, Math.min(PREFIX_BYTES, long.end - long.start)) };
+        pos = long.end + 1;
+      }
     }
-    if (long !== undefined) {
-      yield { start: long.start, long, prefix: await reader.read(long.start, Math.min(PREFIX_BYTES, long.end - long.start)) };
-      pos = long.end + 1;
-    }
+  } finally {
+    giveScratch(scratch);
   }
 }
 
@@ -164,14 +172,16 @@ export async function windowBefore(index: LineIndex, reader: RangeReader, offset
     let k = index.checkpoints.length - 1;
     while (k > 0 && index.checkpoints[k]!.offset >= segmentEnd) k--;
     const segmentStart = index.checkpoints[k]!.offset;
-    const lines: Line[] = [];
-    for await (const line of linesIn(index, reader, segmentStart, segmentEnd)) lines.push(line);
-    for (let j = lines.length - 1; j >= 0; j--) {
-      const line = lines[j]!;
-      const served = eventsOf(line, options);
-      if (!take(budget, cost(line), served.length, start === offset)) { stopped = true; break; }
+    // Each line is served as read (the chunk buffer is borrowed), then the segment is taken from its end backwards.
+    const servedLines: Array<{ start: number; cost: number; served: ServedEvent[] }> = [];
+    for await (const line of linesIn(index, reader, segmentStart, segmentEnd)) {
+      servedLines.push({ start: line.start, cost: cost(line), served: eventsOf(line, options) });
+    }
+    for (let j = servedLines.length - 1; j >= 0; j--) {
+      const { start: lineStart, cost: lineCost, served } = servedLines[j]!;
+      if (!take(budget, lineCost, served.length, start === offset)) { stopped = true; break; }
       chunks.push(served.length > budget.events ? served.slice(served.length - budget.events) : served);
-      start = line.start;
+      start = lineStart;
     }
     segmentEnd = segmentStart;
   }
@@ -204,14 +214,23 @@ export async function oversizedIndex(index: LineIndex, reader: RangeReader, line
   const checkpoints = [{ raw: 0, dec: 0, state: initialDecoderState() }];
   let length = 0;
   const total = line.end - line.start;
-  for (let raw = 0; raw < total;) {
-    const bytes = await reader.read(line.start + raw, Math.min(STRIDE_BYTES, total - raw));
-    if (bytes.length === 0) break;
-    length += decoder.feed(bytes).length;
-    raw += bytes.length;
-    if (raw < total && raw % STRIDE_BYTES === 0) checkpoints.push({ raw, dec: length, state: decoder.state() });
+  const scratch = takeScratch(Math.min(COUNT_CHUNK, total));
+  try {
+    for (let raw = 0; raw < total;) {
+      // Chunks end on every 1 MiB stride, so a checkpoint's state is exact. They are large because each read allocates a
+      // promise and a Buffer object (churn that the heap keeps until a collection): 8 KiB chunks over 200 MiB leave tens
+      // of MiB unreclaimed; this counting pass builds no strings, so a large chunk costs no heap.
+      const step = Math.min(COUNT_CHUNK, STRIDE_BYTES - (raw % STRIDE_BYTES), total - raw);
+      const bytes = await reader.read(line.start + raw, step, scratch);
+      if (bytes.length === 0) break;
+      length += decoder.feedCount(bytes);
+      raw += bytes.length;
+      if (raw < total && raw % STRIDE_BYTES === 0) checkpoints.push({ raw, dec: length, state: decoder.state() });
+    }
+  } finally {
+    giveScratch(scratch);
   }
-  length += decoder.end().length;
+  length += decoder.endCount();
   const built = { checkpoints, length };
   index.oversized.set(line.start, built);
   return built;
@@ -232,15 +251,39 @@ export async function expandOversized(index: LineIndex, reader: RangeReader, at:
   const nominalEnd = (page + 1) * PAGE;
   let text = "";
   let raw = checkpoint.raw;
-  while (checkpoint.dec + text.length < nominalEnd + LOOK && raw < total) {
-    const bytes = await reader.read(line.start + raw, Math.min(256 * 1024, total - raw));
-    if (bytes.length === 0) break;
-    text += decoder.feed(bytes);
-    raw += bytes.length;
+  let base = checkpoint.dec;
+  let tail: StreamDecoder | null = null;
+  const scratch = takeScratch(Math.min(Math.max(COUNT_CHUNK, PAGE + 2 * LOOK), total));
+  try {
+    // Skip the text before `want` by counting only. Decoding a chunk yields at most one unit more than its byte count
+    // (bytes held back at a checkpoint complete a 4-byte sequence), so leaving two units of room per read keeps every
+    // bulk read short of `want`; the crossing read is then at most 2 bytes, decoded again from a snapshot and sliced
+    // exactly, so no large transient string is built for text that is thrown away.
+    while (base < want && raw < total) {
+      const bytes = await reader.read(line.start + raw, Math.min(COUNT_CHUNK, Math.max(1, want - base - 2), total - raw), scratch);
+      if (bytes.length === 0) break;
+      const before = decoder.state();
+      const counted = decoder.feedCount(bytes);
+      raw += bytes.length;
+      if (base + counted < want) { base += counted; continue; }
+      tail = createDecoder(before);
+      text = tail.feed(bytes).slice(want - base);
+      base = want;
+      break;
+    }
+    tail ??= decoder;
+    const need = nominalEnd + LOOK - base;
+    while (text.length < need && raw < total) {
+      const bytes = await reader.read(line.start + raw, Math.min(need - text.length, total - raw), scratch);
+      if (bytes.length === 0) break;
+      text += tail.feed(bytes);
+      raw += bytes.length;
+    }
+  } finally {
+    giveScratch(scratch);
   }
-  if (raw >= total) text += decoder.end();
-  const base = checkpoint.dec;
-  const span = text.slice(want - base, nominalEnd + LOOK - base);
+  if (raw >= total) text += (tail ?? decoder).end();
+  const span = base === want && text.length <= nominalEnd + LOOK - want ? text : text.slice(Math.max(0, want - base), nominalEnd + LOOK - base);
   const endUnits = Math.min(nominalEnd, base + text.length) - want;
   return { text: render(redactor, span, edge(span, page * PAGE - want), edge(span, endUnits)), page, pages, length: over.length };
 }

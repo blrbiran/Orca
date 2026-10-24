@@ -17,7 +17,28 @@ import { TranscriptRefusal } from "./refusal.js";
 export interface RangeReader {
   /** The byte size observed when the source was opened. */
   readonly size: number;
-  read(position: number, length: number): Promise<Buffer>;
+  /** When `into` is at least `length` bytes, the bytes are read into it and a view of it is returned (no allocation). */
+  read(position: number, length: number, into?: Buffer): Promise<Buffer>;
+}
+
+/**
+ * Streaming passes take one buffer and reuse it for every chunk (spec §6.5: peak memory while serving a 512 MiB
+ * transcript stays under 64 MiB; a fresh buffer per chunk leaves tens of MiB of external memory waiting for GC).
+ * A caller must be done with a taken buffer before it awaits anything that takes another one.
+ */
+const freeScratch: Buffer[] = [];
+const SCRATCH_BUFFERS = 4;
+const SCRATCH_LIMIT = 4 * 1024 * 1024;
+
+/** A buffer of at least `length` bytes; pass it back with `giveScratch` (never a subarray of it, or the pool shrinks). */
+export function takeScratch(length: number): Buffer {
+  if (length <= 0) return Buffer.alloc(0);
+  const at = freeScratch.findIndex((buffer) => buffer.length >= length);
+  return at === -1 ? Buffer.allocUnsafe(length) : freeScratch.splice(at, 1)[0]!;
+}
+
+export function giveScratch(buffer: Buffer): void {
+  if (buffer.length > 0 && buffer.length < SCRATCH_LIMIT && freeScratch.length < SCRATCH_BUFFERS) freeScratch.push(buffer);
 }
 
 export interface OpenSource { reader: RangeReader; key: string; close(): Promise<void> }
@@ -28,8 +49,9 @@ export const LISTING_PATH = /^(claude|codex|omp)\/([1-9][0-9]{0,8})\/([a-z][a-z-
 function handleReader(handle: FileHandle, size: number): RangeReader {
   return {
     size,
-    async read(position, length) {
-      const buffer = Buffer.allocUnsafe(Math.max(0, Math.min(length, size - position)));
+    async read(position, length, into) {
+      const wanted = Math.max(0, Math.min(length, size - position));
+      const buffer = into !== undefined && into.length >= wanted ? into.subarray(0, wanted) : Buffer.allocUnsafe(wanted);
       let done = 0;
       while (done < buffer.length) {
         const { bytesRead } = await handle.read(buffer, done, buffer.length - done, position + done);
@@ -82,12 +104,23 @@ export async function openArchiveTranscript(stateDir: string, ref: { artifactId:
   }
   const file = await openRegular(join(stateDir, "artifacts", ref.artifactId, "data"));
   const key = `${file.dev}:${file.ino}`;
+  const reader = handleReader(file.handle, file.size);
   if (verifiedArchives.get(key) !== ref.hash) {
     const hash = createHash("sha256");
-    for await (const chunk of file.handle.createReadStream({ autoClose: false, start: 0 })) hash.update(chunk as Buffer);
+    const scratch = takeScratch(Math.min(1024 * 1024, file.size));
+    try {
+      for (let pos = 0; pos < file.size;) {
+        const chunk = await reader.read(pos, scratch.length, scratch);
+        if (chunk.length === 0) break;
+        hash.update(chunk);
+        pos += chunk.length;
+      }
+    } finally {
+      giveScratch(scratch);
+    }
     if (hash.digest("hex") !== ref.hash) { await file.handle.close(); throw new TranscriptRefusal("transcript-archive-invalid", "hash"); }
     if (verifiedArchives.size >= 64) verifiedArchives.delete(verifiedArchives.keys().next().value!);
     verifiedArchives.set(key, ref.hash);
   }
-  return { reader: handleReader(file.handle, file.size), key: `archive:${key}`, close: () => file.handle.close() };
+  return { reader, key: `archive:${key}`, close: () => file.handle.close() };
 }

@@ -11,7 +11,7 @@
  * - A trailing partial line (no `\n` yet) is never indexed or served.
  */
 import { createHash } from "node:crypto";
-import type { RangeReader } from "./reader.js";
+import { giveScratch, takeScratch, type RangeReader } from "./reader.js";
 import { PARSE_LIMIT } from "./normalize.js";
 import type { DecoderState } from "./unescape.js";
 
@@ -52,29 +52,34 @@ const headDigest = (bytes: Buffer): string => createHash("sha256").update(bytes)
 async function extend(index: LineIndex, reader: RangeReader): Promise<void> {
   let lineStart = index.end;
   let pos = index.end;
-  while (pos < reader.size) {
-    const bytes = await reader.read(pos, Math.min(CHUNK, reader.size - pos));
-    if (bytes.length === 0) break;
-    let from = 0;
-    for (;;) {
-      const nl = bytes.indexOf(10, from);
-      if (nl === -1) break;
-      const lineEnd = pos + nl;
-      const length = lineEnd - lineStart;
-      if (length > PARSE_LIMIT) index.long.push({ start: lineStart, end: lineEnd });
-      index.lines += 1;
-      index.sinceLines += 1;
-      index.sinceBytes += length + 1;
-      lineStart = lineEnd + 1;
-      index.end = lineStart;
-      if (index.sinceLines >= STRIDE_LINES || index.sinceBytes >= STRIDE_BYTES) {
-        index.checkpoints.push({ offset: lineStart, line: index.lines });
-        index.sinceLines = 0;
-        index.sinceBytes = 0;
+  const scratch = takeScratch(Math.min(CHUNK, reader.size - index.end));
+  try {
+    while (pos < reader.size) {
+      const bytes = await reader.read(pos, Math.min(CHUNK, reader.size - pos), scratch);
+      if (bytes.length === 0) break;
+      let from = 0;
+      for (;;) {
+        const nl = bytes.indexOf(10, from);
+        if (nl === -1) break;
+        const lineEnd = pos + nl;
+        const length = lineEnd - lineStart;
+        if (length > PARSE_LIMIT) index.long.push({ start: lineStart, end: lineEnd });
+        index.lines += 1;
+        index.sinceLines += 1;
+        index.sinceBytes += length + 1;
+        lineStart = lineEnd + 1;
+        index.end = lineStart;
+        if (index.sinceLines >= STRIDE_LINES || index.sinceBytes >= STRIDE_BYTES) {
+          index.checkpoints.push({ offset: lineStart, line: index.lines });
+          index.sinceLines = 0;
+          index.sinceBytes = 0;
+        }
+        from = nl + 1;
       }
-      from = nl + 1;
+      pos += bytes.length;
     }
-    pos += bytes.length;
+  } finally {
+    giveScratch(scratch);
   }
   index.size = reader.size;
 }
