@@ -75,8 +75,9 @@ export const placementSchema = z.object({
   changed: z.array(z.string()), changedTotal: z.number().int().nonnegative(),
   unwritable: z.array(z.object({ path: z.string(), reason: z.string() }).strict()), unwritableTotal: z.number().int().nonnegative(),
   stopRecord: sha.nullable(),
-  // §8.5 step 5, §9.2: `toEntry` is the withheld `to` entry, "<mode> <blob>", or "absent".
-  withheld: z.array(z.object({ path: z.string(), reason: z.string(), toEntry: z.string() }).strict()),
+  // §8.5 step 5, §9.2: `toEntry` is the withheld `to` entry, "<mode> <blob>", or "absent"; `by`/`at` are the answer that
+  // withheld it (absent on the Orca-own entries step 5 derives).
+  withheld: z.array(z.object({ path: z.string(), reason: z.string(), toEntry: z.string(), by: z.string().optional(), at: z.number().optional() }).strict()),
   watch: z.string().nullable(),
   detail: z.string().nullable(),
   resolution: z.object({ id: z.string(), action: z.enum(["take-folder", "recheck", "withhold"]), by: z.string(), at: z.number() }).strict().nullable(),

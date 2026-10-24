@@ -10,8 +10,11 @@
  *   changes on paths no landing touches (placement proceeds and leaves them; a later landing that writes one stops).
  * - Unwritable (`folder-unwritable`, nothing written, the reason named): symlinks, file/directory swaps over their whole
  *   prefix, case clashes -- on this file system and on a case-sensitive one.
- * - Withheld paths: the withhold command is Task 5c's, so these cases set `withheld` and a `resolution` in the record
- *   directly, as that command will; the pass then keeps them as placed, until their `to` entry changes.
+ * - Withheld paths (§9.2 `withhold`, through the real command): the stopped paths with their `to` entry and the
+ *   answer's `by`; the rest is placed, and each withhold lasts until its `to` entry changes.
+ * - The answers (§9.2): `recheck` looks again; `take-folder` reads exactly `changed` directly (so an over-cap or
+ *   ignored path is taken), writes the person's folder commit as a `folder edit` on the work branch with the
+ *   `Orca-Resolution` trailer and a kept `drift/<n>`, and the next landing stacks on it; a symlink is not taken.
  * - Modes: new files 0644/0755 and new directories 0755 under umask 0077; a changed file keeps its bits, its executable
  *   state following `to`; a file no landing changes keeps its mode.
  * - The watch signature: a stopped group costs no progress until the stopping paths change; an undone edit is placed
@@ -139,13 +142,14 @@ describe("unwritable changes stop with their reason and write nothing (§8.3 ste
     expect(await w.place()).toBe(true);
     expect(w.record()).toMatchObject({ state: "folder-unwritable", unwritable: four.map((path) => ({ path, reason: "type-change" })) });
     expect(existsSync(join(w.folder, "other.md"))).toBe(false);
-    // What Task 5c's `withhold` records: every unwritable path with its `to` entry, and the resolution.
-    w.setRecord({ withheld: four.map((path) => ({ path, reason: "type-change", toEntry: w.entry(tip, path) })), resolution: { id: "withhold-1", action: "withhold", by: "human", at: Date.now() } });
+    // The answer: every unwritable path with its `to` entry; the pass writes the rest and consumes the answer.
+    expect(w.resolve("withhold")).toEqual({ ok: true });
     expect(await w.place()).toBe(true);
-    expect(w.record()).toMatchObject({ state: "idle", tip, unwritable: [], resolution: { id: "withhold-1" } });
+    expect(w.record()).toMatchObject({ state: "idle", tip, unwritable: [], resolution: null });
     expect(read(w, "other.md")).toBe("O\n");
     expect(read(w, "docs")).toBe("a file\n");
     expect(w.record().withheld.filter((entry) => entry.reason === "type-change").map((entry) => entry.path)).toEqual(four);
+    for (const path of four) expect(w.record().withheld.find((entry) => entry.path === path)).toMatchObject({ toEntry: w.entry(tip, path), by: "owner@example.invalid" });
     // Kept in Orca's store: the placed folder commit holds the old file, the work branch the task's directory.
     expect(w.show(w.ref(PLACED)!, "docs")).toBe("a file");
     const later = w.land({ "docs/a.md": "a, changed\n" });
@@ -160,12 +164,12 @@ describe("unwritable changes stop with their reason and write nothing (§8.3 ste
     writeFileSync(join(w.folder, "a.md"), "mine\n");
     expect(await w.place()).toBe(true);
     expect(w.record()).toMatchObject({ state: "folder-changed", changed: ["a.md"] });
-    w.setRecord({ withheld: [{ path: "a.md", reason: "changed", toEntry: w.entry(tip, "a.md") }], resolution: { id: "withhold-2", action: "withhold", by: "human", at: Date.now() } });
+    expect(w.resolve("withhold")).toEqual({ ok: true });
     expect(await w.place()).toBe(true);
-    expect(w.record()).toMatchObject({ state: "idle", tip, changed: [] });
+    expect(w.record()).toMatchObject({ state: "idle", tip, changed: [], resolution: null });
     expect(read(w, "a.md")).toBe("mine\n");
     expect(read(w, "n.md")).toBe("N\n");
-    expect(w.record().withheld).toContainEqual({ path: "a.md", reason: "changed", toEntry: w.entry(tip, "a.md") });
+    expect(w.record().withheld).toContainEqual(expect.objectContaining({ path: "a.md", reason: "changed", toEntry: w.entry(tip, "a.md"), by: "owner@example.invalid" }));
   }));
 
   it("case folding is NFC then toLowerCase: 'straße' is not a clash with 'strasse' (full case folding would make it one)", () => inWorld({ "strasse.md": "s\n" }, async (w) => {
@@ -174,6 +178,99 @@ describe("unwritable changes stop with their reason and write nothing (§8.3 ste
     const classified = await classifyLandingPaths(w.ws, placed, w.commitOn(placed, { "straße.md": "ß\n" }));
     expect(classified.unwritable).toEqual([]);
     expect(tip).toBeTruthy();
+  }));
+});
+
+describe("the person's answers (§9.2)", () => {
+  it("recheck looks again: still changed stops again and asks again; once the person undoes the edit, it places", () => inWorld({ "a.md": "A\n" }, async (w) => {
+    const tip = w.land({ "a.md": "A2\n" });
+    writeFileSync(join(w.folder, "a.md"), "mine\n");
+    expect(await w.place()).toBe(true);
+    expect(w.record()).toMatchObject({ state: "folder-changed", changed: ["a.md"] });
+    expect(w.resolve("recheck")).toEqual({ ok: true });
+    expect(await w.place()).toBe(true);
+    expect(w.record()).toMatchObject({ state: "folder-changed", changed: ["a.md"], resolution: null });
+    expect(read(w, "a.md")).toBe("mine\n");
+    writeFileSync(join(w.folder, "a.md"), "A\n");
+    expect(w.resolve("recheck")).toEqual({ ok: true });
+    expect(await w.place()).toBe(true);
+    expect(w.record()).toMatchObject({ state: "idle", tip, changed: [], resolution: null });
+    expect(read(w, "a.md")).toBe("A2\n");
+  }));
+
+  it("take-folder reads exactly changed directly (an over-cap path too), joins the person's version to the work branch and the folder commit, keeps the drift, and the next landing stacks on it", async () => {
+    const big = Buffer.alloc(50 * 1024 * 1024 + 1, 0x61);
+    await inWorld({ "a.md": "A\n", "big.bin": big }, async (w) => {
+      // As in the over-cap collision case: the import left the big file out, `placed` and the tip hold it.
+      const placed = w.commitOn(w.base, { "big.bin": big }), tip = w.commitOn(w.doc, { "big.bin": big });
+      w.git(["update-ref", PLACED, placed, w.base]);
+      w.git(["update-ref", "refs/heads/orca/g", tip, w.doc]);
+      w.setRecord({ tip, landedTip: tip });
+      w.land({ "a.md": "A2\n", "big.bin": "orca\n" });
+      writeFileSync(join(w.folder, "a.md"), "mine\n");
+      appendFileSync(join(w.folder, "big.bin"), "!");
+      expect(await w.place()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "folder-changed", changed: ["a.md", "big.bin"] });
+      expect(w.resolve("take-folder")).toEqual({ ok: true });
+      expect(await w.place()).toBe(true);
+      const record = w.record();
+      expect(record).toMatchObject({ state: "idle", changed: [], pending: null, resolution: { action: "take-folder" } });
+      const branch = w.ref("refs/heads/orca/g")!;
+      expect(w.show(branch, "a.md")).toBe("mine");
+      expect(w.show(branch, "big.bin")).toHaveLength(big.length + 1);
+      // The person's version is the folder commit too, and the work-branch commit carries the answer's trailer.
+      expect(w.show(w.ref(PLACED)!, "a.md")).toBe("mine");
+      expect(w.git(["show", "-s", "--format=%B", branch])).toContain(`Orca-Resolution: ${record.resolution!.id}`);
+      // The drift commit is kept (review I4) and holds the person's bytes.
+      const drift = w.ref("refs/orca/group/g/drift/1")!;
+      expect(w.show(drift, "a.md")).toBe("mine");
+      // The next landing is a child of the folder edit and is placed on top of it, not over it.
+      const later = w.land({ "n.md": "N\n" });
+      expect(await w.place()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "idle", changed: [], tip: later });
+      expect(read(w, "n.md")).toBe("N\n");
+      expect(read(w, "a.md")).toBe("mine\n");
+      expect(w.show(w.ref(PLACED)!, "a.md")).toBe("mine");
+      expect(w.show(w.ref(PLACED)!, "n.md")).toBe("N");
+    });
+  }, 60_000);
+
+  it("take-folder does not take a symlink: it stays changed, the group asks again, and the answer is consumed", () => inWorld({ "a.md": "A\n", "b.md": "B\n" }, async (w) => {
+    w.land({ "a.md": "A2\n", "b.md": "B2\n" });
+    writeFileSync(join(w.folder, "a.md"), "mine\n");
+    unlinkSync(join(w.folder, "b.md"));
+    symlinkSync("a.md", join(w.folder, "b.md"));
+    expect(await w.place()).toBe(true);
+    expect(w.record()).toMatchObject({ state: "folder-changed", changed: ["a.md", "b.md"] });
+    expect(w.resolve("take-folder")).toEqual({ ok: true });
+    expect(await w.place()).toBe(true);
+    expect(w.record()).toMatchObject({ state: "folder-changed", changed: ["b.md"], resolution: null });
+    expect(w.record().detail).toContain("not taken: b.md");
+    expect(w.show(w.ref("refs/heads/orca/g")!, "a.md")).toBe("mine");
+    expect(lstatSync(join(w.folder, "b.md")).isSymbolicLink()).toBe(true);
+  }));
+
+  it("take-folder attributes a taken blob that a flow run's head holds to that run", () => inWorld({ "a.md": "A\n" }, async (w) => {
+    w.land({ "a.md": "A2\n" });
+    w.git(["update-ref", "refs/orca/run-1/head", w.commitOn(w.doc, { "a.md": "mine\n" })]);
+    writeFileSync(join(w.folder, "a.md"), "mine\n");
+    expect(await w.place()).toBe(true);
+    expect(w.resolve("take-folder")).toEqual({ ok: true });
+    expect(await w.place()).toBe(true);
+    const body = w.git(["show", "-s", "--format=%B", w.ref("refs/heads/orca/g")!]);
+    expect(body).toContain("orca: folder edit g");
+    expect(body).toContain("Orca-Placed-By: run-1 1 paths");
+    expect(body).toContain("Orca-Person-Edit: 0 paths");
+  }));
+
+  it("withhold with no stopped state, or take-folder outside folder-changed, is refused", () => inWorld({ "a.md": "A\n" }, async (w) => {
+    expect(w.resolve("withhold")).toEqual({ ok: false, code: "folder-change-not-pending" });
+    expect(w.resolve("take-folder")).toEqual({ ok: false, code: "folder-change-not-pending" });
+    w.land({ "a.md": { content: "a.md", mode: "120000" } });
+    expect(await w.place()).toBe(true);
+    expect(w.record()).toMatchObject({ state: "folder-unwritable", unwritable: [{ path: "a.md", reason: "symlink" }] });
+    expect(w.resolve("take-folder")).toEqual({ ok: false, code: "folder-change-not-pending" });
+    expect(w.resolve("withhold")).toEqual({ ok: true });
   }));
 });
 

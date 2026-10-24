@@ -14,6 +14,8 @@ import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathS
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { initialPlacement, readPlacement, recordLandedTip, type PlacementRecord } from "../../../src/control/dirGroup.js";
+import { applyResolveFolderChange } from "../../../src/control/folderChangeCommands.js";
+import type { FolderChangeAction } from "../../../src/control/webProtocol.js";
 import { placeDirGroups, type PlacementHook } from "../../../src/control/dirPlacement.js";
 import { freezeDirWorkspace, importFolder, openDirWorkspace } from "../../../src/control/dirWorkspace.js";
 import type { ControlStore } from "../../../src/control/store.js";
@@ -86,7 +88,7 @@ export async function placementWorld(files: Record<string, string | Buffer>, opt
     requirement: { repoId: "repo", export: { state: "done", path: DOC, commit: doc, parent: base, detail: null } },
     placement: initialPlacement({ base, landedTip: doc, at: 1 }),
   }));
-  let runs = 0;
+  let runs = 0, resolutions = 0;
   const body = (): Record<string, unknown> => JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
   const record = (): PlacementRecord => readPlacement(body().placement)!;
   const setRecord = (patch: Partial<PlacementRecord>): void => {
@@ -104,6 +106,16 @@ export async function placementWorld(files: Record<string, string | Buffer>, opt
       return commit;
     },
     place: (crash?: PlacementHook): Promise<boolean> => placeDirGroups({ store, env, ...(crash === undefined ? {} : { crash }) }),
+    /** The person's `resolve-folder-change` command (§9.2): records the answer (the next `place` acts on it). */
+    resolve(action: FolderChangeAction, commandId = `resolve-${action}-${++resolutions}`): { ok: true } | { ok: false; code: string } {
+      const revision = Number(store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision);
+      const command = {
+        schema: "orca-raw-command-v1" as const, commandId, actorId: "owner@example.invalid", expectedRevision: revision,
+        verb: "resolve-folder-change" as const, target: { kind: "group" as const, groupId: "g" }, payload: { action },
+      };
+      const answer = applyResolveFolderChange({ store }, command) as { error?: { code?: string } };
+      return answer.error === undefined ? { ok: true } : { ok: false, code: String(answer.error.code) };
+    },
     /** The file entry of `path` in a commit: "<mode> <blob>", or "absent" (also for a directory): a withheld `toEntry`. */
     entry(commit: string, path: string): string {
       const line = git(["ls-tree", "-r", "--full-tree", commit, "--", path]).split("\n").find((l) => l.split("\t")[1] === path);

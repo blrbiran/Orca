@@ -677,6 +677,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/integration/retry", verb: "retry-integration", target: fromParams },
     // Integration spec §7: an owner approves an agent's resolution of the group's integration conflict.
     { path: "/api/control/groups/:groupId/integration/resolve", verb: "resolve-integration-conflict", target: fromParams },
+    // Dir-requirements spec §9.2: the person's answer to a folder change that stopped a dir group's placement.
+    { path: "/api/control/groups/:groupId/folder-change", verb: "resolve-folder-change", target: fromParams },
     // Issue-fixes spec §6.3: archive and unarchive; the ledger key is the group's.
     { path: "/api/control/groups/:groupId/archive", verb: "archive-group", target: fromParams },
     { path: "/api/control/groups/:groupId/unarchive", verb: "unarchive-group", target: fromParams },
@@ -798,6 +800,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "set-group-integration": await service.setGroupIntegration(command); break;
           case "retry-integration": service.retryIntegration(command); break;
           case "resolve-integration-conflict": await service.resolveIntegrationConflict(command); break;
+          case "resolve-folder-change": service.resolveFolderChange(command); break;
           case "archive-group": service.archiveGroup(command); break;
           case "unarchive-group": service.unarchiveGroup(command); break;
           case "approve-pending-decision": await service.approvePendingDecision(command); break;

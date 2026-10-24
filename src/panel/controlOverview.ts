@@ -86,6 +86,13 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
     }
     const integration = readGroupIntegration(body);
     if (integration?.state === "conflict" || integration?.state === "blocked") add("integration-review", groupId, repoId, integration.reason ?? `integration-${integration.state}`, groupDestination("integration"), `integration:${integration.schemeHash}`, null, null, true);
+    // Dir-requirements spec §9.3: a stopped (or missing, or failed) placement is a needs-you row on the group's
+    // integration region, which shows the placement block instead of the scheme picker.
+    const placement = summary.placement;
+    if (placement !== undefined) {
+      const reason = ({ "folder-changed": "dir-folder-changed", "folder-unwritable": "dir-folder-unwritable", "folder-missing": "dir-folder-missing", failed: "dir-placement-failed" } as Record<string, string | undefined>)[placement.state];
+      if (reason !== undefined) add("integration-review", groupId, repoId, reason, groupDestination("integration"), `placement:${placement.state}:${placement.watch ?? placement.detail ?? ""}`, null, null, true);
+    }
     for (const estimate of estimates) {
       if (estimate.state === "start-unknown") add("recovery-review", groupId, repoId, "estimate-start-unknown", groupDestination("problem"), `estimate:${estimate.estimateId}:start-unknown`);
     }

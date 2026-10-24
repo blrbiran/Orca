@@ -158,6 +158,20 @@ export const WORK_ROWS: CommandDef[] = [
     route: (c) => `groups/${group(c)}/integration`, payload: (c) => ({ integration: schemeFromFlags(c) }) }),
   empty("group", "retry-integration", "a blocked or conflicted integration back to idle", "retry-integration", "integration/retry"),
   empty("group", "resolve-integration", "approve an agent resolving the group's integration conflict", "resolve-integration-conflict", "integration/resolve"),
+  // Dir-requirements spec §9.2: the person's answer to a folder change that stopped a dir group's placement.
+  verb({ domain: "group", action: "folder-change", summary: "answer a folder change that stopped placement: --take-folder, --recheck or --withhold",
+    verb: "resolve-folder-change", positionals: [GROUP], access: "token",
+    flags: [
+      { name: "take-folder", type: "boolean", summary: "keep the folder's changes and continue" },
+      { name: "recheck", type: "boolean", summary: "look at the folder again" },
+      { name: "withhold", type: "boolean", summary: "leave these paths out of the folder and place the rest" },
+    ],
+    route: (c) => `groups/${group(c)}/folder-change`,
+    payload: (c) => {
+      const chosen = (["take-folder", "recheck", "withhold"] as const).filter((flag) => c.args.flags[flag] === true);
+      if (chosen.length !== 1) throw invalid("give exactly one of --take-folder, --recheck and --withhold");
+      return { action: chosen[0] };
+    } }),
   ...(["depend", "undepend"] as const).map((action) => verb({
     domain: "group", action, summary: action === "depend" ? "make the group wait until --on <group> has landed" : "remove that wait",
     verb: action === "depend" ? "add-group-dependency" : "remove-group-dependency", positionals: [GROUP],

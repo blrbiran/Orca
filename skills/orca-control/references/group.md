@@ -150,6 +150,17 @@ approve an agent resolving the group's integration conflict
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 
+## `orca group folder-change <group> [--take-folder] [--recheck] [--withhold]`
+
+answer a folder change that stopped placement: --take-folder, --recheck or --withhold
+
+- What it does: sends control verb `resolve-folder-change`.
+- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- `<group>`: a group id or a unique prefix
+- `--take-folder`: keep the folder's changes and continue
+- `--recheck`: look at the folder again
+- `--withhold`: leave these paths out of the folder and place the rest
+
 ## `orca group depend <group> --on <on>`
 
 make the group wait until --on <group> has landed

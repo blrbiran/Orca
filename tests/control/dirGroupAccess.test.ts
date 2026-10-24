@@ -38,6 +38,7 @@ import { assembleControlRuntime } from "../../src/panel/controlAssembly.js";
 import { registerControlMutationRoutes, verifyControlJsonBody } from "../../src/panel/controlApi.js";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { permissionRefusal, type Principal } from "../../src/panel/permissions.js";
+import { SOCKET_TIER, VERB_ACCESS } from "../../src/panel/humanOnly.js";
 import { parsePanelArgs } from "../../src/panel/server.js";
 import { dirRequirementHarness } from "./fixtures/dirRequirement.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
@@ -182,6 +183,22 @@ describe("requirement-open by a run Orca dispatched (D10, §5.1, §12)", () => {
       expect(allowed.status).not.toBe(403);
       expect(opened).toEqual([controlRepoKey("code")]);
     } finally { await new Promise<void>((done) => server.close(() => done())); await x.dispose(); p.close(); }
+  });
+});
+
+describe("resolve-folder-change is a person's answer (D10 verb rows, §9.2, §12)", () => {
+  it("a member and a tokenless socket agent are refused; an owner and an owner's token are not; a dispatched run is refused", () => {
+    const answer = (principal: Principal) => permissionRefusal(principal, "resolve-folder-change", { action: "recheck" })?.code ?? "accepted";
+    const person = (userId: string, roles: readonly ("owner" | "member")[]) => ({ userId, name: userId, roles });
+    expect(answer({ kind: "user", ...person("m", ["member"]) })).toBe("control-verb-human-only");
+    expect(answer({ kind: "user", ...person("o", ["owner"]) })).toBe("accepted");
+    expect(answer({ kind: "agent", client: "cli" })).toBe("control-person-token-required");
+    expect(answer({ kind: "agent", client: "cli", person: person("m", ["member"]) })).toBe("control-verb-human-only");
+    expect(answer({ kind: "agent", client: "cli", person: person("o", ["owner"]) })).toBe("accepted");
+    expect(answer({ kind: "agent", client: "cli", dispatchedRun: "run-1", person: person("o", ["owner"]) })).toBe("control-dispatched-run-refused");
+    // The tables say the same: human-only, and a person token on the socket.
+    expect(VERB_ACCESS["resolve-folder-change"]).toBe("human-only");
+    expect(SOCKET_TIER["resolve-folder-change"]).toBe("token");
   });
 });
 

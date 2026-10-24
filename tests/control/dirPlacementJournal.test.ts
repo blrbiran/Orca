@@ -1,12 +1,13 @@
 /**
- * Dir-requirements spec §8.4–§8.5 (journal, `pending` ref, CAS `placed`), criterion D7 (plan Task 5b; the two
- * `take-folder` crash points are Task 5c's). One landing of n = 3 paths (a modify, a delete, an add in a new directory);
+ * Dir-requirements spec §8.4–§8.5 (journal, `pending` ref, CAS `placed`), criterion D7 (plan Task 5b; §9.2 step 0's
+ * replay of a `take-folder` that crashed between its two CASes is Task 5c's). One landing of n = 3 paths (a modify, a
+ * delete, an add in a new directory);
  * the pass is killed at each crash point (the hook throws, as a process death: nothing is written after it), then a
  * restarted round runs. Each restarted round ends `idle` with every landing path equal to F′, no `.orca-*` name left (no
  * aside holds the person's bytes in these cases), `placed` = F′ and `refs/orca/group/g/pending` deleted. While `pending`
  * exists, F′ survives `git gc --prune=now` in the vault (the ref keeps it, review I4).
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { DirPlacementCrashPoint } from "../../src/control/dirPlacement.js";
@@ -47,6 +48,47 @@ async function crashThenRestart(point: DirPlacementCrashPoint): Promise<void> {
     expect(seen.some((entry) => entry.startsWith(`${point}:`))).toBe(true);
   } finally { await w.dispose(); }
 }
+
+describe("a take-folder crash replays by adopting what it committed (D7, §9.2 step 0)", () => {
+  /** Kill the take at `point`, restart: the answer's `Orca-Resolution` commit is adopted, never made twice. */
+  async function takeCrashThenRestart(point: DirPlacementCrashPoint): Promise<void> {
+    const w = await placementWorld({ "a.md": "A\n" });
+    try {
+      w.land({ "a.md": "A2\n" });
+      writeFileSync(join(w.folder, "a.md"), "mine\n");
+      expect(await w.place()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "folder-changed", changed: ["a.md"] });
+      expect(w.resolve("take-folder")).toEqual({ ok: true });
+      const resolutionId = w.record().resolution!.id;
+      const seen: string[] = [];
+      await expect(w.place((at) => {
+        seen.push(at);
+        if (at === point) throw new Killed(point);
+      })).rejects.toBeInstanceOf(Killed);
+      expect(seen).toContain(point);
+
+      expect(await w.place()).toBe(true);
+      const record = w.record();
+      expect(record).toMatchObject({ state: "idle", pending: null, changed: [], unwritable: [], tip: w.tip(), resolution: { id: resolutionId } });
+      expect(w.ref("refs/orca/group/g/pending")).toBeNull();
+      expect(w.ref("refs/orca/group/g/stop")).toBeNull();
+      // Exactly one commit carries the answer: the replay adopted it instead of committing a second folder edit.
+      const edits = w.git(["rev-list", "--first-parent", w.tip()]).split("\n")
+        .filter((sha) => w.git(["show", "-s", "--format=%B", sha]).includes(`Orca-Resolution: ${resolutionId}`));
+      expect(edits).toHaveLength(1);
+      // `placed` is the person's folder commit, the work branch holds the person's bytes, and so does the folder.
+      const placed = w.ref("refs/orca/group/g/placed")!;
+      expect(w.git(["show", "-s", "--format=%B", placed])).toContain("orca: folder edit g");
+      expect(w.show(placed, "a.md")).toBe("mine");
+      expect(w.show(w.tip(), "a.md")).toBe("mine");
+      expect(readFileSync(join(w.folder, "a.md"), "utf8")).toBe("mine\n");
+      expect(orcaNames(w.folder)).toEqual([]);
+    } finally { await w.dispose(); }
+  }
+
+  it("after the T′ CAS, before the placed CAS", () => takeCrashThenRestart("after-tip-cas"));
+  it("after the placed CAS, before the body update", () => takeCrashThenRestart("after-take-placed-cas"));
+});
 
 describe("the placement journal survives a crash at every point (D7)", () => {
   it("after the pending ref and the journal, before any write", () => crashThenRestart("after-journal"));

@@ -18,8 +18,10 @@
  * review C2); Orca's own temporaries are 0600 while they exist.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { chmod, link, lstat, mkdir, open, readdir, readFile, rename, unlink } from "node:fs/promises";
+import { chmod, link, lstat, mkdir, mkdtemp, open, readdir, readFile, rename, rm, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
+import { ORCA_IDENTITY } from "../scheduler/gitExec.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dirWorkspaceOf, readPlacement, STOP_KEPT, type PlacementRecord } from "./dirGroup.js";
 import { DirFolderMissing, nextFolderCommit, openDirWorkspace, type DirWorkspace, type FrozenDirWorkspace } from "./dirWorkspace.js";
@@ -27,8 +29,9 @@ import { ControlError } from "./errors.js";
 import { groupStopped } from "./executionDriver.js";
 import { archivedMarkOf } from "./archivedMark.js";
 import { groupHasReconcilingRun, readGroup, saveGroup } from "./queries.js";
-import { workBranchRef } from "./workspace.js";
+import { compareAndSwap, workBranchRef } from "./workspace.js";
 import { changesBetween } from "../flow/vault/copyBack.js";
+import { commitDriftOnto, treeWith } from "../flow/vault/drift.js";
 import { withDirLock } from "../flow/vault/dirLock.js";
 import { vaultGit, vaultGitBytes } from "../flow/vault/vault.js";
 import type { AdmissionGate } from "./admissionGate.js";
@@ -55,7 +58,11 @@ export type DirPlacementCrashPoint =
   /** §8.4: after `link(t, p)`, before `unlink(a)`. */
   | "after-link"
   /** §8.5 step 8: after the `placed` CAS, before the body update. */
-  | "after-placed-cas";
+  | "after-placed-cas"
+  /** §9.2 step 4: after the `T′` CAS of a take-folder, before the `placed` CAS. */
+  | "after-tip-cas"
+  /** §9.2 step 5: after the `placed` CAS of a take-folder, before the body update. */
+  | "after-take-placed-cas";
 export type PlacementHook = (point: DirPlacementCrashPoint, path?: string) => void;
 
 const byBytes = (a: string, b: string): number => Buffer.compare(Buffer.from(a), Buffer.from(b));
@@ -323,10 +330,14 @@ export interface FolderPlacementTarget {
 }
 /** Updates the placement record from its current stored value (the caller stamps `at` and writes it in one transaction). */
 export type SavePlacement = (update: (current: PlacementRecord) => PlacementRecord) => PlacementRecord;
+/** §9.2 step 2: another owner's current folder commit in this vault (a dir group's `placed`, a flow run's `head`). */
+export interface PlacementOwner { readonly id: string; readonly commit: string }
 export interface FolderPlacementIo {
   env: NodeJS.ProcessEnv; save: SavePlacement;
   /** The placement record as stored now. */
   load: () => PlacementRecord;
+  /** take-folder's attribution: the other owners in this vault, read on the pass's own vault (`placeDirGroups` gives it). */
+  owners?: (ws: DirWorkspace) => Promise<{ dirGroups: PlacementOwner[]; flowRuns: PlacementOwner[] }>;
   hook?: PlacementHook; log?: (line: string) => void;
 }
 
@@ -428,6 +439,208 @@ async function settleJournal(ws: DirWorkspace, pending: NonNullable<PlacementRec
   return kept;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// The person's answers (§9.2)
+
+/** §9.2: the full stopping lists and the `to` folder commit they belong to (the stop record's, else the body's). */
+async function stopLists(ws: DirWorkspace, record: PlacementRecord): Promise<{ changed: string[]; unwritable: Array<{ path: string; reason: string }>; to: string }> {
+  if (record.stopRecord !== null) {
+    const full = JSON.parse(await vaultGit(ws.vault, ["cat-file", "blob", record.stopRecord])) as { changed?: unknown; unwritable?: unknown; to?: unknown };
+    if (Array.isArray(full.changed) && Array.isArray(full.unwritable) && typeof full.to === "string") {
+      return { changed: full.changed as string[], unwritable: full.unwritable as Array<{ path: string; reason: string }>, to: full.to };
+    }
+  }
+  const to = record.pending?.to ?? record.tip;
+  if (to === null) throw new ControlError("recovery-blocked", "dir-placement-stop-record-missing");
+  return { changed: [...record.changed], unwritable: [...record.unwritable], to };
+}
+
+const bodyOfCommit = (ws: DirWorkspace, commit: string): Promise<string> => vaultGit(ws.vault, ["show", "-s", "--format=%B", commit]);
+const resolutionTrailer = (id: string): string => `Orca-Resolution: ${id}`;
+const carriesTrailer = (body: string, trailer: string): boolean => body.split("\n").some((line) => line.trim() === trailer);
+
+/** §9.2 step 0: the `rev` itself or a first-parent ancestor newer than `floor` carrying this answer's trailer. */
+async function adoptedOnBranch(ws: DirWorkspace, rev: string, floor: string | null, trailer: string): Promise<string | null> {
+  const revs = (await vaultGit(ws.vault, ["rev-list", "--first-parent", rev, ...(floor === null ? [] : [`^${floor}`])])).split("\n").filter((line) => line.length > 0);
+  for (const sha of revs) if (carriesTrailer(await bodyOfCommit(ws, sha), trailer)) return sha;
+  return null;
+}
+
+async function commitTree(ws: DirWorkspace, tree: string, parent: string, message: string): Promise<string> {
+  return (await vaultGit(ws.vault, [...ORCA_IDENTITY, "commit-tree", tree, "-p", parent, "-F", "-"], { input: message })).trim();
+}
+
+/** §9.2 step 1: `base`'s tree with these entries set ("<mode> <blob>") or removed (null). Removals go first. */
+async function folderEditTree(ws: DirWorkspace, base: string, entries: ReadonlyMap<string, string | null>): Promise<string> {
+  const scratch = await mkdtemp(join(tmpdir(), "orca-vault-index-"));
+  try {
+    const env = { GIT_INDEX_FILE: join(scratch, "index") };
+    await vaultGit(ws.vault, ["read-tree", base], { env });
+    const removals: string[] = [], puts: string[] = [];
+    for (const [path, entry] of entries) {
+      if (entry === null) removals.push(`0 ${"0".repeat(base.length)}\t${path}`);
+      else puts.push(`${entry}\t${path}`);
+    }
+    if (removals.length + puts.length > 0) {
+      await vaultGit(ws.vault, ["update-index", "-z", "--index-info"], { env, input: [...removals, ...puts].map((line) => `${line}\0`).join("") });
+    }
+    return (await vaultGit(ws.vault, ["write-tree"], { env })).trim();
+  } finally { await rm(scratch, { recursive: true, force: true }); }
+}
+
+/** §9.2 step 1: the drift commit is kept (review I4): `refs/orca/group/<g>/drift/<n>`, create-only. */
+async function writeDriftRef(ws: DirWorkspace, groupId: string, commit: string): Promise<void> {
+  const base = `refs/orca/group/${groupId}/drift/`;
+  const used = new Set((await vaultGit(ws.vault, ["for-each-ref", "--format=%(refname)", base])).split("\n").filter((ref) => ref.startsWith(base)).map((ref) => ref.slice(base.length)));
+  let n = 1;
+  while (used.has(String(n))) n += 1;
+  await vaultGit(ws.vault, ["update-ref", `${base}${n}`, commit, ""]);
+}
+
+/** §9.2 step 1: exactly the `changed` paths, read directly (no snapshot, so caps and excludes never apply). */
+async function takenEntries(ws: DirWorkspace, changed: readonly string[]): Promise<{ entries: Map<string, string | null>; notTaken: string[] }> {
+  const entries = new Map<string, string | null>();
+  const notTaken: string[] = [];
+  for (const path of changed) {
+    const entry = await entryAt(join(ws.frozen.dir, path));
+    if (entry.kind === "absent") { entries.set(path, null); continue; }
+    if (entry.kind !== "file") { notTaken.push(path); continue; }
+    const blob = (await vaultGit(ws.vault, ["hash-object", "-w", "--no-filters", "--stdin"], { input: await readFile(entry.path) })).trim();
+    entries.set(path, `${(entry.mode & 0o111) !== 0 ? "100755" : "100644"} ${blob}`);
+  }
+  return { entries, notTaken };
+}
+
+/** §9.2 step 2: the blob at `path` in a commit, or null when the commit does not hold the path. */
+async function blobAt(ws: DirWorkspace, commit: string, path: string): Promise<string | null> {
+  const line = (await vaultGit(ws.vault, ["ls-tree", "-z", commit, "--", path])).split("\0")[0] ?? "";
+  const tab = line.indexOf("\t");
+  if (tab < 0 || line.slice(tab + 1) !== path) return null;
+  return line.slice(0, tab).split(" ")[2] ?? null;
+}
+
+interface Attribution { byOwner: Map<string, number>; person: number }
+
+/** §9.2 step 2: a taken file equal to another owner's current entry at that path is theirs; the rest are the person's. */
+async function attribute(ws: DirWorkspace, io: FolderPlacementIo, entries: ReadonlyMap<string, string | null>): Promise<Attribution> {
+  const owners = await io.owners?.(ws) ?? { dirGroups: [], flowRuns: [] };
+  const byOwner = new Map<string, number>();
+  let person = 0;
+  for (const [path, entry] of entries) {
+    const blob = entry === null ? null : entry.split(" ")[1] ?? null;
+    let owner: string | null = null;
+    if (blob !== null) {
+      for (const candidate of [...owners.dirGroups, ...owners.flowRuns]) {
+        if (await blobAt(ws, candidate.commit, path) === blob) { owner = candidate.id; break; }
+      }
+    }
+    if (owner === null) person += 1;
+    else byOwner.set(owner, (byOwner.get(owner) ?? 0) + 1);
+  }
+  return { byOwner, person };
+}
+
+const editMessage = (groupId: string, attribution: Attribution, resolutionId: string): string => [
+  `orca: folder edit ${groupId}`,
+  "",
+  ...[...attribution.byOwner.entries()].sort(([a], [b]) => byBytes(a, b)).map(([owner, count]) => `Orca-Placed-By: ${owner} ${count} paths`),
+  `Orca-Person-Edit: ${attribution.person} paths`,
+  resolutionTrailer(resolutionId),
+].join("\n");
+
+const dropRef = async (ws: DirWorkspace, ref: string): Promise<void> => { await vaultGit(ws.vault, ["update-ref", "-d", ref]).catch(() => undefined); };
+
+/**
+ * §9.2 `take-folder`: the person's version of exactly the `changed` paths joins the work branch and the folder commit,
+ * one `Orca-Resolution` trailer making a replay adopt what an earlier attempt committed. The answer stays on the record
+ * (Rule 13); a path that cannot be taken (a symlink, anything not a regular file) stops the group again, named.
+ */
+async function takeFolder(ws: DirWorkspace, target: FolderPlacementTarget, io: FolderPlacementIo, record: PlacementRecord, resolution: NonNullable<PlacementRecord["resolution"]>): Promise<Prepared> {
+  const trailer = resolutionTrailer(resolution.id);
+  const lists = await stopLists(ws, record);
+  const orcaOwn = new Set(target.orcaOwn);
+  let detail: string | null = null;
+  if (record.pending !== null) {
+    const kept = await settleJournal(ws, record.pending, await landingPaths(ws, record.pending.from, record.pending.to));
+    if (kept.length > 0) detail = `kept aside: ${kept.join(", ")}`;
+  }
+  const placed = await revParse(ws, target.refs.placed);
+  const base = record.pending?.to ?? placed;
+  const tip = await revParse(ws, target.workBranch);
+  let tprime = await adoptedOnBranch(ws, tip, record.tip, trailer);
+  let p = carriesTrailer(await bodyOfCommit(ws, placed), trailer) ? placed : null;
+  let notTaken: string[] = [];
+  if (tprime === null) {
+    const changed = [...new Set(lists.changed)].filter((path) => !orcaOwn.has(path)).sort(byBytes);
+    const { entries, notTaken: skipped } = await takenEntries(ws, changed);
+    notTaken = skipped;
+    const taken = [...entries.keys()];
+    const drift = await commitTree(ws, await folderEditTree(ws, base, entries), base, "orca: person edit");
+    await writeDriftRef(ws, target.groupId, drift);
+    const message = editMessage(target.groupId, await attribute(ws, io, entries), resolution.id);
+    const folderCommit = p ?? await commitDriftOnto(ws.vault, base, drift, taken, message);
+    const tree = await treeWith(ws.vault, tip, drift, taken);
+    tprime = await commitTree(ws, tree, tip, message);
+    if (!(await compareAndSwap(ws.vault.path, target.workBranch, tprime, tip))) return { kind: "done" };
+    io.hook?.("after-tip-cas");
+    p = folderCommit;
+  } else {
+    // Adopted `T′`: its own parent shows the paths it took. A path it did not take is still the person's answer's
+    // business (reported again), and a folder commit it never wrote (a crash between the two CASes) is rebuilt from
+    // the folder's current bytes.
+    const parent = await revParse(ws, `${tprime}^`);
+    const taken = new Set((await vaultGit(ws.vault, ["diff-tree", "-r", "-z", "--no-renames", "--name-only", parent, tprime])).split("\0").filter((path) => path.length > 0));
+    notTaken = [...new Set(lists.changed)].filter((path) => !orcaOwn.has(path) && !taken.has(path)).sort(byBytes);
+    if (p === null) {
+      const paths = [...taken].sort(byBytes);
+      const { entries } = await takenEntries(ws, paths);
+      const drift = await commitTree(ws, await folderEditTree(ws, base, entries), base, "orca: person edit");
+      await writeDriftRef(ws, target.groupId, drift);
+      const message = editMessage(target.groupId, await attribute(ws, io, entries), resolution.id);
+      p = await commitDriftOnto(ws.vault, base, drift, paths, message);
+    }
+  }
+  if (p === null) throw new ControlError("recovery-blocked", "dir-placement-take-missing");
+  if (p !== placed) {
+    try { await vaultGit(ws.vault, ["update-ref", target.refs.placed, p, placed]); }
+    catch { if ((await revParse(ws, target.refs.placed).catch(() => null)) !== p) return { kind: "done" }; }
+  }
+  io.hook?.("after-take-placed-cas");
+  io.save((current) => ({ ...current, ...cleanStop(), tip: tprime, landedTip: tprime, pending: null, state: "idle", detail, resolution: { ...resolution } }));
+  await dropRef(ws, target.refs.pending);
+  await dropRef(ws, target.refs.stop);
+  if (notTaken.length === 0) return { kind: "done" };
+  // The paths that could not be taken stay changed; the answer is consumed, so the person is asked again (to withhold
+  // them, or to change the folder and recheck).
+  await stop(ws, target, io, { changed: notTaken, unwritable: [], to: tprime, tip: tprime, consumed: resolution.id, detail: `not taken: ${notTaken.join(", ")}` });
+  return { kind: "done" };
+}
+
+/**
+ * §9.2 `withhold`: every `changed` and `unwritable` path (whole type-change prefixes) becomes withheld with its `to`
+ * entry and the answer's `by`/`at`; the stopped state clears so §8.5 goes on and places the rest. Answers the record.
+ */
+async function withholdPaths(ws: DirWorkspace, target: FolderPlacementTarget, io: FolderPlacementIo, record: PlacementRecord, resolution: NonNullable<PlacementRecord["resolution"]>): Promise<PlacementRecord> {
+  const lists = await stopLists(ws, record);
+  const entries = await entriesOf(ws, lists.to);
+  let detail: string | null = null;
+  if (record.pending !== null) {
+    const kept = await settleJournal(ws, record.pending, await landingPaths(ws, record.pending.from, record.pending.to));
+    if (kept.length > 0) detail = `kept aside: ${kept.join(", ")}`;
+  }
+  const unwritable = new Map(lists.unwritable.map((entry) => [entry.path, entry.reason]));
+  const added = [...new Set([...lists.changed, ...lists.unwritable.map((entry) => entry.path)])].sort(byBytes).map((path) => ({
+    path, reason: unwritable.get(path) ?? "changed", toEntry: entries.get(path) ?? "absent", by: resolution.by, at: resolution.at,
+  }));
+  const merged = new Map(record.withheld.map((entry) => [entry.path, entry]));
+  for (const entry of added) merged.set(entry.path, entry);
+  const withheld = [...merged.values()].sort((a, b) => byBytes(a.path, b.path));
+  const saved = io.save((current) => ({ ...current, ...cleanStop(), state: "idle", detail, pending: null, resolution: null, withheld }));
+  await dropRef(ws, target.refs.pending);
+  await dropRef(ws, target.refs.stop);
+  return saved;
+}
+
 /**
  * §8.5 steps 1–6 for one folder of one group, under the caller's `withDirLock(frozen.dir)`. Answers "done" when nothing
  * is to be written this round (the record is saved as it ended), or the change to write.
@@ -442,6 +655,18 @@ export async function prepareFolderPlacement(target: FolderPlacementTarget, reco
   }
   // Step 1.
   const ws = await openDirWorkspace(io.env, target.frozen);
+  // §9.2: the person's answer, under the folder lock. take-folder does its own steps and answers; withhold writes the
+  // withheld entries and lets §8.5 place the rest; recheck clears the stopped state and starts again from step 1.
+  if (record.resolution !== null) {
+    const resolution = record.resolution;
+    if (resolution.action === "take-folder" && record.state === "folder-changed") return takeFolder(ws, target, io, record, resolution);
+    if (resolution.action === "withhold") record = await withholdPaths(ws, target, io, record, resolution);
+    else {
+      // recheck -- and a take-folder whose state moved (the folder went missing) since the command was recorded.
+      record = io.save((current) => ({ ...current, ...cleanStop(), state: "idle", detail: null, resolution: null }));
+      await dropRef(ws, target.refs.stop);
+    }
+  }
   // Step 3: an owed write first.
   if (record.pending !== null) {
     const pending = record.pending;
@@ -601,9 +826,32 @@ export async function placeDirGroups(deps: PlacementDeps): Promise<boolean> {
       try { deps.crash!(point, path); } catch (error) { throw new Crashed(error); }
     };
     const target: FolderPlacementTarget = { groupId, frozen, workBranch: workBranchRef(groupId), refs: placementRefs(groupId), orcaOwn };
+    const vaultId = frozen.vaultId;
     try {
       if (deps.env === undefined) throw new Error("orca: a dir group's placement needs the driver's env ($ORCA_VAULT_DIR)");
-      const io: FolderPlacementIo = { env: deps.env, save, load, hook, log: (line) => process.stderr.write(`${line}\n`) };
+      // §9.2 step 2: take-folder attributes a taken path to the other owner whose current folder commit holds its blob --
+      // another dir group on this vault, or a flow run's head. Read on the pass's vault, once per take.
+      const owners = async (ws: DirWorkspace): Promise<{ dirGroups: PlacementOwner[]; flowRuns: PlacementOwner[] }> => {
+        const dirGroups: PlacementOwner[] = [];
+        for (const other of deps.store.db.prepare("SELECT id, body FROM groups ORDER BY id").all()) {
+          const id = String(other.id);
+          if (id === groupId) continue;
+          let otherFrozen: FrozenDirWorkspace | null = null;
+          try { otherFrozen = dirWorkspaceOf(JSON.parse(String(other.body))); } catch { continue; }
+          if (otherFrozen === null || otherFrozen.vaultId !== vaultId) continue;
+          const commit = (await vaultGit(ws.vault, ["rev-parse", "--verify", "-q", placementRefs(id).placed]).catch(() => "")).trim();
+          if (commit.length > 0) dirGroups.push({ id, commit });
+        }
+        const flowRuns: PlacementOwner[] = [];
+        for (const line of (await vaultGit(ws.vault, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/orca/"])).split("\n")) {
+          const [name, object] = line.split(" ");
+          if (name === undefined || object === undefined) continue;
+          const parts = name.split("/");
+          if (parts.length === 4 && parts[1] === "orca" && parts[3] === "head") flowRuns.push({ id: parts[2]!, commit: object });
+        }
+        return { dirGroups, flowRuns };
+      };
+      const io: FolderPlacementIo = { env: deps.env, save, load, hook, owners, log: (line) => process.stderr.write(`${line}\n`) };
       await withDirLock(frozen.dir, async () => {
         const prepared = await prepareFolderPlacement(target, before!, io);
         if (prepared.kind === "write") await writeFolderPlacement(target, prepared, io);

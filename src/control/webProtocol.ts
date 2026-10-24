@@ -677,6 +677,8 @@ export const commandVerbSchema = z.enum([
   "flow-pool",
   // Gaps spec §5.5, §13: the person's answer on one step of the running re-run plan (run it, or accept it unchanged).
   "flow-plan-step",
+  // Dir-requirements spec §9.2: the person's answer to a folder change that stopped a dir group's placement.
+  "resolve-folder-change",
 ]);
 
 const repositoryCommandTargetSchema = z.object({ kind: z.literal("repository"), repoId: idSchema }).strict();
@@ -887,6 +889,10 @@ export const checkKindPayloadSchema = z.object({ kind: z.enum(CHECK_KINDS) }).st
 export const setCriteriaReviewPayloadSchema = z.object({ enabled: z.boolean() }).strict();
 // Integration spec §3.1: the group's copy, the same body shape as the repository default's.
 export const setGroupIntegrationPayloadSchema = z.object({ integration: integrationSchemeSchema }).strict();
+// Dir-requirements spec §9.2: keep the folder's version and continue, check again, or leave these paths out.
+export const folderChangeActionSchema = z.enum(["take-folder", "recheck", "withhold"]);
+export type FolderChangeAction = z.infer<typeof folderChangeActionSchema>;
+export const resolveFolderChangePayloadSchema = z.object({ action: folderChangeActionSchema }).strict();
 // Controller ruling W6-8: the envelope's expectedRevision (checked against agent_preferences.revision) is the only one.
 export const setAgentPreferencesPayloadSchema = z.object({ preferences: operatorPreferencesSchema }).strict();
 export const applyAgentUpdatePayloadSchema = z.object({
@@ -1125,6 +1131,8 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("retry-integration"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  // Dir-requirements spec §9.2: the person's answer to a stopped folder change.
+  z.object({ ...rawCommandFields, verb: z.literal("resolve-folder-change"), target: groupCommandTargetSchema, payload: resolveFolderChangePayloadSchema }).strict(),
   // Issue-fixes spec §6.3: archive and unarchive, group target, empty payload.
   z.object({ ...rawCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -1212,6 +1220,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("retry-integration"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("resolve-folder-change"), target: groupCommandTargetSchema, payload: resolveFolderChangePayloadSchema }).strict(),
   // Issue-fixes spec §6.3: archive and unarchive, group target, empty payload.
   z.object({ ...effectiveCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -1404,6 +1413,24 @@ export const groupSummarySchema = z
       state: z.enum(["held", "started", "stopped", "waiting-prerequisite", "backoff", "waiting-slot", "queued"]),
       waitingFor: z.array(idSchema),
       refusal: z.object({ code: nonemptyString, count: positiveSafeInteger, persistent: z.boolean() }).strict().nullable(),
+    }).strict().optional(),
+    // Dir-requirements spec §9.4: a dir group's placement record (§8.2 minus `pending.from/to`), for the group page and
+    // the overview's needs-you row. Optional so every other group's summary parses unchanged.
+    placement: z.object({
+      workspaceKind: z.literal("dir"),
+      state: z.enum(["idle", "folder-changed", "folder-unwritable", "folder-missing", "failed"]),
+      tip: commitShaSchema.nullable(),
+      landedTip: commitShaSchema.nullable(),
+      pending: z.object({
+        tip: commitShaSchema, tmp: z.array(z.object({ path: z.string(), name: z.string() }).strict()),
+        aside: z.array(z.object({ path: z.string(), name: z.string() }).strict()), dirs: z.array(z.string()),
+      }).strict().nullable(),
+      changed: z.array(z.string()), changedTotal: safeInteger,
+      unwritable: z.array(z.object({ path: z.string(), reason: z.string() }).strict()), unwritableTotal: safeInteger,
+      withheld: z.array(z.object({ path: z.string(), reason: z.string(), toEntry: z.string(), by: z.string().optional(), at: z.number().optional() }).strict()),
+      watch: z.string().nullable(), detail: z.string().nullable(),
+      resolution: z.object({ id: z.string(), action: folderChangeActionSchema, by: z.string(), at: z.number() }).strict().nullable(),
+      at: safeInteger,
     }).strict().optional(),
   })
   .strict();
@@ -1963,6 +1990,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group-integration-set"), groupId: idSchema, integration: integrationSchemeSchema }).strict(),
   z.object({ kind: z.literal("integration-retried"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("integration-resolution-started"), groupId: idSchema }).strict(),
+  // Dir-requirements spec §9.2: the answer was recorded; the next placement round does its work.
+  z.object({ kind: z.literal("folder-change-resolved"), groupId: idSchema, action: folderChangeActionSchema }).strict(),
   // Issue-fixes spec §6.3: `at` is the archive mark's time (ms since the epoch).
   z.object({ kind: z.literal("archived"), groupId: idSchema, at: safeInteger }).strict(),
   z.object({ kind: z.literal("unarchived"), groupId: idSchema }).strict(),

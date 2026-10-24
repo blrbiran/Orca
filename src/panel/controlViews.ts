@@ -15,6 +15,7 @@ import { readAgentPreferences } from "../control/agentPreferences.js";
 import { peerCode } from "../control/ccloopPort.js";
 import { groupExecutionPending } from "../control/executionPending.js";
 import { readDebugMark } from "../control/debugGroup.js";
+import { dirWorkspaceOf, readPlacement } from "../control/dirGroup.js";
 import { escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
@@ -487,6 +488,8 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   const dependsOn = prerequisitesOf(store, groupId);
   const systemDebugMark = readSystemDebugMark(body);
   const escalation = archived === null ? [] : escalationsOf(store, groupId);
+  // Dir-requirements spec §9.4: a dir group's placement record, without the journal's `from/to` (not the panel's business).
+  const placement = dirWorkspaceOf(body) === null ? null : readPlacement((body as { placement?: unknown }).placement);
   const summary = {
     groupId,
     repoId,
@@ -513,6 +516,17 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
       correctionId: debugMark.correctionId, ordinal: debugMark.ordinal, missing: debugMark.missing,
       agentFallback: debugMark.agentFallback === null ? null : { reason: debugMark.agentFallback.reason },
       checks: debugMark.checks, closing: debugMark.closing,
+    } }),
+    ...(placement === null ? {} : { placement: {
+      workspaceKind: "dir" as const,
+      state: placement.state, tip: placement.tip, landedTip: placement.landedTip,
+      pending: placement.pending === null ? null : {
+        tip: placement.pending.tip, tmp: placement.pending.tmp, aside: placement.pending.aside, dirs: placement.pending.dirs,
+      },
+      changed: placement.changed, changedTotal: placement.changedTotal,
+      unwritable: placement.unwritable, unwritableTotal: placement.unwritableTotal,
+      withheld: placement.withheld, watch: placement.watch, detail: placement.detail,
+      resolution: placement.resolution, at: placement.at,
     } }),
   };
   const parsed = groupSummarySchema.safeParse(summary);

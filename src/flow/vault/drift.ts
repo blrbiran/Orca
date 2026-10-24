@@ -66,8 +66,11 @@ export function placeDrift(paths: readonly string[], activeOutputs: ReadonlyArra
   return activeOutputs.find((output) => output.paths.some((path) => drifted.has(nfc(path))))?.stepKey ?? "start";
 }
 
-/** The person-authored execution: the step's active output with the drifted paths as the person left them. */
-export async function commitDriftOnto(vault: Vault, onto: string, drift: string, paths: readonly string[]): Promise<string> {
+/**
+ * The person-authored execution: the step's active output with the drifted paths as the person left them. `message` is
+ * the commit message (dir-requirements §9.2 gives its folder commit the attribution trailers).
+ */
+export async function commitDriftOnto(vault: Vault, onto: string, drift: string, paths: readonly string[], message = "orca: person edit"): Promise<string> {
   const tree = await treeWith(vault, onto, drift, paths);
-  return (await vaultGit(vault, [...ORCA_IDENTITY, "commit-tree", tree, "-p", onto, "-m", "orca: person edit"])).trim();
+  return (await vaultGit(vault, [...ORCA_IDENTITY, "commit-tree", tree, "-p", onto, "-F", "-"], { input: message })).trim();
 }

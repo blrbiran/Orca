@@ -60,6 +60,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca group set-integration <group> --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>]` — where this group's finished work goes
 - `orca group retry-integration <group>` — a blocked or conflicted integration back to idle
 - `orca group resolve-integration <group>` — approve an agent resolving the group's integration conflict
+- `orca group folder-change <group> [--take-folder] [--recheck] [--withhold]` — answer a folder change that stopped placement: --take-folder, --recheck or --withhold (person token)
 - `orca group depend <group> --on <on>` — make the group wait until --on <group> has landed
 - `orca group undepend <group> --on <on>` — remove that wait
 

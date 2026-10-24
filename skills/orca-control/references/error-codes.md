@@ -136,6 +136,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `flow-step-not-found` | 404 |
 | `flow-template-invalid` | 422 |
 | `flow-unavailable` | 409 |
+| `folder-change-not-pending` | 409 |
 | `grant-amendment-unsupported` | 422 |
 | `graph-change-needs-handoff` | 422 |
 | `graph-cycle` | 422 |

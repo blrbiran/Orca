@@ -47,6 +47,9 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "set-integration-scheme": "human-only",
   // Protect-acceptance-criteria spec §5: switching the reviewer off leaves every flag for a person.
   "set-criteria-review": "human-only",
+  // Dir-requirements spec §9.2, D5: a folder change the person made is answered by the person (owner only), whatever
+  // the answer -- take-folder, withhold or recheck.
+  "resolve-folder-change": "human-only",
   "set-group-integration": "human-only",
   "retry-integration": "human-only",
   "resolve-integration-conflict": "human-only",
@@ -189,6 +192,8 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "set-spend-cap": "token",
   "clear-spend-cap": "token",
   "set-usage-calendar": "token",
+  // Dir-requirements spec §9.2, D5: all three answers are a person's; a socket agent needs the person token.
+  "resolve-folder-change": "token",
   "settle-unknown-usage": "token",
   "apply-agent-update": "token",
 };
