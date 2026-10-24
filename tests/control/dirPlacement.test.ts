@@ -14,7 +14,8 @@
  *   answer's `by`; the rest is placed, and each withhold lasts until its `to` entry changes.
  * - The answers (§9.2): `recheck` looks again; `take-folder` reads exactly `changed` directly (so an over-cap or
  *   ignored path is taken), writes the person's folder commit as a `folder edit` on the work branch with the
- *   `Orca-Resolution` trailer and a kept `drift/<n>`, and the next landing stacks on it; a symlink is not taken.
+ *   `Orca-Resolution` trailer and a kept `drift/<n>`, and the next landing stacks on it; a symlink is not taken, and
+ *   an Orca-own path never is.
  * - Modes: new files 0644/0755 and new directories 0755 under umask 0077; a changed file keeps its bits, its executable
  *   state following `to`; a file no landing changes keeps its mode.
  * - The watch signature: a stopped group costs no progress until the stopping paths change; an undone edit is placed
@@ -23,11 +24,11 @@
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readPlacement } from "../../src/control/dirGroup.js";
 import { classifyLandingPaths } from "../../src/control/dirPlacement.js";
-import { folderState, orcaNames, placementWorld, type PlacementWorld } from "./fixtures/dirPlacementWorld.js";
+import { DOC, folderState, orcaNames, placementWorld, type PlacementWorld } from "./fixtures/dirPlacementWorld.js";
 
 const PLACED = "refs/orca/group/g/placed";
 async function inWorld(files: Record<string, string | Buffer>, body: (w: PlacementWorld) => Promise<void>, options: { folder?: string } = {}): Promise<void> {
@@ -261,6 +262,25 @@ describe("the person's answers (§9.2)", () => {
     expect(body).toContain("orca: folder edit g");
     expect(body).toContain("Orca-Placed-By: run-1 1 paths");
     expect(body).toContain("Orca-Person-Edit: 0 paths");
+  }));
+
+  it("take-folder never takes an Orca-own path (the requirement document), even when a stop record names it", () => inWorld({ "a.md": "A\n" }, async (w) => {
+    w.land({ "a.md": "A2\n" });
+    writeFileSync(join(w.folder, "a.md"), "mine\n");
+    mkdirSync(dirname(join(w.folder, DOC)), { recursive: true });
+    writeFileSync(join(w.folder, DOC), "person's notes\n");
+    expect(await w.place()).toBe(true);
+    expect(w.record()).toMatchObject({ state: "folder-changed", changed: ["a.md"] });
+    // A stop record that also names the document (as a corrupted or older record could).
+    const stop = JSON.parse(w.git(["cat-file", "blob", w.record().stopRecord!]));
+    const blob = w.git(["hash-object", "-w", "--stdin"], JSON.stringify({ ...stop, changed: [DOC, "a.md"] }));
+    w.git(["update-ref", "refs/orca/group/g/stop", blob]);
+    w.setRecord({ changed: [DOC, "a.md"], changedTotal: 2, stopRecord: blob });
+    expect(w.resolve("take-folder")).toEqual({ ok: true });
+    expect(await w.place()).toBe(true);
+    expect(w.record()).toMatchObject({ state: "idle", changed: [] });
+    expect(w.show(w.ref("refs/heads/orca/g")!, DOC)).toBe("# Notes export");
+    expect(read(w, DOC)).toBe("person's notes\n");
   }));
 
   it("withhold with no stopped state, or take-folder outside folder-changed, is refused", () => inWorld({ "a.md": "A\n" }, async (w) => {
