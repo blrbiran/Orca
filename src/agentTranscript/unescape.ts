@@ -28,6 +28,24 @@ function expectedLength(first: number): number {
   return first >= 0xf0 ? 4 : first >= 0xe0 ? 3 : first >= 0xc0 ? 2 : 1;
 }
 
+/** Whether `byte` may continue the sequence `lead` starts at position `at` (the ranges `Buffer.toString` uses). */
+function continues(lead: number, at: number, byte: number): boolean {
+  if (byte < 0x80 || byte > 0xbf) return false;
+  if (lead === 0xe0 && at === 1) return byte >= 0xa0;
+  if (lead === 0xed && at === 1) return byte <= 0x9f;
+  if (lead === 0xf0 && at === 1) return byte >= 0x90;
+  if (lead === 0xf4 && at === 1) return byte <= 0x8f;
+  return true;
+}
+
+/** Whether `bytes` is a valid prefix of the sequence its first byte starts: a doomed prefix is decoded alone. */
+function validPrefix(bytes: Buffer): boolean {
+  const lead = bytes[0]!;
+  if (lead < 0xc2 || lead > 0xf4) return false;
+  for (let at = 1; at < bytes.length; at++) if (!continues(lead, at, bytes[at]!)) return false;
+  return true;
+}
+
 /** One UTF-8 sequence as `Buffer.toString` decodes it: units in UTF-16, bytes consumed (a maximal subpart on error). */
 function sequenceAt(bytes: Buffer, i: number): { units: number; size: number } {
   const b = bytes[i]!;
@@ -98,20 +116,30 @@ export function createDecoder(from: DecoderState = initialDecoderState()): Strea
   /**
    * Split `bytes` into the completion of the sequence `pending` holds (decoded together with it) and the rest minus an
    * incomplete tail, which becomes the new `pending`. Copying at most 4 bytes into `head` instead of concatenating whole
-   * reads keeps tens of MiB of external memory from waiting for a major GC (§6.5).
+   * reads keeps tens of MiB of external memory from waiting for a major GC (§6.5). Only bytes that `toString` would decode
+   * as part of the held sequence join it: a doomed prefix is decoded alone, and a byte that cannot continue the sequence
+   * starts the next one, so the split output equals the output of decoding the two buffers as one.
    */
   const split = (bytes: Buffer): { headBytes: number; body: Buffer } => {
     let rest = bytes;
     let headBytes = 0;
     if (pending.length > 0) {
-      const need = expectedLength(pending[0]!) - pending.length;
-      const take = Math.min(need, rest.length);
+      const lead = pending[0]!;
+      const complete = expectedLength(lead);
+      const keep = validPrefix(pending);
+      const available = rest.length;
+      let take = 0;
+      if (keep) while (take < complete - pending.length && take < available && continues(lead, pending.length + take, rest[take]!)) take++;
       headBytes = pending.length + take;
       pending.copy(head, 0);
       rest.copy(head, pending.length, 0, take);
       rest = rest.subarray(take);
-      if (take < need) { pending = Buffer.from(head.subarray(0, headBytes)); return { headBytes: -1, body: EMPTY }; }
       pending = EMPTY;
+      if (keep && headBytes < complete && take === available) {
+        // The buffer ended inside the sequence: hold it for the next read.
+        pending = Buffer.from(head.subarray(0, headBytes));
+        return { headBytes: -1, body: EMPTY };
+      }
     }
     const tail = incompleteTail(rest);
     pending = tail > 0 ? Buffer.from(rest.subarray(rest.length - tail)) : EMPTY;
@@ -126,13 +154,17 @@ export function createDecoder(from: DecoderState = initialDecoderState()): Strea
       if (hex !== null) {
         const from = i;
         let taken = 0;
+        let extra = 0;
         while (hex.length + taken < 4 && i < n) {
           const { units: u, size } = sequenceAt(bytes, i);
-          taken += Math.min(u, 4 - hex.length - taken);
+          const give = Math.min(u, 4 - hex.length - taken);
+          taken += give;
+          // A 4-byte character can end the escape midway; its remaining unit is ordinary text, as `walk` sees it.
+          if (give < u) extra += u - give;
           i += size;
         }
         if (taken > 0) hex += bytes.subarray(from, i).toString("utf8").slice(0, taken);
-        if (hex.length === 4) { hex = null; units += 1; }
+        if (hex.length === 4) { hex = null; units += 1 + extra; }
         continue;
       }
       const b = bytes[i]!;

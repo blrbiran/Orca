@@ -285,5 +285,7 @@ export async function expandOversized(index: LineIndex, reader: RangeReader, at:
   if (raw >= total) text += (tail ?? decoder).end();
   const span = base === want && text.length <= nominalEnd + LOOK - want ? text : text.slice(Math.max(0, want - base), nominalEnd + LOOK - base);
   const endUnits = Math.min(nominalEnd, base + text.length) - want;
-  return { text: render(redactor, span, edge(span, page * PAGE - want), edge(span, endUnits)), page, pages, length: over.length };
+  // Review minor 3: a text shorter than the look-around (a truncated or drifted line) would put `b` before `a`.
+  const from = edge(span, page * PAGE - want);
+  return { text: render(redactor, span, from, Math.max(from, edge(span, endUnits))), page, pages, length: over.length };
 }

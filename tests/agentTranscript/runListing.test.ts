@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { collectInto, readDriverRun, readStartEnvelope } from "../../src/control/executionDriver.js";
 import { isFlowChildGroup } from "../../src/flow/groups.js";
+import { readGroupSummaryFromSnapshot } from "../../src/panel/controlViews.js";
 import { readProjectionState } from "../../src/control/projectionJournal.js";
 import type { TranscriptEntry } from "../../src/control/schema.js";
 import { driverHarness } from "../control/fixtures/driverHarness.js";
@@ -63,6 +64,9 @@ describe("T13: the listing of every collected run is stored and served", () => {
       answer = undefined;
       await collectInto(t.deps, readDriverRun(t.h.store, runId));
       expect(t.body(runId).transcripts.entries).toHaveLength(2);
+
+      // D1's run-body key is admitted by the panel's stored-run schema: the group view still reads the run.
+      expect(() => readGroupSummaryFromSnapshot(t.h.store, run.groupId)).not.toThrow();
     } finally { await t.h.dispose(); }
   });
 

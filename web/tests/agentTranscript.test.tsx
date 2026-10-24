@@ -90,4 +90,14 @@ describe("T8: the transcript list", () => {
     expect(urls.length).toBeGreaterThan(1);
     for (const url of urls) expect(url).not.toContain("include=thinking");
   });
+
+  it("asks for nothing while it is not the active region (review minor 6)", async () => {
+    vi.useFakeTimers();
+    answer = () => LISTING;
+    render(<RunTranscript runId={RUN} active={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Transcript" }));
+    await flush();
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(urls).toEqual([]);
+  });
 });

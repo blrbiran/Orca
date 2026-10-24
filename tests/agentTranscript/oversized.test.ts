@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { STRIDE_BYTES } from "../../src/agentTranscript/lineIndex.js";
 import { lineParser } from "../../src/agentTranscript/normalize.js";
 import { HEAD, headOf, PAGE, pageOf } from "../../src/agentTranscript/redact.js";
-import { decodeAll } from "../../src/agentTranscript/unescape.js";
+import { createDecoder, decodeAll } from "../../src/agentTranscript/unescape.js";
 import { expandOversized, windowTail } from "../../src/agentTranscript/window.js";
 import { badUnits, claude, indexOf, jsonl, memoryReader, prose, redactor } from "./fixtures.js";
 
@@ -126,5 +126,48 @@ describe("T3: an oversized line", () => {
     const window = await windowTail(await indexOf(reader), reader, { runtime: "claude", redactor });
     expect(badUnits(window.events[0]!.fields!.text!.text)).toBe(0);
     for (let page = 0; page < 1; page++) expect(badUnits(pageOf(redactor, field, page).text)).toBe(0);
+  });
+});
+
+describe("T3: the streaming decoder equals one whole-buffer decode at any chunk split", () => {
+  /** `feed` and `feedCount` over the same chunks, from two decoders; returns the text, the counted units and both decoders. */
+  const stream = (chunks: readonly Buffer[]) => {
+    const text = createDecoder(), count = createDecoder();
+    let out = "", units = 0;
+    for (const chunk of chunks) { out += text.feed(chunk); units += count.feedCount(chunk); }
+    out += text.end();
+    units += count.endCount();
+    return { out, units, text, count };
+  };
+
+  it("N1/T-F: seeded random bytes, random chunks: same text and count as decoding the whole buffer", () => {
+    let seed = 0x5eed1234;
+    const next = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 2 ** 32; };
+    const alphabet = [0x22, 0x5c, 0x75, 0x6e, 0x30, 0x31, 0x41, 0x0a, 0x80, 0x9f, 0xa9, 0xc0, 0xc3, 0xe0, 0xed, 0xef, 0xf0, 0xf4, 0x98];
+    for (let caseNo = 0; caseNo < 500; caseNo++) {
+      const bytes = Buffer.from(Array.from({ length: Math.floor(next() * 48) }, () => alphabet[Math.floor(next() * alphabet.length)]!));
+      const chunks: Buffer[] = [];
+      for (let at = 0; at < bytes.length;) { const size = 1 + Math.floor(next() * 6); chunks.push(bytes.subarray(at, at + size)); at += size; }
+      const { out, units, text, count } = stream(chunks);
+      expect(out, `case ${caseNo}`).toBe(decodeAll(bytes));
+      expect(units, `case ${caseNo}`).toBe(out.length);
+      expect(count.state(), `case ${caseNo}`).toEqual(text.state());
+    }
+  });
+
+  it("N1/T-F: a dangling lead followed by a lead keeps the following character", () => {
+    const bytes = Buffer.from([0xc3, 0xc3, 0xa9]);
+    expect(decodeAll(bytes)).toBe("\uFFFD\u00e9");
+    const { out, units } = stream([bytes.subarray(0, 1), bytes.subarray(1)]);
+    expect(out).toBe(decodeAll(bytes));
+    expect(units).toBe(out.length);
+  });
+
+  it("N1/T-F: a \\u escape completed inside a 4-byte character counts the character's other unit", () => {
+    const bytes = Buffer.concat([Buffer.from('"\\uD80'), Buffer.from("\u{1F600}"), Buffer.from('x"')]);
+    const chunks = Array.from(bytes, (byte) => Buffer.from([byte]));
+    const { out, units } = stream(chunks);
+    expect(out).toBe(decodeAll(bytes));
+    expect(units).toBe(out.length);
   });
 });

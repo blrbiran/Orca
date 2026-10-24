@@ -91,6 +91,9 @@ export type RunProgress=z.infer<typeof runProgressSchema>;
 // lists it. Strict, so an entry of the wrong shape refuses the whole answer.
 export const transcriptEntrySchema=z.object({attempt:safeInteger.positive(),phase:z.string().min(1),seq:safeInteger.positive(),path:z.string().min(1).nullable(),bytes:safeInteger,final:z.boolean(),truncatedAt:safeInteger.nullable()}).strict();
 export type TranscriptEntry=z.infer<typeof transcriptEntrySchema>;
+// Live transcript spec §12.3 / plan D1: the last listing a collect answered, kept on the run body.
+export const transcriptListingSchema=z.object({sourceDir:z.string().min(1),entries:z.array(transcriptEntrySchema)}).strict();
+export type TranscriptListing=z.infer<typeof transcriptListingSchema>;
 
 /**
  * Failure-cause spec 2026-10-21 §3 (ccloop failure-causes spec §5): ccloop's run-level cause, as collect answers it and the

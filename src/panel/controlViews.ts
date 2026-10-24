@@ -39,7 +39,7 @@ import { activeChain, chainRounds } from "../control/clarifyChain.js";
 import { readEstimateContract } from "../control/estimator.js";
 import { effectivePlanTask } from "../control/taskAmendments.js";
 import type { ControlStore } from "../control/store.js";
-import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, runProgressSchema, safeInteger, type RunProgress } from "../control/schema.js";
+import { agentSelectionSchema, amountSchema, artifactSchema, canonicalTimestampSchema, grantSchema, idSchema, runProgressSchema, safeInteger, transcriptListingSchema, type RunProgress } from "../control/schema.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { exportReasonOf } from "../control/requirementExport.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
@@ -223,6 +223,8 @@ const persistedRunSchema = z.object({
   endedAt: safeInteger.optional(),
   usageSettlement: usageSettlementSchema.optional(),
   drive: driveRecordSchema.optional(),
+  // Live transcript spec §12.3 / plan D1: the last listing collect answered, kept beside the run.
+  transcripts: transcriptListingSchema.optional(),
 }).strict();
 
 function blocked(detail: string): never {

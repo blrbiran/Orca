@@ -105,6 +105,9 @@ const ALLOWED = [
   // Gaps plan Task 10-A fix round 1: the flow attachment upload's refusal carries the same method/path prefix.
   "web/src/controlApi.ts\t`POST ${path}`",
   'web/src/main.tsx\t"orca panel: #root is missing from index.html"',
+  // Live transcript spec §10.4: KiB and MiB are IEC unit symbols beside a number, not prose.
+  "web/src/AgentTranscript.tsx\t`${(bytes / 1024).toFixed(1)} KiB`",
+  "web/src/AgentTranscript.tsx\t`${(bytes / 1024 / 1024).toFixed(1)} MiB`",
 ];
 
 describe("nothing left to translate (spec §6.5 backstop)", () => {
