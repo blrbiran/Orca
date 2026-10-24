@@ -2,8 +2,10 @@ import { archiveCase } from "./archive.js";
 import { archiveRun,writeArtifact } from "../../../src/control/archive.js";
 import { recordUsage } from "../../../src/control/usage.js";
 import type { Candidate } from "../../../src/control/types.js";
-export async function candidateCase() {
+/** Live transcript T6: `beforeArchive` writes into the run directory before it is archived (absent: unchanged). */
+export async function candidateCase(beforeArchive?:(h:Awaited<ReturnType<typeof archiveCase>>)=>Promise<void>) {
  const h=await archiveCase();
+ await beforeArchive?.(h);
  const source=await writeArtifact(h.store,"usage-final",Buffer.from(JSON.stringify({tokens:40,activeMs:20,attempts:1,sessions:1})));
  const stopSource=await writeArtifact(h.store,"stop-final",Buffer.from(JSON.stringify({executionId:"execution-1",generation:1,isolated:true})));
  const handoffPacket={protocol:1,identity:{groupId:h.claim.groupId,workItemId:h.claim.workItemId,taskId:h.claim.taskId,runId:h.claim.runId,generation:h.claim.generation,graphVersion:h.claim.graphVersion,targetVersion:h.claim.targetVersion},request:null,runState:{status:"succeeded"},completed:["implemented"],unfinished:["follow-up"],pendingDecisions:["choose"],awaitingHuman:["approve"],validationCommands:["npm test"],rawLogs:[],usageHighWater:2,unresolvedRequestIds:[],artifacts:[]};
