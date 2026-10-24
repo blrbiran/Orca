@@ -699,7 +699,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/flows/plan-step", verb: "flow-plan-step", target: flowsScoped },
     // Scheduled flows and groups spec §11.1, §13.3: the library's writes, one `@plan-library` scope with revision 0.
     { path: "/api/control/plan-library/save", verb: "plan-library-save", target: planLibraryScoped },
-    { path: PLAN_LIBRARY_IMPORT_ROUTE, verb: "plan-library-import", target: planLibraryScoped },
+    // The import route is PLAN_LIBRARY_IMPORT_ROUTE (its larger body parser); written out so the route table reads whole.
+    { path: "/api/control/plan-library/import", verb: "plan-library-import", target: planLibraryScoped },
     { path: "/api/control/plan-library/archive", verb: "plan-library-archive", target: planLibraryScoped },
     {
       path: "/api/control/repositories/:repoId/criteria-review",

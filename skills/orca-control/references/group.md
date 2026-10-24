@@ -19,16 +19,23 @@ one group's full view
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 
-## `orca group import <plan> [--group <group>] [--estimator-profile <estimator-profile>] [--estimate-mode <estimate-mode>]`
+## `orca group import [<plan>] [--group <group>] [--estimator-profile <estimator-profile>] [--estimate-mode <estimate-mode>] [--library <library>] [--version <version>]`
 
-import a registered plan as a new draft group
+import a registered plan, or a plan library version (--library), as a new draft group
 
 - What it does: sends control verb `import-plan`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
-- `<plan>`: a plan id (or unique prefix) from orca project show / config
+- `<plan>` (optional): a plan id (or unique prefix) from orca project show / config; not with --library
 - `--group <group>`: the new group's id
 - `--estimator-profile <estimator-profile>`: estimate with this profile
 - `--estimate-mode <estimate-mode>`: strict|soft
+- `--library <library>`: a plan library entry (orca plan list) instead of a registered plan
+- `--version <version>`: with --library: the version's sha256; default: the entry's newest
+
+```
+orca group import plan-a
+orca group import --library pl-0123456789abcdef
+```
 
 ## `orca group estimate <group> [--estimator-profile <estimator-profile>] [--mode <mode>]`
 

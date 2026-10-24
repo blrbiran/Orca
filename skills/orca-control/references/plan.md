@@ -4,6 +4,92 @@
 
 Every `orca plan` command. Ids: a full id, a unique prefix, or (projects) a name or path.
 
+## `orca plan list [--archived]`
+
+this project's plan library: entries, their newest version and the schedules that use them
+
+- What it does: reads from the panel (no write).
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `--archived`: include archived entries
+
+```
+orca plan list
+orca plan list --archived
+```
+
+## `orca plan show <entry> [--version <version>]`
+
+a library entry with every version's provenance (by, via, origin, time); --version adds that version's document
+
+- What it does: reads from the panel (no write).
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<entry>`: a plan library entry id (pl-…; orca plan list names them)
+- `--version <version>`: a version's sha256 (orca plan show lists them); default: the newest
+
+```
+orca plan show pl-0123456789abcdef
+orca plan show pl-0123456789abcdef --version 3f2a…
+```
+
+## `orca plan save [--group <group>] [--requirement <requirement>] [--draft <draft>] [--name <name>] [--entry <entry>]`
+
+save a group's plan, or a requirement's split draft, to the plan library (--entry appends a version: person token)
+
+- What it does: sends control verb `plan-library-save`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `--group <group>`: the group whose plan is saved
+- `--requirement <requirement>`: the requirement group whose split draft is saved (with --draft)
+- `--draft <n>`: the draft number (orca requirement show)
+- `--name <name>`: the entry's name; default: the group id
+- `--entry <entry>`: append a version to this entry instead of making a new one — human-only: needs a person token
+
+```
+orca plan save --group g-1a2b
+orca plan save --requirement g-req --draft 2 --name 'export split'
+orca plan save --group g-1a2b --entry pl-0123456789abcdef --as-person
+```
+
+## `orca plan import <path> [--name <name>] [--entry <entry>]`
+
+import a plan file (orca-plan-v1, or a scheduler plan file whose contracts are inlined) into this project's library; needs a person token
+
+- What it does: sends control verb `plan-library-import`.
+- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- `<path>`: the plan file; read here, never sent as a path
+- `--name <name>`: the entry's name; default: the file's name
+- `--entry <entry>`: append a version to this entry instead of making a new one
+
+```
+orca plan import plans/weekly.json --as-person
+orca plan import exported.orca-plan.json --entry pl-0123456789abcdef --as-person
+```
+
+## `orca plan export <entry> [--version <version>] --out <out>`
+
+write a library version's orca-plan-v1 bytes to a new file (mode 0600; an existing path is refused)
+
+- What it does: reads from the panel (no write).
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<entry>`: a plan library entry id (pl-…; orca plan list names them)
+- `--version <version>`: a version's sha256 (orca plan show lists them); default: the newest
+- `--out <out>` (required): the new file to write
+
+```
+orca plan export pl-0123456789abcdef --out weekly.orca-plan.json
+```
+
+## `orca plan archive <entry>`
+
+hide a library entry from lists (refused while a schedule uses it)
+
+- What it does: sends control verb `plan-library-archive`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<entry>`: a plan library entry id (pl-…; orca plan list names them)
+
+```
+orca plan archive pl-0123456789abcdef
+```
+
 ## `orca plan preview <path>`
 
 print the plan's write sets, conflicts and layering, and the runtime preflight; execute nothing (--verbose: more)

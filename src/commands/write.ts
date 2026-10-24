@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import type { CliResponseV1 } from "../entry/envelope.js";
 import { controlSend } from "../entry/operations.js";
 import type { SentRequest } from "./output.js";
-import type { PanelSession } from "./panelCommand.js";
+import { PanelAnswer, type PanelSession } from "./panelCommand.js";
 import type { CommandDef, VerbMapping, WriteContext } from "./types.js";
 
 const num = (value: unknown): number => (typeof value === "number" && Number.isSafeInteger(value) ? value : 0);
@@ -28,7 +28,14 @@ export async function readRevision(mapping: VerbMapping, context: WriteContext):
     case "operator": return num(fieldOf(await context.read("operator/agent-preferences"), "revision"));
     case "spend": return num(fieldOf(await context.read("usage?scope=all"), "spendRevision"));
     case "orchestration": return num(fieldOf(await context.read("orchestration"), "revision"));
-    case "corrections": case "flows": return 0;
+    case "corrections": case "flows": case "plan-library": return 0;
+    case "schedule": {
+      if (mapping.scopeId === undefined) throw new Error("a schedule-scoped row names its schedule (scopeId)");
+      const scheduleId = await mapping.scopeId(context);
+      // Plan B2: a schedule not yet created is revision 0 (its read answers 404).
+      try { return num(fieldOf(await context.read(`schedules/${encodeURIComponent(scheduleId)}`), "revision")); }
+      catch (error) { if (error instanceof PanelAnswer && error.response.status === 404) return 0; throw error; }
+    }
   }
 }
 

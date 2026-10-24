@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { main } from "../../src/cli.js";
+import { REGISTRY } from "../../src/commands/registry.js";
 import { captureStreams } from "../scheduler/sandbox.js";
 
 /**
@@ -56,6 +57,7 @@ const ALLOWED: Array<{ file: string; text: string; why: string }> = [
 ];
 
 interface Hit { file: string; line: number; text: string; name: string; after: string }
+const PLAN_ACTIONS = REGISTRY.filter((def) => def.domain === "plan" && def.action !== null).map((def) => def.action!);
 
 const OCCURRENCE = new RegExp(`(?<![\\w./-])(?:orca|cli\\.ts) (${NAMES.map((n) => n.replace(/-/g, "\\-")).join("|")})(?![\\w-])`, "g");
 
@@ -89,7 +91,9 @@ function scan(): { offenders: string[]; allowedUsed: Set<number> } {
       if (file === THIS_FILE) continue;
       for (const match of text!.matchAll(OCCURRENCE)) {
         const hit: Hit = { file: file!, line: Number(line), text: text!, name: match[1]!, after: text!.slice(match.index! + match[0].length) };
-        if (hit.name === "plan" && hit.after.startsWith(" preview")) continue; // the v2 command
+        // The v2 `plan` commands (Ruling: 这次批准改写所有必要的判据 (ffec7b28): scheduled flows and groups spec §13.1 adds the
+        // plan library's actions beside `plan preview`).
+        if (hit.name === "plan" && PLAN_ACTIONS.some((action) => hit.after.startsWith(` ${action}`))) continue;
         if (hit.after.startsWith(":")) continue; // a message label (`orca gate: …`), pinned by the hook string's sha256 and golden files
         const generated = file!.endsWith(".md") ? generatedLines(file!) : new Set<number>();
         if (generated === "all" || generated.has(hit.line)) continue; // generated from the registry: v2 by construction

@@ -27,8 +27,11 @@ export interface PositionalDef {
   variadic?: boolean;
 }
 
-/** Spec §6.1: which counter `expectedRevision` is checked against. `corrections` and `flows` are always 0. */
-export type RevisionScope = "group" | "repository" | "operator" | "spend" | "orchestration" | "corrections" | "flows";
+/**
+ * Spec §6.1: which counter `expectedRevision` is checked against. `corrections`, `flows` and (scheduled flows and groups
+ * plan B2) `plan-library` are always 0; `schedule` is the schedule's own revision (0 while it does not exist).
+ */
+export type RevisionScope = "group" | "repository" | "operator" | "spend" | "orchestration" | "corrections" | "flows" | "plan-library" | "schedule";
 
 export interface GlobalFlags {
   json: boolean;

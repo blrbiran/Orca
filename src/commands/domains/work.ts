@@ -91,20 +91,37 @@ export const WORK_ROWS: CommandDef[] = [
     route: (c) => `groups/${group(c)}/requirement/classify`, payload: (c) => ({ scope: str(c, "scope"), clarity: str(c, "clarity") }) }),
 
   // --- group
-  verb({ domain: "group", action: "import", summary: "import a registered plan as a new draft group", verb: "import-plan",
-    positionals: [{ name: "plan", summary: "a plan id (or unique prefix) from orca project show / config", required: true }],
+  verb({ domain: "group", action: "import", summary: "import a registered plan, or a plan library version (--library), as a new draft group", verb: "import-plan",
+    positionals: [{ name: "plan", summary: "a plan id (or unique prefix) from orca project show / config; not with --library", required: false }],
     flags: [
       { name: "group", type: "string", summary: "the new group's id" }, { name: "estimator-profile", type: "string", summary: "estimate with this profile" },
       { name: "estimate-mode", type: "string", summary: "strict|soft" },
+      // Scheduled flows and groups spec §5.5, §13.1: a library entry's version instead of a registered plan.
+      { name: "library", type: "string", summary: "a plan library entry (orca plan list) instead of a registered plan" },
+      { name: "version", type: "string", summary: "with --library: the version's sha256; default: the entry's newest" },
     ],
+    examples: ["orca group import plan-a", "orca group import --library pl-0123456789abcdef"],
     scopeId: (c) => newGroupIdOnce(c), route: () => "groups/import-plan",
     payload: async (c) => {
-      const plans = (await config(c)).plans;
-      const planId = resolveId("plan", c.ids.plan!, plans.map((p) => p.planId));
+      const library = str(c, "library");
+      if ((library === undefined) === (c.ids.plan === undefined)) throw invalid("give a plan id or --library <entry>, not both");
+      if (library === undefined && str(c, "version") !== undefined) throw invalid("--version goes with --library");
       const profile = str(c, "estimator-profile");
       const binding = profile === undefined ? null : await profileBinding(c, profile);
+      let source: Record<string, unknown>;
+      if (library !== undefined) {
+        const entry = await c.read(`plan-library/${encodeURIComponent(library)}`) as { entryId: string; projectId: string; head: { sha256: string } | null; versions: Array<{ sha256: string }> };
+        const named = str(c, "version");
+        const sha256 = named !== undefined ? resolveId("version", named, entry.versions.map((v) => v.sha256)) : entry.head?.sha256;
+        if (sha256 === undefined) throw new EntryRejection("plan-library-entry-not-found", `${entry.entryId} has no version`);
+        source = { repoId: entry.projectId, libraryEntry: { entryId: entry.entryId, sha256 } };
+      } else {
+        const plans = (await config(c)).plans;
+        const planId = resolveId("plan", c.ids.plan!, plans.map((p) => p.planId));
+        source = { repoId: plans.find((p) => p.planId === planId)!.repoId, planId };
+      }
       return {
-        groupId: newGroupIdOnce(c), repoId: plans.find((p) => p.planId === planId)!.repoId, planId,
+        groupId: newGroupIdOnce(c), ...source,
         ...(binding === null ? {} : { estimatorProfileId: binding.profileId, estimatorProfileHash: binding.profileHash }),
         ...(str(c, "estimate-mode") === undefined ? {} : { estimateMode: str(c, "estimate-mode") }),
       };
