@@ -46,6 +46,8 @@ export const durableCommandErrorStatuses = {
   "pending-decision-not-found": 404,
   // Kanban spec §9a: no flagged decision of this group has the id.
   "flagged-decision-not-found": 404,
+  // Scheduled flows and groups spec §5.6: no plan library entry (or no version of it) has the id; the detail names it.
+  "plan-library-entry-not-found": 404,
   // Kanban spec §3.3: add-group-dependency names a prerequisite group that does not exist (detail: its id).
   "group-edge-prerequisite-not-found": 404,
   // Debug task plan Task 6 (correction-debug-open): no stored correction has the id; no configured repository has the
@@ -74,6 +76,8 @@ export const durableCommandErrorStatuses = {
   // than a global lock allows (the detail names the lock); a schedule evaluated in a time zone the host cannot read.
   "check-schedule-limit": 409,
   "check-setting-locked": 409,
+  // Scheduled flows and groups spec §5.6: archiving an entry a schedule (enabled or not) still pins.
+  "plan-library-entry-in-use": 409,
   // Flow engine spec §11.2: a project flow setting looser than a global lock allows (the detail names the lock), and a
   // value only the person token may set (irreversible apply-flag; refused from every channel in phase 1).
   "flow-setting-locked": 409,
@@ -299,6 +303,14 @@ export const durableCommandErrorStatuses = {
   // Dir-requirements spec §9.2, §9.3: no folder change waits for this answer on the group (or the answer is one this
   // state cannot take: take-folder outside folder-changed, withhold with nothing withheld-able).
   "folder-change-not-pending": 409,
+  // Scheduled flows and groups spec 2026-10-24 §5: the plan library. A document over 2 MiB canonical; a version whose
+  // stored bytes no longer hash to its sha256; an entry of another project than the command's; a CLI-read plan file whose
+  // targetRepo is not the project's path, or whose contract path is outside the repository or reached through a link.
+  "plan-library-doc-too-large": 422,
+  "plan-library-hash-mismatch": 422,
+  "plan-library-project-mismatch": 422,
+  "plan-library-target-mismatch": 422,
+  "plan-library-contract-path-refused": 422,
   "revision-unchanged": 422,
   "group-stopped": 422,
   "handoff-budget-unavailable": 422,
