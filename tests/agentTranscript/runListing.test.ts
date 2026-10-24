@@ -95,3 +95,19 @@ describe("T13: the listing of every collected run is stored and served", () => {
     } finally { await web.close(); await socket.close(); await old.close(); await t.h.dispose(); }
   });
 });
+
+describe("T13: the scheduler bridge's collect stores the listing too", () => {
+  it("collectControlled keeps the listing on the run body", async () => {
+    const { archiveCase } = await import("../control/fixtures/archive.js");
+    const { ControlService } = await import("../../src/control/service.js");
+    const { collectControlled } = await import("../../src/control/schedulerBridge.js");
+    const { readRun } = await import("../../src/control/budget.js");
+    const h = await archiveCase();
+    try {
+      const port = { collect: async () => ({ events: [], candidate: null, terminal: null, transcripts: [entry()] }), readEvidence: async () => Buffer.alloc(0) };
+      const service = new ControlService(h.store, port as never);
+      await collectControlled(service, h.claim.runId, port as never);
+      expect((readRun(h.store, h.claim.runId) as unknown as { transcripts: unknown }).transcripts).toEqual({ sourceDir: h.sourceDir, entries: [entry()] });
+    } finally { await h.dispose(); }
+  });
+});
