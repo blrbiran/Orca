@@ -34,18 +34,22 @@ describe("T2: the index cache", () => {
   it("a replaced inode (same path, same size, same mtime) rebuilds the index", async () => {
     const { sourceDir, file } = await runDir();
     const cache = createIndexCache();
-    const before = jsonl([claude.text("aaaaaaaaaa"), claude.text("b")]);
-    const after = jsonl([claude.text("c"), claude.text("dddddddddd")]);
+    // Same total size, different line boundaries: the old index's checkpoint (after line 256) falls inside a line of
+    // the new file, so a stale index would serve a cut line.
+    const oldTexts = Array.from({ length: 300 }, (_, i) => `old ${String(i).padStart(3, "0")} ` + "x".repeat(40));
+    const newTexts = oldTexts.map((_, i) => `new ${String(i).padStart(3, "0")} ` + "y".repeat(i === 0 ? 47 : i === 299 ? 33 : 40));
+    const before = jsonl(oldTexts.map((text) => claude.text(text)));
+    const after = jsonl(newTexts.map((text) => claude.text(text)));
     expect(before.length).toBe(after.length);
     writeFileSync(file, before);
     const mtime = statSync(file).mtime;
-    expect(await texts(cache, sourceDir)).toEqual(["aaaaaaaaaa", "b"]);
+    expect((await texts(cache, sourceDir)).slice(-2)).toEqual(oldTexts.slice(-2));
     writeFileSync(file + ".new", after);
     utimesSync(file + ".new", mtime, mtime);
     renameSync(file + ".new", file);
     expect(statSync(file).size).toBe(before.length);
     expect(statSync(file).mtime.getTime()).toBe(mtime.getTime());
-    expect(await texts(cache, sourceDir)).toEqual(["c", "dddddddddd"]);
+    expect(await texts(cache, sourceDir)).toEqual(newTexts.slice(-200));
   });
 
   it("a shrink rebuilds the index", async () => {
