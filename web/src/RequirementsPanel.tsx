@@ -209,6 +209,9 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; ar
   const owner = ownerOf(props.view);
   const key = feedbackKey(owner.repoId, owner.groupId, owner.requirementId, draft.draftNo);
   const feedback = props.drafts.feedback[key] ?? "";
+  // Scheduled flows and groups spec 2026-10-24 §13.3: the person may keep this split in the plan library.
+  const maySave = mayHumanOnly(useContext(AccountContext)) && props.archived !== true && draft.draftHash !== null
+    && (draft.state === "awaiting-review" || props.view.requirement.acceptedDraftNo === draft.draftNo);
   return (
     <section aria-label={t("requirements.draft", { n: draft.draftNo })}>
       <h4>{t("requirements.draft", { n: draft.draftNo })} · {enumText("draftState", draft.state)}</h4>
@@ -228,6 +231,12 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; ar
             { slot: "feedback", key, value: feedback })}>{t("requirements.sendBack")}</button>
           <button type="button" onClick={() => props.onCommand({ verb: "requirement-draft-accept", groupId, expectedRevision: revisionOf(props.view), payload: { draftNo: draft.draftNo, draftHash: draft.draftHash! } })}>{t("requirements.acceptSplit")}</button>
         </>
+      )}
+      {maySave && (
+        <button type="button" onClick={() => props.onCommand({ verb: "plan-library-save", groupId, expectedRevision: 0, payload: {
+          source: { kind: "requirement-draft", groupId, draftNo: draft.draftNo, draftHash: draft.draftHash! },
+          name: (props.view.requirement.slug ?? props.view.requirement.idea).slice(0, 200),
+        } })}>{t("requirements.saveSplit")}</button>
       )}
     </section>
   );

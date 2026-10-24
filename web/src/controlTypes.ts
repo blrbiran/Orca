@@ -115,6 +115,8 @@ export type GroupSummaryV1 = {
   placement?: GroupPlacementV1;
   /** §3.5: tasks of this group the escalation ladder took over; `exhausted` is level 3 (needs you). */
   escalation?: GroupEscalationV1[];
+  /** Scheduled flows and groups spec 2026-10-24 §13.3: the schedule that started this group, and why its fire waits. */
+  scheduleStart?: { scheduleId: string; name: string; slot: number; waitingReason: string | null };
 };
 /** Dir-requirements spec §8.2, §9.4: a dir group's placement record as the summary sends it (the journal's from/to stay on the server). */
 export type GroupPlacementV1 = {
@@ -1085,8 +1087,10 @@ export type FlowSettingsReadV1 = {
 };
 export type FlowListV1 = {
   schema: "orca-flow-list-v1";
-  runs: Array<{ flowRunId: string; groupId: string; templateRef: string; state: string; poolTokens: number; poolDrawn: number; projectId: string | null; dir: string | null; needsYou: number }>;
+  runs: Array<{ flowRunId: string; groupId: string; templateRef: string; state: string; poolTokens: number; poolDrawn: number; projectId: string | null; dir: string | null; needsYou: number; scheduled: FlowRunScheduledV1 | null }>;
 };
+/** Scheduled flows and groups spec §13.3: the schedule that started a run, and its slot. */
+export type FlowRunScheduledV1 = { scheduleId: string; name: string; slot: number };
 /** Gaps spec §8.4 (plan Task 10-B): the start dialog's reads, paired with src/flow/startForm.ts (webParity.test.ts). */
 export type FlowParamTypeV1 = "text" | "longtext" | "enum" | "bool" | "int" | "path" | "slug" | "image";
 export type FlowTemplateParamV1 = { id: string; type: FlowParamTypeV1; required: boolean; options?: string[]; default?: string | number | boolean; derive?: "slug-of-idea" | "today" };
@@ -1110,7 +1114,7 @@ export type FlowAskV1 =
   | { kind: "input"; question: string; candidates: string[]; unclassed?: boolean }
   | { kind: "confirmation"; what: string; payloadSummary: string; unclassed?: boolean }
   | { kind: "clarify-round"; roundNo: number };
-export type FlowResolvedLevelV1 = { value: FlowLevelV1; source: "project" | "global" | "template" | "builtin"; lockedBy: "global" | null; overriddenByLock?: FlowLevelV1 };
+export type FlowResolvedLevelV1 = { value: FlowLevelV1; source: "project" | "global" | "template" | "builtin" | "schedule"; lockedBy: "global" | null; overriddenByLock?: FlowLevelV1 };
 export type FlowExecutionViewV1 = {
   seq: number; state: string; reasons: string[]; planNo: number | null; childGroupId: string | null; by: string; via: string;
   flags: string[]; failure: string | null;
@@ -1159,6 +1163,8 @@ export type FlowEffectV1 = {
 export type FlowRunViewV1 = {
   schema: "orca-flow-run-view-v1"; flowRunId: string; groupId: string; templateRef: string; state: string; params: Record<string, string | number | boolean>;
   poolTokens: number; poolDrawn: number; by: string; via: string; dir: string | null;
+  /** Scheduled flows and groups spec §13.3: the schedule that started this run; null for a hand start. */
+  scheduled: FlowRunScheduledV1 | null;
   template: { id: string; version: number | null; title: { en?: string; zh?: string } | null };
   steps: Array<{
     stepKey: string; kind: string; head: number | null; executor: "agent" | "person" | "either" | null; parallelWith: string | null;
@@ -1205,3 +1211,48 @@ export interface TranscriptWindowV1 {
 }
 /** GET …/expand -- one page (65 536 code units) of an event's field, or of an oversized line's decoded text. */
 export interface TranscriptPageV1 { schema: "orca-transcript-page-v1"; at: number; text: string; page: number; pages: number; length: number }
+
+// Scheduled flows and groups spec 2026-10-24 §6, §13.1: mirrors of src/control/schedules/views.ts and model.ts.
+export type ScheduleStartV1 =
+  | { kind: "flow"; template: string; params: Record<string, string | number | boolean>; clarify?: "skip"; unattended?: boolean; pool?: number }
+  | { kind: "group"; entryId: string; sha256: string; tokenLimit: number | null; integration: IntegrationSchemeV1 | null };
+export type ScheduleFireOutcomeV1 = "starting" | "started" | "waiting" | "skipped" | "failed";
+export type ScheduleFireViewV1 = {
+  seq: number; slot: number; at: number; lateMs: number | null; missed: number; outcome: ScheduleFireOutcomeV1;
+  reason: string | null; commandId: string | null; flowRunId: string | null; groupId: string | null;
+  creditedTo: string | null; confirm: Record<string, unknown> | null; by: string; via: string;
+};
+export type ScheduleViewV1 = {
+  id: string; projectId: string; name: string; kind: "flow" | "group"; cron: string; enabled: boolean;
+  start: ScheduleStartV1; removed: boolean; revision: number;
+  createdBy: string; createdVia: string; createdAt: number;
+  updatedBy: string; updatedVia: string; updatedAt: number;
+  enabledBy: string; enabledVia: string; enabledAt: number;
+  lastSlot: number | null; tz: string | null; failureStreak: number; paused: boolean; pausedReason: string | null;
+  nextSlots: number[]; lastFire: ScheduleFireViewV1 | null; newerVersion: string | null;
+};
+export type SchedulesViewV1 = { schema: "orca-schedules-v1"; repoId: string; schedules: ScheduleViewV1[] };
+export type ScheduleDetailV1 = { schema: "orca-schedule-v1" } & ScheduleViewV1;
+export type ScheduleFiresViewV1 = { schema: "orca-schedule-fires-v1"; scheduleId: string; fires: ScheduleFireViewV1[] };
+// §5.3, §13.3: mirrors of src/control/planLibrary/views.ts and store.ts.
+export type LibraryOriginV1 =
+  | { kind: "group"; groupId: string; planHash: string }
+  | { kind: "requirement-draft"; groupId: string; draftNo: number; draftHash: string }
+  | { kind: "import"; fileName: string; fileSha256: string; format: "orca-plan-v1" | "scheduler-plan-file" };
+export type PlanLibraryVersionV1 = { version: number; sha256: string; by: string; via: string; at: number; origin: LibraryOriginV1 };
+export type PlanLibraryEntryV1 = {
+  entryId: string; projectId: string; name: string; state: "active" | "archived";
+  createdBy: string; createdVia: string; createdAt: number;
+  archivedBy?: string | null; archivedVia?: string | null; archivedAt?: number | null;
+  head: PlanLibraryVersionV1 | null; versionCount: number; usedBy: string[];
+};
+export type PlanLibraryListViewV1 = { schema: "orca-plan-library-v1"; repoId: string; entries: PlanLibraryEntryV1[] };
+export type PlanLibraryEntryViewV1 = { schema: "orca-plan-library-entry-v1" } & PlanLibraryEntryV1 & { versions: PlanLibraryVersionV1[] };
+export type ScheduleSetPayloadV1 =
+  | { projectId: string; name: string; cron: string; enabled: boolean; start: ScheduleStartV1 }
+  | { set: { name?: string; cron?: string; start?: ScheduleStartV1 } };
+export type ScheduleFromGroupPayloadV1 = { scheduleId: string; name: string; cron: string; enabled: boolean; tokenLimit?: number | null };
+export type PlanLibraryImportPayloadV1 = {
+  projectId: string; name: string; entryId?: string; doc: unknown;
+  provenance: { fileName: string; fileSha256: string; format: "orca-plan-v1" | "scheduler-plan-file" };
+};

@@ -7,6 +7,8 @@ import { WorkspaceModeSelector } from "./WorkspaceModeSelector.js";
 import { RepositoryIntegration } from "./IntegrationScheme.js";
 import { ChecksSettings } from "./ChecksSettings.js";
 import { FlowSettings } from "./FlowSettings.js";
+import { ScheduleSettings } from "./ScheduleSettings.js";
+import { PlanLibraryView } from "./PlanLibraryView.js";
 import type { IntegrationSchemeV1, RepositoryIntegrationV1, RepositoryWorkspaceV1 } from "./controlTypes.js";
 
 export function ProjectSettings(props: {
@@ -39,6 +41,11 @@ export function ProjectSettings(props: {
           {props.dir !== true && <ChecksSettings key={props.repoId} scope={{ repoId: props.repoId }} />}
           {/* Flow engine spec §11.2: the project's flow settings, each field with its source and lock. */}
           <FlowSettings key={`flows-${props.repoId}`} scope={{ repoId: props.repoId }} projectName={props.repoLabel ?? props.repoId} />
+          {/* Scheduled flows and groups spec §13.3: the project's schedules, beside Checks; it reads and writes them itself. */}
+          <ScheduleSettings key={`schedules-${props.repoId}`} scope={{ repoId: props.repoId }} dir={props.dir === true}
+            dirPath={props.dir === true ? props.repoPath ?? null : null} defaultIntegration={props.integration?.integration ?? null} />
+          {/* Scheduled flows and groups spec §13.3: the project's plan library, read and written by itself. */}
+          <PlanLibraryView key={`plan-library-${props.repoId}`} scope={{ repoId: props.repoId }} />
         </>
       )}
     </section>

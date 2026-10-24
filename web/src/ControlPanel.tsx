@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
-import { nextCommandId, type ControlAction } from "./controlApi.js";
+import { fetchPlanLibrary, nextCommandId, type ControlAction } from "./controlApi.js";
 import { ControlGroupView } from "./ControlGroupView.js";
 import type { DetailRegion } from "./detailRegion.js";
 import type { GroupDecisionsRead } from "./RunDecisions.js";
@@ -23,7 +23,7 @@ import { ALL_PROJECTS } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
 import type {
   AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, ControlConfigV1, ControlSummaryV1, GroupViewV1, ModelListState,
-  RecoveryViewV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
+  PlanLibraryEntryV1, RecoveryViewV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
 } from "./controlTypes.js";
 import { initialControlState } from "./controlState.js";
 import type { ControlClientState, ControlRefusal, UncertainCommand } from "./controlState.js";
@@ -174,6 +174,40 @@ function ImportForm(props: ImportFormProps): JSX.Element {
   const plans = repository === undefined ? [] : props.config.plans.filter((entry) => entry.repoId === repository.repoId);
   const [planId, setPlanId] = useState<string | null>(null);
   const plan = plans.find((entry) => entry.planId === planId) ?? plans[0];
+  // Scheduled flows and groups spec §13.3: the repository's library entries beside its registered plans. A failed read
+  // is null -- never an empty library -- so the form does not claim there is nothing to import.
+  const [library, setLibrary] = useState<PlanLibraryEntryV1[] | null>(null);
+  const [libraryId, setLibraryId] = useState("");
+  const repoId = repository?.repoId;
+  useEffect(() => {
+    setLibraryId("");
+    setLibrary(null);
+    if (repoId === undefined) return undefined;
+    let live = true;
+    void (async () => {
+      try {
+        const answer = await fetchPlanLibrary(repoId);
+        if (!Array.isArray(answer?.entries)) throw new TypeError("plan-library-shape");
+        if (live) setLibrary(answer.entries);
+      } catch { if (live) setLibrary(null); }
+    })();
+    return () => { live = false; };
+  }, [repoId]);
+  const libraryEntry = library?.find((entry) => entry.entryId === libraryId) ?? null;
+  const chosen = libraryEntry !== null && libraryEntry.head !== null ? libraryEntry : null;
+  const librarySelect = library !== null && library.length > 0 ? (
+    <label>
+      {t("planLibrary.title")}
+      <select data-testid="import-library" aria-label={t("planLibrary.title")} value={libraryId}
+        onChange={(event) => { setLibraryId(event.currentTarget.value); setPlanId(null); }}>
+        <option value="">{t("planLibrary.title")}</option>
+        {library.map((entry) => (
+          <option key={entry.entryId} value={entry.entryId}>{entry.head === null ? entry.name : `${entry.name} · ${entry.head.sha256.slice(0, 10)}`}</option>
+        ))}
+      </select>
+    </label>
+  ) : null;
+  const ready = libraryId !== "" ? chosen !== null : plan !== undefined;
   // Fix round 1 (ruling M1): a target seen unheld is forgotten with its plan, so a re-listing needs a new choice.
   useEffect(() => { if (all && target !== "" && repository === undefined) { setTarget(""); setPlanId(null); } }, [all, target, repository]);
   return (
@@ -194,8 +228,8 @@ function ImportForm(props: ImportFormProps): JSX.Element {
               {choices.map((entry) => <option key={entry.repoId} value={entry.repoId}>{props.repoLabel?.(entry.repoId) ?? entry.displayName}</option>)}
             </select>
           </label>
-          {repository !== undefined && plan === undefined && <p role="note">{t("control.import.noPlan")}</p>}
-          {repository !== undefined && plan !== undefined && (
+          {repository !== undefined && plan === undefined && (library === null || library.length === 0) && <p role="note">{t("control.import.noPlan")}</p>}
+          {repository !== undefined && plan !== undefined && !chosen && (
             <p>
               {t("control.import.summary", {
                 repository: repository.displayName,
@@ -207,37 +241,46 @@ function ImportForm(props: ImportFormProps): JSX.Element {
           {plans.length > 1 && plan !== undefined && (
             <label>
               {t("control.import.plan")}
-              <select value={plan.planId} onChange={(e) => setPlanId(e.currentTarget.value)}>
+              <select value={plan.planId} onChange={(e) => { setPlanId(e.currentTarget.value); setLibraryId(""); }}>
                 {plans.map((entry) => <option key={entry.planId} value={entry.planId}>{entry.displayName}</option>)}
               </select>
             </label>
           )}
-          <button type="button" className="btn-primary" disabled={repository === undefined || plan === undefined} onClick={() => {
-            if (repository !== undefined && plan !== undefined) importPlan(props, repository.repoId, plan.planId);
+          {librarySelect}
+          <button type="button" className="btn-primary" disabled={repository === undefined || !ready} onClick={() => {
+            if (repository !== undefined) importPlan(props, repository.repoId, chosen === null ? plan?.planId : undefined,
+              chosen === null ? undefined : { entryId: chosen.entryId, sha256: chosen.head!.sha256 });
           }}>
             {t("control.import.button")}
           </button>
         </>
-      ) : repository === undefined || plan === undefined ? (
-        <p role="note">{t("control.import.noRepository")}</p>
       ) : (
         <>
-          <p>
-            {t("control.import.summary", {
-              repository: repository.displayName,
-              plan: plan.displayName,
-              mode: props.config.defaults === null ? t("control.import.notConfigured") : enumText("budgetMode", props.config.defaults.estimateMode),
-            })}
-          </p>
-          {plans.length > 1 && (
+          {repository !== undefined && plan !== undefined && !chosen ? (
+            <p>
+              {t("control.import.summary", {
+                repository: repository.displayName,
+                plan: plan.displayName,
+                mode: props.config.defaults === null ? t("control.import.notConfigured") : enumText("budgetMode", props.config.defaults.estimateMode),
+              })}
+            </p>
+          ) : null}
+          {plans.length > 1 && plan !== undefined && (
             <label>
               {t("control.import.plan")}
-              <select value={plan.planId} onChange={(e) => setPlanId(e.currentTarget.value)}>
+              <select value={plan.planId} onChange={(e) => { setPlanId(e.currentTarget.value); setLibraryId(""); }}>
                 {plans.map((entry) => <option key={entry.planId} value={entry.planId}>{entry.displayName}</option>)}
               </select>
             </label>
           )}
-          <button type="button" className="btn-primary" onClick={() => importPlan(props, repository.repoId, plan.planId)}>
+          {librarySelect}
+          {repository === undefined ? <p role="note">{t("control.import.noRepository")}</p>
+            : plan === undefined && library === null ? <p role="note">{t("control.import.noPlan")}</p>
+            : plan === undefined && library !== null && library.length === 0 ? <p role="note">{t("control.import.noPlanAnywhere")}</p> : null}
+          <button type="button" className="btn-primary" disabled={repository === undefined || !ready} onClick={() => {
+            if (repository !== undefined) importPlan(props, repository.repoId, chosen === null ? plan?.planId : undefined,
+              chosen === null ? undefined : { entryId: chosen.entryId, sha256: chosen.head!.sha256 });
+          }}>
             {t("control.import.button")}
           </button>
         </>
@@ -247,7 +290,7 @@ function ImportForm(props: ImportFormProps): JSX.Element {
   );
 }
 
-function importPlan(props: ImportFormProps, repoId: string, planId: string): void {
+function importPlan(props: ImportFormProps, repoId: string, planId?: string, libraryEntry?: { entryId: string; sha256: string }): void {
   const groupId = `group-${nextCommandId()}`;
   const defaults = props.config.defaults;
   props.onCommand({
@@ -257,7 +300,8 @@ function importPlan(props: ImportFormProps, repoId: string, planId: string): voi
     payload: {
       groupId,
       repoId,
-      planId,
+      ...(libraryEntry === undefined ? {} : { libraryEntry }),
+      ...(planId === undefined ? {} : { planId }),
       ...(defaults === null ? {} : { estimatorProfileId: defaults.estimatorProfileId, estimatorProfileHash: defaults.estimatorProfileHash, estimateMode: defaults.estimateMode }),
     },
   });

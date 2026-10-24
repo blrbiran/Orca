@@ -17,15 +17,15 @@ import { currentLanguage } from "./i18n.js";
 import { FlowRunPage } from "./FlowRunPage.js";
 import { Refusal } from "./Refusal.js";
 
-type ParamValue = string | number | boolean;
-type Template = FlowTemplatesV1["templates"][number];
+export type ParamValue = string | number | boolean;
+export type Template = FlowTemplatesV1["templates"][number];
 /** Where a param's value comes from when the start gives none (gaps spec §8.2): a preset, else the template. */
 type EffectiveDefault = { value: ParamValue; source: "project" | "global" } | { value: ParamValue | null; source: "template"; derive?: string }
   /** Task 10-B fix: the presets could not be read, so a preset may stand in front of any template default. */
   | { source: "unread"; templateHas: boolean } | null;
 type Presets = FlowSettingsReadV1["paramDefaults"][string];
 
-function effectiveDefault(param: FlowTemplateParamV1, presets: Presets | undefined | "unread"): EffectiveDefault {
+export function effectiveDefault(param: FlowTemplateParamV1, presets: Presets | undefined | "unread"): EffectiveDefault {
   if (presets === "unread") return { source: "unread", templateHas: param.derive !== undefined || param.default !== undefined };
   const preset = presets?.[param.id];
   if (preset !== undefined && preset.source !== "builtin") return { value: preset.value, source: preset.source };
@@ -39,7 +39,7 @@ function effectiveDefault(param: FlowTemplateParamV1, presets: Presets | undefin
  * folder's picker) for a path. A field the person has not touched sends nothing, so the server resolves it exactly as
  * the line under it says: a preset, else the template's default.
  */
-function ParamField(props: { param: FlowTemplateParamV1; value: ParamValue | undefined; fallback: EffectiveDefault; dir: string; template: string; onChange: (value: ParamValue | undefined) => void }): JSX.Element {
+export function ParamField(props: { param: FlowTemplateParamV1; value: ParamValue | undefined; fallback: EffectiveDefault; dir: string; template: string; onChange: (value: ParamValue | undefined) => void }): JSX.Element {
   const { t } = useTranslation();
   const { param, fallback } = props;
   const label = param.required ? t("flow.start.required", { param: param.id }) : param.id;
@@ -77,7 +77,7 @@ function ParamField(props: { param: FlowTemplateParamV1; value: ParamValue | und
 }
 
 /** A touched param as the start sends it; null when its text is not a value of its type (an int that is not one). */
-function typed(param: FlowTemplateParamV1, value: ParamValue): ParamValue | null {
+export function typed(param: FlowTemplateParamV1, value: ParamValue): ParamValue | null {
   if (param.type === "bool") return value === true;
   if (param.type === "int") return /^-?\d+$/.test(String(value).trim()) && Number.isSafeInteger(Number(String(value).trim())) ? Number(String(value).trim()) : null;
   const raw = String(value);

@@ -8,9 +8,10 @@
  * execution is still alive.
  */
 import type { JSX } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { ControlAction } from "./controlApi.js";
+import { scheduleIdFor, type ControlAction } from "./controlApi.js";
+import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { AgentSelectionEditor, selectionsHashFor } from "./AgentSelectionEditor.js";
 import { BudgetEditor } from "./BudgetEditor.js";
 import { goalSummary } from "./CardGoal.js";
@@ -285,6 +286,59 @@ function ownAgentOnly(preview: AgentSelectionPreviewV1 | null | undefined): bool
   return (preview?.slots ?? []).some((slot) => slot.taskId !== null && slot.outcome.kind === "resolved" && slot.outcome.frozen.provenance.agent === "operator");
 }
 
+/**
+ * Scheduled flows and groups spec 2026-10-24 §13.3: an owner saves this group's plan to the library, or schedules the
+ * group in one `schedule-from-group` (never `schedule-set`). The confirm-mode line reads the group's own scheme.
+ */
+function GroupLibraryActions({ view, onCommand }: { view: GroupViewV1; onCommand: (action: ControlAction) => void }): JSX.Element | null {
+  const { t } = useTranslation();
+  const mayAct = mayHumanOnly(useContext(AccountContext));
+  const [open, setOpen] = useState(false);
+  const goal = (view.summary.goal ?? view.plan.goal).slice(0, 200);
+  const name0 = goal === "" ? view.summary.groupId : goal;
+  // The server caps a schedule's name at 80; the library's name above keeps its 200.
+  const scheduleGoal = (view.summary.goal ?? view.plan.goal).slice(0, 80);
+  const [name, setName] = useState(scheduleGoal.trim() === "" ? view.summary.groupId : scheduleGoal);
+  const [cron, setCron] = useState("");
+  const [limit, setLimit] = useState("");
+  const tokenLimit = limit.trim() === "" ? null : Number(limit);
+  const limitValid = tokenLimit === null || (Number.isSafeInteger(tokenLimit) && tokenLimit > 0);
+  const scheme = view.integration?.scheme ?? null;
+  const mode = scheme !== null && scheme.delivery !== "keep"
+    ? t("schedules.groupConfirmMode.delivery", { delivery: t(`control.integration.deliveries.${scheme.delivery}`) })
+    : tokenLimit !== null ? t("schedules.groupConfirmMode.limited") : t("schedules.groupConfirmMode.auto");
+  if (!mayAct) return null;
+  const groupId = view.summary.groupId;
+  const save = (): void => {
+    if (name.trim() === "" || cron.trim() === "" || !limitValid) return;
+    onCommand({ verb: "schedule-from-group", groupId, expectedRevision: view.summary.commandRevision, payload: {
+      scheduleId: scheduleIdFor(name.trim(), `${groupId}\0${cron.trim()}`), name: name.trim(), cron: cron.trim(), enabled: true,
+      ...(tokenLimit !== null ? { tokenLimit } : {}),
+    } });
+    setOpen(false);
+  };
+  return (
+    <>
+      <button type="button" onClick={() => onCommand({ verb: "plan-library-save", groupId, expectedRevision: 0, payload: { source: { kind: "group", groupId }, name: name0 } })}>
+        {t("group.savePlan")}
+      </button>{" "}
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>{t("group.scheduleThis")}</button>
+      {open && (
+        <div role="dialog" aria-label={t("group.scheduleThis")}>
+          <label>{t("settings.schedules.name")}<input type="text" maxLength={80} value={name} onChange={(event) => setName(event.currentTarget.value)} /></label>
+          <label>{t("schedules.cron")}<input type="text" value={cron} onChange={(event) => setCron(event.currentTarget.value)} /></label>
+          <label>{t("settings.schedules.tokenLimit")}
+            <input type="number" min={1} step={1} value={limit} onChange={(event) => setLimit(event.currentTarget.value)} />
+          </label>
+          <p data-testid="group-schedule-mode">{mode}</p>
+          <button type="button" disabled={name.trim() === "" || cron.trim() === "" || !limitValid} onClick={save}>{t("settings.schedules.save")}</button>{" "}
+          <button type="button" onClick={() => setOpen(false)}>{t("settings.schedules.cancel")}</button>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const { view, config, uncertain, drafts, onDraft, onCommand } = props;
   const { t } = useTranslation();
@@ -526,6 +580,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       </p>
       {view.summary.debug !== undefined && <DebugMark debug={view.summary.debug} />}
       {view.summary.requirement !== undefined && <a href="#requirements" onClick={() => props.onSourceRequirement?.(groupId)}>{t("control.group.sourceRequirement")}</a>}
+      {!archived && view.summary.state !== "clarifying" && <GroupLibraryActions view={view} onCommand={onCommand} />}
       {archived && (
         <p role="status" aria-label={t("control.group.archivedRegion")}>
           {t("control.group.archivedBanner")}{" "}
@@ -591,6 +646,14 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         <ul>{view.plan.successConditions.map((condition, index) => <li key={index}>{condition}</li>)}</ul>
         <p>{t("control.preparation.workspace", { mode: workspaceMode ?? t("common.unknown") })}</p>
       </section>
+      {view.summary.scheduleStart !== undefined && (
+        <div data-testid="group-schedule-start">
+          <p>{t("group.startedBySchedule", { name: view.summary.scheduleStart.name, slot: new Date(view.summary.scheduleStart.slot).toLocaleString() })}</p>
+          {view.summary.scheduleStart.waitingReason !== null && (
+            <p data-tone="warn" data-testid="group-schedule-waiting">{t("group.waitingSince", { slot: new Date(view.summary.scheduleStart.slot).toLocaleString(), reason: view.summary.scheduleStart.waitingReason })}</p>
+          )}
+        </div>
+      )}
       <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} archived={preparationReadOnly} selectionsHash={selectionsHashFor(view, props.preview)}
         suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null}
         ownAgent={ownAgentOnly(props.preview)} />

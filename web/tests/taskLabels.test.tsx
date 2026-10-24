@@ -55,8 +55,11 @@ function Stateful(props: { view: GroupViewV1; onCommand: (action: ControlAction)
   });
   return <ControlGroupView view={props.view} config={config} uncertain={[]} drafts={drafts} onDraft={onDraft} onCommand={props.onCommand} />;
 }
-/** The task ids of the rows on screen (each row's task cell is its detail toggle). */
-const rows = (): Array<string | null> => screen.getAllByRole("button", { expanded: false }).map((button) => button.textContent);
+/** The task ids of the work-items table's rows (each row's task cell is its detail toggle). */
+const rows = (): Array<string | null> => {
+  const table = screen.getByRole("table");
+  return within(table).getAllByRole("button", { expanded: false }).map((button) => button.textContent);
+};
 
 afterEach(cleanup);
 

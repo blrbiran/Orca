@@ -22,7 +22,7 @@ const RUN_A = "fr-00000000-0000-4000-8000-00000000000a";
 const RUN_B = "fr-00000000-0000-4000-8000-00000000000b";
 const run = (over: Partial<FlowListV1["runs"][number]>): FlowListV1["runs"][number] => ({
   flowRunId: RUN_A, groupId: "flow-parent-a", templateRef: "builtin/wechat-article@1", state: "running", poolTokens: 2_000_000, poolDrawn: 500_000,
-  projectId: null, dir: "/home/o/tea", needsYou: 0, ...over,
+  projectId: null, dir: "/home/o/tea", needsYou: 0, scheduled: null, ...over,
 });
 const column = (name: string): HTMLElement => screen.getByRole("region", { name });
 

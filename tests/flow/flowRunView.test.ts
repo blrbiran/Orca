@@ -6,6 +6,8 @@
  * folder, which the kanban's flow card is scoped by.
  */
 import { describe, expect, it } from "vitest";
+import type { ScheduleBody } from "../../src/control/schedules/model.js";
+import { insertSchedule } from "../../src/control/schedules/store.js";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { readFlowList, readFlowRun } from "../../src/flow/views.js";
 import { fakeChildPort } from "./fixtures/childPort.js";
@@ -72,6 +74,46 @@ describe("the run page's read (Task 16, §16.2)", () => {
       expect(w.latest(flowRunId, "write")!.state).toBe("needs-person");
       // mutation: count nothing -> 0, red
       expect((readFlowList(w.store) as { runs: Array<{ needsYou: number }> }).runs[0]!.needsYou).toBe(1);
+    } finally { await w.dispose(); }
+  });
+});
+
+const SLOT = 1_760_000_000_000;
+const scheduleBody = (id: string, name: string): ScheduleBody => ({
+  id, projectId: "repo", name, kind: "flow", cron: "0 2 * * *", enabled: true,
+  start: { kind: "flow", template: "builtin/w@1", params: {} },
+  createdBy: "ann", createdVia: "cli", createdAt: 1, updatedBy: "ann", updatedVia: "cli", updatedAt: 1,
+  enabledBy: "ann", enabledVia: "cli", enabledAt: 1,
+  state: { lastSlot: null, tz: "UTC", failureStreak: 0, paused: false, pausedReason: null },
+});
+type ScheduledView = { scheduled: { scheduleId: string; name: string; slot: number } | null };
+
+describe("the schedule a run was started by (spec §13.3)", () => {
+  it("names it in the run view and the run list, and leaves a hand start null", async () => {
+    const children = fakeChildPort();
+    const w = await flowWorld({ w: { yaml: YAML, assets: { "p.md": "Write.\n" } } }, { children: children.port });
+    try {
+      insertSchedule(w.store, { id: "sch-a", projectId: "repo", kind: "flow", revision: 1, body: scheduleBody("sch-a", "  daily  ") });
+      const scheduled = await w.start({ templateRef: "builtin/w", origin: { kind: "schedule", scheduleId: "sch-a", slot: SLOT } });
+      const plain = await w.start({ templateRef: "builtin/w" });
+      // mutation: drop the name lookup, or the schedule kind check -> red
+      expect((readFlowRun(w.store, scheduled.flowRunId) as ScheduledView).scheduled).toEqual({ scheduleId: "sch-a", name: "daily", slot: SLOT });
+      const list = (readFlowList(w.store) as { runs: Array<ScheduledView & { flowRunId: string }> }).runs;
+      expect(list.find((run) => run.flowRunId === scheduled.flowRunId)!.scheduled).toEqual({ scheduleId: "sch-a", name: "daily", slot: SLOT });
+      expect(list.find((run) => run.flowRunId === plain.flowRunId)!.scheduled).toBeNull();
+    } finally { await w.dispose(); }
+  });
+
+  it("falls back to the schedule's id when its row is missing or unreadable", async () => {
+    const children = fakeChildPort();
+    const w = await flowWorld({ w: { yaml: YAML, assets: { "p.md": "Write.\n" } } }, { children: children.port });
+    try {
+      const missing = await w.start({ templateRef: "builtin/w", origin: { kind: "schedule", scheduleId: "sch-missing", slot: SLOT } });
+      insertSchedule(w.store, { id: "sch-bad", projectId: "repo", kind: "flow", revision: 1, body: scheduleBody("sch-bad", "Broken") });
+      w.store.db.prepare("UPDATE schedules SET body=? WHERE id=?").run("not json", "sch-bad");
+      const corrupt = await w.start({ templateRef: "builtin/w", origin: { kind: "schedule", scheduleId: "sch-bad", slot: SLOT + 1 } });
+      expect((readFlowRun(w.store, missing.flowRunId) as ScheduledView).scheduled).toEqual({ scheduleId: "sch-missing", name: "sch-missing", slot: SLOT });
+      expect((readFlowRun(w.store, corrupt.flowRunId) as ScheduledView).scheduled).toEqual({ scheduleId: "sch-bad", name: "sch-bad", slot: SLOT + 1 });
     } finally { await w.dispose(); }
   });
 });

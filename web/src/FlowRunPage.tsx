@@ -334,6 +334,8 @@ function ClarifyRounds(props: { step: Step; runId: string; open: boolean; send: 
 
 /** §9.3: the level an effect runs at and where it came from. */
 function policyText(policy: FlowEffectV1["policy"], t: TFunction): string {
+  // §10: a clamped effect is held because a schedule started the run; the person sees why, not a bare level.
+  if (policy.source === "schedule") return t("flow.effect.scheduledHeld");
   return t("flow.effect.policy", { level: policy.value, source: t(`flow.source.${policy.source}`), lock: policy.lockedBy === null ? "" : ` · ${t("flow.effect.locked")}` });
 }
 
@@ -901,7 +903,7 @@ export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): 
   return (
     <article className="flow-run" aria-label={t("flow.page", { title })}>
       {props.onBack !== undefined && <button type="button" onClick={props.onBack}>{t("flow.back")}</button>}
-      <h3>{title} · <code>{props.flowRunId}</code>{view !== null && <>{" "}<span className="badge" data-tone={stateTone(view.state)} data-testid="flow-run-state">{t(`flow.state.${view.state}`, { defaultValue: view.state })}</span></>}</h3>
+      <h3>{title} · <code>{props.flowRunId}</code>{view !== null && <>{" "}<span className="badge" data-tone={stateTone(view.state)} data-testid="flow-run-state">{t(`flow.state.${view.state}`, { defaultValue: view.state })}</span></>}{view?.scheduled != null && <>{" "}<span className="badge" data-tone="info" data-testid="flow-run-scheduled">{t("board.card.scheduled", { name: view.scheduled.name })}</span></>}</h3>
       {refusal !== null && <Refusal refusal={refusal} />}
       {unread && <p data-testid="flow-unread">{t("flow.unread")}</p>}
       {view !== null && (<>

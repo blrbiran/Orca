@@ -47,6 +47,7 @@ import { readSpendCapBlock } from "../control/spendCaps.js";
 import { latestGroupActivityAt, readGroupActivity, readRunActivity, readLatestRunActivityByGroup } from "../control/activity.js";
 import { readRunDiagnosis, savedFormatFailureEvidence } from "./runDiagnosis.js";
 import { readGroupIntegration } from "../control/integrationScheme.js";
+import { readSchedule } from "../control/schedules/store.js";
 import { archivedMarkOf } from "../control/archivedMark.js";
 import { workItemCategory, type WorkItemCategory } from "../control/workItemCategory.js";
 import { workBranchRef } from "../control/workspace.js";
@@ -462,6 +463,19 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
   };
 }
 
+/** Scheduled flows and groups spec 2026-10-24 §13.3: a group's schedule origin plus its fire's waiting reason. */
+function scheduleStartOf(store: ControlStore, groupId: string, body: Record<string, unknown>) {
+  const origin = body.origin as { kind?: unknown; scheduleId?: unknown; slot?: unknown } | undefined;
+  if (origin?.kind !== "schedule" || typeof origin.scheduleId !== "string" || typeof origin.slot !== "number") return null;
+  // A corrupt or empty schedule row must not block the group's summary: a blank read name falls back to the id.
+  let name = origin.scheduleId;
+  try { name = readSchedule(store, origin.scheduleId)?.body.name.trim() || name; } catch { /* name stays the id */ }
+  const fire = store.db.prepare("SELECT reason FROM schedule_fires WHERE schedule_id=? AND slot=? AND group_id=? AND outcome='waiting'")
+    .get(origin.scheduleId, origin.slot, groupId);
+  return { scheduleId: origin.scheduleId, name, slot: origin.slot,
+    waitingReason: fire === undefined || fire.reason === null ? null : String(fire.reason) };
+}
+
 export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot, canonicalRecords?: ReadonlyMap<string, string>): GroupSummaryV1 {
   const body = groupBody(store, groupId);
   // N1 spec §4.1, §11.2: a clarifying group is summarised without a plan or a proposal, and without a completion.
@@ -490,6 +504,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   const escalation = archived === null ? [] : escalationsOf(store, groupId);
   // Dir-requirements spec §9.4: a dir group's placement record, without the journal's `from/to` (not the panel's business).
   const placement = dirWorkspaceOf(body) === null ? null : readPlacement((body as { placement?: unknown }).placement);
+  const scheduleStart = scheduleStartOf(store, groupId, body as Record<string, unknown>);
   const summary = {
     groupId,
     repoId,
@@ -512,6 +527,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(orchestration === null ? {} : { orchestration }),
     ...(systemDebugMark === null ? {} : { systemDebug: { source: systemDebugMark.source, stackOn: systemDebugMark.stackOn, settled: systemDebugMark.settled } }),
     ...(escalation.length === 0 ? {} : { escalation }),
+    ...(scheduleStart === null ? {} : { scheduleStart }),
     ...(debugMark === null ? {} : { debug: {
       correctionId: debugMark.correctionId, ordinal: debugMark.ordinal, missing: debugMark.missing,
       agentFallback: debugMark.agentFallback === null ? null : { reason: debugMark.agentFallback.reason },

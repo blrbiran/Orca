@@ -46,7 +46,7 @@ const PICK_ASK = { kind: "ask" as const, form: { title: { type: "text" } }, cand
 function runView(over: Partial<FlowRunViewV1> = {}): FlowRunViewV1 {
   return {
     schema: "orca-flow-run-view-v1", flowRunId: RUN, groupId: "flow-g", templateRef: "builtin/wechat-article@1", state: "running",
-    params: { idea: "Tea" }, poolTokens: 2_000_000, poolDrawn: 750_000, by: "olga", via: "web", dir: "/home/o/tea",
+    params: { idea: "Tea" }, poolTokens: 2_000_000, poolDrawn: 750_000, by: "olga", via: "web", dir: "/home/o/tea", scheduled: null,
     template: { id: "wechat-article", version: 1, title: { en: "WeChat article", zh: "公众号文章" } },
     steps: [
       step("brief", "clarify", [exec(1, { output: { kind: "artifact", ref: "a".repeat(64), hash: "b".repeat(64) } })]),

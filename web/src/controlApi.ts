@@ -38,6 +38,8 @@ import type {
   HandoffStopPayloadV1,
   ImportPlanPayloadV1,
   IntegrationSchemeV1,
+  PlanLibraryEntryViewV1,
+  PlanLibraryListViewV1,
   ProposalEditPayloadV1,
   ProposalSetAgentPayloadV1,
   RecoveryRetryPayloadV1,
@@ -56,6 +58,9 @@ import type {
   RequirementViewV1,
   ResumeFromHandoffPayloadV1,
   RunActivityV1,
+  ScheduleDetailV1,
+  ScheduleFiresViewV1,
+  SchedulesViewV1,
   SetGroupIntegrationPayloadV1,
   SetLimitPayloadV1,
   SetTaskLabelsPayloadV1,
@@ -280,6 +285,46 @@ export function checksCommandPath(scope: ChecksScope, verb: "set-check-settings"
 /** §6.5, §7: a model review's record and its dismissals, by the review group's id. */
 export const reviewRecordPath = (reviewGroupId: string): string => `/api/control/checks/reviews/${segment(reviewGroupId)}`;
 
+/** Scheduled flows and groups spec §11.1, §13.3: the schedule and plan-library reads and the routes a schedule's writes use. */
+export const schedulesReadPath = (repoId: string): string => `/api/control/schedules?repoId=${segment(repoId)}`;
+export const schedulePath = (scheduleId: string): string => `/api/control/schedules/${segment(scheduleId)}`;
+export const scheduleFiresPath = (scheduleId: string, limit = 50): string => `${schedulePath(scheduleId)}/fires?limit=${limit}`;
+export const scheduleCommandPath = (scheduleId: string, leaf: "set" | "enable" | "remove" | "resume"): string => `${schedulePath(scheduleId)}/${leaf}`;
+export const planLibraryReadPath = (repoId: string, archived = false): string => `/api/control/plan-library?repoId=${segment(repoId)}${archived ? "&archived=1" : ""}`;
+export const planLibrarySavePath = "/api/control/plan-library/save";
+export const planLibraryImportPath = "/api/control/plan-library/import";
+export const planLibraryArchivePath = "/api/control/plan-library/archive";
+export const planLibraryEntryPath = (entryId: string): string => `/api/control/plan-library/${segment(entryId)}`;
+export const scheduleFromGroupPath = (groupId: string): string => `/api/control/groups/${segment(groupId)}/schedule`;
+export const planLibraryVersionPath = (entryId: string, sha256: string): string => `${planLibraryEntryPath(entryId)}/versions/${segment(sha256)}`;
+
+/** A 32-bit FNV-1a of `text`, base36, exactly six lowercase characters. */
+function fnv1a36(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193);
+  return ((hash >>> 0) % 36 ** 6).toString(36).padStart(6, "0");
+}
+
+/**
+ * B3: `sch-` + the name's slug, as src/control/schedules/model.ts names a client-created schedule. With `distinct`, a
+ * hash of it is appended so two schedules of one name (or two non-Latin names) get ids of their own.
+ */
+export function scheduleIdFor(name: string, distinct?: string): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 59).replace(/-+$/, "");
+  if (distinct === undefined) return `sch-${slug === "" ? "schedule" : slug}`;
+  // Keep the whole id within 63 chars, the hash included; `schedule` stands in for an empty slug.
+  const tail = `-${fnv1a36(`${name}\0${distinct}`)}`;
+  const head = slug.slice(0, 63 - "sch-".length - tail.length).replace(/-+$/, "");
+  return `sch-${head === "" ? "schedule" : head}${tail}`;
+}
+
+export const fetchSchedules = (repoId: string): Promise<SchedulesViewV1> => controlGet<SchedulesViewV1>(schedulesReadPath(repoId));
+export const fetchSchedule = (scheduleId: string): Promise<ScheduleDetailV1> => controlGet<ScheduleDetailV1>(schedulePath(scheduleId));
+export const fetchScheduleFires = (scheduleId: string, limit = 50): Promise<ScheduleFiresViewV1> =>
+  controlGet<ScheduleFiresViewV1>(scheduleFiresPath(scheduleId, limit));
+export const fetchPlanLibrary = (repoId: string): Promise<PlanLibraryListViewV1> => controlGet<PlanLibraryListViewV1>(planLibraryReadPath(repoId));
+export const fetchPlanLibraryEntry = (entryId: string): Promise<PlanLibraryEntryViewV1> => controlGet<PlanLibraryEntryViewV1>(planLibraryEntryPath(entryId));
+
 /** Integration spec §3.1: set-integration-scheme, naming the whole scheme under the settings revision it was read at. */
 export const sendIntegrationScheme = (repoId: string, integration: IntegrationSchemeV1, expectedRevision: number, commandId: string = nextCommandId()): Promise<ControlAnswer> =>
   sendControlCommand(integrationSchemePath(repoId), { commandId, expectedRevision, payload: { integration } });
@@ -437,7 +482,10 @@ export type ControlAction =
   // three: the open's ledger key is the debug group the server picks (src/panel/controlApi.ts debugOpenScoped).
   | { verb: "correction-debug-open"; groupId: string; expectedRevision: number; payload: CorrectionDebugOpenPayloadV1 }
   | { verb: "correction-record"; groupId: string; expectedRevision: number; payload: { repoId: string; decisionId?: string; runId?: string; kind: "wrong" | "not_my_taste" | "stale"; because: string; chose_instead?: string; again?: boolean } }
-  | { verb: "correction-close"; groupId: string; expectedRevision: number; payload: CorrectionClosePayloadV1 };
+  | { verb: "correction-close"; groupId: string; expectedRevision: number; payload: CorrectionClosePayloadV1 }
+  // Scheduled flows and groups spec 2026-10-24 §11.1: the library and schedule writes offered on a group's page.
+  | { verb: "plan-library-save"; groupId: string; expectedRevision: number; payload: { source: { kind: "group"; groupId: string } | { kind: "requirement-draft"; groupId: string; draftNo: number; draftHash: string }; name: string } }
+  | { verb: "schedule-from-group"; groupId: string; expectedRevision: number; payload: { scheduleId: string; name: string; cron: string; enabled: boolean; tokenLimit?: number | null } };
 
 /** The route a verb is served on -- src/panel/controlApi.ts's mutation table. */
 export function controlCommandPath(action: ControlAction): string {
@@ -522,6 +570,10 @@ export function controlCommandPath(action: ControlAction): string {
       return "/api/control/corrections";
     case "correction-close":
       return `/api/control/corrections/${segment(action.payload.correctionId)}/close`;
+    case "plan-library-save":
+      return planLibrarySavePath;
+    case "schedule-from-group":
+      return scheduleFromGroupPath(action.groupId);
   }
 }
 

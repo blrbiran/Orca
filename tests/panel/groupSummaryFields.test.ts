@@ -87,6 +87,35 @@ describe("the group summary's new fields (spec §6.2)", () => {
     } finally { await h.dispose(); }
   });
 
+  // Scheduled flows and groups spec 2026-10-24 §13.3: the group page names the schedule that started it and why its
+  // fire waits; a missing fire, or a schedule row gone, degrades to null and the id without failing the summary.
+  it("carries a scheduled group's start facts and its fire's waiting reason", async () => {
+    const h = await webFixture();
+    try {
+      expect(readGroupSummary(h.store, "g").scheduleStart).toBeUndefined();
+      const slot = 1_700_000_000_000;
+      const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as Record<string, unknown>;
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...body, origin: { kind: "schedule", scheduleId: "sch-nightly", slot } }));
+      h.store.db.prepare("INSERT INTO schedules(id,project_id,kind,revision,removed,body) VALUES ('sch-nightly','repo','group',1,0,?)").run(JSON.stringify({
+        id: "sch-nightly", projectId: "repo", name: "Nightly", kind: "group", cron: "0 9 * * *", enabled: true,
+        start: { kind: "group", entryId: "pl-1", sha256: "a".repeat(64), tokenLimit: 200, integration: null },
+        createdBy: "owner", createdVia: "web", createdAt: 1, updatedBy: "owner", updatedVia: "web", updatedAt: 1,
+        enabledBy: "owner", enabledVia: "web", enabledAt: 1,
+        state: { lastSlot: null, tz: null, failureStreak: 0, paused: false, pausedReason: null },
+      }));
+      h.store.db.prepare(`INSERT INTO schedule_fires(schedule_id,seq,slot,at,outcome,reason,flow_run_id,group_id,"by",via,body)
+        VALUES ('sch-nightly',1,?,?,'waiting','limited',NULL,'g','orca-auto','schedule:sch-nightly','{}')`).run(slot, slot);
+      expect(readGroupSummary(h.store, "g").scheduleStart).toEqual({ scheduleId: "sch-nightly", name: "Nightly", slot, waitingReason: "limited" });
+      // A reason on a fire that is not `waiting` is no waiting reason.
+      h.store.db.prepare("UPDATE schedule_fires SET outcome='started' WHERE schedule_id='sch-nightly'").run();
+      expect(readGroupSummary(h.store, "g").scheduleStart).toMatchObject({ waitingReason: null });
+      h.store.db.prepare("DELETE FROM schedule_fires WHERE schedule_id='sch-nightly'").run();
+      expect(readGroupSummary(h.store, "g").scheduleStart).toMatchObject({ waitingReason: null });
+      h.store.db.prepare("DELETE FROM schedules WHERE id='sch-nightly'").run();
+      expect(readGroupSummary(h.store, "g").scheduleStart).toMatchObject({ name: "sch-nightly" });
+    } finally { await h.dispose(); }
+  });
+
   it("summarises a clarifying group with its idea as goal, its branch, no counts and no updatedAt yet", async () => {
     const h = await webFixture();
     try {

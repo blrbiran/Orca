@@ -46,6 +46,7 @@ function FlowCard(props: { run: FlowRun; onOpen: () => void }): JSX.Element {
     <li className="board-card" data-testid={`board-flow-${run.flowRunId}`}>
       <button type="button" className="board-card-open" onClick={props.onOpen}>{run.flowRunId} · {t(`flow.state.${run.state}`, { defaultValue: run.state })}</button>
       <span className="badge" data-tone="info" data-testid="board-flow-badge">{t("board.card.flowTemplate", { template: templateOf(run.templateRef) })}</span>
+      {run.scheduled != null && <span className="badge" data-tone="info" data-testid="board-flow-scheduled">{t("board.card.scheduled", { name: run.scheduled.name })}</span>}
       {run.dir !== null && <p className="board-card-goal">{run.dir}</p>}
       {run.needsYou > 0 && <p className="detail-note" data-testid="board-card-reason">{t("board.card.flowNeedsYou", { count: run.needsYou })}</p>}
       <p className="detail-note">{t("board.card.flowPool", { drawn: shortTokens(run.poolDrawn), pool: shortTokens(run.poolTokens) })}</p>

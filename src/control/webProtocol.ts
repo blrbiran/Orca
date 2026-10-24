@@ -1526,6 +1526,8 @@ export const groupSummarySchema = z
       resolution: z.object({ id: z.string(), action: folderChangeActionSchema, by: z.string(), at: z.number() }).strict().nullable(),
       at: safeInteger,
     }).strict().optional(),
+    // Scheduled flows and groups spec 2026-10-24 §13.3: the schedule that started this group and why its fire waits.
+    scheduleStart: z.object({ scheduleId: idSchema, name: nonemptyString, slot: safeInteger, waitingReason: nonemptyString.nullable() }).strict().optional(),
   })
   .strict();
 

@@ -7,6 +7,7 @@
 import { activeChain } from "../control/clarifyChain.js";
 import { latestRoundAt, readRoundsAt } from "../control/requirementRecords.js";
 import type { RoundBody } from "../control/requirementSchemas.js";
+import { readSchedule } from "../control/schedules/store.js";
 import type { ControlStore } from "../control/store.js";
 import type { ToolRulesReport } from "../control/toolRules.js";
 import { FlowRefusal, isDeferredPark, latestByStep, loadRun, openAsks, recordOfExecution } from "./kernel.js";
@@ -33,7 +34,19 @@ export interface FlowExecutionViewV1 {
 /** Task 16: the run list (`orca flow list`, the kanban's flow cards); paired with the Web's copy (webParity). */
 export interface FlowListV1 {
   schema: "orca-flow-list-v1";
-  runs: Array<{ flowRunId: string; groupId: string; templateRef: string; state: string; poolTokens: number; poolDrawn: number; projectId: string | null; dir: string | null; needsYou: number }>;
+  runs: Array<{ flowRunId: string; groupId: string; templateRef: string; state: string; poolTokens: number; poolDrawn: number; projectId: string | null; dir: string | null; needsYou: number; scheduled: FlowRunScheduledV1 | null }>;
+}
+
+/** Scheduled flows and groups spec §13.3: the schedule that started a run, named as the library's row names it. */
+export interface FlowRunScheduledV1 { scheduleId: string; name: string; slot: number }
+
+function scheduledOf(store: ControlStore, origin: unknown): FlowRunScheduledV1 | null {
+  if (typeof origin !== "object" || origin === null) return null;
+  const { kind, scheduleId, slot } = origin as { kind?: unknown; scheduleId?: unknown; slot?: unknown };
+  if (kind !== "schedule" || typeof scheduleId !== "string" || typeof slot !== "number") return null;
+  let name = scheduleId;
+  try { name = readSchedule(store, scheduleId)?.body.name.trim() || scheduleId; } catch { name = scheduleId; }
+  return { scheduleId, name, slot };
 }
 
 export function readFlowList(store: ControlStore): FlowListV1 {
@@ -42,11 +55,12 @@ export function readFlowList(store: ControlStore): FlowListV1 {
     schema: "orca-flow-list-v1",
     runs: rows.map(({ id }) => {
       const row = getFlowRun(store, String(id))!;
-      const body = row.body as { projectId?: string | null; dir?: string | null };
+      const body = row.body as { projectId?: string | null; dir?: string | null; origin?: unknown };
       return {
         flowRunId: row.id, groupId: row.groupId, templateRef: row.templateRef, state: row.state, poolTokens: row.poolTokens, poolDrawn: row.poolDrawn,
         // Task 16: the kanban card's project scope (a run's settings layer) and its folder.
         projectId: body.projectId ?? null, dir: body.dir ?? null,
+        scheduled: scheduledOf(store, body.origin),
         // Steps whose newest execution waits on the person (an ask, a confirm card, a question, an exhausted pool), plus
         // each deferred step: owed, "fill when ready" (gaps spec §6.2). A skip owes nothing. An effect step a deferral
         // holds is owed through that defer, so it is not counted again (final review M6: one item per thing owed).
@@ -104,6 +118,8 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
     schema: "orca-flow-run-view-v1",
     flowRunId: run.row.id, groupId: run.row.groupId, templateRef: run.body.templateRef, state: run.row.state, params: run.params,
     poolTokens: run.row.poolTokens, poolDrawn: run.row.poolDrawn, by: run.body.by, via: run.body.via, dir: run.body.dir,
+    // Scheduled flows and groups spec §13.3: the schedule and slot that started it, named from the library's row.
+    scheduled: scheduledOf(store, (run.body as { origin?: unknown }).origin),
     // Why nothing moves, when a kernel pass keeps failing (kernel.recordRunError); null once a pass succeeds.
     lastError: (run.body as { lastError?: { message: string; at: number } }).lastError ?? null,
     template: { id: run.template.id, version: run.template.version ?? null, title: run.template.title ?? null },
